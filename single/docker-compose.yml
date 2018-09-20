@@ -28,8 +28,6 @@ services:
   loadbalancer:
     image: liubang/openresty-consul-template
     hostname: loadbalancer
-    volumes:
-      - ../nginx.conf.ctmpl:/opt/app/nginx/conf/vhost/nginx.conf.ctmpl
     networks:
       - backend
     depends_on:
@@ -38,6 +36,9 @@ services:
       - consul:consul
     ports:
       - 80:80
+    volumes:
+      - ../consul-template.hcl:/opt/app/consul-template/etc/config.hcl
+      - ../test.iliubang.cn.conf.ctmpl:/opt/app/nginx/conf/vhost/test.iliubang.cn.conf.ctmpl
   registrator:
     image: gliderlabs/registrator:master
     hostname: registrator
@@ -52,5 +53,3 @@ services:
     command: -internal consul://consul:8500
 networks:
   backend:
-
-
