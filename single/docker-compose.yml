@@ -10,7 +10,7 @@ services:
     networks:
       - backend
     volumes:
-      - ./test-service-0.0.1-SNAPSHOT.jar:/data/project/app.jar
+      - ../test-service-0.0.1-SNAPSHOT.jar:/data/project/app.jar
     ports:
       - 8080:8080
     command: java -jar -Dserver.port=8080 /data/project/app.jar
@@ -29,7 +29,7 @@ services:
     image: liubang/openresty-consul-template
     hostname: loadbalancer
     volumes:
-      - ./nginx.conf.ctmpl:/opt/app/nginx/conf/vhost/nginx.conf.ctmpl
+      - ../nginx.conf.ctmpl:/opt/app/nginx/conf/vhost/nginx.conf.ctmpl
     networks:
       - backend
     links:
