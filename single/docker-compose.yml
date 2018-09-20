@@ -32,6 +32,8 @@ services:
       - ../nginx.conf.ctmpl:/opt/app/nginx/conf/vhost/nginx.conf.ctmpl
     networks:
       - backend
+    depends_on:
+      - consul
     links:
       - consul:consul
     ports:
@@ -41,6 +43,8 @@ services:
     hostname: registrator
     networks:
       - backend
+    depends_on:
+      - consul
     links:
       - consul:consul
     volumes:
