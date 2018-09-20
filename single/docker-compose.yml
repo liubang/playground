@@ -12,7 +12,7 @@ services:
     volumes:
       - ../test-service-0.0.1-SNAPSHOT.jar:/data/project/app.jar
     ports:
-      - 8080:8080
+      - 8080
     command: java -jar -Dserver.port=8080 /data/project/app.jar
   consul:
     image: liubang/consul:1.2.3
