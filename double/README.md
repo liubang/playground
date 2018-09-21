@@ -3,13 +3,13 @@
 然后在8.20上执行
 
 ```shell
-docker-compose -f node-820 up
+docker-compose -f node-820.yml up
 ```
 
 在8.21上执行
 
 ```shell
-docker-compose -f node-821 up
+docker-compose -f node-821.yml up
 ```
 
 绑定host
