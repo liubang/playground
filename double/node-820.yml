@@ -47,12 +47,8 @@ services:
     hostname: registrator
     networks:
       - backend
-    depends_on:
-      - consul
-    links:
-      - consul:consul
     volumes:
       - /var/run/docker.sock:/tmp/docker.sock
-    command: -internal consul://consul:8500
+    command: -ip=192.168.8.20 consul://192.168.8.20:8500
 networks:
   backend:
