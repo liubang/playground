@@ -1,0 +1,59 @@
+version: "3"
+services:
+  test_server:
+    image: liubang/java8
+    hostname: test_server
+    environment:
+      SERVICE_8080_NAME: test_server
+      SERVICE_TAGS: service-820
+      MY_HOST: test_server-820
+    networks:
+      - backend
+    volumes:
+      - ../test-service-0.0.1-SNAPSHOT.jar:/data/project/app.jar
+    ports:
+      - 8080
+    command: java -jar -Dserver.port=8080 /data/project/app.jar
+  consul:
+    image: liubang/consul:1.2.3
+    hostname: consulserver-820
+    networks:
+      - backend
+    ports:
+      - 8300:8300
+      - 8500:8500
+      - 8600:8600
+      - 8301:8301
+      - 8301:8301/udp
+      - 8302:8302
+      - 8302:8302/udp
+      - 53:53/udp
+    command: agent -server -ui -advertise 192.168.8.20 --data-dir /tmp/consul -bootstrap-expect 3 -bind 0.0.0.0 -client 0.0.0.0
+  loadbalancer:
+    image: liubang/openresty-consul-template
+    hostname: loadbalancer
+    networks:
+      - backend
+    depends_on:
+      - consul
+    links:
+      - consul:consul
+    ports:
+      - 80:80
+    volumes:
+      - ../consul-template.hcl:/opt/app/consul-template/etc/config.hcl
+      - ../test.iliubang.cn.conf.ctmpl:/opt/app/nginx/conf/vhost/test.iliubang.cn.conf.ctmpl
+  registrator:
+    image: gliderlabs/registrator:master
+    hostname: registrator-820
+    networks:
+      - backend
+    depends_on:
+      - consul
+      - test_server
+      - loadbalancer
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock
+    command: -ip=192.168.8.20 consul://192.168.8.20:8500
+networks:
+  backend:
