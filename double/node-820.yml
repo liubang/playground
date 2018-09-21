@@ -5,12 +5,10 @@ services:
     hostname: test_server
     environment:
       SERVICE_8080_NAME: test_server
-      SERVICE_TAGS: service
-      MY_HOST: test_server
+      SERVICE_TAGS: service-820
+      MY_HOST: test_server-820
     networks:
       - backend
-    depends_on:
-      - registrator
     volumes:
       - ../test-service-0.0.1-SNAPSHOT.jar:/data/project/app.jar
     ports:
@@ -34,7 +32,6 @@ services:
       - backend
     depends_on:
       - consul
-      - registrator
     links:
       - consul:consul
     ports:
@@ -44,9 +41,13 @@ services:
       - ../test.iliubang.cn.conf.ctmpl:/opt/app/nginx/conf/vhost/test.iliubang.cn.conf.ctmpl
   registrator:
     image: gliderlabs/registrator:master
-    hostname: registrator
+    hostname: registrator-820
     networks:
       - backend
+    depends_on:
+      - consul
+      - test_server
+      - loadbalancer
     volumes:
       - /var/run/docker.sock:/tmp/docker.sock
     command: -ip=192.168.8.20 consul://192.168.8.20:8500
