@@ -9,8 +9,6 @@ services:
       MY_HOST: test_server
     networks:
       - backend
-    depends_on:
-      - registrator
     volumes:
       - ../test-service-0.0.1-SNAPSHOT.jar:/data/project/app.jar
     ports:
@@ -34,7 +32,6 @@ services:
       - backend
     depends_on:
       - consul
-      - registrator
     links:
       - consul:consul
     ports:
@@ -49,6 +46,8 @@ services:
       - backend
     depends_on:
       - consul
+      - loadbalancer
+      - test_server
     links:
       - consul:consul
     volumes:
