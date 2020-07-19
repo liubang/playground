@@ -1,0 +1,8 @@
+.buckd
+bazel-bin
+bazel-cpp-lab
+bazel-out
+bazel-testlogs
+buck-out
+compile_commands.json
+**/*.dSYM
