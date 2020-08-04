@@ -97,3 +97,12 @@ cc_binary(
     copts = C2A_OPTS,
 )
 
+cc_binary(
+    name = "test_thread_pool",
+    srcs = [
+        "thread-pool.h",
+        "test-thread-pool.cc",
+    ],
+    copts = C14_OPTS,
+    linkopts = ["-pthread"],
+)
