@@ -9,3 +9,13 @@ cc_binary(
         "test_oop.cc",
     ],
 )
+
+cc_binary(
+    name = "test_file_info",
+    srcs = [
+        "test_file_info.cc",
+    ],
+    copts = [
+        "-std=gnu++14",
+    ],
+)
