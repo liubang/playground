@@ -13,24 +13,12 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2020/07/20 00:32
+# Created: 2020/08/11 17:08
 
 cc_binary(
-    name = "test_signal",
-    srcs = ["test_signal.cc"],
-)
-
-cc_binary(
-    name = "test_oop",
+    name = "main",
     srcs = [
-        "test_oop.cc",
-    ],
-)
-
-cc_binary(
-    name = "test_file_info",
-    srcs = [
-        "test_file_info.cc",
+        "main.cc",
     ],
     copts = [
         "-std=gnu++14",
