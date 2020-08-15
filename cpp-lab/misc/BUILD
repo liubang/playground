@@ -19,3 +19,13 @@ cc_binary(
         "-std=gnu++14",
     ],
 )
+
+cc_binary(
+    name = "test_string",
+    srcs = [
+        "test_string.cc",
+    ],
+    copts = [
+        "-std=gnu++14",
+    ],
+)
