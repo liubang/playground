@@ -26,5 +26,7 @@ int main(int argc, char* argv[]) {
   auto f2 = foo::Foo::getInstance();
   std::cout << f1->getName() << "," << f1->getAge() << std::endl;
   std::cout << f2->getName() << "," << f2->getAge() << std::endl;
+  std::cout << &(*f1) << std::endl;
+  std::cout << &(*f2) << std::endl;
   return 0;
 }
