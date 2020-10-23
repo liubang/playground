@@ -2,29 +2,17 @@
 
 namespace router;
 
+use FFI\Exception;
+
 class Dispatcher
 {
 
-    /**
-     * @var Router
-     */
     private $router;
-
-    private $routerRule;
 
     public function __construct()
     {
         $this->router = new Router();
     }
-
-    /**
-     * @return mixed
-     */
-    public function getRouterRule()
-    {
-        return $this->routerRule;
-    }
-
 
     /**
      * @return Router
@@ -41,9 +29,9 @@ class Dispatcher
     {
         $uri = $request->getUri();
         $requestMethod = $request->getRequestMethod();
+        $routerRule = null;
         foreach ($this->router->getRouters() as $chunk) {
             $preg = '';
-
             foreach ($chunk as $item) {
                 if ($item->getMethod() == $requestMethod) {
                     $preg .= '|' . $item->getCompiledUri();
@@ -62,10 +50,21 @@ class Dispatcher
                     }
                 }
                 $request->setParams($params);
-                $this->routerRule = $rule;
+                $routerRule = $rule;
                 break;
             }
         }
-    }
 
+        if (is_null($routerRule)) {
+            throw new Exception("404 Not Found.");
+        }
+
+        $clazz = $routerRule->getClass();
+        if (!class_exists($clazz)) {
+            throw new Exception("{$clazz} not exists.");
+        }
+        $class = new $clazz();
+        return $routerRule;
+    }
 }
+
