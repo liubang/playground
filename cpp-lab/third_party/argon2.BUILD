@@ -17,7 +17,6 @@ cc_library(
         "src/blake2/*.h",
         "src/blake2/*.c",
     ]),
-    linkstatic = True,
     hdrs = ["include/argon2.h"],
     strip_include_prefix = "include",
     visibility = ["//visibility:public"],

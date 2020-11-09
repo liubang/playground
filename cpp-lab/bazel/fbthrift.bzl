@@ -105,8 +105,8 @@ def _fbthrift_common(ctx, lang):
     )
 
     return struct(
-        headers = depset(direct = headers),
-        sources = depset(direct = sources),
+        headers = headers,
+        sources = sources,
         outputs = depset(direct = outputs),
     )
 

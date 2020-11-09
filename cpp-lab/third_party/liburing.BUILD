@@ -24,6 +24,5 @@ cc_library(
     ],
     includes = ["src/include"],
     copts = ["-w"],
-    linkstatic = True,
     visibility = ["//visibility:public"],
 )

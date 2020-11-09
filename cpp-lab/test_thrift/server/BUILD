@@ -13,6 +13,6 @@ cc_binary(
     deps = [
         "//test_thrift/if:echo_lib",
         "@folly",
-        "@proxygen//:proxygenhttpserver",
+        "@fbthrift//:http2",
     ],
 )

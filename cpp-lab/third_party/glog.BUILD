@@ -124,7 +124,6 @@ cc_library(
         "-DHAVE___ATTRIBUTE__",
         "-I$(GENDIR)/external/glog/glog_internal",
     ],
-    linkstatic = True,
     deps = [
         ":glog_headers",
         "@gflags//:gflags",

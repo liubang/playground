@@ -37,7 +37,6 @@ cc_library(
         "lib/zstd.h",
     ],
     copts = ["-w"],
-    linkstatic = True,
 )
 
 cc_library(
@@ -47,7 +46,6 @@ cc_library(
     includes = ["lib/dictBuilder"],
     deps = [":common"],
     copts = ["-w"],
-    linkstatic = True,
 )
 
 cc_library(
@@ -57,7 +55,6 @@ cc_library(
     hdrs = glob(["lib/compress/*.h"]),
     copts = ["-w"],
     deps = [":common"],
-    linkstatic = True,
 )
 
 cc_library(
@@ -70,7 +67,6 @@ cc_library(
     ],
     copts = ["-w"],
     deps = [":common"],
-    linkstatic = True,
 )
 
 cc_library(
@@ -82,7 +78,6 @@ cc_library(
     hdrs = glob(["lib/decompress/*.h"]),
     copts = ["-w"],
     deps = [":common", ":legacy"],
-    linkstatic = True,
 )
 
 cc_library(
@@ -92,5 +87,4 @@ cc_library(
     hdrs = glob(["lib/deprecated/*.h"]),
     copts = ["-w"],
     deps = [":common"],
-    linkstatic = True,
 )

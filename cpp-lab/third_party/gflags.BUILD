@@ -97,7 +97,6 @@ cc_library(
         "-DHAVE_FNMATCH_H",
         "-DHAVE_PTHREAD",
     ],
-    linkstatic = True,
     linkopts = [
         "-pthread",
     ],

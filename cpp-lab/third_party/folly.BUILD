@@ -108,7 +108,6 @@ cc_library(
     ],
     hdrs = _common_hdrs,
     includes = [".", "folly"],
-    linkstatic = True,
     copts = _common_copts + [
         "-mavx",
         "-mavx2",
@@ -128,7 +127,6 @@ cc_library(
     ],
     hdrs = _common_hdrs,
     includes = [".", "folly"],
-    linkstatic = True,
     copts = _common_copts + [
         "-mno-avx",
         "-mno-avx2",
@@ -147,7 +145,6 @@ cc_library(
     ],
     hdrs = _common_hdrs,
     includes = [".", "folly"],
-    linkstatic = True,
     copts = _common_copts + [
         "-mno-avx",
         "-mno-avx2",
@@ -197,7 +194,6 @@ cc_library(
         "-pthread",
         "-lunwind",
     ],
-    linkstatic = True,
     deps = [
         ":lib_pclmul_files",
         ":MathOperation_AVX2",
@@ -234,7 +230,6 @@ cc_library(
         "folly/experimental/exception_tracer/StackTrace.cpp",
     ],
     copts = _common_copts,
-    linkstatic = True,
     deps = [
         ":folly",
     ],
@@ -248,7 +243,6 @@ cc_library(
         "folly/experimental/exception_tracer/ExceptionTracerLib.cpp",
     ],
     copts = _common_copts,
-    linkstatic = True,
     deps = [
         ":folly_exception_tracer_base",
     ],
@@ -261,7 +255,6 @@ cc_library(
         "folly/experimental/exception_tracer/ExceptionCounterLib.cpp",
     ],
     copts = _common_copts,
-    linkstatic = True,
     deps = [
         ":folly_exception_tracer",
     ],
@@ -274,7 +267,6 @@ cc_library(
         "folly/Benchmark.cpp",
     ],
     copts = _common_copts,
-    linkstatic = True,
     deps = [
         ":folly",
     ],
