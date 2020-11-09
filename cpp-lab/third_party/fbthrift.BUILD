@@ -2,12 +2,26 @@
 
 load("@cpplab//bazel:yacc.bzl", "yacc")
 load("@cpplab//bazel:flex.bzl", "flex")
-load("@cpplab//bazel:fbthrift.bzl", "fbthrift_cc_library", "fbthrift_compile")
+load("@cpplab//bazel:fbthrift.bzl", "fbthrift_compile")
 
 _common_copts = [
     "-std=gnu++1z",
-    "-w",
+    "-Wunused-function",
+    "-Wdeprecated-declarations",
 ]
+
+cc_library(
+    name = "boost_libs",
+    deps = [
+        "@boost//:context",
+        "@boost//:filesystem",
+        "@boost//:program_options",
+        "@boost//:regex",
+        "@boost//:system",
+        "@boost//:thread",
+        "@boost//:headers",
+    ],
+)
 
 yacc(
     name = "thrifty_bison",
@@ -72,7 +86,7 @@ cc_library(
     ],
     deps = [
         ":compiler_ast",
-        "@boost//:headers",
+        ":boost_libs",
     ],
 )
 
@@ -90,7 +104,7 @@ cc_library(
     copts = _common_copts,
     deps = [
         ":compiler_ast",
-        "@boost//:headers",
+        ":boost_libs",
     ],
 )
 
@@ -110,8 +124,7 @@ cc_library(
     ]),
     copts = _common_copts,
     deps = [
-        "@boost//:system",
-        "@boost//:filesystem",
+        ":boost_libs",
     ],
 )
 
@@ -125,9 +138,7 @@ cc_binary(
     ],
     copts = _common_copts,
     deps = [
-        "@boost//:system",
-        "@boost//:filesystem",
-        "@boost//:headers",
+        ":boost_libs",
     ],
 )
 
@@ -226,8 +237,7 @@ cc_binary(
         ":compiler_ast",
         ":compiler_base",
         ":compiler_generators",
-        "@boost//:system",
-        "@boost//:filesystem",
+        ":boost_libs",
     ],
     visibility = ["//visibility:public"],
 )
@@ -242,44 +252,31 @@ fbthrift_compile(
         "templates",
         "no_metadata",
     ],
-    thrift1 = ":thrift1",
     include_prefix = "thrift/lib/thrift",
 )
 
 fbthrift_compile(
-    name = "thriftmetadata",
+    name = "metadata",
     src = "thrift/lib/thrift/metadata.thrift",
-    services = [],
-    thrift1 = ":thrift1",
     include_prefix = "thrift/lib/thrift",
 )
 
 fbthrift_compile(
     name = "frozen",
     src = "thrift/lib/thrift/frozen.thrift",
-    services = [],
-    thrift1 = ":thrift1",
     include_prefix = "thrift/lib/thrift",
 )
 
 fbthrift_compile(
     name = "RpcMetadata",
     src = "thrift/lib/thrift/RpcMetadata.thrift",
-    services = [],
-    thrift1 = ":thrift1",
     include_prefix = "thrift/lib/thrift",
-)
-
-fbthrift_compile(
-    name = "rsocket_config",
-    src = "thrift/lib/cpp2/transport/rsocket/Config.thrift",
-    services = [],
-    thrift1 = ":thrift1",
 )
 
 filegroup(
     name = "cpp_hdrs",
     srcs = glob([
+        "thrift/lib/thrift/*.h",
         "thrift/lib/cpp/**/*.h",
         "thrift/lib/cpp/**/*.tcc",
         "thrift/lib/cpp2/**/*.h",
@@ -298,7 +295,6 @@ cc_library(
     ],
     includes = ["."],
     copts = _common_copts,
-    linkstatic = True,
     deps = [
         "@fmt",
         "@folly",
@@ -320,7 +316,6 @@ cc_library(
     ],
     includes = ["."],
     copts = _common_copts,
-    linkstatic = True,
     deps = [
         "@folly",
         "@glog",
@@ -343,7 +338,6 @@ cc_library(
     ],
     includes = ["."],
     copts = _common_copts,
-    linkstatic = True,
     deps = [
         ":thrift-core",
         "@fmt",
@@ -373,11 +367,13 @@ cc_library(
     ],
     includes = ["."],
     copts = _common_copts,
-    linkstatic = True,
     deps = [
         ":concurrency",
         ":thrift-core",
         "@folly",
+        "@openssl",
+        "@zlib",
+        "@zstd",
     ],
 )
 
@@ -398,11 +394,13 @@ cc_library(
     ],
     includes = ["."],
     copts = _common_copts,
-    linkstatic = True,
     deps = [
         ":transport",
+        ":concurrency",
+        ":boost_libs",
         "@folly",
         "@glog",
+        "@openssl",
     ],
 )
 
@@ -419,12 +417,26 @@ cc_library(
 )
 
 cc_library(
+    name = "thriftmetadata",
+    srcs = [
+        ":metadata",
+    ],
+    hdrs = [
+        ":cpp_hdrs",
+    ],
+    includes = ["."],
+    copts = _common_copts,
+    deps = [
+        "@folly",
+    ],
+)
+
+cc_library(
     name = "thriftfrozen2",
     srcs = [
         "thrift/lib/cpp2/frozen/Frozen.cpp",
         "thrift/lib/cpp2/frozen/FrozenUtil.cpp",
         "thrift/lib/cpp2/frozen/schema/MemorySchema.cpp",
-        ":thriftmetadata",
         ":frozen",
     ],
     includes = ["."],
@@ -432,9 +444,11 @@ cc_library(
         ":cpp_hdrs",
     ],
     copts = _common_copts,
-    linkstatic = True,
     deps = [
+        ":thriftmetadata",
         "@folly",
+        "@glog",
+        "@gflags",
     ],
 )
 
@@ -455,12 +469,17 @@ cc_library(
     ],
     includes = ["."],
     copts = _common_copts,
-    linkstatic = True,
     deps = [
         ":thrift",
         "@folly",
         "@wangle",
     ],
+)
+
+fbthrift_compile(
+    name = "rsocket-cpp2",
+    src = "thrift/lib/cpp2/transport/rsocket/Config.thrift",
+    include_prefix = "thrift/lib/cpp2/transport/rsocket",
 )
 
 cc_library(
@@ -513,34 +532,22 @@ cc_library(
         "thrift/lib/cpp2/transport/rocket/server/RocketThriftRequests.cpp",
         "thrift/lib/cpp2/transport/rocket/server/ThriftRocketServerHandler.cpp",
         "thrift/lib/cpp2/transport/rsocket/server/RSRoutingHandler.cpp",
-        "thrift/lib/cpp2/transport/http2/client/H2ClientConnection.cpp",
-        "thrift/lib/cpp2/transport/http2/client/ThriftTransactionHandler.cpp",
-        "thrift/lib/cpp2/transport/http2/common/H2Channel.cpp",
-        "thrift/lib/cpp2/transport/http2/common/HTTP2RoutingHandler.cpp",
-        "thrift/lib/cpp2/transport/http2/common/SingleRpcChannel.cpp",
-        "thrift/lib/cpp2/transport/http2/server/ThriftRequestHandler.cpp",
         "thrift/lib/cpp2/util/Checksum.cpp",
         "thrift/lib/cpp2/util/ScopedServerInterfaceThread.cpp",
         "thrift/lib/cpp2/util/ScopedServerThread.cpp",
-        "thrift/lib/thrift/RpcMetadata_extra.h",
         ":RpcMetadata",
-        ":rsocket_config",
-        ":thriftmetadata",
+        ":rsocket-cpp2",
     ],
     hdrs = [
         ":cpp_hdrs",
     ],
-    linkstatic = True,
     copts = _common_copts,
     includes = ["."],
     deps = [
         ":thrift",
+        ":thriftmetadata",
         ":thriftfrozen2",
         ":thriftprotocol",
-        "@folly//:folly",
-        "@wangle//:wangle",
-        "@proxygen//:proxygenhttpserver",
-        "@rsocket-cpp//:ReactiveSocket",
     ],
     visibility = ["//visibility:public"],
 )
@@ -553,7 +560,6 @@ cc_library(
     hdrs = glob([
         "thrift/perf/cpp2/util/*.h",
     ]),
-    linkstatic = True,
     copts = _common_copts,
     deps = [
         ":thriftcpp2",
