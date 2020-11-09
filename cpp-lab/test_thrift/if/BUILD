@@ -26,7 +26,6 @@ fbthrift_compile(
     options = [
         "reflection",
     ],
-    thrift1 = "@fbthrift//:thrift1",
 )
 
 fbthrift_cc_library(
@@ -38,7 +37,6 @@ fbthrift_cc_library(
     options = [
         "reflection",
     ],
-    thrift1 = "@fbthrift//:thrift1",
     copts = [
         "-std=c++14",
     ],
