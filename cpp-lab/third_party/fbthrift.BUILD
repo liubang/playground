@@ -553,6 +553,27 @@ cc_library(
 )
 
 cc_library(
+    name = "http2",
+    srcs = [
+        "thrift/lib/cpp2/transport/http2/client/H2ClientConnection.cpp",
+        "thrift/lib/cpp2/transport/http2/client/ThriftTransactionHandler.cpp",
+        "thrift/lib/cpp2/transport/http2/common/H2Channel.cpp",
+        "thrift/lib/cpp2/transport/http2/common/HTTP2RoutingHandler.cpp",
+        "thrift/lib/cpp2/transport/http2/common/SingleRpcChannel.cpp",
+        "thrift/lib/cpp2/transport/http2/server/ThriftRequestHandler.cpp",
+    ],
+    hdrs = glob(["thrift/lib/cpp2/transport/http2/**/*.h"]),
+    includes = ["."],
+    copts = _common_copts,
+    deps = [
+        ":thriftcpp2",
+        "@proxygen//:proxygenhttpserver",
+        "@rsocket-cpp//:ReactiveSocket",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
     name = "thriftperfutil",
     srcs = glob([
         "thrift/perf/cpp2/util/*.cpp",
@@ -563,6 +584,7 @@ cc_library(
     copts = _common_copts,
     deps = [
         ":thriftcpp2",
+        "@proxygen//:proxygenhttpserver",
     ],
     visibility = ["//visibility:public"],
 )
