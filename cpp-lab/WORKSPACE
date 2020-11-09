@@ -1,6 +1,6 @@
 workspace(name = "cpplab")
 
-load("//:workspace.bzl", "external_dependencies", "external_repositories")
+load("//third_party:repository.bzl", "external_dependencies", "external_repositories")
 
 external_dependencies()
 

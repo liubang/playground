@@ -6,7 +6,6 @@ fbthrift_cc_library(
     services = [
         "PikachuService",
     ],
-    thrift1 = "@fbthrift//:thrift1",
     copts = [
         "-std=c++14",
     ],
