@@ -67,6 +67,5 @@ cc_library(
     deps = [
         "@argon2//:argon2",
     ],
-    linkstatic = True,
     visibility = ["//visibility:public"],
 )

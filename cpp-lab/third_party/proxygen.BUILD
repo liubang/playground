@@ -4,6 +4,7 @@ _common_copts = [
     "-std=c++14",
     "-Wall",
     "-Wextra",
+    "-Wsign-compare",
 ]
 
 cc_library(
@@ -14,7 +15,6 @@ cc_library(
     hdrs = [
         "proxygen/external/http_parser/http_parser.h",
     ],
-    linkstatic = True,
     copts = _common_copts,
     visibility = ["//visibility:public"],
 )
@@ -196,7 +196,6 @@ cc_library(
         "proxygen/lib/utils/TraceFieldType.h",
     ],
     includes = ["."],
-    linkstatic = True,
     copts = _common_copts,
     deps = [
         ":proxygen_http_parser",
@@ -225,7 +224,6 @@ cc_library(
             "proxygen/httpserver/**/tests/*.h",
         ],
     ),
-    linkstatic = True,
     copts = _common_copts,
     deps = [
         ":proxygen",
