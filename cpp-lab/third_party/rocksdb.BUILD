@@ -314,7 +314,6 @@ cc_library(
         "-ldl",
         "-pthread",
     ],
-    linkstatic = True,
     deps = [
         "@snappy//:snappy",
         "@zstd//:zstd",
