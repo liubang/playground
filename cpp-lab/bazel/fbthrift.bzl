@@ -29,8 +29,8 @@ _COMMON_ATTR = {
     ),
     "include_prefix": attr.string(
     ),
-    "thrift1": attr.label(
-        mandatory = True,
+    "_thrift1": attr.label(
+        default = Label("@fbthrift//:thrift1"),
         executable = True,
         cfg = "host",
     ),
@@ -48,6 +48,10 @@ def _get_file_name_no_ext(file):
     idx = file.rfind("/")
     return file[idx + 1:].split(".")[0]
 
+def _get_output_dir(input_dir, build_file_dir):
+    idx = input_dir.find(build_file_dir)
+    return input_dir[idx + len(build_file_dir):]
+
 def _fbthrift_common(ctx, lang):
     src = ctx.files.src[0]
     outputs = []
@@ -56,7 +60,7 @@ def _fbthrift_common(ctx, lang):
     file_name = _get_file_name_no_ext(src.path)
     input_dir = _get_file_path(src.path) + "/"
     build_file_dir = _get_file_path(ctx.build_file_path) + "/"
-    sub_dir = input_dir.replace(build_file_dir, "")
+    sub_dir = _get_output_dir(input_dir, build_file_dir)
     out_dir = "{}gen-{}".format(sub_dir, lang)
 
     headers = [
@@ -109,7 +113,7 @@ def _fbthrift_common(ctx, lang):
     args.add(src.path)
     outputs = headers + sources
     ctx.actions.run(
-        executable = ctx.executable.thrift1,
+        executable = ctx.executable._thrift1,
         arguments = [args],
         inputs = depset(direct = ctx.files.src),
         outputs = outputs,
@@ -118,8 +122,8 @@ def _fbthrift_common(ctx, lang):
     )
 
     return struct(
-        headers = headers,
-        sources = sources,
+        headers = depset(direct = headers),
+        sources = depset(direct = sources),
         outputs = depset(direct = outputs),
     )
 
@@ -130,7 +134,7 @@ def _fbthrift_compile_impl(ctx):
     ]
 
 fbthrift_compile = rule(
-    _fbthrift_compile_impl,
+    implementation = _fbthrift_compile_impl,
     attrs = _fbthrift_attrs({
         "lang": attr.string(
             default = "cpp2",
@@ -199,7 +203,7 @@ def _fbthrift_cc_library_impl(ctx):
     ]
 
 fbthrift_cc_library = rule(
-    _fbthrift_cc_library_impl,
+    implementation = _fbthrift_cc_library_impl,
     attrs = _fbthrift_attrs({
         "deps": attr.label_list(
             providers = [CcInfo],
