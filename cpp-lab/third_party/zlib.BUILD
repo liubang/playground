@@ -32,7 +32,6 @@ cc_library(
         "zutil.h",
     ],
     hdrs = ["zlib.h"],
-    linkstatic = True,
     copts = [
         "-Wno-shift-negative-value",
         "-DZ_HAVE_UNISTD_H",

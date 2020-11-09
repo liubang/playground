@@ -79,6 +79,5 @@ cc_library(
     deps = [
         "@folly//:folly",
     ],
-    linkstatic = True,
     visibility = ["//visibility:public"],
 )

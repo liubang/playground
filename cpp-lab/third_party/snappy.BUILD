@@ -19,7 +19,6 @@ cc_library(
     ],
     hdrs = ["snappy.h"],
     includes = ["."],
-    linkstatic = True,
     copts = [
         "-fno-exceptions",
         "-Wno-sign-compare",

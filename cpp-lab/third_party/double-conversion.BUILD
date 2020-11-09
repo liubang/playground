@@ -31,7 +31,6 @@ cc_library(
     linkopts = [
         "-lm",
     ],
-    linkstatic = True,
     includes = ["."],
     visibility = ["//visibility:public"],
 )

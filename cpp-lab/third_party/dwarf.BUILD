@@ -212,6 +212,5 @@ cc_library(
     ],
     includes = [".", "libdwarf"],
     copts = ["-w"],
-    linkstatic = True,
     visibility = ["//visibility:public"],
 )
