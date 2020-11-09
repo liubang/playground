@@ -5,7 +5,6 @@ cc_library(
     srcs = glob(["src/*.c"]),
     hdrs = glob(["src/*.h"]),
     includes = ["src"],
-    linkstatic = True,
     copts = [
         "-fomit-frame-pointer",
         "-O2",

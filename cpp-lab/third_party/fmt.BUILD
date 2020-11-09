@@ -60,6 +60,5 @@ cc_library(
         "-Werror",
     ],
     includes = ["include"],
-    linkstatic = True,
     visibility = ["//visibility:public"],
 )

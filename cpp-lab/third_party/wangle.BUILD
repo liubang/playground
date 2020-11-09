@@ -50,7 +50,6 @@ cc_library(
     copts = [
         "-std=c++1z",
     ],
-    linkstatic = True,
     includes = ["."],
     deps = [
         "@folly//:folly",

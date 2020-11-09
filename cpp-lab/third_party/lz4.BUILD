@@ -15,7 +15,6 @@ cc_library(
         "lib/lz4.h",
     ],
     includes = ["lib"],
-    linkstatic = True,
     visibility = ["//visibility:public"],
 )
 
@@ -25,7 +24,6 @@ cc_library(
         "lib/lz4.c",
     ],
     strip_include_prefix = "lib/",
-    linkstatic = True,
     visibility = ["//visibility:private"],
 )
 
@@ -42,7 +40,6 @@ cc_library(
         ":lz4_lz4c_include",
     ],
     includes = ["lib"],
-    linkstatic = True,
     visibility = ["//visibility:public"],
 )
 
@@ -60,6 +57,5 @@ cc_library(
         ":lz4_hc",
     ],
     includes = ["lib"],
-    linkstatic = True,
     visibility = ["//visibility:public"],
 )
