@@ -13,12 +13,29 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2020/07/20 00:32
-
-load("//:copts/configure_copts.bzl", "DEFAULT_COPTS")
+# Created: 2020/11/19 16:22
 
 _copts = [
-    "-std=gnu++14",
+    "-std=gnu++17",
+    "-Wall",
+    "-Wextra",
+    "-Wcast-qual",
+    "-Wconversion-null",
+    "-Woverlength-strings",
+    "-Wpointer-arith",
+    "-Wno-unused-local-typedefs",
+    "-Wno-unused-parameter",
+    "-Wunused-result",
+    "-Wvarargs",
+    "-Wvla",
+    "-Wwrite-strings",
+    "-Wno-missing-field-initializers",
+    "-Wno-sign-compare",
+    "-msse3",
+    "-msse4",
+    "-msse4.1",
+    "-mpclmul",
+    "-fno-builtin-memcmp",
 ]
 
 cc_binary(
@@ -26,7 +43,7 @@ cc_binary(
     srcs = [
         "scope.cc",
     ],
-    copts = DEFAULT_COPTS,
+    copts = _copts,
     deps = [
         "@folly",
     ],
