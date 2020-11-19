@@ -10,7 +10,7 @@ matrix:
     - language: cpp
       env: 
         - OLC_PATH=cpp
-        - V=3.2.0
+        - V=3.7.0
       compiler:
         - gcc
       before_install:
@@ -29,4 +29,6 @@ matrix:
         - ./install.sh --user
         - rm -f install.sh
       script:
+        - cd cpp
         - bazel build -k //...
+
