@@ -13,10 +13,10 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2020/07/20 00:32
+# Created: 2020/11/19 16:22
 
-GCC_FLAGS = [
-    "-std=gnu++2a",
+_DEFAULT_COPTS = [
+    "-std=gnu++17",
     "-Wall",
     "-Wextra",
     "-Wcast-qual",
@@ -38,12 +38,26 @@ GCC_FLAGS = [
     "-fno-builtin-memcmp",
 ]
 
-GCC_TEST_FLAGS = [
-    "-std=gnu++2a",
-    "-Wno-conversion-null",
-    "-Wno-deprecated-declarations",
-    "-Wno-sign-compare",
-    "-Wno-unused-function",
-    "-Wno-unused-parameter",
-    "-Wno-unused-private-field",
-]
+cc_binary(
+    name = "basic_operation",
+    srcs = [
+        "basic_operation.cc",
+    ],
+    copts = _DEFAULT_COPTS,
+    deps = [
+        "@rocksdb",
+        "@folly",
+    ],
+)
+
+cc_binary(
+    name = "use_memtable",
+    srcs = [
+        "use_memtable.cc",
+    ],
+    copts = _DEFAULT_COPTS,
+    deps = [
+        "@rocksdb",
+        "@folly",
+    ],
+)
