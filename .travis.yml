@@ -5,8 +5,8 @@ matrix:
   include:
     - language: java
       jdk:
-        - oraclejdk8
-        - openjdk8
+        - oraclejdk11
+        - openjdk11
     - language: cpp
       env: 
         - OLC_PATH=cpp
