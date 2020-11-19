@@ -15,25 +15,28 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2020/07/20 00:32
 
-load(
-    "//:copts/configure_copts.bzl",
-    "DEFAULT_COPTS",
-)
-
-cc_library(
-    name = "math",
-    hdrs = [
-        "math.h",
-    ],
-)
+_TEST_COPTS = [
+    "-std=gnu++2a",
+    "-Wno-conversion-null",
+    "-Wno-deprecated-declarations",
+    "-Wno-sign-compare",
+    "-Wno-unused-function",
+    "-Wno-unused-parameter",
+    "-Wno-unused-private-field",
+]
 
 cc_test(
-    name = "test_math",
+    name = "ds",
     srcs = [
-        "test_math.cc",
+        "common.h",
+        "000-merge-sort.cc",
+        "155-min-stack.cc",
+        "289-game-of-life.cc",
+        "300-longest-increasing-subsequence.cc",
+        "452-minimum-number-of-arrowsto-burst-balloons.cc",
     ],
+    copts = _TEST_COPTS,
     deps = [
-        ":math",
         "@gtest//:gtest_main",
     ],
 )

@@ -16,20 +16,14 @@
 # Created: 2020/07/20 00:32
 
 cc_binary(
-    name = "pikachu",
+    name = "demo1",
     srcs = [
-        "pikachu.cc",
-        "pikachu_service.cc",
-        "pikachu_service.h",
+        "demo1.cc",
     ],
-    copts = [
-        "-std=c++14",
+    linkopts = [
+        "-lpcap",
     ],
     deps = [
-        "//pikachu/if:pikachu_thrift",
-        "@folly",
-        "@glog",
         "@gflags",
-        "@proxygen//:proxygenhttpserver",
     ],
 )
