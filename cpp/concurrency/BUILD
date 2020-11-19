@@ -15,7 +15,7 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2020/07/20 00:32
 
-COPTS_COMMON = [
+_COPTS_COMMON = [
     "-Wall",
     "-Wextra",
     "-Wcast-qual",
@@ -40,15 +40,15 @@ COPTS_COMMON = [
 
 C11_OPTS = [
     "-std=gnu++11",
-] + COPTS_COMMON
+] + _COPTS_COMMON
 
 C14_OPTS = [
     "-std=gnu++14",
-] + COPTS_COMMON
+] + _COPTS_COMMON
 
 C2A_OPTS = [
     "-std=gnu++2a",
-] + COPTS_COMMON
+] + _COPTS_COMMON
 
 cc_binary(
     name = "multithread-1",
