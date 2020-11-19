@@ -1,7 +1,3 @@
-## 杂七杂八的测试学习代码
+## Learning and testing code.
 
-- [cpp](./cpp)
-- [go](./go)
-- [java](./java)
-- [php](./php)
-- [docker](./docker)
+[![Build Status](https://travis-ci.org/liubang/laboratory.svg?branch=master)](https://travis-ci.org/liubang/laboratory)
