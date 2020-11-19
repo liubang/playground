@@ -1,5 +1,3 @@
 common --color=yes
 # bazel build
-build:mycluster --remote_executor=grpc://localhost:8980
-build:mycluster --remote_instance_name=remote-execution
 test --test_output=all --action_env="GTEST_COLOR=1"
