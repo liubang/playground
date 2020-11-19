@@ -1,4 +1,4 @@
-workspace(name = "cpplab")
+workspace(name = "cpp")
 
 load("//third_party:repository.bzl", "external_dependencies", "external_repositories")
 

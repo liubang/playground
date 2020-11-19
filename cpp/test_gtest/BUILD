@@ -15,19 +15,45 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2020/07/20 00:32
 
-load("//bazel:fbthrift.bzl", "fbthrift_cc_library", "fbthrift_compile")
+_copts = [
+    "-std=gnu++17",
+    "-Wall",
+    "-Wextra",
+    "-Wcast-qual",
+    "-Wconversion-null",
+    "-Woverlength-strings",
+    "-Wpointer-arith",
+    "-Wno-unused-local-typedefs",
+    "-Wno-unused-parameter",
+    "-Wunused-result",
+    "-Wvarargs",
+    "-Wvla",
+    "-Wwrite-strings",
+    "-Wno-missing-field-initializers",
+    "-Wno-sign-compare",
+    "-msse3",
+    "-msse4",
+    "-msse4.1",
+    "-mpclmul",
+    "-fno-builtin-memcmp",
+]
 
-fbthrift_cc_library(
-    name = "pikachu_thrift",
-    src = "pikachu.thrift",
-    services = [
-        "PikachuService",
+cc_library(
+    name = "math",
+    hdrs = [
+        "math.h",
     ],
-    copts = [
-        "-std=c++14",
+    copts = _copts,
+)
+
+cc_test(
+    name = "test_math",
+    srcs = [
+        "test_math.cc",
     ],
+    copts = _copts,
     deps = [
-        "@fbthrift//:thriftcpp2",
+        ":math",
+        "@gtest//:gtest_main",
     ],
-    visibility = ["//visibility:public"],
 )
