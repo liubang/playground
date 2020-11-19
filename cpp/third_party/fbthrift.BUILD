@@ -1,8 +1,8 @@
 # vim: ft=bzl
 
-load("@cpplab//bazel:yacc.bzl", "yacc")
-load("@cpplab//bazel:flex.bzl", "flex")
-load("@cpplab//bazel:fbthrift.bzl", "fbthrift_compile")
+load("@cpp//bazel:yacc.bzl", "yacc")
+load("@cpp//bazel:flex.bzl", "flex")
+load("@cpp//bazel:fbthrift.bzl", "fbthrift_compile")
 
 _common_copts = [
     "-std=gnu++1z",

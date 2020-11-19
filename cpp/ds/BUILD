@@ -1,8 +1,12 @@
-load(
-    "//:copts/configure_copts.bzl",
-    "DEFAULT_COPTS",
-    "TEST_COPTS",
-)
+_TEST_COPTS = [
+    "-std=gnu++2a",
+    "-Wno-conversion-null",
+    "-Wno-deprecated-declarations",
+    "-Wno-sign-compare",
+    "-Wno-unused-function",
+    "-Wno-unused-parameter",
+    "-Wno-unused-private-field",
+]
 
 cc_test(
     name = "ds",
@@ -14,9 +18,8 @@ cc_test(
         "300-longest-increasing-subsequence.cc",
         "452-minimum-number-of-arrowsto-burst-balloons.cc",
     ],
-    copts = TEST_COPTS,
+    copts = _TEST_COPTS,
     deps = [
         "@gtest//:gtest_main",
     ],
 )
-

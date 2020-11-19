@@ -1,7 +1,6 @@
 #pragma once
 
 namespace test_gtest {
-
 template <typename T>
 class Math {
  public:
@@ -9,5 +8,4 @@ class Math {
     return a + b;
   }
 };
-
 } // namespace test_gtest

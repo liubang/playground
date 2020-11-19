@@ -6,4 +6,7 @@ cc_binary(
     linkopts = [
         "-lpcap",
     ],
+    deps = [
+        "@gflags",
+    ],
 )

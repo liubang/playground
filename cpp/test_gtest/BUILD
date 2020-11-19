@@ -1,5 +1,5 @@
-GCC_FLAGS = [
-    "-std=gnu++2a",
+_copts = [
+    "-std=gnu++17",
     "-Wall",
     "-Wextra",
     "-Wcast-qual",
@@ -21,12 +21,22 @@ GCC_FLAGS = [
     "-fno-builtin-memcmp",
 ]
 
-GCC_TEST_FLAGS = [
-    "-std=gnu++2a",
-    "-Wno-conversion-null",
-    "-Wno-deprecated-declarations",
-    "-Wno-sign-compare",
-    "-Wno-unused-function",
-    "-Wno-unused-parameter",
-    "-Wno-unused-private-field",
-]
+cc_library(
+    name = "math",
+    hdrs = [
+        "math.h",
+    ],
+    copts = _copts,
+)
+
+cc_test(
+    name = "test_math",
+    srcs = [
+        "test_math.cc",
+    ],
+    copts = _copts,
+    deps = [
+        ":math",
+        "@gtest//:gtest_main",
+    ],
+)
