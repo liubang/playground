@@ -1,6 +1,9 @@
 #include <iostream>
 #include <cstdio>
 #include <pcap.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <gflags/gflags.h>
 
 DEFINE_string(net_inter, "enp0s25", "");
@@ -15,6 +18,7 @@ int main(int argc, char* argv[]) {
   bpf_u_int32 net;               /* Our IP */
   struct pcap_pkthdr header;     /* The header that pcap gives us */
   const u_char* packet;          /* The actual packet */
+  struct in_addr addr;
   // clang-format on
 
   // /* Define the device */
@@ -35,6 +39,24 @@ int main(int argc, char* argv[]) {
     net = 0;
     mask = 0;
   }
+
+  /* Get the network address in a human readable form */
+  addr.s_addr = net;
+  char* net_str = inet_ntoa(addr);
+  if (!net_str) {
+    ::fprintf(stderr, "Get addr error");
+    return 2;
+  }
+
+  /* Do the same as above for the device's mask */
+  addr.s_addr = mask;
+  char* mask_str = inet_ntoa(addr);
+  if (!mask_str) {
+    ::fprintf(stderr, "Get mask error");
+    return 2;
+  }
+
+  ::printf("net: %s, mask: %s \n", net_str, mask_str);
 
   /* Open the session in promiscuous mode */
   handle = pcap_open_live(FLAGS_net_inter.data(), BUFSIZ, 1, 1000, errbuf);
