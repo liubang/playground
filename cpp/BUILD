@@ -1,4 +1,4 @@
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//visibility:public"], features = ["fully_static_link"])
 
 # On Bazel CI Mac machines, we are using cmake built from sources
 toolchain(

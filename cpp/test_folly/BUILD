@@ -1,3 +1,5 @@
+# package(features = ["fully_static_link"])
+
 _copts = [
     "-std=gnu++17",
     "-Wall",
@@ -35,6 +37,12 @@ cc_binary(
     name = "future",
     srcs = [
         "future.cc",
+    ],
+    linkopts = [
+        "-l:libstdc++.a",
+    ],
+    features = [
+        # "fully_static_link",
     ],
     copts = _copts,
     deps = [

@@ -3,6 +3,13 @@ cc_binary(
     srcs = [
         "test.cc",
     ],
+    copts = [
+        "-std=gnu++17",
+    ],
+    linkopts = [
+        "-lstdc++",
+        "-static",
+    ],
     deps = [
         "@cityhash",
     ],

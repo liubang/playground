@@ -1,3 +1,4 @@
 common --color=yes
 # bazel build
 test --test_output=all --action_env="GTEST_COLOR=1"
+
