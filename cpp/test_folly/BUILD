@@ -15,6 +15,8 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2020/11/19 16:22
 
+# package(features = ["fully_static_link"])
+
 _copts = [
     "-std=gnu++17",
     "-Wall",
@@ -52,6 +54,12 @@ cc_binary(
     name = "future",
     srcs = [
         "future.cc",
+    ],
+    linkopts = [
+        "-l:libstdc++.a",
+    ],
+    features = [
+        # "fully_static_link",
     ],
     copts = _copts,
     deps = [
