@@ -1,4 +1,5 @@
 common --color=yes
+common --experimental_ui_max_stdouterr_bytes=1073741819
 # bazel build
 test --test_output=all --action_env="GTEST_COLOR=1"
 

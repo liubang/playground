@@ -13,5 +13,14 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2020/07/20 00:32
+# Created: 2020/12/21 17:12
 
+cc_binary(
+    name = "brain_fuck",
+    srcs = [
+        "brain_fuck.cc",
+    ],
+    copts = [
+        "-std=gnu++17",
+    ],
+)
