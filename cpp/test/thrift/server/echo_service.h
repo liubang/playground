@@ -2,7 +2,7 @@
 
 #include <memory>
 
-#include "test_thrift/if/gen-cpp2/EchoService.h"
+#include "test/thrift/if/gen-cpp2/EchoService.h"
 
 #include "demo.h"
 
