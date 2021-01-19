@@ -34,7 +34,7 @@ def _genyacc_impl(ctx):
     ]
 
     ctx.actions.run(
-        executable = ctx.attr.yacc,
+        executable = ctx.executable._yacc,
         arguments = [args],
         inputs = ctx.files.src,
         outputs = outputs,
@@ -82,8 +82,10 @@ yacc = rule(
             doc = "A list of extra options to pass to Bison.  These are " +
                   "subject to $(location ...) expansion.",
         ),
-        "yacc": attr.string(
-            default = "/usr/bin/yacc",
+        "_yacc": attr.label(
+            default = Label("@bison//:yacc_bin"),
+            executable = True,
+            cfg = "host",
         ),
     },
     provides = [
