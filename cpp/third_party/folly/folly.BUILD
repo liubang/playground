@@ -192,7 +192,6 @@ cc_library(
     linkopts = [
         "-ldl",
         "-pthread",
-        "-lunwind",
     ],
     deps = [
         ":lib_pclmul_files",
@@ -205,6 +204,8 @@ cc_library(
         "@boost//:regex",
         "@boost//:system",
         "@boost//:thread",
+        "@libunwind//:libunwind",
+        "@xz-utils//:liblzma",
         "@openssl//:openssl",
         "@libaio//:libaio",
         "@snappy//:snappy",

@@ -56,7 +56,11 @@ cc_binary(
         "singleton.cc",
         "singleton.h",
     ],
+    features = [
+        "fully_static_link",
+    ],
     copts = _copts,
+    linkopts = ["-l:libstdc++.a"],
     deps = [
         "@folly",
     ],

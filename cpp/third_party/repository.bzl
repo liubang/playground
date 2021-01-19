@@ -12,6 +12,24 @@ def external_dependencies():
     )
 
 def external_repositories(path_prefix = "", repo_name = ""):
+    # libunwind
+    http_archive(
+        name = "libunwind",
+        build_file = clean_dep("//third_party/libunwind:libunwind.BUILD"),
+        urls = ["https://github.com/libunwind/libunwind/releases/download/v1.5/libunwind-1.5.0.tar.gz"],
+        sha256 = "90337653d92d4a13de590781371c604f9031cdb50520366aa1e3a91e1efb1017",
+        strip_prefix = "libunwind-1.5.0",
+    )
+
+    # liblzma
+    http_archive(
+        name = "xz-utils",
+        build_file = clean_dep("//third_party/xz-utils:xz-utils.BUILD"),
+        urls = ["https://tukaani.org/xz/xz-5.2.5.tar.gz"],
+        sha256 = "f6f4910fd033078738bd82bfba4f49219d03b17eb0794eb91efbae419f4aba10",
+        strip_prefix = "xz-5.2.5",
+    )
+
     # boost
     http_archive(
         name = "boost",
