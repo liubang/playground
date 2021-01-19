@@ -15,7 +15,7 @@ def _genlex_impl(ctx):
     args.add(ctx.file.src)
     outputs = [ctx.outputs.out]
     ctx.actions.run(
-        executable = ctx.attr.flex,
+        executable = ctx.executable._flex,
         arguments = [args],
         inputs = ctx.files.src + ctx.files.includes,
         outputs = outputs,
@@ -60,8 +60,10 @@ flex = rule(
         "lexopts": attr.string_list(
             doc = "A list of options to be added to the flex command line.",
         ),
-        "flex": attr.string(
-            default = "/usr/bin/flex",
+        "_flex": attr.label(
+            default = Label("@flex//:flex_bin"),
+            executable = True,
+            cfg = "host",
         ),
     },
     provides = [

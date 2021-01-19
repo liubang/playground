@@ -1,4 +1,4 @@
-load("//bazel:fbthrift.bzl", "fbthrift_cc_library", "fbthrift_compile")
+load("//third_party/fbthrift:fbthrift.bzl", "fbthrift_cc_library", "fbthrift_compile")
 
 fbthrift_compile(
     name = "echo",
