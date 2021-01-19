@@ -85,3 +85,13 @@ cc_binary(
         "-ldl",
     ],
 )
+
+cc_binary(
+    name = "context",
+    srcs = [
+        "context.cc",
+    ],
+    copts = [
+        "-std=gnu++17",
+    ],
+)

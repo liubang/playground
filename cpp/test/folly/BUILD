@@ -78,3 +78,14 @@ cc_binary(
         "@folly",
     ],
 )
+
+cc_binary(
+    name = "test1",
+    srcs = [
+        "test1.cc",
+    ],
+    copts = _copts,
+    deps = [
+        "@folly",
+    ],
+)
