@@ -16,20 +16,17 @@
 # Created: 2020/07/20 00:32
 
 cc_binary(
-    name = "echo_server",
+    name = "echo_client",
     srcs = [
-        "echo_service.cc",
-        "echo_service.h",
-        "echo_server.cc",
-        "demo.h",
-        "demo.cc",
+        "echo_client.cc",
     ],
     copts = [
-        "-std=c++17",
+        "-std=c++14",
     ],
     deps = [
-        "//test_thrift/if:echo_lib",
+        "//test/thrift/if:echo_lib",
         "@folly",
         "@fbthrift//:http2",
+        "@fbthrift//:thriftperfutil",
     ],
 )
