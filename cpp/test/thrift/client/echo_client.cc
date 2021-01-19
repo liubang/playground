@@ -1,4 +1,4 @@
-#include "test_thrift/if/gen-cpp2/EchoService.h"
+#include "test/thrift/if/gen-cpp2/EchoService.h"
 
 #include <folly/SocketAddress.h>
 #include <folly/init/Init.h>

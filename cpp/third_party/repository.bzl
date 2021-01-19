@@ -265,3 +265,11 @@ def external_repositories(path_prefix = "", repo_name = ""):
         strip_prefix = "benchmark-16703ff83c1ae6d53e5155df3bb3ab0bc96083be",
         sha256 = "59f918c8ccd4d74b6ac43484467b500f1d64b40cc1010daa055375b322a43ba3",
     )
+
+    http_archive(
+        name = "msgpack",
+        build_file = clean_dep("//third_party:msgpack.BUILD"),
+        urls = ["https://github.com/msgpack/msgpack-c/releases/download/cpp-3.3.0/msgpack-3.3.0.tar.gz"],
+        strip_prefix = "msgpack-3.3.0",
+        sha256 = "6e114d12a5ddb8cb11f669f83f32246e484a8addd0ce93f274996f1941c1f07b",
+    )

@@ -11,7 +11,7 @@ cc_binary(
         "-std=c++17",
     ],
     deps = [
-        "//test_thrift/if:echo_lib",
+        "//test/thrift/if:echo_lib",
         "@folly",
         "@fbthrift//:http2",
     ],
