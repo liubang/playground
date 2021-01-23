@@ -49,7 +49,6 @@ def _fbthrift_common(ctx, lang):
     headers = [
         ctx.actions.declare_file("{}/{}_constants.h".format(out_dir, file_name)),
         ctx.actions.declare_file("{}/{}_data.h".format(out_dir, file_name)),
-        ctx.actions.declare_file("{}/{}_metadata.h".format(out_dir, file_name)),
         ctx.actions.declare_file("{}/{}_types.h".format(out_dir, file_name)),
         ctx.actions.declare_file("{}/{}_types.tcc".format(out_dir, file_name)),
     ]
@@ -83,6 +82,9 @@ def _fbthrift_common(ctx, lang):
     if has_metadata:
         sources += [
             ctx.actions.declare_file("{}/{}_metadata.cpp".format(out_dir, file_name)),
+        ]
+        headers += [
+            ctx.actions.declare_file("{}/{}_metadata.h".format(out_dir, file_name)),
         ]
 
     if ctx.attr.include_prefix:
