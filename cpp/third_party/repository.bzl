@@ -91,6 +91,12 @@ def external_repositories(path_prefix = "", repo_name = ""):
         urls = ["https://pagure.io/libaio/archive/libaio-0.3.111/libaio-libaio-0.3.111.tar.gz"],
         sha256 = "e6bc17cba66e59085e670fea238ad095766b412561f90b354eb4012d851730ba",
         strip_prefix = "libaio-libaio-0.3.111",
+        patches = [
+            "//third_party/libaio:libaio.patch",
+        ],
+        patch_args = [
+            "-p1",
+        ],
     )
 
     # lz4
