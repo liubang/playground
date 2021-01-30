@@ -1,16 +1,17 @@
 # vim: ft=bzl
 
-cc_library(
+load("@rules_foreign_cc//tools/build_defs:make.bzl", "make")
+
+filegroup(
+    name = "all",
+    srcs = glob(["**"]),
+)
+
+make(
     name = "libaio",
-    srcs = glob(["src/*.c"]),
-    hdrs = glob(["src/*.h"]),
-    includes = ["src"],
-    copts = [
-        "-fomit-frame-pointer",
-        "-O2",
-        "-nostdlib",
-        "-nostartfiles",
-        "-Wall",
+    static_libraries = [
+        "libaio.a",
     ],
+    lib_source = ":all",
     visibility = ["//visibility:public"],
 )
