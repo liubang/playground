@@ -238,10 +238,13 @@ class Terp {
   explicit Terp(uint32_t heap_size);
   virtual ~Terp();
   bool initialize(Result& result);
+  uint64_t pop();
+  void push(uint64_t value);
+  const RegisterFileT& register_file() const;
 
  private:
   uint32_t heap_size_{0};
-  uint8_t* heap_{nullptr};
+  uint64_t* heap_{nullptr};
   RegisterFileT registers_{};
 };
 } // namespace basecode
