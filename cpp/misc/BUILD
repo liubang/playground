@@ -78,3 +78,15 @@ cc_binary(
         "-std=gnu++17",
     ],
 )
+
+cc_binary(
+    name = "test_hash",
+    srcs = [
+        "test_hash.cc",
+        "hash.h",
+        "encoding.h",
+    ],
+    copts = [
+        "-std=gnu++17",
+    ],
+)

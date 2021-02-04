@@ -10,11 +10,12 @@ Terp::~Terp() {
 }
 
 bool Terp::initialize(Result& result) {
-  heap_ = new uint8_t[heap_size_];
+  auto heap_size_in_qwords = heap_size_ / sizeof(uint64_t);
+  heap_ = new uint64_t[heap_size_in_qwords];
   registers_.pc = 0;
   registers_.fr = 0;
   registers_.sr = 0;
-  registers_.sp = heap_size_;
+  registers_.sp = heap_size_in_qwords;
 
   for (size_t i = 0; i < 64; ++i) {
     registers_.i[i] = 0;
@@ -22,6 +23,21 @@ bool Terp::initialize(Result& result) {
   }
 
   return !result.is_failed();
+}
+
+uint64_t Terp::pop() {
+  uint64_t value = *(static_cast<uint64_t*>(&heap_[registers_.sp]));
+  registers_.sp += sizeof(uint64_t);
+  return value;
+}
+
+void Terp::push(uint64_t value) {
+  registers_.sp -= sizeof(uint64_t);
+  heap_[registers_.sp] = value;
+}
+
+const RegisterFileT& Terp::register_file() const {
+  return registers_;
 }
 
 } // namespace basecode
