@@ -5,10 +5,18 @@ _COMMON_ATTR = {
             ".thrift",
         ],
     ),
+    "thrift_includes": attr.label_list(
+        mandatory = False,
+        allow_empty = True,
+        allow_files = [".thrift"],
+    ),
     "services": attr.string_list(
         allow_empty = True,
     ),
     "options": attr.string_list(
+        allow_empty = True,
+    ),
+    "output_path": attr.string(
     ),
     "include_prefix": attr.string(
     ),
@@ -36,20 +44,27 @@ def _get_output_dir(input_dir, build_file_dir):
     return input_dir[idx + len(build_file_dir):]
 
 def _fbthrift_common(ctx, lang):
-    src = ctx.files.src[0]
+    src = ctx.file.src
     outputs = []
 
     # input_dir = _get_file_path(src.path)
     file_name = _get_file_name_no_ext(src.path)
-    input_dir = _get_file_path(src.path) + "/"
-    build_file_dir = _get_file_path(ctx.build_file_path) + "/"
-    sub_dir = _get_output_dir(input_dir, build_file_dir)
-    out_dir = "{}gen-{}".format(sub_dir, lang)
+    if ctx.attr.output_path == "":
+        # compute output_path
+        input_dir = _get_file_path(src.path) + "/"
+        build_file_dir = _get_file_path(ctx.build_file_path) + "/"
+        sub_dir = _get_output_dir(input_dir, build_file_dir)
+        out_dir = "{}gen-{}".format(sub_dir, lang)
+    elif not ctx.attr.output_path.endswith("/"):
+        out_dir = "{}gen-{}".format(ctx.attr.output_path + "/", lang)
+    else:
+        out_dir = "{}gen-{}".format(ctx.attr.output_path, lang)
 
     headers = [
         ctx.actions.declare_file("{}/{}_constants.h".format(out_dir, file_name)),
         ctx.actions.declare_file("{}/{}_data.h".format(out_dir, file_name)),
         ctx.actions.declare_file("{}/{}_types.h".format(out_dir, file_name)),
+        ctx.actions.declare_file("{}/{}_types_custom_protocol.h".format(out_dir, file_name)),
         ctx.actions.declare_file("{}/{}_types.tcc".format(out_dir, file_name)),
     ]
 
@@ -100,7 +115,7 @@ def _fbthrift_common(ctx, lang):
     ctx.actions.run(
         executable = ctx.executable._thrift1,
         arguments = [args],
-        inputs = depset(direct = ctx.files.src),
+        inputs = depset(direct = ctx.files.src + ctx.files.thrift_includes),
         outputs = outputs,
         mnemonic = "Fbthrift",
         progress_message = "Fbthrift compile done.",

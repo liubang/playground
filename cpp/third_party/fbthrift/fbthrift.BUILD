@@ -248,6 +248,7 @@ fbthrift_compile(
     name = "reflection",
     src = "thrift/lib/thrift/reflection.thrift",
     services = [],
+    output_path = "thrift/lib/thrift/",
     options = [
         "templates",
         "no_metadata",
@@ -258,18 +259,21 @@ fbthrift_compile(
 fbthrift_compile(
     name = "metadata",
     src = "thrift/lib/thrift/metadata.thrift",
+    output_path = "thrift/lib/thrift",
     include_prefix = "thrift/lib/thrift",
 )
 
 fbthrift_compile(
     name = "frozen",
     src = "thrift/lib/thrift/frozen.thrift",
+    output_path = "thrift/lib/thrift",
     include_prefix = "thrift/lib/thrift",
 )
 
 fbthrift_compile(
     name = "RpcMetadata",
     src = "thrift/lib/thrift/RpcMetadata.thrift",
+    output_path = "thrift/lib/thrift",
     include_prefix = "thrift/lib/thrift",
 )
 
@@ -419,6 +423,7 @@ cc_library(
 cc_library(
     name = "thriftmetadata",
     srcs = [
+        ":frozen",
         ":metadata",
     ],
     hdrs = [
@@ -480,6 +485,7 @@ fbthrift_compile(
     name = "rsocket-cpp2",
     src = "thrift/lib/cpp2/transport/rsocket/Config.thrift",
     include_prefix = "thrift/lib/cpp2/transport/rsocket",
+    output_path = "thrift/lib/cpp2/transport/rsocket",
 )
 
 cc_library(
