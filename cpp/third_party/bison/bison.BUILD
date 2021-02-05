@@ -8,7 +8,7 @@ filegroup(
 
 configure_make(
     name = "bison_build",
-    binaries = ["yacc"],
+    binaries = ["yacc", "bison"],
     lib_source = ":all",
     visibility = ["//visibility:public"],
 )
@@ -17,7 +17,7 @@ genrule(
     name = "yacc_bin",
     srcs = [":bison_build"],
     outs = ["yacc"],
-    cmd = "cp `ls $(locations :bison_build) | grep /bin/yacc$$` $@",
+    cmd = "cp `ls $(locations :bison_build) | grep /bin/bison$$` $@",
     executable = True,
     visibility = ["//visibility:public"],
 )
