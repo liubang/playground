@@ -103,3 +103,23 @@ cc_binary(
         "@boost//:headers",
     ],
 )
+
+cc_binary(
+    name = "partial_function",
+    srcs = [
+        "partial_function.cc",
+    ],
+    copts = [
+        "-std=gnu++2a",
+    ],
+)
+
+cc_binary(
+    name = "partial_application",
+    srcs = [
+        "partial_application.cc",
+    ],
+    copts = [
+        "-std=gnu++2a",
+    ],
+)
