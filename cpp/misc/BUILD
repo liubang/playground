@@ -90,3 +90,16 @@ cc_binary(
         "-std=gnu++17",
     ],
 )
+
+cc_binary(
+    name = "named_parameters",
+    srcs = [
+        "named_parameters.cc",
+    ],
+    copts = [
+        "-std=gnu++2a",
+    ],
+    deps = [
+        "@boost//:headers",
+    ],
+)
