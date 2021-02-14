@@ -110,6 +110,7 @@ def _fbthrift_common(ctx, lang):
         lang = "mstch_cpp2"
     args.add("--gen", "%s:%s" % (lang, ",".join(options)))
     args.add("-out", _get_file_path(headers[0].path))
+    args.add("-I", ".")
     args.add(src.path)
     outputs = headers + sources
     ctx.actions.run(

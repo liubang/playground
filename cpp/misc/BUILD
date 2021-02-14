@@ -123,3 +123,13 @@ cc_binary(
         "-std=gnu++2a",
     ],
 )
+
+cc_binary(
+    name = "curry_function",
+    srcs = [
+        "curry_function.cc",
+    ],
+    copts = [
+        "-std=gnu++2a",
+    ],
+)
