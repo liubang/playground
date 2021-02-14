@@ -30,45 +30,6 @@ cc_binary(
     ],
 )
 
-cc_library(
-    name = "plugin1",
-    srcs = [
-        "dlopen/plugin1.cc",
-    ],
-    hdrs = [
-        "dlopen/singleton.h",
-    ],
-    copts = [
-        "-std=gnu++14",
-    ],
-)
-
-cc_library(
-    name = "plugin2",
-    srcs = [
-        "dlopen/plugin1.cc",
-    ],
-    hdrs = [
-        "dlopen/singleton.h",
-    ],
-    copts = [
-        "-std=gnu++14",
-    ],
-)
-
-cc_binary(
-    name = "test_dlopen",
-    srcs = [
-        "dlopen/main.cc",
-    ],
-    copts = [
-        "-std=gnu++14",
-    ],
-    linkopts = [
-        "-ldl",
-    ],
-)
-
 cc_binary(
     name = "context",
     srcs = [
