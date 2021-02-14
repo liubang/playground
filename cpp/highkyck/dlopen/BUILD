@@ -1,4 +1,4 @@
-# Copyright (c) 2020 The Authors. All rights reserved.
+# Copyright (c) 2021 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,16 +13,43 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2020/11/04 11:24
+# Created: 2021/02/14 18:45
 
-_COPTS = [
-    "-std=gnu++17",
-]
+cc_library(
+    name = "plugin1",
+    srcs = [
+        "plugin1.cc",
+    ],
+    hdrs = [
+        "singleton.h",
+    ],
+    copts = [
+        "-std=gnu++14",
+    ],
+)
+
+cc_library(
+    name = "plugin2",
+    srcs = [
+        "plugin1.cc",
+    ],
+    hdrs = [
+        "singleton.h",
+    ],
+    copts = [
+        "-std=gnu++14",
+    ],
+)
 
 cc_binary(
-    name = "maybe",
+    name = "test_dlopen",
     srcs = [
-        "maybe.cc",
+        "main.cc",
     ],
-    copts = _COPTS,
+    copts = [
+        "-std=gnu++14",
+    ],
+    linkopts = [
+        "-ldl",
+    ],
 )
