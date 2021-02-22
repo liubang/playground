@@ -23,3 +23,16 @@ cc_test(
         "@gtest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "463.island-perimeter",
+    srcs = [
+        "463.island-perimeter.cc",
+    ],
+    copts = [
+        "-std=gnu++17",
+    ],
+    deps = [
+        "@gtest//:gtest_main",
+    ],
+)
