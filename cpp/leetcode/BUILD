@@ -36,3 +36,16 @@ cc_test(
         "@gtest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "1052.grumpy-bookstore-owner",
+    srcs = [
+        "1052.grumpy-bookstore-owner.cc",
+    ],
+    copts = [
+        "-std=gnu++17",
+    ],
+    deps = [
+        "@gtest//:gtest_main",
+    ],
+)
