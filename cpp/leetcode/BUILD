@@ -49,3 +49,16 @@ cc_test(
         "@gtest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "832.flipping-an-image",
+    srcs = [
+        "832.flipping-an-image.cc",
+    ],
+    copts = [
+        "-std=gnu++17",
+    ],
+    deps = [
+        "@gtest//:gtest_main",
+    ],
+)
