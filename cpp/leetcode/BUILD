@@ -75,3 +75,16 @@ cc_test(
         "@gtest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "1047.remove-all-adjacent-duplicates-in-string",
+    srcs = [
+        "1047.remove-all-adjacent-duplicates-in-string.cc",
+    ],
+    copts = [
+        "-std=gnu++17",
+    ],
+    deps = [
+        "@gtest//:gtest_main",
+    ],
+)
