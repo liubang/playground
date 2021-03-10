@@ -101,3 +101,16 @@ cc_test(
         "@gtest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "451.sort-characters-by-frequency",
+    srcs = [
+        "451.sort-characters-by-frequency.cc",
+    ],
+    copts = [
+        "-std=gnu++17",
+    ],
+    deps = [
+        "@gtest//:gtest_main",
+    ],
+)
