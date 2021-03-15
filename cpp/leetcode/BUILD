@@ -1,5 +1,9 @@
 # vim: ft=bzl
 
+package(
+    default_visibility = ["//visibility:public"],
+)
+
 [
     cc_test(
         name = "%s" % f[0:f.rfind(".")],
