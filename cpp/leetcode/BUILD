@@ -16,10 +16,7 @@
 # Created: 2021/02/22 16:50
 
 # vim: ft=bzl
-
-package(
-    default_visibility = ["//visibility:public"],
-)
+package(default_visibility = ["//visibility:public"])
 
 [
     cc_test(
