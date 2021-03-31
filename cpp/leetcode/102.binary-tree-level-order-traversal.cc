@@ -8,37 +8,42 @@ struct TreeNode {
   int val;
   TreeNode* left;
   TreeNode* right;
-  TreeNode(int x) : val(x), left(NULL), right(NULL) {}
+  TreeNode(int x) : val(x), left(nullptr), right(nullptr) {}
   TreeNode(int x, TreeNode* left, TreeNode* right)
       : val(x), left(left), right(right) {}
 };
 
 class Solution {
  public:
-  std::vector<int> levelOrder(TreeNode* root) {
+  std::vector<std::vector<int>> levelOrder(TreeNode* root) {
     if (!root) {
       return {};
     }
-    std::vector<int> ret;
+    std::vector<std::vector<int>> ret;
     std::queue<TreeNode*> queue;
     queue.push(root);
     while (!queue.empty()) {
-      TreeNode* front = queue.front();
-      ret.push_back(front->val);
-      queue.pop();
-      if (front->left) {
-        queue.push(front->left);
+      int size = queue.size();
+      std::vector<int> row;
+      for (int i = 0; i < size; ++i) {
+        TreeNode* front = queue.front();
+        queue.pop();
+        row.push_back(front->val);
+        if (front->left) {
+          queue.push(front->left);
+        }
+        if (front->right) {
+          queue.push(front->right);
+        }
       }
-      if (front->right) {
-        queue.push(front->right);
-      }
+      ret.emplace_back(std::move(row));
     }
     return ret;
   }
 };
 } // namespace
 
-TEST(Leetcode, cong_shang_dao_xia_da_yin_er_cha_shu_lcof) {
+TEST(Leetcode, binary_tree_level_order_traversal) {
   Solution s;
   using DestroyType = std::function<void(TreeNode*)>;
   DestroyType destroy = [&](TreeNode* node) {
@@ -50,10 +55,11 @@ TEST(Leetcode, cong_shang_dao_xia_da_yin_er_cha_shu_lcof) {
     delete node;
   };
 
-  std::vector<int> exp = {3, 9, 20, 15, 7};
   TreeNode* root = new TreeNode(
       3, new TreeNode(9), new TreeNode(20, new TreeNode(15), new TreeNode(7)));
-  EXPECT_EQ(exp, s.levelOrder(root));
+  std::vector<std::vector<int>> exp = {{3}, {9, 20}, {15, 7}};
+  auto ret = s.levelOrder(root);
+  EXPECT_EQ(exp, ret);
 
   destroy(root);
 }
