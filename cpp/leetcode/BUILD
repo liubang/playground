@@ -6,7 +6,9 @@ package(default_visibility = ["//visibility:public"])
         name = "%s" % f[0:f.rfind(".")],
         srcs = [
             "%s" % f,
-        ],
+        ] + glob([
+            "includes/*.h",
+        ]),
         copts = [
             "-std=gnu++17",
             "-w",
