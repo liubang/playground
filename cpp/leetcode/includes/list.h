@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <functional>
+#include <iostream>
 
 namespace leetcode {
 namespace list {
@@ -24,12 +25,14 @@ ListNode* create(const std::vector<int>& vecs) {
   return root;
 }
 
+// 释放无环连表
 void destroy(ListNode* node) {
-  if (!node) {
-    return;
+  ListNode* cur = node;
+  while (cur) {
+    ListNode* next = cur->next;
+    delete cur;
+    cur = next;
   }
-  destroy(node->next);
-  delete node;
 }
 
 } // namespace list
