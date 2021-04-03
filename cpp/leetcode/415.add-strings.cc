@@ -1,4 +1,5 @@
 #include <string>
+#include <cstddef>
 #include <gtest/gtest.h>
 
 namespace {
@@ -16,7 +17,7 @@ class Solution {
       if (j >= 0) {
         sum += num2[j--] - '0';
       }
-      ret.insert(0, 1, sum % 10 + '0');
+      ret = ret.insert(static_cast<size_t>(0), 1, sum % 10 + '0');
       sum /= 10;
     }
     return ret;
