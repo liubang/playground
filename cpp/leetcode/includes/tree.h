@@ -25,7 +25,6 @@ void destroy(TreeNode* node) {
 
 // 根据层次遍历构造二叉树
 TreeNode* create(const std::vector<std::string>& nodes) {
-  int len = nodes.size(), current = 0;
   std::vector<TreeNode*> pNodes;
   TreeNode* pCurNode;
   for (int current = 0; current < nodes.size(); ++current) {
@@ -48,5 +47,14 @@ TreeNode* create(const std::vector<std::string>& nodes) {
   }
   return pNodes[0];
 }
+
+bool equals(TreeNode* lhs, TreeNode* rhs) {
+  if (lhs && rhs) {
+    return lhs->val == rhs->val && equals(lhs->left, rhs->left) &&
+        equals(lhs->right, rhs->right);
+  }
+  return lhs == rhs;
+}
+
 } // namespace tree
 } // namespace leetcode
