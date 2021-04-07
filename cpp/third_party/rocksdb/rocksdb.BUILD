@@ -344,6 +344,7 @@ cc_library(
     copts = _COMMON_COPTS,
     deps = [
         ":rocksdb",
+        "@gtest",
     ],
 )
 
