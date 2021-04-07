@@ -9,6 +9,8 @@ matrix:
       before_install:
         - export GO111MODULE=on
         - export GOPATH=${HOME}/.go
+      install:
+        - go env
       script:
         - cd go
         - go test ./...
