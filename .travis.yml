@@ -6,9 +6,14 @@ matrix:
     - language: go
       go:
         - 1.16.x
+      env:
+        - MATRIX_EVAL="GO111MODULE=on && GOPATH=${HOME}/.go"
       script:
         - cd go
-        - env GO111MODULE=on go test ./...
+        - go test ./...
+      cache:
+        directories:
+          - $HOME/.go
     - language: java
       jdk:
         - oraclejdk9
@@ -22,6 +27,7 @@ matrix:
       env:
         - OLC_PATH=cpp
         - V=3.7.0
+        - MATRIX_EVAL="CXX=g++-10 && CC=gcc-10"
       compiler:
         - gcc
       addons:
@@ -46,7 +52,6 @@ matrix:
         - chmod +x install.sh
         - ./install.sh --user
         - rm -f install.sh
-        - if [ "$CXX" = "g++" ]; then export CXX="g++-10" CC="gcc-10"; fi
         - echo ${CC}
         - echo ${CXX}
         - ${CXX} --version
