@@ -13,7 +13,6 @@ matrix:
     - language: java
       jdk:
         - oraclejdk8
-        - openjdk8
       script:
         - cd java
         - mvn test
@@ -22,7 +21,6 @@ matrix:
         - OLC_PATH=cpp
         - V=3.7.0
       compiler:
-        - clang
         - gcc
       before_install:
         - OS=linux
