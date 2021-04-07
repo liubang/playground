@@ -324,6 +324,7 @@ cc_library(
         "@liburing//:liburing",
         "@gflags//:gflags",
         "@glog//:glog",
+        "@gtest//:gtest",
     ],
     visibility = ["//visibility:public"],
 )
