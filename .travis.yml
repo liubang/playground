@@ -30,5 +30,5 @@ matrix:
         - rm -f install.sh
       script:
         - cd cpp
-        - bazel build -k //...
+        - bazel test //leetcode/...
 
