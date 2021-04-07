@@ -98,7 +98,7 @@ public class TestMockito {
         Assert.assertEquals(spy.get(0), "one");
         Assert.assertEquals(spy.get(1), "two");
 
-        Assert.assertEquals(spy.size(), 100);
+        Assert.assertEquals(spy.size(), 5);
     }
 
     @Test
