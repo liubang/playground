@@ -63,7 +63,7 @@ matrix:
         - ${CXX} --version
       script:
         - cd cpp
-        - bazel test //...
-      cache:
-        directories:
-          - $HOME/.cache/bazel
+        - bazel test //leetcode/...
+      # cache:
+      #   directories:
+      #     - $HOME/.cache/bazel
