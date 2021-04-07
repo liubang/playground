@@ -17,15 +17,15 @@ matrix:
       cache:
         directories:
           - $HOME/.go
-    - language: java
-      jdk:
-        - oraclejdk9
-      script:
-        - cd java
-        - mvn test
-      cache:
-        directories:
-          - $HOME/.m2
+    # - language: java
+    #   jdk:
+    #     - oraclejdk9
+    #   script:
+    #     - cd java
+    #     - mvn test
+    #   cache:
+    #     directories:
+    #       - $HOME/.m2
     - language: cpp
       env:
         - OLC_PATH=cpp
@@ -39,8 +39,10 @@ matrix:
           sources:
             - sourceline: "ppa:ubuntu-toolchain-r/test"
           packages:
+            - build-essential
+            - oftware-properties-common
             - gcc-10
-            - g++10
+            - g++-10
       before_install:
         - OS=linux
         - ARCH=x86_64
