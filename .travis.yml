@@ -3,15 +3,26 @@ sudo: required
 
 matrix:
   include:
+    - language: go
+      go:
+        - 1.15.x
+        - 1.16.x
+      script:
+        - cd go
+        - go test ./...
     - language: java
       jdk:
         - oraclejdk11
         - openjdk11
+      script:
+        - cd java
+        - mvn test
     - language: cpp
-      env: 
+      env:
         - OLC_PATH=cpp
         - V=3.7.0
       compiler:
+        - clang
         - gcc
       before_install:
         - OS=linux
@@ -30,5 +41,4 @@ matrix:
         - rm -f install.sh
       script:
         - cd cpp
-        - bazel test //leetcode/...
-
+        - bazel test //...
