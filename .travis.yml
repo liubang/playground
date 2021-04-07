@@ -40,7 +40,7 @@ matrix:
             - sourceline: "ppa:ubuntu-toolchain-r/test"
           packages:
             - build-essential
-            - oftware-properties-common
+            - software-properties-common
             - gcc-10
             - g++-10
       before_install:
