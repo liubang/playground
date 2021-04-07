@@ -6,11 +6,10 @@ matrix:
     - language: go
       go:
         - 1.16.x
-      env:
-        - GO111MODULE=on
-        - GOPATH=${HOME}/.go
       script:
         - cd go
+        - export GO111MODULE=on
+        - export GOPATH=${HOME}/.go
         - go test ./...
       cache:
         directories:
