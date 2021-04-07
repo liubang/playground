@@ -5,11 +5,47 @@ namespace {
 class Solution {
  public:
   std::vector<int> sortArray(std::vector<int>& nums) {
-    quickSort(nums, 0, nums.size() - 1);
+    // quickSort(nums, 0, nums.size() - 1);
+    mergeSort(nums, 0, nums.size() - 1);
     return nums;
   }
 
  private:
+  void merge(std::vector<int>& nums, int s, int m, int e) {
+    // 将数组nums的[s, m]和[m + 1, e]区间的数据合并
+    // 到tmp，并且保证tmp有序，然后再拷贝回nums
+    int pb = 0;
+    int p1 = s, p2 = m + 1;
+    std::vector<int> tmp(e - s + 1);
+    while (p1 <= m && p2 <= e) {
+      if (nums[p1] < nums[p2]) {
+        tmp[pb++] = nums[p1++];
+      } else {
+        tmp[pb++] = nums[p2++];
+      }
+    }
+    while (p1 <= m) {
+      tmp[pb++] = nums[p1++];
+    }
+    while (p2 <= e) {
+      tmp[pb++] = nums[p2++];
+    }
+    for (int i = 0; i < e - s + 1; ++i) {
+      nums[s + i] = tmp[i];
+    }
+  }
+
+  void mergeSort(std::vector<int>& nums, int s, int e) {
+    if (s >= e) {
+      return;
+    }
+    // 找到中间位置
+    int m = s + (e - s) / 2;
+    mergeSort(nums, s, m);
+    mergeSort(nums, m + 1, e);
+    merge(nums, s, m, e);
+  }
+
   void quickSort(std::vector<int>& nums, int s, int e) {
     if (s >= e) {
       return;
