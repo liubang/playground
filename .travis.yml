@@ -9,11 +9,11 @@ matrix:
         - 1.16.x
       script:
         - cd go
-        - go test ./...
+        - GO111MODULE=on go test ./...
     - language: java
       jdk:
-        - oraclejdk11
-        - openjdk11
+        - oraclejdk8
+        - openjdk8
       script:
         - cd java
         - mvn test
