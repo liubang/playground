@@ -64,6 +64,7 @@ matrix:
       script:
         - cd cpp
         - bazel test //leetcode/...
+        - bazel test //highkyck/misk/...
       # cache:
       #   directories:
       #     - $HOME/.cache/bazel
