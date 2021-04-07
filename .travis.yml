@@ -5,17 +5,25 @@ matrix:
   include:
     - language: go
       go:
-        - 1.15.x
         - 1.16.x
+      before_install:
+        - go env -w GO111MODULE=on
+        - go env -w GOPATH=$HOME/.go
       script:
         - cd go
-        - GO111MODULE=on go test ./...
+        - go test ./...
+      cache:
+        directories:
+          - $HOME/.go
     - language: java
       jdk:
         - oraclejdk8
       script:
         - cd java
         - mvn test
+      cache:
+        directories:
+          - $HOME/.m2
     - language: cpp
       env:
         - OLC_PATH=cpp
@@ -40,3 +48,6 @@ matrix:
       script:
         - cd cpp
         - bazel test //...
+      cache:
+        directories:
+          - $HOME/.cache/bazel
