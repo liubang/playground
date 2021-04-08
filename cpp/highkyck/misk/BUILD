@@ -45,6 +45,9 @@
         includes = [
             "includes",
         ],
+        linkopts = [
+            "-pthread",
+        ],
         copts = [
             "-std=gnu++17",
             "-w",
