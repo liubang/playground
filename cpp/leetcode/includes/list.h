@@ -35,5 +35,12 @@ void destroy(ListNode* node) {
   }
 }
 
+bool equals(ListNode* lhs, ListNode* rhs) {
+  if (lhs && rhs) {
+    return lhs->val == rhs->val && equals(lhs->next, rhs->next);
+  }
+  return lhs == rhs;
+}
+
 } // namespace list
 } // namespace leetcode
