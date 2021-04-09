@@ -1,34 +1,23 @@
 #include <gtest/gtest.h>
+#include "includes/list.h"
 
 namespace {
-struct ListNode {
-  int val;
-  ListNode* next;
-  ListNode() : val(0), next(nullptr) {}
-  ListNode(int x) : val(x), next(nullptr) {}
-  ListNode(int x, ListNode* next) : val(x), next(next) {}
-};
 
 class Solution {
  public:
+  using ListNode = leetcode::list::ListNode;
   ListNode* deleteDuplicates(ListNode* head) {
     if (!head || !head->next) {
       return head;
     }
     ListNode* cur = head;
-    ListNode* next = head->next;
-    for (;;) {
-      while (next && cur->val == next->val) {
-        ListNode* tmp = cur->next;
-        cur->next = next->next;
-        next = next->next;
-        delete tmp;
-      }
-      if (!next) {
-        break;
+    while (cur) {
+      while (cur->next && cur->val == cur->next->val) {
+        ListNode* n = cur->next;
+        cur->next = cur->next->next;
+        delete n;
       }
       cur = cur->next;
-      next = next->next;
     }
     return head;
   }
@@ -36,6 +25,7 @@ class Solution {
 } // namespace
 
 TEST(Leetcode, remove_duplicates_form_sorted_list) {
+  using ListNode = leetcode::list::ListNode;
   Solution s;
   {
     // 1, 1, 2
@@ -43,11 +33,13 @@ TEST(Leetcode, remove_duplicates_form_sorted_list) {
     ListNode* ret = s.deleteDuplicates(head);
     EXPECT_EQ(1, ret->val);
     EXPECT_EQ(2, ret->next->val);
-    ListNode* cur = ret;
-    while (cur) {
-      ListNode* next = cur->next;
-      delete cur;
-      cur = next;
-    }
+    leetcode::list::destroy(ret);
+  }
+
+  {
+    ListNode* head = new ListNode(1);
+    auto ret = s.deleteDuplicates(head);
+    EXPECT_EQ(1, ret->val);
+    leetcode::list::destroy(ret);
   }
 }
