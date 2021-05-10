@@ -85,7 +85,6 @@ class Solution {
         stk.push(token.getOp()(lhs, rhs));
       }
     }
-    std::cout << "\n";
     return stk.top();
   }
 
