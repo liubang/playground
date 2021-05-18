@@ -11,15 +11,12 @@ class Solution {
     int ret = 0, cur = 0;
     size_t len = customers.size();
     for (auto i = 0; i < len; ++i) {
-      if (i < X || grumpy[i] == 0)
-        cur += customers[i];
+      if (i < X || grumpy[i] == 0) cur += customers[i];
     }
     ret = cur;
     for (auto i = X; i < len; ++i) {
-      if (grumpy[i] == 1)
-        cur += customers[i];
-      if (grumpy[i - X] == 1)
-        cur -= customers[i - X];
+      if (grumpy[i] == 1) cur += customers[i];
+      if (grumpy[i - X] == 1) cur -= customers[i - X];
       ret = std::max(ret, cur);
     }
     return ret;
