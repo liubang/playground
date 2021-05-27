@@ -3,6 +3,9 @@ namespace {
 class Solution {
  public:
   int hammingDistance(int x, int y) {
+#if defined(__GNUC__)
+    return __builtin_popcount(x ^ y);
+#else
     int tmp = x ^ y;
     int ret = 0;
     while (tmp > 0) {
@@ -10,6 +13,7 @@ class Solution {
       tmp >>= 1;
     }
     return ret;
+#endif
   }
 };
 } // namespace
