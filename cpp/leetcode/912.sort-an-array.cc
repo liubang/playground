@@ -47,18 +47,12 @@ class Solution {
   }
 
   void quickSort(std::vector<int>& nums, int s, int e) {
-    if (s >= e) {
-      return;
-    }
+    if (s >= e) return;
     int i = s, j = e;
     while (i < j) {
-      while (i < j && nums[j] >= nums[i]) {
-        --j;
-      }
+      while (i < j && nums[j] >= nums[i]) --j;
       std::swap(nums[i], nums[j]);
-      while (i < j && nums[i] < nums[j]) {
-        ++i;
-      }
+      while (i < j && nums[i] < nums[j]) ++i;
       std::swap(nums[i], nums[j]);
     }
     quickSort(nums, s, i - 1);
