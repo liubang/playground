@@ -30,6 +30,9 @@
             "-std=gnu++17",
             "-w",
         ],
+        linkopts = [
+            "-pthread",
+        ],
     )
     for f in glob(["test_*.cc"])
 ]
