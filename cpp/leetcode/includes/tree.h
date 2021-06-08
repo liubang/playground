@@ -29,7 +29,9 @@ TreeNode* create(const std::vector<std::string>& nodes) {
   std::vector<TreeNode*> pNodes;
   TreeNode* pCurNode;
   for (int current = 0; current < nodes.size(); ++current) {
-    if (nodes[current] == "null" || nodes[current] == "nullptr") {
+    if (nodes[current] == "null" || nodes[current] == "nullptr" ||
+        nodes[current] == "NULL" || nodes[current] == "nil" ||
+        nodes[current] == "Nil") {
       continue;
     } else {
       pCurNode = new TreeNode(std::stoi(nodes[current]));
