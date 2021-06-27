@@ -93,3 +93,14 @@ cc_binary(
         "@folly",
     ],
 )
+
+cc_binary(
+    name = "semaphore",
+    srcs = [
+        "semaphore.cc",
+    ],
+    copts = _copts,
+    deps = [
+        "@folly",
+    ],
+)
