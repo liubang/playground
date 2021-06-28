@@ -1,4 +1,4 @@
-module go-lab
+module github.com/liubang/laboratory/go
 
 go 1.12
 
