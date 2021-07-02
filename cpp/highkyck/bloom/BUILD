@@ -14,3 +14,13 @@ cc_library(
     ],
     visibility = ["//visibility:public"],
 )
+
+cc_binary(
+    name = "test_bloom_filter",
+    srcs = [
+        "test_bloom_filter.cc",
+    ],
+    deps = [
+        ":bloom_filter",
+    ],
+)
