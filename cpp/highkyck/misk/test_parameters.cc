@@ -26,6 +26,10 @@ class Bar {
  public:
   Bar(const Foo& foo) : foo_(foo) {}
 
+  Foo foo() const {
+    return foo_;
+  }
+
  private:
   Foo foo_;
 };
@@ -33,7 +37,10 @@ class Bar {
 
 int main(int argc, char* argv[]) {
   highkyck::Foo foo;
-  { highkyck::Bar bar(foo); }
-  { highkyck::Bar bar(std::move(foo)); }
+  highkyck::Bar bar(foo);
+
+  highkyck::Foo ret = bar.foo();
+  // { highkyck::Bar bar(foo); }
+  // { highkyck::Bar bar(std::move(foo)); }
   return 0;
 }
