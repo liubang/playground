@@ -28,8 +28,7 @@ folly::Future<int> add(int a, int b) {
 int main(int argc, char* argv[]) {
   folly::init(&argc, &argv);
   std::cout << "======test1======" << std::endl;
-  add(1, 2).then(
-      [](folly::Try<int>&& value) { std::cout << value.value() << std::endl; });
+  add(1, 2).then([](folly::Try<int>&& value) { std::cout << value.value() << std::endl; });
 
   std::cout << "======test2======" << std::endl;
 
