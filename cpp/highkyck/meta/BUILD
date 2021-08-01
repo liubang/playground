@@ -17,3 +17,23 @@ cc_binary(
         "-std=gnu++17",
     ],
 )
+
+cc_binary(
+    name = "forward",
+    srcs = [
+        "forward.cc",
+    ],
+    copts = [
+        "-std=gnu++17",
+    ],
+)
+
+cc_binary(
+    name = "forward2",
+    srcs = [
+        "forward2.cc",
+    ],
+    copts = [
+        "-std=gnu++17",
+    ],
+)
