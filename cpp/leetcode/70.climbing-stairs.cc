@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <unordered_map>
 
 namespace {
 class Solution {
