@@ -3,20 +3,18 @@
 
 namespace {
 
-class CQueue {
- public:
+class CQueue
+{
+public:
   CQueue() = default;
   virtual ~CQueue() = default;
 
-  void appendTail(int value) {
-    st1_.push(value);
-  }
+  void appendTail(int value) { st1_.push(value); }
 
-  int deleteHead() {
+  int deleteHead()
+  {
     if (st2_.empty()) {
-      if (st1_.empty()) {
-        return -1;
-      }
+      if (st1_.empty()) { return -1; }
       while (!st1_.empty()) {
         st2_.push(st1_.top());
         st1_.pop();
@@ -27,13 +25,14 @@ class CQueue {
     return ret;
   }
 
- private:
+private:
   std::stack<int> st1_;
   std::stack<int> st2_;
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, yong_liang_ge_zhan_shi_xian_dui_lie_lcof) {
+TEST(Leetcode, yong_liang_ge_zhan_shi_xian_dui_lie_lcof)
+{
   CQueue q;
   q.appendTail(3);
   q.appendTail(4);

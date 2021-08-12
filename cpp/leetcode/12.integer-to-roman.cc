@@ -2,9 +2,11 @@
 #include <gtest/gtest.h>
 
 namespace {
-class Solution {
- public:
-  std::string intToRoman(int num) {
+class Solution
+{
+public:
+  std::string intToRoman(int num)
+  {
     std::pair<int, std::string> value_symbols[] = {
         {1000, "M"},
         {900, "CM"},
@@ -30,9 +32,10 @@ class Solution {
     return ret;
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, integer_to_roman) {
+TEST(Leetcode, integer_to_roman)
+{
   Solution s;
   EXPECT_EQ("MXXIV", s.intToRoman(1024));
   EXPECT_EQ("MMCCXIII", s.intToRoman(2213));

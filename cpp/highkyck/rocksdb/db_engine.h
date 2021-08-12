@@ -17,11 +17,10 @@
 
 namespace highkyck {
 
-class DbEngine {
- public:
-  explicit DbEngine(
-      const std::string& data_dir,
-      const rocksdb::Options& options);
+class DbEngine
+{
+public:
+  explicit DbEngine(const std::string& data_dir, const rocksdb::Options& options);
   virtual ~DbEngine();
 
   virtual bool open();
@@ -31,11 +30,11 @@ class DbEngine {
   virtual rocksdb::Status get(Val* val, const Key& key);
   virtual rocksdb::Status setx(const Key& key, const Val& val, uint32_t ttl);
 
- private:
+private:
   std::string data_dir_;
   std::unique_ptr<rocksdb::DB> db_{nullptr};
   rocksdb::Options options_;
   rocksdb::WriteOptions write_options_;
   rocksdb::ReadOptions read_options_;
 };
-} // namespace highkyck
+}   // namespace highkyck

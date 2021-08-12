@@ -6,16 +6,19 @@
 
 namespace leetcode {
 namespace list {
-struct ListNode {
+struct ListNode
+{
   int val;
   ListNode* next;
-  ListNode(int x, ListNode* next = nullptr) : val(x), next(next) {}
+  ListNode(int x, ListNode* next = nullptr)
+      : val(x)
+      , next(next)
+  {}
 };
 
-ListNode* create(const std::vector<int>& vecs) {
-  if (vecs.empty()) {
-    return nullptr;
-  }
+ListNode* create(const std::vector<int>& vecs)
+{
+  if (vecs.empty()) { return nullptr; }
   ListNode* root = new ListNode(vecs[0]);
   ListNode* cur = root;
   for (int i = 1; i < vecs.size(); ++i) {
@@ -26,7 +29,8 @@ ListNode* create(const std::vector<int>& vecs) {
 }
 
 // 释放无环连表
-void destroy(ListNode* node) {
+void destroy(ListNode* node)
+{
   ListNode* cur = node;
   while (cur) {
     ListNode* next = cur->next;
@@ -35,12 +39,11 @@ void destroy(ListNode* node) {
   }
 }
 
-bool equals(ListNode* lhs, ListNode* rhs) {
-  if (lhs && rhs) {
-    return lhs->val == rhs->val && equals(lhs->next, rhs->next);
-  }
+bool equals(ListNode* lhs, ListNode* rhs)
+{
+  if (lhs && rhs) { return lhs->val == rhs->val && equals(lhs->next, rhs->next); }
   return lhs == rhs;
 }
 
-} // namespace list
-} // namespace leetcode
+}   // namespace list
+}   // namespace leetcode
