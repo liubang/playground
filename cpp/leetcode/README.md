@@ -1,5 +1,4 @@
-## leetcode
+##leetcode
 
-```bash
-bazel test //leetcode/...
+```bash bazel test   // leetcode/...
 ```

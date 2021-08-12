@@ -11,16 +11,17 @@
 
 namespace {
 constexpr double EPS = 1e-6;
-class EquationRoot {
- public:
-  double getRoot() {
+class EquationRoot
+{
+public:
+  double getRoot()
+  {
     double s = 0, e = 100;
     double m = (s + e) / 2;
     double y = f(m);
     while (std::abs(y) > EPS) {
-      if (y > 0) {
-        e = m;
-      } else {
+      if (y > 0) { e = m; }
+      else {
         s = m;
       }
       m = (s + e) / 2;
@@ -29,39 +30,41 @@ class EquationRoot {
     return m;
   }
 
- private:
-  inline double f(double x) {
-    return x * x * x - 5 * x * x + 10 * x - 80;
-  }
+private:
+  inline double f(double x) { return x * x * x - 5 * x * x + 10 * x - 80; }
 };
 
-class TowSum {
- public:
-  std::pair<int, int> find(std::vector<int>& nums, int target) {
+class TowSum
+{
+public:
+  std::pair<int, int> find(std::vector<int>& nums, int target)
+  {
     std::sort(nums.begin(), nums.end());
     int i = 0, j = nums.size() - 1;
     while (i <= j) {
       int sum = nums[i] + nums[j];
-      if (sum == target) {
-        break;
-      } else if (target > sum) {
+      if (sum == target) { break; }
+      else if (target > sum) {
         i++;
-      } else {
+      }
+      else {
         j--;
       }
     }
     return std::make_pair(nums[i], nums[j]);
   }
 };
-} // namespace
+}   // namespace
 
-TEST(algo, EquationRoot) {
+TEST(algo, EquationRoot)
+{
   EquationRoot e;
   double root = e.getRoot();
   EXPECT_NEAR(root, 5.70508593, 1e-6);
 }
 
-TEST(algo, TowSum) {
+TEST(algo, TowSum)
+{
   TowSum t;
   std::vector<int> inputs = {1, 2, 8, 4, 3, 6, 13};
   std::pair<int, int> exp(4, 8);

@@ -2,15 +2,16 @@
 #include <gtest/gtest.h>
 
 namespace {
-class SortedStack {
- public:
+class SortedStack
+{
+public:
   SortedStack() = default;
   virtual ~SortedStack() = default;
 
-  void push(int x) {
-    if (st_.empty() || st_.top() >= x) {
-      st_.push(x);
-    } else {
+  void push(int x)
+  {
+    if (st_.empty() || st_.top() >= x) { st_.push(x); }
+    else {
       std::stack<int> temp;
       while (!st_.empty() && st_.top() < x) {
         temp.push(st_.top());
@@ -24,26 +25,22 @@ class SortedStack {
     }
   }
 
-  void pop() {
-    if (!st_.empty()) {
-      st_.pop();
-    }
+  void pop()
+  {
+    if (!st_.empty()) { st_.pop(); }
   }
 
-  int peek() {
-    return st_.empty() ? -1 : st_.top();
-  }
+  int peek() { return st_.empty() ? -1 : st_.top(); }
 
-  bool empty() {
-    return st_.empty();
-  }
+  bool empty() { return st_.empty(); }
 
- private:
+private:
   std::stack<int> st_;
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, sort_of_stack_lcci) {
+TEST(Leetcode, sort_of_stack_lcci)
+{
   SortedStack stack;
   stack.push(1);
   stack.push(2);

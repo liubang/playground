@@ -2,21 +2,22 @@
 #include "includes/tree.h"
 
 namespace {
-class Solution {
- public:
+class Solution
+{
+public:
   using TreeNode = leetcode::tree::TreeNode;
-  TreeNode* lowestCommonAncestor(TreeNode* root, TreeNode* p, TreeNode* q) {
-    if (!root || root == p || root == q) {
-      return root;
-    }
+  TreeNode* lowestCommonAncestor(TreeNode* root, TreeNode* p, TreeNode* q)
+  {
+    if (!root || root == p || root == q) { return root; }
     TreeNode* left = lowestCommonAncestor(root->left, p, q);
     TreeNode* right = lowestCommonAncestor(root->right, p, q);
     return left && right ? root : left ? left : right;
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, lowest_common_ancestor_of_a_binary_tree) {
+TEST(Leetcode, lowest_common_ancestor_of_a_binary_tree)
+{
   using TreeNode = leetcode::tree::TreeNode;
   Solution s;
   {
@@ -31,8 +32,7 @@ TEST(Leetcode, lowest_common_ancestor_of_a_binary_tree) {
   }
 
   {
-    TreeNode* root = new TreeNode(
-        3, nullptr, new TreeNode(1, new TreeNode(0), new TreeNode(8)));
+    TreeNode* root = new TreeNode(3, nullptr, new TreeNode(1, new TreeNode(0), new TreeNode(8)));
     TreeNode* node5 = new TreeNode(5, new TreeNode(6));
     TreeNode* node2 = new TreeNode(2, new TreeNode(7));
     TreeNode* node4 = new TreeNode(4);
