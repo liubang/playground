@@ -5,13 +5,14 @@
 #include "encoding.h"
 
 #ifndef FALLTHROUGH_INTENDED
-#define FALLTHROUGH_INTENDED \
-  do {                       \
-  } while (0)
+#  define FALLTHROUGH_INTENDED \
+    do {                       \
+    } while (0)
 #endif
 
 namespace test {
-uint32_t Hash(const char* data, size_t n, uint32_t seed) {
+uint32_t Hash(const char* data, size_t n, uint32_t seed)
+{
   // Similar to murmur hash
   const uint32_t m = 0xc6a4a793;
   const uint32_t r = 24;
@@ -35,18 +36,14 @@ uint32_t Hash(const char* data, size_t n, uint32_t seed) {
   // std::cout << "left:" << (limit - data) << std::endl;
   // Pick up remaining bytes
   switch (limit - data) {
-    case 3:
-      h += static_cast<uint8_t>(data[2]) << 16;
-      FALLTHROUGH_INTENDED;
-    case 2:
-      h += static_cast<uint8_t>(data[1]) << 8;
-      FALLTHROUGH_INTENDED;
-    case 1:
-      h += static_cast<uint8_t>(data[0]);
-      h *= m;
-      h ^= (h >> r);
-      break;
+  case 3: h += static_cast<uint8_t>(data[2]) << 16; FALLTHROUGH_INTENDED;
+  case 2: h += static_cast<uint8_t>(data[1]) << 8; FALLTHROUGH_INTENDED;
+  case 1:
+    h += static_cast<uint8_t>(data[0]);
+    h *= m;
+    h ^= (h >> r);
+    break;
   }
   return h;
 }
-} // namespace test
+}   // namespace test

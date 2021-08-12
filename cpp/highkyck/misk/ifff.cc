@@ -3,7 +3,8 @@
 
 // 分支消除
 
-int vtod(int v) {
+int vtod(int v)
+{
   // if (v < 10)
   //   return v + 48;
   // else
@@ -12,7 +13,8 @@ int vtod(int v) {
   return v + 55 - (((v - 10) >> 15) & 7);
 }
 
-int xabs(int n) {
+int xabs(int n)
+{
   // if (n >= 0)
   //   return n;
   // else
@@ -23,9 +25,9 @@ int xabs(int n) {
   return (n ^ s) - s;
 }
 
-int main(int argc, char* argv[]) {
-  for (int i = 0; i < 16; ++i)
-    ::std::printf("%c ", vtod(i));
+int main(int argc, char* argv[])
+{
+  for (int i = 0; i < 16; ++i) ::std::printf("%c ", vtod(i));
   ::std::putchar('\n');
 
   ::std::printf("%d\n", xabs(+123));

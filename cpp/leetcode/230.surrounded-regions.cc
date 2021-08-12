@@ -2,11 +2,13 @@
 #include <gtest/gtest.h>
 
 namespace {
-class Solution {
- public:
+class Solution
+{
+public:
   // 先将与边界相连的'O'设置为'#'，然后将所有不为'#'的设置为'X'
   // 最后将'#'还原为'O'
-  void solve(std::vector<std::vector<char>>& board) {
+  void solve(std::vector<std::vector<char>>& board)
+  {
     // clang-format off
     int nr = board.size();
     if (nr == 0) return;
@@ -28,8 +30,9 @@ class Solution {
     // clang-format on
   }
 
- private:
-  void dfs(std::vector<std::vector<char>>& board, int x, int y) {
+private:
+  void dfs(std::vector<std::vector<char>>& board, int x, int y)
+  {
     int nr = board.size();
     int nc = board[0].size();
     board[x][y] = '#';
@@ -41,9 +44,10 @@ class Solution {
     // clang-format on
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, surrounded_regions) {
+TEST(Leetcode, surrounded_regions)
+{
   Solution s;
   {
     std::vector<std::vector<char>> board = {

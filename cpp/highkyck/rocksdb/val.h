@@ -15,7 +15,8 @@
 
 namespace highkyck {
 
-enum class Type {
+enum class Type
+{
   INT_VAL = 1,
   STRING_VAL = 2,
   MAP_VAL = 3,
@@ -23,9 +24,11 @@ enum class Type {
   SET_VAL = 5
 };
 
-struct Val {
+struct Val
+{
   Type t;
-  union {
+  union
+  {
     uint64_t int_val;
     std::string string_val;
     std::unordered_map<std::string, std::string> map_val;
@@ -33,4 +36,4 @@ struct Val {
     std::set<std::string> set_val;
   } v;
 };
-} // namespace highkyck
+}   // namespace highkyck

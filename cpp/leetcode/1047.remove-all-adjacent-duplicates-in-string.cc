@@ -2,23 +2,25 @@
 #include <gtest/gtest.h>
 
 namespace {
-class Solution {
- public:
-  std::string removeDuplicates(const std::string& S) {
+class Solution
+{
+public:
+  std::string removeDuplicates(const std::string& S)
+  {
     std::string ret;
     for (auto& ch : S) {
-      if (!ret.empty() && ret.back() == ch) {
-        ret.pop_back();
-      } else {
+      if (!ret.empty() && ret.back() == ch) { ret.pop_back(); }
+      else {
         ret.push_back(ch);
       }
     }
     return ret;
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, remove_all_adjacent_duplicates_in_string) {
+TEST(Leetcode, remove_all_adjacent_duplicates_in_string)
+{
   Solution s;
   {
     auto ret = s.removeDuplicates("abbaca");

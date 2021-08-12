@@ -4,9 +4,11 @@
 #include <gtest/gtest.h>
 
 namespace {
-class Solution {
- public:
-  std::string removeKdigits(std::string num, int k) {
+class Solution
+{
+public:
+  std::string removeKdigits(std::string num, int k)
+  {
     if (num.length() == k) return "0";
     for (int i = 0; i < k; ++i) {
       int idx = 0;
@@ -18,9 +20,10 @@ class Solution {
     return num;
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, remove_k_digits) {
+TEST(Leetcode, remove_k_digits)
+{
   Solution s;
   // num -> exp, k = vector.idx + 1
   std::vector<std::pair<std::string, std::string>> cases = {
@@ -33,7 +36,5 @@ TEST(Leetcode, remove_k_digits) {
       {"1432219", "0"},
   };
   int i = 1;
-  for (const auto& [num, exp] : cases) {
-    EXPECT_EQ(exp, s.removeKdigits(num, i++));
-  }
+  for (const auto& [num, exp] : cases) { EXPECT_EQ(exp, s.removeKdigits(num, i++)); }
 }

@@ -3,17 +3,22 @@
 #include <iostream>
 
 namespace {
-class NestedInteger {
- public:
-  NestedInteger(int value) : value_(value), is_integer_(true) {}
+class NestedInteger
+{
+public:
+  NestedInteger(int value)
+      : value_(value)
+      , is_integer_(true)
+  {}
 
   NestedInteger(const std::vector<NestedInteger>& list)
-      : is_integer_(false), list_(list) {}
+      : is_integer_(false)
+      , list_(list)
+  {}
 
-  NestedInteger(const std::vector<int>& ints) {
-    for (int i : ints) {
-      list_.emplace_back(i);
-    }
+  NestedInteger(const std::vector<int>& ints)
+  {
+    for (int i : ints) { list_.emplace_back(i); }
     is_integer_ = false;
   }
 
@@ -21,56 +26,46 @@ class NestedInteger {
   NestedInteger& operator=(const NestedInteger&) = default;
   NestedInteger(NestedInteger&&) = default;
 
-  bool isInteger() const {
-    return is_integer_;
-  }
+  bool isInteger() const { return is_integer_; }
 
-  int getInteger() const {
-    return value_;
-  }
+  int getInteger() const { return value_; }
 
-  const std::vector<NestedInteger>& getList() const {
-    return list_;
-  }
+  const std::vector<NestedInteger>& getList() const { return list_; }
 
- private:
+private:
   int value_{0};
   bool is_integer_{true};
   std::vector<NestedInteger> list_;
 };
 
-class NestedIterator {
- public:
-  NestedIterator(const std::vector<NestedInteger>& nestedList) {
-    visit(nestedList);
-  }
+class NestedIterator
+{
+public:
+  NestedIterator(const std::vector<NestedInteger>& nestedList) { visit(nestedList); }
 
-  int next() {
-    return list_[idx_++];
-  }
+  int next() { return list_[idx_++]; }
 
-  bool hasNext() {
-    return idx_ < list_.size();
-  }
+  bool hasNext() { return idx_ < list_.size(); }
 
- private:
-  void visit(const std::vector<NestedInteger>& nestedList) {
+private:
+  void visit(const std::vector<NestedInteger>& nestedList)
+  {
     for (auto& nestedInteger : nestedList) {
-      if (nestedInteger.isInteger()) {
-        list_.push_back(nestedInteger.getInteger());
-      } else {
+      if (nestedInteger.isInteger()) { list_.push_back(nestedInteger.getInteger()); }
+      else {
         visit(nestedInteger.getList());
       }
     }
   }
 
- private:
+private:
   std::vector<int> list_;
   int idx_{0};
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, flatten_nested_list_iterator) {
+TEST(Leetcode, flatten_nested_list_iterator)
+{
   {
     // [[1,1],2,[1,1]]
     std::vector<NestedInteger> inputs;
@@ -81,9 +76,7 @@ TEST(Leetcode, flatten_nested_list_iterator) {
     inputs.emplace_back(std::vector<int>{1, 1});
 
     NestedIterator it(inputs);
-    while (it.hasNext()) {
-      output.push_back(it.next());
-    }
+    while (it.hasNext()) { output.push_back(it.next()); }
     EXPECT_EQ(exp, output);
   }
 
@@ -100,9 +93,7 @@ TEST(Leetcode, flatten_nested_list_iterator) {
     inputs.emplace_back(inner);
 
     NestedIterator it(inputs);
-    while (it.hasNext()) {
-      output.push_back(it.next());
-    }
+    while (it.hasNext()) { output.push_back(it.next()); }
     EXPECT_EQ(exp, output);
   }
 }
