@@ -3,9 +3,11 @@
 #include <gtest/gtest.h>
 
 namespace {
-class Solution {
- public:
-  int romanToInt(const std::string& s) {
+class Solution
+{
+public:
+  int romanToInt(const std::string& s)
+  {
     std::pair<std::string, int> pairs[] = {
         {"M", 1000},
         {"CM", 900},
@@ -31,9 +33,10 @@ class Solution {
     return ret;
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, roman_to_integer) {
+TEST(Leetcode, roman_to_integer)
+{
   Solution s;
   EXPECT_EQ(2994, s.romanToInt("MMCMXCIV"));
   EXPECT_EQ(1994, s.romanToInt("MCMXCIV"));

@@ -10,7 +10,8 @@ DEFINE_string(host, "::1", "EchoServer host");
 DEFINE_int32(port, 1234, "EchoServer port");
 DEFINE_string(transport, "header", "Transport to use: header, rsocket, http2");
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[])
+{
   FLAGS_logtostderr = true;
   folly::init(&argc, &argv);
   folly::EventBase evb;
@@ -33,9 +34,9 @@ int main(int argc, char* argv[]) {
   try {
     client->sync_echo(response, request);
     LOG(INFO) << response.get_message();
-  } catch (apache::thrift::transport::TTransportException& ex) {
+  }
+  catch (apache::thrift::transport::TTransportException& ex) {
     LOG(ERROR) << "Request failed " << ex.what();
   }
   return 0;
 }
-

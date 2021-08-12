@@ -2,16 +2,17 @@
 #include <gtest/gtest.h>
 
 namespace {
-class Solution {
- public:
-  std::vector<std::vector<int>> generate(int numRows) {
+class Solution
+{
+public:
+  std::vector<std::vector<int>> generate(int numRows)
+  {
     std::vector<std::vector<int>> ret;
     for (int i = 0; i < numRows; ++i) {
       std::vector<int> row;
       for (int j = 0; j <= i; ++j) {
-        if (i == 0 || j == 0 || j == i) {
-          row.push_back(1);
-        } else {
+        if (i == 0 || j == 0 || j == i) { row.push_back(1); }
+        else {
           row.push_back(ret[i - 1][j - 1] + ret[i - 1][j]);
         }
       }
@@ -20,9 +21,10 @@ class Solution {
     return ret;
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, pascals_triangle) {
+TEST(Leetcode, pascals_triangle)
+{
   Solution s;
   {
     std::vector<std::vector<int>> exps = {

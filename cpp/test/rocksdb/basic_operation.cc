@@ -3,7 +3,8 @@
 #include "rocksdb/db.h"
 #include "rocksdb/options.h"
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[])
+{
   rocksdb::DB* db;
   rocksdb::Options options;
   options.create_if_missing = true;
@@ -17,9 +18,7 @@ int main(int argc, char* argv[]) {
   if (s.ok()) {
     std::string value;
     s = db->Get(rocksdb::ReadOptions(), "test", &value);
-    if (s.ok()) {
-      std::cout << "the value is:" << value << std::endl;
-    }
+    if (s.ok()) { std::cout << "the value is:" << value << std::endl; }
   }
 
   delete db;

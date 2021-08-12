@@ -5,31 +5,31 @@
 #include "includes/tree.h"
 
 namespace {
-class Solution {
- public:
+class Solution
+{
+public:
   using TreeNode = leetcode::tree::TreeNode;
-  int minDiffInBST(TreeNode* root) {
+  int minDiffInBST(TreeNode* root)
+  {
     int ret = INT_MAX, pre = -1;
     dfs(ret, pre, root);
     return ret;
   }
 
- private:
-  void dfs(int& ret, int& pre, TreeNode* node) {
-    if (!node) {
-      return;
-    }
+private:
+  void dfs(int& ret, int& pre, TreeNode* node)
+  {
+    if (!node) { return; }
     dfs(ret, pre, node->left);
-    if (pre >= 0) {
-      ret = std::min(ret, node->val - pre);
-    }
+    if (pre >= 0) { ret = std::min(ret, node->val - pre); }
     pre = node->val;
     dfs(ret, pre, node->right);
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, minimum_distance_between_bst_nodes) {
+TEST(Leetcode, minimum_distance_between_bst_nodes)
+{
   Solution s;
   {
     std::vector<std::string> nodes = {

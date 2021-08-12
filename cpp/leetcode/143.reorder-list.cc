@@ -4,14 +4,14 @@
 #include "includes/list.h"
 
 namespace {
-class Solution {
- public:
+class Solution
+{
+public:
   using ListNode = leetcode::list::ListNode;
 
-  void reorderList(ListNode* head) {
-    if (!head) {
-      return;
-    }
+  void reorderList(ListNode* head)
+  {
+    if (!head) { return; }
     std::vector<ListNode*> vecs;
     ListNode* cur = head;
     while (cur) {
@@ -20,9 +20,8 @@ class Solution {
     }
     int i = 0, j = vecs.size() - 1, count = 0;
     while (i < j) {
-      if ((count & 1) == 0) {
-        vecs[i++]->next = vecs[j];
-      } else {
+      if ((count & 1) == 0) { vecs[i++]->next = vecs[j]; }
+      else {
         vecs[j--]->next = vecs[i];
       }
       count++;
@@ -30,9 +29,10 @@ class Solution {
     vecs[i]->next = nullptr;
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, reorder_list) {
+TEST(Leetcode, reorder_list)
+{
   using ListNode = leetcode::list::ListNode;
   Solution s;
 

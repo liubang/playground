@@ -2,28 +2,27 @@
 #include <gtest/gtest.h>
 
 namespace {
-class Solution {
- public:
-  std::vector<int> plusOne(std::vector<int>& digits) {
+class Solution
+{
+public:
+  std::vector<int> plusOne(std::vector<int>& digits)
+  {
     int size = digits.size();
     int extra = 1;
     for (int i = size - 1; i >= 0; --i) {
       int tmp = digits[i] + extra;
       digits[i] = tmp % 10;
       extra = tmp / 10;
-      if (extra == 0) {
-        break;
-      }
+      if (extra == 0) { break; }
     }
-    if (extra > 0) {
-      digits.insert(digits.begin(), extra);
-    }
+    if (extra > 0) { digits.insert(digits.begin(), extra); }
     return digits;
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, plus_one) {
+TEST(Leetcode, plus_one)
+{
   Solution s;
   {
     std::vector<int> inputs = {1, 2, 3};

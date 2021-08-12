@@ -2,13 +2,13 @@
 #include "includes/list.h"
 
 namespace {
-class Solution {
- public:
+class Solution
+{
+public:
   using ListNode = leetcode::list::ListNode;
-  leetcode::list::ListNode* reverseList(leetcode::list::ListNode* head) {
-    if (!head) {
-      return nullptr;
-    }
+  leetcode::list::ListNode* reverseList(leetcode::list::ListNode* head)
+  {
+    if (!head) { return nullptr; }
     leetcode::list::ListNode* pre = nullptr;
     leetcode::list::ListNode* cur = head;
     while (cur) {
@@ -21,19 +21,19 @@ class Solution {
   }
 
   // 递归实现
-  ListNode* reverseList2(ListNode* head) {
-    if (!head || !head->next) {
-      return head;
-    }
+  ListNode* reverseList2(ListNode* head)
+  {
+    if (!head || !head->next) { return head; }
     ListNode* newhead = reverseList(head->next);
     head->next->next = head;
     head->next = nullptr;
     return newhead;
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, reverse_linked_list) {
+TEST(Leetcode, reverse_linked_list)
+{
   Solution s;
   {
     leetcode::list::ListNode* head = leetcode::list::create({1, 2, 3, 4, 5});

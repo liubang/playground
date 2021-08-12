@@ -1,8 +1,10 @@
 #include <gtest/gtest.h>
 namespace {
-class Solution {
- public:
-  int hammingDistance(int x, int y) {
+class Solution
+{
+public:
+  int hammingDistance(int x, int y)
+  {
 #if defined(__GNUC__)
     return __builtin_popcount(x ^ y);
 #else
@@ -16,9 +18,10 @@ class Solution {
 #endif
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, hamming_distance) {
+TEST(Leetcode, hamming_distance)
+{
   Solution s;
 
   EXPECT_EQ(2, s.hammingDistance(1, 4));

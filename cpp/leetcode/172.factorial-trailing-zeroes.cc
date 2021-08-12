@@ -1,9 +1,11 @@
 #include <gtest/gtest.h>
 
 namespace {
-class Solution {
- public:
-  int trailingZeroes(int n) {
+class Solution
+{
+public:
+  int trailingZeroes(int n)
+  {
     int ret = 0;
     while (n >= 5) {
       ret += n / 5;
@@ -12,9 +14,10 @@ class Solution {
     return ret;
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, factorial_trailing_zeros) {
+TEST(Leetcode, factorial_trailing_zeros)
+{
   Solution s;
   EXPECT_EQ(2, s.trailingZeroes(11));
   EXPECT_EQ(0, s.trailingZeroes(3));

@@ -3,10 +3,12 @@
 #include "includes/list.h"
 
 namespace {
-class Solution {
- public:
+class Solution
+{
+public:
   using ListNode = leetcode::list::ListNode;
-  ListNode* reverseBetween(ListNode* head, int left, int right) {
+  ListNode* reverseBetween(ListNode* head, int left, int right)
+  {
     int s = 1, e = 1;
     ListNode* pre = nullptr;
     ListNode* cur = head;
@@ -25,16 +27,15 @@ class Solution {
       cur = next;
       e++;
     }
-    if (ss) {
-      ss->next = pre;
-    }
+    if (ss) { ss->next = pre; }
     se->next = cur;
     return ss ? head : pre;
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, reverse_linked_list_ii) {
+TEST(Leetcode, reverse_linked_list_ii)
+{
   Solution s;
   {
     auto head = leetcode::list::create({1, 2, 3, 4, 5});

@@ -3,25 +3,30 @@
 #include <gtest/gtest.h>
 
 namespace {
-class Solution {
- public:
-  int calculate(const std::string& s) {
+class Solution
+{
+public:
+  int calculate(const std::string& s)
+  {
     int sign = 1, ret = 0;
     std::stack<int> stk;
     stk.push(1);
     int len = s.length();
     for (int i = 0; i < len; ++i) {
-      if (s[i] == ' ') {
-        continue;
-      } else if (s[i] == '+') {
+      if (s[i] == ' ') { continue; }
+      else if (s[i] == '+') {
         sign = stk.top();
-      } else if (s[i] == '-') {
+      }
+      else if (s[i] == '-') {
         sign = -stk.top();
-      } else if (s[i] == '(') {
+      }
+      else if (s[i] == '(') {
         stk.push(sign);
-      } else if (s[i] == ')') {
+      }
+      else if (s[i] == ')') {
         stk.pop();
-      } else {
+      }
+      else {
         int num = 0;
         while (s[i] >= '0' && s[i] <= '9' && i < len) {
           num = num * 10 + (s[i] - '0');
@@ -34,9 +39,10 @@ class Solution {
     return ret;
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, basic_calculator) {
+TEST(Leetcode, basic_calculator)
+{
   Solution s;
   {
     std::string input = "1 + 1";

@@ -4,12 +4,12 @@
 #include <gtest/gtest.h>
 
 namespace {
-class Solution {
- public:
-  bool find132pattern(const std::vector<int>& nums) {
-    if (nums.size() < 3) {
-      return false;
-    }
+class Solution
+{
+public:
+  bool find132pattern(const std::vector<int>& nums)
+  {
+    if (nums.size() < 3) { return false; }
     int two = INT_MIN;
     std::stack<int> st;
     for (int i = nums.size() - 1; i >= 0; --i) {
@@ -19,16 +19,18 @@ class Solution {
           st.pop();
         }
         st.push(i);
-      } else {
+      }
+      else {
         return true;
       }
     }
     return false;
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, 132_pattern) {
+TEST(Leetcode, 132_pattern)
+{
   Solution s;
   EXPECT_TRUE(s.find132pattern({3, 1, 4, 2}));
   EXPECT_FALSE(s.find132pattern({1, 2, 3, 4}));

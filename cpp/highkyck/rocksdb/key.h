@@ -4,8 +4,9 @@
 #include <msgpack.hpp>
 
 namespace highkyck {
-class Key {
- public:
+class Key
+{
+public:
   Key() {}
   std::string dbname_;
   std::string tbname_;
@@ -13,4 +14,4 @@ class Key {
 
   MSGPACK_DEFINE(dbname_, tbname_, key_);
 };
-} // namespace highkyck
+}   // namespace highkyck

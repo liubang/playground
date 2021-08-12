@@ -2,12 +2,13 @@
 #include <gtest/gtest.h>
 
 namespace {
-class Solution {
- public:
-  int numIslands(std::vector<std::vector<char>>& grid) {
+class Solution
+{
+public:
+  int numIslands(std::vector<std::vector<char>>& grid)
+  {
     int nr = grid.size();
-    if (nr == 0)
-      return 0;
+    if (nr == 0) return 0;
     int nc = grid[0].size();
     int ret = 0;
     for (int i = 0; i < nr; ++i) {
@@ -21,8 +22,9 @@ class Solution {
     return ret;
   }
 
- private:
-  void dfs(std::vector<std::vector<char>>& grid, int x, int y) {
+private:
+  void dfs(std::vector<std::vector<char>>& grid, int x, int y)
+  {
     int nr = grid.size();
     int nc = grid[0].size();
     grid[x][y] = '0';
@@ -34,9 +36,10 @@ class Solution {
     // clang-format on
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, number_of_islands) {
+TEST(Leetcode, number_of_islands)
+{
   Solution s;
   {
     std::vector<std::vector<char>> grid = {
