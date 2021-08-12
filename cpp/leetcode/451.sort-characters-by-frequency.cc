@@ -4,27 +4,26 @@
 #include <gtest/gtest.h>
 
 namespace {
-class Solution {
- public:
-  std::string frequencySort(const std::string& s) {
+class Solution
+{
+public:
+  std::string frequencySort(const std::string& s)
+  {
     std::unordered_map<char, int> charcount;
-    for (auto& ch : s) {
-      charcount[ch]++;
-    }
+    for (auto& ch : s) { charcount[ch]++; }
     std::vector<std::pair<char, int>> v(charcount.begin(), charcount.end());
     std::sort(v.begin(), v.end(), [](const auto& lhs, const auto& rhs) {
       return lhs.second > rhs.second;
     });
     std::string ret;
-    for (auto& p : v) {
-      ret.append(p.second, p.first);
-    }
+    for (auto& p : v) { ret.append(p.second, p.first); }
     return ret;
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, sort_characters_by_frequency) {
+TEST(Leetcode, sort_characters_by_frequency)
+{
   Solution s;
   {
     std::string input = "tree";

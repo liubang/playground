@@ -3,24 +3,23 @@
 #include <gtest/gtest.h>
 
 namespace {
-class Solution {
- public:
-  int myAtoi(const std::string& s) {
-    if (s.empty()) {
-      return 0;
-    }
+class Solution
+{
+public:
+  int myAtoi(const std::string& s)
+  {
+    if (s.empty()) { return 0; }
     int ret = 0, sign = 1;
     int boundary = INT_MAX / 10;
     int len = s.length(), i = 0;
     // 跳过开头的空格
-    while (s[i] == ' ' && i < len) {
-      i++;
-    }
+    while (s[i] == ' ' && i < len) { i++; }
     // 符号位
     if (s[i] == '-') {
       sign = -1;
       i++;
-    } else if (s[i] == '+') {
+    }
+    else if (s[i] == '+') {
       i++;
     }
     // 数字位
@@ -34,9 +33,10 @@ class Solution {
     return ret * sign;
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, string_to_integer_atoi) {
+TEST(Leetcode, string_to_integer_atoi)
+{
   Solution s;
   EXPECT_EQ(42, s.myAtoi("42"));
   EXPECT_EQ(42, s.myAtoi("  42"));

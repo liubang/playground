@@ -4,22 +4,18 @@
 #include <gtest/gtest.h>
 
 namespace {
-class Solution {
- public:
-  bool isStraight(const std::vector<int>& nums) {
-    if (nums.size() != 5) {
-      return true;
-    }
+class Solution
+{
+public:
+  bool isStraight(const std::vector<int>& nums)
+  {
+    if (nums.size() != 5) { return true; }
     std::set<int> ss;
     int min = 14;
     int max = 0;
     for (auto num : nums) {
-      if (num == 0) {
-        continue;
-      }
-      if (ss.find(num) != ss.end()) {
-        return false;
-      }
+      if (num == 0) { continue; }
+      if (ss.find(num) != ss.end()) { return false; }
       ss.insert(num);
       max = std::max(max, num);
       min = std::min(min, num);
@@ -27,9 +23,10 @@ class Solution {
     return max - min < 5;
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, bu_ke_pai_zhong_de_shu_zi_lcof) {
+TEST(Leetcode, bu_ke_pai_zhong_de_shu_zi_lcof)
+{
   Solution s;
   EXPECT_TRUE(s.isStraight({1, 2, 3, 4, 5}));
   EXPECT_TRUE(s.isStraight({0, 0, 1, 2, 5}));

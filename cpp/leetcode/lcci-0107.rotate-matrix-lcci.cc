@@ -2,14 +2,14 @@
 #include <gtest/gtest.h>
 
 namespace {
-class Solution {
- public:
+class Solution
+{
+public:
   // m[i][j] -> m[j][n - 1 - i]
-  void rotate(std::vector<std::vector<int>>& matrix) {
+  void rotate(std::vector<std::vector<int>>& matrix)
+  {
     int level = matrix.size();
-    if (level == 0) {
-      return;
-    }
+    if (level == 0) { return; }
     int r = (level >> 1) - 1;
     int c = (level - 1) >> 1;
     for (int i = r; i >= 0; --i) {
@@ -21,9 +21,10 @@ class Solution {
     }
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, rotate_matrix_lcci) {
+TEST(Leetcode, rotate_matrix_lcci)
+{
   Solution s;
   {
     std::vector<std::vector<int>> input = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};

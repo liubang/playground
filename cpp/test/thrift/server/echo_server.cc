@@ -13,8 +13,8 @@ using apache::thrift::ThriftServer;
 using apache::thrift::ThriftServerAsyncProcessorFactory;
 using proxygen::HTTPServerOptions;
 
-std::unique_ptr<HTTP2RoutingHandler> createHTTP2RoutingHandler(
-    std::shared_ptr<ThriftServer> server) {
+std::unique_ptr<HTTP2RoutingHandler> createHTTP2RoutingHandler(std::shared_ptr<ThriftServer> server)
+{
   auto h2_option = std::make_unique<HTTPServerOptions>();
   h2_option->threads = static_cast<size_t>(server->getNumIOWorkerThreads());
   h2_option->idleTimeout = server->getIdleTimeout();
@@ -23,12 +23,10 @@ std::unique_ptr<HTTP2RoutingHandler> createHTTP2RoutingHandler(
       std::move(h2_option), server->getThriftProcessor(), *server);
 }
 
-template <class ServiceHandler>
-std::shared_ptr<ThriftServer> newServer(int32_t port) {
+template<class ServiceHandler> std::shared_ptr<ThriftServer> newServer(int32_t port)
+{
   auto handler = std::make_shared<ServiceHandler>();
-  auto proc_factory =
-      std::make_shared<ThriftServerAsyncProcessorFactory<ServiceHandler>>(
-          handler);
+  auto proc_factory = std::make_shared<ThriftServerAsyncProcessorFactory<ServiceHandler>>(handler);
   auto server = std::make_shared<ThriftServer>();
   server->setPort(port);
   server->setProcessorFactory(proc_factory);
@@ -36,7 +34,8 @@ std::shared_ptr<ThriftServer> newServer(int32_t port) {
   return server;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[])
+{
   folly::init(&argc, &argv);
   auto echo_server = newServer<echo::EchoService>(1234);
   echo_server->serve();

@@ -3,27 +3,31 @@
 #include <gtest/gtest.h>
 
 namespace {
-class LRUCache {
- public:
-  LRUCache(int capacity) : capacity_(capacity) {}
+class LRUCache
+{
+public:
+  LRUCache(int capacity)
+      : capacity_(capacity)
+  {}
 
-  void put(int key, int val) {
+  void put(int key, int val)
+  {
     if (map_.find(key) == map_.end()) {
       if (cache_.size() == capacity_) {
         map_.erase(cache_.back().first);
         cache_.pop_back();
       }
-    } else {
+    }
+    else {
       cache_.erase(map_[key]);
     }
     cache_.push_front({key, val});
     map_[key] = cache_.begin();
   }
 
-  int get(int key) {
-    if (map_.find(key) == map_.end()) {
-      return -1;
-    }
+  int get(int key)
+  {
+    if (map_.find(key) == map_.end()) { return -1; }
     std::pair<int, int> kv = *map_[key];
     cache_.erase(map_[key]);
     cache_.push_front(kv);
@@ -31,14 +35,15 @@ class LRUCache {
     return kv.second;
   }
 
- private:
+private:
   int capacity_;
   std::list<std::pair<int, int>> cache_;
   std::unordered_map<int, std::list<std::pair<int, int>>::iterator> map_;
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, lru_cache) {
+TEST(Leetcode, lru_cache)
+{
   LRUCache cache(2);
   cache.put(1, 1);
   cache.put(2, 2);

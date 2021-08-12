@@ -148,7 +148,8 @@ namespace basecode {
 // nop
 //
 
-struct RegisterFileT {
+struct RegisterFileT
+{
   uint64_t i[64];
   double f[64];
   uint64_t pc;
@@ -214,27 +215,31 @@ enum class OperandTypes : uint8_t {
 };
 // clang-format on
 
-struct OperandEncodingT {
+struct OperandEncodingT
+{
   OperandTypes type;
   uint8_t index;
   uint64_t value;
 };
 
-struct DebugInfoT {
+struct DebugInfoT
+{
   uint32_t line_number;
   uint16_t column_number;
   std::string symbol;
   std::string source_file;
 };
 
-struct InstructionT {
+struct InstructionT
+{
   Opcodes op;
   uint8_t operands_count;
   OperandEncodingT operands[4];
 };
 
-class Terp {
- public:
+class Terp
+{
+public:
   explicit Terp(uint32_t heap_size);
   virtual ~Terp();
   bool initialize(Result& result);
@@ -242,9 +247,9 @@ class Terp {
   void push(uint64_t value);
   const RegisterFileT& register_file() const;
 
- private:
+private:
   uint32_t heap_size_{0};
   uint64_t* heap_{nullptr};
   RegisterFileT registers_{};
 };
-} // namespace basecode
+}   // namespace basecode

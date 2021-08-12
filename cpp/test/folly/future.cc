@@ -1,6 +1,6 @@
 #include <chrono>
-#include <thread>
 #include <iostream>
+#include <thread>
 
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/executors/GlobalExecutor.h>
@@ -10,22 +10,24 @@
 namespace {
 std::shared_ptr<folly::CPUThreadPoolExecutor> thread_pool =
     std::make_shared<folly::CPUThreadPoolExecutor>(
-        200,
-        std::make_shared<folly::NamedThreadFactory>("LoaderDataPool"));
+        200, std::make_shared<folly::NamedThreadFactory>("LoaderDataPool"));
 }
 
-int addSync(int a, int b) {
+int addSync(int a, int b)
+{
   std::this_thread::sleep_for(std::chrono::milliseconds(2000));
   return a + b;
 }
 
-folly::Future<int> add(int a, int b) {
+folly::Future<int> add(int a, int b)
+{
   auto promise = std::make_shared<folly::Promise<int>>();
   thread_pool->add([a, b, promise]() { promise->setValue(addSync(a, b)); });
   return promise->getFuture();
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[])
+{
   folly::init(&argc, &argv);
   std::cout << "======test1======" << std::endl;
   add(1, 2).then([](folly::Try<int>&& value) { std::cout << value.value() << std::endl; });

@@ -6,12 +6,12 @@
 
 #include "bloom_filter.h"
 
-std::string random_string(size_t length) {
+std::string random_string(size_t length)
+{
   auto randchar = []() -> char {
-    const char charset[] =
-        "0123456789"
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz";
+    const char charset[] = "0123456789"
+                           "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                           "abcdefghijklmnopqrstuvwxyz";
     const size_t max_index = (sizeof(charset) - 1);
     return charset[rand() % max_index];
   };
@@ -20,7 +20,8 @@ std::string random_string(size_t length) {
   return str;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[])
+{
   highkyck::bloom::BloomFilter filter(16 * 1024 * 1024 * 8);
 
   {
@@ -48,9 +49,7 @@ int main(int argc, char* argv[]) {
 
     for (auto& str : strs) {
       auto ret = filter.contains(str.data(), str.size());
-      if (!ret) {
-        std::cout << "[ERROR]: " << str << '\n';
-      }
+      if (!ret) { std::cout << "[ERROR]: " << str << '\n'; }
     }
   }
 

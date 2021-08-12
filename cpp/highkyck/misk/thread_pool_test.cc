@@ -6,7 +6,8 @@
 
 #include "includes/thread_pool.h"
 
-TEST(thread_pool, thread_pool) {
+TEST(thread_pool, thread_pool)
+{
   ThreadPool pool(4);
   std::vector<std::future<std::pair<int, int>>> results;
 
