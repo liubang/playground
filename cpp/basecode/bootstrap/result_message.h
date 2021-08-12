@@ -4,43 +4,36 @@
 #include <string>
 
 namespace basecode {
-class ResultMessage {
- public:
-  enum Types {
+class ResultMessage
+{
+public:
+  enum Types
+  {
     INFO,
     ERROR,
     WARNING,
     DATA,
   };
 
-  ResultMessage(
-      const std::string& code,
-      const std::string& message,
-      const std::string& details = "",
-      Types type = Types::INFO)
-      : type_(type), code_(code), message_(message), details_(details) {}
+  ResultMessage(const std::string& code, const std::string& message,
+                const std::string& details = "", Types type = Types::INFO)
+      : type_(type)
+      , code_(code)
+      , message_(message)
+      , details_(details)
+  {}
 
-  inline Types type() const {
-    return type_;
-  }
+  inline Types type() const { return type_; }
 
-  inline bool is_error() const {
-    return type_ == Types::ERROR;
-  }
+  inline bool is_error() const { return type_ == Types::ERROR; }
 
-  inline const std::string& code() const {
-    return code_;
-  }
+  inline const std::string& code() const { return code_; }
 
-  inline const std::string& details() const {
-    return details_;
-  }
+  inline const std::string& details() const { return details_; }
 
-  inline const std::string& message() const {
-    return message_;
-  }
+  inline const std::string& message() const { return message_; }
 
- private:
+private:
   Types type_;
   std::string code_;
   std::string message_;
@@ -49,4 +42,4 @@ class ResultMessage {
 
 using ResultMessageList = std::vector<ResultMessage>;
 
-} // namespace basecode
+}   // namespace basecode

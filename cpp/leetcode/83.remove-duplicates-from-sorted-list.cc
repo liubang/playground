@@ -3,13 +3,13 @@
 
 namespace {
 
-class Solution {
- public:
+class Solution
+{
+public:
   using ListNode = leetcode::list::ListNode;
-  ListNode* deleteDuplicates(ListNode* head) {
-    if (!head || !head->next) {
-      return head;
-    }
+  ListNode* deleteDuplicates(ListNode* head)
+  {
+    if (!head || !head->next) { return head; }
     ListNode* cur = head;
     while (cur) {
       while (cur->next && cur->val == cur->next->val) {
@@ -22,9 +22,10 @@ class Solution {
     return head;
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, remove_duplicates_form_sorted_list) {
+TEST(Leetcode, remove_duplicates_form_sorted_list)
+{
   using ListNode = leetcode::list::ListNode;
   Solution s;
   {

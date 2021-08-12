@@ -7,33 +7,37 @@
 
 namespace leetcode {
 namespace tree {
-struct TreeNode {
+struct TreeNode
+{
   int val;
   TreeNode* left;
   TreeNode* right;
   TreeNode(int x, TreeNode* left = nullptr, TreeNode* right = nullptr)
-      : val(x), left(left), right(right) {}
+      : val(x)
+      , left(left)
+      , right(right)
+  {}
 };
 
-void destroy(TreeNode* node) {
-  if (!node) {
-    return;
-  }
+void destroy(TreeNode* node)
+{
+  if (!node) { return; }
   destroy(node->left);
   destroy(node->right);
   delete node;
 }
 
 // 根据层次遍历构造二叉树
-TreeNode* create(const std::vector<std::string>& nodes) {
+TreeNode* create(const std::vector<std::string>& nodes)
+{
   std::vector<TreeNode*> pNodes;
   TreeNode* pCurNode;
   for (int current = 0; current < nodes.size(); ++current) {
-    if (nodes[current] == "null" || nodes[current] == "nullptr" ||
-        nodes[current] == "NULL" || nodes[current] == "nil" ||
-        nodes[current] == "Nil") {
+    if (nodes[current] == "null" || nodes[current] == "nullptr" || nodes[current] == "NULL" ||
+        nodes[current] == "nil" || nodes[current] == "Nil") {
       continue;
-    } else {
+    }
+    else {
       pCurNode = new TreeNode(std::stoi(nodes[current]));
     }
     if (current > 0) {
@@ -41,7 +45,8 @@ TreeNode* create(const std::vector<std::string>& nodes) {
       if (current % 2 != 0) {
         // left
         pNodes[parentIdx]->left = pCurNode;
-      } else {
+      }
+      else {
         // right
         pNodes[parentIdx]->right = pCurNode;
       }
@@ -51,36 +56,37 @@ TreeNode* create(const std::vector<std::string>& nodes) {
   return pNodes[0];
 }
 
-bool equals(TreeNode* lhs, TreeNode* rhs) {
+bool equals(TreeNode* lhs, TreeNode* rhs)
+{
   if (lhs && rhs) {
-    return lhs->val == rhs->val && equals(lhs->left, rhs->left) &&
-        equals(lhs->right, rhs->right);
+    return lhs->val == rhs->val && equals(lhs->left, rhs->left) && equals(lhs->right, rhs->right);
   }
   return lhs == rhs;
 }
 
-enum class Order {
+enum class Order
+{
   PRE_ORDER,
   IN_ORDER,
   POST_ORDER,
 };
 
-void print(TreeNode* node, Order order = Order::PRE_ORDER) {
+void print(TreeNode* node, Order order = Order::PRE_ORDER)
+{
   std::vector<int> seqs;
-  std::function<void(TreeNode*, Order)> visit = [&](TreeNode* node,
-                                                    Order order) {
-    if (!node) {
-      return;
-    }
+  std::function<void(TreeNode*, Order)> visit = [&](TreeNode* node, Order order) {
+    if (!node) { return; }
     if (order == Order::PRE_ORDER) {
       seqs.push_back(node->val);
       visit(node->left, order);
       visit(node->right, order);
-    } else if (order == Order::IN_ORDER) {
+    }
+    else if (order == Order::IN_ORDER) {
       visit(node->left, order);
       seqs.push_back(node->val);
       visit(node->right, order);
-    } else {
+    }
+    else {
       visit(node->left, order);
       visit(node->right, order);
       seqs.push_back(node->val);
@@ -92,12 +98,10 @@ void print(TreeNode* node, Order order = Order::PRE_ORDER) {
   int count = 0;
   std::for_each(seqs.begin(), seqs.end(), [&](int v) {
     std::cout << v;
-    if (count++ < seqs.size() - 1) {
-      std::cout << ',';
-    }
+    if (count++ < seqs.size() - 1) { std::cout << ','; }
   });
   std::cout << ']' << std::endl;
 }
 
-} // namespace tree
-} // namespace leetcode
+}   // namespace tree
+}   // namespace leetcode

@@ -2,23 +2,25 @@
 #include <gtest/gtest.h>
 
 namespace {
-class Solution {
- public:
-  bool isToeplitzMatrix(std::vector<std::vector<int>>& matrix) {
+class Solution
+{
+public:
+  bool isToeplitzMatrix(std::vector<std::vector<int>>& matrix)
+  {
     auto m = matrix.size();
     auto n = matrix[0].size();
     for (auto i = 1; i < m; ++i) {
       for (auto j = 1; j < n; ++j) {
-        if (matrix[i][j] != matrix[i - 1][j - 1])
-          return false;
+        if (matrix[i][j] != matrix[i - 1][j - 1]) return false;
       }
     }
     return true;
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, toeplitz_matrix) {
+TEST(Leetcode, toeplitz_matrix)
+{
   Solution s;
   {
     std::vector<std::vector<int>> matrix = {

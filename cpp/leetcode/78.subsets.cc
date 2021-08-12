@@ -2,9 +2,11 @@
 #include <gtest/gtest.h>
 
 namespace {
-class Solution {
- public:
-  std::vector<std::vector<int>> subsets(const std::vector<int>& nums) {
+class Solution
+{
+public:
+  std::vector<std::vector<int>> subsets(const std::vector<int>& nums)
+  {
     std::vector<std::vector<int>> ret;
     ret.push_back({});
     for (int i = 0; i < nums.size(); ++i) {
@@ -18,12 +20,12 @@ class Solution {
     return ret;
   }
 };
-} // namespace
+}   // namespace
 
-TEST(Leetcode, subsets) {
+TEST(Leetcode, subsets)
+{
   Solution s;
-  std::vector<std::vector<int>> exp = {
-      {}, {1}, {2}, {1, 2}, {3}, {1, 3}, {2, 3}, {1, 2, 3}};
+  std::vector<std::vector<int>> exp = {{}, {1}, {2}, {1, 2}, {3}, {1, 3}, {2, 3}, {1, 2, 3}};
   auto ret = s.subsets({1, 2, 3});
   EXPECT_EQ(exp, ret);
 }
