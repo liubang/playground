@@ -20,7 +20,7 @@ private:
     return dfs(node->left, sum) + dfs(node->right, sum);
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, sum_root_to_leaf_numbers)
 {

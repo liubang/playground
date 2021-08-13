@@ -54,7 +54,7 @@ public:
     return std::make_pair(nums[i], nums[j]);
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(algo, EquationRoot)
 {

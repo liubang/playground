@@ -21,7 +21,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, add_strings)
 {

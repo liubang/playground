@@ -25,7 +25,7 @@ private:
     visit(ret, node->left, k);
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, er_cha_sou_suo_shu_de_di_kda_jie_dian_lcof)
 {

@@ -23,7 +23,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, longest_substring_without_repeating_characters)
 {

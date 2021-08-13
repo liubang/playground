@@ -28,7 +28,7 @@ public:
     return std::accumulate(vec.begin(), vec.end(), 0);
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, basic_calculator_ii)
 {

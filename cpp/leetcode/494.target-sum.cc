@@ -19,7 +19,7 @@ public:
     return dp[w];
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, target_sum)
 {

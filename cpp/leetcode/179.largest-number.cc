@@ -18,7 +18,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, largest_number)
 {

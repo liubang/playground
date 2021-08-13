@@ -53,5 +53,5 @@ void BloomFilter::insert(const void* const data, uint64_t length)
   }
   header_.member_count++;
 }
-}   // namespace bloom
-}   // namespace highkyck
+}  // namespace bloom
+}  // namespace highkyck

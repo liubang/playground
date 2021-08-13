@@ -33,7 +33,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, roman_to_integer)
 {

@@ -44,7 +44,7 @@ private:
     // clang-format on
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, surrounded_regions)
 {

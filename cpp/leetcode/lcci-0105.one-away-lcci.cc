@@ -42,7 +42,7 @@ public:
     return true;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, one_way_lcci)
 {

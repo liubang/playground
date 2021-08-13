@@ -11,8 +11,8 @@ template<> struct Factorial<1>
 {
   static int const value = 1;
 };
-}   // namespace meta
-}   // namespace highkyck
+}  // namespace meta
+}  // namespace highkyck
 
 int main(int argc, char* argv[])
 {

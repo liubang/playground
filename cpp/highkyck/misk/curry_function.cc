@@ -27,7 +27,7 @@ struct detector<Default, std::void_t<Op<Args...>>, Op, Args...>
 
 template<template<class...> class Op, class... Args>
 using is_detected = typename detector<nonesuch, void, Op, Args...>::value_t;
-}   // namespace std
+}  // namespace std
 
 namespace {
 template<class T, typename... Args>
@@ -59,7 +59,7 @@ template<typename F> constexpr curry_t<F> curry(F&& f)
 {
   return {std::forward<F>(f)};
 }
-}   // namespace
+}  // namespace
 
 int test(int a, int b, int c)
 {

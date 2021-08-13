@@ -10,7 +10,7 @@ public:
     return (lastRemaining(n - 1, m) + m) % n;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, yuan_quan_zhong_zui_hou_sheng_xia_de_shu_zi_lcof)
 {

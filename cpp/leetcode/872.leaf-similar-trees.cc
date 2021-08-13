@@ -26,7 +26,7 @@ private:
     dfs(vecs, node->right);
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, leaf_similar_trees)
 {

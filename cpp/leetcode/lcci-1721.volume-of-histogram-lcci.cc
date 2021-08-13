@@ -23,7 +23,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, volume_of_histogram_lcci)
 {

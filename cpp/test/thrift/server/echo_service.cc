@@ -7,4 +7,4 @@ void EchoService::echo(EchoResponse& response, std::unique_ptr<EchoRequest> requ
 {
   response.message = request->message;
 }
-};   // namespace echo
+};  // namespace echo

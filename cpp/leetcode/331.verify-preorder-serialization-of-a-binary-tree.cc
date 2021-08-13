@@ -25,7 +25,7 @@ public:
     return inDegree == outDegree;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, verify_preorder_serialization_of_a_binary_tree)
 {

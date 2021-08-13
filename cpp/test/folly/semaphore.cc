@@ -14,7 +14,7 @@ public:
 private:
   folly::SaturatingSemaphore<true> semaphore_;
 };
-}   // namespace test
+}  // namespace test
 
 int main(int argc, char* argv[])
 {

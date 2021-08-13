@@ -31,7 +31,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, hua_dong_chuang_kou_de_zui_da_zhi_lcof)
 {

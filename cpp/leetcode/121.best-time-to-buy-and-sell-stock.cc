@@ -17,7 +17,7 @@ public:
     return profit;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, best_time_to_by_and_sell_stock)
 {

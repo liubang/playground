@@ -33,7 +33,7 @@ private:
 private:
   std::vector<int> row_;
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, subsets_ii)
 {

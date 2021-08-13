@@ -24,7 +24,7 @@ private:
   FooPtr foo_ptr_;
 };
 
-}   // namespace highkyck
+}  // namespace highkyck
 
 int main(int argc, char* argv[])
 {

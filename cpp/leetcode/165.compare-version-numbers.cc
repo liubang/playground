@@ -21,7 +21,7 @@ public:
     return 0;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, compare_version_numbers)
 {

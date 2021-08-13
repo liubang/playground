@@ -27,7 +27,7 @@ private:
   std::default_random_engine e_;
   std::uniform_int_distribution<int> u_{1, 7};
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, implement_rand10_using_rand7)
 {

@@ -36,4 +36,4 @@ struct Val
     std::set<std::string> set_val;
   } v;
 };
-}   // namespace highkyck
+}  // namespace highkyck

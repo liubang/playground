@@ -27,7 +27,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, island_perimeter)
 {

@@ -23,7 +23,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, binary_tree_maximun_path_sum)
 {

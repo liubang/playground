@@ -57,8 +57,8 @@ template<> struct Prime_print<1>
   void f() { D<1> d = prim ? 1 : 0; };
 };
 
-}   // namespace meta
-}   // namespace highkyck
+}  // namespace meta
+}  // namespace highkyck
 
 int main(int argc, char* argv[])
 {

@@ -25,7 +25,7 @@ private:
     }
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, permutations)
 {

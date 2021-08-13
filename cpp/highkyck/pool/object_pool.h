@@ -56,5 +56,5 @@ private:
   std::deque<std::unique_ptr<Obj>> pool_;
   std::mutex mtx_;
 };
-}   // namespace pool
-}   // namespace highkyck
+}  // namespace pool
+}  // namespace highkyck

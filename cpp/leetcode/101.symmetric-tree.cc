@@ -23,7 +23,7 @@ private:
     return ismirror(l->left, r->right) && ismirror(l->right, r->left);
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, symmetric_tree)
 {

@@ -45,7 +45,7 @@ public:
     return false;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, search_in_rotated_sorted_array_ii)
 {

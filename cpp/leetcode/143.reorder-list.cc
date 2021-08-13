@@ -29,7 +29,7 @@ public:
     vecs[i]->next = nullptr;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, reorder_list)
 {

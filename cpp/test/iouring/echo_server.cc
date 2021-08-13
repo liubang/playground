@@ -91,8 +91,8 @@ void add_provide_buf(io_uring* ring, __u16 bid, unsigned gid)
   memcpy(&sqe->user_data, &conn_i, sizeof(conn_i));
 }
 
-}   // namespace liburing
-}   // namespace test
+}  // namespace liburing
+}  // namespace test
 
 int main(int argc, char* argv[])
 {

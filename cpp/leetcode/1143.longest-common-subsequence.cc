@@ -24,7 +24,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, longest_common_subsequence)
 {

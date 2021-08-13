@@ -12,7 +12,7 @@ public:
     std::sort(nums1.begin(), nums1.end());
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, merge_sorted_array)
 {

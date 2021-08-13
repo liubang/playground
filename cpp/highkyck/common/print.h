@@ -36,5 +36,5 @@ void print(SequenceT<T, AllocT> seq)
   print("\b}");
 }
 
-}   // namespace common
-}   // namespace highkyck
+}  // namespace common
+}  // namespace highkyck

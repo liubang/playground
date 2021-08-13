@@ -39,7 +39,7 @@ private:
 private:
   std::unordered_map<int, std::unordered_map<int, double>> dp_;
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, nge_tou_zi_de_dian_shu)
 {

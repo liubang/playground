@@ -41,7 +41,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, top_k_frequent_words)
 {

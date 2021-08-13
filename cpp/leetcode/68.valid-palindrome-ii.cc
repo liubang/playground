@@ -21,7 +21,7 @@ private:
     return true;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, valid_palindrome_ii)
 {

@@ -14,8 +14,8 @@ public:
 
   Widget(const Widget& value) { std::cout << "copy constructor" << std::endl; }
 };
-}   // namespace meta
-}   // namespace highkyck
+}  // namespace meta
+}  // namespace highkyck
 
 int main(int argc, char* argv[])
 {

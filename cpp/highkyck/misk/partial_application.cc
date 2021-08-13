@@ -25,7 +25,7 @@ template<typename Fn, typename... Args> constexpr decltype(auto) partial(Fn&& fn
   return partial_t<Fn, Args...>(std::forward<Fn>(fn), std::forward<Args>(args)...);
 }
 
-};   // namespace
+};  // namespace
 
 int test(int x, int y, int z)
 {

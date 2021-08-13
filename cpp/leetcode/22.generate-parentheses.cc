@@ -33,7 +33,7 @@ private:
     }
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, generate_parentheses)
 {

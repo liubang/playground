@@ -17,4 +17,4 @@ public:
 private:
   std::shared_ptr<Demo> demo_;
 };
-}   // namespace echo
+}  // namespace echo

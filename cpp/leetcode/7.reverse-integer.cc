@@ -15,7 +15,7 @@ public:
     return n > INT_MAX || n < INT_MIN ? 0 : n;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, reverse_integer)
 {

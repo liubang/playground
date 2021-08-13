@@ -7,7 +7,7 @@ struct TestObj
   std::string name;
   int32_t age;
 };
-};   // namespace
+};  // namespace
 
 int main(int argc, char* argv[])
 {

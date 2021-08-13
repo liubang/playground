@@ -28,7 +28,7 @@ public:
     return lists[0];
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, remove_nth_node_from_end_of_list)
 {

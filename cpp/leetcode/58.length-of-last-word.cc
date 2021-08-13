@@ -18,7 +18,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, length_of_last_word)
 {

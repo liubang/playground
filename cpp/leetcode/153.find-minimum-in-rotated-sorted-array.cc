@@ -18,7 +18,7 @@ public:
     return nums[s];
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, find_minimum_in_rotated_sorted_array)
 {

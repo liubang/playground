@@ -28,7 +28,7 @@ public:
     return ret.length() < len ? ret : S;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, compress_string_lcci)
 {

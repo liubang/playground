@@ -7,7 +7,7 @@
 namespace {
 struct PrivateTag
 {};
-}   // namespace
+}  // namespace
 
 namespace foo {
 static folly::Singleton<Foo, PrivateTag> foo_instance([]() { return new Foo("liubang", 25); });
@@ -17,7 +17,7 @@ std::shared_ptr<Foo> Foo::getInstance()
   return foo_instance.try_get();
 }
 
-}   // namespace foo
+}  // namespace foo
 
 int main(int argc, char* argv[])
 {

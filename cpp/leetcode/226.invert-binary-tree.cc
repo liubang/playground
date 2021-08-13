@@ -25,7 +25,7 @@ public:
     return root;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, invert_binary_tree)
 {

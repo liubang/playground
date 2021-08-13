@@ -18,7 +18,7 @@ public:
 #endif
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, hamming_distance)
 {

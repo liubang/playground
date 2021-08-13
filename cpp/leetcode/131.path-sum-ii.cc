@@ -55,7 +55,7 @@ private:
   std::vector<int> path_;
   std::vector<std::vector<int>> ret_;
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, path_sum_ii)
 {

@@ -36,7 +36,7 @@ private:
     return validate2(node->right, vecs);
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, validate_binary_search_tree)
 {

@@ -18,7 +18,7 @@ public:
 private:
   std::array<std::atomic<uint64_t>, 100> data_;
 };
-}   // namespace highkyck
+}  // namespace highkyck
 
 int main(int argc, char* argv[])
 {

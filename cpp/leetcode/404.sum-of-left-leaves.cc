@@ -29,7 +29,7 @@ private:
     dfs(ret, node->right, false);
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, sum_of_left_leaves)
 {

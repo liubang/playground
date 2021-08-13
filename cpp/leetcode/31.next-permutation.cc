@@ -29,7 +29,7 @@ public:
     std::sort(nums.begin() + i + 1, nums.end());
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, next_permutation)
 {

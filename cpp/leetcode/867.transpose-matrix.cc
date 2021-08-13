@@ -16,7 +16,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, transpose_matrix)
 {

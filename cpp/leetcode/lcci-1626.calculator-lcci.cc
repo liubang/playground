@@ -137,7 +137,7 @@ private:
     }
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, calculator_lcci)
 {

@@ -20,7 +20,7 @@ public:
     return ret - clumsy(N);
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, clumsy_factorial)
 {

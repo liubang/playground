@@ -22,7 +22,7 @@ public:
     return queue.top();
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, kth_largest_element_in_an_array)
 {
