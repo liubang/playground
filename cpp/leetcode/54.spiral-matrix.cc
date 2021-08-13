@@ -54,7 +54,7 @@ private:
     Up,
   };
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, spiral_matrix)
 {

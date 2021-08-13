@@ -19,7 +19,7 @@ private:
     return dfs(node->left, sum, target) || dfs(node->right, sum, target);
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, path_sum)
 {

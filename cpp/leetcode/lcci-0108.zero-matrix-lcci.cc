@@ -21,7 +21,7 @@ public:
     }
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, zero_matrix_lcci)
 {

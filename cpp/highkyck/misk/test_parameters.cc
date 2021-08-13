@@ -31,7 +31,7 @@ public:
 private:
   Foo foo_;
 };
-}   // namespace highkyck
+}  // namespace highkyck
 
 int main(int argc, char* argv[])
 {

@@ -20,4 +20,4 @@ private:
   std::string name_;
   int32_t age_;
 };
-}   // namespace foo
+}  // namespace foo

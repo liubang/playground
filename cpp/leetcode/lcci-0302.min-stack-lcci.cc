@@ -28,7 +28,7 @@ public:
 private:
   std::stack<std::pair<int, int>> st_;
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, min_stack_lcci)
 {

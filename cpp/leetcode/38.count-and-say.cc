@@ -23,7 +23,7 @@ public:
     return cur;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, count_and_say)
 {

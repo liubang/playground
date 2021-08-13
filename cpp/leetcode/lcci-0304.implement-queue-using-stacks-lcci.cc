@@ -40,7 +40,7 @@ private:
   std::stack<int> st1_;
   std::stack<int> st2_;
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, implement_queue_using_stacks_lcci)
 {

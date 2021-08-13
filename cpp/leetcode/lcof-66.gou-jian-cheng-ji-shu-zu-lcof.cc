@@ -19,7 +19,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, gou_jian_cheng_ji_shu_zu_ocof)
 {

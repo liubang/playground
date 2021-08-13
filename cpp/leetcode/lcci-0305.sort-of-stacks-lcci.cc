@@ -37,7 +37,7 @@ public:
 private:
   std::stack<int> st_;
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, sort_of_stack_lcci)
 {

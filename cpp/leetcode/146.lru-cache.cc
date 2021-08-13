@@ -40,7 +40,7 @@ private:
   std::list<std::pair<int, int>> cache_;
   std::unordered_map<int, std::list<std::pair<int, int>>::iterator> map_;
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, lru_cache)
 {

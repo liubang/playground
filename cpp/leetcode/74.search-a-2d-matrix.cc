@@ -21,7 +21,7 @@ public:
     return false;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, search_a_2d_matrix)
 {

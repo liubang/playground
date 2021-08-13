@@ -22,7 +22,7 @@ private:
     return std::min(left, right);
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, second_minimum_node_in_a_binary_tree)
 {

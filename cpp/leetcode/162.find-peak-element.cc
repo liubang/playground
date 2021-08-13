@@ -18,7 +18,7 @@ public:
     return s;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, find_peak_element)
 {

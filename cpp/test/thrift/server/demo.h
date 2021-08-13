@@ -3,4 +3,4 @@
 namespace echo {
 class Demo
 {};
-}   // namespace echo
+}  // namespace echo

@@ -14,7 +14,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, minimum_moves_to_equal_array_elements)
 {

@@ -21,7 +21,7 @@ public:
     return nullptr;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, linked_list_cycle_ii)
 {

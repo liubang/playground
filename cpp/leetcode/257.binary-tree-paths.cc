@@ -38,7 +38,7 @@ private:
     }
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, binary_tree_paths)
 {

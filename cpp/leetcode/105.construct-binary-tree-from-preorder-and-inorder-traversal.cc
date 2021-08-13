@@ -35,7 +35,7 @@ public:
     return root;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, construct_binary_tree_from_preorder_and_inorder_traversal)
 {

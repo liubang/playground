@@ -21,5 +21,5 @@ private:
   std::atomic<T*> ins_{nullptr};
   std::mutex mutex_;
 };
-}   // namespace misk
-}   // namespace highkyck
+}  // namespace misk
+}  // namespace highkyck
