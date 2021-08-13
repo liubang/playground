@@ -103,5 +103,5 @@ void print(TreeNode* node, Order order = Order::PRE_ORDER)
   std::cout << ']' << std::endl;
 }
 
-}   // namespace tree
-}   // namespace leetcode
+}  // namespace tree
+}  // namespace leetcode

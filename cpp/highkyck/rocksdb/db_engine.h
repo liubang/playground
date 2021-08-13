@@ -37,4 +37,4 @@ private:
   rocksdb::WriteOptions write_options_;
   rocksdb::ReadOptions read_options_;
 };
-}   // namespace highkyck
+}  // namespace highkyck

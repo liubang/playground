@@ -35,7 +35,7 @@ private:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, ji_qi_ren_de_yun_dong_fan_wei_lcof)
 {

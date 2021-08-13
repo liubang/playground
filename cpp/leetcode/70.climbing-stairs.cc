@@ -17,7 +17,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, climbing_stairs)
 {

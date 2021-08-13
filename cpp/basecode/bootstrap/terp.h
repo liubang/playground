@@ -252,4 +252,4 @@ private:
   uint64_t* heap_{nullptr};
   RegisterFileT registers_{};
 };
-}   // namespace basecode
+}  // namespace basecode

@@ -20,7 +20,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, maximum_length_of_repeated_subarray)
 {

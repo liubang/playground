@@ -36,7 +36,7 @@ private:
     // clang-format on
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, number_of_islands)
 {

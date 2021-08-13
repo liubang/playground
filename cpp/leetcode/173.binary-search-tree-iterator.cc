@@ -51,7 +51,7 @@ private:
   std::vector<int> list_;
   int idx_{0};
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, binary_search_tree_iterator)
 {

@@ -6,7 +6,7 @@ struct S
   int c : 9;
   int d : 7;
 };
-}   // namespace highkyck
+}  // namespace highkyck
 
 int main(int argc, char* argv[])
 {

@@ -8,7 +8,7 @@ public:
   Foo() = default;
   virtual ~Foo() = default;
 };
-}   // namespace highkyck
+}  // namespace highkyck
 
 int main(int argc, char* argv[])
 {

@@ -17,7 +17,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, remove_all_adjacent_duplicates_in_string)
 {

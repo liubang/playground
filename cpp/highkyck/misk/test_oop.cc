@@ -35,7 +35,7 @@ public:
 
   void print(const std::string& msg) { std::cout << "Derive::print::" << msg << std::endl; }
 };
-}   // namespace misc
+}  // namespace misc
 
 int main(int argc, char* argv[])
 {

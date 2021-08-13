@@ -70,7 +70,7 @@ private:
   std::string original_;
   std::vector<std::string> res_;
 };
-}   // namespace highkyck
+}  // namespace highkyck
 
 int main(int argc, char* argv[])
 {

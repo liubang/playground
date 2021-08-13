@@ -45,5 +45,5 @@ bool equals(ListNode* lhs, ListNode* rhs)
   return lhs == rhs;
 }
 
-}   // namespace list
-}   // namespace leetcode
+}  // namespace list
+}  // namespace leetcode

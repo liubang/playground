@@ -83,5 +83,5 @@ private:
   Header header_;
   std::unique_ptr<uint8_t[]> bits_;
 };
-}   // namespace bloom
-}   // namespace highkyck
+}  // namespace bloom
+}  // namespace highkyck

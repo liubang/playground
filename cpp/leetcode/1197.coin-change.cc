@@ -17,7 +17,7 @@ public:
     return dp[amount] > amount ? -1 : dp[amount];
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, coin_change)
 {

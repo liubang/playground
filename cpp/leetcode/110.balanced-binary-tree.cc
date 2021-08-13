@@ -47,7 +47,7 @@ private:
     return std::max(height(node->left), height(node->right)) + 1;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, balanced_binary_tree)
 {

@@ -20,7 +20,7 @@ public:
     return num;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, remove_k_digits)
 {
