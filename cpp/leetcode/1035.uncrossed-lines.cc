@@ -20,7 +20,7 @@ public:
     return dp[len1][len2];
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, uncrossed_lines)
 {

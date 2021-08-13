@@ -40,7 +40,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, cong_shang_dao_xia_da_yin_er_cha_shu_lcof)
 {

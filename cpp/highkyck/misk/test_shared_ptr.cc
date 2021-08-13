@@ -21,7 +21,7 @@ private:
   std::shared_ptr<std::string> name_ptr_;
 };
 
-}   // namespace highkyck
+}  // namespace highkyck
 
 int main(int argc, char* argv[])
 {

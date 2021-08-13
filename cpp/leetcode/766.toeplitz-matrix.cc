@@ -17,7 +17,7 @@ public:
     return true;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, toeplitz_matrix)
 {

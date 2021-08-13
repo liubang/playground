@@ -24,7 +24,7 @@ private:
     visit(ret, node->right);
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, binary_tree_inordered_traversal)
 {

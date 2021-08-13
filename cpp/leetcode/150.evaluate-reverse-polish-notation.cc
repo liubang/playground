@@ -38,7 +38,7 @@ public:
     return stk.top();
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, evaluate_reverse_polish_notation)
 {

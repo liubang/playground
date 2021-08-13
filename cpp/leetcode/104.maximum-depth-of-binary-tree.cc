@@ -11,7 +11,7 @@ public:
     return root == nullptr ? 0 : std::max(maxDepth(root->left), maxDepth(root->right)) + 1;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, maximum_depth_of_binary_tree)
 {

@@ -86,4 +86,4 @@ private:
   T* ptr_;
 };
 
-}   // namespace highkyck
+}  // namespace highkyck

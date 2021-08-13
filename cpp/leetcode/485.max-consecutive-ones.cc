@@ -20,7 +20,7 @@ public:
     return std::max(ret, cur);
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, max_consecutive_ones)
 {

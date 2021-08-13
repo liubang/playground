@@ -20,7 +20,7 @@ void func2()
 {
   if (::swapcontext(&uctx_func2, &uctx_func1) == -1) handle_error("swapcontext");
 }
-}   // namespace
+}  // namespace
 
 int main(int argc, char* argv[])
 {

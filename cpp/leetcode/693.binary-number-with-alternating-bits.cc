@@ -15,7 +15,7 @@ public:
     return true;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, binary_number_with_alternating_bits)
 {

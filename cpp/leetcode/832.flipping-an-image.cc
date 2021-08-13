@@ -17,7 +17,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, flipping_an_image)
 {

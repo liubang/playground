@@ -12,7 +12,7 @@ public:
     return s.find(s2) != std::string::npos;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, string_rotation_lcci)
 {

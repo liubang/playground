@@ -22,7 +22,7 @@ private:
     return (a == b) || (std::isalpha(a) && std::isalpha(b) && std::toupper(a) == std::toupper(b));
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, valid_palindrome)
 {

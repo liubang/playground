@@ -24,7 +24,7 @@ public:
     return dp[steps][0];
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, number_of_ways_to_stay_in_the_same_place_after_some_steps)
 {

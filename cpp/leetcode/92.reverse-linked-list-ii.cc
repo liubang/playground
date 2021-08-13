@@ -32,7 +32,7 @@ public:
     return ss ? head : pre;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, reverse_linked_list_ii)
 {

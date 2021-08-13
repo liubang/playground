@@ -23,7 +23,7 @@ public:
     return max - min < 5;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, bu_ke_pai_zhong_de_shu_zi_lcof)
 {

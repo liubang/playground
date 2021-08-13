@@ -39,7 +39,7 @@ private:
     return false;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, word_search)
 {

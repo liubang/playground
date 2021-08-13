@@ -277,7 +277,7 @@ SpaceBeforeSquareBrackets: false
 SpaceInEmptyParentheses: false
 
 # 在尾随的评论前添加的空格数(只适用于//)
-SpacesBeforeTrailingComments: 3
+SpacesBeforeTrailingComments: 2
 
 # 在尖括号的<后和>前添加空格
 SpacesInAngles: false
@@ -305,3 +305,4 @@ TabWidth: 2
 
 # 使用tab字符: Never, ForIndentation, ForContinuationAndIndentation, Always
 UseTab: Never
+...

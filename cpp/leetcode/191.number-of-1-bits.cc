@@ -14,7 +14,7 @@ public:
     return count;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, number_of_1_bits)
 {

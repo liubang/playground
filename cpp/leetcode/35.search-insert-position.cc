@@ -24,7 +24,7 @@ public:
     return s;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, search_insert_position)
 {

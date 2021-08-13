@@ -25,7 +25,7 @@ struct Base1
 {};
 struct Derived1 : Base1
 {};
-}   // namespace highkyck
+}  // namespace highkyck
 
 using namespace highkyck;
 
