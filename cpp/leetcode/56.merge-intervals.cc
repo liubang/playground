@@ -26,7 +26,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, merge_intervals)
 {

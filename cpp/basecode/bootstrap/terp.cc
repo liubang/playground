@@ -47,4 +47,4 @@ const RegisterFileT& Terp::register_file() const
   return registers_;
 }
 
-}   // namespace basecode
+}  // namespace basecode

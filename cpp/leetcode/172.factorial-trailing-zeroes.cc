@@ -14,7 +14,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, factorial_trailing_zeros)
 {

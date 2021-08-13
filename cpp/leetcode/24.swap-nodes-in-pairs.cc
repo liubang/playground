@@ -35,7 +35,7 @@ public:
     return newhead;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, swap_nodes_in_pairs)
 {

@@ -14,4 +14,4 @@ public:
 
   MSGPACK_DEFINE(dbname_, tbname_, key_);
 };
-}   // namespace highkyck
+}  // namespace highkyck

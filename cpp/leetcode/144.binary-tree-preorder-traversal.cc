@@ -23,7 +23,7 @@ private:
     visit(ret, node->right);
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, binary_tree_preorder_traversal)
 {

@@ -19,7 +19,7 @@ public:
     return digits;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, plus_one)
 {

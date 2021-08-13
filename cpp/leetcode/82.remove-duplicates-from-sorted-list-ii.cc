@@ -40,7 +40,7 @@ public:
     return dummy->next;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, remove_duplicates_from_sorted_list_ii)
 {

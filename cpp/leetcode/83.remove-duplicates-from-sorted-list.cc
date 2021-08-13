@@ -22,7 +22,7 @@ public:
     return head;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, remove_duplicates_form_sorted_list)
 {

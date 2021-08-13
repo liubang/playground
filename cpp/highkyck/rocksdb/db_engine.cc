@@ -64,4 +64,4 @@ rocksdb::Status DbEngine::get(Val* val, const Key& key)
   return status;
 }
 
-}   // namespace highkyck
+}  // namespace highkyck

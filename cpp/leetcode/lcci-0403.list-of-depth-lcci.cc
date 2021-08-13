@@ -50,7 +50,7 @@ private:
     visit(ret, node->right, dep + 1);
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, list_of_depth_lcci)
 {

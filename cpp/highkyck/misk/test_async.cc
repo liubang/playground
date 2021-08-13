@@ -15,7 +15,7 @@ void funcB()
   std::this_thread::sleep_for(std::chrono::seconds(1));
   std::cout << __FUNCTION__ << std::endl;
 }
-}   // namespace highkyck
+}  // namespace highkyck
 
 int main(int argc, char* argv[])
 {

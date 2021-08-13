@@ -26,7 +26,7 @@ public:
     }
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, house_robber)
 {

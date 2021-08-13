@@ -64,4 +64,4 @@ private:
   bool success_{true};
   ResultMessageList messages_{};
 };
-}   // namespace basecode
+}  // namespace basecode

@@ -43,7 +43,7 @@ private:
     return false;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, shu_de_zi_jie_gou_lcof)
 {

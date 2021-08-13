@@ -11,7 +11,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, xor_operation_in_an_array)
 {

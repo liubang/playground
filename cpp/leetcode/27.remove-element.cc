@@ -16,7 +16,7 @@ public:
     return nums.size();
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, remove_element)
 {

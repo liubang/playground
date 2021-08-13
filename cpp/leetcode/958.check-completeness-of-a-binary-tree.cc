@@ -45,7 +45,7 @@ public:
     return true;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, check_completeness_of_a_binary_tree)
 {

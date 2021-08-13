@@ -20,7 +20,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, sort_characters_by_frequency)
 {

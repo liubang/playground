@@ -21,7 +21,7 @@ public:
     return true;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, ugly_number)
 {

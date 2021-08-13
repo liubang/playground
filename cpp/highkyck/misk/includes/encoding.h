@@ -22,4 +22,4 @@ inline uint64_t DecodeFixed64(const char* ptr)
          (static_cast<uint64_t>(buffer[4]) << 32) | (static_cast<uint64_t>(buffer[5]) << 40) |
          (static_cast<uint64_t>(buffer[6]) << 48) | (static_cast<uint64_t>(buffer[7]) << 56);
 }
-}   // namespace test
+}  // namespace test

@@ -28,7 +28,7 @@ private:
     return dp;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, er_cha_shu_ran_se_UGC)
 {

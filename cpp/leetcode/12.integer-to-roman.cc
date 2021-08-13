@@ -32,7 +32,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, integer_to_roman)
 {

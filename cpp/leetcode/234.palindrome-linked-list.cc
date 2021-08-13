@@ -29,7 +29,7 @@ public:
     return stack.empty();
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, palindrome_linked_list)
 {

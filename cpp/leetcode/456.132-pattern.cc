@@ -27,7 +27,7 @@ public:
     return false;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, 132_pattern)
 {

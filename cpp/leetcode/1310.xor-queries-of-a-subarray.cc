@@ -25,7 +25,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, xor_queries_of_a_subarray)
 {

@@ -65,7 +65,7 @@ private:
   };
   Node* head_;
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, implement_trie_prefix_tree)
 {

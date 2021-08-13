@@ -42,4 +42,4 @@ private:
 
 using ResultMessageList = std::vector<ResultMessage>;
 
-}   // namespace basecode
+}  // namespace basecode

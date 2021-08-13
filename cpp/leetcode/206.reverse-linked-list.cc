@@ -30,7 +30,7 @@ public:
     return newhead;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, reverse_linked_list)
 {

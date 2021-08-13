@@ -55,7 +55,7 @@ private:
     quickSort(nums, i + 1, e);
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, sort_an_array)
 {

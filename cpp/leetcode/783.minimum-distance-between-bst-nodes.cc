@@ -26,7 +26,7 @@ private:
     dfs(ret, pre, node->right);
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, minimum_distance_between_bst_nodes)
 {

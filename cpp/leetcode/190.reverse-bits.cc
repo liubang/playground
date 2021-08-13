@@ -15,7 +15,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, reverse_bits)
 {

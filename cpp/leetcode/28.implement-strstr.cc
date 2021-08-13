@@ -19,7 +19,7 @@ public:
     return -1;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, implement_strstr)
 {
