@@ -29,7 +29,7 @@ private:
   std::stack<int> st1_;
   std::stack<int> st2_;
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, yong_liang_ge_zhan_shi_xian_dui_lie_lcof)
 {

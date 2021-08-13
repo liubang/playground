@@ -32,7 +32,7 @@ public:
     return head;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, remove_linked_list_elements)
 {

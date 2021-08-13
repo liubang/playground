@@ -12,7 +12,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, execl_sheet_column_number)
 {

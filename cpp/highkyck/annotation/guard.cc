@@ -7,7 +7,7 @@
 #if defined(__clang__) && (!defined(SWIG))
 #  define THREAD_ANNOTATION_ATTRIBUTE__(x) __attribute__((x))
 #else
-#  define THREAD_ANNOTATION_ATTRIBUTE__(x)   // no-op
+#  define THREAD_ANNOTATION_ATTRIBUTE__(x)  // no-op
 #endif
 
 #define GUARDED_BY(x) THREAD_ANNOTATION_ATTRIBUTE__(guarded_by(x))
@@ -29,8 +29,8 @@ private:
   std::mutex mutex_;
   std::unordered_map<std::string, std::string> map_ GUARDED_BY(mutex_);
 };
-}   // namespace annotation
-}   // namespace highkyck
+}  // namespace annotation
+}  // namespace highkyck
 
 int main(int argc, char* argv[])
 {

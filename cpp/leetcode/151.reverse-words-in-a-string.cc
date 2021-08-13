@@ -23,7 +23,7 @@ public:
     return ret.erase(ret.find_last_not_of(' ') + 1);
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, reverse_words_in_a_string)
 {

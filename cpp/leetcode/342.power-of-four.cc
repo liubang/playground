@@ -19,7 +19,7 @@ public:
     return (zero & 1) == 0;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, power_of_four)
 {

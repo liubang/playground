@@ -35,7 +35,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, reverse_substrings_between_each_pair_of_parentheses)
 {

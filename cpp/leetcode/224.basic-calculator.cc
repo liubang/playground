@@ -39,7 +39,7 @@ public:
     return ret;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, basic_calculator)
 {

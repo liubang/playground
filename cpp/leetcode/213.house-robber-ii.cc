@@ -29,7 +29,7 @@ private:
     return p;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, house_robber_ii)
 {

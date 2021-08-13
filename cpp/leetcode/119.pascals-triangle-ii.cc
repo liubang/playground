@@ -21,7 +21,7 @@ public:
     return cur;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, pascals_triangle_ii)
 {

@@ -14,7 +14,7 @@ public:
     return left && right ? root : left ? left : right;
   }
 };
-}   // namespace
+}  // namespace
 
 TEST(Leetcode, lowest_common_ancestor_of_a_binary_tree)
 {
