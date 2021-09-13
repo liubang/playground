@@ -7,16 +7,17 @@ Language: Cpp
 BasedOnStyle: llvm
 
 # 访问说明符(public、private等)的偏移
-AccessModifierOffset: -2
+AccessModifierOffset: -4
 
 # 左括号(左圆括号、左尖括号、左方括号)后的对齐: Align, DontAlign, AlwaysBreak(总是在左括号后换行)
 AlignAfterOpenBracket: Align
 
 # 连续赋值时，对齐所有等号
-AlignConsecutiveAssignments: false
+AlignConsecutiveAssignments: true
 
 # 连续声明时，对齐所有声明的变量名
-AlignConsecutiveDeclarations: false
+AlignConsecutiveDeclarations: true
+
 # 对齐连续位域字段的风格
 # AlignConsecutiveBitFields: AcrossEmptyLinesAndComments
 
@@ -42,6 +43,7 @@ AllowAllConstructorInitializersOnNextLine: true
 # 允许函数声明的所有参数在放在下一行
 AllowAllParametersOfDeclarationOnNextLine: true
 
+
 # 允许短的块放在同一行(Always 总是将短块合并成一行，Empty 只合并空块)
 AllowShortBlocksOnASingleLine: Empty
 
@@ -52,7 +54,7 @@ AllowShortCaseLabelsOnASingleLine: true
 AllowShortFunctionsOnASingleLine: Inline
 
 # 允许短的if语句保持在同一行
-AllowShortIfStatementsOnASingleLine: true
+AllowShortIfStatementsOnASingleLine: false
 
 # 允许短的循环保持在同一行
 AllowShortLoopsOnASingleLine: true
@@ -101,9 +103,9 @@ BraceWrapping:
   # extern 导出块后面
   AfterExternBlock: false
   # catch之前
-  BeforeCatch: true
+  BeforeCatch: false
   # else之前
-  BeforeElse: true
+  BeforeElse: false
   # 缩进大括号(整个大括号框起来的部分都缩进)
   IndentBraces: false
   # 空函数的大括号是否可以在一行
@@ -186,7 +188,7 @@ IndentCaseLabels: false
 IndentPPDirectives: AfterHash
 
 # 缩进宽度
-IndentWidth: 2
+IndentWidth: 4
 
 # 函数返回类型换行时，缩进函数声明或函数定义的函数名
 IndentWrappedFunctionNames: false
@@ -204,7 +206,7 @@ MacroBlockEnd: ''
 MaxEmptyLinesToKeep: 10
 
 # 命名空间的缩进: None, Inner(缩进嵌套的命名空间中的内容), All
-NamespaceIndentation: None
+# NamespaceIndentation: Inner
 
 # 使用ObjC块时缩进宽度
 ObjCBlockIndentWidth: 4
@@ -243,7 +245,7 @@ PointerAlignment: Left
 ReflowComments: true
 
 # 允许排序#include
-SortIncludes: false
+SortIncludes: true
 
 # 允许排序 using 声明顺序
 SortUsingDeclarations: false
@@ -301,8 +303,7 @@ SpacesInSquareBrackets: false
 Standard: Cpp11
 
 # tab宽度
-TabWidth: 2
+TabWidth: 4
 
 # 使用tab字符: Never, ForIndentation, ForContinuationAndIndentation, Always
 UseTab: Never
-...
