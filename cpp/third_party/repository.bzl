@@ -12,6 +12,13 @@ def external_dependencies():
     )
 
 def external_repositories(path_prefix = "", repo_name = ""):
+    http_archive(
+        name = "cimg",
+        urls = ["https://github.com/dtschump/CImg/archive/refs/tags/v.2.9.9.tar.gz"],
+        strip_prefix = "CImg-v.2.9.9",
+        sha256 = "94c27f697826bff965ebbccb50e3e45f1f5602400e74ed586e77d9b4dcbc64d2",
+    )
+
     # libunwind
     http_archive(
         name = "libunwind",
