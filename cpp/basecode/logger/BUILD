@@ -15,4 +15,7 @@ cc_library(
         "log_appender.h",
         "logger.h",
     ],
+    copts = [
+        "-std=c++17",
+    ],
 )
