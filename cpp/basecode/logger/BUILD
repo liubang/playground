@@ -13,34 +13,23 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2021/01/30 16:36
+# Created: 2021/11/28 22:44
 
-package(default_visibility = ["//visibility:public"])
-
-_COPTS = [
-    "-std=gnu++2a",
-]
-
-# cc_library(
-#     name = "terp",
-#     srcs = [
-#         "terp.cc",
-#     ],
-#     hdrs = [
-#         "result_message.h",
-#         "result.h",
-#         "terp.h",
-#     ],
-#     copts = _COPTS,
-# )
-
-# cc_binary(
-#     name = "main",
-#     srcs = [
-#         "main.cc",
-#     ],
-#     copts = _COPTS,
-#     deps = [
-#         ":terp",
-#     ],
-# )
+cc_library(
+    name = "logger",
+    srcs = [
+        "buffer.cc",
+        "count_down_latch.cc",
+        "file_writer.cc",
+        "log_appender.cc",
+        "logger.cc",
+        "singleton.h",
+    ],
+    hdrs = [
+        "buffer.h",
+        "count_down_latch.h",
+        "file_writer.h",
+        "log_appender.h",
+        "logger.h",
+    ],
+)
