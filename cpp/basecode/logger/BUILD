@@ -1,12 +1,14 @@
+package(default_visibility = ["//visibility:public"])
+
 cc_library(
     name = "logger",
     srcs = [
         "buffer.cc",
-        "count_down_latch.cc",
         "file_writer.cc",
         "log_appender.cc",
         "logger.cc",
         "singleton.h",
+        "count_down_latch.cc",
     ],
     hdrs = [
         "buffer.h",
