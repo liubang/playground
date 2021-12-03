@@ -4,6 +4,7 @@
 #include <sys/types.h>
 
 namespace basecode {
+namespace logger {
 
 class Buffer
 {
@@ -41,4 +42,6 @@ private:
     char*        data_;
     CookieFunc   cookie_;
 };
+
+}  // namespace logger
 }  // namespace basecode

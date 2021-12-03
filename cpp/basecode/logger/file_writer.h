@@ -5,6 +5,7 @@
 #include <string>
 
 namespace basecode {
+namespace logger {
 
 enum class FileWriterType : uint8_t
 {
@@ -56,4 +57,5 @@ private:
     constexpr static int kRollPerSeconds = 60 * 60 * 24;
 };
 
+}  // namespace logger
 }  // namespace basecode

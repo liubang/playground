@@ -5,11 +5,12 @@
 #include <mutex>
 #include <unordered_map>
 
-#include "file_writer.h"
-#include "log_appender.h"
-#include "singleton.h"
+#include "basecode/logger/file_writer.h"
+#include "basecode/logger/log_appender.h"
+#include "basecode/singleton.h"
 
 namespace basecode {
+namespace logger {
 
 enum class LogLevel : uint8_t
 {
@@ -40,7 +41,7 @@ static LoggerConfig kLoggerConfig;
 class Logger
 {
 public:
-    static Logger* get_logger() { return Singleton<Logger>::get_instance(); }
+    static Logger* get_logger() { return basecode::Singleton<Logger>::get_instance(); }
 
     static void set_global_config(const LoggerConfig& conf) { kLoggerConfig = conf; }
 
@@ -80,4 +81,5 @@ private:
     std::list<Task>                                            functors_;
 };
 
+}  // namespace logger
 }  // namespace basecode

@@ -10,7 +10,7 @@ cc_test(
         "-std=c++17",
     ],
     deps = [
-        "//basecode/cistring:cistring",
+        "//basecode:basecode",
         "@gtest//:gtest_main",
     ],
 )
