@@ -1,0 +1,37 @@
+---
+name: master
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  target:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/check@v2
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v2
+        with:
+          node-version: "16"
+      - uses: actions/cache@v2
+        with:
+          path: affected
+          key: affected.${{ github.sha }}
+      - uses: actions/cache@v2
+        env:
+          cache-name: bazel
+        with:
+          path: ~/.cache/bazelisk
+          key: ${{ env.cache-name }}-${{ runner.os }}
+      - run: npm install -g @bazel/bazelisk
+      - name: run build
+        run: |
+          cd cpp
+          bazelisk test -c opt //highkyck/misk/...
+          bazelisk test -c opt //highkyck/atomic/...
+          bazelisk test -c opt //leetcode/...
+          bazelisk test -c opt //basecode/...
+          bazelisk test -c opt //algo/...
