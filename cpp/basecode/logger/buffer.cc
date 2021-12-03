@@ -46,5 +46,12 @@ void Buffer::cookie_start() {}
 
 void Buffer::cookie_end() {}
 
+void Buffer::clear() {}
+
+void Buffer::set_cookie(const CookieFunc& cookie)
+{
+    cookie_ = cookie;
+}
+
 }  // namespace logger
 }  // namespace basecode
