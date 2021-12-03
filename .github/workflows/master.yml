@@ -26,6 +26,10 @@ jobs:
         with:
           path: ~/.cache/bazelisk
           key: ${{ env.cache-name }}-${{ runner.os }}
+      - uses: egor-tensin/setup-gcc@v1
+        with:
+          version: 10
+          platform: x64
       - run: npm install -g @bazel/bazelisk
       - name: run build
         run: |
