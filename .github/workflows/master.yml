@@ -10,7 +10,7 @@ jobs:
   target:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/check@v2
+      - uses: actions/checkout@v2
         with:
           fetch-depth: 0
       - uses: actions/setup-node@v2
