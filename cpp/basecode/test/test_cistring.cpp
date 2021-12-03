@@ -3,7 +3,7 @@
 #include <map>
 #include <vector>
 
-#include "basecode/cistring/cistring.h"
+#include "basecode/cistring.h"
 
 TEST(cistring, compare)
 {
