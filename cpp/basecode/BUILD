@@ -12,8 +12,8 @@ cc_library(
     ] + glob(["logger/*.h"]),
     copts = [
         "-std=c++17",
-        "-pthread",
     ],
-    deps = [
+    linkopts = [
+        "-pthread",
     ],
 )
