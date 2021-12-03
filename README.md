@@ -1,3 +1,3 @@
 ## Learning and testing code.
 
-[![Build Status](https://travis-ci.org/liubang/laboratory.svg?branch=master)](https://travis-ci.org/liubang/laboratory)
+![Build Status](https://github.com/liubang/laboratory/actions/workflows/master.yml/badge.svg?branch=master)
