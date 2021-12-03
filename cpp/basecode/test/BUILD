@@ -13,28 +13,21 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2021/11/28 22:44
+# Created: 2021/12/03 11:18
 
+# vim: ft=bzl
 package(default_visibility = ["//visibility:public"])
 
-cc_library(
-    name = "logger",
+cc_test(
+    name = "test_cistring",
     srcs = [
-        "buffer.cc",
-        "file_writer.cc",
-        "log_appender.cc",
-        "logger.cc",
-        "singleton.h",
-        "count_down_latch.cc",
-    ],
-    hdrs = [
-        "buffer.h",
-        "count_down_latch.h",
-        "file_writer.h",
-        "log_appender.h",
-        "logger.h",
+        "test_cistring.cpp",
     ],
     copts = [
         "-std=c++17",
+    ],
+    deps = [
+        "//basecode/cistring:cistring",
+        "@gtest//:gtest_main",
     ],
 )
