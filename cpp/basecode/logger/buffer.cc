@@ -1,7 +1,8 @@
-#include "buffer.h"
+#include "basecode/logger/buffer.h"
 #include <string.h>
 
 namespace basecode {
+namespace logger {
 
 Buffer::Buffer(size_t total)
     : total_(total)
@@ -45,4 +46,5 @@ void Buffer::cookie_start() {}
 
 void Buffer::cookie_end() {}
 
+}  // namespace logger
 }  // namespace basecode

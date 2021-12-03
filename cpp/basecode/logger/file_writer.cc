@@ -1,4 +1,4 @@
-#include "file_writer.h"
+#include "basecode/logger/file_writer.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -11,6 +11,8 @@
 #include <unistd.h>
 
 namespace basecode {
+namespace logger {
+
 namespace {
 class MmapFileWriter : public FileWriter
 {
@@ -218,4 +220,5 @@ bool LogFile::roll_file()
     return true;
 }
 
+}  // namespace logger
 }  // namespace basecode
