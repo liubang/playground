@@ -1,5 +1,8 @@
 #pragma once
 
+#include "basecode/count_down_latch.h"
+#include "basecode/logger/buffer.h"
+
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -8,10 +11,9 @@
 #include <unistd.h>
 #include <vector>
 
-#include "buffer.h"
-#include "count_down_latch.h"
-
 namespace basecode {
+namespace logger {
+
 class LogAppenderInterface
 {
 public:
@@ -47,9 +49,11 @@ private:
     std::string                          basename_;
     std::mutex                           mutex_;
     std::condition_variable              cound_;
-    CountDownLatch                       countdown_latch_;
+    basecode::CountDownLatch             countdown_latch_;
     std::thread                          persist_thread_;
     std::unique_ptr<Buffer>              cur_buffer_;
     std::vector<std::unique_ptr<Buffer>> buffers_;
 };
+
+}  // namespace logger
 }  // namespace basecode

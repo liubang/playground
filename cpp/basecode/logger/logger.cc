@@ -1,11 +1,12 @@
-#include "logger.h"
-
 #include <cstring>
 #include <stdarg.h>
 #include <time.h>
 #include <vector>
 
+#include "basecode/logger/logger.h"
+
 namespace basecode {
+namespace logger {
 
 std::string get_log_level_str(LogLevel level)
 {
@@ -149,4 +150,5 @@ void Logger::clear_appender()
     appenders_.clear();
 }
 
+}  // namespace logger
 }  // namespace basecode

@@ -1,8 +1,9 @@
-#include "log_appender.h"
-#include "logger.h"
+#include "basecode/logger/log_appender.h"
+#include "basecode/logger/logger.h"
 #include <sys/stat.h>
 
 namespace basecode {
+namespace logger {
 
 AsyncLogAppender::AsyncLogAppender(const std::string& basename)
     : started_(false)
@@ -100,4 +101,5 @@ void AsyncLogAppender::thread_func()
     log_file.flush();
 }
 
+}  // namespace logger
 }  // namespace basecode
