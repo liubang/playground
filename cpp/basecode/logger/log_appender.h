@@ -14,26 +14,23 @@
 namespace basecode {
 namespace logger {
 
-class LogAppenderInterface
-{
+class LogAppenderInterface {
 public:
   virtual ~LogAppenderInterface() {}
 
-  virtual void append(const char* msg, size_t len) = 0;
+  virtual void append(const char *msg, size_t len) = 0;
 
 public:
   using Ptr = std::shared_ptr<LogAppenderInterface>;
 };
 
-
-class AsyncLogAppender : public LogAppenderInterface
-{
+class AsyncLogAppender : public LogAppenderInterface {
 public:
-  AsyncLogAppender(const std::string& basename);
+  AsyncLogAppender(const std::string &basename);
 
   ~AsyncLogAppender();
 
-  void append(const char* msg, size_t len);
+  void append(const char *msg, size_t len);
 
   void start();
 
@@ -55,5 +52,5 @@ private:
   std::vector<std::unique_ptr<Buffer>> buffers_;
 };
 
-}  // namespace logger
-}  // namespace basecode
+} // namespace logger
+} // namespace basecode
