@@ -9,38 +9,38 @@ namespace logger {
 class Buffer
 {
 public:
-    using CookieFunc = std::function<void()>;
+  using CookieFunc = std::function<void()>;
 
 public:
-    Buffer(size_t total = 1024 * 1024 * 10);
+  Buffer(size_t total = 1024 * 1024 * 10);
 
-    ~Buffer();
+  ~Buffer();
 
-    void clear();
+  void clear();
 
-    void append(const char* data, size_t len);
+  void append(const char* data, size_t len);
 
-    const char* data() const;
+  const char* data() const;
 
-    size_t length() const;
+  size_t length() const;
 
-    size_t available() const;
+  size_t available() const;
 
-    const char* debug();
+  const char* debug();
 
-    void set_cookie(const CookieFunc& cookie);
-
-private:
-    static void cookie_start();
-
-    static void cookie_end();
+  void set_cookie(const CookieFunc& cookie);
 
 private:
-    const size_t total_;
-    size_t       available_;
-    size_t       cur_;
-    char*        data_;
-    CookieFunc   cookie_;
+  static void cookie_start();
+
+  static void cookie_end();
+
+private:
+  const size_t total_;
+  size_t available_;
+  size_t cur_;
+  char* data_;
+  CookieFunc cookie_;
 };
 
 }  // namespace logger
