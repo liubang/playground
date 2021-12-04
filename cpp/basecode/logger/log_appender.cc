@@ -5,25 +5,22 @@
 namespace basecode {
 namespace logger {
 
-AsyncLogAppender::AsyncLogAppender(const std::string& basename)
-  : started_(false)
-  , running_(false)
-  , persist_period_(kLoggerConfig.file_option.log_flush_interval)
-  , basename_(basename)
-  , countdown_latch_(1)
-  , cur_buffer_(new Buffer(kLoggerConfig.log_buffer_size))
-{
+AsyncLogAppender::AsyncLogAppender(const std::string &basename)
+    : started_(false), running_(false),
+      persist_period_(kLoggerConfig.file_option.log_flush_interval),
+      basename_(basename), countdown_latch_(1),
+      cur_buffer_(new Buffer(kLoggerConfig.log_buffer_size)) {
   mkdir(basename_.data(), 0755);
   start();
 }
 
-AsyncLogAppender::~AsyncLogAppender()
-{
-  if (started_) { stop(); }
+AsyncLogAppender::~AsyncLogAppender() {
+  if (started_) {
+    stop();
+  }
 }
 
-void AsyncLogAppender::append(const char* msg, size_t len)
-{
+void AsyncLogAppender::append(const char *msg, size_t len) {
   std::unique_lock<std::mutex> lk(mutex_);
   if (cur_buffer_->available() >= len) {
     cur_buffer_->append(msg, len);
@@ -35,23 +32,20 @@ void AsyncLogAppender::append(const char* msg, size_t len)
   }
 }
 
-void AsyncLogAppender::start()
-{
+void AsyncLogAppender::start() {
   started_ = true;
   running_ = true;
   persist_thread_ = std::thread([this]() { thread_func(); });
   countdown_latch_.await();
 }
 
-void AsyncLogAppender::stop()
-{
+void AsyncLogAppender::stop() {
   started_ = false;
   cound_.notify_all();
   persist_thread_.join();
 }
 
-void AsyncLogAppender::thread_func()
-{
+void AsyncLogAppender::thread_func() {
   std::unique_ptr<Buffer> buffer(new Buffer(kLoggerConfig.log_buffer_size));
   std::vector<std::unique_ptr<Buffer>> persist_buffers;
   persist_buffers.reserve(kLoggerConfig.log_buffer_nums);
@@ -62,8 +56,12 @@ void AsyncLogAppender::thread_func()
   while (running_) {
     {
       std::unique_lock<std::mutex> lk(mutex_);
-      if (buffers_.empty()) { cound_.wait_for(lk, std::chrono::seconds(1)); }
-      if (buffers_.empty() && cur_buffer_->length() == 0) { continue; }
+      if (buffers_.empty()) {
+        cound_.wait_for(lk, std::chrono::seconds(1));
+      }
+      if (buffers_.empty() && cur_buffer_->length() == 0) {
+        continue;
+      }
 
       buffers_.push_back(std::move(cur_buffer_));
       persist_buffers.swap(buffers_);
@@ -75,7 +73,7 @@ void AsyncLogAppender::thread_func()
       persist_buffers.erase(persist_buffers.begin() + 1, persist_buffers.end());
     }
 
-    for (const auto& buffer : persist_buffers) {
+    for (const auto &buffer : persist_buffers) {
       log_file.append(buffer->data(), buffer->length());
     }
 
@@ -85,11 +83,13 @@ void AsyncLogAppender::thread_func()
     log_file.flush();
     if (!started_) {
       std::unique_lock<std::mutex> lk(mutex_);
-      if (cur_buffer_->length() == 0) { running_ = false; }
+      if (cur_buffer_->length() == 0) {
+        running_ = false;
+      }
     }
   }
   log_file.flush();
 }
 
-}  // namespace logger
-}  // namespace basecode
+} // namespace logger
+} // namespace basecode
