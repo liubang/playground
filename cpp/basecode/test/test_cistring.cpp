@@ -5,15 +5,14 @@
 
 #include "basecode/cistring.h"
 
-TEST(cistring, compare)
-{
-  std::vector<std::pair<const char*, const char*>> cases;
+TEST(cistring, compare) {
+  std::vector<std::pair<const char *, const char *>> cases;
 
   cases = {
-    {"", ""}, {"A", "A"}, {"A", "a"}, {"ab", "AB"}, {"aB", "Ab"},
+      {"", ""}, {"A", "A"}, {"A", "a"}, {"ab", "AB"}, {"aB", "Ab"},
   };
 
-  for (const auto& [a, b] : cases) {
+  for (const auto &[a, b] : cases) {
     const basecode::cistring s1(a);
     const basecode::cistring s2(b);
 
@@ -28,10 +27,11 @@ TEST(cistring, compare)
   }
 
   cases = {
-    {"a", "b"}, {"a", "B"}, {"A", "b"}, {"A", "B"}, {"aa", "bb"}, {"Aa", "Bb"}, {"AA", "BB"},
+      {"a", "b"},   {"a", "B"},   {"A", "b"},   {"A", "B"},
+      {"aa", "bb"}, {"Aa", "Bb"}, {"AA", "BB"},
   };
 
-  for (const auto& [a, b] : cases) {
+  for (const auto &[a, b] : cases) {
     const basecode::cistring s1(a);
     const basecode::cistring s2(b);
 
@@ -40,8 +40,7 @@ TEST(cistring, compare)
   }
 }
 
-TEST(cistring, find)
-{
+TEST(cistring, find) {
   const basecode::cistring s1("heLLo WorLd");
   EXPECT_EQ(0u, s1.find("h"));
   EXPECT_EQ(0u, s1.find("H"));

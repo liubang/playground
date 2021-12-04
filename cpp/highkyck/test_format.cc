@@ -8,9 +8,9 @@
 #define ccc "bbb"
 
 #ifdef __linux__
-#define FOO
+# define FOO
 #else
-#define BAR
+# define BAR
 #endif
 
 namespace highkyck {
