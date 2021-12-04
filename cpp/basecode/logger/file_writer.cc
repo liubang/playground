@@ -14,34 +14,38 @@ namespace basecode {
 namespace logger {
 
 namespace {
-class MmapFileWriter : public FileWriter
-{
+class MmapFileWriter : public FileWriter {
 public:
-  MmapFileWriter(const std::string& basename, uint32_t mem_size)
-    : mem_size_(mem_size)
-  {
-    if (fd_ >= 0) { close(fd_); }
-    fd_ = open(basename.data(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+  MmapFileWriter(const std::string &basename, uint32_t mem_size)
+      : mem_size_(mem_size) {
+    if (fd_ >= 0) {
+      close(fd_);
+    }
+    fd_ = open(basename.data(), O_RDWR | O_CREAT,
+               S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
     if (fd_ < 0) {
       fprintf(stderr, "open new file failed, errno=%d", errno);
     } else {
       (void)ftruncate(fd_, mem_size);
-      buffer_ = (char*)mmap(NULL, mem_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
-      if (buffer_ == MAP_FAILED) { fprintf(stderr, "mmap file failed, errno=%d", errno); }
+      buffer_ = (char *)mmap(NULL, mem_size, PROT_READ | PROT_WRITE, MAP_SHARED,
+                             fd_, 0);
+      if (buffer_ == MAP_FAILED) {
+        fprintf(stderr, "mmap file failed, errno=%d", errno);
+      }
     }
   }
 
-  ~MmapFileWriter()
-  {
+  ~MmapFileWriter() {
     if (fd_ >= 0) {
       close(fd_);
       fd_ = -1;
     }
-    if (buffer_ != MAP_FAILED) { munmap(buffer_, mem_size_); }
+    if (buffer_ != MAP_FAILED) {
+      munmap(buffer_, mem_size_);
+    }
   }
 
-  void append(const char* msg, int32_t len)
-  {
+  void append(const char *msg, int32_t len) {
     if (len > mem_size_ - writed_) {
       fprintf(stderr, "mmap memory overflow, errno=%d", errno);
       return;
@@ -50,43 +54,45 @@ public:
     writed_ += len;
   }
 
-  void flush()
-  {
-    if (buffer_ != MAP_FAILED) { msync(buffer_, mem_size_, MS_ASYNC); }
+  void flush() {
+    if (buffer_ != MAP_FAILED) {
+      msync(buffer_, mem_size_, MS_ASYNC);
+    }
   }
 
   uint32_t write_bytes() const { return writed_; }
 
 private:
   int fd_;
-  char* buffer_;
+  char *buffer_;
   int32_t mem_size_;
   int32_t writed_{0};
 };
 
-class AppendFileWriter : public FileWriter
-{
+class AppendFileWriter : public FileWriter {
 public:
-  AppendFileWriter(const std::string& filename)
-    : fp_(::fopen(filename.data(), "ae"))
-  {
+  AppendFileWriter(const std::string &filename)
+      : fp_(::fopen(filename.data(), "ae")) {
     ::setbuffer(fp_, buffer_, sizeof buffer_);
   }
 
-  ~AppendFileWriter()
-  {
-    if (fp_) { ::fclose(fp_); }
+  ~AppendFileWriter() {
+    if (fp_) {
+      ::fclose(fp_);
+    }
   }
 
-  void append(const char* msg, int32_t len)
-  {
+  void append(const char *msg, int32_t len) {
     size_t n = fwrite_unlocked(msg, 1, len, fp_);
     size_t remain = len - n;
     while (remain > 0) {
       size_t x = fwrite_unlocked(msg + n, 1, remain, fp_);
       if (x == 0) {
         int err = ferror(fp_);
-        if (err) { fprintf(stderr, "AppendFileWriter::append() failed %s\n", strerror(err)); }
+        if (err) {
+          fprintf(stderr, "AppendFileWriter::append() failed %s\n",
+                  strerror(err));
+        }
         break;
       }
       n += x;
@@ -100,13 +106,12 @@ public:
   uint32_t write_bytes() const { return writed_; }
 
 private:
-  FILE* fp_;
+  FILE *fp_;
   char buffer_[64 * 1024];
   uint32_t writed_{0};
 };
 
-std::string get_hostname()
-{
+std::string get_hostname() {
   char buf[256];
   if (gethostname(buf, sizeof buf) == 0) {
     buf[sizeof(buf) - 1] = '\0';
@@ -115,8 +120,7 @@ std::string get_hostname()
   return "unknownhost";
 }
 
-std::string get_log_filename(const std::string& basename, time_t* now)
-{
+std::string get_log_filename(const std::string &basename, time_t *now) {
   std::string filename;
   filename.reserve(basename.size() + 64);
   filename = basename;
@@ -138,19 +142,14 @@ std::string get_log_filename(const std::string& basename, time_t* now)
   return filename;
 }
 
-}  // namespace
+} // namespace
 
-LogFile::LogFile(const std::string& basename, int32_t roll_size, int32_t flush_interval,
-                 int32_t check_interval, FileWriterType file_writer_type)
-  : basename_(basename)
-  , roll_size_(roll_size)
-  , flush_interval_(flush_interval)
-  , check_freq_count_(check_interval)
-  , count_(0)
-  , start_of_period_(0)
-  , last_roll_(0)
-  , last_flush_(0)
-{
+LogFile::LogFile(const std::string &basename, int32_t roll_size,
+                 int32_t flush_interval, int32_t check_interval,
+                 FileWriterType file_writer_type)
+    : basename_(basename), roll_size_(roll_size),
+      flush_interval_(flush_interval), check_freq_count_(check_interval),
+      count_(0), start_of_period_(0), last_roll_(0), last_flush_(0) {
   time_t now = 0;
   std::string filename = get_log_filename(basename_, &now);
   if (file_writer_type == FileWriterType::MMAP_FILE) {
@@ -162,8 +161,7 @@ LogFile::LogFile(const std::string& basename, int32_t roll_size, int32_t flush_i
   roll_file();
 }
 
-void LogFile::append(const char* msg, int32_t len)
-{
+void LogFile::append(const char *msg, int32_t len) {
   file_->append(msg, len);
   if (file_->write_bytes() > roll_size_) {
     roll_file();
@@ -183,13 +181,9 @@ void LogFile::append(const char* msg, int32_t len)
   }
 }
 
-void LogFile::flush()
-{
-  file_->flush();
-}
+void LogFile::flush() { file_->flush(); }
 
-bool LogFile::roll_file()
-{
+bool LogFile::roll_file() {
   time_t now = 0;
   std::string filename = get_log_filename(basename_, &now);
   time_t start = now / kRollPerSeconds * kRollPerSeconds;
@@ -208,5 +202,5 @@ bool LogFile::roll_file()
   return true;
 }
 
-}  // namespace logger
-}  // namespace basecode
+} // namespace logger
+} // namespace basecode
