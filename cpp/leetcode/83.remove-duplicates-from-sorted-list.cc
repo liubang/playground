@@ -1,8 +1,7 @@
 #include "includes/list.h"
 #include <gtest/gtest.h>
 
-namespace
-{
+namespace {
 
 class Solution
 {

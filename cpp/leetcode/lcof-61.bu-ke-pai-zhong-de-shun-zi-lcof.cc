@@ -3,8 +3,7 @@
 #include <set>
 #include <vector>
 
-namespace
-{
+namespace {
 class Solution
 {
 public:

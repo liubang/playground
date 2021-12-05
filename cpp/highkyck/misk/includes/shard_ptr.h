@@ -1,17 +1,19 @@
 #pragma once
 
-#include <stddef.h>
 #include <exception>
+#include <stddef.h>
 
-template<class T> class shard_ptr
+template<class T>
+class shard_ptr
 {
 public:
   shard_ptr(T* t)
-      : t_(t)
-      , ref_count_(new size_t)
+    : t_(t)
+    , ref_count_(new size_t)
   {
-    if (t_) { *ref_count_ = 1; }
-    else {
+    if (t_) {
+      *ref_count_ = 1;
+    } else {
       *ref_count_ = 0;
     }
   }

@@ -3,8 +3,7 @@
 #include <stack>
 #include <vector>
 
-namespace
-{
+namespace {
 class Solution
 {
 public:

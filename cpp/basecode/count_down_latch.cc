@@ -2,8 +2,7 @@
 
 #include <chrono>
 
-namespace basecode
-{
+namespace basecode {
 
 CountDownLatch::CountDownLatch(uint32_t count)
   : count_(count)

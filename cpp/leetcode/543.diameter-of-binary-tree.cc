@@ -2,8 +2,7 @@
 #include <functional>
 #include <gtest/gtest.h>
 
-namespace
-{
+namespace {
 class Solution
 {
 public:

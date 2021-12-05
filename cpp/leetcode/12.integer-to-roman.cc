@@ -1,8 +1,7 @@
 #include <gtest/gtest.h>
 #include <map>
 
-namespace
-{
+namespace {
 class Solution
 {
 public:

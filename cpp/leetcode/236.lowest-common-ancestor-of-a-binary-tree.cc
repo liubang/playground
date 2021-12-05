@@ -1,8 +1,7 @@
 #include "includes/tree.h"
 #include <gtest/gtest.h>
 
-namespace
-{
+namespace {
 class Solution
 {
 public:

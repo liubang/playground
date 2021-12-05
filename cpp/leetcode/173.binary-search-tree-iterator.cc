@@ -2,8 +2,7 @@
 #include <gtest/gtest.h>
 #include <vector>
 
-namespace
-{
+namespace {
 struct TreeNode
 {
   int val;

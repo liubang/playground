@@ -34,8 +34,7 @@ int main(int argc, char* argv[])
   try {
     client->sync_echo(response, request);
     LOG(INFO) << response.get_message();
-  }
-  catch (apache::thrift::transport::TTransportException& ex) {
+  } catch (apache::thrift::transport::TTransportException& ex) {
     LOG(ERROR) << "Request failed " << ex.what();
   }
   return 0;

@@ -1,8 +1,8 @@
 #pragma once
 
 #include <atomic>
-#include <type_traits>
 #include <cassert>
+#include <type_traits>
 
 namespace highkyck {
 
@@ -13,7 +13,7 @@ class Referenceable
 {
 public:
   Referenceable()
-      : ref_(0)
+    : ref_(0)
   {}
 
   virtual ~Referenceable() = default;
@@ -33,17 +33,18 @@ private:
   std::atomic<int64_t> ref_;
 };
 
-template<class T> class RefPtr
+template<class T>
+class RefPtr
 {
   static_assert(std::is_base_of<Referenceable, T>::value, "T is not derived from Referenceable");
 
 public:
   RefPtr()
-      : ptr_(nullptr)
+    : ptr_(nullptr)
   {}
 
   RefPtr(T* obj)
-      : ptr_(obj)
+    : ptr_(obj)
   {
     if (obj) { ptr_->AddRef(); }
   }

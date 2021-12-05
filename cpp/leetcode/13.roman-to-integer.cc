@@ -2,8 +2,7 @@
 #include <map>
 #include <string>
 
-namespace
-{
+namespace {
 class Solution
 {
 public:

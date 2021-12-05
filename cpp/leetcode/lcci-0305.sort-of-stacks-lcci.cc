@@ -1,8 +1,7 @@
 #include <gtest/gtest.h>
 #include <stack>
 
-namespace
-{
+namespace {
 class SortedStack
 {
 public:

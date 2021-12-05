@@ -1,8 +1,7 @@
 #include <cmath>
 #include <gtest/gtest.h>
 
-namespace
-{
+namespace {
 class Solution
 {
 public:

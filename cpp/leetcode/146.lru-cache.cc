@@ -2,8 +2,7 @@
 #include <list>
 #include <unordered_map>
 
-namespace
-{
+namespace {
 class LRUCache
 {
 public:
