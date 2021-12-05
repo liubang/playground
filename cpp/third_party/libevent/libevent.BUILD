@@ -9,6 +9,9 @@ filegroup(
 
 configure_make(
     name = "libevent",
+    configure_env_vars = {
+        "AR": "",
+    },
     configure_options = [
         "--enable-shared=no",
     ],
@@ -16,8 +19,5 @@ configure_make(
     lib_source = "@libevent//:all",
     out_lib_dir = "lib",
     static_libraries = ["libevent.a"],
-    configure_env_vars = {
-        "AR": "",
-    },
     visibility = ["//visibility:public"],
 )

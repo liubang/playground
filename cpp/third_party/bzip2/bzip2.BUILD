@@ -5,19 +5,19 @@ exports_files(["LICENSE"])
 cc_library(
     name = "bzip2",
     srcs = [
-        "bzlib_private.h",
         "blocksort.c",
-        "huffman.c",
-        "crctable.c",
-        "randtable.c",
-        "compress.c",
-        "decompress.c",
         "bzlib.c",
+        "bzlib_private.h",
+        "compress.c",
+        "crctable.c",
+        "decompress.c",
+        "huffman.c",
+        "randtable.c",
     ],
     hdrs = [
         "bzlib.h",
     ],
-    includes = ["."],
     copts = ["-w"],
+    includes = ["."],
     visibility = ["//visibility:public"],
 )

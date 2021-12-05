@@ -1,8 +1,8 @@
-#include <string>
-#include <vector>
-#include <stack>
 #include <iostream>
+#include <stack>
+#include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace highkyck {
 
@@ -10,7 +10,7 @@ class ReversePolishNotation
 {
 public:
   ReversePolishNotation(const std::string& notation)
-      : original_(notation)
+    : original_(notation)
   {
     generate();
   }
@@ -44,13 +44,11 @@ private:
         }
         if (!stk.empty()) { stk.pop(); }
         i++;
-      }
-      else {
+      } else {
         if (original_[i] == '(' || stk.empty() || priority[stk.top()] < priority[original_[i]]) {
           stk.push(original_[i]);
           i++;
-        }
-        else {
+        } else {
           while (!stk.empty() && priority[stk.top()] >= priority[original_[i]]) {
             res_.emplace_back(1, stk.top());
             stk.pop();

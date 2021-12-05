@@ -3,10 +3,8 @@
 #include <functional>
 #include <sys/types.h>
 
-namespace basecode
-{
-namespace logger
-{
+namespace basecode {
+namespace logger {
 
 class Buffer
 {

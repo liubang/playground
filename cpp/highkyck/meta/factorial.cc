@@ -2,12 +2,14 @@
 
 namespace highkyck {
 namespace meta {
-template<int N> struct Factorial
+template<int N>
+struct Factorial
 {
   static int const value = N * Factorial<N - 1>::value;
 };
 
-template<> struct Factorial<1>
+template<>
+struct Factorial<1>
 {
   static int const value = 1;
 };

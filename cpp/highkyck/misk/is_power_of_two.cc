@@ -1,7 +1,7 @@
 // 判断整数是不是2的幂次
 
-#include <iostream>
 #include <cstdint>
+#include <iostream>
 
 /*
 bool is_power_of_two(uint64_t n) {

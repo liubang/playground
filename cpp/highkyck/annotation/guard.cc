@@ -1,19 +1,20 @@
 #include <mutex>
-#include <unordered_map>
 #include <string>
+#include <unordered_map>
 
 // Enable thread safety attributes only with clang.
 // The attributes can be safely erased when compiling with other compilers.
 #if defined(__clang__) && (!defined(SWIG))
-#  define THREAD_ANNOTATION_ATTRIBUTE__(x) __attribute__((x))
+# define THREAD_ANNOTATION_ATTRIBUTE__(x) __attribute__((x))
 #else
-#  define THREAD_ANNOTATION_ATTRIBUTE__(x)  // no-op
+# define THREAD_ANNOTATION_ATTRIBUTE__(x)  // no-op
 #endif
 
 #define GUARDED_BY(x) THREAD_ANNOTATION_ATTRIBUTE__(guarded_by(x))
 
 namespace highkyck {
 namespace annotation {
+
 class Foo
 {
 public:
@@ -29,6 +30,7 @@ private:
   std::mutex mutex_;
   std::unordered_map<std::string, std::string> map_ GUARDED_BY(mutex_);
 };
+
 }  // namespace annotation
 }  // namespace highkyck
 

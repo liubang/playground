@@ -45,8 +45,8 @@ void add_accept(io_uring* ring, __u32 fd, sockaddr* client_addr, socklen_t* clie
   io_uring_sqe_set_flags(sqe, flags);
 
   ConnInfo conn_i = {
-      .fd = fd,
-      .type = Status::ACCEPT,
+    .fd = fd,
+    .type = Status::ACCEPT,
   };
   memcpy(&sqe->user_data, &conn_i, sizeof(conn_i));
 }
@@ -59,8 +59,8 @@ void add_socket_read(io_uring* ring, __u32 fd, unsigned gid, size_t message_size
   sqe->buf_group = gid;
 
   ConnInfo conn_i = {
-      .fd = fd,
-      .type = Status::READ,
+    .fd = fd,
+    .type = Status::READ,
   };
   memcpy(&sqe->user_data, &conn_i, sizeof(conn_i));
 }
@@ -72,9 +72,9 @@ void add_socket_write(io_uring* ring, __u32 fd, __u16 bid, size_t message_size, 
   io_uring_sqe_set_flags(sqe, flags);
 
   ConnInfo conn_i = {
-      .fd = fd,
-      .type = Status::WRITE,
-      .bid = bid,
+    .fd = fd,
+    .type = Status::WRITE,
+    .bid = bid,
   };
   memcpy(&sqe->user_data, &conn_i, sizeof(conn_i));
 }
@@ -85,8 +85,8 @@ void add_provide_buf(io_uring* ring, __u16 bid, unsigned gid)
   io_uring_prep_provide_buffers(sqe, bufs[bid], MAX_MESSAGE_LEN, 1, gid, bid);
 
   ConnInfo conn_i = {
-      .fd = 0,
-      .type = Status::PROV_BUF,
+    .fd = 0,
+    .type = Status::PROV_BUF,
   };
   memcpy(&sqe->user_data, &conn_i, sizeof(conn_i));
 }
@@ -151,12 +151,8 @@ int main(int argc, char* argv[])
   io_uring_cqe* cqe;
 
   sqe = io_uring_get_sqe(&ring);
-  io_uring_prep_provide_buffers(sqe,
-                                test::liburing::bufs,
-                                test::liburing::MAX_MESSAGE_LEN,
-                                test::liburing::BUFFERS_COUNT,
-                                test::liburing::group_id,
-                                0);
+  io_uring_prep_provide_buffers(sqe, test::liburing::bufs, test::liburing::MAX_MESSAGE_LEN,
+                                test::liburing::BUFFERS_COUNT, test::liburing::group_id, 0);
 
   io_uring_submit(&ring);
   io_uring_wait_cqe(&ring, &cqe);
@@ -185,39 +181,30 @@ int main(int argc, char* argv[])
         ::fprintf(stdout, "bufs in automatic buffer selection empty, this should not happen...\n");
         ::fflush(stdout);
         return 1;
-      }
-      else if (type == test::liburing::Status::PROV_BUF) {
+      } else if (type == test::liburing::Status::PROV_BUF) {
         if (cqe->res < 0) {
           ::printf("cqe->res = %d\n", cqe->res);
           return 1;
         }
-      }
-      else if (type == test::liburing::Status::ACCEPT) {
+      } else if (type == test::liburing::Status::ACCEPT) {
         __u32 sock_conn_fd = cqe->res;
         if (sock_conn_fd >= 0) {
-          test::liburing::add_socket_read(&ring,
-                                          sock_conn_fd,
-                                          test::liburing::group_id,
-                                          test::liburing::MAX_MESSAGE_LEN,
-                                          IOSQE_BUFFER_SELECT);
+          test::liburing::add_socket_read(&ring, sock_conn_fd, test::liburing::group_id,
+                                          test::liburing::MAX_MESSAGE_LEN, IOSQE_BUFFER_SELECT);
         }
         test::liburing::add_accept(&ring, sock_listen_fd, (sockaddr*)&client_addr, &client_len, 0);
-      }
-      else if (type == test::liburing::Status::READ) {
+      } else if (type == test::liburing::Status::READ) {
         size_t bytes_read = cqe->res;
-        if (cqe->res <= 0) { shutdown(conn_i.fd, SHUT_RDWR); }
-        else {
+        if (cqe->res <= 0) {
+          shutdown(conn_i.fd, SHUT_RDWR);
+        } else {
           __u32 bid = cqe->flags >> 16;
           test::liburing::add_socket_write(&ring, conn_i.fd, bid, bytes_read, 0);
         }
-      }
-      else if (type == test::liburing::Status::WRITE) {
+      } else if (type == test::liburing::Status::WRITE) {
         test::liburing::add_provide_buf(&ring, conn_i.bid, test::liburing::group_id);
-        test::liburing::add_socket_read(&ring,
-                                        conn_i.fd,
-                                        test::liburing::group_id,
-                                        test::liburing::MAX_MESSAGE_LEN,
-                                        IOSQE_BUFFER_SELECT);
+        test::liburing::add_socket_read(&ring, conn_i.fd, test::liburing::group_id,
+                                        test::liburing::MAX_MESSAGE_LEN, IOSQE_BUFFER_SELECT);
       }
     }
 

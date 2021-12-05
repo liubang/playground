@@ -1,6 +1,7 @@
+#include "highkyck/hash/murmurhash2.h"
 #include <cassert>
 #include <memory>
-#include "highkyck/hash/murmurhash2.h"
+#include <string>
 
 #include "bloom_filter.h"
 
@@ -23,7 +24,7 @@ BloomFilter::BloomFilter(const uint64_t bit_count)
 
   uint64_t actual_byte_count = actual_bit_count >> 3;
   bits_ = std::make_unique<uint8_t[]>(actual_byte_count);
-  std::memset(bits_.get(), 0, actual_byte_count);
+  memset(bits_.get(), 0, actual_byte_count);
 }
 
 bool BloomFilter::contains(const void* const data, uint64_t length) const
