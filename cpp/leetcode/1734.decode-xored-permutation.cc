@@ -1,19 +1,18 @@
 #include <gtest/gtest.h>
 #include <vector>
 
-namespace {
-class Solution {
+namespace
+{
+class Solution
+{
 public:
   // 基本思路是先找到第一个元素，然后就非常简单了
-  std::vector<int> decode(const std::vector<int> &encoded) {
+  std::vector<int> decode(const std::vector<int>& encoded)
+  {
     int size = encoded.size();
     int a = 0;
-    for (int i = 1; i <= size + 1; ++i) {
-      a ^= i;
-    }
-    for (int i = 1; i < size; i += 2) {
-      a ^= encoded[i];
-    }
+    for (int i = 1; i <= size + 1; ++i) { a ^= i; }
+    for (int i = 1; i < size; i += 2) { a ^= encoded[i]; }
     std::vector<int> ret;
     ret.push_back(a);
     for (int i = 0; i < size; ++i) {
@@ -23,9 +22,10 @@ public:
     return ret;
   }
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, decode_xored_permutation) {
+TEST(Leetcode, decode_xored_permutation)
+{
   Solution s;
   {
     std::vector<int> exp = {1, 2, 3};

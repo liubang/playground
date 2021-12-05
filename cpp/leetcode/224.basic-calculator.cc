@@ -2,10 +2,13 @@
 #include <stack>
 #include <string>
 
-namespace {
-class Solution {
+namespace
+{
+class Solution
+{
 public:
-  int calculate(const std::string &s) {
+  int calculate(const std::string& s)
+  {
     int sign = 1, ret = 0;
     std::stack<int> stk;
     stk.push(1);
@@ -34,9 +37,10 @@ public:
     return ret;
   }
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, basic_calculator) {
+TEST(Leetcode, basic_calculator)
+{
   Solution s;
   {
     std::string input = "1 + 1";

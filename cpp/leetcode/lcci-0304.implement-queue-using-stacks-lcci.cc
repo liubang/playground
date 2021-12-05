@@ -1,15 +1,18 @@
 #include <gtest/gtest.h>
 #include <stack>
 
-namespace {
-class MyQueue {
+namespace
+{
+class MyQueue
+{
 public:
   MyQueue() = default;
   virtual ~MyQueue() = default;
 
   void push(int x) { st1_.push(x); }
 
-  int pop() {
+  int pop()
+  {
     if (st2_.empty()) {
       while (!st1_.empty()) {
         st2_.push(st1_.top());
@@ -21,7 +24,8 @@ public:
     return ret;
   }
 
-  int peek() {
+  int peek()
+  {
     if (st2_.empty()) {
       while (!st1_.empty()) {
         st2_.push(st1_.top());
@@ -37,9 +41,10 @@ private:
   std::stack<int> st1_;
   std::stack<int> st2_;
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, implement_queue_using_stacks_lcci) {
+TEST(Leetcode, implement_queue_using_stacks_lcci)
+{
   MyQueue my_queue;
   my_queue.push(1);
   my_queue.push(2);
