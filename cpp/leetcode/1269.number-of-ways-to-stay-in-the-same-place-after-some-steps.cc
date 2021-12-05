@@ -1,8 +1,7 @@
 #include <gtest/gtest.h>
 #include <vector>
 
-namespace
-{
+namespace {
 constexpr int MOD = 1E9 + 7;
 class Solution
 {

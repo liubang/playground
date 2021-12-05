@@ -4,8 +4,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace
-{
+namespace {
 class Solution
 {
 public:

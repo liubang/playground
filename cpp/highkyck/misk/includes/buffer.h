@@ -1,7 +1,7 @@
 #pragma once
 
-#include <memory>
 #include <cstring>
+#include <memory>
 
 class Buffer
 {

@@ -2,8 +2,7 @@
 #include <gtest/gtest.h>
 #include <unordered_set>
 
-namespace
-{
+namespace {
 class Solution
 {
 public:

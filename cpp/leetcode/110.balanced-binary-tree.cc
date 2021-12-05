@@ -1,8 +1,7 @@
 #include <functional>
 #include <gtest/gtest.h>
 
-namespace
-{
+namespace {
 struct TreeNode
 {
   int val;

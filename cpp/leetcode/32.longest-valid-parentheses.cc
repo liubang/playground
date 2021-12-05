@@ -2,8 +2,7 @@
 #include <stack>
 #include <string>
 
-namespace
-{
+namespace {
 class Solution
 {
 public:

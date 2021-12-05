@@ -5,8 +5,7 @@
 
 #include <iostream>
 
-namespace basecode
-{
+namespace basecode {
 
 struct cichar_traits : public std::char_traits<char>
 {

@@ -3,8 +3,7 @@
 
 #include "includes/tree.h"
 
-namespace
-{
+namespace {
 class Solution
 {
 public:

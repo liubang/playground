@@ -3,8 +3,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace
-{
+namespace {
 class Solution
 {
 public:
