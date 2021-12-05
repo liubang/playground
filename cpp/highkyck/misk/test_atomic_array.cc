@@ -1,5 +1,5 @@
-#include <atomic>
 #include <array>
+#include <atomic>
 
 namespace highkyck {
 class Foo

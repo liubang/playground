@@ -1,15 +1,14 @@
-#include <map>
-#include <unordered_map>
-#include <string>
 #include <iostream>
+#include <map>
+#include <string>
+#include <unordered_map>
 
 void test1()
 {
   std::map<std::string, std::string> map;
   try {
     std::cout << map.at("aaa") << '\n';
-  }
-  catch (...) {
+  } catch (...) {
     std::cout << "exception" << '\n';
   }
   std::cout << map.size() << '\n';

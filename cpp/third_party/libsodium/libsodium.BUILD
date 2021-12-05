@@ -35,7 +35,10 @@ cc_library(
         exclude = ["src/libsodium/crypto_pwhash/argon2/argon2.c"],
     ),
     hdrs = [":version_h"] + glob(["src/**/*.h"]),
-    copts = ["-DHAVE_PTHREAD", "-w"],
+    copts = [
+        "-DHAVE_PTHREAD",
+        "-w",
+    ],
     includes = [
         "src/libsodium/crypto_core/curve25519/ref10",
         "src/libsodium/crypto_generichash/blake2b/ref",
@@ -64,8 +67,8 @@ cc_library(
     linkopts = [
         "-pthread",
     ],
-    deps = [
-        "@argon2//:argon2",
-    ],
     visibility = ["//visibility:public"],
+    deps = [
+        "@argon2",
+    ],
 )

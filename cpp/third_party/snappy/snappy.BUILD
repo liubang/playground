@@ -18,12 +18,12 @@ cc_library(
         "snappy-stubs-public.h",
     ],
     hdrs = ["snappy.h"],
-    includes = ["."],
     copts = [
         "-fno-exceptions",
         "-Wno-sign-compare",
         "-Wno-shift-negative-value",
     ],
+    includes = ["."],
     visibility = ["//visibility:public"],
 )
 

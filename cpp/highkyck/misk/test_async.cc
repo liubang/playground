@@ -1,7 +1,7 @@
-#include <future>
-#include <thread>
 #include <chrono>
+#include <future>
 #include <iostream>
+#include <thread>
 
 namespace highkyck {
 void funcA()
@@ -29,8 +29,8 @@ int main(int argc, char* argv[])
 
   std::cout << "std::async 耗时："
             << std::chrono::duration_cast<std::chrono::milliseconds>(
-                   std::chrono::steady_clock::now() - start)
-                   .count()
+                 std::chrono::steady_clock::now() - start)
+                 .count()
             << "ms" << std::endl;
 
   start = std::chrono::steady_clock::now();
@@ -42,8 +42,8 @@ int main(int argc, char* argv[])
 
   std::cout << "std::thread 耗时："
             << std::chrono::duration_cast<std::chrono::milliseconds>(
-                   std::chrono::steady_clock::now() - start)
-                   .count()
+                 std::chrono::steady_clock::now() - start)
+                 .count()
             << "ms" << std::endl;
 
   return 0;

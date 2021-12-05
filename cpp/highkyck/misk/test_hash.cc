@@ -1,21 +1,14 @@
-#include <string>
-#include <iostream>
-#include <vector>
-#include <cstring>
 #include "hash.h"
+#include <cstring>
+#include <iostream>
+#include <string>
+#include <vector>
 
 namespace {
-std::vector<std::string> strs = {"OatoXR1oWQ27aghr",
-                                 "FsuHfYSASnISaLXK",
-                                 "0u56dghh6A2VpoqW",
-                                 "$Q$0pjppVzm367Vr",
-                                 "5wA#jO9nuLEUBKWf",
-                                 "lfb8M5E4ZqqgFLUJ",
-                                 "gF#580VAxlU8SYjl",
-                                 "helloworld",
-                                 "$poskBwgBjiR2%dFL",
-                                 "N#zvGO2EDbOKast9gY",
-                                 "lJe1H3X6BM5kB!#BFR8"};
+std::vector<std::string> strs = {"OatoXR1oWQ27aghr",   "FsuHfYSASnISaLXK",   "0u56dghh6A2VpoqW",
+                                 "$Q$0pjppVzm367Vr",   "5wA#jO9nuLEUBKWf",   "lfb8M5E4ZqqgFLUJ",
+                                 "gF#580VAxlU8SYjl",   "helloworld",         "$poskBwgBjiR2%dFL",
+                                 "N#zvGO2EDbOKast9gY", "lJe1H3X6BM5kB!#BFR8"};
 }
 
 int main(int argc, char* argv[])

@@ -33,14 +33,15 @@ _COMMON_COPTS = [
 
 filegroup(
     name = "private_hdrs",
-    srcs = glob(["**/*.h"], exclude = ["include/**/*.h"]),
+    srcs = glob(
+        ["**/*.h"],
+        exclude = ["include/**/*.h"],
+    ),
 )
 
 cc_library(
     name = "rocksdb",
     srcs = [
-        ":private_hdrs",
-        ":build_version",
         "cache/clock_cache.cc",
         "cache/lru_cache.cc",
         "cache/sharded_cache.cc",
@@ -278,8 +279,19 @@ cc_library(
         "utilities/ttl/db_ttl_impl.cc",
         "utilities/write_batch_with_index/write_batch_with_index.cc",
         "utilities/write_batch_with_index/write_batch_with_index_internal.cc",
+        ":build_version",
+        ":private_hdrs",
     ],
     hdrs = glob(["include/rocksdb/**/*.h"]),
+    copts = _COMMON_COPTS,
+    includes = [
+        "include",
+        "util",
+    ],
+    linkopts = [
+        "-ldl",
+        "-pthread",
+    ],
     local_defines = [
         "OS_LINUX",
         "ROCKSDB_FALLOCATE_PRESENT",
@@ -305,34 +317,24 @@ cc_library(
         "HAVE_PCLMUL",
         "ROCKSDB_JEMALLOC",
     ],
-    copts = _COMMON_COPTS,
-    includes = [
-        "include",
-        "util",
-    ],
-    linkopts = [
-        "-ldl",
-        "-pthread",
-    ],
-    deps = [
-        "@snappy//:snappy",
-        "@zstd//:zstd",
-        "@lz4//:lz4_hc",
-        "@zlib//:zlib",
-        "@bzip2//:bzip2",
-        "@jemalloc//:jemalloc",
-        "@liburing//:liburing",
-        "@gflags//:gflags",
-        "@glog//:glog",
-        "@gtest//:gtest",
-    ],
     visibility = ["//visibility:public"],
+    deps = [
+        "@bzip2",
+        "@gflags",
+        "@glog",
+        "@gtest",
+        "@jemalloc",
+        "@liburing",
+        "@lz4//:lz4_hc",
+        "@snappy",
+        "@zlib",
+        "@zstd",
+    ],
 )
 
 cc_library(
     name = "rocksdb_tools_lib",
     srcs = [
-        ":private_hdrs",
         "db/db_test_util.cc",
         "table/mock_table.cc",
         "test_util/fault_injection_test_env.cc",
@@ -341,6 +343,7 @@ cc_library(
         "tools/block_cache_analyzer/block_cache_trace_analyzer.cc",
         "tools/trace_analyzer_tool.cc",
         "utilities/cassandra/test_utils.cc",
+        ":private_hdrs",
     ],
     copts = _COMMON_COPTS,
     deps = [
