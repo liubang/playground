@@ -52,6 +52,7 @@ using cistring = std::basic_string<char, cichar_traits>;
 inline std::ostream& operator<<(std::ostream& os, const cistring& str)
 {
   os << str.c_str();
+
   return os;
 }
 
