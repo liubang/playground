@@ -94,6 +94,5 @@ class Request
     {
         $this->requestMethod = $requestMethod;
     }
-
-
 }
+
