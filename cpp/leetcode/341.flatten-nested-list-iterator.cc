@@ -2,8 +2,7 @@
 #include <iostream>
 #include <vector>
 
-namespace
-{
+namespace {
 class NestedInteger
 {
 public:

@@ -2,8 +2,7 @@
 #include <queue>
 #include <vector>
 
-namespace
-{
+namespace {
 class Solution
 {
 public:

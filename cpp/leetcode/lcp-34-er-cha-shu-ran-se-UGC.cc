@@ -3,8 +3,7 @@
 
 #include "includes/tree.h"
 
-namespace
-{
+namespace {
 using TreeNode = leetcode::tree::TreeNode;
 class Solution
 {

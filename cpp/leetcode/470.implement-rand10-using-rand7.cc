@@ -3,8 +3,7 @@
 #include <time.h>
 #include <unordered_map>
 
-namespace
-{
+namespace {
 
 class Solution
 {
