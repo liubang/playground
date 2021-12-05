@@ -84,4 +84,3 @@ class Dispatcher
         return $routerRule;
     }
 }
-
