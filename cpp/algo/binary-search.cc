@@ -20,8 +20,9 @@ public:
     double m = (s + e) / 2;
     double y = f(m);
     while (std::abs(y) > EPS) {
-      if (y > 0) { e = m; }
-      else {
+      if (y > 0) {
+        e = m;
+      } else {
         s = m;
       }
       m = (s + e) / 2;
@@ -43,11 +44,11 @@ public:
     int i = 0, j = nums.size() - 1;
     while (i <= j) {
       int sum = nums[i] + nums[j];
-      if (sum == target) { break; }
-      else if (target > sum) {
+      if (sum == target) {
+        break;
+      } else if (target > sum) {
         i++;
-      }
-      else {
+      } else {
         j--;
       }
     }

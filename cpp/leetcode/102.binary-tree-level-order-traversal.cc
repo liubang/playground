@@ -3,8 +3,7 @@
 #include <queue>
 #include <vector>
 
-namespace
-{
+namespace {
 struct TreeNode
 {
   int val;

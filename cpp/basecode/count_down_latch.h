@@ -3,8 +3,7 @@
 #include <condition_variable>
 #include <mutex>
 
-namespace basecode
-{
+namespace basecode {
 class CountDownLatch
 {
 public:

@@ -5,7 +5,8 @@
 
 namespace highkyck {
 namespace misk {
-template<class T> class Singleton
+template<class T>
+class Singleton
 {
 public:
   T* getInstance()

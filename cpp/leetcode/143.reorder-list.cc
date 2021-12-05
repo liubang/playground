@@ -3,8 +3,7 @@
 
 #include "includes/list.h"
 
-namespace
-{
+namespace {
 class Solution
 {
 public:
