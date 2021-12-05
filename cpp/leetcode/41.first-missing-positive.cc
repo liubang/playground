@@ -2,26 +2,26 @@
 #include <gtest/gtest.h>
 #include <vector>
 
-namespace {
-class Solution {
+namespace
+{
+class Solution
+{
 public:
-  int firstMissingPositive(std::vector<int> &nums) {
+  int firstMissingPositive(std::vector<int>& nums)
+  {
     std::sort(nums.begin(), nums.end());
     int ret = 1;
     for (auto num : nums) {
-      if (num <= 0) {
-        continue;
-      }
-      if (num == ret) {
-        ret++;
-      }
+      if (num <= 0) { continue; }
+      if (num == ret) { ret++; }
     }
     return ret;
   }
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, first_missing_positive) {
+TEST(Leetcode, first_missing_positive)
+{
   Solution s;
 
   {

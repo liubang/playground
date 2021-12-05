@@ -3,17 +3,18 @@
 
 #include "includes/list.h"
 
-namespace {
-class Solution {
+namespace
+{
+class Solution
+{
 public:
   using ListNode = leetcode::list::ListNode;
 
-  void reorderList(ListNode *head) {
-    if (!head) {
-      return;
-    }
-    std::vector<ListNode *> vecs;
-    ListNode *cur = head;
+  void reorderList(ListNode* head)
+  {
+    if (!head) { return; }
+    std::vector<ListNode*> vecs;
+    ListNode* cur = head;
     while (cur) {
       vecs.push_back(cur);
       cur = cur->next;
@@ -30,17 +31,18 @@ public:
     vecs[i]->next = nullptr;
   }
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, reorder_list) {
+TEST(Leetcode, reorder_list)
+{
   using ListNode = leetcode::list::ListNode;
   Solution s;
 
   {
     std::vector<int> nodes = {1, 2, 3, 4};
-    ListNode *head = leetcode::list::create(nodes);
+    ListNode* head = leetcode::list::create(nodes);
     std::vector<int> exps = {1, 4, 2, 3};
-    ListNode *exp = leetcode::list::create(exps);
+    ListNode* exp = leetcode::list::create(exps);
     s.reorderList(head);
     EXPECT_TRUE(leetcode::list::equals(exp, head));
 
@@ -50,9 +52,9 @@ TEST(Leetcode, reorder_list) {
 
   {
     std::vector<int> nodes = {1, 2, 3, 4, 5};
-    ListNode *head = leetcode::list::create(nodes);
+    ListNode* head = leetcode::list::create(nodes);
     std::vector<int> exps = {1, 5, 2, 4, 3};
-    ListNode *exp = leetcode::list::create(exps);
+    ListNode* exp = leetcode::list::create(exps);
     s.reorderList(head);
     EXPECT_TRUE(leetcode::list::equals(exp, head));
 

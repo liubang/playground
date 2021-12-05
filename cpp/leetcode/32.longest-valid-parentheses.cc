@@ -2,10 +2,13 @@
 #include <stack>
 #include <string>
 
-namespace {
-class Solution {
+namespace
+{
+class Solution
+{
 public:
-  int longestValidParentheses(const std::string &s) {
+  int longestValidParentheses(const std::string& s)
+  {
     std::stack<int> stack;
     stack.push(-1);
     int ret = 0;
@@ -24,16 +27,16 @@ public:
     return ret;
   }
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, longest_valid_parentheses) {
+TEST(Leetcode, longest_valid_parentheses)
+{
   Solution s;
-  EXPECT_EQ(
-      s.longestValidParentheses(")(()(()(((())(((((()()))((((()()(()()())())"
-                                "())()))()()()())(())()()(((()))))()((()))(("
-                                "(())()((()()())((())))(())))())((()())()()("
-                                "(()((())))))((()(((((()((()))(()()(())))((("
-                                ")))()))())"),
-      132);
+  EXPECT_EQ(s.longestValidParentheses(")(()(()(((())(((((()()))((((()()(()()())())"
+                                      "())()))()()()())(())()()(((()))))()((()))(("
+                                      "(())()((()()())((())))(())))())((()())()()("
+                                      "(()((())))))((()(((((()((()))(()()(())))((("
+                                      ")))()))())"),
+            132);
   EXPECT_EQ(4, s.longestValidParentheses(")()())"));
 }
