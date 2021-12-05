@@ -1,10 +1,13 @@
 #include <gtest/gtest.h>
 #include <vector>
 
-namespace {
-class Solution {
+namespace
+{
+class Solution
+{
 public:
-  int minPathSum(const std::vector<std::vector<int>> &grid) {
+  int minPathSum(const std::vector<std::vector<int>>& grid)
+  {
     int m = grid.size(), n = grid[0].size();
     std::vector<std::vector<int>> dp(m, std::vector<int>(n, 0));
     for (int i = 0; i < m; ++i) {
@@ -23,9 +26,10 @@ public:
     return dp[m - 1][n - 1];
   }
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, minimum_path_sum) {
+TEST(Leetcode, minimum_path_sum)
+{
   Solution s;
   EXPECT_EQ(7, s.minPathSum({{1, 3, 1}, {1, 5, 1}, {4, 2, 1}}));
   EXPECT_EQ(12, s.minPathSum({{1, 2, 3}, {4, 5, 6}}));

@@ -3,19 +3,20 @@
 #include <time.h>
 #include <unordered_map>
 
-namespace {
+namespace
+{
 
-class Solution {
+class Solution
+{
 public:
   Solution() { e_.seed(time(0)); }
 
-  int rand10() {
+  int rand10()
+  {
     int ret = 0;
     for (;;) {
       ret = (rand7() - 1) * 7 + rand7();
-      if (ret <= 40) {
-        break;
-      }
+      if (ret <= 40) { break; }
     }
     return ret % 10 + 1;
   }
@@ -27,9 +28,10 @@ private:
   std::default_random_engine e_;
   std::uniform_int_distribution<int> u_{1, 7};
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, implement_rand10_using_rand7) {
+TEST(Leetcode, implement_rand10_using_rand7)
+{
   Solution s;
   EXPECT_GE(s.rand10(), 1);
   EXPECT_LE(s.rand10(), 10);
@@ -39,7 +41,7 @@ TEST(Leetcode, implement_rand10_using_rand7) {
     map[n]++;
   }
 
-  for (auto &[a, b] : map) {
+  for (auto& [a, b] : map) {
     EXPECT_GE(a, 1);
     EXPECT_LE(a, 10);
     EXPECT_GE(b, 800);
