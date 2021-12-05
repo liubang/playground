@@ -35,12 +35,12 @@ cc_library(
     hdrs = [
         "lib/lz4hc.h",
     ],
+    includes = ["lib"],
+    visibility = ["//visibility:public"],
     deps = [
         ":lz4",
         ":lz4_lz4c_include",
     ],
-    includes = ["lib"],
-    visibility = ["//visibility:public"],
 )
 
 cc_library(
@@ -52,10 +52,10 @@ cc_library(
     hdrs = [
         "lib/lz4frame.h",
     ],
+    includes = ["lib"],
+    visibility = ["//visibility:public"],
     deps = [
         ":lz4",
         ":lz4_hc",
     ],
-    includes = ["lib"],
-    visibility = ["//visibility:public"],
 )

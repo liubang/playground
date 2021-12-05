@@ -8,7 +8,10 @@ filegroup(
 
 configure_make(
     name = "bison_build",
-    binaries = ["yacc", "bison"],
+    binaries = [
+        "yacc",
+        "bison",
+    ],
     lib_source = ":all",
     visibility = ["//visibility:public"],
 )

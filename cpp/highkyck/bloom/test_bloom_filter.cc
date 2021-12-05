@@ -1,7 +1,7 @@
-#include <iostream>
-#include <cstring>
-#include <string>
 #include <cstdlib>
+#include <cstring>
+#include <iostream>
+#include <string>
 #include <vector>
 
 #include "bloom_filter.h"

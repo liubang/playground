@@ -9,10 +9,8 @@
 #include <mutex>
 #include <unordered_map>
 
-namespace basecode
-{
-namespace logger
-{
+namespace basecode {
+namespace logger {
 
 enum class LogLevel : uint8_t
 {

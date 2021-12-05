@@ -92,9 +92,12 @@ cc_library(
     name = "lib_pclmul_files",
     srcs = pclmul_files,
     hdrs = _common_hdrs,
-    includes = [".", "folly"],
     copts = _common_copts + [
         "-mpclmul",
+    ],
+    includes = [
+        ".",
+        "folly",
     ],
     deps = [
         "@boost//:program_options",
@@ -107,16 +110,19 @@ cc_library(
         "folly/experimental/crypto/detail/MathOperation_AVX2.cpp",
     ],
     hdrs = _common_hdrs,
-    includes = [".", "folly"],
     copts = _common_copts + [
         "-mavx",
         "-mavx2",
         "-msse2",
     ],
+    includes = [
+        ".",
+        "folly",
+    ],
     deps = [
-        "@glog",
         "@boost//:program_options",
-        "@libsodium//:libsodium",
+        "@glog",
+        "@libsodium",
     ],
 )
 
@@ -126,15 +132,18 @@ cc_library(
         "folly/experimental/crypto/detail/MathOperation_Simple.cpp",
     ],
     hdrs = _common_hdrs,
-    includes = [".", "folly"],
     copts = _common_copts + [
         "-mno-avx",
         "-mno-avx2",
         "-mno-sse2",
     ],
+    includes = [
+        ".",
+        "folly",
+    ],
     deps = [
-        "@glog",
         "@boost//:program_options",
+        "@glog",
     ],
 )
 
@@ -144,22 +153,24 @@ cc_library(
         "folly/experimental/crypto/detail/MathOperation_SSE2.cpp",
     ],
     hdrs = _common_hdrs,
-    includes = [".", "folly"],
     copts = _common_copts + [
         "-mno-avx",
         "-mno-avx2",
         "-msse2",
     ],
+    includes = [
+        ".",
+        "folly",
+    ],
     deps = [
-        "@glog",
         "@boost//:program_options",
-        "@libsodium//:libsodium",
+        "@glog",
+        "@libsodium",
     ],
 )
 
 cc_library(
     name = "folly",
-    includes = [".", "folly"],
     srcs = glob(
         ["folly/**/*.cpp"],
         exclude = [
@@ -189,39 +200,43 @@ cc_library(
     ],
     hdrs = _common_hdrs,
     copts = _common_copts,
+    includes = [
+        ".",
+        "folly",
+    ],
     linkopts = [
         "-ldl",
         "-pthread",
     ],
+    visibility = ["//visibility:public"],
     deps = [
-        ":lib_pclmul_files",
         ":MathOperation_AVX2",
-        ":MathOperation_Simple",
         ":MathOperation_SSE2",
+        ":MathOperation_Simple",
+        ":lib_pclmul_files",
         "@boost//:context",
         "@boost//:filesystem",
         "@boost//:program_options",
         "@boost//:regex",
         "@boost//:system",
         "@boost//:thread",
-        "@libunwind//:libunwind",
-        "@xz-utils//:liblzma",
-        "@openssl//:openssl",
-        "@libaio//:libaio",
-        "@snappy//:snappy",
-        "@libevent//:libevent",
-        "@lz4//:lz4_frame",
-        "@zlib//:zlib",
-        "@dwarf//:dwarf",
-        "@zstd//:zstd",
-        "@liburing//:liburing",
-        "@bzip2//:bzip2",
-        "@libsodium//:libsodium",
-        "@fmt//:fmt",
-        "@glog//:glog",
+        "@bzip2",
         "@double-conversion//:double-conversion",
+        "@dwarf",
+        "@fmt",
+        "@glog",
+        "@libaio",
+        "@libevent",
+        "@libsodium",
+        "@libunwind",
+        "@liburing",
+        "@lz4//:lz4_frame",
+        "@openssl",
+        "@snappy",
+        "@xz-utils//:liblzma",
+        "@zlib",
+        "@zstd",
     ],
-    visibility = ["//visibility:public"],
 )
 
 cc_library(
@@ -231,10 +246,10 @@ cc_library(
         "folly/experimental/exception_tracer/StackTrace.cpp",
     ],
     copts = _common_copts,
+    visibility = ["//visibility:public"],
     deps = [
         ":folly",
     ],
-    visibility = ["//visibility:public"],
 )
 
 cc_library(
@@ -244,10 +259,10 @@ cc_library(
         "folly/experimental/exception_tracer/ExceptionTracerLib.cpp",
     ],
     copts = _common_copts,
+    visibility = ["//visibility:public"],
     deps = [
         ":folly_exception_tracer_base",
     ],
-    visibility = ["//visibility:public"],
 )
 
 cc_library(
@@ -256,10 +271,10 @@ cc_library(
         "folly/experimental/exception_tracer/ExceptionCounterLib.cpp",
     ],
     copts = _common_copts,
+    visibility = ["//visibility:public"],
     deps = [
         ":folly_exception_tracer",
     ],
-    visibility = ["//visibility:public"],
 )
 
 cc_library(
@@ -268,8 +283,8 @@ cc_library(
         "folly/Benchmark.cpp",
     ],
     copts = _common_copts,
+    visibility = ["//visibility:public"],
     deps = [
         ":folly",
     ],
-    visibility = ["//visibility:public"],
 )

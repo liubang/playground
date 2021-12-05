@@ -5,10 +5,8 @@
 
 #include "basecode/logger/logger.h"
 
-namespace basecode
-{
-namespace logger
-{
+namespace basecode {
+namespace logger {
 
 std::string get_log_level_str(LogLevel level)
 {

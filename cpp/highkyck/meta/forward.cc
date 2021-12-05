@@ -7,7 +7,8 @@ class Widget
 public:
   Widget() {}
 
-  template<typename T> explicit Widget(T&& value)
+  template<typename T>
+  explicit Widget(T&& value)
   {
     std::cout << "perfect forwarding" << std::endl;
   }
