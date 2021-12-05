@@ -1,4 +1,5 @@
 <?php
+
 namespace router;
 
 class Request
@@ -76,6 +77,5 @@ class Request
     {
         $this->requestMethod = $requestMethod;
     }
-
-
 }
+
