@@ -9,14 +9,13 @@ filegroup(
 configure_make(
     name = "jemalloc",
     configure_command = "configure",
-    install_prefix = "lib",
     configure_options = [],
+    install_prefix = "lib",
+    lib_source = ":all",
+    out_include_dir = "include",
+    out_lib_dir = "lib",
     static_libraries = [
         "libjemalloc.a",
     ],
-    lib_source = ":all",
-    out_lib_dir = "lib",
-    out_include_dir = "include",
     visibility = ["//visibility:public"],
 )
-

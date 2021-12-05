@@ -12,10 +12,10 @@ configure_make(
     configure_options = [
         "no-shared",
     ],
+    lib_source = ":all",
     static_libraries = [
         "libssl.a",
         "libcrypto.a",
     ],
-    lib_source = ":all",
     visibility = ["//visibility:public"],
 )

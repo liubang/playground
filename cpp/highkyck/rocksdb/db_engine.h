@@ -8,9 +8,9 @@
 //=====================================================================
 #pragma once
 
-#include <string>
 #include <memory>
 #include <rocksdb/db.h>
+#include <string>
 
 #include "key.h"
 #include "val.h"

@@ -1,8 +1,8 @@
 #include <iostream>
 #include <string>
 
-#define AAAA "aaaa"
-#define BBB "bbb"
+#define AAAA       "aaaa"
+#define BBB        "bbb"
 #define BBBBBBBBBB "bbb"
 
 #define ccc "bbb"
@@ -16,13 +16,17 @@
 namespace highkyck {
 namespace misk {
 
-template <typename T> T add(const T &a, const T &b) { return a + b; }
+template<typename T>
+T add(const T& a, const T& b)
+{
+  return a + b;
+}
 
-class bar {
+class bar
+{
 public:
-  bar(int a, int b, int ccccccccccccccccccccccc, int dddddddddddddddddd,
-      int ffffffffffffffffffffff, int eeeeeeeeeeeeeeeeeeeeeeee, int f,
-      const std::string &ggg){};
+  bar(int a, int b, int ccccccccccccccccccccccc, int dddddddddddddddddd, int ffffffffffffffffffffff,
+      int eeeeeeeeeeeeeeeeeeeeeeee, int f, const std::string& ggg){};
 
   virtual ~bar() = default;
 
@@ -37,8 +41,7 @@ public:
   //            const std::string& ggg);
 
   void p(int a, int b, int ccccccccccccccccccccccc, int dddddddddddddddddd,
-         int ffffffffffffffffffffff, int eeeeeeeeeeeeeeeeeeeeeeee, int f,
-         const std::string &ggg);
+         int ffffffffffffffffffffff, int eeeeeeeeeeeeeeeeeeeeeeee, int f, const std::string& ggg);
 
 private:
   std::string str_;
@@ -46,7 +49,8 @@ private:
   int b_;
 };
 
-void foo(int a) {
+void foo(int a)
+{
 
   bar b(1, 1, 1, 1, 1, 1111111111111, 1111111111111,
         "dlkfjkldsfjdkls;afjkdalsfjdkslafjdlkslda;df;kd;");
@@ -54,9 +58,7 @@ void foo(int a) {
   b.p(1, 1, 1, 1, 1, 1111111111111, 1111111111111,
       "dlkfjkldsfjdkls;afjkdalsfjdkslafjdlkslda;df;kd;");
 
-  if (a) {
-    std::cout << "OK";
-  }
+  if (a) { std::cout << "OK"; }
 
   if (a) {
     std::cout << "OK";
@@ -64,9 +66,7 @@ void foo(int a) {
     std::cout << "no";
   }
 
-  for (;;) {
-    std::cout << "ok";
-  }
+  for (;;) { std::cout << "ok"; }
 
   if (a) {
     std::cout << "OK";
@@ -75,13 +75,12 @@ void foo(int a) {
   }
 
   switch (a) {
-  case 1: {
+  case 1:
+  {
     std::cout << "OK";
     std::cout << "OK";
   } break;
-  case 2:
-    std::cout << "ok";
-    break;
+  case 2: std::cout << "ok"; break;
   }
 
   const std::string s = "aaaaa"
@@ -92,12 +91,13 @@ void foo(int a) {
   const std::string ss = "adfsasklfjlasjfkweruieolsjfkds;ajf;kfjkdlasfjkdsal;"
                          "kfjkdlsajfkld;sakjfldasfkdsafj";
 
-  const char *x = "veryVeryVeryVeryVeryVeryVeryVeryVeryVeryVeryVeryLongStringve"
+  const char* x = "veryVeryVeryVeryVeryVeryVeryVeryVeryVeryVeryVeryLongStringve"
                   "ryVeryVeryVeryVeryVe"
                   "ryVeryVeryVeryVeryVeryVeryLongString";
 }
 
-void foo1(int a) {
+void foo1(int a)
+{
 
   if (a) {
     goto end;
@@ -111,5 +111,5 @@ start:
 end:
   std::cout << "endl";
 }
-} // namespace misk
-} // namespace highkyck
+}  // namespace misk
+}  // namespace highkyck

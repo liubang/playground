@@ -1,10 +1,8 @@
 #include "basecode/logger/buffer.h"
 #include <string.h>
 
-namespace basecode
-{
-namespace logger
-{
+namespace basecode {
+namespace logger {
 
 Buffer::Buffer(size_t total)
   : total_(total)

@@ -1,26 +1,29 @@
 #include <iostream>
-#include <vector>
+#include <iterator>
 #include <list>
 #include <map>
 #include <string>
-#include <iterator>
+#include <vector>
 
 namespace highkyck {
 namespace common {
 
-template<typename T> void print(T t)
+template<typename T>
+void print(T t)
 {
   std::cout << t;
 }
 
-template<typename Kt, typename Vt> void print(std::pair<Kt, Vt> kv)
+template<typename Kt, typename Vt>
+void print(std::pair<Kt, Vt> kv)
 {
   print(kv.first);
   print(" = ");
   print(kv.second);
 }
 
-template<> void print(const std::string& s)
+template<>
+void print(const std::string& s)
 {
   std::cout << s;
 }

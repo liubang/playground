@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Copyright (c) 2021 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,31 +15,24 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2021/07/02 12:00
+# Created: 2021/12/05 15:08
 
-cc_library(
-    name = "bloom_filter",
-    srcs = [
-        "bloom_filter.cc",
-    ],
-    hdrs = [
-        "bloom_filter.h",
-    ],
-    copts = [
-        "-std=gnu++17",
-    ],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//highkyck/hash",
-    ],
-)
+set -x
 
-cc_binary(
-    name = "test_bloom_filter",
-    srcs = [
-        "test_bloom_filter.cc",
-    ],
-    deps = [
-        ":bloom_filter",
-    ],
-)
+clang-format -i algo/**/*.h
+clang-format -i algo/**/*.cc
+clang-format -i algo/**/*.cpp
+clang-format -i basecode/**/*.h
+clang-format -i basecode/**/*.cc
+clang-format -i basecode/**/*.cpp
+clang-format -i highkyck/**/*.h
+clang-format -i highkyck/**/*.cc
+clang-format -i highkyck/**/*.cpp
+clang-format -i leetcode/**/*.h
+clang-format -i leetcode/**/*.cc
+clang-format -i leetcode/**/*.cpp
+clang-format -i test/**/*.h
+clang-format -i test/**/*.cc
+clang-format -i test/**/*.cpp
+
+buildifier  ./**/*BUILD*
