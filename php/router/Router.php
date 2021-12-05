@@ -97,7 +97,8 @@ class Router
         $this->addRoute($rule);
     }
 
-    public function dump() {
+    public function dump()
+    {
         print_r($this->routers);
     }
 }
