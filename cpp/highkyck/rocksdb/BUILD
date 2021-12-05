@@ -9,7 +9,7 @@ cc_library(
         "val.h",
     ],
     deps = [
-        "@rocksdb//:rocksdb",
-        "@msgpack//:msgpack",
+        "@msgpack",
+        "@rocksdb",
     ],
 )

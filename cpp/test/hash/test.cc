@@ -1,15 +1,15 @@
-#include <city.h>
-#include <iostream>
 #include <byteswap.h>
+#include <city.h>
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
 
 #ifdef WORDS_BIGENDIAN
-#  define uint32_in_expected_order(x) (bswap_32(x))
-#  define uint64_in_expected_order(x) (bswap_64(x))
+# define uint32_in_expected_order(x) (bswap_32(x))
+# define uint64_in_expected_order(x) (bswap_64(x))
 #else
-#  define uint32_in_expected_order(x) (x)
-#  define uint64_in_expected_order(x) (x)
+# define uint32_in_expected_order(x) (x)
+# define uint64_in_expected_order(x) (x)
 #endif
 
 static uint64 UNALIGNED_LOAD64(const char* p)

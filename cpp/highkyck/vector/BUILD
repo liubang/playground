@@ -1,8 +1,8 @@
 cc_binary(
     name = "test",
     srcs = [
-        "vector.h",
         "test.cc",
+        "vector.h",
     ],
     copts = [
         "-std=gnu++17",

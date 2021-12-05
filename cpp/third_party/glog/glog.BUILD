@@ -61,7 +61,6 @@ EOF
 
 cc_library(
     name = "glog_headers",
-    strip_include_prefix = "src",
     hdrs = [
         "src/glog/log_severity.h",
         ":logging_h",
@@ -69,6 +68,7 @@ cc_library(
         ":stl_logging_h",
         ":vlog_is_on_h",
     ],
+    strip_include_prefix = "src",
 )
 
 cc_library(
@@ -124,9 +124,9 @@ cc_library(
         "-DHAVE___ATTRIBUTE__",
         "-I$(GENDIR)/external/glog/glog_internal",
     ],
+    visibility = ["//visibility:public"],
     deps = [
         ":glog_headers",
-        "@gflags//:gflags",
+        "@gflags",
     ],
-    visibility = ["//visibility:public"],
 )

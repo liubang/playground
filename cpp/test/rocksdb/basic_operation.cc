@@ -1,7 +1,7 @@
-#include <cassert>
-#include <iostream>
 #include "rocksdb/db.h"
 #include "rocksdb/options.h"
+#include <cassert>
+#include <iostream>
 
 int main(int argc, char* argv[])
 {

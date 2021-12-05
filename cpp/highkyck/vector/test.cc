@@ -1,6 +1,6 @@
+#include "vector.h"
 #include <iostream>
 #include <string>
-#include "vector.h"
 
 int main(int argc, char* argv[])
 {

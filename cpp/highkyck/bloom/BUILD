@@ -9,10 +9,10 @@ cc_library(
     copts = [
         "-std=gnu++17",
     ],
-    deps = [
-        "//highkyck/hash:hash",
-    ],
     visibility = ["//visibility:public"],
+    deps = [
+        "//highkyck/hash",
+    ],
 )
 
 cc_binary(

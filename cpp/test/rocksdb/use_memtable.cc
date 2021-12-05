@@ -1,7 +1,7 @@
-#include <rocksdb/db.h>
-#include <folly/ScopeGuard.h>
 #include <folly/Conv.h>
+#include <folly/ScopeGuard.h>
 #include <iostream>
+#include <rocksdb/db.h>
 
 int main(int argc, char* argv[])
 {
@@ -41,8 +41,7 @@ int main(int argc, char* argv[])
     std::string val;
     if (rocksdb::Status::OK() != db->Get(rocksdb::ReadOptions(), rocksdb::Slice(key), &val)) {
       std::cout << "get error." << std::endl;
-    }
-    else {
+    } else {
       std::cout << "key: " << key << ", val: " << val << std::endl;
     }
   }

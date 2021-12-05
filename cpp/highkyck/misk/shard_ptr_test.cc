@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include <string>
 #include <iostream>
+#include <string>
 
 #include "shard_ptr.h"
 
@@ -8,8 +8,8 @@ class Person
 {
 public:
   Person(const std::string& name, int age)
-      : name_(name)
-      , age_(age)
+    : name_(name)
+    , age_(age)
   {}
   ~Person() = default;
 

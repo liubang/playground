@@ -8,8 +8,8 @@ filegroup(
 
 boost_build(
     name = "headers",
-    lib_source = ":all",
     headers_only = True,
+    lib_source = ":all",
     user_options = ["--with-headers"],
     visibility = ["//visibility:public"],
 )

@@ -6,12 +6,12 @@
         ] + glob([
             "includes/*.h",
         ]),
-        includes = [
-            "includes",
-        ],
         copts = [
             "-std=gnu++17",
             "-w",
+        ],
+        includes = [
+            "includes",
         ],
         linkopts = [
             "-pthread",
@@ -28,15 +28,15 @@
         ] + glob([
             "includes/*.h",
         ]),
+        copts = [
+            "-std=gnu++17",
+            "-w",
+        ],
         includes = [
             "includes",
         ],
         linkopts = [
             "-pthread",
-        ],
-        copts = [
-            "-std=gnu++17",
-            "-w",
         ],
         deps = [
             "@gtest//:gtest_main",

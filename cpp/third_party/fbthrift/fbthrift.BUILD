@@ -15,26 +15,26 @@ cc_library(
     deps = [
         "@boost//:context",
         "@boost//:filesystem",
+        "@boost//:headers",
         "@boost//:program_options",
         "@boost//:regex",
         "@boost//:system",
         "@boost//:thread",
-        "@boost//:headers",
     ],
 )
 
 yacc(
     name = "thrifty_bison",
     src = "thrift/compiler/parse/thrifty.yy",
-    source_out = "thrift/compiler/thrifty.cc",
-    header_out = "thrift/compiler/thrifty.hh",
-    extra_outs = [
-        "thrift/compiler/stack.hh",
-    ],
     extra_options = [
         "--skeleton=lalr1.cc",
         "-Wno-yacc",
     ],
+    extra_outs = [
+        "thrift/compiler/stack.hh",
+    ],
+    header_out = "thrift/compiler/thrifty.hh",
+    source_out = "thrift/compiler/thrifty.cc",
 )
 
 flex(
@@ -46,15 +46,15 @@ flex(
 cc_library(
     name = "compiler_ast",
     srcs = [
+        "thrift/compiler/ast/base_types.cc",
         "thrift/compiler/ast/t_program.cc",
+        "thrift/compiler/ast/t_scope.cc",
         "thrift/compiler/ast/t_type.cc",
         "thrift/compiler/ast/t_typedef.cc",
-        "thrift/compiler/ast/base_types.cc",
-        "thrift/compiler/ast/t_scope.cc",
     ],
     hdrs = glob(["thrift/compiler/ast/*.h"]),
-    includes = ["."],
     copts = _common_copts,
+    includes = ["."],
     deps = [
         "@openssl",
     ],
@@ -63,30 +63,33 @@ cc_library(
 cc_library(
     name = "compiler_base",
     srcs = [
-        "thrift/compiler/thrifty.cc",
-        "thrift/compiler/thrifty.hh",
-        "thrift/compiler/stack.hh",
-        "thrift/compiler/thriftl.cc",
         "thrift/compiler/common.cc",
         "thrift/compiler/parse/parsing_driver.cc",
         "thrift/compiler/platform.cc",
+        "thrift/compiler/stack.hh",
+        "thrift/compiler/thriftl.cc",
+        "thrift/compiler/thrifty.cc",
+        "thrift/compiler/thrifty.hh",
         "thrift/compiler/util.cc",
     ],
     hdrs = glob([
         "thrift/compiler/*.h",
         "thrift/compiler/parse/*.h",
     ]),
-    includes = [".", "thrift/compiler"],
     copts = _common_copts + [
         "-Wno-deprecated-register",
         "-Wno-register",
+    ],
+    includes = [
+        ".",
+        "thrift/compiler",
     ],
     local_defines = [
         "THRIFTY_HH=\\\"thrift/compiler/thrifty.hh\\\"",
     ],
     deps = [
-        ":compiler_ast",
         ":boost_libs",
+        ":compiler_ast",
     ],
 )
 
@@ -97,14 +100,14 @@ cc_library(
         "thrift/compiler/lib/java/util.cc",
     ],
     hdrs = [
-        "thrift/compiler/lib/java/util.h",
         "thrift/compiler/lib/cpp2/util.h",
+        "thrift/compiler/lib/java/util.h",
         "thrift/compiler/util.h",
     ],
     copts = _common_copts,
     deps = [
-        ":compiler_ast",
         ":boost_libs",
+        ":compiler_ast",
     ],
 )
 
@@ -133,10 +136,10 @@ cc_binary(
     srcs = [
         "thrift/compiler/generate/build_templates.cc",
     ],
+    copts = _common_copts,
     local_defines = [
         "DBOOST_ERROR_CODE_HEADER_ONLY",
     ],
-    copts = _common_copts,
     deps = [
         ":boost_libs",
     ],
@@ -167,8 +170,8 @@ cc_library(
     hdrs = [
         "thrift/compiler/generate/templates.h",
     ],
-    includes = ["."],
     copts = _common_copts,
+    includes = ["."],
 )
 
 cc_library(
@@ -211,35 +214,35 @@ cc_library(
         "thrift/compiler/lib/**/*.h",
     ]),
     copts = _common_copts,
-    alwayslink = True,
     deps = [
         ":compiler_base",
+        ":compiler_generate_templates",
         ":compiler_lib",
         ":mustache_lib",
-        ":compiler_generate_templates",
         "@openssl",
     ],
+    alwayslink = True,
 )
 
 cc_binary(
     name = "thrift1",
     srcs = [
-        "thrift/compiler/main.cc",
-        "thrift/compiler/compiler.cc",
-        "thrift/compiler/mutator/mutator.cc",
-        "thrift/compiler/validator/validator.cc",
         "thrift/compiler/ast/visitor.cc",
-        "thrift/compiler/validator/validator.h",
+        "thrift/compiler/compiler.cc",
+        "thrift/compiler/main.cc",
+        "thrift/compiler/mutator/mutator.cc",
         "thrift/compiler/mutator/mutator.h",
+        "thrift/compiler/validator/validator.cc",
+        "thrift/compiler/validator/validator.h",
     ],
     copts = _common_copts,
+    visibility = ["//visibility:public"],
     deps = [
+        ":boost_libs",
         ":compiler_ast",
         ":compiler_base",
         ":compiler_generators",
-        ":boost_libs",
     ],
-    visibility = ["//visibility:public"],
 )
 
 ######### cpp library #########
@@ -247,34 +250,34 @@ cc_binary(
 fbthrift_compile(
     name = "reflection",
     src = "thrift/lib/thrift/reflection.thrift",
-    services = [],
-    output_path = "thrift/lib/thrift/",
+    include_prefix = "thrift/lib/thrift",
     options = [
         "templates",
         "no_metadata",
     ],
-    include_prefix = "thrift/lib/thrift",
+    output_path = "thrift/lib/thrift/",
+    services = [],
 )
 
 fbthrift_compile(
     name = "metadata",
     src = "thrift/lib/thrift/metadata.thrift",
-    output_path = "thrift/lib/thrift",
     include_prefix = "thrift/lib/thrift",
+    output_path = "thrift/lib/thrift",
 )
 
 fbthrift_compile(
     name = "frozen",
     src = "thrift/lib/thrift/frozen.thrift",
-    output_path = "thrift/lib/thrift",
     include_prefix = "thrift/lib/thrift",
+    output_path = "thrift/lib/thrift",
 )
 
 fbthrift_compile(
     name = "RpcMetadata",
     src = "thrift/lib/thrift/RpcMetadata.thrift",
-    output_path = "thrift/lib/thrift",
     include_prefix = "thrift/lib/thrift",
+    output_path = "thrift/lib/thrift",
 )
 
 filegroup(
@@ -291,14 +294,14 @@ filegroup(
 cc_library(
     name = "thrift-core",
     srcs = [
-        "thrift/lib/cpp2/FieldRef.cpp",
         "thrift/lib/cpp/Thrift.cpp",
+        "thrift/lib/cpp2/FieldRef.cpp",
     ],
     hdrs = [
         ":cpp_hdrs",
     ],
-    includes = ["."],
     copts = _common_copts,
+    includes = ["."],
     deps = [
         "@fmt",
         "@folly",
@@ -308,8 +311,8 @@ cc_library(
 cc_library(
     name = "concurrency",
     srcs = [
-        "thrift/lib/cpp/concurrency/Mutex.cpp",
         "thrift/lib/cpp/concurrency/Monitor.cpp",
+        "thrift/lib/cpp/concurrency/Mutex.cpp",
         "thrift/lib/cpp/concurrency/PosixThreadFactory.cpp",
         "thrift/lib/cpp/concurrency/ThreadManager.cpp",
         "thrift/lib/cpp/concurrency/TimerManager.cpp",
@@ -318,21 +321,21 @@ cc_library(
     hdrs = [
         ":cpp_hdrs",
     ],
-    includes = ["."],
     copts = _common_copts,
+    includes = ["."],
     deps = [
         "@folly",
-        "@glog",
         "@gflags",
+        "@glog",
     ],
 )
 
 cc_library(
     name = "protocol",
     srcs = [
+        "thrift/lib/cpp/protocol/TBase64Utils.cpp",
         "thrift/lib/cpp/protocol/TDebugProtocol.cpp",
         "thrift/lib/cpp/protocol/TJSONProtocol.cpp",
-        "thrift/lib/cpp/protocol/TBase64Utils.cpp",
         "thrift/lib/cpp/protocol/TProtocolException.cpp",
         "thrift/lib/cpp/protocol/TSimpleJSONProtocol.cpp",
         ":reflection",
@@ -340,8 +343,8 @@ cc_library(
     hdrs = [
         ":cpp_hdrs",
     ],
-    includes = ["."],
     copts = _common_copts,
+    includes = ["."],
     deps = [
         ":thrift-core",
         "@fmt",
@@ -353,14 +356,14 @@ cc_library(
 cc_library(
     name = "transport",
     srcs = [
-        "thrift/lib/cpp/transport/TTransportException.cpp",
+        "thrift/lib/cpp/transport/TBufferTransports.cpp",
         "thrift/lib/cpp/transport/TFDTransport.cpp",
-        "thrift/lib/cpp/transport/THttpTransport.cpp",
+        "thrift/lib/cpp/transport/THeader.cpp",
         "thrift/lib/cpp/transport/THttpClient.cpp",
         "thrift/lib/cpp/transport/THttpServer.cpp",
+        "thrift/lib/cpp/transport/THttpTransport.cpp",
         "thrift/lib/cpp/transport/TSocket.cpp",
-        "thrift/lib/cpp/transport/TBufferTransports.cpp",
-        "thrift/lib/cpp/transport/THeader.cpp",
+        "thrift/lib/cpp/transport/TTransportException.cpp",
         "thrift/lib/cpp/transport/TZlibTransport.cpp",
         "thrift/lib/cpp/util/PausableTimer.cpp",
         "thrift/lib/cpp/util/THttpParser.cpp",
@@ -369,8 +372,8 @@ cc_library(
     hdrs = [
         ":cpp_hdrs",
     ],
-    includes = ["."],
     copts = _common_copts,
+    includes = ["."],
     deps = [
         ":concurrency",
         ":thrift-core",
@@ -396,12 +399,12 @@ cc_library(
     hdrs = [
         ":cpp_hdrs",
     ],
-    includes = ["."],
     copts = _common_copts,
+    includes = ["."],
     deps = [
-        ":transport",
-        ":concurrency",
         ":boost_libs",
+        ":concurrency",
+        ":transport",
         "@folly",
         "@glog",
         "@openssl",
@@ -429,8 +432,8 @@ cc_library(
     hdrs = [
         ":cpp_hdrs",
     ],
-    includes = ["."],
     copts = _common_copts,
+    includes = ["."],
     deps = [
         "@folly",
     ],
@@ -444,16 +447,16 @@ cc_library(
         "thrift/lib/cpp2/frozen/schema/MemorySchema.cpp",
         ":frozen",
     ],
-    includes = ["."],
     hdrs = [
         ":cpp_hdrs",
     ],
     copts = _common_copts,
+    includes = ["."],
     deps = [
         ":thriftmetadata",
         "@folly",
-        "@glog",
         "@gflags",
+        "@glog",
     ],
 )
 
@@ -464,16 +467,16 @@ cc_library(
         "thrift/lib/cpp2/protocol/CompactProtocol.cpp",
         "thrift/lib/cpp2/protocol/CompactV1Protocol.cpp",
         "thrift/lib/cpp2/protocol/DebugProtocol.cpp",
-        "thrift/lib/cpp2/protocol/JSONProtocolCommon.cpp",
         "thrift/lib/cpp2/protocol/JSONProtocol.cpp",
+        "thrift/lib/cpp2/protocol/JSONProtocolCommon.cpp",
         "thrift/lib/cpp2/protocol/Serializer.cpp",
         "thrift/lib/cpp2/protocol/VirtualProtocol.cpp",
     ],
     hdrs = [
         ":cpp_hdrs",
     ],
-    includes = ["."],
     copts = _common_copts,
+    includes = ["."],
     deps = [
         ":thrift",
         "@folly",
@@ -509,18 +512,18 @@ cc_library(
         "thrift/lib/cpp2/security/extensions/ThriftParametersClientExtension.cpp",
         "thrift/lib/cpp2/security/extensions/ThriftParametersContext.cpp",
         "thrift/lib/cpp2/security/extensions/Types.cpp",
-        "thrift/lib/cpp2/server/RequestsRegistry.cpp",
         "thrift/lib/cpp2/server/BaseThriftServer.cpp",
         "thrift/lib/cpp2/server/Cpp2ConnContext.cpp",
         "thrift/lib/cpp2/server/Cpp2Connection.cpp",
         "thrift/lib/cpp2/server/Cpp2Worker.cpp",
+        "thrift/lib/cpp2/server/RequestsRegistry.cpp",
         "thrift/lib/cpp2/server/ServerInstrumentation.cpp",
         "thrift/lib/cpp2/server/ThriftServer.cpp",
         "thrift/lib/cpp2/server/peeking/TLSHelper.cpp",
         "thrift/lib/cpp2/transport/core/RpcMetadataUtil.cpp",
-        "thrift/lib/cpp2/transport/core/ThriftProcessor.cpp",
         "thrift/lib/cpp2/transport/core/ThriftClient.cpp",
         "thrift/lib/cpp2/transport/core/ThriftClientCallback.cpp",
+        "thrift/lib/cpp2/transport/core/ThriftProcessor.cpp",
         "thrift/lib/cpp2/transport/rocket/PayloadUtils.cpp",
         "thrift/lib/cpp2/transport/rocket/Types.cpp",
         "thrift/lib/cpp2/transport/rocket/client/RequestContext.cpp",
@@ -549,13 +552,13 @@ cc_library(
     ],
     copts = _common_copts,
     includes = ["."],
+    visibility = ["//visibility:public"],
     deps = [
         ":thrift",
-        ":thriftmetadata",
         ":thriftfrozen2",
+        ":thriftmetadata",
         ":thriftprotocol",
     ],
-    visibility = ["//visibility:public"],
 )
 
 cc_library(
@@ -569,14 +572,14 @@ cc_library(
         "thrift/lib/cpp2/transport/http2/server/ThriftRequestHandler.cpp",
     ],
     hdrs = glob(["thrift/lib/cpp2/transport/http2/**/*.h"]),
-    includes = ["."],
     copts = _common_copts,
+    includes = ["."],
+    visibility = ["//visibility:public"],
     deps = [
         ":thriftcpp2",
         "@proxygen//:proxygenhttpserver",
         "@rsocket-cpp//:ReactiveSocket",
     ],
-    visibility = ["//visibility:public"],
 )
 
 cc_library(
@@ -588,9 +591,9 @@ cc_library(
         "thrift/perf/cpp2/util/*.h",
     ]),
     copts = _common_copts,
+    visibility = ["//visibility:public"],
     deps = [
         ":thriftcpp2",
         "@proxygen//:proxygenhttpserver",
     ],
-    visibility = ["//visibility:public"],
 )

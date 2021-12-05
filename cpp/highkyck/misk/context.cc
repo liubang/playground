@@ -1,12 +1,12 @@
-#include <ucontext.h>
 #include <cstdio>
 #include <cstdlib>
+#include <ucontext.h>
 
 #define handle_error(msg) \
-  do {                    \
-    perror(msg);          \
-    exit(EXIT_FAILURE);   \
-  } while (00)
+ do {                     \
+  perror(msg);            \
+  exit(EXIT_FAILURE);     \
+ } while (00)
 
 namespace {
 ucontext_t uctx_main, uctx_func1, uctx_func2;

@@ -10,13 +10,10 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-namespace basecode
-{
-namespace logger
-{
+namespace basecode {
+namespace logger {
 
-namespace
-{
+namespace {
 class MmapFileWriter : public FileWriter
 {
 public:

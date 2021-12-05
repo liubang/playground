@@ -33,18 +33,19 @@ cc_binary(
         "@folly",
     ],
 )
+
 cc_binary(
     name = "future",
     srcs = [
         "future.cc",
     ],
-    linkopts = [
-        "-l:libstdc++.a",
-    ],
+    copts = _copts,
     features = [
         # "fully_static_link",
     ],
-    copts = _copts,
+    linkopts = [
+        "-l:libstdc++.a",
+    ],
     deps = [
         "@folly",
     ],
@@ -56,10 +57,10 @@ cc_binary(
         "singleton.cc",
         "singleton.h",
     ],
+    copts = _copts,
     features = [
         "fully_static_link",
     ],
-    copts = _copts,
     linkopts = ["-l:libstdc++.a"],
     deps = [
         "@folly",

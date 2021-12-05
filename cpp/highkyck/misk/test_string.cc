@@ -1,6 +1,6 @@
-#include <string>
-#include <iostream>
 #include <algorithm>
+#include <iostream>
+#include <string>
 
 int main(int argc, char* argv[])
 {

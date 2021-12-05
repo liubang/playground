@@ -1,6 +1,6 @@
 #include <boost/parameter.hpp>
-#include <type_traits>
 #include <string>
+#include <type_traits>
 
 BOOST_PARAMETER_KEYWORD(tag, num_cpus);
 BOOST_PARAMETER_KEYWORD(tag, num_gpus);
@@ -30,24 +30,25 @@ inline static void init_arg(myconf& conf,
 }
 
 inline static void init_arg(
-    myconf& conf, boost::parameter::aux::tagged_argument<tag::object_store_memory, const int> arg)
+  myconf& conf, boost::parameter::aux::tagged_argument<tag::object_store_memory, const int> arg)
 {
   conf.object_store_memory_ = arg[object_store_memory];
 }
 
 inline static void init_arg(
-    myconf& conf, boost::parameter::aux::tagged_argument<tag::ignore_reinit_error, const bool> arg)
+  myconf& conf, boost::parameter::aux::tagged_argument<tag::ignore_reinit_error, const bool> arg)
 {
   conf.ignore_reinit_error_ = arg[ignore_reinit_error];
 }
 
 inline static void init_arg(
-    myconf& conf, boost::parameter::aux::tagged_argument<tag::address, const std::string> arg)
+  myconf& conf, boost::parameter::aux::tagged_argument<tag::address, const std::string> arg)
 {
   conf.address_ = arg[address];
 }
 
-template<typename... Args> inline static void init(Args... args)
+template<typename... Args>
+inline static void init(Args... args)
 {
   myconf conf{};
   (void)std::initializer_list<int>{(init_arg(conf, args), 0)...};

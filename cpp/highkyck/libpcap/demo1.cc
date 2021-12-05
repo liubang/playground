@@ -1,10 +1,10 @@
-#include <iostream>
+#include <arpa/inet.h>
 #include <cstdio>
+#include <gflags/gflags.h>
+#include <iostream>
+#include <netinet/in.h>
 #include <pcap.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <gflags/gflags.h>
 
 DEFINE_string(net_inter, "enp0s25", "");
 

@@ -4,10 +4,8 @@
 #include <stdint.h>
 #include <string>
 
-namespace basecode
-{
-namespace logger
-{
+namespace basecode {
+namespace logger {
 
 enum class FileWriterType : uint8_t
 {

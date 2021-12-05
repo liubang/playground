@@ -27,13 +27,13 @@ cc_binary(
         "basic_operation.cc",
     ],
     copts = _DEFAULT_COPTS,
-    linkopts = ["-l:libstdc++.a"],
     features = [
         "fully_static_link",
     ],
+    linkopts = ["-l:libstdc++.a"],
     deps = [
-        "@rocksdb",
         "@folly",
+        "@rocksdb",
     ],
 )
 
@@ -43,12 +43,12 @@ cc_binary(
         "use_memtable.cc",
     ],
     copts = _DEFAULT_COPTS,
-    linkopts = ["-l:libstdc++.a"],
     features = [
         "fully_static_link",
     ],
+    linkopts = ["-l:libstdc++.a"],
     deps = [
-        "@rocksdb",
         "@folly",
+        "@rocksdb",
     ],
 )

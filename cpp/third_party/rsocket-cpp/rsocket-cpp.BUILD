@@ -25,14 +25,14 @@ cc_library(
     hdrs = glob([
         "yarpl/**/*.h",
     ]),
-    includes = ["."],
     copts = _common_copts,
+    includes = ["."],
+    visibility = ["//visibility:public"],
     deps = [
         "@folly",
-        "@glog",
         "@gflags",
+        "@glog",
     ],
-    visibility = ["//visibility:public"],
 )
 
 cc_library(
@@ -47,10 +47,10 @@ cc_library(
     hdrs = glob([
         "rsocket/**/*.h",
     ]),
-    includes = ["."],
     copts = _common_copts,
+    includes = ["."],
+    visibility = ["//visibility:public"],
     deps = [
         ":yarpl",
     ],
-    visibility = ["//visibility:public"],
 )

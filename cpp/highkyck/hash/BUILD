@@ -1,8 +1,8 @@
 cc_binary(
     name = "test_murmurhash2",
     srcs = [
-        "test_murmurhash2.cc",
         "murmurhash2.h",
+        "test_murmurhash2.cc",
     ],
     copts = [
         "-std=gnu++17",

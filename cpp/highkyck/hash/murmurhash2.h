@@ -1,15 +1,16 @@
 #pragma once
 
-#include <cstdint>
 #include <cctype>
+#include <cstdint>
 #include <type_traits>
 
 namespace highkyck {
 namespace hash {
 
-template<typename T, T m, T r, T x, T y,
-         std::enable_if_t<std::disjunction<std::is_same<T, uint32_t>,
-                                           std::is_same<T, uint64_t>>::value>* = nullptr>
+template<
+  typename T, T m, T r, T x, T y,
+  std::enable_if_t<std::disjunction<std::is_same<T, uint32_t>, std::is_same<T, uint64_t>>::value>* =
+    nullptr>
 class CMurmurHash final
 {
 public:
@@ -43,8 +44,7 @@ public:
         k = std::tolower(k);
         mmix(_hash, k);
       }
-    }
-    else {
+    } else {
       while (data2 != stop) {
         T k = *data2++;
         mmix(_hash, k);

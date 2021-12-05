@@ -1,10 +1,10 @@
 #pragma once
 
-#include <string>
 #include <deque>
-#include <memory>
 #include <functional>
+#include <memory>
 #include <mutex>
+#include <string>
 
 namespace highkyck {
 namespace pool {
@@ -20,7 +20,8 @@ protected:
   virtual ~noncopyable() = default;
 };
 
-template<class Obj, size_t N> class object_pool final : public noncopyable
+template<class Obj, size_t N>
+class object_pool final : public noncopyable
 {
 public:
   using DeleterType = std::function<void(Obj*)>;
@@ -36,7 +37,7 @@ public:
     std::lock_guard<std::mutex> lock(mtx_);
     if (empty()) { return nullptr; }
     std::unique_ptr<Obj, DeleterType> ptr(
-        pool_.front().release(), [this](Obj* o) { pool_.push_back(std::unique_ptr<Obj>(o)); });
+      pool_.front().release(), [this](Obj* o) { pool_.push_back(std::unique_ptr<Obj>(o)); });
     pool_.pop_front();
     return ptr;
   }

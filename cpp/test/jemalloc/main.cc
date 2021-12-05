@@ -1,13 +1,13 @@
 #include <cstdio>
-#include <string>
 #include <memory>
+#include <string>
 
 class Foo
 {
 public:
   Foo(const std::string& name, const std::string& desc)
-      : name_(name)
-      , desc_(desc)
+    : name_(name)
+    , desc_(desc)
   {}
   ~Foo() = default;
 
