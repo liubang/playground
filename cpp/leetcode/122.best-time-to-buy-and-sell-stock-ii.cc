@@ -1,23 +1,25 @@
 #include <gtest/gtest.h>
 #include <vector>
 
-namespace {
-class Solution {
+namespace
+{
+class Solution
+{
 public:
-  int maxProfit(const std::vector<int> &prices) {
+  int maxProfit(const std::vector<int>& prices)
+  {
     int size = prices.size();
     int ret = 0;
     for (int i = 1; i < size; ++i) {
-      if (prices[i] > prices[i - 1]) {
-        ret += prices[i] - prices[i - 1];
-      }
+      if (prices[i] > prices[i - 1]) { ret += prices[i] - prices[i - 1]; }
     }
     return ret;
   }
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, best_time_to_buy_and_sell_stock_ii) {
+TEST(Leetcode, best_time_to_buy_and_sell_stock_ii)
+{
   Solution s;
   EXPECT_EQ(7, s.maxProfit({7, 1, 5, 3, 6, 4}));
   EXPECT_EQ(4, s.maxProfit({1, 2, 3, 4, 5}));

@@ -1,10 +1,13 @@
 #include <gtest/gtest.h>
 #include <vector>
 
-namespace {
-class Solution {
+namespace
+{
+class Solution
+{
 public:
-  int trap(const std::vector<int> &height) {
+  int trap(const std::vector<int>& height)
+  {
     int size = height.size();
     int r = 0;
     std::vector<int> max(size, 0);
@@ -21,9 +24,10 @@ public:
     return ret;
   }
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, volume_of_histogram_lcci) {
+TEST(Leetcode, volume_of_histogram_lcci)
+{
   Solution s;
   EXPECT_EQ(6, s.trap({0, 1, 0, 2, 1, 0, 1, 3, 2, 1, 2, 1}));
 }
