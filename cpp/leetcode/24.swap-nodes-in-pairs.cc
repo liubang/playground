@@ -2,17 +2,18 @@
 #include <gtest/gtest.h>
 #include <vector>
 
-namespace {
-class Solution {
+namespace
+{
+class Solution
+{
 public:
   using ListNode = leetcode::list::ListNode;
   // 方法一
-  ListNode *swapPairs1(ListNode *head) {
-    if (!head || !head->next) {
-      return head;
-    }
-    std::vector<ListNode *> vecs;
-    ListNode *cur = head;
+  ListNode* swapPairs1(ListNode* head)
+  {
+    if (!head || !head->next) { return head; }
+    std::vector<ListNode*> vecs;
+    ListNode* cur = head;
     while (cur) {
       vecs.emplace_back(cur);
       cur = cur->next;
@@ -20,27 +21,25 @@ public:
     for (int i = 0; i < vecs.size() - 1; i += 2) {
       std::swap(vecs[i], vecs[i + 1]);
       vecs[i]->next = vecs[i + 1];
-      if (i > 0) {
-        vecs[i - 1]->next = vecs[i];
-      }
+      if (i > 0) { vecs[i - 1]->next = vecs[i]; }
       vecs[i + 1]->next = i == vecs.size() - 2 ? nullptr : vecs[i + 2];
     }
     return vecs[0];
   }
 
-  ListNode *swapPairs2(ListNode *head) {
-    if (!head || !head->next) {
-      return head;
-    }
-    ListNode *newhead = head->next;
+  ListNode* swapPairs2(ListNode* head)
+  {
+    if (!head || !head->next) { return head; }
+    ListNode* newhead = head->next;
     head->next = swapPairs2(newhead->next);
     newhead->next = head;
     return newhead;
   }
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, swap_nodes_in_pairs) {
+TEST(Leetcode, swap_nodes_in_pairs)
+{
   Solution s;
   {
     std::vector<int> nodes = {1, 2, 3, 4, 5};

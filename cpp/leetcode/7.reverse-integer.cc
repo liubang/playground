@@ -1,10 +1,13 @@
 #include <climits>
 #include <gtest/gtest.h>
 
-namespace {
-class Solution {
+namespace
+{
+class Solution
+{
 public:
-  int reverse(int x) {
+  int reverse(int x)
+  {
     long n = 0;
     while (x != 0) {
       n = n * 10 + x % 10;
@@ -13,9 +16,10 @@ public:
     return n > INT_MAX || n < INT_MIN ? 0 : n;
   }
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, reverse_integer) {
+TEST(Leetcode, reverse_integer)
+{
   Solution s;
   EXPECT_EQ(321, s.reverse(123));
   EXPECT_EQ(-321, s.reverse(-123));

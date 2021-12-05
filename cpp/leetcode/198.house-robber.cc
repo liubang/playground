@@ -1,10 +1,13 @@
 #include <gtest/gtest.h>
 #include <vector>
 
-namespace {
-class Solution {
+namespace
+{
+class Solution
+{
 public:
-  int rob(const std::vector<int> &nums) {
+  int rob(const std::vector<int>& nums)
+  {
     int size = nums.size();
     if (size == 0) {
       return 0;
@@ -23,9 +26,10 @@ public:
     }
   }
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, house_robber) {
+TEST(Leetcode, house_robber)
+{
   Solution s;
   EXPECT_EQ(4, s.rob({1, 2, 3, 1}));
   EXPECT_EQ(12, s.rob({2, 7, 9, 3, 1}));

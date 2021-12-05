@@ -1,12 +1,15 @@
 #include <gtest/gtest.h>
 #include <string>
 
-namespace {
-class Solution {
+namespace
+{
+class Solution
+{
 public:
-  std::string removeDuplicates(const std::string &S) {
+  std::string removeDuplicates(const std::string& S)
+  {
     std::string ret;
-    for (auto &ch : S) {
+    for (auto& ch : S) {
       if (!ret.empty() && ret.back() == ch) {
         ret.pop_back();
       } else {
@@ -16,9 +19,10 @@ public:
     return ret;
   }
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, remove_all_adjacent_duplicates_in_string) {
+TEST(Leetcode, remove_all_adjacent_duplicates_in_string)
+{
   Solution s;
   {
     auto ret = s.removeDuplicates("abbaca");

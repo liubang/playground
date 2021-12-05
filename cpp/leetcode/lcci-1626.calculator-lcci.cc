@@ -4,24 +4,31 @@
 #include <unordered_map>
 #include <vector>
 
-namespace {
-enum class TOKEN_TYPE {
+namespace
+{
+enum class TOKEN_TYPE
+{
   INT,
   OP,
 };
 
-class Operator {
+class Operator
+{
 public:
   Operator() {}
-  Operator(char c, int weight) : c_(c), weight_(weight) {}
+  Operator(char c, int weight)
+    : c_(c)
+    , weight_(weight)
+  {}
 
   int getWeight() const { return weight_; }
 
   char getOp() const { return c_; }
 
-  bool operator<(const Operator &o) { return weight_ < o.getWeight(); }
+  bool operator<(const Operator& o) { return weight_ < o.getWeight(); }
 
-  int operator()(int lhs, int rhs) {
+  int operator()(int lhs, int rhs)
+  {
     if (c_ == '+') {
       return lhs + rhs;
     } else if (c_ == '-') {
@@ -39,10 +46,17 @@ private:
   int weight_;
 };
 
-class Token {
+class Token
+{
 public:
-  Token(int number) : type_(TOKEN_TYPE::INT), number_(number) {}
-  Token(const Operator &op) : type_(TOKEN_TYPE::OP), op_(op) {}
+  Token(int number)
+    : type_(TOKEN_TYPE::INT)
+    , number_(number)
+  {}
+  Token(const Operator& op)
+    : type_(TOKEN_TYPE::OP)
+    , op_(op)
+  {}
 
   int getNumber() const { return number_; }
 
@@ -56,13 +70,15 @@ private:
   Operator op_;
 };
 
-class Solution {
+class Solution
+{
 public:
-  int calculate(const std::string &s) {
+  int calculate(const std::string& s)
+  {
     std::vector<Token> tokens;
     rpn(tokens, s);
     std::stack<int> stk;
-    for (auto &token : tokens) {
+    for (auto& token : tokens) {
       if (token.getType() == TOKEN_TYPE::INT) {
         stk.push(token.getNumber());
       } else {
@@ -78,38 +94,28 @@ public:
 
 private:
   // 转为逆波兰表达式
-  void rpn(std::vector<Token> &tokens, const std::string &s) {
+  void rpn(std::vector<Token>& tokens, const std::string& s)
+  {
     std::stack<Operator> stk;
     int len = s.length(), i = 0;
-    std::unordered_map<char, int> weights = {
-        {'(', 0}, {'+', 1}, {'-', 1}, {'*', 2}, {'/', 2}};
+    std::unordered_map<char, int> weights = {{'(', 0}, {'+', 1}, {'-', 1}, {'*', 2}, {'/', 2}};
     while (i < len) {
       if (s[i] == ' ') {
-        while (i < len && s[i] == ' ') {
-          i++;
-        }
-        if (i >= len) {
-          break;
-        }
+        while (i < len && s[i] == ' ') { i++; }
+        if (i >= len) { break; }
       }
       if (std::isdigit(s[i])) {
         int num = 0;
-        while (i < len && std::isdigit(s[i])) {
-          num = num * 10 + (s[i++] - '0');
-        }
+        while (i < len && std::isdigit(s[i])) { num = num * 10 + (s[i++] - '0'); }
         tokens.emplace_back(num);
-        if (i >= len) {
-          break;
-        }
+        if (i >= len) { break; }
       } else {
         if (s[i] == ')') {
           while (!stk.empty() && stk.top().getOp() != '(') {
             tokens.emplace_back(stk.top());
             stk.pop();
           }
-          if (!stk.empty()) {
-            stk.pop();
-          }
+          if (!stk.empty()) { stk.pop(); }
         } else {
           Operator op(s[i], weights[s[i]]);
           if (s[i] == '(' || stk.empty() || stk.top() < op) {
@@ -131,12 +137,12 @@ private:
     }
   }
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, calculator_lcci) {
+TEST(Leetcode, calculator_lcci)
+{
   Solution s;
   EXPECT_EQ(5, s.calculate(" 3+5 / 2 "));
   EXPECT_EQ(7, s.calculate("3+2*2"));
-  EXPECT_EQ(5594,
-            s.calculate("2 + 34 - ((56 - 3) * 4 + 2) + (1024 - 543) * 12"));
+  EXPECT_EQ(5594, s.calculate("2 + 34 - ((56 - 3) * 4 + 2) + (1024 - 543) * 12"));
 }

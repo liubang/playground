@@ -3,11 +3,14 @@
 #include <string>
 #include <vector>
 
-namespace {
-class Solution {
+namespace
+{
+class Solution
+{
 public:
   using TreeNode = leetcode::tree::TreeNode;
-  std::vector<std::string> binaryTreePaths(TreeNode *root) {
+  std::vector<std::string> binaryTreePaths(TreeNode* root)
+  {
     std::vector<std::string> ret;
     std::string cur;
     dfs(&ret, cur, root);
@@ -15,7 +18,8 @@ public:
   }
 
 private:
-  void dfs(std::vector<std::string> *ret, std::string &cur, TreeNode *node) {
+  void dfs(std::vector<std::string>* ret, std::string& cur, TreeNode* node)
+  {
     cur.append(std::to_string(node->val));
     int size = cur.length();
     if (!node->left && !node->right) {
@@ -35,9 +39,10 @@ private:
     }
   }
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, binary_tree_paths) {
+TEST(Leetcode, binary_tree_paths)
+{
   Solution s;
   {
     auto root = leetcode::tree::create({"11", "22", "23", "null", "59"});

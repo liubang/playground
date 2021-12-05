@@ -1,11 +1,13 @@
 #include <gtest/gtest.h>
 #include <vector>
 
-namespace {
-class Solution {
+namespace
+{
+class Solution
+{
 public:
-  int maxUncrossedLines(const std::vector<int> &nums1,
-                        const std::vector<int> &nums2) {
+  int maxUncrossedLines(const std::vector<int>& nums1, const std::vector<int>& nums2)
+  {
     int len1 = nums1.size(), len2 = nums2.size();
     std::vector<std::vector<int>> dp(len1 + 1, std::vector<int>(len2 + 1));
     for (int i = 1; i <= len1; ++i) {
@@ -20,9 +22,10 @@ public:
     return dp[len1][len2];
   }
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, uncrossed_lines) {
+TEST(Leetcode, uncrossed_lines)
+{
   Solution s;
 
   EXPECT_EQ(2, s.maxUncrossedLines({1, 4, 2}, {1, 2, 4}));

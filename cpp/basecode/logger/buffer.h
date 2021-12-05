@@ -3,10 +3,13 @@
 #include <functional>
 #include <sys/types.h>
 
-namespace basecode {
-namespace logger {
+namespace basecode
+{
+namespace logger
+{
 
-class Buffer {
+class Buffer
+{
 public:
   using CookieFunc = std::function<void()>;
 
@@ -17,17 +20,17 @@ public:
 
   void clear();
 
-  void append(const char *data, size_t len);
+  void append(const char* data, size_t len);
 
-  const char *data() const;
+  const char* data() const;
 
   size_t length() const;
 
   size_t available() const;
 
-  const char *debug();
+  const char* debug();
 
-  void set_cookie(const CookieFunc &cookie);
+  void set_cookie(const CookieFunc& cookie);
 
 private:
   static void cookie_start();
@@ -38,9 +41,9 @@ private:
   const size_t total_;
   size_t available_;
   size_t cur_;
-  char *data_;
+  char* data_;
   CookieFunc cookie_;
 };
 
-} // namespace logger
-} // namespace basecode
+}  // namespace logger
+}  // namespace basecode

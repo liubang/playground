@@ -5,30 +5,31 @@
 
 #include "includes/tree.h"
 
-namespace {
-class Solution {
+namespace
+{
+class Solution
+{
 public:
   using TreeNode = leetcode::tree::TreeNode;
-  TreeNode *invertTree(TreeNode *root) {
-    if (!root)
-      return root;
-    std::queue<TreeNode *> queue;
+  TreeNode* invertTree(TreeNode* root)
+  {
+    if (!root) return root;
+    std::queue<TreeNode*> queue;
     queue.push(root);
     while (!queue.empty()) {
-      TreeNode *cur = queue.front();
+      TreeNode* cur = queue.front();
       queue.pop();
       std::swap(cur->left, cur->right);
-      if (cur->left)
-        queue.push(cur->left);
-      if (cur->right)
-        queue.push(cur->right);
+      if (cur->left) queue.push(cur->left);
+      if (cur->right) queue.push(cur->right);
     }
     return root;
   }
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, invert_binary_tree) {
+TEST(Leetcode, invert_binary_tree)
+{
   Solution s;
   {
     std::vector<std::string> nodes = {"4", "2", "7", "1", "3", "6", "9"};

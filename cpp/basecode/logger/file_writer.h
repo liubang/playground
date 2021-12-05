@@ -4,36 +4,40 @@
 #include <stdint.h>
 #include <string>
 
-namespace basecode {
-namespace logger {
+namespace basecode
+{
+namespace logger
+{
 
-enum class FileWriterType : uint8_t {
+enum class FileWriterType : uint8_t
+{
   MMAP_FILE = 0,
   APPEND_FILE = 1,
 };
 
-class FileWriter {
+class FileWriter
+{
 public:
   FileWriter() = default;
 
   virtual ~FileWriter() = default;
 
-  virtual void append(const char *msg, int32_t len) = 0;
+  virtual void append(const char* msg, int32_t len) = 0;
 
   virtual void flush() = 0;
 
   virtual uint32_t write_bytes() const = 0;
 };
 
-class LogFile {
+class LogFile
+{
 public:
-  LogFile(const std::string &basename, int32_t roll_size,
-          int32_t flush_interval, int32_t check_interval,
-          FileWriterType file_writer_type);
+  LogFile(const std::string& basename, int32_t roll_size, int32_t flush_interval,
+          int32_t check_interval, FileWriterType file_writer_type);
 
   ~LogFile() = default;
 
-  void append(const char *msg, int32_t len);
+  void append(const char* msg, int32_t len);
 
   void flush();
 
@@ -55,5 +59,5 @@ private:
   constexpr static int kRollPerSeconds = 60 * 60 * 24;
 };
 
-} // namespace logger
-} // namespace basecode
+}  // namespace logger
+}  // namespace basecode

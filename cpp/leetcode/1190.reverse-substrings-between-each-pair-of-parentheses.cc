@@ -3,12 +3,14 @@
 #include <stack>
 #include <string>
 
-namespace {
-class Solution {
+namespace
+{
+class Solution
+{
 public:
-  std::string reverseParentheses(const std::string &s) {
-    if (s.empty())
-      return s;
+  std::string reverseParentheses(const std::string& s)
+  {
+    if (s.empty()) return s;
     std::stack<char> stk;
     std::queue<char> queue;
     for (char c : s) {
@@ -20,8 +22,7 @@ public:
           stk.pop();
         }
         // pop char '('
-        if (!stk.empty())
-          stk.pop();
+        if (!stk.empty()) stk.pop();
         while (!queue.empty()) {
           stk.push(queue.front());
           queue.pop();
@@ -36,9 +37,10 @@ public:
     return ret;
   }
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, reverse_substrings_between_each_pair_of_parentheses) {
+TEST(Leetcode, reverse_substrings_between_each_pair_of_parentheses)
+{
   Solution s;
   EXPECT_EQ("dcba", s.reverseParentheses("(abcd)"));
   EXPECT_EQ("iloveu", s.reverseParentheses("(u(love)i)"));

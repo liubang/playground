@@ -2,33 +2,37 @@
 #include <gtest/gtest.h>
 #include <vector>
 
-namespace {
-class Solution {
+namespace
+{
+class Solution
+{
 public:
   using ListNode = leetcode::list::ListNode;
-  ListNode *removeNthFromEnd(ListNode *head, int n) {
-    std::vector<ListNode *> lists;
-    ListNode *cur = head;
+  ListNode* removeNthFromEnd(ListNode* head, int n)
+  {
+    std::vector<ListNode*> lists;
+    ListNode* cur = head;
     while (cur) {
       lists.push_back(cur);
       cur = cur->next;
     }
     int size = lists.size();
     if (n == size) {
-      ListNode *ret = head->next;
+      ListNode* ret = head->next;
       delete head;
       return ret;
     }
     int idx = size - n - 1;
-    ListNode *next = lists[idx]->next;
+    ListNode* next = lists[idx]->next;
     lists[idx]->next = lists[idx]->next->next;
     delete next;
     return lists[0];
   }
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, remove_nth_node_from_end_of_list) {
+TEST(Leetcode, remove_nth_node_from_end_of_list)
+{
   Solution s;
 
   {

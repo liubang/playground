@@ -1,14 +1,15 @@
 #include <gtest/gtest.h>
 #include <string>
 
-namespace {
-class Solution {
+namespace
+{
+class Solution
+{
 public:
-  std::string compressString(const std::string &S) {
+  std::string compressString(const std::string& S)
+  {
     int len = S.length();
-    if (len <= 1) {
-      return S;
-    }
+    if (len <= 1) { return S; }
     std::string ret;
     char pre = S[0];
     int count = 1;
@@ -27,9 +28,10 @@ public:
     return ret.length() < len ? ret : S;
   }
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, compress_string_lcci) {
+TEST(Leetcode, compress_string_lcci)
+{
   Solution s;
   EXPECT_EQ("a2b1c5a3", s.compressString("aabcccccaaa"));
   EXPECT_EQ("abbccd", s.compressString("abbccd"));
