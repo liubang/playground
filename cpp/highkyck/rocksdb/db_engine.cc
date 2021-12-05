@@ -12,8 +12,8 @@
 namespace highkyck {
 
 DbEngine::DbEngine(const std::string& data_dir, const rocksdb::Options& options)
-    : data_dir_(data_dir)
-    , options_(options)
+  : data_dir_(data_dir)
+  , options_(options)
 {}
 
 DbEngine::~DbEngine() {}

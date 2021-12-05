@@ -11,7 +11,7 @@ class Bar
 {
 public:
   Bar(const FooPtr& foo_ptr)
-      : foo_ptr_(foo_ptr)
+    : foo_ptr_(foo_ptr)
   {}
 
   void print_ref_count() { std::cout << "Bar::foo_ptr: " << foo_ptr_->GetRef() << "\n"; }

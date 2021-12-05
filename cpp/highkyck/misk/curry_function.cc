@@ -1,6 +1,6 @@
-#include <utility>
-#include <tuple>
 #include <iostream>
+#include <tuple>
+#include <utility>
 
 namespace std {
 struct nonesuch
@@ -36,15 +36,18 @@ using can_invoke_t = decltype(std::declval<T>()(std::declval<Args>()...));
 template<typename T, typename... Args>
 using can_invoke = std::is_detected<can_invoke_t, T, Args...>;
 
-template<typename F, typename... Arguments> struct curry_t
+template<typename F, typename... Arguments>
+struct curry_t
 {
-  template<typename... Args> constexpr decltype(auto) operator()(Args&&... a) const
+  template<typename... Args>
+  constexpr decltype(auto) operator()(Args&&... a) const
   {
     curry_t<F, Arguments..., Args...> cur = {
-        f_, std::tuple_cat(args_, std::make_tuple(std::forward<Args>(a)...))};
+      f_, std::tuple_cat(args_, std::make_tuple(std::forward<Args>(a)...))};
 
-    if constexpr (!can_invoke<F, Arguments..., Args...>::value) { return cur; }
-    else {
+    if constexpr (!can_invoke<F, Arguments..., Args...>::value) {
+      return cur;
+    } else {
       return cur();
     }
   }
@@ -55,7 +58,8 @@ template<typename F, typename... Arguments> struct curry_t
   std::tuple<Arguments...> args_;
 };
 
-template<typename F> constexpr curry_t<F> curry(F&& f)
+template<typename F>
+constexpr curry_t<F> curry(F&& f)
 {
   return {std::forward<F>(f)};
 }

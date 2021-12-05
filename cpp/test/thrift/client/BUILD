@@ -25,8 +25,8 @@ cc_binary(
     ],
     deps = [
         "//test/thrift/if:echo_lib",
-        "@folly",
         "@fbthrift//:http2",
         "@fbthrift//:thriftperfutil",
+        "@folly",
     ],
 )

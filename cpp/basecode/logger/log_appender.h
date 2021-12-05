@@ -11,10 +11,8 @@
 #include <unistd.h>
 #include <vector>
 
-namespace basecode
-{
-namespace logger
-{
+namespace basecode {
+namespace logger {
 
 class LogAppenderInterface
 {

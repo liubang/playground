@@ -16,7 +16,8 @@ std::string concat(std::string& x, std::string&& y)
   return x.append(y);
 }
 
-template<typename T, typename U> std::string& concat(std::string& x, T&& t, U&& u)
+template<typename T, typename U>
+std::string& concat(std::string& x, T&& t, U&& u)
 {
   return concat(x, std::string(std::forward<T>(t), std::forward<U>(u)));
 }

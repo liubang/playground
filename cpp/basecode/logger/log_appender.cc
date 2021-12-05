@@ -2,10 +2,8 @@
 #include "basecode/logger/logger.h"
 #include <sys/stat.h>
 
-namespace basecode
-{
-namespace logger
-{
+namespace basecode {
+namespace logger {
 AsyncLogAppender::AsyncLogAppender(const std::string& basename)
   : started_(false)
   , running_(false)

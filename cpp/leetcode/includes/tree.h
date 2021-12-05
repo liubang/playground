@@ -5,10 +5,8 @@
 #include <string>
 #include <vector>
 
-namespace leetcode
-{
-namespace tree
-{
+namespace leetcode {
+namespace tree {
 struct TreeNode
 {
   int val;

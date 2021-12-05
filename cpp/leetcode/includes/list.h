@@ -4,10 +4,8 @@
 #include <iostream>
 #include <vector>
 
-namespace leetcode
-{
-namespace list
-{
+namespace leetcode {
+namespace list {
 struct ListNode
 {
   int val;

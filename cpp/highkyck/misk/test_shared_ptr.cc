@@ -1,6 +1,6 @@
+#include <iostream>
 #include <memory>
 #include <string>
-#include <iostream>
 
 namespace highkyck {
 
@@ -8,7 +8,7 @@ class Foo
 {
 public:
   Foo(const std::shared_ptr<std::string>& name)
-      : name_ptr_(name)
+    : name_ptr_(name)
   {}
 
   virtual ~Foo() = default;

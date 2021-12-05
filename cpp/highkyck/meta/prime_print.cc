@@ -5,13 +5,15 @@ namespace meta {
 
 // Prime number computation by Erwin Unruh
 
-template<int i> struct D
+template<int i>
+struct D
 {
   D(void*);
   operator int();
 };
 
-template<int p, int i> struct is_prime
+template<int p, int i>
+struct is_prime
 {
   enum
   {
@@ -19,7 +21,8 @@ template<int p, int i> struct is_prime
   };
 };
 
-template<int i> struct Prime_print
+template<int i>
+struct Prime_print
 {
   Prime_print<i - 1> a;
   enum
@@ -33,14 +36,16 @@ template<int i> struct Prime_print
   }
 };
 
-template<> struct is_prime<0, 0>
+template<>
+struct is_prime<0, 0>
 {
   enum
   {
     prim = 1
   };
 };
-template<> struct is_prime<0, 1>
+template<>
+struct is_prime<0, 1>
 {
   enum
   {
@@ -48,7 +53,8 @@ template<> struct is_prime<0, 1>
   };
 };
 
-template<> struct Prime_print<1>
+template<>
+struct Prime_print<1>
 {
   enum
   {

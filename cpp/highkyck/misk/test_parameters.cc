@@ -23,7 +23,7 @@ class Bar
 {
 public:
   Bar(const Foo& foo)
-      : foo_(foo)
+    : foo_(foo)
   {}
 
   Foo foo() const { return foo_; }

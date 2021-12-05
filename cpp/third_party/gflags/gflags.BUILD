@@ -75,10 +75,10 @@ cc_library(
         "src/util.h",
     ],
     hdrs = [
-        ":gflags_h",
-        ":gflags_declare_h",
         ":gflags_completions_h",
+        ":gflags_declare_h",
         ":gflags_gflags_h",
+        ":gflags_h",
     ],
     copts = [
         "-std=gnu++14",
@@ -97,9 +97,9 @@ cc_library(
         "-DHAVE_FNMATCH_H",
         "-DHAVE_PTHREAD",
     ],
+    include_prefix = "gflags",
     linkopts = [
         "-pthread",
     ],
-    include_prefix = "gflags",
     visibility = ["//visibility:public"],
 )

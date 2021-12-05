@@ -1,12 +1,13 @@
 #pragma once
 
 #include <new>
-#include <utility>
 #include <stddef.h>
+#include <utility>
 
 namespace highkyck {
 
-template<typename ValueT> class vector
+template<typename ValueT>
+class vector
 {
 public:
   using value_type = ValueT;
@@ -24,9 +25,9 @@ private:
 
 public:
   constexpr vector() noexcept
-      : m_data_()
-      , m_size_()
-      , m_capacity_()
+    : m_data_()
+    , m_size_()
+    , m_capacity_()
   {}
 
   vector(const vector& rhs)
@@ -39,8 +40,7 @@ public:
         ::new (&this->m_data_[k]) ValueT(rhs.m_data_[k]);
         this->m_size_ += 1;
       }
-    }
-    catch (...) {
+    } catch (...) {
       for (::size_t k = 0; k < this->m_size_; ++k) { this->m_data_[k].~ValueT(); }
       if (this->m_data_) { ::operator delete(this->m_data_); }
       throw;
@@ -100,7 +100,8 @@ public:
 
   void push_back(const ValueT&& value) { this->emplace_back(value); }
 
-  template<typename... ArgsT> reference emplace_back(ArgsT&&... args)
+  template<typename... ArgsT>
+  reference emplace_back(ArgsT&&... args)
   {
     if (this->m_size_ < this->m_capacity_) {
       ::size_t k = this->m_size_;
@@ -122,8 +123,7 @@ public:
       }
       ::new (&new_data[new_size]) ValueT(::std::forward<ArgsT>(args)...);
       new_size++;
-    }
-    catch (...) {
+    } catch (...) {
       for (::size_t k = 0; k < new_size; ++k) { new_data[k].~ValueT(); }
       ::operator delete(new_data);
       throw;
