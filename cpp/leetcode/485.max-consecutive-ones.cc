@@ -1,10 +1,13 @@
 #include <gtest/gtest.h>
 #include <vector>
 
-namespace {
-class Solution {
+namespace
+{
+class Solution
+{
 public:
-  int findMaxConsecutiveOnes(std::vector<int> &nums) {
+  int findMaxConsecutiveOnes(std::vector<int>& nums)
+  {
     int ret = 0, cur = 0;
     for (auto num : nums) {
       if (num == 0) {
@@ -17,9 +20,10 @@ public:
     return std::max(ret, cur);
   }
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, max_consecutive_ones) {
+TEST(Leetcode, max_consecutive_ones)
+{
   Solution s;
   {
     std::vector<int> nums = {1, 1, 0, 1, 1, 1};

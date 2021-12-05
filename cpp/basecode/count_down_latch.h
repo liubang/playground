@@ -3,8 +3,10 @@
 #include <condition_variable>
 #include <mutex>
 
-namespace basecode {
-class CountDownLatch {
+namespace basecode
+{
+class CountDownLatch
+{
 public:
   CountDownLatch(uint32_t count);
 
@@ -17,13 +19,13 @@ public:
 private:
   CountDownLatch() = delete;
 
-  CountDownLatch(const CountDownLatch &other) = delete;
+  CountDownLatch(const CountDownLatch& other) = delete;
 
-  CountDownLatch &operator=(const CountDownLatch &other) = delete;
+  CountDownLatch& operator=(const CountDownLatch& other) = delete;
 
 private:
   uint32_t count_;
   std::mutex mutex_;
   std::condition_variable cv_;
 };
-} // namespace basecode
+}  // namespace basecode

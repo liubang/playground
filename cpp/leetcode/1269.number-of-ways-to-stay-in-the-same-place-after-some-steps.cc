@@ -1,11 +1,14 @@
 #include <gtest/gtest.h>
 #include <vector>
 
-namespace {
+namespace
+{
 constexpr int MOD = 1E9 + 7;
-class Solution {
+class Solution
+{
 public:
-  int numWays(int arrLen, int steps) {
+  int numWays(int arrLen, int steps)
+  {
     // 能够到达的最大下标位置
     int maxcol = std::min(arrLen - 1, steps);
     // dp[i][j] 表示执行i步到达j位置的方案数
@@ -15,20 +18,17 @@ public:
     for (int i = 1; i <= steps; ++i) {
       for (int j = 0; j <= maxcol; ++j) {
         dp[i][j] = dp[i - 1][j];
-        if (j - 1 >= 0) {
-          dp[i][j] = (dp[i][j] + dp[i - 1][j - 1]) % MOD;
-        }
-        if (j + 1 <= maxcol) {
-          dp[i][j] = (dp[i][j] + dp[i - 1][j + 1]) % MOD;
-        }
+        if (j - 1 >= 0) { dp[i][j] = (dp[i][j] + dp[i - 1][j - 1]) % MOD; }
+        if (j + 1 <= maxcol) { dp[i][j] = (dp[i][j] + dp[i - 1][j + 1]) % MOD; }
       }
     }
     return dp[steps][0];
   }
 };
-} // namespace
+}  // namespace
 
-TEST(Leetcode, number_of_ways_to_stay_in_the_same_place_after_some_steps) {
+TEST(Leetcode, number_of_ways_to_stay_in_the_same_place_after_some_steps)
+{
   Solution s;
   EXPECT_EQ(4, s.numWays(2, 3));
   EXPECT_EQ(2, s.numWays(4, 2));
