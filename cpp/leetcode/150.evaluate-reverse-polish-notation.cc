@@ -4,8 +4,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace
-{
+namespace {
 class Solution
 {
 public:

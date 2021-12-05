@@ -1,8 +1,7 @@
 #include <gtest/gtest.h>
 #include <vector>
 
-namespace
-{
+namespace {
 class Solution
 {
 public:

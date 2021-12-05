@@ -2,8 +2,7 @@
 #include <gtest/gtest.h>
 #include <stack>
 
-namespace
-{
+namespace {
 class MinStack
 {
 public:
