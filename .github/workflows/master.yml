@@ -7,52 +7,31 @@ on:
   workflow_dispatch:
 
 jobs:
-  target:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v2
+      - uses: actions/setup-go@v2
         with:
-          node-version: "16"
-      - uses: actions/cache@v2
-        with:
-          path: affected
-          key: affected-${{ github.sha }}
-      - uses: actions/cache@v2
-        env:
-          cache-name: bazel
-        with:
-          path: ~/.cache/bazelisk
-          key: ${{ env.cache-name }}-${{ runner.os }}
-          restore-keys: |
-            ${{ env.cache-name }}-${{ runner.os }}
-      - run: npm install -g @bazel/bazelisk
-      - run: cd cpp && bash scripts/buildables.sh
-  build:
-    needs:
-      - target
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-node@v2
-        with:
-          node-version: "16"
-      - uses: actions/cache@v2
-        with:
-          path: affected
-          key: affected-${{ github.sha }}
-      - uses: actions/cache@v2
-        env:
-          cache-name: bazel
-        with:
-          path: ~/.cache/bazelisk
-          key: ${{ env.cache-name }}-${{ runner.os }}
-          restore-keys: |
-            ${{ env.cache-name }}-${{ runner.os }}
+          go-version: "^1.16.0"
       - uses: egor-tensin/setup-gcc@v1
         with:
           version: 10
           platform: x64
-      - run: cd cpp && bash scripts/build.sh
+      - uses: actions/cache@v2
+        env:
+          cache-name: bazel
+        with:
+          path: ~/.cache/bazelisk
+          key: ${{ env.cache-name }}-${{ runner.os }}
+          restore-keys: |
+            ${{ env.cache-name }}-${{ runner.os }}
+      - run: go get github.com/bazelbuild/bazelisk
+      - run: |
+        cd cpp
+        bazelisk build //algo/...
+        bazelisk build //basecode/...
+        bazelisk build //highkyck/misk/...
+        bazelisk test //leetcode/...
