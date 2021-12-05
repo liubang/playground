@@ -19,23 +19,48 @@ jobs:
       - uses: actions/cache@v2
         with:
           path: affected
-          key: affected.${{ github.sha }}
+          key: affected-${{ github.sha }}
       - uses: actions/cache@v2
         env:
           cache-name: bazel
         with:
           path: ~/.cache/bazelisk
           key: ${{ env.cache-name }}-${{ runner.os }}
-      - uses: egor-tensin/setup-gcc@v1
-        with:
-          version: 10
-          platform: x64
+          restore-keys: |
+            ${{ env.cache-name }}-${{ runner.os }}
       - run: npm install -g @bazel/bazelisk
       - name: run build
         run: |
           cd cpp
-          bazelisk test -c opt //highkyck/misk/...
-          bazelisk test -c opt //leetcode/...
-          bazelisk test -c opt //basecode/...
-          bazelisk test -c opt //algo/...
-          bazelisk run  -c opt //test/misk/...
+          bash scripts/buildables.sh
+          # bazelisk test -c opt //highkyck/misk/...
+          # bazelisk test -c opt //leetcode/...
+          # bazelisk test -c opt //basecode/...
+          # bazelisk test -c opt //algo/...
+          # bazelisk run  -c opt //test/misk/...
+  build:
+    needs:
+      - target
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v2
+        with:
+          node-version: "16"
+      - uses: actions/cache@v2
+        with:
+          path: affected
+          key: affected-${{ github.sha }}
+      - uses: actions/cache@v2
+        env:
+          cache-name: bazel
+        with:
+          path: ~/.cache/bazelisk
+          key: ${{ env.cache-name }}-${{ runner.os }}
+          restore-keys: |
+            ${{ env.cache-name }}-${{ runner.os }}
+      - uses: egor-tensin/setup-gcc@v1
+        with:
+          version: 10
+          platform: x64
+      - run: cd cpp && bash scripts/build.sh

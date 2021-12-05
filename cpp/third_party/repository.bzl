@@ -297,6 +297,12 @@ def external_repositories(path_prefix = "", repo_name = ""):
         strip_prefix = "cityhash-8af9b8c2b889d80c22d6bc26ba0df1afb79a30db",
     )
 
+    http_archive(
+        name = "com_google_absl",
+        urls = ["https://github.com/abseil/abseil-cpp/archive/98eb410c93ad059f9bba1bf43f5bb916fc92a5ea.zip"],
+        strip_prefix = "abseil-cpp-98eb410c93ad059f9bba1bf43f5bb916fc92a5ea",
+    )
+
     # GoogleTest/GoogleMock
     http_archive(
         name = "gtest",
