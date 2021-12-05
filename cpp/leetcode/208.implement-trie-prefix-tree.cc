@@ -3,8 +3,7 @@
 #include <gtest/gtest.h>
 #include <string>
 
-namespace
-{
+namespace {
 class Trie
 {
 public:

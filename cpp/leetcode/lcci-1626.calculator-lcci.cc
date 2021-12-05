@@ -4,8 +4,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace
-{
+namespace {
 enum class TOKEN_TYPE
 {
   INT,

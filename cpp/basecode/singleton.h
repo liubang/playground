@@ -2,8 +2,7 @@
 
 #include <pthread.h>
 
-namespace basecode
-{
+namespace basecode {
 
 template<typename T>
 class Singleton
