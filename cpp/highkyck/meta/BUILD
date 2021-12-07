@@ -26,16 +26,6 @@ cc_binary(
 )
 
 cc_binary(
-    name = "prime_print",
-    srcs = [
-        "prime_print.cc",
-    ],
-    copts = [
-        "-std=gnu++17",
-    ],
-)
-
-cc_binary(
     name = "forward",
     srcs = [
         "forward.cc",
@@ -49,6 +39,17 @@ cc_binary(
     name = "forward2",
     srcs = [
         "forward2.cc",
+    ],
+    copts = [
+        "-std=gnu++17",
+    ],
+)
+
+cc_binary(
+    name = "deducing_type_test",
+    srcs = [
+        "deducing_type.h",
+        "deducing_type_test.cpp",
     ],
     copts = [
         "-std=gnu++17",
