@@ -1,13 +1,15 @@
 #include <gtest/gtest.h>
 
 namespace {
-class Solution
-{
-public:
-  int clumsy(int N)
-  {
-    if (N <= 2) { return N; }
-    if (N == 3) { return 6; }
+class Solution {
+ public:
+  int clumsy(int N) {
+    if (N <= 2) {
+      return N;
+    }
+    if (N == 3) {
+      return 6;
+    }
 
     int ret = N * (N - 1) / (N - 2) + N - 3;
     N -= 4;
@@ -22,8 +24,7 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, clumsy_factorial)
-{
+TEST(Leetcode, clumsy_factorial) {
   Solution s;
   EXPECT_EQ(1, s.clumsy(1));
   EXPECT_EQ(2, s.clumsy(2));

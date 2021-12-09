@@ -1,12 +1,11 @@
 #include <gtest/gtest.h>
+
 #include <vector>
 
 namespace {
-class Solution
-{
-public:
-  std::vector<int> getRow(int rowIndex)
-  {
+class Solution {
+ public:
+  std::vector<int> getRow(int rowIndex) {
     std::vector<int> cur;
     for (int i = 0; i <= rowIndex; ++i) {
       std::vector<int> tmp;
@@ -24,8 +23,7 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, pascals_triangle_ii)
-{
+TEST(Leetcode, pascals_triangle_ii) {
   Solution s;
   EXPECT_EQ(std::vector<int>({1}), s.getRow(0));
   EXPECT_EQ(std::vector<int>({1, 1}), s.getRow(1));

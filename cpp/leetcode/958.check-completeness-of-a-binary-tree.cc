@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+
 #include <queue>
 #include <string>
 #include <vector>
@@ -6,12 +7,10 @@
 #include "includes/tree.h"
 
 namespace {
-class Solution
-{
-public:
+class Solution {
+ public:
   using TreeNode = leetcode::tree::TreeNode;
-  bool isCompleteTree(TreeNode* root)
-  {
+  bool isCompleteTree(TreeNode* root) {
     // 二叉树层次遍历
     std::queue<TreeNode*> queue;
     queue.push(root);
@@ -37,7 +36,9 @@ public:
           flag = false;
         }
       }
-      if (!queue.empty() && size != (1 << (h - 1))) { return false; }
+      if (!queue.empty() && size != (1 << (h - 1))) {
+        return false;
+      }
       h++;
     }
     return true;
@@ -45,8 +46,7 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, check_completeness_of_a_binary_tree)
-{
+TEST(Leetcode, check_completeness_of_a_binary_tree) {
   Solution s;
   {
     std::vector<std::string> nodes = {"1", "2", "3", "4", "5", "6"};

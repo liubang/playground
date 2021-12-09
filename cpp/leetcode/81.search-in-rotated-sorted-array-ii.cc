@@ -1,17 +1,20 @@
 #include <gtest/gtest.h>
+
 #include <vector>
 
 namespace {
-class Solution
-{
-public:
-  bool search(const std::vector<int>& nums, int target)
-  {
+class Solution {
+ public:
+  bool search(const std::vector<int>& nums, int target) {
     int size = nums.size();
-    if (size == 1) { return nums[0] == target; }
+    if (size == 1) {
+      return nums[0] == target;
+    }
     int i = 0;
     for (; i < size; ++i) {
-      if (nums[i] < nums[i - 1]) { break; }
+      if (nums[i] < nums[i - 1]) {
+        break;
+      }
     }
     // [0, i - 1], [i, size - 1]
     // 现在第一段中查找
@@ -47,8 +50,7 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, search_in_rotated_sorted_array_ii)
-{
+TEST(Leetcode, search_in_rotated_sorted_array_ii) {
   Solution s;
   EXPECT_TRUE(s.search({2, 5, 6, 0, 0, 1, 2}, 0));
   EXPECT_FALSE(s.search({2, 5, 6, 0, 0, 1, 2}, 3));

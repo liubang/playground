@@ -1,24 +1,23 @@
-#include "includes/tree.h"
 #include <gtest/gtest.h>
+
 #include <string>
 #include <vector>
 
+#include "includes/tree.h"
+
 namespace {
-class Solution
-{
-public:
+class Solution {
+ public:
   using TreeNode = leetcode::tree::TreeNode;
-  std::vector<std::string> binaryTreePaths(TreeNode* root)
-  {
+  std::vector<std::string> binaryTreePaths(TreeNode* root) {
     std::vector<std::string> ret;
     std::string cur;
     dfs(&ret, cur, root);
     return ret;
   }
 
-private:
-  void dfs(std::vector<std::string>* ret, std::string& cur, TreeNode* node)
-  {
+ private:
+  void dfs(std::vector<std::string>* ret, std::string& cur, TreeNode* node) {
     cur.append(std::to_string(node->val));
     int size = cur.length();
     if (!node->left && !node->right) {
@@ -40,8 +39,7 @@ private:
 };
 }  // namespace
 
-TEST(Leetcode, binary_tree_paths)
-{
+TEST(Leetcode, binary_tree_paths) {
   Solution s;
   {
     auto root = leetcode::tree::create({"11", "22", "23", "null", "59"});

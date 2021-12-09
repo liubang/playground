@@ -1,13 +1,13 @@
+#include "includes/thread_pool.h"
+
+#include <gtest/gtest.h>
+
 #include <chrono>
 #include <future>
-#include <gtest/gtest.h>
 #include <utility>
 #include <vector>
 
-#include "includes/thread_pool.h"
-
-TEST(thread_pool, thread_pool)
-{
+TEST(thread_pool, thread_pool) {
   ThreadPool pool(4);
   std::vector<std::future<std::pair<int, int>>> results;
 
@@ -25,8 +25,8 @@ TEST(thread_pool, thread_pool)
     EXPECT_EQ(pair.first, pair.second);
   }
 
-  auto duration =
-    std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - start);
+  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::system_clock::now() - start);
 
   EXPECT_LT(duration.count(), 320);
 }

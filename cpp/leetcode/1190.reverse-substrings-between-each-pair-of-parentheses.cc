@@ -1,14 +1,13 @@
 #include <gtest/gtest.h>
+
 #include <queue>
 #include <stack>
 #include <string>
 
 namespace {
-class Solution
-{
-public:
-  std::string reverseParentheses(const std::string& s)
-  {
+class Solution {
+ public:
+  std::string reverseParentheses(const std::string& s) {
     if (s.empty()) return s;
     std::stack<char> stk;
     std::queue<char> queue;
@@ -38,8 +37,7 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, reverse_substrings_between_each_pair_of_parentheses)
-{
+TEST(Leetcode, reverse_substrings_between_each_pair_of_parentheses) {
   Solution s;
   EXPECT_EQ("dcba", s.reverseParentheses("(abcd)"));
   EXPECT_EQ("iloveu", s.reverseParentheses("(u(love)i)"));

@@ -1,15 +1,13 @@
 #pragma once
 #include <cstdio>
 
-class Singleton
-{
-public:
-  static Singleton& Instance()
-  {
+class Singleton {
+ public:
+  static Singleton& Instance() {
     static Singleton s;
     return s;
   }
 
-private:
+ private:
   Singleton() { printf("Singleton ctor\n"); }
 };

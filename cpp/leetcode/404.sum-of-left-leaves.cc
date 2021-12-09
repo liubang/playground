@@ -1,26 +1,26 @@
 #include <gtest/gtest.h>
+
 #include <string>
 #include <vector>
 
 #include "includes/tree.h"
 
 namespace {
-class Solution
-{
-public:
+class Solution {
+ public:
   using TreeNode = leetcode::tree::TreeNode;
-  int sumOfLeftLeaves(TreeNode* root)
-  {
+  int sumOfLeftLeaves(TreeNode* root) {
     int ret = 0;
     dfs(ret, root->left, true);
     dfs(ret, root->right, false);
     return ret;
   }
 
-private:
-  void dfs(int& ret, TreeNode* node, bool left)
-  {
-    if (!node) { return; }
+ private:
+  void dfs(int& ret, TreeNode* node, bool left) {
+    if (!node) {
+      return;
+    }
     if (left && !node->left && !node->right) {
       ret += node->val;
       return;
@@ -31,11 +31,11 @@ private:
 };
 }  // namespace
 
-TEST(Leetcode, sum_of_left_leaves)
-{
+TEST(Leetcode, sum_of_left_leaves) {
   Solution s;
   {
-    auto root = leetcode::tree::create({"1", "2", "null", "3", "null", "4", "null", "5"});
+    auto root = leetcode::tree::create(
+        {"1", "2", "null", "3", "null", "4", "null", "5"});
     EXPECT_EQ(5, s.sumOfLeftLeaves(root));
     leetcode::tree::destroy(root);
   }
@@ -45,7 +45,8 @@ TEST(Leetcode, sum_of_left_leaves)
     leetcode::tree::destroy(root);
   }
   {
-    auto root = leetcode::tree::create({"3", "9", "20", "null", "null", "15", "7"});
+    auto root =
+        leetcode::tree::create({"3", "9", "20", "null", "null", "15", "7"});
     EXPECT_EQ(24, s.sumOfLeftLeaves(root));
     leetcode::tree::destroy(root);
   }
