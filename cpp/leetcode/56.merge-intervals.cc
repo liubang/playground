@@ -1,13 +1,15 @@
 #include <gtest/gtest.h>
+
 #include <vector>
 
 namespace {
-class Solution
-{
-public:
-  std::vector<std::vector<int>> merge(std::vector<std::vector<int>>& intervals)
-  {
-    if (intervals.size() <= 1) { return intervals; }
+class Solution {
+ public:
+  std::vector<std::vector<int>> merge(
+      std::vector<std::vector<int>>& intervals) {
+    if (intervals.size() <= 1) {
+      return intervals;
+    }
     std::sort(intervals.begin(), intervals.end(), [](auto& lhs, auto& rhs) {
       return (lhs[0] < rhs[0]) || (lhs[0] == rhs[0] && lhs[1] < rhs[1]);
     });
@@ -29,8 +31,7 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, merge_intervals)
-{
+TEST(Leetcode, merge_intervals) {
   Solution s;
 
   {

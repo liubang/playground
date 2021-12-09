@@ -7,28 +7,27 @@
 //
 //=====================================================================
 #include "db_engine.h"
+
 #include <sstream>
 
 namespace highkyck {
 
 DbEngine::DbEngine(const std::string& data_dir, const rocksdb::Options& options)
-  : data_dir_(data_dir)
-  , options_(options)
-{}
+    : data_dir_(data_dir), options_(options) {}
 
 DbEngine::~DbEngine() {}
 
-bool DbEngine::open()
-{
+bool DbEngine::open() {
   rocksdb::DB* db;
   auto status = rocksdb::DB::Open(options_, data_dir_, &db);
-  if (!status.ok()) { return false; }
+  if (!status.ok()) {
+    return false;
+  }
   db_.reset(db);
   return true;
 }
 
-bool DbEngine::close()
-{
+bool DbEngine::close() {
   if (db_) {
     auto status = db_->Close();
     return status.ok();
@@ -36,8 +35,7 @@ bool DbEngine::close()
   return true;
 }
 
-rocksdb::Status DbEngine::set(const Key& key, const Val& val)
-{
+rocksdb::Status DbEngine::set(const Key& key, const Val& val) {
   if (val.t != Type::STRING_VAL) {
     // TODO
   }
@@ -50,8 +48,7 @@ rocksdb::Status DbEngine::set(const Key& key, const Val& val)
   return db_->Write(write_options_, &write_batch);
 }
 
-rocksdb::Status DbEngine::get(Val* val, const Key& key)
-{
+rocksdb::Status DbEngine::get(Val* val, const Key& key) {
   std::stringstream sbuf;
   msgpack::pack(sbuf, key);
   rocksdb::Slice slice_key(sbuf.str().data(), sbuf.str().size());

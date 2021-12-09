@@ -1,12 +1,11 @@
 #include <gtest/gtest.h>
+
 #include <vector>
 
 namespace {
-class Solution
-{
-public:
-  int numIslands(std::vector<std::vector<char>>& grid)
-  {
+class Solution {
+ public:
+  int numIslands(std::vector<std::vector<char>>& grid) {
     int nr = grid.size();
     if (nr == 0) return 0;
     int nc = grid[0].size();
@@ -22,9 +21,8 @@ public:
     return ret;
   }
 
-private:
-  void dfs(std::vector<std::vector<char>>& grid, int x, int y)
-  {
+ private:
+  void dfs(std::vector<std::vector<char>>& grid, int x, int y) {
     int nr = grid.size();
     int nc = grid[0].size();
     grid[x][y] = '0';
@@ -38,25 +36,24 @@ private:
 };
 }  // namespace
 
-TEST(Leetcode, number_of_islands)
-{
+TEST(Leetcode, number_of_islands) {
   Solution s;
   {
     std::vector<std::vector<char>> grid = {
-      {'1', '1', '1', '1', '0'},
-      {'1', '1', '0', '1', '0'},
-      {'1', '1', '0', '0', '0'},
-      {'0', '0', '0', '0', '0'},
+        {'1', '1', '1', '1', '0'},
+        {'1', '1', '0', '1', '0'},
+        {'1', '1', '0', '0', '0'},
+        {'0', '0', '0', '0', '0'},
     };
     EXPECT_EQ(1, s.numIslands(grid));
   }
 
   {
     std::vector<std::vector<char>> grid = {
-      {'1', '1', '0', '0', '0'},
-      {'1', '1', '0', '0', '0'},
-      {'0', '0', '1', '0', '0'},
-      {'0', '0', '0', '1', '1'},
+        {'1', '1', '0', '0', '0'},
+        {'1', '1', '0', '0', '0'},
+        {'0', '0', '1', '0', '0'},
+        {'0', '0', '0', '1', '1'},
     };
     EXPECT_EQ(3, s.numIslands(grid));
   }

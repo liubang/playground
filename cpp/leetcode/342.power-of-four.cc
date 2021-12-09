@@ -1,11 +1,9 @@
 #include <gtest/gtest.h>
 
 namespace {
-class Solution
-{
-public:
-  bool isPowerOfFour(int n)
-  {
+class Solution {
+ public:
+  bool isPowerOfFour(int n) {
     if (n <= 0) return false;
     int tmp = n, one = 0, zero = 0;
     while (tmp > 0) {
@@ -22,8 +20,7 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, power_of_four)
-{
+TEST(Leetcode, power_of_four) {
   Solution s;
   EXPECT_FALSE(s.isPowerOfFour(0));
   EXPECT_TRUE(s.isPowerOfFour(1));

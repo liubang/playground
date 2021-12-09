@@ -1,15 +1,15 @@
 #include <arpa/inet.h>
-#include <cstdio>
 #include <gflags/gflags.h>
-#include <iostream>
 #include <netinet/in.h>
 #include <pcap.h>
 #include <sys/socket.h>
 
+#include <cstdio>
+#include <iostream>
+
 DEFINE_string(net_inter, "enp0s25", "");
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
   // clang-format off
   pcap_t* handle;                /* Session handle */
   char errbuf[PCAP_ERRBUF_SIZE]; /* Error string */
@@ -32,7 +32,8 @@ int main(int argc, char* argv[])
 
   /* Find the properties for the device */
   if (pcap_lookupnet(FLAGS_net_inter.data(), &net, &mask, errbuf) == -1) {
-    ::fprintf(stderr, "Couldn't get netmask for device %s: %s\n", FLAGS_net_inter.data(), errbuf);
+    ::fprintf(stderr, "Couldn't get netmask for device %s: %s\n",
+              FLAGS_net_inter.data(), errbuf);
     net = 0;
     mask = 0;
   }
@@ -58,18 +59,21 @@ int main(int argc, char* argv[])
   /* Open the session in promiscuous mode */
   handle = pcap_open_live(FLAGS_net_inter.data(), BUFSIZ, 1, 1000, errbuf);
   if (nullptr == handle) {
-    ::fprintf(stderr, "Couldn't open device %s: %s\n", FLAGS_net_inter.data(), errbuf);
+    ::fprintf(stderr, "Couldn't open device %s: %s\n", FLAGS_net_inter.data(),
+              errbuf);
     return 2;
   }
 
   /* Compile and apply the filter */
   if (pcap_compile(handle, &fp, filter_exp, 0, net) == -1) {
-    ::fprintf(stderr, "Couldn't parse filter %s: %s\n", filter_exp, pcap_geterr(handle));
+    ::fprintf(stderr, "Couldn't parse filter %s: %s\n", filter_exp,
+              pcap_geterr(handle));
     return 2;
   }
 
   if (pcap_setfilter(handle, &fp) == -1) {
-    ::fprintf(stderr, "Couldn't install filter %s: %s\n", filter_exp, pcap_geterr(handle));
+    ::fprintf(stderr, "Couldn't install filter %s: %s\n", filter_exp,
+              pcap_geterr(handle));
     return 2;
   }
 
