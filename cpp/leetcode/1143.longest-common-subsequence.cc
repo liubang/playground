@@ -1,13 +1,13 @@
 #include <gtest/gtest.h>
+
 #include <string>
 #include <vector>
 
 namespace {
-class Solution
-{
-public:
-  int longestCommonSubsequence(const std::string& text1, const std::string& text2)
-  {
+class Solution {
+ public:
+  int longestCommonSubsequence(const std::string& text1,
+                               const std::string& text2) {
     int len1 = text1.length();
     int len2 = text2.length();
     std::vector<std::vector<int>> dp(len1 + 1, std::vector<int>(len2 + 1, 0));
@@ -19,7 +19,9 @@ public:
         } else {
           dp[i][j] = std::max(dp[i - 1][j], dp[i][j - 1]);
         }
-        if (dp[i][j] > ret) { ret = dp[i][j]; }
+        if (dp[i][j] > ret) {
+          ret = dp[i][j];
+        }
       }
     }
     return ret;
@@ -27,8 +29,7 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, longest_common_subsequence)
-{
+TEST(Leetcode, longest_common_subsequence) {
   Solution s;
   EXPECT_EQ(3, s.longestCommonSubsequence("abcde", "ace"));
   EXPECT_EQ(3, s.longestCommonSubsequence("abc", "abc"));

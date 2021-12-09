@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+
 #include <queue>
 #include <string>
 #include <vector>
@@ -6,12 +7,10 @@
 #include "includes/tree.h"
 
 namespace {
-class Solution
-{
-public:
+class Solution {
+ public:
   using TreeNode = leetcode::tree::TreeNode;
-  TreeNode* invertTree(TreeNode* root)
-  {
+  TreeNode* invertTree(TreeNode* root) {
     if (!root) return root;
     std::queue<TreeNode*> queue;
     queue.push(root);
@@ -27,8 +26,7 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, invert_binary_tree)
-{
+TEST(Leetcode, invert_binary_tree) {
   Solution s;
   {
     std::vector<std::string> nodes = {"4", "2", "7", "1", "3", "6", "9"};

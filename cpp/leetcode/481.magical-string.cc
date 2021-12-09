@@ -1,14 +1,17 @@
 #include <gtest/gtest.h>
+
 #include <string>
 
 namespace {
-class Solution
-{
-public:
-  int magicalString(int n)
-  {
-    if (n == 0) { return 0; }
-    if (n < 3) { return 1; }
+class Solution {
+ public:
+  int magicalString(int n) {
+    if (n == 0) {
+      return 0;
+    }
+    if (n < 3) {
+      return 1;
+    }
     // i 是group指针，j是字符串尾部指针
     // 外层循环控制分组，内层循环构造当前字符串
     int i = 2, j = 3, ret = 1;
@@ -32,8 +35,7 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, magical_string)
-{
+TEST(Leetcode, magical_string) {
   Solution s;
   EXPECT_EQ(0, s.magicalString(0));
   EXPECT_EQ(3, s.magicalString(6));

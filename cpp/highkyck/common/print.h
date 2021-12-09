@@ -8,31 +8,29 @@
 namespace highkyck {
 namespace common {
 
-template<typename T>
-void print(T t)
-{
+template <typename T>
+void print(T t) {
   std::cout << t;
 }
 
-template<typename Kt, typename Vt>
-void print(std::pair<Kt, Vt> kv)
-{
+template <typename Kt, typename Vt>
+void print(std::pair<Kt, Vt> kv) {
   print(kv.first);
   print(" = ");
   print(kv.second);
 }
 
-template<>
-void print(const std::string& s)
-{
+template <>
+void print(const std::string& s) {
   std::cout << s;
 }
 
-template<typename T, typename AllocT, template<typename, typename...> typename SequenceT>
-void print(SequenceT<T, AllocT> seq)
-{
+template <typename T, typename AllocT,
+          template <typename, typename...> typename SequenceT>
+void print(SequenceT<T, AllocT> seq) {
   print("{ ");
-  for (auto iter = std::begin(seq); iter != std::end(seq); iter = std::next(iter)) {
+  for (auto iter = std::begin(seq); iter != std::end(seq);
+       iter = std::next(iter)) {
     print(*iter);
     print(",");
   }

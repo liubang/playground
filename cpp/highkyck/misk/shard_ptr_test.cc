@@ -1,29 +1,25 @@
+#include "shard_ptr.h"
+
 #include <gtest/gtest.h>
+
 #include <iostream>
 #include <string>
 
-#include "shard_ptr.h"
-
-class Person
-{
-public:
-  Person(const std::string& name, int age)
-    : name_(name)
-    , age_(age)
-  {}
+class Person {
+ public:
+  Person(const std::string& name, int age) : name_(name), age_(age) {}
   ~Person() = default;
 
   const std::string& getName() const { return name_; }
 
   int getAge() const { return age_; }
 
-private:
+ private:
   std::string name_;
   int age_;
 };
 
-TEST(shard_ptr, shard_ptr)
-{
+TEST(shard_ptr, shard_ptr) {
   shard_ptr<Person> p(new Person("test", 20));
 
   EXPECT_EQ("test", p->getName());
