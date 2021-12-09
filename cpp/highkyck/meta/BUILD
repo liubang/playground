@@ -15,14 +15,16 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2021/07/04 00:28
 
+_COPTS = [
+    "-std=gnu++17",
+]
+
 cc_binary(
     name = "factorial",
     srcs = [
         "factorial.cc",
     ],
-    copts = [
-        "-std=gnu++17",
-    ],
+    copts = _COPTS,
 )
 
 cc_binary(
@@ -30,9 +32,7 @@ cc_binary(
     srcs = [
         "forward.cc",
     ],
-    copts = [
-        "-std=gnu++17",
-    ],
+    copts = _COPTS,
 )
 
 cc_binary(
@@ -40,9 +40,7 @@ cc_binary(
     srcs = [
         "forward2.cc",
     ],
-    copts = [
-        "-std=gnu++17",
-    ],
+    copts = _COPTS,
 )
 
 cc_binary(
@@ -51,7 +49,23 @@ cc_binary(
         "deducing_type.h",
         "deducing_type_test.cpp",
     ],
-    copts = [
-        "-std=gnu++17",
+    copts = _COPTS,
+)
+
+cc_binary(
+    name = "is_nothrow_xxxx_constructible",
+    srcs = [
+        "is_nothrow_xxxx_constructible.cc",
     ],
+    copts = _COPTS,
+)
+
+cc_binary(
+    name = "scope_guard_test",
+    srcs = [
+        "scope_guard_test.cpp",
+        "scope_guard.h",
+        "common.h",
+    ],
+    copts = _COPTS,
 )
