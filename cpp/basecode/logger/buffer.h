@@ -1,17 +1,17 @@
 #pragma once
 
-#include <functional>
 #include <sys/types.h>
+
+#include <functional>
 
 namespace basecode {
 namespace logger {
 
-class Buffer
-{
-public:
+class Buffer {
+ public:
   using CookieFunc = std::function<void()>;
 
-public:
+ public:
   Buffer(size_t total = 1024 * 1024 * 10);
 
   ~Buffer();
@@ -30,12 +30,12 @@ public:
 
   void set_cookie(const CookieFunc& cookie);
 
-private:
+ private:
   static void cookie_start();
 
   static void cookie_end();
 
-private:
+ private:
   const size_t total_;
   size_t available_;
   size_t cur_;

@@ -1,11 +1,9 @@
 #include <gtest/gtest.h>
 
 namespace {
-class Solution
-{
-public:
-  uint32_t reverseBits(uint32_t n)
-  {
+class Solution {
+ public:
+  uint32_t reverseBits(uint32_t n) {
     uint32_t ret = n;
     ret = ((ret & 0xffff0000) >> 16) | ((ret & 0x0000ffff) << 16);
     ret = ((ret & 0xff00ff00) >> 8) | ((ret & 0x00ff00ff) << 8);
@@ -17,8 +15,7 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, reverse_bits)
-{
+TEST(Leetcode, reverse_bits) {
   Solution s;
   {
     uint32_t exp = 0b00111001011110000010100101000000;

@@ -1,21 +1,20 @@
 #pragma once
 
-#include <memory>
 #include <stdint.h>
+
+#include <memory>
 #include <string>
 
 namespace basecode {
 namespace logger {
 
-enum class FileWriterType : uint8_t
-{
+enum class FileWriterType : uint8_t {
   MMAP_FILE = 0,
   APPEND_FILE = 1,
 };
 
-class FileWriter
-{
-public:
+class FileWriter {
+ public:
   FileWriter() = default;
 
   virtual ~FileWriter() = default;
@@ -27,11 +26,11 @@ public:
   virtual uint32_t write_bytes() const = 0;
 };
 
-class LogFile
-{
-public:
-  LogFile(const std::string& basename, int32_t roll_size, int32_t flush_interval,
-          int32_t check_interval, FileWriterType file_writer_type);
+class LogFile {
+ public:
+  LogFile(const std::string& basename, int32_t roll_size,
+          int32_t flush_interval, int32_t check_interval,
+          FileWriterType file_writer_type);
 
   ~LogFile() = default;
 
@@ -41,7 +40,7 @@ public:
 
   bool roll_file();
 
-private:
+ private:
   std::string basename_;
   uint32_t roll_size_;
   uint32_t flush_interval_;
@@ -53,7 +52,7 @@ private:
   std::shared_ptr<FileWriter> file_;
   FileWriterType file_writer_type_;
 
-private:
+ private:
   constexpr static int kRollPerSeconds = 60 * 60 * 24;
 };
 

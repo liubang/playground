@@ -1,12 +1,11 @@
 #include <gtest/gtest.h>
+
 #include <vector>
 
 namespace {
-class Solution
-{
-public:
-  bool searchMatrix(const std::vector<std::vector<int>>& matrix, int target)
-  {
+class Solution {
+ public:
+  bool searchMatrix(const std::vector<std::vector<int>>& matrix, int target) {
     int m = matrix.size();
     int n = matrix[0].size();
     for (int i = m - 1, j = 0; (i >= 0) && (j < n);) {
@@ -23,12 +22,14 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, search_a_2d_matrix)
-{
+TEST(Leetcode, search_a_2d_matrix) {
   Solution s;
-  std::vector<std::vector<int>> input = {{1, 3, 5, 7}, {10, 11, 16, 20}, {23, 30, 34, 60}};
+  std::vector<std::vector<int>> input = {
+      {1, 3, 5, 7}, {10, 11, 16, 20}, {23, 30, 34, 60}};
   for (int i = 0; i < input.size(); ++i) {
-    for (int j = 0; j < input[0].size(); ++j) { EXPECT_TRUE(s.searchMatrix(input, input[i][j])); }
+    for (int j = 0; j < input[0].size(); ++j) {
+      EXPECT_TRUE(s.searchMatrix(input, input[i][j]));
+    }
   }
 
   EXPECT_FALSE(s.searchMatrix(input, 2));

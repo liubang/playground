@@ -1,15 +1,16 @@
-#include <climits>
 #include <gtest/gtest.h>
+
+#include <climits>
 #include <vector>
 
 namespace {
-class Solution
-{
-public:
-  void nextPermutation(std::vector<int>& nums)
-  {
+class Solution {
+ public:
+  void nextPermutation(std::vector<int>& nums) {
     int size = nums.size();
-    if (size <= 1) { return; }
+    if (size <= 1) {
+      return;
+    }
     int i = size - 2;
     for (; i >= 0; --i) {
       int idx = -1, max = INT_MAX;
@@ -31,8 +32,7 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, next_permutation)
-{
+TEST(Leetcode, next_permutation) {
   Solution s;
   {
     std::vector<int> inputs = {1, 2, 3};

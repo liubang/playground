@@ -3,8 +3,7 @@
 
 #include "murmurhash2.h"
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
   const char* data = "hello world";
   uint64_t seed = 0;
   highkyck::hash::CMurmurHash64 hasher;

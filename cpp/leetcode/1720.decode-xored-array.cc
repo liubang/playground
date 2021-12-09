@@ -1,12 +1,11 @@
 #include <gtest/gtest.h>
+
 #include <vector>
 
 namespace {
-class Solution
-{
-public:
-  std::vector<int> decode(const std::vector<int>& encoded, int first)
-  {
+class Solution {
+ public:
+  std::vector<int> decode(const std::vector<int>& encoded, int first) {
     std::vector<int> ret;
     ret.push_back(first);
     for (auto num : encoded) {
@@ -18,8 +17,7 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, decode_xored_array)
-{
+TEST(Leetcode, decode_xored_array) {
   Solution s;
   {
     std::vector<int> exp = {4, 2, 0, 7, 4};

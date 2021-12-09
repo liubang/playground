@@ -1,14 +1,13 @@
 #include <gtest/gtest.h>
+
 #include <vector>
 
 namespace {
-class Solution
-{
-public:
-  bool searchMatrix(const std::vector<std::vector<int>>& matrix, int target)
-  {
-    if (matrix.empty() || matrix[0].empty() || target < matrix[0][0]
-        || target > matrix[matrix.size() - 1][matrix[0].size() - 1]) {
+class Solution {
+ public:
+  bool searchMatrix(const std::vector<std::vector<int>>& matrix, int target) {
+    if (matrix.empty() || matrix[0].empty() || target < matrix[0][0] ||
+        target > matrix[matrix.size() - 1][matrix[0].size() - 1]) {
       return false;
     }
     int m = matrix.size();
@@ -28,8 +27,7 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, search_a_2d_matrix_ii)
-{
+TEST(Leetcode, search_a_2d_matrix_ii) {
   Solution s;
   {
     std::vector<std::vector<int>> input = {{1, 4, 7, 11, 15},

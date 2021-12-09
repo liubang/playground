@@ -1,14 +1,13 @@
 #include <gtest/gtest.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
 namespace {
-class Solution
-{
-public:
-  std::string removeKdigits(std::string num, int k)
-  {
+class Solution {
+ public:
+  std::string removeKdigits(std::string num, int k) {
     if (num.length() == k) return "0";
     for (int i = 0; i < k; ++i) {
       int idx = 0;
@@ -22,14 +21,16 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, remove_k_digits)
-{
+TEST(Leetcode, remove_k_digits) {
   Solution s;
   // num -> exp, k = vector.idx + 1
   std::vector<std::pair<std::string, std::string>> cases = {
-    {"1432219", "132219"}, {"1432219", "12219"}, {"1432219", "1219"}, {"1432219", "119"},
-    {"1432219", "11"},     {"1432219", "1"},     {"1432219", "0"},
+      {"1432219", "132219"}, {"1432219", "12219"}, {"1432219", "1219"},
+      {"1432219", "119"},    {"1432219", "11"},    {"1432219", "1"},
+      {"1432219", "0"},
   };
   int i = 1;
-  for (const auto& [num, exp] : cases) { EXPECT_EQ(exp, s.removeKdigits(num, i++)); }
+  for (const auto& [num, exp] : cases) {
+    EXPECT_EQ(exp, s.removeKdigits(num, i++));
+  }
 }

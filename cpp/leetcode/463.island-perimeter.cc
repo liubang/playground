@@ -1,12 +1,11 @@
 #include <gtest/gtest.h>
+
 #include <vector>
 
 namespace {
-class Solution
-{
-public:
-  int islandPerimeter(std::vector<std::vector<int>>& grid)
-  {
+class Solution {
+ public:
+  int islandPerimeter(std::vector<std::vector<int>>& grid) {
     size_t m = grid.size();
     size_t n = grid[0].size();
     int ret = 0;
@@ -29,15 +28,14 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, island_perimeter)
-{
+TEST(Leetcode, island_perimeter) {
   Solution s;
   {
     std::vector<std::vector<int>> grid = {
-      {0, 1, 0, 0},
-      {1, 1, 1, 0},
-      {0, 1, 0, 0},
-      {1, 1, 0, 0},
+        {0, 1, 0, 0},
+        {1, 1, 1, 0},
+        {0, 1, 0, 0},
+        {1, 1, 0, 0},
     };
 
     auto ret = s.islandPerimeter(grid);

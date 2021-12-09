@@ -5,8 +5,7 @@ static int operands[64 * 1024], cells[1024 * 1024], i, pc, l;
 
 // https://zh.wikipedia.org/wiki/Brainfuck
 
-int main(int c, char* v[])
-{
+int main(int c, char* v[]) {
   if (c < 2) exit(1);
   for (FILE* f = fopen(v[1], "r"); f && (c = getc(f)) != EOF; operands[i++] = c)
     ;

@@ -1,14 +1,14 @@
-#include "includes/list.h"
 #include <gtest/gtest.h>
+
 #include <vector>
 
+#include "includes/list.h"
+
 namespace {
-class Solution
-{
-public:
+class Solution {
+ public:
   using ListNode = leetcode::list::ListNode;
-  ListNode* removeElements(ListNode* head, int val)
-  {
+  ListNode* removeElements(ListNode* head, int val) {
     if (!head) return head;
     while (head && head->val == val) {
       ListNode* tmp = head;
@@ -33,8 +33,7 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, remove_linked_list_elements)
-{
+TEST(Leetcode, remove_linked_list_elements) {
   Solution s;
   {
     auto* head = leetcode::list::create({1, 2, 6, 3, 4, 5, 6});

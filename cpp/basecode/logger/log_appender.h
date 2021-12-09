@@ -1,33 +1,32 @@
 #pragma once
 
-#include "basecode/count_down_latch.h"
-#include "basecode/logger/buffer.h"
+#include <unistd.h>
 
 #include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
-#include <unistd.h>
 #include <vector>
+
+#include "basecode/count_down_latch.h"
+#include "basecode/logger/buffer.h"
 
 namespace basecode {
 namespace logger {
 
-class LogAppenderInterface
-{
-public:
+class LogAppenderInterface {
+ public:
   virtual ~LogAppenderInterface() {}
 
   virtual void append(const char* msg, size_t len) = 0;
 
-public:
+ public:
   using Ptr = std::shared_ptr<LogAppenderInterface>;
 };
 
-class AsyncLogAppender : public LogAppenderInterface
-{
-public:
+class AsyncLogAppender : public LogAppenderInterface {
+ public:
   AsyncLogAppender(const std::string& basename);
 
   ~AsyncLogAppender();
@@ -38,10 +37,10 @@ public:
 
   void stop();
 
-private:
+ private:
   void thread_func();
 
-private:
+ private:
   bool started_;
   bool running_;
   time_t persist_period_;

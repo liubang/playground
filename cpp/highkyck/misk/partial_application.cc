@@ -2,41 +2,34 @@
 #include <tuple>
 
 namespace {
-template<typename F, typename... Args>
-class partial_t
-{
-public:
+template <typename F, typename... Args>
+class partial_t {
+ public:
   constexpr partial_t(F&& f, Args&&... args)
-    : f_(std::forward<F>(f))
-    , args_(std::forward_as_tuple(args...))
-  {}
-  template<typename... RestArgs>
-  constexpr decltype(auto) operator()(RestArgs&&... rest_args)
-  {
+      : f_(std::forward<F>(f)), args_(std::forward_as_tuple(args...)) {}
+  template <typename... RestArgs>
+  constexpr decltype(auto) operator()(RestArgs&&... rest_args) {
     return std::apply(
-      f_, std::tuple_cat(args_, std::forward_as_tuple(std::forward<RestArgs>(rest_args)...)));
+        f_, std::tuple_cat(args_, std::forward_as_tuple(
+                                      std::forward<RestArgs>(rest_args)...)));
   }
 
-private:
+ private:
   F f_;
   std::tuple<Args...> args_;
 };
 
-template<typename Fn, typename... Args>
-constexpr decltype(auto) partial(Fn&& fn, Args&&... args)
-{
-  return partial_t<Fn, Args...>(std::forward<Fn>(fn), std::forward<Args>(args)...);
+template <typename Fn, typename... Args>
+constexpr decltype(auto) partial(Fn&& fn, Args&&... args) {
+  return partial_t<Fn, Args...>(std::forward<Fn>(fn),
+                                std::forward<Args>(args)...);
 }
 
 };  // namespace
 
-int test(int x, int y, int z)
-{
-  return x + y + z;
-}
+int test(int x, int y, int z) { return x + y + z; }
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
   auto f = partial(test, 5, 3);
   auto r = f(7);
   std::cout << r << '\n';

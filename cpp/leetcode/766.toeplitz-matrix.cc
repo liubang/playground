@@ -1,12 +1,11 @@
 #include <gtest/gtest.h>
+
 #include <vector>
 
 namespace {
-class Solution
-{
-public:
-  bool isToeplitzMatrix(std::vector<std::vector<int>>& matrix)
-  {
+class Solution {
+ public:
+  bool isToeplitzMatrix(std::vector<std::vector<int>>& matrix) {
     auto m = matrix.size();
     auto n = matrix[0].size();
     for (auto i = 1; i < m; ++i) {
@@ -19,14 +18,13 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, toeplitz_matrix)
-{
+TEST(Leetcode, toeplitz_matrix) {
   Solution s;
   {
     std::vector<std::vector<int>> matrix = {
-      {1, 2, 3, 4},
-      {5, 1, 2, 3},
-      {9, 5, 1, 2},
+        {1, 2, 3, 4},
+        {5, 1, 2, 3},
+        {9, 5, 1, 2},
     };
     auto res = s.isToeplitzMatrix(matrix);
     EXPECT_TRUE(res);
@@ -34,8 +32,8 @@ TEST(Leetcode, toeplitz_matrix)
 
   {
     std::vector<std::vector<int>> matrix = {
-      {1, 2},
-      {2, 2},
+        {1, 2},
+        {2, 2},
     };
     auto res = s.isToeplitzMatrix(matrix);
     EXPECT_FALSE(res);

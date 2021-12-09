@@ -1,17 +1,18 @@
 #include <gtest/gtest.h>
+
 #include <vector>
 
 #include "includes/list.h"
 
 namespace {
-class Solution
-{
-public:
+class Solution {
+ public:
   using ListNode = leetcode::list::ListNode;
 
-  void reorderList(ListNode* head)
-  {
-    if (!head) { return; }
+  void reorderList(ListNode* head) {
+    if (!head) {
+      return;
+    }
     std::vector<ListNode*> vecs;
     ListNode* cur = head;
     while (cur) {
@@ -32,8 +33,7 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, reorder_list)
-{
+TEST(Leetcode, reorder_list) {
   using ListNode = leetcode::list::ListNode;
   Solution s;
 

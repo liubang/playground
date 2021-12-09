@@ -1,37 +1,30 @@
 #include <gtest/gtest.h>
+
 #include <vector>
 
 namespace {
-struct ListNode
-{
+struct ListNode {
   int val;
   ListNode* next;
-  ListNode()
-    : val(0)
-    , next(nullptr)
-  {}
-  ListNode(int x)
-    : val(x)
-    , next(nullptr)
-  {}
-  ListNode(int x, ListNode* next)
-    : val(x)
-    , next(next)
-  {}
+  ListNode() : val(0), next(nullptr) {}
+  ListNode(int x) : val(x), next(nullptr) {}
+  ListNode(int x, ListNode* next) : val(x), next(next) {}
 };
 
-class Solution
-{
-public:
-  ListNode* deleteDuplicates(ListNode* head)
-  {
-    if (head == nullptr) { return head; }
+class Solution {
+ public:
+  ListNode* deleteDuplicates(ListNode* head) {
+    if (head == nullptr) {
+      return head;
+    }
     ListNode* dummy = new ListNode(0, head);
     ListNode* cur = dummy;
     while (cur->next != nullptr && cur->next->next != nullptr) {
       if (cur->next->val == cur->next->next->val) {
         int x = cur->next->val;
-        while (cur->next != nullptr && cur->next->val == x) { cur->next = cur->next->next; }
+        while (cur->next != nullptr && cur->next->val == x) {
+          cur->next = cur->next->next;
+        }
       } else {
         cur = cur->next;
       }
@@ -41,8 +34,7 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, remove_duplicates_from_sorted_list_ii)
-{
+TEST(Leetcode, remove_duplicates_from_sorted_list_ii) {
   Solution s;
   {
     // 1,2,3,3,4,4,5

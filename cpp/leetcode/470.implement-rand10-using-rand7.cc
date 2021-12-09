@@ -1,36 +1,36 @@
 #include <gtest/gtest.h>
-#include <random>
 #include <time.h>
+
+#include <random>
 #include <unordered_map>
 
 namespace {
 
-class Solution
-{
-public:
+class Solution {
+ public:
   Solution() { e_.seed(time(0)); }
 
-  int rand10()
-  {
+  int rand10() {
     int ret = 0;
     for (;;) {
       ret = (rand7() - 1) * 7 + rand7();
-      if (ret <= 40) { break; }
+      if (ret <= 40) {
+        break;
+      }
     }
     return ret % 10 + 1;
   }
 
-private:
+ private:
   int rand7() { return u_(e_); }
 
-private:
+ private:
   std::default_random_engine e_;
   std::uniform_int_distribution<int> u_{1, 7};
 };
 }  // namespace
 
-TEST(Leetcode, implement_rand10_using_rand7)
-{
+TEST(Leetcode, implement_rand10_using_rand7) {
   Solution s;
   EXPECT_GE(s.rand10(), 1);
   EXPECT_LE(s.rand10(), 10);

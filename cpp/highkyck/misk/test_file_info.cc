@@ -1,9 +1,9 @@
-#include <iostream>
-#include <string>
 #include <sys/stat.h>
 
-int main(int argc, char* argv[])
-{
+#include <iostream>
+#include <string>
+
+int main(int argc, char* argv[]) {
   std::string filename = "/tmp/ccFBYHfm.s";
   struct stat result;
   if (stat(filename.c_str(), &result) == 0) {
