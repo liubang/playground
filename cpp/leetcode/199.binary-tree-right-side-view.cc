@@ -1,17 +1,19 @@
-#include "includes/tree.h"
 #include <gtest/gtest.h>
+
 #include <queue>
 #include <vector>
 
+#include "includes/tree.h"
+
 namespace {
-class Solution
-{
-public:
+class Solution {
+ public:
   using TreeNode = leetcode::tree::TreeNode;
 
-  std::vector<int> rightSideView(TreeNode* root)
-  {
-    if (!root) { return {}; }
+  std::vector<int> rightSideView(TreeNode* root) {
+    if (!root) {
+      return {};
+    }
     std::queue<TreeNode*> queue;
     std::vector<int> ret;
     queue.push(root);
@@ -19,10 +21,16 @@ public:
       int size = queue.size();
       for (int i = 0; i < size; ++i) {
         TreeNode* front = queue.front();
-        if (i == size - 1) { ret.push_back(front->val); }
+        if (i == size - 1) {
+          ret.push_back(front->val);
+        }
         queue.pop();
-        if (front->left) { queue.push(front->left); }
-        if (front->right) { queue.push(front->right); }
+        if (front->left) {
+          queue.push(front->left);
+        }
+        if (front->right) {
+          queue.push(front->right);
+        }
       }
     }
     return ret;
@@ -30,8 +38,7 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, binary_tree_right_side_view)
-{
+TEST(Leetcode, binary_tree_right_side_view) {
   using TreeNode = leetcode::tree::TreeNode;
   Solution s;
   {

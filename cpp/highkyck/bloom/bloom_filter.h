@@ -5,15 +5,14 @@
 
 namespace highkyck {
 namespace bloom {
-class BloomFilter final
-{
-public:
+class BloomFilter final {
+ public:
   static constexpr uint32_t MAGIC_CODE = 0x424c4f4d;
   static constexpr uint32_t DEFAULT_VERSION = 0;
   static constexpr uint32_t DEFAULT_HASHCOUNT = 4;
   static constexpr uint64_t DEFAULT_BIT_COUNT = 16 * 1024 * 1024 * 8;
 
-public:
+ public:
   explicit BloomFilter(const uint64_t bit_cout);
   ~BloomFilter() = default;
   BloomFilter(const BloomFilter&) = delete;
@@ -33,8 +32,7 @@ public:
 
   uint64_t get_checksum() const { return header_.checksum; }
 
-  uint64_t get_memory_size() const
-  {
+  uint64_t get_memory_size() const {
     // 1 byte equals to 8 bits
     return sizeof(BloomFilter) + (get_bit_count() >> 3);
   }
@@ -45,23 +43,21 @@ public:
   // add a member to bloomfilter
   void insert(const void* const data, uint64_t length);
 
-private:
-  bool get_bit(const uint64_t bit_index) const
-  {
+ private:
+  bool get_bit(const uint64_t bit_index) const {
     assert(bits_ != nullptr && bit_index < header_.bit_count);
-    return (bits_.get()[bit_index >> 3] & static_cast<uint8_t>(1 << (bit_index & 0x7))) != 0;
+    return (bits_.get()[bit_index >> 3] &
+            static_cast<uint8_t>(1 << (bit_index & 0x7))) != 0;
   }
 
-  void set_bit(const uint64_t bit_index)
-  {
+  void set_bit(const uint64_t bit_index) {
     assert(bits_ != nullptr && bit_index < header_.bit_count);
     bits_.get()[bit_index >> 3] |= static_cast<uint8_t>(1 << (bit_index & 0x7));
   }
 
-private:
+ private:
 #pragma pack(push, 1)
-  struct Header
-  {
+  struct Header {
     uint32_t magic_code;
     uint32_t version;
     uint32_t hash_count;
@@ -69,13 +65,22 @@ private:
     uint64_t member_count;
     uint64_t checksum;
 
-    bool is_valid()
-    {
-      if (magic_code != MAGIC_CODE) { return false; }
-      if (version != DEFAULT_VERSION) { return false; }
-      if (hash_count != DEFAULT_HASHCOUNT) { return false; }
-      if ((bit_count & 0x7) != 0) { return false; }
-      if (bit_count == 0 || (bit_count & (bit_count - 1)) != 0) { return false; }
+    bool is_valid() {
+      if (magic_code != MAGIC_CODE) {
+        return false;
+      }
+      if (version != DEFAULT_VERSION) {
+        return false;
+      }
+      if (hash_count != DEFAULT_HASHCOUNT) {
+        return false;
+      }
+      if ((bit_count & 0x7) != 0) {
+        return false;
+      }
+      if (bit_count == 0 || (bit_count & (bit_count - 1)) != 0) {
+        return false;
+      }
       return true;
     }
   };

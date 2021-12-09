@@ -1,16 +1,15 @@
-#include "object_pool.h"
 #include <iostream>
 
+#include "object_pool.h"
+
 namespace {
-struct TestObj
-{
+struct TestObj {
   std::string name;
   int32_t age;
 };
 };  // namespace
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
   auto& pool = highkyck::pool::object_pool<TestObj, 10>::get_instance();
 
   {

@@ -1,15 +1,16 @@
-#include "includes/list.h"
 #include <gtest/gtest.h>
+
+#include "includes/list.h"
 
 namespace {
 
-class Solution
-{
-public:
+class Solution {
+ public:
   using ListNode = leetcode::list::ListNode;
-  ListNode* deleteDuplicates(ListNode* head)
-  {
-    if (!head || !head->next) { return head; }
+  ListNode* deleteDuplicates(ListNode* head) {
+    if (!head || !head->next) {
+      return head;
+    }
     ListNode* cur = head;
     while (cur) {
       while (cur->next && cur->val == cur->next->val) {
@@ -24,8 +25,7 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, remove_duplicates_form_sorted_list)
-{
+TEST(Leetcode, remove_duplicates_form_sorted_list) {
   using ListNode = leetcode::list::ListNode;
   Solution s;
   {

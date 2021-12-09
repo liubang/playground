@@ -1,22 +1,21 @@
 #include <gtest/gtest.h>
+
 #include <string>
 #include <vector>
 
 namespace {
-class Solution
-{
-public:
-  std::vector<std::string> generateParenthesis(int n)
-  {
+class Solution {
+ public:
+  std::vector<std::string> generateParenthesis(int n) {
     std::vector<std::string> ret;
     std::string str;
     gen(ret, str, 0, 0, n);
     return ret;
   }
 
-private:
-  void gen(std::vector<std::string>& ret, std::string& str, int open, int close, int n)
-  {
+ private:
+  void gen(std::vector<std::string>& ret, std::string& str, int open, int close,
+           int n) {
     if (str.length() == n * 2) {
       ret.push_back(str);
       return;
@@ -35,12 +34,11 @@ private:
 };
 }  // namespace
 
-TEST(Leetcode, generate_parentheses)
-{
+TEST(Leetcode, generate_parentheses) {
   Solution s;
   {
     std::vector<std::string> exps = {
-      "((()))", "(()())", "(())()", "()(())", "()()()",
+        "((()))", "(()())", "(())()", "()(())", "()()()",
     };
     EXPECT_EQ(exps, s.generateParenthesis(3));
   }

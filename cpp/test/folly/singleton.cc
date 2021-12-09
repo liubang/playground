@@ -1,26 +1,25 @@
 #include "singleton.h"
+
 #include <folly/Singleton.h>
 #include <folly/init/Init.h>
+
 #include <iostream>
 #include <string>
 
 namespace {
-struct PrivateTag
-{};
+struct PrivateTag {};
 }  // namespace
 
 namespace foo {
-static folly::Singleton<Foo, PrivateTag> foo_instance([]() { return new Foo("liubang", 25); });
+static folly::Singleton<Foo, PrivateTag> foo_instance([]() {
+  return new Foo("liubang", 25);
+});
 
-std::shared_ptr<Foo> Foo::getInstance()
-{
-  return foo_instance.try_get();
-}
+std::shared_ptr<Foo> Foo::getInstance() { return foo_instance.try_get(); }
 
 }  // namespace foo
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
   folly::init(&argc, &argv);
 
   auto f1 = foo::Foo::getInstance();
