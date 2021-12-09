@@ -1,15 +1,17 @@
-#include "includes/list.h"
 #include <gtest/gtest.h>
+
 #include <stack>
 
+#include "includes/list.h"
+
 namespace {
-class Solution
-{
-public:
+class Solution {
+ public:
   using ListNode = leetcode::list::ListNode;
-  bool isPalindrome(ListNode* head)
-  {
-    if (!head || !head->next) { return true; }
+  bool isPalindrome(ListNode* head) {
+    if (!head || !head->next) {
+      return true;
+    }
     ListNode* slow = head;
     ListNode* fast = head;
     std::stack<ListNode*> stack;
@@ -18,7 +20,9 @@ public:
       slow = slow->next;
       fast = fast->next->next;
     }
-    if (fast) { slow = slow->next; }
+    if (fast) {
+      slow = slow->next;
+    }
     while (slow) {
       if (stack.top()->val != slow->val) {
         return false;
@@ -32,8 +36,7 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, palindrome_linked_list)
-{
+TEST(Leetcode, palindrome_linked_list) {
   using ListNode = leetcode::list::ListNode;
   Solution s;
   {

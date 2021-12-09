@@ -1,14 +1,14 @@
-#include "includes/list.h"
 #include <gtest/gtest.h>
+
 #include <vector>
 
+#include "includes/list.h"
+
 namespace {
-class Solution
-{
-public:
+class Solution {
+ public:
   using ListNode = leetcode::list::ListNode;
-  ListNode* removeNthFromEnd(ListNode* head, int n)
-  {
+  ListNode* removeNthFromEnd(ListNode* head, int n) {
     std::vector<ListNode*> lists;
     ListNode* cur = head;
     while (cur) {
@@ -30,8 +30,7 @@ public:
 };
 }  // namespace
 
-TEST(Leetcode, remove_nth_node_from_end_of_list)
-{
+TEST(Leetcode, remove_nth_node_from_end_of_list) {
   Solution s;
 
   {

@@ -1,9 +1,8 @@
-#include "scope_guard.h"
+#include "highkyck/meta/scope_guard.h"
+
 #include <iostream>
 
-int main(int argc, char* argv[])
-{
-
+int main(int argc, char* argv[]) {
   {
     std::cout << "first scope begin" << std::endl;
     SCOPE_EXIT { std::cout << "first scope exit" << std::endl; };
