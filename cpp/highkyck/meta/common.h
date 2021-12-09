@@ -1,0 +1,6 @@
+#pragma once
+
+#define HK_CONCATENATE_IMPL(s1, s2) s1##s2
+#define HK_CONCATENATE(s1, s2)      HK_CONCATENATE_IMPL(s1, s2)
+#define HK_ANONYMOUS_VARIABLE(name) \
+ HK_CONCATENATE(HK_CONCATENATE(HK_CONCATENATE(name, __COUNTER__), _), __LINE__)
