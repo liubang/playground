@@ -20,9 +20,10 @@ _COPTS = [
 ]
 
 cc_binary(
-    name = "factorial",
+    name = "factorial_test",
     srcs = [
-        "factorial.cc",
+        "factorial.h",
+        "factorial_test.cc",
     ],
     copts = _COPTS,
 )
@@ -89,9 +90,9 @@ cc_binary(
 )
 
 cc_binary(
-    name = "common_type",
+    name = "common_test",
     srcs = [
-        "common_type.cpp",
+        "common_test.cpp",
         "common.h",
     ],
     copts = _COPTS,
@@ -102,6 +103,24 @@ cc_binary(
     srcs = [
         "enable_if.h",
         "enable_if_test.cpp",
+    ],
+    copts = _COPTS,
+)
+
+cc_binary(
+    name = "fibonacci_test",
+    srcs = [
+        "fibonacci.h",
+        "fibonacci_test.cpp",
+    ],
+    copts = _COPTS,
+)
+
+cc_binary(
+    name = "compute_type_test",
+    srcs = [
+        "compute_type.h",
+        "compute_type_test.cpp",
     ],
     copts = _COPTS,
 )

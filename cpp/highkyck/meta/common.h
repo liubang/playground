@@ -34,5 +34,37 @@ std::string type_name() {
   return r;
 }
 
+template <typename... Ts>
+struct TypeList {
+  using type = TypeList<Ts...>;
+  constexpr static std::size_t size = sizeof...(Ts);
+
+  // TypeList<int, char>::append<long, std::string>
+  template <typename... T>
+  using append = TypeList<Ts..., T...>;
+
+  // TypeList<int, char>::export_to<std::tuple> => std::tuple<itn, char>;
+  template <template <typename...> typename T>
+  using export_to = T<Ts...>;
+};
+
+template <typename T, T v>
+struct integral_constant {
+  constexpr static T value = v;
+};
+
+using true_type = integral_constant<bool, true>;
+using false_type = integral_constant<bool, false>;
+
+using BoolSet = TypeList<true_type, false_type>;
+
+template <typename IN, template <typename> class F>
+struct Map;
+
+template <template <typename> class F, typename... Ts>
+struct Map<TypeList<Ts...>, F> {
+  using type = TypeList<typename F<Ts>::type...>;
+};
+
 }  // namespace detail
 }  // namespace highkyck
