@@ -4,9 +4,8 @@
 #include <mutex>
 
 namespace basecode {
-class CountDownLatch
-{
-public:
+class CountDownLatch {
+ public:
   CountDownLatch(uint32_t count);
 
   void await(uint64_t nanosecs = 0);
@@ -15,14 +14,14 @@ public:
 
   uint32_t get_count();
 
-private:
+ private:
   CountDownLatch() = delete;
 
   CountDownLatch(const CountDownLatch& other) = delete;
 
   CountDownLatch& operator=(const CountDownLatch& other) = delete;
 
-private:
+ private:
   uint32_t count_;
   std::mutex mutex_;
   std::condition_variable cv_;
