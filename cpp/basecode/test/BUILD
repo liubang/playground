@@ -14,3 +14,17 @@ cc_test(
         "@gtest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "test_crc64",
+    srcs = [
+        "test_crc64.cpp",
+    ],
+    copts = [
+        "-std=c++17",
+    ],
+    deps = [
+        "//basecode",
+        "@gtest//:gtest_main",
+    ],
+)
