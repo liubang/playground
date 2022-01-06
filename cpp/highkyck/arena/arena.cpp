@@ -2,8 +2,8 @@
 
 namespace highkyck {
 
-constexpr int kBlockSize = 4096;
-constexpr int kPointerSize = 8;
+constexpr int BLOCK_SIZE = 4096;
+constexpr int POINTER_SIZE = 8;
 
 Arena::Arena()
     : alloc_ptr_(nullptr), alloc_bytes_remaining_(0), memory_usage_(0) {}
@@ -16,7 +16,7 @@ Arena::~Arena() {
 
 char* Arena::allocate_aligned(std::size_t bytes) {
   constexpr int align =
-      (sizeof(void*) > kPointerSize) ? sizeof(void*) : kPointerSize;
+      (sizeof(void*) > POINTER_SIZE) ? sizeof(void*) : POINTER_SIZE;
   static_assert((align & (align - 1)) == 0,
                 "Pointer size should be power of 2");
 
@@ -37,13 +37,13 @@ char* Arena::allocate_aligned(std::size_t bytes) {
 }
 
 char* Arena::allocate_fallback(std::size_t bytes) {
-  if (bytes > kBlockSize / 4) {
+  if (bytes > BLOCK_SIZE / 4) {
     char* result = allocate_new_block(bytes);
     return result;
   }
 
-  alloc_ptr_ = allocate_new_block(kBlockSize);
-  alloc_bytes_remaining_ = kBlockSize;
+  alloc_ptr_ = allocate_new_block(BLOCK_SIZE);
+  alloc_bytes_remaining_ = BLOCK_SIZE;
 
   char* result = alloc_ptr_;
   alloc_ptr_ += bytes;
