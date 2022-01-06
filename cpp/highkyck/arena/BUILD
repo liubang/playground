@@ -9,6 +9,7 @@ cc_library(
     copts = [
         "-std=c++17",
     ],
+    visibility = ["//visibility:public"],
 )
 
 cc_test(
