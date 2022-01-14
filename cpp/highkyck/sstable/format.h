@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 
+#include "iterator.h"
 #include "slice.h"
 
 namespace highkyck {
@@ -12,6 +13,31 @@ struct BlockContent {
   Slice data;           // actual contents of data
   bool cacheable;       // true iff data can be cached
   bool heap_allocated;  // true iff caller should delete[] data.data()
+};
+
+class Comparator;
+
+class Block {
+ public:
+  explicit Block(const BlockContent& contents);
+  ~Block();
+
+  Block(const Block&) = delete;
+  Block& operator=(const Block&) = delete;
+
+  std::size_t size() const { return size_; }
+  Iterator* new_iterator(const Comparator* comparator);
+
+ private:
+  uint32_t num_restarts() const;
+
+ private:
+  class Iter;
+
+  const char* data_;
+  std::size_t size_;
+  uint32_t restart_offset_;
+  bool owned_;  // true iff Block owned data[]
 };
 
 class BlockHandle {
@@ -45,7 +71,7 @@ class Footer {
   void set_metaindex_handle(const BlockHandle& h) { metaindex_handle_ = h; }
   void set_index_handle(const BlockHandle& h) { index_handle_ = h; }
 
-  void encode_to(std::string& dst) const;
+  void encode_to(std::string* dst) const;
   int decode_from(Slice* input);
 
   enum { ENCODED_LENGTH = 2 * BlockHandle::MAX_ENCODE_LENGTH + 8 };
