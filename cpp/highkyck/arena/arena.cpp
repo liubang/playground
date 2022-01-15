@@ -1,4 +1,5 @@
 #include "arena.h"
+#include <cassert>
 
 namespace highkyck {
 
