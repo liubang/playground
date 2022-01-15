@@ -2,8 +2,6 @@
 
 namespace router;
 
-use FFI\Exception;
-
 class Dispatcher
 {
 
@@ -56,12 +54,12 @@ class Dispatcher
         }
 
         if (is_null($routerRule)) {
-            throw new Exception("404 Not Found.");
+            throw new \Exception("404 Not Found.");
         }
 
         $clazz = $routerRule->getClass();
         if (!class_exists($clazz)) {
-            throw new Exception("{$clazz} not exists.");
+            throw new \Exception("{$clazz} not exists.");
         }
         $class = new $clazz();
         return $routerRule;
