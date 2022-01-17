@@ -15,6 +15,21 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2022/01/17 00:02
 
+cc_test(
+    name = "lexer_test",
+    srcs = [
+        "lexer.cpp",
+        "lexer.h",
+        "ut/lexer_test.cpp",
+    ],
+    copts = [
+        "-std=c++17",
+    ],
+    deps = [
+        "@gtest//:gtest_main",
+    ],
+)
+
 cc_binary(
     name = "bfcc",
     srcs = [
