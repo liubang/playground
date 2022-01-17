@@ -6,7 +6,7 @@
 namespace highkyck {
 namespace bfcc {
 
-enum class TokenKind {
+enum class TokenType {
   Add,
   Sub,
   Mul,
@@ -17,15 +17,15 @@ enum class TokenKind {
 
 class Token {
  public:
-  Token(TokenKind kind, int value, const std::string_view& content)
-      : kind_(kind), value_(value), content_(content) {}
+  Token(TokenType type, int value, const std::string_view& content)
+      : type_(type), value_(value), content_(content) {}
 
-  TokenKind Kind() const { return kind_; }
+  TokenType Type() const { return type_; }
   int Value() const { return value_; }
   const std::string_view& Content() const { return content_; }
 
  private:
-  TokenKind kind_;
+  TokenType type_;
   int value_;
   std::string_view content_;
 };
