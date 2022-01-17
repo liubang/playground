@@ -22,30 +22,30 @@ void Lexer::GetNextToken() {
   while (::isspace(cur_char_)) {
     GetNextChar();
   }
-  TokenKind kind;
+  TokenType kind;
   int value = 0;
   int start_pos = cursor_ - 1;
   if (cur_char_ == '\0') {
-    kind = TokenKind::Eof;
+    kind = TokenType::Eof;
     GetNextChar();
   } else if (cur_char_ == '+') {
-    kind = TokenKind::Add;
+    kind = TokenType::Add;
     GetNextChar();
   } else if (cur_char_ == '-') {
-    kind = TokenKind::Sub;
+    kind = TokenType::Sub;
     GetNextChar();
   } else if (cur_char_ == '*') {
-    kind = TokenKind::Mul;
+    kind = TokenType::Mul;
     GetNextChar();
   } else if (cur_char_ == '/') {
-    kind = TokenKind::Div;
+    kind = TokenType::Div;
     GetNextChar();
   } else if (::isdigit(cur_char_)) {
     do {
       value = value * 10 + cur_char_ - '0';
       GetNextChar();
     } while (::isdigit(cur_char_));
-    kind = TokenKind::Num;
+    kind = TokenType::Num;
   } else {
     ::printf("not supported %c\n", cur_char_);
   }
