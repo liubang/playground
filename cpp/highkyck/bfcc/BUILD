@@ -39,5 +39,7 @@ cc_binary(
     ],
     copts = [
         "-std=c++17",
+        "-fsanitize=address",
+        "-fno-omit-frame-pointer",
     ],
 )
