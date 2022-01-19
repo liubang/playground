@@ -5,6 +5,16 @@
 #include <cstdlib>
 #include <cstring>
 
+namespace {
+
+constexpr char BFCC_CHAR_EOF = '\0';
+constexpr char BFCC_CHAR_ADD = '+';
+constexpr char BFCC_CHAR_SUB = '-';
+constexpr char BFCC_CHAR_MUL = '*';
+constexpr char BFCC_CHAR_DIV = '/';
+
+}  // namespace
+
 namespace highkyck {
 namespace bfcc {
 
@@ -25,19 +35,19 @@ void Lexer::GetNextToken() {
   TokenType kind;
   int value = 0;
   int start_pos = cursor_ - 1;
-  if (cur_char_ == '\0') {
+  if (cur_char_ == BFCC_CHAR_EOF) {
     kind = TokenType::Eof;
     GetNextChar();
-  } else if (cur_char_ == '+') {
+  } else if (cur_char_ == BFCC_CHAR_ADD) {
     kind = TokenType::Add;
     GetNextChar();
-  } else if (cur_char_ == '-') {
+  } else if (cur_char_ == BFCC_CHAR_SUB) {
     kind = TokenType::Sub;
     GetNextChar();
-  } else if (cur_char_ == '*') {
+  } else if (cur_char_ == BFCC_CHAR_MUL) {
     kind = TokenType::Mul;
     GetNextChar();
-  } else if (cur_char_ == '/') {
+  } else if (cur_char_ == BFCC_CHAR_DIV) {
     kind = TokenType::Div;
     GetNextChar();
   } else if (::isdigit(cur_char_)) {
