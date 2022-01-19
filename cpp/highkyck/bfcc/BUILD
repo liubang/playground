@@ -25,4 +25,7 @@ cc_binary(
         "-fsanitize=address",
         "-fno-omit-frame-pointer",
     ],
+    linkopts = [
+        "-fsanitize=address",
+    ],
 )
