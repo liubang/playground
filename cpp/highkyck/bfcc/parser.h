@@ -11,7 +11,7 @@ namespace bfcc {
 class Parser {
  public:
   Parser(std::shared_ptr<Lexer> lexer_ptr) : lexer_ptr_(lexer_ptr) {}
-  std::shared_ptr<AstNode> Parse();
+  std::shared_ptr<ProgramNode> Parse();
 
  private:
   std::shared_ptr<AstNode> ParseExpr();
