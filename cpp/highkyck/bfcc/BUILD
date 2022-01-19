@@ -19,6 +19,12 @@ cc_binary(
         "bfcc.cpp",
         "lexer.h",
         "lexer.cpp",
+        "parser.h",
+        "parser.cpp",
+        "ast_node.h",
+        "ast_node.cpp",
+        "print_visitor.h",
+        "print_visitor.cpp",
     ],
     copts = [
         "-std=c++17",
