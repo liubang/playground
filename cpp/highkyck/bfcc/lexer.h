@@ -34,8 +34,10 @@ class Lexer {
  public:
   Lexer(const char* code) : source_code_(code) {}
   void GetNextToken();
-  void GetNextChar();
   std::shared_ptr<Token> CurrentToken() const { return cur_token_; }
+
+ private:
+  void GetNextChar();
 
  private:
   std::string_view source_code_;
