@@ -6,10 +6,6 @@ external_dependencies()
 
 load("@rules_foreign_cc//:workspace_definitions.bzl", "rules_foreign_cc_dependencies")
 
-rules_foreign_cc_dependencies([
-    "//:built_cmake_toolchain",
-    "//:built_ninja_toolchain_osx",
-    "//:built_ninja_toolchain_linux",
-])
+rules_foreign_cc_dependencies()
 
 external_repositories()
