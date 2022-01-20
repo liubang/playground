@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cassert>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -20,23 +21,53 @@ class CliTable {
     lines_.resize(1);
   }
 
-  CliTable Add(const std::string& cell) {
+  CliTable& Add(const std::string& cell) {
     Line& line = lines_.back();
-    assert(line.size() < cell_size_);
+    assert(line.size() <= cell_size_);
     line.push_back(cell);
-    if (cell.length() > cell_maxlens_[lines_.size() - 1]) {
-      cell_maxlens_[lines_.size() - 1] = cell.size();
+    if (cell.length() > cell_maxlens_[line.size() - 1]) {
+      cell_maxlens_[line.size() - 1] = cell.size();
     }
     return *this;
   }
 
   // add new line
-  CliTable Next() {
+  CliTable& Next() {
     lines_.push_back({});
     return *this;
   }
 
-  void Print() { ::fprintf(stderr, ""); }
+  void Print() {
+    for (std::size_t i = 0; i < lines_.size(); ++i) {
+      for (std::size_t j = 0; j < cell_maxlens_.size(); ++j) {
+        if (j == 0) ::fprintf(stdout, "+");
+        for (std::size_t n = 0; n < cell_maxlens_[j]; ++n) {
+          ::fprintf(stdout, "-");
+        }
+        ::fprintf(stdout, "+");
+      }
+      ::fprintf(stdout, "\n");
+      for (std::size_t j = 0; j < lines_[i].size(); ++j) {
+        ::fprintf(stdout, "|");
+        ::fprintf(stdout, lines_[i][j].data());
+        if (lines_[i][j].size() < cell_maxlens_[j]) {
+          for (auto n = 0; n < cell_maxlens_[j] - lines_[i][j].size(); ++n) {
+            ::fprintf(stdout, " ");
+          }
+        }
+      }
+      ::fprintf(stdout, "|\n");
+    }
+    for (std::size_t j = 0; j < cell_maxlens_.size(); ++j) {
+      if (j == 0) ::fprintf(stdout, "+");
+      for (std::size_t n = 0; n < cell_maxlens_[j]; ++n) {
+        ::fprintf(stdout, "-");
+      }
+      ::fprintf(stdout, "+");
+    }
+    ::fprintf(stdout, "\n");
+    Reset(0);
+  }
 
  private:
   using Line = std::vector<std::string>;
