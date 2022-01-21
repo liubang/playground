@@ -8,6 +8,49 @@
 namespace highkyck {
 namespace common {
 
+enum class Style {
+  None,
+  Bold,
+};
+
+enum class Color {
+  None,
+  Red,
+  Yellow,
+};
+
+class Cell {
+ public:
+  explicit Cell(const std::string& data)
+      : data_(data), style_(Style::None), color_(Color::None) {}
+
+  Cell(const std::string& data, Style style, Color Color)
+      : data_(data), style_(style), color_(Color) {}
+
+  const std::string& Data() const { return data_; }
+
+ private:
+  const std::string data_;
+  Style style_;
+  Color color_;
+};
+
+class Row {
+ public:
+  Row() = default;
+  ~Row() = default;
+
+  Row& AddCell(std::shared_ptr<Cell> cell) {
+    cells_.push_back(cell);
+    return *this;
+  }
+
+  const std::vector<std::shared_ptr<Cell>>& Cells() const { return cells_; }
+
+ private:
+  std::vector<std::shared_ptr<Cell>> cells_;
+};
+
 class CliTable {
  public:
   CliTable() {}
@@ -21,7 +64,7 @@ class CliTable {
     rows_.resize(1);
   }
 
-  CliTable& Add(const std::string& cell) {
+  CliTable& Cell(const std::string& cell) {
     Row& row = rows_.back();
     assert(row.size() <= cell_size_);
     row.push_back(cell);
@@ -52,7 +95,7 @@ class CliTable {
   void PrintRow(const Row& row) {
     for (std::size_t i = 0; i < row.size(); ++i) {
       ::fprintf(stdout, "| ");
-      ::fprintf(stdout, "%s ", row[i].data());
+      ::fprintf(stdout, "\033[1m%s ", row[i].data());
       if ((row[i].size() + 2) < cell_maxlens_[i]) {
         for (auto n = 0; n < cell_maxlens_[i] - row[i].size() - 2; ++n) {
           ::fprintf(stdout, " ");
