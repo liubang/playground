@@ -15,17 +15,10 @@ cc_test(
 
 cc_binary(
     name = "bfcc",
-    srcs = [
-        "bfcc.cpp",
-        "lexer.h",
-        "lexer.cpp",
-        "parser.h",
-        "parser.cpp",
-        "ast_node.h",
-        "ast_node.cpp",
-        "print_visitor.h",
-        "print_visitor.cpp",
-    ],
+    srcs = glob([
+        "*.cpp",
+        "*.h",
+    ]),
     copts = [
         "-std=c++17",
         "-fsanitize=address",

@@ -61,6 +61,7 @@ class ConstantNode : public AstNode {
 
 class AstVisitor {
  public:
+  virtual ~AstVisitor() {}
   virtual void VisitorProgram(ProgramNode* node) = 0;
   virtual void VisitorBinaryNode(BinaryNode* node) = 0;
   virtual void VisitorConstantNode(ConstantNode* node) = 0;
