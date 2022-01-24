@@ -1,5 +1,6 @@
 #include "lexer.h"
 
+#include <cassert>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -23,6 +24,7 @@ void Lexer::GetNextChar() {
     cur_char_ = '\0';
     cursor_++;
   } else {
+    assert(cursor_ < source_code_.size());
     cur_char_ = source_code_[cursor_++];
   }
 }
@@ -37,7 +39,6 @@ void Lexer::GetNextToken() {
   int start_pos = cursor_ - 1;
   if (cur_char_ == BFCC_CHAR_EOF) {
     kind = TokenType::Eof;
-    GetNextChar();
   } else if (cur_char_ == BFCC_CHAR_ADD) {
     kind = TokenType::Add;
     GetNextChar();
