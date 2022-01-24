@@ -6,14 +6,14 @@
 namespace highkyck {
 namespace bfcc {
 
-void PrintVisitor::VisitorProgram(std::shared_ptr<ProgramNode> node) {
-  node->Lhs()->Accept(shared_from_this());
+void PrintVisitor::VisitorProgram(ProgramNode* node) {
+  node->Lhs()->Accept(this);
   printf("\n");
 }
 
-void PrintVisitor::VisitorBinaryNode(std::shared_ptr<BinaryNode> node) {
-  node->Rhs()->Accept(shared_from_this());
-  node->Lhs()->Accept(shared_from_this());
+void PrintVisitor::VisitorBinaryNode(BinaryNode* node) {
+  node->Rhs()->Accept(this);
+  node->Lhs()->Accept(this);
   switch (node->Op()) {
     case BinaryOperator::Add:
       printf(" + ");
@@ -32,7 +32,7 @@ void PrintVisitor::VisitorBinaryNode(std::shared_ptr<BinaryNode> node) {
   }
 }
 
-void PrintVisitor::VisitorConstantNode(std::shared_ptr<ConstantNode> node) {
+void PrintVisitor::VisitorConstantNode(ConstantNode* node) {
   printf(" %d ", node->Value());
 }
 
