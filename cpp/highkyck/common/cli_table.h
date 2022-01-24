@@ -8,49 +8,6 @@
 namespace highkyck {
 namespace common {
 
-enum class Style {
-  None,
-  Bold,
-};
-
-enum class Color {
-  None,
-  Red,
-  Yellow,
-};
-
-class Cell {
- public:
-  explicit Cell(const std::string& data)
-      : data_(data), style_(Style::None), color_(Color::None) {}
-
-  Cell(const std::string& data, Style style, Color Color)
-      : data_(data), style_(style), color_(Color) {}
-
-  const std::string& Data() const { return data_; }
-
- private:
-  const std::string data_;
-  Style style_;
-  Color color_;
-};
-
-class Row {
- public:
-  Row() = default;
-  ~Row() = default;
-
-  Row& AddCell(std::shared_ptr<Cell> cell) {
-    cells_.push_back(cell);
-    return *this;
-  }
-
-  const std::vector<std::shared_ptr<Cell>>& Cells() const { return cells_; }
-
- private:
-  std::vector<std::shared_ptr<Cell>> cells_;
-};
-
 class CliTable {
  public:
   CliTable() {}
@@ -68,14 +25,14 @@ class CliTable {
     Row& row = rows_.back();
     assert(row.size() <= cell_size_);
     row.push_back(cell);
-    if ((cell.size() + 2) > cell_maxlens_[row.size() - 1]) {
-      cell_maxlens_[row.size() - 1] = cell.size() + 2;
+    if ((cell.length() + 2) > cell_maxlens_[row.size() - 1]) {
+      cell_maxlens_[row.size() - 1] = cell.length() + 2;
     }
     return *this;
   }
 
   // add new line
-  CliTable& Next() {
+  CliTable& NewRow() {
     rows_.push_back({});
     return *this;
   }
@@ -94,26 +51,21 @@ class CliTable {
 
   void PrintRow(const Row& row) {
     for (std::size_t i = 0; i < row.size(); ++i) {
-      ::fprintf(stdout, "| ");
-      ::fprintf(stdout, "\033[1m%s ", row[i].data());
-      if ((row[i].size() + 2) < cell_maxlens_[i]) {
-        for (auto n = 0; n < cell_maxlens_[i] - row[i].size() - 2; ++n) {
-          ::fprintf(stdout, " ");
-        }
+      fprintf(stdout, "| %s ", row[i].data());
+      if ((row[i].length() + 2) < cell_maxlens_[i]) {
+        const std::string data(cell_maxlens_[i] - row[i].length() - 2, ' ');
+        fprintf(stdout, "%s", data.data());
       }
     }
-    ::fprintf(stdout, "|\n");
+    fprintf(stdout, "|\n");
   }
 
   void PrintLine() {
     for (std::size_t i = 0; i < cell_maxlens_.size(); ++i) {
-      if (i == 0) ::fprintf(stdout, "+");
-      for (std::size_t n = 0; n < cell_maxlens_[i]; ++n) {
-        ::fprintf(stdout, "-");
-      }
-      ::fprintf(stdout, "+");
+      const std::string data(cell_maxlens_[i], '-');
+      fprintf(stdout, "+%s", data.data());
     }
-    ::fprintf(stdout, "\n");
+    fprintf(stdout, "+\n");
   }
 
  private:
