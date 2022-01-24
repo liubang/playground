@@ -8,6 +8,8 @@ namespace bfcc {
 class PrintVisitor : public AstVisitor {
  public:
   void VisitorProgram(ProgramNode* node) override;
+
+ private:
   void VisitorBinaryNode(BinaryNode* node) override;
   void VisitorConstantNode(ConstantNode* node) override;
 };
