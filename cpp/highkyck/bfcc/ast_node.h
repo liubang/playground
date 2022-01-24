@@ -10,19 +10,21 @@ class AstVisitor;
 class AstNode {
  public:
   virtual ~AstNode() {}
-  virtual void Accept(std::shared_ptr<AstVisitor> visitor) = 0;
+  virtual void Accept(AstVisitor* visitor) = 0;
 };
 
-class ProgramNode : public AstNode, std::enable_shared_from_this<ProgramNode> {
+// 表达式
+class ProgramNode : public AstNode {
  public:
   ProgramNode(std::shared_ptr<AstNode> lhs) : lhs_(lhs) {}
-  void Accept(std::shared_ptr<AstVisitor> visitor) override;
+  void Accept(AstVisitor* visitor) override;
   std::shared_ptr<AstNode> Lhs() const { return lhs_; }
 
  private:
   std::shared_ptr<AstNode> lhs_;
 };
 
+// 二元操作
 enum class BinaryOperator {
   Add,
   Sub,
@@ -30,13 +32,12 @@ enum class BinaryOperator {
   Div,
 };
 
-class BinaryNode : public AstNode,
-                   public std::enable_shared_from_this<BinaryNode> {
+class BinaryNode : public AstNode {
  public:
   BinaryNode(BinaryOperator op, std::shared_ptr<AstNode> lhs,
              std::shared_ptr<AstNode> rhs)
       : op_(op), lhs_(lhs), rhs_(rhs) {}
-  void Accept(std::shared_ptr<AstVisitor> visitor) override;
+  void Accept(AstVisitor* visitor) override;
   std::shared_ptr<AstNode> Lhs() const { return lhs_; }
   std::shared_ptr<AstNode> Rhs() const { return rhs_; }
   BinaryOperator Op() const { return op_; }
@@ -47,11 +48,11 @@ class BinaryNode : public AstNode,
   std::shared_ptr<AstNode> rhs_;
 };
 
-class ConstantNode : public AstNode,
-                     public std::enable_shared_from_this<ConstantNode> {
+// 常量
+class ConstantNode : public AstNode {
  public:
   ConstantNode(int value) : value_(value) {}
-  void Accept(std::shared_ptr<AstVisitor> visitor) override;
+  void Accept(AstVisitor* visitor) override;
   int Value() const { return value_; }
 
  private:
@@ -60,9 +61,9 @@ class ConstantNode : public AstNode,
 
 class AstVisitor {
  public:
-  virtual void VisitorProgram(std::shared_ptr<ProgramNode> node) = 0;
-  virtual void VisitorBinaryNode(std::shared_ptr<BinaryNode> node) = 0;
-  virtual void VisitorConstantNode(std::shared_ptr<ConstantNode> node) = 0;
+  virtual void VisitorProgram(ProgramNode* node) = 0;
+  virtual void VisitorBinaryNode(BinaryNode* node) = 0;
+  virtual void VisitorConstantNode(ConstantNode* node) = 0;
 };
 
 }  // namespace bfcc
