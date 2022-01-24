@@ -10,7 +10,7 @@ namespace bfcc {
 
 class Parser {
  public:
-  Parser(std::shared_ptr<Lexer> lexer_ptr) : lexer_ptr_(lexer_ptr) {}
+  explicit Parser(Lexer* lexer_ptr) : lexer_ptr_(lexer_ptr) {}
   std::shared_ptr<ProgramNode> Parse();
 
  private:
@@ -20,7 +20,7 @@ class Parser {
   std::shared_ptr<AstNode> ParsePrimaryExpr();
 
  private:
-  std::shared_ptr<Lexer> lexer_ptr_;
+  Lexer* lexer_ptr_;
 };
 
 }  // namespace bfcc
