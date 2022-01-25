@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cassert>
+#include <codecvt>
 #include <cstdio>
+#include <locale>
 #include <string>
 #include <vector>
 
@@ -38,9 +40,12 @@ class CliTable {
   }
 
   void Print() {
-    for (const auto& row : rows_) {
-      PrintLine();
-      PrintRow(row);
+    PrintLine();
+    for (std::size_t i = 0; i < rows_.size(); ++i) {
+      PrintRow(rows_[i]);
+      if (i == 0) {
+        PrintLine();
+      }
     }
     PrintLine();
     Reset(0);
@@ -67,6 +72,11 @@ class CliTable {
     }
     fprintf(stdout, "+\n");
   }
+
+  // std::wstring ToWstring(const std::string& str) {
+  //   std::wstring_convert<std::codecvt_utf8<wchar_t>> convert;
+  //   return convert.from_bytes(str);
+  // }
 
  private:
   std::size_t cell_size_;  // the number of cells per row
