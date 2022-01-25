@@ -12,12 +12,12 @@ void CodeGen::VisitorProgram(ProgramNode* node) {
   printf("\t.global prog\n");
   printf("prog:\n");
 #else
-  // for macos
+  assert(__APPLE__);
   printf("\t.global _prog\n");
   printf("_prog:\n");
 #endif
   printf("\tpush %%rbp\n");
-  printf("\tmove %%rsp, %%rbp\n");
+  printf("\tmov %%rsp, %%rbp\n");
   printf("\tsub $32, %%rsp\n");
 
   node->Lhs()->Accept(this);
@@ -33,7 +33,6 @@ void CodeGen::VisitorBinaryNode(BinaryNode* node) {
   Push();
   node->Lhs()->Accept(this);
   Pop("%rdi");
-
   switch (node->Op()) {
     case BinaryOperator::Add:
       printf("\tadd %%rdi, %%rax\n");
