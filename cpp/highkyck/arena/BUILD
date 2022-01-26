@@ -36,6 +36,11 @@ cc_test(
     ],
     copts = [
         "-std=c++17",
+        "-fsanitize=address",
+        "-fno-omit-frame-pointer",
+    ],
+    linkopts = [
+        "-fsanitize=address",
     ],
     deps = [
         ":arena",
