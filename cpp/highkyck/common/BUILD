@@ -1,9 +1,16 @@
 package(default_visibility = ["//visibility:public"])
 
-cc_binary(
+cc_library(
+    name = "common",
+    hdrs = [
+        "cli_table.h",
+        "print.h",
+    ],
+)
+
+cc_test(
     name = "cli_table_test",
     srcs = [
-        "cli_table.h",
         "cli_table_test.cpp",
     ],
     copts = [
@@ -13,5 +20,9 @@ cc_binary(
     ],
     linkopts = [
         "-fsanitize=address",
+    ],
+    deps = [
+        ":common",
+        "@gtest//:gtest_main",
     ],
 )
