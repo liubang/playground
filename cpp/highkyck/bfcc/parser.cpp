@@ -40,9 +40,9 @@ std::shared_ptr<AstNode> Parser::ParseMultiExpr() {
 
 std::shared_ptr<AstNode> Parser::ParsePrimaryExpr() {
   if (lexer_ptr_->CurrentToken()->Type() == TokenType::LParent) {
-    lexer_ptr_->GetNextToken();
-    auto node = ParseExpr();
-    lexer_ptr_->GetNextToken();
+    lexer_ptr_->GetNextToken();  // skip (
+    auto node = ParseExpr();     // parse expr
+    lexer_ptr_->GetNextToken();  // skip )
     return node;
   } else {
     auto node =
