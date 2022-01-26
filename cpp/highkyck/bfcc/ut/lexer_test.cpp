@@ -3,7 +3,7 @@
 #include <gtest/gtest.h>
 
 TEST(Lexer, GetNextToken) {
-  const char* code = " 125 + 1 - 3 * 4 / 2";
+  const char* code = " 125 + (1 - 3 ) * 4 / 2";
   highkyck::bfcc::Lexer lexer(code);
 
   // 125
@@ -17,6 +17,12 @@ TEST(Lexer, GetNextToken) {
   EXPECT_EQ(lexer.CurrentToken()->Type(), highkyck::bfcc::TokenType::Add);
   EXPECT_EQ(lexer.CurrentToken()->Value(), 0);
   EXPECT_EQ(lexer.CurrentToken()->Content(), "+");
+
+  // (
+  lexer.GetNextToken();
+  EXPECT_EQ(lexer.CurrentToken()->Type(), highkyck::bfcc::TokenType::LParent);
+  EXPECT_EQ(lexer.CurrentToken()->Value(), 0);
+  EXPECT_EQ(lexer.CurrentToken()->Content(), "(");
 
   // 1
   lexer.GetNextToken();
@@ -35,6 +41,12 @@ TEST(Lexer, GetNextToken) {
   EXPECT_EQ(lexer.CurrentToken()->Type(), highkyck::bfcc::TokenType::Num);
   EXPECT_EQ(lexer.CurrentToken()->Value(), 3);
   EXPECT_EQ(lexer.CurrentToken()->Content(), "3");
+
+  // )
+  lexer.GetNextToken();
+  EXPECT_EQ(lexer.CurrentToken()->Type(), highkyck::bfcc::TokenType::RParent);
+  EXPECT_EQ(lexer.CurrentToken()->Value(), 0);
+  EXPECT_EQ(lexer.CurrentToken()->Content(), ")");
 
   // *
   lexer.GetNextToken();
