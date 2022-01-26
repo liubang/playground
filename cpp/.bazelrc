@@ -3,3 +3,5 @@ common --experimental_ui_max_stdouterr_bytes=1073741819
 # bazel build
 test --test_output=all --action_env="GTEST_COLOR=1"
 
+build:gcc11_config --crosstool_top=//toolchain:gcc11_suite
+build:gcc11_config --cpu=darwin_arm64
