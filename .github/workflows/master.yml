@@ -18,7 +18,7 @@ jobs:
           go-version: "^1.16.0"
       - uses: egor-tensin/setup-gcc@v1
         with:
-          version: 10
+          version: 11
           platform: x64
       - uses: actions/cache@v2
         env:
