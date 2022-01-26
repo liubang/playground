@@ -1,6 +1,8 @@
 #include "cli_table.h"
 
-int main(int argc, char* argv[]) {
+#include <gtest/gtest.h>
+
+TEST(common, cli_table) {
   highkyck::common::CliTable table;
   table.Reset(3);
   table.Cell("aaaaaa").Cell("bbbbb").Cell("cccc").NewRow();
@@ -32,8 +34,8 @@ int main(int argc, char* argv[]) {
       .Cell("this is wangwu")
       .NewRow()
       .Cell("0000004")
-      .Cell("张三").Cell("22").Cell("这是张三的档案啊")
+      .Cell("zhangsan")
+      .Cell("22")
+      .Cell("this is zhangsan")
       .Print();
-
-  return 0;
 }
