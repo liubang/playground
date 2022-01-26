@@ -39,10 +39,17 @@ std::shared_ptr<AstNode> Parser::ParseMultiExpr() {
 }
 
 std::shared_ptr<AstNode> Parser::ParsePrimaryExpr() {
-  auto node =
-      std::make_shared<ConstantNode>(lexer_ptr_->CurrentToken()->Value());
-  lexer_ptr_->GetNextToken();
-  return node;
+  if (lexer_ptr_->CurrentToken()->Type() == TokenType::LParent) {
+    lexer_ptr_->GetNextToken();
+    auto node = ParseExpr();
+    lexer_ptr_->GetNextToken();
+    return node;
+  } else {
+    auto node =
+        std::make_shared<ConstantNode>(lexer_ptr_->CurrentToken()->Value());
+    lexer_ptr_->GetNextToken();
+    return node;
+  }
 }
 
 }  // namespace bfcc

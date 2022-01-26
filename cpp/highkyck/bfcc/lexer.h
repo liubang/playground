@@ -7,11 +7,13 @@ namespace highkyck {
 namespace bfcc {
 
 enum class TokenType {
-  Add,
-  Sub,
-  Mul,
-  Div,
-  Num,
+  Add,      // +
+  Sub,      // -
+  Mul,      // *
+  Div,      // /
+  Num,      // number
+  LParent,  // (
+  RParent,  // )
   Eof,
 };
 
