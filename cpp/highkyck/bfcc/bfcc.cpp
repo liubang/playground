@@ -13,7 +13,7 @@
 #include "parser.h"
 #include "print_visitor.h"
 
-static constexpr char code[] = "  5 + 1- 3*4/2 ";
+static constexpr char code[] = "  5 + (1- 3)*4/2 ";
 
 using Lexer = highkyck::bfcc::Lexer;
 using Parser = highkyck::bfcc::Parser;
