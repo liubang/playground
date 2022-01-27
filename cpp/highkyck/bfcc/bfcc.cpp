@@ -27,6 +27,8 @@ void test_lexer() {
   PrintVisitor visitor;
   auto root = parser.Parse();
   root->Accept(&visitor);
+
+  visitor.Descripbe();
 }
 
 void test_codegen() {
@@ -36,10 +38,12 @@ void test_codegen() {
   CodeGen codegen;
   auto root = parser.Parse();
   root->Accept(&codegen);
+  std::cout << codegen.Code();
 }
 
 int main(int argc, char* argv[]) {
   // put your code here
-  test_codegen();
+  test_lexer();
+  // test_codegen();
   return 0;
 }
