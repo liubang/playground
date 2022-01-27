@@ -1,14 +1,14 @@
 #include "print_visitor.h"
 
 #include <cassert>
-#include <cstdio>
+#include <iostream>
 
 namespace highkyck {
 namespace bfcc {
 
 void PrintVisitor::VisitorProgram(ProgramNode* node) {
   node->Lhs()->Accept(this);
-  printf("\n");
+  sstream_ << "\n";
 }
 
 void PrintVisitor::VisitorBinaryNode(BinaryNode* node) {
@@ -16,16 +16,16 @@ void PrintVisitor::VisitorBinaryNode(BinaryNode* node) {
   node->Lhs()->Accept(this);
   switch (node->Op()) {
     case BinaryOperator::Add:
-      printf(" + ");
+      sstream_ << " + ";
       break;
     case BinaryOperator::Sub:
-      printf(" - ");
+      sstream_ << " - ";
       break;
     case BinaryOperator::Mul:
-      printf(" * ");
+      sstream_ << " * ";
       break;
     case BinaryOperator::Div:
-      printf(" / ");
+      sstream_ << " / ";
       break;
     default:
       assert(0);
@@ -33,8 +33,12 @@ void PrintVisitor::VisitorBinaryNode(BinaryNode* node) {
 }
 
 void PrintVisitor::VisitorConstantNode(ConstantNode* node) {
-  printf(" %d ", node->Value());
+  sstream_ << " " << node->Value() << " ";
 }
+
+void PrintVisitor::Descripbe() const { std::cout << sstream_.str(); }
+
+std::string PrintVisitor::String() const { return sstream_.str(); }
 
 }  // namespace bfcc
 }  // namespace highkyck
