@@ -7,25 +7,36 @@ namespace highkyck {
 namespace bfcc {
 
 void CodeGen::VisitorProgram(ProgramNode* node) {
-  printf("\t.text\n");
+  code_ << "\t.text\n";
+  // printf("\t.text\n");
 #ifdef __linux__
-  printf("\t.global prog\n");
-  printf("prog:\n");
+  code_ << "\t.global prog\n";
+  code_ << "prog:\n";
+  // printf("\t.global prog\n");
+  // printf("prog:\n");
 #else
   assert(__APPLE__);
-  printf("\t.global _prog\n");
-  printf("_prog:\n");
+  code_ << "\t.global _prog\n";
+  code_ << "_prog:\n";
+  // printf("\t.global _prog\n");
+  // printf("_prog:\n");
 #endif
-  printf("\tpush %%rbp\n");
-  printf("\tmov %%rsp, %%rbp\n");
-  printf("\tsub $32, %%rsp\n");
+  code_ << "\tpush %%rbp\n";
+  code_ << "\tmov %%rsp, %%rbp\n";
+  code_ << "\tsub $32, %%rsp\n";
+  // printf("\tpush %%rbp\n");
+  // printf("\tmov %%rsp, %%rbp\n");
+  // printf("\tsub $32, %%rsp\n");
 
   node->Lhs()->Accept(this);
   assert(stack_level_ == 0);
 
-  printf("\tmov %%rbp, %%rsp\n");
-  printf("\tpop %%rbp\n");
-  printf("\tret\n");
+  code_ << "\tmov %%rbp, %%rsp\n";
+  code_ << "\tpop %%rbp\n";
+  code_ << "\tret\n";
+  // printf("\tmov %%rbp, %%rsp\n");
+  // printf("\tpop %%rbp\n");
+  // printf("\tret\n");
 }
 
 void CodeGen::VisitorBinaryNode(BinaryNode* node) {
@@ -35,17 +46,22 @@ void CodeGen::VisitorBinaryNode(BinaryNode* node) {
   Pop("%rdi");
   switch (node->Op()) {
     case BinaryOperator::Add:
-      printf("\tadd %%rdi, %%rax\n");
+      code_ << "\tadd %%rdi, %%rax\n";
+      // printf("\tadd %%rdi, %%rax\n");
       break;
     case BinaryOperator::Sub:
-      printf("\tsub %%rdi, %%rax\n");
+      code_ << "\tsub %%rdi, %%rax\n";
+      // printf("\tsub %%rdi, %%rax\n");
       break;
     case BinaryOperator::Mul:
-      printf("\timul %%rdi, %%rax\n");
+      code_ << "\timul %%rdi, %%rax\n";
+      // printf("\timul %%rdi, %%rax\n");
       break;
     case BinaryOperator::Div:
-      printf("\tcqo\n");
-      printf("\tidiv %%rdi\n");
+      code_ << "\tcqo\n";
+      code_ << "\tidiv %%rdi\n";
+      // printf("\tcqo\n");
+      // printf("\tidiv %%rdi\n");
       break;
     default:
       assert(0);
@@ -54,16 +70,19 @@ void CodeGen::VisitorBinaryNode(BinaryNode* node) {
 }
 
 void CodeGen::VisitorConstantNode(ConstantNode* node) {
-  printf("\tmov $%d, %%rax\n", node->Value());
+  // printf("\tmov $%d, %%rax\n", node->Value());
+  code_ << "\tmov $" << node->Value() << ", %%rax\n";
 }
 
 void CodeGen::Push() {
-  printf("\tpush %%rax\n");
+  code_ << "\tpush %%rax\n";
+  // printf("\tpush %%rax\n");
   stack_level_++;
 }
 
 void CodeGen::Pop(const char* reg) {
-  printf("\tpop %s\n", reg);
+  code_ << "\tpop %s\n";
+  // printf("\tpop %s\n", reg);
   stack_level_--;
 }
 
