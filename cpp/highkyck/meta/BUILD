@@ -107,3 +107,14 @@ cc_binary(
     ],
     copts = _COPTS,
 )
+
+cc_binary(
+    name = "test_value_type_of",
+    srcs = [
+        "value_type_of.h",
+        "test_value_type_of.cpp",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+)
