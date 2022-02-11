@@ -4,6 +4,7 @@
 #include <ostream>
 #include <utility>
 
+// https://www.cppstories.com/2022/tuple-iteration-basics/
 namespace highkyck {
 namespace cppstories {
 
@@ -50,13 +51,12 @@ void PrintTupleFinal(const TupleT& tp) {
 template <typename TupleT, std::size_t... Is>
 std::ostream& PrintTupleImplStream(std::ostream& os, const TupleT& tp,
                                    std::index_sequence<Is...>) {
-  std::size_t index = 0;
-  auto print_elem = [&index, &os](const auto& x) {
-    if (index++ > 0) os << ", ";
-    os << x;
+  auto print_elem = [&os](const auto& x, std::size_t index) {
+    if (index > 0) os << ", ";
+    os << index << ":" << x;
   };
   os << "(";
-  (print_elem(std::get<Is>(tp)), ...);
+  (print_elem(std::get<Is>(tp), Is), ...);
   os << ")";
   return os;
 }
