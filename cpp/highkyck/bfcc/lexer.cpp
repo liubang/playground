@@ -6,6 +6,8 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "diagnostic.h"
+
 namespace {
 
 constexpr char BFCC_CHAR_EOF = '\0';
@@ -33,6 +35,15 @@ void Lexer::GetNextChar() {
   }
 }
 
+void Lexer::ExpectToken(TokenType type) {
+  if (CurrentToken()->Type() == type) {
+    GetNextToken();
+  } else {
+    DiagnosticError(source_code_, line_, CurrentToken()->Location().col,
+                    "'%s' expected", TokenTypeName(type).data());
+  }
+}
+
 bool Lexer::IsLetter() { return std::isalpha(cur_char_) || cur_char_ == '_'; }
 
 bool Lexer::IsDigit() { return std::isdigit(cur_char_); }
@@ -42,11 +53,18 @@ bool Lexer::IsLetterOrDigit() { return IsLetter() || IsDigit(); }
 void Lexer::GetNextToken() {
   // sksip white space
   while (::isspace(cur_char_)) {
+    if (cur_char_ == '\n') {
+      line_++;
+      line_head_ = cursor_;
+    }
     GetNextChar();
   }
   TokenType kind;
-  int value = 0;
-  int start_pos = cursor_ - 1;
+  SourceLocation location;
+  location.line = line_;                    // 当前行
+  location.col = cursor_ - 1 - line_head_;  // 当前列
+  int64_t value = 0;
+  int64_t start_pos = cursor_ - 1;
   switch (cur_char_) {
     case BFCC_CHAR_EOF:
       kind = TokenType::Eof;
@@ -96,13 +114,14 @@ void Lexer::GetNextToken() {
         } while (IsDigit());
         kind = TokenType::Num;
       } else {
-        ::printf("not supported %c\n", cur_char_);
-        assert(0);
+        DiagnosticError(source_code_, location.line, location.col,
+                        "current '%c' is illegal", cur_char_);
       }
       break;
   }
   cur_token_ = std::make_shared<Token>(
-      kind, value, source_code_.substr(start_pos, cursor_ - 1 - start_pos));
+      kind, value, source_code_.substr(start_pos, cursor_ - 1 - start_pos),
+      location);
 }
 
 }  // namespace bfcc
