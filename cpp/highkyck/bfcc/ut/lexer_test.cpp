@@ -2,79 +2,48 @@
 
 #include <gtest/gtest.h>
 
+#define TK(t, v, c)                                \
+  do {                                             \
+    lexer.GetNextToken();                          \
+    EXPECT_EQ(lexer.CurrentToken()->Type(), t);    \
+    EXPECT_EQ(lexer.CurrentToken()->Value(), v);   \
+    EXPECT_EQ(lexer.CurrentToken()->Content(), c); \
+  } while (0)
+
 TEST(Lexer, GetNextToken) {
-  const char* code = " 125 + (1 - 3 ) * 4 / 2";
+  const char* code = " 125 +abc_124d + (1 - 3 ) * 4 / 2;";
   highkyck::bfcc::Lexer lexer(code);
 
   // 125
-  lexer.GetNextToken();
-  EXPECT_EQ(lexer.CurrentToken()->Type(), highkyck::bfcc::TokenType::Num);
-  EXPECT_EQ(lexer.CurrentToken()->Value(), 125);
-  EXPECT_EQ(lexer.CurrentToken()->Content(), "125");
-
+  TK(highkyck::bfcc::TokenType::Num, 125, "125");
   // +
-  lexer.GetNextToken();
-  EXPECT_EQ(lexer.CurrentToken()->Type(), highkyck::bfcc::TokenType::Add);
-  EXPECT_EQ(lexer.CurrentToken()->Value(), 0);
-  EXPECT_EQ(lexer.CurrentToken()->Content(), "+");
-
+  TK(highkyck::bfcc::TokenType::Add, 0, "+");
+  // abc_124d
+  TK(highkyck::bfcc::TokenType::Identifier, 0, "abc_124d");
+  // +
+  TK(highkyck::bfcc::TokenType::Add, 0, "+");
   // (
-  lexer.GetNextToken();
-  EXPECT_EQ(lexer.CurrentToken()->Type(), highkyck::bfcc::TokenType::LParent);
-  EXPECT_EQ(lexer.CurrentToken()->Value(), 0);
-  EXPECT_EQ(lexer.CurrentToken()->Content(), "(");
-
+  TK(highkyck::bfcc::TokenType::LParent, 0, "(");
   // 1
-  lexer.GetNextToken();
-  EXPECT_EQ(lexer.CurrentToken()->Type(), highkyck::bfcc::TokenType::Num);
-  EXPECT_EQ(lexer.CurrentToken()->Value(), 1);
-  EXPECT_EQ(lexer.CurrentToken()->Content(), "1");
-
+  TK(highkyck::bfcc::TokenType::Num, 1, "1");
   // -
-  lexer.GetNextToken();
-  EXPECT_EQ(lexer.CurrentToken()->Type(), highkyck::bfcc::TokenType::Sub);
-  EXPECT_EQ(lexer.CurrentToken()->Value(), 0);
-  EXPECT_EQ(lexer.CurrentToken()->Content(), "-");
-
+  TK(highkyck::bfcc::TokenType::Sub, 0, "-");
   // 3
-  lexer.GetNextToken();
-  EXPECT_EQ(lexer.CurrentToken()->Type(), highkyck::bfcc::TokenType::Num);
-  EXPECT_EQ(lexer.CurrentToken()->Value(), 3);
-  EXPECT_EQ(lexer.CurrentToken()->Content(), "3");
-
+  TK(highkyck::bfcc::TokenType::Num, 3, "3");
   // )
-  lexer.GetNextToken();
-  EXPECT_EQ(lexer.CurrentToken()->Type(), highkyck::bfcc::TokenType::RParent);
-  EXPECT_EQ(lexer.CurrentToken()->Value(), 0);
-  EXPECT_EQ(lexer.CurrentToken()->Content(), ")");
-
+  TK(highkyck::bfcc::TokenType::RParent, 0, ")");
   // *
-  lexer.GetNextToken();
-  EXPECT_EQ(lexer.CurrentToken()->Type(), highkyck::bfcc::TokenType::Mul);
-  EXPECT_EQ(lexer.CurrentToken()->Value(), 0);
-  EXPECT_EQ(lexer.CurrentToken()->Content(), "*");
-
+  TK(highkyck::bfcc::TokenType::Mul, 0, "*");
   // 4
-  lexer.GetNextToken();
-  EXPECT_EQ(lexer.CurrentToken()->Type(), highkyck::bfcc::TokenType::Num);
-  EXPECT_EQ(lexer.CurrentToken()->Value(), 4);
-  EXPECT_EQ(lexer.CurrentToken()->Content(), "4");
-
+  TK(highkyck::bfcc::TokenType::Num, 4, "4");
   // /
-  lexer.GetNextToken();
-  EXPECT_EQ(lexer.CurrentToken()->Type(), highkyck::bfcc::TokenType::Div);
-  EXPECT_EQ(lexer.CurrentToken()->Value(), 0);
-  EXPECT_EQ(lexer.CurrentToken()->Content(), "/");
-
+  TK(highkyck::bfcc::TokenType::Div, 0, "/");
   // 2
-  lexer.GetNextToken();
-  EXPECT_EQ(lexer.CurrentToken()->Type(), highkyck::bfcc::TokenType::Num);
-  EXPECT_EQ(lexer.CurrentToken()->Value(), 2);
-  EXPECT_EQ(lexer.CurrentToken()->Content(), "2");
-
+  TK(highkyck::bfcc::TokenType::Num, 2, "2");
+  // ;
+  TK(highkyck::bfcc::TokenType::Semicolon, 0, ";");
   // Eof
-  lexer.GetNextToken();
-  EXPECT_EQ(lexer.CurrentToken()->Type(), highkyck::bfcc::TokenType::Eof);
-  EXPECT_EQ(lexer.CurrentToken()->Value(), 0);
-  EXPECT_EQ(lexer.CurrentToken()->Content(), "");
+  TK(highkyck::bfcc::TokenType::Eof, 0, "");
 }
+
+#undef TK
