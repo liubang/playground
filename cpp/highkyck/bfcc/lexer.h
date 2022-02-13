@@ -7,24 +7,27 @@ namespace highkyck {
 namespace bfcc {
 
 enum class TokenType {
-  Add,      // +
-  Sub,      // -
-  Mul,      // *
-  Div,      // /
-  Num,      // number
-  LParent,  // (
-  RParent,  // )
+  Add,         // +
+  Sub,         // -
+  Mul,         // *
+  Div,         // /
+  Num,         // number
+  LParent,     // (
+  RParent,     // )
+  Identifier,  // variable
+  Semicolon,   // ;
+  Assign,      // =
   Eof,
 };
 
 class Token {
  public:
-  Token(TokenType type, int value, const std::string_view& content)
+  Token(TokenType type, int value, std::string_view content)
       : type_(type), value_(value), content_(content) {}
 
   TokenType Type() const { return type_; }
   int Value() const { return value_; }
-  const std::string_view& Content() const { return content_; }
+  std::string_view Content() const { return content_; }
 
  private:
   TokenType type_;
@@ -40,6 +43,9 @@ class Lexer {
 
  private:
   void GetNextChar();
+  bool IsLetter();
+  bool IsDigit();
+  bool IsLetterOrDigit();
 
  private:
   std::string_view source_code_;
