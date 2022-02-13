@@ -7,12 +7,24 @@ namespace highkyck {
 namespace bfcc {
 
 void PrintVisitor::VisitorProgram(ProgramNode* node) {
-  node->Lhs()->Accept(this);
+  for (auto& s : node->Stmts()) {
+    s->Accept(this);
+  }
   sstream_ << "\n";
 }
 
-void PrintVisitor::VisitorBinaryNode(BinaryNode* node) {
+void PrintVisitor::VisitorExprStmtNode(ExprStmtNode* node) {
+  node->Lhs()->Accept(this);
+  sstream_ << ";";
+}
+
+void PrintVisitor::VisitorAssignStmtNode(AssignExprNode* node) {
+  node->Lhs()->Accept(this);
+  sstream_ << " = ";
   node->Rhs()->Accept(this);
+}
+
+void PrintVisitor::VisitorBinaryNode(BinaryNode* node) {
   node->Lhs()->Accept(this);
   switch (node->Op()) {
     case BinaryOperator::Add:
@@ -30,6 +42,11 @@ void PrintVisitor::VisitorBinaryNode(BinaryNode* node) {
     default:
       assert(0);
   }
+  node->Rhs()->Accept(this);
+}
+
+void PrintVisitor::VisitorIdentifierNode(IdentifierNode* node) {
+  sstream_ << " " << std::string(node->Id()->name) << " ";
 }
 
 void PrintVisitor::VisitorConstantNode(ConstantNode* node) {
