@@ -13,11 +13,7 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2022/01/17 00:02
-
-package(
-    default_visibility = ["//visibility:public"],
-)
+# Created: 2022/02/13 16:21
 
 _COMMON_COPTS = [
     "-std=c++17",
@@ -29,69 +25,59 @@ _COMMON_LINKOPTS = [
     "-fsanitize=address",
 ]
 
-cc_library(
-    name = "lexer",
-    srcs = [
-        "lexer.cpp",
-    ],
-    hdrs = [
-        "lexer.h",
-    ],
-    copts = _COMMON_COPTS,
-)
-
-cc_library(
-    name = "parser",
-    srcs = [
-        "ast_node.cpp",
-        "parser.cpp",
-    ],
-    hdrs = [
-        "ast_node.h",
-        "parser.h",
-    ],
-    copts = _COMMON_COPTS,
-    deps = [
-        ":lexer",
-    ],
-)
-
-cc_library(
-    name = "print_visitor",
-    srcs = [
-        "print_visitor.cpp",
-    ],
-    hdrs = [
-        "print_visitor.h",
-    ],
-    copts = _COMMON_COPTS,
-    deps = [
-        ":parser",
-    ],
-)
-
-cc_library(
-    name = "codegen",
-    srcs = [
-        "codegen.cpp",
-    ],
-    hdrs = [
-        "codegen.h",
-    ],
-    copts = _COMMON_COPTS,
-    deps = [
-        ":parser",
-    ],
-)
-
 cc_binary(
     name = "bfcc",
-    srcs = ["bfcc.cpp"],
+    srcs = [
+        "bfcc.cpp",
+    ],
     copts = _COMMON_COPTS,
     linkopts = _COMMON_LINKOPTS,
     deps = [
-        # ":lexer",
-        # ":parser",
-        # ":codegen",
+        "//highkyck/bfcc:lexer",
+        "//highkyck/bfcc:parser",
+        "//highkyck/bfcc:codegen",
+    ],
+)
+genrule(
+    name = "compiled_source",
+    srcs = [":bfcc"],
+    outs = ["compiled_source.s"],
+    cmd = "./$(locations :bfcc) 'a=123;b=4; a * b;' > $@",
+)
+
+cc_binary(
+    name = "driver",
+    srcs = [
+        "driver.c",
+        ":compiled_source",
+    ],
+    copts = [
+        "-std=c11",
+    ],
+)
+
+cc_test(
+    name = "lexer_test",
+    srcs = [
+        "lexer_test.cpp",
+    ],
+    copts = _COMMON_COPTS,
+    linkopts = _COMMON_LINKOPTS,
+    deps = [
+        "//highkyck/bfcc:lexer",
+        "@gtest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "print_visitor_test",
+    srcs = [
+        "print_visitor_test.cpp",
+    ],
+    copts = _COMMON_COPTS,
+    linkopts = _COMMON_LINKOPTS,
+    deps = [
+        "//highkyck/bfcc:print_visitor",
+        "@gtest//:gtest_main",
     ],
 )
