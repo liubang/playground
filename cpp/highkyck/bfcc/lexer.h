@@ -8,16 +8,22 @@ namespace highkyck {
 namespace bfcc {
 
 enum class TokenType {
-  Add,         // +
-  Sub,         // -
-  Mul,         // *
-  Div,         // /
-  Num,         // number
-  LParent,     // (
-  RParent,     // )
-  Identifier,  // variable
-  Semicolon,   // ;
-  Assign,      // =
+  Add,           // +
+  Sub,           // -
+  Mul,           // *
+  Div,           // /
+  Num,           // number
+  LParent,       // (
+  RParent,       // )
+  Identifier,    // variable
+  Semicolon,     // ;
+  Assign,        // =
+  Equal,         // ==
+  PipeEqual,     // !=
+  Greater,       // >
+  GreaterEqual,  // >=
+  Lesser,        // <
+  LesserEqual,   // <=
   Eof,
 };
 
@@ -43,6 +49,18 @@ inline std::string TokenTypeName(TokenType type) {
       return ";";
     case TokenType::Assign:
       return "=";
+    case TokenType::Equal:
+      return "==";
+    case TokenType::PipeEqual:
+      return "!=";
+    case TokenType::Greater:
+      return ">";
+    case TokenType::GreaterEqual:
+      return ">=";
+    case TokenType::Lesser:
+      return "<";
+    case TokenType::LesserEqual:
+      return "<=";
     case TokenType::Eof:
       return "Eof";
     default:
@@ -99,6 +117,7 @@ class Lexer {
   bool IsLetter();
   bool IsDigit();
   bool IsLetterOrDigit();
+  char PeekChar(int distance);
 
  private:
   std::string_view source_code_;

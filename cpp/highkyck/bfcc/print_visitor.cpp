@@ -39,6 +39,24 @@ void PrintVisitor::VisitorBinaryNode(BinaryNode* node) {
     case BinaryOperator::Div:
       sstream_ << " / ";
       break;
+    case BinaryOperator::Equal:
+      sstream_ << " == ";
+      break;
+    case BinaryOperator::PipeEqual:
+      sstream_ << " != ";
+      break;
+    case BinaryOperator::Greater:
+      sstream_ << " > ";
+      break;
+    case BinaryOperator::GreaterEqual:
+      sstream_ << " >= ";
+      break;
+    case BinaryOperator::Lesser:
+      sstream_ << " < ";
+      break;
+    case BinaryOperator::LesserEqual:
+      sstream_ << " <= ";
+      break;
     default:
       assert(0);
   }

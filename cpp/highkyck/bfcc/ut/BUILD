@@ -21,11 +21,12 @@ cc_binary(
         "//highkyck/bfcc:codegen",
     ],
 )
+
 genrule(
     name = "compiled_source",
     srcs = [":bfcc"],
     outs = ["compiled_source.s"],
-    cmd = "./$(locations :bfcc) 'a=123;b=4; a * b;' > $@",
+    cmd = "./$(locations :bfcc) 'a=3;a<=3;' > $@",
 )
 
 cc_binary(

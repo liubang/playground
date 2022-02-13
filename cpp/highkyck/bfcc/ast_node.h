@@ -74,6 +74,12 @@ enum class BinaryOperator {
   Sub,
   Mul,
   Div,
+  Equal,
+  PipeEqual,
+  Greater,
+  GreaterEqual,
+  Lesser,
+  LesserEqual,
 };
 
 class BinaryNode : public AstNode {

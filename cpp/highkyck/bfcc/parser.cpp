@@ -26,11 +26,47 @@ std::shared_ptr<AstNode> Parser::ParseStmt() {
 std::shared_ptr<AstNode> Parser::ParseExpr() { return ParseAssignExpr(); }
 
 std::shared_ptr<AstNode> Parser::ParseAssignExpr() {
-  auto left = ParseAddExpr();
+  auto left = ParseEqualExpr();
   if (lexer_ptr_->CurrentToken()->Type() == TokenType::Assign) {
     lexer_ptr_->GetNextToken();
     auto node = std::make_shared<AssignExprNode>(left, ParseAssignExpr());
     return node;
+  }
+  return left;
+}
+
+std::shared_ptr<AstNode> Parser::ParseEqualExpr() {
+  auto left = ParseRelationalExpr();
+  while (lexer_ptr_->CurrentToken()->Type() == TokenType::Equal ||
+         lexer_ptr_->CurrentToken()->Type() == TokenType::PipeEqual) {
+    BinaryOperator op = BinaryOperator::Equal;
+    if (lexer_ptr_->CurrentToken()->Type() == TokenType::PipeEqual) {
+      op = BinaryOperator::PipeEqual;
+    }
+    lexer_ptr_->GetNextToken();
+    auto node = std::make_shared<BinaryNode>(op, left, ParseRelationalExpr());
+    left = node;
+  }
+  return left;
+}
+
+std::shared_ptr<AstNode> Parser::ParseRelationalExpr() {
+  auto left = ParseAddExpr();
+  while (lexer_ptr_->CurrentToken()->Type() == TokenType::Greater ||
+         lexer_ptr_->CurrentToken()->Type() == TokenType::GreaterEqual ||
+         lexer_ptr_->CurrentToken()->Type() == TokenType::Lesser ||
+         lexer_ptr_->CurrentToken()->Type() == TokenType::LesserEqual) {
+    BinaryOperator op = BinaryOperator::Greater;
+    if (lexer_ptr_->CurrentToken()->Type() == TokenType::GreaterEqual) {
+      op = BinaryOperator::GreaterEqual;
+    } else if (lexer_ptr_->CurrentToken()->Type() == TokenType::Lesser) {
+      op = BinaryOperator::Lesser;
+    } else if (lexer_ptr_->CurrentToken()->Type() == TokenType::LesserEqual) {
+      op = BinaryOperator::LesserEqual;
+    }
+    lexer_ptr_->GetNextToken();
+    auto node = std::make_shared<BinaryNode>(op, left, ParseAddExpr());
+    left = node;
   }
   return left;
 }
