@@ -2,6 +2,8 @@
 
 #include <cassert>
 
+#include "diagnostic.h"
+
 namespace highkyck {
 namespace bfcc {
 
@@ -63,9 +65,9 @@ std::shared_ptr<AstNode> Parser::ParseMultiExpr() {
 
 std::shared_ptr<AstNode> Parser::ParsePrimaryExpr() {
   if (lexer_ptr_->CurrentToken()->Type() == TokenType::LParent) {
-    lexer_ptr_->GetNextToken();  // skip (
-    auto node = ParseExpr();     // parse expr
-    lexer_ptr_->GetNextToken();  // skip )
+    lexer_ptr_->GetNextToken();                   // skip (
+    auto node = ParseExpr();                      // parse expr
+    lexer_ptr_->ExpectToken(TokenType::RParent);  // expect ) and stkip
     return node;
   } else if (lexer_ptr_->CurrentToken()->Type() == TokenType::Identifier) {
     auto name = lexer_ptr_->CurrentToken()->Content();
@@ -82,8 +84,9 @@ std::shared_ptr<AstNode> Parser::ParsePrimaryExpr() {
     lexer_ptr_->GetNextToken();
     return node;
   } else {
-    ::printf("Not Support!!!\n");
-    assert(0);
+    auto token = lexer_ptr_->CurrentToken();
+    DiagnosticError(lexer_ptr_->SourceCode(), token->Location().line,
+                    token->Location().col, "Not support node");
   }
 }
 
