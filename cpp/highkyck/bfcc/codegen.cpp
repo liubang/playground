@@ -69,6 +69,36 @@ void CodeGen::VisitorBinaryNode(BinaryNode* node) {
       code_ << "\tcqo\n";
       code_ << "\tidiv %rdi\n";
       break;
+    case BinaryOperator::Equal:
+      code_ << "\tcmp %rdi, %rax\n";
+      code_ << "\tsete %al\n";
+      code_ << "\tmovzb %al, %rax\n";
+      break;
+    case BinaryOperator::PipeEqual:
+      code_ << "\tcmp %rdi, %rax\n";
+      code_ << "\tsetne %al\n";
+      code_ << "\tmovzb %al, %rax\n";
+      break;
+    case BinaryOperator::Greater:
+      code_ << "\tcmp %rdi, %rax\n";
+      code_ << "\tsetg %al\n";
+      code_ << "\tmovzb %al, %rax\n";
+      break;
+    case BinaryOperator::GreaterEqual:
+      code_ << "\tcmp %rdi, %rax\n";
+      code_ << "\tsetge %al\n";
+      code_ << "\tmovzb %al, %rax\n";
+      break;
+    case BinaryOperator::Lesser:
+      code_ << "\tcmp %rdi, %rax\n";
+      code_ << "\tsetl %al\n";
+      code_ << "\tmovzb %al, %rax\n";
+      break;
+    case BinaryOperator::LesserEqual:
+      code_ << "\tcmp %rdi, %rax\n";
+      code_ << "\tsetle %al\n";
+      code_ << "\tmovzb %al, %rax\n";
+      break;
     default:
       assert(0);
       break;

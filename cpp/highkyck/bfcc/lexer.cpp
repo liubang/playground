@@ -19,6 +19,9 @@ constexpr char BFCC_CHAR_LPARENT = '(';
 constexpr char BFCC_CHAR_RPARENT = ')';
 constexpr char BFCC_CHAR_SEMICOLON = ';';
 constexpr char BFCC_CHAR_ASSIGN = '=';
+constexpr char BFCC_CHAR_NOT = '!';
+constexpr char BFCC_CHAR_GREATER = '>';
+constexpr char BFCC_CHAR_LESSER = '<';
 
 }  // namespace
 
@@ -41,6 +44,16 @@ void Lexer::ExpectToken(TokenType type) {
   } else {
     DiagnosticError(source_code_, line_, CurrentToken()->Location().col,
                     "'%s' expected", TokenTypeName(type).data());
+  }
+}
+
+char Lexer::PeekChar(int distance) {
+  assert(distance >= 0);
+  std::size_t idx = cursor_ - 1 + distance;
+  if (idx < source_code_.size()) {
+    return source_code_[idx];
+  } else {
+    return '\0';
   }
 }
 
@@ -98,7 +111,40 @@ void Lexer::GetNextToken() {
       GetNextChar();
       break;
     case BFCC_CHAR_ASSIGN:
-      kind = TokenType::Assign;
+      if (PeekChar(1) == BFCC_CHAR_ASSIGN) {
+        GetNextChar();
+        kind = TokenType::Equal;
+      } else {
+        kind = TokenType::Assign;
+      }
+      GetNextChar();
+      break;
+    case BFCC_CHAR_NOT:
+      if (PeekChar(1) == BFCC_CHAR_ASSIGN) {
+        GetNextChar();
+        kind = TokenType::PipeEqual;
+      } else {
+        DiagnosticError(source_code_, location.line, location.col,
+                        "current '%c' is illegal", cur_char_);
+      }
+      GetNextChar();
+      break;
+    case BFCC_CHAR_GREATER:
+      if (PeekChar(1) == BFCC_CHAR_ASSIGN) {
+        GetNextChar();
+        kind = TokenType::GreaterEqual;
+      } else {
+        kind = TokenType::Greater;
+      }
+      GetNextChar();
+      break;
+    case BFCC_CHAR_LESSER:
+      if (PeekChar(1) == BFCC_CHAR_ASSIGN) {
+        GetNextChar();
+        kind = TokenType::LesserEqual;
+      } else {
+        kind = TokenType::Lesser;
+      }
       GetNextChar();
       break;
     default:
