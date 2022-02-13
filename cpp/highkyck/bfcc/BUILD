@@ -30,6 +30,17 @@ _COMMON_LINKOPTS = [
 ]
 
 cc_library(
+    name = "diagnostic",
+    srcs = [
+        "diagnostic.cpp",
+    ],
+    hdrs = [
+        "diagnostic.h",
+    ],
+    copts = _COMMON_COPTS,
+)
+
+cc_library(
     name = "lexer",
     srcs = [
         "lexer.cpp",
@@ -38,6 +49,9 @@ cc_library(
         "lexer.h",
     ],
     copts = _COMMON_COPTS,
+    deps = [
+        ":diagnostic",
+    ],
 )
 
 cc_library(
@@ -53,6 +67,7 @@ cc_library(
     copts = _COMMON_COPTS,
     deps = [
         ":lexer",
+        ":diagnostic",
     ],
 )
 
@@ -90,8 +105,8 @@ cc_binary(
     copts = _COMMON_COPTS,
     linkopts = _COMMON_LINKOPTS,
     deps = [
-        # ":lexer",
-        # ":parser",
-        # ":codegen",
+        ":lexer",
+        ":parser",
+        ":codegen",
     ],
 )
