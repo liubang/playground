@@ -1,63 +1,80 @@
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+_COMMON_COPTS = [
+    "-std=c++17",
+    "-fsanitize=address",
+    "-fno-omit-frame-pointer",
+]
+
+_COMMON_LINKOPTS = [
+    "-fsanitize=address",
+]
+
+cc_library(
+    name = "lexer",
+    srcs = [
+        "lexer.cpp",
+    ],
+    hdrs = [
+        "lexer.h",
+    ],
+    copts = _COMMON_COPTS,
+)
+
+cc_library(
+    name = "parser",
+    srcs = [
+        "ast_node.cpp",
+        "parser.cpp",
+    ],
+    hdrs = [
+        "ast_node.h",
+        "parser.h",
+    ],
+    copts = _COMMON_COPTS,
+    deps = [
+        ":lexer",
+    ],
+)
+
+cc_library(
+    name = "print_visitor",
+    srcs = [
+        "print_visitor.cpp",
+    ],
+    hdrs = [
+        "print_visitor.h",
+    ],
+    copts = _COMMON_COPTS,
+    deps = [
+        ":parser",
+    ],
+)
+
+cc_library(
+    name = "codegen",
+    srcs = [
+        "codegen.cpp",
+    ],
+    hdrs = [
+        "codegen.h",
+    ],
+    copts = _COMMON_COPTS,
+    deps = [
+        ":parser",
+    ],
+)
+
 cc_binary(
     name = "bfcc",
-    srcs = glob([
-        "*.cpp",
-        "*.h",
-    ]),
-    copts = [
-        "-std=c++17",
-        "-fsanitize=address",
-        "-fno-omit-frame-pointer",
-    ],
-    linkopts = [
-        "-fsanitize=address",
-    ],
-)
-
-cc_test(
-    name = "lexer_test",
-    srcs = [
-        "lexer.cpp",
-        "lexer.h",
-        "ut/lexer_test.cpp",
-    ],
-    copts = [
-        "-std=c++17",
-        "-fsanitize=address",
-        "-fno-omit-frame-pointer",
-    ],
-    linkopts = [
-        "-fsanitize=address",
-    ],
+    srcs = ["bfcc.cpp"],
+    copts = _COMMON_COPTS,
+    linkopts = _COMMON_LINKOPTS,
     deps = [
-        "@gtest//:gtest_main",
-    ],
-)
-
-cc_test(
-    name = "codegen_test",
-    srcs = [
-        "lexer.cpp",
-        "lexer.h",
-        "parser.h",
-        "parser.cpp",
-        "ast_node.h",
-        "ast_node.cpp",
-        "codegen.h",
-        "codegen.cpp",
-        "print_visitor.h",
-        "print_visitor.cpp",
-        "ut/codegen_test.cpp",
-    ],
-    copts = [
-        "-std=c++17",
-        "-fsanitize=address",
-        "-fno-omit-frame-pointer",
-    ],
-    linkopts = [
-        "-fsanitize=address",
-    ],
-    deps = [
-        "@gtest//:gtest_main",
+        # ":lexer",
+        # ":parser",
+        # ":codegen",
     ],
 )

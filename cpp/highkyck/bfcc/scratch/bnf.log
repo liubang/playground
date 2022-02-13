@@ -1,5 +1,8 @@
-Prog         := Expr
-Expr         := AddExpr
+Prog         := Stmt*
+Stmt         := Expr;
+Expr         := AssignExpr
+AssignExpr   := AddExpr
+             := AddExpr = AssignExpr
 AddExpr      := MultiExpr
              := AddExpr + MultiExpr
              := AddExpr - MultiExpr
@@ -7,3 +10,5 @@ MultiExpr    := PrimaryExpr
              := MultiExpr * PrimaryExpr
              := MultiExpr / PrimaryExpr
 PrimaryExpr  := Num
+             := (Expr)
+             := Identifier

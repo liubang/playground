@@ -20,7 +20,10 @@ class PrintVisitor : public AstVisitor {
   }
 
  private:
+  void VisitorExprStmtNode(ExprStmtNode* node) override;
+  void VisitorAssignStmtNode(AssignExprNode* node) override;
   void VisitorBinaryNode(BinaryNode* node) override;
+  void VisitorIdentifierNode(IdentifierNode* node) override;
   void VisitorConstantNode(ConstantNode* node) override;
 
  private:

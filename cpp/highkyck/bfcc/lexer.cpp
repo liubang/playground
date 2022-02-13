@@ -15,6 +15,8 @@ constexpr char BFCC_CHAR_MUL = '*';
 constexpr char BFCC_CHAR_DIV = '/';
 constexpr char BFCC_CHAR_LPARENT = '(';
 constexpr char BFCC_CHAR_RPARENT = ')';
+constexpr char BFCC_CHAR_SEMICOLON = ';';
+constexpr char BFCC_CHAR_ASSIGN = '=';
 
 }  // namespace
 
@@ -30,6 +32,12 @@ void Lexer::GetNextChar() {
     cur_char_ = source_code_[cursor_++];
   }
 }
+
+bool Lexer::IsLetter() { return std::isalpha(cur_char_) || cur_char_ == '_'; }
+
+bool Lexer::IsDigit() { return std::isdigit(cur_char_); }
+
+bool Lexer::IsLetterOrDigit() { return IsLetter() || IsDigit(); }
 
 void Lexer::GetNextToken() {
   // sksip white space
@@ -67,12 +75,25 @@ void Lexer::GetNextToken() {
       kind = TokenType::RParent;
       GetNextChar();
       break;
+    case BFCC_CHAR_SEMICOLON:
+      kind = TokenType::Semicolon;
+      GetNextChar();
+      break;
+    case BFCC_CHAR_ASSIGN:
+      kind = TokenType::Assign;
+      GetNextChar();
+      break;
     default:
-      if (std::isdigit(cur_char_)) {
+      if (IsLetter()) {
+        while (IsLetterOrDigit()) {
+          GetNextChar();
+        }
+        kind = TokenType::Identifier;
+      } else if (IsDigit()) {
         do {
           value = value * 10 + cur_char_ - '0';
           GetNextChar();
-        } while (::isdigit(cur_char_));
+        } while (IsDigit());
         kind = TokenType::Num;
       } else {
         ::printf("not supported %c\n", cur_char_);
