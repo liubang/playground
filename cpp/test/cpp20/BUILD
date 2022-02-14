@@ -16,7 +16,7 @@
 # Created: 2022/01/26 16:50
 
 _COPTS = [
-    "-std=c++17",
+    "-std=c++20",
     "-fsanitize=address",
     "-fno-omit-frame-pointer",
 ]
@@ -33,9 +33,15 @@ cc_binary(
     ],
     copts = _COPTS,
     linkopts = _LINKOPTS,
-    deps = [
-        "@gtest//:gtest_main",
+)
+
+cc_binary(
+    name = "test_source_location",
+    srcs = [
+        "test_source_location.cpp",
     ],
+    copts = _COPTS,
+    linkopts = _LINKOPTS,
 )
 
 # cc_test(
