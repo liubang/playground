@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <ostream>
+#include <string>
 #include <string_view>
 
 namespace highkyck {
@@ -87,13 +88,13 @@ class Token {
 
   TokenType Type() const { return type_; }
   int Value() const { return value_; }
-  std::string_view Content() const { return content_; }
+  const std::string& Content() const { return content_; }
   const SourceLocation& Location() const { return location_; }
 
  private:
   TokenType type_;
   int value_;
-  std::string_view content_;
+  std::string content_;
   SourceLocation location_;
 };
 
@@ -106,11 +107,11 @@ inline std::ostream& operator<<(std::ostream& os, const Token& token) {
 
 class Lexer {
  public:
-  Lexer(const char* code) : source_code_(code) {}
+  Lexer(std::string_view code) : source_code_(code) {}
   void GetNextToken();
   void ExpectToken(TokenType type);
   std::shared_ptr<Token> CurrentToken() const { return cur_token_; }
-  std::string_view SourceCode() const { return source_code_; }
+  const std::string& SourceCode() const { return source_code_; }
 
  private:
   void GetNextChar();
@@ -120,7 +121,7 @@ class Lexer {
   char PeekChar(int distance);
 
  private:
-  std::string_view source_code_;
+  std::string source_code_;
   std::shared_ptr<Token> cur_token_;
   char cur_char_{' '};
   int64_t cursor_{0};
