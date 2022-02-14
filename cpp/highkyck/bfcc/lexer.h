@@ -88,13 +88,13 @@ class Token {
 
   TokenType Type() const { return type_; }
   int Value() const { return value_; }
-  const std::string& Content() const { return content_; }
+  std::string_view Content() const { return content_; }
   const SourceLocation& Location() const { return location_; }
 
  private:
   TokenType type_;
   int value_;
-  std::string content_;
+  std::string_view content_;
   SourceLocation location_;
 };
 
@@ -111,7 +111,7 @@ class Lexer {
   void GetNextToken();
   void ExpectToken(TokenType type);
   std::shared_ptr<Token> CurrentToken() const { return cur_token_; }
-  const std::string& SourceCode() const { return source_code_; }
+  std::string_view SourceCode() const { return source_code_; }
 
  private:
   void GetNextChar();
@@ -121,7 +121,7 @@ class Lexer {
   char PeekChar(int distance);
 
  private:
-  std::string source_code_;
+  std::string_view source_code_;
   std::shared_ptr<Token> cur_token_;
   char cur_char_{' '};
   int64_t cursor_{0};
