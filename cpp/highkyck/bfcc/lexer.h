@@ -8,30 +8,28 @@
 namespace highkyck {
 namespace bfcc {
 
-enum class TokenType
-{
-    Add,           // +
-    Sub,           // -
-    Mul,           // *
-    Div,           // /
-    Num,           // number
-    LParent,       // (
-    RParent,       // )
-    Identifier,    // variable
-    Semicolon,     // ;
-    Assign,        // =
-    Equal,         // ==
-    PipeEqual,     // !=
-    Greater,       // >
-    GreaterEqual,  // >=
-    Lesser,        // <
-    LesserEqual,   // <=
-    Eof,
+enum class TokenType {
+  Add,           // +
+  Sub,           // -
+  Mul,           // *
+  Div,           // /
+  Num,           // number
+  LParent,       // (
+  RParent,       // )
+  Identifier,    // variable
+  Semicolon,     // ;
+  Assign,        // =
+  Equal,         // ==
+  PipeEqual,     // !=
+  Greater,       // >
+  GreaterEqual,  // >=
+  Lesser,        // <
+  LesserEqual,   // <=
+  Eof,
 };
 
-inline std::string TokenTypeName(TokenType type)
-{
-    switch (type) {
+inline std::string TokenTypeName(TokenType type) {
+  switch (type) {
     case TokenType::Add: return "+";
     case TokenType::Sub: return "-";
     case TokenType::Mul: return "*";
@@ -50,85 +48,60 @@ inline std::string TokenTypeName(TokenType type)
     case TokenType::LesserEqual: return "<=";
     case TokenType::Eof: return "Eof";
     default: return "Unknown";
-    }
+  }
 }
 
-struct SourceLocation
-{
-    int64_t line;
-    int64_t col;
+struct SourceLocation {
+  uint64_t line;
+  uint64_t col;
 };
 
-inline std::ostream& operator<<(std::ostream&         os,
-                                const SourceLocation& location)
-{
-    os << "(" << location.line << ", " << location.col << ")";
-    return os;
+inline std::ostream& operator<<(std::ostream& os,
+                                const SourceLocation& location) {
+  os << "(" << location.line << ", " << location.col << ")";
+  return os;
 }
 
-class Token
-{
-public:
-    Token(TokenType type, int value, std::string_view content,
-          const SourceLocation& location)
-        : type_(type)
-        , value_(value)
-        , content_(content)
-        , location_(location)
-    {}
+struct Token {
+  TokenType type;
+  int value;
+  std::string_view content;
+  SourceLocation location;
 
-    TokenType Type() const { return type_; }
-
-    int Value() const { return value_; }
-
-    std::string_view Content() const { return content_; }
-
-    const SourceLocation& Location() const { return location_; }
-
-private:
-    TokenType        type_;
-    int              value_;
-    std::string_view content_;
-    SourceLocation   location_;
+  Token(TokenType type, int value, std::string_view content,
+        const SourceLocation& location)
+      : type(type), value(value), content(content), location(location) {}
 };
 
-inline std::ostream& operator<<(std::ostream& os, const Token& token)
-{
-    os << "Token{Content: " << token.Content()
-       << ", Type: " << TokenTypeName(token.Type())
-       << ", Location: " << token.Location() << "}";
-    return os;
+inline std::ostream& operator<<(std::ostream& os, const Token& token) {
+  os << "Token{Content: " << token.content
+     << ", Type: " << TokenTypeName(token.type)
+     << ", Location: " << token.location << "}";
+  return os;
 }
 
-class Lexer
-{
-public:
-    explicit Lexer(const char* source_code)
-        : source_code_(source_code)
-    {}
+class Lexer {
+ public:
+  explicit Lexer(const char* source_code) : source_code_(source_code) {}
+  void GetNextToken();
+  void ExpectToken(TokenType type);
+  std::shared_ptr<Token> CurrentToken() const { return cur_token_; }
+  std::string_view SourceCode() const { return source_code_; }
 
-    void GetNextToken();
+ private:
+  void GetNextChar();
+  bool IsLetter();
+  bool IsDigit();
+  bool IsLetterOrDigit();
+  char PeekChar(int distance);
 
-    void ExpectToken(TokenType type);
-
-    std::shared_ptr<Token> CurrentToken() const { return cur_token_; }
-
-    std::string_view SourceCode() const { return source_code_; }
-
-private:
-    void GetNextChar();
-    bool IsLetter();
-    bool IsDigit();
-    bool IsLetterOrDigit();
-    char PeekChar(int distance);
-
-private:
-    std::string_view       source_code_;
-    std::shared_ptr<Token> cur_token_;
-    char                   cur_char_{' '};
-    int64_t                cursor_{0};
-    int64_t                line_{0};
-    int64_t                line_head_{0};
+ private:
+  std::string_view source_code_;
+  std::shared_ptr<Token> cur_token_;
+  char cur_char_{' '};
+  uint64_t cursor_{0};
+  uint64_t line_{0};
+  uint64_t line_head_{0};
 };
 
 }  // namespace bfcc
