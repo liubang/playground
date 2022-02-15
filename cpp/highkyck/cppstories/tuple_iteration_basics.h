@@ -64,11 +64,9 @@ std::ostream& PrintTupleImplStream(std::ostream& os, const TupleT& tp,
 }  // namespace cppstories
 }  // namespace highkyck
 
-namespace std {
 template <typename TupleT,
           std::size_t TupleSize = std::tuple_size<TupleT>::value>
-std::ostream& operator<<(std::ostream& os, const TupleT& tp) {
+inline std::ostream& operator<<(std::ostream& os, const TupleT& tp) {
   return highkyck::cppstories::PrintTupleImplStream(
       os, tp, std::make_index_sequence<TupleSize>{});
 }
-}  // namespace std
