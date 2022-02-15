@@ -3,26 +3,34 @@
 namespace highkyck {
 namespace bfcc {
 
-void ProgramNode::Accept(AstVisitor* visitor) { visitor->VisitorProgram(this); }
-
-void ExprStmtNode::Accept(AstVisitor* visitor) {
-  visitor->VisitorExprStmtNode(this);
+void ProgramNode::Accept(AstVisitor* visitor)
+{
+    visitor->VisitorProgram(this);
 }
 
-void AssignExprNode::Accept(AstVisitor* visitor) {
-  visitor->VisitorAssignStmtNode(this);
+void ExprStmtNode::Accept(AstVisitor* visitor)
+{
+    visitor->VisitorExprStmtNode(this);
 }
 
-void BinaryNode::Accept(AstVisitor* visitor) {
-  visitor->VisitorBinaryNode(this);
+void AssignExprNode::Accept(AstVisitor* visitor)
+{
+    visitor->VisitorAssignStmtNode(this);
 }
 
-void IdentifierNode::Accept(AstVisitor* visitor) {
-  visitor->VisitorIdentifierNode(this);
+void BinaryNode::Accept(AstVisitor* visitor)
+{
+    visitor->VisitorBinaryNode(this);
 }
 
-void ConstantNode::Accept(AstVisitor* visitor) {
-  visitor->VisitorConstantNode(this);
+void IdentifierNode::Accept(AstVisitor* visitor)
+{
+    visitor->VisitorIdentifierNode(this);
+}
+
+void ConstantNode::Accept(AstVisitor* visitor)
+{
+    visitor->VisitorConstantNode(this);
 }
 
 }  // namespace bfcc
