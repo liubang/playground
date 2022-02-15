@@ -2,12 +2,12 @@
 
 #include <gtest/gtest.h>
 
-#define TK(t, v, c)                                \
-  do {                                             \
-    lexer.GetNextToken();                          \
-    EXPECT_EQ(lexer.CurrentToken()->Type(), t);    \
-    EXPECT_EQ(lexer.CurrentToken()->Value(), v);   \
-    EXPECT_EQ(lexer.CurrentToken()->Content(), c); \
+#define TK(t, v, c)                              \
+  do {                                           \
+    lexer.GetNextToken();                        \
+    EXPECT_EQ(lexer.CurrentToken()->type, t);    \
+    EXPECT_EQ(lexer.CurrentToken()->value, v);   \
+    EXPECT_EQ(lexer.CurrentToken()->content, c); \
   } while (0)
 
 TEST(Lexer, GetNextToken) {
