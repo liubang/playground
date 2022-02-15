@@ -1,4 +1,6 @@
 ---
 Language:        Cpp
 BasedOnStyle:  Google
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: Inline
 ...
