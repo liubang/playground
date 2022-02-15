@@ -5,8 +5,8 @@
 namespace highkyck {
 namespace bfcc {
 
-[[noreturn]] void DiagnosticError(std::string_view source, int64_t line,
-                                  int64_t col, const char* fmt, ...);
+[[noreturn]] void DiagnosticError(std::string_view source, uint64_t line,
+                                  uint64_t col, const char* fmt, ...);
 
 }  // namespace bfcc
 }  // namespace highkyck

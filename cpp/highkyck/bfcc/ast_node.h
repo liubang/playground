@@ -9,175 +9,131 @@ namespace bfcc {
 
 class AstVisitor;
 
-struct Identifier
-{
-    std::string_view name;
-    int64_t          offset;
-    Identifier(std::string_view name, int64_t offset)
-        : name(name)
-        , offset(offset)
-    {}
+struct Identifier {
+  std::string_view name;
+  int64_t offset;
+  Identifier(std::string_view name, int64_t offset)
+      : name(name), offset(offset) {}
 };
 
-class AstNode
-{
-public:
-    virtual ~AstNode() {}
-    virtual void Accept(AstVisitor* visitor) = 0;
+class AstNode {
+ public:
+  virtual ~AstNode() {}
+  virtual void Accept(AstVisitor* visitor) = 0;
 };
 
 // program
-class ProgramNode : public AstNode
-{
-public:
-    ProgramNode() = default;
+class ProgramNode : public AstNode {
+ public:
+  ProgramNode() = default;
 
-    ProgramNode(const std::list<std::shared_ptr<AstNode>>& stmts)
-        : stmts_(stmts)
-    {}
+  ProgramNode(const std::list<std::shared_ptr<AstNode>>& stmts)
+      : stmts_(stmts) {}
 
-    virtual ~ProgramNode() = default;
+  virtual ~ProgramNode() = default;
+  void Accept(AstVisitor* visitor) override;
+  void PushStmt(std::shared_ptr<AstNode> stmt) { stmts_.push_back(stmt); }
+  const std::list<std::shared_ptr<AstNode>>& Stmts() const { return stmts_; }
+  const std::list<std::shared_ptr<Identifier>>& LocalIds() const {
+    return local_ids_;
+  }
 
-    void Accept(AstVisitor* visitor) override;
-
-    void PushStmt(std::shared_ptr<AstNode> stmt) { stmts_.push_back(stmt); }
-
-    const std::list<std::shared_ptr<AstNode>>& Stmts() const { return stmts_; }
-
-    const std::list<std::shared_ptr<Identifier>>& LocalIds() const
-    {
-        return local_ids_;
-    }
-
-private:
-    friend class Parser;
-    std::list<std::shared_ptr<AstNode>>    stmts_;
-    std::list<std::shared_ptr<Identifier>> local_ids_;
+ private:
+  friend class Parser;
+  std::list<std::shared_ptr<AstNode>> stmts_;
+  std::list<std::shared_ptr<Identifier>> local_ids_;
 };
 
 // stmt
-class ExprStmtNode : public AstNode
-{
-public:
-    ExprStmtNode(std::shared_ptr<AstNode> lhs)
-        : lhs_(lhs)
-    {}
+class ExprStmtNode : public AstNode {
+ public:
+  ExprStmtNode(std::shared_ptr<AstNode> lhs) : lhs_(lhs) {}
+  virtual ~ExprStmtNode() = default;
+  void Accept(AstVisitor* visitor) override;
+  std::shared_ptr<AstNode> Lhs() const { return lhs_; }
 
-    virtual ~ExprStmtNode() = default;
-
-    void Accept(AstVisitor* visitor) override;
-
-    std::shared_ptr<AstNode> Lhs() const { return lhs_; }
-
-private:
-    std::shared_ptr<AstNode> lhs_;
+ private:
+  std::shared_ptr<AstNode> lhs_;
 };
 
 // assign expr
-class AssignExprNode : public AstNode
-{
-public:
-    AssignExprNode(std::shared_ptr<AstNode> lhs, std::shared_ptr<AstNode> rhs)
-        : lhs_(lhs)
-        , rhs_(rhs)
-    {}
+class AssignExprNode : public AstNode {
+ public:
+  AssignExprNode(std::shared_ptr<AstNode> lhs, std::shared_ptr<AstNode> rhs)
+      : lhs_(lhs), rhs_(rhs) {}
 
-    virtual ~AssignExprNode() = default;
+  virtual ~AssignExprNode() = default;
+  void Accept(AstVisitor* visitor) override;
+  std::shared_ptr<AstNode> Lhs() const { return lhs_; }
+  std::shared_ptr<AstNode> Rhs() const { return rhs_; }
 
-    void Accept(AstVisitor* visitor) override;
-
-    std::shared_ptr<AstNode> Lhs() const { return lhs_; }
-
-    std::shared_ptr<AstNode> Rhs() const { return rhs_; }
-
-private:
-    std::shared_ptr<AstNode> lhs_;
-    std::shared_ptr<AstNode> rhs_;
+ private:
+  std::shared_ptr<AstNode> lhs_;
+  std::shared_ptr<AstNode> rhs_;
 };
 
 // binary op
-enum class BinaryOperator
-{
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Equal,
-    PipeEqual,
-    Greater,
-    GreaterEqual,
-    Lesser,
-    LesserEqual,
+enum class BinaryOperator {
+  Add,
+  Sub,
+  Mul,
+  Div,
+  Equal,
+  PipeEqual,
+  Greater,
+  GreaterEqual,
+  Lesser,
+  LesserEqual,
 };
 
-class BinaryNode : public AstNode
-{
-public:
-    BinaryNode(BinaryOperator op, std::shared_ptr<AstNode> lhs,
-               std::shared_ptr<AstNode> rhs)
-        : op_(op)
-        , lhs_(lhs)
-        , rhs_(rhs)
-    {}
+class BinaryNode : public AstNode {
+ public:
+  BinaryNode(BinaryOperator op, std::shared_ptr<AstNode> lhs,
+             std::shared_ptr<AstNode> rhs)
+      : op_(op), lhs_(lhs), rhs_(rhs) {}
+  void Accept(AstVisitor* visitor) override;
+  std::shared_ptr<AstNode> Lhs() const { return lhs_; }
+  std::shared_ptr<AstNode> Rhs() const { return rhs_; }
+  BinaryOperator Op() const { return op_; }
 
-    void Accept(AstVisitor* visitor) override;
-
-    std::shared_ptr<AstNode> Lhs() const { return lhs_; }
-
-    std::shared_ptr<AstNode> Rhs() const { return rhs_; }
-
-    BinaryOperator Op() const { return op_; }
-
-private:
-    BinaryOperator           op_;
-    std::shared_ptr<AstNode> lhs_;
-    std::shared_ptr<AstNode> rhs_;
+ private:
+  BinaryOperator op_;
+  std::shared_ptr<AstNode> lhs_;
+  std::shared_ptr<AstNode> rhs_;
 };
 
 // identifier
-class IdentifierNode : public AstNode
-{
-public:
-    IdentifierNode(std::shared_ptr<Identifier> id)
-        : id_(id)
-    {}
+class IdentifierNode : public AstNode {
+ public:
+  IdentifierNode(std::shared_ptr<Identifier> id) : id_(id) {}
+  virtual ~IdentifierNode() = default;
+  void Accept(AstVisitor* visitor) override;
+  std::shared_ptr<Identifier> Id() const { return id_; }
 
-    virtual ~IdentifierNode() = default;
-
-    void Accept(AstVisitor* visitor) override;
-
-    std::shared_ptr<Identifier> Id() const { return id_; }
-
-private:
-    std::shared_ptr<Identifier> id_;
+ private:
+  std::shared_ptr<Identifier> id_;
 };
 
 // constant
-class ConstantNode : public AstNode
-{
-public:
-    ConstantNode(int value)
-        : value_(value)
-    {}
+class ConstantNode : public AstNode {
+ public:
+  ConstantNode(int value) : value_(value) {}
+  void Accept(AstVisitor* visitor) override;
+  int Value() const { return value_; }
 
-    void Accept(AstVisitor* visitor) override;
-
-    int Value() const { return value_; }
-
-private:
-    int value_;
+ private:
+  int value_;
 };
 
-class AstVisitor
-{
-public:
-    virtual ~AstVisitor() {}
-    virtual void VisitorProgram(ProgramNode* node)           = 0;
-    virtual void VisitorExprStmtNode(ExprStmtNode* node)     = 0;
-    virtual void VisitorAssignStmtNode(AssignExprNode* node) = 0;
-    virtual void VisitorBinaryNode(BinaryNode* node)         = 0;
-    virtual void VisitorIdentifierNode(IdentifierNode* node) = 0;
-    virtual void VisitorConstantNode(ConstantNode* node)     = 0;
+class AstVisitor {
+ public:
+  virtual ~AstVisitor() {}
+  virtual void VisitorProgram(ProgramNode* node) = 0;
+  virtual void VisitorExprStmtNode(ExprStmtNode* node) = 0;
+  virtual void VisitorAssignStmtNode(AssignExprNode* node) = 0;
+  virtual void VisitorBinaryNode(BinaryNode* node) = 0;
+  virtual void VisitorIdentifierNode(IdentifierNode* node) = 0;
+  virtual void VisitorConstantNode(ConstantNode* node) = 0;
 };
 
 }  // namespace bfcc
