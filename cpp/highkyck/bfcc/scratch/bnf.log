@@ -1,5 +1,7 @@
 Prog            := Stmt*
 Stmt            := Expr;
+                := if (Expr) Stmt
+                := if (Expr) Stmt else Stmt
 Expr            := AssignExpr
 AssignExpr      := EqualityExpr
                 := EqualityExpr = AssignExpr
