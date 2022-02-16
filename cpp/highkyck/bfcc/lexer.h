@@ -25,6 +25,8 @@ enum class TokenType {
   GreaterEqual,  // >=
   Lesser,        // <
   LesserEqual,   // <=
+  If,            // if
+  Else,          // else
   Eof,
 };
 
