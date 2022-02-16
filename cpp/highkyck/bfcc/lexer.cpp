@@ -23,6 +23,9 @@ constexpr char BFCC_CHAR_ASSIGN    = '=';
 constexpr char BFCC_CHAR_NOT       = '!';
 constexpr char BFCC_CHAR_GREATER   = '>';
 constexpr char BFCC_CHAR_LESSER    = '<';
+// some ids
+constexpr char BFCC_ID_IF[]        = "if";
+constexpr char BFCC_ID_ELSE[]      = "else";
 /* clang-format on */
 
 }  // namespace
@@ -158,7 +161,15 @@ void Lexer::GetNextToken() {
         while (IsLetterOrDigit()) {
           GetNextChar();
         }
-        kind = TokenType::Identifier;
+        std::string_view content =
+            source_code_.substr(start_pos, cursor_ - 1 - start_pos);
+        if (content == BFCC_ID_IF) {
+          kind = TokenType::If;
+        } else if (content == BFCC_ID_ELSE) {
+          kind = TokenType::Else;
+        } else {
+          kind = TokenType::Identifier;
+        }
       } else if (IsDigit()) {
         do {
           value = value * 10 + cur_char_ - '0';

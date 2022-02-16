@@ -13,6 +13,17 @@ void PrintVisitor::VisitorProgram(ProgramNode* node) {
   sstream_ << "\n";
 }
 
+void PrintVisitor::VisitorIfStmtNode(IfStmtNode* node) {
+  sstream_ << "if (";
+  node->Cond()->Accept(this);
+  sstream_ << ")";
+  node->Then()->Accept(this);
+  if (node->Else() != nullptr) {
+    sstream_ << " else ";
+    node->Else()->Accept(this);
+  }
+}
+
 void PrintVisitor::VisitorExprStmtNode(ExprStmtNode* node) {
   node->Lhs()->Accept(this);
   sstream_ << ";";

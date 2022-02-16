@@ -37,6 +37,10 @@ void CodeGen::VisitorExprStmtNode(ExprStmtNode* node) {
   node->Lhs()->Accept(this);
 }
 
+void CodeGen::VisitorIfStmtNode(IfStmtNode* node) {
+    //TODO(liubang): 
+}
+
 void CodeGen::VisitorAssignStmtNode(AssignExprNode* node) {
   auto idnode = std::dynamic_pointer_cast<IdentifierNode>(node->Lhs());
   assert(idnode != nullptr);
