@@ -14,12 +14,12 @@ class CodeGen : public AstVisitor {
     code_.str("");
     code_.clear();
   }
-
   void VisitorProgram(ProgramNode* node) override;
   std::string Code() const { return code_.str(); }
 
  private:
   void VisitorExprStmtNode(ExprStmtNode* node) override;
+  void VisitorIfStmtNode(IfStmtNode* node) override;
   void VisitorAssignStmtNode(AssignExprNode* node) override;
   void VisitorBinaryNode(BinaryNode* node) override;
   void VisitorIdentifierNode(IdentifierNode* node) override;

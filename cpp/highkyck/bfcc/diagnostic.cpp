@@ -1,7 +1,6 @@
 #include "diagnostic.h"
 
 #include <cstdarg>
-#include <format>
 #include <iostream>
 
 namespace highkyck {
