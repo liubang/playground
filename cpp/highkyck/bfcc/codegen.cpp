@@ -38,7 +38,33 @@ void CodeGen::VisitorExprStmtNode(ExprStmtNode* node) {
 }
 
 void CodeGen::VisitorIfStmtNode(IfStmtNode* node) {
-    //TODO(liubang): 
+  node->Cond()->Accept(this);
+  int seq = sequence_++;
+  // if
+  code_ << "\tcmp $0, %rax\n";
+  if (node->Else() != nullptr) {
+    code_ << "\tje .L.else_" << seq << "\n";
+  } else {
+    code_ << "\tje .L.end_" << seq << "\n";
+  }
+
+  // then
+  node->Then()->Accept(this);
+  code_ << "\tje .L.end_" << seq << "\n";
+
+  // else
+  if (node->Else() != nullptr) {
+    code_ << ".L.else_" << seq << ":\n";
+    node->Else()->Accept(this);
+  }
+
+  code_ << ".L.end_" << seq << ":\n";
+}
+
+void CodeGen::VisitorBlockStmtNode(BlockStmtNode* node) {
+  for (auto s : node->Stmts()) {
+    s->Accept(this);
+  }
 }
 
 void CodeGen::VisitorAssignStmtNode(AssignExprNode* node) {

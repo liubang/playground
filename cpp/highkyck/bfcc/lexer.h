@@ -16,6 +16,8 @@ enum class TokenType {
   Num,           // number
   LParent,       // (
   RParent,       // )
+  LBrace,        // {
+  RBrace,        // }
   Identifier,    // variable
   Semicolon,     // ;
   Assign,        // =
@@ -39,6 +41,8 @@ inline std::string TokenTypeName(TokenType type) {
     case TokenType::Num: return "Number";
     case TokenType::LParent: return "(";
     case TokenType::RParent: return ")";
+    case TokenType::LBrace: return "{";
+    case TokenType::RBrace: return "}";
     case TokenType::Identifier: return "Identifier";
     case TokenType::Semicolon: return ";";
     case TokenType::Assign: return "=";
@@ -48,6 +52,8 @@ inline std::string TokenTypeName(TokenType type) {
     case TokenType::GreaterEqual: return ">=";
     case TokenType::Lesser: return "<";
     case TokenType::LesserEqual: return "<=";
+    case TokenType::If: return "if";
+    case TokenType::Else: return "else";
     case TokenType::Eof: return "Eof";
     default: return "Unknown";
   }

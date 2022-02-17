@@ -20,6 +20,7 @@ class CodeGen : public AstVisitor {
  private:
   void VisitorExprStmtNode(ExprStmtNode* node) override;
   void VisitorIfStmtNode(IfStmtNode* node) override;
+  void VisitorBlockStmtNode(BlockStmtNode* node) override;
   void VisitorAssignStmtNode(AssignExprNode* node) override;
   void VisitorBinaryNode(BinaryNode* node) override;
   void VisitorIdentifierNode(IdentifierNode* node) override;
@@ -31,6 +32,7 @@ class CodeGen : public AstVisitor {
  private:
   int stack_level_{0};
   std::stringstream code_;
+  int sequence_{0};
 };
 
 }  // namespace bfcc
