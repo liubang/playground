@@ -73,6 +73,18 @@ class IfStmtNode : public AstNode {
   std::shared_ptr<AstNode> else_;
 };
 
+class BlockStmtNode : public AstNode {
+ public:
+  BlockStmtNode() = default;
+  virtual ~BlockStmtNode() = default;
+  void Accept(AstVisitor* visitor) override;
+  void AddStmt(std::shared_ptr<AstNode> stmt) { stmts_.push_back(stmt); }
+  const std::list<std::shared_ptr<AstNode>>& Stmts() const { return stmts_; }
+
+ private:
+  std::list<std::shared_ptr<AstNode>> stmts_;
+};
+
 // assign expr
 class AssignExprNode : public AstNode {
  public:
@@ -148,6 +160,7 @@ class AstVisitor {
   virtual void VisitorProgram(ProgramNode* node) = 0;
   virtual void VisitorExprStmtNode(ExprStmtNode* node) = 0;
   virtual void VisitorIfStmtNode(IfStmtNode* node) = 0;
+  virtual void VisitorBlockStmtNode(BlockStmtNode* node) = 0;
   virtual void VisitorAssignStmtNode(AssignExprNode* node) = 0;
   virtual void VisitorBinaryNode(BinaryNode* node) = 0;
   virtual void VisitorIdentifierNode(IdentifierNode* node) = 0;

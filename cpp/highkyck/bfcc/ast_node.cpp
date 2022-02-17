@@ -15,6 +15,10 @@ void IfStmtNode::Accept(AstVisitor* visitor) {
   visitor->VisitorIfStmtNode(this);
 }
 
+void BlockStmtNode::Accept(AstVisitor* visitor) {
+  visitor->VisitorBlockStmtNode(this);
+}
+
 void AssignExprNode::Accept(AstVisitor* visitor) {
   visitor->VisitorAssignStmtNode(this);
 }
