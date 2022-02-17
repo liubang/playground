@@ -90,4 +90,36 @@ TEST(Lexer, test2) {
   TK(highkyck::bfcc::TokenType::Eof, 0, "");
 }
 
+TEST(Lexer, test3) {
+  constexpr char code[] = "a=3; if (a !=3) { a = 3;} else a = a * a;";
+  highkyck::bfcc::Lexer lexer(code);
+
+  TK(highkyck::bfcc ::TokenType::Identifier, 0, "a");
+  TK(highkyck::bfcc ::TokenType::Assign, 0, "=");
+  TK(highkyck::bfcc ::TokenType::Num, 3, "3");
+  TK(highkyck::bfcc ::TokenType::Semicolon, 0, ";");
+  TK(highkyck::bfcc ::TokenType::If, 0, "if");
+  TK(highkyck::bfcc ::TokenType::LParent, 0, "(");
+  TK(highkyck::bfcc ::TokenType::Identifier, 0, "a");
+  TK(highkyck::bfcc ::TokenType::PipeEqual, 0, "!=");
+  TK(highkyck::bfcc ::TokenType::Num, 3, "3");
+  TK(highkyck::bfcc ::TokenType::RParent, 0, ")");
+  TK(highkyck::bfcc ::TokenType::LBrace, 0, "{");
+  TK(highkyck::bfcc ::TokenType::Identifier, 0, "a");
+  TK(highkyck::bfcc ::TokenType::Assign, 0, "=");
+  TK(highkyck::bfcc ::TokenType::Num, 3, "3");
+  TK(highkyck::bfcc ::TokenType::Semicolon, 0, ";");
+  TK(highkyck::bfcc ::TokenType::RBrace, 0, "}");
+  TK(highkyck::bfcc ::TokenType::Else, 0, "else");
+  TK(highkyck::bfcc ::TokenType::Identifier, 0, "a");
+  TK(highkyck::bfcc ::TokenType::Assign, 0, "=");
+  TK(highkyck::bfcc ::TokenType::Identifier, 0, "a");
+  TK(highkyck::bfcc ::TokenType::Mul, 0, "*");
+  TK(highkyck::bfcc ::TokenType::Identifier, 0, "a");
+  TK(highkyck::bfcc ::TokenType::Semicolon, 0, ";");
+
+  // Eof
+  TK(highkyck::bfcc::TokenType::Eof, 0, "");
+}
+
 #undef TK

@@ -23,6 +23,8 @@ constexpr char BFCC_CHAR_ASSIGN    = '=';
 constexpr char BFCC_CHAR_NOT       = '!';
 constexpr char BFCC_CHAR_GREATER   = '>';
 constexpr char BFCC_CHAR_LESSER    = '<';
+constexpr char BFCC_CHAR_LBRACE    = '{';
+constexpr char BFCC_CHAR_RBRACE    = '}';
 // some ids
 constexpr char BFCC_ID_IF[]        = "if";
 constexpr char BFCC_ID_ELSE[]      = "else";
@@ -105,6 +107,14 @@ void Lexer::GetNextToken() {
       break;
     case BFCC_CHAR_DIV:
       kind = TokenType::Div;
+      GetNextChar();
+      break;
+    case BFCC_CHAR_LBRACE:
+      kind = TokenType::LBrace;
+      GetNextChar();
+      break;
+    case BFCC_CHAR_RBRACE:
+      kind = TokenType::RBrace;
       GetNextChar();
       break;
     case BFCC_CHAR_LPARENT:
