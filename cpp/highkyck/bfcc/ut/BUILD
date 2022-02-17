@@ -23,17 +23,35 @@ cc_binary(
 )
 
 genrule(
-    name = "compiled_source",
+    name = "gen_test_stmt",
     srcs = [":bfcc"],
-    outs = ["compiled_source.s"],
+    outs = ["gen_test_stmt.s"],
     cmd = "./$(locations :bfcc) 'a=3;a<=3;' > $@",
 )
 
 cc_binary(
-    name = "driver",
+    name = "test_stmt",
     srcs = [
         "driver.c",
-        ":compiled_source",
+        ":gen_test_stmt",
+    ],
+    copts = [
+        "-std=c11",
+    ],
+)
+
+genrule(
+    name = "gen_test_ifelse",
+    srcs = [":bfcc"],
+    outs = ["gen_test_ifelse.s"],
+    cmd = "./$(locations :bfcc) 'a=2; if (a!=3) {a = 3; a = a * a;} else {if (a == 3) a = 5; else a = 6;} a = a + 7;' > $@",
+)
+
+cc_binary(
+    name = "test_ifelse",
+    srcs = [
+        "driver.c",
+        ":gen_test_ifelse",
     ],
     copts = [
         "-std=c11",
