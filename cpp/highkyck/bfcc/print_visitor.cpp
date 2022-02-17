@@ -24,6 +24,14 @@ void PrintVisitor::VisitorIfStmtNode(IfStmtNode* node) {
   }
 }
 
+void PrintVisitor::VisitorBlockStmtNode(BlockStmtNode* node) {
+  sstream_ << "{";
+  for (auto s : node->Stmts()) {
+    s->Accept(this);
+  }
+  sstream_ << "}";
+}
+
 void PrintVisitor::VisitorExprStmtNode(ExprStmtNode* node) {
   node->Lhs()->Accept(this);
   sstream_ << ";";
