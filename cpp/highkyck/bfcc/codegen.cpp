@@ -43,14 +43,14 @@ void CodeGen::VisitorIfStmtNode(IfStmtNode* node) {
   // if
   code_ << "\tcmp $0, %rax\n";
   if (node->Else() != nullptr) {
-    code_ << "\tje .L.else_" << seq << "\n";
+    code_ << "\tjne .L.else_" << seq << "\n";
   } else {
     code_ << "\tje .L.end_" << seq << "\n";
   }
 
   // then
   node->Then()->Accept(this);
-  code_ << "\tje .L.end_" << seq << "\n";
+  code_ << "\tjmp .L.end_" << seq << "\n";
 
   // else
   if (node->Else() != nullptr) {
