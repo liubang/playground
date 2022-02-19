@@ -29,6 +29,7 @@ enum class TokenType {
   LesserEqual,   // <=
   If,            // if
   Else,          // else
+  While,         // while
   Eof,
 };
 
@@ -54,6 +55,7 @@ inline std::string TokenTypeName(TokenType type) {
     case TokenType::LesserEqual: return "<=";
     case TokenType::If: return "if";
     case TokenType::Else: return "else";
+    case TokenType::While: return "while";
     case TokenType::Eof: return "Eof";
     default: return "Unknown";
   }
