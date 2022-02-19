@@ -58,6 +58,24 @@ cc_binary(
     ],
 )
 
+genrule(
+    name = "gen_while",
+    srcs = [":bfcc"],
+    outs = ["gen_while.s"],
+    cmd = "./$(locations :bfcc) 'a=1;while(a<10){a=a+1;}a;' > $@",
+)
+
+cc_binary(
+    name = "test_while",
+    srcs = [
+        "driver.c",
+        ":gen_while",
+    ],
+    copts = [
+        "-std=c11",
+    ],
+)
+
 cc_test(
     name = "lexer_test",
     srcs = [

@@ -34,7 +34,10 @@ void CodeGen::VisitorProgram(ProgramNode* node) {
 }
 
 void CodeGen::VisitorExprStmtNode(ExprStmtNode* node) {
-  node->Lhs()->Accept(this);
+  // skip empty stmt, such as ';;'
+  if (node->Lhs() != nullptr) {
+    node->Lhs()->Accept(this);
+  }
 }
 
 void CodeGen::VisitorIfStmtNode(IfStmtNode* node) {
@@ -43,7 +46,7 @@ void CodeGen::VisitorIfStmtNode(IfStmtNode* node) {
   // if
   code_ << "\tcmp $0, %rax\n";
   if (node->Else() != nullptr) {
-    code_ << "\tjne .L.else_" << seq << "\n";
+    code_ << "\tje .L.else_" << seq << "\n";
   } else {
     code_ << "\tje .L.end_" << seq << "\n";
   }
@@ -56,8 +59,20 @@ void CodeGen::VisitorIfStmtNode(IfStmtNode* node) {
   if (node->Else() != nullptr) {
     code_ << ".L.else_" << seq << ":\n";
     node->Else()->Accept(this);
+    code_ << "\tjmp .L.end_" << seq << "\n";
   }
 
+  code_ << ".L.end_" << seq << ":\n";
+}
+
+void CodeGen::VisitorWhileStmtNode(WhileStmtNode* node) {
+  int seq = sequence_++;
+  code_ << ".L.begin_" << seq << ":\n";
+  node->Cond()->Accept(this);
+  code_ << "\tcmp $0, %rax\n";
+  code_ << "\tje .L.end_" << seq << "\n";
+  node->Then()->Accept(this);
+  code_ << "\tjmp .L.begin_" << seq << "\n";
   code_ << ".L.end_" << seq << ":\n";
 }
 
