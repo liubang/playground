@@ -47,9 +47,10 @@ class ProgramNode : public AstNode {
 // stmt
 class ExprStmtNode : public AstNode {
  public:
-  ExprStmtNode(std::shared_ptr<AstNode> lhs) : lhs_(lhs) {}
+  ExprStmtNode(std::shared_ptr<AstNode> lhs = nullptr) : lhs_(lhs) {}
   virtual ~ExprStmtNode() = default;
   void Accept(AstVisitor* visitor) override;
+  void SetLhs(std::shared_ptr<AstNode> lhs) { lhs_ = lhs; }
   std::shared_ptr<AstNode> Lhs() const { return lhs_; }
 
  private:
@@ -71,6 +72,20 @@ class IfStmtNode : public AstNode {
   std::shared_ptr<AstNode> cond_;
   std::shared_ptr<AstNode> then_;
   std::shared_ptr<AstNode> else_;
+};
+
+class WhileStmtNode : public AstNode {
+ public:
+  WhileStmtNode(std::shared_ptr<AstNode> c, std::shared_ptr<AstNode> t)
+      : cond_(c), then_(t) {}
+  virtual ~WhileStmtNode() = default;
+  void Accept(AstVisitor* visitor) override;
+  std::shared_ptr<AstNode> Cond() const { return cond_; }
+  std::shared_ptr<AstNode> Then() const { return then_; }
+
+ private:
+  std::shared_ptr<AstNode> cond_;
+  std::shared_ptr<AstNode> then_;
 };
 
 class BlockStmtNode : public AstNode {
@@ -160,6 +175,7 @@ class AstVisitor {
   virtual void VisitorProgram(ProgramNode* node) = 0;
   virtual void VisitorExprStmtNode(ExprStmtNode* node) = 0;
   virtual void VisitorIfStmtNode(IfStmtNode* node) = 0;
+  virtual void VisitorWhileStmtNode(WhileStmtNode* node) = 0;
   virtual void VisitorBlockStmtNode(BlockStmtNode* node) = 0;
   virtual void VisitorAssignStmtNode(AssignExprNode* node) = 0;
   virtual void VisitorBinaryNode(BinaryNode* node) = 0;

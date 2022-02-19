@@ -28,6 +28,7 @@ constexpr char BFCC_CHAR_RBRACE    = '}';
 // some ids
 constexpr char BFCC_ID_IF[]        = "if";
 constexpr char BFCC_ID_ELSE[]      = "else";
+constexpr char BFCC_ID_WHILE[]     = "while";
 /* clang-format on */
 
 }  // namespace
@@ -177,6 +178,8 @@ void Lexer::GetNextToken() {
           kind = TokenType::If;
         } else if (content == BFCC_ID_ELSE) {
           kind = TokenType::Else;
+        } else if (content == BFCC_ID_WHILE) {
+          kind = TokenType::While;
         } else {
           kind = TokenType::Identifier;
         }

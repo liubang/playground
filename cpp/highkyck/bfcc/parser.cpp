@@ -29,6 +29,13 @@ std::shared_ptr<AstNode> Parser::ParseStmt() {
       e = ParseStmt();
     }
     return std::make_shared<IfStmtNode>(c, t, e);
+  } else if (lexer_ptr_->CurrentToken()->type == TokenType::While) {
+    lexer_ptr_->GetNextToken();
+    lexer_ptr_->ExpectToken(TokenType::LParent);
+    auto c = ParseExpr();
+    lexer_ptr_->ExpectToken(TokenType::RParent);
+    auto t = ParseStmt();
+    return std::make_shared<WhileStmtNode>(c, t);
   } else if (lexer_ptr_->CurrentToken()->type == TokenType::LBrace) {
     lexer_ptr_->GetNextToken();
     auto node = std::make_shared<BlockStmtNode>();
@@ -38,7 +45,10 @@ std::shared_ptr<AstNode> Parser::ParseStmt() {
     lexer_ptr_->ExpectToken(TokenType::RBrace);
     return node;
   } else {
-    auto node = std::make_shared<ExprStmtNode>(ParseExpr());
+    auto node = std::make_shared<ExprStmtNode>();
+    if (lexer_ptr_->CurrentToken()->type != TokenType::Semicolon) {
+      node->SetLhs(ParseExpr());
+    }
     assert(lexer_ptr_->CurrentToken()->type == TokenType::Semicolon);
     lexer_ptr_->GetNextToken();
     return node;
