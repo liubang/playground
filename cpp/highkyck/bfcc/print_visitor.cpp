@@ -16,12 +16,19 @@ void PrintVisitor::VisitorProgram(ProgramNode* node) {
 void PrintVisitor::VisitorIfStmtNode(IfStmtNode* node) {
   sstream_ << "if (";
   node->Cond()->Accept(this);
-  sstream_ << ")";
+  sstream_ << ") ";
   node->Then()->Accept(this);
   if (node->Else() != nullptr) {
     sstream_ << " else ";
     node->Else()->Accept(this);
   }
+}
+
+void PrintVisitor::VisitorWhileStmtNode(WhileStmtNode* node) {
+  sstream_ << "while (";
+  node->Cond()->Accept(this);
+  sstream_ << ") ";
+  node->Then()->Accept(this);
 }
 
 void PrintVisitor::VisitorBlockStmtNode(BlockStmtNode* node) {
@@ -33,7 +40,9 @@ void PrintVisitor::VisitorBlockStmtNode(BlockStmtNode* node) {
 }
 
 void PrintVisitor::VisitorExprStmtNode(ExprStmtNode* node) {
-  node->Lhs()->Accept(this);
+  if (node->Lhs() != nullptr) {
+    node->Lhs()->Accept(this);
+  }
   sstream_ << ";";
 }
 
@@ -62,11 +71,11 @@ void PrintVisitor::VisitorBinaryNode(BinaryNode* node) {
 }
 
 void PrintVisitor::VisitorIdentifierNode(IdentifierNode* node) {
-  sstream_ << " " << std::string(node->Id()->name) << " ";
+  sstream_ << std::string(node->Id()->name);
 }
 
 void PrintVisitor::VisitorConstantNode(ConstantNode* node) {
-  sstream_ << " " << node->Value() << " ";
+  sstream_ << node->Value();
 }
 
 void PrintVisitor::Descripbe() const {
