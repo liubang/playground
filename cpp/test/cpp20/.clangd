@@ -1,3 +1,3 @@
 CompileFlags:
   Remove: [-fno-canonical-system-headers]
-  Add: [-std=c++20]
+  Add: [-std=c++20, -fcoroutines, -stdlib=libc++]
