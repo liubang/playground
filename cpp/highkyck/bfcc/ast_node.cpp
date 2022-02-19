@@ -15,6 +15,10 @@ void IfStmtNode::Accept(AstVisitor* visitor) {
   visitor->VisitorIfStmtNode(this);
 }
 
+void WhileStmtNode::Accept(AstVisitor* visitor) {
+  visitor->VisitorWhileStmtNode(this);
+}
+
 void BlockStmtNode::Accept(AstVisitor* visitor) {
   visitor->VisitorBlockStmtNode(this);
 }
