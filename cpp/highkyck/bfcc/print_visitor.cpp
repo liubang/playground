@@ -31,6 +31,14 @@ void PrintVisitor::VisitorWhileStmtNode(WhileStmtNode* node) {
   node->Then()->Accept(this);
 }
 
+void PrintVisitor::VisitorDoWhileStmtNode(DoWhileStmtNode* node) {
+  sstream_ << "do ";
+  node->Stmt()->Accept(this);
+  sstream_ << " while (";
+  node->Cond()->Accept(this);
+  sstream_ << ")";
+}
+
 void PrintVisitor::VisitorBlockStmtNode(BlockStmtNode* node) {
   sstream_ << "{";
   for (auto s : node->Stmts()) {
