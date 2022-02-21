@@ -30,6 +30,7 @@ enum class TokenType {
   If,            // if
   Else,          // else
   While,         // while
+  Do,            // do
   Eof,
 };
 
@@ -56,6 +57,7 @@ inline std::string TokenTypeName(TokenType type) {
     case TokenType::If: return "if";
     case TokenType::Else: return "else";
     case TokenType::While: return "while";
+    case TokenType::Do: return "do";
     case TokenType::Eof: return "Eof";
     default: return "Unknown";
   }

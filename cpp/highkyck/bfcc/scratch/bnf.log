@@ -3,6 +3,7 @@ Stmt            := Expr?;
                 := if (Expr) Stmt
                 := if (Expr) Stmt else Stmt
                 := while (Expr) Stmt
+                := do Stmt while (Expr)
                 := {Stmt*}
 Expr            := AssignExpr
 AssignExpr      := EqualityExpr
