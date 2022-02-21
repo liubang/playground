@@ -88,6 +88,20 @@ class WhileStmtNode : public AstNode {
   std::shared_ptr<AstNode> then_;
 };
 
+class DoWhileStmtNode : public AstNode {
+ public:
+  DoWhileStmtNode(std::shared_ptr<AstNode> s, std::shared_ptr<AstNode> c)
+      : stmt_(s), cond_(c) {}
+  virtual ~DoWhileStmtNode() = default;
+  void Accept(AstVisitor* visitor) override;
+  std::shared_ptr<AstNode> Stmt() const { return stmt_; }
+  std::shared_ptr<AstNode> Cond() const { return cond_; }
+
+ private:
+  std::shared_ptr<AstNode> stmt_;
+  std::shared_ptr<AstNode> cond_;
+};
+
 class BlockStmtNode : public AstNode {
  public:
   BlockStmtNode() = default;
@@ -176,6 +190,7 @@ class AstVisitor {
   virtual void VisitorExprStmtNode(ExprStmtNode* node) = 0;
   virtual void VisitorIfStmtNode(IfStmtNode* node) = 0;
   virtual void VisitorWhileStmtNode(WhileStmtNode* node) = 0;
+  virtual void VisitorDoWhileStmtNode(DoWhileStmtNode* node) = 0;
   virtual void VisitorBlockStmtNode(BlockStmtNode* node) = 0;
   virtual void VisitorAssignStmtNode(AssignExprNode* node) = 0;
   virtual void VisitorBinaryNode(BinaryNode* node) = 0;
