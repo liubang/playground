@@ -76,6 +76,17 @@ void CodeGen::VisitorWhileStmtNode(WhileStmtNode* node) {
   code_ << ".L.end_" << seq << ":\n";
 }
 
+void CodeGen::VisitorDoWhileStmtNode(DoWhileStmtNode* node) {
+  int seq = sequence_++;
+  code_ << ".L.begin_" << seq << ":\n";
+  node->Stmt()->Accept(this);
+  node->Cond()->Accept(this);
+  code_ << "\tcmp $0, %rax\n";
+  code_ << "\tje .L.end_" << seq << "\n";
+  code_ << "\tjmp .L.begin_" << seq << "\n";
+  code_ << ".L.end_" << seq << ":\n";
+}
+
 void CodeGen::VisitorBlockStmtNode(BlockStmtNode* node) {
   for (auto s : node->Stmts()) {
     s->Accept(this);
