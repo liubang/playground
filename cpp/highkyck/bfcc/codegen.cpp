@@ -87,8 +87,24 @@ void CodeGen::VisitorDoWhileStmtNode(DoWhileStmtNode* node) {
   code_ << ".L.end_" << seq << ":\n";
 }
 
-// TODO(liubang):
-void CodeGen::VisitorForStmtNode(ForStmtNode* node) {}
+void CodeGen::VisitorForStmtNode(ForStmtNode* node) {
+  int seq = sequence_++;
+  if (node->Init()) {
+    node->Init()->Accept(this);
+  }
+  code_ << ".L.begin_" << seq << ":\n";
+  if (node->Cond()) {
+    node->Cond()->Accept(this);
+    code_ << "\tcmp $0, %rax\n";
+    code_ << "\tje .L.end_" << seq << "\n";
+  }
+  node->Stmt()->Accept(this);
+  if (node->Inc()) {
+    node->Inc()->Accept(this);
+  }
+  code_ << "\tjmp .L.begin_" << seq << "\n";
+  code_ << ".L.end_" << seq << ":\n";
+}
 
 void CodeGen::VisitorBlockStmtNode(BlockStmtNode* node) {
   for (auto s : node->Stmts()) {
