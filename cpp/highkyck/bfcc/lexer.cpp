@@ -30,6 +30,7 @@ constexpr char BFCC_ID_IF[]        = "if";
 constexpr char BFCC_ID_ELSE[]      = "else";
 constexpr char BFCC_ID_WHILE[]     = "while";
 constexpr char BFCC_ID_DO[]        = "do";
+constexpr char BFCC_ID_FOR[]       = "for";
 /* clang-format on */
 
 }  // namespace
@@ -183,6 +184,8 @@ void Lexer::GetNextToken() {
           kind = TokenType::While;
         } else if (content == BFCC_ID_DO) {
           kind = TokenType::Do;
+        } else if (content == BFCC_ID_FOR) {
+          kind = TokenType::For;
         } else {
           kind = TokenType::Identifier;
         }
