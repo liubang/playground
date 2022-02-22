@@ -1,8 +1,9 @@
 ---
-Language:        Cpp
-BasedOnStyle:  Google
+Language:           Cpp
+BasedOnStyle:       Google
 IndentPPDirectives: AfterHash
-IndentCaseLabels: true
-AlwaysBreakTemplateDeclarations: false
+IndentCaseLabels:   true
+AlwaysBreakTemplateDeclarations:   true
 AllowShortCaseLabelsOnASingleLine: true
-AllowShortFunctionsOnASingleLine: Inline
+AllowShortFunctionsOnASingleLine:  Inline
+...
