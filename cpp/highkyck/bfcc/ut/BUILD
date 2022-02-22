@@ -94,6 +94,24 @@ cc_binary(
     ],
 )
 
+genrule(
+    name = "gen_for_loop",
+    srcs = [":bfcc"],
+    outs = ["gen_for_loop.s"],
+    cmd = "./$(locations :bfcc) 'j=0;for(i=0;i <=10;i=i+1) {j=j+i;};j;' > $@",
+)
+
+cc_binary(
+    name = "test_for_loop",
+    srcs = [
+        "driver.c",
+        ":gen_for_loop",
+    ],
+    copts = [
+        "-std=c11",
+    ],
+)
+
 cc_test(
     name = "lexer_test",
     srcs = [
