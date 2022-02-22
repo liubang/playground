@@ -102,6 +102,27 @@ class DoWhileStmtNode : public AstNode {
   std::shared_ptr<AstNode> cond_;
 };
 
+class ForStmtNode : public AstNode {
+ public:
+  ForStmtNode(std::shared_ptr<AstNode> init = nullptr,
+              std::shared_ptr<AstNode> cond = nullptr,
+              std::shared_ptr<AstNode> inc = nullptr,
+              std::shared_ptr<AstNode> stmt = nullptr)
+      : init_(init), cond_(cond), inc_(inc), stmt_(stmt) {}
+  virtual ~ForStmtNode() = default;
+  void Accept(AstVisitor* visitor) override;
+  std::shared_ptr<AstNode> Init() const { return init_; }
+  std::shared_ptr<AstNode> Cond() const { return cond_; }
+  std::shared_ptr<AstNode> Inc() const { return inc_; }
+  std::shared_ptr<AstNode> Stmt() const { return stmt_; }
+
+ private:
+  std::shared_ptr<AstNode> init_;
+  std::shared_ptr<AstNode> cond_;
+  std::shared_ptr<AstNode> inc_;
+  std::shared_ptr<AstNode> stmt_;
+};
+
 class BlockStmtNode : public AstNode {
  public:
   BlockStmtNode() = default;
@@ -191,6 +212,7 @@ class AstVisitor {
   virtual void VisitorIfStmtNode(IfStmtNode* node) = 0;
   virtual void VisitorWhileStmtNode(WhileStmtNode* node) = 0;
   virtual void VisitorDoWhileStmtNode(DoWhileStmtNode* node) = 0;
+  virtual void VisitorForStmtNode(ForStmtNode* node) = 0;
   virtual void VisitorBlockStmtNode(BlockStmtNode* node) = 0;
   virtual void VisitorAssignStmtNode(AssignExprNode* node) = 0;
   virtual void VisitorBinaryNode(BinaryNode* node) = 0;

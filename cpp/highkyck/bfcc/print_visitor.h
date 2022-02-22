@@ -24,6 +24,7 @@ class PrintVisitor : public AstVisitor {
   void VisitorIfStmtNode(IfStmtNode* node) override;
   void VisitorWhileStmtNode(WhileStmtNode* node) override;
   void VisitorDoWhileStmtNode(DoWhileStmtNode* node) override;
+  void VisitorForStmtNode(ForStmtNode* node) override;
   void VisitorBlockStmtNode(BlockStmtNode* node) override;
   void VisitorAssignStmtNode(AssignExprNode* node) override;
   void VisitorBinaryNode(BinaryNode* node) override;

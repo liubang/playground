@@ -23,6 +23,10 @@ void DoWhileStmtNode::Accept(AstVisitor* visitor) {
   visitor->VisitorDoWhileStmtNode(this);
 }
 
+void ForStmtNode::Accept(AstVisitor* visitor) {
+  visitor->VisitorForStmtNode(this);
+}
+
 void BlockStmtNode::Accept(AstVisitor* visitor) {
   visitor->VisitorBlockStmtNode(this);
 }
