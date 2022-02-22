@@ -7,3 +7,13 @@ cc_binary(
         "-std=c++17",
     ],
 )
+
+cc_binary(
+    name = "test_apply",
+    srcs = [
+        "test_apply.cpp",
+    ],
+    copts = [
+        "-std=c++17",
+    ],
+)

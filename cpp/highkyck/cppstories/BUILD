@@ -25,3 +25,19 @@ cc_test(
         "@gtest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "test_tuple_iteration_apply",
+    srcs = [
+        "test_tuple_iteration_apply.cpp",
+        "tuple_iteration_apply.h",
+        "tuple_iteration_basics.h",
+    ],
+    copts = _common_copts + [
+        "-std=c++17",
+    ],
+    linkopts = _common_linkopts,
+    deps = [
+        "@gtest//:gtest_main",
+    ],
+)
