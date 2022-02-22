@@ -79,3 +79,15 @@ TEST(PrintVisitor, test_do_while_stmt) {
   auto ret = visitor.String();
   EXPECT_EQ(ret, "a = 0;b = 1;do {a = a + 1;b = a + b;} while (a < 10);b;\n");
 }
+
+TEST(PrintVisitor, test_for_loop_stmt) {
+  const char* code = "a=0;b=0;for(a=0;a<=10;a=a+1) {b=b+a;};b;";
+  highkyck::bfcc::Lexer lexer(code);
+  lexer.GetNextToken();
+  highkyck::bfcc::Parser parser(&lexer);
+  highkyck::bfcc::PrintVisitor visitor;
+  auto root = parser.Parse();
+  root->Accept(&visitor);
+  auto ret = visitor.String();
+  EXPECT_EQ(ret, "a = 0;b = 0;for (a = 0;a <= 10;a = a + 1) {b = b + a;};b;\n");
+}

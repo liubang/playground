@@ -87,6 +87,9 @@ void CodeGen::VisitorDoWhileStmtNode(DoWhileStmtNode* node) {
   code_ << ".L.end_" << seq << ":\n";
 }
 
+// TODO(liubang):
+void CodeGen::VisitorForStmtNode(ForStmtNode* node) {}
+
 void CodeGen::VisitorBlockStmtNode(BlockStmtNode* node) {
   for (auto s : node->Stmts()) {
     s->Accept(this);

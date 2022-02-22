@@ -39,6 +39,23 @@ void PrintVisitor::VisitorDoWhileStmtNode(DoWhileStmtNode* node) {
   sstream_ << ")";
 }
 
+void PrintVisitor::VisitorForStmtNode(ForStmtNode* node) {
+  sstream_ << "for (";
+  if (node->Init() != nullptr) {
+    node->Init()->Accept(this);
+  }
+  sstream_ << ";";
+  if (node->Cond() != nullptr) {
+    node->Cond()->Accept(this);
+  }
+  sstream_ << ";";
+  if (node->Inc() != nullptr) {
+    node->Inc()->Accept(this);
+  }
+  sstream_ << ") ";
+  node->Stmt()->Accept(this);
+}
+
 void PrintVisitor::VisitorBlockStmtNode(BlockStmtNode* node) {
   sstream_ << "{";
   for (auto s : node->Stmts()) {
