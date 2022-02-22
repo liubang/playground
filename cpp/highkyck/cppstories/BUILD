@@ -31,10 +31,9 @@ cc_test(
     srcs = [
         "test_tuple_iteration_apply.cpp",
         "tuple_iteration_apply.h",
-        "tuple_iteration_basics.h",
     ],
     copts = _common_copts + [
-        "-std=c++17",
+        "-std=c++20",
     ],
     linkopts = _common_linkopts,
     deps = [
