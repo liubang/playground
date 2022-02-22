@@ -15,7 +15,7 @@ void DiagnosticError(std::string_view source, uint64_t line, uint64_t col,
   std::vfprintf(stderr, fmt, ap);
   std::fprintf(stderr, "\n");
   va_end(ap);
-  exit(0);
+  exit(-1);
 }
 
 }  // namespace bfcc
