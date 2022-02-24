@@ -7,10 +7,24 @@ namespace highkyck {
 namespace bfcc {
 
 void PrintVisitor::VisitorProgram(ProgramNode* node) {
-  for (auto& s : node->Stmts()) {
+  for (auto& s : node->Funcs()) {
     s->Accept(this);
   }
   sstream_ << "\n";
+}
+
+void PrintVisitor::VisitorFunctionNode(FunctionNode* node) {
+  sstream_ << node->Name() << " (";
+  const auto& params = node->Params();
+  for (std::size_t i = 0; i < params.size(); ++i) {
+    if (i > 0) sstream_ << ", ";
+    sstream_ << params[i]->name;
+  }
+  sstream_ << ") {";
+  for (const auto& stmt : node->Stmts()) {
+    stmt->Accept(this);
+  }
+  sstream_ << "}";
 }
 
 void PrintVisitor::VisitorIfStmtNode(IfStmtNode* node) {
