@@ -1,4 +1,6 @@
-Prog            := Stmt*
+Prog            := Function*
+Function        := Identifier( FuncArg? ) { Stmt* }
+FuncArg         := Identifier (, Identifier)*
 Stmt            := Expr?;
                 := if (Expr) Stmt
                 := if (Expr) Stmt else Stmt

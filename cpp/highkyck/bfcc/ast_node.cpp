@@ -7,6 +7,10 @@ void ProgramNode::Accept(AstVisitor* visitor) {
   visitor->VisitorProgram(this);
 }
 
+void FunctionNode::Accept(AstVisitor* visitor) {
+  visitor->VisitorFunctionNode(this);
+}
+
 void ExprStmtNode::Accept(AstVisitor* visitor) {
   visitor->VisitorExprStmtNode(this);
 }

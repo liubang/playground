@@ -18,6 +18,7 @@ class CodeGen : public AstVisitor {
   std::string Code() const { return code_.str(); }
 
  private:
+  void VisitorFunctionNode(FunctionNode* node) override;
   void VisitorExprStmtNode(ExprStmtNode* node) override;
   void VisitorIfStmtNode(IfStmtNode* node) override;
   void VisitorWhileStmtNode(WhileStmtNode* node) override;

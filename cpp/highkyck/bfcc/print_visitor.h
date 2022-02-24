@@ -20,6 +20,7 @@ class PrintVisitor : public AstVisitor {
   std::string String() const;
 
  private:
+  void VisitorFunctionNode(FunctionNode* node) override;
   void VisitorExprStmtNode(ExprStmtNode* node) override;
   void VisitorIfStmtNode(IfStmtNode* node) override;
   void VisitorWhileStmtNode(WhileStmtNode* node) override;
