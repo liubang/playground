@@ -3,6 +3,7 @@
 #include <list>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace highkyck {
 namespace bfcc {
@@ -27,21 +28,43 @@ class ProgramNode : public AstNode {
  public:
   ProgramNode() = default;
 
-  ProgramNode(const std::list<std::shared_ptr<AstNode>>& stmts)
-      : stmts_(stmts) {}
+  ProgramNode(const std::list<std::shared_ptr<AstNode>>& funcs)
+      : funcs_(funcs) {}
 
   virtual ~ProgramNode() = default;
   void Accept(AstVisitor* visitor) override;
+  void PushFunc(std::shared_ptr<AstNode> func) { funcs_.push_back(func); }
+  const std::list<std::shared_ptr<AstNode>>& Funcs() const { return funcs_; }
+
+ private:
+  std::list<std::shared_ptr<AstNode>> funcs_;
+};
+
+class FunctionNode : public AstNode {
+ public:
+  explicit FunctionNode(std::string_view name) : name_(name) {}
+  virtual ~FunctionNode() = default;
+  void Accept(AstVisitor* visitor) override;
+  void AddParams(std::shared_ptr<Identifier> param) {
+    params_.push_back(param);
+  }
+  void PushLocalId(std::shared_ptr<Identifier> id) { local_ids_.push_back(id); }
   void PushStmt(std::shared_ptr<AstNode> stmt) { stmts_.push_back(stmt); }
-  const std::list<std::shared_ptr<AstNode>>& Stmts() const { return stmts_; }
+  std::string_view Name() const { return name_; }
+  const std::vector<std::shared_ptr<Identifier>>& Params() const {
+    return params_;
+  }
   const std::list<std::shared_ptr<Identifier>>& LocalIds() const {
     return local_ids_;
   }
+  const std::list<std::shared_ptr<AstNode>>& Stmts() const { return stmts_; }
 
  private:
   friend class Parser;
-  std::list<std::shared_ptr<AstNode>> stmts_;
+  std::string_view name_;
+  std::vector<std::shared_ptr<Identifier>> params_;
   std::list<std::shared_ptr<Identifier>> local_ids_;
+  std::list<std::shared_ptr<AstNode>> stmts_;
 };
 
 // stmt
@@ -208,6 +231,7 @@ class AstVisitor {
  public:
   virtual ~AstVisitor() {}
   virtual void VisitorProgram(ProgramNode* node) = 0;
+  virtual void VisitorFunctionNode(FunctionNode* node) = 0;
   virtual void VisitorExprStmtNode(ExprStmtNode* node) = 0;
   virtual void VisitorIfStmtNode(IfStmtNode* node) = 0;
   virtual void VisitorWhileStmtNode(WhileStmtNode* node) = 0;

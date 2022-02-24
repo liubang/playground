@@ -33,6 +33,9 @@ void CodeGen::VisitorProgram(ProgramNode* node) {
   code_ << "\tret\n";
 }
 
+// TODO(liubang):
+void CodeGen::VisitorFunctionNode(FunctionNode* node) {}
+
 void CodeGen::VisitorExprStmtNode(ExprStmtNode* node) {
   // skip empty stmt, such as ';;'
   if (node->Lhs() != nullptr) {

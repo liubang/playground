@@ -9,10 +9,38 @@ namespace bfcc {
 
 std::shared_ptr<ProgramNode> Parser::Parse() {
   auto node = std::make_shared<ProgramNode>();
-  ids_ = &node->local_ids_;
   while (lexer_ptr_->CurrentToken()->type != TokenType::Eof) {
+    node->PushFunc(ParseFunction());
+  }
+  return node;
+}
+
+std::shared_ptr<AstNode> Parser::ParseFunction() {
+  auto node =
+      std::make_shared<FunctionNode>(lexer_ptr_->CurrentToken()->content);
+  ids_ = &node->local_ids_;
+  ids_map_.clear();
+  lexer_ptr_->ExpectToken(TokenType::Identifier);
+  lexer_ptr_->ExpectToken(TokenType::LParent);
+  if (lexer_ptr_->CurrentToken()->type != TokenType::RParent) {
+    auto tok = lexer_ptr_->CurrentToken();
+    ParsePrimaryExpr();
+    node->AddParams(ids_map_[tok->content]);
+    while (lexer_ptr_->CurrentToken()->type == TokenType::Comma) {
+      lexer_ptr_->GetNextToken();
+      auto tok = lexer_ptr_->CurrentToken();
+      ParsePrimaryExpr();
+      node->AddParams(ids_map_[tok->content]);
+    }
+  }
+  lexer_ptr_->ExpectToken(TokenType::RParent);
+
+  lexer_ptr_->ExpectToken(TokenType::LBrace);
+  while (lexer_ptr_->CurrentToken()->type != TokenType::RBrace) {
     node->PushStmt(ParseStmt());
   }
+  lexer_ptr_->ExpectToken(TokenType::RBrace);
+
   return node;
 }
 

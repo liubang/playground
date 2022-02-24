@@ -15,6 +15,7 @@ class Parser {
   std::shared_ptr<ProgramNode> Parse();
 
  private:
+  std::shared_ptr<AstNode> ParseFunction();
   std::shared_ptr<AstNode> ParseStmt();
   std::shared_ptr<AstNode> ParseExpr();
   std::shared_ptr<AstNode> ParseAssignExpr();
