@@ -19,6 +19,7 @@ enum class TokenType {
   LBrace,        // {
   RBrace,        // }
   Identifier,    // variable
+  Comma,         //,
   Semicolon,     // ;
   Assign,        // =
   Equal,         // ==
