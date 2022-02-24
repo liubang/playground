@@ -18,6 +18,7 @@ constexpr char BFCC_CHAR_MUL       = '*';
 constexpr char BFCC_CHAR_DIV       = '/';
 constexpr char BFCC_CHAR_LPARENT   = '(';
 constexpr char BFCC_CHAR_RPARENT   = ')';
+constexpr char BFCC_CHAR_COMMA     = ',';
 constexpr char BFCC_CHAR_SEMICOLON = ';';
 constexpr char BFCC_CHAR_ASSIGN    = '=';
 constexpr char BFCC_CHAR_NOT       = '!';
@@ -126,6 +127,10 @@ void Lexer::GetNextToken() {
       break;
     case BFCC_CHAR_RPARENT:
       kind = TokenType::RParent;
+      GetNextChar();
+      break;
+    case BFCC_CHAR_COMMA:
+      kind = TokenType::Comma;
       GetNextChar();
       break;
     case BFCC_CHAR_SEMICOLON:
