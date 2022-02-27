@@ -6,16 +6,12 @@
 
 #include "ast_node.h"
 
-namespace highkyck {
-namespace bfcc {
+namespace highkyck::bfcc {
 
 class PrintVisitor : public AstVisitor {
  public:
   void VisitorProgram(ProgramNode* node) override;
-  virtual ~PrintVisitor() {
-    sstream_.str("");
-    sstream_.clear();
-  }
+  ~PrintVisitor() override;
   void Descripbe() const;
   std::string String() const;
 
@@ -36,5 +32,4 @@ class PrintVisitor : public AstVisitor {
   std::stringstream sstream_;
 };
 
-}  // namespace bfcc
 }  // namespace highkyck
