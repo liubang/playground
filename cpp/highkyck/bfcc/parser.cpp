@@ -4,8 +4,7 @@
 
 #include "diagnostic.h"
 
-namespace highkyck {
-namespace bfcc {
+namespace highkyck::bfcc {
 
 std::shared_ptr<ProgramNode> Parser::Parse() {
   auto node = std::make_shared<ProgramNode>();
@@ -229,5 +228,4 @@ std::shared_ptr<Identifier> Parser::MakeId(std::string_view name) {
   return id;
 }
 
-}  // namespace bfcc
-}  // namespace highkyck
+}  // namespace highkyck::bfcc

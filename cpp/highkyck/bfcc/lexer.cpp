@@ -26,18 +26,18 @@ constexpr char BFCC_CHAR_GREATER   = '>';
 constexpr char BFCC_CHAR_LESSER    = '<';
 constexpr char BFCC_CHAR_LBRACE    = '{';
 constexpr char BFCC_CHAR_RBRACE    = '}';
+
 // some ids
-constexpr char BFCC_ID_IF[]        = "if";
-constexpr char BFCC_ID_ELSE[]      = "else";
-constexpr char BFCC_ID_WHILE[]     = "while";
-constexpr char BFCC_ID_DO[]        = "do";
-constexpr char BFCC_ID_FOR[]       = "for";
+constexpr std::string_view BFCC_ID_IF    = "if";
+constexpr std::string_view BFCC_ID_ELSE  = "else";
+constexpr std::string_view BFCC_ID_WHILE = "while";
+constexpr std::string_view BFCC_ID_DO    = "do";
+constexpr std::string_view BFCC_ID_FOR   = "for";
 /* clang-format on */
 
 }  // namespace
 
-namespace highkyck {
-namespace bfcc {
+namespace highkyck::bfcc {
 
 void Lexer::GetNextChar() {
   if (cursor_ == source_code_.size()) {
@@ -212,5 +212,4 @@ void Lexer::GetNextToken() {
       location);
 }
 
-}  // namespace bfcc
-}  // namespace highkyck
+}  // namespace highkyck::bfcc
