@@ -1,16 +1,17 @@
 #pragma once
 
 #include <cassert>
+#include <cstddef>
 #include <memory>
 
-namespace highkyck {
-namespace bloom {
+namespace highkyck::bloom {
 class BloomFilter final {
  public:
   static constexpr uint32_t MAGIC_CODE = 0x424c4f4d;
   static constexpr uint32_t DEFAULT_VERSION = 0;
   static constexpr uint32_t DEFAULT_HASHCOUNT = 4;
-  static constexpr uint64_t DEFAULT_BIT_COUNT = 16 * 1024 * 1024 * 8;
+  static constexpr uint64_t DEFAULT_BIT_COUNT =
+      static_cast<const uint64_t>(16 * 1024 * 1024 * 8);
 
  public:
   explicit BloomFilter(const uint64_t bit_cout);
@@ -20,19 +21,21 @@ class BloomFilter final {
   BloomFilter& operator=(const BloomFilter&) = delete;
   BloomFilter& operator=(const BloomFilter&&) = delete;
 
-  uint32_t get_magic_code() const { return header_.magic_code; }
+  [[nodiscard]] uint32_t get_magic_code() const { return header_.magic_code; }
 
-  uint32_t get_version() const { return header_.version; }
+  [[nodiscard]] uint32_t get_version() const { return header_.version; }
 
-  uint32_t get_hash_count() const { return header_.hash_count; }
+  [[nodiscard]] uint32_t get_hash_count() const { return header_.hash_count; }
 
-  uint64_t get_bit_count() const { return header_.bit_count; }
+  [[nodiscard]] uint64_t get_bit_count() const { return header_.bit_count; }
 
-  uint64_t get_member_count() const { return header_.member_count; }
+  [[nodiscard]] uint64_t get_member_count() const {
+    return header_.member_count;
+  }
 
-  uint64_t get_checksum() const { return header_.checksum; }
+  [[nodiscard]] uint64_t get_checksum() const { return header_.checksum; }
 
-  uint64_t get_memory_size() const {
+  [[nodiscard]] uint64_t get_memory_size() const {
     // 1 byte equals to 8 bits
     return sizeof(BloomFilter) + (get_bit_count() >> 3);
   }
@@ -44,7 +47,7 @@ class BloomFilter final {
   void insert(const void* const data, uint64_t length);
 
  private:
-  bool get_bit(const uint64_t bit_index) const {
+  [[nodiscard]] bool get_bit(const uint64_t bit_index) const {
     assert(bits_ != nullptr && bit_index < header_.bit_count);
     return (bits_.get()[bit_index >> 3] &
             static_cast<uint8_t>(1 << (bit_index & 0x7))) != 0;
@@ -89,5 +92,4 @@ class BloomFilter final {
   Header header_;
   std::unique_ptr<uint8_t[]> bits_;
 };
-}  // namespace bloom
-}  // namespace highkyck
+}  // namespace highkyck::bloom
