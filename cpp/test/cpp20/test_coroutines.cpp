@@ -2,7 +2,8 @@
 #include <exception>
 #include <iostream>
 
-template <typename T> struct Generator {
+template <typename T>
+struct Generator {
   struct promise_type {
     T value;
     std::suspend_always initial_suspend() { return {}; }
@@ -27,7 +28,8 @@ template <typename T> struct Generator {
   }
 };
 
-template <typename T> Generator<T> sequence() {
+template <typename T>
+Generator<T> sequence() {
   int i = 0;
   while (true) {
     co_yield i++;
