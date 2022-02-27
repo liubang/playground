@@ -1,8 +1,8 @@
 #include <stdio.h>
 
-extern int prog();
+extern int test();
 
 int main(int argc, char *argv[]) {
-  printf("prot() = %d\n", prog());
+  printf("test() = %d\n", test());
   return 0;
 }
