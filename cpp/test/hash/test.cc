@@ -6,11 +6,11 @@
 #include <iostream>
 
 #ifdef WORDS_BIGENDIAN
-#define uint32_in_expected_order(x) (bswap_32(x))
-#define uint64_in_expected_order(x) (bswap_64(x))
+#  define uint32_in_expected_order(x) (bswap_32(x))
+#  define uint64_in_expected_order(x) (bswap_64(x))
 #else
-#define uint32_in_expected_order(x) (x)
-#define uint64_in_expected_order(x) (x)
+#  define uint32_in_expected_order(x) (x)
+#  define uint64_in_expected_order(x) (x)
 #endif
 
 static uint64 UNALIGNED_LOAD64(const char* p) {
@@ -48,7 +48,9 @@ static uint64 Rotate(uint64 val, int shift) {
   return shift == 0 ? val : ((val >> shift) | (val << (64 - shift)));
 }
 
-static uint64 ShiftMix(uint64 val) { return val ^ (val >> 47); }
+static uint64 ShiftMix(uint64 val) {
+  return val ^ (val >> 47);
+}
 
 int main(int argc, char* argv[]) {
   // std::cout << s.size() << std::endl;

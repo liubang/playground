@@ -3,8 +3,7 @@
 #include <cassert>
 #include <iostream>
 
-namespace highkyck {
-namespace bfcc {
+namespace highkyck::bfcc {
 
 void PrintVisitor::VisitorProgram(ProgramNode* node) {
   for (auto& s : node->Funcs()) {
@@ -14,7 +13,7 @@ void PrintVisitor::VisitorProgram(ProgramNode* node) {
 }
 
 void PrintVisitor::VisitorFunctionNode(FunctionNode* node) {
-  sstream_ << node->Name() << " (";
+  sstream_ << node->Name() << "(";
   const auto& params = node->Params();
   for (std::size_t i = 0; i < params.size(); ++i) {
     if (i > 0) sstream_ << ", ";
@@ -125,5 +124,9 @@ std::string PrintVisitor::String() const {
   return sstream_.str();
 }
 
-}  // namespace bfcc
-}  // namespace highkyck
+PrintVisitor::~PrintVisitor() {
+  sstream_.str("");
+  sstream_.clear();
+}
+
+}  // namespace highkyck::bfcc

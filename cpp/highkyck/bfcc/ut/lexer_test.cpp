@@ -11,7 +11,7 @@
   } while (0)
 
 TEST(Lexer, test_relational_operator) {
-  constexpr char code[] =
+  const char code[] =
       " 125 +abc_124d + (1 - 3 ) * 4 / 2;a == 1;a > 1; a>=1; a < 1; a<=1;";
 
   highkyck::bfcc::Lexer lexer(code);

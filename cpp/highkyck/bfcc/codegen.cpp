@@ -1,29 +1,48 @@
 #include "codegen.h"
 
+#include <array>
 #include <cassert>
+#include <cstddef>
 #include <cstdio>
 
-namespace highkyck {
-namespace bfcc {
+namespace highkyck::bfcc {
 
 void CodeGen::VisitorProgram(ProgramNode* node) {
-  code_ << "\t.text\n";
+  for (auto& f : node->Funcs()) {
+    f->Accept(this);
+  }
+}
+
+void CodeGen::VisitorFunctionNode(FunctionNode* node) {
+  code_ << ".text\n";
 #ifdef __linux__
-  code_ << "\t.global prog\n";
-  code_ << "prog:\n";
+  code_ << ".global " << node->Name() << "\n";
+  code_ << node->Name() << ":\n";
 #else
   static_assert(__APPLE__, "Only support linux and macos system");
-  code_ << "\t.global _prog\n";
-  code_ << "_prog:\n";
+  code_ << "\t.global _" << node->Name() << "\n";
+  code_ << "_" << node->Name() << ":\n";
 #endif
-  int64_t stack_size = 0;
+
+  int32_t stack_size = 0;
   for (auto& v : node->LocalIds()) {
     stack_size += 8;
-    v->offset = stack_size * -1;
+    v->offset = static_cast<int64_t>(stack_size * -1);
   }
+  stack_size = AlignTo(stack_size, 16);
+
+  // init function stack
   code_ << "\tpush %rbp\n";
   code_ << "\tmov %rsp, %rbp\n";
   code_ << "\tsub $" << stack_size << ", %rsp\n";
+
+  const std::array<std::string, 6> reg = {"%rdi", "%rsi", "%rdx",
+                                          "%rcx", "%r8d", "%r9d"};
+  int i = 0;
+  for (auto& p : node->Params()) {
+    code_ << "\tmov " << reg[i++] << ", %d(" << p->offset << ")\n";
+  }
+
   for (auto& s : node->Stmts()) {
     s->Accept(this);
     assert(stack_level_ == 0);
@@ -32,9 +51,6 @@ void CodeGen::VisitorProgram(ProgramNode* node) {
   code_ << "\tpop %rbp\n";
   code_ << "\tret\n";
 }
-
-// TODO(liubang):
-void CodeGen::VisitorFunctionNode(FunctionNode* node) {}
 
 void CodeGen::VisitorExprStmtNode(ExprStmtNode* node) {
   // skip empty stmt, such as ';;'
@@ -110,7 +126,7 @@ void CodeGen::VisitorForStmtNode(ForStmtNode* node) {
 }
 
 void CodeGen::VisitorBlockStmtNode(BlockStmtNode* node) {
-  for (auto s : node->Stmts()) {
+  for (const auto& s : node->Stmts()) {
     s->Accept(this);
   }
 }
@@ -191,5 +207,12 @@ void CodeGen::Pop(const char* reg) {
   stack_level_--;
 }
 
-}  // namespace bfcc
-}  // namespace highkyck
+int32_t CodeGen::AlignTo(int32_t size, int32_t align) {
+  return (size + align - 1) / align * align;
+}
+
+CodeGen::~CodeGen() {
+  code_.str("");
+  code_.clear();
+}
+}  // namespace highkyck::bfcc

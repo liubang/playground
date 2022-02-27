@@ -3,8 +3,7 @@
 #include <cstdarg>
 #include <iostream>
 
-namespace highkyck {
-namespace bfcc {
+namespace highkyck::bfcc {
 
 void DiagnosticError(std::string_view source, uint64_t line, uint64_t col,
                      const char* fmt, ...) {
@@ -18,5 +17,4 @@ void DiagnosticError(std::string_view source, uint64_t line, uint64_t col,
   exit(-1);
 }
 
-}  // namespace bfcc
-}  // namespace highkyck
+}  // namespace highkyck::bfcc

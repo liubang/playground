@@ -6,8 +6,7 @@
 #include "ast_node.h"
 #include "lexer.h"
 
-namespace highkyck {
-namespace bfcc {
+namespace highkyck::bfcc {
 
 class Parser {
  public:
@@ -36,5 +35,4 @@ class Parser {
       ids_map_;  // for search
 };
 
-}  // namespace bfcc
-}  // namespace highkyck
+}  // namespace highkyck::bfcc

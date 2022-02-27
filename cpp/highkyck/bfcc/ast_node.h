@@ -3,10 +3,10 @@
 #include <list>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
-namespace highkyck {
-namespace bfcc {
+namespace highkyck::bfcc {
 
 class AstVisitor;
 
@@ -19,7 +19,7 @@ struct Identifier {
 
 class AstNode {
  public:
-  virtual ~AstNode() {}
+  virtual ~AstNode() = default;
   virtual void Accept(AstVisitor* visitor) = 0;
 };
 
@@ -28,13 +28,17 @@ class ProgramNode : public AstNode {
  public:
   ProgramNode() = default;
 
-  ProgramNode(const std::list<std::shared_ptr<AstNode>>& funcs)
-      : funcs_(funcs) {}
+  ProgramNode(std::list<std::shared_ptr<AstNode>> funcs)
+      : funcs_(std::move(funcs)) {}
 
-  virtual ~ProgramNode() = default;
+  ~ProgramNode() override = default;
   void Accept(AstVisitor* visitor) override;
-  void PushFunc(std::shared_ptr<AstNode> func) { funcs_.push_back(func); }
-  const std::list<std::shared_ptr<AstNode>>& Funcs() const { return funcs_; }
+  void PushFunc(const std::shared_ptr<AstNode>& func) {
+    funcs_.push_back(func);
+  }
+  [[nodiscard]] const std::list<std::shared_ptr<AstNode>>& Funcs() const {
+    return funcs_;
+  }
 
  private:
   std::list<std::shared_ptr<AstNode>> funcs_;
@@ -43,21 +47,27 @@ class ProgramNode : public AstNode {
 class FunctionNode : public AstNode {
  public:
   explicit FunctionNode(std::string_view name) : name_(name) {}
-  virtual ~FunctionNode() = default;
+  ~FunctionNode() override = default;
   void Accept(AstVisitor* visitor) override;
-  void AddParams(std::shared_ptr<Identifier> param) {
+  void AddParams(const std::shared_ptr<Identifier>& param) {
     params_.push_back(param);
   }
-  void PushLocalId(std::shared_ptr<Identifier> id) { local_ids_.push_back(id); }
-  void PushStmt(std::shared_ptr<AstNode> stmt) { stmts_.push_back(stmt); }
-  std::string_view Name() const { return name_; }
-  const std::vector<std::shared_ptr<Identifier>>& Params() const {
+  void PushLocalId(const std::shared_ptr<Identifier>& id) {
+    local_ids_.push_back(id);
+  }
+  void PushStmt(const std::shared_ptr<AstNode>& stmt) {
+    stmts_.push_back(stmt);
+  }
+  [[nodiscard]] std::string_view Name() const { return name_; }
+  [[nodiscard]] const std::vector<std::shared_ptr<Identifier>>& Params() const {
     return params_;
   }
-  const std::list<std::shared_ptr<Identifier>>& LocalIds() const {
+  [[nodiscard]] const std::list<std::shared_ptr<Identifier>>& LocalIds() const {
     return local_ids_;
   }
-  const std::list<std::shared_ptr<AstNode>>& Stmts() const { return stmts_; }
+  [[nodiscard]] const std::list<std::shared_ptr<AstNode>>& Stmts() const {
+    return stmts_;
+  }
 
  private:
   friend class Parser;
@@ -70,11 +80,11 @@ class FunctionNode : public AstNode {
 // stmt
 class ExprStmtNode : public AstNode {
  public:
-  ExprStmtNode(std::shared_ptr<AstNode> lhs = nullptr) : lhs_(lhs) {}
-  virtual ~ExprStmtNode() = default;
+  ExprStmtNode(std::shared_ptr<AstNode> lhs = nullptr) : lhs_(std::move(lhs)) {}
+  ~ExprStmtNode() override = default;
   void Accept(AstVisitor* visitor) override;
-  void SetLhs(std::shared_ptr<AstNode> lhs) { lhs_ = lhs; }
-  std::shared_ptr<AstNode> Lhs() const { return lhs_; }
+  void SetLhs(std::shared_ptr<AstNode> lhs) { lhs_ = std::move(lhs); }
+  [[nodiscard]] std::shared_ptr<AstNode> Lhs() const { return lhs_; }
 
  private:
   std::shared_ptr<AstNode> lhs_;
@@ -84,12 +94,12 @@ class IfStmtNode : public AstNode {
  public:
   IfStmtNode(std::shared_ptr<AstNode> c, std::shared_ptr<AstNode> t,
              std::shared_ptr<AstNode> e)
-      : cond_(c), then_(t), else_(e) {}
-  virtual ~IfStmtNode() = default;
+      : cond_(std::move(c)), then_(std::move(t)), else_(std::move(e)) {}
+  ~IfStmtNode() override = default;
   void Accept(AstVisitor* visitor) override;
-  std::shared_ptr<AstNode> Cond() const { return cond_; }
-  std::shared_ptr<AstNode> Then() const { return then_; }
-  std::shared_ptr<AstNode> Else() const { return else_; }
+  [[nodiscard]] std::shared_ptr<AstNode> Cond() const { return cond_; }
+  [[nodiscard]] std::shared_ptr<AstNode> Then() const { return then_; }
+  [[nodiscard]] std::shared_ptr<AstNode> Else() const { return else_; }
 
  private:
   std::shared_ptr<AstNode> cond_;
@@ -100,11 +110,11 @@ class IfStmtNode : public AstNode {
 class WhileStmtNode : public AstNode {
  public:
   WhileStmtNode(std::shared_ptr<AstNode> c, std::shared_ptr<AstNode> t)
-      : cond_(c), then_(t) {}
-  virtual ~WhileStmtNode() = default;
+      : cond_(std::move(c)), then_(std::move(t)) {}
+  ~WhileStmtNode() override = default;
   void Accept(AstVisitor* visitor) override;
-  std::shared_ptr<AstNode> Cond() const { return cond_; }
-  std::shared_ptr<AstNode> Then() const { return then_; }
+  [[nodiscard]] std::shared_ptr<AstNode> Cond() const { return cond_; }
+  [[nodiscard]] std::shared_ptr<AstNode> Then() const { return then_; }
 
  private:
   std::shared_ptr<AstNode> cond_;
@@ -114,11 +124,11 @@ class WhileStmtNode : public AstNode {
 class DoWhileStmtNode : public AstNode {
  public:
   DoWhileStmtNode(std::shared_ptr<AstNode> s, std::shared_ptr<AstNode> c)
-      : stmt_(s), cond_(c) {}
-  virtual ~DoWhileStmtNode() = default;
+      : stmt_(std::move(s)), cond_(std::move(c)) {}
+  ~DoWhileStmtNode() override = default;
   void Accept(AstVisitor* visitor) override;
-  std::shared_ptr<AstNode> Stmt() const { return stmt_; }
-  std::shared_ptr<AstNode> Cond() const { return cond_; }
+  [[nodiscard]] std::shared_ptr<AstNode> Stmt() const { return stmt_; }
+  [[nodiscard]] std::shared_ptr<AstNode> Cond() const { return cond_; }
 
  private:
   std::shared_ptr<AstNode> stmt_;
@@ -131,13 +141,16 @@ class ForStmtNode : public AstNode {
               std::shared_ptr<AstNode> cond = nullptr,
               std::shared_ptr<AstNode> inc = nullptr,
               std::shared_ptr<AstNode> stmt = nullptr)
-      : init_(init), cond_(cond), inc_(inc), stmt_(stmt) {}
-  virtual ~ForStmtNode() = default;
+      : init_(std::move(init)),
+        cond_(std::move(cond)),
+        inc_(std::move(inc)),
+        stmt_(std::move(stmt)) {}
+  ~ForStmtNode() override = default;
   void Accept(AstVisitor* visitor) override;
-  std::shared_ptr<AstNode> Init() const { return init_; }
-  std::shared_ptr<AstNode> Cond() const { return cond_; }
-  std::shared_ptr<AstNode> Inc() const { return inc_; }
-  std::shared_ptr<AstNode> Stmt() const { return stmt_; }
+  [[nodiscard]] std::shared_ptr<AstNode> Init() const { return init_; }
+  [[nodiscard]] std::shared_ptr<AstNode> Cond() const { return cond_; }
+  [[nodiscard]] std::shared_ptr<AstNode> Inc() const { return inc_; }
+  [[nodiscard]] std::shared_ptr<AstNode> Stmt() const { return stmt_; }
 
  private:
   std::shared_ptr<AstNode> init_;
@@ -149,10 +162,12 @@ class ForStmtNode : public AstNode {
 class BlockStmtNode : public AstNode {
  public:
   BlockStmtNode() = default;
-  virtual ~BlockStmtNode() = default;
+  ~BlockStmtNode() override = default;
   void Accept(AstVisitor* visitor) override;
-  void AddStmt(std::shared_ptr<AstNode> stmt) { stmts_.push_back(stmt); }
-  const std::list<std::shared_ptr<AstNode>>& Stmts() const { return stmts_; }
+  void AddStmt(const std::shared_ptr<AstNode>& stmt) { stmts_.push_back(stmt); }
+  [[nodiscard]] const std::list<std::shared_ptr<AstNode>>& Stmts() const {
+    return stmts_;
+  }
 
  private:
   std::list<std::shared_ptr<AstNode>> stmts_;
@@ -162,12 +177,12 @@ class BlockStmtNode : public AstNode {
 class AssignExprNode : public AstNode {
  public:
   AssignExprNode(std::shared_ptr<AstNode> lhs, std::shared_ptr<AstNode> rhs)
-      : lhs_(lhs), rhs_(rhs) {}
+      : lhs_(std::move(lhs)), rhs_(std::move(rhs)) {}
 
-  virtual ~AssignExprNode() = default;
+  ~AssignExprNode() override = default;
   void Accept(AstVisitor* visitor) override;
-  std::shared_ptr<AstNode> Lhs() const { return lhs_; }
-  std::shared_ptr<AstNode> Rhs() const { return rhs_; }
+  [[nodiscard]] std::shared_ptr<AstNode> Lhs() const { return lhs_; }
+  [[nodiscard]] std::shared_ptr<AstNode> Rhs() const { return rhs_; }
 
  private:
   std::shared_ptr<AstNode> lhs_;
@@ -192,11 +207,11 @@ class BinaryNode : public AstNode {
  public:
   BinaryNode(BinaryOperator op, std::shared_ptr<AstNode> lhs,
              std::shared_ptr<AstNode> rhs)
-      : op_(op), lhs_(lhs), rhs_(rhs) {}
+      : op_(op), lhs_(std::move(lhs)), rhs_(std::move(rhs)) {}
   void Accept(AstVisitor* visitor) override;
-  std::shared_ptr<AstNode> Lhs() const { return lhs_; }
-  std::shared_ptr<AstNode> Rhs() const { return rhs_; }
-  BinaryOperator Op() const { return op_; }
+  [[nodiscard]] std::shared_ptr<AstNode> Lhs() const { return lhs_; }
+  [[nodiscard]] std::shared_ptr<AstNode> Rhs() const { return rhs_; }
+  [[nodiscard]] BinaryOperator Op() const { return op_; }
 
  private:
   BinaryOperator op_;
@@ -207,10 +222,10 @@ class BinaryNode : public AstNode {
 // identifier
 class IdentifierNode : public AstNode {
  public:
-  IdentifierNode(std::shared_ptr<Identifier> id) : id_(id) {}
-  virtual ~IdentifierNode() = default;
+  IdentifierNode(std::shared_ptr<Identifier> id) : id_(std::move(id)) {}
+  ~IdentifierNode() override = default;
   void Accept(AstVisitor* visitor) override;
-  std::shared_ptr<Identifier> Id() const { return id_; }
+  [[nodiscard]] std::shared_ptr<Identifier> Id() const { return id_; }
 
  private:
   std::shared_ptr<Identifier> id_;
@@ -221,7 +236,7 @@ class ConstantNode : public AstNode {
  public:
   ConstantNode(int value) : value_(value) {}
   void Accept(AstVisitor* visitor) override;
-  int Value() const { return value_; }
+  [[nodiscard]] int Value() const { return value_; }
 
  private:
   int value_;
@@ -229,7 +244,7 @@ class ConstantNode : public AstNode {
 
 class AstVisitor {
  public:
-  virtual ~AstVisitor() {}
+  virtual ~AstVisitor() = default;
   virtual void VisitorProgram(ProgramNode* node) = 0;
   virtual void VisitorFunctionNode(FunctionNode* node) = 0;
   virtual void VisitorExprStmtNode(ExprStmtNode* node) = 0;
@@ -244,5 +259,4 @@ class AstVisitor {
   virtual void VisitorConstantNode(ConstantNode* node) = 0;
 };
 
-}  // namespace bfcc
-}  // namespace highkyck
+}  // namespace highkyck::bfcc

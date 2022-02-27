@@ -5,8 +5,7 @@
 #include <string>
 #include <string_view>
 
-namespace highkyck {
-namespace bfcc {
+namespace highkyck::bfcc {
 
 enum class TokenType {
   Add,           // +
@@ -100,8 +99,10 @@ class Lexer {
   explicit Lexer(const char* source_code) : source_code_(source_code) {}
   void GetNextToken();
   void ExpectToken(TokenType type);
-  std::shared_ptr<Token> CurrentToken() const { return cur_token_; }
-  std::string_view SourceCode() const { return source_code_; }
+  [[nodiscard]] std::shared_ptr<Token> CurrentToken() const {
+    return cur_token_;
+  }
+  [[nodiscard]] std::string_view SourceCode() const { return source_code_; }
 
  private:
   void GetNextChar();
@@ -119,5 +120,4 @@ class Lexer {
   uint64_t line_head_{0};
 };
 
-}  // namespace bfcc
-}  // namespace highkyck
+}  // namespace highkyck::bfcc

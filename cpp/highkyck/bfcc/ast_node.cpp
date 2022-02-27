@@ -1,7 +1,6 @@
 #include "ast_node.h"
 
-namespace highkyck {
-namespace bfcc {
+namespace highkyck::bfcc {
 
 void ProgramNode::Accept(AstVisitor* visitor) {
   visitor->VisitorProgram(this);
@@ -51,5 +50,4 @@ void ConstantNode::Accept(AstVisitor* visitor) {
   visitor->VisitorConstantNode(this);
 }
 
-}  // namespace bfcc
-}  // namespace highkyck
+}  // namespace highkyck::bfcc
