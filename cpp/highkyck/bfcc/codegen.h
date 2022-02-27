@@ -4,16 +4,12 @@
 
 #include "ast_node.h"
 
-namespace highkyck {
-namespace bfcc {
+namespace highkyck::bfcc {
 
 class CodeGen : public AstVisitor {
  public:
-  CodeGen() {}
-  virtual ~CodeGen() {
-    code_.str("");
-    code_.clear();
-  }
+  CodeGen() = default;
+  ~CodeGen() override;
   void VisitorProgram(ProgramNode* node) override;
   std::string Code() const { return code_.str(); }
 
@@ -33,11 +29,12 @@ class CodeGen : public AstVisitor {
   void Push();
   void Pop(const char* reg);
 
+  int32_t AlignTo(int32_t size, int32_t align);
+
  private:
   int stack_level_{0};
   std::stringstream code_;
   int sequence_{0};
 };
 
-}  // namespace bfcc
-}  // namespace highkyck
+}  // namespace highkyck::bfcc
