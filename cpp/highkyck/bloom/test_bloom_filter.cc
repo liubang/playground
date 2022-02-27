@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -21,7 +22,8 @@ std::string random_string(size_t length) {
 }
 
 int main(int argc, char* argv[]) {
-  highkyck::bloom::BloomFilter filter(16 * 1024 * 1024 * 8);
+  highkyck::bloom::BloomFilter filter(
+      static_cast<uint64_t>(16 * 1024 * 1024 * 8));
 
   {
     const char* data = "liubang";
