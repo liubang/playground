@@ -1,8 +1,7 @@
 #include <cstdio>
 #include <iostream>
 
-namespace test {
-namespace cpp17 {
+namespace test::cpp17 {
 
 template <typename H, typename... T>
 constexpr auto add(H head, T... ts) {
@@ -27,12 +26,11 @@ constexpr auto get_minimal_elem(T... ts) {
   return min;
 }
 
-}  // namespace cpp17
-}  // namespace test
+}  // namespace test::cpp17
 
 void test_add() {
   constexpr int a = test::cpp17::add(1, 2, 3, 4, 5, 6);
-  static_assert(a == 21, "");
+  static_assert(a == 21);
 }
 
 void test_call_func_with_each_elem() {
@@ -47,7 +45,7 @@ void test_call_func_with_each_elem_reverse_order() {
 
 void test_get_minimal_elem() {
   constexpr auto a = test::cpp17::get_minimal_elem(0, 1, 2, 3, 4, 5);
-  static_assert(a == 0, "");
+  static_assert(a == 0);
 }
 
 int main(int argc, char* argv[]) {
