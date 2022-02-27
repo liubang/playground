@@ -1,13 +1,13 @@
 #include "bloom_filter.h"
 
 #include <cassert>
+#include <cstring>
 #include <memory>
 #include <string>
 
 #include "highkyck/hash/murmurhash2.h"
 
-namespace highkyck {
-namespace bloom {
+namespace highkyck::bloom {
 BloomFilter::BloomFilter(const uint64_t bit_count) {
   uint64_t actual_bit_count = 8;
   while (actual_bit_count < bit_count) {
@@ -57,5 +57,4 @@ void BloomFilter::insert(const void* const data, uint64_t length) {
   }
   header_.member_count++;
 }
-}  // namespace bloom
-}  // namespace highkyck
+}  // namespace highkyck::bloom
