@@ -104,6 +104,10 @@ class Lexer {
   }
   [[nodiscard]] std::string_view SourceCode() const { return source_code_; }
 
+  void BeginPeekToken();
+
+  void EndPeekToken();
+
  private:
   void GetNextChar();
   bool IsLetter();
@@ -118,6 +122,11 @@ class Lexer {
   uint64_t cursor_{0};
   uint64_t line_{0};
   uint64_t line_head_{0};
+  char peek_cur_char_;
+  uint64_t peek_cur_cursor_{0};
+  uint64_t peek_cur_line_{0};
+  uint64_t peek_cur_line_head_{0};
+  std::shared_ptr<Token> peek_cur_token_;
 };
 
 }  // namespace highkyck::bfcc

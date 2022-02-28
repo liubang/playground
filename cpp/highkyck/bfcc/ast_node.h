@@ -231,6 +231,23 @@ class IdentifierNode : public AstNode {
   std::shared_ptr<Identifier> id_;
 };
 
+class FuncCallNode : public AstNode {
+ public:
+  FuncCallNode(std::string_view func_name,
+               std::vector<std::shared_ptr<AstNode>> args)
+      : func_name_(func_name), args_(std::move(args)) {}
+  void Accept(AstVisitor* visitor) override;
+  ~FuncCallNode() override = default;
+  [[nodiscard]] std::string_view FuncName() const { return func_name_; }
+  [[nodiscard]] const std::vector<std::shared_ptr<AstNode>>& Args() const {
+    return args_;
+  }
+
+ private:
+  std::string_view func_name_;
+  std::vector<std::shared_ptr<AstNode>> args_;
+};
+
 // constant
 class ConstantNode : public AstNode {
  public:
@@ -256,6 +273,7 @@ class AstVisitor {
   virtual void VisitorAssignStmtNode(AssignExprNode* node) = 0;
   virtual void VisitorBinaryNode(BinaryNode* node) = 0;
   virtual void VisitorIdentifierNode(IdentifierNode* node) = 0;
+  virtual void VisitorFuncCallNode(FuncCallNode* node) = 0;
   virtual void VisitorConstantNode(ConstantNode* node) = 0;
 };
 
