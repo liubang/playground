@@ -194,6 +194,15 @@ std::shared_ptr<AstNode> Parser::ParsePrimaryExpr() {
     lexer_ptr_->ExpectToken(TokenType::RParent);  // expect ) and stkip
     return node;
   } else if (lexer_ptr_->CurrentToken()->type == TokenType::Identifier) {
+    lexer_ptr_->BeginPeekToken();
+    lexer_ptr_->GetNextToken();
+    if (lexer_ptr_->CurrentToken()->type == TokenType::LParent) {
+      lexer_ptr_->EndPeekToken();
+      // parse function call
+      return ParseFuncCallNode();
+    }
+    lexer_ptr_->EndPeekToken();
+
     auto name = lexer_ptr_->CurrentToken()->content;
     auto id = FindId(name);
     if (!id) {
@@ -212,6 +221,22 @@ std::shared_ptr<AstNode> Parser::ParsePrimaryExpr() {
     DiagnosticError(lexer_ptr_->SourceCode(), token->location.line,
                     token->location.col, "Not support node");
   }
+}
+
+std::shared_ptr<AstNode> Parser::ParseFuncCallNode() {
+  auto name = lexer_ptr_->CurrentToken()->content;
+  std::vector<std::shared_ptr<AstNode>> args;
+  lexer_ptr_->ExpectToken(TokenType::Identifier);
+  lexer_ptr_->ExpectToken(TokenType::LParent);
+  if (lexer_ptr_->CurrentToken()->type != TokenType::RParent) {
+    args.push_back(ParseAssignExpr());
+    while (lexer_ptr_->CurrentToken()->type == TokenType::Comma) {
+      lexer_ptr_->GetNextToken();
+      args.push_back(ParseAssignExpr());
+    }
+  }
+  lexer_ptr_->ExpectToken(TokenType::RParent);
+  return std::make_shared<FuncCallNode>(name, args);
 }
 
 std::shared_ptr<Identifier> Parser::FindId(std::string_view name) {
