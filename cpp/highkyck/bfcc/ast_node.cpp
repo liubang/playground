@@ -46,6 +46,10 @@ void IdentifierNode::Accept(AstVisitor* visitor) {
   visitor->VisitorIdentifierNode(this);
 }
 
+void FuncCallNode::Accept(AstVisitor* visitor) {
+  visitor->VisitorFuncCallNode(this);
+}
+
 void ConstantNode::Accept(AstVisitor* visitor) {
   visitor->VisitorConstantNode(this);
 }

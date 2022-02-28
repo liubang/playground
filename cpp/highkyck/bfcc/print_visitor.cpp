@@ -112,6 +112,17 @@ void PrintVisitor::VisitorIdentifierNode(IdentifierNode* node) {
   sstream_ << std::string(node->Id()->name);
 }
 
+void PrintVisitor::VisitorFuncCallNode(FuncCallNode* node) {
+  sstream_ << node->FuncName() << " (";
+  for (std::size_t i = 0; i < node->Args().size(); ++i) {
+    if (i > 0) {
+      sstream_ << ", ";
+    }
+    node->Args()[i]->Accept(this);
+  }
+  sstream_ << ")";
+}
+
 void PrintVisitor::VisitorConstantNode(ConstantNode* node) {
   sstream_ << node->Value();
 }

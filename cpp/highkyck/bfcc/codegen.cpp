@@ -193,6 +193,9 @@ void CodeGen::VisitorIdentifierNode(IdentifierNode* node) {
   code_ << "\tmov (%rax), %rax\n";
 }
 
+// TODO(liubang):
+void CodeGen::VisitorFuncCallNode(FuncCallNode* node) {}
+
 void CodeGen::VisitorConstantNode(ConstantNode* node) {
   code_ << "\tmov $" << node->Value() << ", %rax\n";
 }
