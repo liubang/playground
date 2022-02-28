@@ -26,6 +26,7 @@ class PrintVisitor : public AstVisitor {
   void VisitorAssignStmtNode(AssignExprNode* node) override;
   void VisitorBinaryNode(BinaryNode* node) override;
   void VisitorIdentifierNode(IdentifierNode* node) override;
+  void VisitorFuncCallNode(FuncCallNode* node) override;
   void VisitorConstantNode(ConstantNode* node) override;
 
  private:
