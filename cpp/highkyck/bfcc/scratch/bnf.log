@@ -27,4 +27,5 @@ MultiExpr       := PrimaryExpr
                 := MultiExpr / PrimaryExpr
 PrimaryExpr     := Num
                 := (Expr)
-                := Identifier
+                := Identifier((Args?))?
+Args            := AssignExpr(, AssignExpr)*

@@ -49,6 +49,22 @@ void Lexer::GetNextChar() {
   }
 }
 
+void Lexer::BeginPeekToken() {
+  peek_cur_char_ = cur_char_;
+  peek_cur_cursor_ = cursor_;
+  peek_cur_line_ = line_;
+  peek_cur_line_head_ = line_head_;
+  peek_cur_token_ = cur_token_;
+}
+
+void Lexer::EndPeekToken() {
+  cur_char_ = peek_cur_char_;
+  cursor_ = peek_cur_cursor_;
+  line_ = peek_cur_line_;
+  line_head_ = peek_cur_line_head_;
+  cur_token_ = peek_cur_token_;
+}
+
 void Lexer::ExpectToken(TokenType type) {
   if (CurrentToken()->type == type) {
     GetNextToken();

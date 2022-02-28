@@ -102,3 +102,15 @@ TEST(PrintVisitor, test_for_loop_stmt) {
       ret,
       "test() {a = 0;b = 0;for (a = 0;a <= 10;a = a + 1) {b = b + a;};b;}\n");
 }
+
+TEST(PrintVisitor, test_func_call) {
+  const char* code = "sum(n) { a= 0; b = 1; a + b + n;} test() {sum(100);}";
+  highkyck::bfcc::Lexer lexer(code);
+  lexer.GetNextToken();
+  highkyck::bfcc::Parser parser(&lexer);
+  highkyck::bfcc::PrintVisitor visitor;
+  auto root = parser.Parse();
+  root->Accept(&visitor);
+  auto ret = visitor.String();
+  EXPECT_EQ(ret, "sum(n) {a = 0;b = 1;a + b + n;}test() {sum (100);}\n");
+}

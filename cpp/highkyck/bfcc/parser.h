@@ -23,6 +23,7 @@ class Parser {
   std::shared_ptr<AstNode> ParseAddExpr();
   std::shared_ptr<AstNode> ParseMultiExpr();
   std::shared_ptr<AstNode> ParsePrimaryExpr();
+  std::shared_ptr<AstNode> ParseFuncCallNode();
 
   // sth. about variables
   std::shared_ptr<Identifier> FindId(std::string_view name);
