@@ -8,7 +8,7 @@
 #include <vector>
 
 TEST(thread_pool, thread_pool) {
-  ThreadPool pool(4);
+  ThreadPool pool(1024);
   std::vector<std::future<std::pair<int, int>>> results;
 
   auto start = std::chrono::system_clock::now();
@@ -28,5 +28,5 @@ TEST(thread_pool, thread_pool) {
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::system_clock::now() - start);
 
-  EXPECT_LT(duration.count(), 320);
+  EXPECT_LT(duration.count(), 100);
 }
