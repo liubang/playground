@@ -112,6 +112,24 @@ cc_binary(
     ],
 )
 
+genrule(
+    name = "gen_function_call",
+    srcs = [":bfcc"],
+    outs = ["gen_function_call.s"],
+    cmd = "./$(locations :bfcc) 'sum(n) {n = n + 10;n;} test() {b = sum(12); b;}' > $@",
+)
+
+cc_binary(
+    name = "test_function_call",
+    srcs = [
+        "driver.c",
+        ":gen_function_call",
+    ],
+    copts = [
+        "-std=c11",
+    ],
+)
+
 cc_test(
     name = "lexer_test",
     srcs = [
