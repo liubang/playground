@@ -5,6 +5,11 @@
 #include <cstddef>
 #include <cstdio>
 
+namespace {
+const std::array<std::string_view, 6> Reg64 = {"%rdi", "%rsi", "%rdx",
+                                               "%rcx", "%r8d", "%r9d"};
+}
+
 namespace highkyck::bfcc {
 
 void CodeGen::VisitorProgram(ProgramNode* node) {
@@ -36,11 +41,9 @@ void CodeGen::VisitorFunctionNode(FunctionNode* node) {
   code_ << "\tmov %rsp, %rbp\n";
   code_ << "\tsub $" << stack_size << ", %rsp\n";
 
-  const std::array<std::string, 6> reg = {"%rdi", "%rsi", "%rdx",
-                                          "%rcx", "%r8d", "%r9d"};
   int i = 0;
   for (auto& p : node->Params()) {
-    code_ << "\tmov " << reg[i++] << ", %d(" << p->offset << ")\n";
+    code_ << "\tmov " << Reg64[i++] << ", " << p->offset << "(%rbp)\n";
   }
 
   for (auto& s : node->Stmts()) {
@@ -193,8 +196,21 @@ void CodeGen::VisitorIdentifierNode(IdentifierNode* node) {
   code_ << "\tmov (%rax), %rax\n";
 }
 
-// TODO(liubang):
-void CodeGen::VisitorFuncCallNode(FuncCallNode* node) {}
+void CodeGen::VisitorFuncCallNode(FuncCallNode* node) {
+  for (auto& arg : node->Args()) {
+    arg->Accept(this);
+    Push();
+  }
+  for (int i = node->Args().size() - 1; i >= 0; i--) {
+    Pop(Reg64[i].data());
+  }
+#ifdef __linux__
+  code_ << "\tcall " << node->FuncName() << "\n";
+#else
+  static_assert(__APPLE__, "Only support linux and macos system");
+  code_ << "\tcall __" << node->FuncName() << "\n";
+#endif
+}
 
 void CodeGen::VisitorConstantNode(ConstantNode* node) {
   code_ << "\tmov $" << node->Value() << ", %rax\n";
