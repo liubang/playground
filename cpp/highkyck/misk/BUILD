@@ -34,7 +34,7 @@
             "-pthread",
         ],
     )
-    for f in glob(["test_*.cc"])
+    for f in glob(["test_*.cc", "test_*.cpp"])
 ]
 
 [
@@ -59,5 +59,5 @@
             "@gtest//:gtest_main",
         ],
     )
-    for f in glob(["*_test.cc"])
+    for f in glob(["*_test.cc", "*_test.cpp"])
 ]
