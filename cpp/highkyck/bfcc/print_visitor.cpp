@@ -71,10 +71,16 @@ void PrintVisitor::VisitorForStmtNode(ForStmtNode* node) {
 
 void PrintVisitor::VisitorBlockStmtNode(BlockStmtNode* node) {
   sstream_ << "{";
-  for (auto s : node->Stmts()) {
+  for (const auto& s : node->Stmts()) {
     s->Accept(this);
   }
   sstream_ << "}";
+}
+
+void PrintVisitor::VisitorReturnStmtNode(ReturnStmtNode* node) {
+  sstream_ << "return ";
+  node->Lhs()->Accept(this);
+  sstream_ << ";";
 }
 
 void PrintVisitor::VisitorExprStmtNode(ExprStmtNode* node) {

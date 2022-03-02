@@ -98,6 +98,11 @@ std::shared_ptr<AstNode> Parser::ParseStmt() {
     }
     lexer_ptr_->ExpectToken(TokenType::RBrace);
     return node;
+  } else if (lexer_ptr_->CurrentToken()->type == TokenType::Return) {
+    lexer_ptr_->GetNextToken();
+    auto node = std::make_shared<ReturnStmtNode>(ParseExpr());
+    lexer_ptr_->ExpectToken(TokenType::Semicolon);
+    return node;
   } else {
     auto node = std::make_shared<ExprStmtNode>();
     if (lexer_ptr_->CurrentToken()->type != TokenType::Semicolon) {

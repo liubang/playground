@@ -23,6 +23,7 @@ class PrintVisitor : public AstVisitor {
   void VisitorDoWhileStmtNode(DoWhileStmtNode* node) override;
   void VisitorForStmtNode(ForStmtNode* node) override;
   void VisitorBlockStmtNode(BlockStmtNode* node) override;
+  void VisitorReturnStmtNode(ReturnStmtNode* node) override;
   void VisitorAssignStmtNode(AssignExprNode* node) override;
   void VisitorBinaryNode(BinaryNode* node) override;
   void VisitorIdentifierNode(IdentifierNode* node) override;
@@ -33,4 +34,4 @@ class PrintVisitor : public AstVisitor {
   std::stringstream sstream_;
 };
 
-}  // namespace highkyck
+}  // namespace highkyck::bfcc

@@ -16,9 +16,9 @@ cc_binary(
     copts = _COMMON_COPTS,
     linkopts = _COMMON_LINKOPTS,
     deps = [
+        "//highkyck/bfcc:codegen",
         "//highkyck/bfcc:lexer",
         "//highkyck/bfcc:parser",
-        "//highkyck/bfcc:codegen",
     ],
 )
 
@@ -124,6 +124,24 @@ cc_binary(
     srcs = [
         "driver.c",
         ":gen_function_call",
+    ],
+    copts = [
+        "-std=c11",
+    ],
+)
+
+genrule(
+    name = "gen_return",
+    srcs = [":bfcc"],
+    outs = ["gen_return.s"],
+    cmd = "./$(locations :bfcc) 'sum(n) {return n + 10;} test() {b = sum(12); if (b > 10) {return 20;} else {return 10;}}' > $@",
+)
+
+cc_binary(
+    name = "test_return",
+    srcs = [
+        "driver.c",
+        ":gen_return",
     ],
     copts = [
         "-std=c11",
