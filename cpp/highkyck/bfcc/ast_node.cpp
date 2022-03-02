@@ -34,6 +34,10 @@ void BlockStmtNode::Accept(AstVisitor* visitor) {
   visitor->VisitorBlockStmtNode(this);
 }
 
+void ReturnStmtNode::Accept(AstVisitor* visitor) {
+  visitor->VisitorReturnStmtNode(this);
+}
+
 void AssignExprNode::Accept(AstVisitor* visitor) {
   visitor->VisitorAssignStmtNode(this);
 }
