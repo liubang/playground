@@ -12,6 +12,5 @@ Diagnostics:
         misc-unused-parameters,
       ]
     Remove: modernize-use-trailing-return-type
-    CheckOptions:
 CompileFlags:
   Remove: [-fno-canonical-system-headers]
