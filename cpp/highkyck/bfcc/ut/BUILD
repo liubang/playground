@@ -134,7 +134,7 @@ genrule(
     name = "gen_return",
     srcs = [":bfcc"],
     outs = ["gen_return.s"],
-    cmd = "./$(locations :bfcc) 'sum(n) {return n + 10;} test() {b = sum(12); if (b > 10) {return 20;} else {return 10;}}' > $@",
+    cmd = "./$(locations :bfcc) 'fib(n) {if (n <= 1) {return n;} return fib(n - 1) + fib(n - 2);} test() {return fib(11);}' > $@",
 )
 
 cc_binary(
