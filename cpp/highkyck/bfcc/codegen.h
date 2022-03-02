@@ -1,6 +1,7 @@
 #pragma once
 
 #include <sstream>
+#include <string>
 
 #include "ast_node.h"
 
@@ -21,6 +22,7 @@ class CodeGen : public AstVisitor {
   void VisitorDoWhileStmtNode(DoWhileStmtNode* node) override;
   void VisitorForStmtNode(ForStmtNode* node) override;
   void VisitorBlockStmtNode(BlockStmtNode* node) override;
+  void VisitorReturnStmtNode(ReturnStmtNode* node) override;
   void VisitorAssignStmtNode(AssignExprNode* node) override;
   void VisitorBinaryNode(BinaryNode* node) override;
   void VisitorIdentifierNode(IdentifierNode* node) override;
@@ -36,6 +38,7 @@ class CodeGen : public AstVisitor {
   int stack_level_{0};
   std::stringstream code_;
   int sequence_{0};
+  std::string cur_func_name_;
 };
 
 }  // namespace highkyck::bfcc

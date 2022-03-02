@@ -19,6 +19,7 @@ void CodeGen::VisitorProgram(ProgramNode* node) {
 }
 
 void CodeGen::VisitorFunctionNode(FunctionNode* node) {
+  cur_func_name_ = node->Name();
   code_ << ".text\n";
 #ifdef __linux__
   code_ << ".global " << node->Name() << "\n";
@@ -50,6 +51,7 @@ void CodeGen::VisitorFunctionNode(FunctionNode* node) {
     s->Accept(this);
     assert(stack_level_ == 0);
   }
+  code_ << ".LReturn_" << cur_func_name_ << ":\n";
   code_ << "\tmov %rbp, %rsp\n";
   code_ << "\tpop %rbp\n";
   code_ << "\tret\n";
@@ -132,6 +134,11 @@ void CodeGen::VisitorBlockStmtNode(BlockStmtNode* node) {
   for (const auto& s : node->Stmts()) {
     s->Accept(this);
   }
+}
+
+void CodeGen::VisitorReturnStmtNode(ReturnStmtNode* node) {
+  node->Lhs()->Accept(this);
+  code_ << "\tjmp .LReturn_" << cur_func_name_ << "\n";
 }
 
 void CodeGen::VisitorAssignStmtNode(AssignExprNode* node) {

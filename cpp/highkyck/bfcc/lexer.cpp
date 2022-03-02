@@ -28,11 +28,12 @@ constexpr char BFCC_CHAR_LBRACE    = '{';
 constexpr char BFCC_CHAR_RBRACE    = '}';
 
 // some ids
-constexpr std::string_view BFCC_ID_IF    = "if";
-constexpr std::string_view BFCC_ID_ELSE  = "else";
-constexpr std::string_view BFCC_ID_WHILE = "while";
-constexpr std::string_view BFCC_ID_DO    = "do";
-constexpr std::string_view BFCC_ID_FOR   = "for";
+constexpr std::string_view BFCC_ID_IF     = "if";
+constexpr std::string_view BFCC_ID_ELSE   = "else";
+constexpr std::string_view BFCC_ID_WHILE  = "while";
+constexpr std::string_view BFCC_ID_DO     = "do";
+constexpr std::string_view BFCC_ID_FOR    = "for";
+constexpr std::string_view BFCC_ID_RETURN = "return";
 /* clang-format on */
 
 }  // namespace
@@ -207,6 +208,8 @@ void Lexer::GetNextToken() {
           kind = TokenType::Do;
         } else if (content == BFCC_ID_FOR) {
           kind = TokenType::For;
+        } else if (content == BFCC_ID_RETURN) {
+          kind = TokenType::Return;
         } else {
           kind = TokenType::Identifier;
         }

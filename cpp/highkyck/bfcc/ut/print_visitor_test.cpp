@@ -114,3 +114,18 @@ TEST(PrintVisitor, test_func_call) {
   auto ret = visitor.String();
   EXPECT_EQ(ret, "sum(n) {a = 0;b = 1;a + b + n;}test() {sum (100);}\n");
 }
+
+TEST(PrintVisitor, test_return) {
+  const char* code =
+      "sum(n) { a= 0; b = 1; return a + b + n;} test() {return sum(100);}";
+  highkyck::bfcc::Lexer lexer(code);
+  lexer.GetNextToken();
+  highkyck::bfcc::Parser parser(&lexer);
+  highkyck::bfcc::PrintVisitor visitor;
+  auto root = parser.Parse();
+  root->Accept(&visitor);
+  auto ret = visitor.String();
+  EXPECT_EQ(
+      ret,
+      "sum(n) {a = 0;b = 1;return a + b + n;}test() {return sum (100);}\n");
+}
