@@ -6,9 +6,12 @@ Diagnostics:
         bugprone-*,
         portability-*,
         modernize-*,
+        misc-static-assert,
+        misc-redundant-expression,
+        misc-uniqueptr-reset-release,
+        misc-unused-parameters,
       ]
     Remove: modernize-use-trailing-return-type
     CheckOptions:
-      WarnOnFloatingPointNarrowingConversion: false
 CompileFlags:
   Remove: [-fno-canonical-system-headers]
