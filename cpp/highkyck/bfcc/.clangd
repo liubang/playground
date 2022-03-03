@@ -14,4 +14,5 @@ Diagnostics:
     Remove: modernize-use-trailing-return-type
 CompileFlags:
   Remove: [-fno-canonical-system-headers]
-  Add: [-std=c++17]
+  Add: [-xc++, -std=c++17]
+  Compiler: g++

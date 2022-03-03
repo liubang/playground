@@ -1,14 +1,18 @@
 Prog            := Function*
-Function        := Identifier( FuncArg? ) { Stmt* }
-FuncArg         := Identifier (, Identifier)*
+Function        := DeclarationSpec Declarator "{" Stmt* "}"
+DeclarationSpec := int
+Declarator      := (*)* Identifier ("("FuncArg?")")?
+FuncArg         := DeclarationSpec Declarator (, DeclarationSpec Declarator)*
 Stmt            := Expr?;
-                := if (Expr) Stmt
-                := if (Expr) Stmt else Stmt
-                := while (Expr) Stmt
-                := do Stmt while (Expr);
-                := for (Expr?;Expr?;Expr?) Stmt
-                := return Expr;
-                := {Stmt*}
+                := if "(" Expr ")" Stmt
+                := if "(" Expr ")" Stmt else Stmt
+                := while "(" Expr ")" Stmt
+                := do Stmt while "(" Expr ")";
+                := for "(" Expr?; Expr?; Expr? ")" Stmt
+                := "{" Stmt* "}"
+                := return Expr ";"
+                := DeclarationStmt
+DeclarationStmt := DeclarationSpec Declarator (= Expr)? (, DeclarationSpec Declarator (= Expr)?)*
 Expr            := AssignExpr
 AssignExpr      := EqualityExpr
                 := EqualityExpr = AssignExpr

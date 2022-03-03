@@ -27,9 +27,11 @@ cc_library(
     name = "lexer",
     srcs = [
         "lexer.cpp",
+        "type.cpp",
     ],
     hdrs = [
         "lexer.h",
+        "type.h",
     ],
     copts = _COMMON_COPTS,
     deps = [
@@ -49,8 +51,8 @@ cc_library(
     ],
     copts = _COMMON_COPTS,
     deps = [
-        ":lexer",
         ":diagnostic",
+        ":lexer",
     ],
 )
 
@@ -88,8 +90,8 @@ cc_binary(
     copts = _COMMON_COPTS,
     linkopts = _COMMON_LINKOPTS,
     deps = [
+        ":codegen",
         ":lexer",
         ":parser",
-        ":codegen",
     ],
 )
