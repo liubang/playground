@@ -18,3 +18,14 @@ cc_binary(
     ],
     linkopts = _LINKOPTS,
 )
+
+cc_binary(
+    name = "print_any_container",
+    srcs = [
+        "print_any_container.cpp",
+    ],
+    copts = _COPTS + [
+        "-fcoroutines",
+    ],
+    linkopts = _LINKOPTS,
+)
