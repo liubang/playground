@@ -13,35 +13,5 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2022/02/11 17:24
+# Created: 2022/03/18 16:38
 
-cc_binary(
-    name = "test_fold_expression",
-    srcs = [
-        "test_fold_expression.cpp",
-    ],
-    copts = [
-        "-std=c++17",
-    ],
-)
-
-cc_binary(
-    name = "test_apply",
-    srcs = [
-        "test_apply.cpp",
-    ],
-    copts = [
-        "-std=c++17",
-    ],
-)
-
-cc_binary(
-    name = "test_factorial",
-    srcs = [
-        "factorial.h",
-        "test_factorial.cpp",
-    ],
-    copts = [
-        "-std=c++17",
-    ],
-)
