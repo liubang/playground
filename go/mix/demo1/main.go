@@ -8,6 +8,10 @@ import (
 
 func main() {
 	var x int
+	a := []string{"a", "b", "c"}
+	for idx, _ := range a {
+		fmt.Println(a[idx])
+	}
 	threads := runtime.GOMAXPROCS(0)
 	for i := 0; i < threads; i++ {
 		go func() {

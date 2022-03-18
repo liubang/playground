@@ -17,3 +17,14 @@ cc_binary(
         "-std=c++17",
     ],
 )
+
+cc_binary(
+    name = "test_factorial",
+    srcs = [
+        "factorial.h",
+        "test_factorial.cpp",
+    ],
+    copts = [
+        "-std=c++17",
+    ],
+)
