@@ -16,7 +16,7 @@ func main() {
 
 	// 客户端配置
 	config = clientv3.Config{
-		Endpoints:   []string{"localhost:2379"},
+            Endpoints:   []string{"localhost:2379"},
 		DialTimeout: 5 * time.Second,
 	}
 

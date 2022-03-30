@@ -29,3 +29,12 @@ cc_binary(
     ],
     linkopts = _LINKOPTS,
 )
+
+cc_binary(
+    name = "vertical_symmetry",
+    srcs = [
+        "vertical_symmetry.cpp",
+    ],
+    copts = _COPTS,
+    linkopts = _LINKOPTS,
+)
