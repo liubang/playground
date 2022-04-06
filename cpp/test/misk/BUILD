@@ -54,8 +54,8 @@ cc_test(
 cc_test(
     name = "test_detect_class_member",
     srcs = [
-        "test_detect_class_member.cpp",
         "detect_class_member.h",
+        "test_detect_class_member.cpp",
     ],
     copts = _common_copts + [
         "-std=c++11",
@@ -64,4 +64,26 @@ cc_test(
     deps = [
         "@gtest//:gtest_main",
     ],
+)
+
+cc_binary(
+    name = "test_myvector",
+    srcs = [
+        "test_myvector.cpp",
+    ],
+    copts = _common_copts + [
+        "-std=c++17",
+    ],
+    linkopts = _common_linkopts,
+)
+
+cc_binary(
+    name = "test_myvector1",
+    srcs = [
+        "test_myvector1.cpp",
+    ],
+    copts = _common_copts + [
+        "-std=c++17",
+    ],
+    linkopts = _common_linkopts,
 )
