@@ -28,7 +28,7 @@ jobs:
           key: ${{ env.cache-name }}-${{ runner.os }}
           restore-keys: |
             ${{ env.cache-name }}-${{ runner.os }}
-      - run: go install github.com/bazelbuild/bazelisk
+      - run: go install github.com/bazelbuild/bazelisk@latest
       - name: run build
         run: |
           cd cpp
