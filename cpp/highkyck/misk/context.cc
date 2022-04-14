@@ -12,18 +12,19 @@
 namespace {
 ucontext_t uctx_main, uctx_func1, uctx_func2;
 
-void func1() {
-  if (::swapcontext(&uctx_func1, &uctx_func2) == -1)
-    handle_error("swapcontext");
+void func1()
+{
+  if (::swapcontext(&uctx_func1, &uctx_func2) == -1) handle_error("swapcontext");
 }
 
-void func2() {
-  if (::swapcontext(&uctx_func2, &uctx_func1) == -1)
-    handle_error("swapcontext");
+void func2()
+{
+  if (::swapcontext(&uctx_func2, &uctx_func1) == -1) handle_error("swapcontext");
 }
-}  // namespace
+}// namespace
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[])
+{
   char func1_stack[16384];
   char func2_stack[16384];
   if (::getcontext(&uctx_func1) == -1) handle_error("getcontext");
