@@ -18,7 +18,8 @@ bool is_power_of_two(uint64_t n) {
 }
 */
 
-bool is_power_of_two(uint64_t n) {
+bool is_power_of_two(uint64_t n)
+{
   // -n 实际上就是n按位取反然后加1的结果
   // -n = ~n + 1
   //  8     01000
