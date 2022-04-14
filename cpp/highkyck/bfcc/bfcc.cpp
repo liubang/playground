@@ -11,13 +11,14 @@
 
 #include "lexer.h"
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[])
+{
   if (argc != 2) {
     printf("usage: ./bfcc code\n");
     return 0;
   }
 
-  FILE* fp = ::fopen(argv[1], "r");
+  FILE *fp = ::fopen(argv[1], "r");
   if (!fp) {
     std::cerr << "file open failed: " << argv[1] << "\n";
     return 0;
@@ -26,7 +27,7 @@ int main(int argc, char* argv[]) {
   char buf[1024 * 10];
   size_t len = fread(buf, 1, sizeof(buf), fp);
   buf[len] = '\0';
-  const char* source = buf;
+  const char *source = buf;
 
   highkyck::bfcc::Lexer lexer(source);
   do {
