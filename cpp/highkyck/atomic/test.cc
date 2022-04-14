@@ -1,7 +1,8 @@
 #include <atomic>
 #include <iostream>
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[])
+{
   std::atomic<bool> at;
   at = false;
 
