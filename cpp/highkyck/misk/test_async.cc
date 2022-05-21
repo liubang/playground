@@ -4,18 +4,21 @@
 #include <thread>
 
 namespace highkyck {
-void funcA() {
+void funcA()
+{
   std::this_thread::sleep_for(std::chrono::seconds(1));
   std::cout << __FUNCTION__ << std::endl;
 }
 
-void funcB() {
+void funcB()
+{
   std::this_thread::sleep_for(std::chrono::seconds(1));
   std::cout << __FUNCTION__ << std::endl;
 }
-}  // namespace highkyck
+}// namespace highkyck
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[])
+{
   std::future<void> f1 = std::async(highkyck::funcA);
   std::future<void> f2 = std::async(highkyck::funcB);
 
@@ -26,8 +29,8 @@ int main(int argc, char* argv[]) {
 
   std::cout << "std::async 耗时："
             << std::chrono::duration_cast<std::chrono::milliseconds>(
-                   std::chrono::steady_clock::now() - start)
-                   .count()
+                 std::chrono::steady_clock::now() - start)
+                 .count()
             << "ms" << std::endl;
 
   start = std::chrono::steady_clock::now();
@@ -39,8 +42,8 @@ int main(int argc, char* argv[]) {
 
   std::cout << "std::thread 耗时："
             << std::chrono::duration_cast<std::chrono::milliseconds>(
-                   std::chrono::steady_clock::now() - start)
-                   .count()
+                 std::chrono::steady_clock::now() - start)
+                 .count()
             << "ms" << std::endl;
 
   return 0;

@@ -6,23 +6,23 @@
 
 namespace highkyck {
 
-class ReversePolishNotation {
- public:
-  ReversePolishNotation(const std::string& notation) : original_(notation) {
-    generate();
-  }
+class ReversePolishNotation
+{
+public:
+  ReversePolishNotation(const std::string &notation) : original_(notation) { generate(); }
 
-  void print() {
-    for (auto& line : res_) {
-      std::cout << line;
-    }
+  void print()
+  {
+    for (auto &line : res_) { std::cout << line; }
     std::cout << std::endl;
   }
 
- private:
-  void generate() {
+private:
+  void generate()
+  {
     std::unordered_map<char, int> priority = {
-        {'(', 0}, {'+', 1}, {'-', 1}, {'*', 2}, {'/', 2}};
+      { '(', 0 }, { '+', 1 }, { '-', 1 }, { '*', 2 }, { '/', 2 }
+    };
     std::stack<char> stk;
     int len = original_.length(), i = 0;
     while (i < len) {
@@ -33,27 +33,21 @@ class ReversePolishNotation {
           i++;
         }
         res_.emplace_back(std::move(num));
-        if (i >= len) {
-          break;
-        }
+        if (i >= len) { break; }
       }
       if (original_[i] == ')') {
         while (!stk.empty() && stk.top() != '(') {
           res_.emplace_back(1, stk.top());
           stk.pop();
         }
-        if (!stk.empty()) {
-          stk.pop();
-        }
+        if (!stk.empty()) { stk.pop(); }
         i++;
       } else {
-        if (original_[i] == '(' || stk.empty() ||
-            priority[stk.top()] < priority[original_[i]]) {
+        if (original_[i] == '(' || stk.empty() || priority[stk.top()] < priority[original_[i]]) {
           stk.push(original_[i]);
           i++;
         } else {
-          while (!stk.empty() &&
-                 priority[stk.top()] >= priority[original_[i]]) {
+          while (!stk.empty() && priority[stk.top()] >= priority[original_[i]]) {
             res_.emplace_back(1, stk.top());
             stk.pop();
           }
@@ -68,13 +62,14 @@ class ReversePolishNotation {
     }
   }
 
- private:
+private:
   std::string original_;
   std::vector<std::string> res_;
 };
-}  // namespace highkyck
+}// namespace highkyck
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[])
+{
   highkyck::ReversePolishNotation rpn("9+(3-1)*3+10/2");
   rpn.print();
   return 0;
