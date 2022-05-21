@@ -5,10 +5,13 @@ namespace {
 template<typename F, typename... Args> class partial_t
 {
 public:
-  constexpr partial_t(F &&f, Args &&...args) : f_(std::forward<F>(f)), args_(std::forward_as_tuple(args...)) {}
+  constexpr partial_t(F &&f, Args &&...args)
+    : f_(std::forward<F>(f)), args_(std::forward_as_tuple(args...))
+  {}
   template<typename... RestArgs> constexpr decltype(auto) operator()(RestArgs &&...rest_args)
   {
-    return std::apply(f_, std::tuple_cat(args_, std::forward_as_tuple(std::forward<RestArgs>(rest_args)...)));
+    return std::apply(
+      f_, std::tuple_cat(args_, std::forward_as_tuple(std::forward<RestArgs>(rest_args)...)));
   }
 
 private:
