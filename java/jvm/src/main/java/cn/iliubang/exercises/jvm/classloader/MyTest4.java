@@ -11,8 +11,10 @@ public class MyTest4 {
         System.out.println(Demo2.str);
     }
 }
+
 class Demo2 {
     public static final String str = UUID.randomUUID().toString();
+
     static {
         System.out.println(Demo2.class.getName());
     }
