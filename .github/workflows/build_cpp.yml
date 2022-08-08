@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "cpp/**"
+      - ".github/workflows/build_cpp.yml"
   workflow_dispatch:
 
 jobs:

@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "java/**"
+      - ".github/workflows/build_java.yml"
   workflow_dispatch:
 
 jobs:
