@@ -1,0 +1,21 @@
+---
+name: build-go
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "go/**"
+  workflow_dispatch:
+
+jobs:
+  build-go:
+    name: go laboratory
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
+        with:
+          go-version: "^1.18.0"
+          check-latest: true
+      - run: cd go && go install -mod=mod github.com/onsi/ginkgo/v2/ginkgo && ginkgo --gcflags=all=-l -v -p ./...
