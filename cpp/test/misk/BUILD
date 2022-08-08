@@ -87,3 +87,14 @@ cc_binary(
     ],
     linkopts = _common_linkopts,
 )
+
+cc_binary(
+    name = "test_union",
+    srcs = [
+        "test_union.cpp",
+    ],
+    copts = _common_copts + [
+        "-std=c++17",
+    ],
+    linkopts = _common_linkopts,
+)
