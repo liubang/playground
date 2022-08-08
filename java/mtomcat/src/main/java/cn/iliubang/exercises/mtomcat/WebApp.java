@@ -9,6 +9,7 @@ import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.Map;
 
@@ -19,7 +20,7 @@ import java.util.Map;
  */
 public class WebApp {
 
-    private static ServletContext context;
+    private static final ServletContext context;
 
     static {
         context = new ServletContext();
@@ -44,11 +45,7 @@ public class WebApp {
                 }
             }
 
-        } catch (ParserConfigurationException e) {
-            e.printStackTrace();
-        } catch (SAXException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
+        } catch (ParserConfigurationException | IOException | SAXException e) {
             e.printStackTrace();
         }
     }
@@ -65,10 +62,8 @@ public class WebApp {
         try {
             Class<?> clazz = Class.forName(className);
             try {
-                return (Servlet) clazz.newInstance();
-            } catch (InstantiationException e) {
-                e.printStackTrace();
-            } catch (IllegalAccessException e) {
+                return (Servlet) clazz.getDeclaredConstructor().newInstance();
+            } catch (Exception e) {
                 e.printStackTrace();
             }
         } catch (ClassNotFoundException e) {

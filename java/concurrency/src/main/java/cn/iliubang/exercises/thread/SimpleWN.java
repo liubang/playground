@@ -5,7 +5,6 @@ package cn.iliubang.exercises.thread;
  *
  * @author <a href="mailto:it.liubang@gmail.com">liubang</a>
  * @version $Revision: {Version} $ $Date: 2018/10/13 22:02 $
- * @see
  */
 public class SimpleWN {
     final static Object object = new Object();
