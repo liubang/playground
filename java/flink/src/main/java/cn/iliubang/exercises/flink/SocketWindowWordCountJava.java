@@ -31,11 +31,11 @@ public class SocketWindowWordCountJava {
         DataStreamSource<String> text = env.socketTextStream(host, port, delimiter, maxRetry);
 
         DataStream<WordWithCount> wordcount = text.flatMap((FlatMapFunction<String, WordWithCount>) (s, collector) -> {
-            String[] words = s.split("\\s");
-            for (String word : words) {
-                collector.collect(new WordWithCount(word, 1L));
-            }
-        }).keyBy("word")
+                    String[] words = s.split("\\s");
+                    for (String word : words) {
+                        collector.collect(new WordWithCount(word, 1L));
+                    }
+                }).keyBy("word")
                 // 执行时间窗口大小为2s，指定时间间隔为1s
                 .timeWindow(Time.seconds(2), Time.seconds(1))
                 // .sum("count"); // 用sum或者reduce
