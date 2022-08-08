@@ -5,7 +5,6 @@ package cn.iliubang.exercises.thread;
  *
  * @author <a href="mailto:it.liubang@gmail.com">liubang</a>
  * @version $Revision: {Version} $ $Date: 2018/10/13 20:46 $
- * @see
  */
 public class PriorityDemo {
 

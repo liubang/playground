@@ -47,6 +47,7 @@ jobs:
           bazelisk test  //highkyck/bfcc/...
           bazelisk test  //highkyck/cppstories/...
           bazelisk test  //test/misk/...
+
   build-rust:
     name: rust laboratory
     runs-on: ubuntu-latest
@@ -56,3 +57,16 @@ jobs:
         with:
           toolchain: stable
       - run: cd rust && cargo run --release --all-features
+
+  build-java:
+    name: java laboratory
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '18'
+          cache: 'maven'
+      - name: build with maven
+        run: cd java && mvn package

@@ -1,6 +1,10 @@
 package cn.iliubang.exercises.primary.javassist.some;
 
-import javassist.*;
+import javassist.ClassPool;
+import javassist.CtClass;
+import javassist.CtConstructor;
+import javassist.CtField;
+import javassist.CtMethod;
 
 /**
  * @author liubang <it.liubang@gmail.com>

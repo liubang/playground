@@ -1,6 +1,7 @@
 ### File
 
 两个常量：
+
 1. 路径分隔符：`File.pathSeparator`
 2. 文件分隔符：`File.separator`
 
@@ -30,36 +31,46 @@ public static void main(String[] args) {
 **分类**
 
 流向：
+
 - 输入流
 - 输出流
 
 数据：
+
 - 字节流：二进制流，可以处理一切文件
 - 字符流：只能处理纯文本
 
 功能：
+
 - 节点流：包裹源头的
 - 处理流：增强功能，提高性能
 
 **字符流与字节流**
 
 字节流：
+
 - 输入流：InputStream read(byte[] b), read(byte[] b, int off, int len), close()
-- - FileInputStream
+-
+    - FileInputStream
 
 - 输出流：OutputStream write(byte[]), write(byte[]b, int off, int len), flush(), close()
-- - FileOutputStream
+-
+    - FileOutputStream
 
 字符流：
+
 - 输入流：Reader read(char[] cbuf), read(char[] cbuf, int off, int len), flush(), close()
-- - FileReader
+-
+    - FileReader
 
 - 输出流：Writer write(char[] cbuf) write(char[] cbuf, int off, int len), flush(), close()
-- - FileWriter
+-
+    - FileWriter
 
 **操作**
 
 举例：搬家
+
 ```text
 读取文件
 关联房子  -> 建立与文件的联系  
