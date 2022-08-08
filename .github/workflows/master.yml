@@ -7,7 +7,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-cpp:
+    name: cpp laboratory
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -15,7 +16,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v2
         with:
-          go-version: "^1.16.0"
+          go-version: "^1.18.0"
       - uses: egor-tensin/setup-gcc@v1
         with:
           version: 11
@@ -46,3 +47,12 @@ jobs:
           bazelisk test  //highkyck/bfcc/...
           bazelisk test  //highkyck/cppstories/...
           bazelisk test  //test/misk/...
+  build-rust:
+    name: rust laboratory
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - run: cd rust && cargo run --release --all-features
