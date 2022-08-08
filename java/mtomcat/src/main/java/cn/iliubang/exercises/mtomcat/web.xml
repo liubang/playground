@@ -1,21 +1,21 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <web-app>
-  <servlet>
-    <servlet-name>login</servlet-name>
-    <servlet-class>cn.iliubang.exercises.mtomcat.servlet.LoginServlet</servlet-class>
-  </servlet>
-  <servlet>
-    <servlet-name>register</servlet-name>
-    <servlet-class>cn.iliubang.exercises.mtomcat.servlet.RegistServlet</servlet-class>
-  </servlet>
+    <servlet>
+        <servlet-name>login</servlet-name>
+        <servlet-class>cn.iliubang.exercises.mtomcat.servlet.LoginServlet</servlet-class>
+    </servlet>
+    <servlet>
+        <servlet-name>register</servlet-name>
+        <servlet-class>cn.iliubang.exercises.mtomcat.servlet.RegistServlet</servlet-class>
+    </servlet>
 
-  <servlet-mapping>
-    <url-pattern>/login</url-pattern>
-    <servlet-name>login</servlet-name>
-  </servlet-mapping>
+    <servlet-mapping>
+        <url-pattern>/login</url-pattern>
+        <servlet-name>login</servlet-name>
+    </servlet-mapping>
 
-  <servlet-mapping>
-    <url-pattern>/reg</url-pattern>
-    <servlet-name>register</servlet-name>
-  </servlet-mapping>
+    <servlet-mapping>
+        <url-pattern>/reg</url-pattern>
+        <servlet-name>register</servlet-name>
+    </servlet-mapping>
 </web-app>
