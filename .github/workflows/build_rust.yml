@@ -1,0 +1,20 @@
+---
+name: build-rust
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "rust/**"
+  workflow_dispatch:
+
+jobs:
+  build-rust:
+    name: rust laboratory
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - run: cd rust && cargo build --release --all-features
