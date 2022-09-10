@@ -8,3 +8,14 @@ cc_binary(
         "-std=c++17",
     ],
 )
+
+cc_binary(
+    name = "print",
+    srcs = [
+        "print.cpp",
+        "print.h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+)
