@@ -51,18 +51,18 @@ requires(BuiltinArray<UnknownType> ==
          false) struct _ExtractInnermostElementType<UnknownType> {
   using ElementType =
       std::remove_cvref_t<decltype(*std::declval<UnknownType>().begin())>;
-  using Type = _ExtractInnermostElementType<ElementType>::Type;
+  using Type = typename _ExtractInnermostElementType<ElementType>::Type;
 };
 
 template <typename UnknownType, auto Length>
 struct _ExtractInnermostElementType<UnknownType[Length]> {
   using ElementType = std::remove_cvref_t<UnknownType>;
-  using Type = _ExtractInnermostElementType<ElementType>::Type;
+  using Type = typename _ExtractInnermostElementType<ElementType>::Type;
 };
 
 template <typename UnknownType>
 using ExtractInnermostElementType =
-    _ExtractInnermostElementType<std::remove_cvref_t<UnknownType>>::Type;
+    typename _ExtractInnermostElementType<std::remove_cvref_t<UnknownType>>::Type;
 
 auto& operator<<(SubtypeOf<std::ostream> auto& Printer, Iterable auto&& Container) requires(
     requires {
