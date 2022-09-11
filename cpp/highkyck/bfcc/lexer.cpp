@@ -74,7 +74,11 @@ void Lexer::ExpectToken(TokenType type)
   if (CurrentToken()->type == type) {
     GetNextToken();
   } else {
-    DiagnosticError(source_code_, line_, CurrentToken()->location.col, "'%s' expected", TokenTypeName(type).data());
+    DiagnosticError(source_code_,
+      line_,
+      CurrentToken()->location.col,
+      "'%s' expected",
+      TokenTypeName(type).data());
   }
 }
 
@@ -169,7 +173,8 @@ void Lexer::GetNextToken()
       GetNextChar();
       kind = TokenType::PipeEqual;
     } else {
-      DiagnosticError(source_code_, location.line, location.col, "current '%c' is illegal", cur_char_);
+      DiagnosticError(
+        source_code_, location.line, location.col, "current '%c' is illegal", cur_char_);
     }
     GetNextChar();
     break;
@@ -217,12 +222,14 @@ void Lexer::GetNextToken()
       } while (IsDigit());
       kind = TokenType::Num;
     } else {
-      DiagnosticError(source_code_, location.line, location.col, "current '%c' is illegal", cur_char_);
+      DiagnosticError(
+        source_code_, location.line, location.col, "current '%c' is illegal", cur_char_);
     }
     break;
   }
 
-  cur_token_ = std::make_shared<Token>(kind, value, source_code_.substr(start_pos, cursor_ - 1 - start_pos), location);
+  cur_token_ = std::make_shared<Token>(
+    kind, value, source_code_.substr(start_pos, cursor_ - 1 - start_pos), location);
 }
 
 }// namespace highkyck::bfcc
