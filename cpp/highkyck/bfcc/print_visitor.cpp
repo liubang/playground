@@ -132,7 +132,10 @@ void PrintVisitor::VisitorBinaryNode(BinaryNode *node)
   node->Rhs()->Accept(this);
 }
 
-void PrintVisitor::VisitorIdentifierNode(IdentifierNode *node) { sstream_ << std::string(node->Id()->name); }
+void PrintVisitor::VisitorIdentifierNode(IdentifierNode *node)
+{
+  sstream_ << std::string(node->Id()->name);
+}
 
 void PrintVisitor::VisitorFuncCallNode(FuncCallNode *node)
 {
