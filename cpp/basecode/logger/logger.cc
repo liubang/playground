@@ -89,9 +89,12 @@ void Logger::fatal(const char* format, ...) {
   va_end(ap);
 }
 
-void Logger::write_log(LogLevel level, const char* file_name,
-                       const char* function_name, int32_t line_num,
-                       const char* fmt, va_list ap) {
+void Logger::write_log(LogLevel level,
+                       const char* file_name,
+                       const char* function_name,
+                       int32_t line_num,
+                       const char* fmt,
+                       va_list ap) {
   if (level < kLoggerConfig.level) {
     return;
   }
@@ -148,7 +151,9 @@ void Logger::del_appender(const std::string& name) {
   }
 }
 
-void Logger::clear_appender() { appenders_.clear(); }
+void Logger::clear_appender() {
+  appenders_.clear();
+}
 
 }  // namespace logger
 }  // namespace basecode
