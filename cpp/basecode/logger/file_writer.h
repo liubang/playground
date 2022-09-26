@@ -28,8 +28,10 @@ class FileWriter {
 
 class LogFile {
  public:
-  LogFile(const std::string& basename, int32_t roll_size,
-          int32_t flush_interval, int32_t check_interval,
+  LogFile(const std::string& basename,
+          int32_t roll_size,
+          int32_t flush_interval,
+          int32_t check_interval,
           FileWriterType file_writer_type);
 
   ~LogFile() = default;
