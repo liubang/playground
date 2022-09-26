@@ -144,8 +144,10 @@ std::string get_log_filename(const std::string& basename, time_t* now) {
 
 }  // namespace
 
-LogFile::LogFile(const std::string& basename, int32_t roll_size,
-                 int32_t flush_interval, int32_t check_interval,
+LogFile::LogFile(const std::string& basename,
+                 int32_t roll_size,
+                 int32_t flush_interval,
+                 int32_t check_interval,
                  FileWriterType file_writer_type)
     : basename_(basename),
       roll_size_(roll_size),
@@ -186,7 +188,9 @@ void LogFile::append(const char* msg, int32_t len) {
   }
 }
 
-void LogFile::flush() { file_->flush(); }
+void LogFile::flush() {
+  file_->flush();
+}
 
 bool LogFile::roll_file() {
   time_t now = 0;

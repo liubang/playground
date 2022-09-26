@@ -19,7 +19,8 @@ struct cichar_traits : public std::char_traits<char> {
     return to_upper_case(a) < to_upper_case(b);
   }
 
-  static constexpr int compare(const char* str1, const char* str2,
+  static constexpr int compare(const char* str1,
+                               const char* str2,
                                std::size_t count) {
     for (std::size_t i = 0; i < count; ++i) {
       if (lt(str1[i], str2[i])) {
@@ -31,7 +32,8 @@ struct cichar_traits : public std::char_traits<char> {
     return 0;
   }
 
-  static constexpr const char* find(const char* s, std::size_t n,
+  static constexpr const char* find(const char* s,
+                                    std::size_t n,
                                     const char& a) {
     for (std::size_t i = 0; i < n; ++i) {
       if (eq(s[i], a)) {
