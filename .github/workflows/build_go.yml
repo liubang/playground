@@ -11,7 +11,7 @@ on:
 
 jobs:
   build-go:
-    name: go laboratory
+    name: go playground
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
