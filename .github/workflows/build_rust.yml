@@ -11,7 +11,7 @@ on:
 
 jobs:
   build-rust:
-    name: rust laboratory
+    name: rust playground
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
