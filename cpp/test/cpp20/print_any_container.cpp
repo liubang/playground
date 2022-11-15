@@ -61,8 +61,8 @@ struct _ExtractInnermostElementType<UnknownType[Length]> {
 };
 
 template <typename UnknownType>
-using ExtractInnermostElementType =
-    typename _ExtractInnermostElementType<std::remove_cvref_t<UnknownType>>::Type;
+using ExtractInnermostElementType = typename _ExtractInnermostElementType<
+    std::remove_cvref_t<UnknownType>>::Type;
 
 auto& operator<<(SubtypeOf<std::ostream> auto& Printer, Iterable auto&& Container) requires(
     requires {

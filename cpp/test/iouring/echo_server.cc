@@ -34,8 +34,11 @@ struct ConnInfo {
 char bufs[BUFFERS_COUNT][MAX_MESSAGE_LEN] = {{0}};
 int32_t group_id = 1337;
 
-void add_accept(io_uring* ring, __u32 fd, sockaddr* client_addr,
-                socklen_t* client_len, unsigned flags) {
+void add_accept(io_uring* ring,
+                __u32 fd,
+                sockaddr* client_addr,
+                socklen_t* client_len,
+                unsigned flags) {
   io_uring_sqe* sqe = io_uring_get_sqe(ring);
   io_uring_prep_accept(sqe, fd, client_addr, client_len, 0);
   io_uring_sqe_set_flags(sqe, flags);
@@ -47,8 +50,11 @@ void add_accept(io_uring* ring, __u32 fd, sockaddr* client_addr,
   memcpy(&sqe->user_data, &conn_i, sizeof(conn_i));
 }
 
-void add_socket_read(io_uring* ring, __u32 fd, unsigned gid,
-                     size_t message_size, unsigned flags) {
+void add_socket_read(io_uring* ring,
+                     __u32 fd,
+                     unsigned gid,
+                     size_t message_size,
+                     unsigned flags) {
   io_uring_sqe* sqe = io_uring_get_sqe(ring);
   io_uring_prep_recv(sqe, fd, NULL, message_size, 0);
   io_uring_sqe_set_flags(sqe, flags);
@@ -61,7 +67,10 @@ void add_socket_read(io_uring* ring, __u32 fd, unsigned gid,
   memcpy(&sqe->user_data, &conn_i, sizeof(conn_i));
 }
 
-void add_socket_write(io_uring* ring, __u32 fd, __u16 bid, size_t message_size,
+void add_socket_write(io_uring* ring,
+                      __u32 fd,
+                      __u16 bid,
+                      size_t message_size,
                       unsigned flags) {
   io_uring_sqe* sqe = io_uring_get_sqe(ring);
   io_uring_prep_send(sqe, fd, &bufs[bid], message_size, 0);

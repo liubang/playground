@@ -7,9 +7,10 @@ class Widget {
  public:
   Widget() {}
 
-  template <typename T, typename std::enable_if<
-                            std::is_same<typename std::decay<T>::type,
-                                         std::string>::value>::type* = nullptr>
+  template <typename T,
+            typename std::enable_if<std::is_same<typename std::decay<T>::type,
+                                                 std::string>::value>::type* =
+                nullptr>
   explicit Widget(T&& value) {
     std::cout << "perfect forwarding" << std::endl;
   }

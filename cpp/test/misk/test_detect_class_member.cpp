@@ -17,4 +17,3 @@ TEST(misk, detect_class_member) {
   EXPECT_FALSE(HasX<Foo>::value);
   EXPECT_TRUE(HasX<Bar>::value);
 }
-

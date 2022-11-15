@@ -5,8 +5,11 @@
 
 namespace highkyck::bfcc {
 
-void DiagnosticError(std::string_view source, uint64_t line, uint64_t col, const char *fmt, ...)
-{
+void DiagnosticError(std::string_view source,
+                     uint64_t line,
+                     uint64_t col,
+                     const char* fmt,
+                     ...) {
   std::va_list ap;
   va_start(ap, fmt);
   std::fprintf(stderr, "%s\n", source.data());
@@ -17,4 +20,4 @@ void DiagnosticError(std::string_view source, uint64_t line, uint64_t col, const
   exit(-1);
 }
 
-}// namespace highkyck::bfcc
+}  // namespace highkyck::bfcc

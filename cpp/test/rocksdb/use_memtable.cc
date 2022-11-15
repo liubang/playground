@@ -17,7 +17,9 @@ int main(int argc, char* argv[]) {
   rocksdb::Status status =
       rocksdb::DB::Open(options, "/tmp/memtable_test", &db);
 
-  SCOPE_EXIT { delete db; };
+  SCOPE_EXIT {
+    delete db;
+  };
 
   if (rocksdb::Status::OK() != status) {
     std::cout << "open db error:" << status.ToString() << std::endl;

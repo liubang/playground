@@ -10,7 +10,8 @@
 namespace {
 std::shared_ptr<folly::CPUThreadPoolExecutor> thread_pool =
     std::make_shared<folly::CPUThreadPoolExecutor>(
-        200, std::make_shared<folly::NamedThreadFactory>("LoaderDataPool"));
+        200,
+        std::make_shared<folly::NamedThreadFactory>("LoaderDataPool"));
 }
 
 int addSync(int a, int b) {

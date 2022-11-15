@@ -36,4 +36,6 @@ class Card {
 enum UID : uint64_t;
 enum CardID : uint64_t;
 
-int main(int argc, char *argv[]) { return 0; }
+int main(int argc, char* argv[]) {
+  return 0;
+}
