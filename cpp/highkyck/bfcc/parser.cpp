@@ -6,16 +6,17 @@
 
 namespace highkyck::bfcc {
 
-std::shared_ptr<ProgramNode> Parser::Parse()
-{
+std::shared_ptr<ProgramNode> Parser::Parse() {
   auto node = std::make_shared<ProgramNode>();
-  while (lexer_ptr_->CurrentToken()->type != TokenType::Eof) { node->PushFunc(ParseFunction()); }
+  while (lexer_ptr_->CurrentToken()->type != TokenType::Eof) {
+    node->PushFunc(ParseFunction());
+  }
   return node;
 }
 
-std::shared_ptr<AstNode> Parser::ParseFunction()
-{
-  auto node = std::make_shared<FunctionNode>(lexer_ptr_->CurrentToken()->content);
+std::shared_ptr<AstNode> Parser::ParseFunction() {
+  auto node =
+      std::make_shared<FunctionNode>(lexer_ptr_->CurrentToken()->content);
   ids_ = &node->local_ids_;
   ids_map_.clear();
   lexer_ptr_->ExpectToken(TokenType::Identifier);
@@ -34,14 +35,15 @@ std::shared_ptr<AstNode> Parser::ParseFunction()
   lexer_ptr_->ExpectToken(TokenType::RParent);
 
   lexer_ptr_->ExpectToken(TokenType::LBrace);
-  while (lexer_ptr_->CurrentToken()->type != TokenType::RBrace) { node->PushStmt(ParseStmt()); }
+  while (lexer_ptr_->CurrentToken()->type != TokenType::RBrace) {
+    node->PushStmt(ParseStmt());
+  }
   lexer_ptr_->ExpectToken(TokenType::RBrace);
 
   return node;
 }
 
-std::shared_ptr<AstNode> Parser::ParseStmt()
-{
+std::shared_ptr<AstNode> Parser::ParseStmt() {
   if (lexer_ptr_->CurrentToken()->type == TokenType::If) {
     lexer_ptr_->GetNextToken();
     lexer_ptr_->ExpectToken(TokenType::LParent);
@@ -75,17 +77,25 @@ std::shared_ptr<AstNode> Parser::ParseStmt()
     std::shared_ptr<AstNode> init = nullptr;
     std::shared_ptr<AstNode> cond = nullptr;
     std::shared_ptr<AstNode> inc = nullptr;
-    if (lexer_ptr_->CurrentToken()->type != TokenType::Semicolon) { init = ParseExpr(); }
+    if (lexer_ptr_->CurrentToken()->type != TokenType::Semicolon) {
+      init = ParseExpr();
+    }
     lexer_ptr_->ExpectToken(TokenType::Semicolon);
-    if (lexer_ptr_->CurrentToken()->type != TokenType::Semicolon) { cond = ParseExpr(); }
+    if (lexer_ptr_->CurrentToken()->type != TokenType::Semicolon) {
+      cond = ParseExpr();
+    }
     lexer_ptr_->ExpectToken(TokenType::Semicolon);
-    if (lexer_ptr_->CurrentToken()->type != TokenType::Semicolon) { inc = ParseExpr(); }
+    if (lexer_ptr_->CurrentToken()->type != TokenType::Semicolon) {
+      inc = ParseExpr();
+    }
     lexer_ptr_->ExpectToken(TokenType::RParent);
     return std::make_shared<ForStmtNode>(init, cond, inc, ParseStmt());
   } else if (lexer_ptr_->CurrentToken()->type == TokenType::LBrace) {
     lexer_ptr_->GetNextToken();
     auto node = std::make_shared<BlockStmtNode>();
-    while (lexer_ptr_->CurrentToken()->type != TokenType::RBrace) { node->AddStmt(ParseStmt()); }
+    while (lexer_ptr_->CurrentToken()->type != TokenType::RBrace) {
+      node->AddStmt(ParseStmt());
+    }
     lexer_ptr_->ExpectToken(TokenType::RBrace);
     return node;
   } else if (lexer_ptr_->CurrentToken()->type == TokenType::Return) {
@@ -95,17 +105,20 @@ std::shared_ptr<AstNode> Parser::ParseStmt()
     return node;
   } else {
     auto node = std::make_shared<ExprStmtNode>();
-    if (lexer_ptr_->CurrentToken()->type != TokenType::Semicolon) { node->SetLhs(ParseExpr()); }
+    if (lexer_ptr_->CurrentToken()->type != TokenType::Semicolon) {
+      node->SetLhs(ParseExpr());
+    }
     assert(lexer_ptr_->CurrentToken()->type == TokenType::Semicolon);
     lexer_ptr_->GetNextToken();
     return node;
   }
 }
 
-std::shared_ptr<AstNode> Parser::ParseExpr() { return ParseAssignExpr(); }
+std::shared_ptr<AstNode> Parser::ParseExpr() {
+  return ParseAssignExpr();
+}
 
-std::shared_ptr<AstNode> Parser::ParseAssignExpr()
-{
+std::shared_ptr<AstNode> Parser::ParseAssignExpr() {
   auto left = ParseEqualExpr();
   if (lexer_ptr_->CurrentToken()->type == TokenType::Assign) {
     lexer_ptr_->GetNextToken();
@@ -115,11 +128,10 @@ std::shared_ptr<AstNode> Parser::ParseAssignExpr()
   return left;
 }
 
-std::shared_ptr<AstNode> Parser::ParseEqualExpr()
-{
+std::shared_ptr<AstNode> Parser::ParseEqualExpr() {
   auto left = ParseRelationalExpr();
-  while (lexer_ptr_->CurrentToken()->type == TokenType::Equal
-         || lexer_ptr_->CurrentToken()->type == TokenType::PipeEqual) {
+  while (lexer_ptr_->CurrentToken()->type == TokenType::Equal ||
+         lexer_ptr_->CurrentToken()->type == TokenType::PipeEqual) {
     BinaryOperator op = BinaryOperator::Equal;
     if (lexer_ptr_->CurrentToken()->type == TokenType::PipeEqual) {
       op = BinaryOperator::PipeEqual;
@@ -131,13 +143,12 @@ std::shared_ptr<AstNode> Parser::ParseEqualExpr()
   return left;
 }
 
-std::shared_ptr<AstNode> Parser::ParseRelationalExpr()
-{
+std::shared_ptr<AstNode> Parser::ParseRelationalExpr() {
   auto left = ParseAddExpr();
-  while (lexer_ptr_->CurrentToken()->type == TokenType::Greater
-         || lexer_ptr_->CurrentToken()->type == TokenType::GreaterEqual
-         || lexer_ptr_->CurrentToken()->type == TokenType::Lesser
-         || lexer_ptr_->CurrentToken()->type == TokenType::LesserEqual) {
+  while (lexer_ptr_->CurrentToken()->type == TokenType::Greater ||
+         lexer_ptr_->CurrentToken()->type == TokenType::GreaterEqual ||
+         lexer_ptr_->CurrentToken()->type == TokenType::Lesser ||
+         lexer_ptr_->CurrentToken()->type == TokenType::LesserEqual) {
     BinaryOperator op = BinaryOperator::Greater;
     if (lexer_ptr_->CurrentToken()->type == TokenType::GreaterEqual) {
       op = BinaryOperator::GreaterEqual;
@@ -153,13 +164,13 @@ std::shared_ptr<AstNode> Parser::ParseRelationalExpr()
   return left;
 }
 
-std::shared_ptr<AstNode> Parser::ParseAddExpr()
-{
+std::shared_ptr<AstNode> Parser::ParseAddExpr() {
   std::shared_ptr<AstNode> left = ParseMultiExpr();
-  while (lexer_ptr_->CurrentToken()->type == TokenType::Add
-         || lexer_ptr_->CurrentToken()->type == TokenType::Sub) {
-    BinaryOperator op = lexer_ptr_->CurrentToken()->type == TokenType::Add ? BinaryOperator::Add
-                                                                           : BinaryOperator::Sub;
+  while (lexer_ptr_->CurrentToken()->type == TokenType::Add ||
+         lexer_ptr_->CurrentToken()->type == TokenType::Sub) {
+    BinaryOperator op = lexer_ptr_->CurrentToken()->type == TokenType::Add
+                            ? BinaryOperator::Add
+                            : BinaryOperator::Sub;
     lexer_ptr_->GetNextToken();
     auto node = std::make_shared<BinaryNode>(op, left, ParseMultiExpr());
     left = node;
@@ -167,13 +178,13 @@ std::shared_ptr<AstNode> Parser::ParseAddExpr()
   return left;
 }
 
-std::shared_ptr<AstNode> Parser::ParseMultiExpr()
-{
+std::shared_ptr<AstNode> Parser::ParseMultiExpr() {
   std::shared_ptr<AstNode> left = ParsePrimaryExpr();
-  while (lexer_ptr_->CurrentToken()->type == TokenType::Mul
-         || lexer_ptr_->CurrentToken()->type == TokenType::Div) {
-    BinaryOperator op = lexer_ptr_->CurrentToken()->type == TokenType::Mul ? BinaryOperator::Mul
-                                                                           : BinaryOperator::Div;
+  while (lexer_ptr_->CurrentToken()->type == TokenType::Mul ||
+         lexer_ptr_->CurrentToken()->type == TokenType::Div) {
+    BinaryOperator op = lexer_ptr_->CurrentToken()->type == TokenType::Mul
+                            ? BinaryOperator::Mul
+                            : BinaryOperator::Div;
     lexer_ptr_->GetNextToken();
     auto node = std::make_shared<BinaryNode>(op, left, ParsePrimaryExpr());
     left = node;
@@ -181,12 +192,11 @@ std::shared_ptr<AstNode> Parser::ParseMultiExpr()
   return left;
 }
 
-std::shared_ptr<AstNode> Parser::ParsePrimaryExpr()
-{
+std::shared_ptr<AstNode> Parser::ParsePrimaryExpr() {
   if (lexer_ptr_->CurrentToken()->type == TokenType::LParent) {
-    lexer_ptr_->GetNextToken();// skip (
-    auto node = ParseExpr();// parse expr
-    lexer_ptr_->ExpectToken(TokenType::RParent);// expect ) and stkip
+    lexer_ptr_->GetNextToken();                   // skip (
+    auto node = ParseExpr();                      // parse expr
+    lexer_ptr_->ExpectToken(TokenType::RParent);  // expect ) and stkip
     return node;
   } else if (lexer_ptr_->CurrentToken()->type == TokenType::Identifier) {
     lexer_ptr_->BeginPeekToken();
@@ -200,23 +210,25 @@ std::shared_ptr<AstNode> Parser::ParsePrimaryExpr()
 
     auto name = lexer_ptr_->CurrentToken()->content;
     auto id = FindId(name);
-    if (!id) { id = MakeId(name); }
+    if (!id) {
+      id = MakeId(name);
+    }
     auto node = std::make_shared<IdentifierNode>(id);
     lexer_ptr_->GetNextToken();
     return node;
   } else if (lexer_ptr_->CurrentToken()->type == TokenType::Num) {
-    auto node = std::make_shared<ConstantNode>(lexer_ptr_->CurrentToken()->value);
+    auto node =
+        std::make_shared<ConstantNode>(lexer_ptr_->CurrentToken()->value);
     lexer_ptr_->GetNextToken();
     return node;
   } else {
     auto token = lexer_ptr_->CurrentToken();
-    DiagnosticError(
-      lexer_ptr_->SourceCode(), token->location.line, token->location.col, "Not support node");
+    DiagnosticError(lexer_ptr_->SourceCode(), token->location.line,
+                    token->location.col, "Not support node");
   }
 }
 
-std::shared_ptr<AstNode> Parser::ParseFuncCallNode()
-{
+std::shared_ptr<AstNode> Parser::ParseFuncCallNode() {
   auto name = lexer_ptr_->CurrentToken()->content;
   std::vector<std::shared_ptr<AstNode>> args;
   lexer_ptr_->ExpectToken(TokenType::Identifier);
@@ -232,18 +244,18 @@ std::shared_ptr<AstNode> Parser::ParseFuncCallNode()
   return std::make_shared<FuncCallNode>(name, args);
 }
 
-std::shared_ptr<Identifier> Parser::FindId(std::string_view name)
-{
-  if (ids_map_.find(name) != ids_map_.end()) { return ids_map_[name]; }
+std::shared_ptr<Identifier> Parser::FindId(std::string_view name) {
+  if (ids_map_.find(name) != ids_map_.end()) {
+    return ids_map_[name];
+  }
   return nullptr;
 }
 
-std::shared_ptr<Identifier> Parser::MakeId(std::string_view name)
-{
+std::shared_ptr<Identifier> Parser::MakeId(std::string_view name) {
   auto id = std::make_shared<Identifier>(name, 0);
   ids_->push_front(id);
   ids_map_[name] = id;
   return id;
 }
 
-}// namespace highkyck::bfcc
+}  // namespace highkyck::bfcc
