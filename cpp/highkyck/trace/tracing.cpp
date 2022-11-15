@@ -18,13 +18,12 @@
   } while (0)
 
 extern "C" {
-NO_INSTRUMENT void __cyg_profile_func_enter(void *callee, void *caller)
-{
+NO_INSTRUMENT void __cyg_profile_func_enter(void* callee, void* caller) {
   Dl_info info;
   if (dladdr(callee, &info)) {
     int status;
-    const char *name;
-    char *demangled = abi::__cxa_demangle(info.dli_sname, NULL, 0, &status);
+    const char* name;
+    char* demangled = abi::__cxa_demangle(info.dli_sname, NULL, 0, &status);
     if (0 == status) {
       name = demangled ? demangled : "[no demangled]";
     } else {
@@ -35,13 +34,12 @@ NO_INSTRUMENT void __cyg_profile_func_enter(void *callee, void *caller)
   }
 }
 
-NO_INSTRUMENT void __cyg_profile_func_exit(void *callee, void *caller)
-{
+NO_INSTRUMENT void __cyg_profile_func_exit(void* callee, void* caller) {
   Dl_info info;
   if (dladdr(callee, &info)) {
     int status;
-    const char *name;
-    char *demangled = abi::__cxa_demangle(info.dli_sname, NULL, 0, &status);
+    const char* name;
+    char* demangled = abi::__cxa_demangle(info.dli_sname, NULL, 0, &status);
     if (status == 0) {
       name = demangled ? demangled : "[not demangled]";
     } else {
