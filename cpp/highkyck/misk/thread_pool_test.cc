@@ -7,8 +7,7 @@
 #include <utility>
 #include <vector>
 
-TEST(thread_pool, thread_pool)
-{
+TEST(thread_pool, thread_pool) {
   ThreadPool pool(1024);
   std::vector<std::future<std::pair<int, int>>> results;
 
@@ -21,13 +20,13 @@ TEST(thread_pool, thread_pool)
     }));
   }
 
-  for (auto &result : results) {
+  for (auto& result : results) {
     std::pair<int, int> pair = result.get();
     EXPECT_EQ(pair.first, pair.second);
   }
 
-  auto duration =
-    std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - start);
+  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::system_clock::now() - start);
 
   EXPECT_LT(duration.count(), 100);
 }
