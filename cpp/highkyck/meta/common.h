@@ -100,15 +100,18 @@ template <typename IN, typename INIT, template <typename, typename> class OP>
 using Fold_t = typename Fold<IN, INIT, OP>::type;
 
 // 对当前参数H执行二元函数OP，其返回值类型更新INIT参数
-template <typename ACC, template <typename, typename> class OP, typename H,
+template <typename ACC,
+          template <typename, typename>
+          class OP,
+          typename H,
           typename... Ts>
 struct Fold<TypeList<H, Ts...>, ACC, OP>
     : Fold<TypeList<Ts...>, typename OP<ACC, H>::type, OP> {};
 
 // 连接两个TypeList
 // 输入两个TypeList IN1, IN2
-// 定义Append二元操作，输入两个参数，一个ACC TypeList，一个类参数E，通过调用TypeList的 a
-// pend原函数
+// 定义Append二元操作，输入两个参数，一个ACC
+// TypeList，一个类参数E，通过调用TypeList的 a pend原函数
 template <typename IN1, typename IN2>
 class Concat {
   template <typename ACC, typename E>

@@ -44,8 +44,9 @@ class ScopeGuardImpl : public ScopeGuardImplBase {
   explicit ScopeGuardImpl(const FunctionType& fn) noexcept(
       std::is_nothrow_copy_constructible<FunctionType>::value)
       : ScopeGuardImpl(
-            fn, make_failsafe(
-                    std::is_nothrow_copy_constructible<FunctionType>{}, &fn)) {}
+            fn,
+            make_failsafe(std::is_nothrow_copy_constructible<FunctionType>{},
+                          &fn)) {}
 
   explicit ScopeGuardImpl(FunctionType&& fn) noexcept(
       std::is_nothrow_move_constructible<FunctionType>::value)
@@ -110,7 +111,8 @@ enum class ScopeGuardOnExit {};
 
 template <typename FunctionType>
 ScopeGuardImpl<typename std::decay<FunctionType>::type, true> operator+(
-    detail::ScopeGuardOnExit, FunctionType&& fn) {
+    detail::ScopeGuardOnExit,
+    FunctionType&& fn) {
   return ScopeGuardImpl<typename std::decay<FunctionType>::type, true>(
       std::forward<FunctionType>(fn));
 }

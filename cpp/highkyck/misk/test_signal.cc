@@ -3,14 +3,12 @@
 #include <iostream>
 #include <thread>
 
-void signalHandler(int signum)
-{
+void signalHandler(int signum) {
   std::cout << "quit:" << signum << std::endl;
   exit(signum);
 }
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char* argv[]) {
   signal(SIGQUIT, signalHandler);
   for (;;) {
     std::cout << "Going to sleep...." << std::endl;

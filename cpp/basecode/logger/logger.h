@@ -65,8 +65,11 @@ class Logger {
   void clear_appender();
 
  private:
-  void write_log(LogLevel level, const char* file_name,
-                 const char* function_name, int32_t line_num, const char* fmt,
+  void write_log(LogLevel level,
+                 const char* file_name,
+                 const char* function_name,
+                 int32_t line_num,
+                 const char* fmt,
                  va_list ap);
 
  private:

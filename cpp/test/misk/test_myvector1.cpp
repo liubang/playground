@@ -15,7 +15,8 @@ class MyVector {
   template <typename T2, typename R2>
   MyVector& operator=(const MyVector<T2, R2>& other) {
     assert(size() == other.size());
-    for (std::size_t i = 0; i < size(); ++i) vec_[i] = other[i];
+    for (std::size_t i = 0; i < size(); ++i)
+      vec_[i] = other[i];
     return *this;
   }
 
@@ -72,7 +73,8 @@ MyVector<T, MyVectorMul<T, R1, R2>> operator*(const MyVector<T, R1>& a,
 template <typename T>
 std::ostream& operator<<(std::ostream& os, const MyVector<T>& vec) {
   os << '\n';
-  for (std::size_t i = 0; i < vec.size(); ++i) os << vec[i] << ' ';
+  for (std::size_t i = 0; i < vec.size(); ++i)
+    os << vec[i] << ' ';
   os << '\n';
   return os;
 }

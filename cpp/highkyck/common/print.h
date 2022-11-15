@@ -25,8 +25,10 @@ void print(const std::string& s) {
   std::cout << s;
 }
 
-template <typename T, typename AllocT,
-          template <typename, typename...> typename SequenceT>
+template <typename T,
+          typename AllocT,
+          template <typename, typename...>
+          typename SequenceT>
 void print(SequenceT<T, AllocT> seq) {
   print("{ ");
   for (auto iter = std::begin(seq); iter != std::end(seq);

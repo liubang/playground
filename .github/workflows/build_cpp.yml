@@ -38,6 +38,7 @@ jobs:
           cd cpp
           bazelisk build //basecode/...
           bazelisk query "kind('cc_binary', //highkyck/misk/...)" --keep_going --noshow_progress --output=label  | xargs bazelisk run
+          bazelisk query "kind('cc_binary', //highkyck/utils/...)" --keep_going --noshow_progress --output=label  | xargs bazelisk run
           bazelisk query "kind('cc_binary', //highkyck/meta/...)" --keep_going --noshow_progress --output=label  | xargs bazelisk run
           bazelisk query "kind('cc_binary', //highkyck/trace/...)" --keep_going --noshow_progress --output=label  | xargs bazelisk run
           bazelisk query "kind('cc_binary', //highkyck/brain_fuck/...)" --keep_going --noshow_progress --output=label  | xargs bazelisk run

@@ -2,9 +2,8 @@
 
 #include <gtest/gtest.h>
 
-TEST(arena, allocate)
-{
-  constexpr std::size_t ptr_char_size = sizeof(char *);
+TEST(arena, allocate) {
+  constexpr std::size_t ptr_char_size = sizeof(char*);
 
   highkyck::Arena arena;
   arena.allocate(1024);

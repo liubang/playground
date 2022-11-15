@@ -51,7 +51,8 @@ construct(T*) {
 // #2. using helper type
 template <class T, class... Args>
 std::enable_if<std::is_constructible<T, Args&&...>::value> construct(
-    T* p, Args&&... args) {
+    T* p,
+    Args&&... args) {
   std::cout << "constructing T with operation\n";
   ::new (detail::voidify(p)) T(static_cast<Args&>(args)...);
 }
@@ -66,10 +67,11 @@ void destroy(
 }
 
 // #4. enable via a non-type template parameter
-template <class T, typename std::enable_if<
-                       !std::is_trivially_destructible<T>{} &&
-                           (std::is_class<T>{} || std::is_union<T>{}),
-                       bool>::type = true>
+template <
+    class T,
+    typename std::enable_if<!std::is_trivially_destructible<T>{} &&
+                                (std::is_class<T>{} || std::is_union<T>{}),
+                            bool>::type = true>
 void destroy(T* t) {
   std::cout << "destroying non-trivially destructible T\n";
   t->~T();
