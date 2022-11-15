@@ -1,4 +1,4 @@
-# Copyright (c) 2020 The Authors. All rights reserved.
+# Copyright (c) 2022 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,5 +13,22 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2020/07/20 00:32
+# Created: 2022/11/15 16:53
 
+package(default_visibility = ["//visibility:public"])
+
+cc_binary(
+    name = "ip_test",
+    srcs = [
+        "ip.h",
+        "ip_test.cpp",
+    ],
+    copts = [
+        "-std=c++17",
+        "-fsanitize=address",
+        "-fno-omit-frame-pointer",
+    ],
+    linkopts = [
+        "-fsanitize=address",
+    ],
+)

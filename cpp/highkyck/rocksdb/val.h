@@ -15,10 +15,15 @@
 
 namespace highkyck {
 
-enum class Type { INT_VAL = 1, STRING_VAL = 2, MAP_VAL = 3, LIST_VAL = 4, SET_VAL = 5 };
+enum class Type {
+  INT_VAL = 1,
+  STRING_VAL = 2,
+  MAP_VAL = 3,
+  LIST_VAL = 4,
+  SET_VAL = 5
+};
 
-struct Val
-{
+struct Val {
   Type t;
   union {
     uint64_t int_val;
@@ -28,4 +33,4 @@ struct Val
     std::set<std::string> set_val;
   } v;
 };
-}// namespace highkyck
+}  // namespace highkyck

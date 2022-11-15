@@ -3,8 +3,7 @@
 #include <string>
 #include <unordered_map>
 
-void test1()
-{
+void test1() {
   std::map<std::string, std::string> map;
   try {
     std::cout << map.at("aaa") << '\n';
@@ -17,25 +16,22 @@ void test1()
   std::cout << map.size() << '\n';
 }
 
-class Foo
-{
-public:
+class Foo {
+ public:
   Foo() { aaa_.clear(); }
 
   std::map<std::string, uint64_t> aaa() { return aaa_; }
 
-private:
+ private:
   std::map<std::string, uint64_t> aaa_;
 };
 
-void test2()
-{
+void test2() {
   Foo foo;
   auto a = foo.aaa();
 }
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char* argv[]) {
   test1();
   test2();
   return 0;

@@ -16,29 +16,25 @@ enum T2 {
   T2_T3 = 3,
 };
 
-struct Foo
-{
+struct Foo {
   union {
-    struct
-    {
+    struct {
       T1 t1 : 4;
       T2 t2 : 4;
     } __attribute__((packed));
     char val_;
   } __attribute__((packed));
 
-  explicit Foo(const char &val) : val_(val) {}
+  explicit Foo(const char& val) : val_(val) {}
 
   Foo(T1 t1, T2 t2) : t1(t1), t2(t2) {}
 };
 
 static_assert(sizeof(Foo) == 1, "error");
 
-}// namespace
+}  // namespace
 
-
-int main(int argc, char *argv[])
-{
+int main(int argc, char* argv[]) {
   {
     char c = 1;
     c = (c << 4) | 1;
