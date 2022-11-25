@@ -10,3 +10,16 @@ img {
   // 禁用图片拖动
   -webkit-user-drag: none;
 }
+
+// 首页布局样式
+
+.logo {
+  height: 32px;
+  margin: 16px;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.site-layout,
+.site-layout-background {
+  background: #fff;
+}
