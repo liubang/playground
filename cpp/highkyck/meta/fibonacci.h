@@ -3,23 +3,16 @@ namespace highkyck {
 namespace detail {
 
 template <std::size_t N>
-struct Fibonacci {
-  constexpr static std::size_t value =
-      Fibonacci<N - 1>::value + Fibonacci<N - 2>::value;
-};
+constexpr std::size_t fibonacci = fibonacci<N - 1> + fibonacci<N - 2>;
 
 template <>
-struct Fibonacci<0> {
-  constexpr static std::size_t value = 0;
-};
+constexpr std::size_t fibonacci<0> = 0;
 
 template <>
-struct Fibonacci<1> {
-  constexpr static std::size_t value = 1;
-};
+constexpr std::size_t fibonacci<1> = 1;
 
 template <std::size_t N>
-constexpr std::size_t Fibonacci_v = Fibonacci<N>::value;
+constexpr double golden_ratio = fibonacci<N + 1> * 1.0 / fibonacci<N>;
 
 }  // namespace detail
 }  // namespace highkyck
