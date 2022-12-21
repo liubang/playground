@@ -1,3 +1,12 @@
+#======================================================================
+#
+# repository.bzl -
+#
+# Created by liubang on 2022/12/21 23:10
+# Last Modified: 2022/12/21 23:10
+#
+#======================================================================
+
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 def clean_dep(dep):
@@ -6,9 +15,9 @@ def clean_dep(dep):
 def external_dependencies():
     http_archive(
         name = "rules_foreign_cc",
-        strip_prefix = "rules_foreign_cc-d54c78ab86b40770ee19f0949db9d74a831ab9f0",
-        urls = ["https://github.com/bazelbuild/rules_foreign_cc/archive/d54c78ab86b40770ee19f0949db9d74a831ab9f0.zip"],
-        sha256 = "3c6445404e9e5d17fa0ecdef61be00dd93b20222c11f45e146a98c0a3f67defa",
+        strip_prefix = "rules_foreign_cc-0.9.0",
+        url = "https://github.com/bazelbuild/rules_foreign_cc/archive/0.9.0.tar.gz",
+        sha256 = "2a4d07cd64b0719b39a7c12218a3e507672b82a97b98c6a89d38565894cf7c51",
     )
 
 def external_repositories(path_prefix = "", repo_name = ""):
@@ -306,17 +315,17 @@ def external_repositories(path_prefix = "", repo_name = ""):
     # GoogleTest/GoogleMock
     http_archive(
         name = "gtest",
-        urls = ["https://github.com/google/googletest/archive/b6cd405286ed8635ece71c72f118e659f4ade3fb.zip"],
-        strip_prefix = "googletest-b6cd405286ed8635ece71c72f118e659f4ade3fb",
-        sha256 = "ff7a82736e158c077e76188232eac77913a15dac0b22508c390ab3f88e6d6d86",
+        sha256 = "81964fe578e9bd7c94dfdb09c8e4d6e6759e19967e397dbea48d1c10e45d0df2",
+        strip_prefix = "googletest-release-1.12.1",
+        urls = ["https://github.com/google/googletest/archive/refs/tags/release-1.12.1.tar.gz"],
     )
 
     # Google benchmark
     http_archive(
         name = "com_github_google_benchmark",
-        urls = ["https://github.com/google/benchmark/archive/16703ff83c1ae6d53e5155df3bb3ab0bc96083be.zip"],
-        strip_prefix = "benchmark-16703ff83c1ae6d53e5155df3bb3ab0bc96083be",
-        sha256 = "59f918c8ccd4d74b6ac43484467b500f1d64b40cc1010daa055375b322a43ba3",
+        sha256 = "6430e4092653380d9dc4ccb45a1e2dc9259d581f4866dc0759713126056bc1d7",
+        strip_prefix = "benchmark-1.7.1",
+        urls = ["https://github.com/google/benchmark/archive/refs/tags/v1.7.1.tar.gz"],
     )
 
     http_archive(
