@@ -13,17 +13,22 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2022/11/01 15:37
+// Created: 2022/12/23 15:19
 
-mod handlers;
+use actix_web::get;
+use actix_web::web;
+use actix_web::Responder;
+use actix_web::Result;
 
-use actix_web::App;
-use actix_web::HttpServer;
+use super::model::CommonResult;
 
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    HttpServer::new(|| App::new().service(handlers::index::index))
-        .bind(("127.0.0.1", 8801))?
-        .run()
-        .await
+#[get("/index.html")]
+async fn index() -> Result<impl Responder> {
+    let obj = CommonResult {
+        code: 0,
+        message: "OK".to_string(),
+        data: "Ok".to_string(),
+    };
+
+    Ok(web::Json(obj))
 }
