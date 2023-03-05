@@ -1,0 +1,59 @@
+% Copyright (c) 2023 The Authors. All rights reserved.
+%
+% Licensed under the Apache License, Version 2.0 (the "License");
+% you may not use this file except in compliance with the License.
+% You may obtain a copy of the License at
+%
+%      https://www.apache.org/licenses/LICENSE-2.0
+%
+% Unless required by applicable law or agreed to in writing, software
+% distributed under the License is distributed on an "AS IS" BASIS,
+% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+% See the License for the specific language governing permissions and
+% limitations under the License.
+
+% Authors: liubang (it.liubang@gmail.com)
+% Created: 2023/03/06 00:22
+
+\documentclass{ctexart}
+\usepackage{amsmath, mathrsfs, amsfonts}
+\usepackage{tikz}
+\usepackage{graphics}
+
+\begin{document}
+% \maketitle
+% \newpage
+
+\begin{figure}[htp]
+    \centering
+    \begin{tikzpicture}[>=latex]
+        % 坐标起始位置
+        \draw[<->] (0, 0) -- (5, 0);
+        \draw[->] (0, -1) -- (5, -1);
+        \draw[<-] (0, -2) -- (5, -2);
+        \draw[|<-] (0, -3) -- (5, -3);
+        \draw[->|] (0, -4) -- (5, -4);
+        \draw[|<->|] (0, -5) -- (5, -5);
+    \end{tikzpicture}
+    \caption{lines latex}
+\end{figure}
+
+\begin{figure}[htp]
+    \centering
+    \begin{tikzpicture}[>=stealth]
+        % 坐标起始位置
+        \draw[<->, dashed, thick] (0, 0) -- (5, 0);
+        \draw[->, dotted, very thick] (0, -1) -- (5, -1);
+        \draw[<-, dashdotted, ultra thick] (0, -2) -- (5, -2);
+        \draw[|<-, thin] (0, -3) -- (5, -3);
+        \draw[->|, very thin] (0, -4) -- (5, -4);
+        \draw[|<->|, ultra thin] (0, -5) to (5, -5);
+        \draw[dashed] (0, -6) -- (5, -6);
+        \draw[dotted] (0, -7) -- (5, -7);
+        \draw[dashdotted] (0, -8) -- (5, -8);
+    \end{tikzpicture}
+    \caption{lines stealth}
+\end{figure}
+
+
+\end{document}
