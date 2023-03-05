@@ -1,0 +1,42 @@
+\documentclass{ctexart}
+\usepackage{amsmath, mathrsfs, amsfonts}
+\usepackage{tikz}
+\usepackage{graphics}
+
+\begin{document}
+% \maketitle
+% \newpage
+
+\begin{figure}[htp]
+    \centering
+    \begin{tikzpicture}[>=latex]
+        % 坐标起始位置
+        \draw[<->] (0, 0) -- (5, 0);
+        \draw[->] (0, -1) -- (5, -1);
+        \draw[<-] (0, -2) -- (5, -2);
+        \draw[|<-] (0, -3) -- (5, -3);
+        \draw[->|] (0, -4) -- (5, -4);
+        \draw[|<->|] (0, -5) -- (5, -5);
+    \end{tikzpicture}
+    \caption{lines latex}
+\end{figure}
+
+\begin{figure}[htp]
+    \centering
+    \begin{tikzpicture}[>=stealth]
+        % 坐标起始位置
+        \draw[<->, dashed, thick] (0, 0) -- (5, 0);
+        \draw[->, dotted, very thick] (0, -1) -- (5, -1);
+        \draw[<-, dashdotted, ultra thick] (0, -2) -- (5, -2);
+        \draw[|<-, thin] (0, -3) -- (5, -3);
+        \draw[->|, very thin] (0, -4) -- (5, -4);
+        \draw[|<->|, ultra thin] (0, -5) to (5, -5);
+        \draw[dashed] (0, -6) -- (5, -6);
+        \draw[dotted] (0, -7) -- (5, -7);
+        \draw[dashdotted] (0, -8) -- (5, -8);
+    \end{tikzpicture}
+    \caption{lines stealth}
+\end{figure}
+
+
+\end{document}
