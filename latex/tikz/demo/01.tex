@@ -1,6 +1,5 @@
 \documentclass{article}
 \usepackage{xeCJK}
-\usepackage{amsmath, mathrsfs, amsfonts}
 \usepackage{tikz}
 \usepackage{graphics}
 
@@ -10,6 +9,7 @@
 \maketitle
 \newpage
 
+\section{绘制直线}
 \begin{figure}[htp]
     \centering
     \begin{tikzpicture}[>=latex]
@@ -39,6 +39,52 @@
         \draw[dashdotted] (0, -8) -- (5, -8);
     \end{tikzpicture}
     \caption{lines stealth}
+\end{figure}
+
+\begin{figure}[htp]
+    \centering
+    \begin{tikzpicture}
+        \draw[thick] (0, 0) node[below]{直线下方} -- (5, 0);
+        \draw[thick] (0, -1) -- (5, -1) node[above]{直线上方};
+        \draw[|<->|] (0, -2) -- node[fill=white]{直线中间} (5, -2);
+        % 20%红色和80%白色调配填充
+        \draw[|<->|] (0, -3) -- node[fill=red!20!white]{直线中间} (5, -3);
+        \draw[|<->|] (0, -4) -- node[below]{直线下面} (5, -4);
+    \end{tikzpicture}
+    \caption{}
+\end{figure}
+
+\newpage
+\section{绘制坐标系}
+\begin{figure}[htp]
+    \centering
+    \begin{tikzpicture}[>=latex]
+        \draw[->] (-1, 0) -- (4, 0)node[right]{$x$};
+        \draw[->] (0, -1) -- (0, 4)node[right]{$y$};
+        \draw (0, 2)node[left]{$N$} -- (2, 2)node[right]{$P(x, y)$} -- (2, 0)node[below]{$M$};
+        \node at (-.2, -.2){$O$};
+        % 画刻度值
+        \draw(0, 1)node[left]{$1$} -- (.1, 1);
+        \draw(1, 0)node[below]{$1$} -- (1, .1);
+    \end{tikzpicture}
+    \caption{}
+\end{figure}
+
+\begin{figure}[htp]
+    \centering
+    \begin{tikzpicture}[>=latex]
+        \draw[->] (-1, 0) -- (4, 0)node[right]{$x$};
+        \draw[->] (0, -1) -- (0, 4)node[right]{$y$};
+        \node at (-.2, -.2){$O$};
+
+        % 通过foreach自动绘制刻度
+        \foreach \x in {1, 2, ..., 6}
+            {
+                \draw (0, \x*0.5)node[left]{$\x$} -- (.1, \x*0.5);
+                \draw (\x*0.5, 0)node[below]{$\x$} -- (\x*0.5, .1);
+            }
+    \end{tikzpicture}
+    \caption{}
 \end{figure}
 
 
