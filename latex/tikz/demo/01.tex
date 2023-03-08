@@ -87,5 +87,40 @@
     \caption{}
 \end{figure}
 
+\newpage
+\section{填充颜色}
+
+\begin{figure}[htp]
+    \centering
+    \begin{tikzpicture}[>=latex, scale=.7]
+        \draw[fill=red!20!white] (-4, 0)node[above]{$C$} -- (0, 3)node[right]{$B$} -- (4, 0)node[above]{$A$} -- (0, -3)node[right]{$D$} -- (-4, 0);
+        \draw[->] (-5, 0) -- (5, 0)node[right]{$x$};
+        \draw[->] (0, -5) -- (0, 5)node[right]{$y$};
+        \node at (-.3, -.3){$O$};
+    \end{tikzpicture}
+    \caption{}
+\end{figure}
+
+\newpage
+\section{绘制基本图形}
+
+\begin{figure}[htp]
+    \centering
+    \begin{tikzpicture}[>=latex]
+        \draw[fill=cyan] (0, 0) rectangle (6, 4);
+        \fill[cyan, draw=black] (0, -5) rectangle (6, -1);
+        \fill[cyan] (0, -10) rectangle (6, -6);
+    \end{tikzpicture}
+    \caption{}
+\end{figure}
+
+\begin{figure}[htp]
+    \centering
+    \begin{tikzpicture}[>=latex]
+        \fill[cyan] (0, 0) circle (1.5);
+    \end{tikzpicture}
+    \caption{}
+\end{figure}
+
 
 \end{document}
