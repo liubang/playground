@@ -36,3 +36,14 @@ cc_binary(
         "-std=c++20",
     ],
 )
+
+cc_binary(
+    name = "traits",
+    srcs = [
+        "traits.cpp",
+        "traits.h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+)
