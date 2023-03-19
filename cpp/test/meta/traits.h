@@ -17,6 +17,9 @@ struct is_floating_point<double> : std::true_type {};
 template <>
 struct is_floating_point<long double> : std::true_type {};
 
+template <typename T>
+constexpr bool is_floating_point_v = is_floating_point<T>::value;
+
 //-------------------------------------------------------------------------------------------------
 // 主模板，输入两个类型参数
 template <typename T, typename U>
@@ -66,5 +69,17 @@ struct array_size<E[N]> {
   using value_type = E;
   static constexpr std::size_t value = N;
 };
+
+//-------------------------------------------------------------------------------------------------
+template <bool, typename = void>
+struct enable_if {};
+
+template <typename T>
+struct enable_if<true, T> {
+  using type = T;
+};
+
+template <bool v, typename T = void>
+using enable_if_t = typename enable_if<v, T>::type;
 
 }  // namespace highkyck::meta
