@@ -42,6 +42,7 @@ cc_binary(
     srcs = [
         "traits.cpp",
         "traits.h",
+        "traits_test.h",
     ],
     copts = [
         "-std=c++20",
