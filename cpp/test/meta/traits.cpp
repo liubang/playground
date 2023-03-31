@@ -3,6 +3,12 @@
 #include <string>
 #include "traits_test.h"
 
+namespace {
+struct Foo {
+  void Init() {}
+};
+}  // namespace
+
 int main(int argc, char* argv[]) {
   static_assert(highkyck::meta::is_floating_point<float>::value);
   static_assert(highkyck::meta::is_floating_point<double>::value);
@@ -33,6 +39,12 @@ int main(int argc, char* argv[]) {
 
   assert(highkyck::meta::numEqNew(3, 3));
   assert(highkyck::meta::numEqNew(3.1, 3.1));
+
+  assert(!highkyck::meta::HasTypeMember<int>::value);
+  assert(highkyck::meta::HasTypeMember<std::true_type>::value);
+
+  assert(!highkyck::meta::HasInit<int>::value);
+  assert(!highkyck::meta::HasInit<Foo>::value);
 
   return 0;
 }
