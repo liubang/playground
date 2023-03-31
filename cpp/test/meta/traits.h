@@ -82,4 +82,31 @@ struct enable_if<true, T> {
 template <bool v, typename T = void>
 using enable_if_t = typename enable_if<v, T>::type;
 
+//-------------------------------------------------------------------------------------------------
+template <typename...>
+using void_t = void;
+
+/**
+ * @brief 判断一个类型中是否存在type这个成员
+ *
+ * @tparam T [TODO:tparam]
+ */
+template <typename T, typename = void>
+struct HasTypeMember : std::false_type {};
+
+template <typename T>
+struct HasTypeMember<T, void_t<typename T::type>> : std::true_type {};
+
+/**
+ * @brief 判断一个类型中是否存在Init成员函数
+ *
+ * @tparam T [TODO:tparam]
+ */
+template <typename T, typename = void>
+struct HasInit : std::false_type {};
+
+template <typename T>
+struct HasInit<T, void_t<decltype(std::declval<T>().Init())>> : std::true_type {
+};
+
 }  // namespace highkyck::meta
