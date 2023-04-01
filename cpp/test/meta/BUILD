@@ -48,3 +48,15 @@ cc_binary(
         "-std=c++20",
     ],
 )
+
+cc_binary(
+    name = "expression",
+    srcs = [
+        "expression.h",
+        "expression_test.cpp",
+        "traits.h",
+    ],
+    copts = [
+        "-std=c++20",
+    ],
+)
