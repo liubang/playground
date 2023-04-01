@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"time"
 
 	"github.com/gocolly/colly"
+	"github.com/gocolly/colly/debug"
 )
 
 type item struct {
@@ -18,50 +20,35 @@ type item struct {
 }
 
 func main() {
-	stories := []item{}
-	// Instantiate default collector
 	c := colly.NewCollector(
-		// Visit only domains: old.reddit.com
-		colly.AllowedDomains("old.reddit.com"),
-		// Parallelism
-		colly.Async(true),
+		// colly.AllowedDomains("baike.baidu.com"),
+		colly.Debugger(&debug.LogDebugger{
+			Output: os.Stdout,
+		}),
+		colly.MaxDepth(1),
+		colly.UserAgent("Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/67.0.3396.99 Safari/537.36"),
 	)
 
-	// On every a element which has .top-matter attribute call callback
-	// This class is unique to the div that holds all information about a story
-	c.OnHTML(".top-matter", func(e *colly.HTMLElement) {
-		temp := item{}
-		temp.StoryURL = e.ChildAttr("a[data-event-action=title]", "href")
-		temp.Source = "https://old.reddit.com/r/programming/"
-		temp.Title = e.ChildText("a[data-event-action=title]")
-		temp.Comments = e.ChildAttr("a[data-event-action=comments]", "href")
-		temp.CrawledAt = time.Now()
-		stories = append(stories, temp)
+	c.DisableCookies()
+	// extensions.RandomUserAgent(c)
+	// extensions.Referer(c)
+
+	c.OnHTML("dd.lemmaWgt-lemmaTitle-title", func(h *colly.HTMLElement) {
+		log.Println("OK")
+		log.Println(h.Text)
 	})
 
-	// On every span tag with the class next-button
-	c.OnHTML("span.next-button", func(h *colly.HTMLElement) {
-		t := h.ChildAttr("a", "href")
-		c.Visit(t)
-	})
-
-	// Set max Parallelism and introduce a Random Delay
-	c.Limit(&colly.LimitRule{
-		Parallelism: 2,
-		RandomDelay: 5 * time.Second,
-	})
-
-	// Before making a request print "Visiting ..."
 	c.OnRequest(func(r *colly.Request) {
+		r.Headers.Add("Accept-Encoding", "gzip, deflate")
+		r.Headers.Add("Accept", "*/*")
+		r.Headers.Add("Connection", "keep-alive")
 		fmt.Println("Visiting", r.URL.String())
 	})
 
-	// Crawl all reddits the user passes in
-	reddits := os.Args[1:]
-	for _, reddit := range reddits {
-		c.Visit(reddit)
-	}
+	c.OnResponse(func(r *colly.Response) {
+		fmt.Println(*r.Request.Headers)
+		// log.Println(string(r.Body))
+	})
 
-	c.Wait()
-	fmt.Println(stories)
+	c.Visit("https://baike.baidu.com/item/ChatGPT")
 }
