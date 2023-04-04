@@ -1,45 +1,21 @@
-cc_binary(
-    name = "demo1",
-    srcs = [
-        "demo1.cc",
-        "demo1.h",
-    ],
-    copts = [
-        "-std=c++17",
-    ],
-)
+package(default_visibility = ["//visibility:public"])
 
-cc_binary(
-    name = "print",
-    srcs = [
-        "print.cpp",
-        "print.h",
-    ],
-    copts = [
-        "-std=c++20",
-    ],
-)
-
-cc_binary(
-    name = "traits",
-    srcs = [
-        "traits.cpp",
-        "traits.h",
-        "traits_test.h",
-    ],
-    copts = [
-        "-std=c++20",
-    ],
-)
-
-cc_binary(
-    name = "expression",
-    srcs = [
-        "expression.h",
-        "expression_test.cpp",
-        "traits.h",
-    ],
-    copts = [
-        "-std=c++20",
-    ],
-)
+[
+    cc_binary(
+        name = "%s" % f[:f.rfind(".")],
+        srcs = [
+            "%s" % f,
+        ] + glob([
+            "*.h",
+            "include/*.h",
+        ]),
+        copts = [
+            "-std=c++20",
+            "-fno-omit-frame-pointer",
+            "-fsanitize=address",
+        ],
+        includes = ["include"],
+        linkopts = ["-fsanitize=address"],
+    )
+    for f in glob(["*_test.cpp"])
+]
