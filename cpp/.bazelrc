@@ -1,9 +1,6 @@
 common --color=yes
 common --experimental_ui_max_stdouterr_bytes=1073741819
+common --enable_bzlmod
 
 # bazel build
-test --enable_bzlmod --test_output=all --action_env="GTEST_COLOR=1"
-
-build --enable_bzlmod
-build:gcc11_config --crosstool_top=//toolchain:gcc11_suite
-build:gcc11_config --cpu=darwin_arm64
+test --test_output=all --action_env="GTEST_COLOR=1"
