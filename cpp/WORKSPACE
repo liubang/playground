@@ -1,11 +1,5 @@
 workspace(name = "cpp")
 
-load("//third_party:repository.bzl", "external_dependencies", "external_repositories")
-
-external_dependencies()
-
-load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_dependencies")
-
-rules_foreign_cc_dependencies()
+load("//third_party:repository.bzl", "external_repositories")
 
 external_repositories()
