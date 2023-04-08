@@ -1,6 +1,6 @@
 # vim: ft=bzl
 
-load("@rules_foreign_cc//tools/build_defs:make.bzl", "make")
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "make")
 
 filegroup(
     name = "all",
@@ -10,7 +10,7 @@ filegroup(
 make(
     name = "libaio",
     lib_source = ":all",
-    static_libraries = [
+    out_static_libs = [
         "libaio.a",
     ],
     visibility = ["//visibility:public"],

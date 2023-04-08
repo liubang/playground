@@ -1,5 +1,5 @@
 # vim: ft=bzl
-load("@rules_foreign_cc//tools/build_defs:configure.bzl", "configure_make")
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
 
 filegroup(
     name = "all",
@@ -9,7 +9,7 @@ filegroup(
 configure_make(
     name = "libunwind",
     lib_source = ":all",
-    static_libraries = [
+    out_static_libs = [
         "libunwind.a",
     ],
     visibility = ["//visibility:public"],

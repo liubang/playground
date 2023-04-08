@@ -12,7 +12,7 @@ genrule(
 )
 
 _COMMON_COPTS = [
-    "-std=c++11",
+    "-std=c++14",
     "-fno-omit-frame-pointer",
     "-fno-builtin-memcmp",
     "-momit-leaf-frame-pointer",
@@ -24,6 +24,7 @@ _COMMON_COPTS = [
     "-Werror",
     "-Wsign-compare",
     "-Wshadow",
+    "-Wno-range-loop-construct",
     "-Wno-unused-parameter",
     "-Wno-unused-variable",
     "-Woverloaded-virtual",
