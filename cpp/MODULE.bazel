@@ -1,0 +1,23 @@
+#======================================================================
+#
+# MODULE.bazel -
+#
+# Created by liubang on 2023/04/08 13:44
+# Last Modified: 2023/04/08 13:44
+#
+#======================================================================
+module(
+    name = "playground",
+    version = "0.0.1",
+)
+
+bazel_dep(name = "rules_foreign_cc", version = "0.9.0")
+bazel_dep(name = "glog", version = "0.5.0", repo_name = "glog")
+bazel_dep(name = "gflags", version = "2.2.2", repo_name = "gflags")
+bazel_dep(name = "abseil-cpp", version = "20230125.1", repo_name = "com_google_absl")
+bazel_dep(name = "googletest", version = "1.12.1", repo_name = "gtest")
+bazel_dep(name = "zlib", version = "1.2.13", repo_name = "zlib")
+bazel_dep(name = "bzip2", version = "1.0.8", repo_name = "bzip2")
+bazel_dep(name = "fmt", version = "9.1.0", repo_name = "fmt")
+bazel_dep(name = "grpc", version = "1.47.0", repo_name = "grpc")
+bazel_dep(name = "nlohmann_json", version = "3.11.2", repo_name = "json")

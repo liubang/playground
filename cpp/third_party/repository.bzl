@@ -7,6 +7,10 @@
 #
 #======================================================================
 
+"""
+this is module docstring
+"""
+
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 def clean_dep(dep):
@@ -20,7 +24,8 @@ def external_dependencies():
         sha256 = "2a4d07cd64b0719b39a7c12218a3e507672b82a97b98c6a89d38565894cf7c51",
     )
 
-def external_repositories(path_prefix = "", repo_name = ""):
+def external_repositories():
+    """ this is """
     http_archive(
         name = "cimg",
         urls = ["https://github.com/dtschump/CImg/archive/refs/tags/v.2.9.9.tar.gz"],
@@ -62,15 +67,6 @@ def external_repositories(path_prefix = "", repo_name = ""):
         sha256 = "ddb04774f1e32f0c49751e21b67216ac87852ceb056b75209af2443400636d46",
         urls = ["https://www.openssl.org/source/openssl-1.1.1g.tar.gz"],
         strip_prefix = "openssl-1.1.1g",
-    )
-
-    # zlib
-    http_archive(
-        name = "zlib",
-        build_file = clean_dep("//third_party/zlib:zlib.BUILD"),
-        sha256 = "c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1",
-        strip_prefix = "zlib-1.2.11",
-        urls = ["https://zlib.net/zlib-1.2.11.tar.gz"],
     )
 
     # jemalloc
@@ -124,15 +120,6 @@ def external_repositories(path_prefix = "", repo_name = ""):
         strip_prefix = "lz4-1.9.2",
     )
 
-    # bzip2
-    http_archive(
-        name = "bzip2",
-        build_file = clean_dep("//third_party/bzip2:bzip2.BUILD"),
-        urls = ["https://versaweb.dl.sourceforge.net/project/bzip2/bzip2-1.0.6.tar.gz"],
-        sha256 = "a2848f34fcd5d6cf47def00461fcb528a0484d8edef8208d6d2e2909dc61d9cd",
-        strip_prefix = "bzip2-1.0.6",
-    )
-
     # libdwarf
     http_archive(
         name = "dwarf",
@@ -149,15 +136,6 @@ def external_repositories(path_prefix = "", repo_name = ""):
         urls = ["https://github.com/facebook/rocksdb/archive/v6.8.1.tar.gz"],
         sha256 = "ca192a06ed3bcb9f09060add7e9d0daee1ae7a8705a3d5ecbe41867c5e2796a2",
         strip_prefix = "rocksdb-6.8.1",
-    )
-
-    # fmt
-    http_archive(
-        name = "fmt",
-        build_file = clean_dep("//third_party/fmt:fmt.BUILD"),
-        urls = ["https://github.com/fmtlib/fmt/archive/6.1.2.tar.gz"],
-        sha256 = "1cafc80701b746085dddf41bd9193e6d35089e1c6ec1940e037fcb9c98f62365",
-        strip_prefix = "fmt-6.1.2",
     )
 
     # double-conversion
@@ -280,44 +258,12 @@ def external_repositories(path_prefix = "", repo_name = ""):
         url = "https://github.com/P-H-C/phc-winner-argon2/archive/20171227.tar.gz",
     )
 
-    # glog
-    http_archive(
-        name = "glog",
-        build_file = clean_dep("//third_party/glog:glog.BUILD"),
-        urls = ["https://github.com/google/glog/archive/v0.4.0.tar.gz"],
-        sha256 = "f28359aeba12f30d73d9e4711ef356dc842886968112162bc73002645139c39c",
-        strip_prefix = "glog-0.4.0",
-    )
-
-    # gflags
-    http_archive(
-        name = "gflags",
-        build_file = clean_dep("//third_party/gflags:gflags.BUILD"),
-        urls = ["https://github.com/gflags/gflags/archive/v2.2.2.tar.gz"],
-        sha256 = "34af2f15cf7367513b352bdcd2493ab14ce43692d2dcd9dfc499492966c64dcf",
-        strip_prefix = "gflags-2.2.2",
-    )
-
     http_archive(
         name = "cityhash",
         build_file = clean_dep("//third_party/cityhash:cityhash.BUILD"),
         urls = ["https://github.com/google/cityhash/archive/8af9b8c2b889d80c22d6bc26ba0df1afb79a30db.zip"],
         sha256 = "3524f5ed43143974a29fddeeece29c8b6348f05db08dd180452da01a2837ddce",
         strip_prefix = "cityhash-8af9b8c2b889d80c22d6bc26ba0df1afb79a30db",
-    )
-
-    http_archive(
-        name = "com_google_absl",
-        urls = ["https://github.com/abseil/abseil-cpp/archive/98eb410c93ad059f9bba1bf43f5bb916fc92a5ea.zip"],
-        strip_prefix = "abseil-cpp-98eb410c93ad059f9bba1bf43f5bb916fc92a5ea",
-    )
-
-    # GoogleTest/GoogleMock
-    http_archive(
-        name = "gtest",
-        sha256 = "81964fe578e9bd7c94dfdb09c8e4d6e6759e19967e397dbea48d1c10e45d0df2",
-        strip_prefix = "googletest-release-1.12.1",
-        urls = ["https://github.com/google/googletest/archive/refs/tags/release-1.12.1.tar.gz"],
     )
 
     # Google benchmark

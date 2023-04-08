@@ -1,6 +1,5 @@
 # vim: ft=bzl
-
-load("@rules_foreign_cc//tools/build_defs:configure.bzl", "configure_make")
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
 
 filegroup(
     name = "all",
@@ -15,6 +14,6 @@ configure_make(
     install_prefix = "lib",
     lib_source = ":all",
     out_lib_dir = "lib",
-    static_libraries = ["libcityhash.a"],
+    out_static_libs = ["libcityhash.a"],
     visibility = ["//visibility:public"],
 )

@@ -1,5 +1,5 @@
 # vim: ft=bzl
-load("@rules_foreign_cc//tools/build_defs:configure.bzl", "configure_make")
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
 
 filegroup(
     name = "all",
@@ -8,8 +8,8 @@ filegroup(
 
 configure_make(
     name = "flex_build",
-    binaries = ["flex"],
     lib_source = ":all",
+    out_binaries = ["flex"],
     visibility = ["//visibility:public"],
 )
 

@@ -1,6 +1,6 @@
 # vim: ft=bzl
 
-load("@rules_foreign_cc//tools/build_defs:configure.bzl", "configure_make")
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
 
 filegroup(
     name = "all",
@@ -9,15 +9,15 @@ filegroup(
 
 configure_make(
     name = "libevent",
-    configure_env_vars = {
-        "AR": "",
-    },
     configure_options = [
         "--enable-shared=no",
     ],
+    env = {
+        "AR": "",
+    },
     install_prefix = "lib",
     lib_source = "@libevent//:all",
     out_lib_dir = "lib",
-    static_libraries = ["libevent.a"],
+    out_static_libs = ["libevent.a"],
     visibility = ["//visibility:public"],
 )

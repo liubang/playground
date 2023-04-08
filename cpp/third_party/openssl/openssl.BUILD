@@ -1,5 +1,5 @@
 # vim: ft=bzl
-load("@rules_foreign_cc//tools/build_defs:configure.bzl", "configure_make")
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
 
 filegroup(
     name = "all",
@@ -13,7 +13,7 @@ configure_make(
         "no-shared",
     ],
     lib_source = ":all",
-    static_libraries = [
+    out_static_libs = [
         "libssl.a",
         "libcrypto.a",
     ],

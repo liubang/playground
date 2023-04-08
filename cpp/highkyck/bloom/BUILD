@@ -7,7 +7,7 @@ cc_library(
         "bloom_filter.h",
     ],
     copts = [
-        "-std=gnu++17",
+        "-std=c++17",
     ],
     visibility = ["//visibility:public"],
     deps = [
