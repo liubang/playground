@@ -15,4 +15,15 @@
     </a>
 </p></div>
 
+### 运行
 
+```sh
+bazel build //...
+bazel test //...
+```
+
+### 更新 go 依赖
+
+```sh
+gazelle update-repos -from_file=go/go.mod -to_macro=go_deps.bzl%go_repositories
+```
