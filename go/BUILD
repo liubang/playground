@@ -1,4 +1,4 @@
-# Copyright (c) 2020 The Authors. All rights reserved.
+# Copyright (c) 2023 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,13 +13,28 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2020/07/20 00:32
+# Created: 2023/05/21 02:32
 
 #======================================================================
 #
 # BUILD -
 #
-# Created by liubang on 2023/05/21 01:23
-# Last Modified: 2023/05/21 01:23
+# Created by liubang on 2023/05/21 01:46
+# Last Modified: 2023/05/21 01:46
 #
 #======================================================================
+
+load("@bazel_gazelle//:def.bzl", "gazelle")
+
+# gazelle:prefix github.com/playground/go
+gazelle(name = "gazelle")
+
+gazelle(
+    name = "gazelle-update-repos",
+    args = [
+        "-from_file=go.mod",
+        "-to_macro=go_deps.bzl%go_dependencies",
+        "-prune",
+    ],
+    command = "update-repos",
+)
