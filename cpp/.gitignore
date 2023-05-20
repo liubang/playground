@@ -1,4 +1,0 @@
-bazel-*
-compile_commands.json
-**/*.dSYM
-core
