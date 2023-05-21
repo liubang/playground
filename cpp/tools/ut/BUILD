@@ -21,3 +21,25 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "thread_pool_test",
+    srcs = ["thread_pool_test.cpp"],
+    copts = common_copts + ["-std=c++20"],
+    linkopts = common_linkopts,
+    deps = [
+        "//cpp/tools",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "numbers_test",
+    srcs = ["numbers_test.cpp"],
+    copts = common_copts + ["-std=c++20"],
+    linkopts = common_linkopts,
+    deps = [
+        "//cpp/tools",
+        "@googletest//:gtest_main",
+    ],
+)
