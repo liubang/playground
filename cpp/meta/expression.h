@@ -1,15 +1,13 @@
 #pragma once
 
-#include <cassert>
-
 #include "traits.h"
+#include <cassert>
 
 namespace playground::cpp::meta {
 
 template <typename T, typename U, typename OP>
 struct BinaryExpression {
-  BinaryExpression(const T& lhs, const U& rhs, OP op)
-      : lhs(lhs), rhs(rhs), op(op) {}
+  BinaryExpression(const T& lhs, const U& rhs, OP op) : lhs(lhs), rhs(rhs), op(op) {}
 
   auto operator()() const { return op(lhs, rhs); }
 
@@ -49,9 +47,7 @@ constexpr bool is_container_v = false;
 
 // 这里简单的用类型是否存在value_type和iterator来判断是否为容器类型
 template <typename T>
-constexpr bool
-    is_container_v<T, void_t<typename T::value_type, typename T::iterator>> =
-        true;
+constexpr bool is_container_v<T, void_t<typename T::value_type, typename T::iterator>> = true;
 
 // BinaryContainerExpression也视为容器类型
 template <typename T, typename U, typename OP>
@@ -68,10 +64,10 @@ constexpr bool is_container_v<BinaryContainerExpression<T, U, OP>> = true;
  * @param rhs [TODO:parameter]
  * @return [TODO:return]
  */
-template <typename T, typename U,
-          typename = playground::cpp::meta::enable_if_t<
-              playground::cpp::meta::is_container_v<T> &&
-              playground::cpp::meta::is_container_v<U>>>
+template <typename T,
+          typename U,
+          typename = playground::cpp::meta::enable_if_t<playground::cpp::meta::is_container_v<T> &&
+                                                        playground::cpp::meta::is_container_v<U>>>
 auto operator+(const T& lhs, const U& rhs) {
   auto plus = [](auto x, auto y) { return x + y; };
   return playground::cpp::meta::BinaryContainerExpression(lhs, rhs, plus);

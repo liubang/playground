@@ -7,7 +7,6 @@
 //
 //=====================================================================
 #include "cpp/misc/arena/arena.h"
-
 #include <gtest/gtest.h>
 
 TEST(arena, allocate) {
