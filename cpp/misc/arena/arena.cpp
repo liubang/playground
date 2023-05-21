@@ -15,8 +15,7 @@ namespace playground::cpp::misc::arena {
 constexpr int BLOCK_SIZE = 4096;
 constexpr int POINTER_SIZE = 8;
 
-Arena::Arena()
-    : alloc_ptr_(nullptr), alloc_bytes_remaining_(0), memory_usage_(0) {}
+Arena::Arena() : alloc_ptr_(nullptr), alloc_bytes_remaining_(0), memory_usage_(0) {}
 
 Arena::~Arena() {
   for (std::size_t i = 0; i < blocks_.size(); ++i) {
@@ -25,13 +24,10 @@ Arena::~Arena() {
 }
 
 char* Arena::allocate_aligned(std::size_t bytes) {
-  constexpr int align =
-      (sizeof(void*) > POINTER_SIZE) ? sizeof(void*) : POINTER_SIZE;
-  static_assert((align & (align - 1)) == 0,
-                "Pointer size should be power of 2");
+  constexpr int align = (sizeof(void*) > POINTER_SIZE) ? sizeof(void*) : POINTER_SIZE;
+  static_assert((align & (align - 1)) == 0, "Pointer size should be power of 2");
 
-  std::size_t current_mod =
-      reinterpret_cast<uintptr_t>(alloc_ptr_) & (align - 1);
+  std::size_t current_mod = reinterpret_cast<uintptr_t>(alloc_ptr_) & (align - 1);
   std::size_t slop = (current_mod == 0 ? 0 : align - current_mod);
   std::size_t needed = bytes + slop;
   char* result;
