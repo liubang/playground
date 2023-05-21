@@ -24,3 +24,13 @@ cc_binary(
     copts = common_copts + ["-std=c++20"],
     linkopts = common_linkopts,
 )
+
+cc_binary(
+    name = "test_named_parameters",
+    srcs = ["test_named_parameters.cpp"],
+    copts = common_copts + ["-std=c++20"],
+    linkopts = common_linkopts,
+    deps = [
+        "@boost//:headers",
+    ],
+)

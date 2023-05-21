@@ -1,6 +1,7 @@
 common --color=yes
 common --experimental_ui_max_stdouterr_bytes=1073741819
 common --enable_bzlmod
+common -j 8
 
 # for java
 build --nojava_header_compilation
