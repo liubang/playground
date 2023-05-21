@@ -1,0 +1,32 @@
+load("@rules_java//java:defs.bzl", "java_binary", "java_library")
+
+java_library(
+    name = "thread",
+    srcs = [
+        "BadSuspend.java",
+        "PriorityDemo.java",
+        "SimpleWN.java",
+    ],
+    visibility = ["//:__subpackages__"],
+)
+
+java_binary(
+    name = "BadSuspend",
+    main_class = "cn.iliubang.exercises.thread.BadSuspend",
+    visibility = ["//visibility:public"],
+    runtime_deps = [":thread"],
+)
+
+java_binary(
+    name = "PriorityDemo",
+    main_class = "cn.iliubang.exercises.thread.PriorityDemo",
+    visibility = ["//visibility:public"],
+    runtime_deps = [":thread"],
+)
+
+java_binary(
+    name = "SimpleWN",
+    main_class = "cn.iliubang.exercises.thread.SimpleWN",
+    visibility = ["//visibility:public"],
+    runtime_deps = [":thread"],
+)

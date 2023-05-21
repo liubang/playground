@@ -1,0 +1,19 @@
+load("@rules_java//java:defs.bzl", "java_binary", "java_library")
+
+java_library(
+    name = "dynamicProxy",
+    srcs = [
+        "Client.java",
+        "RealStar.java",
+        "Star.java",
+        "StarHandler.java",
+    ],
+    visibility = ["//:__subpackages__"],
+)
+
+java_binary(
+    name = "Client",
+    main_class = "cn.iliubang.exercises.primary.aop.proxy.dynamicProxy.Client",
+    visibility = ["//visibility:public"],
+    runtime_deps = [":dynamicProxy"],
+)

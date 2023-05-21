@@ -1,0 +1,18 @@
+load("@rules_java//java:defs.bzl", "java_binary", "java_library")
+
+java_library(
+    name = "exercises",
+    srcs = ["Main.java"],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "@maven//:org_springframework_boot_spring_boot",
+        "@maven//:org_springframework_boot_spring_boot_autoconfigure",
+    ],
+)
+
+java_binary(
+    name = "Main",
+    main_class = "cn.iliubang.exercises.Main",
+    visibility = ["//visibility:public"],
+    runtime_deps = [":exercises"],
+)

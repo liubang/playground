@@ -1,0 +1,24 @@
+load("@rules_java//java:defs.bzl", "java_binary", "java_library")
+
+java_library(
+    name = "some",
+    srcs = [
+        "Demo1.java",
+        "Demo2.java",
+    ],
+    visibility = ["//:__subpackages__"],
+)
+
+java_binary(
+    name = "Demo1",
+    main_class = "cn.iliubang.exercises.primary.reflection.some.Demo1",
+    visibility = ["//visibility:public"],
+    runtime_deps = [":some"],
+)
+
+java_binary(
+    name = "Demo2",
+    main_class = "cn.iliubang.exercises.primary.reflection.some.Demo2",
+    visibility = ["//visibility:public"],
+    runtime_deps = [":some"],
+)

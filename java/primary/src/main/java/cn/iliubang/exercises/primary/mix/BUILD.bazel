@@ -1,0 +1,14 @@
+load("@rules_java//java:defs.bzl", "java_binary", "java_library")
+
+java_library(
+    name = "mix",
+    srcs = ["Demo1.java"],
+    visibility = ["//:__subpackages__"],
+)
+
+java_binary(
+    name = "Demo1",
+    main_class = "cn.iliubang.exercises.primary.mix.Demo1",
+    visibility = ["//visibility:public"],
+    runtime_deps = [":mix"],
+)

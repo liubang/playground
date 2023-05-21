@@ -1,0 +1,16 @@
+load("@rules_java//java:defs.bzl", "java_library")
+
+java_library(
+    name = "agent",
+    srcs = [
+        "DefaultAgent.java",
+        "LogTransformer.java",
+        "TimeCountAdpter.java",
+    ],
+    visibility = ["//:__subpackages__"],
+    exports = ["@maven//:org_ow2_asm_asm"],
+    deps = [
+        "@maven//:org_ow2_asm_asm",
+        "@maven//:org_ow2_asm_asm_commons",
+    ],
+)

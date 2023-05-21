@@ -1,0 +1,15 @@
+load("@rules_java//java:defs.bzl", "java_library")
+
+java_library(
+    name = "servlet",
+    srcs = [
+        "LoginServlet.java",
+        "RegistServlet.java",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//java/mtomcat/src/main/java/cn/iliubang/exercises/mtomcat",
+        "//java/mtomcat/src/main/java/cn/iliubang/exercises/mtomcat/request",
+        "//java/mtomcat/src/main/java/cn/iliubang/exercises/mtomcat/response",
+    ],
+)

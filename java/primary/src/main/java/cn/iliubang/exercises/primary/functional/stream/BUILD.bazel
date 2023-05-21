@@ -1,0 +1,58 @@
+load("@rules_java//java:defs.bzl", "java_binary", "java_library", "java_plugin")
+
+java_plugin(
+    name = "lombok_plugin",
+    processor_class = "lombok.launch.AnnotationProcessorHider$AnnotationProcessor",
+    deps = [
+        "@maven//:org_projectlombok_lombok",
+    ],
+)
+
+java_library(
+    name = "lombok",
+    exported_plugins = [
+        ":lombok_plugin",
+    ],
+    exports = [
+        "@maven//:org_projectlombok_lombok",
+    ],
+)
+
+java_library(
+    name = "stream",
+    srcs = [
+        "ArtistList.java",
+        "CountUseFor.java",
+        "CountUseIterator.java",
+        "CountUseStream.java",
+        "DemoCollectToList.java",
+        "DemoMap.java",
+        "DemoMinAndMax.java",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        ":lombok",
+        "@maven//:junit_junit",
+    ],
+)
+
+java_binary(
+    name = "CountUseFor",
+    main_class = "cn.iliubang.exercises.primary.functional.stream.CountUseFor",
+    visibility = ["//visibility:public"],
+    runtime_deps = [":stream"],
+)
+
+java_binary(
+    name = "CountUseIterator",
+    main_class = "cn.iliubang.exercises.primary.functional.stream.CountUseIterator",
+    visibility = ["//visibility:public"],
+    runtime_deps = [":stream"],
+)
+
+java_binary(
+    name = "CountUseStream",
+    main_class = "cn.iliubang.exercises.primary.functional.stream.CountUseStream",
+    visibility = ["//visibility:public"],
+    runtime_deps = [":stream"],
+)

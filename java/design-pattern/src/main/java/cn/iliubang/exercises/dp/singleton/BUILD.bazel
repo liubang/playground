@@ -1,0 +1,39 @@
+load("@rules_java//java:defs.bzl", "java_binary", "java_library")
+
+java_library(
+    name = "singleton",
+    srcs = [
+        "Client01.java",
+        "Client02.java",
+        "Client03.java",
+        "SingletonDemo01.java",
+        "SingletonDemo02.java",
+        "SingletonDemo03.java",
+        "SingletonDemo04.java",
+        "SingletonDemo05.java",
+        "SingletonDemo06.java",
+        "SingletonDemo07.java",
+    ],
+    visibility = ["//:__subpackages__"],
+)
+
+java_binary(
+    name = "Client01",
+    main_class = "cn.iliubang.exercises.dp.singleton.Client01",
+    visibility = ["//visibility:public"],
+    runtime_deps = [":singleton"],
+)
+
+java_binary(
+    name = "Client02",
+    main_class = "cn.iliubang.exercises.dp.singleton.Client02",
+    visibility = ["//visibility:public"],
+    runtime_deps = [":singleton"],
+)
+
+java_binary(
+    name = "Client03",
+    main_class = "cn.iliubang.exercises.dp.singleton.Client03",
+    visibility = ["//visibility:public"],
+    runtime_deps = [":singleton"],
+)

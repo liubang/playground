@@ -1,0 +1,15 @@
+load("@rules_java//java:defs.bzl", "java_binary", "java_library")
+
+java_library(
+    name = "orm",
+    srcs = ["Demo.java"],
+    visibility = ["//:__subpackages__"],
+    deps = ["//java/primary/src/main/java/cn/iliubang/exercises/primary/annotation/orm/annotation"],
+)
+
+java_binary(
+    name = "Demo",
+    main_class = "cn.iliubang.exercises.primary.annotation.orm.Demo",
+    visibility = ["//visibility:public"],
+    runtime_deps = [":orm"],
+)

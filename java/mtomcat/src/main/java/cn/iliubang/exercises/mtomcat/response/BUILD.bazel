@@ -1,0 +1,10 @@
+load("@rules_java//java:defs.bzl", "java_library")
+
+java_library(
+    name = "response",
+    srcs = [
+        "Response.java",
+        "ResponseStatus.java",
+    ],
+    visibility = ["//:__subpackages__"],
+)

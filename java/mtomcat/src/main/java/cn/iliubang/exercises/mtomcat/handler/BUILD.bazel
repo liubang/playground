@@ -1,0 +1,9 @@
+load("@rules_java//java:defs.bzl", "java_library")
+
+java_library(
+    name = "handler",
+    srcs = ["WebHandler.java"],
+    visibility = ["//:__subpackages__"],
+    exports = ["//java/mtomcat/src/main/java/cn/iliubang/exercises/mtomcat/entity"],
+    deps = ["//java/mtomcat/src/main/java/cn/iliubang/exercises/mtomcat/entity"],
+)

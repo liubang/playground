@@ -1,0 +1,26 @@
+load("@rules_java//java:defs.bzl", "java_binary", "java_library")
+
+java_library(
+    name = "mtomcat",
+    srcs = [
+        "Dispatcher.java",
+        "HttpServer.java",
+        "Servlet.java",
+        "ServletContext.java",
+        "WebApp.java",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//java/mtomcat/src/main/java/cn/iliubang/exercises/mtomcat/entity",
+        "//java/mtomcat/src/main/java/cn/iliubang/exercises/mtomcat/handler",
+        "//java/mtomcat/src/main/java/cn/iliubang/exercises/mtomcat/request",
+        "//java/mtomcat/src/main/java/cn/iliubang/exercises/mtomcat/response",
+    ],
+)
+
+java_binary(
+    name = "HttpServer",
+    main_class = "cn.iliubang.exercises.mtomcat.HttpServer",
+    visibility = ["//visibility:public"],
+    runtime_deps = [":mtomcat"],
+)

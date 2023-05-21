@@ -1,0 +1,33 @@
+load("@rules_java//java:defs.bzl", "java_binary", "java_library")
+
+java_library(
+    name = "concurrent",
+    srcs = [
+        "ReenterLockInt.java",
+        "SemapDemo.java",
+        "TimeLock.java",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = ["//java/concurrency/src/main/java/cn/iliubang/exercises/concurrent/deadlock"],
+)
+
+java_binary(
+    name = "ReenterLockInt",
+    main_class = "cn.iliubang.exercises.concurrent.ReenterLockInt",
+    visibility = ["//visibility:public"],
+    runtime_deps = [":concurrent"],
+)
+
+java_binary(
+    name = "SemapDemo",
+    main_class = "cn.iliubang.exercises.concurrent.SemapDemo",
+    visibility = ["//visibility:public"],
+    runtime_deps = [":concurrent"],
+)
+
+java_binary(
+    name = "TimeLock",
+    main_class = "cn.iliubang.exercises.concurrent.TimeLock",
+    visibility = ["//visibility:public"],
+    runtime_deps = [":concurrent"],
+)
