@@ -13,21 +13,31 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/05/21 02:32
+# Created: 2023/05/21 23:50
 
 #======================================================================
 #
 # BUILD -
 #
-# Created by liubang on 2023/05/21 00:32
-# Last Modified: 2023/05/21 00:32
+# Created by liubang on 2023/05/21 23:30
+# Last Modified: 2023/05/21 23:30
 #
 #======================================================================
 
-cc_library(
-    name = "tools",
-    hdrs = glob(["*.h"]),
-    copts = ["-std=c++20"],
-    linkopts = ["-pthread"],
-    visibility = ["//visibility:public"],
+load("//cpp:opts.bzl", "common_copts", "common_linkopts")
+
+cc_binary(
+    name = "test_async",
+    srcs = ["test_async.cpp"],
+    copts = common_copts + ["-std=c++20"],
+    linkopts = common_linkopts + [
+        "-pthread",
+    ],
+)
+
+cc_binary(
+    name = "test_context",
+    srcs = ["test_context.cpp"],
+    copts = common_copts + ["-std=c++20"],
+    linkopts = common_linkopts,
 )
