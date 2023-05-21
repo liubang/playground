@@ -48,3 +48,25 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "tuple_iteration_basics_test",
+    srcs = ["tuple_iteration_basics_test.cpp"],
+    copts = common_copts + ["-std=c++20"],
+    linkopts = common_linkopts,
+    deps = [
+        "//cpp/meta",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "tuple_iteration_apply_test",
+    srcs = ["tuple_iteration_apply_test.cpp"],
+    copts = common_copts + ["-std=c++20"],
+    linkopts = common_linkopts,
+    deps = [
+        "//cpp/meta",
+        "@googletest//:gtest_main",
+    ],
+)
