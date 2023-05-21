@@ -13,21 +13,30 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/04/14 14:00
+# Created: 2023/05/21 22:57
 
 #======================================================================
 #
 # BUILD -
 #
-# Created by liubang on 2023/05/21 02:05
-# Last Modified: 2023/05/21 02:05
+# Created by liubang on 2023/05/21 22:40
+# Last Modified: 2023/05/21 22:40
 #
 #======================================================================
 
-licenses(["notice"])
+load("//cpp:opts.bzl", "common_copts", "common_linkopts")
 
-exports_files([
-    "LICENSE",
-    "MODULE.bazel",
-    "WORKSPACE",
-])
+cc_test(
+    name = "bloom_filter_test",
+    srcs = [
+        "bloom_filter_test.cpp",
+    ],
+    copts = common_copts + [
+        "-std=c++20",
+    ],
+    linkopts = common_linkopts,
+    deps = [
+        "//cpp/misc/bloom:bloom_filter",
+        "@googletest//:gtest_main",
+    ],
+)
