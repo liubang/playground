@@ -24,21 +24,18 @@ inline std::optional<std::string> getLocalIp() {
   remote_server.sin_family = AF_INET;
   remote_server.sin_addr.s_addr = inet_addr(REMOTE_ADDRESS);
   remote_server.sin_port = htons(22);
-  int err =
-      ::connect(sock, reinterpret_cast<const struct sockaddr*>(&remote_server),
-                sizeof(remote_server));
+  int err = ::connect(sock, reinterpret_cast<const struct sockaddr*>(&remote_server),
+                      sizeof(remote_server));
   if (err < 0) {
     return std::nullopt;
   }
 
   struct sockaddr_in local_addr;
   socklen_t local_addr_len = sizeof(local_addr);
-  err = getsockname(sock, reinterpret_cast<struct sockaddr*>(&local_addr),
-                    &local_addr_len);
+  err = getsockname(sock, reinterpret_cast<struct sockaddr*>(&local_addr), &local_addr_len);
   char buffer[INET_ADDRSTRLEN];
   std::string local_ip;
-  const char* p =
-      inet_ntop(AF_INET, &local_addr.sin_addr, buffer, INET_ADDRSTRLEN);
+  const char* p = inet_ntop(AF_INET, &local_addr.sin_addr, buffer, INET_ADDRSTRLEN);
   if (p != nullptr) {
     local_ip = std::string(buffer);
   }
