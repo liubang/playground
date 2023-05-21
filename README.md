@@ -22,8 +22,20 @@ bazel build //...
 bazel test //...
 ```
 
+### 更新 C/C++ compile_commands.json
+
+```sh
+bazel run //cpp:refresh_compile_commands
+```
+
 ### 更新 go 依赖
 
 ```sh
-gazelle update-repos -from_file=go/go.mod -to_macro=go_deps.bzl%go_repositories
+gazelle update-repos -from_file=go/go.mod -to_macro=go/go_deps.bzl%go_repositories
+```
+
+### 更新 java 依赖
+
+```sh
+REPIN=1 bazel run @unpinned_maven//:pin
 ```
