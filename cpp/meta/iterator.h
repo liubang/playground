@@ -63,9 +63,8 @@ void advanceImpl(Iterator& iter,
 }
 
 template <typename Iterator>
-void advance(Iterator& iter,
-             typename iterator_traits<Iterator>::difference_type n) {
+void advance(Iterator& iter, typename iterator_traits<Iterator>::difference_type n) {
   advanceImpl(iter, n, iterator_traits<Iterator>::iterator_category);
 }
 
-};  // namespace highkyck::meta
+};  // namespace playground::cpp::meta
