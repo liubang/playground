@@ -1,0 +1,6 @@
+---
+BasedOnStyle: Chromium
+Language: Cpp
+ColumnLimit: 100
+Standard: c++20
+IncludeBlocks: Preserve
