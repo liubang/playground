@@ -13,21 +13,23 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/04/14 14:00
+# Created: 2023/05/21 22:57
 
 #======================================================================
 #
 # BUILD -
 #
-# Created by liubang on 2023/05/21 02:05
-# Last Modified: 2023/05/21 02:05
+# Created by liubang on 2023/05/21 22:38
+# Last Modified: 2023/05/21 22:38
 #
 #======================================================================
-
-licenses(["notice"])
-
-exports_files([
-    "LICENSE",
-    "MODULE.bazel",
-    "WORKSPACE",
-])
+cc_library(
+    name = "bloom_filter",
+    srcs = glob(["*.cpp"]),
+    hdrs = glob(["*.h"]),
+    copts = ["-std=c++17"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//cpp/misc/hash",
+    ],
+)

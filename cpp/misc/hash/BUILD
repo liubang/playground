@@ -13,21 +13,20 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/04/14 14:00
+# Created: 2023/05/21 22:57
 
 #======================================================================
 #
 # BUILD -
 #
-# Created by liubang on 2023/05/21 02:05
-# Last Modified: 2023/05/21 02:05
+# Created by liubang on 2023/05/21 22:39
+# Last Modified: 2023/05/21 22:39
 #
 #======================================================================
 
-licenses(["notice"])
-
-exports_files([
-    "LICENSE",
-    "MODULE.bazel",
-    "WORKSPACE",
-])
+cc_library(
+    name = "hash",
+    hdrs = glob(["*.h"]),
+    copts = ["-std=c++17"],
+    visibility = ["//visibility:public"],
+)
