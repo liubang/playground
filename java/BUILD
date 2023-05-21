@@ -1,4 +1,4 @@
-# Copyright (c) 2020 The Authors. All rights reserved.
+# Copyright (c) 2023 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,22 +13,28 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2020/07/20 00:32
+# Created: 2023/05/21 21:06
 
 #======================================================================
 #
 # BUILD -
 #
-# Created by liubang on 2023/05/21 01:23
-# Last Modified: 2023/05/21 01:23
+# Created by liubang on 2023/05/21 13:17
+# Last Modified: 2023/05/21 13:17
 #
 #======================================================================
 
-load("@hedron_compile_commands//:refresh_compile_commands.bzl", "refresh_compile_commands")
+load("@bazel_gazelle//:def.bzl", "DEFAULT_LANGUAGES", "gazelle", "gazelle_binary")
 
-refresh_compile_commands(
-    name = "refresh_compile_commands",
-    targets = {
-        "//cpp/...": "",
-    },
+# gazelle:java_maven_install_file maven_install.json
+gazelle(
+    name = "gazelle",
+    gazelle = ":gazelle_bin",
+)
+
+gazelle_binary(
+    name = "gazelle_bin",
+    languages = DEFAULT_LANGUAGES + [
+        "@contrib_rules_jvm//java/gazelle",
+    ],
 )
