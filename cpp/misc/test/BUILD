@@ -34,3 +34,10 @@ cc_binary(
         "@boost//:headers",
     ],
 )
+
+cc_binary(
+    name = "test_heap_use_after_free",
+    srcs = ["test_heap_use_after_free.cpp"],
+    copts = common_copts + ["-std=c++20"],
+    linkopts = common_linkopts,
+)
