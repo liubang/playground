@@ -1,0 +1,34 @@
+Diagnostics:
+  UnusedIncludes: Strict
+  ClangTidy:
+    Add: 
+      - modernize*
+      - performance-implicit-conversion-in-loop
+      - performance-faster-string-find
+      - performance-inefficient-algorithm
+      - performance-inefficient-string-concatenation
+      - performance-inefficient-vector-operation
+      - performance-move-const-arg
+      - performance-move-constructor-init
+      - performance-no-automatic-move
+      - performance-no-int-to-ptr
+      - performance-noexcept-move-constructor
+      - performance-trivially-destructible
+      - performance-type-promotion-in-math-fn
+      - performance-unnecessary-copy-initialization
+      - performance-unnecessary-value-param
+      - readability-avoid-const-params-in-decls
+      - readability-duplicate-include
+      - readability-else-after-return
+      - readability-implicit-bool-conversion
+      - readability-make-member-function-const
+      - readability-qualified-auto
+      - readability-static-definition-in-anonymous-namespace
+      - readability-static-accessed-through-instance
+      - readability-simplify-subscript-expr
+      - readability-simplify-boolean-expr
+      - readability-redundant-string-init
+    Remove: modernize-use-trailing-return-type
+    CheckOptions: 
+      performance-move-const-arg.CheckTriviallyCopyableMove: true
+      performance-move-const-arg.CheckMoveToConstRef: true
