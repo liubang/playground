@@ -36,7 +36,7 @@ class CMurmurHash final {
 
   void __attribute__((no_sanitize("alignment")))
   add(const void* const data, const T length, const bool lower_case) {
-    auto data1 = static_cast<const uint8_t*>(data);
+    const auto* data1 = static_cast<const uint8_t*>(data);
     T data_size = length;
 
     _size += data_size;

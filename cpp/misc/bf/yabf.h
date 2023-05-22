@@ -13,10 +13,7 @@
 
 // yet another brainfuck implement
 
-namespace playground {
-namespace cpp {
-namespace misc {
-namespace bf {
+namespace playground::cpp::misc::bf {
 
 enum class Op {
   ptr_inc,   // >
@@ -97,15 +94,12 @@ void execute(unsigned char* data_ptr) {
   } else if constexpr (Program.inst[InstPtr] == Op::jmp_ifz) {
     if (*data_ptr == 0) {
       return execute<Program, Program.inst_jmp[InstPtr]>(data_ptr);
-    } else {
-      return execute<Program, InstPtr + 1>(data_ptr);
     }
+    return execute<Program, InstPtr + 1>(data_ptr);
+
   } else if constexpr (Program.inst[InstPtr] == Op::jmp) {
     return execute<Program, Program.inst_jmp[InstPtr]>(data_ptr);
   }
 }
 
-}  // namespace bf
-}  // namespace misc
-}  // namespace cpp
-}  // namespace playground
+}  // namespace playground::cpp::misc::bf

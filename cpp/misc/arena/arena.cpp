@@ -18,8 +18,8 @@ constexpr int POINTER_SIZE = 8;
 Arena::Arena() : alloc_ptr_(nullptr), alloc_bytes_remaining_(0), memory_usage_(0) {}
 
 Arena::~Arena() {
-  for (std::size_t i = 0; i < blocks_.size(); ++i) {
-    delete[] blocks_[i];
+  for (auto& block : blocks_) {
+    delete[] block;
   }
 }
 

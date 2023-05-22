@@ -19,7 +19,7 @@ auto to_string() -> std::string {
   uint16_t port = 80;
   uint64_t start_time = 1684743618;
   char ip_port_str[64];
-  unsigned char* ip_str = (unsigned char*)(&ip);
+  auto* ip_str = (unsigned char*)(&ip);
   ::memset(ip_port_str, '\0', 64);
   ::snprintf(ip_port_str, 64, "%d.%d.%d.%d:%d:%lu", ip_str[0], ip_str[1], ip_str[2], ip_str[3],
              port, start_time);
