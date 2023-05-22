@@ -13,29 +13,13 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/05/21 02:32
+# Created: 2023/05/22 23:44
 
 #======================================================================
 #
 # BUILD -
 #
-# Created by liubang on 2023/05/21 00:32
-# Last Modified: 2023/05/21 00:32
+# Created by liubang on 2023/05/22 22:59
+# Last Modified: 2023/05/22 22:59
 #
 #======================================================================
-
-cc_library(
-    name = "tools",
-    hdrs = glob(["*.h"]),
-    linkopts = ["-pthread"],
-    visibility = ["//visibility:public"],
-)
-
-cc_library(
-    name = "boost_headers",
-    srcs = ["boost.cpp"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "@boost//:headers",
-    ],
-)
