@@ -25,7 +25,9 @@ class Arena {
   char* allocate(std::size_t bytes);
   char* allocate_aligned(std::size_t bytes);
 
-  std::size_t memory_usage() const { return memory_usage_.load(std::memory_order_relaxed); }
+  [[nodiscard]] std::size_t memory_usage() const {
+    return memory_usage_.load(std::memory_order_relaxed);
+  }
 
  private:
   char* allocate_fallback(std::size_t bytes);

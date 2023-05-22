@@ -8,9 +8,9 @@ static int operands[64 * 1024], cells[1024 * 1024], i, pc, l;
 int main(int c, char* v[]) {
   if (c < 2)
     exit(1);
-  for (FILE* f = fopen(v[1], "r"); f && (c = getc(f)) != EOF; operands[i++] = c)
+  for (FILE* f = fopen(v[1], "r"); (f != nullptr) && (c = getc(f)) != EOF; operands[i++] = c)
     ;
-  for (i = 0; (c = operands[i]); i++) {
+  for (i = 0; (c = operands[i]) != 0; i++) {
     // 指针加一
     if (c == '>')
       pc++;
@@ -30,14 +30,14 @@ int main(int c, char* v[]) {
     if (c == ',')
       cells[pc] = getchar();
     // 如果指针指向的单元值为零，向后跳转到对应的]指令的次一指令处
-    for (l = 0; c == '[' && !cells[pc]; i++) {
+    for (l = 0; c == '[' && (cells[pc] == 0); i++) {
       if (operands[i] == '[')
         l++;
       if ((operands[i] == ']') && (l-- == 1))
         break;
     }
     // 如果指针指向的单元值不为零，向前跳转到对应的[指令的次一指令处
-    for (; c == ']' && cells[pc]; i--) {
+    for (; c == ']' && (cells[pc] != 0); i--) {
       if (operands[i] == ']')
         l++;
       if ((operands[i] == '[') && (l-- == 1))
