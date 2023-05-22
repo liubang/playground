@@ -39,11 +39,11 @@ class ThreadPool {
   // synchronization
   std::mutex queue_mutex;
   std::condition_variable condition;
-  bool stop;
+  bool stop{false};
 };
 
 // the constructor just launches some amount of workers
-inline ThreadPool::ThreadPool(size_t threads) : stop(false) {
+inline ThreadPool::ThreadPool(size_t threads) {
   for (size_t i = 0; i < threads; ++i)
     workers.emplace_back([this] {
       for (;;) {
