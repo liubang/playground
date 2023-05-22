@@ -51,7 +51,7 @@ int main(int argc, char* argv[]) {
   uctx_func2.uc_stack.ss_sp = func2_stack;
   uctx_func2.uc_stack.ss_size = sizeof(func2_stack);
   // uctx_func2执行完执行uctx_func1
-  uctx_func2.uc_link = (argc > 1) ? NULL : &uctx_func1;
+  uctx_func2.uc_link = (argc > 1) ? nullptr : &uctx_func1;
   ::makecontext(&uctx_func2, func2, 0);
 
   // 保存当前执行上下文到uctx_main，然后开始执行uctx_func2对应的上下文
