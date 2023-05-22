@@ -7,6 +7,7 @@
 //
 //=====================================================================
 
+#ifdef __linux__
 #include <ucontext.h>
 
 #include <cstdio>
@@ -60,3 +61,12 @@ int main(int argc, char* argv[]) {
   ::printf("main: exiting\n");
   return 0;
 }
+#else
+#include <iostream>
+
+int main(int argc, char* argv[]) {
+  std::cout << "unsupported system.\n" << std::flush;
+  return 0;
+}
+
+#endif
