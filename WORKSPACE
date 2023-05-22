@@ -22,17 +22,6 @@ load("@hedron_compile_commands//:workspace_setup.bzl", "hedron_compile_commands_
 
 hedron_compile_commands_setup()
 
-# http_archive(
-#     name = "rules_foreign_cc",
-#     # sha256 = "...",
-#     strip_prefix = "rules_foreign_cc-7fa1a1259bbc4fbceb4dc3a23ed520907b5d8d1d",
-#     url = "https://github.com/bazelbuild/rules_foreign_cc/archive/7fa1a1259bbc4fbceb4dc3a23ed520907b5d8d1d.tar.gz",
-# )
-
-# load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_dependencies")
-#
-# rules_foreign_cc_dependencies(register_default_tools = True)
-#
 load("//third_party:repos.bzl", "external_repositories")
 
 external_repositories()

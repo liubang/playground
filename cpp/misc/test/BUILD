@@ -31,7 +31,7 @@ cc_binary(
     copts = common_copts + ["-std=c++20"],
     linkopts = common_linkopts,
     deps = [
-        "@boost//:headers",
+        "//cpp/tools:boost_headers",
     ],
 )
 
@@ -40,4 +40,16 @@ cc_binary(
     srcs = ["test_heap_use_after_free.cpp"],
     copts = common_copts + ["-std=c++20"],
     linkopts = common_linkopts,
+)
+
+cc_binary(
+    name = "test_liburing",
+    srcs = ["test_liburing.cpp"],
+    copts = common_copts + [
+        "-std=c++17",
+    ],
+    linkopts = common_linkopts,
+    deps = [
+        "@liburing",
+    ],
 )

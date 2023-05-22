@@ -13,3 +13,12 @@ cc_library(
     linkopts = ["-pthread"],
     visibility = ["//visibility:public"],
 )
+
+cc_library(
+    name = "boost_headers",
+    srcs = ["boost.cpp"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@boost//:headers",
+    ],
+)
