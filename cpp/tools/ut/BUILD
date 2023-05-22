@@ -22,10 +22,11 @@ cc_test(
     ],
 )
 
+# the thread pool can only be running >= c++11 and <= c++17
 cc_test(
     name = "thread_pool_test",
     srcs = ["thread_pool_test.cpp"],
-    copts = common_copts + ["-std=c++20"],
+    copts = common_copts + ["-std=c++14"],
     linkopts = common_linkopts,
     deps = [
         "//cpp/tools",

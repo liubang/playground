@@ -10,7 +10,6 @@
 cc_library(
     name = "tools",
     hdrs = glob(["*.h"]),
-    copts = ["-std=c++20"],
     linkopts = ["-pthread"],
     visibility = ["//visibility:public"],
 )
