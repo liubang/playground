@@ -24,7 +24,7 @@ void funcB() {
 }
 }  // namespace
 
-int main(int argc, char* argv[]) {
+auto main(int argc, char* argv[]) -> int {
   std::future<void> f1 = std::async(funcA);
   std::future<void> f2 = std::async(funcB);
 

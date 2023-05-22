@@ -7,6 +7,8 @@
 #
 #======================================================================
 
+load("@hedron_compile_commands//:refresh_compile_commands.bzl", "refresh_compile_commands")
+
 licenses(["notice"])
 
 exports_files([
@@ -14,3 +16,10 @@ exports_files([
     "MODULE.bazel",
     "WORKSPACE",
 ])
+
+refresh_compile_commands(
+    name = "refresh_compile_commands",
+    targets = {
+        "//cpp/...": "",
+    },
+)

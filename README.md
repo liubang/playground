@@ -25,7 +25,7 @@ bazel test //...
 ### 更新 C/C++ compile_commands.json
 
 ```sh
-bazel run //cpp:refresh_compile_commands
+bazel run //:refresh_compile_commands
 ```
 
 ### 更新 go 依赖
