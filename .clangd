@@ -28,7 +28,9 @@ Diagnostics:
       - readability-simplify-subscript-expr
       - readability-simplify-boolean-expr
       - readability-redundant-string-init
-    Remove: modernize-use-trailing-return-type
+    Remove: 
+      - modernize-use-trailing-return-type
+      - modernize-avoid-c-arrays
     CheckOptions: 
       performance-move-const-arg.CheckTriviallyCopyableMove: true
       performance-move-const-arg.CheckMoveToConstRef: true
