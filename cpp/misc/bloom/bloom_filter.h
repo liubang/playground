@@ -22,7 +22,7 @@ class BloomFilter final {
   static constexpr uint64_t DEFAULT_BIT_COUNT = static_cast<const uint64_t>(16 * 1024 * 1024 * 8);
 
  public:
-  explicit BloomFilter(const uint64_t bit_cout);
+  explicit BloomFilter(uint64_t bit_cout);
   ~BloomFilter() = default;
   BloomFilter(const BloomFilter&) = delete;
   BloomFilter(const BloomFilter&&) = delete;
@@ -47,10 +47,10 @@ class BloomFilter final {
   }
 
   // lookup if bloomfilter contains data
-  bool contains(const void* const data, uint64_t length) const;
+  bool contains(const void* data, uint64_t length) const;
 
   // add a member to bloomfilter
-  void insert(const void* const data, uint64_t length);
+  void insert(const void* data, uint64_t length);
 
  private:
   [[nodiscard]] bool get_bit(const uint64_t bit_index) const {
@@ -73,7 +73,7 @@ class BloomFilter final {
     uint64_t member_count;
     uint64_t checksum;
 
-    bool is_valid() {
+    [[nodiscard]] bool is_valid() const {
       if (magic_code != MAGIC_CODE) {
         return false;
       }
