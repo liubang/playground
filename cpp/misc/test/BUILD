@@ -49,7 +49,8 @@ cc_binary(
         "-std=c++17",
     ],
     linkopts = common_linkopts,
-    deps = [
-        "@liburing",
-    ],
+    deps = select({
+        "//:linux_x86_64": ["@liburing"],
+        "//conditions:default": [],
+    }),
 )
