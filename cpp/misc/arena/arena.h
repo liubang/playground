@@ -15,6 +15,7 @@
 
 namespace playground::cpp::misc::arena {
 
+// Reference from Google's leveldb
 class Arena {
  public:
   Arena();
@@ -22,7 +23,18 @@ class Arena {
   Arena(const Arena&) = delete;
   Arena& operator=(const Arena&) = delete;
 
-  char* allocate(std::size_t bytes);
+  inline char* allocate(std::size_t bytes) {
+    assert(bytes > 0);
+    if (bytes <= alloc_bytes_remaining_) {
+      char* result = alloc_ptr_;
+      alloc_ptr_ += bytes;
+      alloc_bytes_remaining_ -= bytes;
+      return result;
+    }
+
+    return allocate_fallback(bytes);
+  }
+
   char* allocate_aligned(std::size_t bytes);
 
   [[nodiscard]] std::size_t memory_usage() const {
@@ -44,16 +56,5 @@ class Arena {
 
   std::atomic<std::size_t> memory_usage_;
 };
-
-inline char* Arena::allocate(std::size_t bytes) {
-  assert(bytes > 0);
-  if (bytes <= alloc_bytes_remaining_) {
-    char* result = alloc_ptr_;
-    alloc_ptr_ += bytes;
-    alloc_bytes_remaining_ -= bytes;
-    return result;
-  }
-  return allocate_fallback(bytes);
-}
 
 }  // namespace playground::cpp::misc::arena
