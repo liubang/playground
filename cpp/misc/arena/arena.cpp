@@ -43,6 +43,8 @@ char* Arena::allocate_aligned(std::size_t bytes) {
 }
 
 char* Arena::allocate_fallback(std::size_t bytes) {
+  // 如果申请的内存大于一个Block的1/4，则需要多少内存就申请多少内存
+  // 否则，申请的内存太小的话，就按一个block来申请
   if (bytes > BLOCK_SIZE / 4) {
     char* result = allocate_new_block(bytes);
     return result;
