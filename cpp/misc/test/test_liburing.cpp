@@ -6,6 +6,8 @@
 // Last Modified: 2023/05/22 23:44
 //
 //=====================================================================
+
+#ifdef __linux__
 #include <fcntl.h>
 #include <liburing.h>
 #include <netinet/in.h>
@@ -222,3 +224,12 @@ int main(int argc, char* argv[]) {
 
   return 0;
 }
+#else
+#include <iostream>
+
+int main(int argc, char* argv[]) {
+  std::cout << "unsupported platform\n" << std::flush;
+  return 0;
+}
+
+#endif
