@@ -44,3 +44,14 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "binary_test",
+    srcs = ["binary_test.cpp"],
+    copts = common_copts + ["-std=c++20"],
+    linkopts = common_linkopts,
+    deps = [
+        "//cpp/tools",
+        "@googletest//:gtest_main",
+    ],
+)
