@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 # Copyright (c) 2023 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,22 +16,17 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/05/25 00:28
+# Created: 2023/05/25 00:51
 
-#======================================================================
-#
-# BUILD -
-#
-# Created by liubang on 2023/05/25 00:02
-# Last Modified: 2023/05/25 00:02
-#
-#======================================================================
+from proto.test.sensor_pb2 import Sensor
 
-load("@rules_proto//proto:defs.bzl", "proto_library")
-
-package(default_visibility = ["//visibility:public"])
-
-proto_library(
-    name = "sensor",
-    srcs = ["sensor.proto"],
-)
+if __name__ == "__main__":
+    with open("sensor.data", 'rb') as file:
+        content = file.read()
+        print("Retrieve Sensor object from sensor.data")
+        sensor = Sensor()
+        sensor.ParseFromString(content)
+        print(f"Sensor name: {sensor.name}")
+        print(f"Sensor temperature: {sensor.temperature}")
+        print(f"Sensor humidity: {sensor.humidity}")
+    print("Sensor door: {}".format("Open" if sensor.door else "Closed"))
