@@ -13,22 +13,29 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/05/25 00:28
+# Created: 2023/05/25 00:51
 
 #======================================================================
 #
 # BUILD -
 #
-# Created by liubang on 2023/05/25 00:02
-# Last Modified: 2023/05/25 00:02
+# Created by liubang on 2023/05/25 00:44
+# Last Modified: 2023/05/25 00:44
 #
 #======================================================================
 
-load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@rules_python//python:defs.bzl", "py_binary")
+load("@rules_python//python:proto.bzl", "py_proto_library")
 
-package(default_visibility = ["//visibility:public"])
+py_proto_library(
+    name = "py_sensor_proto",
+    deps = [
+        "//proto/test:sensor",
+    ],
+)
 
-proto_library(
-    name = "sensor",
-    srcs = ["sensor.proto"],
+py_binary(
+    name = "sensor_pb",
+    srcs = ["sensor_pb.py"],
+    deps = [":py_sensor_proto"],
 )
