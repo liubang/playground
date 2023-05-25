@@ -54,3 +54,18 @@ cc_binary(
         "//conditions:default": [],
     }),
 )
+
+cc_proto_library(
+    name = "cc_sensor_proto",
+    deps = ["//proto/test:sensor"],
+)
+
+cc_binary(
+    name = "test_pb",
+    srcs = ["test_pb.cpp"],
+    copts = common_copts + [
+        "-std=c++17",
+    ],
+    linkopts = common_linkopts,
+    deps = [":cc_sensor_proto"],
+)

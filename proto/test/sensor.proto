@@ -8,8 +8,8 @@ message Sensor {
   int32 humidity     = 3;
 
   enum SwitchLevel { 
-    SWITCH_LEVEL_CLOSED = 0;
-    SWITCH_LEVEL_OPEN   = 1;
+    CLOSED = 0;
+    OPEN   = 1;
   }
 
   SwitchLevel door = 5;

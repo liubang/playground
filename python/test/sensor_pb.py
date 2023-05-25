@@ -1,3 +1,13 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+# ======================================================================
+#
+# sensor_pb.py -
+#
+# Created by liubang on 2023/05/26 00:44
+# Last Modified: 2023/05/26 00:44
+#
+# ======================================================================
 from proto.test.sensor_pb2 import Sensor
 import argparse
 
