@@ -16,31 +16,27 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/05/25 00:51
+# Created: 2023/05/26 00:44
 
 # ======================================================================
 #
-# sensor_pb.py -
+# test_ut.py -
 #
-# Created by liubang on 2023/05/26 00:44
-# Last Modified: 2023/05/26 00:44
+# Created by liubang on 2023/05/26 00:42
+# Last Modified: 2023/05/26 00:42
 #
 # ======================================================================
-from proto.test.sensor_pb2 import Sensor
-import argparse
+import unittest
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='这是一个简单的程序示例')
-    parser.add_argument("-f", "--file", type=str, help='文件路径')
-    args = parser.parse_args()
 
-    with open(args.file, 'rb') as file:
-        content = file.read()
-        print("Retrieve Sensor object from sensor.data")
-        sensor = Sensor()
-        sensor.ParseFromString(content)
-        print(f"Sensor name: {sensor.name}")
-        print(f"Sensor temperature: {sensor.temperature}")
-        print(f"Sensor humidity: {sensor.humidity}")
+class TestSum(unittest.TestCase):
 
-    print("Sensor door: {}".format("Open" if sensor.door else "Closed"))
+    def test_sum(self):
+        self.assertEqual(sum([1, 2, 3]), 6, "Should be 6")
+
+    def test_sum_tuple(self):
+        self.assertEqual(sum((1, 5, 2)), 8, "Should be 6")
+
+
+if __name__ == '__main__':
+    unittest.main()
