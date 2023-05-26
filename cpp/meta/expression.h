@@ -1,7 +1,7 @@
 #pragma once
 
-#include "traits.h"
 #include <cassert>
+#include "traits.h"
 
 namespace playground::cpp::meta {
 
@@ -11,7 +11,7 @@ struct BinaryExpression {
 
   auto operator()() const { return op(lhs, rhs); }
 
- protected:
+protected:
   T lhs;
   U rhs;
   OP op;
@@ -64,8 +64,7 @@ constexpr bool is_container_v<BinaryContainerExpression<T, U, OP>> = true;
  * @param rhs [TODO:parameter]
  * @return [TODO:return]
  */
-template <typename T,
-          typename U,
+template <typename T, typename U,
           typename = playground::cpp::meta::enable_if_t<playground::cpp::meta::is_container_v<T> &&
                                                         playground::cpp::meta::is_container_v<U>>>
 auto operator+(const T& lhs, const U& rhs) {

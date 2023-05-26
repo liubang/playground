@@ -6,6 +6,8 @@
 // Last Modified: 2023/05/21 23:44
 //
 //=====================================================================
+#pragma once
+
 #include <cstdint>
 #include <iostream>
 

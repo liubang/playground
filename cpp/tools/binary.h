@@ -14,16 +14,18 @@
 
 namespace playground::cpp::tools {
 class Binary {
- public:
+public:
   Binary() : data_(""), size_(0) {}
   Binary(const char* d, size_t n) : data_(d), size_(n) {}
   Binary(const std::string& s) : data_(s.data()), size_(s.size()) {}
   Binary(const char* s) : data_(s), size_(strlen(s)) {}
 
   Binary(const Binary&) = default;
+
   Binary& operator=(const Binary&) = default;
 
   [[nodiscard]] const char* data() const { return data_; }
+
   [[nodiscard]] std::size_t size() const { return size_; }
 
   [[nodiscard]] bool empty() const { return size_ == 0; }
@@ -32,6 +34,7 @@ class Binary {
     assert(n < size_);
     return data_[n];
   }
+
   void clear() {
     data_ = "";
     size_ = 0;
@@ -41,7 +44,7 @@ class Binary {
 
   [[nodiscard]] int compare(const Binary& b) const;
 
- private:
+private:
   const char* data_;
   std::size_t size_;
 };
