@@ -8,7 +8,6 @@
 //=====================================================================
 
 #include "cpp/tools/binary.h"
-
 #include <gtest/gtest.h>
 
 TEST(Binary, constructor) {

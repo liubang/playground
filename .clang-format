@@ -1,6 +1,9 @@
 ---
-BasedOnStyle: Chromium
+BasedOnStyle: Google
 Language: Cpp
 ColumnLimit: 100
-Standard: c++20
+Standard: Latest
 IncludeBlocks: Preserve
+FixNamespaceComments: true
+AccessModifierOffset: -2
+AlignEscapedNewlines: Right

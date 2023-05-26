@@ -23,10 +23,13 @@ class BloomFilter final {
 
  public:
   explicit BloomFilter(uint64_t bit_cout);
-  ~BloomFilter() = default;
+
   BloomFilter(const BloomFilter&) = delete;
+
   BloomFilter(const BloomFilter&&) = delete;
+
   BloomFilter& operator=(const BloomFilter&) = delete;
+
   BloomFilter& operator=(const BloomFilter&&) = delete;
 
   [[nodiscard]] uint32_t get_magic_code() const { return header_.magic_code; }
