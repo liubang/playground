@@ -1,10 +1,11 @@
 
+#include "cpp/misc/bloom/bloom_filter.h"
+
 #include <cassert>
 #include <cstring>
 #include <memory>
 #include <string>
 
-#include "cpp/misc/bloom/bloom_filter.h"
 #include "cpp/misc/hash/murmurhash2.h"
 
 namespace playground::cpp::misc::bloom {
