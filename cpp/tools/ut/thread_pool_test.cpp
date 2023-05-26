@@ -7,6 +7,8 @@
 //
 //=====================================================================
 
+#include "cpp/tools/thread_pool.h"
+
 #include <chrono>
 #include <future>
 #include <utility>
@@ -14,14 +16,11 @@
 
 #include <gtest/gtest.h>
 
-#include "cpp/tools/thread_pool.h"
-
 TEST(thread_pool, thread_pool) {
   playground::cpp::tools::ThreadPool pool(1024);
   std::vector<std::future<std::pair<int, int>>> results;
-
   auto start = std::chrono::system_clock::now();
-
+  results.reserve(1024);
   for (int i = 0; i < 1024; ++i) {
     results.emplace_back(pool.enqueue([i] {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));

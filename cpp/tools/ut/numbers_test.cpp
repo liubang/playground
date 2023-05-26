@@ -8,7 +8,6 @@
 //=====================================================================
 
 #include "cpp/tools/numbers.h"
-
 #include <gtest/gtest.h>
 
 TEST(tools, ip) {
