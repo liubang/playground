@@ -43,10 +43,7 @@ struct ConnInfo {
 char bufs[BUFFERS_COUNT][MAX_MESSAGE_LEN] = {{0}};
 
 int32_t group_id = 1337;
-void add_accept(io_uring* ring,
-                __u32 fd,
-                sockaddr* client_addr,
-                socklen_t* client_len,
+void add_accept(io_uring* ring, __u32 fd, sockaddr* client_addr, socklen_t* client_len,
                 unsigned flags) {
   io_uring_sqe* sqe = io_uring_get_sqe(ring);
   io_uring_prep_accept(sqe, fd, client_addr, client_len, 0);

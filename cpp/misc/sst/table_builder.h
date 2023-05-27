@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include "cpp/misc/fs/fs_writer.h"
 #include "cpp/tools/binary.h"
 
 namespace playground::cpp::misc::sst {
@@ -21,6 +22,7 @@ public:
 
 private:
 private:
+  fs::FsWriter* writer_;
 };
 
 }  // namespace playground::cpp::misc::sst
