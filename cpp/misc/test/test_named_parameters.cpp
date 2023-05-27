@@ -25,14 +25,12 @@ struct myconf {
 };
 
 inline static void init_arg(
-    myconf& conf,
-    const boost::parameter::aux::tagged_argument<tag::num_cpus, const int>& arg) {
+    myconf& conf, const boost::parameter::aux::tagged_argument<tag::num_cpus, const int>& arg) {
   conf.num_cpus_ = arg[num_cpus];
 }
 
 inline static void init_arg(
-    myconf& conf,
-    const boost::parameter::aux::tagged_argument<tag::num_gpus, const int>& arg) {
+    myconf& conf, const boost::parameter::aux::tagged_argument<tag::num_gpus, const int>& arg) {
   conf.num_gpus_ = arg[num_gpus];
 }
 

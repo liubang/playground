@@ -6,4 +6,4 @@ Standard: Latest
 IncludeBlocks: Preserve
 FixNamespaceComments: true
 AccessModifierOffset: -2
-AlignEscapedNewlines: Right
+AlignEscapedNewlines: Left
