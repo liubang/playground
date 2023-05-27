@@ -6,16 +6,17 @@
 // Last Modified: 2023/05/26 16:51
 //
 //=====================================================================
+#pragma once
 
 #include <string>
 #include <utility>
 
 namespace playground::cpp::tools {
 
-#define NEW_STATUS(name)                                                                           \
-  static Status New##name(const std::string& msg) { return {k##name, msg}; }
+#define NEW_STATUS(name) \
+  static Status New##name(const std::string& msg = "") { return {k##name, msg}; }
 
-#define IS_STATUS(name)                                                                            \
+#define IS_STATUS(name) \
   [[nodiscard]] bool is##name() const { return code_ == k##name; }
 
 class Status {
@@ -55,6 +56,8 @@ public:
         return "InvalidArgument";
       case kIOError:
         return "IOError";
+      default:
+        return "Unknown";
     }
   }
 
