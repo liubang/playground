@@ -10,19 +10,36 @@
 #pragma once
 
 #include "cpp/misc/fs/fs.h"
+#include "cpp/misc/sst/block_builder.h"
 #include "cpp/tools/binary.h"
+#include "cpp/tools/status.h"
 
 namespace playground::cpp::misc::sst {
 
 class TableBuilder {
 public:
-  void Add(const tools::Binary& key, const tools::Binary& value);
+  TableBuilder(fs::FsWriter* writer);
+  TableBuilder(const TableBuilder&) = delete;
+  TableBuilder& operator=(const TableBuilder&) = delete;
+  ~TableBuilder();
+
+  void add(const tools::Binary& key, const tools::Binary& value);
 
   void flush();
+
+  tools::Status finish();
+
+  uint64_t entries_count();
+
+  uint64_t file_size();
 
 private:
 private:
   fs::FsWriter* writer_;
+  BlockBuilder data_block_;
+  BlockBuilder index_block_;
+  std::string last_key_;
+  int64_t num_entries_;
 };
 
 }  // namespace playground::cpp::misc::sst
