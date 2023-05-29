@@ -8,6 +8,7 @@
 //=====================================================================
 #include <fcntl.h>
 #include <unistd.h>
+#include <cassert>
 #include <string>
 #include <utility>
 
@@ -27,7 +28,14 @@ tools::Status posixError(const std::string& context, int err_number) {
 
 class PosixFsWriter final : public FsWriter {
 public:
-  PosixFsWriter(std::string filename, int fd) : fd_(fd), filename_(std::move(filename)) {}
+  PosixFsWriter(const PosixFsWriter&) = delete;
+  PosixFsWriter(PosixFsWriter&&) = delete;
+  PosixFsWriter& operator=(const PosixFsWriter&) = delete;
+  PosixFsWriter& operator=(PosixFsWriter&&) = delete;
+
+  PosixFsWriter(std::string filename, int fd) : fd_(fd), filename_(std::move(filename)) {
+    assert(fd >= 0);
+  }
 
   ~PosixFsWriter() override {
     if (fd_ >= 0) {
@@ -122,6 +130,39 @@ private:
   const std::string filename_;
 };
 
+class PosixFsReader final : public FsReader {
+public:
+  PosixFsReader(const PosixFsReader&) = default;
+  PosixFsReader(PosixFsReader&&) = default;
+  PosixFsReader& operator=(const PosixFsReader&) = delete;
+  PosixFsReader& operator=(PosixFsReader&&) = delete;
+
+  PosixFsReader(std::string filename, int fd) : filename_(std::move(filename)), fd_(fd) {
+    assert(fd >= 0);
+  }
+
+  ~PosixFsReader() override {
+    if (fd_ >= 0) {
+      ::close(fd_);
+    }
+  };
+
+  tools::Status read(uint64_t offset, std::size_t n, tools::Binary* result,
+                     char* scratch) const override {
+    tools::Status status;
+    ssize_t read_size = ::pread(fd_, scratch, n, static_cast<off_t>(offset));
+    *result = tools::Binary(scratch, (read_size < 0) ? 0 : read_size);
+    if (read_size < 0) {
+      status = posixError(filename_, errno);
+    }
+    return status;
+  }
+
+private:
+  const std::string filename_;
+  int fd_{0};
+};
+
 class PosixFs : public Fs {
 public:
   PosixFs() = default;
@@ -137,7 +178,12 @@ public:
   }
 
   tools::Status newFsReader(const std::string& filename, FsReader** result) override {
-    // TODO(liubang): implement
+    int fd = ::open(filename.c_str(), O_RDONLY | kOpenBaseFlags);
+    if (fd < 0) {
+      *result = nullptr;
+      return posixError(filename, errno);
+    }
+    *result = new PosixFsReader(filename, fd);
     return tools::Status::NewOk();
   }
 };
