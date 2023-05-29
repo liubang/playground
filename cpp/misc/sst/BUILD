@@ -6,3 +6,19 @@
 # Last Modified: 2023/05/26 16:34
 #
 #======================================================================
+
+cc_library(
+    name = "sstable",
+    srcs = [
+        "block_builder.cpp",
+        "table_builder.cpp",
+    ],
+    hdrs = [
+        "block_builder.h",
+        "table_builder.h",
+    ],
+    deps = [
+        "//cpp/misc/fs",
+        "//cpp/tools",
+    ],
+)
