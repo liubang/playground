@@ -18,22 +18,33 @@ namespace detail {
 constexpr auto kIsLittleEndian = __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__;
 constexpr auto kIsBigEndian = !kIsLittleEndian;
 
+static inline uint8_t byteswap_gen(uint8_t v) { return uint8_t(v); }
+static inline uint16_t byteswap_gen(uint16_t v) { return __builtin_bswap16(v); }
+static inline uint32_t byteswap_gen(uint32_t v) { return __builtin_bswap32(v); }
+static inline uint64_t byteswap_gen(uint64_t v) { return __builtin_bswap64(v); }
+
 template <std::size_t Size>
 struct uint_types_by_size;
 
-#define BIT_GEN(sz, fn)                                                     \
-  static inline uint##sz##_t byteswap_gen(uint##sz##_t v) { return fn(v); } \
-  template <>                                                               \
-  struct uint_types_by_size<sz / 8> {                                       \
-    using type = uint##sz##_t;                                              \
-  };
+template <>
+struct uint_types_by_size<1> {
+  using type = uint8_t;
+};
 
-BIT_GEN(8, uint8_t)
-BIT_GEN(64, __builtin_bswap64)
-BIT_GEN(32, __builtin_bswap32)
-BIT_GEN(16, __builtin_bswap16)
+template <>
+struct uint_types_by_size<2> {
+  using type = uint16_t;
+};
 
-#undef BIT_GEN
+template <>
+struct uint_types_by_size<4> {
+  using type = uint32_t;
+};
+
+template <>
+struct uint_types_by_size<8> {
+  using type = uint64_t;
+};
 
 template <class T>
 struct EndianInt {
