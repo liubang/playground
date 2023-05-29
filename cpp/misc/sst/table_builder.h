@@ -9,7 +9,7 @@
 
 #pragma once
 
-#include "cpp/misc/fs/fs_writer.h"
+#include "cpp/misc/fs/fs.h"
 #include "cpp/tools/binary.h"
 
 namespace playground::cpp::misc::sst {
