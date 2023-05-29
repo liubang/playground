@@ -32,8 +32,12 @@ cc_library(
     ],
     hdrs = [
         "block_builder.h",
+        "encoding.h",
+        "filter_block_builder.h",
+        "filter_policy.h",
         "table_builder.h",
     ],
+    visibility = ["//visibility:public"],
     deps = [
         "//cpp/misc/fs",
         "//cpp/tools",
