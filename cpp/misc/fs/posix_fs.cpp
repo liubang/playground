@@ -104,7 +104,12 @@ private:
   }
 
   tools::Status syncFd(int fd, const std::string& filename) {
+    // 这里简单粗暴的区分Linux和macos
+#if defined(__APPLE__) && defined(__MACH__)
+    if (::fsync(fd) == 0) {
+#else
     if (::fdatasync(fd) == 0) {
+#endif
       return tools::Status::NewOk();
     }
     return posixError(filename, errno);
@@ -119,6 +124,8 @@ private:
 
 class PosixFs : public Fs {
 public:
+  PosixFs() = default;
+
   tools::Status newFsWriter(const std::string& filename, FsWriter** result) override {
     int fd = ::open(filename.c_str(), O_TRUNC | O_WRONLY | O_CREAT | kOpenBaseFlags, 0644);
     if (fd < 0) {
@@ -128,6 +135,37 @@ public:
     *result = new PosixFsWriter(filename, fd);
     return tools::Status::NewOk();
   }
+
+  tools::Status newFsReader(const std::string& filename, FsReader** result) override {
+    // TODO(liubang): implement
+    return tools::Status::NewOk();
+  }
 };
+
+namespace {
+
+template <typename T>
+class SingletonFs {
+public:
+  SingletonFs() { new (&fs_storage_) T(); }
+  SingletonFs(const SingletonFs&) = delete;
+  SingletonFs& operator=(const SingletonFs&) = delete;
+
+  ~SingletonFs() = default;
+
+  Fs* fs() { return reinterpret_cast<Fs*>(&fs_storage_); }
+
+private:
+  typename std::aligned_storage<sizeof(T), alignof(T)>::type fs_storage_;
+};
+
+using PosixDefaultFs = SingletonFs<PosixFs>;
+
+}  // namespace
+
+Fs* Fs::getInstance() {
+  static PosixDefaultFs posix_default_fs;
+  return posix_default_fs.fs();
+}
 
 }  // namespace playground::cpp::misc::fs
