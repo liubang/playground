@@ -33,28 +33,22 @@ std::string random_string(size_t length) {
 }
 
 TEST(bloom, bloom) {
-  playground::cpp::misc::bloom::BloomFilter filter(static_cast<uint64_t>(16 * 1024 * 1024 * 8));
+  playground::cpp::misc::bloom::BloomFilter filter(32);
 
-  const char* data1 = "liubang";
-  uint64_t len1 = strlen(data1);
-  filter.insert(data1, len1);
-  auto res = filter.contains(data1, len1);
-  EXPECT_TRUE(res);
+  auto* binaries = new playground::cpp::tools::Binary[100];
 
-  const char* data2 = "other string";
-  uint64_t len2 = strlen(data2);
-  res = filter.contains(data2, len2);
-  EXPECT_FALSE(res);
-
-  std::vector<std::string> strs;
   for (int i = 1; i < 100; ++i) {
     auto str = random_string(i);
-    strs.push_back(str);
-    filter.insert(str.c_str(), str.size());
+    binaries[i] = playground::cpp::tools::Binary(str);
   }
 
-  for (auto& str : strs) {
-    auto ret = filter.contains(str.data(), str.size());
+  std::string dst;
+  filter.create(binaries, 100, &dst);
+
+  playground::cpp::tools::Binary ff(dst);
+
+  for (int i = 0; i < 100; ++i) {
+    auto ret = filter.contains(binaries[i], ff);
     EXPECT_TRUE(ret);
   }
 }
