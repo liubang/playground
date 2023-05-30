@@ -9,4 +9,6 @@
 
 #include "cpp/misc/sst/block_builder.h"
 
-namespace playground::cpp::misc::sst {}
+namespace playground::cpp::misc::sst {
+
+}
