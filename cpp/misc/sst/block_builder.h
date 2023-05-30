@@ -15,6 +15,9 @@
 
 namespace playground::cpp::misc::sst {
 
+/**
+ * data block and index block builder
+ */
 class BlockBuilder {
 public:
   BlockBuilder(const BlockBuilder&) = delete;
