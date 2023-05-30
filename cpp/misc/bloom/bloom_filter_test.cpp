@@ -35,7 +35,10 @@ std::string random_string(size_t length) {
 TEST(bloom, bloom) {
   playground::cpp::misc::bloom::BloomFilter filter(32);
 
-  auto* binaries = new playground::cpp::tools::Binary[100];
+  std::unique_ptr<playground::cpp::tools::Binary[]> binaries_ptr =
+      std::make_unique<playground::cpp::tools::Binary[]>(100);
+
+  auto* binaries = binaries_ptr.get();
 
   for (int i = 1; i < 100; ++i) {
     auto str = random_string(i);
