@@ -12,12 +12,14 @@ cc_library(
     name = "sstable",
     srcs = [
         "block_builder.cpp",
+        "filter_block_reader.cpp",
         "table_builder.cpp",
     ],
     hdrs = [
         "block_builder.h",
         "encoding.h",
         "filter_block_builder.h",
+        "filter_block_reader.h",
         "filter_policy.h",
         "table_builder.h",
     ],

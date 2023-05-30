@@ -17,6 +17,7 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//cpp/misc/hash",
+        "//cpp/tools",
     ],
 )
 

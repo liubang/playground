@@ -15,24 +15,37 @@
 
 namespace playground::cpp::misc::sst {
 
+/**
+ * @brief [TODO:description]
+ *
+ * @tparam T [TODO:tparam]
+ * @param dst [TODO:parameter]
+ * @param value [TODO:parameter]
+ */
 template <typename T, typename std::enable_if<
                           std::is_integral<T>::value && !std::is_same<T, bool>::value, T>::type = 0>
-void putInt(std::string *dst, T value) {
+void encodeInt(std::string *dst, T value) {
   // 这里统一用little endian
   value = playground::cpp::tools::Endian::little(value);
   dst->append(reinterpret_cast<const char *>(&value), sizeof(T));
 }
 
+/**
+ * @brief [TODO:description]
+ *
+ * @tparam T [TODO:tparam]
+ * @param input [TODO:parameter]
+ * @return [TODO:return]
+ */
 template <typename T, typename std::enable_if<
                           std::is_integral<T>::value && !std::is_same<T, bool>::value, T>::type = 0>
-bool getInt(playground::cpp::tools::Binary *input, T *value) {
-  if (input->size() != sizeof(T)) {
-    return false;
-  }
-  memcpy(value, input->data(), input->size());
+T decodeInt(const char *input) {
+  T value;
+  std::size_t s = sizeof(T);
+  memcpy(&value, input, s);
   // 这里统一用little endian
-  *value = playground::cpp::tools::Endian::little(*value);
-  return true;
+  value = playground::cpp::tools::Endian::little(value);
+  return value;
 }
 
 }  // namespace playground::cpp::misc::sst

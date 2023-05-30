@@ -8,12 +8,14 @@
 //=====================================================================
 
 #include "cpp/misc/sst/filter_block_builder.h"
+#include "cpp/misc/sst/encoding.h"
 
 #include <cassert>
 
 namespace playground::cpp::misc::sst {
 
-constexpr static std::size_t kFilterBase = 1 << 11;
+static const size_t kFilterBaseLg = 11;
+constexpr static std::size_t kFilterBase = 1 << kFilterBaseLg;
 
 FilterBlockBuilder::FilterBlockBuilder(const FilterPolicy* policy) : filter_policy_(policy) {}
 
@@ -37,8 +39,16 @@ tools::Binary FilterBlockBuilder::finish() {
     genFilter();
   }
 
-  // TODO(liubang): encoding
-  return {};
+  const uint32_t array_offset = result_.size();
+  // 将每个filter的offset写入filter block中
+  for (auto filter_offset : filter_offsets_) {
+    encodeInt(&result_, filter_offset);
+  }
+
+  // 记录filter offset的地址偏移量，通过这个偏移量，可以找到哪一段是filter_offsets
+  encodeInt(&result_, array_offset);
+  result_.push_back(kFilterBaseLg);
+  return {result_};
 }
 
 void FilterBlockBuilder::genFilter() {
@@ -55,7 +65,7 @@ void FilterBlockBuilder::genFilter() {
     tmp_keys_[i] = tools::Binary(base, len);
   }
   filter_offsets_.push_back(result_.size());
-  filter_policy_->create_filter(&tmp_keys_[0], static_cast<int>(num_keys), &result_);
+  filter_policy_->createFilter(&tmp_keys_[0], static_cast<int>(num_keys), &result_);
   tmp_keys_.clear();
   keys_.clear();
   start_.clear();

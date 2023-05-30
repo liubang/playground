@@ -42,7 +42,7 @@ public:
 
   [[nodiscard]] bool empty() const { return size_ == 0; }
 
-  char operator[](std::size_t n) {
+  char operator[](std::size_t n) const {
     assert(n < size_);
     return data_[n];
   }
@@ -52,7 +52,7 @@ public:
     size_ = 0;
   }
 
-  [[nodiscard]] std::string to_string() const { return {data_, size_}; }
+  [[nodiscard]] std::string toString() const { return {data_, size_}; }
 
   [[nodiscard]] int compare(const Binary& b) const;
 
