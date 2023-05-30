@@ -15,7 +15,7 @@
 namespace playground::cpp::misc::sst {
 
 static const size_t kFilterBaseLg = 11;
-constexpr static std::size_t kFilterBase = 1 << kFilterBaseLg;
+constexpr static std::size_t kFilterBase = 1 << kFilterBaseLg;  // 2048
 
 FilterBlockBuilder::FilterBlockBuilder(const FilterPolicy* policy) : filter_policy_(policy) {}
 
@@ -27,11 +27,11 @@ void FilterBlockBuilder::startBlock(uint64_t offset) {
   }
 }
 
-void FilterBlockBuilder::add(const tools::Binary& key) {
+void FilterBlockBuilder::addKey(const tools::Binary& key) {
   // make a copy
   tools::Binary k = key;
   keys_.append(k.data(), k.size());
-  start_.push_back(key.size());
+  start_.push_back(keys_.size());
 }
 
 tools::Binary FilterBlockBuilder::finish() {
@@ -41,7 +41,7 @@ tools::Binary FilterBlockBuilder::finish() {
 
   const uint32_t array_offset = result_.size();
   // 将每个filter的offset写入filter block中
-  for (auto filter_offset : filter_offsets_) {
+  for (uint32_t filter_offset : filter_offsets_) {
     encodeInt(&result_, filter_offset);
   }
 
@@ -59,13 +59,14 @@ void FilterBlockBuilder::genFilter() {
   }
   start_.push_back(keys_.size());
   tmp_keys_.resize(num_keys);
-  for (int i = 0; i < num_keys; ++i) {
+  for (std::size_t i = 0; i < num_keys; ++i) {
     const char* base = keys_.data() + start_[i];
     std::size_t len = start_[i + 1] - start_[i];
     tmp_keys_[i] = tools::Binary(base, len);
   }
   filter_offsets_.push_back(result_.size());
   filter_policy_->createFilter(&tmp_keys_[0], static_cast<int>(num_keys), &result_);
+
   tmp_keys_.clear();
   keys_.clear();
   start_.clear();

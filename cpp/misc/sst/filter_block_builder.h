@@ -25,7 +25,8 @@ public:
   FilterPolicy& operator=(const FilterBlockBuilder&) = delete;
 
   void startBlock(uint64_t offset);
-  void add(const tools::Binary& key);
+
+  void addKey(const tools::Binary& key);
 
   tools::Binary finish();
 
