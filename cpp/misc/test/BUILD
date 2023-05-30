@@ -69,3 +69,13 @@ cc_binary(
     linkopts = common_linkopts,
     deps = [":cc_sensor_proto"],
 )
+
+cc_binary(
+    name = "test_bits",
+    srcs = ["test_bits.cpp"],
+    copts = common_copts + [
+        "-std=c++20",
+    ],
+    linkopts = common_linkopts,
+    deps = ["//cpp/tools"],
+)

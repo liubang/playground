@@ -20,6 +20,8 @@ class BloomFilterPolicy : public FilterPolicy {
 public:
   BloomFilterPolicy(std::size_t bits_per_key) : bits_per_key_(bits_per_key) {}
 
+  ~BloomFilterPolicy() override = default;
+
   void createFilter(tools::Binary* keys, std::size_t n, std::string* dst) const override {
     bloom::BloomFilter bloom_filter(bits_per_key_);
     bloom_filter.create(keys, n, dst);
@@ -37,7 +39,7 @@ private:
   std::size_t bits_per_key_;
 };
 
-const FilterPolicy* newBloomFilterPolicy(uint64_t bits_per_key) {
+FilterPolicy* newBloomFilterPolicy(uint64_t bits_per_key) {
   return new BloomFilterPolicy(bits_per_key);
 }
 

@@ -32,7 +32,7 @@ bool BloomFilter::contains(const tools::Binary& key, const tools::Binary& filter
 
   uint64_t seed = 0;
   playground::cpp::misc::hash::CMurmurHash64 hasher;
-  for (int i = 0; i < hash_count; ++i) {
+  for (std::size_t i = 0; i < hash_count; ++i) {
     hasher.begin(seed);
     hasher.add(key.data(), key.size(), false);
     seed = hasher.end();
@@ -60,10 +60,10 @@ void BloomFilter::create(const tools::Binary* keys, std::size_t n, std::string* 
   auto* array = reinterpret_cast<uint8_t*>(&((*dst)[init_size]));
 
   playground::cpp::misc::hash::CMurmurHash64 hasher;
-  for (int i = 0; i < n; ++i) {
+  for (std::size_t i = 0; i < n; ++i) {
     uint64_t seed = 0;
     const auto key = keys[i];
-    for (int j = 0; j < hash_count_; ++j) {
+    for (std::size_t j = 0; j < hash_count_; ++j) {
       hasher.begin(seed);
       hasher.add(key.data(), key.size(), false);
       seed = hasher.end();
