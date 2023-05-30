@@ -16,28 +16,25 @@ using playground::cpp::tools::Binary;
 TEST(encoding, putAndGetInt) {
   std::string dst;
   int32_t a = 12345;
-  playground::cpp::misc::sst::putInt(&dst, a);
+  playground::cpp::misc::sst::encodeInt(&dst, a);
   Binary binary(dst);
 
-  int32_t aa;
-  playground::cpp::misc::sst::getInt(&binary, &aa);
+  auto aa = playground::cpp::misc::sst::decodeInt<uint32_t>(binary.data());
   EXPECT_EQ(a, aa);
 
-  int64_t b = 123456789;
+  uint64_t b = 123456789;
   dst.clear();
-  playground::cpp::misc::sst::putInt(&dst, b);
+  playground::cpp::misc::sst::encodeInt(&dst, b);
   binary.reset(dst);
 
-  int64_t bb;
-  playground::cpp::misc::sst::getInt(&binary, &bb);
+  auto bb = playground::cpp::misc::sst::decodeInt<uint64_t>(binary.data());
   EXPECT_EQ(b, bb);
 
-  int8_t c = 2;
+  uint8_t c = 2;
   dst.clear();
-  playground::cpp::misc::sst::putInt(&dst, c);
+  playground::cpp::misc::sst::encodeInt(&dst, c);
   binary.reset(dst);
 
-  int8_t cc;
-  playground::cpp::misc::sst::getInt(&binary, &cc);
+  auto cc = playground::cpp::misc::sst::decodeInt<uint8_t>(binary.data());
   EXPECT_EQ(c, cc);
 }

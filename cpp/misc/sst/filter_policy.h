@@ -19,12 +19,33 @@ class FilterPolicy {
 public:
   virtual ~FilterPolicy();
 
-  virtual void create_filter(tools::Binary* keys, std::size_t n, std::string* dst) const = 0;
+  /**
+   * @brief [TODO:description]
+   *
+   * @param keys [TODO:parameter]
+   * @param n [TODO:parameter]
+   * @param dst [TODO:parameter]
+   */
+  virtual void createFilter(tools::Binary* keys, std::size_t n, std::string* dst) const = 0;
 
+  /**
+   * @brief [TODO:description]
+   *
+   * @return [TODO:return]
+   */
   [[nodiscard]] virtual const char* name() const = 0;
 
-  [[nodiscard]] virtual bool key_may_match(const tools::Binary& key,
-                                           const tools::Binary& filter) const = 0;
+  /**
+   * @brief [TODO:description]
+   *
+   * @param key [TODO:parameter]
+   * @param filter [TODO:parameter]
+   * @return [TODO:return]
+   */
+  [[nodiscard]] virtual bool keyMayMatch(const tools::Binary& key,
+                                         const tools::Binary& filter) const = 0;
 };
+
+const FilterPolicy* newBloomFilterPolicy(uint64_t bits_per_key);
 
 }  // namespace playground::cpp::misc::sst

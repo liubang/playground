@@ -29,9 +29,9 @@ public:
 
   tools::Status finish();
 
-  uint64_t entries_count();
+  uint64_t entriesCount();
 
-  uint64_t file_size();
+  uint64_t fileSize();
 
 private:
 private:
