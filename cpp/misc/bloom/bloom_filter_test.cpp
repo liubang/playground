@@ -17,20 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "cpp/misc/bloom/bloom_filter.h"
-
-std::string random_string(size_t length) {
-  auto randchar = []() -> char {
-    const char charset[] =
-        "0123456789"
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz";
-    const size_t max_index = (sizeof(charset) - 1);
-    return charset[rand() % max_index];
-  };
-  std::string str(length, 0);
-  std::generate_n(str.begin(), length, randchar);
-  return str;
-}
+#include "cpp/tools/random.h"
 
 TEST(bloom, bloom) {
   playground::cpp::misc::bloom::BloomFilter filter(32);
@@ -41,7 +28,7 @@ TEST(bloom, bloom) {
   auto* binaries = binaries_ptr.get();
 
   for (int i = 1; i < 100; ++i) {
-    auto str = random_string(i);
+    auto str = playground::cpp::tools::random_string(i);
     binaries[i] = playground::cpp::tools::Binary(str);
   }
 

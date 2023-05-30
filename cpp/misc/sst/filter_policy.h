@@ -46,6 +46,6 @@ public:
                                          const tools::Binary& filter) const = 0;
 };
 
-const FilterPolicy* newBloomFilterPolicy(uint64_t bits_per_key);
+FilterPolicy* newBloomFilterPolicy(uint64_t bits_per_key);
 
 }  // namespace playground::cpp::misc::sst
