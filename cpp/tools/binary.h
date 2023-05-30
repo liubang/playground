@@ -26,6 +26,16 @@ public:
 
   Binary& operator=(const Binary&) = default;
 
+  void reset(const std::string& s) {
+    data_ = s.data();
+    size_ = s.size();
+  }
+
+  void reset(const char* d, std::size_t n) {
+    data_ = d;
+    size_ = n;
+  }
+
   [[nodiscard]] const char* data() const { return data_; }
 
   [[nodiscard]] std::size_t size() const { return size_; }
