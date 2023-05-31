@@ -30,6 +30,7 @@ void FilterBlockBuilder::startBlock(uint64_t offset) {
 void FilterBlockBuilder::addKey(const tools::Binary& key) {
   // make a copy
   tools::Binary k = key;
+  // 这两行的先后顺序不能颠倒
   start_.push_back(keys_.size());
   keys_.append(k.data(), k.size());
 }

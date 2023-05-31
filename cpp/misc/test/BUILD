@@ -79,3 +79,13 @@ cc_binary(
     linkopts = common_linkopts,
     deps = ["//cpp/tools"],
 )
+
+cc_binary(
+    name = "test_block_builder",
+    srcs = ["test_block_builder.cpp"],
+    copts = common_copts + [
+        "-std=c++20",
+    ],
+    linkopts = common_linkopts,
+    deps = ["//cpp/misc/sst:sstable"],
+)

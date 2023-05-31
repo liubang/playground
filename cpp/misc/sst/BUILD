@@ -13,6 +13,7 @@ cc_library(
     srcs = [
         "block_builder.cpp",
         "bloom_filter_policy.cpp",
+        "comparator.cpp",
         "filter_block_builder.cpp",
         "filter_block_reader.cpp",
         "filter_policy.cpp",
@@ -20,6 +21,7 @@ cc_library(
     ],
     hdrs = [
         "block_builder.h",
+        "comparator.h",
         "encoding.h",
         "filter_block_builder.h",
         "filter_block_reader.h",
@@ -53,9 +55,33 @@ cc_test(
 
 cc_test(
     name = "filter_block_test",
-    srcs = [
-        "filter_block_test.cpp",
+    srcs = ["filter_block_test.cpp"],
+    copts = common_copts + [
+        "-std=c++20",
     ],
+    linkopts = common_linkopts,
+    deps = [
+        ":sstable",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "comparator_test",
+    srcs = ["comparator_test.cpp"],
+    copts = common_copts + [
+        "-std=c++20",
+    ],
+    linkopts = common_linkopts,
+    deps = [
+        ":sstable",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "block_builder_test",
+    srcs = ["block_builder_test.cpp"],
     copts = common_copts + [
         "-std=c++20",
     ],
