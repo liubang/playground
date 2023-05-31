@@ -74,6 +74,10 @@ tools::Binary BlockBuilder::finish() {
   return {buffer_};
 }
 
+std::size_t BlockBuilder::sizeEstimate() const {
+  return (buffer_.size() + restarts_.size() * sizeof(uint32_t) + sizeof(uint32_t));
+}
+
 void BlockBuilder::reset() {
   buffer_.clear();
   last_key_.clear();
