@@ -18,3 +18,4 @@ build --nojava_header_compilation
 
 # bazel build
 test --test_output=all --action_env="GTEST_COLOR=1"
+test -c dbg
