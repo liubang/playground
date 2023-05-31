@@ -35,6 +35,8 @@ public:
 
   [[nodiscard]] bool empty() const { return buffer_.empty(); }
 
+  [[nodiscard]] std::size_t sizeEstimate() const;
+
   void reset();
 
 private:
