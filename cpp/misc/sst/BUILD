@@ -17,7 +17,7 @@ cc_library(
         "filter_block_builder.cpp",
         "filter_block_reader.cpp",
         "filter_policy.cpp",
-        "table_builder.cpp",
+        "sstable_builder.cpp",
     ],
     hdrs = [
         "block_builder.h",
@@ -26,7 +26,7 @@ cc_library(
         "filter_block_builder.h",
         "filter_block_reader.h",
         "filter_policy.h",
-        "table_builder.h",
+        "sstable_builder.h",
     ],
     copts = ["-std=c++20"],
     visibility = ["//visibility:public"],
