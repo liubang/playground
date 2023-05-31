@@ -58,12 +58,31 @@ TEST(block_builder, test) {
 
   restarts[restart_count] = size - (4 * (restart_count + 1));
 
+  std::string pre_key;
   // parse keys and values
   for (int i = 0; i < restart_count; ++i) {
+    // 计算每一个restart的起始位置和结束位置
     uint32_t start = restarts[i];
-    // 计算每一个restart的长度
-    uint32_t limit = restarts[i + 1] - start;
+    uint32_t end = restarts[i + 1];
     // 解析每一个restart中的key和value
+    while (start < end) {
+      assert((start + 12) < end);
+      auto shared = playground::cpp::misc::sst::decodeInt<uint32_t>(data + start);
+      auto non_shared = playground::cpp::misc::sst::decodeInt<uint32_t>(data + start + 4);
+      auto value_size = playground::cpp::misc::sst::decodeInt<uint32_t>(data + start + 8);
+      assert(start + 12 + non_shared + value_size <= end);
+
+      assert(pre_key.size() >= shared);
+      std::string key(pre_key.data(), shared);
+      key.append(data + start + 12, non_shared);
+      pre_key = key;
+      std::string value(data + start + 12 + non_shared, value_size);
+
+      EXPECT_TRUE(kvs.contains(key));
+      EXPECT_TRUE(kvs[key] == value);
+
+      start += 12 + non_shared + value_size;
+    }
   }
 
   delete comparator;

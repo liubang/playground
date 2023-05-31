@@ -3,6 +3,7 @@
 #include "cpp/tools/random.h"
 
 #include <iostream>
+#include <memory>
 
 int main(int argc, char* argv[]) {
   // put your code here
