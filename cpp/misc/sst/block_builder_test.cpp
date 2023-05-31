@@ -13,11 +13,12 @@
 
 #include <gtest/gtest.h>
 #include <memory>
+#include <vector>
 
 TEST(block_builder, test) {
   auto* comparator = playground::cpp::misc::sst::bytewiseComparator();
   playground::cpp::misc::sst::BlockBuilder block_builder(comparator, 16);
-  constexpr int COUNT = 100;
+  constexpr int COUNT = 10000;
 
   EXPECT_TRUE(block_builder.empty());
 
@@ -43,6 +44,13 @@ TEST(block_builder, test) {
   std::size_t size = block.size();
   auto restart_count = playground::cpp::misc::sst::decodeInt<uint32_t>(&data[size - 4]);
   EXPECT_EQ(restart_count, (COUNT / 16) + (COUNT % 16 == 0 ? 0 : 1));
+
+  std::vector<uint32_t> restarts(restart_count);
+  for (int i = 0; i < restart_count; ++i) {
+    uint32_t offset = 4 * (i + 2);
+    auto restart = playground::cpp::misc::sst::decodeInt<uint32_t>(&data[size - offset]);
+    restarts[i] = restart;
+  }
 
   delete comparator;
 
