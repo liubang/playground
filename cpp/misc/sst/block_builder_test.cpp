@@ -1,0 +1,50 @@
+//=====================================================================
+//
+// block_builder_test.cpp -
+//
+// Created by liubang on 2023/05/31 14:59
+// Last Modified: 2023/05/31 14:59
+//
+//=====================================================================
+
+#include "cpp/misc/sst/block_builder.h"
+#include "cpp/misc/sst/encoding.h"
+#include "cpp/tools/random.h"
+
+#include <gtest/gtest.h>
+#include <memory>
+
+TEST(block_builder, test) {
+  auto* comparator = playground::cpp::misc::sst::bytewiseComparator();
+  playground::cpp::misc::sst::BlockBuilder block_builder(comparator, 16);
+  constexpr int COUNT = 100;
+
+  EXPECT_TRUE(block_builder.empty());
+
+  std::vector<std::string> keys;
+  const std::string key_prefix = "test_key_";
+  for (int i = 0; i < COUNT; ++i) {
+    std::string key = key_prefix + std::to_string(i);
+    keys.push_back(key);
+  }
+
+  std::sort(keys.begin(), keys.end());
+
+  for (int i = 0; i < COUNT; ++i) {
+    auto val = playground::cpp::tools::random_string(64);
+    block_builder.add(keys[i], val);
+  }
+
+  EXPECT_TRUE(!block_builder.empty());
+
+  auto block = block_builder.finish();
+  // try to parse
+  const char* data = block.data();
+  std::size_t size = block.size();
+  auto restart_count = playground::cpp::misc::sst::decodeInt<uint32_t>(&data[size - 4]);
+  EXPECT_EQ(restart_count, (COUNT / 16) + (COUNT % 16 == 0 ? 0 : 1));
+
+  delete comparator;
+
+  // parse key and value
+}
