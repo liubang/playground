@@ -11,7 +11,6 @@
 #include "cpp/misc/sst/encoding.h"
 
 #include <cassert>
-#include <vector>
 
 namespace playground::cpp::misc::sst {
 
