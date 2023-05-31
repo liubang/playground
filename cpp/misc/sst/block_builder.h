@@ -13,6 +13,7 @@
 #include "cpp/tools/binary.h"
 
 #include <string>
+#include <vector>
 
 namespace playground::cpp::misc::sst {
 
