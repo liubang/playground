@@ -38,7 +38,8 @@ TEST(bloom, bloom) {
   playground::cpp::tools::Binary ff(dst);
 
   for (int i = 0; i < 100; ++i) {
-    auto ret = filter.contains(binaries[i], ff);
-    EXPECT_TRUE(ret);
+    EXPECT_TRUE(filter.contains(binaries[i], ff));
+    auto str = playground::cpp::tools::random_string(128);
+    EXPECT_FALSE(filter.contains(str, ff));
   }
 }
