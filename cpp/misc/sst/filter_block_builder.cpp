@@ -30,8 +30,8 @@ void FilterBlockBuilder::startBlock(uint64_t offset) {
 void FilterBlockBuilder::addKey(const tools::Binary& key) {
   // make a copy
   tools::Binary k = key;
-  keys_.append(k.data(), k.size());
   start_.push_back(keys_.size());
+  keys_.append(k.data(), k.size());
 }
 
 tools::Binary FilterBlockBuilder::finish() {
@@ -59,7 +59,7 @@ void FilterBlockBuilder::genFilter() {
   }
   start_.push_back(keys_.size());
   tmp_keys_.resize(num_keys);
-  for (std::size_t i = 0; i < num_keys; ++i) {
+  for (std::size_t i = 0; i < num_keys; i++) {
     const char* base = keys_.data() + start_[i];
     std::size_t len = start_[i + 1] - start_[i];
     tmp_keys_[i] = tools::Binary(base, len);
