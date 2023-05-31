@@ -31,8 +31,6 @@ public:
 
   tools::Binary finish();
 
-  [[nodiscard]] std::size_t size() const;
-
   [[nodiscard]] bool empty() const { return buffer_.empty(); }
 
   [[nodiscard]] std::size_t sizeEstimate() const;

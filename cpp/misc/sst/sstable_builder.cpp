@@ -33,7 +33,7 @@ void SSTableBuilder::add(const tools::Binary& key, const tools::Binary& value) {
   data_block_.add(key, value);
   num_entries_++;
 
-  const size_t s = data_block_.size();
+  const size_t s = data_block_.sizeEstimate();
   if (s >= block_size_) {
     flush();
   }
@@ -43,7 +43,6 @@ void SSTableBuilder::flush() {
   if (!ok() || data_block_.empty()) {
     return;
   }
-
 }
 
 }  // namespace playground::cpp::misc::sst
