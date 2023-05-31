@@ -19,7 +19,7 @@
 TEST(block_builder, test) {
   auto* comparator = playground::cpp::misc::sst::bytewiseComparator();
   playground::cpp::misc::sst::BlockBuilder block_builder(comparator, 16);
-  constexpr int COUNT = 10000;
+  constexpr int COUNT = 10001;
 
   EXPECT_TRUE(block_builder.empty());
 
@@ -55,15 +55,16 @@ TEST(block_builder, test) {
     auto restart = playground::cpp::misc::sst::decodeInt<uint32_t>(&data[size - offset]);
     restarts[i] = restart;
   }
-  // restarts[restart_count] = size - (4 * (restart_count + 1));
-  //
-  // // parse keys and values
-  // for (int i = 0; i < restart_count; ++i) {
-  //   uint32_t start = restarts[i];
-  //   // 计算每一个restart的长度
-  //   uint32_t limit = restarts[i + 1] - start;
-  //   // 解析每一个restart中的key和value
-  // }
+
+  restarts[restart_count] = size - (4 * (restart_count + 1));
+
+  // parse keys and values
+  for (int i = 0; i < restart_count; ++i) {
+    uint32_t start = restarts[i];
+    // 计算每一个restart的长度
+    uint32_t limit = restarts[i + 1] - start;
+    // 解析每一个restart中的key和value
+  }
 
   delete comparator;
 }
