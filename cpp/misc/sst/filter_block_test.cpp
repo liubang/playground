@@ -25,7 +25,7 @@ TEST(filter_block, build_and_read) {
 
   builder.startBlock(0);
   for (int i = 0; i < 1000; ++i) {
-    auto str = playground::cpp::tools::random_string(16);
+    auto str = playground::cpp::tools::random_string(128);
     builder.addKey(str);
     keys.push_back(str);
   }
@@ -36,5 +36,11 @@ TEST(filter_block, build_and_read) {
   for (int i = 0; i < 1000; ++i) {
     auto ret = reader.keyMayMatch(0, keys[i]);
     EXPECT_TRUE(ret);
+  }
+
+  for (int i = 0; i < 1000; ++i) {
+    auto str = playground::cpp::tools::random_string(64);
+    auto ret = reader.keyMayMatch(0, str);
+    EXPECT_FALSE(ret);
   }
 }
