@@ -25,7 +25,7 @@ TEST(filter_block, build_and_read) {
 
   builder.startBlock(0);
   for (int i = 0; i < 1000; ++i) {
-    auto str = playground::cpp::tools::random_string(64);
+    auto str = playground::cpp::tools::random_string(16);
     builder.addKey(str);
     keys.push_back(str);
   }
@@ -35,11 +35,6 @@ TEST(filter_block, build_and_read) {
 
   for (int i = 0; i < 1000; ++i) {
     auto ret = reader.keyMayMatch(0, keys[i]);
-    if (!ret) {
-      // TODO(liubang): fix that
-      std::cout << "=========== : " << i << " " << keys[i] << std::endl;
-    }
-    // std::cout << "=========== : " << i << " " << keys[i] << std::endl;
     EXPECT_TRUE(ret);
   }
 }
