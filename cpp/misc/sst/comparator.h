@@ -7,6 +7,8 @@
 //
 //=====================================================================
 
+#pragma once
+
 #include "cpp/tools/binary.h"
 
 namespace playground::cpp::misc::sst {
