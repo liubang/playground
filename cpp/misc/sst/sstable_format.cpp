@@ -9,6 +9,8 @@
 
 #include "cpp/misc/sst/sstable_format.h"
 #include "cpp/misc/sst/encoding.h"
+#include "cpp/misc/sst/options.h"
+#include "cpp/tools/crc.h"
 
 #include <memory>
 
@@ -72,20 +74,45 @@ tools::Status BlockReader::readBlock(fs::FsReader* reader, const BlockHandle& ha
                                      BlockContents* result) {
   // read block trailer
   auto s = static_cast<std::size_t>(handle.size());
-  std::unique_ptr<char[]> buf = std::make_unique<char[]>(s + kBlockTrailerSize);
+  char* buf = new char[s + kBlockTrailerSize];
 
   tools::Binary content;
-  auto status = reader->read(handle.offset(), s + kBlockTrailerSize, &content, buf.get());
+  auto status = reader->read(handle.offset(), s + kBlockTrailerSize, &content, buf);
   if (!status.isOk()) {
+    delete[] buf;
     return status;
   }
   // invalid content
   if (content.size() != s + kBlockTrailerSize) {
+    delete[] buf;
     return tools::Status::NewCorruption("invalid block");
   }
 
   // crc check
   const char* data = content.data();
+  auto crc = decodeInt<uint32_t>(data);
+  auto actual_crc = tools::crc32(data, s + 1);
+  if (crc != actual_crc) {
+    delete[] buf;
+    return tools::Status::NewCorruption("crc error");
+  }
+
+  // TODO(liubang): support compresstion
+  switch (static_cast<CompressionType>(data[s])) {
+    case CompressionType::kNoCompression:
+    default:
+      if (data != buf) {
+        result->data = tools::Binary(data, s);
+        result->heap_allocated = false;
+        result->cachable = false;
+      } else {
+        result->data = tools::Binary(buf, s);
+        result->heap_allocated = true;
+        result->cachable = true;
+      }
+  }
+
+  return tools::Status::NewOk();
 }
 
 }  // namespace playground::cpp::misc::sst

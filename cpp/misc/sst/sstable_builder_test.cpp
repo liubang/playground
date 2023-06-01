@@ -28,6 +28,7 @@ TEST(sstable_builder, build) {
     delete options->comparator;
     delete options->filter_policy;
     delete options;
+    delete writer;
     delete sstable_builder;
   };
 
