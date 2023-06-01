@@ -15,8 +15,8 @@
 
 namespace playground::cpp::misc::sst {
 
-BlockBuilder::BlockBuilder(const Comparator* comparator, int block_restart_interval)
-    : comparator_(comparator), block_restart_interval_(block_restart_interval) {
+BlockBuilder::BlockBuilder(const Options* options)
+    : comparator_(options->comparator), block_restart_interval_(options->block_restart_interval) {
   restarts_.push_back(0);
 }
 
