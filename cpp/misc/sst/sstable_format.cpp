@@ -10,6 +10,8 @@
 #include "cpp/misc/sst/sstable_format.h"
 #include "cpp/misc/sst/encoding.h"
 
+#include <memory>
+
 namespace playground::cpp::misc::sst {
 
 void BlockHandle::encodeTo(std::string* dst) const {
@@ -64,6 +66,23 @@ tools::Status Footer::decodeFrom(const tools::Binary& input) {
     result = index_handle_.decodeFrom(tools::Binary(input.data() + 16, input.size() - 16));
   }
   return result;
+}
+
+tools::Status BlockReader::readBlock(fs::FsReader* reader, const BlockHandle& handle,
+                                     BlockContents* result) {
+  // read block trailer
+  auto s = static_cast<std::size_t>(handle.size());
+  std::unique_ptr<char[]> buf = std::make_unique<char[]>(s + kBlockTrailerSize);
+
+  tools::Binary content;
+  auto status = reader->read(handle.offset(), s + kBlockTrailerSize, &content, buf.get());
+  if (!status.isOk()) {
+    return status;
+  }
+  // invalid content
+  if (content.size() != s + kBlockTrailerSize) {
+    return tools::Status::NewCorruption("invalid block");
+  }
 }
 
 }  // namespace playground::cpp::misc::sst

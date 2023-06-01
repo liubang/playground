@@ -7,6 +7,7 @@
 //
 //=====================================================================
 
+#include "cpp/misc/fs/fs.h"
 #include "cpp/tools/binary.h"
 #include "cpp/tools/status.h"
 
@@ -73,6 +74,8 @@ struct BlockContents {
 
 class BlockReader {
 public:
+  static tools::Status readBlock(fs::FsReader* reader, const BlockHandle& handle,
+                                 BlockContents* result);
 };
 
 }  // namespace playground::cpp::misc::sst
