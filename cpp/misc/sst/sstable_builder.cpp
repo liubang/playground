@@ -83,6 +83,27 @@ void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
   block->reset();
 }
 
+/*
+ * 所以一个完整的data block的结构为
+ *
+ * +------------------+
+ * |  <key1, value2>  | 
+ * +------------------+
+ * |  <key2, value2>  |
+ * +------------------+
+ * |    ......        |
+ * +------------------+
+ * |  restart idxes   |
+ * +------------------+
+ * |  block trailer   |
+ * +------------------+
+ *
+ *
+ *
+ *
+ *
+ *
+ */
 void SSTableBuilder::writeBlockRaw(const tools::Binary& content, CompressionType type,
                                    BlockHandle* handle) {
   handle->setOffset(offset_);
