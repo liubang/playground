@@ -22,6 +22,8 @@ SSTableBuilder::SSTableBuilder(const Options* options, fs::FsWriter* writer)
                         ? nullptr
                         : new FilterBlockBuilder(options->filter_policy)) {}
 
+SSTableBuilder::~SSTableBuilder() = default;
+
 void SSTableBuilder::add(const tools::Binary& key, const tools::Binary& value) {
   assert(!closed_);
   if (!ok()) {
