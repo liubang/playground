@@ -10,6 +10,7 @@
 #pragma once
 
 #include "cpp/misc/sst/comparator.h"
+#include "cpp/misc/sst/options.h"
 #include "cpp/tools/binary.h"
 
 #include <string>
@@ -22,7 +23,8 @@ namespace playground::cpp::misc::sst {
  */
 class BlockBuilder {
 public:
-  BlockBuilder(const Comparator* comparator, int block_restart_interval);
+  // BlockBuilder(const Comparator* comparator, int block_restart_interval);
+  BlockBuilder(const Options* options);
 
   BlockBuilder(const BlockBuilder&) = delete;
   BlockBuilder& operator=(const BlockBuilder&) = delete;

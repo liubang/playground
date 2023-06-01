@@ -10,8 +10,9 @@
 
 #include "cpp/misc/fs/fs.h"
 #include "cpp/misc/sst/block_builder.h"
-#include "cpp/misc/sst/comparator.h"
 #include "cpp/misc/sst/filter_block_builder.h"
+#include "cpp/misc/sst/options.h"
+#include "cpp/misc/sst/sstable_format.h"
 #include "cpp/tools/binary.h"
 #include "cpp/tools/status.h"
 
@@ -19,7 +20,7 @@ namespace playground::cpp::misc::sst {
 
 class SSTableBuilder {
 public:
-  SSTableBuilder(const Comparator* comparator, fs::FsWriter* writer);
+  SSTableBuilder(const Options& options, fs::FsWriter* writer);
   SSTableBuilder(const SSTableBuilder&) = delete;
   SSTableBuilder& operator=(const SSTableBuilder&) = delete;
   ~SSTableBuilder();
@@ -39,19 +40,22 @@ public:
   [[nodiscard]] bool ok() const { return status().isOk(); }
 
 private:
-  void writeBlock(BlockBuilder* builder);
+  void writeBlock(BlockBuilder* builder, BlockHandle* handle);
+  void writeBlockRaw(const tools::Binary& content, CompressionType type, BlockHandle* handle);
 
 private:
-  const Comparator* comparator_;
+  const Options& options_;
   fs::FsWriter* writer_;
   BlockBuilder data_block_;
   BlockBuilder index_block_;
+  BlockHandle pending_handler_;
   FilterBlockBuilder* filter_block_;
   std::string last_key_;
-  int64_t num_entries_;
-  std::size_t block_size_;
+  int64_t num_entries_{0};
+  uint64_t offset_{0};
   tools::Status status_;
   bool pending_index_entry_{true};
+  bool closed_{false};
 };
 
 }  // namespace playground::cpp::misc::sst

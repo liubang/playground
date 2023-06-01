@@ -10,6 +10,7 @@
 #include "cpp/misc/sst/encoding.h"
 
 #include <gtest/gtest.h>
+#include "cpp/tools/binary.h"
 
 using playground::cpp::tools::Binary;
 

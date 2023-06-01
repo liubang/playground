@@ -11,6 +11,8 @@
 #include "cpp/misc/sst/encoding.h"
 #include "cpp/tools/random.h"
 
+#include "absl/cleanup/cleanup.h"
+
 #include <gtest/gtest.h>
 #include <memory>
 #include <unordered_map>
@@ -18,7 +20,17 @@
 
 TEST(block_builder, test) {
   auto* comparator = playground::cpp::misc::sst::bytewiseComparator();
-  playground::cpp::misc::sst::BlockBuilder block_builder(comparator, 16);
+  auto* options = new playground::cpp::misc::sst::Options();
+
+  absl::Cleanup cleanup = [&]() {
+    delete comparator;
+    delete options;
+  };
+
+  options->comparator = comparator;
+  options->block_restart_interval = 16;
+
+  playground::cpp::misc::sst::BlockBuilder block_builder(options);
   constexpr int COUNT = 10001;
 
   EXPECT_TRUE(block_builder.empty());
@@ -84,6 +96,4 @@ TEST(block_builder, test) {
       start += 12 + non_shared + value_size;
     }
   }
-
-  delete comparator;
 }
