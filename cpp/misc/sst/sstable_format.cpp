@@ -83,6 +83,9 @@ tools::Status BlockReader::readBlock(fs::FsReader* reader, const BlockHandle& ha
   if (content.size() != s + kBlockTrailerSize) {
     return tools::Status::NewCorruption("invalid block");
   }
+
+  // crc check
+  const char* data = content.data();
 }
 
 }  // namespace playground::cpp::misc::sst
