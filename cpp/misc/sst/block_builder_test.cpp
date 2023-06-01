@@ -19,15 +19,14 @@
 #include <vector>
 
 TEST(block_builder, test) {
-  auto* comparator = playground::cpp::misc::sst::bytewiseComparator();
   auto* options = new playground::cpp::misc::sst::Options();
 
   absl::Cleanup cleanup = [&]() {
-    delete comparator;
+    delete options->comparator;
+    delete options->filter_policy;
     delete options;
   };
 
-  options->comparator = comparator;
   options->block_restart_interval = 16;
 
   playground::cpp::misc::sst::BlockBuilder block_builder(options);

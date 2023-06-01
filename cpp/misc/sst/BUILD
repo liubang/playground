@@ -21,17 +21,7 @@ cc_library(
         "sstable_builder.cpp",
         "sstable_format.cpp",
     ],
-    hdrs = [
-        "block_builder.h",
-        "comparator.h",
-        "encoding.h",
-        "filter_block_builder.h",
-        "filter_block_reader.h",
-        "filter_policy.h",
-        "options.h",
-        "sstable_builder.h",
-        "sstable_format.h",
-    ],
+    hdrs = glob(["*.h"]),
     copts = ["-std=c++20"],
     visibility = ["//visibility:public"],
     deps = [
@@ -87,6 +77,20 @@ cc_test(
 cc_test(
     name = "block_builder_test",
     srcs = ["block_builder_test.cpp"],
+    copts = common_copts + [
+        "-std=c++20",
+    ],
+    linkopts = common_linkopts,
+    deps = [
+        ":sstable",
+        "@abseil-cpp//absl/cleanup",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "sstable_builder_test",
+    srcs = ["sstable_builder_test.cpp"],
     copts = common_copts + [
         "-std=c++20",
     ],
