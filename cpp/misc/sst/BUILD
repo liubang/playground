@@ -11,8 +11,8 @@ load("//cpp:opts.bzl", "common_copts", "common_linkopts")
 cc_library(
     name = "sstable",
     srcs = [
+        "block.cpp",
         "block_builder.cpp",
-        "block_iterator.cpp",
         "bloom_filter_policy.cpp",
         "comparator.cpp",
         "filter_block_builder.cpp",

@@ -21,7 +21,11 @@ SSTableBuilder::SSTableBuilder(const Options* options, fs::FsWriter* writer)
                         ? nullptr
                         : new FilterBlockBuilder(options->filter_policy)) {}
 
-SSTableBuilder::~SSTableBuilder() = default;
+SSTableBuilder::~SSTableBuilder() {
+  if (filter_block_ != nullptr) {
+    delete filter_block_;
+  }
+};
 
 void SSTableBuilder::add(const tools::Binary& key, const tools::Binary& value) {
   assert(!closed_);
