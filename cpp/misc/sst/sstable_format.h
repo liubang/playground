@@ -16,6 +16,10 @@
 
 namespace playground::cpp::misc::sst {
 
+/**
+ * @class BlockHandle
+ * @brief 主要是用来构造索引的
+ */
 class BlockHandle {
 public:
   enum { kMaxEncodedLength = 10 + 10 };
@@ -58,7 +62,7 @@ private:
 
 static constexpr uint64_t kTableMagicNumber = 0x833859d02c1dbd75ull;
 
-// type(1B) + crc(4B)
+// compression type(1B) + crc(4B)
 static constexpr uint32_t kBlockTrailerSize = 5;
 
 struct BlockContents {
