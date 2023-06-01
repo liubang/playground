@@ -12,6 +12,7 @@
 #include "cpp/tools/bits.h"
 
 #include <string>
+#include <cstring>
 #include <type_traits>
 
 namespace playground::cpp::misc::sst {
