@@ -71,4 +71,8 @@ struct BlockContents {
   bool heap_allocated;
 };
 
+class BlockReader {
+public:
+};
+
 }  // namespace playground::cpp::misc::sst
