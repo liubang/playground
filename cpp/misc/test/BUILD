@@ -87,5 +87,8 @@ cc_binary(
         "-std=c++20",
     ],
     linkopts = common_linkopts,
-    deps = ["//cpp/misc/sst:sstable"],
+    deps = [
+        "//cpp/misc/sst:sstable",
+        "@abseil-cpp//absl/cleanup",
+    ],
 )

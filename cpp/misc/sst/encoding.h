@@ -7,7 +7,8 @@
 //
 //=====================================================================
 
-#include "cpp/tools/binary.h"
+#pragma once
+
 #include "cpp/tools/bits.h"
 
 #include <string>

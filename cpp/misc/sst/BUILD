@@ -17,7 +17,9 @@ cc_library(
         "filter_block_builder.cpp",
         "filter_block_reader.cpp",
         "filter_policy.cpp",
+        "options.cpp",
         "sstable_builder.cpp",
+        "sstable_format.cpp",
     ],
     hdrs = [
         "block_builder.h",
@@ -26,7 +28,9 @@ cc_library(
         "filter_block_builder.h",
         "filter_block_reader.h",
         "filter_policy.h",
+        "options.h",
         "sstable_builder.h",
+        "sstable_format.h",
     ],
     copts = ["-std=c++20"],
     visibility = ["//visibility:public"],
@@ -88,6 +92,7 @@ cc_test(
     linkopts = common_linkopts,
     deps = [
         ":sstable",
+        "@abseil-cpp//absl/cleanup",
         "@googletest//:gtest_main",
     ],
 )

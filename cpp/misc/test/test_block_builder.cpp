@@ -2,14 +2,24 @@
 #include "cpp/misc/sst/encoding.h"
 #include "cpp/tools/random.h"
 
+#include "absl/cleanup/cleanup.h"
+
 #include <iostream>
 #include <memory>
 
 int main(int argc, char* argv[]) {
   // put your code here
   auto* comparator = playground::cpp::misc::sst::bytewiseComparator();
-  std::unique_ptr<playground::cpp::misc::sst::Comparator> comparator_ptr(comparator);
-  playground::cpp::misc::sst::BlockBuilder block_builder(comparator_ptr.get(), 16);
+  auto* options = new playground::cpp::misc::sst::Options();
+
+  absl::Cleanup cleanup = [&]() {
+    delete comparator;
+    delete options;
+  };
+
+  options->comparator = comparator;
+
+  playground::cpp::misc::sst::BlockBuilder block_builder(options);
   constexpr int COUNT = 1000000;
 
   std::vector<std::string> keys;
