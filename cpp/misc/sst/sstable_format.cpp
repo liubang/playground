@@ -63,10 +63,6 @@ tools::Status Footer::decodeFrom(const tools::Binary& input) {
     // TODO(liubang): 优化没必要的拷贝
     result = index_handle_.decodeFrom(tools::Binary(input.data() + 16, input.size() - 16));
   }
-  // if (result.isOk()) {
-  //   const char* end = magic_ptr + 8;
-  //   input = tools::Binary(end, input.data() + input.size() - end);
-  // }
   return result;
 }
 
