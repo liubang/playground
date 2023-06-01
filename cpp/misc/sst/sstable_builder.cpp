@@ -8,8 +8,7 @@
 //=====================================================================
 #include "cpp/misc/sst/sstable_builder.h"
 #include "cpp/misc/sst/encoding.h"
-
-#include <zlib.h>
+#include "cpp/tools/crc.h"
 
 namespace playground::cpp::misc::sst {
 
@@ -87,7 +86,7 @@ void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
  * 所以一个完整的data block的结构为
  *
  * +------------------+
- * |  <key1, value2>  | 
+ * |  <key1, value2>  |
  * +------------------+
  * |  <key2, value2>  |
  * +------------------+
@@ -113,7 +112,7 @@ void SSTableBuilder::writeBlockRaw(const tools::Binary& content, CompressionType
     // crc
     char trailer[kBlockTrailerSize];
     trailer[0] = static_cast<unsigned char>(type);
-    uint32_t crc = crc32(0L, (const Bytef*)content.data(), content.size());
+    uint32_t crc = tools::crc32(content.data(), content.size());
     std::string encode_crc;
     encodeInt(&encode_crc, crc);
     memcpy(trailer + 1, encode_crc.data(), encode_crc.size());
