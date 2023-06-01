@@ -20,7 +20,7 @@ namespace playground::cpp::misc::sst {
 
 class SSTableBuilder {
 public:
-  SSTableBuilder(const Options& options, fs::FsWriter* writer);
+  SSTableBuilder(const Options* options, fs::FsWriter* writer);
   SSTableBuilder(const SSTableBuilder&) = delete;
   SSTableBuilder& operator=(const SSTableBuilder&) = delete;
   ~SSTableBuilder();
@@ -40,11 +40,11 @@ public:
   [[nodiscard]] bool ok() const { return status().isOk(); }
 
 private:
-  void writeBlock(BlockBuilder* builder, BlockHandle* handle);
+  void writeBlock(BlockBuilder* block, BlockHandle* handle);
   void writeBlockRaw(const tools::Binary& content, CompressionType type, BlockHandle* handle);
 
 private:
-  const Options& options_;
+  const Options* options_;
   fs::FsWriter* writer_;
   BlockBuilder data_block_;
   BlockBuilder index_block_;
@@ -54,7 +54,7 @@ private:
   int64_t num_entries_{0};
   uint64_t offset_{0};
   tools::Status status_;
-  bool pending_index_entry_{true};
+  bool pending_index_entry_{false};
   bool closed_{false};
 };
 

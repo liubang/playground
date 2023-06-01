@@ -13,14 +13,14 @@
 
 namespace playground::cpp::misc::sst {
 
-SSTableBuilder::SSTableBuilder(const Options& options, fs::FsWriter* writer)
+SSTableBuilder::SSTableBuilder(const Options* options, fs::FsWriter* writer)
     : options_(options),
       writer_(writer),
-      data_block_(&options),
-      index_block_(&options),
-      filter_block_(options.filter_policy == nullptr
+      data_block_(options),
+      index_block_(options),
+      filter_block_(options->filter_policy == nullptr
                         ? nullptr
-                        : new FilterBlockBuilder(options.filter_policy)) {}
+                        : new FilterBlockBuilder(options->filter_policy)) {}
 
 void SSTableBuilder::add(const tools::Binary& key, const tools::Binary& value) {
   assert(!closed_);
@@ -38,7 +38,7 @@ void SSTableBuilder::add(const tools::Binary& key, const tools::Binary& value) {
   }
 
   if (num_entries_ > 0) {
-    assert(options_.comparator->compare(key, last_key_) > 0);
+    assert(options_->comparator->compare(key, last_key_) > 0);
   }
 
   if (filter_block_ != nullptr) {
@@ -51,7 +51,7 @@ void SSTableBuilder::add(const tools::Binary& key, const tools::Binary& value) {
 
   const size_t s = data_block_.sizeEstimate();
   // 达到block_size后，就写入
-  if (s >= options_.block_size) {
+  if (s >= options_->block_size) {
     flush();
   }
 }
@@ -73,11 +73,12 @@ void SSTableBuilder::flush() {
   }
 }
 
-void SSTableBuilder::writeBlock(BlockBuilder* builder, BlockHandle* handle) {
+void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
   assert(ok());
-  auto raw = builder->finish();
+  auto raw = block->finish();
   // TODO(liubang): support compression
   writeBlockRaw(raw, CompressionType::kNoCompression, handle);
+  block->reset();
 }
 
 void SSTableBuilder::writeBlockRaw(const tools::Binary& content, CompressionType type,
@@ -115,10 +116,10 @@ tools::Status SSTableBuilder::finish() {
 
   // 写入metaindex block
   if (ok()) {
-    BlockBuilder meta_index_block(&options_);
+    BlockBuilder meta_index_block(options_);
     if (filter_block_ != nullptr) {
       std::string key = "filter.";
-      key.append(options_.filter_policy->name());
+      key.append(options_->filter_policy->name());
       std::string handle_encoding;
       filter_block_handle.encodeTo(&handle_encoding);
       // 记录filter block的类型和位置
