@@ -11,9 +11,9 @@
 #include "cpp/misc/fs/fs.h"
 #include "cpp/tools/random.h"
 
-#include "absl/cleanup/cleanup.h"
 #include <gtest/gtest.h>
 #include <vector>
+#include "absl/cleanup/cleanup.h"
 
 TEST(sstable_builder, build) {
   constexpr int COUNT = 10001;
@@ -24,7 +24,12 @@ TEST(sstable_builder, build) {
 
   auto* sstable_builder = new playground::cpp::misc::sst::SSTableBuilder(options, writer);
 
-  absl::Cleanup cleanup = [&]() { delete sstable_builder; };
+  absl::Cleanup cleanup = [&]() {
+    delete options->comparator;
+    delete options->filter_policy;
+    delete options;
+    delete sstable_builder;
+  };
 
   std::vector<std::string> keys;
   std::unordered_map<std::string, std::string> kvs;

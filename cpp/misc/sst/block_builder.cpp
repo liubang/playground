@@ -59,7 +59,7 @@ void BlockBuilder::add(const tools::Binary& key, const tools::Binary& value) {
 
 tools::Binary BlockBuilder::finish() {
   /*
-   * block footer
+   * restarts indexes
    *
    * +---------------+---------------+--------+---------------+------------------+
    * | restart[0] 4B | restart[1] 4B | ...... | restart[n] 4B | restart count 4B |
