@@ -34,48 +34,86 @@ class Block::BlockIterator : public Iterator {
 public:
   BlockIterator(const Comparator* comparator, const char* data, uint32_t restarts,
                 uint32_t num_restarts)
-      : comparator_(comparator),
-        data_(data),
-        restarts_(restarts),
-        num_restarts_(num_restarts),
-        current_(0),
-        current_end_(0),
-        current_restart_(0) {}
+      : comparator_(comparator), data_(data), restarts_(restarts), num_restarts_(num_restarts) {}
 
   [[nodiscard]] bool valid() const override { return current_ < restarts_; }
   [[nodiscard]] tools::Binary key() const override { return key_; }
   [[nodiscard]] tools::Binary val() const override { return val_; }
 
-  void prev() override {}
-  void next() override {}
-
-public:
-  inline void decodeKeyVal() {
-    if (current_ == current_end_) {
-      if (valid()) {
-        current_restart_++;
-        if (current_restart_ == num_restarts_) {
-          current_end_ = restarts_;
-        } else {
-          auto curr = decodeInt<uint32_t>(data_ + ((current_restart_ - 1) * 4));
-          auto next = decodeInt<uint32_t>(data_ + (current_restart_ * 4));
-          current_end_ = next - curr;
-        }
+  void prev() override {
+    assert(valid());
+    const uint32_t old = current_;
+    while (getRestartOffset(current_restart_) >= old) {
+      if (current_restart_ == 0) {
+        current_ = restarts_;
+        current_restart_ = num_restarts_;
+        return;
       }
+      --current_restart_;
     }
-    assert(current_ + 12 < current_end_);
-    auto shared = playground::cpp::misc::sst::decodeInt<uint32_t>(data_ + current_);
-    auto non_shared = playground::cpp::misc::sst::decodeInt<uint32_t>(data_ + current_ + 4);
-    auto value_size = playground::cpp::misc::sst::decodeInt<uint32_t>(data_ + current_ + 8);
+    seekToRestartPoint(current_restart_);
+    do {
+    } while (parseNextKeyVal() && nextEntryOffset() < old);
+  }
 
-    assert(current_ + 12 + non_shared + value_size <= current_end_);
-    assert(key_.size() >= shared);
+  void next() override {
+    assert(valid());
+    parseNextKeyVal();
+  }
 
-    std::string key(key_.data(), shared);
-    key.append(data_ + current_ + 12, non_shared);
-    key_ = key;
-    val_.reset(data_ + current_ + 12 + non_shared, value_size);
-    current_ += 12 + non_shared + value_size;
+private:
+  uint32_t getRestartOffset(uint32_t idx) {
+    assert(idx < num_restarts_);
+    return decodeInt<uint32_t>(data_ + idx * sizeof(uint32_t));
+  }
+
+  void seekToRestartPoint(uint32_t idx) {
+    key_.clear();
+    current_restart_ = idx;
+    uint32_t offset = getRestartOffset(idx);
+    val_ = tools::Binary(data_ + offset, 0);
+  }
+
+  [[nodiscard]] inline uint32_t nextEntryOffset() const {
+    return (val_.data() + val_.size()) - data_;
+  }
+
+  bool parseNextKeyVal() {
+    current_ = nextEntryOffset();
+    const char* p = data_ + current_;
+    const char* limit = data_ + restarts_;
+    if (p >= limit) {
+      current_ = restarts_;
+      current_restart_ = num_restarts_;
+      return false;
+    }
+    uint32_t shared, non_shared, value_size;
+    p = decodeEntry(p, limit, &shared, &non_shared, &value_size);
+    // TODO(liubang): error handle
+    if (p == nullptr || key_.size() < shared) return false;
+    key_.resize(shared);
+    key_.append(p, non_shared);
+    val_ = tools::Binary(p + non_shared, value_size);
+    while (current_restart_ + 1 < num_restarts_ && getRestartOffset(current_restart_) < current_) {
+      ++current_restart_;
+    }
+
+    return true;
+  }
+
+  const char* decodeEntry(const char* p, const char* limit, uint32_t* shared, uint32_t* non_shared,
+                          uint32_t* value_size) {
+    constexpr std::size_t s = sizeof(uint32_t);
+    if (p + 3 > limit) return nullptr;
+    *shared = playground::cpp::misc::sst::decodeInt<uint32_t>(p);
+    *non_shared = playground::cpp::misc::sst::decodeInt<uint32_t>(p + s);
+    *value_size = playground::cpp::misc::sst::decodeInt<uint32_t>(p + s * 2);
+    p += s * 3;
+    return p;
+  }
+
+  [[nodiscard]] inline int compara(const tools::Binary& a, const tools::Binary& b) const {
+    return comparator_->compare(a, b);
   }
 
 private:
@@ -83,9 +121,8 @@ private:
   const char* data_;              // data block content
   uint32_t const restarts_;       // restart的起始位置
   uint32_t const num_restarts_;   // restart的个数
-  uint32_t current_;              // 当前游标的位置
-  uint32_t current_end_;          // 当前block的结束位置
-  uint32_t current_restart_;      // 当前是第几个restart
+  uint32_t current_{0};           // 当前游标的偏移
+  uint32_t current_restart_{0};   // 当前是第几个restart
   std::string key_;               // 当前游标处的key
   tools::Binary val_;             // 当前游标处的value
 };
