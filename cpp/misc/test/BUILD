@@ -31,7 +31,7 @@ cc_binary(
     copts = common_copts + ["-std=c++20"],
     linkopts = common_linkopts,
     deps = [
-        "//cpp/tools:boost_headers",
+        "//cpp/tools",
     ],
 )
 
