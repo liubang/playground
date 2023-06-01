@@ -9,15 +9,12 @@
 
 int main(int argc, char* argv[]) {
   // put your code here
-  auto* comparator = playground::cpp::misc::sst::bytewiseComparator();
   auto* options = new playground::cpp::misc::sst::Options();
 
   absl::Cleanup cleanup = [&]() {
-    delete comparator;
-    delete options;
+    delete options->comparator;
+    delete options->filter_policy;
   };
-
-  options->comparator = comparator;
 
   playground::cpp::misc::sst::BlockBuilder block_builder(options);
   constexpr int COUNT = 1000000;
