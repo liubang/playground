@@ -35,6 +35,7 @@ cc_library(
         "filter_block_builder.cpp",
         "filter_block_reader.cpp",
         "filter_policy.cpp",
+        "iterator.cpp",
         "options.cpp",
         "sstable_builder.cpp",
         "sstable_format.cpp",
@@ -46,7 +47,6 @@ cc_library(
         "//cpp/misc/bloom:bloom_filter",
         "//cpp/misc/fs",
         "//cpp/tools",
-        "@zlib",
     ],
 )
 
