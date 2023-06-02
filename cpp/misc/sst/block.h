@@ -17,6 +17,7 @@ namespace playground::cpp::misc::sst {
 class Block {
 public:
   explicit Block(const BlockContents& content);
+
   Block(const Block&) = delete;
   Block& operator=(const Block&) = delete;
 
