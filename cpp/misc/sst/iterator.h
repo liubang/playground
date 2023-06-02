@@ -19,8 +19,10 @@ public:
   Iterator(const Iterator&) = delete;
   Iterator& operator=(const Iterator&) = delete;
 
-  virtual ~Iterator();
+  virtual ~Iterator() = default;
 
+  virtual void first() = 0;
+  virtual void last() = 0;
   virtual void next() = 0;
   virtual void prev() = 0;
 
