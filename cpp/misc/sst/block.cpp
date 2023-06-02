@@ -9,6 +9,8 @@
 #include "cpp/misc/sst/block.h"
 #include "cpp/misc/sst/encoding.h"
 
+#include <iostream>
+
 namespace playground::cpp::misc::sst {
 
 Block::Block(const BlockContents& content)
@@ -40,6 +42,17 @@ public:
   [[nodiscard]] tools::Binary key() const override { return key_; }
   [[nodiscard]] tools::Binary val() const override { return val_; }
 
+  void first() override {
+    seekToRestartPoint(0);
+    parseNextKeyVal();
+  }
+
+  void last() override {
+    seekToRestartPoint(num_restarts_ - 1);
+    while (parseNextKeyVal() && nextEntryOffset() < restarts_) {
+    }
+  }
+
   void prev() override {
     assert(valid());
     const uint32_t old = current_;
@@ -60,6 +73,8 @@ public:
     assert(valid());
     parseNextKeyVal();
   }
+
+  ~BlockIterator() override = default;
 
 private:
   uint32_t getRestartOffset(uint32_t idx) {
@@ -126,5 +141,9 @@ private:
   std::string key_;               // 当前游标处的key
   tools::Binary val_;             // 当前游标处的value
 };
+
+Iterator* Block::iterator(const Comparator* comparator) {
+  return new BlockIterator(comparator, data_, restart_offset_, num_restarts_);
+}
 
 }  // namespace playground::cpp::misc::sst
