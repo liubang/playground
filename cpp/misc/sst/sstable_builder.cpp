@@ -86,8 +86,11 @@ void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
   block->reset();
 }
 
-/*                                                     +---------------------+
- * 所以一个完整的data block的结构为                    |  shared size(4B)    |
+/*
+ *
+ *
+ *                                                     +---------------------+
+ *                                                     |  shared size(4B)    |
  *                                                     +---------------------+
  *                                                     | non shared size(4B) |
  *                                  +----------------->+---------------------+
