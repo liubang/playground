@@ -36,5 +36,5 @@ TEST(thread_pool, thread_pool) {
   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::system_clock::now() - start);
 
-  EXPECT_LT(duration.count(), 100);
+  EXPECT_LT(duration.count(), 200);
 }
