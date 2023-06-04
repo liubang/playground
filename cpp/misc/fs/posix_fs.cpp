@@ -7,6 +7,7 @@
 //
 //=====================================================================
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <cassert>
 #include <string>
@@ -139,6 +140,17 @@ public:
 
   PosixFsReader(std::string filename, int fd) : filename_(std::move(filename)), fd_(fd) {
     assert(fd >= 0);
+  }
+
+  [[nodiscard]] std::size_t size() const override {
+    if (fd_ >= 0) {
+      struct stat file_stat;
+      if (::fstat(fd_, &file_stat) == -1) {
+        return 0;
+      }
+      return file_stat.st_size;
+    }
+    return 0;
   }
 
   ~PosixFsReader() override {

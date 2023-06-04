@@ -32,9 +32,12 @@ public:
 
 class FsReader {
 public:
+  virtual ~FsReader();
+
   virtual tools::Status read(uint64_t offset, size_t n, tools::Binary* result,
                              char* scratch) const = 0;
-  virtual ~FsReader();
+
+  [[nodiscard]] virtual std::size_t size() const = 0;
 };
 
 class FsWriter {
