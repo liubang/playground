@@ -12,6 +12,7 @@
 #include "cpp/misc/sst/options.h"
 #include "cpp/tools/crc.h"
 
+#include <iostream>
 #include <memory>
 
 namespace playground::cpp::misc::sst {
@@ -65,7 +66,7 @@ tools::Status Footer::decodeFrom(const tools::Binary& input) {
   tools::Status result = metaindex_handle_.decodeFrom(input);
   if (result.isOk()) {
     // TODO(liubang): 优化没必要的拷贝
-    result = index_handle_.decodeFrom(tools::Binary(input.data() + 16, input.size() - 16));
+    result = index_handle_.decodeFrom(tools::Binary(input.data() + 16, 16));
   }
   return result;
 }
@@ -90,8 +91,8 @@ tools::Status BlockReader::readBlock(fs::FsReader* reader, const BlockHandle& ha
 
   // crc check
   const char* data = content.data();
-  auto crc = decodeInt<uint32_t>(data);
-  auto actual_crc = tools::crc32(data, s + 1);
+  auto crc = decodeInt<uint32_t>(data + s + 1);
+  auto actual_crc = tools::crc32(data, s);
   if (crc != actual_crc) {
     delete[] buf;
     return tools::Status::NewCorruption("crc error");
@@ -102,6 +103,7 @@ tools::Status BlockReader::readBlock(fs::FsReader* reader, const BlockHandle& ha
     case CompressionType::kNoCompression:
     default:
       if (data != buf) {
+        delete[] buf;
         result->data = tools::Binary(data, s);
         result->heap_allocated = false;
         result->cachable = false;

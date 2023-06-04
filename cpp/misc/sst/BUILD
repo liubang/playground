@@ -103,3 +103,17 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+# cc_test(
+#     name = "table_test",
+#     srcs = ["table_test.cpp"],
+#     copts = common_copts + [
+#         "-std=c++20",
+#     ],
+#     linkopts = common_linkopts,
+#     deps = [
+#         ":sstable",
+#         "@abseil-cpp//absl/cleanup",
+#         "@googletest//:gtest_main",
+#     ],
+# )
