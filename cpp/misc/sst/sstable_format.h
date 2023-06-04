@@ -6,6 +6,7 @@
 // Last Modified: 2023/05/31 20:56
 //
 //=====================================================================
+#pragma once
 
 #include "cpp/misc/fs/fs.h"
 #include "cpp/tools/binary.h"

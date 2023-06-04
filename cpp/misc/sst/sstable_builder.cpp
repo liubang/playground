@@ -149,7 +149,19 @@ void SSTableBuilder::writeBlockRaw(const tools::Binary& content, CompressionType
   }
 }
 
-// 主要是记录sst的footer
+/*
+ *
+ * +----------------+
+ * |  filter block  |
+ * +----------------+
+ * | metaindex block|
+ * +----------------+
+ * |  index block   |
+ * +----------------+
+ * |   footer       |
+ * +----------------+
+ *
+ */
 tools::Status SSTableBuilder::finish() {
   assert(!closed_);
   flush();
