@@ -9,16 +9,14 @@
 
 #include "cpp/misc/sst/table.h"
 
+#include <iostream>
 #include <memory>
 
 namespace playground::cpp::misc::sst {
 
-Table::Table(const Options& options, fs::FsReader* reader, const BlockHandle& metaindex_handle,
+Table::Table(const Options* options, fs::FsReader* reader, /*const BlockHandle& metaindex_handle,*/
              Block* index_block)
-    : options_(options),
-      reader_(reader),
-      metaindex_Handle_(metaindex_handle),
-      index_block_(index_block) {}
+    : options_(options), reader_(reader), index_block_(index_block) {}
 
 Table::~Table() {
   if (filter_ != nullptr) delete filter_;
@@ -26,7 +24,7 @@ Table::~Table() {
   if (index_block_ != nullptr) delete index_block_;
 }
 
-tools::Status Table::open(const Options& options, fs::FsReader* reader, uint64_t size,
+tools::Status Table::open(const Options* options, fs::FsReader* reader, uint64_t size,
                           Table** table) {
   *table = nullptr;
   if (size < Footer::kEncodedLength) {
@@ -48,13 +46,13 @@ tools::Status Table::open(const Options& options, fs::FsReader* reader, uint64_t
 
   auto* index_block = new Block(index_block_contents);
 
-  *table = new Table(options, reader, footer.metaindexHandle(), index_block);
+  *table = new Table(options, reader, /* footer.metaindexHandle(), */ index_block);
   (*table)->readMeta(footer);
   return s;
 }
 
 void Table::readMeta(const Footer& footer) {
-  if (options_.filter_policy == nullptr) {
+  if (options_->filter_policy == nullptr) {
     return;
   }
 
@@ -64,10 +62,10 @@ void Table::readMeta(const Footer& footer) {
   }
 
   auto meta = std::make_unique<Block>(contents);
-  auto* iter = meta->iterator(options_.comparator);
+  auto* iter = meta->iterator(options_->comparator);
 
   std::string key = "filter.";
-  key.append(options_.filter_policy->name());
+  key.append(options_->filter_policy->name());
   iter->seek(key);
   if (iter->valid() && iter->key() == tools::Binary(key)) {
     readFilter(iter->val());
@@ -80,16 +78,22 @@ void Table::readFilter(const tools::Binary& filter_handle_value) {
   if (!filter_handle.decodeFrom(filter_handle_value).isOk()) {
     return;
   }
+
   BlockContents block;
   if (!BlockReader::readBlock(reader_, filter_handle, &block).isOk()) {
     return;
   }
-  filter_ = new FilterBlockReader(options_.filter_policy, block.data);
+
+  if (block.heap_allocated) {
+    filter_data_ = block.data.data();
+  }
+
+  filter_ = new FilterBlockReader(options_->filter_policy, block.data);
 }
 
 tools::Status Table::get(const tools::Binary& key, tools::Binary* value) {
   tools::Status s;
-  auto* iiter = index_block_->iterator(options_.comparator);
+  auto* iiter = index_block_->iterator(options_->comparator);
   iiter->seek(key);
   if (iiter->valid()) {
     tools::Binary handle_value = iiter->val();
@@ -97,6 +101,7 @@ tools::Status Table::get(const tools::Binary& key, tools::Binary* value) {
     if (filter_ != nullptr && handle.decodeFrom(handle_value).isOk() &&
         !filter_->keyMayMatch(handle.offset(), key)) {
       // not found
+      s = tools::Status::NewNotFound();
     } else {
       // key may found
       auto* iter = blockReader(iiter->val());
@@ -131,7 +136,7 @@ Iterator* Table::blockReader(const tools::Binary& index_value) {
 
   Iterator* iter = nullptr;
   if (nullptr != block) {
-    iter = block->iterator(options_.comparator);
+    iter = block->iterator(options_->comparator);
     iter->registerCleanup([&block]() { delete block; });
   }
   return iter;

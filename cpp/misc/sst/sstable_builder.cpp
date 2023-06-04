@@ -139,7 +139,7 @@ void SSTableBuilder::writeBlockRaw(const tools::Binary& content, CompressionType
     trailer[0] = static_cast<unsigned char>(type);
     uint32_t crc = tools::crc32(content.data(), content.size());
     std::string encode_crc;
-    encodeInt(&encode_crc, crc);
+    encodeInt<uint32_t>(&encode_crc, crc);
     memcpy(trailer + 1, encode_crc.data(), encode_crc.size());
     status_ = writer_->append(tools::Binary(trailer, kBlockTrailerSize));
     if (ok()) {
@@ -212,6 +212,7 @@ tools::Status SSTableBuilder::finish() {
       offset_ += footer_content.size();
     }
   }
+  writer_->flush();
   return status_;
 }
 
