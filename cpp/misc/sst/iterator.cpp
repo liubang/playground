@@ -13,4 +13,17 @@ namespace playground::cpp::misc::sst {
 
 Iterator::Iterator() = default;
 
+Iterator::~Iterator() {
+  if (cleanup_funcs_.empty()) {
+    return;
+  }
+  while (!cleanup_funcs_.empty()) {
+    const auto func = cleanup_funcs_.front();
+    cleanup_funcs_.pop_front();
+    func();
+  }
 }
+
+void Iterator::registerCleanup(const CleanupFunc& func) { cleanup_funcs_.push_back(func); }
+
+}  // namespace playground::cpp::misc::sst
