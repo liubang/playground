@@ -57,6 +57,7 @@ cc_test(
     name = "utils_test",
     srcs = [
         "utils_test.cpp",
+        "utils_test.h",
     ],
     copts = common_copts + ["-std=c++20"],
     linkopts = common_linkopts,
@@ -80,6 +81,17 @@ cc_test(
 cc_test(
     name = "tuple_iteration_apply_test",
     srcs = ["tuple_iteration_apply_test.cpp"],
+    copts = common_copts + ["-std=c++20"],
+    linkopts = common_linkopts,
+    deps = [
+        "//cpp/meta",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "type_list_test",
+    srcs = ["type_list_test.cpp"],
     copts = common_copts + ["-std=c++20"],
     linkopts = common_linkopts,
     deps = [
