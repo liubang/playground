@@ -7,3 +7,5 @@ IncludeBlocks: Preserve
 FixNamespaceComments: true
 AccessModifierOffset: -2
 AlignEscapedNewlines: Left
+IndentCaseLabels: false
+AllowShortCaseLabelsOnASingleLine: true
