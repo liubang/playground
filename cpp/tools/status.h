@@ -43,22 +43,17 @@ public:
   [[nodiscard]] const std::string& msg() const { return msg_; }
 
   [[nodiscard]] std::string to_string() const {
+    // clang-format off
     switch (code_) {
-      case kOk:
-        return "OK";
-      case kNotFound:
-        return "NotFound";
-      case kCorruption:
-        return "Corruption";
-      case kNotSupported:
-        return "NotSupported";
-      case kInvalidArgument:
-        return "InvalidArgument";
-      case kIOError:
-        return "IOError";
-      default:
-        return "Unknown";
+    case kOk             : return "OK";
+    case kNotFound       : return "NotFound";
+    case kCorruption     : return "Corruption";
+    case kNotSupported   : return "NotSupported";
+    case kInvalidArgument: return "InvalidArgument";
+    case kIOError        : return "IOError";
+    default              : return "Unknown";
     }
+    // clang-format on
   }
 
 private:
