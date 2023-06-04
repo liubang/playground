@@ -22,6 +22,7 @@ cc_library(
         "options.cpp",
         "sstable_builder.cpp",
         "sstable_format.cpp",
+        "table.cpp",
     ],
     hdrs = glob(["*.h"]),
     copts = ["-std=c++20"],
