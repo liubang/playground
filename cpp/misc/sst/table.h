@@ -23,26 +23,25 @@ public:
 
   ~Table();
 
-  static tools::Status open(const Options& options, fs::FsReader* reader, uint64_t size,
+  static tools::Status open(const Options* options, fs::FsReader* reader, uint64_t size,
                             Table** table);
 
   tools::Status get(const tools::Binary& key, tools::Binary* value);
 
 private:
-  Table(const Options& options, fs::FsReader* reader, const BlockHandle& metaindex_handle,
-        Block* index_block);
+  Table(const Options* options, fs::FsReader* reader, Block* index_block);
 
   void readMeta(const Footer& footer);
   void readFilter(const tools::Binary& filter_handle_content);
   Iterator* blockReader(const tools::Binary& index_value);
 
 private:
-  const Options& options_;
+  const Options* options_;
   fs::FsReader* reader_;
   tools::Status status_;
   FilterBlockReader* filter_{nullptr};
-  const char* filter_data_{nullptr};
-  BlockHandle metaindex_Handle_;
+  const char* filter_data_;
+  // BlockHandle metaindex_Handle_;
   Block* index_block_;
 };
 
