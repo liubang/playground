@@ -20,7 +20,7 @@ TEST(sstable_builder, build) {
   auto* options = new playground::cpp::misc::sst::Options();
   playground::cpp::misc::fs::FsWriter* writer;
   auto* fs = playground::cpp::misc::fs::Fs::getInstance();
-  fs->newFsWriter("./test.sst", &writer);
+  fs->newFsWriter("/tmp/test.sst", &writer);
 
   auto* sstable_builder = new playground::cpp::misc::sst::SSTableBuilder(options, writer);
 
