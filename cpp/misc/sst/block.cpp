@@ -41,6 +41,60 @@ public:
   [[nodiscard]] bool valid() const override { return current_ < restarts_; }
   [[nodiscard]] tools::Binary key() const override { return key_; }
   [[nodiscard]] tools::Binary val() const override { return val_; }
+  [[nodiscard]] tools::Status status() const override { return status_; }
+
+  void seek(const tools::Binary& target) override {
+    uint32_t left = 0;
+    uint32_t right = num_restarts_ - 1;
+    int current_key_compare = 0;
+    if (valid()) {
+      current_key_compare = compare(key_, target);
+      if (current_key_compare < 0) {
+        left = current_restart_;
+      } else if (current_key_compare > 0) {
+        right = current_restart_;
+      } else {
+        return;
+      }
+    }
+
+    // binary search
+    while (left < right) {
+      uint32_t mid = (left + right + 1) / 2;
+      uint32_t offset = getRestartOffset(mid);
+      uint32_t shared, non_shared, value_size;
+      const char* key_ptr =
+          decodeEntry(data_ + offset, data_ + restarts_, &shared, &non_shared, &value_size);
+      if (nullptr == key_ptr || (shared != 0)) {
+        status_ = tools::Status::NewCorruption("invalid entry in block");
+        current_ = restarts_;
+        current_restart_ = num_restarts_;
+        key_.clear();
+        val_.clear();
+        return;
+      }
+      tools::Binary mid_key(key_ptr, non_shared);
+      if (compare(mid_key, target) < 0) {
+        left = mid;
+      } else {
+        right = mid - 1;
+      }
+    }
+
+    assert(current_key_compare == 0 || valid());
+    bool skip_seek = left == current_restart_ && current_key_compare < 0;
+    if (!skip_seek) {
+      seekToRestartPoint(left);
+    }
+    while (true) {
+      if (!parseNextKeyVal()) {
+        return;
+      }
+      if (compare(key_, target) >= 0) {
+        return;
+      }
+    }
+  }
 
   void first() override {
     seekToRestartPoint(0);
@@ -127,7 +181,7 @@ private:
     return p;
   }
 
-  [[nodiscard]] inline int compara(const tools::Binary& a, const tools::Binary& b) const {
+  [[nodiscard]] inline int compare(const tools::Binary& a, const tools::Binary& b) const {
     return comparator_->compare(a, b);
   }
 
@@ -140,8 +194,10 @@ private:
   uint32_t current_restart_{0};   // 当前是第几个restart
   std::string key_;               // 当前游标处的key
   tools::Binary val_;             // 当前游标处的value
+  tools::Status status_;
 };
 
+// TODO(liubang): use unique_ptr
 Iterator* Block::iterator(const Comparator* comparator) {
   return new BlockIterator(comparator, data_, restart_offset_, num_restarts_);
 }
