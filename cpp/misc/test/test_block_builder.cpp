@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
 
   // parse all restarts
   std::vector<uint32_t> parsed_restarts;
-  for (int i = 0; i < restart_count; ++i) {
+  for (uint32_t i = 0; i < restart_count; ++i) {
     uint32_t offset = 4 * (i + 2);
     auto restart = playground::cpp::misc::sst::decodeInt<uint32_t>(&data[size - offset]);
     std::cout << restart << std::endl;
