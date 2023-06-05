@@ -92,3 +92,29 @@ cc_binary(
         "@abseil-cpp//absl/cleanup",
     ],
 )
+
+cc_binary(
+    name = "test_boost_coroutine2",
+    srcs = ["test_boost_coroutine2.cpp"],
+    copts = [
+        "-std=c++20",
+    ],
+    # linkopts = common_linkopts,
+    deps = [
+        "//cpp/misc/sst:sstable",
+        "@boost//:coroutine2",
+    ],
+)
+
+cc_binary(
+    name = "test_boost_fiber",
+    srcs = ["test_boost_fiber.cpp"],
+    copts = common_copts + [
+        "-std=c++20",
+    ],
+    linkopts = common_linkopts,
+    deps = [
+        "//cpp/misc/sst:sstable",
+        "@boost//:fiber",
+    ],
+)

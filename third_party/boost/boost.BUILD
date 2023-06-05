@@ -104,9 +104,10 @@ boost_build(
 boost_build(
     name = "fiber",
     lib_source = ":all",
-    out_static_libs = ["libboost_fiber.a"],
+    out_static_libs = ["libboost_fiber*.a"],
     user_options = ["--with-fiber"],
     visibility = ["//visibility:public"],
+    deps = [":context"],
 )
 
 boost_build(
@@ -139,6 +140,7 @@ boost_build(
     out_static_libs = ["libboost_coroutine.a"],
     user_options = ["--with-coroutine"],
     visibility = ["//visibility:public"],
+    deps = [":context"],
 )
 
 boost_build(

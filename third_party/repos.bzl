@@ -11,12 +11,19 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 def external_repositories():
     # boost
+    # http_archive(
+    #     name = "boost",
+    #     build_file = "//third_party/boost:boost.BUILD",
+    #     urls = ["https://boostorg.jfrog.io/artifactory/main/release/1.82.0/source/boost_1_82_0.tar.gz"],
+    #     sha256 = "66a469b6e608a51f8347236f4912e27dc5c60c60d7d53ae9bfe4683316c6f04c",
+    #     strip_prefix = "boost_1_82_0",
+    # )
+
     http_archive(
-        name = "boost",
-        build_file = "//third_party/boost:boost.BUILD",
-        sha256 = "5347464af5b14ac54bb945dc68f1dd7c56f0dad7262816b956138fc53bcc0131",
-        urls = ["https://boostorg.jfrog.io/artifactory/main/release/1.77.0/source/boost_1_77_0.tar.gz"],
-        strip_prefix = "boost_1_77_0",
+        name = "com_github_nelhage_rules_boost",
+        url = "https://github.com/nelhage/rules_boost/archive/89f900b403cb3269e0f9e7fb4d599bbe8e827c45.tar.gz",
+        strip_prefix = "rules_boost-89f900b403cb3269e0f9e7fb4d599bbe8e827c45",
+        sha256 = "e2fdf0b0bca0f5b94431e3f8c9daf15a0181bf95cb4d448a9b42de81ffd31d91",
     )
 
     # liburing
