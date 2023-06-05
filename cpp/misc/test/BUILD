@@ -101,7 +101,6 @@ cc_binary(
     ],
     # linkopts = common_linkopts,
     deps = [
-        "//cpp/misc/sst:sstable",
         "@boost//:coroutine2",
     ],
 )
@@ -114,7 +113,15 @@ cc_binary(
     ],
     linkopts = common_linkopts,
     deps = [
-        "//cpp/misc/sst:sstable",
         "@boost//:fiber",
     ],
+)
+
+cc_binary(
+    name = "test_fs_path",
+    srcs = ["test_fs_path.cpp"],
+    copts = common_copts + [
+        "-std=c++20",
+    ],
+    linkopts = common_linkopts,
 )
