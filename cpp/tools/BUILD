@@ -32,6 +32,7 @@ cc_library(
     linkopts = ["-pthread"],
     visibility = ["//visibility:public"],
     deps = [
-        "@boost//:headers",
+        "@boost//:crc",
+        "@boost//:parameter",
     ],
 )
