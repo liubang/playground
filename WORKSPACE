@@ -26,6 +26,10 @@ load("//third_party:repos.bzl", "external_repositories")
 
 external_repositories()
 
+load("@com_github_nelhage_rules_boost//:boost/boost.bzl", "boost_deps")
+
+boost_deps()
+
 ################ for golang ################
 load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
 load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies")
