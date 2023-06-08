@@ -33,6 +33,5 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "@boost//:crc",
-        "@boost//:parameter",
     ],
 )

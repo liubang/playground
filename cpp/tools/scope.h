@@ -8,7 +8,9 @@
 //=====================================================================
 #pragma once
 
+#include <type_traits>
 #include <utility>
+#include "cpp/tools/preprocessor.h"
 
 namespace playground::cpp::tools {
 
@@ -30,18 +32,18 @@ class ScopeGuard {
 
 namespace detail {
 
-struct ScopeOnExist {};
+enum class ScopeGuardOnExit {};
 template <typename Fn>
-inline ScopeGuard<Fn> operator+(ScopeOnExist, Fn&& fn) {
+inline ScopeGuard<typename std::decay<Fn>::type> operator+(
+    detail::ScopeGuardOnExit,
+    Fn&& fn) {
   return ScopeGuard<Fn>(std::forward<Fn>(fn));
 }
 
 }  // namespace detail
 
-#define SCOPE_EXIT                           \
-  auto __playground_cpp_tools_ScopeGuard__ = \
-      playground::cpp::tools::detail::ScopeOnExist{} + [&]
-
-#define CANCEL_SCOPE_EXIT __playground_cpp_tools_ScopeGuard__.dismiss()
+#define SCOPE_EXIT                                                  \
+  auto PG_ANONYMOUS_VARIABLE(__playground_cpp_tools_ScopeGuard__) = \
+      playground::cpp::tools::detail::ScopeGuardOnExit{} + [&]() noexcept
 
 }  // namespace playground::cpp::tools
