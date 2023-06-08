@@ -15,7 +15,7 @@
 namespace playground::cpp::misc::sst {
 
 class Block {
-public:
+ public:
   explicit Block(const BlockContents& content);
 
   Block(const Block&) = delete;
@@ -25,10 +25,10 @@ public:
 
   Iterator* iterator(const Comparator* comparator);
 
-private:
+ private:
   class BlockIterator;
 
-private:
+ private:
   const char* data_;
   std::size_t size_;
   std::size_t num_restarts_;

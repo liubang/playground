@@ -24,7 +24,8 @@ int main(int argc, char* argv[]) {
     }
   });
 
-  for (auto i : source) std::cout << i << " ";
+  for (auto i : source)
+    std::cout << i << " ";
 
   return 0;
 }

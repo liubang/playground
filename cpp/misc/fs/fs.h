@@ -17,7 +17,7 @@ class FsReader;
 class FsWriter;
 
 class Fs {
-public:
+ public:
   Fs();
   Fs(const Fs&) = delete;
   Fs& operator=(const Fs&) = delete;
@@ -26,22 +26,26 @@ public:
 
   static Fs* getInstance();
 
-  virtual tools::Status newFsReader(const std::string& filename, FsReader** result) = 0;
-  virtual tools::Status newFsWriter(const std::string& filename, FsWriter** result) = 0;
+  virtual tools::Status newFsReader(const std::string& filename,
+                                    FsReader** result) = 0;
+  virtual tools::Status newFsWriter(const std::string& filename,
+                                    FsWriter** result) = 0;
 };
 
 class FsReader {
-public:
+ public:
   virtual ~FsReader();
 
-  virtual tools::Status read(uint64_t offset, size_t n, tools::Binary* result,
+  virtual tools::Status read(uint64_t offset,
+                             size_t n,
+                             tools::Binary* result,
                              char* scratch) const = 0;
 
   [[nodiscard]] virtual std::size_t size() const = 0;
 };
 
 class FsWriter {
-public:
+ public:
   FsWriter() = default;
   FsWriter(const FsWriter&) = delete;
   FsWriter& operator=(const FsWriter&) = delete;

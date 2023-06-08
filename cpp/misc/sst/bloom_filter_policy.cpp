@@ -17,17 +17,21 @@ namespace playground::cpp::misc::sst {
  * @brief this class is a proxy of bloom::BloomFilter
  */
 class BloomFilterPolicy : public FilterPolicy {
-public:
+ public:
   BloomFilterPolicy(std::size_t bits_per_key) : bits_per_key_(bits_per_key) {}
 
   ~BloomFilterPolicy() override = default;
 
-  void createFilter(tools::Binary* keys, std::size_t n, std::string* dst) const override {
+  void createFilter(tools::Binary* keys,
+                    std::size_t n,
+                    std::string* dst) const override {
     bloom::BloomFilter bloom_filter(bits_per_key_);
     bloom_filter.create(keys, n, dst);
   }
 
-  [[nodiscard]] const char* name() const override { return "BloomFilterPolicy"; }
+  [[nodiscard]] const char* name() const override {
+    return "BloomFilterPolicy";
+  }
 
   [[nodiscard]] bool keyMayMatch(const tools::Binary& key,
                                  const tools::Binary& filter) const override {
@@ -35,7 +39,7 @@ public:
     return bloom_filter.contains(key, filter);
   }
 
-private:
+ private:
   std::size_t bits_per_key_;
 };
 

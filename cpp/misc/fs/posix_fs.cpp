@@ -28,13 +28,14 @@ tools::Status posixError(const std::string& context, int err_number) {
 }
 
 class PosixFsWriter final : public FsWriter {
-public:
+ public:
   PosixFsWriter(const PosixFsWriter&) = delete;
   PosixFsWriter(PosixFsWriter&&) = delete;
   PosixFsWriter& operator=(const PosixFsWriter&) = delete;
   PosixFsWriter& operator=(PosixFsWriter&&) = delete;
 
-  PosixFsWriter(std::string filename, int fd) : fd_(fd), filename_(std::move(filename)) {
+  PosixFsWriter(std::string filename, int fd)
+      : fd_(fd), filename_(std::move(filename)) {
     assert(fd >= 0);
   }
 
@@ -47,7 +48,8 @@ public:
   tools::Status append(const tools::Binary& data) override {
     std::size_t write_size = data.size();
     const char* write_data = data.data();
-    std::size_t copy_size = std::min(write_size, kWritableFileBufferSize - pos_);
+    std::size_t copy_size =
+        std::min(write_size, kWritableFileBufferSize - pos_);
     std::memcpy(buf_ + pos_, write_data, copy_size);
     write_data += copy_size;
     write_size -= copy_size;
@@ -90,7 +92,7 @@ public:
     return syncFd(fd_, filename_);
   }
 
-private:
+ private:
   tools::Status writeUnbuffered(const char* data, std::size_t size) {
     while (size > 0) {
       ssize_t write_result = ::write(fd_, data, size);
@@ -124,7 +126,7 @@ private:
     return posixError(filename, errno);
   }
 
-private:
+ private:
   char buf_[kWritableFileBufferSize];
   std::size_t pos_{0};
   int fd_;
@@ -132,13 +134,14 @@ private:
 };
 
 class PosixFsReader final : public FsReader {
-public:
+ public:
   PosixFsReader(const PosixFsReader&) = default;
   PosixFsReader(PosixFsReader&&) = default;
   PosixFsReader& operator=(const PosixFsReader&) = delete;
   PosixFsReader& operator=(PosixFsReader&&) = delete;
 
-  PosixFsReader(std::string filename, int fd) : filename_(std::move(filename)), fd_(fd) {
+  PosixFsReader(std::string filename, int fd)
+      : filename_(std::move(filename)), fd_(fd) {
     assert(fd >= 0);
   }
 
@@ -159,7 +162,9 @@ public:
     }
   };
 
-  tools::Status read(uint64_t offset, std::size_t n, tools::Binary* result,
+  tools::Status read(uint64_t offset,
+                     std::size_t n,
+                     tools::Binary* result,
                      char* scratch) const override {
     tools::Status status;
     ssize_t read_size = ::pread(fd_, scratch, n, static_cast<off_t>(offset));
@@ -170,17 +175,19 @@ public:
     return status;
   }
 
-private:
+ private:
   const std::string filename_;
   int fd_{0};
 };
 
 class PosixFs : public Fs {
-public:
+ public:
   PosixFs() = default;
 
-  tools::Status newFsWriter(const std::string& filename, FsWriter** result) override {
-    int fd = ::open(filename.c_str(), O_TRUNC | O_WRONLY | O_CREAT | kOpenBaseFlags, 0644);
+  tools::Status newFsWriter(const std::string& filename,
+                            FsWriter** result) override {
+    int fd = ::open(filename.c_str(),
+                    O_TRUNC | O_WRONLY | O_CREAT | kOpenBaseFlags, 0644);
     if (fd < 0) {
       *result = nullptr;
       return posixError(filename, errno);
@@ -189,7 +196,8 @@ public:
     return tools::Status::NewOk();
   }
 
-  tools::Status newFsReader(const std::string& filename, FsReader** result) override {
+  tools::Status newFsReader(const std::string& filename,
+                            FsReader** result) override {
     int fd = ::open(filename.c_str(), O_RDONLY | kOpenBaseFlags);
     if (fd < 0) {
       *result = nullptr;
@@ -204,7 +212,7 @@ namespace {
 
 template <typename T>
 class SingletonFs {
-public:
+ public:
   SingletonFs() { new (&fs_storage_) T(); }
   SingletonFs(const SingletonFs&) = delete;
   SingletonFs& operator=(const SingletonFs&) = delete;
@@ -213,7 +221,7 @@ public:
 
   Fs* fs() { return reinterpret_cast<Fs*>(&fs_storage_); }
 
-private:
+ private:
   typename std::aligned_storage<sizeof(T), alignof(T)>::type fs_storage_;
 };
 

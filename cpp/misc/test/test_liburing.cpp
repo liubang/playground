@@ -43,7 +43,10 @@ struct ConnInfo {
 char bufs[BUFFERS_COUNT][MAX_MESSAGE_LEN] = {{0}};
 
 int32_t group_id = 1337;
-void add_accept(io_uring* ring, __u32 fd, sockaddr* client_addr, socklen_t* client_len,
+void add_accept(io_uring* ring,
+                __u32 fd,
+                sockaddr* client_addr,
+                socklen_t* client_len,
                 unsigned flags) {
   io_uring_sqe* sqe = io_uring_get_sqe(ring);
   io_uring_prep_accept(sqe, fd, client_addr, client_len, 0);
@@ -56,7 +59,11 @@ void add_accept(io_uring* ring, __u32 fd, sockaddr* client_addr, socklen_t* clie
   memcpy(&sqe->user_data, &conn_i, sizeof(conn_i));
 }
 
-void add_socket_read(io_uring* ring, __u32 fd, unsigned gid, size_t message_size, unsigned flags) {
+void add_socket_read(io_uring* ring,
+                     __u32 fd,
+                     unsigned gid,
+                     size_t message_size,
+                     unsigned flags) {
   io_uring_sqe* sqe = io_uring_get_sqe(ring);
   io_uring_prep_recv(sqe, fd, nullptr, message_size, 0);
   io_uring_sqe_set_flags(sqe, flags);
@@ -69,7 +76,11 @@ void add_socket_read(io_uring* ring, __u32 fd, unsigned gid, size_t message_size
   memcpy(&sqe->user_data, &conn_i, sizeof(conn_i));
 }
 
-void add_socket_write(io_uring* ring, __u32 fd, __u16 bid, size_t message_size, unsigned flags) {
+void add_socket_write(io_uring* ring,
+                      __u32 fd,
+                      __u16 bid,
+                      size_t message_size,
+                      unsigned flags) {
   io_uring_sqe* sqe = io_uring_get_sqe(ring);
   io_uring_prep_send(sqe, fd, &bufs[bid], message_size, 0);
   io_uring_sqe_set_flags(sqe, flags);
@@ -123,7 +134,8 @@ int main(int argc, char* argv[]) {
     ::perror("Error listening on socket...\n");
     return 1;
   }
-  ::printf("io uring echo server listening for connections on port: %d\n", portno);
+  ::printf("io uring echo server listening for connections on port: %d\n",
+           portno);
 
   io_uring_params params;
   io_uring ring;
@@ -141,7 +153,8 @@ int main(int argc, char* argv[]) {
 
   io_uring_probe* probe;
   probe = io_uring_get_probe_ring(&ring);
-  if ((probe == nullptr) || (io_uring_opcode_supported(probe, IORING_OP_PROVIDE_BUFFERS) == 0)) {
+  if ((probe == nullptr) ||
+      (io_uring_opcode_supported(probe, IORING_OP_PROVIDE_BUFFERS) == 0)) {
     ::printf("Buffer select not supported, skipping...\n");
     return 0;
   }
@@ -152,8 +165,10 @@ int main(int argc, char* argv[]) {
 
   sqe = io_uring_get_sqe(&ring);
   io_uring_prep_provide_buffers(
-      sqe, playground::cpp::misc::liburing::bufs, playground::cpp::misc::liburing::MAX_MESSAGE_LEN,
-      playground::cpp::misc::liburing::BUFFERS_COUNT, playground::cpp::misc::liburing::group_id, 0);
+      sqe, playground::cpp::misc::liburing::bufs,
+      playground::cpp::misc::liburing::MAX_MESSAGE_LEN,
+      playground::cpp::misc::liburing::BUFFERS_COUNT,
+      playground::cpp::misc::liburing::group_id, 0);
 
   io_uring_submit(&ring);
   io_uring_wait_cqe(&ring, &cqe);
@@ -163,8 +178,8 @@ int main(int argc, char* argv[]) {
   }
   io_uring_cqe_seen(&ring, cqe);
 
-  playground::cpp::misc::liburing::add_accept(&ring, sock_listen_fd, (sockaddr*)&client_addr,
-                                              &client_len, 0);
+  playground::cpp::misc::liburing::add_accept(
+      &ring, sock_listen_fd, (sockaddr*)&client_addr, &client_len, 0);
 
   for (;;) {
     io_uring_submit_and_wait(&ring, 1);
@@ -195,24 +210,27 @@ int main(int argc, char* argv[]) {
         if (sock_conn_fd >= 0) {
           playground::cpp::misc::liburing::add_socket_read(
               &ring, sock_conn_fd, playground::cpp::misc::liburing::group_id,
-              playground::cpp::misc::liburing::MAX_MESSAGE_LEN, IOSQE_BUFFER_SELECT);
+              playground::cpp::misc::liburing::MAX_MESSAGE_LEN,
+              IOSQE_BUFFER_SELECT);
         }
-        playground::cpp::misc::liburing::add_accept(&ring, sock_listen_fd, (sockaddr*)&client_addr,
-                                                    &client_len, 0);
+        playground::cpp::misc::liburing::add_accept(
+            &ring, sock_listen_fd, (sockaddr*)&client_addr, &client_len, 0);
       } else if (type == playground::cpp::misc::liburing::Status::READ) {
         size_t bytes_read = cqe->res;
         if (cqe->res <= 0) {
           shutdown(conn_i.fd, SHUT_RDWR);
         } else {
           __u32 bid = cqe->flags >> 16;
-          playground::cpp::misc::liburing::add_socket_write(&ring, conn_i.fd, bid, bytes_read, 0);
+          playground::cpp::misc::liburing::add_socket_write(&ring, conn_i.fd,
+                                                            bid, bytes_read, 0);
         }
       } else if (type == playground::cpp::misc::liburing::Status::WRITE) {
-        playground::cpp::misc::liburing::add_provide_buf(&ring, conn_i.bid,
-                                                         playground::cpp::misc::liburing::group_id);
+        playground::cpp::misc::liburing::add_provide_buf(
+            &ring, conn_i.bid, playground::cpp::misc::liburing::group_id);
         playground::cpp::misc::liburing::add_socket_read(
             &ring, conn_i.fd, playground::cpp::misc::liburing::group_id,
-            playground::cpp::misc::liburing::MAX_MESSAGE_LEN, IOSQE_BUFFER_SELECT);
+            playground::cpp::misc::liburing::MAX_MESSAGE_LEN,
+            IOSQE_BUFFER_SELECT);
       }
     }
 

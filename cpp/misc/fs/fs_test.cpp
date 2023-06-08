@@ -14,9 +14,9 @@
 #include <memory>
 
 TEST(fs, FsWriterAndFsReader) {
-  auto *fs = playground::cpp::misc::fs::Fs::getInstance();
-  playground::cpp::misc::fs::FsWriter *fw;
-  playground::cpp::misc::fs::FsReader *fr;
+  auto* fs = playground::cpp::misc::fs::Fs::getInstance();
+  playground::cpp::misc::fs::FsWriter* fw;
+  playground::cpp::misc::fs::FsReader* fr;
 
   const std::string filename = "./test.log";
   fs->newFsWriter(filename, &fw);
@@ -41,7 +41,8 @@ TEST(fs, FsWriterAndFsReader) {
   char buffer[1024];
   auto status = fr_ptr->read(0, 1024, &result, buffer);
   EXPECT_TRUE(status.isOk());
-  EXPECT_EQ(std::string("hello world"), std::string(result.data(), result.size()));
+  EXPECT_EQ(std::string("hello world"),
+            std::string(result.data(), result.size()));
 
   ::remove(filename.data());
 }

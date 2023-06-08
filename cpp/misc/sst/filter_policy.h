@@ -16,7 +16,7 @@
 namespace playground::cpp::misc::sst {
 
 class FilterPolicy {
-public:
+ public:
   virtual ~FilterPolicy();
 
   /**
@@ -26,7 +26,9 @@ public:
    * @param n [TODO:parameter]
    * @param dst [TODO:parameter]
    */
-  virtual void createFilter(tools::Binary* keys, std::size_t n, std::string* dst) const = 0;
+  virtual void createFilter(tools::Binary* keys,
+                            std::size_t n,
+                            std::string* dst) const = 0;
 
   /**
    * @brief [TODO:description]

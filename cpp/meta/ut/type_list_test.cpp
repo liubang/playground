@@ -19,11 +19,14 @@ TEST(meta, type_list) {
   static_assert(playground::cpp::meta::TL<AList>);
   static_assert(AList::size == 2);
   static_assert(
-      std::is_same_v<AList::prepend<double>, playground::cpp::meta::TypeList<double, int, char>>);
+      std::is_same_v<AList::prepend<double>,
+                     playground::cpp::meta::TypeList<double, int, char>>);
 
   static_assert(
-      std::is_same_v<AList::append<double>, playground::cpp::meta::TypeList<int, char, double>>);
+      std::is_same_v<AList::append<double>,
+                     playground::cpp::meta::TypeList<int, char, double>>);
 
   static_assert(std::is_same_v<AList::to<std::tuple>, std::tuple<int, char>>);
-  static_assert(std::is_same_v<AList::to<std::variant>, std::variant<int, char>>);
+  static_assert(
+      std::is_same_v<AList::to<std::variant>, std::variant<int, char>>);
 }

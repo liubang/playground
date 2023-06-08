@@ -17,7 +17,8 @@ namespace playground::cpp::misc::sst {
 static const size_t kFilterBaseLg = 11;
 constexpr static std::size_t kFilterBase = 1 << kFilterBaseLg;  // 2048
 
-FilterBlockBuilder::FilterBlockBuilder(const FilterPolicy* policy) : filter_policy_(policy) {}
+FilterBlockBuilder::FilterBlockBuilder(const FilterPolicy* policy)
+    : filter_policy_(policy) {}
 
 void FilterBlockBuilder::startBlock(uint64_t offset) {
   uint64_t filter_index = (offset / kFilterBase);
@@ -46,7 +47,8 @@ tools::Binary FilterBlockBuilder::finish() {
     encodeInt(&result_, filter_offset);
   }
 
-  // 记录filter offset的地址偏移量，通过这个偏移量，可以找到哪一段是filter_offsets
+  // 记录filter
+  // offset的地址偏移量，通过这个偏移量，可以找到哪一段是filter_offsets
   encodeInt(&result_, array_offset);
   result_.push_back(kFilterBaseLg);
   return {result_};
@@ -66,7 +68,8 @@ void FilterBlockBuilder::genFilter() {
     tmp_keys_[i] = tools::Binary(base, len);
   }
   filter_offsets_.push_back(result_.size());
-  filter_policy_->createFilter(&tmp_keys_[0], static_cast<int>(num_keys), &result_);
+  filter_policy_->createFilter(&tmp_keys_[0], static_cast<int>(num_keys),
+                               &result_);
 
   tmp_keys_.clear();
   keys_.clear();
