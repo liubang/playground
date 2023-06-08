@@ -1,8 +1,9 @@
 #include "cpp/misc/sst/block_builder.h"
 #include "cpp/misc/sst/encoding.h"
 #include "cpp/tools/random.h"
+#include "cpp/tools/scope.h"
 
-#include "absl/cleanup/cleanup.h"
+// #include "absl/cleanup/cleanup.h"
 
 #include <iostream>
 #include <memory>
@@ -11,7 +12,12 @@ int main(int argc, char* argv[]) {
   // put your code here
   auto* options = new playground::cpp::misc::sst::Options();
 
-  absl::Cleanup cleanup = [&]() {
+  // absl::Cleanup cleanup = [&]() {
+  //   delete options->comparator;
+  //   delete options->filter_policy;
+  // };
+
+  SCOPE_EXIT {
     delete options->comparator;
     delete options->filter_policy;
   };
