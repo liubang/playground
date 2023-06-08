@@ -1,9 +1,9 @@
 #pragma once
 
-#include "cpp/meta/traits.h"
-#include <type_traits>
 #include <cmath>
 #include <limits>
+#include <type_traits>
+#include "cpp/meta/traits.h"
 
 namespace playground::cpp::meta::ut {
 

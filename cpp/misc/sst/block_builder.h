@@ -22,7 +22,7 @@ namespace playground::cpp::misc::sst {
  * data block and index block builder
  */
 class BlockBuilder {
-public:
+ public:
   // BlockBuilder(const Comparator* comparator, int block_restart_interval);
   BlockBuilder(const Options* options);
 
@@ -39,7 +39,7 @@ public:
 
   void reset();
 
-private:
+ private:
   const Comparator* comparator_;
   bool finished_{false};
   int counter_{0};

@@ -128,7 +128,8 @@ void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
  *
  *
  */
-void SSTableBuilder::writeBlockRaw(const tools::Binary& content, CompressionType type,
+void SSTableBuilder::writeBlockRaw(const tools::Binary& content,
+                                   CompressionType type,
                                    BlockHandle* handle) {
   handle->setOffset(offset_);
   handle->setSize(content.size());
@@ -170,7 +171,8 @@ tools::Status SSTableBuilder::finish() {
 
   // 写filter block
   if (ok() && filter_block_ != nullptr) {
-    writeBlockRaw(filter_block_->finish(), CompressionType::kNoCompression, &filter_block_handle);
+    writeBlockRaw(filter_block_->finish(), CompressionType::kNoCompression,
+                  &filter_block_handle);
   }
 
   // 写入metaindex block

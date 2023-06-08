@@ -43,7 +43,8 @@ TEST(Status, constructor) {
   EXPECT_FALSE(not_supported.isInvalidArgument());
   EXPECT_FALSE(not_supported.isIOError());
 
-  auto invalid_argument = playground::cpp::tools::Status::NewInvalidArgument("xxx");
+  auto invalid_argument =
+      playground::cpp::tools::Status::NewInvalidArgument("xxx");
   EXPECT_TRUE(invalid_argument.isInvalidArgument());
   EXPECT_FALSE(invalid_argument.isOk());
   EXPECT_FALSE(invalid_argument.isNotFound());
@@ -73,7 +74,8 @@ TEST(Status, to_string) {
   auto not_supported = playground::cpp::tools::Status::NewNotSupported("xxx");
   EXPECT_EQ("NotSupported", not_supported.to_string());
 
-  auto invalid_argument = playground::cpp::tools::Status::NewInvalidArgument("xxx");
+  auto invalid_argument =
+      playground::cpp::tools::Status::NewInvalidArgument("xxx");
   EXPECT_EQ("InvalidArgument", invalid_argument.to_string());
 
   auto io_error = playground::cpp::tools::Status::NewIOError("xxxx");

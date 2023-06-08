@@ -65,8 +65,10 @@ struct Filter : Out {};  // 边界情况，当列表为空的时候返回空列�
 
 template <template <typename> class P, TL Out, typename H, typename... Ts>
 struct Filter<TypeList<H, Ts...>, P, Out>
-    : std::conditional_t<P<H>::value, Filter<TypeList<Ts...>, P, typename Out::template append<H>>,
-                         Filter<TypeList<Ts...>, P, Out>> {};
+    : std::conditional_t<
+          P<H>::value,
+          Filter<TypeList<Ts...>, P, typename Out::template append<H>>,
+          Filter<TypeList<Ts...>, P, Out>> {};
 
 //-------------------------------------------------------------------------------------------------
 
@@ -78,8 +80,13 @@ struct Return {
 template <TL In, typename Init, template <typename, typename> class Op>
 struct Fold : Return<Init> {};
 
-template <typename Acc, template <typename, typename> class Op, typename H, typename... Ts>
-struct Fold<TypeList<H, Ts...>, Acc, Op> : Fold<TypeList<Ts...>, typename Op<Acc, H>::type, Op> {};
+template <typename Acc,
+          template <typename, typename>
+          class Op,
+          typename H,
+          typename... Ts>
+struct Fold<TypeList<H, Ts...>, Acc, Op>
+    : Fold<TypeList<Ts...>, typename Op<Acc, H>::type, Op> {};
 
 //-------------------------------------------------------------------------------------------------
 
@@ -121,7 +128,7 @@ class Elem {
   using FindE = std::conditional_t<Acc::value, Acc, std::is_same<T, E>>;
   using Found = Fold<In, std::false_type, FindE>::type;
 
-public:
+ public:
   constexpr static bool value = Found::value;
 };
 
@@ -131,9 +138,10 @@ template <TL In>
 class Unique {
   template <TL Acc, typename E>
   // Acc为去重列表, 初始值为空, 如果E在Acc中，则返回Acc，否则将E加入Acc
-  using Append = std::conditional_t<Elem<Acc, E>::value, Acc, typename Acc::template append<E>>;
+  using Append = std::
+      conditional_t<Elem<Acc, E>::value, Acc, typename Acc::template append<E>>;
 
-public:
+ public:
   using type = Fold<In, TypeList<>, Append>::type;
 };
 

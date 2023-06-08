@@ -41,7 +41,8 @@ template <typename TupleT, std::size_t... Is>
 void PrintTupleImpl(const TupleT& tp, std::index_sequence<Is...>) {
   std::size_t index = 0;
   auto print_elem = [&index](const auto& x) {
-    if (index++ > 0) std::cout << ", ";
+    if (index++ > 0)
+      std::cout << ", ";
     std::cout << x;
   };
 
@@ -56,9 +57,12 @@ void PrintTupleFinal(const TupleT& tp) {
 }
 
 template <typename TupleT, std::size_t... Is>
-std::ostream& PrintTupleImplStream(std::ostream& os, const TupleT& tp, std::index_sequence<Is...>) {
+std::ostream& PrintTupleImplStream(std::ostream& os,
+                                   const TupleT& tp,
+                                   std::index_sequence<Is...>) {
   auto print_elem = [&os](const auto& x, std::size_t index) {
-    if (index > 0) os << ", ";
+    if (index > 0)
+      os << ", ";
     os << index << ":" << x;
   };
   os << "(";
@@ -69,7 +73,9 @@ std::ostream& PrintTupleImplStream(std::ostream& os, const TupleT& tp, std::inde
 
 }  // namespace playground::cpp::meta
 
-template <typename TupleT, std::size_t TupleSize = std::tuple_size<TupleT>::value>
+template <typename TupleT,
+          std::size_t TupleSize = std::tuple_size<TupleT>::value>
 inline std::ostream& operator<<(std::ostream& os, const TupleT& tp) {
-  return playground::cpp::meta::PrintTupleImplStream(os, tp, std::make_index_sequence<TupleSize>{});
+  return playground::cpp::meta::PrintTupleImplStream(
+      os, tp, std::make_index_sequence<TupleSize>{});
 }

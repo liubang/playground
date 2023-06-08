@@ -23,7 +23,8 @@ TEST(meta, expression) {
     std::vector<int> x{1, 2, 3}, y{1, 1, 1}, z{2, 5, 3};
     int alpha = 4;
     auto add_scale = [alpha](auto lhs, auto rhs) { return lhs + alpha * rhs; };
-    auto expr = playground::cpp::meta::BinaryContainerExpression(x, y, add_scale);
+    auto expr =
+        playground::cpp::meta::BinaryContainerExpression(x, y, add_scale);
 
     for (std::size_t i = 0; i < expr.size(); ++i) {
       std::cout << expr[i] << " ";

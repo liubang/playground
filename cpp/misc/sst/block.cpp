@@ -14,7 +14,9 @@
 namespace playground::cpp::misc::sst {
 
 Block::Block(const BlockContents& content)
-    : data_(content.data.data()), size_(content.data.size()), owned_(content.heap_allocated) {
+    : data_(content.data.data()),
+      size_(content.data.size()),
+      owned_(content.heap_allocated) {
   num_restarts_ = decodeInt<uint32_t>(data_ + size_ - 4);
   std::size_t max_num_restarts = (size_ - 4) / 4;
   if (num_restarts_ > max_num_restarts) {
@@ -33,10 +35,15 @@ Block::~Block() {
 }
 
 class Block::BlockIterator : public Iterator {
-public:
-  BlockIterator(const Comparator* comparator, const char* data, uint32_t restarts,
+ public:
+  BlockIterator(const Comparator* comparator,
+                const char* data,
+                uint32_t restarts,
                 uint32_t num_restarts)
-      : comparator_(comparator), data_(data), restarts_(restarts), num_restarts_(num_restarts) {}
+      : comparator_(comparator),
+        data_(data),
+        restarts_(restarts),
+        num_restarts_(num_restarts) {}
 
   [[nodiscard]] bool valid() const override { return current_ < restarts_; }
   [[nodiscard]] tools::Binary key() const override { return key_; }
@@ -63,8 +70,8 @@ public:
       uint32_t mid = (left + right + 1) / 2;
       uint32_t offset = getRestartOffset(mid);
       uint32_t shared, non_shared, value_size;
-      const char* key_ptr =
-          decodeEntry(data_ + offset, data_ + restarts_, &shared, &non_shared, &value_size);
+      const char* key_ptr = decodeEntry(data_ + offset, data_ + restarts_,
+                                        &shared, &non_shared, &value_size);
       if (nullptr == key_ptr || (shared != 0)) {
         status_ = tools::Status::NewCorruption("invalid entry in block");
         current_ = restarts_;
@@ -130,7 +137,7 @@ public:
 
   ~BlockIterator() override = default;
 
-private:
+ private:
   uint32_t getRestartOffset(uint32_t idx) {
     assert(idx < num_restarts_);
     return decodeInt<uint32_t>(data_ + idx * sizeof(uint32_t));
@@ -159,21 +166,27 @@ private:
     uint32_t shared, non_shared, value_size;
     p = decodeEntry(p, limit, &shared, &non_shared, &value_size);
     // TODO(liubang): error handle
-    if (p == nullptr || key_.size() < shared) return false;
+    if (p == nullptr || key_.size() < shared)
+      return false;
     key_.resize(shared);
     key_.append(p, non_shared);
     val_ = tools::Binary(p + non_shared, value_size);
-    while (current_restart_ + 1 < num_restarts_ && getRestartOffset(current_restart_) < current_) {
+    while (current_restart_ + 1 < num_restarts_ &&
+           getRestartOffset(current_restart_) < current_) {
       ++current_restart_;
     }
 
     return true;
   }
 
-  const char* decodeEntry(const char* p, const char* limit, uint32_t* shared, uint32_t* non_shared,
+  const char* decodeEntry(const char* p,
+                          const char* limit,
+                          uint32_t* shared,
+                          uint32_t* non_shared,
                           uint32_t* value_size) {
     constexpr std::size_t s = sizeof(uint32_t);
-    if (p + 3 > limit) return nullptr;
+    if (p + 3 > limit)
+      return nullptr;
     *shared = playground::cpp::misc::sst::decodeInt<uint32_t>(p);
     *non_shared = playground::cpp::misc::sst::decodeInt<uint32_t>(p + s);
     *value_size = playground::cpp::misc::sst::decodeInt<uint32_t>(p + s * 2);
@@ -181,11 +194,12 @@ private:
     return p;
   }
 
-  [[nodiscard]] inline int compare(const tools::Binary& a, const tools::Binary& b) const {
+  [[nodiscard]] inline int compare(const tools::Binary& a,
+                                   const tools::Binary& b) const {
     return comparator_->compare(a, b);
   }
 
-private:
+ private:
   const Comparator* comparator_;  // 主要是seek的时候做二分查找的
   const char* data_;              // data block content
   uint32_t const restarts_;       // restart的起始位置

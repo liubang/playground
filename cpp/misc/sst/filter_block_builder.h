@@ -18,7 +18,7 @@
 namespace playground::cpp::misc::sst {
 
 class FilterBlockBuilder {
-public:
+ public:
   explicit FilterBlockBuilder(const FilterPolicy* filter_policy);
 
   FilterBlockBuilder(const FilterBlockBuilder&) = delete;
@@ -30,17 +30,17 @@ public:
 
   tools::Binary finish();
 
-private:
+ private:
   void genFilter();
 
-private:
+ private:
   const FilterPolicy* filter_policy_;
   std::string keys_;                // 所有的key组合成一个大的string
-  std::vector<std::size_t> start_;  // 每一个key在keys_中的偏移,可以通过start_[i + 1] - start_[i]
-                                    // 计算出第i个key的长度
-  std::string result_;                    // 所有的filter都存放在result_中
+  std::vector<std::size_t> start_;  // 每一个key在keys_中的偏移,可以通过start_[i
+                                    // + 1] - start_[i] 计算出第i个key的长度
+  std::string result_;  // 所有的filter都存放在result_中
   std::vector<uint32_t> filter_offsets_;  // 每个filter在result_中的offset
-  std::vector<tools::Binary> tmp_keys_;   // 生成新的filter的时候存储临时的key
+  std::vector<tools::Binary> tmp_keys_;  // 生成新的filter的时候存储临时的key
 };
 
 }  // namespace playground::cpp::misc::sst

@@ -14,17 +14,23 @@
 
 namespace playground::cpp::misc::sst {
 
-Table::Table(const Options* options, fs::FsReader* reader, /*const BlockHandle& metaindex_handle,*/
+Table::Table(const Options* options,
+             fs::FsReader* reader, /*const BlockHandle& metaindex_handle,*/
              Block* index_block)
     : options_(options), reader_(reader), index_block_(index_block) {}
 
 Table::~Table() {
-  if (filter_ != nullptr) delete filter_;
-  if (filter_data_ != nullptr) delete[] filter_data_;
-  if (index_block_ != nullptr) delete index_block_;
+  if (filter_ != nullptr)
+    delete filter_;
+  if (filter_data_ != nullptr)
+    delete[] filter_data_;
+  if (index_block_ != nullptr)
+    delete index_block_;
 }
 
-tools::Status Table::open(const Options* options, fs::FsReader* reader, uint64_t size,
+tools::Status Table::open(const Options* options,
+                          fs::FsReader* reader,
+                          uint64_t size,
                           Table** table) {
   *table = nullptr;
   if (size < Footer::kEncodedLength) {
@@ -32,21 +38,26 @@ tools::Status Table::open(const Options* options, fs::FsReader* reader, uint64_t
   }
   char footer_content[Footer::kEncodedLength];
   tools::Binary footer_input;
-  auto s = reader->read(size - Footer::kEncodedLength, Footer::kEncodedLength, &footer_input,
-                        footer_content);
-  if (!s.isOk()) return s;
+  auto s = reader->read(size - Footer::kEncodedLength, Footer::kEncodedLength,
+                        &footer_input, footer_content);
+  if (!s.isOk())
+    return s;
   Footer footer;
   s = footer.decodeFrom(footer_input);
-  if (!s.isOk()) return s;
+  if (!s.isOk())
+    return s;
 
   // parse index block
   BlockContents index_block_contents;
-  s = BlockReader::readBlock(reader, footer.indexHandle(), &index_block_contents);
-  if (!s.isOk()) return s;
+  s = BlockReader::readBlock(reader, footer.indexHandle(),
+                             &index_block_contents);
+  if (!s.isOk())
+    return s;
 
   auto* index_block = new Block(index_block_contents);
 
-  *table = new Table(options, reader, /* footer.metaindexHandle(), */ index_block);
+  *table =
+      new Table(options, reader, /* footer.metaindexHandle(), */ index_block);
   (*table)->readMeta(footer);
   return s;
 }
@@ -57,7 +68,8 @@ void Table::readMeta(const Footer& footer) {
   }
 
   BlockContents contents;
-  if (BlockReader::readBlock(reader_, footer.metaindexHandle(), &contents).isOk()) {
+  if (BlockReader::readBlock(reader_, footer.metaindexHandle(), &contents)
+          .isOk()) {
     return;
   }
 

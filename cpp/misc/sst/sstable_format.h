@@ -23,10 +23,11 @@ namespace playground::cpp::misc::sst {
  * @brief 主要是用来构造索引的
  */
 class BlockHandle {
-public:
+ public:
   enum { kMaxEncodedLength = 10 + 10 };
 
-  BlockHandle() : offset_(~static_cast<uint64_t>(0)), size_(~static_cast<uint64_t>(0)) {}
+  BlockHandle()
+      : offset_(~static_cast<uint64_t>(0)), size_(~static_cast<uint64_t>(0)) {}
 
   [[nodiscard]] const uint64_t offset() const { return offset_; }
   [[nodiscard]] const uint64_t size() const { return size_; }
@@ -37,27 +38,33 @@ public:
   void encodeTo(std::string* dst) const;
   [[nodiscard]] tools::Status decodeFrom(const tools::Binary& input);
 
-private:
+ private:
   uint64_t offset_;
   uint64_t size_;
 };
 
 class Footer {
-public:
+ public:
   enum { kEncodedLength = 2 * BlockHandle::kMaxEncodedLength + 8 };
 
   Footer() = default;
 
-  void setMetaindexHandle(const BlockHandle& block_handle) { metaindex_handle_ = block_handle; }
-  void setIndexHandle(const BlockHandle& block_handle) { index_handle_ = block_handle; }
+  void setMetaindexHandle(const BlockHandle& block_handle) {
+    metaindex_handle_ = block_handle;
+  }
+  void setIndexHandle(const BlockHandle& block_handle) {
+    index_handle_ = block_handle;
+  }
 
-  [[nodiscard]] const BlockHandle& metaindexHandle() const { return metaindex_handle_; }
+  [[nodiscard]] const BlockHandle& metaindexHandle() const {
+    return metaindex_handle_;
+  }
   [[nodiscard]] const BlockHandle& indexHandle() const { return index_handle_; }
 
   void encodeTo(std::string* dst) const;
   [[nodiscard]] tools::Status decodeFrom(const tools::Binary& input);
 
-private:
+ private:
   BlockHandle metaindex_handle_;
   BlockHandle index_handle_;
 };
@@ -74,8 +81,9 @@ struct BlockContents {
 };
 
 class BlockReader {
-public:
-  static tools::Status readBlock(fs::FsReader* reader, const BlockHandle& handle,
+ public:
+  static tools::Status readBlock(fs::FsReader* reader,
+                                 const BlockHandle& handle,
                                  BlockContents* result);
 };
 

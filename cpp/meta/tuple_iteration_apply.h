@@ -19,7 +19,8 @@ template <typename... Args>
 void PrintImpl(const Args&... tupleArgs) {
   std::size_t index = 0;
   auto print_elem = [&index](const auto& x) {
-    if (index++ > 0) std::cout << ", ";
+    if (index++ > 0)
+      std::cout << ", ";
     std::cout << x;
   };
 
@@ -40,7 +41,8 @@ void PrintTupleApply(const TupleT& tp) {
       [](const auto&... tupleArgs) {
         std::size_t index = 0;
         auto print_elem = [&index](const auto& x) {
-          if (index++ > 0) std::cout << ", ";
+          if (index++ > 0)
+            std::cout << ", ";
           std::cout << x;
         };
         (print_elem(tupleArgs), ...);

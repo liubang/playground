@@ -22,7 +22,8 @@ TEST(sstable_builder, build) {
   auto* fs = playground::cpp::misc::fs::Fs::getInstance();
   fs->newFsWriter("/tmp/test.sst", &writer);
 
-  auto* sstable_builder = new playground::cpp::misc::sst::SSTableBuilder(options, writer);
+  auto* sstable_builder =
+      new playground::cpp::misc::sst::SSTableBuilder(options, writer);
 
   absl::Cleanup cleanup = [&]() {
     delete options->comparator;

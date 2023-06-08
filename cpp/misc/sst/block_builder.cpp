@@ -16,7 +16,8 @@
 namespace playground::cpp::misc::sst {
 
 BlockBuilder::BlockBuilder(const Options* options)
-    : comparator_(options->comparator), block_restart_interval_(options->block_restart_interval) {
+    : comparator_(options->comparator),
+      block_restart_interval_(options->block_restart_interval) {
   restarts_.push_back(0);
 }
 
@@ -75,7 +76,8 @@ tools::Binary BlockBuilder::finish() {
 }
 
 std::size_t BlockBuilder::sizeEstimate() const {
-  return (buffer_.size() + restarts_.size() * sizeof(uint32_t) + sizeof(uint32_t));
+  return (buffer_.size() + restarts_.size() * sizeof(uint32_t) +
+          sizeof(uint32_t));
 }
 
 void BlockBuilder::reset() {

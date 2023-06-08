@@ -19,7 +19,8 @@
 TEST(filter_block, build_and_read) {
   std::unique_ptr<playground::cpp::misc::sst::FilterPolicy> filter_policy_ptr(
       playground::cpp::misc::sst::newBloomFilterPolicy(64));
-  playground::cpp::misc::sst::FilterBlockBuilder builder(filter_policy_ptr.get());
+  playground::cpp::misc::sst::FilterBlockBuilder builder(
+      filter_policy_ptr.get());
 
   std::vector<std::string> keys;
 
@@ -31,7 +32,8 @@ TEST(filter_block, build_and_read) {
   }
 
   auto filter = builder.finish();
-  playground::cpp::misc::sst::FilterBlockReader reader(filter_policy_ptr.get(), filter);
+  playground::cpp::misc::sst::FilterBlockReader reader(filter_policy_ptr.get(),
+                                                       filter);
 
   for (int i = 0; i < 1000; ++i) {
     auto ret = reader.keyMayMatch(0, keys[i]);

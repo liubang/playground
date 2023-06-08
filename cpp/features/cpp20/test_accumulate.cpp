@@ -25,19 +25,26 @@ TEST(modern, test_accumulate) {
     int age;
   };
 
-  std::vector<Person> persons = {{"zhangsan", 10}, {"lisi", 15}, {"wangwu", 11}};
-  sum = std::accumulate(persons.begin(), persons.end(), 0,
-                        [](auto res, const auto& person) { return res + person.age; });
+  std::vector<Person> persons = {
+      {"zhangsan", 10}, {"lisi", 15}, {"wangwu", 11}};
+
+  sum = std::accumulate(
+      persons.begin(), persons.end(), 0,
+      [](auto res, const auto& person) { return res + person.age; });
+
   EXPECT_EQ((10 + 15 + 11), sum);
 
   std::vector<std::string> strs = {"a", "b", "c", "d"};
-  auto joined = std::accumulate(strs.begin() + 1, strs.end(), strs[0],
-                                [](auto res, const auto& str) { return res + "-" + str; });
+  auto joined = std::accumulate(
+      strs.begin() + 1, strs.end(), strs[0],
+      [](auto res, const auto& str) { return res + "-" + str; });
+
   EXPECT_EQ("a-b-c-d", joined);
 
   std::vector<int> a = {1, 2, 3, 4};
-  auto b = std::accumulate(a.begin(), a.end(), 0,
-                           [](auto res, const auto& i) { return res |= (1 << i); });
+  auto b = std::accumulate(a.begin(), a.end(), 0, [](auto res, const auto& i) {
+    return res |= (1 << i);
+  });
 
   auto bs = std::bitset<8>(b).to_string();
   EXPECT_EQ("00011110", bs);

@@ -14,7 +14,8 @@
 
 TEST(comparator, compara) {
   auto* comparator = playground::cpp::misc::sst::bytewiseComparator();
-  std::unique_ptr<playground::cpp::misc::sst::Comparator> comparator_ptr(comparator);
+  std::unique_ptr<playground::cpp::misc::sst::Comparator> comparator_ptr(
+      comparator);
 
   playground::cpp::tools::Binary b1 = "abc";
   playground::cpp::tools::Binary b2 = "abd";

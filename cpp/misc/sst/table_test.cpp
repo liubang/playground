@@ -21,7 +21,8 @@ TEST(table, table) {
   fs->newFsReader("/tmp/test.sst", &reader);
   playground::cpp::misc::sst::Table* table;
 
-  auto s = playground::cpp::misc::sst::Table::open(options, reader, reader->size(), &table);
+  auto s = playground::cpp::misc::sst::Table::open(options, reader,
+                                                   reader->size(), &table);
   EXPECT_TRUE(s.isOk());
   std::cout << s.msg() << std::endl;
 
