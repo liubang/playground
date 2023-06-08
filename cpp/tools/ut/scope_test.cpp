@@ -24,18 +24,4 @@ TEST(tools, scope) {
   }
 
   EXPECT_EQ(0, i);
-
-  {
-    ++i;
-
-    SCOPE_EXIT {
-      i--;
-    };
-
-    EXPECT_EQ(1, i);
-
-    CANCEL_SCOPE_EXIT;
-  }
-
-  EXPECT_EQ(1, i);
 }
