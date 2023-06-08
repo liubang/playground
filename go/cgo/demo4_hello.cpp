@@ -4,4 +4,6 @@ extern "C" {
 
 #include <iostream>
 
-void Demo4SayHello(const char *s) { std::cout << s << std::endl; }
+void Demo4SayHello(const char* s) {
+  std::cout << s << std::endl;
+}

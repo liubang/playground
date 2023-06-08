@@ -58,8 +58,8 @@ tools::Status Footer::decodeFrom(const tools::Binary& input) {
   const char* magic_ptr = input.data() + kEncodedLength - 8;
   const auto magic_lo = decodeInt<uint32_t>(magic_ptr);
   const auto magic_hi = decodeInt<uint32_t>(magic_ptr + 4);
-  const uint64_t magic =
-      ((static_cast<uint64_t>(magic_hi) << 32 | (static_cast<uint64_t>(magic_lo))));
+  const uint64_t magic = ((static_cast<uint64_t>(magic_hi) << 32 |
+                           (static_cast<uint64_t>(magic_lo))));
   if (magic != kTableMagicNumber) {
     return tools::Status::NewCorruption("invalid magic number");
   }
@@ -71,14 +71,16 @@ tools::Status Footer::decodeFrom(const tools::Binary& input) {
   return result;
 }
 
-tools::Status BlockReader::readBlock(fs::FsReader* reader, const BlockHandle& handle,
+tools::Status BlockReader::readBlock(fs::FsReader* reader,
+                                     const BlockHandle& handle,
                                      BlockContents* result) {
   // read block trailer
   auto s = static_cast<std::size_t>(handle.size());
   char* buf = new char[s + kBlockTrailerSize];
 
   tools::Binary content;
-  auto status = reader->read(handle.offset(), s + kBlockTrailerSize, &content, buf);
+  auto status =
+      reader->read(handle.offset(), s + kBlockTrailerSize, &content, buf);
   if (!status.isOk()) {
     delete[] buf;
     return status;
