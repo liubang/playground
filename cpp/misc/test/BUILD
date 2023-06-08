@@ -31,7 +31,9 @@ cc_binary(
     copts = common_copts + ["-std=c++20"],
     linkopts = common_linkopts,
     deps = [
-        "//cpp/tools",
+        "@boost//:mpl",
+        "@boost//:parameter",
+        "@boost//:utility",
     ],
 )
 
@@ -89,7 +91,8 @@ cc_binary(
     linkopts = common_linkopts,
     deps = [
         "//cpp/misc/sst:sstable",
-        "@abseil-cpp//absl/cleanup",
+        "//cpp/tools",
+        # "@abseil-cpp//absl/cleanup",
     ],
 )
 

@@ -10,8 +10,9 @@
 #include "cpp/misc/sst/block_builder.h"
 #include "cpp/misc/sst/block.h"
 #include "cpp/tools/random.h"
+#include "cpp/tools/scope.h"
 
-#include "absl/cleanup/cleanup.h"
+// #include "absl/cleanup/cleanup.h"
 
 #include <gtest/gtest.h>
 #include <memory>
@@ -21,7 +22,13 @@
 TEST(block_builder, test) {
   auto* options = new playground::cpp::misc::sst::Options();
 
-  absl::Cleanup cleanup = [&]() {
+  // absl::Cleanup cleanup = [&]() {
+  //   delete options->comparator;
+  //   delete options->filter_policy;
+  //   delete options;
+  // };
+
+  SCOPE_EXIT {
     delete options->comparator;
     delete options->filter_policy;
     delete options;
@@ -63,7 +70,12 @@ TEST(block_builder, test) {
   playground::cpp::misc::sst::Block b(block_content);
 
   auto* itr = b.iterator(nullptr);
-  absl::Cleanup cleanup1 = [&]() { delete itr; };
+  // absl::Cleanup cleanup1 = [&]() { delete itr; };
+
+  SCOPE_EXIT {
+    delete itr;
+  };
+
   itr->first();
   while (itr->valid()) {
     auto k = itr->key();

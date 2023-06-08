@@ -21,9 +21,8 @@ def external_repositories():
 
     http_archive(
         name = "com_github_nelhage_rules_boost",
-        url = "https://github.com/nelhage/rules_boost/archive/89f900b403cb3269e0f9e7fb4d599bbe8e827c45.tar.gz",
-        strip_prefix = "rules_boost-89f900b403cb3269e0f9e7fb4d599bbe8e827c45",
-        sha256 = "e2fdf0b0bca0f5b94431e3f8c9daf15a0181bf95cb4d448a9b42de81ffd31d91",
+        url = "https://github.com/nelhage/rules_boost/archive/929f5412553c5295d30b16858da7cbefba0d0870.tar.gz",
+        strip_prefix = "rules_boost-929f5412553c5295d30b16858da7cbefba0d0870",
     )
 
     # liburing

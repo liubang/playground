@@ -10,10 +10,11 @@
 #include "cpp/misc/sst/sstable_builder.h"
 #include "cpp/misc/fs/fs.h"
 #include "cpp/tools/random.h"
+#include "cpp/tools/scope.h"
 
 #include <gtest/gtest.h>
 #include <vector>
-#include "absl/cleanup/cleanup.h"
+// #include "absl/cleanup/cleanup.h"
 
 TEST(sstable_builder, build) {
   constexpr int COUNT = 10001;
@@ -25,7 +26,15 @@ TEST(sstable_builder, build) {
   auto* sstable_builder =
       new playground::cpp::misc::sst::SSTableBuilder(options, writer);
 
-  absl::Cleanup cleanup = [&]() {
+  // absl::Cleanup cleanup = [&]() {
+  //   delete options->comparator;
+  //   delete options->filter_policy;
+  //   delete options;
+  //   delete writer;
+  //   delete sstable_builder;
+  // };
+
+  SCOPE_EXIT {
     delete options->comparator;
     delete options->filter_policy;
     delete options;
