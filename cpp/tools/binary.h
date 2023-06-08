@@ -16,7 +16,7 @@
 
 namespace playground::cpp::tools {
 class Binary {
-public:
+ public:
   Binary() : data_(""), size_(0) {}
   Binary(const char* d, size_t n) : data_(d), size_(n) {}
   Binary(const std::string& s) : data_(s.data()), size_(s.size()) {}
@@ -56,13 +56,14 @@ public:
 
   [[nodiscard]] int compare(const Binary& b) const;
 
-private:
+ private:
   const char* data_;
   std::size_t size_;
 };
 
 inline bool operator==(const Binary& a, const Binary& b) {
-  return (a.size() == b.size()) && (::memcmp(a.data(), b.data(), a.size()) == 0);
+  return (a.size() == b.size()) &&
+         (::memcmp(a.data(), b.data(), a.size()) == 0);
 }
 
 inline int Binary::compare(const Binary& b) const {

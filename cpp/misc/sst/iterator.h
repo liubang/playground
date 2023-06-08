@@ -18,7 +18,7 @@
 namespace playground::cpp::misc::sst {
 
 class Iterator {
-public:
+ public:
   Iterator();
   Iterator(const Iterator&) = delete;
   Iterator& operator=(const Iterator&) = delete;
@@ -39,7 +39,7 @@ public:
   using CleanupFunc = std::function<void()>;
   void registerCleanup(const CleanupFunc& function);
 
-private:
+ private:
   std::list<CleanupFunc> cleanup_funcs_;
 };
 

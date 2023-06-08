@@ -37,13 +37,15 @@ int main(int argc, char* argv[]) {
   // try to parse
   const char* data = block.data();
   std::size_t size = block.size();
-  auto restart_count = playground::cpp::misc::sst::decodeInt<uint32_t>(&data[size - 4]);
+  auto restart_count =
+      playground::cpp::misc::sst::decodeInt<uint32_t>(&data[size - 4]);
 
   // parse all restarts
   std::vector<uint32_t> parsed_restarts;
   for (uint32_t i = 0; i < restart_count; ++i) {
     uint32_t offset = 4 * (i + 2);
-    auto restart = playground::cpp::misc::sst::decodeInt<uint32_t>(&data[size - offset]);
+    auto restart =
+        playground::cpp::misc::sst::decodeInt<uint32_t>(&data[size - offset]);
     std::cout << restart << std::endl;
     parsed_restarts.push_back(restart);
   }
