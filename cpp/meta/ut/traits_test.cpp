@@ -27,21 +27,24 @@ TEST(meta, traits) {
   static_assert(false == playground::cpp::meta::is_floating_point<int>::value);
 
   static_assert(playground::cpp::meta::is_same<int, int>::value);
-  static_assert(playground::cpp::meta::is_same<std::string, std::string>::value);
+  static_assert(
+      playground::cpp::meta::is_same<std::string, std::string>::value);
   static_assert(false == playground::cpp::meta::is_same<int, long>::value);
 
-  static_assert(
-      playground::cpp::meta::is_same<int, playground::cpp::meta::remove_const_t<const int>>::value);
-
   static_assert(playground::cpp::meta::is_same<
-                int, playground::cpp::meta::conditional<true, int, std::string>::type>::value);
+                int, playground::cpp::meta::remove_const_t<const int>>::value);
 
   static_assert(
       playground::cpp::meta::is_same<
-          std::string, playground::cpp::meta::conditional<false, int, std::string>::type>::value);
+          int, playground::cpp::meta::conditional<true, int,
+                                                  std::string>::type>::value);
 
-  static_assert(
-      playground::cpp::meta::is_same_v<int, playground::cpp::meta::array_size<int[5]>::value_type>);
+  static_assert(playground::cpp::meta::is_same<
+                std::string, playground::cpp::meta::conditional<
+                                 false, int, std::string>::type>::value);
+
+  static_assert(playground::cpp::meta::is_same_v<
+                int, playground::cpp::meta::array_size<int[5]>::value_type>);
 
   static_assert(playground::cpp::meta::array_size<int[5]>::value == 5);
 

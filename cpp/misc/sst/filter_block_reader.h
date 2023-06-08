@@ -15,13 +15,13 @@
 namespace playground::cpp::misc::sst {
 
 class FilterBlockReader {
-public:
+ public:
   FilterBlockReader(const FilterPolicy* filter_policy,
                     const playground::cpp::tools::Binary& contents);
 
   bool keyMayMatch(uint64_t block_offset, const tools::Binary& key);
 
-private:
+ private:
   const FilterPolicy* filter_policy_;  // filter 策略
   const char* data_;                   //
   const char* offset_;

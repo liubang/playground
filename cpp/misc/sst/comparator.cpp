@@ -14,16 +14,21 @@ namespace playground::cpp::misc::sst {
 Comparator::~Comparator() = default;
 
 class BytewiseComparator : public Comparator {
-public:
+ public:
   BytewiseComparator() = default;
 
-  [[nodiscard]] const char* name() const override { return "BytewiseComparator"; };
+  [[nodiscard]] const char* name() const override {
+    return "BytewiseComparator";
+  };
 
-  [[nodiscard]] int compare(const tools::Binary& a, const tools::Binary& b) const override {
+  [[nodiscard]] int compare(const tools::Binary& a,
+                            const tools::Binary& b) const override {
     return a.compare(b);
   }
 };
 
-Comparator* bytewiseComparator() { return new BytewiseComparator(); }
+Comparator* bytewiseComparator() {
+  return new BytewiseComparator();
+}
 
 }  // namespace playground::cpp::misc::sst
