@@ -14,6 +14,7 @@
 namespace playground::cpp::misc::sst {
 
 Options::Options()
-    : comparator(bytewiseComparator()), filter_policy(newBloomFilterPolicy(bits_per_key)) {}
+    : comparator(bytewiseComparator()),
+      filter_policy(newBloomFilterPolicy(bits_per_key)) {}
 
 }  // namespace playground::cpp::misc::sst

@@ -18,10 +18,18 @@ namespace detail {
 constexpr auto kIsLittleEndian = __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__;
 constexpr auto kIsBigEndian = !kIsLittleEndian;
 
-static inline uint8_t byteswap_gen(uint8_t v) { return uint8_t(v); }
-static inline uint16_t byteswap_gen(uint16_t v) { return __builtin_bswap16(v); }
-static inline uint32_t byteswap_gen(uint32_t v) { return __builtin_bswap32(v); }
-static inline uint64_t byteswap_gen(uint64_t v) { return __builtin_bswap64(v); }
+static inline uint8_t byteswap_gen(uint8_t v) {
+  return uint8_t(v);
+}
+static inline uint16_t byteswap_gen(uint16_t v) {
+  return __builtin_bswap16(v);
+}
+static inline uint32_t byteswap_gen(uint32_t v) {
+  return __builtin_bswap32(v);
+}
+static inline uint64_t byteswap_gen(uint64_t v) {
+  return __builtin_bswap64(v);
+}
 
 template <std::size_t Size>
 struct uint_types_by_size;
@@ -48,9 +56,10 @@ struct uint_types_by_size<8> {
 
 template <class T>
 struct EndianInt {
-  static_assert((std::is_integral<T>::value && !std::is_same<T, bool>::value) ||
-                    std::is_floating_point<T>::value,
-                "template type parameter must be non-bool integral or floating point");
+  static_assert(
+      (std::is_integral<T>::value && !std::is_same<T, bool>::value) ||
+          std::is_floating_point<T>::value,
+      "template type parameter must be non-bool integral or floating point");
 
   static T swap(T x) {
     constexpr auto s = sizeof(T);
@@ -65,13 +74,14 @@ struct EndianInt {
 }  // namespace detail
 
 class Endian {
-public:
+ public:
   enum class Order : uint8_t {
     LITTLE,
     BIG,
   };
 
-  static constexpr Order order = detail::kIsLittleEndian ? Order::LITTLE : Order::BIG;
+  static constexpr Order order =
+      detail::kIsLittleEndian ? Order::LITTLE : Order::BIG;
 
   template <class T>
   static T swap(T x) {

@@ -17,7 +17,7 @@ namespace playground::cpp::misc::arena {
 
 // Reference from Google's leveldb
 class Arena {
-public:
+ public:
   Arena();
   ~Arena();
   Arena(const Arena&) = delete;
@@ -41,11 +41,11 @@ public:
     return memory_usage_.load(std::memory_order_relaxed);
   }
 
-private:
+ private:
   char* allocate_fallback(std::size_t bytes);
   char* allocate_new_block(std::size_t block_bytes);
 
-private:
+ private:
   // allocation state
   char* alloc_ptr_;
 

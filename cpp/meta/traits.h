@@ -106,6 +106,7 @@ template <typename T, typename = void>
 struct HasInit : std::false_type {};
 
 template <typename T>
-struct HasInit<T, void_t<decltype(std::declval<T>().Init())>> : std::true_type {};
+struct HasInit<T, void_t<decltype(std::declval<T>().Init())>> : std::true_type {
+};
 
 }  // namespace playground::cpp::meta

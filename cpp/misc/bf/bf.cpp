@@ -8,7 +8,8 @@ static int operands[64 * 1024], cells[1024 * 1024], i, pc, l;
 int main(int c, char* v[]) {
   if (c < 2)
     exit(1);
-  for (FILE* f = fopen(v[1], "r"); (f != nullptr) && (c = getc(f)) != EOF; operands[i++] = c)
+  for (FILE* f = fopen(v[1], "r"); (f != nullptr) && (c = getc(f)) != EOF;
+       operands[i++] = c)
     ;
   for (i = 0; (c = operands[i]) != 0; i++) {
     // 指针加一

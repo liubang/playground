@@ -21,13 +21,15 @@
 namespace playground::cpp::misc::json {
 
 struct JSONObject {
-  std::variant<std::nullptr_t,                              // null
-               bool,                                        // true|false
-               int,                                         // 123
-               double,                                      // 3.14
-               std::string,                                 // "hello world"
-               std::vector<JSONObject>,                     // [42, "hello", true]
-               std::unordered_map<std::string, JSONObject>  // {"name": "zhangsan", "age": 12}
+  std::variant<std::nullptr_t,           // null
+               bool,                     // true|false
+               int,                      // 123
+               double,                   // 3.14
+               std::string,              // "hello world"
+               std::vector<JSONObject>,  // [42, "hello", true]
+               std::unordered_map<std::string, JSONObject>  // {"name":
+                                                            // "zhangsan",
+                                                            // "age": 12}
                >
       inner;
 
@@ -37,12 +39,12 @@ struct JSONObject {
   }
 
   template <class T>
-  T const &get() const {
+  T const& get() const {
     return std::get<T>(inner);
   }
 
   template <class T>
-  T &get() {
+  T& get() {
     return std::get<T>(inner);
   }
 };
@@ -93,7 +95,8 @@ std::pair<JSONObject, std::size_t> parse(std::string_view json) {
   if (('0' <= json[0] && json[0] <= '9') || json[0] == '+' || json[0] == '-') {
     std::regex num_re{"[+-]?[0-9]+(\\.[0-9]*)?([eE][+-]?[0-9]+)?"};
     std::cmatch match;
-    if (std::regex_search(json.data(), json.data() + json.size(), match, num_re)) {
+    if (std::regex_search(json.data(), json.data() + json.size(), match,
+                          num_re)) {
       std::string str = match.str();
       // if (auto num = try_parse_num<int>(str); num.has_value()) {
       // equals to blow

@@ -19,7 +19,7 @@
 namespace playground::cpp::misc::sst {
 
 class SSTableBuilder {
-public:
+ public:
   SSTableBuilder(const Options* options, fs::FsWriter* writer);
   SSTableBuilder(const SSTableBuilder&) = delete;
   SSTableBuilder& operator=(const SSTableBuilder&) = delete;
@@ -39,11 +39,13 @@ public:
 
   [[nodiscard]] bool ok() const { return status().isOk(); }
 
-private:
+ private:
   void writeBlock(BlockBuilder* block, BlockHandle* handle);
-  void writeBlockRaw(const tools::Binary& content, CompressionType type, BlockHandle* handle);
+  void writeBlockRaw(const tools::Binary& content,
+                     CompressionType type,
+                     BlockHandle* handle);
 
-private:
+ private:
   const Options* options_;
   fs::FsWriter* writer_;
   BlockBuilder data_block_;

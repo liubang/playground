@@ -13,14 +13,18 @@
 
 namespace playground::cpp::tools {
 
-#define NEW_STATUS(name) \
-  static Status New##name(const std::string& msg = "") { return {k##name, msg}; }
+#define NEW_STATUS(name)                                 \
+  static Status New##name(const std::string& msg = "") { \
+    return {k##name, msg};                               \
+  }
 
-#define IS_STATUS(name) \
-  [[nodiscard]] bool is##name() const { return code_ == k##name; }
+#define IS_STATUS(name)                 \
+  [[nodiscard]] bool is##name() const { \
+    return code_ == k##name;            \
+  }
 
 class Status {
-public:
+ public:
   Status() = default;
   Status(const Status&) = default;
 
@@ -56,7 +60,7 @@ public:
     // clang-format on
   }
 
-private:
+ private:
   enum Code {
     kOk = 0,
     kNotFound = 1,
@@ -68,7 +72,7 @@ private:
 
   Status(Code code, std::string msg) : code_(code), msg_(std::move(msg)) {}
 
-private:
+ private:
   Code code_{kOk};
   std::string msg_;
 };
