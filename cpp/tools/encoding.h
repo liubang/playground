@@ -10,7 +10,7 @@
 #pragma once
 
 #include <algorithm>
-#include <cstddef>
+#include <cstdint>
 #include <type_traits>
 
 namespace playground::cpp::tools {
