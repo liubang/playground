@@ -23,7 +23,12 @@
 # Last Modified: 2023/05/26 16:34
 #
 #======================================================================
-load("//cpp:opts.bzl", "common_copts", "common_linkopts")
+load(
+    "//cpp:copts/configure_copts.bzl",
+    "DEFAULT_COPTS",
+    "DEFAULT_LINKOPTS",
+    "TEST_COPTS",
+)
 
 cc_library(
     name = "sstable",
@@ -42,7 +47,8 @@ cc_library(
         "table.cpp",
     ],
     hdrs = glob(["*.h"]),
-    copts = ["-std=c++20"],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
     visibility = ["//visibility:public"],
     deps = [
         "//cpp/misc/bloom:bloom_filter",
@@ -57,10 +63,10 @@ cc_test(
         "encoding.h",
         "encoding_test.cpp",
     ],
-    copts = common_copts + [
+    copts = [
         "-std=c++20",
-    ],
-    linkopts = common_linkopts,
+    ] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
     deps = [
         "//cpp/tools",
         "@googletest//:gtest_main",
@@ -70,10 +76,10 @@ cc_test(
 cc_test(
     name = "filter_block_test",
     srcs = ["filter_block_test.cpp"],
-    copts = common_copts + [
+    copts = [
         "-std=c++20",
-    ],
-    linkopts = common_linkopts,
+    ] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
     deps = [
         ":sstable",
         "@googletest//:gtest_main",
@@ -83,10 +89,10 @@ cc_test(
 cc_test(
     name = "comparator_test",
     srcs = ["comparator_test.cpp"],
-    copts = common_copts + [
+    copts = [
         "-std=c++20",
-    ],
-    linkopts = common_linkopts,
+    ] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
     deps = [
         ":sstable",
         "@googletest//:gtest_main",
@@ -96,10 +102,10 @@ cc_test(
 cc_test(
     name = "block_builder_test",
     srcs = ["block_builder_test.cpp"],
-    copts = common_copts + [
+    copts = [
         "-std=c++20",
-    ],
-    linkopts = common_linkopts,
+    ] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
     deps = [
         ":sstable",
         # "@abseil-cpp//absl/cleanup",
@@ -110,10 +116,10 @@ cc_test(
 cc_test(
     name = "sstable_builder_test",
     srcs = ["sstable_builder_test.cpp"],
-    copts = common_copts + [
+    copts = [
         "-std=c++20",
-    ],
-    linkopts = common_linkopts,
+    ] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
     deps = [
         ":sstable",
         "@googletest//:gtest_main",
