@@ -17,7 +17,7 @@ namespace playground::cpp::tools {
 template <typename Fn>
 class ScopeGuard {
  public:
-  ScopeGuard(Fn&& fn) : fn_(std::move(fn)), enabled_(true) {}
+  ScopeGuard(Fn&& fn) : fn_(std::move(fn)) {}
   ~ScopeGuard() {
     if (enabled_)
       fn_();
@@ -27,7 +27,7 @@ class ScopeGuard {
 
  private:
   Fn fn_;
-  bool enabled_;
+  bool enabled_{true};
 };
 
 namespace detail {

@@ -20,12 +20,7 @@ namespace playground::cpp::misc::fs {
 constexpr const size_t kWritableFileBufferSize = 65536;
 constexpr const int kOpenBaseFlags = O_CLOEXEC;
 
-tools::Status posixError(const std::string& context, int err_number) {
-  if (errno == ENOENT) {
-    return tools::Status::NewNotFound(context + std::strerror(err_number));
-  }
-  return tools::Status::NewIOError(context + std::strerror(err_number));
-}
+tools::Status posixError(const std::string& context, int err_number);
 
 class PosixFsWriter final : public FsWriter {
  public:
@@ -232,6 +227,13 @@ using PosixDefaultFs = SingletonFs<PosixFs>;
 Fs* Fs::getInstance() {
   static PosixDefaultFs posix_default_fs;
   return posix_default_fs.fs();
+}
+
+tools::Status posixError(const std::string& context, int err_number) {
+  if (errno == ENOENT) {
+    return tools::Status::NewNotFound(context + std::strerror(err_number));
+  }
+  return tools::Status::NewIOError(context + std::strerror(err_number));
 }
 
 }  // namespace playground::cpp::misc::fs
