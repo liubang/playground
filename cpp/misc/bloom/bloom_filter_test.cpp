@@ -18,18 +18,23 @@
 
 #include "cpp/misc/bloom/bloom_filter.h"
 #include "cpp/tools/random.h"
+#include "cpp/tools/scope.h"
 
 TEST(bloom, bloom) {
   playground::cpp::misc::bloom::BloomFilter filter(32);
 
-  std::unique_ptr<playground::cpp::tools::Binary[]> binaries_ptr =
-      std::make_unique<playground::cpp::tools::Binary[]>(100);
+  auto* binaries = new playground::cpp::tools::Binary[100];
 
-  auto* binaries = binaries_ptr.get();
+  SCOPE_EXIT {
+    delete[] binaries;
+  };
+
+  std::vector<std::string> strs;
 
   for (int i = 1; i < 100; ++i) {
-    auto str = playground::cpp::tools::random_string(i);
-    binaries[i] = playground::cpp::tools::Binary(str);
+    strs.emplace_back(playground::cpp::tools::random_string(i + 10));
+    binaries[i] =
+        playground::cpp::tools::Binary(strs[i].data(), strs[i].size());
   }
 
   std::string dst;
