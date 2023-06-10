@@ -25,6 +25,14 @@ def external_repositories():
         strip_prefix = "rules_boost-929f5412553c5295d30b16858da7cbefba0d0870",
     )
 
+    # Google benchmark.
+    http_archive(
+        name = "com_github_google_benchmark",  # 2023-01-10T16:48:17Z
+        sha256 = "ede6830512f21490eeea1f238f083702eb178890820c14451c1c3d69fd375b19",
+        strip_prefix = "benchmark-a3235d7b69c84e8c9ff8722a22b8ac5e1bc716a6",
+        urls = ["https://github.com/google/benchmark/archive/a3235d7b69c84e8c9ff8722a22b8ac5e1bc716a6.zip"],
+    )
+
     # liburing
     http_archive(
         name = "liburing",

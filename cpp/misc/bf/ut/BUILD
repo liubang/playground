@@ -6,16 +6,19 @@
 # Last Modified: 2023/05/21 23:03
 #
 #======================================================================
-
-load("//cpp:opts.bzl", "common_copts", "common_linkopts")
+load(
+    "//cpp:copts/configure_copts.bzl",
+    "DEFAULT_LINKOPTS",
+    "TEST_COPTS",
+)
 
 cc_test(
     name = "yabf_test",
     srcs = ["yabf_test.cpp"],
-    copts = common_copts + [
+    copts = [
         "-std=c++20",
-    ],
-    linkopts = common_linkopts,
+    ] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
     deps = [
         "//cpp/misc/bf:yabf",
         "@googletest//:gtest_main",

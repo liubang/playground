@@ -6,7 +6,12 @@
 # Last Modified: 2023/05/21 01:37
 #
 #======================================================================
-load("//cpp:opts.bzl", "common_copts", "common_linkopts")
+load(
+    "//cpp:copts/configure_copts.bzl",
+    "DEFAULT_COPTS",
+    "DEFAULT_LINKOPTS",
+    "TEST_COPTS",
+)
 
 cc_library(
     name = "arena",
@@ -16,9 +21,8 @@ cc_library(
     hdrs = [
         "arena.h",
     ],
-    copts = [
-        "-std=c++20",
-    ],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
     visibility = ["//visibility:public"],
 )
 
@@ -27,10 +31,10 @@ cc_test(
     srcs = [
         "arena_test.cpp",
     ],
-    copts = common_copts + [
+    copts = [
         "-std=c++20",
-    ],
-    linkopts = common_linkopts,
+    ] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
     deps = [
         "//cpp/misc/arena",
         "@googletest//:gtest_main",

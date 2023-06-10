@@ -9,10 +9,11 @@
 
 #include "cpp/misc/sst/table.h"
 #include "cpp/misc/fs/fs.h"
+#include "cpp/tools/scope.h"
 
 #include <gtest/gtest.h>
 #include <iostream>
-#include "absl/cleanup/cleanup.h"
+// #include "absl/cleanup/cleanup.h"
 
 TEST(table, table) {
   auto* options = new playground::cpp::misc::sst::Options();
@@ -26,13 +27,21 @@ TEST(table, table) {
   EXPECT_TRUE(s.isOk());
   std::cout << s.msg() << std::endl;
 
-  absl::Cleanup cleanup = [&]() {
+  SCOPE_EXIT {
     delete options->comparator;
     delete options->filter_policy;
     delete options;
     delete reader;
     delete table;
   };
+
+  // absl::Cleanup cleanup = [&]() {
+  //   delete options->comparator;
+  //   delete options->filter_policy;
+  //   delete options;
+  //   delete reader;
+  //   delete table;
+  // };
 
   constexpr int COUNT = 10001;
 
