@@ -10,6 +10,7 @@
 
 #include <type_traits>
 #include <utility>
+
 #include "cpp/tools/preprocessor.h"
 
 namespace playground::cpp::tools {
@@ -19,8 +20,7 @@ class ScopeGuard {
  public:
   ScopeGuard(Fn&& fn) : fn_(std::move(fn)) {}
   ~ScopeGuard() {
-    if (enabled_)
-      fn_();
+    if (enabled_) fn_();
   }
 
   void dismiss() { enabled_ = false; }
@@ -35,8 +35,7 @@ namespace detail {
 enum class ScopeGuardOnExit {};
 template <typename Fn>
 inline ScopeGuard<typename std::decay<Fn>::type> operator+(
-    detail::ScopeGuardOnExit,
-    Fn&& fn) {
+    detail::ScopeGuardOnExit, Fn&& fn) {
   return ScopeGuard<Fn>(std::forward<Fn>(fn));
 }
 
