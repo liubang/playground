@@ -6,7 +6,6 @@
 // Last Modified: 2023/05/29 22:44
 //
 //=====================================================================
-
 #include <bit>
 #include <cstdint>
 #include <type_traits>
