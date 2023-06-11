@@ -6,9 +6,8 @@
 // Last Modified: 2023/05/21 22:42
 //
 //=====================================================================
-#include <gtest/gtest.h>
-
 #include "cpp/misc/hash/murmurhash2.h"
+#include <gtest/gtest.h>
 
 TEST(hash, murmurhash2_test) {
   const char* data = "hello world";
