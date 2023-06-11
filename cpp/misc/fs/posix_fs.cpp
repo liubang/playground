@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
 #include <cassert>
 #include <string>
 #include <utility>
@@ -157,9 +158,7 @@ class PosixFsReader final : public FsReader {
     }
   };
 
-  tools::Status read(uint64_t offset,
-                     std::size_t n,
-                     tools::Binary* result,
+  tools::Status read(uint64_t offset, std::size_t n, tools::Binary* result,
                      char* scratch) const override {
     tools::Status status;
     ssize_t read_size = ::pread(fd_, scratch, n, static_cast<off_t>(offset));
