@@ -8,7 +8,6 @@
 //=====================================================================
 
 #include "cpp/misc/bloom/bloom_filter.h"
-#include "cpp/misc/hash/murmurhash2.h"
 
 #include <cassert>
 #include <cstring>
@@ -16,14 +15,14 @@
 #include <memory>
 #include <string>
 
+#include "cpp/misc/hash/murmurhash2.h"
+
 namespace playground::cpp::misc::bloom {
 
 BloomFilter::BloomFilter(std::size_t bit_per_key) : bits_per_key_(bit_per_key) {
   hash_count_ = static_cast<size_t>(bit_per_key * 0.69);
-  if (hash_count_ < 1)
-    hash_count_ = 1;
-  if (hash_count_ > 30)
-    hash_count_ = 30;
+  if (hash_count_ < 1) hash_count_ = 1;
+  if (hash_count_ > 30) hash_count_ = 30;
 }
 
 bool BloomFilter::contains(const tools::Binary& key,
@@ -48,8 +47,7 @@ bool BloomFilter::contains(const tools::Binary& key,
   return true;
 }
 
-void BloomFilter::create(const tools::Binary* keys,
-                         std::size_t n,
+void BloomFilter::create(const tools::Binary* keys, std::size_t n,
                          std::string* dst) const {
   std::size_t bit_count = (n * bits_per_key_) << 3;
   uint64_t actual_bit_count = 8;

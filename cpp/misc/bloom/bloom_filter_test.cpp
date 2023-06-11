@@ -6,6 +6,10 @@
 // Last Modified: 2023/05/21 22:51
 //
 //=====================================================================
+#include "cpp/misc/bloom/bloom_filter.h"
+
+#include <gtest/gtest.h>
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdlib>
@@ -14,9 +18,6 @@
 #include <string>
 #include <vector>
 
-#include <gtest/gtest.h>
-
-#include "cpp/misc/bloom/bloom_filter.h"
 #include "cpp/tools/random.h"
 #include "cpp/tools/scope.h"
 
@@ -25,9 +26,7 @@ TEST(bloom, bloom) {
 
   auto* binaries = new playground::cpp::tools::Binary[100];
 
-  SCOPE_EXIT {
-    delete[] binaries;
-  };
+  SCOPE_EXIT { delete[] binaries; };
 
   std::vector<std::string> strs(100);
 
