@@ -6,7 +6,6 @@
 // Last Modified: 2023/05/29 19:36
 //
 //=====================================================================
-
 #pragma once
 
 #include "cpp/misc/sst/comparator.h"

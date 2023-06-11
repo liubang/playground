@@ -6,6 +6,7 @@
 // Last Modified: 2023/06/04 00:36
 //
 //=====================================================================
+#pragma once
 
 #include "cpp/misc/fs/fs.h"
 #include "cpp/misc/sst/block.h"
