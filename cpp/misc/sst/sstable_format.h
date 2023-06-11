@@ -29,8 +29,8 @@ class BlockHandle {
   BlockHandle()
       : offset_(~static_cast<uint64_t>(0)), size_(~static_cast<uint64_t>(0)) {}
 
-  [[nodiscard]] const uint64_t offset() const { return offset_; }
-  [[nodiscard]] const uint64_t size() const { return size_; }
+  [[nodiscard]] uint64_t offset() const { return offset_; }
+  [[nodiscard]] uint64_t size() const { return size_; }
 
   void setOffset(uint64_t offset) { offset_ = offset; }
   void setSize(uint64_t size) { size_ = size; }
