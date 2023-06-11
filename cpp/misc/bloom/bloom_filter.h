@@ -8,11 +8,11 @@
 //=====================================================================
 #pragma once
 
-#include "cpp/tools/binary.h"
-
 #include <cassert>
 #include <cstddef>
 #include <memory>
+
+#include "cpp/tools/binary.h"
 
 namespace playground::cpp::misc::bloom {
 

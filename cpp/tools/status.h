@@ -18,10 +18,8 @@ namespace playground::cpp::tools {
     return {k##name, msg};                               \
   }
 
-#define IS_STATUS(name)                 \
-  [[nodiscard]] bool is##name() const { \
-    return code_ == k##name;            \
-  }
+#define IS_STATUS(name) \
+  [[nodiscard]] bool is##name() const { return code_ == k##name; }
 
 class Status {
  public:
@@ -70,7 +68,7 @@ class Status {
     kIOError = 5
   };
 
-  Status(Code code, std::string msg) : code_(code), msg_(std::move(msg)) {}
+  Status(Code code, std::string_view msg) : code_(code), msg_(msg) {}
 
  private:
   Code code_{kOk};

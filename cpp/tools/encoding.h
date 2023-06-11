@@ -28,8 +28,7 @@ template <>
 struct is_varint_type<uint64_t> : std::true_type {};
 
 template <typename T, std::enable_if_t<is_varint_type<T>::type>* = nullptr>
-inline void* varint_encode(T value,
-                           void* const buffer,
+inline void* varint_encode(T value, void* const buffer,
                            std::size_t buffer_size) {
   static_assert(sizeof(T) <= 8);
   auto min_size = std::min(buffer_size, sizeof(T));
@@ -48,8 +47,7 @@ inline void* varint_encode(T value,
 }
 
 template <typename T, std::enable_if_t<is_varint_type<T>::value>* = nullptr>
-inline void* varint_decode(void* const buffer,
-                           std::size_t buffer_size,
+inline void* varint_decode(void* const buffer, std::size_t buffer_size,
                            T* result) {
   static_assert(sizeof(T) <= 8);
   constexpr auto final_byte_mask =
