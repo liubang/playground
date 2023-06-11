@@ -29,12 +29,11 @@ TEST(bloom, bloom) {
     delete[] binaries;
   };
 
-  std::vector<std::string> strs;
+  std::vector<std::string> strs(100);
 
-  for (int i = 1; i < 100; ++i) {
-    strs.emplace_back(playground::cpp::tools::random_string(i + 10));
-    binaries[i] =
-        playground::cpp::tools::Binary(strs[i].data(), strs[i].size());
+  for (int i = 0; i < 100; ++i) {
+    strs[i] = playground::cpp::tools::random_string(i + 10);
+    binaries[i] = playground::cpp::tools::Binary(strs[i]);
   }
 
   std::string dst;

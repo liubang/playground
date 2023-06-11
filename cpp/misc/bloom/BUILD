@@ -26,17 +26,17 @@ cc_library(
     ],
 )
 
-# cc_test(
-#     name = "bloom_filter_test",
-#     srcs = [
-#         "bloom_filter_test.cpp",
-#     ],
-#     copts = [
-#         "-std=c++20",
-#     ] + TEST_COPTS,
-#     linkopts = DEFAULT_LINKOPTS,
-#     deps = [
-#         "//cpp/misc/bloom:bloom_filter",
-#         "@googletest//:gtest_main",
-#     ],
-# )
+cc_test(
+    name = "bloom_filter_test",
+    srcs = [
+        "bloom_filter_test.cpp",
+    ],
+    copts = [
+        "-std=c++20",
+    ] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        "//cpp/misc/bloom:bloom_filter",
+        "@googletest//:gtest_main",
+    ],
+)
