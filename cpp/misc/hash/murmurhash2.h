@@ -29,10 +29,10 @@ class CMurmurHash final {
   ~CMurmurHash() = default;
 
   void begin(const T seed = 0) {
-    _size = 0;
-    _tail = 0;
-    _count = 0;
-    _hash = seed;
+    size_ = 0;
+    tail_ = 0;
+    count_ = 0;
+    hash_ = seed;
   }
 
   void __attribute__((no_sanitize("alignment")))
@@ -40,7 +40,7 @@ class CMurmurHash final {
     const auto* data1 = static_cast<const uint8_t*>(data);
     T data_size = length;
 
-    _size += data_size;
+    size_ += data_size;
     process_tail(data1, data_size, lower_case);
 
     auto data2 = reinterpret_cast<const T*>(data1);
@@ -50,12 +50,12 @@ class CMurmurHash final {
       while (data2 != stop) {
         T k = *data2++;
         k = std::tolower(k);
-        mmix(_hash, k);
+        mmix(hash_, k);
       }
     } else {
       while (data2 != stop) {
         T k = *data2++;
-        mmix(_hash, k);
+        mmix(hash_, k);
       }
     }
 
@@ -66,12 +66,12 @@ class CMurmurHash final {
   }
 
   T end() {
-    mmix(_hash, _tail);
-    mmix(_hash, _size);
-    _hash ^= _hash >> x;
-    _hash *= m;
-    _hash ^= _hash >> y;
-    return _hash;
+    mmix(hash_, tail_);
+    mmix(hash_, size_);
+    hash_ ^= hash_ >> x;
+    hash_ *= m;
+    hash_ ^= hash_ >> y;
+    return hash_;
   }
 
  private:
@@ -92,18 +92,18 @@ class CMurmurHash final {
   }
 
   void process_tail(const uint8_t*& data, T& length, const bool lower_case) {
-    while (length > 0 && (length < sizeof(T) || _count > 0)) {
+    while (length > 0 && (length < sizeof(T) || count_ > 0)) {
       uint8_t value = *data++;
       if (lower_case && (value >= 'A' && value <= 'Z')) {
         value += 'a' - 'A';
       }
-      _tail |= static_cast<T>(value) << (_count << 3);
-      _count++;
+      tail_ |= static_cast<T>(value) << (count_ << 3);
+      count_++;
       length--;
-      if (_count == sizeof(T)) {
-        mmix(_hash, _tail);
-        _tail = 0;
-        _count = 0;
+      if (count_ == sizeof(T)) {
+        mmix(hash_, tail_);
+        tail_ = 0;
+        count_ = 0;
       }
     }
   }
@@ -111,10 +111,10 @@ class CMurmurHash final {
  private:
   static constexpr T _mask = sizeof(T) - 1;
   static constexpr T _shift = (sizeof(T) == 4 ? 2 : 3);
-  T _size = 0;
-  T _tail = 0;
-  T _count = 0;
-  T _hash = 0;
+  T size_ = 0;
+  T tail_ = 0;
+  T count_ = 0;
+  T hash_ = 0;
 };
 
 using CMurmurHash32 = CMurmurHash<uint32_t, 0x5bd1e995, 24, 13, 15>;
