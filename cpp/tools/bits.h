@@ -17,18 +17,10 @@ namespace detail {
 constexpr auto kIsLittleEndian = __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__;
 constexpr auto kIsBigEndian = !kIsLittleEndian;
 
-static inline uint8_t byteswap_gen(uint8_t v) {
-  return uint8_t(v);
-}
-static inline uint16_t byteswap_gen(uint16_t v) {
-  return __builtin_bswap16(v);
-}
-static inline uint32_t byteswap_gen(uint32_t v) {
-  return __builtin_bswap32(v);
-}
-static inline uint64_t byteswap_gen(uint64_t v) {
-  return __builtin_bswap64(v);
-}
+static inline uint8_t byteswap_gen(uint8_t v) { return uint8_t(v); }
+static inline uint16_t byteswap_gen(uint16_t v) { return __builtin_bswap16(v); }
+static inline uint32_t byteswap_gen(uint32_t v) { return __builtin_bswap32(v); }
+static inline uint64_t byteswap_gen(uint64_t v) { return __builtin_bswap64(v); }
 
 template <std::size_t Size>
 struct uint_types_by_size;

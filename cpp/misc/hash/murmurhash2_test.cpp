@@ -7,6 +7,7 @@
 //
 //=====================================================================
 #include "cpp/misc/hash/murmurhash2.h"
+
 #include <gtest/gtest.h>
 
 TEST(hash, murmurhash2_test) {
