@@ -8,9 +8,13 @@
 //=====================================================================
 
 #include "cpp/tools/ip.h"
+
 #include <gtest/gtest.h>
+
+#include <iostream>
 
 TEST(tools, ip) {
   auto ip = playground::cpp::tools::getLocalIp();
+  std::cout << ip.value() << std::endl;
   EXPECT_FALSE(ip->empty());
 }
