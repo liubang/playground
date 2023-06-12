@@ -16,11 +16,14 @@
 #include <cstring>
 #include <optional>
 #include <string>
+#include <string_view>
+
+#include "cpp/tools/scope.h"
 
 namespace playground::cpp::tools {
 
 inline std::optional<std::string> getLocalIp() {
-  constexpr char REMOTE_ADDRESS[] = "10.255.255.255";
+  static constexpr std::string_view REMOTE_ADDRESS = "10.255.255.255";
 
   struct sockaddr_in remote_server;
   int sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -30,7 +33,7 @@ inline std::optional<std::string> getLocalIp() {
 
   memset(&remote_server, 0, sizeof(remote_server));
   remote_server.sin_family = AF_INET;
-  remote_server.sin_addr.s_addr = inet_addr(REMOTE_ADDRESS);
+  remote_server.sin_addr.s_addr = inet_addr(REMOTE_ADDRESS.data());
   remote_server.sin_port = htons(22);
   int err =
       ::connect(sock, reinterpret_cast<const struct sockaddr*>(&remote_server),
@@ -39,6 +42,7 @@ inline std::optional<std::string> getLocalIp() {
     return std::nullopt;
   }
 
+  SCOPE_EXIT { ::close(sock); };
   struct sockaddr_in local_addr;
   socklen_t local_addr_len = sizeof(local_addr);
   err = getsockname(sock, reinterpret_cast<struct sockaddr*>(&local_addr),
@@ -50,7 +54,7 @@ inline std::optional<std::string> getLocalIp() {
   if (p != nullptr) {
     local_ip = std::string(buffer);
   }
-  ::close(sock);
+
   return local_ip;
 }
 
