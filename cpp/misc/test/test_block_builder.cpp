@@ -10,7 +10,7 @@
 
 int main(int argc, char* argv[]) {
   // put your code here
-  auto* options = new playground::cpp::misc::sst::Options();
+  auto* options = new pl::misc::sst::Options();
 
   // absl::Cleanup cleanup = [&]() {
   //   delete options->comparator;
@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) {
     delete options->filter_policy;
   };
 
-  playground::cpp::misc::sst::BlockBuilder block_builder(options);
+  pl::misc::sst::BlockBuilder block_builder(options);
   constexpr int COUNT = 1000000;
 
   std::vector<std::string> keys;
@@ -35,7 +35,7 @@ int main(int argc, char* argv[]) {
   std::sort(keys.begin(), keys.end());
 
   for (int i = 0; i < COUNT; ++i) {
-    auto val = playground::cpp::tools::random_string(64);
+    auto val = pl::tools::random_string(64);
     block_builder.add(keys[i], val);
   }
 
@@ -44,14 +44,14 @@ int main(int argc, char* argv[]) {
   const char* data = block.data();
   std::size_t size = block.size();
   auto restart_count =
-      playground::cpp::misc::sst::decodeInt<uint32_t>(&data[size - 4]);
+      pl::misc::sst::decodeInt<uint32_t>(&data[size - 4]);
 
   // parse all restarts
   std::vector<uint32_t> parsed_restarts;
   for (uint32_t i = 0; i < restart_count; ++i) {
     uint32_t offset = 4 * (i + 2);
     auto restart =
-        playground::cpp::misc::sst::decodeInt<uint32_t>(&data[size - offset]);
+        pl::misc::sst::decodeInt<uint32_t>(&data[size - offset]);
     std::cout << restart << std::endl;
     parsed_restarts.push_back(restart);
   }

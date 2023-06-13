@@ -16,13 +16,13 @@
 // #include "absl/cleanup/cleanup.h"
 
 TEST(table, table) {
-  auto* options = new playground::cpp::misc::sst::Options();
-  playground::cpp::misc::fs::FsReader* reader;
-  auto* fs = playground::cpp::misc::fs::Fs::getInstance();
+  auto* options = new pl::misc::sst::Options();
+  pl::misc::fs::FsReader* reader;
+  auto* fs = pl::misc::fs::Fs::getInstance();
   fs->newFsReader("/tmp/test.sst", &reader);
-  playground::cpp::misc::sst::Table* table;
+  pl::misc::sst::Table* table;
 
-  auto s = playground::cpp::misc::sst::Table::open(options, reader,
+  auto s = pl::misc::sst::Table::open(options, reader,
                                                    reader->size(), &table);
   EXPECT_TRUE(s.isOk());
   std::cout << s.msg() << std::endl;
@@ -48,7 +48,7 @@ TEST(table, table) {
   for (int i = 0; i < COUNT; ++i) {
     const std::string key_prefix = "test_key_";
     std::string key = key_prefix + std::to_string(i);
-    playground::cpp::tools::Binary val;
+    pl::tools::Binary val;
     auto s = table->get(key, &val);
     EXPECT_TRUE(s.isOk());
   }

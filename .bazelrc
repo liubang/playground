@@ -15,6 +15,7 @@ build --jobs 8
 
 # for java
 build --nojava_header_compilation
+build --cxxopt=-std=c++20
 
 # bazel build
 test --test_output=all --action_env="GTEST_COLOR=1"

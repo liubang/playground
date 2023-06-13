@@ -12,7 +12,7 @@
 #include <iostream>
 #include <memory>
 
-namespace playground::cpp::misc::sst {
+namespace pl::misc::sst {
 
 Table::Table(const Options* options,
              fs::FsReader* reader, /*const BlockHandle& metaindex_handle,*/
@@ -154,4 +154,4 @@ Iterator* Table::blockReader(const tools::Binary& index_value) {
   return iter;
 }
 
-}  // namespace playground::cpp::misc::sst
+}  // namespace pl::misc::sst

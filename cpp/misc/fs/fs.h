@@ -10,7 +10,7 @@
 
 #include "cpp/tools/binary.h"
 #include "cpp/tools/status.h"
-namespace playground::cpp::misc::fs {
+namespace pl::misc::fs {
 
 class FsReader;
 class FsWriter;
@@ -53,4 +53,4 @@ class FsWriter {
   virtual tools::Status sync() = 0;
 };
 
-}  // namespace playground::cpp::misc::fs
+}  // namespace pl::misc::fs

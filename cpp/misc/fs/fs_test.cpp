@@ -15,20 +15,20 @@
 #include <memory>
 
 TEST(fs, FsWriterAndFsReader) {
-  auto* fs = playground::cpp::misc::fs::Fs::getInstance();
-  playground::cpp::misc::fs::FsWriter* fw;
-  playground::cpp::misc::fs::FsReader* fr;
+  auto* fs = pl::misc::fs::Fs::getInstance();
+  pl::misc::fs::FsWriter* fw;
+  pl::misc::fs::FsReader* fr;
 
   const std::string filename = "./test.log";
   fs->newFsWriter(filename, &fw);
   EXPECT_NE(fw, nullptr);
-  std::unique_ptr<playground::cpp::misc::fs::FsWriter> fw_ptr(fw);
+  std::unique_ptr<pl::misc::fs::FsWriter> fw_ptr(fw);
 
   fs->newFsReader(filename, &fr);
   EXPECT_NE(fr, nullptr);
-  std::unique_ptr<playground::cpp::misc::fs::FsReader> fr_ptr(fr);
+  std::unique_ptr<pl::misc::fs::FsReader> fr_ptr(fr);
 
-  playground::cpp::tools::Binary data("hello world");
+  pl::tools::Binary data("hello world");
   auto st = fw_ptr->append(data);
   EXPECT_TRUE(st.isOk());
   st = fw_ptr->flush();
@@ -38,7 +38,7 @@ TEST(fs, FsWriterAndFsReader) {
   st = fw_ptr->close();
   EXPECT_TRUE(st.isOk());
 
-  playground::cpp::tools::Binary result;
+  pl::tools::Binary result;
   char buffer[1024];
   auto status = fr_ptr->read(0, 1024, &result, buffer);
   EXPECT_TRUE(status.isOk());

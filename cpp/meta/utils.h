@@ -13,7 +13,7 @@
 
 #include "cpp/meta/type_list.h"
 
-namespace playground::cpp::meta {
+namespace pl::meta {
 
 //-------------------------------------------------------------------------------------------------
 
@@ -152,4 +152,4 @@ class Unique {
 
 //-------------------------------------------------------------------------------------------------
 
-}  // namespace playground::cpp::meta
+}  // namespace pl::meta

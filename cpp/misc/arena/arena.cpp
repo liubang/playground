@@ -10,7 +10,7 @@
 
 #include <cassert>
 
-namespace playground::cpp::misc::arena {
+namespace pl::misc::arena {
 
 constexpr int BLOCK_SIZE = 4096;
 constexpr int POINTER_SIZE = 8;
@@ -71,4 +71,4 @@ char* Arena::allocate_new_block(std::size_t bytes) {
   return result;
 }
 
-}  // namespace playground::cpp::misc::arena
+}  // namespace pl::misc::arena

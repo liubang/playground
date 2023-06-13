@@ -10,7 +10,7 @@
 #include "cpp/misc/bloom/bloom_filter.h"
 #include "cpp/misc/sst/filter_policy.h"
 
-namespace playground::cpp::misc::sst {
+namespace pl::misc::sst {
 
 /**
  * @class BloomFilterPolicy
@@ -47,4 +47,4 @@ FilterPolicy* newBloomFilterPolicy(uint64_t bits_per_key) {
   return new BloomFilterPolicy(bits_per_key);
 }
 
-}  // namespace playground::cpp::misc::sst
+}  // namespace pl::misc::sst
