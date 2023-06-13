@@ -14,6 +14,6 @@
 TEST(bf, yabf) {
   // x = std::getchar(); y = x + 3; std::putchar(y);
   // static constexpr auto add3 =
-  // playground::cpp::misc::bf::parse(",>+++<[->+<]>."); unsigned char
-  // memory[1024] = {}; playground::cpp::misc::bf::execute<add3>(memory);
+  // pl::misc::bf::parse(",>+++<[->+<]>."); unsigned char
+  // memory[1024] = {}; pl::misc::bf::execute<add3>(memory);
 }

@@ -13,7 +13,7 @@
 
 #include "cpp/tools/preprocessor.h"
 
-namespace playground::cpp::tools {
+namespace pl::tools {
 
 template <typename Fn>
 class ScopeGuard {
@@ -42,7 +42,7 @@ inline ScopeGuard<typename std::decay<Fn>::type> operator+(
 }  // namespace detail
 
 #define SCOPE_EXIT                                                  \
-  auto PG_ANONYMOUS_VARIABLE(__playground_cpp_tools_ScopeGuard__) = \
-      playground::cpp::tools::detail::ScopeGuardOnExit{} + [&]() noexcept
+  auto PL_ANONYMOUS_VARIABLE(__playground_cpp_tools_ScopeGuard__) = \
+      pl::tools::detail::ScopeGuardOnExit{} + [&]() noexcept
 
-}  // namespace playground::cpp::tools
+}  // namespace pl::tools

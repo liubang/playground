@@ -18,8 +18,7 @@
 #include <thread>
 #include <vector>
 
-namespace playground {
-namespace cpp {
+namespace pl {
 namespace tools {
 
 class ThreadPool {
@@ -53,8 +52,7 @@ inline ThreadPool::ThreadPool(size_t threads) {
           std::unique_lock<std::mutex> lock(this->queue_mutex_);
           this->condition_.wait(
               lock, [this] { return this->stop_ || !this->tasks_.empty(); });
-          if (this->stop_ && this->tasks_.empty())
-            return;
+          if (this->stop_ && this->tasks_.empty()) return;
           task = std::move(this->tasks_.front());
           this->tasks_.pop();
         }
@@ -78,8 +76,7 @@ auto ThreadPool::enqueue(F&& f, Args&&... args)
     std::unique_lock<std::mutex> lock(queue_mutex_);
 
     // don't allow enqueueing after stopping the pool
-    if (stop_)
-      throw std::runtime_error("enqueue on stopped ThreadPool");
+    if (stop_) throw std::runtime_error("enqueue on stopped ThreadPool");
 
     tasks_.emplace([task]() { (*task)(); });
   }
@@ -94,10 +91,8 @@ inline ThreadPool::~ThreadPool() {
     stop_ = true;
   }
   condition_.notify_all();
-  for (std::thread& worker : workers_)
-    worker.join();
+  for (std::thread& worker : workers_) worker.join();
 }
 
 }  // namespace tools
-}  // namespace cpp
-}  // namespace playground
+}  // namespace pl

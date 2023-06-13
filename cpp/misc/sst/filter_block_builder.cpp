@@ -12,7 +12,7 @@
 
 #include <cassert>
 
-namespace playground::cpp::misc::sst {
+namespace pl::misc::sst {
 
 static const size_t kFilterBaseLg = 11;
 constexpr static std::size_t kFilterBase = 1 << kFilterBaseLg;  // 2048
@@ -76,4 +76,4 @@ void FilterBlockBuilder::genFilter() {
   start_.clear();
 }
 
-}  // namespace playground::cpp::misc::sst
+}  // namespace pl::misc::sst

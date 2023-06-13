@@ -15,7 +15,7 @@
 #include <iostream>
 #include <memory>
 
-namespace playground::cpp::misc::sst {
+namespace pl::misc::sst {
 
 void BlockHandle::encodeTo(std::string* dst) const {
   assert(offset_ != ~static_cast<uint64_t>(0));
@@ -119,4 +119,4 @@ tools::Status BlockReader::readBlock(fs::FsReader* reader,
   return tools::Status::NewOk();
 }
 
-}  // namespace playground::cpp::misc::sst
+}  // namespace pl::misc::sst

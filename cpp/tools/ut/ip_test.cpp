@@ -14,7 +14,7 @@
 #include <iostream>
 
 TEST(tools, ip) {
-  auto ip = playground::cpp::tools::getLocalIp();
+  auto ip = pl::tools::getLocalIp();
   std::cout << ip.value() << std::endl;
   EXPECT_FALSE(ip->empty());
 }

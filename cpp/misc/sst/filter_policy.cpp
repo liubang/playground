@@ -9,7 +9,7 @@
 
 #include "cpp/misc/sst/filter_policy.h"
 
-namespace playground::cpp::misc::sst {
+namespace pl::misc::sst {
 
 FilterPolicy::~FilterPolicy() = default;
 

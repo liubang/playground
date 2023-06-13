@@ -10,15 +10,12 @@
 
 #include <cstddef>
 
-namespace playground::cpp::meta {
+namespace pl::meta {
 //-------------------------------------------------------------------------------------------------
 
 // 定义iterator基本类型
-template <typename Category,
-          typename Tp,
-          typename Distance = std::ptrdiff_t,
-          typename Pointer = Tp*,
-          typename Ref = Tp&>
+template <typename Category, typename Tp, typename Distance = std::ptrdiff_t,
+          typename Pointer = Tp*, typename Ref = Tp&>
 struct iterator {
   using iterator_category = Category;
   using value_type = Tp;
@@ -47,8 +44,7 @@ template <typename Iterator>
 void advanceImpl(Iterator& iter,
                  typename iterator_traits<Iterator>::difference_type n,
                  input_iterator_tag) {
-  for (; n > 0; --n)
-    ++iter;
+  for (; n > 0; --n) ++iter;
 }
 
 template <typename Iterator>
@@ -56,11 +52,9 @@ void advanceImpl(Iterator& iter,
                  typename iterator_traits<Iterator>::difference_type n,
                  bidirectional_iterator_tag) {
   if (n >= 0)
-    for (; n > 0; --n)
-      ++iter;
+    for (; n > 0; --n) ++iter;
   else
-    for (; n < 0; ++n)
-      --iter;
+    for (; n < 0; ++n) --iter;
 }
 
 template <typename Iterator>
@@ -76,4 +70,4 @@ void advance(Iterator& iter,
   advanceImpl(iter, n, iterator_traits<Iterator>::iterator_category);
 }
 
-};  // namespace playground::cpp::meta
+};  // namespace pl::meta

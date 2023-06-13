@@ -9,7 +9,7 @@
 
 #include "cpp/tools/crc.h"
 
-namespace playground::cpp::tools {
+namespace pl::tools {
 
 uint32_t crc32(const void* data, size_t length) {
   boost::crc_32_type result;
@@ -17,4 +17,4 @@ uint32_t crc32(const void* data, size_t length) {
   return result.checksum();
 }
 
-}  // namespace playground::cpp::tools
+}  // namespace pl::tools
