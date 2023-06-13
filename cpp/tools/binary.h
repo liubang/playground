@@ -13,7 +13,7 @@
 #include <cstring>
 #include <string>
 
-namespace playground::cpp::tools {
+namespace pl::tools {
 class Binary {
  public:
   Binary() : data_(""), size_(0) {}
@@ -79,4 +79,4 @@ inline int Binary::compare(const Binary& b) const {
   return r;
 }
 
-}  // namespace playground::cpp::tools
+}  // namespace pl::tools

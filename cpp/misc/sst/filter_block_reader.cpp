@@ -10,11 +10,11 @@
 #include "cpp/misc/sst/filter_block_reader.h"
 #include "cpp/misc/sst/encoding.h"
 
-namespace playground::cpp::misc::sst {
+namespace pl::misc::sst {
 
 FilterBlockReader::FilterBlockReader(
     const FilterPolicy* filter_policy,
-    const playground::cpp::tools::Binary& contents)
+    const pl::tools::Binary& contents)
     : filter_policy_(filter_policy) {
   std::size_t n = contents.size();
   if (n < 5)
@@ -43,4 +43,4 @@ bool FilterBlockReader::keyMayMatch(uint64_t block_offset,
   return true;
 }
 
-}  // namespace playground::cpp::misc::sst
+}  // namespace pl::misc::sst

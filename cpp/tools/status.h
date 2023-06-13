@@ -11,7 +11,7 @@
 #include <string>
 #include <utility>
 
-namespace playground::cpp::tools {
+namespace pl::tools {
 
 #define NEW_STATUS(name)                                 \
   static Status New##name(const std::string& msg = "") { \
@@ -78,4 +78,4 @@ class Status {
 #undef IS_STATUS
 #undef NEW_STATUS
 
-}  // namespace playground::cpp::tools
+}  // namespace pl::tools

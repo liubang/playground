@@ -7,25 +7,25 @@
 //
 //=====================================================================
 
-#include <tuple>
-#include <utility>
+#include "cpp/meta/tuple_iteration_basics.h"
 
 #include <gtest/gtest.h>
 
-#include "cpp/meta/tuple_iteration_basics.h"
+#include <tuple>
+#include <utility>
 
 TEST(meta, PrintTupleManual) {
   std::tuple tp{10, 20, "hello"};
-  playground::cpp::meta::PrintTupleManual<decltype(tp), 0, 1, 2>(tp);
+  pl::meta::PrintTupleManual<decltype(tp), 0, 1, 2>(tp);
   std::cout << std::endl;
   EXPECT_TRUE(true);
 }
 
 TEST(meta, PrintTupleManualEx) {
   std::tuple tp{10, 20, "hello"};
-  playground::cpp::meta::PrintTupleManualEx(tp, std::index_sequence<0, 1, 2>{});
+  pl::meta::PrintTupleManualEx(tp, std::index_sequence<0, 1, 2>{});
   std::cout << std::endl;
-  playground::cpp::meta::PrintTupleManualEx(
+  pl::meta::PrintTupleManualEx(
       tp, std::make_index_sequence<std::tuple_size_v<decltype(tp)>>{});
   std::cout << std::endl;
   EXPECT_TRUE(true);
@@ -33,14 +33,14 @@ TEST(meta, PrintTupleManualEx) {
 
 TEST(meta, PrintTupleAutoGetSize) {
   std::tuple tp{10, 20, "hello"};
-  playground::cpp::meta::PrintTupleAutoGetSize(tp);
+  pl::meta::PrintTupleAutoGetSize(tp);
   std::cout << std::endl;
   EXPECT_TRUE(true);
 }
 
 TEST(meta, PrintTupleFinal) {
   std::tuple tp{10, 20, "hello"};
-  playground::cpp::meta::PrintTupleFinal(tp);
+  pl::meta::PrintTupleFinal(tp);
   std::cout << std::endl;
   EXPECT_TRUE(true);
 }

@@ -13,7 +13,7 @@
 
 #include <string>
 
-namespace playground::cpp::misc::sst {
+namespace pl::misc::sst {
 
 class FilterPolicy {
  public:
@@ -50,4 +50,4 @@ class FilterPolicy {
 
 FilterPolicy* newBloomFilterPolicy(uint64_t bits_per_key);
 
-}  // namespace playground::cpp::misc::sst
+}  // namespace pl::misc::sst

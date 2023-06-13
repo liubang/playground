@@ -16,7 +16,7 @@
 #include "cpp/tools/binary.h"
 #include "cpp/tools/status.h"
 
-namespace playground::cpp::misc::sst {
+namespace pl::misc::sst {
 
 class SSTableBuilder {
  public:
@@ -60,4 +60,4 @@ class SSTableBuilder {
   bool closed_{false};
 };
 
-}  // namespace playground::cpp::misc::sst
+}  // namespace pl::misc::sst

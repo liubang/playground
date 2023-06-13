@@ -10,7 +10,7 @@
 #include <cstdint>
 #include <type_traits>
 
-namespace playground::cpp::tools {
+namespace pl::tools {
 
 namespace detail {
 
@@ -90,4 +90,4 @@ class Endian {
   }
 };
 
-}  // namespace playground::cpp::tools
+}  // namespace pl::tools

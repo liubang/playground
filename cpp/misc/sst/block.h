@@ -12,7 +12,7 @@
 #include "cpp/misc/sst/iterator.h"
 #include "cpp/misc/sst/sstable_format.h"
 
-namespace playground::cpp::misc::sst {
+namespace pl::misc::sst {
 
 class Block {
  public:
@@ -36,4 +36,4 @@ class Block {
   bool owned_;
 };
 
-}  // namespace playground::cpp::misc::sst
+}  // namespace pl::misc::sst

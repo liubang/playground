@@ -20,7 +20,7 @@
 #include <cstdlib>
 #include <cstring>
 
-namespace playground::cpp::misc::liburing {
+namespace pl::misc::liburing {
 
 constexpr __u32 MAX_CONNECTIONS = 4096;
 constexpr __u32 BACKLOG = 512;
@@ -104,7 +104,7 @@ void add_provide_buf(io_uring* ring, __u16 bid, unsigned gid) {
   memcpy(&sqe->user_data, &conn_i, sizeof(conn_i));
 }
 
-}  // namespace playground::cpp::misc::liburing
+}  // namespace pl::misc::liburing
 
 int main(int argc, char* argv[]) {
   if (argc < 2) {
@@ -130,7 +130,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  if (listen(sock_listen_fd, playground::cpp::misc::liburing::BACKLOG) < 0) {
+  if (listen(sock_listen_fd, pl::misc::liburing::BACKLOG) < 0) {
     ::perror("Error listening on socket...\n");
     return 1;
   }
@@ -165,10 +165,10 @@ int main(int argc, char* argv[]) {
 
   sqe = io_uring_get_sqe(&ring);
   io_uring_prep_provide_buffers(
-      sqe, playground::cpp::misc::liburing::bufs,
-      playground::cpp::misc::liburing::MAX_MESSAGE_LEN,
-      playground::cpp::misc::liburing::BUFFERS_COUNT,
-      playground::cpp::misc::liburing::group_id, 0);
+      sqe, pl::misc::liburing::bufs,
+      pl::misc::liburing::MAX_MESSAGE_LEN,
+      pl::misc::liburing::BUFFERS_COUNT,
+      pl::misc::liburing::group_id, 0);
 
   io_uring_submit(&ring);
   io_uring_wait_cqe(&ring, &cqe);
@@ -178,7 +178,7 @@ int main(int argc, char* argv[]) {
   }
   io_uring_cqe_seen(&ring, cqe);
 
-  playground::cpp::misc::liburing::add_accept(
+  pl::misc::liburing::add_accept(
       &ring, sock_listen_fd, (sockaddr*)&client_addr, &client_len, 0);
 
   for (;;) {
@@ -189,7 +189,7 @@ int main(int argc, char* argv[]) {
 
     io_uring_for_each_cqe(&ring, head, cqe) {
       ++count;
-      playground::cpp::misc::liburing::ConnInfo conn_i;
+      pl::misc::liburing::ConnInfo conn_i;
       memcpy(&conn_i, &cqe->user_data, sizeof(conn_i));
 
       __u32 type = conn_i.type;
@@ -200,36 +200,36 @@ int main(int argc, char* argv[]) {
         ::fflush(stdout);
         return 1;
       }
-      if (type == playground::cpp::misc::liburing::Status::PROV_BUF) {
+      if (type == pl::misc::liburing::Status::PROV_BUF) {
         if (cqe->res < 0) {
           ::printf("cqe->res = %d\n", cqe->res);
           return 1;
         }
-      } else if (type == playground::cpp::misc::liburing::Status::ACCEPT) {
+      } else if (type == pl::misc::liburing::Status::ACCEPT) {
         __u32 sock_conn_fd = cqe->res;
         if (sock_conn_fd >= 0) {
-          playground::cpp::misc::liburing::add_socket_read(
-              &ring, sock_conn_fd, playground::cpp::misc::liburing::group_id,
-              playground::cpp::misc::liburing::MAX_MESSAGE_LEN,
+          pl::misc::liburing::add_socket_read(
+              &ring, sock_conn_fd, pl::misc::liburing::group_id,
+              pl::misc::liburing::MAX_MESSAGE_LEN,
               IOSQE_BUFFER_SELECT);
         }
-        playground::cpp::misc::liburing::add_accept(
+        pl::misc::liburing::add_accept(
             &ring, sock_listen_fd, (sockaddr*)&client_addr, &client_len, 0);
-      } else if (type == playground::cpp::misc::liburing::Status::READ) {
+      } else if (type == pl::misc::liburing::Status::READ) {
         size_t bytes_read = cqe->res;
         if (cqe->res <= 0) {
           shutdown(conn_i.fd, SHUT_RDWR);
         } else {
           __u32 bid = cqe->flags >> 16;
-          playground::cpp::misc::liburing::add_socket_write(&ring, conn_i.fd,
+          pl::misc::liburing::add_socket_write(&ring, conn_i.fd,
                                                             bid, bytes_read, 0);
         }
-      } else if (type == playground::cpp::misc::liburing::Status::WRITE) {
-        playground::cpp::misc::liburing::add_provide_buf(
-            &ring, conn_i.bid, playground::cpp::misc::liburing::group_id);
-        playground::cpp::misc::liburing::add_socket_read(
-            &ring, conn_i.fd, playground::cpp::misc::liburing::group_id,
-            playground::cpp::misc::liburing::MAX_MESSAGE_LEN,
+      } else if (type == pl::misc::liburing::Status::WRITE) {
+        pl::misc::liburing::add_provide_buf(
+            &ring, conn_i.bid, pl::misc::liburing::group_id);
+        pl::misc::liburing::add_socket_read(
+            &ring, conn_i.fd, pl::misc::liburing::group_id,
+            pl::misc::liburing::MAX_MESSAGE_LEN,
             IOSQE_BUFFER_SELECT);
       }
     }

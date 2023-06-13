@@ -10,7 +10,7 @@
 
 #include <cstddef>
 
-namespace playground::cpp::meta {
+namespace pl::meta {
 
 template <typename... Ts>
 struct TypeList {
@@ -31,4 +31,4 @@ concept TL = requires {
   typename TypeList::type;        // 返回值
 };
 
-}  // namespace playground::cpp::meta
+}  // namespace pl::meta

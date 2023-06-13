@@ -12,7 +12,7 @@
 #include "cpp/misc/sst/comparator.h"
 #include "cpp/misc/sst/filter_policy.h"
 
-namespace playground::cpp::misc::sst {
+namespace pl::misc::sst {
 
 enum class CompressionType : uint8_t {
   kNoCompression = 0x0,
@@ -35,4 +35,4 @@ struct Options {
   const FilterPolicy* filter_policy;
 };
 
-}  // namespace playground::cpp::misc::sst
+}  // namespace pl::misc::sst

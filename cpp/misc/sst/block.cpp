@@ -11,7 +11,7 @@
 
 #include <iostream>
 
-namespace playground::cpp::misc::sst {
+namespace pl::misc::sst {
 
 Block::Block(const BlockContents& content)
     : data_(content.data.data()),
@@ -187,9 +187,9 @@ class Block::BlockIterator : public Iterator {
     constexpr std::size_t s = sizeof(uint32_t);
     if (p + 3 > limit)
       return nullptr;
-    *shared = playground::cpp::misc::sst::decodeInt<uint32_t>(p);
-    *non_shared = playground::cpp::misc::sst::decodeInt<uint32_t>(p + s);
-    *value_size = playground::cpp::misc::sst::decodeInt<uint32_t>(p + s * 2);
+    *shared = pl::misc::sst::decodeInt<uint32_t>(p);
+    *non_shared = pl::misc::sst::decodeInt<uint32_t>(p + s);
+    *value_size = pl::misc::sst::decodeInt<uint32_t>(p + s * 2);
     p += s * 3;
     return p;
   }
@@ -216,4 +216,4 @@ Iterator* Block::iterator(const Comparator* comparator) {
   return new BlockIterator(comparator, data_, restart_offset_, num_restarts_);
 }
 
-}  // namespace playground::cpp::misc::sst
+}  // namespace pl::misc::sst

@@ -16,7 +16,7 @@
 
 #include "cpp/misc/fs/fs.h"
 
-namespace playground::cpp::misc::fs {
+namespace pl::misc::fs {
 
 constexpr const size_t kWritableFileBufferSize = 65536;
 constexpr const int kOpenBaseFlags = O_CLOEXEC;
@@ -235,4 +235,4 @@ tools::Status posixError(const std::string& context, int err_number) {
   return tools::Status::NewIOError(context + std::strerror(err_number));
 }
 
-}  // namespace playground::cpp::misc::fs
+}  // namespace pl::misc::fs

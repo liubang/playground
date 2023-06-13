@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-namespace playground::cpp::misc::sst {
+namespace pl::misc::sst {
 
 /**
  * data block and index block builder
@@ -48,4 +48,4 @@ class BlockBuilder {
   std::vector<uint32_t> restarts_;
 };
 
-}  // namespace playground::cpp::misc::sst
+}  // namespace pl::misc::sst

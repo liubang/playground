@@ -20,7 +20,7 @@
 #include <vector>
 
 TEST(block_builder, test) {
-  auto* options = new playground::cpp::misc::sst::Options();
+  auto* options = new pl::misc::sst::Options();
 
   // absl::Cleanup cleanup = [&]() {
   //   delete options->comparator;
@@ -36,7 +36,7 @@ TEST(block_builder, test) {
 
   options->block_restart_interval = 16;
 
-  playground::cpp::misc::sst::BlockBuilder block_builder(options);
+  pl::misc::sst::BlockBuilder block_builder(options);
   constexpr int COUNT = 10001;
 
   EXPECT_TRUE(block_builder.empty());
@@ -52,7 +52,7 @@ TEST(block_builder, test) {
   std::sort(keys.begin(), keys.end());
 
   for (int i = 0; i < COUNT; ++i) {
-    auto val = playground::cpp::tools::random_string(64);
+    auto val = pl::tools::random_string(64);
     block_builder.add(keys[i], val);
     kvs[keys[i]] = val;
   }
@@ -61,13 +61,13 @@ TEST(block_builder, test) {
 
   auto block = block_builder.finish();
 
-  playground::cpp::misc::sst::BlockContents block_content = {
+  pl::misc::sst::BlockContents block_content = {
       block,
       false,
       false,
   };
 
-  playground::cpp::misc::sst::Block b(block_content);
+  pl::misc::sst::Block b(block_content);
 
   auto* itr = b.iterator(nullptr);
   // absl::Cleanup cleanup1 = [&]() { delete itr; };
@@ -94,14 +94,14 @@ TEST(block_builder, test) {
   // const char* data = block.data();
   // std::size_t size = block.size();
   // auto restart_count =
-  // playground::cpp::misc::sst::decodeInt<uint32_t>(&data[size - 4]);
+  // pl::misc::sst::decodeInt<uint32_t>(&data[size - 4]);
   // EXPECT_EQ(restart_count, (COUNT / 16) + (COUNT % 16 == 0 ? 0 : 1));
   //
   // // parse all restarts
   // std::vector<uint32_t> restarts(restart_count + 1);
   // for (int i = 0; i < restart_count; ++i) {
   //   uint32_t offset = 4 * (i + 2);
-  //   auto restart = playground::cpp::misc::sst::decodeInt<uint32_t>(&data[size
+  //   auto restart = pl::misc::sst::decodeInt<uint32_t>(&data[size
   //   - offset]); restarts[i] = restart;
   // }
   //
@@ -116,10 +116,10 @@ TEST(block_builder, test) {
   //   // 解析每一个restart中的key和value
   //   while (start < end) {
   //     assert((start + 12) < end);
-  //     auto shared = playground::cpp::misc::sst::decodeInt<uint32_t>(data +
+  //     auto shared = pl::misc::sst::decodeInt<uint32_t>(data +
   //     start); auto non_shared =
-  //     playground::cpp::misc::sst::decodeInt<uint32_t>(data + start + 4); auto
-  //     value_size = playground::cpp::misc::sst::decodeInt<uint32_t>(data +
+  //     pl::misc::sst::decodeInt<uint32_t>(data + start + 4); auto
+  //     value_size = pl::misc::sst::decodeInt<uint32_t>(data +
   //     start + 8); assert(start + 12 + non_shared + value_size <= end);
   //
   //     assert(pre_key.size() >= shared);

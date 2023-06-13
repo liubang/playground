@@ -10,7 +10,7 @@
 
 #include "cpp/tools/binary.h"
 
-namespace playground::cpp::misc::sst {
+namespace pl::misc::sst {
 
 class Comparator {
  public:
@@ -24,4 +24,4 @@ class Comparator {
 
 Comparator* bytewiseComparator();
 
-}  // namespace playground::cpp::misc::sst
+}  // namespace pl::misc::sst

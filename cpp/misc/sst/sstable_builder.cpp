@@ -10,7 +10,7 @@
 #include "cpp/misc/sst/encoding.h"
 #include "cpp/tools/crc.h"
 
-namespace playground::cpp::misc::sst {
+namespace pl::misc::sst {
 
 SSTableBuilder::SSTableBuilder(const Options* options, fs::FsWriter* writer)
     : options_(options),
@@ -218,4 +218,4 @@ tools::Status SSTableBuilder::finish() {
   return status_;
 }
 
-}  // namespace playground::cpp::misc::sst
+}  // namespace pl::misc::sst
