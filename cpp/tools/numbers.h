@@ -11,7 +11,7 @@
 #include <cstdint>
 #include <iostream>
 
-namespace playground::cpp::tools {
+namespace pl::tools {
 
 /*
 bool is_power_of_two(uint64_t n) {
@@ -37,4 +37,4 @@ inline bool is_power_of_two(uint64_t n) {
   return (n != 0) && ((n & -n) == n);
 }
 
-}  // namespace playground::cpp::tools
+}  // namespace pl::tools

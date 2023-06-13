@@ -15,7 +15,7 @@
 #include "cpp/misc/sst/filter_policy.h"
 #include "cpp/tools/binary.h"
 
-namespace playground::cpp::misc::sst {
+namespace pl::misc::sst {
 
 class FilterBlockBuilder {
  public:
@@ -43,4 +43,4 @@ class FilterBlockBuilder {
   std::vector<tools::Binary> tmp_keys_;  // 生成新的filter的时候存储临时的key
 };
 
-}  // namespace playground::cpp::misc::sst
+}  // namespace pl::misc::sst

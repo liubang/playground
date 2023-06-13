@@ -15,7 +15,7 @@
 #include "cpp/misc/sst/sstable_format.h"
 #include "cpp/tools/status.h"
 
-namespace playground::cpp::misc::sst {
+namespace pl::misc::sst {
 
 class Table {
  public:
@@ -48,4 +48,4 @@ class Table {
   Block* index_block_;
 };
 
-}  // namespace playground::cpp::misc::sst
+}  // namespace pl::misc::sst

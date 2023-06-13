@@ -9,9 +9,10 @@
 #pragma once
 
 #include <cassert>
+
 #include "traits.h"
 
-namespace playground::cpp::meta {
+namespace pl::meta {
 
 template <typename T, typename U, typename OP>
 struct BinaryExpression {
@@ -64,7 +65,7 @@ constexpr bool
 template <typename T, typename U, typename OP>
 constexpr bool is_container_v<BinaryContainerExpression<T, U, OP>> = true;
 
-}  // namespace playground::cpp::meta
+}  // namespace pl::meta
 
 /**
  * @brief 重载operator+，这里必须在namespace外面定义
@@ -75,12 +76,10 @@ constexpr bool is_container_v<BinaryContainerExpression<T, U, OP>> = true;
  * @param rhs [TODO:parameter]
  * @return [TODO:return]
  */
-template <typename T,
-          typename U,
-          typename = playground::cpp::meta::enable_if_t<
-              playground::cpp::meta::is_container_v<T> &&
-              playground::cpp::meta::is_container_v<U>>>
+template <typename T, typename U,
+          typename = pl::meta::enable_if_t<pl::meta::is_container_v<T> &&
+                                           pl::meta::is_container_v<U>>>
 auto operator+(const T& lhs, const U& rhs) {
   auto plus = [](auto x, auto y) { return x + y; };
-  return playground::cpp::meta::BinaryContainerExpression(lhs, rhs, plus);
+  return pl::meta::BinaryContainerExpression(lhs, rhs, plus);
 }

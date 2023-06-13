@@ -17,7 +17,7 @@
 
 #include "cpp/misc/hash/murmurhash2.h"
 
-namespace playground::cpp::misc::bloom {
+namespace pl::misc::bloom {
 
 BloomFilter::BloomFilter(std::size_t bit_per_key) : bits_per_key_(bit_per_key) {
   hash_count_ = static_cast<size_t>(bit_per_key * 0.69);
@@ -33,7 +33,7 @@ bool BloomFilter::contains(const tools::Binary& key,
   const size_t hash_count = array[len - 1];
 
   uint64_t seed = 0;
-  playground::cpp::misc::hash::CMurmurHash64 hasher;
+  pl::misc::hash::CMurmurHash64 hasher;
   for (std::size_t i = 0; i < hash_count; ++i) {
     hasher.begin(seed);
     hasher.add(key.data(), key.size(), false);
@@ -64,7 +64,7 @@ void BloomFilter::create(const tools::Binary* keys, std::size_t n,
 
   auto* array = reinterpret_cast<uint8_t*>(&((*dst)[init_size]));
 
-  playground::cpp::misc::hash::CMurmurHash64 hasher;
+  pl::misc::hash::CMurmurHash64 hasher;
   for (std::size_t i = 0; i < n; ++i) {
     uint64_t seed = 0;
     const auto key = keys[i];
@@ -78,4 +78,4 @@ void BloomFilter::create(const tools::Binary* keys, std::size_t n,
   }
 }
 
-}  // namespace playground::cpp::misc::bloom
+}  // namespace pl::misc::bloom

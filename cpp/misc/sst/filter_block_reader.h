@@ -12,12 +12,12 @@
 #include "cpp/misc/sst/filter_policy.h"
 #include "cpp/tools/binary.h"
 
-namespace playground::cpp::misc::sst {
+namespace pl::misc::sst {
 
 class FilterBlockReader {
  public:
   FilterBlockReader(const FilterPolicy* filter_policy,
-                    const playground::cpp::tools::Binary& contents);
+                    const pl::tools::Binary& contents);
 
   bool keyMayMatch(uint64_t block_offset, const tools::Binary& key);
 
@@ -29,4 +29,4 @@ class FilterBlockReader {
   size_t base_lg_;
 };
 
-}  // namespace playground::cpp::misc::sst
+}  // namespace pl::misc::sst

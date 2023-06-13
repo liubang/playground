@@ -14,7 +14,7 @@
 
 #include "cpp/tools/binary.h"
 
-namespace playground::cpp::misc::bloom {
+namespace pl::misc::bloom {
 
 class BloomFilter final {
  public:
@@ -37,4 +37,4 @@ class BloomFilter final {
   std::size_t hash_count_;    // hash函数的个数
 };
 
-}  // namespace playground::cpp::misc::bloom
+}  // namespace pl::misc::bloom

@@ -13,16 +13,16 @@
 #include <memory>
 
 TEST(comparator, compara) {
-  auto* comparator = playground::cpp::misc::sst::bytewiseComparator();
-  std::unique_ptr<playground::cpp::misc::sst::Comparator> comparator_ptr(
+  auto* comparator = pl::misc::sst::bytewiseComparator();
+  std::unique_ptr<pl::misc::sst::Comparator> comparator_ptr(
       comparator);
 
-  playground::cpp::tools::Binary b1 = "abc";
-  playground::cpp::tools::Binary b2 = "abd";
-  playground::cpp::tools::Binary b3 = "abc";
-  playground::cpp::tools::Binary b4 = "aba";
-  playground::cpp::tools::Binary b5 = "";
-  playground::cpp::tools::Binary b6 = "abcccc";
+  pl::tools::Binary b1 = "abc";
+  pl::tools::Binary b2 = "abd";
+  pl::tools::Binary b3 = "abc";
+  pl::tools::Binary b4 = "aba";
+  pl::tools::Binary b5 = "";
+  pl::tools::Binary b6 = "abcccc";
 
   EXPECT_TRUE(comparator_ptr->compare(b1, b2) < 0);
   EXPECT_TRUE(comparator_ptr->compare(b1, b3) == 0);
