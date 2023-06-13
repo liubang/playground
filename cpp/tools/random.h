@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <string>
 
-namespace pl::tools {
+namespace pl {
 
 std::string random_string(size_t length) {
   auto randchar = []() -> char {
@@ -27,4 +27,4 @@ std::string random_string(size_t length) {
   return str;
 }
 
-}  // namespace pl::tools
+}  // namespace pl

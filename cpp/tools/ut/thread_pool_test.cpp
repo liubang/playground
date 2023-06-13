@@ -18,7 +18,7 @@
 #include <gtest/gtest.h>
 
 TEST(thread_pool, thread_pool) {
-  pl::tools::ThreadPool pool(1024);
+  pl::ThreadPool pool(1024);
   std::vector<std::future<std::pair<int, int>>> results;
   auto start = std::chrono::system_clock::now();
   results.reserve(1024);

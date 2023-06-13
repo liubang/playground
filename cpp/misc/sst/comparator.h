@@ -10,7 +10,7 @@
 
 #include "cpp/tools/binary.h"
 
-namespace pl::misc::sst {
+namespace pl {
 
 class Comparator {
  public:
@@ -18,10 +18,9 @@ class Comparator {
 
   [[nodiscard]] virtual const char* name() const = 0;
 
-  [[nodiscard]] virtual int compare(const tools::Binary& a,
-                                    const tools::Binary& b) const = 0;
+  [[nodiscard]] virtual int compare(const Binary& a, const Binary& b) const = 0;
 };
 
 Comparator* bytewiseComparator();
 
-}  // namespace pl::misc::sst
+}  // namespace pl

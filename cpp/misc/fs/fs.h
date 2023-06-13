@@ -10,7 +10,7 @@
 
 #include "cpp/tools/binary.h"
 #include "cpp/tools/status.h"
-namespace pl::misc::fs {
+namespace pl {
 
 class FsReader;
 class FsWriter;
@@ -25,18 +25,18 @@ class Fs {
 
   static Fs* getInstance();
 
-  virtual tools::Status newFsReader(const std::string& filename,
-                                    FsReader** result) = 0;
-  virtual tools::Status newFsWriter(const std::string& filename,
-                                    FsWriter** result) = 0;
+  virtual Status newFsReader(const std::string& filename,
+                             FsReader** result) = 0;
+  virtual Status newFsWriter(const std::string& filename,
+                             FsWriter** result) = 0;
 };
 
 class FsReader {
  public:
   virtual ~FsReader();
 
-  virtual tools::Status read(uint64_t offset, size_t n, tools::Binary* result,
-                             char* scratch) const = 0;
+  virtual Status read(uint64_t offset, size_t n, Binary* result,
+                      char* scratch) const = 0;
 
   [[nodiscard]] virtual std::size_t size() const = 0;
 };
@@ -47,10 +47,10 @@ class FsWriter {
   FsWriter(const FsWriter&) = delete;
   FsWriter& operator=(const FsWriter&) = delete;
   virtual ~FsWriter();
-  virtual tools::Status append(const tools::Binary& data) = 0;
-  virtual tools::Status close() = 0;
-  virtual tools::Status flush() = 0;
-  virtual tools::Status sync() = 0;
+  virtual Status append(const Binary& data) = 0;
+  virtual Status close() = 0;
+  virtual Status flush() = 0;
+  virtual Status sync() = 0;
 };
 
-}  // namespace pl::misc::fs
+}  // namespace pl

@@ -8,14 +8,14 @@
 //=====================================================================
 #pragma once
 
+#include <string>
+#include <vector>
+
 #include "cpp/misc/sst/comparator.h"
 #include "cpp/misc/sst/options.h"
 #include "cpp/tools/binary.h"
 
-#include <string>
-#include <vector>
-
-namespace pl::misc::sst {
+namespace pl {
 
 /**
  * data block and index block builder
@@ -28,9 +28,9 @@ class BlockBuilder {
   BlockBuilder(const BlockBuilder&) = delete;
   BlockBuilder& operator=(const BlockBuilder&) = delete;
 
-  void add(const tools::Binary& key, const tools::Binary& val);
+  void add(const Binary& key, const Binary& val);
 
-  tools::Binary finish();
+  Binary finish();
 
   [[nodiscard]] bool empty() const { return buffer_.empty(); }
 
@@ -48,4 +48,4 @@ class BlockBuilder {
   std::vector<uint32_t> restarts_;
 };
 
-}  // namespace pl::misc::sst
+}  // namespace pl

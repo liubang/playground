@@ -13,7 +13,7 @@
 #include <memory>
 #include <vector>
 
-namespace pl::misc::arena {
+namespace pl {
 
 // Reference from Google's leveldb
 class Arena {
@@ -57,4 +57,4 @@ class Arena {
   std::atomic<std::size_t> memory_usage_;
 };
 
-}  // namespace pl::misc::arena
+}  // namespace pl

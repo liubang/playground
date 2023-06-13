@@ -8,13 +8,13 @@
 //=====================================================================
 #pragma once
 
-#include "cpp/tools/binary.h"
-#include "cpp/tools/status.h"
-
 #include <functional>
 #include <list>
 
-namespace pl::misc::sst {
+#include "cpp/tools/binary.h"
+#include "cpp/tools/status.h"
+
+namespace pl {
 
 class Iterator {
  public:
@@ -28,12 +28,12 @@ class Iterator {
   virtual void last() = 0;
   virtual void next() = 0;
   virtual void prev() = 0;
-  virtual void seek(const tools::Binary& target) = 0;
+  virtual void seek(const Binary& target) = 0;
 
-  [[nodiscard]] virtual tools::Status status() const = 0;
+  [[nodiscard]] virtual Status status() const = 0;
   [[nodiscard]] virtual bool valid() const = 0;
-  [[nodiscard]] virtual tools::Binary key() const = 0;
-  [[nodiscard]] virtual tools::Binary val() const = 0;
+  [[nodiscard]] virtual Binary key() const = 0;
+  [[nodiscard]] virtual Binary val() const = 0;
 
   using CleanupFunc = std::function<void()>;
   void registerCleanup(const CleanupFunc& function);
@@ -42,4 +42,4 @@ class Iterator {
   std::list<CleanupFunc> cleanup_funcs_;
 };
 
-}  // namespace pl::misc::sst
+}  // namespace pl

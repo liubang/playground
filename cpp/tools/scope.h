@@ -13,7 +13,7 @@
 
 #include "cpp/tools/preprocessor.h"
 
-namespace pl::tools {
+namespace pl {
 
 template <typename Fn>
 class ScopeGuard {
@@ -43,6 +43,6 @@ inline ScopeGuard<typename std::decay<Fn>::type> operator+(
 
 #define SCOPE_EXIT                                                  \
   auto PL_ANONYMOUS_VARIABLE(__playground_cpp_tools_ScopeGuard__) = \
-      pl::tools::detail::ScopeGuardOnExit{} + [&]() noexcept
+      pl::detail::ScopeGuardOnExit{} + [&]() noexcept
 
-}  // namespace pl::tools
+}  // namespace pl

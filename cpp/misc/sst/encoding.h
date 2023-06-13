@@ -14,7 +14,7 @@
 #include <string>
 #include <type_traits>
 
-namespace pl::misc::sst {
+namespace pl {
 
 /**
  * @brief [TODO:description]
@@ -29,7 +29,7 @@ template <typename T,
                                   T>::type = 0>
 void encodeInt(std::string* dst, T value) {
   // 这里统一用little endian
-  value = pl::tools::Endian::little(value);
+  value = pl::Endian::little(value);
   dst->append(reinterpret_cast<const char*>(&value), sizeof(T));
 }
 
@@ -49,8 +49,8 @@ T decodeInt(const char* input) {
   std::size_t s = sizeof(T);
   memcpy(&value, input, s);
   // 这里统一用little endian
-  value = pl::tools::Endian::little(value);
+  value = pl::Endian::little(value);
   return value;
 }
 
-}  // namespace pl::misc::sst
+}  // namespace pl

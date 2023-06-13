@@ -16,12 +16,12 @@
 
 #include "cpp/misc/fs/fs.h"
 
-namespace pl::misc::fs {
+namespace pl {
 
 constexpr const size_t kWritableFileBufferSize = 65536;
 constexpr const int kOpenBaseFlags = O_CLOEXEC;
 
-tools::Status posixError(const std::string& context, int err_number);
+Status posixError(const std::string& context, int err_number);
 
 class PosixFsWriter final : public FsWriter {
  public:
@@ -41,7 +41,7 @@ class PosixFsWriter final : public FsWriter {
     }
   }
 
-  tools::Status append(const tools::Binary& data) override {
+  Status append(const Binary& data) override {
     std::size_t write_size = data.size();
     const char* write_data = data.data();
     std::size_t copy_size =
@@ -51,7 +51,7 @@ class PosixFsWriter final : public FsWriter {
     write_size -= copy_size;
     pos_ += copy_size;
     if (write_size == 0) {
-      return tools::Status::NewOk();
+      return Status::NewOk();
     }
 
     auto status = flushBuffer();
@@ -62,14 +62,14 @@ class PosixFsWriter final : public FsWriter {
     if (write_size < kWritableFileBufferSize) {
       std::memcpy(buf_, write_data, write_size);
       pos_ = write_size;
-      return tools::Status::NewOk();
+      return Status::NewOk();
     }
 
     return writeUnbuffered(write_data, write_size);
   }
 
-  tools::Status close() override {
-    tools::Status status = flushBuffer();
+  Status close() override {
+    Status status = flushBuffer();
     int result = ::close(fd_);
     if (result < 0 && status.isOk()) {
       status = posixError(filename_, errno);
@@ -78,10 +78,10 @@ class PosixFsWriter final : public FsWriter {
     return status;
   }
 
-  tools::Status flush() override { return flushBuffer(); }
+  Status flush() override { return flushBuffer(); }
 
-  tools::Status sync() override {
-    tools::Status status = flushBuffer();
+  Status sync() override {
+    Status status = flushBuffer();
     if (!status.isOk()) {
       return status;
     }
@@ -89,7 +89,7 @@ class PosixFsWriter final : public FsWriter {
   }
 
  private:
-  tools::Status writeUnbuffered(const char* data, std::size_t size) {
+  Status writeUnbuffered(const char* data, std::size_t size) {
     while (size > 0) {
       ssize_t write_result = ::write(fd_, data, size);
       if (write_result < 0) {
@@ -101,23 +101,23 @@ class PosixFsWriter final : public FsWriter {
       data += write_result;
       size -= write_result;
     }
-    return tools::Status::NewOk();
+    return Status::NewOk();
   }
 
-  tools::Status flushBuffer() {
-    tools::Status status = writeUnbuffered(buf_, pos_);
+  Status flushBuffer() {
+    Status status = writeUnbuffered(buf_, pos_);
     pos_ = 0;
     return status;
   }
 
-  tools::Status syncFd(int fd, const std::string& filename) {
+  Status syncFd(int fd, const std::string& filename) {
     // 这里简单粗暴的区分Linux和macos
 #if defined(__APPLE__) && defined(__MACH__)
     if (::fsync(fd) == 0) {
 #else
     if (::fdatasync(fd) == 0) {
 #endif
-      return tools::Status::NewOk();
+      return Status::NewOk();
     }
     return posixError(filename, errno);
   }
@@ -158,11 +158,11 @@ class PosixFsReader final : public FsReader {
     }
   };
 
-  tools::Status read(uint64_t offset, std::size_t n, tools::Binary* result,
-                     char* scratch) const override {
-    tools::Status status;
+  Status read(uint64_t offset, std::size_t n, Binary* result,
+              char* scratch) const override {
+    Status status;
     ssize_t read_size = ::pread(fd_, scratch, n, static_cast<off_t>(offset));
-    *result = tools::Binary(scratch, (read_size < 0) ? 0 : read_size);
+    *result = Binary(scratch, (read_size < 0) ? 0 : read_size);
     if (read_size < 0) {
       status = posixError(filename_, errno);
     }
@@ -178,8 +178,7 @@ class PosixFs : public Fs {
  public:
   PosixFs() = default;
 
-  tools::Status newFsWriter(const std::string& filename,
-                            FsWriter** result) override {
+  Status newFsWriter(const std::string& filename, FsWriter** result) override {
     int fd = ::open(filename.c_str(),
                     O_TRUNC | O_WRONLY | O_CREAT | kOpenBaseFlags, 0644);
     if (fd < 0) {
@@ -187,18 +186,17 @@ class PosixFs : public Fs {
       return posixError(filename, errno);
     }
     *result = new PosixFsWriter(filename, fd);
-    return tools::Status::NewOk();
+    return Status::NewOk();
   }
 
-  tools::Status newFsReader(const std::string& filename,
-                            FsReader** result) override {
+  Status newFsReader(const std::string& filename, FsReader** result) override {
     int fd = ::open(filename.c_str(), O_RDONLY | kOpenBaseFlags);
     if (fd < 0) {
       *result = nullptr;
       return posixError(filename, errno);
     }
     *result = new PosixFsReader(filename, fd);
-    return tools::Status::NewOk();
+    return Status::NewOk();
   }
 };
 
@@ -228,11 +226,11 @@ Fs* Fs::getInstance() {
   return posix_default_fs.fs();
 }
 
-tools::Status posixError(const std::string& context, int err_number) {
+Status posixError(const std::string& context, int err_number) {
   if (errno == ENOENT) {
-    return tools::Status::NewNotFound(context + std::strerror(err_number));
+    return Status::NewNotFound(context + std::strerror(err_number));
   }
-  return tools::Status::NewIOError(context + std::strerror(err_number));
+  return Status::NewIOError(context + std::strerror(err_number));
 }
 
-}  // namespace pl::misc::fs
+}  // namespace pl
