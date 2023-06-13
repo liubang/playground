@@ -12,7 +12,7 @@
 #include <cstdint>
 #include <type_traits>
 
-namespace playground::cpp::misc::hash {
+namespace pl::misc::hash {
 
 template <typename T, T m, T r, T x, T y,
           std::enable_if_t<std::disjunction<
@@ -117,4 +117,4 @@ using CMurmurHash32 = CMurmurHash<uint32_t, 0x5bd1e995, 24, 13, 15>;
 using CMurmurHash64 =
     CMurmurHash<uint64_t, UINT64_C(0xc6a4a7935bd1e995), 47, 47, 47>;
 
-}  // namespace playground::cpp::misc::hash
+}  // namespace pl::misc::hash

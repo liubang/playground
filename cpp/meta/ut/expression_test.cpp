@@ -14,7 +14,7 @@
 TEST(meta, expression) {
   {
     auto plus = [](auto x, auto y) { return x + y; };
-    playground::cpp::meta::BinaryExpression exp(5, 3.5, plus);
+    pl::meta::BinaryExpression exp(5, 3.5, plus);
     auto res = exp();
     EXPECT_EQ(8.5, res);
   }
@@ -24,7 +24,7 @@ TEST(meta, expression) {
     int alpha = 4;
     auto add_scale = [alpha](auto lhs, auto rhs) { return lhs + alpha * rhs; };
     auto expr =
-        playground::cpp::meta::BinaryContainerExpression(x, y, add_scale);
+        pl::meta::BinaryContainerExpression(x, y, add_scale);
 
     for (std::size_t i = 0; i < expr.size(); ++i) {
       std::cout << expr[i] << " ";
@@ -37,8 +37,8 @@ TEST(meta, expression) {
     // x + y + z;
     std::vector<int> x{1, 2, 3}, y{1, 1, 1}, z{2, 5, 3};
     auto plus = [](auto x, auto y) { return x + y; };
-    auto expr = playground::cpp::meta::BinaryContainerExpression(
-        playground::cpp::meta::BinaryContainerExpression(x, y, plus), z, plus);
+    auto expr = pl::meta::BinaryContainerExpression(
+        pl::meta::BinaryContainerExpression(x, y, plus), z, plus);
 
     for (std::size_t i = 0; i < expr.size(); ++i) {
       std::cout << expr[i] << " ";

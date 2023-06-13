@@ -20,7 +20,7 @@
 
 #include "cpp/tools/scope.h"
 
-namespace playground::cpp::tools {
+namespace pl::tools {
 
 inline std::optional<std::string> getLocalIp() {
   static constexpr std::string_view REMOTE_ADDRESS = "10.255.255.255";
@@ -58,4 +58,4 @@ inline std::optional<std::string> getLocalIp() {
   return local_ip;
 }
 
-}  // namespace playground::cpp::tools
+}  // namespace pl::tools
