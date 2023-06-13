@@ -15,7 +15,7 @@
 #include "cpp/misc/sst/sstable_format.h"
 #include "cpp/tools/status.h"
 
-namespace pl::misc::sst {
+namespace pl {
 
 class Table {
  public:
@@ -24,28 +24,28 @@ class Table {
 
   ~Table();
 
-  static tools::Status open(const Options* options,
-                            fs::FsReader* reader,
+  static Status open(const Options* options,
+                            FsReader* reader,
                             uint64_t size,
                             Table** table);
 
-  tools::Status get(const tools::Binary& key, tools::Binary* value);
+  Status get(const Binary& key, Binary* value);
 
  private:
-  Table(const Options* options, fs::FsReader* reader, Block* index_block);
+  Table(const Options* options, FsReader* reader, Block* index_block);
 
   void readMeta(const Footer& footer);
-  void readFilter(const tools::Binary& filter_handle_content);
-  Iterator* blockReader(const tools::Binary& index_value);
+  void readFilter(const Binary& filter_handle_content);
+  Iterator* blockReader(const Binary& index_value);
 
  private:
   const Options* options_;
-  fs::FsReader* reader_;
-  tools::Status status_;
+  FsReader* reader_;
+  Status status_;
   FilterBlockReader* filter_{nullptr};
   const char* filter_data_;
   // BlockHandle metaindex_Handle_;
   Block* index_block_;
 };
 
-}  // namespace pl::misc::sst
+}  // namespace pl

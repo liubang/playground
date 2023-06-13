@@ -8,12 +8,13 @@
 //=====================================================================
 
 #include "cpp/misc/sst/block_builder.h"
-#include "cpp/misc/sst/encoding.h"
 
 #include <cassert>
 #include <iostream>
 
-namespace pl::misc::sst {
+#include "cpp/misc/sst/encoding.h"
+
+namespace pl {
 
 BlockBuilder::BlockBuilder(const Options* options)
     : comparator_(options->comparator),
@@ -21,9 +22,9 @@ BlockBuilder::BlockBuilder(const Options* options)
   restarts_.push_back(0);
 }
 
-void BlockBuilder::add(const tools::Binary& key, const tools::Binary& value) {
+void BlockBuilder::add(const Binary& key, const Binary& value) {
   assert(!finished_);
-  auto last_key_pice = tools::Binary(last_key_);
+  auto last_key_pice = Binary(last_key_);
   // 必须保证key按照指定的comparator的递增的顺序
   assert(buffer_.empty() || comparator_->compare(key, last_key_pice) > 0);
   uint32_t shared = 0;
@@ -42,7 +43,8 @@ void BlockBuilder::add(const tools::Binary& key, const tools::Binary& value) {
 
   /*
    * +----------------+--------------------+---------------+----------------+-------+
-   * | shared size 4B | non shared size 4B | value size 4B | non shared key | value |
+   * | shared size 4B | non shared size 4B | value size 4B | non shared key |
+   * value |
    * +----------------+--------------------+---------------+----------------+-------+
    */
   encodeInt<uint32_t>(&buffer_, shared);
@@ -54,16 +56,17 @@ void BlockBuilder::add(const tools::Binary& key, const tools::Binary& value) {
 
   last_key_.resize(shared);
   last_key_.append(key.data() + shared, non_shared);
-  assert(tools::Binary(last_key_).compare(key) == 0);
+  assert(Binary(last_key_).compare(key) == 0);
   counter_++;
 }
 
-tools::Binary BlockBuilder::finish() {
+Binary BlockBuilder::finish() {
   /*
    * restarts indexes
    *
    * +---------------+---------------+--------+---------------+------------------+
-   * | restart[0] 4B | restart[1] 4B | ...... | restart[n] 4B | restart count 4B |
+   * | restart[0] 4B | restart[1] 4B | ...... | restart[n] 4B | restart count 4B
+   * |
    * +---------------+---------------+--------+---------------+------------------+
    */
   for (uint32_t restart : restarts_) {
@@ -89,4 +92,4 @@ void BlockBuilder::reset() {
   restarts_.push_back(0);
 }
 
-}  // namespace pl::misc::sst
+}  // namespace pl

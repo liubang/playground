@@ -13,7 +13,7 @@
 #include <cstdint>
 #include <type_traits>
 
-namespace pl::tools {
+namespace pl {
 
 template <typename T>
 struct is_varint_type : std::false_type {};
@@ -70,4 +70,4 @@ inline void* varint_decode(void* const buffer, std::size_t buffer_size,
   *result = value;
 }
 
-}  // namespace pl::tools
+}  // namespace pl

@@ -11,7 +11,7 @@
 
 #include <iostream>
 
-namespace pl::misc::sst {
+namespace pl {
 
 Block::Block(const BlockContents& content)
     : data_(content.data.data()),
@@ -46,11 +46,11 @@ class Block::BlockIterator : public Iterator {
         num_restarts_(num_restarts) {}
 
   [[nodiscard]] bool valid() const override { return current_ < restarts_; }
-  [[nodiscard]] tools::Binary key() const override { return key_; }
-  [[nodiscard]] tools::Binary val() const override { return val_; }
-  [[nodiscard]] tools::Status status() const override { return status_; }
+  [[nodiscard]] Binary key() const override { return key_; }
+  [[nodiscard]] Binary val() const override { return val_; }
+  [[nodiscard]] Status status() const override { return status_; }
 
-  void seek(const tools::Binary& target) override {
+  void seek(const Binary& target) override {
     uint32_t left = 0;
     uint32_t right = num_restarts_ - 1;
     int current_key_compare = 0;
@@ -73,14 +73,14 @@ class Block::BlockIterator : public Iterator {
       const char* key_ptr = decodeEntry(data_ + offset, data_ + restarts_,
                                         &shared, &non_shared, &value_size);
       if (nullptr == key_ptr || (shared != 0)) {
-        status_ = tools::Status::NewCorruption("invalid entry in block");
+        status_ = Status::NewCorruption("invalid entry in block");
         current_ = restarts_;
         current_restart_ = num_restarts_;
         key_.clear();
         val_.clear();
         return;
       }
-      tools::Binary mid_key(key_ptr, non_shared);
+      Binary mid_key(key_ptr, non_shared);
       if (compare(mid_key, target) < 0) {
         left = mid;
       } else {
@@ -147,7 +147,7 @@ class Block::BlockIterator : public Iterator {
     key_.clear();
     current_restart_ = idx;
     uint32_t offset = getRestartOffset(idx);
-    val_ = tools::Binary(data_ + offset, 0);
+    val_ = Binary(data_ + offset, 0);
   }
 
   [[nodiscard]] inline uint32_t nextEntryOffset() const {
@@ -170,7 +170,7 @@ class Block::BlockIterator : public Iterator {
       return false;
     key_.resize(shared);
     key_.append(p, non_shared);
-    val_ = tools::Binary(p + non_shared, value_size);
+    val_ = Binary(p + non_shared, value_size);
     while (current_restart_ + 1 < num_restarts_ &&
            getRestartOffset(current_restart_) < current_) {
       ++current_restart_;
@@ -187,15 +187,15 @@ class Block::BlockIterator : public Iterator {
     constexpr std::size_t s = sizeof(uint32_t);
     if (p + 3 > limit)
       return nullptr;
-    *shared = pl::misc::sst::decodeInt<uint32_t>(p);
-    *non_shared = pl::misc::sst::decodeInt<uint32_t>(p + s);
-    *value_size = pl::misc::sst::decodeInt<uint32_t>(p + s * 2);
+    *shared = pl::decodeInt<uint32_t>(p);
+    *non_shared = pl::decodeInt<uint32_t>(p + s);
+    *value_size = pl::decodeInt<uint32_t>(p + s * 2);
     p += s * 3;
     return p;
   }
 
-  [[nodiscard]] inline int compare(const tools::Binary& a,
-                                   const tools::Binary& b) const {
+  [[nodiscard]] inline int compare(const Binary& a,
+                                   const Binary& b) const {
     return comparator_->compare(a, b);
   }
 
@@ -207,8 +207,8 @@ class Block::BlockIterator : public Iterator {
   uint32_t current_{0};           // 当前游标的偏移
   uint32_t current_restart_{0};   // 当前是第几个restart
   std::string key_;               // 当前游标处的key
-  tools::Binary val_;             // 当前游标处的value
-  tools::Status status_;
+  Binary val_;             // 当前游标处的value
+  Status status_;
 };
 
 // TODO(liubang): use unique_ptr
@@ -216,4 +216,4 @@ Iterator* Block::iterator(const Comparator* comparator) {
   return new BlockIterator(comparator, data_, restart_offset_, num_restarts_);
 }
 
-}  // namespace pl::misc::sst
+}  // namespace pl

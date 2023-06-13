@@ -11,8 +11,8 @@
 #include <boost/crc.hpp>
 #include <cstddef>
 
-namespace pl::tools {
+namespace pl {
 
 uint32_t crc32(const void* data, size_t length);
 
-}  // namespace pl::tools
+}  // namespace pl

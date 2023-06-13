@@ -13,7 +13,7 @@
 TEST(hash, murmurhash2_test) {
   const char* data = "hello world";
   uint64_t seed = 0;
-  pl::misc::hash::CMurmurHash64 hasher;
+  pl::CMurmurHash64 hasher;
   for (uint32_t i = 0; i < 4; ++i) {
     hasher.begin(seed);
     hasher.add(data, strlen(data), false);

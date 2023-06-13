@@ -18,13 +18,13 @@
 
 TEST(sstable_builder, build) {
   constexpr int COUNT = 10001;
-  auto* options = new pl::misc::sst::Options();
-  pl::misc::fs::FsWriter* writer;
-  auto* fs = pl::misc::fs::Fs::getInstance();
+  auto* options = new pl::Options();
+  pl::FsWriter* writer;
+  auto* fs = pl::Fs::getInstance();
   fs->newFsWriter("/tmp/test.sst", &writer);
 
   auto* sstable_builder =
-      new pl::misc::sst::SSTableBuilder(options, writer);
+      new pl::SSTableBuilder(options, writer);
 
   // absl::Cleanup cleanup = [&]() {
   //   delete options->comparator;
@@ -53,7 +53,7 @@ TEST(sstable_builder, build) {
   std::sort(keys.begin(), keys.end());
 
   for (int i = 0; i < COUNT; ++i) {
-    auto val = pl::tools::random_string(64);
+    auto val = pl::random_string(64);
     sstable_builder->add(keys[i], val);
     kvs[keys[i]] = val;
   }

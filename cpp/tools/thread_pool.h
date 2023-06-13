@@ -19,7 +19,6 @@
 #include <vector>
 
 namespace pl {
-namespace tools {
 
 class ThreadPool {
  public:
@@ -94,5 +93,4 @@ inline ThreadPool::~ThreadPool() {
   for (std::thread& worker : workers_) worker.join();
 }
 
-}  // namespace tools
 }  // namespace pl

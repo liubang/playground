@@ -10,9 +10,9 @@
 #include "cpp/misc/sst/encoding.h"
 #include "cpp/tools/crc.h"
 
-namespace pl::misc::sst {
+namespace pl {
 
-SSTableBuilder::SSTableBuilder(const Options* options, fs::FsWriter* writer)
+SSTableBuilder::SSTableBuilder(const Options* options, FsWriter* writer)
     : options_(options),
       writer_(writer),
       data_block_(options),
@@ -27,7 +27,7 @@ SSTableBuilder::~SSTableBuilder() {
   }
 };
 
-void SSTableBuilder::add(const tools::Binary& key, const tools::Binary& value) {
+void SSTableBuilder::add(const Binary& key, const Binary& value) {
   assert(!closed_);
   if (!ok()) {
     return;
@@ -128,7 +128,7 @@ void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
  *
  *
  */
-void SSTableBuilder::writeBlockRaw(const tools::Binary& content,
+void SSTableBuilder::writeBlockRaw(const Binary& content,
                                    CompressionType type,
                                    BlockHandle* handle) {
   handle->setOffset(offset_);
@@ -138,11 +138,11 @@ void SSTableBuilder::writeBlockRaw(const tools::Binary& content,
     // crc
     char trailer[kBlockTrailerSize];
     trailer[0] = static_cast<unsigned char>(type);
-    uint32_t crc = tools::crc32(content.data(), content.size());
+    uint32_t crc = crc32(content.data(), content.size());
     std::string encode_crc;
     encodeInt<uint32_t>(&encode_crc, crc);
     memcpy(trailer + 1, encode_crc.data(), encode_crc.size());
-    status_ = writer_->append(tools::Binary(trailer, kBlockTrailerSize));
+    status_ = writer_->append(Binary(trailer, kBlockTrailerSize));
     if (ok()) {
       // 更新下一个block的offset
       offset_ += content.size() + kBlockTrailerSize;
@@ -163,7 +163,7 @@ void SSTableBuilder::writeBlockRaw(const tools::Binary& content,
  * +----------------+
  *
  */
-tools::Status SSTableBuilder::finish() {
+Status SSTableBuilder::finish() {
   assert(!closed_);
   flush();
   closed_ = true;
@@ -218,4 +218,4 @@ tools::Status SSTableBuilder::finish() {
   return status_;
 }
 
-}  // namespace pl::misc::sst
+}  // namespace pl
