@@ -10,7 +10,7 @@
 #include "cpp/misc/bloom/bloom_filter.h"
 #include "cpp/misc/sst/filter_policy.h"
 
-namespace pl::misc::sst {
+namespace pl {
 
 /**
  * @class BloomFilterPolicy
@@ -22,10 +22,9 @@ class BloomFilterPolicy : public FilterPolicy {
 
   ~BloomFilterPolicy() override = default;
 
-  void createFilter(tools::Binary* keys,
-                    std::size_t n,
+  void createFilter(Binary* keys, std::size_t n,
                     std::string* dst) const override {
-    bloom::BloomFilter bloom_filter(bits_per_key_);
+    BloomFilter bloom_filter(bits_per_key_);
     bloom_filter.create(keys, n, dst);
   }
 
@@ -33,9 +32,9 @@ class BloomFilterPolicy : public FilterPolicy {
     return "BloomFilterPolicy";
   }
 
-  [[nodiscard]] bool keyMayMatch(const tools::Binary& key,
-                                 const tools::Binary& filter) const override {
-    bloom::BloomFilter bloom_filter(bits_per_key_);
+  [[nodiscard]] bool keyMayMatch(const Binary& key,
+                                 const Binary& filter) const override {
+    BloomFilter bloom_filter(bits_per_key_);
     return bloom_filter.contains(key, filter);
   }
 
@@ -47,4 +46,4 @@ FilterPolicy* newBloomFilterPolicy(uint64_t bits_per_key) {
   return new BloomFilterPolicy(bits_per_key);
 }
 
-}  // namespace pl::misc::sst
+}  // namespace pl

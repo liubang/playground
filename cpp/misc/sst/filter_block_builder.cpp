@@ -8,11 +8,12 @@
 //=====================================================================
 
 #include "cpp/misc/sst/filter_block_builder.h"
-#include "cpp/misc/sst/encoding.h"
 
 #include <cassert>
 
-namespace pl::misc::sst {
+#include "cpp/misc/sst/encoding.h"
+
+namespace pl {
 
 static const size_t kFilterBaseLg = 11;
 constexpr static std::size_t kFilterBase = 1 << kFilterBaseLg;  // 2048
@@ -28,15 +29,15 @@ void FilterBlockBuilder::startBlock(uint64_t offset) {
   }
 }
 
-void FilterBlockBuilder::addKey(const tools::Binary& key) {
+void FilterBlockBuilder::addKey(const Binary& key) {
   // make a copy
-  tools::Binary k = key;
+  Binary k = key;
   // 这两行的先后顺序不能颠倒
   start_.push_back(keys_.size());
   keys_.append(k.data(), k.size());
 }
 
-tools::Binary FilterBlockBuilder::finish() {
+Binary FilterBlockBuilder::finish() {
   if (!start_.empty()) {
     genFilter();
   }
@@ -65,7 +66,7 @@ void FilterBlockBuilder::genFilter() {
   for (std::size_t i = 0; i < num_keys; i++) {
     const char* base = keys_.data() + start_[i];
     std::size_t len = start_[i + 1] - start_[i];
-    tmp_keys_[i] = tools::Binary(base, len);
+    tmp_keys_[i] = Binary(base, len);
   }
   filter_offsets_.push_back(result_.size());
   filter_policy_->createFilter(&tmp_keys_[0], static_cast<int>(num_keys),
@@ -76,4 +77,4 @@ void FilterBlockBuilder::genFilter() {
   start_.clear();
 }
 
-}  // namespace pl::misc::sst
+}  // namespace pl

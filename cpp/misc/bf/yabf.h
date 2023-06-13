@@ -13,7 +13,7 @@
 
 // yet another brainfuck implement
 
-namespace pl::misc::bf {
+namespace pl {
 
 enum class Op {
   ptr_inc,   // >
@@ -102,4 +102,4 @@ void execute(unsigned char* data_ptr) {
   }
 }
 
-}  // namespace pl::misc::bf
+}  // namespace pl

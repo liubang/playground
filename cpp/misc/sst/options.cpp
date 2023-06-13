@@ -11,10 +11,10 @@
 #include "cpp/misc/sst/comparator.h"
 #include "cpp/misc/sst/filter_policy.h"
 
-namespace pl::misc::sst {
+namespace pl {
 
 Options::Options()
     : comparator(bytewiseComparator()),
       filter_policy(newBloomFilterPolicy(bits_per_key)) {}
 
-}  // namespace pl::misc::sst
+}  // namespace pl

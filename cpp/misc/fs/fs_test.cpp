@@ -15,20 +15,20 @@
 #include <memory>
 
 TEST(fs, FsWriterAndFsReader) {
-  auto* fs = pl::misc::fs::Fs::getInstance();
-  pl::misc::fs::FsWriter* fw;
-  pl::misc::fs::FsReader* fr;
+  auto* fs = pl::Fs::getInstance();
+  pl::FsWriter* fw;
+  pl::FsReader* fr;
 
   const std::string filename = "./test.log";
   fs->newFsWriter(filename, &fw);
   EXPECT_NE(fw, nullptr);
-  std::unique_ptr<pl::misc::fs::FsWriter> fw_ptr(fw);
+  std::unique_ptr<pl::FsWriter> fw_ptr(fw);
 
   fs->newFsReader(filename, &fr);
   EXPECT_NE(fr, nullptr);
-  std::unique_ptr<pl::misc::fs::FsReader> fr_ptr(fr);
+  std::unique_ptr<pl::FsReader> fr_ptr(fr);
 
-  pl::tools::Binary data("hello world");
+  pl::Binary data("hello world");
   auto st = fw_ptr->append(data);
   EXPECT_TRUE(st.isOk());
   st = fw_ptr->flush();
@@ -38,7 +38,7 @@ TEST(fs, FsWriterAndFsReader) {
   st = fw_ptr->close();
   EXPECT_TRUE(st.isOk());
 
-  pl::tools::Binary result;
+  pl::Binary result;
   char buffer[1024];
   auto status = fr_ptr->read(0, 1024, &result, buffer);
   EXPECT_TRUE(status.isOk());

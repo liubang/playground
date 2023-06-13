@@ -9,7 +9,7 @@
 
 #include "cpp/misc/sst/iterator.h"
 
-namespace pl::misc::sst {
+namespace pl {
 
 Iterator::Iterator() = default;
 
@@ -28,4 +28,4 @@ void Iterator::registerCleanup(const CleanupFunc& func) {
   cleanup_funcs_.push_back(func);
 }
 
-}  // namespace pl::misc::sst
+}  // namespace pl

@@ -16,38 +16,37 @@
 #include "cpp/tools/binary.h"
 #include "cpp/tools/status.h"
 
-namespace pl::misc::sst {
+namespace pl {
 
 class SSTableBuilder {
  public:
-  SSTableBuilder(const Options* options, fs::FsWriter* writer);
+  SSTableBuilder(const Options* options, FsWriter* writer);
   SSTableBuilder(const SSTableBuilder&) = delete;
   SSTableBuilder& operator=(const SSTableBuilder&) = delete;
   ~SSTableBuilder();
 
-  void add(const tools::Binary& key, const tools::Binary& value);
+  void add(const Binary& key, const Binary& value);
 
   void flush();
 
-  tools::Status finish();
+  Status finish();
 
   uint64_t entriesCount();
 
   uint64_t fileSize();
 
-  [[nodiscard]] tools::Status status() const { return status_; }
+  [[nodiscard]] Status status() const { return status_; }
 
   [[nodiscard]] bool ok() const { return status().isOk(); }
 
  private:
   void writeBlock(BlockBuilder* block, BlockHandle* handle);
-  void writeBlockRaw(const tools::Binary& content,
-                     CompressionType type,
+  void writeBlockRaw(const Binary& content, CompressionType type,
                      BlockHandle* handle);
 
  private:
   const Options* options_;
-  fs::FsWriter* writer_;
+  FsWriter* writer_;
   BlockBuilder data_block_;
   BlockBuilder index_block_;
   BlockHandle pending_handler_;
@@ -55,9 +54,9 @@ class SSTableBuilder {
   std::string last_key_;
   int64_t num_entries_{0};
   uint64_t offset_{0};
-  tools::Status status_;
+  Status status_;
   bool pending_index_entry_{false};
   bool closed_{false};
 };
 
-}  // namespace pl::misc::sst
+}  // namespace pl
