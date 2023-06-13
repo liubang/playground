@@ -9,11 +9,11 @@
 
 #pragma once
 
-#define PG_CONCATENATE_IMPL(s1, s2) s1##s2
-#define PG_CONCATENATE(s1, s2) PG_CONCATENATE_IMPL(s1, s2)
+#define PL_CONCATENATE_IMPL(s1, s2) s1##s2
+#define PL_CONCATENATE(s1, s2) PL_CONCATENATE_IMPL(s1, s2)
 
 #ifdef __COUNTER__
-#define PG_ANONYMOUS_VARIABLE(str) PG_CONCATENATE(str, __COUNTER__)
+#define PL_ANONYMOUS_VARIABLE(str) PL_CONCATENATE(str, __COUNTER__)
 #else
-#define PG_ANONYMOUS_VARIABLE(str) PG_CONCATENATE(str, __LINE__)
+#define PL_ANONYMOUS_VARIABLE(str) PL_CONCATENATE(str, __LINE__)
 #endif

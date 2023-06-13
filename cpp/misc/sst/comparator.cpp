@@ -9,7 +9,7 @@
 
 #include "cpp/misc/sst/comparator.h"
 
-namespace playground::cpp::misc::sst {
+namespace pl::misc::sst {
 
 Comparator::~Comparator() = default;
 
@@ -31,4 +31,4 @@ Comparator* bytewiseComparator() {
   return new BytewiseComparator();
 }
 
-}  // namespace playground::cpp::misc::sst
+}  // namespace pl::misc::sst

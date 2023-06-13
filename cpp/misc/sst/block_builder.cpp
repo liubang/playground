@@ -13,7 +13,7 @@
 #include <cassert>
 #include <iostream>
 
-namespace playground::cpp::misc::sst {
+namespace pl::misc::sst {
 
 BlockBuilder::BlockBuilder(const Options* options)
     : comparator_(options->comparator),
@@ -89,4 +89,4 @@ void BlockBuilder::reset() {
   restarts_.push_back(0);
 }
 
-}  // namespace playground::cpp::misc::sst
+}  // namespace pl::misc::sst

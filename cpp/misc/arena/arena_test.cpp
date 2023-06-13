@@ -12,7 +12,7 @@
 
 TEST(arena, allocate) {
   constexpr std::size_t ptr_char_size = sizeof(char*);
-  playground::cpp::misc::arena::Arena arena;
+  pl::misc::arena::Arena arena;
 
   arena.allocate(1024);
   int usage = 4096 + ptr_char_size;

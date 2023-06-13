@@ -16,7 +16,7 @@
 #include <cstdint>
 #include <string>
 
-namespace playground::cpp::misc::sst {
+namespace pl::misc::sst {
 
 /**
  * @class BlockHandle
@@ -87,4 +87,4 @@ class BlockReader {
                                  BlockContents* result);
 };
 
-}  // namespace playground::cpp::misc::sst
+}  // namespace pl::misc::sst

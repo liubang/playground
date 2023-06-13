@@ -14,7 +14,7 @@
 #include <functional>
 #include <list>
 
-namespace playground::cpp::misc::sst {
+namespace pl::misc::sst {
 
 class Iterator {
  public:
@@ -42,4 +42,4 @@ class Iterator {
   std::list<CleanupFunc> cleanup_funcs_;
 };
 
-}  // namespace playground::cpp::misc::sst
+}  // namespace pl::misc::sst
