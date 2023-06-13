@@ -20,7 +20,7 @@
 #include <vector>
 
 TEST(block_builder, test) {
-  auto* options = new pl::misc::sst::Options();
+  auto* options = new pl::Options();
 
   // absl::Cleanup cleanup = [&]() {
   //   delete options->comparator;
@@ -36,7 +36,7 @@ TEST(block_builder, test) {
 
   options->block_restart_interval = 16;
 
-  pl::misc::sst::BlockBuilder block_builder(options);
+  pl::BlockBuilder block_builder(options);
   constexpr int COUNT = 10001;
 
   EXPECT_TRUE(block_builder.empty());
@@ -52,7 +52,7 @@ TEST(block_builder, test) {
   std::sort(keys.begin(), keys.end());
 
   for (int i = 0; i < COUNT; ++i) {
-    auto val = pl::tools::random_string(64);
+    auto val = pl::random_string(64);
     block_builder.add(keys[i], val);
     kvs[keys[i]] = val;
   }
@@ -61,13 +61,13 @@ TEST(block_builder, test) {
 
   auto block = block_builder.finish();
 
-  pl::misc::sst::BlockContents block_content = {
+  pl::BlockContents block_content = {
       block,
       false,
       false,
   };
 
-  pl::misc::sst::Block b(block_content);
+  pl::Block b(block_content);
 
   auto* itr = b.iterator(nullptr);
   // absl::Cleanup cleanup1 = [&]() { delete itr; };
@@ -94,14 +94,14 @@ TEST(block_builder, test) {
   // const char* data = block.data();
   // std::size_t size = block.size();
   // auto restart_count =
-  // pl::misc::sst::decodeInt<uint32_t>(&data[size - 4]);
+  // pl::decodeInt<uint32_t>(&data[size - 4]);
   // EXPECT_EQ(restart_count, (COUNT / 16) + (COUNT % 16 == 0 ? 0 : 1));
   //
   // // parse all restarts
   // std::vector<uint32_t> restarts(restart_count + 1);
   // for (int i = 0; i < restart_count; ++i) {
   //   uint32_t offset = 4 * (i + 2);
-  //   auto restart = pl::misc::sst::decodeInt<uint32_t>(&data[size
+  //   auto restart = pl::decodeInt<uint32_t>(&data[size
   //   - offset]); restarts[i] = restart;
   // }
   //
@@ -116,10 +116,10 @@ TEST(block_builder, test) {
   //   // 解析每一个restart中的key和value
   //   while (start < end) {
   //     assert((start + 12) < end);
-  //     auto shared = pl::misc::sst::decodeInt<uint32_t>(data +
+  //     auto shared = pl::decodeInt<uint32_t>(data +
   //     start); auto non_shared =
-  //     pl::misc::sst::decodeInt<uint32_t>(data + start + 4); auto
-  //     value_size = pl::misc::sst::decodeInt<uint32_t>(data +
+  //     pl::decodeInt<uint32_t>(data + start + 4); auto
+  //     value_size = pl::decodeInt<uint32_t>(data +
   //     start + 8); assert(start + 12 + non_shared + value_size <= end);
   //
   //     assert(pre_key.size() >= shared);

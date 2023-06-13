@@ -17,22 +17,22 @@
 #include <gtest/gtest.h>
 
 TEST(filter_block, build_and_read) {
-  std::unique_ptr<pl::misc::sst::FilterPolicy> filter_policy_ptr(
-      pl::misc::sst::newBloomFilterPolicy(64));
-  pl::misc::sst::FilterBlockBuilder builder(
+  std::unique_ptr<pl::FilterPolicy> filter_policy_ptr(
+      pl::newBloomFilterPolicy(64));
+  pl::FilterBlockBuilder builder(
       filter_policy_ptr.get());
 
   std::vector<std::string> keys;
 
   builder.startBlock(0);
   for (int i = 0; i < 1000; ++i) {
-    auto str = pl::tools::random_string(128);
+    auto str = pl::random_string(128);
     builder.addKey(str);
     keys.push_back(str);
   }
 
   auto filter = builder.finish();
-  pl::misc::sst::FilterBlockReader reader(filter_policy_ptr.get(),
+  pl::FilterBlockReader reader(filter_policy_ptr.get(),
                                                        filter);
 
   for (int i = 0; i < 1000; ++i) {
@@ -41,7 +41,7 @@ TEST(filter_block, build_and_read) {
   }
 
   for (int i = 0; i < 1000; ++i) {
-    auto str = pl::tools::random_string(64);
+    auto str = pl::random_string(64);
     auto ret = reader.keyMayMatch(0, str);
     EXPECT_FALSE(ret);
   }
