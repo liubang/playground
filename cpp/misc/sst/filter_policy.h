@@ -9,11 +9,11 @@
 
 #pragma once
 
-#include "cpp/tools/binary.h"
-
 #include <string>
 
-namespace pl::misc::sst {
+#include "cpp/tools/binary.h"
+
+namespace pl {
 
 class FilterPolicy {
  public:
@@ -26,8 +26,7 @@ class FilterPolicy {
    * @param n [TODO:parameter]
    * @param dst [TODO:parameter]
    */
-  virtual void createFilter(tools::Binary* keys,
-                            std::size_t n,
+  virtual void createFilter(Binary* keys, std::size_t n,
                             std::string* dst) const = 0;
 
   /**
@@ -44,10 +43,10 @@ class FilterPolicy {
    * @param filter [TODO:parameter]
    * @return [TODO:return]
    */
-  [[nodiscard]] virtual bool keyMayMatch(const tools::Binary& key,
-                                         const tools::Binary& filter) const = 0;
+  [[nodiscard]] virtual bool keyMayMatch(const Binary& key,
+                                         const Binary& filter) const = 0;
 };
 
 FilterPolicy* newBloomFilterPolicy(uint64_t bits_per_key);
 
-}  // namespace pl::misc::sst
+}  // namespace pl

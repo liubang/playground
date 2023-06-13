@@ -12,10 +12,10 @@
 #include <iostream>
 #include <memory>
 
-namespace pl::misc::sst {
+namespace pl {
 
 Table::Table(const Options* options,
-             fs::FsReader* reader, /*const BlockHandle& metaindex_handle,*/
+             FsReader* reader, /*const BlockHandle& metaindex_handle,*/
              Block* index_block)
     : options_(options), reader_(reader), index_block_(index_block) {}
 
@@ -28,16 +28,16 @@ Table::~Table() {
     delete index_block_;
 }
 
-tools::Status Table::open(const Options* options,
-                          fs::FsReader* reader,
+Status Table::open(const Options* options,
+                          FsReader* reader,
                           uint64_t size,
                           Table** table) {
   *table = nullptr;
   if (size < Footer::kEncodedLength) {
-    return tools::Status::NewCorruption("file is too short to be an sstable");
+    return Status::NewCorruption("file is too short to be an sstable");
   }
   char footer_content[Footer::kEncodedLength];
-  tools::Binary footer_input;
+  Binary footer_input;
   auto s = reader->read(size - Footer::kEncodedLength, Footer::kEncodedLength,
                         &footer_input, footer_content);
   if (!s.isOk())
@@ -79,13 +79,13 @@ void Table::readMeta(const Footer& footer) {
   std::string key = "filter.";
   key.append(options_->filter_policy->name());
   iter->seek(key);
-  if (iter->valid() && iter->key() == tools::Binary(key)) {
+  if (iter->valid() && iter->key() == Binary(key)) {
     readFilter(iter->val());
   }
   delete iter;
 }
 
-void Table::readFilter(const tools::Binary& filter_handle_value) {
+void Table::readFilter(const Binary& filter_handle_value) {
   BlockHandle filter_handle;
   if (!filter_handle.decodeFrom(filter_handle_value).isOk()) {
     return;
@@ -103,23 +103,23 @@ void Table::readFilter(const tools::Binary& filter_handle_value) {
   filter_ = new FilterBlockReader(options_->filter_policy, block.data);
 }
 
-tools::Status Table::get(const tools::Binary& key, tools::Binary* value) {
-  tools::Status s;
+Status Table::get(const Binary& key, Binary* value) {
+  Status s;
   auto* iiter = index_block_->iterator(options_->comparator);
   iiter->seek(key);
   if (iiter->valid()) {
-    tools::Binary handle_value = iiter->val();
+    Binary handle_value = iiter->val();
     BlockHandle handle;
     if (filter_ != nullptr && handle.decodeFrom(handle_value).isOk() &&
         !filter_->keyMayMatch(handle.offset(), key)) {
       // not found
-      s = tools::Status::NewNotFound();
+      s = Status::NewNotFound();
     } else {
       // key may found
       auto* iter = blockReader(iiter->val());
       if (nullptr == iter) {
         delete iiter;
-        return tools::Status::NewNotFound();
+        return Status::NewNotFound();
       }
 
       iter->seek(key);
@@ -135,7 +135,7 @@ tools::Status Table::get(const tools::Binary& key, tools::Binary* value) {
   return s;
 }
 
-Iterator* Table::blockReader(const tools::Binary& index_value) {
+Iterator* Table::blockReader(const Binary& index_value) {
   Block* block = nullptr;
   BlockHandle handle;
   auto s = handle.decodeFrom(index_value);
@@ -154,4 +154,4 @@ Iterator* Table::blockReader(const tools::Binary& index_value) {
   return iter;
 }
 
-}  // namespace pl::misc::sst
+}  // namespace pl

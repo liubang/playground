@@ -11,10 +11,10 @@
 #include <gtest/gtest.h>
 
 TEST(tools, ip) {
-  EXPECT_TRUE(pl::tools::is_power_of_two(1));
-  EXPECT_TRUE(pl::tools::is_power_of_two(4));
-  EXPECT_TRUE(pl::tools::is_power_of_two(8));
-  EXPECT_TRUE(pl::tools::is_power_of_two(16));
-  EXPECT_FALSE(pl::tools::is_power_of_two(10));
-  EXPECT_FALSE(pl::tools::is_power_of_two(12));
+  EXPECT_TRUE(pl::is_power_of_two(1));
+  EXPECT_TRUE(pl::is_power_of_two(4));
+  EXPECT_TRUE(pl::is_power_of_two(8));
+  EXPECT_TRUE(pl::is_power_of_two(16));
+  EXPECT_FALSE(pl::is_power_of_two(10));
+  EXPECT_FALSE(pl::is_power_of_two(12));
 }
