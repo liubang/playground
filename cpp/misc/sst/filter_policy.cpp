@@ -9,7 +9,7 @@
 
 #include "cpp/misc/sst/filter_policy.h"
 
-namespace pl::misc::sst {
+namespace pl {
 
 FilterPolicy::~FilterPolicy() = default;
 

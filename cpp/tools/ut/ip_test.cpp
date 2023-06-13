@@ -14,7 +14,7 @@
 #include <iostream>
 
 TEST(tools, ip) {
-  auto ip = pl::tools::getLocalIp();
+  auto ip = pl::getLocalIp();
   std::cout << ip.value() << std::endl;
   EXPECT_FALSE(ip->empty());
 }

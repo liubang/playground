@@ -15,7 +15,7 @@
 #include <iostream>
 #include <memory>
 
-namespace pl::misc::sst {
+namespace pl {
 
 void BlockHandle::encodeTo(std::string* dst) const {
   assert(offset_ != ~static_cast<uint64_t>(0));
@@ -24,13 +24,13 @@ void BlockHandle::encodeTo(std::string* dst) const {
   encodeInt(dst, size_);
 }
 
-tools::Status BlockHandle::decodeFrom(const tools::Binary& input) {
+Status BlockHandle::decodeFrom(const Binary& input) {
   if (input.size() < 16) {
-    return tools::Status::NewCorruption("bad block handle");
+    return Status::NewCorruption("bad block handle");
   }
   offset_ = decodeInt<uint64_t>(input.data());
   size_ = decodeInt<uint64_t>(input.data() + 8);
-  return tools::Status::NewOk();
+  return Status::NewOk();
 }
 
 /*
@@ -51,9 +51,9 @@ void Footer::encodeTo(std::string* dst) const {
   assert(dst->size() == s + kEncodedLength);
 }
 
-tools::Status Footer::decodeFrom(const tools::Binary& input) {
+Status Footer::decodeFrom(const Binary& input) {
   if (input.size() < kEncodedLength) {
-    return tools::Status::NewCorruption("invalid sstable format");
+    return Status::NewCorruption("invalid sstable format");
   }
   const char* magic_ptr = input.data() + kEncodedLength - 8;
   const auto magic_lo = decodeInt<uint32_t>(magic_ptr);
@@ -61,24 +61,24 @@ tools::Status Footer::decodeFrom(const tools::Binary& input) {
   const uint64_t magic = ((static_cast<uint64_t>(magic_hi) << 32 |
                            (static_cast<uint64_t>(magic_lo))));
   if (magic != kTableMagicNumber) {
-    return tools::Status::NewCorruption("invalid magic number");
+    return Status::NewCorruption("invalid magic number");
   }
-  tools::Status result = metaindex_handle_.decodeFrom(input);
+  Status result = metaindex_handle_.decodeFrom(input);
   if (result.isOk()) {
     // TODO(liubang): 优化没必要的拷贝
-    result = index_handle_.decodeFrom(tools::Binary(input.data() + 16, 16));
+    result = index_handle_.decodeFrom(Binary(input.data() + 16, 16));
   }
   return result;
 }
 
-tools::Status BlockReader::readBlock(fs::FsReader* reader,
+Status BlockReader::readBlock(FsReader* reader,
                                      const BlockHandle& handle,
                                      BlockContents* result) {
   // read block trailer
   auto s = static_cast<std::size_t>(handle.size());
   char* buf = new char[s + kBlockTrailerSize];
 
-  tools::Binary content;
+  Binary content;
   auto status =
       reader->read(handle.offset(), s + kBlockTrailerSize, &content, buf);
   if (!status.isOk()) {
@@ -88,16 +88,16 @@ tools::Status BlockReader::readBlock(fs::FsReader* reader,
   // invalid content
   if (content.size() != s + kBlockTrailerSize) {
     delete[] buf;
-    return tools::Status::NewCorruption("invalid block");
+    return Status::NewCorruption("invalid block");
   }
 
   // crc check
   const char* data = content.data();
   auto crc = decodeInt<uint32_t>(data + s + 1);
-  auto actual_crc = tools::crc32(data, s);
+  auto actual_crc = crc32(data, s);
   if (crc != actual_crc) {
     delete[] buf;
-    return tools::Status::NewCorruption("crc error");
+    return Status::NewCorruption("crc error");
   }
 
   // TODO(liubang): support compresstion
@@ -106,17 +106,17 @@ tools::Status BlockReader::readBlock(fs::FsReader* reader,
     default:
       if (data != buf) {
         delete[] buf;
-        result->data = tools::Binary(data, s);
+        result->data = Binary(data, s);
         result->heap_allocated = false;
         result->cachable = false;
       } else {
-        result->data = tools::Binary(buf, s);
+        result->data = Binary(buf, s);
         result->heap_allocated = true;
         result->cachable = true;
       }
   }
 
-  return tools::Status::NewOk();
+  return Status::NewOk();
 }
 
-}  // namespace pl::misc::sst
+}  // namespace pl

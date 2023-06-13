@@ -16,7 +16,7 @@
 #include <cstdint>
 #include <string>
 
-namespace pl::misc::sst {
+namespace pl {
 
 /**
  * @class BlockHandle
@@ -36,7 +36,7 @@ class BlockHandle {
   void setSize(uint64_t size) { size_ = size; }
 
   void encodeTo(std::string* dst) const;
-  [[nodiscard]] tools::Status decodeFrom(const tools::Binary& input);
+  [[nodiscard]] Status decodeFrom(const Binary& input);
 
  private:
   uint64_t offset_;
@@ -62,7 +62,7 @@ class Footer {
   [[nodiscard]] const BlockHandle& indexHandle() const { return index_handle_; }
 
   void encodeTo(std::string* dst) const;
-  [[nodiscard]] tools::Status decodeFrom(const tools::Binary& input);
+  [[nodiscard]] Status decodeFrom(const Binary& input);
 
  private:
   BlockHandle metaindex_handle_;
@@ -75,16 +75,16 @@ static constexpr uint64_t kTableMagicNumber = 0x833859d02c1dbd75ull;
 static constexpr uint32_t kBlockTrailerSize = 5;
 
 struct BlockContents {
-  tools::Binary data;
+  Binary data;
   bool cachable;
   bool heap_allocated;
 };
 
 class BlockReader {
  public:
-  static tools::Status readBlock(fs::FsReader* reader,
+  static Status readBlock(FsReader* reader,
                                  const BlockHandle& handle,
                                  BlockContents* result);
 };
 
-}  // namespace pl::misc::sst
+}  // namespace pl

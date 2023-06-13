@@ -14,7 +14,7 @@
 
 #include "cpp/tools/binary.h"
 
-namespace pl::misc::bloom {
+namespace pl {
 
 class BloomFilter final {
  public:
@@ -26,15 +26,14 @@ class BloomFilter final {
   BloomFilter& operator=(const BloomFilter&&) = delete;
 
   // lookup if bloomfilter contains data
-  [[nodiscard]] bool contains(const tools::Binary& key,
-                              const tools::Binary& filter) const;
+  [[nodiscard]] bool contains(const Binary& key, const Binary& filter) const;
 
   // add a member to bloomfilter
-  void create(const tools::Binary* keys, std::size_t n, std::string* dst) const;
+  void create(const Binary* keys, std::size_t n, std::string* dst) const;
 
  private:
   std::size_t bits_per_key_;  // 每一个key需要占用多少bit
   std::size_t hash_count_;    // hash函数的个数
 };
 
-}  // namespace pl::misc::bloom
+}  // namespace pl

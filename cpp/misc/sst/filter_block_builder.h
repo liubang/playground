@@ -15,7 +15,7 @@
 #include "cpp/misc/sst/filter_policy.h"
 #include "cpp/tools/binary.h"
 
-namespace pl::misc::sst {
+namespace pl {
 
 class FilterBlockBuilder {
  public:
@@ -26,9 +26,9 @@ class FilterBlockBuilder {
 
   void startBlock(uint64_t offset);
 
-  void addKey(const tools::Binary& key);
+  void addKey(const Binary& key);
 
-  tools::Binary finish();
+  Binary finish();
 
  private:
   void genFilter();
@@ -40,7 +40,7 @@ class FilterBlockBuilder {
                                     // + 1] - start_[i] 计算出第i个key的长度
   std::string result_;  // 所有的filter都存放在result_中
   std::vector<uint32_t> filter_offsets_;  // 每个filter在result_中的offset
-  std::vector<tools::Binary> tmp_keys_;  // 生成新的filter的时候存储临时的key
+  std::vector<Binary> tmp_keys_;  // 生成新的filter的时候存储临时的key
 };
 
-}  // namespace pl::misc::sst
+}  // namespace pl

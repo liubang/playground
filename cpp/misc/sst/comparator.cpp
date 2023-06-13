@@ -9,7 +9,7 @@
 
 #include "cpp/misc/sst/comparator.h"
 
-namespace pl::misc::sst {
+namespace pl {
 
 Comparator::~Comparator() = default;
 
@@ -21,14 +21,11 @@ class BytewiseComparator : public Comparator {
     return "BytewiseComparator";
   };
 
-  [[nodiscard]] int compare(const tools::Binary& a,
-                            const tools::Binary& b) const override {
+  [[nodiscard]] int compare(const Binary& a, const Binary& b) const override {
     return a.compare(b);
   }
 };
 
-Comparator* bytewiseComparator() {
-  return new BytewiseComparator();
-}
+Comparator* bytewiseComparator() { return new BytewiseComparator(); }
 
-}  // namespace pl::misc::sst
+}  // namespace pl
