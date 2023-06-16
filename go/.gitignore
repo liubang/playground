@@ -1,5 +1,0 @@
-.idea
-output/
-vendor/*
-!vendor/.gitkeep
-*.out
