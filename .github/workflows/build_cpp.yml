@@ -38,3 +38,37 @@ jobs:
         run: |
           bazelisk build //cpp/...
           bazelisk test  //cpp/...
+  coverage:
+    name: code coverage
+    runs-on: ubuntu-latest
+    needs: [build-cpp]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v3
+        with:
+          go-version: "^1.19.0"
+      - uses: actions/cache@v3
+        env:
+          cache-name: bazel-coverage
+        with:
+          path: ~/.cache/bazelisk
+          key: ${{ env.cache-name }}-${{ runner.os }}
+          restore-keys: |
+            ${{ env.cache-name }}-${{ runner.os }}
+      - run: go install github.com/bazelbuild/bazelisk@latest
+      - name: run build
+        run: |
+          sudo apt install lcov -y
+          bazelisk coverage --instrument_test_targets --combined_report=lcov //cpp/...
+          genhtml --output coverage "./bazel-out/_coverage/_coverage_report.dat"
+      - name: Deploy 🚀
+        uses: peaceiris/actions-gh-pages@v3
+        if: ${{ github.ref == 'refs/heads/main' }}
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./coverage
+          publish_branch: coverage
+          user_name: "liubang"
+          user_email: "it.liubang@gmail.com"
