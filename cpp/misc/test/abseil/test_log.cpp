@@ -8,9 +8,7 @@
 //=====================================================================
 #include <gtest/gtest.h>
 
-#include "absl/flags/parse.h"
 #include "absl/log/check.h"
-#include "absl/log/initialize.h"
 #include "absl/log/log.h"
 
 TEST(abseil, log) {
