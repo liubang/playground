@@ -20,6 +20,12 @@ def external_repositories():
     # )
 
     http_archive(
+        name = "oneTBB",
+        urls = ["https://github.com/oneapi-src/oneTBB/archive/c45684495599d41ba10893effa0682eceb1a3169.zip"],
+        strip_prefix = "oneTBB-c45684495599d41ba10893effa0682eceb1a3169",
+    )
+
+    http_archive(
         name = "com_github_nelhage_rules_boost",
         url = "https://github.com/nelhage/rules_boost/archive/929f5412553c5295d30b16858da7cbefba0d0870.tar.gz",
         strip_prefix = "rules_boost-929f5412553c5295d30b16858da7cbefba0d0870",
