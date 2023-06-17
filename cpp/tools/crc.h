@@ -8,11 +8,10 @@
 //=====================================================================
 #pragma once
 
-#include <boost/crc.hpp>
-#include <cstddef>
+#include <cstdint>
 
 namespace pl {
 
-uint32_t crc32(const void* data, size_t length);
+uint32_t crc32(const void* data, std::size_t length);
 
 }  // namespace pl
