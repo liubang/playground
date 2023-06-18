@@ -152,13 +152,11 @@ class Unique {
 
 //-------------------------------------------------------------------------------------------------
 
-template <typename T>
-inline auto func(T t) {
-  if (std::is_same_v<T, int>) {
-    return 2;
-  } else {
-    return 1;
-  }
+template <typename... Ts, std::enable_if<std::conjunction<
+                              std::is_integral<Ts>...>::value>::type* = nullptr>
+constexpr auto sums(Ts... ts) {
+  // static_assert(std::conjunction<std::is_integral<Ts>...>::value);
+  return (0 + ... + ts);
 }
 
 }  // namespace pl
