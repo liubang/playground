@@ -31,19 +31,16 @@ TEST(meta, traits) {
   static_assert(pl::is_same<std::string, std::string>::value);
   static_assert(!pl::is_same<int, long>::value);
 
-  static_assert(
-      pl::is_same<int, pl::remove_const_t<const int>>::value);
+  static_assert(pl::is_same<int, pl::remove_const_t<const int>>::value);
 
   static_assert(
-      pl::is_same<
-          int, pl::conditional<true, int, std::string>::type>::value);
-
-  static_assert(pl::is_same<
-                std::string,
-                pl::conditional<false, int, std::string>::type>::value);
+      pl::is_same<int, pl::conditional<true, int, std::string>::type>::value);
 
   static_assert(
-      pl::is_same_v<int, pl::array_size<int[5]>::value_type>);
+      pl::is_same<std::string,
+                  pl::conditional<false, int, std::string>::type>::value);
+
+  static_assert(pl::is_same_v<int, pl::array_size<int[5]>::value_type>);
 
   static_assert(pl::array_size<int[5]>::value == 5);
 
