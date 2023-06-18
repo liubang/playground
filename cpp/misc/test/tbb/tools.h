@@ -22,8 +22,8 @@ void measure(Fn&& fn) {
   fn();
   auto end = std::chrono::high_resolution_clock::now();
   auto elapsed =
-      std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-  std::cout << ">> Elapsed time: " << elapsed.count() << "(ms)" << std::endl;
+      std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+  std::cout << ">> Elapsed time: " << elapsed.count() << "(us)" << std::endl;
 }
 
 }  // namespace pl
