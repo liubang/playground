@@ -13,7 +13,7 @@
 #include <tuple>
 #include <utility>
 
-namespace pl::meta {
+namespace pl {
 
 template <typename... Args>
 void PrintImpl(const Args&... tupleArgs) {
@@ -49,4 +49,4 @@ void PrintTupleApply(const TupleT& tp) {
   std::cout << ")";
 }
 
-}  // namespace pl::meta
+}  // namespace pl
