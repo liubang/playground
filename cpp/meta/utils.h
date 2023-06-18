@@ -13,7 +13,7 @@
 
 #include "cpp/meta/type_list.h"
 
-namespace pl::meta {
+namespace pl {
 
 //-------------------------------------------------------------------------------------------------
 
@@ -152,4 +152,13 @@ class Unique {
 
 //-------------------------------------------------------------------------------------------------
 
-}  // namespace pl::meta
+template <typename T>
+inline auto func(T t) {
+  if (std::is_same_v<T, int>) {
+    return 2;
+  } else {
+    return 1;
+  }
+}
+
+}  // namespace pl
