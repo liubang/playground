@@ -60,3 +60,8 @@ TEST(utils, unique) {
   static_assert(std::is_same_v<pl::Unique<longList>::type,
                                pl::TypeList<char, float, int, double>::type>);
 }
+
+TEST(utils, sums) {
+  //
+  static_assert(pl::sums(1, 2, 3, 4) == 10);
+}
