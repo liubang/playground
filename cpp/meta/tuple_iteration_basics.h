@@ -13,7 +13,7 @@
 #include <utility>
 
 // https://www.cppstories.com/2022/tuple-iteration-basics/
-namespace pl::meta {
+namespace pl {
 
 template <typename T>
 void PrintElem(const T& t) {
@@ -68,11 +68,11 @@ std::ostream& PrintTupleImplStream(std::ostream& os, const TupleT& tp,
   return os;
 }
 
-}  // namespace pl::meta
+}  // namespace pl
 
 template <typename TupleT,
           std::size_t TupleSize = std::tuple_size<TupleT>::value>
 inline std::ostream& operator<<(std::ostream& os, const TupleT& tp) {
-  return pl::meta::PrintTupleImplStream(os, tp,
+  return pl::PrintTupleImplStream(os, tp,
                                         std::make_index_sequence<TupleSize>{});
 }

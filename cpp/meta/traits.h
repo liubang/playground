@@ -10,7 +10,7 @@
 
 #include <type_traits>
 
-namespace pl::meta {
+namespace pl {
 
 //-------------------------------------------------------------------------------------------------
 template <typename T>
@@ -117,4 +117,4 @@ template <typename T>
 struct HasInit<T, void_t<decltype(std::declval<T>().Init())>> : std::true_type {
 };
 
-}  // namespace pl::meta
+}  // namespace pl

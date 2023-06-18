@@ -16,16 +16,16 @@
 
 TEST(meta, PrintTupleManual) {
   std::tuple tp{10, 20, "hello"};
-  pl::meta::PrintTupleManual<decltype(tp), 0, 1, 2>(tp);
+  pl::PrintTupleManual<decltype(tp), 0, 1, 2>(tp);
   std::cout << std::endl;
   EXPECT_TRUE(true);
 }
 
 TEST(meta, PrintTupleManualEx) {
   std::tuple tp{10, 20, "hello"};
-  pl::meta::PrintTupleManualEx(tp, std::index_sequence<0, 1, 2>{});
+  pl::PrintTupleManualEx(tp, std::index_sequence<0, 1, 2>{});
   std::cout << std::endl;
-  pl::meta::PrintTupleManualEx(
+  pl::PrintTupleManualEx(
       tp, std::make_index_sequence<std::tuple_size_v<decltype(tp)>>{});
   std::cout << std::endl;
   EXPECT_TRUE(true);
@@ -33,14 +33,14 @@ TEST(meta, PrintTupleManualEx) {
 
 TEST(meta, PrintTupleAutoGetSize) {
   std::tuple tp{10, 20, "hello"};
-  pl::meta::PrintTupleAutoGetSize(tp);
+  pl::PrintTupleAutoGetSize(tp);
   std::cout << std::endl;
   EXPECT_TRUE(true);
 }
 
 TEST(meta, PrintTupleFinal) {
   std::tuple tp{10, 20, "hello"};
-  pl::meta::PrintTupleFinal(tp);
+  pl::PrintTupleFinal(tp);
   std::cout << std::endl;
   EXPECT_TRUE(true);
 }

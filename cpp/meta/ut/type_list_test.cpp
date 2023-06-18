@@ -16,14 +16,14 @@
 #include <variant>
 
 TEST(meta, type_list) {
-  using AList = pl::meta::TypeList<int, char>;
-  static_assert(pl::meta::TL<AList>);
+  using AList = pl::TypeList<int, char>;
+  static_assert(pl::TL<AList>);
   static_assert(AList::size == 2);
   static_assert(std::is_same_v<AList::prepend<double>,
-                               pl::meta::TypeList<double, int, char>>);
+                               pl::TypeList<double, int, char>>);
 
   static_assert(std::is_same_v<AList::append<double>,
-                               pl::meta::TypeList<int, char, double>>);
+                               pl::TypeList<int, char, double>>);
 
   static_assert(std::is_same_v<AList::to<std::tuple>, std::tuple<int, char>>);
   static_assert(

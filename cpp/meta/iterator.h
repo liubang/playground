@@ -10,7 +10,7 @@
 
 #include <cstddef>
 
-namespace pl::meta {
+namespace pl {
 //-------------------------------------------------------------------------------------------------
 
 // 定义iterator基本类型
@@ -70,4 +70,4 @@ void advance(Iterator& iter,
   advanceImpl(iter, n, iterator_traits<Iterator>::iterator_category);
 }
 
-};  // namespace pl::meta
+};  // namespace pl
