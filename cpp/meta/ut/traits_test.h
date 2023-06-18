@@ -14,7 +14,7 @@
 
 #include "cpp/meta/traits.h"
 
-namespace pl::meta::ut {
+namespace pl::ut {
 
 template <typename T, enable_if_t<std::is_integral_v<T>>* = nullptr>
 constexpr bool numEq(T lhs, T rhs) {
@@ -41,4 +41,4 @@ auto numEqNew(T lhs, T rhs) -> enable_if_t<std::is_arithmetic_v<T>, bool> {
   return numEqImpl(lhs, rhs, is_floating_point<T>{});
 };
 
-}  // namespace pl::meta::ut
+}  // namespace pl::ut
