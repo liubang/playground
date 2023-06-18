@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2023-06-18 10:13:26</td>
+            <td class="headerValue">2023-06-18 13:20:26</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">7</td>
@@ -77,7 +77,7 @@
 <a name="15"><span class="lineNum">      15 </span><span class="lineCov">          4 : TEST(meta, expression) {</span></a>
 <a name="16"><span class="lineNum">      16 </span>            :   {</a>
 <a name="17"><span class="lineNum">      17 </span><span class="lineCov">          1 :     auto plus = [](auto x, auto y) { return x + y; };</span></a>
-<a name="18"><span class="lineNum">      18 </span><span class="lineCov">          1 :     pl::meta::BinaryExpression exp(5, 3.5, plus);</span></a>
+<a name="18"><span class="lineNum">      18 </span><span class="lineCov">          1 :     pl::BinaryExpression exp(5, 3.5, plus);</span></a>
 <a name="19"><span class="lineNum">      19 </span><span class="lineCov">          1 :     auto res = exp();</span></a>
 <a name="20"><span class="lineNum">      20 </span><span class="lineCov">          1 :     EXPECT_EQ(8.5, res);</span></a>
 <a name="21"><span class="lineNum">      21 </span>            :   }</a>
@@ -86,7 +86,7 @@
 <a name="24"><span class="lineNum">      24 </span><span class="lineCov">          3 :     std::vector&lt;int&gt; x{1, 2, 3}, y{1, 1, 1}, z{2, 5, 3};</span></a>
 <a name="25"><span class="lineNum">      25 </span><span class="lineCov">          1 :     int alpha = 4;</span></a>
 <a name="26"><span class="lineNum">      26 </span><span class="lineCov">          4 :     auto add_scale = [alpha](auto lhs, auto rhs) { return lhs + alpha * rhs; };</span></a>
-<a name="27"><span class="lineNum">      27 </span><span class="lineCov">          1 :     auto expr = pl::meta::BinaryContainerExpression(x, y, add_scale);</span></a>
+<a name="27"><span class="lineNum">      27 </span><span class="lineCov">          1 :     auto expr = pl::BinaryContainerExpression(x, y, add_scale);</span></a>
 <a name="28"><span class="lineNum">      28 </span>            : </a>
 <a name="29"><span class="lineNum">      29 </span><span class="lineCov">          4 :     for (std::size_t i = 0; i &lt; expr.size(); ++i) {</span></a>
 <a name="30"><span class="lineNum">      30 </span><span class="lineCov">          3 :       std::cout &lt;&lt; expr[i] &lt;&lt; &quot; &quot;;</span></a>
@@ -99,8 +99,8 @@
 <a name="37"><span class="lineNum">      37 </span>            :     // x + y + z;</a>
 <a name="38"><span class="lineNum">      38 </span><span class="lineCov">          3 :     std::vector&lt;int&gt; x{1, 2, 3}, y{1, 1, 1}, z{2, 5, 3};</span></a>
 <a name="39"><span class="lineNum">      39 </span><span class="lineCov">          6 :     auto plus = [](auto x, auto y) { return x + y; };</span></a>
-<a name="40"><span class="lineNum">      40 </span>            :     auto expr = pl::meta::BinaryContainerExpression(</a>
-<a name="41"><span class="lineNum">      41 </span><span class="lineCov">          1 :         pl::meta::BinaryContainerExpression(x, y, plus), z, plus);</span></a>
+<a name="40"><span class="lineNum">      40 </span>            :     auto expr = pl::BinaryContainerExpression(</a>
+<a name="41"><span class="lineNum">      41 </span><span class="lineCov">          1 :         pl::BinaryContainerExpression(x, y, plus), z, plus);</span></a>
 <a name="42"><span class="lineNum">      42 </span>            : </a>
 <a name="43"><span class="lineNum">      43 </span><span class="lineCov">          4 :     for (std::size_t i = 0; i &lt; expr.size(); ++i) {</span></a>
 <a name="44"><span class="lineNum">      44 </span><span class="lineCov">          3 :       std::cout &lt;&lt; expr[i] &lt;&lt; &quot; &quot;;</span></a>
