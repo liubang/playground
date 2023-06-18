@@ -31,17 +31,17 @@
             <td class="headerValue">_coverage_report.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntry">15</td>
-            <td class="headerCovTableEntry">15</td>
+            <td class="headerCovTableEntry">17</td>
+            <td class="headerCovTableEntry">17</td>
             <td class="headerCovTableEntryHi">100.0 %</td>
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2023-06-18 13:20:26</td>
+            <td class="headerValue">2023-06-18 14:59:49</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntry">28</td>
-            <td class="headerCovTableEntry">28</td>
+            <td class="headerCovTableEntry">32</td>
+            <td class="headerCovTableEntry">32</td>
             <td class="headerCovTableEntryHi">100.0 %</td>
           </tr>
           <tr><td><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
@@ -122,6 +122,11 @@
 <a name="60"><span class="lineNum">      60 </span>            :   static_assert(std::is_same_v&lt;pl::Unique&lt;longList&gt;::type,</a>
 <a name="61"><span class="lineNum">      61 </span>            :                                pl::TypeList&lt;char, float, int, double&gt;::type&gt;);</a>
 <a name="62"><span class="lineNum">      62 </span><span class="lineCov">          1 : }</span></a>
+<a name="63"><span class="lineNum">      63 </span>            : </a>
+<a name="64"><span class="lineNum">      64 </span><span class="lineCov">          4 : TEST(utils, sums) {</span></a>
+<a name="65"><span class="lineNum">      65 </span>            :   //</a>
+<a name="66"><span class="lineNum">      66 </span>            :   static_assert(pl::sums(1, 2, 3, 4) == 10);</a>
+<a name="67"><span class="lineNum">      67 </span><span class="lineCov">          1 : }</span></a>
 </pre>
       </td>
     </tr>
