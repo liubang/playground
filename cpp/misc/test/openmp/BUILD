@@ -13,17 +13,16 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/06/18 01:27
+# Created: 2023/06/20 00:02
 
 #======================================================================
 #
 # BUILD -
 #
-# Created by liubang on 2023/06/17 22:26
-# Last Modified: 2023/06/17 22:26
+# Created by liubang on 2023/06/19 23:36
+# Last Modified: 2023/06/19 23:36
 #
 #======================================================================
-
 load(
     "//cpp:copts/configure_copts.bzl",
     "DEFAULT_COPTS",
@@ -31,7 +30,7 @@ load(
 )
 
 cc_library(
-    name = "tbb_common",
+    name = "common",
     hdrs = glob(["*.h"]),
 )
 
@@ -43,12 +42,14 @@ cc_library(
         ],
         copts = [
             "-std=c++20",
+            "-fopenmp",
         ] + DEFAULT_COPTS,
-        linkopts = DEFAULT_LINKOPTS,
+        linkopts = [
+            "-fopenmp",
+        ] + DEFAULT_LINKOPTS,
         deps = [
-            ":tbb_common",
+            ":common",
             "//cpp/tools",
-            "@oneTBB//:tbb",
         ],
     )
     for f in glob(["*.cpp"])
