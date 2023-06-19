@@ -14,7 +14,7 @@
 #include <iostream>
 #include <vector>
 
-#include "cpp/misc/test/tbb/tools.h"
+#include "cpp/tools/measure.h"
 
 struct Data {
   std::vector<float> arr;

@@ -12,7 +12,7 @@
 #include <iostream>
 #include <vector>
 
-#include "cpp/misc/test/tbb/tools.h"
+#include "cpp/tools/measure.h"
 
 int main(int argc, char *argv[]) {
   pl::measure([] {
