@@ -12,7 +12,7 @@
 #include <iostream>
 #include <vector>
 
-#include "cpp/misc/test/tbb/tools.h"
+#include "cpp/tools/measure.h"
 
 auto main(int argc, char *argv[]) -> int {
   size_t n = 1 << 26;
