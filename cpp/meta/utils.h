@@ -152,7 +152,7 @@ class Unique {
 
 //-------------------------------------------------------------------------------------------------
 
-template <typename... Ts, std::enable_if<std::conjunction<
+template <typename... Ts, typename std::enable_if<std::conjunction<
                               std::is_integral<Ts>...>::value>::type* = nullptr>
 constexpr auto sums(Ts... ts) {
   // static_assert(std::conjunction<std::is_integral<Ts>...>::value);
