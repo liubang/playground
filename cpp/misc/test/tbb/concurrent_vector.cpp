@@ -12,7 +12,7 @@
 #include <cmath>
 #include <iostream>
 
-#include "cpp/misc/test/tbb/tools.h"
+#include "cpp/tools/measure.h"
 
 int main(int argc, char *argv[]) {
   size_t n = 1 << 27;
