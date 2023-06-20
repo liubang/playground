@@ -7,10 +7,15 @@
 //
 //=====================================================================
 
+#include <benchmark/benchmark.h>
+
 #include <iostream>
 
-int main(int argc, char *argv[]) {
+static void hello(benchmark::State& state) {
+  for (auto _ : state) {
 #pragma omp parallel
-  { std::cout << "hello world" << std::endl; }
-  return 0;
+    { std::cout << "hello world" << std::endl; }
+  }
 }
+
+BENCHMARK(hello);

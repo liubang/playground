@@ -8,8 +8,8 @@
 #======================================================================
 load(
     "//cpp:copts/configure_copts.bzl",
-    "DEFAULT_COPTS",
     "DEFAULT_LINKOPTS",
+    "TEST_COPTS",
 )
 
 cc_library(
@@ -18,7 +18,7 @@ cc_library(
 )
 
 [
-    cc_binary(
+    cc_test(
         name = "%s" % f[:f.rfind(".")],
         srcs = [
             "%s" % f,
@@ -26,13 +26,13 @@ cc_library(
         copts = [
             "-std=c++20",
             "-fopenmp",
-        ] + DEFAULT_COPTS,
+        ] + TEST_COPTS,
         linkopts = [
             "-fopenmp",
         ] + DEFAULT_LINKOPTS,
         deps = [
             ":common",
-            "//cpp/tools",
+            "@com_github_google_benchmark//:benchmark_main",
         ],
     )
     for f in glob(["*.cpp"])
