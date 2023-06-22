@@ -74,5 +74,5 @@ template <typename TupleT,
           std::size_t TupleSize = std::tuple_size<TupleT>::value>
 inline std::ostream& operator<<(std::ostream& os, const TupleT& tp) {
   return pl::PrintTupleImplStream(os, tp,
-                                        std::make_index_sequence<TupleSize>{});
+                                  std::make_index_sequence<TupleSize>{});
 }
