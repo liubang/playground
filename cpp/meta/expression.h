@@ -76,9 +76,9 @@ constexpr bool is_container_v<BinaryContainerExpression<T, U, OP>> = true;
  * @param rhs [TODO:parameter]
  * @return [TODO:return]
  */
-template <typename T, typename U,
-          typename = pl::enable_if_t<pl::is_container_v<T> &&
-                                           pl::is_container_v<U>>>
+template <
+    typename T, typename U,
+    typename = pl::enable_if_t<pl::is_container_v<T> && pl::is_container_v<U>>>
 auto operator+(const T& lhs, const U& rhs) {
   auto plus = [](auto x, auto y) { return x + y; };
   return pl::BinaryContainerExpression(lhs, rhs, plus);
