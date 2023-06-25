@@ -6,6 +6,7 @@
 // Last Modified: 2023/06/18 13:49
 //
 //=====================================================================
+#include <benchmark/benchmark.h>
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_scan.h>
 
@@ -13,11 +14,10 @@
 #include <iostream>
 #include <vector>
 
-#include "cpp/tools/measure.h"
+constexpr size_t n = 1 << 26;
 
-int main(int argc, char *argv[]) {
-  size_t n = 1 << 26;
-  pl::measure([n] {
+static void test1(benchmark::State& state) {
+  for (auto _ : state) {
     std::vector<float> a(n);
     float res = tbb::parallel_scan(
         tbb::blocked_range<size_t>(0, n), (float)0,
@@ -34,7 +34,7 @@ int main(int argc, char *argv[]) {
 
     std::cout << a[n / 2] << std::endl;
     std::cout << res << std::endl;
-  });
-
-  return 0;
+  }
 }
+
+BENCHMARK(test1);

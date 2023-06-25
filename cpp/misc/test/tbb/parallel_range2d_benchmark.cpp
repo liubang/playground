@@ -6,6 +6,7 @@
 // Last Modified: 2023/06/18 00:27
 //
 //=====================================================================
+#include <benchmark/benchmark.h>
 #include <tbb/blocked_range2d.h>
 #include <tbb/parallel_for.h>
 
@@ -13,11 +14,10 @@
 #include <iostream>
 #include <vector>
 
-#include "cpp/tools/measure.h"
+constexpr std::size_t n = 1 << 13;
 
-int main(int argc, char *argv[]) {
-  pl::measure([] {
-    std::size_t n = 1 << 13;
+static void test1(benchmark::State& state) {
+  for (auto _ : state) {
     std::vector<float> a(n * n);
     tbb::parallel_for(
         tbb::blocked_range2d<std::size_t>(0, n, 0, n),
@@ -28,6 +28,7 @@ int main(int argc, char *argv[]) {
             }
           }
         });
-  });
-  return 0;
+  }
 }
+
+BENCHMARK(test1);

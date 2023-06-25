@@ -6,17 +6,17 @@
 // Last Modified: 2023/06/18 13:13
 //
 //=====================================================================
+#include <benchmark/benchmark.h>
 #include <tbb/task_group.h>
 
 #include <cmath>
 #include <iostream>
 #include <vector>
 
-#include "cpp/tools/measure.h"
+constexpr size_t n = 1 << 26;
 
-auto main(int argc, char *argv[]) -> int {
-  size_t n = 1 << 26;
-  pl::measure([n] {
+static void test1(benchmark::State& state) {
+  for (auto _ : state) {
     std::vector<float> a(n);
     float res = 0;
     for (size_t i = 0; i < n; ++i) {
@@ -26,9 +26,11 @@ auto main(int argc, char *argv[]) -> int {
 
     std::cout << a[n / 2] << std::endl;
     std::cout << res << std::endl;
-  });
+  }
+}
 
-  pl::measure([n] {
+static void test2(benchmark::State& state) {
+  for (auto _ : state) {
     std::vector<float> a(n);
     float res = 0;
     size_t maxt = 16;  // 当前系统的逻辑核数量
@@ -66,6 +68,8 @@ auto main(int argc, char *argv[]) -> int {
 
     std::cout << a[n / 2] << std::endl;
     std::cout << res << std::endl;
-  });
-  return 0;
+  }
 }
+
+BENCHMARK(test1);
+BENCHMARK(test2);

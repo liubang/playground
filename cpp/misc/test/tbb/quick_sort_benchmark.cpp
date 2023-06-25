@@ -6,41 +6,49 @@
 // Last Modified: 2023/06/18 16:59
 //
 //=====================================================================
-
-#include "cpp/misc/test/tbb/quick_sort.h"
+#include <benchmark/benchmark.h>
 
 #include <algorithm>
 #include <iostream>
 #include <vector>
 
-#include "cpp/tools/measure.h"
+#include "cpp/misc/test/tbb/quick_sort.h"
 
-int main(int argc, char *argv[]) {
-  size_t n = 1 << 24;
+constexpr size_t n = 1 << 24;
 
-  pl::measure([n] {
+static void test1(benchmark::State& state) {
+  for (auto _ : state) {
     std::vector<int> arr(n);
     std::generate(arr.begin(), arr.end(), std::rand);
     std::sort(arr.begin(), arr.end(), std::less<int>{});
-  });
+  }
+}
 
-  pl::measure([n] {
+static void test2(benchmark::State& state) {
+  for (auto _ : state) {
     std::vector<int> arr(n);
     std::generate(arr.begin(), arr.end(), std::rand);
     pl::quick_sort(arr.data(), arr.size());
-  });
+  }
+}
 
-  pl::measure([n] {
+static void test3(benchmark::State& state) {
+  for (auto _ : state) {
     std::vector<int> arr(n);
     std::generate(arr.begin(), arr.end(), std::rand);
     pl::quick_sort2(arr.data(), arr.size());
-  });
+  }
+}
 
-  pl::measure([n] {
+static void test4(benchmark::State& state) {
+  for (auto _ : state) {
     std::vector<int> arr(n);
     std::generate(arr.begin(), arr.end(), std::rand);
     pl::quick_sort3(arr.data(), arr.size());
-  });
-
-  return 0;
+  }
 }
+
+BENCHMARK(test1);
+BENCHMARK(test2);
+BENCHMARK(test3);
+BENCHMARK(test4);

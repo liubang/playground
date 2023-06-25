@@ -7,14 +7,13 @@
 //
 //=====================================================================
 
+#include <benchmark/benchmark.h>
 #include <tbb/parallel_for_each.h>
 #include <tbb/parallel_pipeline.h>
 
 #include <cmath>
 #include <iostream>
 #include <vector>
-
-#include "cpp/tools/measure.h"
 
 struct Data {
   std::vector<float> arr;
@@ -53,10 +52,10 @@ struct Data {
   }
 };
 
-int main(int argc, char* argv[]) {
-  size_t n = 1 << 12;
+constexpr size_t n = 1 << 12;
 
-  pl::measure([n] {
+static void test1(benchmark::State& state) {
+  for (auto _ : state) {
     std::vector<Data> datas(n);
     for (auto& data : datas) {
       data.step1();
@@ -64,9 +63,11 @@ int main(int argc, char* argv[]) {
       data.step3();
       data.step4();
     }
-  });
+  }
+}
 
-  pl::measure([n] {
+static void test2(benchmark::State& state) {
+  for (auto _ : state) {
     std::vector<Data> datas(n);
     tbb::parallel_for_each(datas.begin(), datas.end(), [&](Data& data) {
       data.step1();
@@ -74,9 +75,11 @@ int main(int argc, char* argv[]) {
       data.step3();
       data.step4();
     });
-  });
+  }
+}
 
-  pl::measure([n] {
+static void test3(benchmark::State& state) {
+  for (auto _ : state) {
     std::vector<Data> datas(n);
     tbb::parallel_for_each(datas.begin(), datas.end(),
                            [&](Data& data) { data.step1(); });
@@ -89,9 +92,11 @@ int main(int argc, char* argv[]) {
 
     tbb::parallel_for_each(datas.begin(), datas.end(),
                            [&](Data& data) { data.step4(); });
-  });
+  }
+}
 
-  pl::measure([n] {
+static void test4(benchmark::State& state) {
+  for (auto _ : state) {
     std::vector<Data> datas(n);
     auto it = datas.begin();
     tbb::parallel_pipeline(
@@ -124,7 +129,10 @@ int main(int argc, char* argv[]) {
                                         data->step4();
                                         return data;
                                       }));
-  });
-
-  return 0;
+  }
 }
+
+BENCHMARK(test1);
+BENCHMARK(test2);
+BENCHMARK(test3);
+BENCHMARK(test4);
