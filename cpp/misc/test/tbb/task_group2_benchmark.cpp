@@ -6,17 +6,17 @@
 // Last Modified: 2023/06/18 01:18
 //
 //=====================================================================
+#include <benchmark/benchmark.h>
 #include <tbb/task_group.h>
 
 #include <cmath>
 #include <iostream>
 #include <vector>
 
-#include "cpp/tools/measure.h"
+constexpr std::size_t n = 1 << 26;
 
-int main(int argc, char *argv[]) {
-  pl::measure([] {
-    std::size_t n = 1 << 26;
+static void test1(benchmark::State& state) {
+  for (auto _ : state) {
     float res = 0;
     std::size_t maxt = 4;
     tbb::task_group tg;
@@ -36,6 +36,7 @@ int main(int argc, char *argv[]) {
     for (std::size_t t = 0; t < maxt; ++t) {
       res += tmp_res[t];
     }
-  });
-  return 0;
+  }
 }
+
+BENCHMARK(test1);
