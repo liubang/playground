@@ -6,6 +6,7 @@
 // Last Modified: 2023/06/18 14:20
 //
 //=====================================================================
+#include <benchmark/benchmark.h>
 #include <tbb/blocked_range2d.h>
 #include <tbb/parallel_for.h>
 
@@ -14,12 +15,10 @@
 #include <thread>
 #include <vector>
 
-#include "cpp/tools/measure.h"
+constexpr size_t n = 1 << 14;
 
-// 转置矩阵
-int main(int argc, char *argv[]) {
-  size_t n = 1 << 14;
-  pl::measure([n] {
+static void test1(benchmark::State& state) {
+  for (auto _ : state) {
     std::vector<float> a(n * n);
     std::vector<float> b(n * n);
 
@@ -32,9 +31,11 @@ int main(int argc, char *argv[]) {
             }
           }
         });
-  });
+  }
+}
 
-  pl::measure([n] {
+static void test2(benchmark::State& state) {
+  for (auto _ : state) {
     std::vector<float> a(n * n);
     std::vector<float> b(n * n);
     size_t grain = 24;
@@ -48,7 +49,8 @@ int main(int argc, char *argv[]) {
           }
         },
         tbb::simple_partitioner{});
-  });
-
-  return 0;
+  }
 }
+
+BENCHMARK(test1);
+BENCHMARK(test2);
