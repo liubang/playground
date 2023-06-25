@@ -11,11 +11,12 @@ common --color=yes
 common --experimental_ui_max_stdouterr_bytes=1073741819
 common --enable_bzlmod
 
-build --jobs 8
+build --jobs=8
 
 # for java
 build --nojava_header_compilation
 
+# for cpp
 build --cxxopt=-std=c++20
 
 # bazel build
