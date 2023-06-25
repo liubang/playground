@@ -25,11 +25,14 @@ cc_library(
         ],
         copts = [
             "-std=c++20",
-            "-fopenmp",
-        ] + TEST_COPTS,
-        linkopts = [
-            "-fopenmp",
-        ] + DEFAULT_LINKOPTS,
+        ] + TEST_COPTS + select({
+            "//:linux_x86_64": ["-fopenmp"],
+            "//conditions:default": [],
+        }),
+        linkopts = DEFAULT_LINKOPTS + select({
+            "//:linux_x86_64": ["-fopenmp"],
+            "//conditions:default": [],
+        }),
         deps = [
             ":common",
             "@com_github_google_benchmark//:benchmark_main",
