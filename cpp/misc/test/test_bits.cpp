@@ -1,6 +1,6 @@
-#include "cpp/tools/bits.h"
-
 #include <iostream>
+
+#include "cpp/tools/bits.h"
 
 int main(int argc, char* argv[]) {
   uint64_t i = 26;
