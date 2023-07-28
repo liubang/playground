@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2023-06-30 18:19:41</td>
+            <td class="headerValue">2023-07-28 06:11:20</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">1</td>
@@ -73,12 +73,12 @@
 <a name="11"><span class="lineNum">      11 </span>            : </a>
 <a name="12"><span class="lineNum">      12 </span>            : #include &lt;iostream&gt;</a>
 <a name="13"><span class="lineNum">      13 </span>            : </a>
-<a name="14"><span class="lineNum">      14 </span><span class="lineCov">          4 : static void hello(benchmark::State&amp; state) {</span></a>
-<a name="15"><span class="lineNum">      15 </span><span class="lineCov">       2238 :   for (auto _ : state) {</span></a>
+<a name="14"><span class="lineNum">      14 </span><span class="lineCov">          6 : static void hello(benchmark::State&amp; state) {</span></a>
+<a name="15"><span class="lineNum">      15 </span><span class="lineCov">     106570 :   for (auto _ : state) {</span></a>
 <a name="16"><span class="lineNum">      16 </span>            : #pragma omp parallel</a>
 <a name="17"><span class="lineNum">      17 </span>            :     { std::cout &lt;&lt; &quot;hello world&quot; &lt;&lt; std::endl; }</a>
 <a name="18"><span class="lineNum">      18 </span>            :   }</a>
-<a name="19"><span class="lineNum">      19 </span><span class="lineCov">          4 : }</span></a>
+<a name="19"><span class="lineNum">      19 </span><span class="lineCov">          6 : }</span></a>
 <a name="20"><span class="lineNum">      20 </span>            : </a>
 <a name="21"><span class="lineNum">      21 </span>            : BENCHMARK(hello);</a>
 </pre>
