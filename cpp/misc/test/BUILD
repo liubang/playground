@@ -129,3 +129,10 @@ cc_binary(
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
 )
+
+cc_binary(
+    name = "test_pack",
+    srcs = ["test_pack.cpp"],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+)
