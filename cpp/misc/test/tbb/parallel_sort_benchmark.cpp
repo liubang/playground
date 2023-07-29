@@ -6,7 +6,7 @@
 // Last Modified: 2023/06/18 17:08
 //
 //=====================================================================
-#include <benchmark/benchmark.h>
+#include <nanobench.h>
 #include <tbb/parallel_sort.h>
 
 #include <algorithm>
@@ -15,12 +15,13 @@
 
 constexpr size_t n = 1 << 24;
 
-static void test1(benchmark::State& state) {
-  for (auto _ : state) {
-    std::vector<int> arr(n);
-    std::generate(arr.begin(), arr.end(), std::rand);
-    tbb::parallel_sort(arr.begin(), arr.end(), std::less<int>{});
-  }
+static void test1() {
+  std::vector<int> arr(n);
+  std::generate(arr.begin(), arr.end(), std::rand);
+  tbb::parallel_sort(arr.begin(), arr.end(), std::less<int>{});
 }
 
-BENCHMARK(test1);
+int main(int argc, char *argv[]) {
+  ankerl::nanobench::Bench().run("test1", [&] { test1(); });
+  return 0;
+}
