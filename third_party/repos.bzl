@@ -10,15 +10,6 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 def external_repositories():
-    # boost
-    # http_archive(
-    #     name = "boost",
-    #     build_file = "//third_party/boost:boost.BUILD",
-    #     urls = ["https://boostorg.jfrog.io/artifactory/main/release/1.82.0/source/boost_1_82_0.tar.gz"],
-    #     sha256 = "66a469b6e608a51f8347236f4912e27dc5c60c60d7d53ae9bfe4683316c6f04c",
-    #     strip_prefix = "boost_1_82_0",
-    # )
-
     http_archive(
         name = "oneTBB",
         urls = ["https://github.com/oneapi-src/oneTBB/archive/c45684495599d41ba10893effa0682eceb1a3169.zip"],
@@ -31,12 +22,12 @@ def external_repositories():
         strip_prefix = "rules_boost-929f5412553c5295d30b16858da7cbefba0d0870",
     )
 
-    # Google benchmark.
     http_archive(
-        name = "com_github_google_benchmark",  # 2023-01-10T16:48:17Z
-        sha256 = "ede6830512f21490eeea1f238f083702eb178890820c14451c1c3d69fd375b19",
-        strip_prefix = "benchmark-a3235d7b69c84e8c9ff8722a22b8ac5e1bc716a6",
-        urls = ["https://github.com/google/benchmark/archive/a3235d7b69c84e8c9ff8722a22b8ac5e1bc716a6.zip"],
+        name = "nanobench",
+        build_file = "//third_party/nanobench:nanobench.BUILD",
+        strip_prefix = "nanobench-4.3.11",
+        sha256 = "53a5a913fa695c23546661bf2cd22b299e10a3e994d9ed97daf89b5cada0da70",
+        urls = ["https://github.com/martinus/nanobench/archive/refs/tags/v4.3.11.tar.gz"],
     )
 
     # liburing

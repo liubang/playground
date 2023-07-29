@@ -23,7 +23,7 @@ load(
         ] + TEST_COPTS,
         linkopts = DEFAULT_LINKOPTS,
         deps = [
-            "@googletest//:gtest_main",
+            "@catch2//:catch2_main",
         ],
     )
     for f in glob(["*.cpp"])

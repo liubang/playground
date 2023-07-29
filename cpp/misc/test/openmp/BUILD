@@ -35,7 +35,7 @@ cc_library(
         }),
         deps = [
             ":common",
-            "@com_github_google_benchmark//:benchmark_main",
+            "@nanobench",
         ],
     )
     for f in glob(["*.cpp"])

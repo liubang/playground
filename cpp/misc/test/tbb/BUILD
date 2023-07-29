@@ -9,7 +9,6 @@
 
 load(
     "//cpp:copts/configure_copts.bzl",
-    "DEFAULT_COPTS",
     "DEFAULT_LINKOPTS",
     "TEST_COPTS",
 )
@@ -31,28 +30,9 @@ cc_library(
         linkopts = DEFAULT_LINKOPTS,
         deps = [
             ":tbb_common",
-            "@com_github_google_benchmark//:benchmark_main",
+            "@nanobench",
             "@oneTBB//:tbb",
         ],
     )
-    for f in glob(["*_benchmark.cpp"])
-]
-
-[
-    cc_binary(
-        name = "%s" % f[:f.rfind(".")],
-        srcs = [
-            "%s" % f,
-        ],
-        copts = [
-            "-std=c++20",
-        ] + DEFAULT_COPTS,
-        linkopts = DEFAULT_LINKOPTS,
-        deps = [
-            ":tbb_common",
-            "//cpp/tools",
-            "@oneTBB//:tbb",
-        ],
-    )
-    for f in glob(["test_*.cpp"])
+    for f in glob(["*.cpp"])
 ]
