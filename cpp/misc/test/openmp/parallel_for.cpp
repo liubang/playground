@@ -7,7 +7,7 @@
 //
 //=====================================================================
 
-#include <benchmark/benchmark.h>
+#include <nanobench.h>
 
 #include <cmath>
 #include <iostream>
@@ -15,28 +15,28 @@
 
 static constexpr std::size_t n = 1 << 26;
 
-static void test1(benchmark::State& state) {
-  for (auto _ : state) {
-    std::vector<float> a(n);
-    for (std::size_t i = 0; i < n; ++i) {
-      a[i] = std::sin(i);
-    }
-    benchmark::DoNotOptimize(a);
+static void test1() {
+  std::vector<float> a(n);
+  for (std::size_t i = 0; i < n; ++i) {
+    a[i] = std::sin(i);
   }
+  ankerl::nanobench::doNotOptimizeAway(a);
 }
 
-static void test2(benchmark::State& state) {
-  for (auto _ : state) {
-    std::vector<float> a(n);
+static void test2() {
+  std::vector<float> a(n);
 
 #pragma omp parallel for
-    for (std::size_t i = 0; i < n; ++i) {
-      a[i] = std::sin(i);
-    }
-
-    benchmark::DoNotOptimize(a);
+  for (std::size_t i = 0; i < n; ++i) {
+    a[i] = std::sin(i);
   }
+
+  ankerl::nanobench::doNotOptimizeAway(a);
 }
 
-BENCHMARK(test1);
-BENCHMARK(test2);
+int main(int argc, char* argv[]) {
+  // put your code here
+  ankerl::nanobench::Bench().run("test1", [&] { test1(); });
+  ankerl::nanobench::Bench().run("test2", [&] { test2(); });
+  return 0;
+}
