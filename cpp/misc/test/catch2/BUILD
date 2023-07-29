@@ -13,43 +13,28 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/06/18 01:27
+# Created: 2023/07/29 22:43
 
 #======================================================================
 #
 # BUILD -
 #
-# Created by liubang on 2023/06/17 22:26
-# Last Modified: 2023/06/17 22:26
+# Created by liubang on 2023/07/29 22:26
+# Last Modified: 2023/07/29 22:26
 #
 #======================================================================
-
 load(
     "//cpp:copts/configure_copts.bzl",
     "DEFAULT_LINKOPTS",
     "TEST_COPTS",
 )
 
-cc_library(
-    name = "tbb_common",
-    hdrs = glob(["*.h"]),
+cc_test(
+    name = "test_fibonacci",
+    srcs = ["fibonacci.cpp"],
+    copts = ["-std=c++20"] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        "@catch2//:catch2_main",
+    ],
 )
-
-[
-    cc_test(
-        name = "%s" % f[:f.rfind(".")],
-        srcs = [
-            "%s" % f,
-        ],
-        copts = [
-            "-std=c++20",
-        ] + TEST_COPTS,
-        linkopts = DEFAULT_LINKOPTS,
-        deps = [
-            ":tbb_common",
-            "@nanobench",
-            "@oneTBB//:tbb",
-        ],
-    )
-    for f in glob(["*.cpp"])
-]
