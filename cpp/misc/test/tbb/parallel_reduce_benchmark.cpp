@@ -13,7 +13,8 @@
 #include <cmath>
 #include <iostream>
 #include <vector>
-constexpr size_t n = 1 << 26;
+
+constexpr size_t n = 1 << 10;
 
 static void test1() {
   float res = 0;
