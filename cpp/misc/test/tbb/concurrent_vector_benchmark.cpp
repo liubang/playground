@@ -13,7 +13,7 @@
 #include <cmath>
 #include <iostream>
 
-constexpr size_t n = 1 << 27;
+constexpr size_t n = 1 << 10;
 
 static void test1() {
   tbb::concurrent_vector<float> a;
