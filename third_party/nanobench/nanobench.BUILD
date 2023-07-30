@@ -14,3 +14,10 @@ cc_library(
     includes = ["src/include"],
     visibility = ["//visibility:public"],
 )
+
+cc_library(
+    name = "nanobench_hdrs",
+    hdrs = ["src/include/nanobench.h"],
+    includes = ["src/include"],
+    visibility = ["//visibility:public"],
+)

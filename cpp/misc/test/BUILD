@@ -12,21 +12,21 @@ load(
     "DEFAULT_LINKOPTS",
 )
 
-cc_binary(
+cc_test(
     name = "test_async",
     srcs = ["test_async.cpp"],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS + ["-pthread"],
 )
 
-cc_binary(
+cc_test(
     name = "test_context",
     srcs = ["test_context.cpp"],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
 )
 
-cc_binary(
+cc_test(
     name = "test_named_parameters",
     srcs = ["test_named_parameters.cpp"],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
@@ -45,7 +45,7 @@ cc_binary(
     linkopts = DEFAULT_LINKOPTS,
 )
 
-cc_binary(
+cc_test(
     name = "test_liburing",
     srcs = ["test_liburing.cpp"],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
@@ -61,7 +61,7 @@ cc_proto_library(
     deps = ["//proto/test:sensor"],
 )
 
-cc_binary(
+cc_test(
     name = "test_pb",
     srcs = ["test_pb.cpp"],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
@@ -69,7 +69,7 @@ cc_binary(
     deps = [":cc_sensor_proto"],
 )
 
-cc_binary(
+cc_test(
     name = "test_bits",
     srcs = ["test_bits.cpp"],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
@@ -77,7 +77,7 @@ cc_binary(
     deps = ["//cpp/tools"],
 )
 
-cc_binary(
+cc_test(
     name = "test_block_builder",
     srcs = ["test_block_builder.cpp"],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
@@ -89,7 +89,7 @@ cc_binary(
     ],
 )
 
-cc_binary(
+cc_test(
     name = "test_boost_coroutine2",
     srcs = ["test_boost_coroutine2.cpp"],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
@@ -99,7 +99,7 @@ cc_binary(
     ],
 )
 
-cc_binary(
+cc_test(
     name = "test_boost_fiber",
     srcs = ["test_boost_fiber.cpp"],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
@@ -109,30 +109,33 @@ cc_binary(
     ],
 )
 
-cc_binary(
+cc_test(
     name = "test_fs_path",
     srcs = ["test_fs_path.cpp"],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
 )
 
-cc_binary(
+cc_test(
     name = "test_map",
     srcs = ["test_map.cpp"],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
 )
 
-cc_binary(
+cc_test(
     name = "test_bitset",
     srcs = ["test_bitset.cpp"],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
 )
 
-cc_binary(
+cc_test(
     name = "test_pack",
     srcs = ["test_pack.cpp"],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        "//cpp/tools",
+    ],
 )
