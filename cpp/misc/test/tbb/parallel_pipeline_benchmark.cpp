@@ -52,7 +52,7 @@ struct Data {
   }
 };
 
-constexpr size_t n = 1 << 12;
+constexpr size_t n = 1 << 6;
 
 static void test1() {
   std::vector<Data> datas(n);
