@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2023-07-28 06:11:20</td>
+            <td class="headerValue">2023-07-30 15:56:26</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">7</td>
@@ -80,9 +80,9 @@
 <a name="18"><span class="lineNum">      18 </span>            :  */</a>
 <a name="19"><span class="lineNum">      19 </span>            : class BloomFilterPolicy : public FilterPolicy {</a>
 <a name="20"><span class="lineNum">      20 </span>            :  public:</a>
-<a name="21"><span class="lineNum">      21 </span><span class="lineCov">          3 :   BloomFilterPolicy(std::size_t bits_per_key) : bits_per_key_(bits_per_key) {}</span></a>
+<a name="21"><span class="lineNum">      21 </span><span class="lineCov">          4 :   BloomFilterPolicy(std::size_t bits_per_key) : bits_per_key_(bits_per_key) {}</span></a>
 <a name="22"><span class="lineNum">      22 </span>            : </a>
-<a name="23"><span class="lineNum">      23 </span><span class="lineCov">          6 :   ~BloomFilterPolicy() override = default;</span></a>
+<a name="23"><span class="lineNum">      23 </span><span class="lineCov">          8 :   ~BloomFilterPolicy() override = default;</span></a>
 <a name="24"><span class="lineNum">      24 </span>            : </a>
 <a name="25"><span class="lineNum">      25 </span><span class="lineCov">        190 :   void createFilter(Binary* keys, std::size_t n,</span></a>
 <a name="26"><span class="lineNum">      26 </span>            :                     std::string* dst) const override {</a>
@@ -104,8 +104,8 @@
 <a name="42"><span class="lineNum">      42 </span>            :   std::size_t bits_per_key_;</a>
 <a name="43"><span class="lineNum">      43 </span>            : };</a>
 <a name="44"><span class="lineNum">      44 </span>            : </a>
-<a name="45"><span class="lineNum">      45 </span><span class="lineCov">          3 : FilterPolicy* newBloomFilterPolicy(uint64_t bits_per_key) {</span></a>
-<a name="46"><span class="lineNum">      46 </span><span class="lineCov">          3 :   return new BloomFilterPolicy(bits_per_key);</span></a>
+<a name="45"><span class="lineNum">      45 </span><span class="lineCov">          4 : FilterPolicy* newBloomFilterPolicy(uint64_t bits_per_key) {</span></a>
+<a name="46"><span class="lineNum">      46 </span><span class="lineCov">          4 :   return new BloomFilterPolicy(bits_per_key);</span></a>
 <a name="47"><span class="lineNum">      47 </span>            : }</a>
 <a name="48"><span class="lineNum">      48 </span>            : </a>
 <a name="49"><span class="lineNum">      49 </span>            : }  // namespace pl</a>
