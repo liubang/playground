@@ -13,7 +13,7 @@
 #include <iostream>
 #include <vector>
 
-constexpr std::size_t n = 1 << 26;
+constexpr std::size_t n = 1 << 10;
 
 static void test1() {
   std::vector<float> a(n);
