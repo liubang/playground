@@ -8,9 +8,8 @@
 //=====================================================================
 #include "cpp/meta/traits.h"
 
-#include <gtest/gtest.h>
-
 #include <cassert>
+#include <catch2/catch_test_macros.hpp>
 #include <string>
 
 #include "cpp/meta/ut/traits_test.h"
@@ -21,7 +20,7 @@ struct Foo {
 };
 }  // namespace
 
-TEST(meta, traits) {
+TEST_CASE("meta", "[traits]") {
   static_assert(pl::is_floating_point<float>::value);
   static_assert(pl::is_floating_point<double>::value);
   static_assert(pl::is_floating_point<long double>::value);
