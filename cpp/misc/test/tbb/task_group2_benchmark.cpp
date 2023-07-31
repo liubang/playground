@@ -35,6 +35,7 @@ static void test1() {
   for (std::size_t t = 0; t < maxt; ++t) {
     res += tmp_res[t];
   }
+  std::cout << res << '\n';
 }
 
 int main(int argc, char *argv[]) {
