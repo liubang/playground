@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2023-07-30 15:56:26</td>
+            <td class="headerValue">2023-07-31 06:40:59</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">1</td>
@@ -86,11 +86,11 @@
 <a name="24"><span class="lineNum">      24 </span><span class="lineCov">  184549376 :   std::swap(data[0], data[mid]);</span></a>
 <a name="25"><span class="lineNum">      25 </span><span class="lineCov">  184549376 :   T pivot = data[0];</span></a>
 <a name="26"><span class="lineNum">      26 </span><span class="lineCov">  184549376 :   size_t left = 0, right = size - 1;</span></a>
-<a name="27"><span class="lineNum">      27 </span><span class="lineCov"> 1207686003 :   while (left &lt; right) {</span></a>
-<a name="28"><span class="lineNum">      28 </span><span class="lineCov"> 2941798720 :     while (left &lt; right &amp;&amp; !(data[right] &lt; pivot)) right--;</span></a>
-<a name="29"><span class="lineNum">      29 </span><span class="lineCov"> 1023136627 :     if (left &lt; right) data[left++] = data[right];</span></a>
-<a name="30"><span class="lineNum">      30 </span><span class="lineCov"> 2816107001 :     while (left &lt; right &amp;&amp; data[left] &lt; pivot) left++;</span></a>
-<a name="31"><span class="lineNum">      31 </span><span class="lineCov"> 1023136627 :     if (left &lt; right) data[right--] = data[left];</span></a>
+<a name="27"><span class="lineNum">      27 </span><span class="lineCov"> 1206763180 :   while (left &lt; right) {</span></a>
+<a name="28"><span class="lineNum">      28 </span><span class="lineCov"> 2932692102 :     while (left &lt; right &amp;&amp; !(data[right] &lt; pivot)) right--;</span></a>
+<a name="29"><span class="lineNum">      29 </span><span class="lineCov"> 1022213804 :     if (left &lt; right) data[left++] = data[right];</span></a>
+<a name="30"><span class="lineNum">      30 </span><span class="lineCov"> 2835499654 :     while (left &lt; right &amp;&amp; data[left] &lt; pivot) left++;</span></a>
+<a name="31"><span class="lineNum">      31 </span><span class="lineCov"> 1022213804 :     if (left &lt; right) data[right--] = data[left];</span></a>
 <a name="32"><span class="lineNum">      32 </span>            :   }</a>
 <a name="33"><span class="lineNum">      33 </span><span class="lineCov">  184549376 :   data[left] = pivot;</span></a>
 <a name="34"><span class="lineNum">      34 </span><span class="lineCov">  184549376 :   quick_sort(data, left);</span></a>

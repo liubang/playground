@@ -37,11 +37,11 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2023-07-30 15:56:26</td>
+            <td class="headerValue">2023-07-31 06:40:59</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntry">8</td>
-            <td class="headerCovTableEntry">8</td>
+            <td class="headerCovTableEntry">2</td>
+            <td class="headerCovTableEntry">2</td>
             <td class="headerCovTableEntryHi">100.0 %</td>
           </tr>
           <tr><td><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
@@ -70,24 +70,23 @@
 <a name="8"><span class="lineNum">       8 </span>            : //=====================================================================</a>
 <a name="9"><span class="lineNum">       9 </span>            : #include &quot;cpp/meta/tuple_iteration_apply.h&quot;</a>
 <a name="10"><span class="lineNum">      10 </span>            : </a>
-<a name="11"><span class="lineNum">      11 </span>            : #include &lt;gtest/gtest.h&gt;</a>
-<a name="12"><span class="lineNum">      12 </span>            : </a>
-<a name="13"><span class="lineNum">      13 </span>            : #include &lt;tuple&gt;</a>
-<a name="14"><span class="lineNum">      14 </span>            : #include &lt;utility&gt;</a>
-<a name="15"><span class="lineNum">      15 </span>            : </a>
-<a name="16"><span class="lineNum">      16 </span><span class="lineCov">          4 : TEST(meta, PrintTupleApplyFn) {</span></a>
-<a name="17"><span class="lineNum">      17 </span><span class="lineCov">          1 :   std::tuple tp{10, 20, &quot;hello&quot;};</span></a>
-<a name="18"><span class="lineNum">      18 </span><span class="lineCov">          1 :   pl::PrintTupleApplyFn(tp);</span></a>
-<a name="19"><span class="lineNum">      19 </span><span class="lineCov">          1 :   std::cout &lt;&lt; std::endl;</span></a>
-<a name="20"><span class="lineNum">      20 </span><span class="lineCov">          1 :   EXPECT_TRUE(true);</span></a>
-<a name="21"><span class="lineNum">      21 </span><span class="lineCov">          1 : }</span></a>
-<a name="22"><span class="lineNum">      22 </span>            : </a>
-<a name="23"><span class="lineNum">      23 </span><span class="lineCov">          4 : TEST(meta, PrintTupleApply) {</span></a>
-<a name="24"><span class="lineNum">      24 </span><span class="lineCov">          1 :   std::tuple tp{10, 20, 3.14, 42, &quot;hello&quot;};</span></a>
-<a name="25"><span class="lineNum">      25 </span><span class="lineCov">          1 :   pl::PrintTupleApply(tp);</span></a>
-<a name="26"><span class="lineNum">      26 </span><span class="lineCov">          1 :   std::cout &lt;&lt; std::endl;</span></a>
-<a name="27"><span class="lineNum">      27 </span><span class="lineCov">          1 :   EXPECT_TRUE(true);</span></a>
-<a name="28"><span class="lineNum">      28 </span><span class="lineCov">          1 : }</span></a>
+<a name="11"><span class="lineNum">      11 </span>            : #include &lt;catch2/catch_test_macros.hpp&gt;</a>
+<a name="12"><span class="lineNum">      12 </span>            : #include &lt;tuple&gt;</a>
+<a name="13"><span class="lineNum">      13 </span>            : #include &lt;utility&gt;</a>
+<a name="14"><span class="lineNum">      14 </span>            : </a>
+<a name="15"><span class="lineNum">      15 </span><span class="lineCov">          1 : TEST_CASE(&quot;meta&quot;, &quot;[PrintTupleApplyFn]&quot;) {</span></a>
+<a name="16"><span class="lineNum">      16 </span><span class="lineCov">          1 :   std::tuple tp{10, 20, &quot;hello&quot;};</span></a>
+<a name="17"><span class="lineNum">      17 </span><span class="lineCov">          1 :   pl::PrintTupleApplyFn(tp);</span></a>
+<a name="18"><span class="lineNum">      18 </span><span class="lineCov">          1 :   std::cout &lt;&lt; std::endl;</span></a>
+<a name="19"><span class="lineNum">      19 </span><span class="lineCov">          1 :   REQUIRE(true);</span></a>
+<a name="20"><span class="lineNum">      20 </span><span class="lineCov">          1 : };</span></a>
+<a name="21"><span class="lineNum">      21 </span>            : </a>
+<a name="22"><span class="lineNum">      22 </span><span class="lineCov">          1 : TEST_CASE(&quot;meta&quot;, &quot;[PrintTupleApply]&quot;) {</span></a>
+<a name="23"><span class="lineNum">      23 </span><span class="lineCov">          1 :   std::tuple tp{10, 20, 3.14, 42, &quot;hello&quot;};</span></a>
+<a name="24"><span class="lineNum">      24 </span><span class="lineCov">          1 :   pl::PrintTupleApply(tp);</span></a>
+<a name="25"><span class="lineNum">      25 </span><span class="lineCov">          1 :   std::cout &lt;&lt; std::endl;</span></a>
+<a name="26"><span class="lineNum">      26 </span><span class="lineCov">          1 :   REQUIRE(true);</span></a>
+<a name="27"><span class="lineNum">      27 </span><span class="lineCov">          1 : };</span></a>
 </pre>
       </td>
     </tr>
