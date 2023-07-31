@@ -21,7 +21,7 @@ cc_test(
     linkopts = DEFAULT_LINKOPTS,
     deps = [
         "//cpp/meta",
-        "@googletest//:gtest_main",
+        "@catch2//:catch2_main",
     ],
 )
 
@@ -35,7 +35,7 @@ cc_test(
     linkopts = DEFAULT_LINKOPTS,
     deps = [
         "//cpp/meta",
-        "@googletest//:gtest_main",
+        "@catch2//:catch2_main",
     ],
 )
 
@@ -49,20 +49,9 @@ cc_test(
     linkopts = DEFAULT_LINKOPTS,
     deps = [
         "//cpp/meta",
-        "@googletest//:gtest_main",
+        "@catch2//:catch2_main",
     ],
 )
-
-# cc_test(
-#     name = "tuple_iteration_basics_test",
-#     srcs = ["tuple_iteration_basics_test.cpp"],
-#     copts = TEST_COPTS,
-#     linkopts = DEFAULT_LINKOPTS,
-#     deps = [
-#         "//cpp/meta",
-#         "@googletest//:gtest_main",
-#     ],
-# )
 
 cc_test(
     name = "tuple_iteration_apply_test",
@@ -71,7 +60,18 @@ cc_test(
     linkopts = DEFAULT_LINKOPTS,
     deps = [
         "//cpp/meta",
-        "@googletest//:gtest_main",
+        "@catch2//:catch2_main",
+    ],
+)
+
+cc_test(
+    name = "tuple_iteration_basics_test",
+    srcs = ["tuple_iteration_basics_test.cpp"],
+    copts = ["-std=c++20"] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        "//cpp/meta",
+        "@catch2//:catch2_main",
     ],
 )
 
@@ -82,6 +82,6 @@ cc_test(
     linkopts = DEFAULT_LINKOPTS,
     deps = [
         "//cpp/meta",
-        "@googletest//:gtest_main",
+        "@catch2//:catch2_main",
     ],
 )
