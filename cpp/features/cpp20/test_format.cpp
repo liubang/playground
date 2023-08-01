@@ -15,7 +15,8 @@
 #include <ranges>
 #include <string>
 
-#if defined(__GNUC__) and __GNUC__ == 13
+#if (defined(__GNUC__) && __GNUC__ >= 13) || \
+    (defined(__clang_major__) && __clang_major__ >= 16)
 #include <format>
 #endif
 
@@ -48,7 +49,8 @@ void print_table_cpp17() {
 
 //-------------------------------------------------------------------------------------------------
 
-#if defined(__GNUC__) and __GNUC__ == 13
+#if (defined(__GNUC__) && __GNUC__ >= 13) || \
+    (defined(__clang_major__) && __clang_major__ >= 16)
 // calculate max column width
 template <typename T>
 std::size_t max_key_length1(const std::map<std::string, T> &m) {
@@ -92,7 +94,8 @@ void print_table_cpp20() {
 TEST_CASE("modern", "[test_format]") {
   SECTION("c++17 version") { print_table_cpp17(); };
 
-#if defined(__GNUC__) and __GNUC__ == 13
+#if (defined(__GNUC__) && __GNUC__ >= 13) || \
+    (defined(__clang_major__) && __clang_major__ >= 16)
   SECTION("c++20 version") { print_table_cpp20(); };
 #endif
 }
