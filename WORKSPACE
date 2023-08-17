@@ -26,6 +26,10 @@ load("//third_party:repos.bzl", "external_repositories")
 
 external_repositories()
 
+load("@rules_perl//perl:deps.bzl", "perl_register_toolchains")
+
+perl_register_toolchains()
+
 load("@com_github_nelhage_rules_boost//:boost/boost.bzl", "boost_deps")
 
 boost_deps()
