@@ -12,6 +12,8 @@ module(
     bazel_compatibility = [">=6.0.0"],
 )
 
+bazel_dep(name = "bazel_skylib", version = "1.4.2")
+
 # dpes for c/cpp
 bazel_dep(name = "grpc", version = "1.48.1")
 bazel_dep(name = "protobuf", version = "21.7")
