@@ -47,10 +47,13 @@ def external_repositories():
 
     http_archive(
         name = "snappy",
-        urls = ["https://github.com/google/snappy/archive/refs/tags/1.1.10.tar.gz"],
-        sha256 = "49d831bffcc5f3d01482340fe5af59852ca2fe76c3e05df0e67203ebbe0f1d90",
-        strip_prefix = "snappy-1.1.10",
         build_file = "//third_party/snappy:snappy.BUILD",
+        sha256 = "3dfa02e873ff51a11ee02b9ca391807f0c8ea0529a4924afa645fbf97163f9d4",
+        strip_prefix = "snappy-1.1.7",
+        urls = [
+            "https://storage.googleapis.com/mirror.tensorflow.org/github.com/google/snappy/archive/1.1.7.tar.gz",
+            "https://github.com/google/snappy/archive/1.1.7.tar.gz",
+        ],
     )
 
     http_archive(
