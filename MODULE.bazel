@@ -29,6 +29,36 @@ bazel_dep(name = "catch2", version = "3.3.0")
 bazel_dep(name = "googletest", version = "1.14.0")
 bazel_dep(name = "google_benchmark", version = "1.8.2")
 
+# bison and flex
+bazel_dep(name = "rules_bison", version = "0.2.2")
+bazel_dep(name = "rules_flex", version = "0.2.1")
+
+bison = use_extension(
+    "@rules_bison//bison/extensions:bison_repository_ext.bzl",
+    "bison_repository_ext",
+)
+bison.repository(
+    name = "bison",
+    extra_copts = ["-O3"],
+    version = "3.3.2",
+)
+use_repo(bison, "bison")
+
+register_toolchains("@bison//:toolchain")
+
+flex = use_extension(
+    "@rules_flex//flex/extensions:flex_repository_ext.bzl",
+    "flex_repository_ext",
+)
+flex.repository(
+    name = "flex",
+    extra_copts = ["-O3"],
+    version = "2.6.4",
+)
+use_repo(flex, "flex")
+
+register_toolchains("@flex//:toolchain")
+
 # deps for go
 bazel_dep(name = "gazelle", version = "0.32.0", repo_name = "bazel_gazelle")
 

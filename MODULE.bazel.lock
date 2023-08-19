@@ -1,6 +1,6 @@
 {
   "lockFileVersion": 1,
-  "moduleFileHash": "c25716a6516122054981b08f0ad80883a935895a4e73cae0521f57202925fa49",
+  "moduleFileHash": "ab7c0d7c93c29b44ebc3ee2e820fa5c7d0cdc6b59703fa9675a7f77b6efea1a2",
   "flags": {
     "cmdRegistries": [
       "https://bcr.bazel.build/"
@@ -22,15 +22,74 @@
       "key": "<root>",
       "repoName": "playground",
       "executionPlatformsToRegister": [],
-      "toolchainsToRegister": [],
+      "toolchainsToRegister": [
+        "@bison//:toolchain",
+        "@flex//:toolchain"
+      ],
       "extensionUsages": [
+        {
+          "extensionBzlFile": "@rules_bison//bison/extensions:bison_repository_ext.bzl",
+          "extensionName": "bison_repository_ext",
+          "usingModule": "<root>",
+          "location": {
+            "file": "@@//:MODULE.bazel",
+            "line": 36,
+            "column": 22
+          },
+          "imports": {
+            "bison": "bison"
+          },
+          "devImports": [],
+          "tags": [
+            {
+              "tagName": "repository",
+              "attributeValues": {"name":"--bison","extra_copts":["---O3"],"version":"--3.3.2"},
+              "devDependency": false,
+              "location": {
+                "file": "@@//:MODULE.bazel",
+                "line": 40,
+                "column": 17
+              }
+            }
+          ],
+          "hasDevUseExtension": false,
+          "hasNonDevUseExtension": true
+        },
+        {
+          "extensionBzlFile": "@rules_flex//flex/extensions:flex_repository_ext.bzl",
+          "extensionName": "flex_repository_ext",
+          "usingModule": "<root>",
+          "location": {
+            "file": "@@//:MODULE.bazel",
+            "line": 49,
+            "column": 21
+          },
+          "imports": {
+            "flex": "flex"
+          },
+          "devImports": [],
+          "tags": [
+            {
+              "tagName": "repository",
+              "attributeValues": {"name":"--flex","extra_copts":["---O3"],"version":"--2.6.4"},
+              "devDependency": false,
+              "location": {
+                "file": "@@//:MODULE.bazel",
+                "line": 53,
+                "column": 16
+              }
+            }
+          ],
+          "hasDevUseExtension": false,
+          "hasNonDevUseExtension": true
+        },
         {
           "extensionBzlFile": "@rules_foreign_cc//foreign_cc:extensions.bzl",
           "extensionName": "tools",
           "usingModule": "<root>",
           "location": {
             "file": "@@//:MODULE.bazel",
-            "line": 48,
+            "line": 78,
             "column": 22
           },
           "imports": {},
@@ -42,7 +101,7 @@
               "devDependency": false,
               "location": {
                 "file": "@@//:MODULE.bazel",
-                "line": 49,
+                "line": 79,
                 "column": 12
               }
             },
@@ -52,7 +111,7 @@
               "devDependency": false,
               "location": {
                 "file": "@@//:MODULE.bazel",
-                "line": 50,
+                "line": 80,
                 "column": 12
               }
             }
@@ -66,7 +125,7 @@
           "usingModule": "<root>",
           "location": {
             "file": "@@//:MODULE.bazel",
-            "line": 53,
+            "line": 83,
             "column": 22
           },
           "imports": {
@@ -81,7 +140,7 @@
               "devDependency": false,
               "location": {
                 "file": "@@//:MODULE.bazel",
-                "line": 54,
+                "line": 84,
                 "column": 14
               }
             }
@@ -95,7 +154,7 @@
           "usingModule": "<root>",
           "location": {
             "file": "@@//:MODULE.bazel",
-            "line": 90,
+            "line": 120,
             "column": 23
           },
           "imports": {
@@ -111,7 +170,7 @@
               "devDependency": false,
               "location": {
                 "file": "@@//:MODULE.bazel",
-                "line": 91,
+                "line": 121,
                 "column": 17
               }
             },
@@ -121,7 +180,7 @@
               "devDependency": false,
               "location": {
                 "file": "@@//:MODULE.bazel",
-                "line": 96,
+                "line": 126,
                 "column": 17
               }
             }
@@ -135,7 +194,7 @@
           "usingModule": "<root>",
           "location": {
             "file": "@@//:MODULE.bazel",
-            "line": 102,
+            "line": 132,
             "column": 20
           },
           "imports": {
@@ -150,7 +209,7 @@
               "devDependency": false,
               "location": {
                 "file": "@@//:MODULE.bazel",
-                "line": 103,
+                "line": 133,
                 "column": 10
               }
             }
@@ -176,6 +235,8 @@
         "catch2": "catch2@3.3.0",
         "googletest": "googletest@1.14.0",
         "google_benchmark": "google_benchmark@1.8.2",
+        "rules_bison": "rules_bison@0.2.2",
+        "rules_flex": "rules_flex@0.2.1",
         "bazel_gazelle": "gazelle@0.32.0",
         "platforms": "platforms@0.0.7",
         "rules_foreign_cc": "rules_foreign_cc@0.9.0",
@@ -692,6 +753,84 @@
         "bzlFile": "@bazel_tools//tools/build_defs/repo:http.bzl",
         "ruleClassName": "http_archive",
         "attributes": {"name":"--google_benchmark~1.8.2","urls":["--https://github.com/google/benchmark/archive/refs/tags/v1.8.2.tar.gz"],"integrity":"--sha256-KqspgNA3YTf5adkoSPu2gharsHYzA0U0/IxlzE56DpM=","strip_prefix":"--benchmark-1.8.2","remote_patches":{"--https://bcr.bazel.build/modules/google_benchmark/1.8.2/patches/module_dot_bazel.patch":"--sha256-703OrC3OH7pk9qrGkAMbvp/8yEoHiesDKHNVIKVJB/M="},"remote_patch_strip":0}
+      }
+    },
+    "rules_bison@0.2.2": {
+      "name": "rules_bison",
+      "version": "0.2.2",
+      "key": "rules_bison@0.2.2",
+      "repoName": "rules_bison",
+      "executionPlatformsToRegister": [],
+      "toolchainsToRegister": [
+        "@bison//:toolchain"
+      ],
+      "extensionUsages": [
+        {
+          "extensionBzlFile": "@rules_bison//bison/internal:default_toolchain_ext.bzl",
+          "extensionName": "default_toolchain_ext",
+          "usingModule": "rules_bison@0.2.2",
+          "location": {
+            "file": "https://bcr.bazel.build/modules/rules_bison/0.2.2/MODULE.bazel",
+            "line": 28,
+            "column": 34
+          },
+          "imports": {
+            "bison": "bison"
+          },
+          "devImports": [],
+          "tags": [],
+          "hasDevUseExtension": false,
+          "hasNonDevUseExtension": true
+        }
+      ],
+      "deps": {
+        "bazel_tools": "bazel_tools@_",
+        "local_config_platform": "local_config_platform@_",
+        "rules_m4": "rules_m4@0.2.3"
+      },
+      "repoSpec": {
+        "bzlFile": "@bazel_tools//tools/build_defs/repo:http.bzl",
+        "ruleClassName": "http_archive",
+        "attributes": {"name":"--rules_bison~0.2.2","urls":["--https://github.com/jmillikin/rules_bison/releases/download/v0.2.2/rules_bison-v0.2.2.tar.xz"],"integrity":"--sha256-InkYNDDkOLLcd8rNex27Y0OJcbJBFAZXDx3dkgt8kUU=","strip_prefix":"--","remote_patches":{"--https://bcr.bazel.build/modules/rules_bison/0.2.2/patches/module_dot_bazel.patch":"--sha256-yZQfFywDALJFkuCpnWZCuRqVreUCq0/H/ABWsgh0wcM="},"remote_patch_strip":0}
+      }
+    },
+    "rules_flex@0.2.1": {
+      "name": "rules_flex",
+      "version": "0.2.1",
+      "key": "rules_flex@0.2.1",
+      "repoName": "rules_flex",
+      "executionPlatformsToRegister": [],
+      "toolchainsToRegister": [
+        "@flex//:toolchain"
+      ],
+      "extensionUsages": [
+        {
+          "extensionBzlFile": "@rules_flex//flex/internal:default_toolchain_ext.bzl",
+          "extensionName": "default_toolchain_ext",
+          "usingModule": "rules_flex@0.2.1",
+          "location": {
+            "file": "https://bcr.bazel.build/modules/rules_flex/0.2.1/MODULE.bazel",
+            "line": 27,
+            "column": 34
+          },
+          "imports": {
+            "flex": "flex"
+          },
+          "devImports": [],
+          "tags": [],
+          "hasDevUseExtension": false,
+          "hasNonDevUseExtension": true
+        }
+      ],
+      "deps": {
+        "bazel_tools": "bazel_tools@_",
+        "local_config_platform": "local_config_platform@_",
+        "rules_m4": "rules_m4@0.2.3"
+      },
+      "repoSpec": {
+        "bzlFile": "@bazel_tools//tools/build_defs/repo:http.bzl",
+        "ruleClassName": "http_archive",
+        "attributes": {"name":"--rules_flex~0.2.1","urls":["--https://github.com/jmillikin/rules_flex/releases/download/v0.2.1/rules_flex-v0.2.1.tar.xz"],"integrity":"--sha256-iSn+3ECQnRmktCVI0HhfeWx2d9zvi10WALQV5aSndJ8=","strip_prefix":"--","remote_patches":{},"remote_patch_strip":0}
       }
     },
     "gazelle@0.32.0": {
@@ -1693,6 +1832,44 @@
         "bzlFile": "@bazel_tools//tools/build_defs/repo:http.bzl",
         "ruleClassName": "http_archive",
         "attributes": {"name":"--libpfm~4.11.0","urls":["--https://sourceforge.net/projects/perfmon2/files/libpfm4/libpfm-4.11.0.tar.gz"],"integrity":"--sha256-XaX4hyveFLNjTJaI2YD2i9ootRAmhyPMEpc+7bq5/sw=","strip_prefix":"--libpfm-4.11.0","remote_patches":{"--https://bcr.bazel.build/modules/libpfm/4.11.0/patches/module_dot_bazel.patch":"--sha256-G0wQJ2mVEoW/L5LGzmbNfuZaxI2+9NDuWJtqvCpM1pc=","--https://bcr.bazel.build/modules/libpfm/4.11.0/patches/add_build_file.patch":"--sha256-E61d/qQgmeOcUliWaveHPp1EZoOjkvZJsqhGhHofqUg="},"remote_patch_strip":0}
+      }
+    },
+    "rules_m4@0.2.3": {
+      "name": "rules_m4",
+      "version": "0.2.3",
+      "key": "rules_m4@0.2.3",
+      "repoName": "rules_m4",
+      "executionPlatformsToRegister": [],
+      "toolchainsToRegister": [
+        "@m4//:toolchain"
+      ],
+      "extensionUsages": [
+        {
+          "extensionBzlFile": "@rules_m4//m4/internal:default_toolchain_ext.bzl",
+          "extensionName": "default_toolchain_ext",
+          "usingModule": "rules_m4@0.2.3",
+          "location": {
+            "file": "https://bcr.bazel.build/modules/rules_m4/0.2.3/MODULE.bazel",
+            "line": 26,
+            "column": 34
+          },
+          "imports": {
+            "m4": "m4"
+          },
+          "devImports": [],
+          "tags": [],
+          "hasDevUseExtension": false,
+          "hasNonDevUseExtension": true
+        }
+      ],
+      "deps": {
+        "bazel_tools": "bazel_tools@_",
+        "local_config_platform": "local_config_platform@_"
+      },
+      "repoSpec": {
+        "bzlFile": "@bazel_tools//tools/build_defs/repo:http.bzl",
+        "ruleClassName": "http_archive",
+        "attributes": {"name":"--rules_m4~0.2.3","urls":["--https://github.com/jmillikin/rules_m4/releases/download/v0.2.3/rules_m4-v0.2.3.tar.xz"],"integrity":"--sha256-EM5B8VDM+/3cnSOU7mgOuYTcij3+phOv0BPPsi6nRFw=","strip_prefix":"--","remote_patches":{},"remote_patch_strip":0}
       }
     },
     "stardoc@0.5.3": {
@@ -5122,6 +5299,81 @@
           "bzlFile": "@@bazel_tools//tools/osx:xcode_configure.bzl",
           "ruleClassName": "xcode_autoconf",
           "attributes": {"name":"--rules_cc~0.0.8~cc_configure~local_config_xcode","xcode_locator":"--@bazel_tools//tools/osx:xcode_locator.m","remote_xcode":"--"}
+        }
+      }
+    },
+    "@rules_bison~0.2.2//bison/internal:default_toolchain_ext.bzl%default_toolchain_ext": {
+      "bzlTransitiveDigest": "JVWcUny48LFS9D+xz4b9u/94awfBOIGXV5iu8iY/nRc=",
+      "generatedRepoSpecs": {
+        "bison_v3.3.2": {
+          "bzlFile": "@@rules_bison~0.2.2//bison/rules:bison_repository.bzl",
+          "ruleClassName": "bison_repository",
+          "attributes": {"name":"--rules_bison~0.2.2~default_toolchain_ext~bison_v3.3.2","version":"--3.3.2"}
+        },
+        "bison": {
+          "bzlFile": "@@rules_bison~0.2.2//bison/rules:bison_toolchain_repository.bzl",
+          "ruleClassName": "bison_toolchain_repository",
+          "attributes": {"name":"--rules_bison~0.2.2~default_toolchain_ext~bison","bison_repository":"--@bison_v3.3.2"}
+        }
+      }
+    },
+    "@rules_bison~0.2.2//bison/extensions:bison_repository_ext.bzl%bison_repository_ext": {
+      "bzlTransitiveDigest": "A+3YMZenwhA/NwA7Bes9xuoVWQNCaBPxA05vtcFi8I4=",
+      "generatedRepoSpecs": {
+        "bison_v3.3.2__cfg0A7AA425": {
+          "bzlFile": "@@rules_bison~0.2.2//bison/rules:bison_repository.bzl",
+          "ruleClassName": "bison_repository",
+          "attributes": {"name":"--rules_bison~0.2.2~bison_repository_ext~bison_v3.3.2__cfg0A7AA425","version":"--3.3.2","extra_copts":["---O3"]}
+        },
+        "bison": {
+          "bzlFile": "@@rules_bison~0.2.2//bison/rules:bison_toolchain_repository.bzl",
+          "ruleClassName": "bison_toolchain_repository",
+          "attributes": {"name":"--rules_bison~0.2.2~bison_repository_ext~bison","bison_repository":"--@bison_v3.3.2__cfg0A7AA425"}
+        }
+      }
+    },
+    "@rules_m4~0.2.3//m4/internal:default_toolchain_ext.bzl%default_toolchain_ext": {
+      "bzlTransitiveDigest": "rm6OAtIMR6n0t1X9wBVXucwCa6wqpIoqqh+kSzHNOg4=",
+      "generatedRepoSpecs": {
+        "m4_v1.4.18": {
+          "bzlFile": "@@rules_m4~0.2.3//m4/rules:m4_repository.bzl",
+          "ruleClassName": "m4_repository",
+          "attributes": {"name":"--rules_m4~0.2.3~default_toolchain_ext~m4_v1.4.18","version":"--1.4.18"}
+        },
+        "m4": {
+          "bzlFile": "@@rules_m4~0.2.3//m4/rules:m4_toolchain_repository.bzl",
+          "ruleClassName": "m4_toolchain_repository",
+          "attributes": {"name":"--rules_m4~0.2.3~default_toolchain_ext~m4","m4_repository":"--@m4_v1.4.18"}
+        }
+      }
+    },
+    "@rules_flex~0.2.1//flex/internal:default_toolchain_ext.bzl%default_toolchain_ext": {
+      "bzlTransitiveDigest": "fn+aX2vKsiaNLj3QtNfsRcI8fiATDtxAayRTJFGJkNI=",
+      "generatedRepoSpecs": {
+        "flex": {
+          "bzlFile": "@@rules_flex~0.2.1//flex/rules:flex_toolchain_repository.bzl",
+          "ruleClassName": "flex_toolchain_repository",
+          "attributes": {"name":"--rules_flex~0.2.1~default_toolchain_ext~flex","flex_repository":"--@flex_v2.6.4"}
+        },
+        "flex_v2.6.4": {
+          "bzlFile": "@@rules_flex~0.2.1//flex/rules:flex_repository.bzl",
+          "ruleClassName": "flex_repository",
+          "attributes": {"name":"--rules_flex~0.2.1~default_toolchain_ext~flex_v2.6.4","version":"--2.6.4"}
+        }
+      }
+    },
+    "@rules_flex~0.2.1//flex/extensions:flex_repository_ext.bzl%flex_repository_ext": {
+      "bzlTransitiveDigest": "fsokVt4OQxtP/gV71beKC6gUH5P9kC27TOkNb7+Dj8g=",
+      "generatedRepoSpecs": {
+        "flex": {
+          "bzlFile": "@@rules_flex~0.2.1//flex/rules:flex_toolchain_repository.bzl",
+          "ruleClassName": "flex_toolchain_repository",
+          "attributes": {"name":"--rules_flex~0.2.1~flex_repository_ext~flex","flex_repository":"--@flex_v2.6.4__cfg0A7AA425"}
+        },
+        "flex_v2.6.4__cfg0A7AA425": {
+          "bzlFile": "@@rules_flex~0.2.1//flex/rules:flex_repository.bzl",
+          "ruleClassName": "flex_repository",
+          "attributes": {"name":"--rules_flex~0.2.1~flex_repository_ext~flex_v2.6.4__cfg0A7AA425","version":"--2.6.4","extra_copts":["---O3"]}
         }
       }
     }
