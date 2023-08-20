@@ -1,9 +1,5 @@
 #pragma once
 
-// interface to the lexer
-extern int yylineno;
-void yyerror(char *s, ...);
-
 struct symbol {
   char *name;
   double value;
@@ -83,3 +79,7 @@ struct ast *newflow(int nodetype, struct ast *cond, struct ast *tl,
 void dodef(struct symbol *name, struct symlist *syms, struct ast *func);
 double eval(struct ast *);
 void treefree(struct ast *);
+
+// interface to the lexer
+extern int yylineno;
+void yyerror(char *s, ...);
