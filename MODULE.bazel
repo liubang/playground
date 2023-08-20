@@ -21,15 +21,17 @@ bazel_dep(name = "fmt", version = "10.1.0")
 bazel_dep(name = "bzip2", version = "1.0.8")
 bazel_dep(name = "zlib", version = "1.2.13")
 bazel_dep(name = "abseil-cpp", version = "20230125.1")
+bazel_dep(name = "sqlite3", version = "3.42.0")
 bazel_dep(name = "nlohmann_json", version = "3.11.2")
 bazel_dep(name = "rapidjson", version = "1.1.0")
 bazel_dep(name = "glog", version = "0.5.0")
 bazel_dep(name = "gflags", version = "2.2.2")
-bazel_dep(name = "catch2", version = "3.3.0")
+bazel_dep(name = "catch2", version = "3.4.0")
 bazel_dep(name = "googletest", version = "1.14.0")
 bazel_dep(name = "google_benchmark", version = "1.8.2")
 
 # bison and flex
+bazel_dep(name = "rules_m4", version = "0.2.3")
 bazel_dep(name = "rules_bison", version = "0.2.2")
 bazel_dep(name = "rules_flex", version = "0.2.1")
 
