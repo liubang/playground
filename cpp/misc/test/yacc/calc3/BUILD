@@ -38,6 +38,7 @@ cc_binary(
     srcs = ["main.c"],
     deps = [
         ":calc_bison",
+        ":calc_common",
         ":calc_flex",
     ],
 )
