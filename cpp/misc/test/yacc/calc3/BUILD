@@ -6,39 +6,34 @@
 # Last Modified: 2023/08/20 16:00
 #
 #======================================================================
-load("@rules_flex//flex:flex.bzl", "flex_cc_library")
-load("@rules_bison//bison:bison.bzl", "bison_cc_library")
+load("@rules_flex//flex:flex.bzl", "flex", "flex_cc_library")
+load("@rules_bison//bison:bison.bzl", "bison", "bison_cc_library")
+
+bison(
+    name = "calc_bison",
+    src = "calc.y",
+)
+
+flex(
+    name = "calc_flex",
+    src = "calc.l",
+)
 
 cc_library(
     name = "calc_common",
-    srcs = ["calc.c"],
+    srcs = [
+        "calc.c",
+        ":calc_bison",
+        ":calc_flex",
+    ],
     hdrs = ["calc.h"],
     includes = ["."],
-)
-
-bison_cc_library(
-    name = "calc_bison",
-    src = "calc.y",
-    deps = [
-        ":calc_common",
-    ],
-)
-
-flex_cc_library(
-    name = "calc_flex",
-    src = "calc.l",
-    deps = [
-        ":calc_bison",
-        ":calc_common",
-    ],
 )
 
 cc_binary(
     name = "calc",
     srcs = ["main.c"],
     deps = [
-        ":calc_bison",
         ":calc_common",
-        ":calc_flex",
     ],
 )
