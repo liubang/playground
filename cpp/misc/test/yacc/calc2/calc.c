@@ -1,4 +1,4 @@
-#include "calc2.h"
+#include "calc.h"
 
 #include <stdarg.h>
 #include <stdio.h>
