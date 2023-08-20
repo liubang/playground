@@ -18,19 +18,19 @@ COPTS = [
     "-D__STDC_CONSTANT_MACROS",
     "-DGFLAGS_NS=google",
 ] + select({
-    "@//config:brpc_with_glog": ["-DBRPC_WITH_GLOG=1"],
+    "@//:brpc_with_glog": ["-DBRPC_WITH_GLOG=1"],
     "//conditions:default": ["-DBRPC_WITH_GLOG=0"],
 }) + select({
-    "@//config:brpc_with_mesalink": ["-DUSE_MESALINK"],
+    "@//:brpc_with_mesalink": ["-DUSE_MESALINK"],
     "//conditions:default": [""],
 }) + select({
-    "@//config:brpc_with_thrift": ["-DENABLE_THRIFT_FRAMED_PROTOCOL=1"],
+    "@//:brpc_with_thrift": ["-DENABLE_THRIFT_FRAMED_PROTOCOL=1"],
     "//conditions:default": [""],
 }) + select({
-    "@//config:brpc_with_thrift_legacy_version": [],
+    "@//:brpc_with_thrift_legacy_version": [],
     "//conditions:default": ["-DTHRIFT_STDCXX=std"],
 }) + select({
-    "@//config:brpc_with_rdma": ["-DBRPC_WITH_RDMA=1"],
+    "@//:brpc_with_rdma": ["-DBRPC_WITH_RDMA=1"],
     "//conditions:default": [""],
 })
 
@@ -54,12 +54,12 @@ LINKOPTS = [
         "-lrt",
     ],
 }) + select({
-    "@//config:brpc_with_mesalink": [
+    "@//:brpc_with_mesalink": [
         "-lmesalink",
     ],
     "//conditions:default": [],
 }) + select({
-    "@//config:brpc_with_rdma": [
+    "@//:brpc_with_rdma": [
         "-libverbs",
     ],
     "//conditions:default": [],
@@ -78,7 +78,7 @@ genrule(
 #undef BRPC_WITH_GLOG
 #endif
 #define BRPC_WITH_GLOG """ + select({
-              "@//config:brpc_with_glog": "1",
+              "@//:brpc_with_glog": "1",
               "//conditions:default": "0",
           }) +
           """
@@ -274,7 +274,7 @@ objc_library(
     deps = [
         "@gflags",
     ] + select({
-        "@//config:brpc_with_glog": ["@glog"],
+        "@//:brpc_with_glog": ["@glog"],
         "//conditions:default": [],
     }),
 )
@@ -296,7 +296,7 @@ cc_library(
         ":config_h",
     ],
     copts = COPTS + select({
-        "@//config:brpc_build_for_unittest": [
+        "@//:brpc_build_for_unittest": [
             "-DBVAR_NOT_LINK_DEFAULT_VARIABLES",
             "-DUNIT_TEST",
         ],
@@ -314,7 +314,7 @@ cc_library(
         "@protobuf",
         "@zlib",
     ] + select({
-        "@//config:brpc_with_glog": ["@glog"],
+        "@//:brpc_with_glog": ["@glog"],
         "//conditions:default": [],
     }) + select({
         "@bazel_tools//tools/osx:darwin": [":macos_lib"],
@@ -333,7 +333,7 @@ cc_library(
             "src/bvar/default_variables.cpp",
         ],
     ) + select({
-        "@//config:brpc_build_for_unittest": [],
+        "@//:brpc_build_for_unittest": [],
         "//conditions:default": ["src/bvar/default_variables.cpp"],
     }),
     hdrs = glob([
@@ -342,7 +342,7 @@ cc_library(
         "src/bvar/detail/*.h",
     ]),
     copts = COPTS + select({
-        "@//config:brpc_build_for_unittest": [
+        "@//:brpc_build_for_unittest": [
             "-DBVAR_NOT_LINK_DEFAULT_VARIABLES",
             "-DUNIT_TEST",
         ],
@@ -486,7 +486,7 @@ cc_library(
             "src/brpc/event_dispatcher_kqueue.cpp",
         ],
     ) + select({
-        "@//config:brpc_with_thrift": glob([
+        "@//:brpc_with_thrift": glob([
             "src/brpc/thrift*.cpp",
             "src/brpc/**/thrift*.cpp",
         ]),
@@ -513,7 +513,7 @@ cc_library(
         ":mcpack2pb",
         "@leveldb",
     ] + select({
-        "@//config:brpc_with_thrift": [
+        "@//:brpc_with_thrift": [
             "@org_apache_thrift//:thrift",
         ],
         "//conditions:default": [],
