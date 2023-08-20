@@ -381,6 +381,7 @@ static double calluser(struct ufncall* f) {
 }
 
 void yyerror(char* s, ...) {
+  extern int yylineno;
   va_list ap;
   va_start(ap, s);
   fprintf(stderr, "%d: error: ", yylineno);

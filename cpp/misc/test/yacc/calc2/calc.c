@@ -77,6 +77,7 @@ void treefree(struct ast *a) {
 }
 
 void yyerror(char *s, ...) {
+  extern int yylineno;
   va_list ap;
   va_start(ap, s);
   fprintf(stderr, "%d: error: ", yylineno);
