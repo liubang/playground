@@ -19,23 +19,25 @@ cc_library(
 bison_cc_library(
     name = "calc_bison",
     src = "calc.y",
-    deps = [":calc_common"],
+    deps = [
+        ":calc_common",
+    ],
 )
 
 flex_cc_library(
     name = "calc_flex",
     src = "calc.l",
-    deps = [":calc_bison"],
+    deps = [
+        ":calc_bison",
+        ":calc_common",
+    ],
 )
 
 cc_binary(
     name = "calc",
-    srcs = [
-        "main.c",
-    ],
+    srcs = ["main.c"],
     deps = [
         ":calc_bison",
-        ":calc_common",
         ":calc_flex",
     ],
 )
