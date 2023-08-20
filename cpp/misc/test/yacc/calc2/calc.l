@@ -1,7 +1,7 @@
 %option noyywrap nodefault yylineno
 %{
-# include "calc2.h"
-# include "calc2_bison.h"
+# include "calc.h"
+# include "calc_bison.h"
 %}
 
 /* float exponent */
