@@ -1,4 +1,4 @@
-%option noyywrap nodefault yylineno
+%option nounput noyywrap nodefault yylineno
 
 %{
 #include "calc.h"

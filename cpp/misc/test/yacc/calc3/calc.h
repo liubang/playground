@@ -81,5 +81,4 @@ double eval(struct ast *);
 void treefree(struct ast *);
 
 // interface to the lexer
-extern int yylineno;
 void yyerror(char *s, ...);
