@@ -5,12 +5,12 @@ genrule(
     cmd = """
 sed -e 's/#cmakedefine01/#define/' \
 """ + select({
-        "@//config:brpc_with_sse42": """-e 's/ HAVE_SSE42/ HAVE_SSE42 1/' \
+        "@//:brpc_with_sse42": """-e 's/ HAVE_SSE42/ HAVE_SSE42 1/' \
 """,
         "//conditions:default": """-e 's/ HAVE_SSE42/ HAVE_SSE42 0/' \
 """,
     }) + select({
-        "@//config:brpc_with_glog": """-e 's/ CRC32C_TESTS_BUILT_WITH_GLOG/ CRC32C_TESTS_BUILT_WITH_GLOG 1/' \
+        "@//:brpc_with_glog": """-e 's/ CRC32C_TESTS_BUILT_WITH_GLOG/ CRC32C_TESTS_BUILT_WITH_GLOG 1/' \
 """,
         "//conditions:default": """-e 's/ CRC32C_TESTS_BUILT_WITH_GLOG/ CRC32C_TESTS_BUILT_WITH_GLOG 0/' \
 """,
@@ -45,7 +45,7 @@ cc_library(
         "include/crc32c/crc32c.h",
     ],
     copts = select({
-        "@//config:brpc_with_sse42": ["-msse4.2"],
+        "@//:brpc_with_sse42": ["-msse4.2"],
         "//conditions:default": [],
     }),
     strip_include_prefix = "include",
@@ -70,7 +70,7 @@ cc_test(
         "@googletest//:gtest",
         "@googletest//:gtest_main",
     ] + select({
-        "@//config:brpc_with_glog": ["@glog"],
+        "@//:brpc_with_glog": ["@glog"],
         "//conditions:default": [],
     }),
 )
