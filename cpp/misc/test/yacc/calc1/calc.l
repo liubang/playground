@@ -1,3 +1,4 @@
+%option noyywrap nodefault yylineno
 %{
 /*
  |------------------------------------------------------------------
@@ -11,21 +12,18 @@
  */
 
 #include <stdio.h>
+# include "calc.h"
 #include "calc_bison.h"
 
-int yywrap(void)
-{
-	return 1;
-}
 %}
 
 %%
 
-"+"		return ADD;
-"-"		return SUB;
-"*"		return MUL;
-"/"		return DIV;
-"\n"		return CR;
+"+"  return ADD;
+"-"  return SUB;
+"*"  return MUL;
+"/"  return DIV;
+"\n" return CR;
 
 ([1-9][0-9]*)|0|([0-9]+\.[0-9]+) {
 	double d;
