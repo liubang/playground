@@ -111,11 +111,10 @@ def external_repositories():
         branch = "main",
     )
 
-    # http_archive(
-    #     name = "rules_perl",  # 2021-09-23T03:21:58Z
-    #     sha256 = "55fbe071971772758ad669615fc9aac9b126db6ae45909f0f36de499f6201dd3",
-    #     strip_prefix = "rules_perl-2f4f36f454375e678e81e5ca465d4d497c5c02da",
-    #     urls = [
-    #         "https://github.com/bazelbuild/rules_perl/archive/2f4f36f454375e678e81e5ca465d4d497c5c02da.tar.gz",
-    #     ],
-    # )
+    http_archive(
+        name = "sqlite",
+        build_file = "//third_party/sqlite:sqlite.BUILD",
+        urls = ["https://sqlite.org/2023/sqlite-src-3420000.zip"],
+        sha256 = "38ca56a317be37fb00bd92bc280d9b9209bd4008b297d483c41ec1f6079bfb6d",
+        strip_prefix = "sqlite-src-3420000",
+    )
