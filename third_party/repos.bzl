@@ -8,6 +8,7 @@
 #======================================================================
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 
 def external_repositories():
     http_archive(
@@ -104,11 +105,17 @@ def external_repositories():
         strip_prefix = "brpc-1.6.0",
     )
 
-    http_archive(
-        name = "rules_perl",  # 2021-09-23T03:21:58Z
-        sha256 = "55fbe071971772758ad669615fc9aac9b126db6ae45909f0f36de499f6201dd3",
-        strip_prefix = "rules_perl-2f4f36f454375e678e81e5ca465d4d497c5c02da",
-        urls = [
-            "https://github.com/bazelbuild/rules_perl/archive/2f4f36f454375e678e81e5ca465d4d497c5c02da.tar.gz",
-        ],
+    git_repository(
+        name = "rules_perl",
+        remote = "https://github.com/bazelbuild/rules_perl.git",
+        branch = "main",
     )
+
+    # http_archive(
+    #     name = "rules_perl",  # 2021-09-23T03:21:58Z
+    #     sha256 = "55fbe071971772758ad669615fc9aac9b126db6ae45909f0f36de499f6201dd3",
+    #     strip_prefix = "rules_perl-2f4f36f454375e678e81e5ca465d4d497c5c02da",
+    #     urls = [
+    #         "https://github.com/bazelbuild/rules_perl/archive/2f4f36f454375e678e81e5ca465d4d497c5c02da.tar.gz",
+    #     ],
+    # )

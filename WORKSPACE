@@ -26,7 +26,9 @@ load("//third_party:repos.bzl", "external_repositories")
 
 external_repositories()
 
-load("@rules_perl//perl:deps.bzl", "perl_register_toolchains")
+load("@rules_perl//perl:deps.bzl", "perl_register_toolchains", "perl_rules_dependencies")
+
+perl_rules_dependencies()
 
 perl_register_toolchains()
 

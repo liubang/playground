@@ -1,8 +1,8 @@
 #include <stdio.h>
 
-int main(int argc, char *argv[]) {
-  extern int yyparse(void);
+extern int yyparse(void);
 
+int main(int argc, char *argv[]) {
   printf("> ");
   return yyparse();
 }

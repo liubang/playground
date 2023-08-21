@@ -12,6 +12,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include "calc.h"
+
 #define YYDEBUG 1
 
 %}
@@ -64,22 +66,3 @@ primary_expression
 ;
 
 %%
-
-int yyerror(char const *str)
-{
-	extern char *yytext;
-	fprintf(stderr, "syntax error near %s\n", yytext);
-	return 0;
-}
-
-int main(void)
-{
-	extern int yyparse(void);
-	extern FILE *yyin;
-
-	yyin = stdin;
-	if (yyparse()) {
-		fprintf(stderr, "Core Dump!\n");
-		exit(1);
-	}
-}

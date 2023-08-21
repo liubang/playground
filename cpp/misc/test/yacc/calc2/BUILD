@@ -33,6 +33,7 @@ cc_library(
 cc_binary(
     name = "calc",
     srcs = ["main.c"],
+    copts = ["-std=c99"],
     deps = [
         ":calc_common",
     ],
