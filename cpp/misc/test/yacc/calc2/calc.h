@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdio.h>
+
 void yyerror(char *s, ...);
 
 struct ast {
@@ -19,3 +21,7 @@ struct ast *newnum(double d);
 
 double eval(struct ast *);
 void treefree(struct ast *);
+
+extern int yylineno;
+extern FILE *yyin;
+extern int yylex(void);

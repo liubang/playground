@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdio.h>
+
 struct symbol {
   char *name;
   double value;
@@ -82,3 +84,7 @@ void treefree(struct ast *);
 
 // interface to the lexer
 void yyerror(char *s, ...);
+
+extern int yylineno;
+extern FILE *yyin;
+extern int yylex(void);
