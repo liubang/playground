@@ -9,10 +9,20 @@
 
 cc_binary(
     name = "lemon",
-    srcs = ["tool/lemon.c"],
+    srcs = [
+        "tool/lemon.c",
+    ],
     copts = [
         "-std=c99",
         "-O2",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "lempar",
+    srcs = [
+        "tool/lempar.c",
     ],
     visibility = ["//visibility:public"],
 )
