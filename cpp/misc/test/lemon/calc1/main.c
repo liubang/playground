@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "calc.h"
+#include "ttokens.h"
 #include "types.h"
 
 int main(int argc, char *argv[]) {
@@ -34,25 +34,25 @@ int main(int argc, char *argv[]) {
           value = value * 10 + (*c - '0');
         }
         v[i].value = value;
-        Parse(pParser, INTEGER, &v[i]);
+        Parse(pParser, TK_INTEGER, &v[i]);
         break;
       case '+':
-        Parse(pParser, PLUS, NULL);
+        Parse(pParser, TK_PLUS, NULL);
         break;
       case '-':
-        Parse(pParser, MINUS, NULL);
+        Parse(pParser, TK_MINUS, NULL);
         break;
       case '*':
-        Parse(pParser, TIMES, NULL);
+        Parse(pParser, TK_TIMES, NULL);
         break;
       case '/':
-        Parse(pParser, DIVIDE, NULL);
+        Parse(pParser, TK_DIVIDE, NULL);
         break;
       case '(':
-        Parse(pParser, LPAR, NULL);
+        Parse(pParser, TK_LPAR, NULL);
         break;
       case ')':
-        Parse(pParser, RPAR, NULL);
+        Parse(pParser, TK_RPAR, NULL);
         break;
       default:
         fprintf(stderr, "Unexpected token %s\n", c);
