@@ -11,11 +11,11 @@ genrule(
     name = "calc_lemon",
     srcs = [
         "calc.y",
+        "ttokens.h",
         "@sqlite//:lempar",
     ],
     outs = [
         "calc.c",
-        "calc.h",
     ],
     cmd = "$(location @sqlite//:lemon) -T$(location @sqlite//:lempar) -d$(RULEDIR) -s $(location calc.y)",
     tools = [
@@ -27,6 +27,7 @@ cc_binary(
     name = "calc",
     srcs = [
         "main.c",
+        "ttokens.h",
         "types.h",
         ":calc_lemon",
     ],
