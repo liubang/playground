@@ -1,6 +1,9 @@
+%token_prefix TK_
+
 %include {
 #include <stdio.h>
 #include "types.h"
+#include "ttokens.h"
 }
 
 %syntax_error {
