@@ -13,40 +13,35 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/08/22 01:44
+# Created: 2023/08/22 20:51
 
 #======================================================================
 #
 # BUILD -
 #
-# Created by liubang on 2023/08/22 00:37
-# Last Modified: 2023/08/22 00:37
+# Created by liubang on 2023/08/22 17:18
+# Last Modified: 2023/08/22 17:18
 #
 #======================================================================
-
-genrule(
-    name = "calc_lemon",
-    srcs = [
-        "calc.y",
-        "ttokens.h",
-        "@sqlite//:lempar",
-    ],
-    outs = [
-        "calc.c",
-    ],
-    cmd = "$(location @sqlite//:lemon) -T$(location @sqlite//:lempar) -d$(RULEDIR) -s $(location calc.y)",
-    tools = [
-        "@sqlite//:lemon",
-    ],
-)
-
-cc_binary(
-    name = "calc",
-    srcs = [
-        "main.cpp",
-        "ttokens.h",
-        "types.h",
-        ":calc_lemon",
-    ],
-    includes = ["."],
-)
+# genrule(
+#     name = "sql_lemon",
+#     srcs = [
+#         "sql.y",
+#         "ttokens.h",
+#         "@sqlite//:lempar",
+#     ],
+#     outs = ["sql.c"],
+#     cmd = "$(location @sqlite//:lemon) -T$(location @sqlite//:lempar) -d$(RULEDIR) -s $(location sql.y)",
+#     tools = [
+#         "@sqlite//:lemon",
+#     ],
+# )
+#
+# cc_binary(
+#     name = "sql",
+#     srcs = [
+#         "main.c",
+#         ":sql_lemon",
+#     ],
+#     includes = ["."],
+# )
