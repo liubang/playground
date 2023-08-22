@@ -26,7 +26,7 @@ genrule(
 cc_binary(
     name = "calc",
     srcs = [
-        "main.c",
+        "main.cpp",
         "ttokens.h",
         "types.h",
         ":calc_lemon",
