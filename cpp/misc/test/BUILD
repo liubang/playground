@@ -139,3 +139,10 @@ cc_test(
         "//cpp/tools",
     ],
 )
+
+cc_test(
+    name = "test_multimap",
+    srcs = ["test_multimap.cpp"],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+)
