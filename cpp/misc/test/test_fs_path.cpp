@@ -13,13 +13,13 @@
 namespace fs = std::filesystem;
 
 auto main() -> int {
-  fs::path directory = "path/to/directory";
-  fs::path filename = "file.txt";
+    fs::path directory = "path/to/directory";
+    fs::path filename = "file.txt";
 
-  // Join directory and filename
-  fs::path filepath = directory / filename;
+    // Join directory and filename
+    fs::path filepath = directory / filename;
 
-  std::cout << "File path: " << filepath << std::endl;
+    std::cout << "File path: " << filepath << std::endl;
 
-  return 0;
+    return 0;
 }
