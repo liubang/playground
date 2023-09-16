@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2023-09-12 12:48:24</td>
+            <td class="headerValue">2023-09-16 18:05:14</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">1</td>
@@ -68,17 +68,17 @@
 <a name="6"><span class="lineNum">       6 </span>            : // Last Modified: 2023/05/25 23:51</a>
 <a name="7"><span class="lineNum">       7 </span>            : //</a>
 <a name="8"><span class="lineNum">       8 </span>            : //=====================================================================</a>
-<a name="9"><span class="lineNum">       9 </span>            : #include &lt;fstream&gt;</a>
-<a name="10"><span class="lineNum">      10 </span>            : #include &quot;proto/test/sensor.pb.h&quot;</a>
+<a name="9"><span class="lineNum">       9 </span>            : #include &quot;proto/test/sensor.pb.h&quot;</a>
+<a name="10"><span class="lineNum">      10 </span>            : #include &lt;fstream&gt;</a>
 <a name="11"><span class="lineNum">      11 </span>            : </a>
 <a name="12"><span class="lineNum">      12 </span><span class="lineCov">          1 : int main() {</span></a>
-<a name="13"><span class="lineNum">      13 </span><span class="lineCov">          1 :   proto::test::Sensor sensor;</span></a>
-<a name="14"><span class="lineNum">      14 </span>            :   sensor.set_name(&quot;Laboratory&quot;);</a>
-<a name="15"><span class="lineNum">      15 </span><span class="lineCov">          1 :   sensor.set_temperature(23.4);</span></a>
-<a name="16"><span class="lineNum">      16 </span><span class="lineCov">          1 :   sensor.set_humidity(68);</span></a>
-<a name="17"><span class="lineNum">      17 </span><span class="lineCov">          1 :   sensor.set_door(proto::test::Sensor_SwitchLevel_OPEN);</span></a>
-<a name="18"><span class="lineNum">      18 </span><span class="lineCov">          1 :   std::ofstream ofs(&quot;sensor.data&quot;, std::ios_base::out | std::ios_base::binary);</span></a>
-<a name="19"><span class="lineNum">      19 </span><span class="lineCov">          1 :   sensor.SerializeToOstream(&amp;ofs);</span></a>
+<a name="13"><span class="lineNum">      13 </span><span class="lineCov">          1 :     proto::test::Sensor sensor;</span></a>
+<a name="14"><span class="lineNum">      14 </span>            :     sensor.set_name(&quot;Laboratory&quot;);</a>
+<a name="15"><span class="lineNum">      15 </span><span class="lineCov">          1 :     sensor.set_temperature(23.4);</span></a>
+<a name="16"><span class="lineNum">      16 </span><span class="lineCov">          1 :     sensor.set_humidity(68);</span></a>
+<a name="17"><span class="lineNum">      17 </span><span class="lineCov">          1 :     sensor.set_door(proto::test::Sensor_SwitchLevel_OPEN);</span></a>
+<a name="18"><span class="lineNum">      18 </span><span class="lineCov">          1 :     std::ofstream ofs(&quot;sensor.data&quot;, std::ios_base::out | std::ios_base::binary);</span></a>
+<a name="19"><span class="lineNum">      19 </span><span class="lineCov">          1 :     sensor.SerializeToOstream(&amp;ofs);</span></a>
 <a name="20"><span class="lineNum">      20 </span><span class="lineCov">          2 : }</span></a>
 </pre>
       </td>
