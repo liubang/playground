@@ -11,17 +11,15 @@
 #include <gtest/gtest.h>
 
 TEST(tools, scope) {
-  static int i = 0;
+    static int i = 0;
 
-  {
-    ++i;
+    {
+        ++i;
 
-    SCOPE_EXIT {
-      i--;
-    };
+        SCOPE_EXIT { i--; };
 
-    EXPECT_EQ(1, i);
-  }
+        EXPECT_EQ(1, i);
+    }
 
-  EXPECT_EQ(0, i);
+    EXPECT_EQ(0, i);
 }
