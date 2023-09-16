@@ -15,38 +15,36 @@
 namespace pl {
 
 template <typename Fn>
-concept FuncWithVoidRet = std::is_invocable_v<std::decay_t<Fn>> &&
-                          std::is_void_v<std::invoke_result_t<Fn>>;
+concept FuncWithVoidRet =
+    std::is_invocable_v<std::decay_t<Fn>> && std::is_void_v<std::invoke_result_t<Fn>>;
 
 template <typename Fn>
-concept FuncWithNonVoidRet = std::is_invocable_v<std::decay_t<Fn>> &&
-                             !std::is_void_v<std::invoke_result_t<Fn>>;
+concept FuncWithNonVoidRet =
+    std::is_invocable_v<std::decay_t<Fn>> && !std::is_void_v<std::invoke_result_t<Fn>>;
 
 template <typename Fn>
-  requires FuncWithVoidRet<Fn>
-auto measure(Fn&& fn) {
-  static_assert(std::is_invocable_v<std::decay_t<Fn>>);
-  static_assert(std::is_void_v<std::invoke_result_t<Fn>>);
-  auto start = std::chrono::high_resolution_clock::now();
-  fn();
-  auto end = std::chrono::high_resolution_clock::now();
-  auto elapsed =
-      std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-  std::cout << ">> Elapsed time: " << elapsed.count() << "(us)" << std::endl;
+    requires FuncWithVoidRet<Fn>
+auto measure(Fn &&fn) {
+    static_assert(std::is_invocable_v<std::decay_t<Fn>>);
+    static_assert(std::is_void_v<std::invoke_result_t<Fn>>);
+    auto start = std::chrono::high_resolution_clock::now();
+    fn();
+    auto end = std::chrono::high_resolution_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    std::cout << ">> Elapsed time: " << elapsed.count() << "(us)" << std::endl;
 }
 
 template <typename Fn>
-  requires FuncWithNonVoidRet<Fn>
-auto measure(Fn&& fn) {
-  static_assert(std::is_invocable_v<std::decay_t<Fn>>);
-  static_assert(!std::is_void_v<std::invoke_result_t<Fn>>);
-  auto start = std::chrono::high_resolution_clock::now();
-  auto res = fn();
-  auto end = std::chrono::high_resolution_clock::now();
-  auto elapsed =
-      std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-  std::cout << ">> Elapsed time: " << elapsed.count() << "(us)" << std::endl;
-  return res;
+    requires FuncWithNonVoidRet<Fn>
+auto measure(Fn &&fn) {
+    static_assert(std::is_invocable_v<std::decay_t<Fn>>);
+    static_assert(!std::is_void_v<std::invoke_result_t<Fn>>);
+    auto start = std::chrono::high_resolution_clock::now();
+    auto res = fn();
+    auto end = std::chrono::high_resolution_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    std::cout << ">> Elapsed time: " << elapsed.count() << "(us)" << std::endl;
+    return res;
 }
 
 //// for c++17
@@ -72,4 +70,4 @@ auto measure(Fn&& fn) {
 //   }
 // }
 
-}  // namespace pl
+} // namespace pl
