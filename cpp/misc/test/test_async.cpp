@@ -14,43 +14,43 @@
 
 namespace {
 void funcA() {
-  std::this_thread::sleep_for(std::chrono::seconds(1));
-  std::cout << __FUNCTION__ << std::endl;
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::cout << __FUNCTION__ << std::endl;
 }
 
 void funcB() {
-  std::this_thread::sleep_for(std::chrono::seconds(1));
-  std::cout << __FUNCTION__ << std::endl;
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::cout << __FUNCTION__ << std::endl;
 }
-}  // namespace
+} // namespace
 
-auto main(int argc, char* argv[]) -> int {
-  std::future<void> f1 = std::async(funcA);
-  std::future<void> f2 = std::async(funcB);
+auto main(int argc, char *argv[]) -> int {
+    std::future<void> f1 = std::async(funcA);
+    std::future<void> f2 = std::async(funcB);
 
-  auto start = std::chrono::steady_clock::now();
+    auto start = std::chrono::steady_clock::now();
 
-  f1.get();
-  f2.get();
+    f1.get();
+    f2.get();
 
-  std::cout << "std::async 耗时："
-            << std::chrono::duration_cast<std::chrono::milliseconds>(
-                   std::chrono::steady_clock::now() - start)
-                   .count()
-            << "ms" << std::endl;
+    std::cout << "std::async 耗时："
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - start)
+                     .count()
+              << "ms" << std::endl;
 
-  start = std::chrono::steady_clock::now();
-  std::thread t1(funcA);
-  std::thread t2(funcB);
+    start = std::chrono::steady_clock::now();
+    std::thread t1(funcA);
+    std::thread t2(funcB);
 
-  t1.join();
-  t2.join();
+    t1.join();
+    t2.join();
 
-  std::cout << "std::thread 耗时："
-            << std::chrono::duration_cast<std::chrono::milliseconds>(
-                   std::chrono::steady_clock::now() - start)
-                   .count()
-            << "ms" << std::endl;
+    std::cout << "std::thread 耗时："
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - start)
+                     .count()
+              << "ms" << std::endl;
 
-  return 0;
+    return 0;
 }
