@@ -14,18 +14,18 @@ namespace pl {
 Comparator::~Comparator() = default;
 
 class BytewiseComparator : public Comparator {
- public:
-  BytewiseComparator() = default;
+public:
+    BytewiseComparator() = default;
 
-  [[nodiscard]] const char* name() const override {
-    return "BytewiseComparator";
-  };
+    [[nodiscard]] const char *name() const override { return "BytewiseComparator"; };
 
-  [[nodiscard]] int compare(const Binary& a, const Binary& b) const override {
-    return a.compare(b);
-  }
+    [[nodiscard]] int compare(const Binary &a, const Binary &b) const override {
+        return a.compare(b);
+    }
 };
 
-Comparator* bytewiseComparator() { return new BytewiseComparator(); }
+Comparator *bytewiseComparator() {
+    return new BytewiseComparator();
+}
 
-}  // namespace pl
+} // namespace pl

@@ -16,65 +16,63 @@
 namespace pl {
 
 static const size_t kFilterBaseLg = 11;
-constexpr static std::size_t kFilterBase = 1 << kFilterBaseLg;  // 2048
+constexpr static std::size_t kFilterBase = 1 << kFilterBaseLg; // 2048
 
-FilterBlockBuilder::FilterBlockBuilder(const FilterPolicy* policy)
-    : filter_policy_(policy) {}
+FilterBlockBuilder::FilterBlockBuilder(const FilterPolicy *policy) : filter_policy_(policy) {}
 
 void FilterBlockBuilder::startBlock(uint64_t offset) {
-  uint64_t filter_index = (offset / kFilterBase);
-  assert(filter_index >= filter_offsets_.size());
-  while (filter_index > filter_offsets_.size()) {
-    genFilter();
-  }
+    uint64_t filter_index = (offset / kFilterBase);
+    assert(filter_index >= filter_offsets_.size());
+    while (filter_index > filter_offsets_.size()) {
+        genFilter();
+    }
 }
 
-void FilterBlockBuilder::addKey(const Binary& key) {
-  // make a copy
-  Binary k = key;
-  // 这两行的先后顺序不能颠倒
-  start_.push_back(keys_.size());
-  keys_.append(k.data(), k.size());
+void FilterBlockBuilder::addKey(const Binary &key) {
+    // make a copy
+    Binary k = key;
+    // 这两行的先后顺序不能颠倒
+    start_.push_back(keys_.size());
+    keys_.append(k.data(), k.size());
 }
 
 Binary FilterBlockBuilder::finish() {
-  if (!start_.empty()) {
-    genFilter();
-  }
+    if (!start_.empty()) {
+        genFilter();
+    }
 
-  const uint32_t array_offset = result_.size();
-  // 将每个filter的offset写入filter block中
-  for (uint32_t filter_offset : filter_offsets_) {
-    encodeInt(&result_, filter_offset);
-  }
+    const uint32_t array_offset = result_.size();
+    // 将每个filter的offset写入filter block中
+    for (uint32_t filter_offset : filter_offsets_) {
+        encodeInt(&result_, filter_offset);
+    }
 
-  // 记录filter
-  // offset的地址偏移量，通过这个偏移量，可以找到哪一段是filter_offsets
-  encodeInt(&result_, array_offset);
-  result_.push_back(kFilterBaseLg);
-  return {result_};
+    // 记录filter
+    // offset的地址偏移量，通过这个偏移量，可以找到哪一段是filter_offsets
+    encodeInt(&result_, array_offset);
+    result_.push_back(kFilterBaseLg);
+    return {result_};
 }
 
 void FilterBlockBuilder::genFilter() {
-  const std::size_t num_keys = start_.size();
-  if (num_keys == 0) {
+    const std::size_t num_keys = start_.size();
+    if (num_keys == 0) {
+        filter_offsets_.push_back(result_.size());
+        return;
+    }
+    start_.push_back(keys_.size());
+    tmp_keys_.resize(num_keys);
+    for (std::size_t i = 0; i < num_keys; i++) {
+        const char *base = keys_.data() + start_[i];
+        std::size_t len = start_[i + 1] - start_[i];
+        tmp_keys_[i] = Binary(base, len);
+    }
     filter_offsets_.push_back(result_.size());
-    return;
-  }
-  start_.push_back(keys_.size());
-  tmp_keys_.resize(num_keys);
-  for (std::size_t i = 0; i < num_keys; i++) {
-    const char* base = keys_.data() + start_[i];
-    std::size_t len = start_[i + 1] - start_[i];
-    tmp_keys_[i] = Binary(base, len);
-  }
-  filter_offsets_.push_back(result_.size());
-  filter_policy_->createFilter(&tmp_keys_[0], static_cast<int>(num_keys),
-                               &result_);
+    filter_policy_->createFilter(&tmp_keys_[0], static_cast<int>(num_keys), &result_);
 
-  tmp_keys_.clear();
-  keys_.clear();
-  start_.clear();
+    tmp_keys_.clear();
+    keys_.clear();
+    start_.clear();
 }
 
-}  // namespace pl
+} // namespace pl

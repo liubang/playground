@@ -17,33 +17,29 @@ namespace pl {
  * @brief this class is a proxy of bloom::BloomFilter
  */
 class BloomFilterPolicy : public FilterPolicy {
- public:
-  BloomFilterPolicy(std::size_t bits_per_key) : bits_per_key_(bits_per_key) {}
+public:
+    BloomFilterPolicy(std::size_t bits_per_key) : bits_per_key_(bits_per_key) {}
 
-  ~BloomFilterPolicy() override = default;
+    ~BloomFilterPolicy() override = default;
 
-  void createFilter(Binary* keys, std::size_t n,
-                    std::string* dst) const override {
-    BloomFilter bloom_filter(bits_per_key_);
-    bloom_filter.create(keys, n, dst);
-  }
+    void createFilter(Binary *keys, std::size_t n, std::string *dst) const override {
+        BloomFilter bloom_filter(bits_per_key_);
+        bloom_filter.create(keys, n, dst);
+    }
 
-  [[nodiscard]] const char* name() const override {
-    return "BloomFilterPolicy";
-  }
+    [[nodiscard]] const char *name() const override { return "BloomFilterPolicy"; }
 
-  [[nodiscard]] bool keyMayMatch(const Binary& key,
-                                 const Binary& filter) const override {
-    BloomFilter bloom_filter(bits_per_key_);
-    return bloom_filter.contains(key, filter);
-  }
+    [[nodiscard]] bool keyMayMatch(const Binary &key, const Binary &filter) const override {
+        BloomFilter bloom_filter(bits_per_key_);
+        return bloom_filter.contains(key, filter);
+    }
 
- private:
-  std::size_t bits_per_key_;
+private:
+    std::size_t bits_per_key_;
 };
 
-FilterPolicy* newBloomFilterPolicy(uint64_t bits_per_key) {
-  return new BloomFilterPolicy(bits_per_key);
+FilterPolicy *newBloomFilterPolicy(uint64_t bits_per_key) {
+    return new BloomFilterPolicy(bits_per_key);
 }
 
-}  // namespace pl
+} // namespace pl

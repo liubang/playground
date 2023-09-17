@@ -12,8 +12,8 @@
 #include "absl/log/log.h"
 
 TEST(abseil, log) {
-  // absl::ParseCommandLine(argc, argv);
-  // absl::InitializeLog();
-  LOG(INFO) << "Hello world!";
-  CHECK(1 != 2) << "oops!";
+    // absl::ParseCommandLine(argc, argv);
+    // absl::InitializeLog();
+    LOG(INFO) << "Hello world!";
+    CHECK(1 != 2) << "oops!";
 }
