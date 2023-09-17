@@ -21,31 +21,31 @@ namespace pl {
  * data block and index block builder
  */
 class BlockBuilder {
- public:
-  // BlockBuilder(const Comparator* comparator, int block_restart_interval);
-  BlockBuilder(const Options* options);
+public:
+    // BlockBuilder(const Comparator* comparator, int block_restart_interval);
+    BlockBuilder(const Options *options);
 
-  BlockBuilder(const BlockBuilder&) = delete;
-  BlockBuilder& operator=(const BlockBuilder&) = delete;
+    BlockBuilder(const BlockBuilder &) = delete;
+    BlockBuilder &operator=(const BlockBuilder &) = delete;
 
-  void add(const Binary& key, const Binary& val);
+    void add(const Binary &key, const Binary &val);
 
-  Binary finish();
+    Binary finish();
 
-  [[nodiscard]] bool empty() const { return buffer_.empty(); }
+    [[nodiscard]] bool empty() const { return buffer_.empty(); }
 
-  [[nodiscard]] std::size_t sizeEstimate() const;
+    [[nodiscard]] std::size_t sizeEstimate() const;
 
-  void reset();
+    void reset();
 
- private:
-  const Comparator* comparator_;
-  bool finished_{false};
-  int counter_{0};
-  std::string buffer_;
-  std::string last_key_;
-  int block_restart_interval_{0};
-  std::vector<uint32_t> restarts_;
+private:
+    const Comparator *comparator_;
+    bool finished_{false};
+    int counter_{0};
+    std::string buffer_;
+    std::string last_key_;
+    int block_restart_interval_{0};
+    std::vector<uint32_t> restarts_;
 };
 
-}  // namespace pl
+} // namespace pl

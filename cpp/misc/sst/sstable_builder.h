@@ -19,44 +19,43 @@
 namespace pl {
 
 class SSTableBuilder {
- public:
-  SSTableBuilder(const Options* options, FsWriter* writer);
-  SSTableBuilder(const SSTableBuilder&) = delete;
-  SSTableBuilder& operator=(const SSTableBuilder&) = delete;
-  ~SSTableBuilder();
+public:
+    SSTableBuilder(const Options *options, FsWriter *writer);
+    SSTableBuilder(const SSTableBuilder &) = delete;
+    SSTableBuilder &operator=(const SSTableBuilder &) = delete;
+    ~SSTableBuilder();
 
-  void add(const Binary& key, const Binary& value);
+    void add(const Binary &key, const Binary &value);
 
-  void flush();
+    void flush();
 
-  Status finish();
+    Status finish();
 
-  uint64_t entriesCount();
+    uint64_t entriesCount();
 
-  uint64_t fileSize();
+    uint64_t fileSize();
 
-  [[nodiscard]] Status status() const { return status_; }
+    [[nodiscard]] Status status() const { return status_; }
 
-  [[nodiscard]] bool ok() const { return status().isOk(); }
+    [[nodiscard]] bool ok() const { return status().isOk(); }
 
- private:
-  void writeBlock(BlockBuilder* block, BlockHandle* handle);
-  void writeBlockRaw(const Binary& content, CompressionType type,
-                     BlockHandle* handle);
+private:
+    void writeBlock(BlockBuilder *block, BlockHandle *handle);
+    void writeBlockRaw(const Binary &content, CompressionType type, BlockHandle *handle);
 
- private:
-  const Options* options_;
-  FsWriter* writer_;
-  BlockBuilder data_block_;
-  BlockBuilder index_block_;
-  BlockHandle pending_handler_;
-  FilterBlockBuilder* filter_block_;
-  std::string last_key_;
-  int64_t num_entries_{0};
-  uint64_t offset_{0};
-  Status status_;
-  bool pending_index_entry_{false};
-  bool closed_{false};
+private:
+    const Options *options_;
+    FsWriter *writer_;
+    BlockBuilder data_block_;
+    BlockBuilder index_block_;
+    BlockHandle pending_handler_;
+    FilterBlockBuilder *filter_block_;
+    std::string last_key_;
+    int64_t num_entries_{0};
+    uint64_t offset_{0};
+    Status status_;
+    bool pending_index_entry_{false};
+    bool closed_{false};
 };
 
-}  // namespace pl
+} // namespace pl
