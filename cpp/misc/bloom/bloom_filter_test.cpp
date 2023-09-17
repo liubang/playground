@@ -22,27 +22,29 @@
 #include "cpp/tools/scope.h"
 
 TEST(bloom, bloom) {
-  pl::BloomFilter filter(32);
+    pl::BloomFilter filter(32);
 
-  auto* binaries = new pl::Binary[100];
+    auto *binaries = new pl::Binary[100];
 
-  SCOPE_EXIT { delete[] binaries; };
+    SCOPE_EXIT {
+        delete[] binaries;
+    };
 
-  std::vector<std::string> strs(100);
+    std::vector<std::string> strs(100);
 
-  for (int i = 0; i < 100; ++i) {
-    strs[i] = pl::random_string(i + 10);
-    binaries[i] = pl::Binary(strs[i]);
-  }
+    for (int i = 0; i < 100; ++i) {
+        strs[i] = pl::random_string(i + 10);
+        binaries[i] = pl::Binary(strs[i]);
+    }
 
-  std::string dst;
-  filter.create(binaries, 100, &dst);
+    std::string dst;
+    filter.create(binaries, 100, &dst);
 
-  pl::Binary ff(dst);
+    pl::Binary ff(dst);
 
-  for (int i = 0; i < 100; ++i) {
-    EXPECT_TRUE(filter.contains(binaries[i], ff));
-    auto str = pl::random_string(128);
-    EXPECT_FALSE(filter.contains(str, ff));
-  }
+    for (int i = 0; i < 100; ++i) {
+        EXPECT_TRUE(filter.contains(binaries[i], ff));
+        auto str = pl::random_string(128);
+        EXPECT_FALSE(filter.contains(str, ff));
+    }
 }

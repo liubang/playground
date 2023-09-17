@@ -22,9 +22,8 @@ namespace pl {
  *
  * @tparam T [TODO:tparam]
  */
-template <typename T, std::size_t I, std::size_t... Is>
-struct Array {
-  using type = std::array<typename Array<T, Is...>::type, I>;
+template <typename T, std::size_t I, std::size_t... Is> struct Array {
+    using type = std::array<typename Array<T, Is...>::type, I>;
 };
 
 /**
@@ -32,9 +31,8 @@ struct Array {
  *
  * @tparam T [TODO:tparam]
  */
-template <typename T, std::size_t I>
-struct Array<T, I> {
-  using type = std::array<T, I>;
+template <typename T, std::size_t I> struct Array<T, I> {
+    using type = std::array<T, I>;
 };
 
 //-------------------------------------------------------------------------------------------------
@@ -45,9 +43,8 @@ struct Array<T, I> {
  * @tparam Args [TODO:tparam]
  * @param args [TODO:parameter]
  */
-template <typename... Args>
-void print(const Args&... args) {
-  ((std::cout << args << std::endl), ...);
+template <typename... Args> void print(const Args &...args) {
+    ((std::cout << args << std::endl), ...);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -55,8 +52,7 @@ void print(const Args&... args) {
 /**
  * @brief 元函数声明，接收一个TypeList和一个单参元函数
  */
-template <TL In, template <typename> class F>
-struct Map;
+template <TL In, template <typename> class F> struct Map;
 
 /**
  * @brief 元函数的实现
@@ -69,43 +65,35 @@ struct Map<TypeList<Ts...>, F> : TypeList<typename F<Ts>::type...> {};
 //-------------------------------------------------------------------------------------------------
 
 template <TL In, template <typename> class P, TL Out = TypeList<>>
-struct Filter : Out {};  // 边界情况，当列表为空的时候返回空列表
+struct Filter : Out {}; // 边界情况，当列表为空的时候返回空列表
 
 template <template <typename> class P, TL Out, typename H, typename... Ts>
 struct Filter<TypeList<H, Ts...>, P, Out>
-    : std::conditional_t<
-          P<H>::value,
-          Filter<TypeList<Ts...>, P, typename Out::template append<H>>,
-          Filter<TypeList<Ts...>, P, Out>> {};
+    : std::conditional_t<P<H>::value,
+                         Filter<TypeList<Ts...>, P, typename Out::template append<H>>,
+                         Filter<TypeList<Ts...>, P, Out>> {};
 
 //-------------------------------------------------------------------------------------------------
 
-template <typename T>
-struct Return {
-  using type = T;
+template <typename T> struct Return {
+    using type = T;
 };
 
 template <TL In, typename Init, template <typename, typename> class Op>
 struct Fold : Return<Init> {};
 
-template <typename Acc, template <typename, typename> class Op, typename H,
-          typename... Ts>
-struct Fold<TypeList<H, Ts...>, Acc, Op>
-    : Fold<TypeList<Ts...>, typename Op<Acc, H>::type, Op> {};
+template <typename Acc, template <typename, typename> class Op, typename H, typename... Ts>
+struct Fold<TypeList<H, Ts...>, Acc, Op> : Fold<TypeList<Ts...>, typename Op<Acc, H>::type, Op> {};
 
 //-------------------------------------------------------------------------------------------------
 
-template <TL... In>
-struct Concat;
+template <TL... In> struct Concat;
 
-template <TL... In>
-using Concat_t = typename Concat<In...>::type;
+template <TL... In> using Concat_t = typename Concat<In...>::type;
 
-template <>
-struct Concat<> : TypeList<> {};  // 没有输入，返回空
+template <> struct Concat<> : TypeList<> {}; // 没有输入，返回空
 
-template <TL In>
-struct Concat<In> : In {};  // 只有一个输入，返回输入本身
+template <TL In> struct Concat<In> : In {}; // 只有一个输入，返回输入本身
 
 // 多于两个元素，递归执行concat
 template <TL In, TL In2, TL... Rest>
@@ -127,36 +115,34 @@ struct Concat<TypeList<Ts1...>, TypeList<Ts2...>> : TypeList<Ts1..., Ts2...> {};
 
 //-------------------------------------------------------------------------------------------------
 
-template <TL In, typename E>
-class Elem {
-  template <typename Acc, typename T>
-  using FindE = std::conditional_t<Acc::value, Acc, std::is_same<T, E>>;
-  using Found = typename Fold<In, std::false_type, FindE>::type;
+template <TL In, typename E> class Elem {
+    template <typename Acc, typename T>
+    using FindE = std::conditional_t<Acc::value, Acc, std::is_same<T, E>>;
+    using Found = typename Fold<In, std::false_type, FindE>::type;
 
- public:
-  constexpr static bool value = Found::value;
+public:
+    constexpr static bool value = Found::value;
 };
 
 //-------------------------------------------------------------------------------------------------
 
-template <TL In>
-class Unique {
-  template <TL Acc, typename E>
-  // Acc为去重列表, 初始值为空, 如果E在Acc中，则返回Acc，否则将E加入Acc
-  using Append = std::conditional_t<Elem<Acc, E>::value, Acc,
-                                    typename Acc::template append<E>>;
+template <TL In> class Unique {
+    template <TL Acc, typename E>
+    // Acc为去重列表, 初始值为空, 如果E在Acc中，则返回Acc，否则将E加入Acc
+    using Append = std::conditional_t<Elem<Acc, E>::value, Acc, typename Acc::template append<E>>;
 
- public:
-  using type = typename Fold<In, TypeList<>, Append>::type;
+public:
+    using type = typename Fold<In, TypeList<>, Append>::type;
 };
 
 //-------------------------------------------------------------------------------------------------
 
-template <typename... Ts, typename std::enable_if<std::conjunction<
-                              std::is_integral<Ts>...>::value>::type* = nullptr>
+template <
+    typename... Ts,
+    typename std::enable_if<std::conjunction<std::is_integral<Ts>...>::value>::type * = nullptr>
 constexpr auto sums(Ts... ts) {
-  // static_assert(std::conjunction<std::is_integral<Ts>...>::value);
-  return (0 + ... + ts);
+    // static_assert(std::conjunction<std::is_integral<Ts>...>::value);
+    return (0 + ... + ts);
 }
 
-}  // namespace pl
+} // namespace pl
