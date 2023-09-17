@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2023-09-16 18:05:14</td>
+            <td class="headerValue">2023-09-17 06:17:39</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">4</td>
@@ -75,24 +75,23 @@
 <a name="13"><span class="lineNum">      13 </span>            : #include &lt;memory&gt;</a>
 <a name="14"><span class="lineNum">      14 </span>            : </a>
 <a name="15"><span class="lineNum">      15 </span><span class="lineCov">          4 : TEST(comparator, compara) {</span></a>
-<a name="16"><span class="lineNum">      16 </span><span class="lineCov">          1 :   auto* comparator = pl::bytewiseComparator();</span></a>
-<a name="17"><span class="lineNum">      17 </span>            :   std::unique_ptr&lt;pl::Comparator&gt; comparator_ptr(</a>
-<a name="18"><span class="lineNum">      18 </span><span class="lineCov">          1 :       comparator);</span></a>
-<a name="19"><span class="lineNum">      19 </span>            : </a>
-<a name="20"><span class="lineNum">      20 </span><span class="lineCov">          1 :   pl::Binary b1 = &quot;abc&quot;;</span></a>
-<a name="21"><span class="lineNum">      21 </span><span class="lineCov">          1 :   pl::Binary b2 = &quot;abd&quot;;</span></a>
-<a name="22"><span class="lineNum">      22 </span><span class="lineCov">          1 :   pl::Binary b3 = &quot;abc&quot;;</span></a>
-<a name="23"><span class="lineNum">      23 </span><span class="lineCov">          1 :   pl::Binary b4 = &quot;aba&quot;;</span></a>
-<a name="24"><span class="lineNum">      24 </span><span class="lineCov">          1 :   pl::Binary b5 = &quot;&quot;;</span></a>
-<a name="25"><span class="lineNum">      25 </span><span class="lineCov">          1 :   pl::Binary b6 = &quot;abcccc&quot;;</span></a>
-<a name="26"><span class="lineNum">      26 </span>            : </a>
-<a name="27"><span class="lineNum">      27 </span><span class="lineCov">          1 :   EXPECT_TRUE(comparator_ptr-&gt;compare(b1, b2) &lt; 0);</span></a>
-<a name="28"><span class="lineNum">      28 </span><span class="lineCov">          1 :   EXPECT_TRUE(comparator_ptr-&gt;compare(b1, b3) == 0);</span></a>
-<a name="29"><span class="lineNum">      29 </span><span class="lineCov">          1 :   EXPECT_TRUE(comparator_ptr-&gt;compare(b1, b4) &gt; 0);</span></a>
-<a name="30"><span class="lineNum">      30 </span>            : </a>
-<a name="31"><span class="lineNum">      31 </span><span class="lineCov">          1 :   EXPECT_TRUE(comparator_ptr-&gt;compare(b1, b5) &gt; 0);</span></a>
-<a name="32"><span class="lineNum">      32 </span><span class="lineCov">          1 :   EXPECT_TRUE(comparator_ptr-&gt;compare(b1, b6) &lt; 0);</span></a>
-<a name="33"><span class="lineNum">      33 </span><span class="lineCov">          1 : }</span></a>
+<a name="16"><span class="lineNum">      16 </span><span class="lineCov">          1 :     auto *comparator = pl::bytewiseComparator();</span></a>
+<a name="17"><span class="lineNum">      17 </span><span class="lineCov">          1 :     std::unique_ptr&lt;pl::Comparator&gt; comparator_ptr(comparator);</span></a>
+<a name="18"><span class="lineNum">      18 </span>            : </a>
+<a name="19"><span class="lineNum">      19 </span><span class="lineCov">          1 :     pl::Binary b1 = &quot;abc&quot;;</span></a>
+<a name="20"><span class="lineNum">      20 </span><span class="lineCov">          1 :     pl::Binary b2 = &quot;abd&quot;;</span></a>
+<a name="21"><span class="lineNum">      21 </span><span class="lineCov">          1 :     pl::Binary b3 = &quot;abc&quot;;</span></a>
+<a name="22"><span class="lineNum">      22 </span><span class="lineCov">          1 :     pl::Binary b4 = &quot;aba&quot;;</span></a>
+<a name="23"><span class="lineNum">      23 </span><span class="lineCov">          1 :     pl::Binary b5 = &quot;&quot;;</span></a>
+<a name="24"><span class="lineNum">      24 </span><span class="lineCov">          1 :     pl::Binary b6 = &quot;abcccc&quot;;</span></a>
+<a name="25"><span class="lineNum">      25 </span>            : </a>
+<a name="26"><span class="lineNum">      26 </span><span class="lineCov">          1 :     EXPECT_TRUE(comparator_ptr-&gt;compare(b1, b2) &lt; 0);</span></a>
+<a name="27"><span class="lineNum">      27 </span><span class="lineCov">          1 :     EXPECT_TRUE(comparator_ptr-&gt;compare(b1, b3) == 0);</span></a>
+<a name="28"><span class="lineNum">      28 </span><span class="lineCov">          1 :     EXPECT_TRUE(comparator_ptr-&gt;compare(b1, b4) &gt; 0);</span></a>
+<a name="29"><span class="lineNum">      29 </span>            : </a>
+<a name="30"><span class="lineNum">      30 </span><span class="lineCov">          1 :     EXPECT_TRUE(comparator_ptr-&gt;compare(b1, b5) &gt; 0);</span></a>
+<a name="31"><span class="lineNum">      31 </span><span class="lineCov">          1 :     EXPECT_TRUE(comparator_ptr-&gt;compare(b1, b6) &lt; 0);</span></a>
+<a name="32"><span class="lineNum">      32 </span><span class="lineCov">          1 : }</span></a>
 </pre>
       </td>
     </tr>
