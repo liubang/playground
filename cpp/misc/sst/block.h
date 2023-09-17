@@ -15,25 +15,25 @@
 namespace pl {
 
 class Block {
- public:
-  explicit Block(const BlockContents& content);
+public:
+    explicit Block(const BlockContents &content);
 
-  Block(const Block&) = delete;
-  Block& operator=(const Block&) = delete;
+    Block(const Block &) = delete;
+    Block &operator=(const Block &) = delete;
 
-  ~Block();
+    ~Block();
 
-  Iterator* iterator(const Comparator* comparator);
+    Iterator *iterator(const Comparator *comparator);
 
- private:
-  class BlockIterator;
+private:
+    class BlockIterator;
 
- private:
-  const char* data_;
-  std::size_t size_;
-  std::size_t num_restarts_;
-  uint32_t restart_offset_;
-  bool owned_;
+private:
+    const char *data_;
+    std::size_t size_;
+    std::size_t num_restarts_;
+    uint32_t restart_offset_;
+    bool owned_;
 };
 
-}  // namespace pl
+} // namespace pl
