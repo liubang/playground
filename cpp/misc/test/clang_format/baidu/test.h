@@ -136,7 +136,7 @@ private:
 namespace detail {
 
 constexpr auto kIsLittleEndian = __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__;
-constexpr auto kIsBigEndian = !kIsLittleEndian;
+constexpr auto kIsBigEndian    = !kIsLittleEndian;
 
 static inline uint8_t byteswap_gen(uint8_t v) {
     return uint8_t(v);
@@ -191,7 +191,7 @@ template <class T> struct EndianInt {
 
     static T swap(T x) {
         constexpr auto s = sizeof(T);
-        using B = typename uint_types_by_size<s>::type;
+        using B          = typename uint_types_by_size<s>::type;
         return bit_cast<T>(byteswap_gen(bit_cast<B>(x)));
     }
 
