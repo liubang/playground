@@ -13,14 +13,14 @@
 namespace pl {
 
 class Comparator {
- public:
-  virtual ~Comparator();
+public:
+    virtual ~Comparator();
 
-  [[nodiscard]] virtual const char* name() const = 0;
+    [[nodiscard]] virtual const char *name() const = 0;
 
-  [[nodiscard]] virtual int compare(const Binary& a, const Binary& b) const = 0;
+    [[nodiscard]] virtual int compare(const Binary &a, const Binary &b) const = 0;
 };
 
-Comparator* bytewiseComparator();
+Comparator *bytewiseComparator();
 
-}  // namespace pl
+} // namespace pl
