@@ -15,30 +15,30 @@
 // https://www.cppstories.com/2022/tuple-iteration-basics/
 namespace pl {
 
-template <typename T> void PrintElem(const T &t) {
+template <typename T> void PrintElem(const T& t) {
     std::cout << t << ',';
 }
 
-template <typename TupleT, std::size_t... Is> void PrintTupleManual(const TupleT &tp) {
+template <typename TupleT, std::size_t... Is> void PrintTupleManual(const TupleT& tp) {
     // fold expression
     (PrintElem(std::get<Is>(tp)), ...);
 }
 
 template <typename TupleT, std::size_t... Is>
-void PrintTupleManualEx(const TupleT &tp, std::index_sequence<Is...>) {
+void PrintTupleManualEx(const TupleT& tp, std::index_sequence<Is...>) {
     // fold expression
     (PrintElem(std::get<Is>(tp)), ...);
 }
 
 template <typename TupleT, std::size_t TupleSize = std::tuple_size_v<TupleT>>
-void PrintTupleAutoGetSize(const TupleT &tp) {
+void PrintTupleAutoGetSize(const TupleT& tp) {
     PrintTupleManualEx(tp, std::make_index_sequence<TupleSize>{});
 }
 
 template <typename TupleT, std::size_t... Is>
-void PrintTupleImpl(const TupleT &tp, std::index_sequence<Is...>) {
+void PrintTupleImpl(const TupleT& tp, std::index_sequence<Is...>) {
     std::size_t index = 0;
-    auto print_elem = [&index](const auto &x) {
+    auto print_elem = [&index](const auto& x) {
         if (index++ > 0)
             std::cout << ", ";
         std::cout << x;
@@ -50,13 +50,13 @@ void PrintTupleImpl(const TupleT &tp, std::index_sequence<Is...>) {
 }
 
 template <typename TupleT, std::size_t TupleSize = std::tuple_size_v<TupleT>>
-void PrintTupleFinal(const TupleT &tp) {
+void PrintTupleFinal(const TupleT& tp) {
     PrintTupleImpl(tp, std::make_index_sequence<TupleSize>{});
 }
 
 template <typename TupleT, std::size_t... Is>
-std::ostream &PrintTupleImplStream(std::ostream &os, const TupleT &tp, std::index_sequence<Is...>) {
-    auto print_elem = [&os](const auto &x, std::size_t index) {
+std::ostream& PrintTupleImplStream(std::ostream& os, const TupleT& tp, std::index_sequence<Is...>) {
+    auto print_elem = [&os](const auto& x, std::size_t index) {
         if (index > 0)
             os << ", ";
         os << index << ":" << x;
@@ -70,6 +70,6 @@ std::ostream &PrintTupleImplStream(std::ostream &os, const TupleT &tp, std::inde
 } // namespace pl
 
 template <typename TupleT, std::size_t TupleSize = std::tuple_size<TupleT>::value>
-inline std::ostream &operator<<(std::ostream &os, const TupleT &tp) {
+inline std::ostream& operator<<(std::ostream& os, const TupleT& tp) {
     return pl::PrintTupleImplStream(os, tp, std::make_index_sequence<TupleSize>{});
 }

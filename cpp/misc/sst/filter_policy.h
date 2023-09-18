@@ -26,14 +26,14 @@ public:
      * @param n [TODO:parameter]
      * @param dst [TODO:parameter]
      */
-    virtual void createFilter(Binary *keys, std::size_t n, std::string *dst) const = 0;
+    virtual void createFilter(Binary* keys, std::size_t n, std::string* dst) const = 0;
 
     /**
      * @brief [TODO:description]
      *
      * @return [TODO:return]
      */
-    [[nodiscard]] virtual const char *name() const = 0;
+    [[nodiscard]] virtual const char* name() const = 0;
 
     /**
      * @brief [TODO:description]
@@ -42,9 +42,9 @@ public:
      * @param filter [TODO:parameter]
      * @return [TODO:return]
      */
-    [[nodiscard]] virtual bool keyMayMatch(const Binary &key, const Binary &filter) const = 0;
+    [[nodiscard]] virtual bool keyMayMatch(const Binary& key, const Binary& filter) const = 0;
 };
 
-FilterPolicy *newBloomFilterPolicy(uint64_t bits_per_key);
+FilterPolicy* newBloomFilterPolicy(uint64_t bits_per_key);
 
 } // namespace pl

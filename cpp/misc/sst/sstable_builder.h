@@ -20,12 +20,15 @@ namespace pl {
 
 class SSTableBuilder {
 public:
-    SSTableBuilder(const Options *options, FsWriter *writer);
-    SSTableBuilder(const SSTableBuilder &) = delete;
-    SSTableBuilder &operator=(const SSTableBuilder &) = delete;
+    SSTableBuilder(const Options* options, FsWriter* writer);
+
+    SSTableBuilder(const SSTableBuilder&) = delete;
+
+    SSTableBuilder& operator=(const SSTableBuilder&) = delete;
+
     ~SSTableBuilder();
 
-    void add(const Binary &key, const Binary &value);
+    void add(const Binary& key, const Binary& value);
 
     void flush();
 
@@ -40,16 +43,16 @@ public:
     [[nodiscard]] bool ok() const { return status().isOk(); }
 
 private:
-    void writeBlock(BlockBuilder *block, BlockHandle *handle);
-    void writeBlockRaw(const Binary &content, CompressionType type, BlockHandle *handle);
+    void writeBlock(BlockBuilder* block, BlockHandle* handle);
+    void writeBlockRaw(const Binary& content, CompressionType type, BlockHandle* handle);
 
 private:
-    const Options *options_;
-    FsWriter *writer_;
+    const Options* options_;
+    FsWriter* writer_;
     BlockBuilder data_block_;
     BlockBuilder index_block_;
     BlockHandle pending_handler_;
-    FilterBlockBuilder *filter_block_;
+    FilterBlockBuilder* filter_block_;
     std::string last_key_;
     int64_t num_entries_{0};
     uint64_t offset_{0};

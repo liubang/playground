@@ -13,7 +13,7 @@
 #include <memory>
 
 TEST(comparator, compara) {
-    auto *comparator = pl::bytewiseComparator();
+    auto* comparator = pl::bytewiseComparator();
     std::unique_ptr<pl::Comparator> comparator_ptr(comparator);
 
     pl::Binary b1 = "abc";

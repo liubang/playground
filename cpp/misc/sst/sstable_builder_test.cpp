@@ -18,12 +18,12 @@
 
 TEST(sstable_builder, build) {
     constexpr int COUNT = 10001;
-    auto *options = new pl::Options();
-    pl::FsWriter *writer;
-    auto *fs = pl::Fs::getInstance();
+    auto* options       = new pl::Options();
+    pl::FsWriter* writer;
+    auto* fs = pl::Fs::getInstance();
     fs->newFsWriter("/tmp/test.sst", &writer);
 
-    auto *sstable_builder = new pl::SSTableBuilder(options, writer);
+    auto* sstable_builder = new pl::SSTableBuilder(options, writer);
 
     // absl::Cleanup cleanup = [&]() {
     //   delete options->comparator;
