@@ -17,14 +17,14 @@ class BytewiseComparator : public Comparator {
 public:
     BytewiseComparator() = default;
 
-    [[nodiscard]] const char *name() const override { return "BytewiseComparator"; };
+    [[nodiscard]] const char* name() const override { return "BytewiseComparator"; };
 
-    [[nodiscard]] int compare(const Binary &a, const Binary &b) const override {
+    [[nodiscard]] int compare(const Binary& a, const Binary& b) const override {
         return a.compare(b);
     }
 };
 
-Comparator *bytewiseComparator() {
+Comparator* bytewiseComparator() {
     return new BytewiseComparator();
 }
 

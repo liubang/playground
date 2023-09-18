@@ -20,7 +20,7 @@
 #include <vector>
 
 TEST(block_builder, test) {
-    auto *options = new pl::Options();
+    auto* options = new pl::Options();
 
     // absl::Cleanup cleanup = [&]() {
     //   delete options->comparator;
@@ -69,7 +69,7 @@ TEST(block_builder, test) {
 
     pl::Block b(block_content);
 
-    auto *itr = b.iterator(nullptr);
+    auto* itr = b.iterator(nullptr);
     // absl::Cleanup cleanup1 = [&]() { delete itr; };
 
     SCOPE_EXIT {

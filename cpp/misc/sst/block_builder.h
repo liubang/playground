@@ -23,12 +23,13 @@ namespace pl {
 class BlockBuilder {
 public:
     // BlockBuilder(const Comparator* comparator, int block_restart_interval);
-    BlockBuilder(const Options *options);
+    BlockBuilder(const Options* options);
 
-    BlockBuilder(const BlockBuilder &) = delete;
-    BlockBuilder &operator=(const BlockBuilder &) = delete;
+    BlockBuilder(const BlockBuilder&) = delete;
 
-    void add(const Binary &key, const Binary &val);
+    BlockBuilder& operator=(const BlockBuilder&) = delete;
+
+    void add(const Binary& key, const Binary& val);
 
     Binary finish();
 
@@ -39,7 +40,7 @@ public:
     void reset();
 
 private:
-    const Comparator *comparator_;
+    const Comparator* comparator_;
     bool finished_{false};
     int counter_{0};
     std::string buffer_;

@@ -15,9 +15,9 @@
 namespace pl {
 
 enum class CompressionType : uint8_t {
-    kNoCompression = 0x0,
+    kNoCompression     = 0x0,
     kSnappyCompression = 0x1,
-    kZstdCompression = 0x2,
+    kZstdCompression   = 0x2,
 };
 
 struct Options {
@@ -30,9 +30,9 @@ struct Options {
 
     uint64_t bits_per_key = 16;
 
-    const Comparator *comparator;
+    const Comparator* comparator;
 
-    const FilterPolicy *filter_policy;
+    const FilterPolicy* filter_policy;
 };
 
 } // namespace pl

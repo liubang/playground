@@ -15,9 +15,9 @@
 
 namespace pl {
 
-template <typename... Args> void PrintImpl(const Args &...tupleArgs) {
+template <typename... Args> void PrintImpl(const Args&... tupleArgs) {
     std::size_t index = 0;
-    auto print_elem = [&index](const auto &x) {
+    auto print_elem = [&index](const auto& x) {
         if (index++ > 0)
             std::cout << ", ";
         std::cout << x;
@@ -32,12 +32,12 @@ template <typename... Args> void PrintTupleApplyFn(const std::tuple<Args...> tp)
     std::cout << ")";
 }
 
-template <typename TupleT> void PrintTupleApply(const TupleT &tp) {
+template <typename TupleT> void PrintTupleApply(const TupleT& tp) {
     std::cout << "(";
     std::apply(
-        [](const auto &...tupleArgs) {
+        [](const auto&... tupleArgs) {
             std::size_t index = 0;
-            auto print_elem = [&index](const auto &x) {
+            auto print_elem = [&index](const auto& x) {
                 if (index++ > 0)
                     std::cout << ", ";
                 std::cout << x;
