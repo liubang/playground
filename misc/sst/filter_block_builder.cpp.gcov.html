@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2023-09-17 17:35:11</td>
+            <td class="headerValue">2023-09-18 16:10:17</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">5</td>
@@ -77,10 +77,10 @@
 <a name="15"><span class="lineNum">      15 </span>            : </a>
 <a name="16"><span class="lineNum">      16 </span>            : namespace pl {</a>
 <a name="17"><span class="lineNum">      17 </span>            : </a>
-<a name="18"><span class="lineNum">      18 </span>            : static const size_t kFilterBaseLg = 11;</a>
+<a name="18"><span class="lineNum">      18 </span>            : static const size_t kFilterBaseLg        = 11;</a>
 <a name="19"><span class="lineNum">      19 </span>            : constexpr static std::size_t kFilterBase = 1 &lt;&lt; kFilterBaseLg; // 2048</a>
 <a name="20"><span class="lineNum">      20 </span>            : </a>
-<a name="21"><span class="lineNum">      21 </span><span class="lineCov">          2 : FilterBlockBuilder::FilterBlockBuilder(const FilterPolicy *policy) : filter_policy_(policy) {}</span></a>
+<a name="21"><span class="lineNum">      21 </span><span class="lineCov">          2 : FilterBlockBuilder::FilterBlockBuilder(const FilterPolicy* policy) : filter_policy_(policy) {}</span></a>
 <a name="22"><span class="lineNum">      22 </span>            : </a>
 <a name="23"><span class="lineNum">      23 </span><span class="lineCov">        190 : void FilterBlockBuilder::startBlock(uint64_t offset) {</span></a>
 <a name="24"><span class="lineNum">      24 </span><span class="lineCov">        190 :     uint64_t filter_index = (offset / kFilterBase);</span></a>
@@ -90,7 +90,7 @@
 <a name="28"><span class="lineNum">      28 </span>            :     }</a>
 <a name="29"><span class="lineNum">      29 </span><span class="lineCov">        190 : }</span></a>
 <a name="30"><span class="lineNum">      30 </span>            : </a>
-<a name="31"><span class="lineNum">      31 </span><span class="lineCov">      11001 : void FilterBlockBuilder::addKey(const Binary &amp;key) {</span></a>
+<a name="31"><span class="lineNum">      31 </span><span class="lineCov">      11001 : void FilterBlockBuilder::addKey(const Binary&amp; key) {</span></a>
 <a name="32"><span class="lineNum">      32 </span>            :     // make a copy</a>
 <a name="33"><span class="lineNum">      33 </span><span class="lineCov">      11001 :     Binary k = key;</span></a>
 <a name="34"><span class="lineNum">      34 </span>            :     // 这两行的先后顺序不能颠倒</a>
@@ -125,9 +125,9 @@
 <a name="63"><span class="lineNum">      63 </span><span class="lineCov">        190 :     start_.push_back(keys_.size());</span></a>
 <a name="64"><span class="lineNum">      64 </span><span class="lineCov">        190 :     tmp_keys_.resize(num_keys);</span></a>
 <a name="65"><span class="lineNum">      65 </span><span class="lineCov">      11191 :     for (std::size_t i = 0; i &lt; num_keys; i++) {</span></a>
-<a name="66"><span class="lineNum">      66 </span><span class="lineCov">      11001 :         const char *base = keys_.data() + start_[i];</span></a>
-<a name="67"><span class="lineNum">      67 </span><span class="lineCov">      11001 :         std::size_t len = start_[i + 1] - start_[i];</span></a>
-<a name="68"><span class="lineNum">      68 </span><span class="lineCov">      11001 :         tmp_keys_[i] = Binary(base, len);</span></a>
+<a name="66"><span class="lineNum">      66 </span><span class="lineCov">      11001 :         const char* base = keys_.data() + start_[i];</span></a>
+<a name="67"><span class="lineNum">      67 </span><span class="lineCov">      11001 :         std::size_t len  = start_[i + 1] - start_[i];</span></a>
+<a name="68"><span class="lineNum">      68 </span><span class="lineCov">      11001 :         tmp_keys_[i]     = Binary(base, len);</span></a>
 <a name="69"><span class="lineNum">      69 </span>            :     }</a>
 <a name="70"><span class="lineNum">      70 </span><span class="lineCov">        190 :     filter_offsets_.push_back(result_.size());</span></a>
 <a name="71"><span class="lineNum">      71 </span><span class="lineCov">        190 :     filter_policy_-&gt;createFilter(&amp;tmp_keys_[0], static_cast&lt;int&gt;(num_keys), &amp;result_);</span></a>

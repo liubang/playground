@@ -31,13 +31,13 @@
             <td class="headerValue">_coverage_report.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntry">13</td>
-            <td class="headerCovTableEntry">13</td>
+            <td class="headerCovTableEntry">14</td>
+            <td class="headerCovTableEntry">14</td>
             <td class="headerCovTableEntryHi">100.0 %</td>
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2023-09-17 17:35:11</td>
+            <td class="headerValue">2023-09-18 16:10:17</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">2</td>
@@ -70,15 +70,15 @@
 <a name="8"><span class="lineNum">       8 </span>            : //=====================================================================</a>
 <a name="9"><span class="lineNum">       9 </span>            : #include &lt;algorithm&gt;</a>
 <a name="10"><span class="lineNum">      10 </span>            : #include &lt;array&gt;</a>
-<a name="11"><span class="lineNum">      11 </span>            : #include &lt;catch2/catch_test_macros.hpp&gt;</a>
-<a name="12"><span class="lineNum">      12 </span>            : #include &lt;iomanip&gt;</a>
-<a name="13"><span class="lineNum">      13 </span>            : #include &lt;iostream&gt;</a>
-<a name="14"><span class="lineNum">      14 </span>            : #include &lt;map&gt;</a>
-<a name="15"><span class="lineNum">      15 </span>            : #include &lt;ranges&gt;</a>
-<a name="16"><span class="lineNum">      16 </span>            : #include &lt;string&gt;</a>
-<a name="17"><span class="lineNum">      17 </span>            : </a>
-<a name="18"><span class="lineNum">      18 </span>            : #if (defined(__GNUC__) &amp;&amp; __GNUC__ &gt;= 13) || \</a>
-<a name="19"><span class="lineNum">      19 </span>            :     (defined(__clang_major__) &amp;&amp; __clang_major__ &gt;= 16)</a>
+<a name="11"><span class="lineNum">      11 </span>            : #include &lt;iomanip&gt;</a>
+<a name="12"><span class="lineNum">      12 </span>            : #include &lt;iostream&gt;</a>
+<a name="13"><span class="lineNum">      13 </span>            : #include &lt;map&gt;</a>
+<a name="14"><span class="lineNum">      14 </span>            : #include &lt;ranges&gt;</a>
+<a name="15"><span class="lineNum">      15 </span>            : #include &lt;string&gt;</a>
+<a name="16"><span class="lineNum">      16 </span>            : </a>
+<a name="17"><span class="lineNum">      17 </span>            : #include &lt;catch2/catch_test_macros.hpp&gt;</a>
+<a name="18"><span class="lineNum">      18 </span>            : </a>
+<a name="19"><span class="lineNum">      19 </span>            : #if (defined(__GNUC__) &amp;&amp; __GNUC__ &gt;= 13) || (defined(__clang_major__) &amp;&amp; __clang_major__ &gt;= 16)</a>
 <a name="20"><span class="lineNum">      20 </span>            : #include &lt;format&gt;</a>
 <a name="21"><span class="lineNum">      21 </span>            : #endif</a>
 <a name="22"><span class="lineNum">      22 </span>            : </a>
@@ -93,74 +93,73 @@
 <a name="31"><span class="lineNum">      31 </span>            :  * @brief print table in cpp17</a>
 <a name="32"><span class="lineNum">      32 </span>            :  */</a>
 <a name="33"><span class="lineNum">      33 </span><span class="lineCov">          1 : void print_table_cpp17() {</span></a>
-<a name="34"><span class="lineNum">      34 </span>            :   // print headers</a>
-<a name="35"><span class="lineNum">      35 </span><span class="lineCov">          5 :   for (const auto &amp;[key, val] : product_to_orders) {</span></a>
-<a name="36"><span class="lineNum">      36 </span><span class="lineCov">          4 :     std::cout &lt;&lt; std::setw(10) &lt;&lt; key;</span></a>
-<a name="37"><span class="lineNum">      37 </span>            :   }</a>
-<a name="38"><span class="lineNum">      38 </span><span class="lineCov">          1 :   std::cout &lt;&lt; '\n';</span></a>
+<a name="34"><span class="lineNum">      34 </span>            :     // print headers</a>
+<a name="35"><span class="lineNum">      35 </span><span class="lineCov">          5 :     for (const auto&amp; [key, val] : product_to_orders) {</span></a>
+<a name="36"><span class="lineNum">      36 </span><span class="lineCov">          4 :         std::cout &lt;&lt; std::setw(10) &lt;&lt; key;</span></a>
+<a name="37"><span class="lineNum">      37 </span>            :     }</a>
+<a name="38"><span class="lineNum">      38 </span><span class="lineCov">          1 :     std::cout &lt;&lt; '\n';</span></a>
 <a name="39"><span class="lineNum">      39 </span>            : </a>
-<a name="40"><span class="lineNum">      40 </span>            :   // print values</a>
-<a name="41"><span class="lineNum">      41 </span><span class="lineCov">          6 :   for (std::size_t i = 0; i &lt; ROWS; ++i) {</span></a>
-<a name="42"><span class="lineNum">      42 </span><span class="lineCov">         25 :     for (const auto &amp;[key, val] : product_to_orders) {</span></a>
-<a name="43"><span class="lineNum">      43 </span><span class="lineCov">         20 :       std::cout &lt;&lt; std::setw(10) &lt;&lt; std::fixed &lt;&lt; std::setprecision(2)</span></a>
-<a name="44"><span class="lineNum">      44 </span><span class="lineCov">         20 :                 &lt;&lt; val[i];</span></a>
-<a name="45"><span class="lineNum">      45 </span>            :     }</a>
-<a name="46"><span class="lineNum">      46 </span><span class="lineCov">          5 :     std::cout &lt;&lt; '\n';</span></a>
-<a name="47"><span class="lineNum">      47 </span>            :   }</a>
-<a name="48"><span class="lineNum">      48 </span><span class="lineCov">          1 : }</span></a>
-<a name="49"><span class="lineNum">      49 </span>            : </a>
-<a name="50"><span class="lineNum">      50 </span>            : //-------------------------------------------------------------------------------------------------</a>
-<a name="51"><span class="lineNum">      51 </span>            : </a>
-<a name="52"><span class="lineNum">      52 </span>            : #if (defined(__GNUC__) &amp;&amp; __GNUC__ &gt;= 13) || \</a>
-<a name="53"><span class="lineNum">      53 </span>            :     (defined(__clang_major__) &amp;&amp; __clang_major__ &gt;= 16)</a>
-<a name="54"><span class="lineNum">      54 </span>            : // calculate max column width</a>
-<a name="55"><span class="lineNum">      55 </span>            : template &lt;typename T&gt;</a>
-<a name="56"><span class="lineNum">      56 </span>            : std::size_t max_key_length1(const std::map&lt;std::string, T&gt; &amp;m) {</a>
-<a name="57"><span class="lineNum">      57 </span>            :   std::size_t max_len = 0;</a>
-<a name="58"><span class="lineNum">      58 </span>            :   for (const auto &amp;[key, val] : m) {</a>
-<a name="59"><span class="lineNum">      59 </span>            :     max_len = std::max(key.length(), max_len);</a>
-<a name="60"><span class="lineNum">      60 </span>            :   }</a>
-<a name="61"><span class="lineNum">      61 </span>            :   return max_len;</a>
-<a name="62"><span class="lineNum">      62 </span>            : }</a>
-<a name="63"><span class="lineNum">      63 </span>            : </a>
-<a name="64"><span class="lineNum">      64 </span>            : template &lt;typename T&gt;</a>
-<a name="65"><span class="lineNum">      65 </span>            : std::size_t max_key_length2(const std::map&lt;std::string, T&gt; &amp;m) {</a>
-<a name="66"><span class="lineNum">      66 </span>            :   auto res = std::ranges::max_element(</a>
-<a name="67"><span class="lineNum">      67 </span>            :       std::views::keys(m),</a>
-<a name="68"><span class="lineNum">      68 </span>            :       [](const auto &amp;a, const auto &amp;b) { return a.length() &lt; b.length(); });</a>
-<a name="69"><span class="lineNum">      69 </span>            :   return (*res).length();</a>
-<a name="70"><span class="lineNum">      70 </span>            : }</a>
-<a name="71"><span class="lineNum">      71 </span>            : </a>
-<a name="72"><span class="lineNum">      72 </span>            : const auto col_length = max_key_length2(product_to_orders) + 2;</a>
-<a name="73"><span class="lineNum">      73 </span>            : </a>
-<a name="74"><span class="lineNum">      74 </span>            : /**</a>
-<a name="75"><span class="lineNum">      75 </span>            :  * @brief print table use std::format in cpp20</a>
-<a name="76"><span class="lineNum">      76 </span>            :  * WARN: GCC13 required</a>
-<a name="77"><span class="lineNum">      77 </span>            :  */</a>
-<a name="78"><span class="lineNum">      78 </span>            : void print_table_cpp20() {</a>
-<a name="79"><span class="lineNum">      79 </span>            :   // headers</a>
-<a name="80"><span class="lineNum">      80 </span>            :   for (const auto &amp;name : std::views::keys(product_to_orders)) {</a>
-<a name="81"><span class="lineNum">      81 </span>            :     std::cout &lt;&lt; std::format(&quot;{:*&gt;{}}&quot;, name, col_length);</a>
-<a name="82"><span class="lineNum">      82 </span>            :   }</a>
-<a name="83"><span class="lineNum">      83 </span>            :   std::cout &lt;&lt; '\n';</a>
-<a name="84"><span class="lineNum">      84 </span>            :   // print values</a>
-<a name="85"><span class="lineNum">      85 </span>            :   for (std::size_t i = 0; i &lt; ROWS; ++i) {</a>
-<a name="86"><span class="lineNum">      86 </span>            :     for (const auto &amp;values : std::views::values(product_to_orders)) {</a>
-<a name="87"><span class="lineNum">      87 </span>            :       std::cout &lt;&lt; std::format(&quot;{:&gt;{}.2f}&quot;, values[i], col_length);</a>
-<a name="88"><span class="lineNum">      88 </span>            :     }</a>
-<a name="89"><span class="lineNum">      89 </span>            :     std::cout '\n';</a>
-<a name="90"><span class="lineNum">      90 </span>            :   }</a>
-<a name="91"><span class="lineNum">      91 </span>            : }</a>
-<a name="92"><span class="lineNum">      92 </span>            : #endif</a>
-<a name="93"><span class="lineNum">      93 </span>            : </a>
-<a name="94"><span class="lineNum">      94 </span><span class="lineCov">          1 : TEST_CASE(&quot;modern&quot;, &quot;[test_format]&quot;) {</span></a>
-<a name="95"><span class="lineNum">      95 </span><span class="lineCov">          1 :   SECTION(&quot;c++17 version&quot;) { print_table_cpp17(); };</span></a>
-<a name="96"><span class="lineNum">      96 </span>            : </a>
-<a name="97"><span class="lineNum">      97 </span>            : #if (defined(__GNUC__) &amp;&amp; __GNUC__ &gt;= 13) || \</a>
-<a name="98"><span class="lineNum">      98 </span>            :     (defined(__clang_major__) &amp;&amp; __clang_major__ &gt;= 16)</a>
-<a name="99"><span class="lineNum">      99 </span>            :   SECTION(&quot;c++20 version&quot;) { print_table_cpp20(); };</a>
-<a name="100"><span class="lineNum">     100 </span>            : #endif</a>
-<a name="101"><span class="lineNum">     101 </span><span class="lineCov">          1 : }</span></a>
+<a name="40"><span class="lineNum">      40 </span>            :     // print values</a>
+<a name="41"><span class="lineNum">      41 </span><span class="lineCov">          6 :     for (std::size_t i = 0; i &lt; ROWS; ++i) {</span></a>
+<a name="42"><span class="lineNum">      42 </span><span class="lineCov">         25 :         for (const auto&amp; [key, val] : product_to_orders) {</span></a>
+<a name="43"><span class="lineNum">      43 </span><span class="lineCov">         20 :             std::cout &lt;&lt; std::setw(10) &lt;&lt; std::fixed &lt;&lt; std::setprecision(2) &lt;&lt; val[i];</span></a>
+<a name="44"><span class="lineNum">      44 </span>            :         }</a>
+<a name="45"><span class="lineNum">      45 </span><span class="lineCov">          5 :         std::cout &lt;&lt; '\n';</span></a>
+<a name="46"><span class="lineNum">      46 </span>            :     }</a>
+<a name="47"><span class="lineNum">      47 </span><span class="lineCov">          1 : }</span></a>
+<a name="48"><span class="lineNum">      48 </span>            : </a>
+<a name="49"><span class="lineNum">      49 </span>            : //-------------------------------------------------------------------------------------------------</a>
+<a name="50"><span class="lineNum">      50 </span>            : </a>
+<a name="51"><span class="lineNum">      51 </span>            : #if (defined(__GNUC__) &amp;&amp; __GNUC__ &gt;= 13) || (defined(__clang_major__) &amp;&amp; __clang_major__ &gt;= 16)</a>
+<a name="52"><span class="lineNum">      52 </span>            : // calculate max column width</a>
+<a name="53"><span class="lineNum">      53 </span>            : template &lt;typename T&gt; std::size_t max_key_length1(const std::map&lt;std::string, T&gt;&amp; m) {</a>
+<a name="54"><span class="lineNum">      54 </span>            :     std::size_t max_len = 0;</a>
+<a name="55"><span class="lineNum">      55 </span>            :     for (const auto&amp; [key, val] : m) {</a>
+<a name="56"><span class="lineNum">      56 </span>            :         max_len = std::max(key.length(), max_len);</a>
+<a name="57"><span class="lineNum">      57 </span>            :     }</a>
+<a name="58"><span class="lineNum">      58 </span>            :     return max_len;</a>
+<a name="59"><span class="lineNum">      59 </span>            : }</a>
+<a name="60"><span class="lineNum">      60 </span>            : </a>
+<a name="61"><span class="lineNum">      61 </span>            : template &lt;typename T&gt; std::size_t max_key_length2(const std::map&lt;std::string, T&gt;&amp; m) {</a>
+<a name="62"><span class="lineNum">      62 </span>            :     auto res = std::ranges::max_element(std::views::keys(m), [](const auto&amp; a, const auto&amp; b) {</a>
+<a name="63"><span class="lineNum">      63 </span>            :         return a.length() &lt; b.length();</a>
+<a name="64"><span class="lineNum">      64 </span>            :     });</a>
+<a name="65"><span class="lineNum">      65 </span>            :     return (*res).length();</a>
+<a name="66"><span class="lineNum">      66 </span>            : }</a>
+<a name="67"><span class="lineNum">      67 </span>            : </a>
+<a name="68"><span class="lineNum">      68 </span>            : const auto col_length = max_key_length2(product_to_orders) + 2;</a>
+<a name="69"><span class="lineNum">      69 </span>            : </a>
+<a name="70"><span class="lineNum">      70 </span>            : /**</a>
+<a name="71"><span class="lineNum">      71 </span>            :  * @brief print table use std::format in cpp20</a>
+<a name="72"><span class="lineNum">      72 </span>            :  * WARN: GCC13 required</a>
+<a name="73"><span class="lineNum">      73 </span>            :  */</a>
+<a name="74"><span class="lineNum">      74 </span>            : void print_table_cpp20() {</a>
+<a name="75"><span class="lineNum">      75 </span>            :     // headers</a>
+<a name="76"><span class="lineNum">      76 </span>            :     for (const auto&amp; name : std::views::keys(product_to_orders)) {</a>
+<a name="77"><span class="lineNum">      77 </span>            :         std::cout &lt;&lt; std::format(&quot;{:*&gt;{}}&quot;, name, col_length);</a>
+<a name="78"><span class="lineNum">      78 </span>            :     }</a>
+<a name="79"><span class="lineNum">      79 </span>            :     std::cout &lt;&lt; '\n';</a>
+<a name="80"><span class="lineNum">      80 </span>            :     // print values</a>
+<a name="81"><span class="lineNum">      81 </span>            :     for (std::size_t i = 0; i &lt; ROWS; ++i) {</a>
+<a name="82"><span class="lineNum">      82 </span>            :         for (const auto&amp; values : std::views::values(product_to_orders)) {</a>
+<a name="83"><span class="lineNum">      83 </span>            :             std::cout &lt;&lt; std::format(&quot;{:&gt;{}.2f}&quot;, values[i], col_length);</a>
+<a name="84"><span class="lineNum">      84 </span>            :         }</a>
+<a name="85"><span class="lineNum">      85 </span>            :         std::cout '\n';</a>
+<a name="86"><span class="lineNum">      86 </span>            :     }</a>
+<a name="87"><span class="lineNum">      87 </span>            : }</a>
+<a name="88"><span class="lineNum">      88 </span>            : #endif</a>
+<a name="89"><span class="lineNum">      89 </span>            : </a>
+<a name="90"><span class="lineNum">      90 </span><span class="lineCov">          1 : TEST_CASE(&quot;modern&quot;, &quot;[test_format]&quot;) {</span></a>
+<a name="91"><span class="lineNum">      91 </span><span class="lineCov">          1 :     SECTION(&quot;c++17 version&quot;) {</span></a>
+<a name="92"><span class="lineNum">      92 </span><span class="lineCov">          1 :         print_table_cpp17();</span></a>
+<a name="93"><span class="lineNum">      93 </span><span class="lineCov">          1 :     };</span></a>
+<a name="94"><span class="lineNum">      94 </span>            : </a>
+<a name="95"><span class="lineNum">      95 </span>            : #if (defined(__GNUC__) &amp;&amp; __GNUC__ &gt;= 13) || (defined(__clang_major__) &amp;&amp; __clang_major__ &gt;= 16)</a>
+<a name="96"><span class="lineNum">      96 </span>            :     SECTION(&quot;c++20 version&quot;) {</a>
+<a name="97"><span class="lineNum">      97 </span>            :         print_table_cpp20();</a>
+<a name="98"><span class="lineNum">      98 </span>            :     };</a>
+<a name="99"><span class="lineNum">      99 </span>            : #endif</a>
+<a name="100"><span class="lineNum">     100 </span><span class="lineCov">          1 : }</span></a>
 </pre>
       </td>
     </tr>

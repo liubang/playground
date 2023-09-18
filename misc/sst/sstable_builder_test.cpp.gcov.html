@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2023-09-17 17:35:11</td>
+            <td class="headerValue">2023-09-18 16:10:17</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">5</td>
@@ -80,12 +80,12 @@
 <a name="18"><span class="lineNum">      18 </span>            : </a>
 <a name="19"><span class="lineNum">      19 </span><span class="lineCov">          4 : TEST(sstable_builder, build) {</span></a>
 <a name="20"><span class="lineNum">      20 </span><span class="lineCov">          1 :     constexpr int COUNT = 10001;</span></a>
-<a name="21"><span class="lineNum">      21 </span><span class="lineCov">          1 :     auto *options = new pl::Options();</span></a>
-<a name="22"><span class="lineNum">      22 </span>            :     pl::FsWriter *writer;</a>
-<a name="23"><span class="lineNum">      23 </span><span class="lineCov">          1 :     auto *fs = pl::Fs::getInstance();</span></a>
+<a name="21"><span class="lineNum">      21 </span><span class="lineCov">          1 :     auto* options       = new pl::Options();</span></a>
+<a name="22"><span class="lineNum">      22 </span>            :     pl::FsWriter* writer;</a>
+<a name="23"><span class="lineNum">      23 </span><span class="lineCov">          1 :     auto* fs = pl::Fs::getInstance();</span></a>
 <a name="24"><span class="lineNum">      24 </span><span class="lineCov">          1 :     fs-&gt;newFsWriter(&quot;/tmp/test.sst&quot;, &amp;writer);</span></a>
 <a name="25"><span class="lineNum">      25 </span>            : </a>
-<a name="26"><span class="lineNum">      26 </span><span class="lineCov">          1 :     auto *sstable_builder = new pl::SSTableBuilder(options, writer);</span></a>
+<a name="26"><span class="lineNum">      26 </span><span class="lineCov">          1 :     auto* sstable_builder = new pl::SSTableBuilder(options, writer);</span></a>
 <a name="27"><span class="lineNum">      27 </span>            : </a>
 <a name="28"><span class="lineNum">      28 </span>            :     // absl::Cleanup cleanup = [&amp;]() {</a>
 <a name="29"><span class="lineNum">      29 </span>            :     //   delete options-&gt;comparator;</a>
