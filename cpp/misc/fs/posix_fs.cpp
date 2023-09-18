@@ -19,16 +19,19 @@
 namespace pl {
 
 constexpr const size_t kWritableFileBufferSize = 65536;
-constexpr const int kOpenBaseFlags = O_CLOEXEC;
+constexpr const int kOpenBaseFlags             = O_CLOEXEC;
 
-Status posixError(const std::string &context, int err_number);
+Status posixError(const std::string& context, int err_number);
 
 class PosixFsWriter final : public FsWriter {
 public:
-    PosixFsWriter(const PosixFsWriter &) = delete;
-    PosixFsWriter(PosixFsWriter &&) = delete;
-    PosixFsWriter &operator=(const PosixFsWriter &) = delete;
-    PosixFsWriter &operator=(PosixFsWriter &&) = delete;
+    PosixFsWriter(const PosixFsWriter&) = delete;
+
+    PosixFsWriter(PosixFsWriter&&) = delete;
+
+    PosixFsWriter& operator=(const PosixFsWriter&) = delete;
+
+    PosixFsWriter& operator=(PosixFsWriter&&) = delete;
 
     PosixFsWriter(std::string filename, int fd) : fd_(fd), filename_(std::move(filename)) {
         assert(fd >= 0);
@@ -40,10 +43,10 @@ public:
         }
     }
 
-    Status append(const Binary &data) override {
+    Status append(const Binary& data) override {
         std::size_t write_size = data.size();
-        const char *write_data = data.data();
-        std::size_t copy_size = std::min(write_size, kWritableFileBufferSize - pos_);
+        const char* write_data = data.data();
+        std::size_t copy_size  = std::min(write_size, kWritableFileBufferSize - pos_);
         std::memcpy(buf_ + pos_, write_data, copy_size);
         write_data += copy_size;
         write_size -= copy_size;
@@ -68,7 +71,7 @@ public:
 
     Status close() override {
         Status status = flushBuffer();
-        int result = ::close(fd_);
+        int result    = ::close(fd_);
         if (result < 0 && status.isOk()) {
             status = posixError(filename_, errno);
         }
@@ -87,7 +90,7 @@ public:
     }
 
 private:
-    Status writeUnbuffered(const char *data, std::size_t size) {
+    Status writeUnbuffered(const char* data, std::size_t size) {
         while (size > 0) {
             ssize_t write_result = ::write(fd_, data, size);
             if (write_result < 0) {
@@ -104,11 +107,11 @@ private:
 
     Status flushBuffer() {
         Status status = writeUnbuffered(buf_, pos_);
-        pos_ = 0;
+        pos_          = 0;
         return status;
     }
 
-    Status syncFd(int fd, const std::string &filename) {
+    Status syncFd(int fd, const std::string& filename) {
         // 这里简单粗暴的区分Linux和macos
 #if defined(__APPLE__) && defined(__MACH__)
         if (::fsync(fd) == 0) {
@@ -129,10 +132,10 @@ private:
 
 class PosixFsReader final : public FsReader {
 public:
-    PosixFsReader(const PosixFsReader &) = default;
-    PosixFsReader(PosixFsReader &&) = default;
-    PosixFsReader &operator=(const PosixFsReader &) = delete;
-    PosixFsReader &operator=(PosixFsReader &&) = delete;
+    PosixFsReader(const PosixFsReader&)            = default;
+    PosixFsReader(PosixFsReader&&)                 = default;
+    PosixFsReader& operator=(const PosixFsReader&) = delete;
+    PosixFsReader& operator=(PosixFsReader&&)      = delete;
 
     PosixFsReader(std::string filename, int fd) : filename_(std::move(filename)), fd_(fd) {
         assert(fd >= 0);
@@ -155,10 +158,10 @@ public:
         }
     };
 
-    Status read(uint64_t offset, std::size_t n, Binary *result, char *scratch) const override {
+    Status read(uint64_t offset, std::size_t n, Binary* result, char* scratch) const override {
         Status status;
         ssize_t read_size = ::pread(fd_, scratch, n, static_cast<off_t>(offset));
-        *result = Binary(scratch, (read_size < 0) ? 0 : read_size);
+        *result           = Binary(scratch, (read_size < 0) ? 0 : read_size);
         if (read_size < 0) {
             status = posixError(filename_, errno);
         }
@@ -174,7 +177,7 @@ class PosixFs : public Fs {
 public:
     PosixFs() = default;
 
-    Status newFsWriter(const std::string &filename, FsWriter **result) override {
+    Status newFsWriter(const std::string& filename, FsWriter** result) override {
         int fd = ::open(filename.c_str(), O_TRUNC | O_WRONLY | O_CREAT | kOpenBaseFlags, 0644);
         if (fd < 0) {
             *result = nullptr;
@@ -184,7 +187,7 @@ public:
         return Status::NewOk();
     }
 
-    Status newFsReader(const std::string &filename, FsReader **result) override {
+    Status newFsReader(const std::string& filename, FsReader** result) override {
         int fd = ::open(filename.c_str(), O_RDONLY | kOpenBaseFlags);
         if (fd < 0) {
             *result = nullptr;
@@ -200,12 +203,12 @@ namespace {
 template <typename T> class SingletonFs {
 public:
     SingletonFs() { new (&fs_storage_) T(); }
-    SingletonFs(const SingletonFs &) = delete;
-    SingletonFs &operator=(const SingletonFs &) = delete;
+    SingletonFs(const SingletonFs&)            = delete;
+    SingletonFs& operator=(const SingletonFs&) = delete;
 
     ~SingletonFs() = default;
 
-    Fs *fs() { return reinterpret_cast<Fs *>(&fs_storage_); }
+    Fs* fs() { return reinterpret_cast<Fs*>(&fs_storage_); }
 
 private:
     typename std::aligned_storage<sizeof(T), alignof(T)>::type fs_storage_;
@@ -215,12 +218,12 @@ using PosixDefaultFs = SingletonFs<PosixFs>;
 
 } // namespace
 
-Fs *Fs::getInstance() {
+Fs* Fs::getInstance() {
     static PosixDefaultFs posix_default_fs;
     return posix_default_fs.fs();
 }
 
-Status posixError(const std::string &context, int err_number) {
+Status posixError(const std::string& context, int err_number) {
     if (errno == ENOENT) {
         return Status::NewNotFound(context + std::strerror(err_number));
     }

@@ -33,7 +33,7 @@ class VariableExprAST : public ExprAST {
 public:
     VariableExprAST(std::string name) : name_(std::move(name)) {}
 
-    [[nodiscard]] const std::string &name() const { return name_; }
+    [[nodiscard]] const std::string& name() const { return name_; }
 
 private:
     std::string name_;
@@ -67,7 +67,7 @@ public:
     PrototypeAST(std::string name, std::vector<std::string> args)
         : name_(std::move(name)), args_(std::move(args)) {}
 
-    [[nodiscard]] const std::string &name() const { return name_; }
+    [[nodiscard]] const std::string& name() const { return name_; }
 
 private:
     std::string name_;
@@ -84,12 +84,12 @@ private:
     std::unique_ptr<ExprAST> body_;
 };
 
-std::unique_ptr<ExprAST> log_error(const char *str) {
+std::unique_ptr<ExprAST> log_error(const char* str) {
     ::fprintf(stderr, "Error: %s\n", str);
     return nullptr;
 }
 
-std::unique_ptr<PrototypeAST> log_error_p(const char *str) {
+std::unique_ptr<PrototypeAST> log_error_p(const char* str) {
     log_error(str);
     return nullptr;
 }
