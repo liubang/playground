@@ -17,7 +17,7 @@ static std::string identifier_str;
 static double num_val;
 static int cur_tok;
 
-const std::string &identifier_string() {
+const std::string& identifier_string() {
     return identifier_str;
 }
 

@@ -29,13 +29,16 @@ public:
     BlockHandle() : offset_(~static_cast<uint64_t>(0)), size_(~static_cast<uint64_t>(0)) {}
 
     [[nodiscard]] uint64_t offset() const { return offset_; }
+
     [[nodiscard]] uint64_t size() const { return size_; }
 
     void setOffset(uint64_t offset) { offset_ = offset; }
+
     void setSize(uint64_t size) { size_ = size; }
 
-    void encodeTo(std::string *dst) const;
-    [[nodiscard]] Status decodeFrom(const Binary &input);
+    void encodeTo(std::string* dst) const;
+
+    [[nodiscard]] Status decodeFrom(const Binary& input);
 
 private:
     uint64_t offset_;
@@ -48,14 +51,14 @@ public:
 
     Footer() = default;
 
-    void setMetaindexHandle(const BlockHandle &block_handle) { metaindex_handle_ = block_handle; }
-    void setIndexHandle(const BlockHandle &block_handle) { index_handle_ = block_handle; }
+    void setMetaindexHandle(const BlockHandle& block_handle) { metaindex_handle_ = block_handle; }
+    void setIndexHandle(const BlockHandle& block_handle) { index_handle_ = block_handle; }
 
-    [[nodiscard]] const BlockHandle &metaindexHandle() const { return metaindex_handle_; }
-    [[nodiscard]] const BlockHandle &indexHandle() const { return index_handle_; }
+    [[nodiscard]] const BlockHandle& metaindexHandle() const { return metaindex_handle_; }
+    [[nodiscard]] const BlockHandle& indexHandle() const { return index_handle_; }
 
-    void encodeTo(std::string *dst) const;
-    [[nodiscard]] Status decodeFrom(const Binary &input);
+    void encodeTo(std::string* dst) const;
+    [[nodiscard]] Status decodeFrom(const Binary& input);
 
 private:
     BlockHandle metaindex_handle_;
@@ -75,7 +78,7 @@ struct BlockContents {
 
 class BlockReader {
 public:
-    static Status readBlock(FsReader *reader, const BlockHandle &handle, BlockContents *result);
+    static Status readBlock(FsReader* reader, const BlockHandle& handle, BlockContents* result);
 };
 
 } // namespace pl

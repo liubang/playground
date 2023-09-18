@@ -11,7 +11,7 @@
 #include <gtest/gtest.h>
 
 TEST(arena, allocate) {
-    constexpr std::size_t ptr_char_size = sizeof(char *);
+    constexpr std::size_t ptr_char_size = sizeof(char*);
     pl::Arena arena;
 
     arena.allocate(1024);
