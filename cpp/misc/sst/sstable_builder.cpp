@@ -12,7 +12,7 @@
 
 namespace pl {
 
-SSTableBuilder::SSTableBuilder(const Options *options, FsWriter *writer)
+SSTableBuilder::SSTableBuilder(const Options* options, FsWriter* writer)
     : options_(options),
       writer_(writer),
       data_block_(options),
@@ -27,7 +27,7 @@ SSTableBuilder::~SSTableBuilder() {
     }
 };
 
-void SSTableBuilder::add(const Binary &key, const Binary &value) {
+void SSTableBuilder::add(const Binary& key, const Binary& value) {
     assert(!closed_);
     if (!ok()) {
         return;
@@ -71,14 +71,14 @@ void SSTableBuilder::flush() {
     if (ok()) {
         // 复位标记，下次开始一个新的block
         pending_index_entry_ = true;
-        status_ = writer_->flush();
+        status_              = writer_->flush();
     }
     if (filter_block_ != nullptr) {
         filter_block_->startBlock(offset_);
     }
 }
 
-void SSTableBuilder::writeBlock(BlockBuilder *block, BlockHandle *handle) {
+void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
     assert(ok());
     auto raw = block->finish();
     // TODO(liubang): support compression
@@ -128,16 +128,16 @@ void SSTableBuilder::writeBlock(BlockBuilder *block, BlockHandle *handle) {
  *
  *
  */
-void SSTableBuilder::writeBlockRaw(const Binary &content,
+void SSTableBuilder::writeBlockRaw(const Binary& content,
                                    CompressionType type,
-                                   BlockHandle *handle) {
+                                   BlockHandle* handle) {
     handle->setOffset(offset_);
     handle->setSize(content.size());
     status_ = writer_->append(content);
     if (ok()) {
         // crc
         char trailer[kBlockTrailerSize];
-        trailer[0] = static_cast<unsigned char>(type);
+        trailer[0]   = static_cast<unsigned char>(type);
         uint32_t crc = crc32(content.data(), content.size());
         std::string encode_crc;
         encodeInt<uint32_t>(&encode_crc, crc);
