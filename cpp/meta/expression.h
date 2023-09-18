@@ -15,7 +15,7 @@
 namespace pl {
 
 template <typename T, typename U, typename OP> struct BinaryExpression {
-    BinaryExpression(const T &lhs, const U &rhs, OP op) : lhs(lhs), rhs(rhs), op(op) {}
+    BinaryExpression(const T& lhs, const U& rhs, OP op) : lhs(lhs), rhs(rhs), op(op) {}
 
     auto operator()() const { return op(lhs, rhs); }
 
@@ -74,7 +74,7 @@ constexpr bool is_container_v<BinaryContainerExpression<T, U, OP>> = true;
 template <typename T,
           typename U,
           typename = pl::enable_if_t<pl::is_container_v<T> && pl::is_container_v<U>>>
-auto operator+(const T &lhs, const U &rhs) {
+auto operator+(const T& lhs, const U& rhs) {
     auto plus = [](auto x, auto y) {
         return x + y;
     };

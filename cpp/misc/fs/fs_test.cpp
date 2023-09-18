@@ -14,9 +14,9 @@
 #include <memory>
 
 TEST(fs, FsWriterAndFsReader) {
-    auto *fs = pl::Fs::getInstance();
-    pl::FsWriter *fw;
-    pl::FsReader *fr;
+    auto* fs = pl::Fs::getInstance();
+    pl::FsWriter* fw;
+    pl::FsReader* fr;
 
     const std::string filename = "./test.log";
     fs->newFsWriter(filename, &fw);

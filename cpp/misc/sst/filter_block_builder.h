@@ -19,14 +19,15 @@ namespace pl {
 
 class FilterBlockBuilder {
 public:
-    explicit FilterBlockBuilder(const FilterPolicy *filter_policy);
+    explicit FilterBlockBuilder(const FilterPolicy* filter_policy);
 
-    FilterBlockBuilder(const FilterBlockBuilder &) = delete;
-    FilterPolicy &operator=(const FilterBlockBuilder &) = delete;
+    FilterBlockBuilder(const FilterBlockBuilder&) = delete;
+
+    FilterPolicy& operator=(const FilterBlockBuilder&) = delete;
 
     void startBlock(uint64_t offset);
 
-    void addKey(const Binary &key);
+    void addKey(const Binary& key);
 
     Binary finish();
 
@@ -34,7 +35,7 @@ private:
     void genFilter();
 
 private:
-    const FilterPolicy *filter_policy_;
+    const FilterPolicy* filter_policy_;
     std::string keys_;                     // 所有的key组合成一个大的string
     std::vector<std::size_t> start_;       // 每一个key在keys_中的偏移,可以通过start_[i
                                            // + 1] - start_[i] 计算出第i个key的长度

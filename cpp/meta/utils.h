@@ -43,7 +43,7 @@ template <typename T, std::size_t I> struct Array<T, I> {
  * @tparam Args [TODO:tparam]
  * @param args [TODO:parameter]
  */
-template <typename... Args> void print(const Args &...args) {
+template <typename... Args> void print(const Args&... args) {
     ((std::cout << args << std::endl), ...);
 }
 
@@ -139,7 +139,7 @@ public:
 
 template <
     typename... Ts,
-    typename std::enable_if<std::conjunction<std::is_integral<Ts>...>::value>::type * = nullptr>
+    typename std::enable_if<std::conjunction<std::is_integral<Ts>...>::value>::type* = nullptr>
 constexpr auto sums(Ts... ts) {
     // static_assert(std::conjunction<std::is_integral<Ts>...>::value);
     return (0 + ... + ts);

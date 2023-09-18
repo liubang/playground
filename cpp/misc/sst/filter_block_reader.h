@@ -16,14 +16,14 @@ namespace pl {
 
 class FilterBlockReader {
 public:
-    FilterBlockReader(const FilterPolicy *filter_policy, const pl::Binary &contents);
+    FilterBlockReader(const FilterPolicy* filter_policy, const pl::Binary& contents);
 
-    bool keyMayMatch(uint64_t block_offset, const Binary &key);
+    bool keyMayMatch(uint64_t block_offset, const Binary& key);
 
 private:
-    const FilterPolicy *filter_policy_; // filter 策略
-    const char *data_;                  //
-    const char *offset_;
+    const FilterPolicy* filter_policy_; // filter 策略
+    const char* data_;                  //
+    const char* offset_;
     size_t num_;
     size_t base_lg_;
 };

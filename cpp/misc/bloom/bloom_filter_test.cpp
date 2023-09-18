@@ -24,7 +24,7 @@
 TEST(bloom, bloom) {
     pl::BloomFilter filter(32);
 
-    auto *binaries = new pl::Binary[100];
+    auto* binaries = new pl::Binary[100];
 
     SCOPE_EXIT {
         delete[] binaries;
@@ -33,7 +33,7 @@ TEST(bloom, bloom) {
     std::vector<std::string> strs(100);
 
     for (int i = 0; i < 100; ++i) {
-        strs[i] = pl::random_string(i + 10);
+        strs[i]     = pl::random_string(i + 10);
         binaries[i] = pl::Binary(strs[i]);
     }
 

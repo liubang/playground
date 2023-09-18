@@ -17,19 +17,19 @@
 
 namespace pl {
 
-void BlockHandle::encodeTo(std::string *dst) const {
+void BlockHandle::encodeTo(std::string* dst) const {
     assert(offset_ != ~static_cast<uint64_t>(0));
     assert(size_ != ~static_cast<uint64_t>(0));
     encodeInt(dst, offset_);
     encodeInt(dst, size_);
 }
 
-Status BlockHandle::decodeFrom(const Binary &input) {
+Status BlockHandle::decodeFrom(const Binary& input) {
     if (input.size() < 16) {
         return Status::NewCorruption("bad block handle");
     }
     offset_ = decodeInt<uint64_t>(input.data());
-    size_ = decodeInt<uint64_t>(input.data() + 8);
+    size_   = decodeInt<uint64_t>(input.data() + 8);
     return Status::NewOk();
 }
 
@@ -41,7 +41,7 @@ Status BlockHandle::decodeFrom(const Binary &input) {
  * | <------------------  40B ------------------> |
  *
  */
-void Footer::encodeTo(std::string *dst) const {
+void Footer::encodeTo(std::string* dst) const {
     const std::size_t s = dst->size();
     metaindex_handle_.encodeTo(dst);
     index_handle_.encodeTo(dst);
@@ -51,13 +51,13 @@ void Footer::encodeTo(std::string *dst) const {
     assert(dst->size() == s + kEncodedLength);
 }
 
-Status Footer::decodeFrom(const Binary &input) {
+Status Footer::decodeFrom(const Binary& input) {
     if (input.size() < kEncodedLength) {
         return Status::NewCorruption("invalid sstable format");
     }
-    const char *magic_ptr = input.data() + kEncodedLength - 8;
-    const auto magic_lo = decodeInt<uint32_t>(magic_ptr);
-    const auto magic_hi = decodeInt<uint32_t>(magic_ptr + 4);
+    const char* magic_ptr = input.data() + kEncodedLength - 8;
+    const auto magic_lo   = decodeInt<uint32_t>(magic_ptr);
+    const auto magic_hi   = decodeInt<uint32_t>(magic_ptr + 4);
     const uint64_t magic =
         ((static_cast<uint64_t>(magic_hi) << 32 | (static_cast<uint64_t>(magic_lo))));
     if (magic != kTableMagicNumber) {
@@ -71,10 +71,10 @@ Status Footer::decodeFrom(const Binary &input) {
     return result;
 }
 
-Status BlockReader::readBlock(FsReader *reader, const BlockHandle &handle, BlockContents *result) {
+Status BlockReader::readBlock(FsReader* reader, const BlockHandle& handle, BlockContents* result) {
     // read block trailer
-    auto s = static_cast<std::size_t>(handle.size());
-    char *buf = new char[s + kBlockTrailerSize];
+    auto s    = static_cast<std::size_t>(handle.size());
+    char* buf = new char[s + kBlockTrailerSize];
 
     Binary content;
     auto status = reader->read(handle.offset(), s + kBlockTrailerSize, &content, buf);
@@ -89,9 +89,9 @@ Status BlockReader::readBlock(FsReader *reader, const BlockHandle &handle, Block
     }
 
     // crc check
-    const char *data = content.data();
-    auto crc = decodeInt<uint32_t>(data + s + 1);
-    auto actual_crc = crc32(data, s);
+    const char* data = content.data();
+    auto crc         = decodeInt<uint32_t>(data + s + 1);
+    auto actual_crc  = crc32(data, s);
     if (crc != actual_crc) {
         delete[] buf;
         return Status::NewCorruption("crc error");
@@ -103,13 +103,13 @@ Status BlockReader::readBlock(FsReader *reader, const BlockHandle &handle, Block
     default:
         if (data != buf) {
             delete[] buf;
-            result->data = Binary(data, s);
+            result->data           = Binary(data, s);
             result->heap_allocated = false;
-            result->cachable = false;
+            result->cachable       = false;
         } else {
-            result->data = Binary(buf, s);
+            result->data           = Binary(buf, s);
             result->heap_allocated = true;
-            result->cachable = true;
+            result->cachable       = true;
         }
     }
 
