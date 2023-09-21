@@ -19,7 +19,7 @@ auto to_string() -> std::string {
     uint16_t port = 80;
     uint64_t start_time = 1684743618;
     char ip_port_str[64];
-    auto *ip_str = (unsigned char *)(&ip);
+    auto* ip_str = (unsigned char*)(&ip);
     ::memset(ip_port_str, '\0', 64);
     ::snprintf(ip_port_str, 64, "%d.%d.%d.%d:%d:%lu", ip_str[0], ip_str[1], ip_str[2], ip_str[3],
                port, start_time);
@@ -28,7 +28,7 @@ auto to_string() -> std::string {
 }
 } // namespace
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     /*
      * 这里主要是为了构造heap-use-after-free的场景，
      * ==14709==ERROR: AddressSanitizer: heap-use-after-free on address
@@ -41,7 +41,7 @@ int main(int argc, char *argv[]) {
      * string，此时，我们在再后面printf中使用这个 字符串指针，
      * 就触发了heap-use-after-free 的问题。
      */
-    const char *s = to_string().c_str();
+    const char* s = to_string().c_str();
 
     ::printf("s is %s\n", s);
     ::printf("s is %s\n", s);

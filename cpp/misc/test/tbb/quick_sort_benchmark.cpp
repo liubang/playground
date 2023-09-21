@@ -40,7 +40,7 @@ static void test4() {
     pl::quick_sort3(arr.data(), arr.size());
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     ankerl::nanobench::Bench().run("test1", [&] {
         test1();
     });

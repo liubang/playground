@@ -19,11 +19,8 @@ namespace pl {
 class Arena {
 public:
     Arena();
-
     ~Arena();
-
     Arena(const Arena&) = delete;
-
     Arena& operator=(const Arena&) = delete;
 
     inline char* allocate(std::size_t bytes) {

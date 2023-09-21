@@ -21,7 +21,7 @@ struct Outer {
     union {
         struct {
             OtherType ot : 4;
-            SomeType st : 4;
+            SomeType st  : 4;
         } __attribute__((packed));
         char val_;
     } __attribute__((packed));
@@ -32,7 +32,7 @@ struct Outer {
 
 } __attribute__((packed));
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     static_assert(sizeof(Outer) == 1);
     {
         Outer outer(ST_B, OT_C);

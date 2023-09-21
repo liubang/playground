@@ -23,11 +23,11 @@ template <> struct is_varint_type<uint32_t> : std::true_type {};
 
 template <> struct is_varint_type<uint64_t> : std::true_type {};
 
-template <typename T, std::enable_if_t<is_varint_type<T>::type> * = nullptr>
-inline void *varint_encode(T value, void *const buffer, std::size_t buffer_size) {
+template <typename T, std::enable_if_t<is_varint_type<T>::type>* = nullptr>
+inline void* varint_encode(T value, void* const buffer, std::size_t buffer_size) {
     static_assert(sizeof(T) <= 8);
     auto min_size = std::min(buffer_size, sizeof(T));
-    auto *p = static_cast<uint8_t *>(buffer);
+    auto* p = static_cast<uint8_t*>(buffer);
     uint64_t count = 0;
     for (; count < min_size && value >= 0x7F; ++count) {
         // (value & 127) | 128;
@@ -41,12 +41,12 @@ inline void *varint_encode(T value, void *const buffer, std::size_t buffer_size)
     return p;
 }
 
-template <typename T, std::enable_if_t<is_varint_type<T>::value> * = nullptr>
-inline void *varint_decode(void *const buffer, std::size_t buffer_size, T *result) {
+template <typename T, std::enable_if_t<is_varint_type<T>::value>* = nullptr>
+inline void* varint_decode(void* const buffer, std::size_t buffer_size, T* result) {
     static_assert(sizeof(T) <= 8);
     constexpr auto final_byte_mask = static_cast<uint8_t>(~(uint32_t(1) << sizeof(T)) - 1);
     auto min_size = std::min(buffer_size, sizeof(T));
-    auto *p = static_cast<uint8_t *>(buffer);
+    auto* p = static_cast<uint8_t*>(buffer);
     T value = 0;
     uint64_t count = 0;
     uint64_t shift = 0;
