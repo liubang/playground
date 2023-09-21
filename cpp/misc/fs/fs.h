@@ -18,7 +18,7 @@ class FsWriter;
 class Fs {
 public:
     Fs();
-    Fs(const Fs&)            = delete;
+    Fs(const Fs&) = delete;
     Fs& operator=(const Fs&) = delete;
 
     virtual ~Fs();
@@ -40,14 +40,14 @@ public:
 
 class FsWriter {
 public:
-    FsWriter()                           = default;
-    FsWriter(const FsWriter&)            = delete;
+    FsWriter() = default;
+    FsWriter(const FsWriter&) = delete;
     FsWriter& operator=(const FsWriter&) = delete;
     virtual ~FsWriter();
     virtual Status append(const Binary& data) = 0;
-    virtual Status close()                    = 0;
-    virtual Status flush()                    = 0;
-    virtual Status sync()                     = 0;
+    virtual Status close() = 0;
+    virtual Status flush() = 0;
+    virtual Status sync() = 0;
 };
 
 } // namespace pl

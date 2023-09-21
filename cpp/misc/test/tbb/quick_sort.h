@@ -15,11 +15,11 @@
 
 namespace pl {
 
-template <typename T> void quick_sort(T *data, size_t size) {
+template <typename T> void quick_sort(T* data, size_t size) {
     if (size < 1)
         return;
     size_t mid = std::hash<size_t>{}(size);
-    mid ^= std::hash<void *>{}(static_cast<void *>(data));
+    mid ^= std::hash<void*>{}(static_cast<void*>(data));
     mid %= size;
     std::swap(data[0], data[mid]);
     T pivot = data[0];
@@ -39,11 +39,11 @@ template <typename T> void quick_sort(T *data, size_t size) {
     quick_sort(data + left + 1, size - left - 1);
 }
 
-template <typename T> void quick_sort2(T *data, size_t size) {
+template <typename T> void quick_sort2(T* data, size_t size) {
     if (size < 1)
         return;
     size_t mid = std::hash<size_t>{}(size);
-    mid ^= std::hash<void *>{}(static_cast<void *>(data));
+    mid ^= std::hash<void*>{}(static_cast<void*>(data));
     mid %= size;
     std::swap(data[0], data[mid]);
     T pivot = data[0];
@@ -68,7 +68,7 @@ template <typename T> void quick_sort2(T *data, size_t size) {
         });
 }
 
-template <typename T> void quick_sort3(T *data, size_t size) {
+template <typename T> void quick_sort3(T* data, size_t size) {
     if (size < 1)
         return;
     if (size < (1 << 16)) {
@@ -76,7 +76,7 @@ template <typename T> void quick_sort3(T *data, size_t size) {
         return;
     }
     size_t mid = std::hash<size_t>{}(size);
-    mid ^= std::hash<void *>{}(static_cast<void *>(data));
+    mid ^= std::hash<void*>{}(static_cast<void*>(data));
     mid %= size;
     std::swap(data[0], data[mid]);
     T pivot = data[0];

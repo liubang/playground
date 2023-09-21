@@ -24,8 +24,6 @@ public:
     }
 };
 
-Comparator* bytewiseComparator() {
-    return new BytewiseComparator();
-}
+Comparator* bytewiseComparator() { return new BytewiseComparator(); }
 
 } // namespace pl

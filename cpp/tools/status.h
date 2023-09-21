@@ -14,7 +14,7 @@
 namespace pl {
 
 #define NEW_STATUS(name)                                   \
-    static Status New##name(const std::string &msg = "") { \
+    static Status New##name(const std::string& msg = "") { \
         return {k##name, msg};                             \
     }
 
@@ -26,9 +26,9 @@ namespace pl {
 class Status {
 public:
     Status() = default;
-    Status(const Status &) = default;
+    Status(const Status&) = default;
 
-    Status &operator=(const Status &) = default;
+    Status& operator=(const Status&) = default;
 
     NEW_STATUS(Ok)
     NEW_STATUS(NotFound)
@@ -44,7 +44,7 @@ public:
     IS_STATUS(InvalidArgument)
     IS_STATUS(IOError)
 
-    [[nodiscard]] const std::string &msg() const { return msg_; }
+    [[nodiscard]] const std::string& msg() const { return msg_; }
 
     [[nodiscard]] std::string to_string() const {
         switch (code_) {

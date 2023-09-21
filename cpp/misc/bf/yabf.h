@@ -35,7 +35,7 @@ template <std::size_t InstructionCapacity> struct Program {
 template <std::size_t N> constexpr auto parse(const char (&str)[N]) {
     Program<N> result{};
 
-    std::size_t jump_stack[N]  = {};
+    std::size_t jump_stack[N] = {};
     std::size_t jump_stack_top = 0;
 
     for (auto ptr = str; *ptr; ++ptr) {
@@ -52,14 +52,14 @@ template <std::size_t N> constexpr auto parse(const char (&str)[N]) {
         } else if (*ptr == ',') {
             result.inst[result.inst_count++] = Op::read;
         } else if (*ptr == '[') {
-            jump_stack[jump_stack_top++]     = result.inst_count;
+            jump_stack[jump_stack_top++] = result.inst_count;
             result.inst[result.inst_count++] = Op::jmp_ifz;
         } else if (*ptr == ']') {
-            auto open              = jump_stack[--jump_stack_top];
-            auto close             = result.inst_count++;
-            result.inst[close]     = Op::jmp;
+            auto open = jump_stack[--jump_stack_top];
+            auto close = result.inst_count++;
+            result.inst[close] = Op::jmp;
             result.inst_jmp[close] = open;
-            result.inst_jmp[open]  = close + 1;
+            result.inst_jmp[open] = close + 1;
         }
     }
 

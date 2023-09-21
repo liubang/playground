@@ -19,7 +19,7 @@
 namespace pl {
 
 constexpr const size_t kWritableFileBufferSize = 65536;
-constexpr const int kOpenBaseFlags             = O_CLOEXEC;
+constexpr const int kOpenBaseFlags = O_CLOEXEC;
 
 Status posixError(const std::string& context, int err_number);
 
@@ -46,7 +46,7 @@ public:
     Status append(const Binary& data) override {
         std::size_t write_size = data.size();
         const char* write_data = data.data();
-        std::size_t copy_size  = std::min(write_size, kWritableFileBufferSize - pos_);
+        std::size_t copy_size = std::min(write_size, kWritableFileBufferSize - pos_);
         std::memcpy(buf_ + pos_, write_data, copy_size);
         write_data += copy_size;
         write_size -= copy_size;
@@ -71,7 +71,7 @@ public:
 
     Status close() override {
         Status status = flushBuffer();
-        int result    = ::close(fd_);
+        int result = ::close(fd_);
         if (result < 0 && status.isOk()) {
             status = posixError(filename_, errno);
         }
@@ -107,7 +107,7 @@ private:
 
     Status flushBuffer() {
         Status status = writeUnbuffered(buf_, pos_);
-        pos_          = 0;
+        pos_ = 0;
         return status;
     }
 
@@ -132,10 +132,10 @@ private:
 
 class PosixFsReader final : public FsReader {
 public:
-    PosixFsReader(const PosixFsReader&)            = default;
-    PosixFsReader(PosixFsReader&&)                 = default;
+    PosixFsReader(const PosixFsReader&) = default;
+    PosixFsReader(PosixFsReader&&) = default;
     PosixFsReader& operator=(const PosixFsReader&) = delete;
-    PosixFsReader& operator=(PosixFsReader&&)      = delete;
+    PosixFsReader& operator=(PosixFsReader&&) = delete;
 
     PosixFsReader(std::string filename, int fd) : filename_(std::move(filename)), fd_(fd) {
         assert(fd >= 0);
@@ -161,7 +161,7 @@ public:
     Status read(uint64_t offset, std::size_t n, Binary* result, char* scratch) const override {
         Status status;
         ssize_t read_size = ::pread(fd_, scratch, n, static_cast<off_t>(offset));
-        *result           = Binary(scratch, (read_size < 0) ? 0 : read_size);
+        *result = Binary(scratch, (read_size < 0) ? 0 : read_size);
         if (read_size < 0) {
             status = posixError(filename_, errno);
         }
@@ -203,7 +203,7 @@ namespace {
 template <typename T> class SingletonFs {
 public:
     SingletonFs() { new (&fs_storage_) T(); }
-    SingletonFs(const SingletonFs&)            = delete;
+    SingletonFs(const SingletonFs&) = delete;
     SingletonFs& operator=(const SingletonFs&) = delete;
 
     ~SingletonFs() = default;

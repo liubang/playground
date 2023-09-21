@@ -5,7 +5,7 @@
 #include <random>
 #include <unordered_map>
 
-static void BM_MapInsert(benchmark::State &state) {
+static void BM_MapInsert(benchmark::State& state) {
     const int num_elements = state.range(0);
     std::map<int, int> ordered_map;
     std::vector<int> keys(num_elements);
@@ -30,7 +30,7 @@ static void BM_MapInsert(benchmark::State &state) {
 }
 BENCHMARK(BM_MapInsert)->Range(8, 8 << 10);
 
-static void BM_UnorderedMapInsert(benchmark::State &state) {
+static void BM_UnorderedMapInsert(benchmark::State& state) {
     const int num_elements = state.range(0);
     std::unordered_map<int, int> unordered_map;
     std::vector<int> keys(num_elements);
@@ -55,7 +55,7 @@ static void BM_UnorderedMapInsert(benchmark::State &state) {
 }
 BENCHMARK(BM_UnorderedMapInsert)->Range(8, 8 << 10);
 
-static void BM_MapRead(benchmark::State &state) {
+static void BM_MapRead(benchmark::State& state) {
     const int num_elements = state.range(0);
     std::map<int, int> ordered_map;
     std::vector<int> keys(num_elements);
@@ -78,7 +78,7 @@ static void BM_MapRead(benchmark::State &state) {
 }
 BENCHMARK(BM_MapRead)->Range(8, 8 << 10);
 
-static void BM_UnorderedMapRead(benchmark::State &state) {
+static void BM_UnorderedMapRead(benchmark::State& state) {
     const int num_elements = state.range(0);
     std::unordered_map<int, int> unordered_map;
     std::vector<int> keys(num_elements);
