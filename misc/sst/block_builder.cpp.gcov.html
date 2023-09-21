@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2023-09-18 16:10:17</td>
+            <td class="headerValue">2023-09-21 17:45:34</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">5</td>
@@ -78,12 +78,12 @@
 <a name="16"><span class="lineNum">      16 </span>            : </a>
 <a name="17"><span class="lineNum">      17 </span>            : namespace pl {</a>
 <a name="18"><span class="lineNum">      18 </span>            : </a>
-<a name="19"><span class="lineNum">      19 </span><span class="lineCov">          5 : BlockBuilder::BlockBuilder(const Options *options)</span></a>
+<a name="19"><span class="lineNum">      19 </span><span class="lineCov">          5 : BlockBuilder::BlockBuilder(const Options* options)</span></a>
 <a name="20"><span class="lineNum">      20 </span><span class="lineCov">          5 :     : comparator_(options-&gt;comparator), block_restart_interval_(options-&gt;block_restart_interval) {</span></a>
 <a name="21"><span class="lineNum">      21 </span><span class="lineCov">          5 :     restarts_.push_back(0);</span></a>
 <a name="22"><span class="lineNum">      22 </span><span class="lineCov">          5 : }</span></a>
 <a name="23"><span class="lineNum">      23 </span>            : </a>
-<a name="24"><span class="lineNum">      24 </span><span class="lineCov">    1020192 : void BlockBuilder::add(const Binary &amp;key, const Binary &amp;value) {</span></a>
+<a name="24"><span class="lineNum">      24 </span><span class="lineCov">    1020192 : void BlockBuilder::add(const Binary&amp; key, const Binary&amp; value) {</span></a>
 <a name="25"><span class="lineNum">      25 </span><span class="lineCov">    1020192 :     assert(!finished_);</span></a>
 <a name="26"><span class="lineNum">      26 </span><span class="lineCov">    1020192 :     auto last_key_pice = Binary(last_key_);</span></a>
 <a name="27"><span class="lineNum">      27 </span>            :     // 必须保证key按照指定的comparator的递增的顺序</a>

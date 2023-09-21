@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2023-09-18 16:10:17</td>
+            <td class="headerValue">2023-09-21 17:45:34</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">16</td>
@@ -77,7 +77,7 @@
 <a name="15"><span class="lineNum">      15 </span>            : </a>
 <a name="16"><span class="lineNum">      16 </span><span class="lineCov">          1 : Block::Block(const BlockContents&amp; content)</span></a>
 <a name="17"><span class="lineNum">      17 </span><span class="lineCov">          1 :     : data_(content.data.data()), size_(content.data.size()), owned_(content.heap_allocated) {</span></a>
-<a name="18"><span class="lineNum">      18 </span><span class="lineCov">          1 :     num_restarts_                = decodeInt&lt;uint32_t&gt;(data_ + size_ - 4);</span></a>
+<a name="18"><span class="lineNum">      18 </span><span class="lineCov">          1 :     num_restarts_ = decodeInt&lt;uint32_t&gt;(data_ + size_ - 4);</span></a>
 <a name="19"><span class="lineNum">      19 </span><span class="lineCov">          1 :     std::size_t max_num_restarts = (size_ - 4) / 4;</span></a>
 <a name="20"><span class="lineNum">      20 </span><span class="lineCov">          1 :     if (num_restarts_ &gt; max_num_restarts) {</span></a>
 <a name="21"><span class="lineNum">      21 </span>            :         // invalid block</a>
@@ -108,8 +108,8 @@
 <a name="46"><span class="lineNum">      46 </span><span class="lineNoCov">          0 :     [[nodiscard]] Status status() const override { return status_; }</span></a>
 <a name="47"><span class="lineNum">      47 </span>            : </a>
 <a name="48"><span class="lineNum">      48 </span><span class="lineNoCov">          0 :     void seek(const Binary&amp; target) override {</span></a>
-<a name="49"><span class="lineNum">      49 </span><span class="lineNoCov">          0 :         uint32_t left           = 0;</span></a>
-<a name="50"><span class="lineNum">      50 </span><span class="lineNoCov">          0 :         uint32_t right          = num_restarts_ - 1;</span></a>
+<a name="49"><span class="lineNum">      49 </span><span class="lineNoCov">          0 :         uint32_t left = 0;</span></a>
+<a name="50"><span class="lineNum">      50 </span><span class="lineNoCov">          0 :         uint32_t right = num_restarts_ - 1;</span></a>
 <a name="51"><span class="lineNum">      51 </span><span class="lineNoCov">          0 :         int current_key_compare = 0;</span></a>
 <a name="52"><span class="lineNum">      52 </span><span class="lineNoCov">          0 :         if (valid()) {</span></a>
 <a name="53"><span class="lineNum">      53 </span><span class="lineNoCov">          0 :             current_key_compare = compare(key_, target);</span></a>
@@ -124,14 +124,14 @@
 <a name="62"><span class="lineNum">      62 </span>            : </a>
 <a name="63"><span class="lineNum">      63 </span>            :         // binary search</a>
 <a name="64"><span class="lineNum">      64 </span><span class="lineNoCov">          0 :         while (left &lt; right) {</span></a>
-<a name="65"><span class="lineNum">      65 </span><span class="lineNoCov">          0 :             uint32_t mid    = (left + right + 1) / 2;</span></a>
+<a name="65"><span class="lineNum">      65 </span><span class="lineNoCov">          0 :             uint32_t mid = (left + right + 1) / 2;</span></a>
 <a name="66"><span class="lineNum">      66 </span><span class="lineNoCov">          0 :             uint32_t offset = getRestartOffset(mid);</span></a>
 <a name="67"><span class="lineNum">      67 </span><span class="lineNoCov">          0 :             uint32_t shared, non_shared, value_size;</span></a>
 <a name="68"><span class="lineNum">      68 </span>            :             const char* key_ptr =</a>
 <a name="69"><span class="lineNum">      69 </span><span class="lineNoCov">          0 :                 decodeEntry(data_ + offset, data_ + restarts_, &amp;shared, &amp;non_shared, &amp;value_size);</span></a>
 <a name="70"><span class="lineNum">      70 </span><span class="lineNoCov">          0 :             if (nullptr == key_ptr || (shared != 0)) {</span></a>
-<a name="71"><span class="lineNum">      71 </span><span class="lineNoCov">          0 :                 status_          = Status::NewCorruption(&quot;invalid entry in block&quot;);</span></a>
-<a name="72"><span class="lineNum">      72 </span><span class="lineNoCov">          0 :                 current_         = restarts_;</span></a>
+<a name="71"><span class="lineNum">      71 </span><span class="lineNoCov">          0 :                 status_ = Status::NewCorruption(&quot;invalid entry in block&quot;);</span></a>
+<a name="72"><span class="lineNum">      72 </span><span class="lineNoCov">          0 :                 current_ = restarts_;</span></a>
 <a name="73"><span class="lineNum">      73 </span><span class="lineNoCov">          0 :                 current_restart_ = num_restarts_;</span></a>
 <a name="74"><span class="lineNum">      74 </span><span class="lineNoCov">          0 :                 key_.clear();</span></a>
 <a name="75"><span class="lineNum">      75 </span><span class="lineNoCov">          0 :                 val_.clear();</span></a>
@@ -176,7 +176,7 @@
 <a name="114"><span class="lineNum">     114 </span><span class="lineNoCov">          0 :         const uint32_t old = current_;</span></a>
 <a name="115"><span class="lineNum">     115 </span><span class="lineNoCov">          0 :         while (getRestartOffset(current_restart_) &gt;= old) {</span></a>
 <a name="116"><span class="lineNum">     116 </span><span class="lineNoCov">          0 :             if (current_restart_ == 0) {</span></a>
-<a name="117"><span class="lineNum">     117 </span><span class="lineNoCov">          0 :                 current_         = restarts_;</span></a>
+<a name="117"><span class="lineNum">     117 </span><span class="lineNoCov">          0 :                 current_ = restarts_;</span></a>
 <a name="118"><span class="lineNum">     118 </span><span class="lineNoCov">          0 :                 current_restart_ = num_restarts_;</span></a>
 <a name="119"><span class="lineNum">     119 </span><span class="lineNoCov">          0 :                 return;</span></a>
 <a name="120"><span class="lineNum">     120 </span>            :             }</a>
@@ -203,8 +203,8 @@
 <a name="141"><span class="lineNum">     141 </span><span class="lineCov">          1 :     void seekToRestartPoint(uint32_t idx) {</span></a>
 <a name="142"><span class="lineNum">     142 </span><span class="lineCov">          1 :         key_.clear();</span></a>
 <a name="143"><span class="lineNum">     143 </span><span class="lineCov">          1 :         current_restart_ = idx;</span></a>
-<a name="144"><span class="lineNum">     144 </span><span class="lineCov">          1 :         uint32_t offset  = getRestartOffset(idx);</span></a>
-<a name="145"><span class="lineNum">     145 </span><span class="lineCov">          1 :         val_             = Binary(data_ + offset, 0);</span></a>
+<a name="144"><span class="lineNum">     144 </span><span class="lineCov">          1 :         uint32_t offset = getRestartOffset(idx);</span></a>
+<a name="145"><span class="lineNum">     145 </span><span class="lineCov">          1 :         val_ = Binary(data_ + offset, 0);</span></a>
 <a name="146"><span class="lineNum">     146 </span><span class="lineCov">          1 :     }</span></a>
 <a name="147"><span class="lineNum">     147 </span>            : </a>
 <a name="148"><span class="lineNum">     148 </span><span class="lineCov">      10002 :     [[nodiscard]] inline uint32_t nextEntryOffset() const {</span></a>
@@ -212,11 +212,11 @@
 <a name="150"><span class="lineNum">     150 </span>            :     }</a>
 <a name="151"><span class="lineNum">     151 </span>            : </a>
 <a name="152"><span class="lineNum">     152 </span><span class="lineCov">      10002 :     bool parseNextKeyVal() {</span></a>
-<a name="153"><span class="lineNum">     153 </span><span class="lineCov">      10002 :         current_          = nextEntryOffset();</span></a>
-<a name="154"><span class="lineNum">     154 </span><span class="lineCov">      10002 :         const char* p     = data_ + current_;</span></a>
+<a name="153"><span class="lineNum">     153 </span><span class="lineCov">      10002 :         current_ = nextEntryOffset();</span></a>
+<a name="154"><span class="lineNum">     154 </span><span class="lineCov">      10002 :         const char* p = data_ + current_;</span></a>
 <a name="155"><span class="lineNum">     155 </span><span class="lineCov">      10002 :         const char* limit = data_ + restarts_;</span></a>
 <a name="156"><span class="lineNum">     156 </span><span class="lineCov">      10002 :         if (p &gt;= limit) {</span></a>
-<a name="157"><span class="lineNum">     157 </span><span class="lineCov">          1 :             current_         = restarts_;</span></a>
+<a name="157"><span class="lineNum">     157 </span><span class="lineCov">          1 :             current_ = restarts_;</span></a>
 <a name="158"><span class="lineNum">     158 </span><span class="lineCov">          1 :             current_restart_ = num_restarts_;</span></a>
 <a name="159"><span class="lineNum">     159 </span><span class="lineCov">          1 :             return false;</span></a>
 <a name="160"><span class="lineNum">     160 </span>            :         }</a>
@@ -244,7 +244,7 @@
 <a name="182"><span class="lineNum">     182 </span><span class="lineCov">      10001 :         constexpr std::size_t s = sizeof(uint32_t);</span></a>
 <a name="183"><span class="lineNum">     183 </span><span class="lineCov">      10001 :         if (p + 3 &gt; limit)</span></a>
 <a name="184"><span class="lineNum">     184 </span><span class="lineNoCov">          0 :             return nullptr;</span></a>
-<a name="185"><span class="lineNum">     185 </span><span class="lineCov">      10001 :         *shared     = pl::decodeInt&lt;uint32_t&gt;(p);</span></a>
+<a name="185"><span class="lineNum">     185 </span><span class="lineCov">      10001 :         *shared = pl::decodeInt&lt;uint32_t&gt;(p);</span></a>
 <a name="186"><span class="lineNum">     186 </span><span class="lineCov">      10001 :         *non_shared = pl::decodeInt&lt;uint32_t&gt;(p + s);</span></a>
 <a name="187"><span class="lineNum">     187 </span><span class="lineCov">      10001 :         *value_size = pl::decodeInt&lt;uint32_t&gt;(p + s * 2);</span></a>
 <a name="188"><span class="lineNum">     188 </span><span class="lineCov">      10001 :         p += s * 3;</span></a>

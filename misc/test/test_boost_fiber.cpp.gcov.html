@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2023-09-18 16:10:17</td>
+            <td class="headerValue">2023-09-21 17:45:34</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">2</td>
@@ -73,7 +73,7 @@
 <a name="11"><span class="lineNum">      11 </span>            : #include &lt;iostream&gt;</a>
 <a name="12"><span class="lineNum">      12 </span>            : #include &lt;string&gt;</a>
 <a name="13"><span class="lineNum">      13 </span>            : </a>
-<a name="14"><span class="lineNum">      14 </span><span class="lineCov">          4 : void fn(std::string const &amp;str, int n) {</span></a>
+<a name="14"><span class="lineNum">      14 </span><span class="lineCov">          4 : void fn(std::string const&amp; str, int n) {</span></a>
 <a name="15"><span class="lineNum">      15 </span><span class="lineCov">          4 :     boost::fibers::fiber::id this_id = boost::this_fiber::get_id();</span></a>
 <a name="16"><span class="lineNum">      16 </span><span class="lineCov">         18 :     for (int i = 0; i &lt; n; ++i) {</span></a>
 <a name="17"><span class="lineNum">      17 </span><span class="lineCov">         14 :         std::cout &lt;&lt; &quot;fiber: &quot; &lt;&lt; this_id &lt;&lt; &quot;, &quot; &lt;&lt; str &lt;&lt; &quot;: &quot; &lt;&lt; std::endl;</span></a>
@@ -81,7 +81,7 @@
 <a name="19"><span class="lineNum">      19 </span>            :     }</a>
 <a name="20"><span class="lineNum">      20 </span><span class="lineCov">          4 : }</span></a>
 <a name="21"><span class="lineNum">      21 </span>            : </a>
-<a name="22"><span class="lineNum">      22 </span><span class="lineCov">          1 : int main(int argc, char *argv[]) {</span></a>
+<a name="22"><span class="lineNum">      22 </span><span class="lineCov">          1 : int main(int argc, char* argv[]) {</span></a>
 <a name="23"><span class="lineNum">      23 </span><span class="lineCov">          1 :     boost::fibers::fiber f1(fn, &quot;abc&quot;, 3);</span></a>
 <a name="24"><span class="lineNum">      24 </span><span class="lineCov">          1 :     boost::fibers::fiber f2(fn, &quot;def&quot;, 4);</span></a>
 <a name="25"><span class="lineNum">      25 </span><span class="lineCov">          1 :     boost::fibers::fiber f3(fn, &quot;hij&quot;, 2);</span></a>

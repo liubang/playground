@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2023-09-18 16:10:17</td>
+            <td class="headerValue">2023-09-21 17:45:34</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">20</td>
@@ -81,7 +81,7 @@
 <a name="19"><span class="lineNum">      19 </span>            : namespace pl {</a>
 <a name="20"><span class="lineNum">      20 </span>            : </a>
 <a name="21"><span class="lineNum">      21 </span>            : constexpr const size_t kWritableFileBufferSize = 65536;</a>
-<a name="22"><span class="lineNum">      22 </span>            : constexpr const int kOpenBaseFlags             = O_CLOEXEC;</a>
+<a name="22"><span class="lineNum">      22 </span>            : constexpr const int kOpenBaseFlags = O_CLOEXEC;</a>
 <a name="23"><span class="lineNum">      23 </span>            : </a>
 <a name="24"><span class="lineNum">      24 </span>            : Status posixError(const std::string&amp; context, int err_number);</a>
 <a name="25"><span class="lineNum">      25 </span>            : </a>
@@ -108,7 +108,7 @@
 <a name="46"><span class="lineNum">      46 </span><span class="lineCov">        386 :     Status append(const Binary&amp; data) override {</span></a>
 <a name="47"><span class="lineNum">      47 </span><span class="lineCov">        386 :         std::size_t write_size = data.size();</span></a>
 <a name="48"><span class="lineNum">      48 </span><span class="lineCov">        386 :         const char* write_data = data.data();</span></a>
-<a name="49"><span class="lineNum">      49 </span><span class="lineCov">        386 :         std::size_t copy_size  = std::min(write_size, kWritableFileBufferSize - pos_);</span></a>
+<a name="49"><span class="lineNum">      49 </span><span class="lineCov">        386 :         std::size_t copy_size = std::min(write_size, kWritableFileBufferSize - pos_);</span></a>
 <a name="50"><span class="lineNum">      50 </span><span class="lineCov">        386 :         std::memcpy(buf_ + pos_, write_data, copy_size);</span></a>
 <a name="51"><span class="lineNum">      51 </span><span class="lineCov">        386 :         write_data += copy_size;</span></a>
 <a name="52"><span class="lineNum">      52 </span><span class="lineCov">        386 :         write_size -= copy_size;</span></a>
@@ -133,7 +133,7 @@
 <a name="71"><span class="lineNum">      71 </span>            : </a>
 <a name="72"><span class="lineNum">      72 </span><span class="lineCov">          2 :     Status close() override {</span></a>
 <a name="73"><span class="lineNum">      73 </span><span class="lineCov">          2 :         Status status = flushBuffer();</span></a>
-<a name="74"><span class="lineNum">      74 </span><span class="lineCov">          2 :         int result    = ::close(fd_);</span></a>
+<a name="74"><span class="lineNum">      74 </span><span class="lineCov">          2 :         int result = ::close(fd_);</span></a>
 <a name="75"><span class="lineNum">      75 </span><span class="lineCov">          2 :         if (result &lt; 0 &amp;&amp; status.isOk()) {</span></a>
 <a name="76"><span class="lineNum">      76 </span><span class="lineNoCov">          0 :             status = posixError(filename_, errno);</span></a>
 <a name="77"><span class="lineNum">      77 </span>            :         }</a>
@@ -169,7 +169,7 @@
 <a name="107"><span class="lineNum">     107 </span>            : </a>
 <a name="108"><span class="lineNum">     108 </span><span class="lineCov">        195 :     Status flushBuffer() {</span></a>
 <a name="109"><span class="lineNum">     109 </span><span class="lineCov">        195 :         Status status = writeUnbuffered(buf_, pos_);</span></a>
-<a name="110"><span class="lineNum">     110 </span><span class="lineCov">        195 :         pos_          = 0;</span></a>
+<a name="110"><span class="lineNum">     110 </span><span class="lineCov">        195 :         pos_ = 0;</span></a>
 <a name="111"><span class="lineNum">     111 </span><span class="lineCov">        195 :         return status;</span></a>
 <a name="112"><span class="lineNum">     112 </span>            :     }</a>
 <a name="113"><span class="lineNum">     113 </span>            : </a>
@@ -194,10 +194,10 @@
 <a name="132"><span class="lineNum">     132 </span>            : </a>
 <a name="133"><span class="lineNum">     133 </span>            : class PosixFsReader final : public FsReader {</a>
 <a name="134"><span class="lineNum">     134 </span>            : public:</a>
-<a name="135"><span class="lineNum">     135 </span>            :     PosixFsReader(const PosixFsReader&amp;)            = default;</a>
-<a name="136"><span class="lineNum">     136 </span>            :     PosixFsReader(PosixFsReader&amp;&amp;)                 = default;</a>
+<a name="135"><span class="lineNum">     135 </span>            :     PosixFsReader(const PosixFsReader&amp;) = default;</a>
+<a name="136"><span class="lineNum">     136 </span>            :     PosixFsReader(PosixFsReader&amp;&amp;) = default;</a>
 <a name="137"><span class="lineNum">     137 </span>            :     PosixFsReader&amp; operator=(const PosixFsReader&amp;) = delete;</a>
-<a name="138"><span class="lineNum">     138 </span>            :     PosixFsReader&amp; operator=(PosixFsReader&amp;&amp;)      = delete;</a>
+<a name="138"><span class="lineNum">     138 </span>            :     PosixFsReader&amp; operator=(PosixFsReader&amp;&amp;) = delete;</a>
 <a name="139"><span class="lineNum">     139 </span>            : </a>
 <a name="140"><span class="lineNum">     140 </span><span class="lineCov">          1 :     PosixFsReader(std::string filename, int fd) : filename_(std::move(filename)), fd_(fd) {</span></a>
 <a name="141"><span class="lineNum">     141 </span><span class="lineCov">          1 :         assert(fd &gt;= 0);</span></a>
@@ -223,7 +223,7 @@
 <a name="161"><span class="lineNum">     161 </span><span class="lineCov">          1 :     Status read(uint64_t offset, std::size_t n, Binary* result, char* scratch) const override {</span></a>
 <a name="162"><span class="lineNum">     162 </span><span class="lineCov">          1 :         Status status;</span></a>
 <a name="163"><span class="lineNum">     163 </span><span class="lineCov">          1 :         ssize_t read_size = ::pread(fd_, scratch, n, static_cast&lt;off_t&gt;(offset));</span></a>
-<a name="164"><span class="lineNum">     164 </span><span class="lineCov">          1 :         *result           = Binary(scratch, (read_size &lt; 0) ? 0 : read_size);</span></a>
+<a name="164"><span class="lineNum">     164 </span><span class="lineCov">          1 :         *result = Binary(scratch, (read_size &lt; 0) ? 0 : read_size);</span></a>
 <a name="165"><span class="lineNum">     165 </span><span class="lineCov">          1 :         if (read_size &lt; 0) {</span></a>
 <a name="166"><span class="lineNum">     166 </span><span class="lineNoCov">          0 :             status = posixError(filename_, errno);</span></a>
 <a name="167"><span class="lineNum">     167 </span>            :         }</a>
@@ -265,7 +265,7 @@
 <a name="203"><span class="lineNum">     203 </span>            : template &lt;typename T&gt; class SingletonFs {</a>
 <a name="204"><span class="lineNum">     204 </span>            : public:</a>
 <a name="205"><span class="lineNum">     205 </span><span class="lineCov">          4 :     SingletonFs() { new (&amp;fs_storage_) T(); }</span></a>
-<a name="206"><span class="lineNum">     206 </span>            :     SingletonFs(const SingletonFs&amp;)            = delete;</a>
+<a name="206"><span class="lineNum">     206 </span>            :     SingletonFs(const SingletonFs&amp;) = delete;</a>
 <a name="207"><span class="lineNum">     207 </span>            :     SingletonFs&amp; operator=(const SingletonFs&amp;) = delete;</a>
 <a name="208"><span class="lineNum">     208 </span>            : </a>
 <a name="209"><span class="lineNum">     209 </span>            :     ~SingletonFs() = default;</a>

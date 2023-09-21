@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2023-09-18 16:10:17</td>
+            <td class="headerValue">2023-09-21 17:45:34</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">7</td>
@@ -133,7 +133,7 @@
 <a name="71"><span class="lineNum">      71 </span><span class="lineCov">        189 :     if (ok()) {</span></a>
 <a name="72"><span class="lineNum">      72 </span>            :         // 复位标记，下次开始一个新的block</a>
 <a name="73"><span class="lineNum">      73 </span><span class="lineCov">        189 :         pending_index_entry_ = true;</span></a>
-<a name="74"><span class="lineNum">      74 </span><span class="lineCov">        189 :         status_              = writer_-&gt;flush();</span></a>
+<a name="74"><span class="lineNum">      74 </span><span class="lineCov">        189 :         status_ = writer_-&gt;flush();</span></a>
 <a name="75"><span class="lineNum">      75 </span>            :     }</a>
 <a name="76"><span class="lineNum">      76 </span><span class="lineCov">        189 :     if (filter_block_ != nullptr) {</span></a>
 <a name="77"><span class="lineNum">      77 </span><span class="lineCov">        189 :         filter_block_-&gt;startBlock(offset_);</span></a>
@@ -199,7 +199,7 @@
 <a name="137"><span class="lineNum">     137 </span><span class="lineCov">        192 :     if (ok()) {</span></a>
 <a name="138"><span class="lineNum">     138 </span>            :         // crc</a>
 <a name="139"><span class="lineNum">     139 </span><span class="lineCov">        192 :         char trailer[kBlockTrailerSize];</span></a>
-<a name="140"><span class="lineNum">     140 </span><span class="lineCov">        192 :         trailer[0]   = static_cast&lt;unsigned char&gt;(type);</span></a>
+<a name="140"><span class="lineNum">     140 </span><span class="lineCov">        192 :         trailer[0] = static_cast&lt;unsigned char&gt;(type);</span></a>
 <a name="141"><span class="lineNum">     141 </span><span class="lineCov">        192 :         uint32_t crc = crc32(content.data(), content.size());</span></a>
 <a name="142"><span class="lineNum">     142 </span><span class="lineCov">        192 :         std::string encode_crc;</span></a>
 <a name="143"><span class="lineNum">     143 </span><span class="lineCov">        192 :         encodeInt&lt;uint32_t&gt;(&amp;encode_crc, crc);</span></a>

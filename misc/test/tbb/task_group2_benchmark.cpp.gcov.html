@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2023-09-18 16:10:17</td>
+            <td class="headerValue">2023-09-21 17:45:34</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">4</td>
@@ -87,8 +87,8 @@
 <a name="25"><span class="lineNum">      25 </span><span class="lineCov">         44 :         std::size_t end = std::min(n, (t + 1) * n / maxt);</span></a>
 <a name="26"><span class="lineNum">      26 </span><span class="lineCov">         44 :         tg.run([&amp;, t, beg, end] {</span></a>
 <a name="27"><span class="lineNum">      27 </span><span class="lineCov">         44 :             float local_res = 0;</span></a>
-<a name="28"><span class="lineNum">      28 </span><span class="lineCov">  647394314 :             for (std::size_t i = beg; i &lt; end; ++i) {</span></a>
-<a name="29"><span class="lineNum">      29 </span><span class="lineCov">  706148353 :                 local_res += std::sin(i);</span></a>
+<a name="28"><span class="lineNum">      28 </span><span class="lineCov">  712693121 :             for (std::size_t i = beg; i &lt; end; ++i) {</span></a>
+<a name="29"><span class="lineNum">      29 </span><span class="lineCov">  715623015 :                 local_res += std::sin(i);</span></a>
 <a name="30"><span class="lineNum">      30 </span>            :             }</a>
 <a name="31"><span class="lineNum">      31 </span><span class="lineNoCov">          0 :             tmp_res[t] = local_res;</span></a>
 <a name="32"><span class="lineNum">      32 </span><span class="lineCov">         44 :         });</span></a>
@@ -100,7 +100,7 @@
 <a name="38"><span class="lineNum">      38 </span><span class="lineCov">         11 :     std::cout &lt;&lt; res &lt;&lt; '\n';</span></a>
 <a name="39"><span class="lineNum">      39 </span><span class="lineCov">         11 : }</span></a>
 <a name="40"><span class="lineNum">      40 </span>            : </a>
-<a name="41"><span class="lineNum">      41 </span><span class="lineCov">          1 : int main(int argc, char *argv[]) {</span></a>
+<a name="41"><span class="lineNum">      41 </span><span class="lineCov">          1 : int main(int argc, char* argv[]) {</span></a>
 <a name="42"><span class="lineNum">      42 </span><span class="lineCov">          1 :     ankerl::nanobench::Bench().run(&quot;test1&quot;, [&amp;] {</span></a>
 <a name="43"><span class="lineNum">      43 </span><span class="lineCov">         11 :         test1();</span></a>
 <a name="44"><span class="lineNum">      44 </span><span class="lineCov">         11 :     });</span></a>

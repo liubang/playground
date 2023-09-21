@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2023-09-18 16:10:17</td>
+            <td class="headerValue">2023-09-21 17:45:34</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">5</td>
@@ -73,7 +73,7 @@
 <a name="11"><span class="lineNum">      11 </span>            : #include &lt;iostream&gt;</a>
 <a name="12"><span class="lineNum">      12 </span>            : #include &lt;string&gt;</a>
 <a name="13"><span class="lineNum">      13 </span>            : </a>
-<a name="14"><span class="lineNum">      14 </span><span class="lineCov">          1 : void download(const std::string &amp;file) {</span></a>
+<a name="14"><span class="lineNum">      14 </span><span class="lineCov">          1 : void download(const std::string&amp; file) {</span></a>
 <a name="15"><span class="lineNum">      15 </span><span class="lineCov">         11 :     for (int i = 0; i &lt; 10; ++i) {</span></a>
 <a name="16"><span class="lineNum">      16 </span><span class="lineCov">         10 :         std::cout &lt;&lt; &quot;Downloading &quot; &lt;&lt; file &lt;&lt; &quot; (&quot; &lt;&lt; i * 10 &lt;&lt; &quot;%)...&quot; &lt;&lt; std::endl;</span></a>
 <a name="17"><span class="lineNum">      17 </span><span class="lineCov">         10 :         std::this_thread::sleep_for(std::chrono::milliseconds(400));</span></a>
@@ -87,7 +87,7 @@
 <a name="25"><span class="lineNum">      25 </span><span class="lineCov">          1 :     std::cout &lt;&lt; &quot;Hi, &quot; &lt;&lt; name &lt;&lt; std::endl;</span></a>
 <a name="26"><span class="lineNum">      26 </span><span class="lineCov">          1 : }</span></a>
 <a name="27"><span class="lineNum">      27 </span>            : </a>
-<a name="28"><span class="lineNum">      28 </span><span class="lineCov">          1 : int main(int argc, char *argv[]) {</span></a>
+<a name="28"><span class="lineNum">      28 </span><span class="lineCov">          1 : int main(int argc, char* argv[]) {</span></a>
 <a name="29"><span class="lineNum">      29 </span><span class="lineCov">          1 :     tbb::parallel_invoke(</span></a>
 <a name="30"><span class="lineNum">      30 </span><span class="lineCov">          1 :         [&amp;] {</span></a>
 <a name="31"><span class="lineNum">      31 </span><span class="lineCov">          1 :             download(&quot;hello.zip&quot;);</span></a>
