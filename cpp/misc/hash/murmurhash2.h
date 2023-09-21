@@ -28,27 +28,27 @@ public:
     ~CMurmurHash() = default;
 
     void begin(const T seed = 0) {
-        size_  = 0;
-        tail_  = 0;
+        size_ = 0;
+        tail_ = 0;
         count_ = 0;
-        hash_  = seed;
+        hash_ = seed;
     }
 
     void __attribute__((no_sanitize("alignment")))
     add(const void* const data, const T length, const bool lower_case) {
         const auto* data1 = static_cast<const uint8_t*>(data);
-        T data_size       = length;
+        T data_size = length;
 
         size_ += data_size;
         process_tail(data1, data_size, lower_case);
 
         auto data2 = reinterpret_cast<const T*>(data1);
-        auto stop  = data2 + (data_size >> _shift);
+        auto stop = data2 + (data_size >> _shift);
 
         if (lower_case) {
             while (data2 != stop) {
                 T k = *data2++;
-                k   = std::tolower(k);
+                k = std::tolower(k);
                 mmix(hash_, k);
             }
         } else {
@@ -101,19 +101,19 @@ private:
             length--;
             if (count_ == sizeof(T)) {
                 mmix(hash_, tail_);
-                tail_  = 0;
+                tail_ = 0;
                 count_ = 0;
             }
         }
     }
 
 private:
-    static constexpr T _mask  = sizeof(T) - 1;
+    static constexpr T _mask = sizeof(T) - 1;
     static constexpr T _shift = (sizeof(T) == 4 ? 2 : 3);
-    T size_                   = 0;
-    T tail_                   = 0;
-    T count_                  = 0;
-    T hash_                   = 0;
+    T size_ = 0;
+    T tail_ = 0;
+    T count_ = 0;
+    T hash_ = 0;
 };
 
 using CMurmurHash32 = CMurmurHash<uint32_t, 0x5bd1e995, 24, 13, 15>;

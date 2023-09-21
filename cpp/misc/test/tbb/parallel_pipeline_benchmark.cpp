@@ -57,7 +57,7 @@ constexpr size_t n = 1 << 6;
 
 static void test1() {
     std::vector<Data> datas(n);
-    for (auto &data : datas) {
+    for (auto& data : datas) {
         data.step1();
         data.step2();
         data.step3();
@@ -67,7 +67,7 @@ static void test1() {
 
 static void test2() {
     std::vector<Data> datas(n);
-    tbb::parallel_for_each(datas.begin(), datas.end(), [&](Data &data) {
+    tbb::parallel_for_each(datas.begin(), datas.end(), [&](Data& data) {
         data.step1();
         data.step2();
         data.step3();
@@ -77,19 +77,19 @@ static void test2() {
 
 static void test3() {
     std::vector<Data> datas(n);
-    tbb::parallel_for_each(datas.begin(), datas.end(), [&](Data &data) {
+    tbb::parallel_for_each(datas.begin(), datas.end(), [&](Data& data) {
         data.step1();
     });
 
-    tbb::parallel_for_each(datas.begin(), datas.end(), [&](Data &data) {
+    tbb::parallel_for_each(datas.begin(), datas.end(), [&](Data& data) {
         data.step2();
     });
 
-    tbb::parallel_for_each(datas.begin(), datas.end(), [&](Data &data) {
+    tbb::parallel_for_each(datas.begin(), datas.end(), [&](Data& data) {
         data.step3();
     });
 
-    tbb::parallel_for_each(datas.begin(), datas.end(), [&](Data &data) {
+    tbb::parallel_for_each(datas.begin(), datas.end(), [&](Data& data) {
         data.step4();
     });
 }
@@ -99,36 +99,36 @@ static void test4() {
     auto it = datas.begin();
     tbb::parallel_pipeline(
         16,
-        tbb::make_filter<void, Data *>(tbb::filter_mode::serial_in_order,
-                                       [&](tbb::flow_control &fc) -> Data * {
-                                           if (it == datas.end()) {
-                                               fc.stop();
-                                               return nullptr;
-                                           }
-                                           return &*it++;
+        tbb::make_filter<void, Data*>(tbb::filter_mode::serial_in_order,
+                                      [&](tbb::flow_control& fc) -> Data* {
+                                          if (it == datas.end()) {
+                                              fc.stop();
+                                              return nullptr;
+                                          }
+                                          return &*it++;
+                                      }),
+        tbb::make_filter<Data*, Data*>(tbb::filter_mode::parallel,
+                                       [&](Data* data) -> Data* {
+                                           data->step1();
+                                           return data;
                                        }),
-        tbb::make_filter<Data *, Data *>(tbb::filter_mode::parallel,
-                                         [&](Data *data) -> Data * {
-                                             data->step1();
-                                             return data;
-                                         }),
-        tbb::make_filter<Data *, Data *>(tbb::filter_mode::parallel,
-                                         [&](Data *data) -> Data * {
-                                             data->step2();
-                                             return data;
-                                         }),
-        tbb::make_filter<Data *, Data *>(tbb::filter_mode::parallel,
-                                         [&](Data *data) -> Data * {
-                                             data->step3();
-                                             return data;
-                                         }),
-        tbb::make_filter<Data *, void>(tbb::filter_mode::parallel, [&](Data *data) -> Data * {
+        tbb::make_filter<Data*, Data*>(tbb::filter_mode::parallel,
+                                       [&](Data* data) -> Data* {
+                                           data->step2();
+                                           return data;
+                                       }),
+        tbb::make_filter<Data*, Data*>(tbb::filter_mode::parallel,
+                                       [&](Data* data) -> Data* {
+                                           data->step3();
+                                           return data;
+                                       }),
+        tbb::make_filter<Data*, void>(tbb::filter_mode::parallel, [&](Data* data) -> Data* {
             data->step4();
             return data;
         }));
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     // put your code here
     ankerl::nanobench::Bench().run("test1", [&] {
         test1();

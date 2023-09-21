@@ -17,7 +17,7 @@ namespace pl {
 
 template <typename Fn> class ScopeGuard {
 public:
-    ScopeGuard(Fn &&fn) : fn_(std::move(fn)) {}
+    ScopeGuard(Fn&& fn) : fn_(std::move(fn)) {}
     ~ScopeGuard() {
         if (enabled_)
             fn_();
@@ -34,7 +34,7 @@ namespace detail {
 
 enum class ScopeGuardOnExit {};
 template <typename Fn>
-inline ScopeGuard<typename std::decay<Fn>::type> operator+(detail::ScopeGuardOnExit, Fn &&fn) {
+inline ScopeGuard<typename std::decay<Fn>::type> operator+(detail::ScopeGuardOnExit, Fn&& fn) {
     return ScopeGuard<Fn>(std::forward<Fn>(fn));
 }
 

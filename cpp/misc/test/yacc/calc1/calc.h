@@ -2,8 +2,8 @@
 
 #include <stdio.h>
 
-void yyerror(char *s, ...);
+void yyerror(char* s, ...);
 
 extern int yylineno;
-extern FILE *yyin;
+extern FILE* yyin;
 extern int yylex(void);

@@ -24,7 +24,7 @@ TEST(Binary, constructor) {
     EXPECT_STREQ(b3.data(), "hello");
     EXPECT_EQ(5, b3.size());
 
-    const char *cs = "hello";
+    const char* cs = "hello";
     pl::Binary b4(cs);
     EXPECT_STREQ(b4.data(), "hello");
     EXPECT_EQ(5, b4.size());

@@ -17,21 +17,13 @@ static std::string identifier_str;
 static double num_val;
 static int cur_tok;
 
-const std::string& identifier_string() {
-    return identifier_str;
-}
+const std::string& identifier_string() { return identifier_str; }
 
-int curtok() {
-    return cur_tok;
-}
+int curtok() { return cur_tok; }
 
-double get_num_val() {
-    return num_val;
-}
+double get_num_val() { return num_val; }
 
-int get_next_token() {
-    return cur_tok = gettok();
-}
+int get_next_token() { return cur_tok = gettok(); }
 
 int gettok() {
     static int last_char = ' ';
@@ -83,7 +75,7 @@ int gettok() {
     }
 
     int this_char = last_char;
-    last_char     = getchar();
+    last_char = getchar();
     return this_char;
 }
 

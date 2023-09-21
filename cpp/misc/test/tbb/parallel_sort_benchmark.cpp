@@ -21,7 +21,7 @@ static void test1() {
     tbb::parallel_sort(arr.begin(), arr.end(), std::less<int>{});
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     ankerl::nanobench::Bench().run("test1", [&] {
         test1();
     });

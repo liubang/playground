@@ -44,8 +44,8 @@ char bufs[BUFFERS_COUNT][MAX_MESSAGE_LEN] = {{0}};
 
 int32_t group_id = 1337;
 void add_accept(
-    io_uring *ring, __u32 fd, sockaddr *client_addr, socklen_t *client_len, unsigned flags) {
-    io_uring_sqe *sqe = io_uring_get_sqe(ring);
+    io_uring* ring, __u32 fd, sockaddr* client_addr, socklen_t* client_len, unsigned flags) {
+    io_uring_sqe* sqe = io_uring_get_sqe(ring);
     io_uring_prep_accept(sqe, fd, client_addr, client_len, 0);
     io_uring_sqe_set_flags(sqe, flags);
 
@@ -56,8 +56,8 @@ void add_accept(
     memcpy(&sqe->user_data, &conn_i, sizeof(conn_i));
 }
 
-void add_socket_read(io_uring *ring, __u32 fd, unsigned gid, size_t message_size, unsigned flags) {
-    io_uring_sqe *sqe = io_uring_get_sqe(ring);
+void add_socket_read(io_uring* ring, __u32 fd, unsigned gid, size_t message_size, unsigned flags) {
+    io_uring_sqe* sqe = io_uring_get_sqe(ring);
     io_uring_prep_recv(sqe, fd, nullptr, message_size, 0);
     io_uring_sqe_set_flags(sqe, flags);
     sqe->buf_group = gid;
@@ -69,8 +69,8 @@ void add_socket_read(io_uring *ring, __u32 fd, unsigned gid, size_t message_size
     memcpy(&sqe->user_data, &conn_i, sizeof(conn_i));
 }
 
-void add_socket_write(io_uring *ring, __u32 fd, __u16 bid, size_t message_size, unsigned flags) {
-    io_uring_sqe *sqe = io_uring_get_sqe(ring);
+void add_socket_write(io_uring* ring, __u32 fd, __u16 bid, size_t message_size, unsigned flags) {
+    io_uring_sqe* sqe = io_uring_get_sqe(ring);
     io_uring_prep_send(sqe, fd, &bufs[bid], message_size, 0);
     io_uring_sqe_set_flags(sqe, flags);
 
@@ -82,8 +82,8 @@ void add_socket_write(io_uring *ring, __u32 fd, __u16 bid, size_t message_size, 
     memcpy(&sqe->user_data, &conn_i, sizeof(conn_i));
 }
 
-void add_provide_buf(io_uring *ring, __u16 bid, unsigned gid) {
-    io_uring_sqe *sqe = io_uring_get_sqe(ring);
+void add_provide_buf(io_uring* ring, __u16 bid, unsigned gid) {
+    io_uring_sqe* sqe = io_uring_get_sqe(ring);
     io_uring_prep_provide_buffers(sqe, bufs[bid], MAX_MESSAGE_LEN, 1, gid, bid);
 
     ConnInfo conn_i = {
@@ -95,7 +95,7 @@ void add_provide_buf(io_uring *ring, __u16 bid, unsigned gid) {
 
 } // namespace pl::misc::liburing
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     if (argc < 2) {
         ::printf("Please give a port number: ./%s [port]\n", argv[0]);
         return 0;
@@ -114,7 +114,7 @@ int main(int argc, char *argv[]) {
     serv_addr.sin_port = htons(portno);
     serv_addr.sin_addr.s_addr = INADDR_ANY;
 
-    if (bind(sock_listen_fd, (sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+    if (bind(sock_listen_fd, (sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
         ::perror("Error binding socket...\n");
         return 1;
     }
@@ -139,7 +139,7 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
-    io_uring_probe *probe;
+    io_uring_probe* probe;
     probe = io_uring_get_probe_ring(&ring);
     if ((probe == nullptr) || (io_uring_opcode_supported(probe, IORING_OP_PROVIDE_BUFFERS) == 0)) {
         ::printf("Buffer select not supported, skipping...\n");
@@ -147,8 +147,8 @@ int main(int argc, char *argv[]) {
     }
     free(probe);
 
-    io_uring_sqe *sqe;
-    io_uring_cqe *cqe;
+    io_uring_sqe* sqe;
+    io_uring_cqe* cqe;
 
     sqe = io_uring_get_sqe(&ring);
     io_uring_prep_provide_buffers(
@@ -163,11 +163,11 @@ int main(int argc, char *argv[]) {
     }
     io_uring_cqe_seen(&ring, cqe);
 
-    pl::misc::liburing::add_accept(&ring, sock_listen_fd, (sockaddr *)&client_addr, &client_len, 0);
+    pl::misc::liburing::add_accept(&ring, sock_listen_fd, (sockaddr*)&client_addr, &client_len, 0);
 
     for (;;) {
         io_uring_submit_and_wait(&ring, 1);
-        io_uring_cqe *cqe;
+        io_uring_cqe* cqe;
         unsigned head;
         unsigned count = 0;
 
@@ -195,7 +195,7 @@ int main(int argc, char *argv[]) {
                         &ring, sock_conn_fd, pl::misc::liburing::group_id,
                         pl::misc::liburing::MAX_MESSAGE_LEN, IOSQE_BUFFER_SELECT);
                 }
-                pl::misc::liburing::add_accept(&ring, sock_listen_fd, (sockaddr *)&client_addr,
+                pl::misc::liburing::add_accept(&ring, sock_listen_fd, (sockaddr*)&client_addr,
                                                &client_len, 0);
             } else if (type == pl::misc::liburing::Status::READ) {
                 size_t bytes_read = cqe->res;
@@ -222,7 +222,7 @@ int main(int argc, char *argv[]) {
 #else
 #include <iostream>
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     std::cout << "unsupported platform\n" << std::flush;
     return 0;
 }
