@@ -18,7 +18,7 @@
 
 TEST(sstable_builder, build) {
     constexpr int COUNT = 10001;
-    auto* options       = new pl::Options();
+    auto* options = new pl::Options();
     pl::FsWriter* writer;
     auto* fs = pl::Fs::getInstance();
     fs->newFsWriter("/tmp/test.sst", &writer);

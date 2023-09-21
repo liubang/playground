@@ -12,7 +12,7 @@
 
 namespace pl {
 
-constexpr int BLOCK_SIZE   = 4096;
+constexpr int BLOCK_SIZE = 4096;
 constexpr int POINTER_SIZE = 8;
 
 Arena::Arena() : alloc_ptr_(nullptr), alloc_bytes_remaining_(0), memory_usage_(0) {}
@@ -28,8 +28,8 @@ char* Arena::allocate_aligned(std::size_t bytes) {
     static_assert((align & (align - 1)) == 0, "Pointer size should be power of 2");
 
     std::size_t current_mod = reinterpret_cast<uintptr_t>(alloc_ptr_) & (align - 1);
-    std::size_t slop        = (current_mod == 0 ? 0 : align - current_mod);
-    std::size_t needed      = bytes + slop;
+    std::size_t slop = (current_mod == 0 ? 0 : align - current_mod);
+    std::size_t needed = bytes + slop;
     char* result;
     if (needed <= alloc_bytes_remaining_) {
         result = alloc_ptr_ + slop;
@@ -50,7 +50,7 @@ char* Arena::allocate_fallback(std::size_t bytes) {
         return result;
     }
 
-    alloc_ptr_             = allocate_new_block(BLOCK_SIZE);
+    alloc_ptr_ = allocate_new_block(BLOCK_SIZE);
     alloc_bytes_remaining_ = BLOCK_SIZE;
 
     char* result = alloc_ptr_;

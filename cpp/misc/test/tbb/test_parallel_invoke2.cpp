@@ -11,7 +11,7 @@
 #include <iostream>
 #include <string>
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     std::string s = "hello world";
     char ch = 'd';
     tbb::parallel_invoke(

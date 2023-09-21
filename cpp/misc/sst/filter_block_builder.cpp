@@ -15,7 +15,7 @@
 
 namespace pl {
 
-static const size_t kFilterBaseLg        = 11;
+static const size_t kFilterBaseLg = 11;
 constexpr static std::size_t kFilterBase = 1 << kFilterBaseLg; // 2048
 
 FilterBlockBuilder::FilterBlockBuilder(const FilterPolicy* policy) : filter_policy_(policy) {}
@@ -64,8 +64,8 @@ void FilterBlockBuilder::genFilter() {
     tmp_keys_.resize(num_keys);
     for (std::size_t i = 0; i < num_keys; i++) {
         const char* base = keys_.data() + start_[i];
-        std::size_t len  = start_[i + 1] - start_[i];
-        tmp_keys_[i]     = Binary(base, len);
+        std::size_t len = start_[i + 1] - start_[i];
+        tmp_keys_[i] = Binary(base, len);
     }
     filter_offsets_.push_back(result_.size());
     filter_policy_->createFilter(&tmp_keys_[0], static_cast<int>(num_keys), &result_);

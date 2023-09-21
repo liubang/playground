@@ -5,7 +5,7 @@
 #include <random>
 #include <thread>
 
-int main(int, char **) {
+int main(int, char**) {
     uint64_t x = 1;
     ankerl::nanobench::Bench().run("x += x", [&]() {
         ankerl::nanobench::doNotOptimizeAway(x += x);

@@ -16,7 +16,9 @@ TEST(tools, scope) {
     {
         ++i;
 
-        SCOPE_EXIT { i--; };
+        SCOPE_EXIT {
+            i--;
+        };
 
         EXPECT_EQ(1, i);
     }

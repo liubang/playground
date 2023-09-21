@@ -15,7 +15,7 @@ namespace pl {
 
 Block::Block(const BlockContents& content)
     : data_(content.data.data()), size_(content.data.size()), owned_(content.heap_allocated) {
-    num_restarts_                = decodeInt<uint32_t>(data_ + size_ - 4);
+    num_restarts_ = decodeInt<uint32_t>(data_ + size_ - 4);
     std::size_t max_num_restarts = (size_ - 4) / 4;
     if (num_restarts_ > max_num_restarts) {
         // invalid block
@@ -46,8 +46,8 @@ public:
     [[nodiscard]] Status status() const override { return status_; }
 
     void seek(const Binary& target) override {
-        uint32_t left           = 0;
-        uint32_t right          = num_restarts_ - 1;
+        uint32_t left = 0;
+        uint32_t right = num_restarts_ - 1;
         int current_key_compare = 0;
         if (valid()) {
             current_key_compare = compare(key_, target);
@@ -62,14 +62,14 @@ public:
 
         // binary search
         while (left < right) {
-            uint32_t mid    = (left + right + 1) / 2;
+            uint32_t mid = (left + right + 1) / 2;
             uint32_t offset = getRestartOffset(mid);
             uint32_t shared, non_shared, value_size;
             const char* key_ptr =
                 decodeEntry(data_ + offset, data_ + restarts_, &shared, &non_shared, &value_size);
             if (nullptr == key_ptr || (shared != 0)) {
-                status_          = Status::NewCorruption("invalid entry in block");
-                current_         = restarts_;
+                status_ = Status::NewCorruption("invalid entry in block");
+                current_ = restarts_;
                 current_restart_ = num_restarts_;
                 key_.clear();
                 val_.clear();
@@ -114,7 +114,7 @@ public:
         const uint32_t old = current_;
         while (getRestartOffset(current_restart_) >= old) {
             if (current_restart_ == 0) {
-                current_         = restarts_;
+                current_ = restarts_;
                 current_restart_ = num_restarts_;
                 return;
             }
@@ -141,8 +141,8 @@ private:
     void seekToRestartPoint(uint32_t idx) {
         key_.clear();
         current_restart_ = idx;
-        uint32_t offset  = getRestartOffset(idx);
-        val_             = Binary(data_ + offset, 0);
+        uint32_t offset = getRestartOffset(idx);
+        val_ = Binary(data_ + offset, 0);
     }
 
     [[nodiscard]] inline uint32_t nextEntryOffset() const {
@@ -150,11 +150,11 @@ private:
     }
 
     bool parseNextKeyVal() {
-        current_          = nextEntryOffset();
-        const char* p     = data_ + current_;
+        current_ = nextEntryOffset();
+        const char* p = data_ + current_;
         const char* limit = data_ + restarts_;
         if (p >= limit) {
-            current_         = restarts_;
+            current_ = restarts_;
             current_restart_ = num_restarts_;
             return false;
         }
@@ -182,7 +182,7 @@ private:
         constexpr std::size_t s = sizeof(uint32_t);
         if (p + 3 > limit)
             return nullptr;
-        *shared     = pl::decodeInt<uint32_t>(p);
+        *shared = pl::decodeInt<uint32_t>(p);
         *non_shared = pl::decodeInt<uint32_t>(p + s);
         *value_size = pl::decodeInt<uint32_t>(p + s * 2);
         p += s * 3;

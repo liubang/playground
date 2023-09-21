@@ -24,7 +24,7 @@ concept FuncWithNonVoidRet =
 
 template <typename Fn>
     requires FuncWithVoidRet<Fn>
-auto measure(Fn &&fn) {
+auto measure(Fn&& fn) {
     static_assert(std::is_invocable_v<std::decay_t<Fn>>);
     static_assert(std::is_void_v<std::invoke_result_t<Fn>>);
     auto start = std::chrono::high_resolution_clock::now();
@@ -36,7 +36,7 @@ auto measure(Fn &&fn) {
 
 template <typename Fn>
     requires FuncWithNonVoidRet<Fn>
-auto measure(Fn &&fn) {
+auto measure(Fn&& fn) {
     static_assert(std::is_invocable_v<std::decay_t<Fn>>);
     static_assert(!std::is_void_v<std::invoke_result_t<Fn>>);
     auto start = std::chrono::high_resolution_clock::now();

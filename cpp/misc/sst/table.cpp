@@ -67,7 +67,7 @@ void Table::readMeta(const Footer& footer) {
         return;
     }
 
-    auto meta  = std::make_unique<Block>(contents);
+    auto meta = std::make_unique<Block>(contents);
     auto* iter = meta->iterator(options_->comparator);
 
     std::string key = "filter.";

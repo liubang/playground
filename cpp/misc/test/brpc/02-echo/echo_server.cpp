@@ -23,7 +23,7 @@ DEFINE_int32(idle_timeout_s,
              "Connection will be closed if there is no "
              "read/write operations during the last `idle_timeout_s'");
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     // Parse gflags. We recommend you to use gflags as well.
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 

@@ -10,7 +10,7 @@
 #include <map>
 #include <string>
 
-auto main(int argc, char *argv[]) -> int {
+auto main(int argc, char* argv[]) -> int {
     {
         std::map<std::string, std::string> mmp;
         mmp["A"] = "A";
@@ -19,7 +19,7 @@ auto main(int argc, char *argv[]) -> int {
         mmp["F"] = "F";
         mmp["H"] = "H";
 
-        for (auto &[name, nn] : mmp) {
+        for (auto& [name, nn] : mmp) {
             std::cout << name << " ==> " << nn << "\n";
         }
 
@@ -36,7 +36,7 @@ auto main(int argc, char *argv[]) -> int {
         mmp["F"] = "F";
         mmp["H"] = "H";
 
-        for (auto &[name, nn] : mmp) {
+        for (auto& [name, nn] : mmp) {
             std::cout << name << " ==> " << nn << "\n";
         }
 

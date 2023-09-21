@@ -19,7 +19,7 @@ namespace pl {
 class Iterator {
 public:
     Iterator();
-    Iterator(const Iterator&)            = delete;
+    Iterator(const Iterator&) = delete;
     Iterator& operator=(const Iterator&) = delete;
 
     virtual ~Iterator();

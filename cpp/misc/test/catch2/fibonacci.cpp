@@ -12,19 +12,11 @@ TEST_CASE("Fibonacci") {
     // some more asserts..
 
     // now let's benchmark:
-    BENCHMARK("Fibonacci 20") {
-        return Fibonacci(20);
-    };
+    BENCHMARK("Fibonacci 20") { return Fibonacci(20); };
 
-    BENCHMARK("Fibonacci 25") {
-        return Fibonacci(25);
-    };
+    BENCHMARK("Fibonacci 25") { return Fibonacci(25); };
 
-    BENCHMARK("Fibonacci 30") {
-        return Fibonacci(30);
-    };
+    BENCHMARK("Fibonacci 30") { return Fibonacci(30); };
 
-    BENCHMARK("Fibonacci 35") {
-        return Fibonacci(35);
-    };
+    BENCHMARK("Fibonacci 35") { return Fibonacci(35); };
 }

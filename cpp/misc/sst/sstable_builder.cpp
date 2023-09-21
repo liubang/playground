@@ -71,7 +71,7 @@ void SSTableBuilder::flush() {
     if (ok()) {
         // 复位标记，下次开始一个新的block
         pending_index_entry_ = true;
-        status_              = writer_->flush();
+        status_ = writer_->flush();
     }
     if (filter_block_ != nullptr) {
         filter_block_->startBlock(offset_);
@@ -137,7 +137,7 @@ void SSTableBuilder::writeBlockRaw(const Binary& content,
     if (ok()) {
         // crc
         char trailer[kBlockTrailerSize];
-        trailer[0]   = static_cast<unsigned char>(type);
+        trailer[0] = static_cast<unsigned char>(type);
         uint32_t crc = crc32(content.data(), content.size());
         std::string encode_crc;
         encodeInt<uint32_t>(&encode_crc, crc);

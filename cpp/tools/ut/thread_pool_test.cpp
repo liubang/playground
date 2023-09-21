@@ -29,7 +29,7 @@ TEST(thread_pool, thread_pool) {
         }));
     }
 
-    for (auto &result : results) {
+    for (auto& result : results) {
         std::pair<int, int> pair = result.get();
         EXPECT_EQ(pair.first, pair.second);
     }

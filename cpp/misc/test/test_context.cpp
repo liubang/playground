@@ -33,7 +33,7 @@ void func2() {
 }
 } // namespace
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     char func1_stack[16384];
     char func2_stack[16384];
     if (::getcontext(&uctx_func1) == -1)
@@ -64,7 +64,7 @@ int main(int argc, char *argv[]) {
 #else
 #include <iostream>
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     std::cout << "unsupported system.\n" << std::flush;
     return 0;
 }
