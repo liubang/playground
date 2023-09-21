@@ -17,11 +17,8 @@ namespace pl {
 class Block {
 public:
     explicit Block(const BlockContents& content);
-
     Block(const Block&) = delete;
-
     Block& operator=(const Block&) = delete;
-
     ~Block();
 
     Iterator* iterator(const Comparator* comparator);

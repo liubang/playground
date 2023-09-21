@@ -67,7 +67,7 @@ static void test2() {
     std::cout << res << std::endl;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     ankerl::nanobench::Bench().run("test1", [&] {
         test1();
     });

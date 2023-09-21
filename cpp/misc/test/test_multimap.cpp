@@ -1,7 +1,7 @@
 #include <iostream>
 #include <map>
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     std::multimap<std::string, std::string> multimap;
 
     multimap.insert(std::make_pair("hello", "world"));
@@ -9,7 +9,7 @@ int main(int argc, char *argv[]) {
     multimap.insert(std::make_pair("hello", "world2"));
     multimap.insert(std::make_pair("hello", "world3"));
 
-    for (const auto &pair : multimap) {
+    for (const auto& pair : multimap) {
         std::cout << pair.first << ": " << pair.second << '\n';
     }
 

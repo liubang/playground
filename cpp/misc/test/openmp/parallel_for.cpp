@@ -34,7 +34,7 @@ static void test2() {
     ankerl::nanobench::doNotOptimizeAway(a);
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     // put your code here
     ankerl::nanobench::Bench().run("test1", [&] {
         test1();

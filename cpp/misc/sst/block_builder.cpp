@@ -16,12 +16,12 @@
 
 namespace pl {
 
-BlockBuilder::BlockBuilder(const Options *options)
+BlockBuilder::BlockBuilder(const Options* options)
     : comparator_(options->comparator), block_restart_interval_(options->block_restart_interval) {
     restarts_.push_back(0);
 }
 
-void BlockBuilder::add(const Binary &key, const Binary &value) {
+void BlockBuilder::add(const Binary& key, const Binary& value) {
     assert(!finished_);
     auto last_key_pice = Binary(last_key_);
     // 必须保证key按照指定的comparator的递增的顺序
