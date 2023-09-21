@@ -24,8 +24,6 @@ Iterator::~Iterator() {
     }
 }
 
-void Iterator::registerCleanup(const CleanupFunc& func) {
-    cleanup_funcs_.push_back(func);
-}
+void Iterator::registerCleanup(const CleanupFunc& func) { cleanup_funcs_.push_back(func); }
 
 } // namespace pl

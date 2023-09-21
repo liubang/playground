@@ -19,13 +19,9 @@ namespace pl {
 class BloomFilter final {
 public:
     explicit BloomFilter(std::size_t bit_per_key);
-
     BloomFilter(const BloomFilter&) = delete;
-
     BloomFilter(const BloomFilter&&) = delete;
-
     BloomFilter& operator=(const BloomFilter&) = delete;
-
     BloomFilter& operator=(const BloomFilter&&) = delete;
 
     // lookup if bloomfilter contains data

@@ -72,9 +72,7 @@ TEST(block_builder, test) {
     auto* itr = b.iterator(nullptr);
     // absl::Cleanup cleanup1 = [&]() { delete itr; };
 
-    SCOPE_EXIT {
-        delete itr;
-    };
+    SCOPE_EXIT { delete itr; };
 
     itr->first();
     while (itr->valid()) {

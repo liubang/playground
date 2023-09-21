@@ -10,11 +10,11 @@
 
 #include <brpc/controller.h>
 
-void pl::brpc::EchoServiceImpl::Echo(::google::protobuf::RpcController *cntl_base,
-                                     const ::pl::brpc::EchoRequest *request,
-                                     ::pl::brpc::EchoResponse *response,
-                                     ::google::protobuf::Closure *done) {
+void pl::brpc::EchoServiceImpl::Echo(::google::protobuf::RpcController* cntl_base,
+                                     const ::pl::brpc::EchoRequest* request,
+                                     ::pl::brpc::EchoResponse* response,
+                                     ::google::protobuf::Closure* done) {
     ::brpc::ClosureGuard done_guard(done);
-    [[__maybe_unused__]] auto *cntl = static_cast<::brpc::Controller *>(cntl_base);
+    [[__maybe_unused__]] auto* cntl = static_cast<::brpc::Controller*>(cntl_base);
     response->set_message(request->message());
 }

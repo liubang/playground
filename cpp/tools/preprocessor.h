@@ -10,7 +10,7 @@
 #pragma once
 
 #define PL_CONCATENATE_IMPL(s1, s2) s1##s2
-#define PL_CONCATENATE(s1, s2) PL_CONCATENATE_IMPL(s1, s2)
+#define PL_CONCATENATE(s1, s2)      PL_CONCATENATE_IMPL(s1, s2)
 
 #ifdef __COUNTER__
 #define PL_ANONYMOUS_VARIABLE(str) PL_CONCATENATE(str, __COUNTER__)

@@ -6,9 +6,9 @@
 #include "cpp/tools/random.h"
 #include "cpp/tools/scope.h"
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     // put your code here
-    auto *options = new pl::Options();
+    auto* options = new pl::Options();
 
     SCOPE_EXIT {
         delete options->comparator;
@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
 
     auto block = block_builder.finish();
     // try to parse
-    const char *data = block.data();
+    const char* data = block.data();
     std::size_t size = block.size();
     auto restart_count = pl::decodeInt<uint32_t>(&data[size - 4]);
 
