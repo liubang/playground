@@ -26,3 +26,14 @@ cc_library(
     linkopts = DEFAULT_LINKOPTS,
     visibility = ["//visibility:public"],
 )
+
+cc_binary(
+    name = "kaleidoscope",
+    srcs = ["main.cpp"],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":kaleidoscope_lib",
+    ],
+)
