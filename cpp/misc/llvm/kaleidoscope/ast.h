@@ -6,6 +6,7 @@
 // Last Modified: 2023/09/17 23:26
 //
 //=====================================================================
+#pragma once
 
 #include <memory>
 #include <string>
@@ -84,21 +85,21 @@ private:
     std::unique_ptr<ExprAST> body_;
 };
 
-std::unique_ptr<ExprAST> log_error(const char* str) {
-    ::fprintf(stderr, "Error: %s\n", str);
-    return nullptr;
-}
-
-std::unique_ptr<PrototypeAST> log_error_p(const char* str) {
-    log_error(str);
-    return nullptr;
-}
-
 std::unique_ptr<ExprAST> parse_number_expr();
 std::unique_ptr<ExprAST> parse_paren_expr();
 std::unique_ptr<ExprAST> parse_expression();
 std::unique_ptr<ExprAST> parse_identifier_expr();
 std::unique_ptr<ExprAST> parse_primary();
 std::unique_ptr<ExprAST> parse_bin_op_rhs(int expr_prec, std::unique_ptr<ExprAST> lhs);
+std::unique_ptr<PrototypeAST> parse_prototype();
+std::unique_ptr<FunctionAST> parse_definition();
+std::unique_ptr<FunctionAST> parse_top_level_expr();
+std::unique_ptr<PrototypeAST> parse_extern();
+
+void handle_definition();
+void handle_extern();
+void handle_top_level_expression();
+
+void run();
 
 } // namespace pl::llvm
