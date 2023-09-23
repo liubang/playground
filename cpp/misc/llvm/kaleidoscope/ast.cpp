@@ -19,7 +19,7 @@ static std::map<char, int> binop_precedence = {
     {'*', 40},
 };
 
-int get_tok_precedence() {
+static int get_tok_precedence() {
     if (isascii(curtok()) == 0) {
         return -1;
     }
@@ -28,6 +28,16 @@ int get_tok_precedence() {
         return -1;
     }
     return tok_prec;
+}
+
+static std::unique_ptr<ExprAST> log_error(const char* str) {
+    ::fprintf(stderr, "Error: %s\n", str);
+    return nullptr;
+}
+
+static std::unique_ptr<PrototypeAST> log_error_p(const char* str) {
+    log_error(str);
+    return nullptr;
 }
 
 // numberexpr ::= number
@@ -130,6 +140,100 @@ std::unique_ptr<ExprAST> parse_bin_op_rhs(int expr_prec, std::unique_ptr<ExprAST
             }
         }
         lhs = std::make_unique<BinaryExprAST>(bin_op, std::move(lhs), std::move(rhs));
+    }
+}
+
+// prototype
+//   ::= id '(' id* ')'
+std::unique_ptr<PrototypeAST> parse_prototype() {
+    if (curtok() != tok_identifier) {
+        return log_error_p("Expected function name in prototype");
+    }
+    std::string func_name = identifier_string();
+    get_next_token();
+    if (curtok() != '(') {
+        return log_error_p("Expected '(' in prototype");
+    }
+    std::vector<std::string> arg_names;
+    while (get_next_token() == tok_identifier) {
+        arg_names.push_back(identifier_string());
+    }
+    // success
+    get_next_token();
+    return std::make_unique<PrototypeAST>(func_name, std::move(arg_names));
+}
+
+// definition ::= 'def' prototype expression
+std::unique_ptr<FunctionAST> parse_definition() {
+    get_next_token();
+    auto proto = parse_prototype();
+    if (!proto) {
+        return nullptr;
+    }
+    if (auto e = parse_expression()) {
+        return std::make_unique<FunctionAST>(std::move(proto), std::move(e));
+    }
+    return nullptr;
+}
+
+// toplevelexpr ::= expression
+std::unique_ptr<FunctionAST> parse_top_level_expr() {
+    if (auto e = parse_expression()) {
+        auto proto = std::make_unique<PrototypeAST>("__anon_expr", std::vector<std::string>());
+        return std::make_unique<FunctionAST>(std::move(proto), std::move(e));
+    }
+    return nullptr;
+}
+
+// external ::= 'extern' prototype
+std::unique_ptr<PrototypeAST> parse_extern() {
+    get_next_token();
+    return parse_prototype();
+}
+
+void handle_definition() {
+    if (parse_definition()) {
+        fprintf(stderr, "parsed a function definition.\n");
+    } else {
+        get_next_token();
+    }
+}
+
+void handle_extern() {
+    if (parse_extern()) {
+        fprintf(stderr, "parsed an extern.\n");
+    } else {
+        get_next_token();
+    }
+}
+
+void handle_top_level_expression() {
+    if (parse_top_level_expr()) {
+        fprintf(stderr, "parsed a top-level expr.\n");
+    } else {
+        get_next_token();
+    }
+}
+
+void run() {
+    for (;;) {
+        fprintf(stderr, "ready> ");
+        switch (curtok()) {
+        case tok_eof:
+            return;
+        case ';':
+            get_next_token();
+            break;
+        case tok_def:
+            handle_definition();
+            break;
+        case tok_extern:
+            handle_extern();
+            break;
+        default:
+            handle_top_level_expression();
+            break;
+        }
     }
 }
 
