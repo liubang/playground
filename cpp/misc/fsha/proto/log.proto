@@ -1,0 +1,6 @@
+package pl.fsha.log.proto;
+
+message CheckPointMeta {
+    uint32 serial_id = 1;
+    uint64 next_mrsn = 2;
+}
