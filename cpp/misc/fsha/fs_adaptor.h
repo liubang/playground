@@ -6,7 +6,6 @@
 // Last Modified: 2023/09/28 14:02
 //
 //=====================================================================
-
 #pragma once
 
 #include <ctime>
@@ -16,8 +15,8 @@
 
 namespace pl {
 
-constexpr static uint32_t FS_WRITE = 1 << 0;
-constexpr static uint32_t FS_TRUNC = 1 << 1;
+constexpr static uint32_t FS_WRITE  = 1 << 0;
+constexpr static uint32_t FS_TRUNC  = 1 << 1;
 constexpr static uint32_t FS_DIRECT = 1 << 2;
 
 enum class FsType {
@@ -41,7 +40,6 @@ public:
     virtual int clear() = 0;
     virtual int close() = 0;
     virtual int sync() { return 0; }
-
     std::string get_name() const { return filename_; }
 
 protected:
@@ -65,23 +63,19 @@ class FsAdaptor {
 public:
     FsAdaptor() = default;
     virtual ~FsAdaptor() = default;
-    virtual FsType fs_type() const = 0;
 
+    virtual FsType type() const = 0;
     virtual std::unique_ptr<FileAdaptor> open(const std::string& filename, uint32_t flag) = 0;
     virtual int close(std::unique_ptr<FileAdaptor> file) = 0;
-
     virtual std::unique_ptr<FileAdaptor> create(const std::string& filename, uint32_t flag) = 0;
     virtual int unlink(const std::string& filename) = 0;
-
     virtual int stat(const std::string& filename, FileStatus* status) = 0;
     virtual ssize_t size(const std::string& filename) = 0;
     virtual bool is_file(const std::string& filename) = 0;
     virtual bool is_dir(const std::string& dir) = 0;
-
     virtual int rename(const std::string& oldname, const std::string& newname) = 0;
     virtual int mkdir(const std::string& filepath) = 0;
     virtual int rmdir(const std::string& filename, bool recursive = false) = 0;
-
     virtual std::unique_ptr<DirAdaptor> opendir(const std::string& dir) = 0;
     virtual int closedir(std::unique_ptr<DirAdaptor> dir) = 0;
 };
