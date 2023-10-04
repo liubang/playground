@@ -1,3 +1,5 @@
+syntax = "proto3";
+
 package pl.fsha.log.proto;
 
 message CheckPointMeta {
