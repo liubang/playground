@@ -4,7 +4,7 @@
 
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-  <title>LCOV - _coverage_report.dat - misc/hash/murmurhash2_test.cpp</title>
+  <title>LCOV - _coverage_report.dat - tools/ut/demangle_test.cpp</title>
   <link rel="stylesheet" type="text/css" href="../../gcov.css">
 </head>
 
@@ -19,7 +19,7 @@
         <table cellpadding=1 border=0 width="100%">
           <tr>
             <td width="10%" class="headerItem">Current view:</td>
-            <td width="35%" class="headerValue"><a href="../../index.html">top level</a> - <a href="index.html">misc/hash</a> - murmurhash2_test.cpp<span style="font-size: 80%;"> (source / <a href="murmurhash2_test.cpp.func-sort-c.html">functions</a>)</span></td>
+            <td width="35%" class="headerValue"><a href="../../index.html">top level</a> - <a href="index.html">tools/ut</a> - demangle_test.cpp<span style="font-size: 80%;"> (source / <a href="demangle_test.cpp.func-sort-c.html">functions</a>)</span></td>
             <td width="5%"></td>
             <td width="15%"></td>
             <td width="10%" class="headerCovTableHead">Hit</td>
@@ -31,8 +31,8 @@
             <td class="headerValue">_coverage_report.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntry">10</td>
-            <td class="headerCovTableEntry">10</td>
+            <td class="headerCovTableEntry">6</td>
+            <td class="headerCovTableEntry">6</td>
             <td class="headerCovTableEntryHi">100.0 %</td>
           </tr>
           <tr>
@@ -40,8 +40,8 @@
             <td class="headerValue">2023-10-06 16:52:40</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntry">4</td>
-            <td class="headerCovTableEntry">4</td>
+            <td class="headerCovTableEntry">1</td>
+            <td class="headerCovTableEntry">1</td>
             <td class="headerCovTableEntryHi">100.0 %</td>
           </tr>
           <tr><td><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
@@ -62,28 +62,29 @@
 <pre class="source">
 <a name="1"><span class="lineNum">       1 </span>            : //=====================================================================</a>
 <a name="2"><span class="lineNum">       2 </span>            : //</a>
-<a name="3"><span class="lineNum">       3 </span>            : // murmurhash2_test.cc -</a>
+<a name="3"><span class="lineNum">       3 </span>            : // demangle_test.cpp -</a>
 <a name="4"><span class="lineNum">       4 </span>            : //</a>
-<a name="5"><span class="lineNum">       5 </span>            : // Created by liubang on 2023/05/21 22:42</a>
-<a name="6"><span class="lineNum">       6 </span>            : // Last Modified: 2023/05/21 22:42</a>
+<a name="5"><span class="lineNum">       5 </span>            : // Created by liubang on 2023/10/06 23:16</a>
+<a name="6"><span class="lineNum">       6 </span>            : // Last Modified: 2023/10/06 23:16</a>
 <a name="7"><span class="lineNum">       7 </span>            : //</a>
 <a name="8"><span class="lineNum">       8 </span>            : //=====================================================================</a>
-<a name="9"><span class="lineNum">       9 </span>            : #include &quot;cpp/misc/hash/murmurhash2.h&quot;</a>
-<a name="10"><span class="lineNum">      10 </span>            : </a>
-<a name="11"><span class="lineNum">      11 </span>            : #include &lt;gtest/gtest.h&gt;</a>
-<a name="12"><span class="lineNum">      12 </span>            : </a>
-<a name="13"><span class="lineNum">      13 </span><span class="lineCov">          4 : TEST(hash, murmurhash2_test) {</span></a>
-<a name="14"><span class="lineNum">      14 </span><span class="lineCov">          1 :     const char* data = &quot;hello world&quot;;</span></a>
-<a name="15"><span class="lineNum">      15 </span><span class="lineCov">          1 :     uint64_t seed = 0;</span></a>
-<a name="16"><span class="lineNum">      16 </span><span class="lineCov">          1 :     pl::CMurmurHash64 hasher;</span></a>
-<a name="17"><span class="lineNum">      17 </span><span class="lineCov">          5 :     for (uint32_t i = 0; i &lt; 4; ++i) {</span></a>
-<a name="18"><span class="lineNum">      18 </span><span class="lineCov">          4 :         hasher.begin(seed);</span></a>
-<a name="19"><span class="lineNum">      19 </span><span class="lineCov">          4 :         hasher.add(data, strlen(data), false);</span></a>
-<a name="20"><span class="lineNum">      20 </span><span class="lineCov">          4 :         seed = hasher.end();</span></a>
-<a name="21"><span class="lineNum">      21 </span>            :     }</a>
-<a name="22"><span class="lineNum">      22 </span>            : </a>
-<a name="23"><span class="lineNum">      23 </span><span class="lineCov">          1 :     EXPECT_NE(0, seed);</span></a>
-<a name="24"><span class="lineNum">      24 </span><span class="lineCov">          1 : }</span></a>
+<a name="9"><span class="lineNum">       9 </span>            : #include &quot;cpp/meta/utils.h&quot;</a>
+<a name="10"><span class="lineNum">      10 </span>            : #include &quot;cpp/tools/demangle.h&quot;</a>
+<a name="11"><span class="lineNum">      11 </span>            : </a>
+<a name="12"><span class="lineNum">      12 </span><span class="lineCov">          1 : int main(int argc, char* argv[]) {</span></a>
+<a name="13"><span class="lineNum">      13 </span>            :     {</a>
+<a name="14"><span class="lineNum">      14 </span>            :         int t;</a>
+<a name="15"><span class="lineNum">      15 </span><span class="lineCov">          1 :         const int&amp; s = t;</span></a>
+<a name="16"><span class="lineNum">      16 </span><span class="lineCov">          1 :         pl::print(pl::demangle&lt;decltype(s)&gt;());</span></a>
+<a name="17"><span class="lineNum">      17 </span>            :     }</a>
+<a name="18"><span class="lineNum">      18 </span>            : </a>
+<a name="19"><span class="lineNum">      19 </span>            :     {</a>
+<a name="20"><span class="lineNum">      20 </span><span class="lineCov">          1 :         int* const s = nullptr;</span></a>
+<a name="21"><span class="lineNum">      21 </span><span class="lineCov">          1 :         pl::print(pl::demangle&lt;decltype(s)&gt;());</span></a>
+<a name="22"><span class="lineNum">      22 </span>            :     }</a>
+<a name="23"><span class="lineNum">      23 </span>            : </a>
+<a name="24"><span class="lineNum">      24 </span><span class="lineCov">          1 :     return 0;</span></a>
+<a name="25"><span class="lineNum">      25 </span>            : }</a>
 </pre>
       </td>
     </tr>
