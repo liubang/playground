@@ -91,3 +91,14 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "demangle_test",
+    srcs = ["demangle_test.cpp"],
+    copts = ["-std=c++20"] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        "//cpp/meta",
+        "//cpp/tools",
+    ],
+)
