@@ -20,27 +20,27 @@ public:
     virtual ~FilterPolicy();
 
     /**
-     * @brief [TODO:description]
+     * @brief description]
      *
-     * @param keys [TODO:parameter]
-     * @param n [TODO:parameter]
-     * @param dst [TODO:parameter]
+     * @param keys parameter]
+     * @param n parameter]
+     * @param dst parameter]
      */
     virtual void createFilter(Binary* keys, std::size_t n, std::string* dst) const = 0;
 
     /**
-     * @brief [TODO:description]
+     * @brief description]
      *
-     * @return [TODO:return]
+     * @return return]
      */
     [[nodiscard]] virtual const char* name() const = 0;
 
     /**
-     * @brief [TODO:description]
+     * @brief description]
      *
-     * @param key [TODO:parameter]
-     * @param filter [TODO:parameter]
-     * @return [TODO:return]
+     * @param key parameter]
+     * @param filter parameter]
+     * @return return]
      */
     [[nodiscard]] virtual bool keyMayMatch(const Binary& key, const Binary& filter) const = 0;
 };

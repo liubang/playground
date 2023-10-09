@@ -20,7 +20,7 @@ namespace pl {
 /**
  * @brief 构造多维数组
  *
- * @tparam T [TODO:tparam]
+ * @tparam T
  */
 template <typename T, std::size_t I, std::size_t... Is> struct Array {
     using type = std::array<typename Array<T, Is...>::type, I>;
@@ -29,7 +29,7 @@ template <typename T, std::size_t I, std::size_t... Is> struct Array {
 /**
  * @brief 边界处理
  *
- * @tparam T [TODO:tparam]
+ * @tparam T
  */
 template <typename T, std::size_t I> struct Array<T, I> {
     using type = std::array<T, I>;
@@ -40,8 +40,8 @@ template <typename T, std::size_t I> struct Array<T, I> {
 /**
  * @brief 打印
  *
- * @tparam Args [TODO:tparam]
- * @param args [TODO:parameter]
+ * @tparam Args
+ * @param args
  */
 template <typename... Args> void print(const Args&... args) {
     ((std::cout << args << std::endl), ...);
@@ -57,7 +57,7 @@ template <TL In, template <typename> class F> struct Map;
 /**
  * @brief 元函数的实现
  *
- * @tparam Ts [TODO:tparam]
+ * @tparam Ts
  */
 template <template <typename> class F, typename... Ts>
 struct Map<TypeList<Ts...>, F> : TypeList<typename F<Ts>::type...> {};

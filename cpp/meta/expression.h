@@ -48,7 +48,7 @@ BinaryContainerExpression(T, U, OP) -> BinaryContainerExpression<T, U, OP>;
 /**
  * @brief 判断一个类型是否为容器
  *
- * @tparam T [TODO:tparam]
+ * @tparam T
  */
 template <typename T, typename = void> constexpr bool is_container_v = false;
 
@@ -65,11 +65,11 @@ constexpr bool is_container_v<BinaryContainerExpression<T, U, OP>> = true;
 /**
  * @brief 重载operator+，这里必须在namespace外面定义
  *
- * @tparam T [TODO:tparam]
- * @tparam U [TODO:tparam]
- * @param lhs [TODO:parameter]
- * @param rhs [TODO:parameter]
- * @return [TODO:return]
+ * @tparam T
+ * @tparam U
+ * @param lhs
+ * @param rhs
+ * @return
  */
 template <typename T,
           typename U,
