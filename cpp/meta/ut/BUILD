@@ -85,3 +85,14 @@ cc_test(
         "@catch2//:catch2_main",
     ],
 )
+
+cc_test(
+    name = "function_test",
+    srcs = ["function_test.cpp"],
+    copts = ["-std=c++20"] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        "//cpp/meta",
+        "@catch2//:catch2_main",
+    ],
+)
