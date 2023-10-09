@@ -46,20 +46,24 @@ template <typename Iterator>
 void advanceImpl(Iterator& iter,
                  typename iterator_traits<Iterator>::difference_type n,
                  input_iterator_tag) {
-    for (; n > 0; --n)
+    for (; n > 0; --n) {
         ++iter;
+    }
 }
 
 template <typename Iterator>
 void advanceImpl(Iterator& iter,
                  typename iterator_traits<Iterator>::difference_type n,
                  bidirectional_iterator_tag) {
-    if (n >= 0)
-        for (; n > 0; --n)
+    if (n >= 0) {
+        for (; n > 0; --n) {
             ++iter;
-    else
-        for (; n < 0; ++n)
+        }
+    } else {
+        for (; n < 0; ++n) {
             --iter;
+        }
+    }
 }
 
 template <typename Iterator>

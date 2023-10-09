@@ -78,7 +78,7 @@ template <typename...> using void_t = void;
 /**
  * @brief 判断一个类型中是否存在type这个成员
  *
- * @tparam T [TODO:tparam]
+ * @tparam T
  */
 template <typename T, typename = void> struct HasTypeMember : std::false_type {};
 
@@ -87,7 +87,7 @@ template <typename T> struct HasTypeMember<T, void_t<typename T::type>> : std::t
 /**
  * @brief 判断一个类型中是否存在Init成员函数
  *
- * @tparam T [TODO:tparam]
+ * @tparam T
  */
 template <typename T, typename = void> struct HasInit : std::false_type {};
 
