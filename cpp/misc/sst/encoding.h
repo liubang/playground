@@ -17,11 +17,11 @@
 namespace pl {
 
 /**
- * @brief [TODO:description]
+ * @brief
  *
- * @tparam T [TODO:tparam]
- * @param dst [TODO:parameter]
- * @param value [TODO:parameter]
+ * @tparam T
+ * @param dst
+ * @param value
  */
 template <typename T,
           typename std::enable_if<std::is_integral<T>::value && !std::is_same<T, bool>::value,
@@ -33,11 +33,11 @@ void encodeInt(std::string* dst, T value) {
 }
 
 /**
- * @brief [TODO:description]
+ * @brief
  *
- * @tparam T [TODO:tparam]
- * @param input [TODO:parameter]
- * @return [TODO:return]
+ * @tparam T
+ * @param input
+ * @return
  */
 template <typename T,
           typename std::enable_if<std::is_integral<T>::value && !std::is_same<T, bool>::value,
