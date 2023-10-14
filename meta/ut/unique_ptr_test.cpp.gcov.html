@@ -4,7 +4,7 @@
 
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-  <title>LCOV - _coverage_report.dat - misc/sst/options.cpp</title>
+  <title>LCOV - _coverage_report.dat - meta/ut/unique_ptr_test.cpp</title>
   <link rel="stylesheet" type="text/css" href="../../gcov.css">
 </head>
 
@@ -19,7 +19,7 @@
         <table cellpadding=1 border=0 width="100%">
           <tr>
             <td width="10%" class="headerItem">Current view:</td>
-            <td width="35%" class="headerValue"><a href="../../index.html">top level</a> - <a href="index.html">misc/sst</a> - options.cpp<span style="font-size: 80%;"> (source / <a href="options.cpp.func-sort-c.html">functions</a>)</span></td>
+            <td width="35%" class="headerValue"><a href="../../index.html">top level</a> - <a href="index.html">meta/ut</a> - unique_ptr_test.cpp<span style="font-size: 80%;"> (source / <a href="unique_ptr_test.cpp.func-sort-c.html">functions</a>)</span></td>
             <td width="5%"></td>
             <td width="15%"></td>
             <td width="10%" class="headerCovTableHead">Hit</td>
@@ -31,8 +31,8 @@
             <td class="headerValue">_coverage_report.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntry">2</td>
-            <td class="headerCovTableEntry">2</td>
+            <td class="headerCovTableEntry">8</td>
+            <td class="headerCovTableEntry">8</td>
             <td class="headerCovTableEntryHi">100.0 %</td>
           </tr>
           <tr>
@@ -62,23 +62,26 @@
 <pre class="source">
 <a name="1"><span class="lineNum">       1 </span>            : //=====================================================================</a>
 <a name="2"><span class="lineNum">       2 </span>            : //</a>
-<a name="3"><span class="lineNum">       3 </span>            : // options.cpp -</a>
+<a name="3"><span class="lineNum">       3 </span>            : // unique_ptr_test.cpp -</a>
 <a name="4"><span class="lineNum">       4 </span>            : //</a>
-<a name="5"><span class="lineNum">       5 </span>            : // Created by liubang on 2023/06/01 14:29</a>
-<a name="6"><span class="lineNum">       6 </span>            : // Last Modified: 2023/06/01 14:29</a>
+<a name="5"><span class="lineNum">       5 </span>            : // Created by liubang on 2023/10/15 01:07</a>
+<a name="6"><span class="lineNum">       6 </span>            : // Last Modified: 2023/10/15 01:07</a>
 <a name="7"><span class="lineNum">       7 </span>            : //</a>
 <a name="8"><span class="lineNum">       8 </span>            : //=====================================================================</a>
-<a name="9"><span class="lineNum">       9 </span>            : </a>
-<a name="10"><span class="lineNum">      10 </span>            : #include &quot;cpp/misc/sst/options.h&quot;</a>
-<a name="11"><span class="lineNum">      11 </span>            : #include &quot;cpp/misc/sst/comparator.h&quot;</a>
-<a name="12"><span class="lineNum">      12 </span>            : #include &quot;cpp/misc/sst/filter_policy.h&quot;</a>
-<a name="13"><span class="lineNum">      13 </span>            : </a>
-<a name="14"><span class="lineNum">      14 </span>            : namespace pl {</a>
-<a name="15"><span class="lineNum">      15 </span>            : </a>
-<a name="16"><span class="lineNum">      16 </span><span class="lineCov">          3 : Options::Options()</span></a>
-<a name="17"><span class="lineNum">      17 </span><span class="lineCov">          3 :     : comparator(bytewiseComparator()), filter_policy(newBloomFilterPolicy(bits_per_key)) {}</span></a>
+<a name="9"><span class="lineNum">       9 </span>            : #include &quot;cpp/meta/unique_ptr.h&quot;</a>
+<a name="10"><span class="lineNum">      10 </span>            : #include &lt;catch2/catch_test_macros.hpp&gt;</a>
+<a name="11"><span class="lineNum">      11 </span>            : #include &lt;string&gt;</a>
+<a name="12"><span class="lineNum">      12 </span>            : </a>
+<a name="13"><span class="lineNum">      13 </span><span class="lineCov">          1 : TEST_CASE(&quot;meta&quot;, &quot;[unique_ptr]&quot;) {</span></a>
+<a name="14"><span class="lineNum">      14 </span><span class="lineCov">          1 :     auto str_ptr = pl::make_unique&lt;std::string&gt;(&quot;hello&quot;);</span></a>
+<a name="15"><span class="lineNum">      15 </span><span class="lineCov">          1 :     str_ptr-&gt;append(&quot; world&quot;);</span></a>
+<a name="16"><span class="lineNum">      16 </span>            : </a>
+<a name="17"><span class="lineNum">      17 </span><span class="lineCov">          1 :     REQUIRE(*(str_ptr.get()) == &quot;hello world&quot;);</span></a>
 <a name="18"><span class="lineNum">      18 </span>            : </a>
-<a name="19"><span class="lineNum">      19 </span>            : } // namespace pl</a>
+<a name="19"><span class="lineNum">      19 </span><span class="lineCov">          1 :     auto str_ptr2 = std::move(str_ptr);</span></a>
+<a name="20"><span class="lineNum">      20 </span><span class="lineCov">          1 :     REQUIRE(*(str_ptr2.get()) == &quot;hello world&quot;);</span></a>
+<a name="21"><span class="lineNum">      21 </span><span class="lineCov">          1 :     REQUIRE(str_ptr.get() == nullptr);</span></a>
+<a name="22"><span class="lineNum">      22 </span><span class="lineCov">          1 : }</span></a>
 </pre>
       </td>
     </tr>
