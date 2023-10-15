@@ -146,3 +146,10 @@ cc_test(
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
 )
+
+cc_test(
+    name = "test_template_lazy",
+    srcs = ["test_template_lazy.cpp"],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+)
