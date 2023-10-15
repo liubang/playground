@@ -4,7 +4,7 @@
 
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-  <title>LCOV - _coverage_report.dat - tools/ut/scope_test.cpp</title>
+  <title>LCOV - _coverage_report.dat - features/cpp17/test_fold_exp.cpp</title>
   <link rel="stylesheet" type="text/css" href="../../gcov.css">
 </head>
 
@@ -19,7 +19,7 @@
         <table cellpadding=1 border=0 width="100%">
           <tr>
             <td width="10%" class="headerItem">Current view:</td>
-            <td width="35%" class="headerValue"><a href="../../index.html">top level</a> - <a href="index.html">tools/ut</a> - scope_test.cpp<span style="font-size: 80%;"> (source / <a href="scope_test.cpp.func-sort-c.html">functions</a>)</span></td>
+            <td width="35%" class="headerValue"><a href="../../index.html">top level</a> - <a href="index.html">features/cpp17</a> - test_fold_exp.cpp<span style="font-size: 80%;"> (source / <a href="test_fold_exp.cpp.func-sort-c.html">functions</a>)</span></td>
             <td width="5%"></td>
             <td width="15%"></td>
             <td width="10%" class="headerCovTableHead">Hit</td>
@@ -40,8 +40,8 @@
             <td class="headerValue">2023-10-15 08:52:42</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntry">5</td>
-            <td class="headerCovTableEntry">5</td>
+            <td class="headerCovTableEntry">4</td>
+            <td class="headerCovTableEntry">4</td>
             <td class="headerCovTableEntryHi">100.0 %</td>
           </tr>
           <tr><td><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
@@ -62,31 +62,31 @@
 <pre class="source">
 <a name="1"><span class="lineNum">       1 </span>            : //=====================================================================</a>
 <a name="2"><span class="lineNum">       2 </span>            : //</a>
-<a name="3"><span class="lineNum">       3 </span>            : // scope_test.cpp -</a>
+<a name="3"><span class="lineNum">       3 </span>            : // test_fold_exp.cpp -</a>
 <a name="4"><span class="lineNum">       4 </span>            : //</a>
-<a name="5"><span class="lineNum">       5 </span>            : // Created by liubang on 2023/06/08 15:02</a>
-<a name="6"><span class="lineNum">       6 </span>            : // Last Modified: 2023/06/08 15:02</a>
+<a name="5"><span class="lineNum">       5 </span>            : // Created by liubang on 2023/10/15 15:19</a>
+<a name="6"><span class="lineNum">       6 </span>            : // Last Modified: 2023/10/15 15:19</a>
 <a name="7"><span class="lineNum">       7 </span>            : //</a>
 <a name="8"><span class="lineNum">       8 </span>            : //=====================================================================</a>
 <a name="9"><span class="lineNum">       9 </span>            : </a>
-<a name="10"><span class="lineNum">      10 </span>            : #include &quot;cpp/tools/scope.h&quot;</a>
-<a name="11"><span class="lineNum">      11 </span>            : #include &lt;gtest/gtest.h&gt;</a>
+<a name="10"><span class="lineNum">      10 </span>            : #include &lt;cstdio&gt;</a>
+<a name="11"><span class="lineNum">      11 </span>            : #include &lt;iostream&gt;</a>
 <a name="12"><span class="lineNum">      12 </span>            : </a>
-<a name="13"><span class="lineNum">      13 </span><span class="lineCov">          4 : TEST(tools, scope) {</span></a>
-<a name="14"><span class="lineNum">      14 </span>            :     static int i = 0;</a>
-<a name="15"><span class="lineNum">      15 </span>            : </a>
-<a name="16"><span class="lineNum">      16 </span>            :     {</a>
-<a name="17"><span class="lineNum">      17 </span><span class="lineCov">          1 :         ++i;</span></a>
-<a name="18"><span class="lineNum">      18 </span>            : </a>
-<a name="19"><span class="lineNum">      19 </span><span class="lineCov">          1 :         SCOPE_EXIT {</span></a>
-<a name="20"><span class="lineNum">      20 </span><span class="lineCov">          1 :             i--;</span></a>
-<a name="21"><span class="lineNum">      21 </span><span class="lineCov">          2 :         };</span></a>
-<a name="22"><span class="lineNum">      22 </span>            : </a>
-<a name="23"><span class="lineNum">      23 </span><span class="lineCov">          1 :         EXPECT_EQ(1, i);</span></a>
-<a name="24"><span class="lineNum">      24 </span><span class="lineCov">          1 :     }</span></a>
+<a name="13"><span class="lineNum">      13 </span><span class="lineCov">          3 : template &lt;typename... Ts&gt; auto func(Ts... ts) {</span></a>
+<a name="14"><span class="lineNum">      14 </span>            :     // print number of parameters</a>
+<a name="15"><span class="lineNum">      15 </span><span class="lineCov">          3 :     std::cout &lt;&lt; sizeof...(ts) &lt;&lt; std::endl;</span></a>
+<a name="16"><span class="lineNum">      16 </span>            :     // print each parameter</a>
+<a name="17"><span class="lineNum">      17 </span><span class="lineCov">          2 :     (printf(&quot;%d\n&quot;, ts), ...);</span></a>
+<a name="18"><span class="lineNum">      18 </span><span class="lineCov">          3 :     return (0 + ... + ts);</span></a>
+<a name="19"><span class="lineNum">      19 </span>            : }</a>
+<a name="20"><span class="lineNum">      20 </span>            : </a>
+<a name="21"><span class="lineNum">      21 </span><span class="lineCov">          1 : int main(int argc, char* argv[]) {</span></a>
+<a name="22"><span class="lineNum">      22 </span><span class="lineCov">          1 :     std::cout &lt;&lt; func() &lt;&lt; &quot;\n&quot;;</span></a>
+<a name="23"><span class="lineNum">      23 </span><span class="lineCov">          1 :     std::cout &lt;&lt; func(1, 2) &lt;&lt; &quot;\n&quot;;</span></a>
+<a name="24"><span class="lineNum">      24 </span><span class="lineCov">          1 :     std::cout &lt;&lt; func(1, 2, 3) &lt;&lt; &quot;\n&quot;;</span></a>
 <a name="25"><span class="lineNum">      25 </span>            : </a>
-<a name="26"><span class="lineNum">      26 </span><span class="lineCov">          1 :     EXPECT_EQ(0, i);</span></a>
-<a name="27"><span class="lineNum">      27 </span><span class="lineCov">          1 : }</span></a>
+<a name="26"><span class="lineNum">      26 </span><span class="lineCov">          1 :     return 0;</span></a>
+<a name="27"><span class="lineNum">      27 </span>            : }</a>
 </pre>
       </td>
     </tr>
