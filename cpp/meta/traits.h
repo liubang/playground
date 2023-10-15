@@ -94,4 +94,26 @@ template <typename T, typename = void> struct HasInit : std::false_type {};
 template <typename T>
 struct HasInit<T, void_t<decltype(std::declval<T>().Init())>> : std::true_type {};
 
+//-------------------------------------------------------------------------------------------------
+
+template <typename... Ts> struct common_type {};
+
+template <typename T> struct common_type<T> {
+    using type = T;
+};
+
+template <typename T, typename S> struct common_type<T, S> {
+    using type = decltype(0 ? std::declval<T>() : std::declval<S>());
+};
+
+template <typename T0, typename T1, typename... Ts> struct common_type<T0, T1, Ts...> {
+    using type = typename common_type<T0, typename common_type<T1, Ts...>::type>::type;
+};
+
+/**
+ * @brief 获取几个类型的公共类型
+ *
+ */
+template <typename... Ts> using common_type_t = typename common_type<Ts...>::type;
+
 } // namespace pl
