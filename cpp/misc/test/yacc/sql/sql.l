@@ -124,5 +124,14 @@ LIKE                { return LIKE; }
 LIMIT               { return LIMIT; }
 LINES               { return LINES; }
 LOAD                { return LOAD; }
+LOCALTIME           { return LOCALTIME; }
+LOCALTIMESTAMP      { return LOCALTIMESTAMP; }
+LOCK                { return LOCK; }
+LONG                { return LONG; }
+LONGBLOB            { return LONGBLOB; }
+LONGTEXT            { return LONGTEXT; }
+LOOP                { return LOOP; }
+LOW_PRIORITY        { return LOW_PRIORITY; }
+MATCH               { return MATCH; }
 
 %%
