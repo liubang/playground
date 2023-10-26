@@ -78,4 +78,45 @@ template <typename T, unsigned B> inline T signextend(const T x) {
     return __s.x = x;
 }
 
+/**
+ * @brief conditionally set or clear bits without branching
+ *
+ * @param bool f conditional flag
+ * @param unsigned int m the bit mask
+ * @param unsigned int w the word to modify: if (f) w |= m; else w &= ~m;
+ */
+inline unsigned int clear_bits_with_condition(bool f, unsigned int m, unsigned int w) {
+    w ^= (-static_cast<int>(f) ^ w) & m;
+    return w;
+}
+
+/**
+ * @brief counting bits set by lookup table
+ *
+ * @param unsigned int v count the number of bits set in 32-bit value v
+ * @return unsigned int c is the total bits set in v
+ */
+inline unsigned int count_bitset_by_table(unsigned int v) {
+    static const unsigned char bitsset_table256[256] = {
+#define B2(n) n, n + 1, n + 1, n + 2
+#define B4(n) B2(n), B2(n + 1), B2(n + 1), B2(n + 2)
+#define B6(n) B4(n), B4(n + 1), B4(n + 1), B4(n + 2)
+        B6(0), B6(1), B6(1), B6(2)};
+
+    unsigned int c;
+    auto* p = (unsigned char*)&v;
+    c = bitsset_table256[p[0]] + bitsset_table256[p[1]] + bitsset_table256[p[2]] +
+        bitsset_table256[p[3]];
+
+    return c;
+}
+
+inline unsigned int count_bitset(unsigned int v) {
+    unsigned int c;
+    for (c = 0; v != 0u; c++) {
+        v &= v - 1; // clear the least significant bit set
+    }
+    return c;
+}
+
 } // namespace pl
