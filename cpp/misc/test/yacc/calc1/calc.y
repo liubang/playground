@@ -21,7 +21,6 @@
 extern int Calclex(YYSTYPE* yylval, yyscan_t yyscanner, CalcParseResult* result);
 extern int Calcerror(yyscan_t scanner, CalcParseResult* result, const char* s);
 int yydebug=1;
-
 %}
 
 
