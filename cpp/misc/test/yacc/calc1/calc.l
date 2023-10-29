@@ -1,4 +1,3 @@
-%option noyywrap nodefault yylineno
 %{
 /*
  |------------------------------------------------------------------
@@ -12,10 +11,21 @@
  */
 
 #include <stdio.h>
-# include "calc.h"
+#include "calc.h"
 #include "calc_bison.h"
 
+#define YY_DECL int Calclex(YYSTYPE* yylval, yyscan_t yyscanner, CalcParseResult* result)
+
+int Calcerror(yyscan_t scanner, CalcParseResult* result, const char* s) {
+    result->is_error = 1;
+    return 1;
+}
+
+
 %}
+
+%option noyywrap nodefault yylineno reentrant
+%option prefix="Calc"
 
 %%
 
@@ -23,12 +33,12 @@
 "-"  return SUB;
 "*"  return MUL;
 "/"  return DIV;
-"\n" return CR;
+"="  return CR;
 
 ([1-9][0-9]*)|0|([0-9]+\.[0-9]+) {
 	double d;
 	sscanf(yytext, "%lf", &d);
-	yylval.double_value = d;
+	yylval->double_value = d;
 	return DOUBLE_LITERAL;
 }
 

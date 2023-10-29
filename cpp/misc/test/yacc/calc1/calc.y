@@ -12,11 +12,28 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "calc.h"
 
-#define YYDEBUG 1
+#define YY_DECL
+#include "calc_flex.h"
+#include "calc.h"
+#include "calc_bison.h"
+
+extern int Calclex(YYSTYPE* yylval, yyscan_t yyscanner, CalcParseResult* result);
+extern int Calcerror(yyscan_t scanner, CalcParseResult* result, const char* s);
+int yydebug=1;
 
 %}
+
+
+%defines
+%pure-parser
+%name_prefix="Calc"
+%error_verbose
+%verbose
+%lex-param {yyscan_t scanner}
+%lex-param {CalcParseResult* result}
+%parse-param {yyscan_t scanner}
+%parse-param {CalcParseResult* result}
 
 %union {
 	int	int_value;
@@ -36,7 +53,7 @@ line_list
 line
 	: expression CR
 	{
-		printf(">>%lf\n", $1);
+        result->ret = $1;
 	}
 ;
 expression
