@@ -1,15 +1,18 @@
-#include "calc.h"
-
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define NHASH 9997
-static struct symbol symtab[NHASH];
+#include "calc.h"
+#include "calc_flex.h"
 
-static unsigned symhash(char* sym) {
+extern int Calcparse(yyscan_t scanner, CalcResult* result);
+
+#define NHASH 9997
+static struct Symbol symtab[NHASH];
+
+static unsigned SymHash(char* sym) {
     unsigned int hash = 0;
     unsigned c;
     while ((c = *sym++))
@@ -17,8 +20,8 @@ static unsigned symhash(char* sym) {
     return hash;
 }
 
-struct symbol* lookup(char* sym) {
-    struct symbol* sp = &symtab[symhash(sym) % NHASH];
+struct Symbol* Lookup(CalcResult* result, char* sym) {
+    struct Symbol* sp = &symtab[SymHash(sym) % NHASH];
     int scount = NHASH;
     while (--scount >= 0) {
         if (sp->name && !strcmp(sp->name, sym)) {
@@ -36,14 +39,14 @@ struct symbol* lookup(char* sym) {
         if (++sp >= symtab + NHASH)
             sp = symtab;
     }
-    yyerror("symbol table overflow\n");
+    Calcerror("symbol table overflow", result, NULL);
     abort();
 }
 
-struct ast* newast(int nodetype, struct ast* l, struct ast* r) {
-    struct ast* a = malloc(sizeof(struct ast));
+struct Ast* NewAst(CalcResult* result, int nodetype, struct Ast* l, struct Ast* r) {
+    struct Ast* a = malloc(sizeof(struct Ast));
     if (!a) {
-        yyerror("out of space");
+        Calcerror("out of space", result, NULL);
         exit(0);
     }
     a->nodetype = nodetype;
@@ -52,21 +55,21 @@ struct ast* newast(int nodetype, struct ast* l, struct ast* r) {
     return a;
 }
 
-struct ast* newnum(double d) {
-    struct numval* a = malloc(sizeof(struct numval));
+struct Ast* NewNum(CalcResult* result, double d) {
+    struct NumVal* a = malloc(sizeof(struct NumVal));
     if (!a) {
-        yyerror("out of space");
+        Calcerror("out of space", result, NULL);
         exit(0);
     }
     a->nodetype = 'K';
     a->number = d;
-    return (struct ast*)a;
+    return (struct Ast*)a;
 }
 
-struct ast* newcmp(int cmptype, struct ast* l, struct ast* r) {
-    struct ast* a = malloc(sizeof(struct ast));
+struct Ast* NewCmp(CalcResult* result, int cmptype, struct Ast* l, struct Ast* r) {
+    struct Ast* a = malloc(sizeof(struct Ast));
     if (!a) {
-        yyerror("out of space");
+        Calcerror("out of space", result, NULL);
         exit(0);
     }
     a->nodetype = '0' + cmptype;
@@ -75,67 +78,68 @@ struct ast* newcmp(int cmptype, struct ast* l, struct ast* r) {
     return a;
 }
 
-struct ast* newfunc(int functype, struct ast* l) {
-    struct fncall* a = malloc(sizeof(struct fncall));
+struct Ast* NewFunc(CalcResult* result, int functype, struct Ast* l) {
+    struct FnCall* a = malloc(sizeof(struct FnCall));
     if (!a) {
-        yyerror("out of space");
+        Calcerror("out of space", result, NULL);
         exit(0);
     }
     a->nodetype = 'F';
     a->l = l;
     a->functype = functype;
-    return (struct ast*)a;
+    return (struct Ast*)a;
 }
 
-struct ast* newcall(struct symbol* s, struct ast* l) {
-    struct ufncall* a = malloc(sizeof(struct ufncall));
+struct Ast* NewCall(CalcResult* result, struct Symbol* s, struct Ast* l) {
+    struct UfnCall* a = malloc(sizeof(struct UfnCall));
     if (!a) {
-        yyerror("out of space");
+        Calcerror("out of space", result, NULL);
         exit(0);
     }
     a->nodetype = 'C';
     a->l = l;
     a->s = s;
-    return (struct ast*)a;
+    return (struct Ast*)a;
 }
 
-struct ast* newref(struct symbol* s) {
-    struct symref* a = malloc(sizeof(struct symref));
+struct Ast* NewRef(CalcResult* result, struct Symbol* s) {
+    struct SymRef* a = malloc(sizeof(struct SymRef));
     if (!a) {
-        yyerror("out of space");
+        Calcerror("out of space", result, NULL);
         exit(0);
     }
     a->nodetype = 'N';
     a->s = s;
-    return (struct ast*)a;
+    return (struct Ast*)a;
 }
 
-struct ast* newasgn(struct symbol* s, struct ast* v) {
-    struct symasgn* a = malloc(sizeof(struct symasgn));
+struct Ast* NewAssign(CalcResult* result, struct Symbol* s, struct Ast* v) {
+    struct SymAssign* a = malloc(sizeof(struct SymAssign));
     if (!a) {
-        yyerror("out of space");
+        Calcerror("out of space", result, NULL);
         exit(0);
     }
     a->nodetype = '=';
     a->s = s;
     a->v = v;
-    return (struct ast*)a;
+    return (struct Ast*)a;
 }
 
-struct ast* newflow(int nodetype, struct ast* cond, struct ast* tl, struct ast* el) {
-    struct flow* a = malloc(sizeof(struct flow));
+struct Ast*
+NewFlow(CalcResult* result, int nodetype, struct Ast* cond, struct Ast* tl, struct Ast* el) {
+    struct Flow* a = malloc(sizeof(struct Flow));
     if (!a) {
-        yyerror("out of space");
+        Calcerror("out of space", result, NULL);
         exit(0);
     }
     a->nodetype = nodetype;
     a->cond = cond;
     a->tl = tl;
     a->el = el;
-    return (struct ast*)a;
+    return (struct Ast*)a;
 }
 
-void treefree(struct ast* a) {
+void TreeFree(struct Ast* a) {
     switch (a->nodetype) {
     case '+':
     case '-':
@@ -148,25 +152,25 @@ void treefree(struct ast* a) {
     case '5':
     case '6':
     case 'L':
-        treefree(a->r);
+        TreeFree(a->r);
     case '|':
     case 'M':
     case 'C':
     case 'F':
-        treefree(a->l);
+        TreeFree(a->l);
     case 'K':
     case 'N':
         break;
     case '=':
-        free(((struct symasgn*)a)->v);
+        free(((struct SymAssign*)a)->v);
         break;
     case 'I':
     case 'W':
-        free(((struct flow*)a)->cond);
-        if (((struct flow*)a)->tl)
-            treefree(((struct flow*)a)->tl);
-        if (((struct flow*)a)->el)
-            treefree(((struct flow*)a)->el);
+        free(((struct Flow*)a)->cond);
+        if (((struct Flow*)a)->tl)
+            TreeFree(((struct Flow*)a)->tl);
+        if (((struct Flow*)a)->el)
+            TreeFree(((struct Flow*)a)->el);
         break;
     default:
         printf("internal error: free bad node %c\n", a->nodetype);
@@ -174,10 +178,10 @@ void treefree(struct ast* a) {
     free(a);
 }
 
-struct symlist* newsymlist(struct symbol* sym, struct symlist* next) {
-    struct symlist* sl = malloc(sizeof(struct symlist));
+struct SymList* NewSymList(CalcResult* result, struct Symbol* sym, struct SymList* next) {
+    struct SymList* sl = malloc(sizeof(struct SymList));
     if (!sl) {
-        yyerror("out of space");
+        Calcerror("out of space", result, NULL);
         exit(0);
     }
     sl->sym = sym;
@@ -185,8 +189,8 @@ struct symlist* newsymlist(struct symbol* sym, struct symlist* next) {
     return sl;
 }
 
-void symlistfree(struct symlist* sl) {
-    struct symlist* nsl;
+void SymListFree(struct SymList* sl) {
+    struct SymList* nsl;
 
     while (sl) {
         nsl = sl->next;
@@ -195,77 +199,77 @@ void symlistfree(struct symlist* sl) {
     }
 }
 
-static double callbuiltin(struct fncall*);
-static double calluser(struct ufncall*);
+static double callbuiltin(struct FnCall*);
+static double calluser(struct UfnCall*);
 
-double eval(struct ast* a) {
+double Eval(struct Ast* a) {
     double v = 0.0;
     if (!a) {
-        yyerror("internal error, null eval");
+        printf("internal error, null eval\n");
         return 0.0;
     }
 
     switch (a->nodetype) {
     /* constant */
     case 'K':
-        v = ((struct numval*)a)->number;
+        v = ((struct NumVal*)a)->number;
         break;
     /* symbol ref */
     case 'N':
-        v = ((struct symref*)a)->s->value;
+        v = ((struct SymRef*)a)->s->value;
         break;
     case '=':
-        v = ((struct symasgn*)a)->s->value = eval(((struct symasgn*)a)->v);
+        v = ((struct SymAssign*)a)->s->value = Eval(((struct SymAssign*)a)->v);
         break;
     /* expression */
     case '+':
-        v = eval(a->l) + eval(a->r);
+        v = Eval(a->l) + Eval(a->r);
         break;
     case '-':
-        v = eval(a->l) - eval(a->r);
+        v = Eval(a->l) - Eval(a->r);
         break;
     case '*':
-        v = eval(a->l) * eval(a->r);
+        v = Eval(a->l) * Eval(a->r);
         break;
     case '/':
-        v = eval(a->l) / eval(a->r);
+        v = Eval(a->l) / Eval(a->r);
         break;
     case '|':
-        v = fabs(eval(a->l));
+        v = fabs(Eval(a->l));
         break;
     case 'M':
-        v = -eval(a->l);
+        v = -Eval(a->l);
         break;
     /* comparisions */
     case '1':
-        v = (eval(a->l) > eval(a->r)) ? 1 : 0;
+        v = (Eval(a->l) > Eval(a->r)) ? 1 : 0;
         break;
     case '2':
-        v = (eval(a->l) < eval(a->r)) ? 1 : 0;
+        v = (Eval(a->l) < Eval(a->r)) ? 1 : 0;
         break;
     case '3':
-        v = (eval(a->l) != eval(a->r)) ? 1 : 0;
+        v = (Eval(a->l) != Eval(a->r)) ? 1 : 0;
         break;
     case '4':
-        v = (eval(a->l) == eval(a->r)) ? 1 : 0;
+        v = (Eval(a->l) == Eval(a->r)) ? 1 : 0;
         break;
     case '5':
-        v = (eval(a->l) >= eval(a->r)) ? 1 : 0;
+        v = (Eval(a->l) >= Eval(a->r)) ? 1 : 0;
         break;
     case '6':
-        v = (eval(a->l) <= eval(a->r)) ? 1 : 0;
+        v = (Eval(a->l) <= Eval(a->r)) ? 1 : 0;
         break;
     /* control flow */
     case 'I':
-        if (eval(((struct flow*)a)->cond) != 0) {
-            if (((struct flow*)a)->tl) {
-                v = eval(((struct flow*)a)->tl);
+        if (Eval(((struct Flow*)a)->cond) != 0) {
+            if (((struct Flow*)a)->tl) {
+                v = Eval(((struct Flow*)a)->tl);
             } else {
                 v = 0.0;
             }
         } else {
-            if (((struct flow*)a)->el) {
-                v = eval(((struct flow*)a)->el);
+            if (((struct Flow*)a)->el) {
+                v = Eval(((struct Flow*)a)->el);
             } else {
                 v = 0.0;
             }
@@ -273,21 +277,21 @@ double eval(struct ast* a) {
         break;
     case 'W':
         v = 0.0;
-        if (((struct flow*)a)->tl) {
-            while (eval(((struct flow*)a)->cond) != 0) {
-                v = eval(((struct flow*)a)->tl);
+        if (((struct Flow*)a)->tl) {
+            while (Eval(((struct Flow*)a)->cond) != 0) {
+                v = Eval(((struct Flow*)a)->tl);
             }
         }
         break;
     case 'L':
-        eval(a->l);
-        v = eval(a->r);
+        Eval(a->l);
+        v = Eval(a->r);
         break;
     case 'F':
-        v = callbuiltin((struct fncall*)a);
+        v = callbuiltin((struct FnCall*)a);
         break;
     case 'C':
-        v = calluser((struct ufncall*)a);
+        v = calluser((struct UfnCall*)a);
         break;
     default:
         printf("internal error: bad node %c\n", a->nodetype);
@@ -295,9 +299,9 @@ double eval(struct ast* a) {
     return v;
 }
 
-static double callbuiltin(struct fncall* f) {
-    enum bifs functype = f->functype;
-    double v = eval(f->l);
+static double callbuiltin(struct FnCall* f) {
+    enum Bifs functype = f->functype;
+    double v = Eval(f->l);
     switch (functype) {
     case B_sqrt:
         return sqrt(v);
@@ -309,30 +313,30 @@ static double callbuiltin(struct fncall* f) {
         printf("= %4.4g\n", v);
         return v;
     default:
-        yyerror("Unknown built-in function %d", functype);
+        printf("Unknown built-in function %d", functype);
         return 0.0;
     }
 }
 
-void dodef(struct symbol* name, struct symlist* syms, struct ast* func) {
+void DoDef(CalcResult* result, struct Symbol* name, struct SymList* syms, struct Ast* func) {
     if (name->syms)
-        symlistfree(name->syms);
+        SymListFree(name->syms);
     if (name->func)
-        treefree(name->func);
+        TreeFree(name->func);
     name->syms = syms;
     name->func = func;
 }
 
-static double calluser(struct ufncall* f) {
-    struct symbol* fn = f->s; /* function name */
-    struct symlist* sl;       /* dummy args */
-    struct ast* args = f->l;  /* real args */
+static double calluser(struct UfnCall* f) {
+    struct Symbol* fn = f->s; /* function name */
+    struct SymList* sl;       /* dummy args */
+    struct Ast* args = f->l;  /* real args */
     double *oldval, *newval;  /* saved arg values */
     double v;
     int nargs;
     int i;
     if (!fn->func) {
-        yyerror("call to undefined function", fn->name);
+        printf("call to undefined function %s", fn->name);
         return 0;
     }
     sl = fn->syms;
@@ -346,22 +350,22 @@ static double calluser(struct ufncall* f) {
             free(oldval);
         if (newval)
             free(newval);
-        yyerror("out of space in %s", fn->name);
+        printf("out of space in %s", fn->name);
         return 0.0;
     }
 
     for (i = 0; i < nargs; ++i) {
         if (!args) {
-            yyerror("too few args in call to %s", fn->name);
+            printf("too few args in call to %s", fn->name);
             free(oldval);
             free(newval);
             return 0.0;
         }
         if (args->nodetype == 'L') {
-            newval[i] = eval(args->l);
+            newval[i] = Eval(args->l);
             args = args->r;
         } else {
-            newval[i] = eval(args);
+            newval[i] = Eval(args);
             args = NULL;
         }
     }
@@ -369,18 +373,18 @@ static double calluser(struct ufncall* f) {
     sl = fn->syms;
 
     for (i = 0; i < nargs; ++i) {
-        struct symbol* s = sl->sym;
+        struct Symbol* s = sl->sym;
         oldval[i] = s->value;
         s->value = newval[i];
         sl = sl->next;
     }
 
     free(newval);
-    v = eval(fn->func);
+    v = Eval(fn->func);
 
     sl = fn->syms;
     for (i = 0; i < nargs; ++i) {
-        struct symbol* s = sl->sym;
+        struct Symbol* s = sl->sym;
         s->value = oldval[i];
         sl = sl->next;
     }
@@ -388,10 +392,38 @@ static double calluser(struct ufncall* f) {
     return v;
 }
 
-void yyerror(char* s, ...) {
-    va_list ap;
-    va_start(ap, s);
-    fprintf(stderr, "%d: error: ", yylineno);
-    vfprintf(stderr, s, ap);
-    fprintf(stderr, "\n");
+CalcResult* CalcParse(const char* sql) {
+    int ret = 0;
+    FILE* fin = fmemopen((void*)sql, strlen(sql), "r");
+    CalcResult* result = NewCalcResult();
+
+    yyscan_t scanner;
+    Calclex_init(&scanner);
+    Calcset_in(fin, scanner);
+    ret = Calcparse(scanner, result);
+    Calclex_destroy(scanner);
+    fclose(fin);
+    if (ret) {
+        printf("oops!!!\n");
+        result->is_error = 1;
+    }
+    return result;
+}
+
+CalcResult* NewCalcResult() {
+    CalcResult* result = (CalcResult*)malloc(sizeof(CalcResult));
+    result->error_msg = NULL;
+    return result;
+}
+
+void DestroyCalcResult(CalcResult* result) {
+    if (result) {
+        if (result->error_msg) {
+            free(result->error_msg);
+        }
+        if (result->ast) {
+            TreeFree(result->ast);
+        }
+        free(result);
+    }
 }
