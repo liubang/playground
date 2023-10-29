@@ -2,88 +2,92 @@
 
 #include <stdio.h>
 
-struct symbol {
+typedef struct CalcResult {
+    struct Ast* ast;
+    int is_error;
+    char* error_msg;
+} CalcResult;
+
+extern CalcResult* NewCalcResult();
+extern void DestroyCalcResult(CalcResult* result);
+extern CalcResult* CalcParse(const char* sql);
+
+struct Symbol {
     char* name;
     double value;
-    struct ast* func;     /* stmt for the function */
-    struct symlist* syms; /* list of dummy args */
+    struct Ast* func;     /* stmt for the function */
+    struct SymList* syms; /* list of dummy args */
 };
 
-struct symbol* lookup(char*);
+struct Symbol* Lookup(CalcResult*, char*);
 
-struct symlist {
-    struct symbol* sym;
-    struct symlist* next;
+struct SymList {
+    struct Symbol* sym;
+    struct SymList* next;
 };
 
-struct symlist* newsymlist(struct symbol* sym, struct symlist* next);
-void symlistfree(struct symlist* sl);
+struct SymList* NewSymList(CalcResult* result, struct Symbol* sym, struct SymList* next);
+void SymListFree(struct SymList* sl);
 
-enum bifs {
+enum Bifs {
     B_sqrt = 1,
     B_exp = 2,
     B_log = 3,
     B_print = 4,
 };
 
-struct ast {
+struct Ast {
     int nodetype;
-    struct ast* l;
-    struct ast* r;
+    struct Ast* l;
+    struct Ast* r;
 };
 
-struct fncall {
+struct FnCall {
     int nodetype; // 'F'
-    struct ast* l;
-    enum bifs functype;
+    struct Ast* l;
+    enum Bifs functype;
 };
 
-struct ufncall {
+struct UfnCall {
     int nodetype; // 'C'
-    struct ast* l;
-    struct symbol* s;
+    struct Ast* l;
+    struct Symbol* s;
 };
 
-struct flow {
+struct Flow {
     int nodetype; // 'I' or 'W'
-    struct ast* cond;
-    struct ast* tl;
-    struct ast* el;
+    struct Ast* cond;
+    struct Ast* tl;
+    struct Ast* el;
 };
 
-struct numval {
+struct NumVal {
     int nodetype; // 'K'
     double number;
 };
 
-struct symref {
+struct SymRef {
     int nodetype; // 'N'
-    struct symbol* s;
+    struct Symbol* s;
 };
 
-struct symasgn {
+struct SymAssign {
     int nodetype;     // '='
-    struct symbol* s; // symbol
-    struct ast* v;    // value
+    struct Symbol* s; // symbol
+    struct Ast* v;    // value
 };
 
 // build an AST
-struct ast* newast(int nodetype, struct ast* l, struct ast* r);
-struct ast* newcmp(int cmptype, struct ast* l, struct ast* r);
-struct ast* newfunc(int functype, struct ast* l);
-struct ast* newcall(struct symbol* s, struct ast* l);
-struct ast* newref(struct symbol* s);
-struct ast* newasgn(struct symbol* s, struct ast* v);
-struct ast* newnum(double d);
-struct ast* newflow(int nodetype, struct ast* cond, struct ast* tl, struct ast* tr);
+struct Ast* NewAst(CalcResult* result, int nodetype, struct Ast* l, struct Ast* r);
+struct Ast* NewCmp(CalcResult* result, int cmptype, struct Ast* l, struct Ast* r);
+struct Ast* NewFunc(CalcResult* result, int functype, struct Ast* l);
+struct Ast* NewCall(CalcResult* result, struct Symbol* s, struct Ast* l);
+struct Ast* NewRef(CalcResult* result, struct Symbol* s);
+struct Ast* NewAssign(CalcResult* result, struct Symbol* s, struct Ast* v);
+struct Ast* NewNum(CalcResult* result, double d);
+struct Ast*
+NewFlow(CalcResult* result, int nodetype, struct Ast* cond, struct Ast* tl, struct Ast* tr);
 
-void dodef(struct symbol* name, struct symlist* syms, struct ast* func);
-double eval(struct ast*);
-void treefree(struct ast*);
-
-// interface to the lexer
-void yyerror(char* s, ...);
-
-extern int yylineno;
-extern FILE* yyin;
-extern int yylex(void);
+void DoDef(CalcResult* result, struct Symbol* name, struct SymList* syms, struct Ast* func);
+double Eval(struct Ast*);
+void TreeFree(struct Ast*);
