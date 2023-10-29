@@ -88,13 +88,9 @@ void print_table_cpp20() {
 #endif
 
 TEST_CASE("modern", "[test_format]") {
-    SECTION("c++17 version") {
-        print_table_cpp17();
-    };
+    SECTION("c++17 version") { print_table_cpp17(); };
 
 #if (defined(__GNUC__) && __GNUC__ >= 13) || (defined(__clang_major__) && __clang_major__ >= 16)
-    SECTION("c++20 version") {
-        print_table_cpp20();
-    };
+    SECTION("c++20 version") { print_table_cpp20(); };
 #endif
 }
