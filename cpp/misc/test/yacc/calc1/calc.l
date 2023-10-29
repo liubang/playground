@@ -21,7 +21,6 @@ int Calcerror(yyscan_t scanner, CalcParseResult* result, const char* s) {
     return 1;
 }
 
-
 %}
 
 %option noyywrap nodefault yylineno reentrant
