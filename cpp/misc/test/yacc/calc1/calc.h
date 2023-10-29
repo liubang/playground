@@ -2,8 +2,10 @@
 
 #include <stdio.h>
 
-void yyerror(char* s, ...);
+typedef struct CalcParseResult {
+    int is_error;
+    int ret;
+} CalcParseResult;
 
-extern int yylineno;
-extern FILE* yyin;
-extern int yylex(void);
+extern CalcParseResult* CalcParse(const char* sql);
+extern void DestroyCalcParseResult(CalcParseResult* result);
