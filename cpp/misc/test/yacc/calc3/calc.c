@@ -16,6 +16,7 @@
 #include "calc_flex.h"
 
 extern int Calcparse(yyscan_t scanner, CalcResult* result);
+extern int Calcerror(yyscan_t scanner, CalcResult* result, const char* s);
 
 #define NHASH 9997
 static struct Symbol symtab[NHASH];
