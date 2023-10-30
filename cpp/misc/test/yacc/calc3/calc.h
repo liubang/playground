@@ -27,13 +27,12 @@ struct Symbol {
     struct SymList* syms; /* list of dummy args */
 };
 
-struct Symbol* Lookup(CalcResult*, char*);
-
 struct SymList {
     struct Symbol* sym;
     struct SymList* next;
 };
 
+struct Symbol* Lookup(CalcResult*, char*);
 struct SymList* NewSymList(CalcResult* result, struct Symbol* sym, struct SymList* next);
 void SymListFree(struct SymList* sl);
 
