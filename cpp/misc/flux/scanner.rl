@@ -1,12 +1,11 @@
-#![allow(clippy::never_loop, clippy::double_parens, clippy::duplicate_underscore_argument, clippy::single_match, clippy::comparison_chain, clippy::too_many_arguments, clippy::assign_op_pattern, clippy::needless_return)]
-use std::vec::Vec;
-
-use crate::scanner::*;
+#include <string>
+#include <vector>
+#include "cpp/misc/flux/token.h"
 
 %%{
     machine flux;
 
-    alphtype u8;
+    alphtype unsigned char;
 
     include WChar "unicode.rl";
 
@@ -14,15 +13,15 @@ use crate::scanner::*;
         // We do this for every newline we find.
         // This allows us to return correct line/column for each token
         // back to the caller.
-        *cur_line += 1;
-        *last_newline = fpc + 1;
+        cur_line += 1;
+        last_newline = fpc + 1;
     }
 
     action advance_line_between_tokens {
         // We do this for each newline we find in the whitespace between tokens,
         // so we can record the location of the first byte of a token.
-        last_newline_before_token = *last_newline;
-        cur_line_token_start = *cur_line;
+        last_newline_before_token = last_newline;
+        cur_line_token_start = cur_line;
     }
 
     newline = '\n' @advance_line;
@@ -150,69 +149,78 @@ use crate::scanner::*;
 
 %% write data nofinal;
 
-pub fn scan(
-    data: &[u8],
-    mode: i32,
-    pp: &mut i32,
-    _data: i32,
-    pe: i32,
-    eof: i32,
-    last_newline: &mut i32,
-    cur_line: &mut i32,
-    token: &mut TokenType,
-    token_start: &mut i32,
-    token_start_line: &mut i32,
-    token_start_col: &mut i32,
-    token_end: &mut i32,
-    token_end_line: &mut i32,
-    token_end_col: &mut i32 ) -> u32
+uint32_t real_scan(
+    const char* data,
+    int32_t mode,
+    const char* pp,
+    const char* _data,
+    const char* pe,
+    const char* eof,
+    const char* last_newline,
+    int32_t cur_line,
+    TokenType& token,
+    int32_t& token_start,
+    int32_t& token_start_line,
+    int32_t& token_start_col,
+    int32_t& token_end,
+    int32_t& token_end_line,
+    int32_t& token_end_col)
 {
-    let mut cs = flux_start;
-    match mode {
-        0 => { cs = flux_en_main },
-        1 => { cs = flux_en_main_with_regex },
-        2 => { cs = flux_en_string_expr },
-        _ => {},
+    int cs = flux_start;
+    switch (cs) {
+    case 0:
+        cs = flux_en_main;
+        break;
+    case 1:
+        cs = flux_en_main_with_regex;
+        break;
+    case 2:
+        cs = flux_en_string_expr;
+        break;
+    default:
+        break;
     }
-    let mut p: i32 = *pp;
+    
+    const char* p = pp;
 
-    let mut act: i32 = 0;
-    let mut ts: i32 = 0;
-    let mut te: i32 = 0;
-    let mut tok: TokenType = TokenType::Illegal;
+    int32_t act = 0;
+    const char* ts = 0;
+    const char* te = 0;
 
-    let mut last_newline_before_token: i32 = *last_newline;
-    let mut cur_line_token_start: i32 = *cur_line;
+    TokenType tok = TokenType::Illegal;
+
+    const char* last_newline_before_token = last_newline;
+    uint32_t cur_line_token_start = cur_line;
 
     // alskdfj
     %% write init nocs;
     %% write exec;
 
     // Update output args.
-    *token = tok;
+    token = tok;
 
-    *token_start = ts - _data;
-    *token_start_line = cur_line_token_start;
-    *token_start_col = ts - last_newline_before_token + 1;
+    token_start = ts - _data;
+    token_start_line = cur_line_token_start;
+    token_start_col = ts - last_newline_before_token + 1;
 
-    *token_end = te - _data;
+    token_end = te - _data;
 
-    if (*last_newline > te) {
+    if (last_newline > te) {
         // te (the token end pointer) will only be less than last_newline
         // (pointer to the last newline the scanner saw) if we are trying
         // to find a multi-line token (either string or regex literal)
         // but don't find the closing `/` or `"`.
         // In that case we need to reset last_newline and cur_line.
-        *cur_line = cur_line_token_start;
-        *last_newline = last_newline_before_token;
+        cur_line = cur_line_token_start;
+        last_newline = last_newline_before_token;
     }
 
-    *token_end_line = *cur_line;
-    *token_end_col = te - *last_newline + 1;
+    token_end_line = cur_line;
+    token_end_col = te - last_newline + 1;
 
-    *pp = p;
-    if cs == flux_error {
-        return 1
+    pp = p;
+    if (cs == flux_error) {
+        return 1;
     } else {
         return 0;
     }
