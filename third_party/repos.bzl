@@ -118,3 +118,10 @@ def external_repositories():
         sha256 = "38ca56a317be37fb00bd92bc280d9b9209bd4008b297d483c41ec1f6079bfb6d",
         strip_prefix = "sqlite-src-3420000",
     )
+
+    http_archive(
+        name = "rules_ragel",
+        urls = ["https://github.com/jmillikin/rules_ragel/archive/07490ea288899d816bddadfb2ae1393d6a9b9c1c.zip"],
+        sha256 = "9891b1925a0a539bd4d5ab1e0997f42fa72b50a0483b3f2bdf39861e44f16df0",
+        strip_prefix = "rules_ragel-07490ea288899d816bddadfb2ae1393d6a9b9c1c",
+    )

@@ -7,3 +7,32 @@
 #
 #======================================================================
 
+load("@rules_ragel//ragel:ragel.bzl", "ragel")
+load(
+    "//cpp:copts/configure_copts.bzl",
+    "DEFAULT_COPTS",
+    "DEFAULT_LINKOPTS",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+ragel(
+    name = "scanner_generated",
+    src = "scanner.rl",
+    data = [
+        "unicode.rl",
+    ],
+    language = "c++",
+    ragel_options = ["-I ."],
+)
+
+cc_library(
+    name = "scanner",
+    srcs = [
+        "scanner.cpp",
+        ":scanner_generated",
+    ],
+    hdrs = ["token.h"],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+)
