@@ -36,6 +36,10 @@ load("@com_github_nelhage_rules_boost//:boost/boost.bzl", "boost_deps")
 
 boost_deps()
 
+load("@rules_ragel//ragel:ragel.bzl", "ragel_register_toolchains")
+
+ragel_register_toolchains("7.0.0.11")
+
 ################ for golang ################
 load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
 load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies")
