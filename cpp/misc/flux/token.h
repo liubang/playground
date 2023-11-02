@@ -8,8 +8,10 @@
 //=====================================================================
 #pragma once
 
+#include <memory>
 #include <ostream>
 #include <string>
+#include <vector>
 
 namespace pl {
 enum class TokenType {
