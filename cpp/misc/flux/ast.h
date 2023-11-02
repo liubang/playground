@@ -206,4 +206,41 @@ struct TvarType : public TType {
     std::shared_ptr<Identifier> identifier;
 };
 
+struct ArrayType : public TType {
+    std::shared_ptr<BaseNode> base_node;
+    std::shared_ptr<TType> monotype;
+};
+
+struct StreamType : public TType {
+    std::shared_ptr<BaseNode> base_node;
+    std::shared_ptr<TType> monotype;
+};
+
+struct VectorType : public TType {
+    std::shared_ptr<BaseNode> base_node;
+    std::shared_ptr<TType> monotype;
+};
+
+struct DictType : public TType {
+    std::shared_ptr<BaseNode> base_node;
+    std::shared_ptr<TType> key;
+    std::shared_ptr<TType> val;
+};
+
+struct DynamicType : public TType {
+    std::shared_ptr<BaseNode> base_node;
+};
+
+struct ParamType;
+
+struct FuncType : public TType {
+    std::shared_ptr<BaseNode> base_node;
+    std::shared_ptr<TType> monotype;
+    std::vector<std::shared_ptr<ParamType>> parameters;
+};
+
+struct TypeExpr : public Expr {
+    std::shared_ptr<BaseNode> base_node;
+};
+
 } // namespace pl
