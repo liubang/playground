@@ -32,7 +32,22 @@ cc_library(
         "scanner.cpp",
         ":scanner_generated",
     ],
-    hdrs = ["token.h"],
+    hdrs = [
+        "scanner.h",
+        "token.h",
+    ],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
+)
+
+cc_binary(
+    name = "scanner_test",
+    srcs = [
+        "scanner_test.cpp",
+    ],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        ":scanner",
+    ],
 )

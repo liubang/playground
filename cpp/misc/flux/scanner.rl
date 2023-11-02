@@ -14,13 +14,13 @@
         // This allows us to return correct line/column for each token
         // back to the caller.
         cur_line += 1;
-        last_newline = fpc + 1;
+        *last_newline = fpc + 1;
     }
 
     action advance_line_between_tokens {
         // We do this for each newline we find in the whitespace between tokens,
         // so we can record the location of the first byte of a token.
-        last_newline_before_token = last_newline;
+        last_newline_before_token = *last_newline;
         cur_line_token_start = cur_line;
     }
 
@@ -147,17 +147,19 @@
     *|;
 }%%
 
+namespace pl {
+
 %% write data nofinal;
 
 uint32_t real_scan(
     const char* data,
     int32_t mode,
-    const char* pp,
+    const char** pp,
     const char* _data,
     const char* pe,
     const char* eof,
-    const char* last_newline,
-    int32_t cur_line,
+    const char** last_newline,
+    int32_t& cur_line,
     TokenType& token,
     int32_t& token_start,
     int32_t& token_start_line,
@@ -181,7 +183,7 @@ uint32_t real_scan(
         break;
     }
     
-    const char* p = pp;
+    const char* p = *pp;
 
     int32_t act = 0;
     const char* ts = 0;
@@ -189,7 +191,7 @@ uint32_t real_scan(
 
     TokenType tok = TokenType::Illegal;
 
-    const char* last_newline_before_token = last_newline;
+    const char* last_newline_before_token = *last_newline;
     uint32_t cur_line_token_start = cur_line;
 
     // alskdfj
@@ -205,23 +207,24 @@ uint32_t real_scan(
 
     token_end = te - _data;
 
-    if (last_newline > te) {
+    if (*last_newline > te) {
         // te (the token end pointer) will only be less than last_newline
         // (pointer to the last newline the scanner saw) if we are trying
         // to find a multi-line token (either string or regex literal)
         // but don't find the closing `/` or `"`.
         // In that case we need to reset last_newline and cur_line.
         cur_line = cur_line_token_start;
-        last_newline = last_newline_before_token;
+        *last_newline = last_newline_before_token;
     }
 
     token_end_line = cur_line;
-    token_end_col = te - last_newline + 1;
+    token_end_col = te - *last_newline + 1;
 
-    pp = p;
+    *pp = p;
     if (cs == flux_error) {
         return 1;
     } else {
         return 0;
     }
+}
 }
