@@ -203,12 +203,32 @@ struct Position {
 
     Position() = default;
     Position(uint32_t line, uint32_t column) : line(line), column(column) {}
+    bool is_valid() const { return line > 0 && column > 0; }
+    bool operator<(const Position& other) const {
+        return line < other.line || (line == other.line && column < other.column);
+    }
+};
+
+struct SourceLocation {
+    std::string file;
+    Position start;
+    Position end;
+    std::string source;
+
+    SourceLocation() = default;
+    SourceLocation(const std::string& file,
+                   const Position& start,
+                   const Position& end,
+                   const std::string& source)
+        : file(file), start(start), end(end), source(source) {}
+
+    bool is_valid() const { return start.is_valid() && end.is_valid(); }
 };
 
 struct Comment {
     std::string text;
     Comment() = default;
-    Comment(std::string text) : text(std::move(text)) {}
+    Comment(const std::string& text) : text(text) {}
 };
 
 struct Token {
@@ -216,17 +236,17 @@ struct Token {
     std::string lit;
     uint32_t start_offset;
     uint32_t end_offset;
-    std::shared_ptr<Position> start_pos;
-    std::shared_ptr<Position> end_pos;
+    Position start_pos;
+    Position end_pos;
     std::vector<std::shared_ptr<Comment>> comments;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const Token& token) {
     os << "{ tok: " << token_to_string(token.tok) << ", lit: " << token.lit << ", offset: ["
        << token.start_offset << ", " << token.end_offset
-       << "], start_pos: {line: " << token.start_pos->line
-       << ", column: " << token.start_pos->column << "}, end_pos: {line: " << token.end_pos->line
-       << ", column: " << token.end_pos->column << "}}";
+       << "], start_pos: {line: " << token.start_pos.line << ", column: " << token.start_pos.column
+       << "}, end_pos: {line: " << token.end_pos.line << ", column: " << token.end_pos.column
+       << "}}";
     return os;
 }
 
