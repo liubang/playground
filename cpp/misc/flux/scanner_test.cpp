@@ -16,7 +16,7 @@ int main(int argc, char* argv[]) {
     from(bucket:"telegraf/autogen")
         |> range(start:-1h)
         |> filter(fn:(r) =>
-            r._measurement == "cpu" and
+            r._measurement == "😄🫵👌" and
             r.cpu == "cpu-total"
         )
         |> aggregateWindow(every: 1m, fn: mean)
@@ -29,7 +29,7 @@ int main(int argc, char* argv[]) {
         if (token->tok == pl::TokenType::Eof) {
             break;
         }
-        std::cout << (*token.get()) << "\n";
+        std::cout << (*token) << "\n";
     }
 
     return 0;
