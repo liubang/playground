@@ -129,15 +129,15 @@ def external_repositories():
     http_archive(
         name = "colm",
         build_file = "//third_party/colm:colm.BUILD",
-        urls = ["https://github.com/adrian-thurston/colm/archive/refs/tags/0.14.7.tar.gz"],
+        urls = ["https://www.colm.net/files/colm/colm-0.14.7.tar.gz"],
         strip_prefix = "colm-0.14.7",
-        sha256 = "06c8296cab3c660dcb0b150d5b58c10707278d34a35fe664f8ed05f4606fc079",
+        sha256 = "6037b31c358dda6f580f7321f97a182144a8401c690b458fcae055c65501977d",
     )
 
     http_archive(
         name = "ragel",
         build_file = "//third_party/ragel:ragel.BUILD",
-        urls = ["https://github.com/adrian-thurston/ragel/archive/refs/tags/7.0.4.tar.gz"],
+        urls = ["https://www.colm.net/files/ragel/ragel-7.0.4.tar.gz"],
         strip_prefix = "ragel-7.0.4",
-        sha256 = "0f7c3866f82ba2552f1ae1f03b94170121a0ff8bac92c8e22c531d732fd20581",
+        sha256 = "84b1493efe967e85070c69e78b04dc55edc5c5718f9d6b77929762cb2abed278",
     )
