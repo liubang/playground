@@ -12,24 +12,6 @@
 
 namespace pl {
 
-/*
-pub fn scan(
-    data: &[u8],
-    mode: i32,
-    pp: &mut i32,
-    _data: i32,
-    pe: i32,
-    eof: i32,
-    last_newline: &mut i32,
-    cur_line: &mut i32,
-    token: &mut TokenType,
-    token_start: &mut i32,
-    token_start_line: &mut i32,
-    token_start_col: &mut i32,
-    token_end: &mut i32,
-    token_end_line: &mut i32,
-    token_end_col: &mut i32 ) -> u32
-*/
 extern uint32_t real_scan(const char* data,
                           int32_t mode,
                           const char** p,
@@ -91,8 +73,8 @@ std::shared_ptr<Token> Scanner::scan(int32_t mode) {
         t->lit = std::string(data_ + token_start, token_end - token_start);
         t->start_offset = token_start;
         t->end_offset = token_end;
-        t->start_pos = std::make_shared<Position>(token_start_line, token_start_col);
-        t->end_pos = std::make_shared<Position>(token_end_line, token_end_col);
+        t->start_pos = Position(token_start_line, token_start_col);
+        t->end_pos = Position(token_end_line, token_end_col);
     }
     positions_[t->start_pos] = t->start_offset;
     positions_[t->end_pos] = t->end_offset;
@@ -107,8 +89,8 @@ std::shared_ptr<Token> Scanner::get_eof_token() {
     token->lit = "";
     token->start_offset = data_len_;
     token->end_offset = data_len_;
-    token->start_pos = std::make_shared<Position>(cur_line_, column);
-    token->end_pos = std::make_shared<Position>(cur_line_, column);
+    token->start_pos = Position(cur_line_, column);
+    token->end_pos = Position(cur_line_, column);
     return token;
 }
 
