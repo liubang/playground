@@ -51,7 +51,7 @@ public:
     /**
      * Get the offset of a position
      */
-    uint32_t offset(const std::shared_ptr<Position>& pos) {
+    uint32_t offset(const Position& pos) {
         if (positions_.count(pos) == 0) {
             // TODO(liubang): error handler
             return UINT32_MAX;
@@ -84,7 +84,7 @@ private:
     int32_t checkpoint_line_;
     const char* checkpoint_last_newline_;
     TokenType token_;
-    std::map<std::shared_ptr<Position>, uint32_t> positions_;
+    std::map<Position, uint32_t> positions_;
     std::vector<std::shared_ptr<Comment>> comments_;
 };
 } // namespace pl
