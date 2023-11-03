@@ -8,239 +8,685 @@
 //=====================================================================
 #pragma once
 
+#include <chrono>
+#include <unordered_map>
 #include <vector>
 
 #include "token.h"
 
 namespace pl {
 
-enum class ExprType {
-    Identifier,
-    Array,
-    Dict,
-    Function,
-    Logical,
-    Object,
-    Member,
-    Index,
-    Binary,
-    Unary,
-    PipeExpr,
-    Call,
-    Conditional,
-    StringExpr,
-    Paren,
-    Integer,
-    Float,
-    StringLit,
-    Duration,
-    Uint,
-    Boolean,
-    DateTime,
-    Regexp,
-    PipeLit,
-    Label,
-    Bad,
-};
-
-struct Expr {
-    ExprType type;
-};
-
-enum class StmtType {
-    Expr,
-    Variable,
-    Option,
-    Return,
-    Bad,
-    TestCase,
-    Builtin,
-};
-
-struct Stmt {
-    StmtType type;
-};
-
-enum class AsgnType {
-    Variable,
-    Member,
-};
-
-struct Assignment {
-    AsgnType type;
-};
-
-enum class PropKeyType {
-    Identifier,
-    StringLit,
-};
-
-struct PropKey {
-    PropKeyType type;
-};
-
-enum class FuncBodyType {
-    Block,
-    Expr,
-};
-
-struct FuncBody {
-    FuncBodyType type;
-};
-
+struct Position;
+struct SourceLocation;
+struct Comment;
+struct BaseNode;
 struct Attribute;
 struct AttributeParam;
+struct Package;
 struct File;
 struct PackageClause;
 struct ImportDeclaration;
+struct Block;
+struct BadStmt;
+struct ExprStmt;
+struct ReturnStmt;
+struct OptionStmt;
+struct BuiltinStmt;
+struct NamedType;
+struct TvarType;
+struct ArrayType;
+struct StreamType;
+struct VectorType;
+struct DictType;
+struct DynamicType;
+struct FunctionType;
+struct TypeExpression;
+struct TypeConstraint;
+struct RecordType;
+struct PropertyType;
+struct TestCaseStmt;
+struct VariableAssgn;
+struct MemberAssgn;
+struct StringExpr;
+struct TextPart;
+struct InterpolatedPart;
+struct ParenExpr;
+struct CallExpr;
+struct PipeExpr;
+struct MemberExpr;
+struct IndexExpr;
+struct FunctionExpr;
+struct BinaryExpr;
+struct UnaryExpr;
+struct LogicalExpr;
+struct ArrayItem;
+struct ArrayExpr;
+struct DictExpr;
+struct DictItem;
+struct WithSource;
+struct ObjectExpr;
+struct ConditionalExpr;
+struct BadExpr;
+struct Property;
 struct Identifier;
+struct PipeLit;
 struct StringLit;
+struct BooleanLit;
+struct FloatLit;
+struct IntegerLit;
+struct UintLit;
+struct LabelLit;
+struct RegexpLit;
+struct Duration;
+struct DurationLit;
+struct DateTimeLit;
 
-struct TypeExpr;
+struct Expression;
+struct Statement;
+struct Assignment;
+struct PropertyKey;
+struct FunctionBody;
+struct MonoType;
+struct ParameterType;
+struct StringExprPart;
+struct Operator;
+
+enum class LogicalOperator;
 
 struct BaseNode {
+    // implementation details
     SourceLocation location;
-    std::vector<Comment> comments;
-    std::vector<Attribute> attributes;
+    std::vector<std::shared_ptr<Comment>> comments;
+    std::vector<std::shared_ptr<Attribute>> attributes;
     std::vector<std::string> errors;
 };
 
-struct Attribute {
-    std::shared_ptr<BaseNode> base_node;
+struct AttributeParam : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<Expression> value;
+    std::vector<std::shared_ptr<Comment>> comma;
+};
+
+struct Attribute : public BaseNode {
+    std::shared_ptr<BaseNode> base;
     std::string name;
-    std::vector<AttributeParam> params;
+    std::vector<std::shared_ptr<AttributeParam>> params;
 };
 
-struct AttributeParam {
-    std::shared_ptr<BaseNode> base_node;
-    std::shared_ptr<Expr> value;
-    std::vector<Comment> comma;
-};
-
-struct Package {
-    std::shared_ptr<BaseNode> base_node;
+struct Package : public BaseNode {
+    std::shared_ptr<BaseNode> base;
     std::string path;
     std::string package;
-    std::vector<File> files;
+    std::vector<std::shared_ptr<File>> files;
+    std::vector<std::shared_ptr<Statement>> body;
+    std::vector<std::shared_ptr<Comment>> eof;
 };
 
-struct File {
-    std::shared_ptr<BaseNode> base_node;
+struct File : public BaseNode {
+    std::shared_ptr<BaseNode> base;
     std::string name;
     std::string metadata;
-    std::shared_ptr<PackageClause> pacakge;
-    std::vector<ImportDeclaration> import;
-    std::vector<Stmt> body;
-    std::vector<Comment> eof;
+    std::shared_ptr<PackageClause> package;
+    std::vector<std::shared_ptr<ImportDeclaration>> imports;
 };
 
-struct PackageClause {
-    std::shared_ptr<BaseNode> base_node;
+struct PackageClause : public BaseNode {
+    std::shared_ptr<BaseNode> base;
     std::shared_ptr<Identifier> name;
 };
 
-struct ImportDeclaration {
-    std::shared_ptr<BaseNode> base_node;
+struct ImportDeclaration : public BaseNode {
+    std::shared_ptr<BaseNode> base;
     std::shared_ptr<Identifier> alias;
     std::shared_ptr<StringLit> path;
 };
 
-struct Block {
-    std::shared_ptr<BaseNode> base_node;
-    std::vector<Comment> lbrace;
-    std::vector<Stmt> body;
-    std::vector<Comment> rbrace;
+// stmt
+
+enum class StatementType {
+    ExpressionStatement,
+    VariableAssignment,
+    OptionStatement,
+    ReturnStatement,
+    BadStatement,
+    TestCaseStatement,
+    BuiltinStatement
 };
 
-struct BadStmt : public Stmt {
-    std::shared_ptr<BaseNode> base_node;
+std::string stmttype_to_str(StatementType type) {
+    switch (type) {
+    case StatementType::ExpressionStatement:
+        return "ExpressionStatement";
+    case StatementType::VariableAssignment:
+        return "VariableAssignment";
+    case StatementType::OptionStatement:
+        return "OptionStatement";
+    case StatementType::ReturnStatement:
+        return "ReturnStatement";
+    case StatementType::BadStatement:
+        return "BadStatement";
+    case StatementType::TestCaseStatement:
+        return "TestCaseStatement";
+    case StatementType::BuiltinStatement:
+        return "BuiltinStatement";
+    default:
+        return "Unknown";
+    }
+}
+
+struct ExprStmt : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<Expression> expression;
+};
+
+struct VariableAssgn : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<Identifier> id;
+    std::shared_ptr<Expression> init;
+};
+
+struct OptionStmt : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<Assignment> assignment;
+};
+
+struct ReturnStmt {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<Expression> argument;
+};
+
+struct BadStmt : public BaseNode {
+    std::shared_ptr<BaseNode> base;
     std::string text;
 };
 
-struct ExprStmt : public Stmt {
-    std::shared_ptr<BaseNode> base_node;
-    std::shared_ptr<Expr> expr;
-};
-
-struct ReturnStmt : public Stmt {
-    std::shared_ptr<BaseNode> base_node;
-    std::shared_ptr<Expr> argument;
-};
-
-struct OptionStmt : public Stmt {
-    std::shared_ptr<BaseNode> base_node;
-    std::shared_ptr<Expr> argument;
-};
-
-struct BuiltinStmt : public Stmt {
-    std::shared_ptr<BaseNode> base_node;
-    std::vector<Comment> colon;
+struct TestCaseStmt : public BaseNode {
+    std::shared_ptr<BaseNode> base;
     std::shared_ptr<Identifier> id;
-    std::shared_ptr<TypeExpr> ty;
+    std::shared_ptr<StringLit> extends;
+    std::shared_ptr<Block> block;
 };
 
-enum class MonoType {
-    Tvar,
-    Basic,
-    Array,
-    Stream,
-    Vector,
-    Dict,
-    Dynamic,
-    Record,
-    Function,
-    Label,
+struct BuiltinStmt : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::vector<std::shared_ptr<Comment>> colon;
+    std::shared_ptr<Identifier> id;
+    std::shared_ptr<TypeExpression> ty;
 };
 
-struct TType {
-    MonoType type;
+struct Statement {
+    int typ;
 };
 
-struct NameType : public TType {
-    std::shared_ptr<BaseNode> base_node;
-    std::shared_ptr<Identifier> identifier;
+// expr
+enum class ExpressionType {
+    Identifier,
+    ArrayExpression,
+    DictExpression,
+    FunctionExpression,
+    LogicalExpression,
+    ObjectExpression,
+    MemberExpression,
+    IndexExpression,
+    BinaryExpression,
+    UnaryExpression,
+    PipeExpression,
+    CallExpression,
+    ConditionalExpression,
+    StringExpression,
+    ParenExpression,
+    IntegerLiteral,
+    FloatLiteral,
+    StringLiteral,
+    DurationLiteral,
+    UnsignedIntegerLiteral,
+    BooleanLiteral,
+    DateTimeLiteral,
+    RegexpLiteral,
+    PipeLiteral,
+    LabelLiteral,
+    BadExpression
 };
 
-struct TvarType : public TType {
-    std::shared_ptr<BaseNode> base_node;
-    std::shared_ptr<Identifier> identifier;
+struct Identifier : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::string name;
 };
 
-struct ArrayType : public TType {
-    std::shared_ptr<BaseNode> base_node;
-    std::shared_ptr<TType> monotype;
+struct ArrayExpr {
+    std::shared_ptr<BaseNode> base;
+    std::vector<std::shared_ptr<Comment>> lbrack;
+    std::vector<std::shared_ptr<ArrayItem>> elements;
+    std::vector<std::shared_ptr<Comment>> rbrack;
 };
 
-struct StreamType : public TType {
-    std::shared_ptr<BaseNode> base_node;
-    std::shared_ptr<TType> monotype;
+struct DictExpr : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::vector<std::shared_ptr<Comment>> lbrack;
+    std::vector<std::shared_ptr<DictItem>> elements;
+    std::vector<std::shared_ptr<Comment>> rbrack;
 };
 
-struct VectorType : public TType {
-    std::shared_ptr<BaseNode> base_node;
-    std::shared_ptr<TType> monotype;
+struct FunctionExpr : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::vector<std::shared_ptr<Comment>> lparen;
+    std::vector<std::shared_ptr<Property>> params;
+    std::vector<std::shared_ptr<Comment>> rparen;
+    std::vector<std::shared_ptr<Comment>> arrow;
+    std::shared_ptr<FunctionBody> body;
 };
 
-struct DictType : public TType {
-    std::shared_ptr<BaseNode> base_node;
-    std::shared_ptr<TType> key;
-    std::shared_ptr<TType> val;
+struct LogicalExpr : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    LogicalOperator op;
+    std::shared_ptr<Expression> left;
+    std::shared_ptr<Expression> right;
 };
 
-struct DynamicType : public TType {
-    std::shared_ptr<BaseNode> base_node;
+struct ObjectExpr : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::vector<std::shared_ptr<Comment>> lbrace;
+    std::shared_ptr<WithSource> with;
+    std::vector<std::shared_ptr<Property>> properties;
+    std::vector<std::shared_ptr<Comment>> rbrace;
 };
 
-struct ParamType;
-
-struct FuncType : public TType {
-    std::shared_ptr<BaseNode> base_node;
-    std::shared_ptr<TType> monotype;
-    std::vector<std::shared_ptr<ParamType>> parameters;
+struct MemberExpr : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<Expression> object;
+    std::vector<std::shared_ptr<Comment>> lbrack;
+    std::shared_ptr<PropertyKey> property;
+    std::vector<std::shared_ptr<Comment>> rbrack;
 };
 
-struct TypeExpr : public Expr {
-    std::shared_ptr<BaseNode> base_node;
+struct IndexExpr : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<Expression> array;
+    std::vector<std::shared_ptr<Comment>> lbrack;
+    std::shared_ptr<Expression> index;
+    std::vector<std::shared_ptr<Comment>> rbrack;
+};
+
+struct BinaryExpr : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<Operator> op;
+    std::shared_ptr<Expression> left;
+    std::shared_ptr<Expression> right;
+};
+
+struct UnaryExpr : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<Operator> op;
+    std::shared_ptr<Expression> argument;
+};
+
+struct PipeExpr : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<Expression> argument;
+    std::shared_ptr<CallExpr> call;
+};
+
+struct CallExpr : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<Expression> callee;
+    std::vector<std::shared_ptr<Comment>> lparen;
+    std::vector<std::shared_ptr<Expression>> arguments;
+    std::vector<std::shared_ptr<Comment>> rparen;
+};
+
+struct ConditionalExpr : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::vector<std::shared_ptr<Comment>> tk_if;
+    std::shared_ptr<Expression> test;
+    std::vector<std::shared_ptr<Comment>> tk_then;
+    std::shared_ptr<Expression> consequent;
+    std::vector<std::shared_ptr<Comment>> tk_else;
+    std::shared_ptr<Expression> alternate;
+};
+
+struct StringExpr : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::vector<std::shared_ptr<StringExprPart>> parts;
+};
+
+struct StringExprPart {
+    enum class Type {
+        Text,
+        Interpolated,
+    };
+    Type type;
+    std::shared_ptr<TextPart> text;
+    std::shared_ptr<InterpolatedPart> interpolated;
+};
+
+struct TextPart : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::string value;
+};
+
+struct InterpolatedPart : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<Expression> expression;
+};
+
+struct ParenExpr : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::vector<std::shared_ptr<Comment>> lparen;
+    std::shared_ptr<Expression> expression;
+    std::vector<std::shared_ptr<Comment>> rparen;
+};
+
+struct IntegerLit : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    int64_t value;
+};
+
+struct FloatLit : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    double value;
+};
+
+struct StringLit : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::string value;
+};
+
+struct DurationLit : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::vector<std::shared_ptr<Duration>> values;
+};
+
+struct UintLit : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    uint64_t value;
+};
+
+struct BooleanLit : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    bool value;
+};
+
+struct DateTimeLit : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::chrono::system_clock::time_point value;
+};
+
+struct RegexpLit : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::string value;
+};
+
+struct PipeLit : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+};
+
+struct LabelLit : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::string value;
+};
+
+struct BadExpr : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::string text;
+    std::shared_ptr<Expression> expression;
+};
+
+struct Expression {
+    ExpressionType type;
+    std::shared_ptr<BaseNode> base;
+};
+
+// operator
+enum class OperatorType {
+    MultiplicationOperator,
+    DivisionOperator,
+    ModuloOperator,
+    PowerOperator,
+    AdditionOperator,
+    SubtractionOperator,
+    LessThanEqualOperator,
+    LessThanOperator,
+    GreaterThanEqualOperator,
+    GreaterThanOperator,
+    StartsWithOperator,
+    InOperator,
+    NotOperator,
+    ExistsOperator,
+    NotEmptyOperator,
+    EmptyOperator,
+    EqualOperator,
+    NotEqualOperator,
+    RegexpMatchOperator,
+    NotRegexpMatchOperator,
+    InvalidOperator,
+};
+
+std::unordered_map<std::string, OperatorType> operator_map = {
+    {"*", OperatorType::MultiplicationOperator},
+    {"/", OperatorType::DivisionOperator},
+    {"%", OperatorType::ModuloOperator},
+    {"^", OperatorType::PowerOperator},
+    {"+", OperatorType::AdditionOperator},
+    {"-", OperatorType::SubtractionOperator},
+    {"<=", OperatorType::LessThanEqualOperator},
+    {"<", OperatorType::LessThanOperator},
+    {">=", OperatorType::GreaterThanEqualOperator},
+    {">", OperatorType::GreaterThanOperator},
+    {"startswith", OperatorType::StartsWithOperator},
+    {"in", OperatorType::InOperator},
+    {"not", OperatorType::NotOperator},
+    {"exists", OperatorType::ExistsOperator},
+    {"not empty", OperatorType::NotEmptyOperator},
+    {"empty", OperatorType::EmptyOperator},
+    {"==", OperatorType::EqualOperator},
+    {"!=", OperatorType::NotEqualOperator},
+    {"=~", OperatorType::RegexpMatchOperator},
+    {"!~", OperatorType::NotRegexpMatchOperator},
+    {"<INVALID_OP>", OperatorType::InvalidOperator},
+};
+
+std::string operator_to_string(OperatorType op) {
+    switch (op) {
+    case OperatorType::MultiplicationOperator:
+        return "MultiplicationOperator";
+    case OperatorType::DivisionOperator:
+        return "DivisionOperator";
+    case OperatorType::ModuloOperator:
+        return "ModuloOperator";
+    case OperatorType::PowerOperator:
+        return "PowerOperator";
+    case OperatorType::AdditionOperator:
+        return "AdditionOperator";
+    case OperatorType::SubtractionOperator:
+        return "SubtractionOperator";
+    case OperatorType::LessThanEqualOperator:
+        return "LessThanEqualOperator";
+    case OperatorType::LessThanOperator:
+        return "LessThanOperator";
+    case OperatorType::GreaterThanEqualOperator:
+        return "GreaterThanEqualOperator";
+    case OperatorType::GreaterThanOperator:
+        return "GreaterThanOperator";
+    case OperatorType::StartsWithOperator:
+        return "StartsWithOperator";
+    case OperatorType::InOperator:
+        return "InOperator";
+    case OperatorType::NotOperator:
+        return "NotOperator";
+    case OperatorType::ExistsOperator:
+        return "ExistsOperator";
+    case OperatorType::NotEmptyOperator:
+        return "NotEmptyOperator";
+    case OperatorType::EmptyOperator:
+        return "EmptyOperator";
+    case OperatorType::EqualOperator:
+        return "EqualOperator";
+    case OperatorType::NotEqualOperator:
+        return "NotEqualOperator";
+    case OperatorType::RegexpMatchOperator:
+        return "RegexpMatchOperator";
+    case OperatorType::NotRegexpMatchOperator:
+        return "NotRegexpMatchOperator";
+    case OperatorType::InvalidOperator:
+        return "InvalidOperator";
+    }
+}
+
+struct Operator {};
+
+enum class LogicalOperator {
+    AndOperator,
+    OrOperator,
+};
+
+// assign
+struct MemberAssgn : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<MemberExpr> member;
+    std::shared_ptr<Expression> init;
+};
+
+enum class AssignmentType { VariableAssignment, MemberAssignment };
+
+struct Assignment {
+    AssignmentType type;
+    std::shared_ptr<VariableAssgn> variable;
+    std::shared_ptr<MemberAssgn> member;
+};
+
+// property
+enum class PropertyKeyType { Identifier, StringLiteral };
+
+struct PropertyKey {
+    PropertyKeyType type;
+    union {
+        Identifier identifier;
+        StringLit stringLit;
+    };
+};
+
+// function
+enum class FunctionBodyType { Block, Expression };
+
+struct Block : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::vector<std::shared_ptr<Comment>> lbrace;
+    std::vector<std::shared_ptr<Statement>> body;
+    std::vector<std::shared_ptr<Comment>> rbrace;
+};
+
+struct FunctionBody {
+    FunctionBodyType type;
+    union {
+        Block block;
+        Expression expression;
+    };
+};
+
+// parameter
+
+struct TvarType : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<Identifier> name;
+};
+
+struct NamedType : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<Identifier> name;
+};
+
+struct ArrayType : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<MonoType> element;
+};
+
+struct StreamType : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<MonoType> element;
+};
+
+struct VectorType : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<MonoType> element;
+};
+
+struct DictType : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<MonoType> key;
+    std::shared_ptr<MonoType> val;
+};
+
+struct DynamicType : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+};
+
+struct FunctionType : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::vector<std::shared_ptr<ParameterType>> parameters;
+    std::shared_ptr<MonoType> monotype;
+};
+
+struct RecordType : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<Identifier> tvar;
+    std::vector<std::shared_ptr<PropertyType>> properties;
+};
+
+struct MonoType {
+    enum class Type {
+        Tvar,
+        Basic,
+        Array,
+        Stream,
+        Vector,
+        Dict,
+        Dynamic,
+        Record,
+        Function,
+        Label,
+    };
+    Type type;
+    std::shared_ptr<TvarType> tvar;
+    std::shared_ptr<NamedType> basic;
+    std::shared_ptr<ArrayType> array;
+    std::shared_ptr<StreamType> stream;
+    std::shared_ptr<VectorType> vector;
+    std::shared_ptr<DictType> dict;
+    std::shared_ptr<DynamicType> dynamic;
+    std::shared_ptr<RecordType> record;
+    std::shared_ptr<FunctionType> func;
+    std::shared_ptr<LabelLit> label;
+};
+
+struct Required : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<Identifier> name;
+    std::shared_ptr<MonoType> monotype;
+};
+
+struct Optional : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<Identifier> name;
+    std::shared_ptr<MonoType> monotype;
+    std::shared_ptr<LabelLit> _default;
+};
+
+struct Pipe : public BaseNode {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<Identifier> name;
+    std::shared_ptr<MonoType> monotype;
+};
+
+struct ParameterType {
+    enum class Type {
+        Required,
+        Optional,
+        Pipe,
+    };
+    Type type;
+    std::shared_ptr<Required> required;
+    std::shared_ptr<Optional> optional;
+    std::shared_ptr<Pipe> pipe;
 };
 
 } // namespace pl
