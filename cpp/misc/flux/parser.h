@@ -16,16 +16,20 @@ public:
           fname_(""),
           depth_(0) {}
 
-    std::shared_ptr<Token> scan() {
+    // scan will read the next token from the Scanner. If peek has been used,
+    // this will return the peeked token and consume it.
+    std::unique_ptr<Token> scan() {
         if (token_) {
-            return token_;
+            return std::move(token_);
         }
         return scanner_->scan();
     }
 
+    // peek will read the next token from the Scanner and then buffer it.
+    // It will return information about the token.
     std::shared_ptr<Token> peek() {
         if (token_) {
-            return token_;
+            return std::move(token_);
         }
         auto token = scanner_->scan();
         token_ = std::move(token);
@@ -35,9 +39,9 @@ public:
     // TODO:
     std::shared_ptr<Token> peek_with_regex() { return nullptr; }
 
-    std::shared_ptr<Token> consume() {
+    std::unique_ptr<Token> consume() {
         if (token_) {
-            return token_;
+            return std::move(token_);
         }
         // TODO: handler error
         return nullptr;
@@ -74,7 +78,7 @@ public:
 
 private:
     std::unique_ptr<Scanner> scanner_;
-    std::shared_ptr<Token> token_;
+    std::unique_ptr<Token> token_;
     std::vector<std::string> errs_;
     std::map<TokenType, int32_t> blocks_;
     std::string source_;
