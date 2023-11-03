@@ -32,10 +32,10 @@ public:
           checkpoint_last_newline_(data),
           token_(TokenType::Illegal) {}
 
-    std::shared_ptr<Token> scan() { return scan_with_comments(0); }
-    std::shared_ptr<Token> scan_with_regex() { return scan_with_comments(1); }
-    std::shared_ptr<Token> scan_with_expr() { return scan_with_comments(2); }
-    std::shared_ptr<Token> scan_with_comments(int32_t mode);
+    std::unique_ptr<Token> scan() { return scan_with_comments(0); }
+    std::unique_ptr<Token> scan_with_regex() { return scan_with_comments(1); }
+    std::unique_ptr<Token> scan_with_expr() { return scan_with_comments(2); }
+    std::unique_ptr<Token> scan_with_comments(int32_t mode);
 
     /**
      * unread will reset the Scanner to go back to the location before the last scan_with_regex or
@@ -67,9 +67,8 @@ public:
     }
 
 private:
-    std::shared_ptr<Token> scan(int32_t mode);
-
-    std::shared_ptr<Token> get_eof_token();
+    std::unique_ptr<Token> scan(int32_t mode);
+    std::unique_ptr<Token> get_eof_token();
 
 private:
     const char* data_;
