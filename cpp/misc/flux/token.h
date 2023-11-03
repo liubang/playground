@@ -244,7 +244,7 @@ struct Token {
 };
 
 inline std::ostream& operator<<(std::ostream& os, const Token& token) {
-    os << "{ tok: " << token_to_string(token.tok) << ", lit: " << token.lit << ", offset: ["
+    os << "{tok: " << token_to_string(token.tok) << ", lit: " << token.lit << ", offset: ["
        << token.start_offset << ", " << token.end_offset
        << "], start_pos: {line: " << token.start_pos.line << ", column: " << token.start_pos.column
        << "}, end_pos: {line: " << token.end_pos.line << ", column: " << token.end_pos.column
