@@ -28,8 +28,8 @@ extern uint32_t real_scan(const char* data,
                           int32_t& token_end_line,
                           int32_t& token_end_col);
 
-std::shared_ptr<Token> Scanner::scan_with_comments(int32_t mode) {
-    std::shared_ptr<Token> token;
+std::unique_ptr<Token> Scanner::scan_with_comments(int32_t mode) {
+    std::unique_ptr<Token> token;
     for (;;) {
         token = scan(mode);
         if (token->tok != TokenType::Comment) {
@@ -41,7 +41,7 @@ std::shared_ptr<Token> Scanner::scan_with_comments(int32_t mode) {
     return token;
 }
 
-std::shared_ptr<Token> Scanner::scan(int32_t mode) {
+std::unique_ptr<Token> Scanner::scan(int32_t mode) {
     if (p_ == eof_) {
         return get_eof_token();
     }
@@ -59,7 +59,7 @@ std::shared_ptr<Token> Scanner::scan(int32_t mode) {
     auto err =
         real_scan(data_, mode, &p_, ps_, pe_, eof_, &last_newline_, cur_line_, token_, token_start,
                   token_start_line, token_start_col, token_end, token_end_line, token_end_col);
-    std::shared_ptr<Token> t;
+    std::unique_ptr<Token> t;
     if (err != 0) {
         // TODO(liubang):
         t = get_eof_token();
@@ -68,7 +68,7 @@ std::shared_ptr<Token> Scanner::scan(int32_t mode) {
     if (token_ == TokenType::Illegal && p_ == eof_) {
         t = get_eof_token();
     } else {
-        t = std::make_shared<Token>();
+        t = std::make_unique<Token>();
         t->tok = token_;
         t->lit = std::move(std::string(data_ + token_start, token_end - token_start));
         t->start_offset = token_start;
@@ -82,9 +82,9 @@ std::shared_ptr<Token> Scanner::scan(int32_t mode) {
     return t;
 }
 
-std::shared_ptr<Token> Scanner::get_eof_token() {
+std::unique_ptr<Token> Scanner::get_eof_token() {
     uint32_t column = eof_ - last_newline_ + 1;
-    auto token = std::make_shared<Token>();
+    auto token = std::make_unique<Token>();
     token->tok = TokenType::Eof;
     token->lit = "";
     token->start_offset = data_len_;
