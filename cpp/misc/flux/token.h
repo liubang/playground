@@ -211,6 +211,11 @@ struct Position {
     }
 };
 
+inline std::ostream& operator<<(std::ostream& os, const Position& pos) {
+    os << "{line:" << pos.line << ", column:" << pos.column << "}";
+    return os;
+}
+
 struct SourceLocation {
     std::string file;
     Position start;
@@ -245,10 +250,8 @@ struct Token {
 
 inline std::ostream& operator<<(std::ostream& os, const Token& token) {
     os << "{tok: " << token_to_string(token.tok) << ", lit: " << token.lit << ", offset: ["
-       << token.start_offset << ", " << token.end_offset
-       << "], start_pos: {line: " << token.start_pos.line << ", column: " << token.start_pos.column
-       << "}, end_pos: {line: " << token.end_pos.line << ", column: " << token.end_pos.column
-       << "}}";
+       << token.start_offset << ", " << token.end_offset << "], start_pos: " << token.start_pos
+       << ", end_pos: " << token.end_pos << "}";
     return os;
 }
 
