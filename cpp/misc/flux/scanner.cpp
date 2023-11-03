@@ -70,7 +70,7 @@ std::shared_ptr<Token> Scanner::scan(int32_t mode) {
     } else {
         t = std::make_shared<Token>();
         t->tok = token_;
-        t->lit = std::string(data_ + token_start, token_end - token_start);
+        t->lit = std::move(std::string(data_ + token_start, token_end - token_start));
         t->start_offset = token_start;
         t->end_offset = token_end;
         t->start_pos = Position(token_start_line, token_start_col);
