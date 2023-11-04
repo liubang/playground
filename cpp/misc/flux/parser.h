@@ -3,7 +3,9 @@
 #include <memory>
 #include <set>
 #include <sstream>
+#include <utility>
 
+#include "ast.h"
 #include "scanner.h"
 #include "token.h"
 
@@ -17,7 +19,60 @@ public:
           fname_(""),
           depth_(0) {}
 
+    // Parses a file of Flux source code, returning a Package
+    std::unique_ptr<Package> parse_single_package(const std::string& pkgpath,
+                                                  const std::string& fname) {
+        std::shared_ptr<File> ast_file = parse_file(fname);
+        auto package = std::make_unique<Package>();
+        package->package = ast_file->package->name->name;
+        package->base = ast_file;
+        package->path = pkgpath;
+        package->files.emplace_back(ast_file);
+        return package;
+    }
+
+    // Parses a file of Flux source code, returning a File
+    std::unique_ptr<File> parse_file(const std::string& fname) {
+        fname_ = fname;
+        auto start_pos = peek()->start_pos;
+        auto end = Position::invalid();
+        auto inner_attributes = parse_attribute_inner_list();
+        auto pkg = parse_package_clause(&inner_attributes);
+        if (pkg) {
+            end = pkg->base->location.end;
+        }
+        auto imports = parse_import_list(&inner_attributes);
+        if (!imports.empty()) {
+            end = imports.rbegin()->get()->location.end;
+        }
+        auto body = parse_statement_list(&inner_attributes);
+        if (!inner_attributes.empty()) {
+            // We have left over attributes from the beginning of the file.
+            auto badstmt = std::make_shared<BadStmt>();
+            badstmt->base = base_node_from_others(inner_attributes[0]->base.get(),
+                                                  inner_attributes.rbegin()->get()->base.get());
+            badstmt->text = "extra attributes not associated with anything";
+            body.emplace_back(std::make_shared<Statement>(Statement::Type::BadStatement, badstmt));
+        }
+        if (!body.empty()) {
+            end = body.rbegin()->get()->base()->location.end;
+        }
+        auto eof = peek()->comments;
+        auto ret = std::make_unique<File>();
+        ret->base = std::make_shared<BaseNode>();
+        ret->base->location = source_location(start_pos, end);
+        ret->name = fname_;
+        ret->metadata = METADATA;
+        ret->package = std::move(pkg);
+        ret->body = body;
+        ret->imports = imports;
+        ret->eof = eof;
+        return ret;
+    }
+
 private:
+    constexpr static char METADATA[] = "parser-type=rust";
+
     // scan will read the next token from the Scanner. If peek has been used,
     // this will return the peeked token and consume it.
     std::unique_ptr<Token> scan() {
@@ -110,14 +165,13 @@ private:
             return t;
         }
         token_ = std::move(t);
-        auto ret = std::unique_ptr<Token>();
+        auto ret = std::make_unique<Token>();
         ret->start_offset = token_->start_offset;
         ret->end_offset = token_->end_offset;
         ret->start_pos = token_->start_pos;
         ret->end_pos = token_->end_pos;
         if (t->tok == TokenType::Eof) {
             errs_.emplace_back("expected " + token_to_string(exp) + ", got EOF");
-            auto ret = std::unique_ptr<Token>();
             ret->tok = token_->tok;
             ret->comments = token_->comments;
         } else {
@@ -152,7 +206,121 @@ private:
         return blocks_.find(t_tok) == blocks_.end() || blocks_[t_tok] == 0;
     }
 
-    std::unique_ptr<Token> close() {}
+    // close will close a block that was opened using open.
+    //
+    // This function will always decrement the block count for the end token.
+    //
+    // If the next token is the end token, then this will consume the token and return the pos and
+    // lit for the token. Otherwise, it will return NoPos.
+    std::unique_ptr<Token> close(TokenType end) {
+        if (end == TokenType::Eof) {
+            return scan();
+        }
+        if (blocks_.find(end) == blocks_.end()) {
+            // TODO: error handler
+            return nullptr;
+        }
+        blocks_[end] = blocks_[end] - 1;
+        const auto* token = peek();
+        if (token->tok == end) {
+            return consume();
+        }
+        errs_.emplace_back("expected " + token_to_string(end) + ", got " +
+                           token_to_string(token->tok));
+        auto ret = std::make_unique<Token>();
+        ret->tok = token->tok;
+        ret->lit = token->lit;
+        ret->start_pos = token->start_pos;
+        ret->end_pos = token->end_pos;
+        ret->start_offset = token->start_offset;
+        ret->end_offset = token->end_offset;
+        return ret;
+    }
+
+    std::unique_ptr<BaseNode> base_node(SourceLocation location) {
+        auto ret = std::make_unique<BaseNode>();
+        ret->location = std::move(location);
+        ret->errors = errs_;
+        return ret;
+    }
+
+    std::unique_ptr<BaseNode> base_node_from_token(const Token* token) {
+        auto base = base_node_from_tokens(token, token);
+        base->comments = token->comments;
+        return base;
+    }
+
+    std::unique_ptr<BaseNode> base_node_from_tokens(const Token* start, const Token* end) {
+        return base_node(source_location(start->start_pos, end->end_pos));
+    }
+
+    std::unique_ptr<BaseNode> base_node_from_other_start(const BaseNode* start, const Token* end) {
+        return base_node(source_location(start->location.start, end->end_pos));
+    }
+
+    std::unique_ptr<BaseNode> base_node_from_other_end(const Token* start, const BaseNode* end) {
+        return base_node(source_location(start->start_pos, end->location.end));
+    }
+
+    std::unique_ptr<BaseNode> base_node_from_other_end_c(const Token* start,
+                                                         const BaseNode* end,
+                                                         const Token* comments_from) {
+        auto base = base_node(source_location(start->start_pos, end->location.end));
+        base->comments = comments_from->comments;
+        return base;
+    }
+
+    std::unique_ptr<BaseNode>
+    base_node_from_other_end_c_a(const Token* start,
+                                 const BaseNode* end,
+                                 const Token* comments_from,
+                                 const std::vector<std::shared_ptr<Attribute>>& attributes) {
+        auto base = base_node(source_location(start->start_pos, end->location.end));
+        base->comments = comments_from->comments;
+        base->attributes = attributes;
+        return base;
+    }
+
+    std::unique_ptr<BaseNode> base_node_from_others_c(const BaseNode* start,
+                                                      const BaseNode* end,
+                                                      const Token* comments_from) {
+        auto base = base_node_from_pos(start->location.start, end->location.end);
+        base->comments = comments_from->comments;
+        return base;
+    }
+
+    std::unique_ptr<BaseNode> base_node_from_others(const BaseNode* start, const BaseNode* end) {
+        return base_node_from_pos(start->location.start, end->location.end);
+    }
+
+    std::unique_ptr<BaseNode> base_node_from_pos(const Position& start, const Position& end) {
+        return base_node(source_location(start, end));
+    }
+
+    SourceLocation source_location(const Position& start, const Position& end) {
+        if (!start.is_valid() || !end.is_valid()) {
+            return SourceLocation::_default();
+        }
+        SourceLocation ret;
+        ret.file = fname_;
+        ret.start = start;
+        ret.end = end;
+        auto s = scanner_->offset(start);
+        auto e = scanner_->offset(end);
+        ret.source = std::string(source_.data() + s, (e - s));
+        return ret;
+    }
+
+    std::vector<std::shared_ptr<Attribute>> parse_attribute_inner_list() {}
+
+    std::unique_ptr<PackageClause>
+    parse_package_clause(std::vector<std::shared_ptr<Attribute>>* attributes) {}
+
+    std::vector<std::shared_ptr<ImportDeclaration>>
+    parse_import_list(std::vector<std::shared_ptr<Attribute>>* attributes) {}
+
+    std::vector<std::shared_ptr<Statement>>
+    parse_statement_list(std::vector<std::shared_ptr<Attribute>>* attributes) {}
 
 private:
     std::unique_ptr<Scanner> scanner_;

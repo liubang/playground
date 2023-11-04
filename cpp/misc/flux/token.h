@@ -209,6 +209,7 @@ struct Position {
     bool operator<(const Position& other) const {
         return line < other.line || (line == other.line && column < other.column);
     }
+    static Position invalid() { return Position(0, 0); }
 };
 
 inline std::ostream& operator<<(std::ostream& os, const Position& pos) {
@@ -230,6 +231,7 @@ struct SourceLocation {
         : file(file), start(start), end(end), source(source) {}
 
     bool is_valid() const { return start.is_valid() && end.is_valid(); }
+    static SourceLocation _default() { return SourceLocation(); }
 };
 
 struct Comment {
