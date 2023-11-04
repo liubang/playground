@@ -51,3 +51,20 @@ cc_binary(
         ":scanner",
     ],
 )
+
+cc_library(
+    name = "parser",
+    srcs = [
+        "parser.cpp",
+    ],
+    hdrs = [
+        "ast.h",
+        "parser.h",
+        "strconv.h",
+    ],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        ":scanner",
+    ],
+)

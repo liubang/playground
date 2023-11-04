@@ -207,31 +207,31 @@ struct Statement {
                  std::shared_ptr<BuiltinStmt>>
         stmt;
 
-    Statement(Type t, const std::shared_ptr<BaseNode>& stmt) : type(t) {
-        switch (t) {
-        case Type::ExpressionStatement:
-            this->stmt = std::static_pointer_cast<ExprStmt>(stmt);
-            break;
-        case Type::VariableAssignment:
-            this->stmt = std::static_pointer_cast<VariableAssgn>(stmt);
-            break;
-        case Type::OptionStatement:
-            this->stmt = std::static_pointer_cast<OptionStmt>(stmt);
-            break;
-        case Type::ReturnStatement:
-            this->stmt = std::static_pointer_cast<ReturnStmt>(stmt);
-            break;
-        case Type::BadStatement:
-            this->stmt = std::static_pointer_cast<BadStmt>(stmt);
-            break;
-        case Type::TestCaseStatement:
-            this->stmt = std::static_pointer_cast<TestCaseStmt>(stmt);
-            break;
-        case Type::BuiltinStatement:
-            this->stmt = std::static_pointer_cast<BuiltinStmt>(stmt);
-            break;
-        }
-    }
+    // Statement(Type t, const std::shared_ptr<BaseNode>& stmt) : type(t) {
+    //     switch (t) {
+    //     case Type::ExpressionStatement:
+    //         this->stmt = std::static_pointer_cast<ExprStmt>(stmt);
+    //         break;
+    //     case Type::VariableAssignment:
+    //         this->stmt = std::static_pointer_cast<VariableAssgn>(stmt);
+    //         break;
+    //     case Type::OptionStatement:
+    //         this->stmt = std::static_pointer_cast<OptionStmt>(stmt);
+    //         break;
+    //     case Type::ReturnStatement:
+    //         this->stmt = std::static_pointer_cast<ReturnStmt>(stmt);
+    //         break;
+    //     case Type::BadStatement:
+    //         this->stmt = std::static_pointer_cast<BadStmt>(stmt);
+    //         break;
+    //     case Type::TestCaseStatement:
+    //         this->stmt = std::static_pointer_cast<TestCaseStmt>(stmt);
+    //         break;
+    //     case Type::BuiltinStatement:
+    //         this->stmt = std::static_pointer_cast<BuiltinStmt>(stmt);
+    //         break;
+    //     }
+    // }
 
     std::shared_ptr<BaseNode> base() {
         switch (type) {
@@ -254,34 +254,6 @@ struct Statement {
 };
 
 // expr
-enum class ExpressionType {
-    Identifier,
-    ArrayExpression,
-    DictExpression,
-    FunctionExpression,
-    LogicalExpression,
-    ObjectExpression,
-    MemberExpression,
-    IndexExpression,
-    BinaryExpression,
-    UnaryExpression,
-    PipeExpression,
-    CallExpression,
-    ConditionalExpression,
-    StringExpression,
-    ParenExpression,
-    IntegerLiteral,
-    FloatLiteral,
-    StringLiteral,
-    DurationLiteral,
-    UnsignedIntegerLiteral,
-    BooleanLiteral,
-    DateTimeLiteral,
-    RegexpLiteral,
-    PipeLiteral,
-    LabelLiteral,
-    BadExpression
-};
 
 struct Identifier : public BaseNode {
     std::shared_ptr<BaseNode> base;
@@ -467,8 +439,120 @@ struct BadExpr : public BaseNode {
 };
 
 struct Expression {
-    ExpressionType type;
-    std::shared_ptr<BaseNode> base;
+    enum class Type {
+        Identifier,
+        ArrayExpr,
+        DictExpr,
+        FunctionExpr,
+        LogicalExpr,
+        ObjectExpr,
+        MemberExpr,
+        IndexExpr,
+        BinaryExpr,
+        UnaryExpr,
+        PipeExpr,
+        CallExpr,
+        ConditionalExpr,
+        StringExpr,
+        ParenExpr,
+        IntegerLit,
+        FloatLit,
+        StringLit,
+        DurationLit,
+        UnsignedIntegerLit,
+        BooleanLit,
+        DateTimeLit,
+        RegexpLit,
+        PipeLit,
+        LabelLit,
+        BadExpr
+    };
+    Type type;
+
+    std::variant<std::shared_ptr<Identifier>,
+                 std::shared_ptr<ArrayExpr>,
+                 std::shared_ptr<DictExpr>,
+                 std::shared_ptr<FunctionExpr>,
+                 std::shared_ptr<LogicalExpr>,
+                 std::shared_ptr<ObjectExpr>,
+                 std::shared_ptr<MemberExpr>,
+                 std::shared_ptr<IndexExpr>,
+                 std::shared_ptr<BinaryExpr>,
+                 std::shared_ptr<UnaryExpr>,
+                 std::shared_ptr<PipeExpr>,
+                 std::shared_ptr<CallExpr>,
+                 std::shared_ptr<ConditionalExpr>,
+                 std::shared_ptr<StringExpr>,
+                 std::shared_ptr<ParenExpr>,
+                 std::shared_ptr<IntegerLit>,
+                 std::shared_ptr<FloatLit>,
+                 std::shared_ptr<StringLit>,
+                 std::shared_ptr<DurationLit>,
+                 std::shared_ptr<UintLit>,
+                 std::shared_ptr<BooleanLit>,
+                 std::shared_ptr<DateTimeLit>,
+                 std::shared_ptr<RegexpLit>,
+                 std::shared_ptr<PipeLit>,
+                 std::shared_ptr<LabelLit>,
+                 std::shared_ptr<BadExpr>>
+        expr;
+
+    std::shared_ptr<BaseNode> base() {
+        switch (type) {
+        case Type::Identifier:
+            return std::get<std::shared_ptr<Identifier>>(expr)->base;
+        case Type::ArrayExpr:
+            return std::get<std::shared_ptr<ArrayExpr>>(expr)->base;
+        case Type::DictExpr:
+            return std::get<std::shared_ptr<DictExpr>>(expr)->base;
+        case Type::FunctionExpr:
+            return std::get<std::shared_ptr<FunctionExpr>>(expr)->base;
+        case Type::LogicalExpr:
+            return std::get<std::shared_ptr<LogicalExpr>>(expr)->base;
+        case Type::ObjectExpr:
+            return std::get<std::shared_ptr<ObjectExpr>>(expr)->base;
+        case Type::MemberExpr:
+            return std::get<std::shared_ptr<MemberExpr>>(expr)->base;
+        case Type::IndexExpr:
+            return std::get<std::shared_ptr<IndexExpr>>(expr)->base;
+        case Type::BinaryExpr:
+            return std::get<std::shared_ptr<BinaryExpr>>(expr)->base;
+        case Type::UnaryExpr:
+            return std::get<std::shared_ptr<UnaryExpr>>(expr)->base;
+        case Type::PipeExpr:
+            return std::get<std::shared_ptr<PipeExpr>>(expr)->base;
+        case Type::CallExpr:
+            return std::get<std::shared_ptr<CallExpr>>(expr)->base;
+        case Type::ConditionalExpr:
+            return std::get<std::shared_ptr<ConditionalExpr>>(expr)->base;
+        case Type::IntegerLit:
+            return std::get<std::shared_ptr<IntegerLit>>(expr)->base;
+        case Type::FloatLit:
+            return std::get<std::shared_ptr<FloatLit>>(expr)->base;
+        case Type::StringLit:
+            return std::get<std::shared_ptr<StringLit>>(expr)->base;
+        case Type::DurationLit:
+            return std::get<std::shared_ptr<DurationLit>>(expr)->base;
+        case Type::UnsignedIntegerLit:
+            return std::get<std::shared_ptr<UintLit>>(expr)->base;
+        case Type::BooleanLit:
+            return std::get<std::shared_ptr<BooleanLit>>(expr)->base;
+        case Type::DateTimeLit:
+            return std::get<std::shared_ptr<DateTimeLit>>(expr)->base;
+        case Type::RegexpLit:
+            return std::get<std::shared_ptr<RegexpLit>>(expr)->base;
+        case Type::PipeLit:
+            return std::get<std::shared_ptr<PipeLit>>(expr)->base;
+        case Type::LabelLit:
+            return std::get<std::shared_ptr<LabelLit>>(expr)->base;
+        case Type::BadExpr:
+            return std::get<std::shared_ptr<BadExpr>>(expr)->base;
+        case Type::StringExpr:
+            return std::get<std::shared_ptr<StringExpr>>(expr)->base;
+        case Type::ParenExpr:
+            return std::get<std::shared_ptr<ParenExpr>>(expr)->base;
+        }
+    }
 };
 
 // operator

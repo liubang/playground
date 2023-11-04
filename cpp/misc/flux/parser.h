@@ -1,5 +1,14 @@
+//=====================================================================
+//
+// parser.h -
+//
+// Created by liubang on 2023/11/04 17:26
+// Last Modified: 2023/11/04 17:26
+//
+//=====================================================================
 #pragma once
 
+#include <algorithm>
 #include <memory>
 #include <set>
 #include <sstream>
@@ -7,9 +16,14 @@
 
 #include "ast.h"
 #include "scanner.h"
+#include "strconv.h"
 #include "token.h"
 
 namespace pl {
+
+struct TokenError {
+    std::unique_ptr<Token> token;
+};
 
 class Parser {
 public:
@@ -311,16 +325,244 @@ private:
         return ret;
     }
 
-    std::vector<std::shared_ptr<Attribute>> parse_attribute_inner_list() {}
+    std::vector<std::shared_ptr<Attribute>> parse_attribute_inner_list() {
+        auto attributes = std::vector<std::shared_ptr<Attribute>>();
+        while (peek()->tok == TokenType::Attribute) {
+            attributes.emplace_back(parse_attribute_inner());
+        }
+        return attributes;
+    }
+
+    std::unique_ptr<Attribute> parse_attribute_inner() {
+        auto tok = expect(TokenType::Attribute);
+        auto lit = tok->lit;
+        auto name = std::string(std::find_if(lit.begin(), lit.end(),
+                                             [](char c) {
+                                                 return c != '@';
+                                             }),
+                                lit.end());
+        return parse_attribute_rest(std::move(tok), name);
+    }
+
+    std::unique_ptr<Attribute> parse_attribute_rest(std::unique_ptr<Token> tok,
+                                                    const std::string& name) {
+        // Parenthesis are optional. No parenthesis means no parameters.
+        if (peek()->tok != TokenType::LParen) {
+            auto ret = std::make_unique<Attribute>();
+            ret->base = base_node_from_token(tok.get());
+            ret->name = name;
+            return ret;
+        }
+
+        open(TokenType::LParen, TokenType::RParen);
+        auto params = parse_attribute_params();
+        auto end = close(TokenType::RParen);
+        auto base = base_node_from_tokens(tok.get(), end.get());
+        base->comments = tok->comments;
+        auto ret = std::make_unique<Attribute>();
+        ret->base = std::move(base);
+        ret->name = name;
+        ret->params = std::move(params);
+        return ret;
+    }
+
+    std::vector<std::shared_ptr<AttributeParam>> parse_attribute_params() {
+        std::vector<std::shared_ptr<AttributeParam>> params;
+        while (more()) {
+            auto value = parse_primary_expression();
+            auto start_pos = value->base()->location.start;
+            auto end_pos = value->base()->location.end;
+            std::vector<std::shared_ptr<Comment>> comments;
+
+            if (more()) {
+                const auto* t = peek();
+                if (t->tok != TokenType::Comma) {
+                    errs_.emplace_back("expected comma in attribute parameter list, got " +
+                                       token_to_string(t->tok));
+                } else {
+                    auto tt = consume();
+                    end_pos = tt->end_pos;
+                    comments = tt->comments;
+                }
+            }
+
+            auto param = std::make_shared<AttributeParam>();
+            param->base = base_node_from_pos(start_pos, end_pos);
+            param->value = std::move(value);
+            param->comma = comments;
+            params.emplace_back(param);
+        }
+        return params;
+    }
+
+    std::unique_ptr<Expression> parse_primary_expression() {
+        auto t = peek_with_regex();
+        auto ret = std::make_unique<Expression>();
+        switch (t->tok) {
+        case TokenType::Ident: {
+            ret->type = Expression::Type::Identifier;
+            ret->expr = parse_identifier();
+            break;
+        }
+        case TokenType::Int: {
+            ret->type = Expression::Type::IntegerLit;
+            ret->expr = parse_int_literal();
+            break;
+        }
+        case TokenType::Float: {
+            TokenError err;
+            std::unique_ptr<FloatLit> fl;
+            std::tie(fl, err) = parse_float_literal();
+            if (fl) {
+                ret->type = Expression::Type::FloatLit;
+                ret->expr = std::move(fl);
+            } else {
+                return create_bad_expression(std::move(err.token));
+            }
+            break;
+        }
+        case TokenType::String: {
+            ret->type = Expression::Type::StringLit;
+            ret->expr = parse_string_literal();
+            break;
+        }
+        case TokenType::Quote:
+            // TODO:
+            break;
+        case TokenType::Regex:
+            // TODO:
+            break;
+        case TokenType::Time:
+            // TODO:
+            break;
+        case TokenType::Duration:
+            // TODO:
+            break;
+        case TokenType::PipeReceive:
+            // TODO:
+            break;
+        case TokenType::LBrack:
+            // TODO:
+            break;
+        case TokenType::LBrace:
+            // TODO:
+            break;
+        case TokenType::LParen:
+            // TODO:
+            break;
+        case TokenType::Dot:
+            // TODO:
+            break;
+        default:
+            break;
+        }
+        return ret;
+    }
+
+    // TODO:
+    std::tuple<std::unique_ptr<StringExpr>, TokenError> parse_string_expression() {
+        auto start = expect(TokenType::Quote);
+        for (;;) {
+        }
+        return {nullptr, TokenError()};
+    }
+
+    std::unique_ptr<StringLit> parse_string_literal() {
+        auto t = expect(TokenType::String);
+        return new_string_literal(std::move(t));
+    }
+
+    std::unique_ptr<StringLit> new_string_literal(std::unique_ptr<Token> t) {
+        auto result = StrConv::parse_string(t->lit);
+        if (!result.ok()) {
+            return nullptr;
+        }
+        auto ret = std::make_unique<StringLit>();
+        ret->base = base_node_from_token(t.get());
+        ret->value = result.t();
+        return ret;
+    }
+
+    std::unique_ptr<Expression> create_bad_expression(std::unique_ptr<Token> tok) {
+        std::string ss = "invalid token for primary expression: " + token_to_string(tok->tok);
+        return create_bad_expression_with_text(std::move(tok), std::move(ss));
+    }
+
+    std::unique_ptr<Expression> create_bad_expression_with_text(std::unique_ptr<Token> tok,
+                                                                std::string_view text) {
+        auto base = std::make_shared<BaseNode>();
+        base->location = source_location(tok->start_pos, tok->end_pos);
+
+        auto expr = std::make_shared<BadExpr>();
+        expr->text = text;
+        expr->base = base;
+
+        auto ret = std::make_unique<Expression>();
+        ret->type = Expression::Type::BadExpr;
+        ret->expr = expr;
+
+        return ret;
+    }
+
+    std::unique_ptr<Identifier> parse_identifier() {
+        auto t = expect_or_skip(TokenType::Ident);
+        auto ret = std::make_unique<Identifier>();
+        ret->base = base_node_from_token(t.get());
+        ret->name = t->lit;
+        return ret;
+    }
+
+    std::unique_ptr<IntegerLit> parse_int_literal() {
+        auto t = expect(TokenType::Int);
+        auto ret = std::make_unique<IntegerLit>();
+        ret->base = base_node_from_token(t.get());
+        if (t->lit.starts_with('0') && t->lit.length() > 1) {
+            errs_.emplace_back("invalid integer literal " + t->lit +
+                               ": nonzero value cannot start with 0");
+            ret->value = 0;
+            return ret;
+        }
+
+        try {
+            int64_t value = std::stol(t->lit);
+            ret->value = value;
+        } catch (...) {
+            errs_.emplace_back("invalid integer literal " + t->lit + ": value out of range");
+            ret->value = 0;
+        }
+
+        return ret;
+    }
+
+    std::tuple<std::unique_ptr<FloatLit>, TokenError> parse_float_literal() {
+        auto t = expect(TokenType::Float);
+        try {
+            long double value = std::stod(t->lit);
+            auto ret = std::make_unique<FloatLit>();
+            ret->base = base_node_from_token(t.get());
+            ret->value = value;
+            return {std::move(ret), TokenError()};
+        } catch (...) {
+            TokenError tok_err;
+            tok_err.token = std::move(t);
+            return {std::unique_ptr<FloatLit>(), std::move(tok_err)};
+        }
+    }
 
     std::unique_ptr<PackageClause>
-    parse_package_clause(std::vector<std::shared_ptr<Attribute>>* attributes) {}
+    parse_package_clause(std::vector<std::shared_ptr<Attribute>>* attributes) {
+        return nullptr;
+    }
 
     std::vector<std::shared_ptr<ImportDeclaration>>
-    parse_import_list(std::vector<std::shared_ptr<Attribute>>* attributes) {}
+    parse_import_list(std::vector<std::shared_ptr<Attribute>>* attributes) {
+        return {};
+    }
 
     std::vector<std::shared_ptr<Statement>>
-    parse_statement_list(std::vector<std::shared_ptr<Attribute>>* attributes) {}
+    parse_statement_list(std::vector<std::shared_ptr<Attribute>>* attributes) {
+        return {};
+    }
 
 private:
     std::unique_ptr<Scanner> scanner_;
