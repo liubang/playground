@@ -10,6 +10,7 @@
 
 #include <chrono>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 #include "token.h"
@@ -128,6 +129,8 @@ struct File : public BaseNode {
     std::string metadata;
     std::shared_ptr<PackageClause> package;
     std::vector<std::shared_ptr<ImportDeclaration>> imports;
+    std::vector<std::shared_ptr<Statement>> body;
+    std::vector<std::shared_ptr<Comment>> eof;
 };
 
 struct PackageClause : public BaseNode {
@@ -142,37 +145,6 @@ struct ImportDeclaration : public BaseNode {
 };
 
 // stmt
-
-enum class StatementType {
-    ExpressionStatement,
-    VariableAssignment,
-    OptionStatement,
-    ReturnStatement,
-    BadStatement,
-    TestCaseStatement,
-    BuiltinStatement
-};
-
-std::string stmttype_to_str(StatementType type) {
-    switch (type) {
-    case StatementType::ExpressionStatement:
-        return "ExpressionStatement";
-    case StatementType::VariableAssignment:
-        return "VariableAssignment";
-    case StatementType::OptionStatement:
-        return "OptionStatement";
-    case StatementType::ReturnStatement:
-        return "ReturnStatement";
-    case StatementType::BadStatement:
-        return "BadStatement";
-    case StatementType::TestCaseStatement:
-        return "TestCaseStatement";
-    case StatementType::BuiltinStatement:
-        return "BuiltinStatement";
-    default:
-        return "Unknown";
-    }
-}
 
 struct ExprStmt : public BaseNode {
     std::shared_ptr<BaseNode> base;
@@ -215,7 +187,70 @@ struct BuiltinStmt : public BaseNode {
 };
 
 struct Statement {
-    int typ;
+    enum class Type {
+        ExpressionStatement,
+        VariableAssignment,
+        OptionStatement,
+        ReturnStatement,
+        BadStatement,
+        TestCaseStatement,
+        BuiltinStatement
+    };
+    Type type;
+
+    std::variant<std::shared_ptr<ExprStmt>,
+                 std::shared_ptr<VariableAssgn>,
+                 std::shared_ptr<OptionStmt>,
+                 std::shared_ptr<ReturnStmt>,
+                 std::shared_ptr<BadStmt>,
+                 std::shared_ptr<TestCaseStmt>,
+                 std::shared_ptr<BuiltinStmt>>
+        stmt;
+
+    Statement(Type t, const std::shared_ptr<BaseNode>& stmt) : type(t) {
+        switch (t) {
+        case Type::ExpressionStatement:
+            this->stmt = std::static_pointer_cast<ExprStmt>(stmt);
+            break;
+        case Type::VariableAssignment:
+            this->stmt = std::static_pointer_cast<VariableAssgn>(stmt);
+            break;
+        case Type::OptionStatement:
+            this->stmt = std::static_pointer_cast<OptionStmt>(stmt);
+            break;
+        case Type::ReturnStatement:
+            this->stmt = std::static_pointer_cast<ReturnStmt>(stmt);
+            break;
+        case Type::BadStatement:
+            this->stmt = std::static_pointer_cast<BadStmt>(stmt);
+            break;
+        case Type::TestCaseStatement:
+            this->stmt = std::static_pointer_cast<TestCaseStmt>(stmt);
+            break;
+        case Type::BuiltinStatement:
+            this->stmt = std::static_pointer_cast<BuiltinStmt>(stmt);
+            break;
+        }
+    }
+
+    std::shared_ptr<BaseNode> base() {
+        switch (type) {
+        case Type::ExpressionStatement:
+            return std::get<std::shared_ptr<ExprStmt>>(stmt)->base;
+        case Type::VariableAssignment:
+            return std::get<std::shared_ptr<VariableAssgn>>(stmt)->base;
+        case Type::OptionStatement:
+            return std::get<std::shared_ptr<OptionStmt>>(stmt)->base;
+        case Type::ReturnStatement:
+            return std::get<std::shared_ptr<ReturnStmt>>(stmt)->base;
+        case Type::BadStatement:
+            return std::get<std::shared_ptr<BadStmt>>(stmt)->base;
+        case Type::TestCaseStatement:
+            return std::get<std::shared_ptr<TestCaseStmt>>(stmt)->base;
+        case Type::BuiltinStatement:
+            return std::get<std::shared_ptr<BuiltinStmt>>(stmt)->base;
+        }
+    }
 };
 
 // expr
