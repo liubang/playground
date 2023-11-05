@@ -90,8 +90,8 @@ struct FunctionBody;
 struct MonoType;
 struct ParameterType;
 struct StringExprPart;
-struct Operator;
 
+enum class Operator;
 enum class LogicalOperator;
 
 struct BaseNode {
@@ -260,11 +260,22 @@ struct Identifier {
     std::string name;
 };
 
+struct ArrayItem {
+    std::shared_ptr<Expression> expression;
+    std::vector<std::shared_ptr<Comment>> comma;
+};
+
 struct ArrayExpr {
     std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<Comment>> lbrack;
     std::vector<std::shared_ptr<ArrayItem>> elements;
     std::vector<std::shared_ptr<Comment>> rbrack;
+};
+
+struct DictItem {
+    std::shared_ptr<Expression> key;
+    std::shared_ptr<Expression> val;
+    std::vector<std::shared_ptr<Comment>> comma;
 };
 
 struct DictExpr {
@@ -316,7 +327,7 @@ struct IndexExpr {
 
 struct BinaryExpr {
     std::shared_ptr<BaseNode> base;
-    std::shared_ptr<Operator> op;
+    Operator op;
     std::shared_ptr<Expression> left;
     std::shared_ptr<Expression> right;
 };
@@ -415,7 +426,7 @@ struct BooleanLit {
 
 struct DateTimeLit {
     std::shared_ptr<BaseNode> base;
-    std::chrono::system_clock::time_point value;
+    std::tm value;
 };
 
 struct RegexpLit {
@@ -556,7 +567,7 @@ struct Expression {
 };
 
 // operator
-enum class OperatorType {
+enum class Operator {
     MultiplicationOperator,
     DivisionOperator,
     ModuloOperator,
@@ -580,78 +591,76 @@ enum class OperatorType {
     InvalidOperator,
 };
 
-std::unordered_map<std::string, OperatorType> operator_map = {
-    {"*", OperatorType::MultiplicationOperator},
-    {"/", OperatorType::DivisionOperator},
-    {"%", OperatorType::ModuloOperator},
-    {"^", OperatorType::PowerOperator},
-    {"+", OperatorType::AdditionOperator},
-    {"-", OperatorType::SubtractionOperator},
-    {"<=", OperatorType::LessThanEqualOperator},
-    {"<", OperatorType::LessThanOperator},
-    {">=", OperatorType::GreaterThanEqualOperator},
-    {">", OperatorType::GreaterThanOperator},
-    {"startswith", OperatorType::StartsWithOperator},
-    {"in", OperatorType::InOperator},
-    {"not", OperatorType::NotOperator},
-    {"exists", OperatorType::ExistsOperator},
-    {"not empty", OperatorType::NotEmptyOperator},
-    {"empty", OperatorType::EmptyOperator},
-    {"==", OperatorType::EqualOperator},
-    {"!=", OperatorType::NotEqualOperator},
-    {"=~", OperatorType::RegexpMatchOperator},
-    {"!~", OperatorType::NotRegexpMatchOperator},
-    {"<INVALID_OP>", OperatorType::InvalidOperator},
+std::unordered_map<std::string, Operator> operator_map = {
+    {"*", Operator::MultiplicationOperator},
+    {"/", Operator::DivisionOperator},
+    {"%", Operator::ModuloOperator},
+    {"^", Operator::PowerOperator},
+    {"+", Operator::AdditionOperator},
+    {"-", Operator::SubtractionOperator},
+    {"<=", Operator::LessThanEqualOperator},
+    {"<", Operator::LessThanOperator},
+    {">=", Operator::GreaterThanEqualOperator},
+    {">", Operator::GreaterThanOperator},
+    {"startswith", Operator::StartsWithOperator},
+    {"in", Operator::InOperator},
+    {"not", Operator::NotOperator},
+    {"exists", Operator::ExistsOperator},
+    {"not empty", Operator::NotEmptyOperator},
+    {"empty", Operator::EmptyOperator},
+    {"==", Operator::EqualOperator},
+    {"!=", Operator::NotEqualOperator},
+    {"=~", Operator::RegexpMatchOperator},
+    {"!~", Operator::NotRegexpMatchOperator},
+    {"<INVALID_OP>", Operator::InvalidOperator},
 };
 
-std::string operator_to_string(OperatorType op) {
+std::string operator_to_string(Operator op) {
     switch (op) {
-    case OperatorType::MultiplicationOperator:
+    case Operator::MultiplicationOperator:
         return "MultiplicationOperator";
-    case OperatorType::DivisionOperator:
+    case Operator::DivisionOperator:
         return "DivisionOperator";
-    case OperatorType::ModuloOperator:
+    case Operator::ModuloOperator:
         return "ModuloOperator";
-    case OperatorType::PowerOperator:
+    case Operator::PowerOperator:
         return "PowerOperator";
-    case OperatorType::AdditionOperator:
+    case Operator::AdditionOperator:
         return "AdditionOperator";
-    case OperatorType::SubtractionOperator:
+    case Operator::SubtractionOperator:
         return "SubtractionOperator";
-    case OperatorType::LessThanEqualOperator:
+    case Operator::LessThanEqualOperator:
         return "LessThanEqualOperator";
-    case OperatorType::LessThanOperator:
+    case Operator::LessThanOperator:
         return "LessThanOperator";
-    case OperatorType::GreaterThanEqualOperator:
+    case Operator::GreaterThanEqualOperator:
         return "GreaterThanEqualOperator";
-    case OperatorType::GreaterThanOperator:
+    case Operator::GreaterThanOperator:
         return "GreaterThanOperator";
-    case OperatorType::StartsWithOperator:
+    case Operator::StartsWithOperator:
         return "StartsWithOperator";
-    case OperatorType::InOperator:
+    case Operator::InOperator:
         return "InOperator";
-    case OperatorType::NotOperator:
+    case Operator::NotOperator:
         return "NotOperator";
-    case OperatorType::ExistsOperator:
+    case Operator::ExistsOperator:
         return "ExistsOperator";
-    case OperatorType::NotEmptyOperator:
+    case Operator::NotEmptyOperator:
         return "NotEmptyOperator";
-    case OperatorType::EmptyOperator:
+    case Operator::EmptyOperator:
         return "EmptyOperator";
-    case OperatorType::EqualOperator:
+    case Operator::EqualOperator:
         return "EqualOperator";
-    case OperatorType::NotEqualOperator:
+    case Operator::NotEqualOperator:
         return "NotEqualOperator";
-    case OperatorType::RegexpMatchOperator:
+    case Operator::RegexpMatchOperator:
         return "RegexpMatchOperator";
-    case OperatorType::NotRegexpMatchOperator:
+    case Operator::NotRegexpMatchOperator:
         return "NotRegexpMatchOperator";
-    case OperatorType::InvalidOperator:
+    case Operator::InvalidOperator:
         return "InvalidOperator";
     }
 }
-
-struct Operator {};
 
 enum class LogicalOperator {
     AndOperator,
@@ -674,18 +683,22 @@ struct Assignment {
 };
 
 // property
-enum class PropertyKeyType { Identifier, StringLiteral };
+
+struct Property {
+    std::shared_ptr<BaseNode> base;
+    std::shared_ptr<PropertyKey> key;
+    std::vector<std::shared_ptr<Comment>> separator;
+    std::shared_ptr<Expression> value;
+    std::vector<std::shared_ptr<Comment>> comma;
+};
 
 struct PropertyKey {
-    PropertyKeyType type;
-    union {
-        Identifier identifier;
-        StringLit stringLit;
-    };
+    enum class Type { Identifier, StringLiteral };
+    Type type;
+    std::variant<std::shared_ptr<Identifier>, std::shared_ptr<StringLit>> key;
 };
 
 // function
-enum class FunctionBodyType { Block, Expression };
 
 struct Block {
     std::shared_ptr<BaseNode> base;
@@ -695,11 +708,9 @@ struct Block {
 };
 
 struct FunctionBody {
-    FunctionBodyType type;
-    union {
-        Block block;
-        Expression expression;
-    };
+    enum class Type { Block, Expression };
+    Type type;
+    std::variant<std::shared_ptr<Block>, std::shared_ptr<Expression>> body;
 };
 
 // parameter

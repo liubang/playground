@@ -428,24 +428,51 @@ private:
             ret->expr = parse_string_literal();
             break;
         }
-        case TokenType::Quote:
-            // TODO:
+        case TokenType::Quote: {
+            std::unique_ptr<StringExpr> str_expr;
+            TokenError err;
+            std::tie(str_expr, err) = parse_string_expression();
+            if (str_expr) {
+                ret->type = Expression::Type::StringExpr;
+                ret->expr = std::move(str_expr);
+            }
             break;
+        }
         case TokenType::Regex:
-            // TODO:
+            ret->type = Expression::Type::RegexpLit;
+            ret->expr = parse_regexp_literral();
             break;
-        case TokenType::Time:
-            // TODO:
+        case TokenType::Time: {
+            std::unique_ptr<DateTimeLit> lit;
+            TokenError err;
+            std::tie(lit, err) = parse_time_literal();
+            if (!lit) {
+                return create_bad_expression_with_text(
+                    std::move(err.token), "invalid data time literal, missing time offset");
+            }
+            ret->type = Expression::Type::DateTimeLit;
+            ret->expr = std::move(lit);
             break;
-        case TokenType::Duration:
-            // TODO:
+        }
+        case TokenType::Duration: {
+            std::unique_ptr<DurationLit> lit;
+            TokenError err;
+            std::tie(lit, err) = parse_duration_literal();
+            if (!lit) {
+                return create_bad_expression(std::move(err.token));
+            }
+            ret->type = Expression::Type::DurationLit;
+            ret->expr = std::move(lit);
             break;
+        }
         case TokenType::PipeReceive:
-            // TODO:
+            ret->type = Expression::Type::PipeLit;
+            ret->expr = parse_pipe_literal();
             break;
-        case TokenType::LBrack:
-            // TODO:
-            break;
+        case TokenType::LBrack: {
+            auto start = open(TokenType::LBrack, TokenType::RBrack);
+            return parse_array_or_dict(std::move(start));
+        }
         case TokenType::LBrace:
             // TODO:
             break;
@@ -517,6 +544,371 @@ private:
 
     // TODO
     std::unique_ptr<Expression> parse_expression() {}
+
+    std::unique_ptr<ObjectExpr> parse_object_literal() {
+        auto start = open(TokenType::LBrace, TokenType::RBrace);
+        auto obj = parse_object_body();
+        auto end = close(TokenType::RBrace);
+        obj->base = base_node_from_tokens(start.get(), end.get());
+        obj->lbrace = std::move(start->comments);
+        obj->rbrace = std::move(end->comments);
+        return obj;
+    }
+
+    std::unique_ptr<ObjectExpr> parse_object_body() {
+        auto t = peek();
+        if (t->tok == TokenType::Ident) {
+            auto ident = parse_identifier();
+            return parse_object_body_suffix(std::move(ident));
+        } else if (t->tok == TokenType::String) {
+            auto s = parse_string_literal();
+            auto propk = std::make_unique<PropertyKey>();
+            propk->type = PropertyKey::Type::StringLiteral;
+            propk->key = std::move(s);
+            auto props = parse_property_list_suffix(std::move(propk));
+            auto objexpr = std::make_unique<ObjectExpr>();
+            objexpr->base = std::make_shared<BaseNode>();
+            objexpr->properties = std::move(props);
+            return objexpr;
+        } else {
+            auto objexpr = std::make_unique<ObjectExpr>();
+            objexpr->base = std::make_shared<BaseNode>();
+            objexpr->properties = parse_property_list();
+            return objexpr;
+        }
+    }
+
+    std::vector<std::shared_ptr<Property>> parse_property_list() {
+        std::vector<std::shared_ptr<Property>> params;
+        while (more()) {
+            const auto* t = peek();
+            std::shared_ptr<Property> p;
+            if (t->tok == TokenType::Ident) {
+                p = parse_ident_property();
+            } else if (t->tok == TokenType::String) {
+                p = parse_string_property();
+            } else {
+                p = parse_invalid_property();
+            }
+            if (more()) {
+                t = peek();
+                if (t->tok != TokenType::Comma) {
+                    errs_.emplace_back("expected comma in property list, got " +
+                                       token_to_string(t->tok));
+                } else {
+                    auto nt = consume();
+                    p->comma = t->comments;
+                }
+            }
+            params.emplace_back(std::move(p));
+        }
+
+        return params;
+    }
+
+    std::unique_ptr<Property> parse_string_property() {
+        auto key = parse_string_literal();
+        auto pk = std::unique_ptr<PropertyKey>();
+        pk->type = PropertyKey::Type::StringLiteral;
+        pk->key = std::move(key);
+        return parse_property_suffix(std::move(pk));
+    }
+
+    std::unique_ptr<Property> parse_ident_property() {
+        auto key = parse_identifier();
+        auto pk = std::unique_ptr<PropertyKey>();
+        pk->type = PropertyKey::Type::Identifier;
+        pk->key = std::move(key);
+        return parse_property_suffix(std::move(pk));
+    }
+
+    std::unique_ptr<Property> parse_invalid_property() {
+        const auto* t = peek();
+        std::unique_ptr<Expression> value;
+        if (t->tok == TokenType::Colon) {
+            errs_.emplace_back("missing property key");
+            consume();
+            value = parse_property_value();
+        } else if (t->tok == TokenType::Comma) {
+            errs_.emplace_back("missing property in property list");
+        } else {
+            errs_.emplace_back("unexpcted token for property key: " + token_to_string(t->tok) +
+                               t->lit);
+
+            // We are not really parsing an expression, this is just a way to advance to just before
+            // the next comma, colon, end of block, or EOF.
+            parse_expression_while_more(nullptr, {TokenType::Comma, TokenType::Colon});
+
+            // If we stopped at a colon, attempt to parse the value
+            if (peek()->tok == TokenType::Colon) {
+                consume();
+                value = parse_property_value();
+            }
+        }
+        auto end_start_pos = peek()->start_pos;
+        std::unique_ptr<Property> p;
+        std::shared_ptr<PropertyKey> k;
+        k->type = PropertyKey::Type::StringLiteral;
+        std::shared_ptr<StringLit> sk;
+        sk->base = base_node_from_pos(t->start_pos, t->start_pos);
+        sk->value = "<invalid>";
+        k->key = std::move(sk);
+
+        p->base = base_node_from_pos(t->start_pos, end_start_pos);
+        p->value = std::move(value);
+        p->key = std::move(k);
+        return p;
+    }
+
+    std::unique_ptr<Expression>
+    parse_expression_while_more(std::unique_ptr<Expression> init,
+                                const std::set<TokenType>& stop_tokens) {
+        for (;;) {
+            auto t = peek();
+            if (stop_tokens.contains(t->tok) || !more()) {
+                break;
+            }
+            auto e = parse_expression();
+            if (e->type == Expression::Type::BadExpr) {
+                auto invalid_t = scan();
+                auto loc = source_location(invalid_t->start_pos, invalid_t->end_pos);
+                std::stringstream ss;
+                ss << "invalid expression " << loc << ":" << invalid_t->lit;
+                errs_.emplace_back(ss.str());
+                continue;
+            }
+            if (init) {
+                std::unique_ptr<Expression> ex = std::make_unique<Expression>();
+                ex->type = Expression::Type::BinaryExpr;
+                std::shared_ptr<BinaryExpr> be = std::make_unique<BinaryExpr>();
+                be->base = base_node_from_others(init->base().get(), e->base().get());
+                be->op = Operator::InvalidOperator;
+                be->left = std::move(init);
+                be->right = std::move(e);
+                ex->expr = std::move(be);
+                init = std::move(ex);
+            } else {
+                init = std::move(e);
+            }
+        }
+        return init;
+    }
+
+    // TODO
+    std::unique_ptr<Expression> parse_property_value() { return nullptr; }
+
+    // TODO
+    std::unique_ptr<Property> parse_property_suffix(std::unique_ptr<PropertyKey> key) {
+        return nullptr;
+    }
+
+    // TODO
+    std::vector<std::shared_ptr<Property>>
+    parse_property_list_suffix(std::unique_ptr<PropertyKey> key) {
+        return {};
+    }
+
+    // TODO
+    std::unique_ptr<ObjectExpr> parse_object_body_suffix(std::unique_ptr<Identifier> id) {
+        return nullptr;
+    }
+
+    std::unique_ptr<Expression> parse_array_or_dict(std::unique_ptr<Token> start) {
+        switch (peek()->tok) {
+        // empty dictinary [:]
+        case TokenType::Colon: {
+            consume();
+            auto end = close(TokenType::RBrack);
+            auto base = base_node_from_tokens(start.get(), end.get());
+            auto lbrack = start->comments;
+            auto rbrack = end->comments;
+            auto dict_expr = std::make_shared<DictExpr>();
+            dict_expr->base = std::move(base);
+            dict_expr->lbrack = std::move(lbrack);
+            dict_expr->rbrack = std::move(rbrack);
+
+            auto expr = std::make_unique<Expression>();
+            expr->type = Expression::Type::ArrayExpr;
+            expr->expr = std::move(dict_expr);
+            return expr;
+        }
+        // empty array []
+        case TokenType::RBrack: {
+            auto end = close(TokenType::RBrack);
+            auto base = base_node_from_tokens(start.get(), end.get());
+            auto lbrack = start->comments;
+            auto rbrack = end->comments;
+            auto arr_expr = std::make_shared<ArrayExpr>();
+            arr_expr->base = std::move(base);
+            arr_expr->lbrack = std::move(lbrack);
+            arr_expr->rbrack = std::move(rbrack);
+
+            auto expr = std::make_unique<Expression>();
+            expr->type = Expression::Type::ArrayExpr;
+            expr->expr = std::move(arr_expr);
+
+            return expr;
+        }
+        default: {
+            auto expr = parse_expression();
+            if (peek()->tok == TokenType::Colon) {
+                // non-empty dictionary
+                consume();
+                auto val = parse_expression();
+                return parse_dict_items_rest(std::move(start), std::move(expr), std::move(val));
+            }
+            // non-empty array
+            return parse_array_items_rest(std::move(start), std::move(expr));
+        }
+        }
+    }
+
+    std::unique_ptr<Expression> parse_array_items_rest(std::unique_ptr<Token> start,
+                                                       std::unique_ptr<Expression> init) {
+        auto expr = std::make_unique<Expression>();
+        expr->type = Expression::Type::ArrayExpr;
+        auto arr_expr = std::make_shared<ArrayExpr>();
+
+        if (peek()->tok == TokenType::RBrack) {
+            auto end = close(TokenType::RBrack);
+            arr_expr->base = base_node_from_tokens(start.get(), end.get());
+            arr_expr->lbrack = std::move(start->comments);
+            auto arr_item = std::make_shared<ArrayItem>();
+            arr_item->expression = std::move(init);
+            arr_expr->rbrack = std::move(end->comments);
+            arr_expr->elements.push_back(std::move(arr_item));
+        } else {
+            // else
+            auto comma = expect(TokenType::Comma);
+            std::vector<std::shared_ptr<ArrayItem>> items;
+            auto arr_item = std::make_shared<ArrayItem>();
+            arr_item->expression = std::move(init);
+            arr_item->comma = std::move(comma->comments);
+            items.emplace_back(std::move(arr_item));
+
+            auto last = peek()->start_offset;
+            while (more()) {
+                std::vector<std::shared_ptr<Comment>> ncomma;
+                auto expression = parse_expression();
+                if (peek()->tok == TokenType::Comma) {
+                    comma = scan();
+                    ncomma = comma->comments;
+                }
+                auto arr_item = std::make_shared<ArrayItem>();
+                arr_item->expression = std::move(expression);
+                arr_item->comma = std::move(ncomma);
+                items.emplace_back(std::move(arr_item));
+
+                auto _this = peek()->start_offset;
+                if (last == _this) {
+                    break;
+                }
+                last = _this;
+            }
+            auto end = close(TokenType::RBrack);
+            arr_expr->base = base_node_from_tokens(start.get(), end.get());
+            arr_expr->lbrack = std::move(start->comments);
+            arr_expr->elements = std::move(items);
+            arr_expr->rbrack = std::move(end->comments);
+        }
+
+        expr->expr = std::move(arr_expr);
+        return expr;
+    }
+
+    std::unique_ptr<Expression> parse_dict_items_rest(std::unique_ptr<Token> start,
+                                                      std::unique_ptr<Expression> key,
+                                                      std::unique_ptr<Expression> val) {
+        auto expr = std::make_unique<Expression>();
+        expr->type = Expression::Type::DictExpr;
+        auto dict_expr = std::make_shared<DictExpr>();
+
+        if (peek()->tok == TokenType::RBrack) {
+            auto end = close(TokenType::RBrack);
+            dict_expr->base = base_node_from_tokens(start.get(), end.get());
+            dict_expr->lbrack = std::move(start->comments);
+            dict_expr->rbrack = std::move(end->comments);
+            std::shared_ptr<DictItem> item = std::make_shared<DictItem>();
+            item->key = std::move(key);
+            item->val = std::move(val);
+            dict_expr->elements.emplace_back(std::move(item));
+        } else {
+            auto comma = expect(TokenType::Comma);
+            std::vector<std::shared_ptr<DictItem>> items;
+            std::shared_ptr<DictItem> item = std::make_shared<DictItem>();
+            item->key = std::move(key);
+            item->val = std::move(val);
+            item->comma = std::move(comma->comments);
+            items.emplace_back(std::move(item));
+
+            while (more()) {
+                auto nkey = parse_expression();
+                expect(TokenType::Colon);
+                auto nval = parse_expression();
+                std::shared_ptr<DictItem> item = std::make_shared<DictItem>();
+                item->key = std::move(nkey);
+                item->val = std::move(nval);
+                if (peek()->tok == TokenType::Comma) {
+                    comma = scan();
+                    item->comma = std::move(comma->comments);
+                }
+                items.emplace_back(std::move(item));
+            }
+
+            auto end = close(TokenType::RBrack);
+            dict_expr->base = base_node_from_tokens(start.get(), end.get());
+            dict_expr->lbrack = std::move(start->comments);
+            dict_expr->rbrack = std::move(end->comments);
+            dict_expr->elements = std::move(items);
+        }
+
+        expr->expr = std::move(dict_expr);
+        return expr;
+    }
+
+    std::unique_ptr<PipeLit> parse_pipe_literal() {
+        auto t = expect(TokenType::PipeReceive);
+        auto pipe_lit = std::make_unique<PipeLit>();
+        pipe_lit->base = base_node_from_token(t.get());
+        return pipe_lit;
+    }
+
+    std::tuple<std::unique_ptr<DurationLit>, TokenError> parse_duration_literal() {
+        auto t = expect(TokenType::Duration);
+        auto value = StrConv::parse_duration(t->lit);
+        if (value.ok()) {
+            auto dl = std::make_unique<DurationLit>();
+            dl->base = base_node_from_token(t.get());
+            dl->values = value.t();
+            return {std::move(dl), TokenError()};
+        }
+        return {nullptr, TokenError()};
+    }
+
+    std::tuple<std::unique_ptr<DateTimeLit>, TokenError> parse_time_literal() {
+        auto t = expect(TokenType::Time);
+        auto value = StrConv::parse_time(t->lit);
+        if (value.ok()) {
+            auto datetime_lit = std::make_unique<DateTimeLit>();
+            datetime_lit->base = base_node_from_token(t.get());
+            datetime_lit->value = value.t();
+            return {std::move(datetime_lit), TokenError()};
+        }
+        return {nullptr, TokenError(std::move(t))};
+    }
+
+    std::unique_ptr<RegexpLit> parse_regexp_literral() {
+        auto t = expect(TokenType::Regex);
+        auto value = StrConv::parse_regex(t->lit);
+        auto ret = std::make_unique<RegexpLit>();
+        ret->base = base_node_from_token(t.get());
+        if (!value.ok()) {
+            errs_.emplace_back(value.e());
+        } else {
+            ret->value = value.t();
+        }
+        return ret;
+    }
 
     std::unique_ptr<Expression> parse_conditional_expression() {
         auto t = peek();
@@ -646,16 +1038,19 @@ private:
         }
     }
 
+    // TODO:
     std::unique_ptr<PackageClause>
     parse_package_clause(std::vector<std::shared_ptr<Attribute>>* attributes) {
         return nullptr;
     }
 
+    // TODO:
     std::vector<std::shared_ptr<ImportDeclaration>>
     parse_import_list(std::vector<std::shared_ptr<Attribute>>* attributes) {
         return {};
     }
 
+    // TODO:
     std::vector<std::shared_ptr<Statement>>
     parse_statement_list(std::vector<std::shared_ptr<Attribute>>* attributes) {
         return {};

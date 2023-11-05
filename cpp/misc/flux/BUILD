@@ -16,6 +16,7 @@ load(
 
 package(default_visibility = ["//visibility:public"])
 
+# flux v0.193.0
 ragel(
     name = "scanner_generated",
     src = "scanner.rl",
