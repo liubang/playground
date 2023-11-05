@@ -22,6 +22,8 @@
 namespace pl {
 
 struct TokenError {
+    TokenError() = default;
+    TokenError(std::unique_ptr<Token> t) : token(std::move(t)) {}
     std::unique_ptr<Token> token;
 };
 
@@ -39,7 +41,7 @@ public:
         std::shared_ptr<File> ast_file = parse_file(fname);
         auto package = std::make_unique<Package>();
         package->package = ast_file->package->name->name;
-        package->base = ast_file;
+        package->base = ast_file->base;
         package->path = pkgpath;
         package->files.emplace_back(ast_file);
         return package;
@@ -57,7 +59,7 @@ public:
         }
         auto imports = parse_import_list(&inner_attributes);
         if (!imports.empty()) {
-            end = imports.rbegin()->get()->location.end;
+            end = imports.rbegin()->get()->base->location.end;
         }
         auto body = parse_statement_list(&inner_attributes);
         if (!inner_attributes.empty()) {
@@ -462,10 +464,105 @@ private:
     // TODO:
     std::tuple<std::unique_ptr<StringExpr>, TokenError> parse_string_expression() {
         auto start = expect(TokenType::Quote);
+        std::vector<std::shared_ptr<StringExprPart>> parts;
         for (;;) {
+            auto t = scanner_->scan_with_expr();
+            switch (t->tok) {
+            case TokenType::Text: {
+                auto value = StrConv::parse_text(t->lit);
+                if (value.ok()) {
+                    std::shared_ptr<StringExprPart> p = std::make_shared<StringExprPart>();
+                    std::shared_ptr<TextPart> tp = std::make_shared<TextPart>();
+                    tp->base = base_node_from_token(t.get());
+                    tp->value = value.t();
+                    p->type = StringExprPart::Type::Text;
+                    p->part = tp;
+                    parts.emplace_back(p);
+                } else {
+                    return {nullptr, TokenError(std::move(t))};
+                }
+                break;
+            }
+            case TokenType::StringExpr: {
+                auto expr = parse_expression();
+                auto end = expect(TokenType::RBrace);
+                std::shared_ptr<StringExprPart> p = std::make_shared<StringExprPart>();
+                std::shared_ptr<InterpolatedPart> ip = std::make_shared<InterpolatedPart>();
+                ip->base = base_node_from_tokens(t.get(), end.get());
+                ip->expression = std::move(expr);
+                p->type = StringExprPart::Type::Interpolated;
+                p->part = ip;
+                parts.emplace_back(p);
+                break;
+            }
+            case TokenType::Quote: {
+                auto string_expr = std::make_unique<StringExpr>();
+                string_expr->base = base_node_from_tokens(start.get(), t.get());
+                string_expr->parts = std::move(parts);
+                return {std::move(string_expr), TokenError()};
+            }
+            default: {
+                auto loc = source_location(t->start_pos, t->end_pos);
+                std::stringstream ss;
+                ss << "got unexpcted token in string expression " << loc << ": "
+                   << token_to_string(t->tok);
+                errs_.emplace_back(ss.str());
+                auto string_expr = std::make_unique<StringExpr>();
+                string_expr->base = base_node_from_tokens(start.get(), t.get());
+                return {std::move(string_expr), TokenError()};
+            }
+            }
         }
-        return {nullptr, TokenError()};
     }
+
+    // TODO
+    std::unique_ptr<Expression> parse_expression() {}
+
+    std::unique_ptr<Expression> parse_conditional_expression() {
+        auto t = peek();
+        if (t->tok == TokenType::If) {
+            auto if_tok = scan();
+            auto test = parse_expression();
+            auto then_tok = expect_or_skip(TokenType::Then);
+            auto cons = then_tok->tok == TokenType::Then
+                            ? parse_expression()
+                            : create_placeholder_expression(then_tok.get());
+            auto else_tok = expect_or_skip(TokenType::Else);
+            auto alt = else_tok->tok == TokenType::Else
+                           ? parse_expression()
+                           : create_placeholder_expression(else_tok.get());
+
+            auto cond_expr = std::make_shared<ConditionalExpr>();
+            cond_expr->base = base_node_from_other_end(t, alt->base().get());
+            cond_expr->tk_if = if_tok->comments;
+            cond_expr->tk_then = then_tok->comments;
+            cond_expr->test = std::move(test);
+            cond_expr->consequent = std::move(cons);
+            cond_expr->tk_else = else_tok->comments;
+            cond_expr->alternate = std::move(alt);
+            auto exp = std::make_unique<Expression>();
+            exp->type = Expression::Type::ConditionalExpr;
+            exp->expr = cond_expr;
+            return exp;
+        }
+        return parse_logical_or_expression();
+    }
+
+    std::unique_ptr<Expression> create_placeholder_expression(const Token* tok) {
+        auto expr = std::make_unique<Expression>();
+        auto bad_expr = std::make_shared<BadExpr>();
+
+        bad_expr->base = std::make_shared<BaseNode>();
+        bad_expr->base->location = source_location(tok->start_pos, tok->end_pos);
+
+        expr->type = Expression::Type::BadExpr;
+        expr->expr = bad_expr;
+
+        return expr;
+    }
+
+    // TODO:
+    std::unique_ptr<Expression> parse_logical_or_expression() {}
 
     std::unique_ptr<StringLit> parse_string_literal() {
         auto t = expect(TokenType::String);
