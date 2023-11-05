@@ -7,8 +7,15 @@
 //
 //=====================================================================
 
+#include <iomanip>
+#include <iostream>
+#include <locale>
 #include <optional>
+#include <sstream>
 #include <string>
+#include <vector>
+
+#include "ast.h"
 
 namespace pl {
 
@@ -127,6 +134,90 @@ public:
             return Result<std::string, std::string>::Err("invalid string literal");
         }
         return parse_text(lit.substr(1, lit.length() - 2));
+    }
+
+    static Result<std::string, std::string> parse_regex(const std::string& lit) {
+        if (lit.length() < 3) {
+            return Result<std::string, std::string>::Err("regexp must be at least 3 characters");
+        }
+        if (!lit.starts_with('/')) {
+            return Result<std::string, std::string>::Err("regexp must be start with a slash");
+        }
+        if (!lit.ends_with('/')) {
+            return Result<std::string, std::string>::Err("regexp must be end with a slash");
+        }
+
+        auto expr = lit.substr(1, lit.length() - 2);
+        std::string unescaped;
+        for (size_t i = 0; i < expr.length(); ++i) {
+            char c = expr[i];
+            if (c == '\\') {
+                ++i;
+                if (i == expr.length()) {
+                    return Result<std::string, std::string>::Err("unterminated regex sequence");
+                }
+                char cc = expr[i];
+                if (cc == '/') {
+                    unescaped.push_back('/');
+                } else if (cc == 'x') {
+                    auto ret = push_hex_byte(expr, i, &unescaped);
+                    if (!ret.ok()) {
+                        return ret;
+                    }
+                } else if (cc == c) {
+                    unescaped.push_back('\\');
+                    unescaped.push_back(c);
+                }
+            } else {
+                unescaped.push_back(c);
+            }
+        }
+        return Result<std::string, std::string>::Ok(std::move(unescaped));
+    }
+
+    // TODO: parse time from string
+    static Result<std::tm, std::string> parse_time(const std::string& lit) {
+        std::istringstream s(lit);
+        std::tm t = {};
+        if (lit.find_first_of('T') == std::string::npos) {
+            constexpr static char datefmt[] = "%Y-%m-%d";
+            s >> std::get_time(&t, datefmt);
+        } else {
+            constexpr static char rfc3339[] = "%Y-%m-%dT%H:%M:%SZ";
+            // parse rfc3339 time format
+            s >> std::get_time(&t, rfc3339);
+        }
+        if (s.fail()) {
+            return Result<std::tm, std::string>::Err("fail to parse time: " + lit);
+        }
+        return Result<std::tm, std::string>::Ok(std::move(t));
+    }
+
+    static Result<std::vector<std::shared_ptr<Duration>>, std::string>
+    parse_duration(const std::string& lit) {
+        std::vector<std::shared_ptr<Duration>> values;
+        for (size_t i = 0; i < lit.length(); ++i) {
+        }
+    }
+
+    // TODO:
+    static Result<int64_t, std::string> parse_magnitude() {}
+
+    static Result<std::string, std::string> parse_unit(const std::string& chars) {
+        std::string u;
+        for (size_t i = 0; i < chars.size(); ++i) {
+            if (std::isalpha(chars[i]) == 0) {
+                break;
+            }
+            u.push_back(chars[i]);
+        }
+        if (u.empty()) {
+            return Result<std::string, std::string>::Err("parsing empty unit");
+        }
+        if (u == "µs") {
+            u = "us";
+        }
+        return Result<std::string, std::string>::Ok(std::move(u));
     }
 };
 
