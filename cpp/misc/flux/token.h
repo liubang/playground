@@ -234,6 +234,11 @@ struct SourceLocation {
     static SourceLocation _default() { return SourceLocation(); }
 };
 
+inline std::ostream& operator<<(std::ostream& os, const SourceLocation& loc) {
+    os << "file: " << loc.file << "@{start: " << loc.start << ", end: " << loc.end << "}";
+    return os;
+}
+
 struct Comment {
     std::string text;
     Comment() = default;
