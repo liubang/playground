@@ -102,19 +102,19 @@ struct BaseNode {
     std::vector<std::string> errors;
 };
 
-struct AttributeParam : public BaseNode {
+struct AttributeParam {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Expression> value;
     std::vector<std::shared_ptr<Comment>> comma;
 };
 
-struct Attribute : public BaseNode {
+struct Attribute {
     std::shared_ptr<BaseNode> base;
     std::string name;
     std::vector<std::shared_ptr<AttributeParam>> params;
 };
 
-struct Package : public BaseNode {
+struct Package {
     std::shared_ptr<BaseNode> base;
     std::string path;
     std::string package;
@@ -123,7 +123,7 @@ struct Package : public BaseNode {
     std::vector<std::shared_ptr<Comment>> eof;
 };
 
-struct File : public BaseNode {
+struct File {
     std::shared_ptr<BaseNode> base;
     std::string name;
     std::string metadata;
@@ -133,12 +133,12 @@ struct File : public BaseNode {
     std::vector<std::shared_ptr<Comment>> eof;
 };
 
-struct PackageClause : public BaseNode {
+struct PackageClause {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Identifier> name;
 };
 
-struct ImportDeclaration : public BaseNode {
+struct ImportDeclaration {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Identifier> alias;
     std::shared_ptr<StringLit> path;
@@ -146,18 +146,18 @@ struct ImportDeclaration : public BaseNode {
 
 // stmt
 
-struct ExprStmt : public BaseNode {
+struct ExprStmt {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Expression> expression;
 };
 
-struct VariableAssgn : public BaseNode {
+struct VariableAssgn {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Identifier> id;
     std::shared_ptr<Expression> init;
 };
 
-struct OptionStmt : public BaseNode {
+struct OptionStmt {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Assignment> assignment;
 };
@@ -167,19 +167,19 @@ struct ReturnStmt {
     std::shared_ptr<Expression> argument;
 };
 
-struct BadStmt : public BaseNode {
+struct BadStmt {
     std::shared_ptr<BaseNode> base;
     std::string text;
 };
 
-struct TestCaseStmt : public BaseNode {
+struct TestCaseStmt {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Identifier> id;
     std::shared_ptr<StringLit> extends;
     std::shared_ptr<Block> block;
 };
 
-struct BuiltinStmt : public BaseNode {
+struct BuiltinStmt {
     std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<Comment>> colon;
     std::shared_ptr<Identifier> id;
@@ -255,7 +255,7 @@ struct Statement {
 
 // expr
 
-struct Identifier : public BaseNode {
+struct Identifier {
     std::shared_ptr<BaseNode> base;
     std::string name;
 };
@@ -267,14 +267,14 @@ struct ArrayExpr {
     std::vector<std::shared_ptr<Comment>> rbrack;
 };
 
-struct DictExpr : public BaseNode {
+struct DictExpr {
     std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<Comment>> lbrack;
     std::vector<std::shared_ptr<DictItem>> elements;
     std::vector<std::shared_ptr<Comment>> rbrack;
 };
 
-struct FunctionExpr : public BaseNode {
+struct FunctionExpr {
     std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<Comment>> lparen;
     std::vector<std::shared_ptr<Property>> params;
@@ -283,14 +283,14 @@ struct FunctionExpr : public BaseNode {
     std::shared_ptr<FunctionBody> body;
 };
 
-struct LogicalExpr : public BaseNode {
+struct LogicalExpr {
     std::shared_ptr<BaseNode> base;
     LogicalOperator op;
     std::shared_ptr<Expression> left;
     std::shared_ptr<Expression> right;
 };
 
-struct ObjectExpr : public BaseNode {
+struct ObjectExpr {
     std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<Comment>> lbrace;
     std::shared_ptr<WithSource> with;
@@ -298,7 +298,7 @@ struct ObjectExpr : public BaseNode {
     std::vector<std::shared_ptr<Comment>> rbrace;
 };
 
-struct MemberExpr : public BaseNode {
+struct MemberExpr {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Expression> object;
     std::vector<std::shared_ptr<Comment>> lbrack;
@@ -306,7 +306,7 @@ struct MemberExpr : public BaseNode {
     std::vector<std::shared_ptr<Comment>> rbrack;
 };
 
-struct IndexExpr : public BaseNode {
+struct IndexExpr {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Expression> array;
     std::vector<std::shared_ptr<Comment>> lbrack;
@@ -314,26 +314,26 @@ struct IndexExpr : public BaseNode {
     std::vector<std::shared_ptr<Comment>> rbrack;
 };
 
-struct BinaryExpr : public BaseNode {
+struct BinaryExpr {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Operator> op;
     std::shared_ptr<Expression> left;
     std::shared_ptr<Expression> right;
 };
 
-struct UnaryExpr : public BaseNode {
+struct UnaryExpr {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Operator> op;
     std::shared_ptr<Expression> argument;
 };
 
-struct PipeExpr : public BaseNode {
+struct PipeExpr {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Expression> argument;
     std::shared_ptr<CallExpr> call;
 };
 
-struct CallExpr : public BaseNode {
+struct CallExpr {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Expression> callee;
     std::vector<std::shared_ptr<Comment>> lparen;
@@ -341,7 +341,7 @@ struct CallExpr : public BaseNode {
     std::vector<std::shared_ptr<Comment>> rparen;
 };
 
-struct ConditionalExpr : public BaseNode {
+struct ConditionalExpr {
     std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<Comment>> tk_if;
     std::shared_ptr<Expression> test;
@@ -351,7 +351,7 @@ struct ConditionalExpr : public BaseNode {
     std::shared_ptr<Expression> alternate;
 };
 
-struct StringExpr : public BaseNode {
+struct StringExpr {
     std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<StringExprPart>> parts;
 };
@@ -362,77 +362,77 @@ struct StringExprPart {
         Interpolated,
     };
     Type type;
-    std::shared_ptr<TextPart> text;
-    std::shared_ptr<InterpolatedPart> interpolated;
+
+    std::variant<std::shared_ptr<TextPart>, std::shared_ptr<InterpolatedPart>> part;
 };
 
-struct TextPart : public BaseNode {
+struct TextPart {
     std::shared_ptr<BaseNode> base;
     std::string value;
 };
 
-struct InterpolatedPart : public BaseNode {
+struct InterpolatedPart {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Expression> expression;
 };
 
-struct ParenExpr : public BaseNode {
+struct ParenExpr {
     std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<Comment>> lparen;
     std::shared_ptr<Expression> expression;
     std::vector<std::shared_ptr<Comment>> rparen;
 };
 
-struct IntegerLit : public BaseNode {
+struct IntegerLit {
     std::shared_ptr<BaseNode> base;
     int64_t value;
 };
 
-struct FloatLit : public BaseNode {
+struct FloatLit {
     std::shared_ptr<BaseNode> base;
     double value;
 };
 
-struct StringLit : public BaseNode {
+struct StringLit {
     std::shared_ptr<BaseNode> base;
     std::string value;
 };
 
-struct DurationLit : public BaseNode {
+struct DurationLit {
     std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<Duration>> values;
 };
 
-struct UintLit : public BaseNode {
+struct UintLit {
     std::shared_ptr<BaseNode> base;
     uint64_t value;
 };
 
-struct BooleanLit : public BaseNode {
+struct BooleanLit {
     std::shared_ptr<BaseNode> base;
     bool value;
 };
 
-struct DateTimeLit : public BaseNode {
+struct DateTimeLit {
     std::shared_ptr<BaseNode> base;
     std::chrono::system_clock::time_point value;
 };
 
-struct RegexpLit : public BaseNode {
+struct RegexpLit {
     std::shared_ptr<BaseNode> base;
     std::string value;
 };
 
-struct PipeLit : public BaseNode {
+struct PipeLit {
     std::shared_ptr<BaseNode> base;
 };
 
-struct LabelLit : public BaseNode {
+struct LabelLit {
     std::shared_ptr<BaseNode> base;
     std::string value;
 };
 
-struct BadExpr : public BaseNode {
+struct BadExpr {
     std::shared_ptr<BaseNode> base;
     std::string text;
     std::shared_ptr<Expression> expression;
@@ -659,7 +659,7 @@ enum class LogicalOperator {
 };
 
 // assign
-struct MemberAssgn : public BaseNode {
+struct MemberAssgn {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<MemberExpr> member;
     std::shared_ptr<Expression> init;
@@ -687,7 +687,7 @@ struct PropertyKey {
 // function
 enum class FunctionBodyType { Block, Expression };
 
-struct Block : public BaseNode {
+struct Block {
     std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<Comment>> lbrace;
     std::vector<std::shared_ptr<Statement>> body;
@@ -704,48 +704,48 @@ struct FunctionBody {
 
 // parameter
 
-struct TvarType : public BaseNode {
+struct TvarType {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Identifier> name;
 };
 
-struct NamedType : public BaseNode {
+struct NamedType {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Identifier> name;
 };
 
-struct ArrayType : public BaseNode {
+struct ArrayType {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<MonoType> element;
 };
 
-struct StreamType : public BaseNode {
+struct StreamType {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<MonoType> element;
 };
 
-struct VectorType : public BaseNode {
+struct VectorType {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<MonoType> element;
 };
 
-struct DictType : public BaseNode {
+struct DictType {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<MonoType> key;
     std::shared_ptr<MonoType> val;
 };
 
-struct DynamicType : public BaseNode {
+struct DynamicType {
     std::shared_ptr<BaseNode> base;
 };
 
-struct FunctionType : public BaseNode {
+struct FunctionType {
     std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<ParameterType>> parameters;
     std::shared_ptr<MonoType> monotype;
 };
 
-struct RecordType : public BaseNode {
+struct RecordType {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Identifier> tvar;
     std::vector<std::shared_ptr<PropertyType>> properties;
@@ -777,20 +777,20 @@ struct MonoType {
     std::shared_ptr<LabelLit> label;
 };
 
-struct Required : public BaseNode {
+struct Required {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Identifier> name;
     std::shared_ptr<MonoType> monotype;
 };
 
-struct Optional : public BaseNode {
+struct Optional {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Identifier> name;
     std::shared_ptr<MonoType> monotype;
     std::shared_ptr<LabelLit> _default;
 };
 
-struct Pipe : public BaseNode {
+struct Pipe {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Identifier> name;
     std::shared_ptr<MonoType> monotype;
