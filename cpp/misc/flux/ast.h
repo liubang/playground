@@ -301,6 +301,11 @@ struct LogicalExpr {
     std::shared_ptr<Expression> right;
 };
 
+struct WithSource {
+    std::shared_ptr<Identifier> source;
+    std::vector<std::shared_ptr<Comment>> with;
+};
+
 struct ObjectExpr {
     std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<Comment>> lbrace;
@@ -334,7 +339,7 @@ struct BinaryExpr {
 
 struct UnaryExpr {
     std::shared_ptr<BaseNode> base;
-    std::shared_ptr<Operator> op;
+    Operator op;
     std::shared_ptr<Expression> argument;
 };
 
@@ -696,6 +701,15 @@ struct PropertyKey {
     enum class Type { Identifier, StringLiteral };
     Type type;
     std::variant<std::shared_ptr<Identifier>, std::shared_ptr<StringLit>> key;
+
+    std::shared_ptr<BaseNode> base() {
+        switch (type) {
+        case Type::Identifier:
+            return std::get<std::shared_ptr<Identifier>>(key)->base;
+        case Type::StringLiteral:
+            return std::get<std::shared_ptr<StringLit>>(key)->base;
+        }
+    }
 };
 
 // function

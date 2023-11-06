@@ -488,7 +488,6 @@ private:
         return ret;
     }
 
-    // TODO:
     std::tuple<std::unique_ptr<StringExpr>, TokenError> parse_string_expression() {
         auto start = expect(TokenType::Quote);
         std::vector<std::shared_ptr<StringExprPart>> parts;
@@ -497,17 +496,16 @@ private:
             switch (t->tok) {
             case TokenType::Text: {
                 auto value = StrConv::parse_text(t->lit);
-                if (value.ok()) {
-                    std::shared_ptr<StringExprPart> p = std::make_shared<StringExprPart>();
-                    std::shared_ptr<TextPart> tp = std::make_shared<TextPart>();
-                    tp->base = base_node_from_token(t.get());
-                    tp->value = value.t();
-                    p->type = StringExprPart::Type::Text;
-                    p->part = tp;
-                    parts.emplace_back(p);
-                } else {
+                if (!value.ok()) {
                     return {nullptr, TokenError(std::move(t))};
                 }
+                std::shared_ptr<StringExprPart> p = std::make_shared<StringExprPart>();
+                std::shared_ptr<TextPart> tp = std::make_shared<TextPart>();
+                tp->base = base_node_from_token(t.get());
+                tp->value = value.t();
+                p->type = StringExprPart::Type::Text;
+                p->part = tp;
+                parts.emplace_back(p);
                 break;
             }
             case TokenType::StringExpr: {
@@ -556,11 +554,12 @@ private:
     }
 
     std::unique_ptr<ObjectExpr> parse_object_body() {
-        auto t = peek();
+        const auto* t = peek();
         if (t->tok == TokenType::Ident) {
             auto ident = parse_identifier();
             return parse_object_body_suffix(std::move(ident));
-        } else if (t->tok == TokenType::String) {
+        }
+        if (t->tok == TokenType::String) {
             auto s = parse_string_literal();
             auto propk = std::make_unique<PropertyKey>();
             propk->type = PropertyKey::Type::StringLiteral;
@@ -570,12 +569,11 @@ private:
             objexpr->base = std::make_shared<BaseNode>();
             objexpr->properties = std::move(props);
             return objexpr;
-        } else {
-            auto objexpr = std::make_unique<ObjectExpr>();
-            objexpr->base = std::make_shared<BaseNode>();
-            objexpr->properties = parse_property_list();
-            return objexpr;
         }
+        auto objexpr = std::make_unique<ObjectExpr>();
+        objexpr->base = std::make_shared<BaseNode>();
+        objexpr->properties = parse_property_list();
+        return objexpr;
     }
 
     std::vector<std::shared_ptr<Property>> parse_property_list() {
@@ -694,23 +692,83 @@ private:
         return init;
     }
 
-    // TODO
-    std::unique_ptr<Expression> parse_property_value() { return nullptr; }
-
-    // TODO
-    std::unique_ptr<Property> parse_property_suffix(std::unique_ptr<PropertyKey> key) {
-        return nullptr;
+    std::unique_ptr<Expression> parse_property_value() {
+        auto res = parse_expression_while_more(nullptr, {TokenType::Comma, TokenType::Colon});
+        if (!res) {
+            errs_.emplace_back("missing property value");
+        }
+        return res;
     }
 
-    // TODO
+    std::unique_ptr<Property> parse_property_suffix(std::unique_ptr<PropertyKey> key) {
+        const auto* t = peek();
+        std::unique_ptr<Token> tt;
+        std::unique_ptr<Expression> value;
+        std::vector<std::shared_ptr<Comment>> sep;
+        if (t->tok == TokenType::Colon) {
+            tt = consume();
+            value = parse_property_value();
+            sep = t->comments;
+        }
+        std::shared_ptr<BaseNode> value_base;
+        if (value) {
+            value_base = value->base();
+        } else {
+            value_base = key->base();
+        }
+        std::unique_ptr<Property> ret = std::make_unique<Property>();
+        ret->base = base_node_from_others(key->base().get(), value_base.get());
+        ret->key = std::move(key);
+        ret->value = std::move(value);
+        ret->separator = std::move(sep);
+        return ret;
+    }
+
     std::vector<std::shared_ptr<Property>>
     parse_property_list_suffix(std::unique_ptr<PropertyKey> key) {
-        return {};
+        std::vector<std::shared_ptr<Property>> props;
+        auto p = parse_property_suffix(std::move(key));
+        props.emplace_back(std::move(p));
+        if (!more()) {
+            return props;
+        }
+        const auto* t = peek();
+        if (t->tok == TokenType::Comma) {
+            errs_.emplace_back("expected comma in property list, got " + token_to_string(t->tok));
+        } else {
+            auto last = props.size() - 1;
+            auto tt = consume();
+            props[last]->comma = t->comments;
+        }
+        auto list = parse_property_list();
+        props.insert(props.end(), std::make_move_iterator(list.begin()),
+                     std::make_move_iterator(list.end()));
+        return props;
     }
 
-    // TODO
     std::unique_ptr<ObjectExpr> parse_object_body_suffix(std::unique_ptr<Identifier> id) {
-        return nullptr;
+        const auto* t = peek();
+        std::unique_ptr<ObjectExpr> obj_expr = std::make_unique<ObjectExpr>();
+        obj_expr->base = std::make_shared<BaseNode>();
+        if (t->tok == TokenType::Ident) {
+            if (t->lit != "with") {
+                errs_.emplace_back("");
+            }
+            auto tt = consume();
+            auto props = parse_property_list();
+            std::shared_ptr<WithSource> with_source = std::make_shared<WithSource>();
+            with_source->source = std::move(id);
+            with_source->with = t->comments;
+            obj_expr->with = std::move(with_source);
+            obj_expr->properties = std::move(props);
+        } else {
+            std::unique_ptr<PropertyKey> ident = std::make_unique<PropertyKey>();
+            ident->type = PropertyKey::Type::Identifier;
+            ident->key = std::move(id);
+            auto props = parse_property_list_suffix(std::move(ident));
+            obj_expr->properties = std::move(props);
+        }
+        return obj_expr;
     }
 
     std::unique_ptr<Expression> parse_array_or_dict(std::unique_ptr<Token> start) {
@@ -953,8 +1011,149 @@ private:
         return expr;
     }
 
-    // TODO:
-    std::unique_ptr<Expression> parse_logical_or_expression() {}
+    std::optional<Operator> parse_logical_unary_operator() {
+        const auto* t = peek();
+        if (t->tok == TokenType::Not) {
+            return Operator::NotOperator;
+        }
+        if (t->tok == TokenType::Exists) {
+            return Operator::ExistsOperator;
+        }
+        return std::nullopt;
+    }
+
+    // TODO
+    std::unique_ptr<Expression>
+    parse_logical_and_expression_suffix(std::unique_ptr<Expression> expr) {}
+
+    // TODO
+    std::unique_ptr<Expression> parse_logical_unary_expression() {
+        const auto* t = peek();
+        auto op = parse_logical_unary_operator();
+        if (op) {
+            consume();
+            auto expr = parse_logical_unary_expression();
+            std::unique_ptr<Expression> ret = std::make_unique<Expression>();
+            ret->type = Expression::Type::UnaryExpr;
+            std::shared_ptr<UnaryExpr> uexpr = std::make_shared<UnaryExpr>();
+            uexpr->base = base_node_from_other_end_c(t, expr->base().get(), t);
+            uexpr->op = op.value();
+            uexpr->argument = std::move(expr);
+            ret->expr = std::move(uexpr);
+            return ret;
+        }
+        return parse_comparison_expression();
+    }
+
+    std::unique_ptr<Expression> parse_comparison_expression() {
+        auto expr = parse_additive_expression();
+        return parse_comparison_expression_suffix(std::move(expr));
+    }
+
+    std::optional<Operator> parse_comparison_operator() {
+        const auto* t = peek();
+        switch (t->tok) {
+        case TokenType::Eq:
+            return Operator::EqualOperator;
+        case TokenType::Neq:
+            return Operator::NotEqualOperator;
+        case TokenType::Lte:
+            return Operator::LessThanEqualOperator;
+        case TokenType::Lt:
+            return Operator::LessThanOperator;
+        case TokenType::Gte:
+            return Operator::GreaterThanEqualOperator;
+        case TokenType::Gt:
+            return Operator::GreaterThanOperator;
+        case TokenType::RegexEq:
+            return Operator::RegexpMatchOperator;
+        case TokenType::RegexNeq:
+            return Operator::NotRegexpMatchOperator;
+        default:
+            return std::nullopt;
+        }
+    }
+
+    // TODO
+    std::unique_ptr<Expression> parse_multiplicative_expression() {}
+
+    std::unique_ptr<Expression> parse_additive_expression() {
+        auto expr = parse_multiplicative_expression();
+        return parse_additive_expression_suffix(std::move(expr));
+    }
+
+    std::optional<Operator> parse_additive_operator() {
+        const auto* t = peek();
+        if (t->tok == TokenType::Add) {
+            return Operator::AdditionOperator;
+        }
+        if (t->tok == TokenType::Sub) {
+            return Operator::SubtractionOperator;
+        }
+        return std::nullopt;
+    }
+
+    // TODO
+    std::unique_ptr<Expression> parse_additive_expression_suffix(std::unique_ptr<Expression> expr) {
+        std::shared_ptr<Expression> ret = std::move(expr);
+        for (;;) {
+            auto op = parse_additive_operator();
+            if (!op) {
+                break;
+            }
+            auto t = scan();
+            auto rhs = parse_multiplicative_expression();
+            auto nret = std::make_unique<Expression>();
+            nret->type = Expression::Type::BinaryExpr;
+            auto binexpr = std::make_shared<BinaryExpr>();
+            binexpr->base = base_node_from_others_c(ret->base().get(), rhs->base().get(), t.get());
+            binexpr->left = ret;
+            binexpr->right = std::move(rhs);
+            nret->expr = std::move(binexpr);
+            ret = std::move(nret);
+        }
+        // TODO
+        return nullptr;
+        // return std::move(ret);
+    }
+
+    std::unique_ptr<Expression>
+    parse_comparison_expression_suffix(std::unique_ptr<Expression> expr) {
+        std::shared_ptr<Expression> ret = std::move(expr);
+        for (;;) {
+            auto op = parse_comparison_operator();
+            if (!op) {
+                break;
+            }
+            auto t = scan();
+            auto rhs = parse_additive_expression();
+            auto nret = std::make_unique<Expression>();
+            nret->type = Expression::Type::BinaryExpr;
+            auto binexpr = std::make_shared<BinaryExpr>();
+            binexpr->base = base_node_from_others_c(ret->base().get(), rhs->base().get(), t.get());
+            binexpr->left = ret;
+            binexpr->right = std::move(rhs);
+            ret->expr = std::move(binexpr);
+            ret = std::move(nret);
+        }
+        // TODO
+        // return std::move(ret);
+        return nullptr;
+    }
+
+    std::unique_ptr<Expression> parse_logical_and_expression() {
+        auto expr = parse_logical_unary_expression();
+        return parse_logical_and_expression_suffix(std::move(expr));
+    }
+
+    // TODO
+    std::unique_ptr<Expression>
+    parse_logical_or_expression_suffix(std::unique_ptr<Expression> expr) {}
+
+    std::unique_ptr<Expression> parse_logical_or_expression() {
+        auto expr = parse_logical_and_expression();
+        return parse_logical_or_expression_suffix(std::move(expr));
+    }
 
     std::unique_ptr<StringLit> parse_string_literal() {
         auto t = expect(TokenType::String);
