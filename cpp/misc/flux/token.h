@@ -224,6 +224,8 @@ struct SourceLocation {
     std::string source;
 
     SourceLocation() = default;
+    SourceLocation(const Position& start, const Position& end)
+        : file(""), start(start), end(end), source("") {}
     SourceLocation(const std::string& file,
                    const Position& start,
                    const Position& end,
