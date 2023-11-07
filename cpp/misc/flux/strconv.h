@@ -35,11 +35,11 @@ public:
         return std::move(ret);
     }
 
-    bool ok() const { return ok_; }
-    bool err() const { return !ok_; }
+    [[nodiscard]] bool ok() const { return ok_; }
+    [[nodiscard]] bool err() const { return !ok_; }
 
-    const T& t() const { return t_; }
-    const E& e() const { return e_; }
+    [[nodiscard]] const T& t() const { return t_; }
+    [[nodiscard]] const E& e() const { return e_; }
 
 private:
     Result() = default;

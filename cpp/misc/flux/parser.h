@@ -30,10 +30,7 @@ struct TokenError {
 class Parser {
 public:
     Parser(const std::string& input)
-        : scanner_(std::make_unique<Scanner>(input.data(), input.size())),
-          source_(input),
-          fname_(""),
-          depth_(0) {}
+        : scanner_(std::make_unique<Scanner>(input.data(), input.size())), source_(input) {}
 
     // Parses a file of Flux source code, returning a Package
     std::unique_ptr<Package> parse_single_package(const std::string& pkgpath,
@@ -68,7 +65,10 @@ public:
             badstmt->base = base_node_from_others(inner_attributes[0]->base.get(),
                                                   inner_attributes.rbegin()->get()->base.get());
             badstmt->text = "extra attributes not associated with anything";
-            body.emplace_back(std::make_shared<Statement>(Statement::Type::BadStatement, badstmt));
+            std::shared_ptr<Statement> stmt = std::make_shared<Statement>();
+            stmt->type = Statement::Type::BadStatement;
+            stmt->stmt = std::move(badstmt);
+            body.emplace_back(std::move(stmt));
         }
         if (!body.empty()) {
             end = body.rbegin()->get()->base()->location.end;
@@ -151,13 +151,13 @@ private:
             default:
                 bool first = true;
                 std::stringstream ss;
-                for (auto t : exp) {
+                for (auto tt : exp) {
                     if (!first) {
                         ss << " or ";
                     } else {
                         first = false;
                     }
-                    ss << token_to_string(t);
+                    ss << token_to_string(tt);
                 }
                 return ss.str();
             }
@@ -398,7 +398,7 @@ private:
     }
 
     std::unique_ptr<Expression> parse_primary_expression() {
-        auto t = peek_with_regex();
+        const auto* t = peek_with_regex();
         auto ret = std::make_unique<Expression>();
         switch (t->tok) {
         case TokenType::Ident: {
@@ -541,7 +541,7 @@ private:
     }
 
     // TODO
-    std::unique_ptr<Expression> parse_expression() {}
+    std::unique_ptr<Expression> parse_expression() { return nullptr; }
 
     std::unique_ptr<ObjectExpr> parse_object_literal() {
         auto start = open(TokenType::LBrace, TokenType::RBrace);
@@ -662,7 +662,7 @@ private:
     parse_expression_while_more(std::unique_ptr<Expression> init,
                                 const std::set<TokenType>& stop_tokens) {
         for (;;) {
-            auto t = peek();
+            const auto* t = peek();
             if (stop_tokens.contains(t->tok) || !more()) {
                 break;
             }
@@ -852,10 +852,10 @@ private:
                     comma = scan();
                     ncomma = comma->comments;
                 }
-                auto arr_item = std::make_shared<ArrayItem>();
-                arr_item->expression = std::move(expression);
-                arr_item->comma = std::move(ncomma);
-                items.emplace_back(std::move(arr_item));
+                auto narr_item = std::make_shared<ArrayItem>();
+                narr_item->expression = std::move(expression);
+                narr_item->comma = std::move(ncomma);
+                items.emplace_back(std::move(narr_item));
 
                 auto _this = peek()->start_offset;
                 if (last == _this) {
@@ -903,14 +903,14 @@ private:
                 auto nkey = parse_expression();
                 expect(TokenType::Colon);
                 auto nval = parse_expression();
-                std::shared_ptr<DictItem> item = std::make_shared<DictItem>();
-                item->key = std::move(nkey);
-                item->val = std::move(nval);
+                std::shared_ptr<DictItem> nitem = std::make_shared<DictItem>();
+                nitem->key = std::move(nkey);
+                nitem->val = std::move(nval);
                 if (peek()->tok == TokenType::Comma) {
                     comma = scan();
-                    item->comma = std::move(comma->comments);
+                    nitem->comma = std::move(comma->comments);
                 }
-                items.emplace_back(std::move(item));
+                items.emplace_back(std::move(nitem));
             }
 
             auto end = close(TokenType::RBrack);
@@ -969,7 +969,7 @@ private:
     }
 
     std::unique_ptr<Expression> parse_conditional_expression() {
-        auto t = peek();
+        const auto* t = peek();
         if (t->tok == TokenType::If) {
             auto if_tok = scan();
             auto test = parse_expression();
@@ -1024,7 +1024,9 @@ private:
 
     // TODO
     std::unique_ptr<Expression>
-    parse_logical_and_expression_suffix(std::unique_ptr<Expression> expr) {}
+    parse_logical_and_expression_suffix(std::unique_ptr<Expression> expr) {
+        return nullptr;
+    }
 
     // TODO
     std::unique_ptr<Expression> parse_logical_unary_expression() {
@@ -1075,7 +1077,7 @@ private:
     }
 
     // TODO
-    std::unique_ptr<Expression> parse_multiplicative_expression() {}
+    std::unique_ptr<Expression> parse_multiplicative_expression() { return nullptr; }
 
     std::unique_ptr<Expression> parse_additive_expression() {
         auto expr = parse_multiplicative_expression();
@@ -1148,7 +1150,9 @@ private:
 
     // TODO
     std::unique_ptr<Expression>
-    parse_logical_or_expression_suffix(std::unique_ptr<Expression> expr) {}
+    parse_logical_or_expression_suffix(std::unique_ptr<Expression> expr) {
+        return nullptr;
+    }
 
     std::unique_ptr<Expression> parse_logical_or_expression() {
         auto expr = parse_logical_and_expression();
@@ -1262,7 +1266,7 @@ private:
     std::map<TokenType, int32_t> blocks_;
     std::string source_;
     std::string fname_;
-    uint32_t depth_;
+    uint32_t depth_{0};
 };
 
 } // namespace pl
