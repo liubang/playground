@@ -207,32 +207,6 @@ struct Statement {
                  std::shared_ptr<BuiltinStmt>>
         stmt;
 
-    // Statement(Type t, const std::shared_ptr<BaseNode>& stmt) : type(t) {
-    //     switch (t) {
-    //     case Type::ExpressionStatement:
-    //         this->stmt = std::static_pointer_cast<ExprStmt>(stmt);
-    //         break;
-    //     case Type::VariableAssignment:
-    //         this->stmt = std::static_pointer_cast<VariableAssgn>(stmt);
-    //         break;
-    //     case Type::OptionStatement:
-    //         this->stmt = std::static_pointer_cast<OptionStmt>(stmt);
-    //         break;
-    //     case Type::ReturnStatement:
-    //         this->stmt = std::static_pointer_cast<ReturnStmt>(stmt);
-    //         break;
-    //     case Type::BadStatement:
-    //         this->stmt = std::static_pointer_cast<BadStmt>(stmt);
-    //         break;
-    //     case Type::TestCaseStatement:
-    //         this->stmt = std::static_pointer_cast<TestCaseStmt>(stmt);
-    //         break;
-    //     case Type::BuiltinStatement:
-    //         this->stmt = std::static_pointer_cast<BuiltinStmt>(stmt);
-    //         break;
-    //     }
-    // }
-
     std::shared_ptr<BaseNode> base() {
         switch (type) {
         case Type::ExpressionStatement:
