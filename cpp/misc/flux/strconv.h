@@ -205,11 +205,11 @@ public:
 
     static Result<std::string, std::string> parse_unit(const std::string& chars) {
         std::string u;
-        for (size_t i = 0; i < chars.size(); ++i) {
-            if (std::isalpha(chars[i]) == 0) {
+        for (char i : chars) {
+            if (std::isalpha(i) == 0) {
                 break;
             }
-            u.push_back(chars[i]);
+            u.push_back(i);
         }
         if (u.empty()) {
             return Result<std::string, std::string>::Err("parsing empty unit");

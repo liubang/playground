@@ -1022,14 +1022,43 @@ private:
         return std::nullopt;
     }
 
-    // TODO
-    std::unique_ptr<Expression>
-    parse_logical_and_expression_suffix(std::unique_ptr<Expression> expr) {
-        return nullptr;
+    std::optional<LogicalOperator> parse_and_operator() {
+        const auto* t = peek();
+        if (t->tok == TokenType::And) {
+            return LogicalOperator::AndOperator;
+        }
+        return std::nullopt;
     }
 
     // TODO
-    std::unique_ptr<Expression> parse_logical_unary_expression() {
+    std::shared_ptr<Expression>
+    parse_logical_and_expression_suffix(const std::shared_ptr<Expression>& expr) {
+        std::shared_ptr<Expression> res = expr;
+        for (;;) {
+            auto and_op = parse_and_operator();
+            if (!and_op) {
+                break;
+            }
+            auto t = scan();
+            auto rhs = parse_logical_unary_expression();
+            auto nexpr = std::make_shared<Expression>();
+            nexpr->type = Expression::Type::LogicalExpr;
+
+            auto logicexpr = std::make_shared<LogicalExpr>();
+            logicexpr->base =
+                base_node_from_others_c(res->base().get(), rhs->base().get(), t.get());
+            logicexpr->op = and_op.value();
+            logicexpr->left = res;
+            logicexpr->right = std::move(rhs);
+            nexpr->expr = logicexpr;
+
+            res = nexpr;
+        }
+        return res;
+    }
+
+    // TODO
+    std::shared_ptr<Expression> parse_logical_unary_expression() {
         const auto* t = peek();
         auto op = parse_logical_unary_operator();
         if (op) {
@@ -1047,9 +1076,9 @@ private:
         return parse_comparison_expression();
     }
 
-    std::unique_ptr<Expression> parse_comparison_expression() {
+    std::shared_ptr<Expression> parse_comparison_expression() {
         auto expr = parse_additive_expression();
-        return parse_comparison_expression_suffix(std::move(expr));
+        return parse_comparison_expression_suffix(expr);
     }
 
     std::optional<Operator> parse_comparison_operator() {
@@ -1079,7 +1108,7 @@ private:
     // TODO
     std::unique_ptr<Expression> parse_multiplicative_expression() { return nullptr; }
 
-    std::unique_ptr<Expression> parse_additive_expression() {
+    std::shared_ptr<Expression> parse_additive_expression() {
         auto expr = parse_multiplicative_expression();
         return parse_additive_expression_suffix(std::move(expr));
     }
@@ -1096,7 +1125,7 @@ private:
     }
 
     // TODO
-    std::unique_ptr<Expression> parse_additive_expression_suffix(std::unique_ptr<Expression> expr) {
+    std::shared_ptr<Expression> parse_additive_expression_suffix(std::unique_ptr<Expression> expr) {
         std::shared_ptr<Expression> ret = std::move(expr);
         for (;;) {
             auto op = parse_additive_operator();
@@ -1114,14 +1143,12 @@ private:
             nret->expr = std::move(binexpr);
             ret = std::move(nret);
         }
-        // TODO
-        return nullptr;
-        // return std::move(ret);
+        return ret;
     }
 
-    std::unique_ptr<Expression>
-    parse_comparison_expression_suffix(std::unique_ptr<Expression> expr) {
-        std::shared_ptr<Expression> ret = std::move(expr);
+    std::shared_ptr<Expression>
+    parse_comparison_expression_suffix(const std::shared_ptr<Expression>& expr) {
+        std::shared_ptr<Expression> ret = expr;
         for (;;) {
             auto op = parse_comparison_operator();
             if (!op) {
@@ -1135,28 +1162,26 @@ private:
             binexpr->base = base_node_from_others_c(ret->base().get(), rhs->base().get(), t.get());
             binexpr->left = ret;
             binexpr->right = std::move(rhs);
-            ret->expr = std::move(binexpr);
+            nret->expr = std::move(binexpr);
             ret = std::move(nret);
         }
-        // TODO
-        // return std::move(ret);
-        return nullptr;
+        return ret;
     }
 
-    std::unique_ptr<Expression> parse_logical_and_expression() {
+    std::shared_ptr<Expression> parse_logical_and_expression() {
         auto expr = parse_logical_unary_expression();
-        return parse_logical_and_expression_suffix(std::move(expr));
+        return parse_logical_and_expression_suffix(expr);
     }
 
     // TODO
     std::unique_ptr<Expression>
-    parse_logical_or_expression_suffix(std::unique_ptr<Expression> expr) {
+    parse_logical_or_expression_suffix(const std::shared_ptr<Expression>& expr) {
         return nullptr;
     }
 
     std::unique_ptr<Expression> parse_logical_or_expression() {
         auto expr = parse_logical_and_expression();
-        return parse_logical_or_expression_suffix(std::move(expr));
+        return parse_logical_or_expression_suffix(expr);
     }
 
     std::unique_ptr<StringLit> parse_string_literal() {
