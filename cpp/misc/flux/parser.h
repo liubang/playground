@@ -474,19 +474,66 @@ private:
             return parse_array_or_dict(std::move(start));
         }
         case TokenType::LBrace:
-            // TODO:
+            ret->type = Expression::Type::ObjectExpr;
+            ret->expr = parse_object_literal();
             break;
         case TokenType::LParen:
-            // TODO:
-            break;
+            return parse_paren_expression();
         case TokenType::Dot:
-            // TODO:
+            ret->type = Expression::Type::LabelLit;
+            ret->expr = parse_label_literal();
             break;
         default:
             break;
         }
         return ret;
     }
+
+    // TODO
+    std::unique_ptr<Expression> parse_function_expression(std::unique_ptr<Token> lparen,
+                                                          std::unique_ptr<Token> rparen,
+                                                          const std::vector<Property>& params) {}
+
+    // TODO
+    std::unique_ptr<Expression> parse_paren_ident_expression(std::unique_ptr<Token> lparen,
+                                                             std::unique_ptr<Identifier> key) {}
+
+    std::unique_ptr<Expression> parse_paren_body_expression(std::unique_ptr<Token> lparen) {
+        const auto* t = peek();
+        if (t->tok == TokenType::RParen) {
+            auto tt = close(TokenType::RParen);
+            return parse_function_expression(std::move(lparen), std::move(tt), {});
+        }
+        if (t->tok == TokenType::Ident) {
+            auto ident = parse_identifier();
+            return parse_paren_ident_expression(std::move(lparen), std::move(ident));
+        }
+        auto expr = parse_expression_while_more(nullptr, {});
+        if (!expr) {
+            expr = std::make_unique<Expression>();
+            expr->type = Expression::Type::BadExpr;
+            auto bad_expr = std::make_shared<BadExpr>();
+            SourceLocation sl(t->start_pos, t->end_pos);
+            bad_expr->base = std::make_shared<BaseNode>(sl);
+            bad_expr->text = t->lit;
+            expr->expr = std::move(bad_expr);
+        }
+        auto rparen = close(TokenType::RParen);
+        auto ret = std::make_unique<Expression>();
+        ret->type = Expression::Type::ParenExpr;
+        ret->expr =
+            std::make_shared<ParenExpr>(base_node_from_tokens(lparen.get(), rparen.get()),
+                                        lparen->comments, std::move(expr), rparen->comments);
+        return ret;
+    }
+
+    std::unique_ptr<Expression> parse_paren_expression() {
+        auto lparen = open(TokenType::LParen, TokenType::RParen);
+        return parse_paren_body_expression(std::move(lparen));
+    }
+
+    // TODO
+    std::unique_ptr<LabelLit> parse_label_literal() {}
 
     std::tuple<std::unique_ptr<StringExpr>, TokenError> parse_string_expression() {
         auto start = expect(TokenType::Quote);
