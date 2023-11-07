@@ -100,6 +100,14 @@ struct BaseNode {
     std::vector<std::shared_ptr<Comment>> comments;
     std::vector<std::shared_ptr<Attribute>> attributes;
     std::vector<std::string> errors;
+
+    BaseNode() = default;
+    BaseNode(SourceLocation loc) : location(std::move(loc)) {}
+    BaseNode(SourceLocation loc,
+             const std::vector<std::shared_ptr<Comment>>& comments,
+             const std::vector<std::shared_ptr<Attribute>>& attributes,
+             const std::vector<std::string>& errors)
+        : location(std::move(loc)), comments(comments), attributes(attributes), errors(errors) {}
 };
 
 struct AttributeParam {
@@ -371,6 +379,12 @@ struct ParenExpr {
     std::vector<std::shared_ptr<Comment>> lparen;
     std::shared_ptr<Expression> expression;
     std::vector<std::shared_ptr<Comment>> rparen;
+    ParenExpr() = default;
+    ParenExpr(std::unique_ptr<BaseNode> base,
+              const std::vector<std::shared_ptr<Comment>>& lparen,
+              std::unique_ptr<Expression> expr,
+              const std::vector<std::shared_ptr<Comment>>& rparen)
+        : base(std::move(base)), lparen(lparen), expression(std::move(expr)), rparen(rparen) {}
 };
 
 struct IntegerLit {
