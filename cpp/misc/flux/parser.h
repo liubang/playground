@@ -489,10 +489,52 @@ private:
         return ret;
     }
 
-    // TODO
-    std::unique_ptr<Expression> parse_function_expression(std::unique_ptr<Token> lparen,
-                                                          std::unique_ptr<Token> rparen,
-                                                          const std::vector<Property>& params) {}
+    std::unique_ptr<Block> parse_block() {
+        auto start = open(TokenType::LBrace, TokenType::RBrace);
+        auto stmts = parse_statement_list({});
+        auto end = close(TokenType::RBrace);
+        return std::make_unique<Block>(base_node_from_tokens(start.get(), end.get()),
+                                       start->comments, stmts, end->comments);
+    }
+
+    std::unique_ptr<Expression>
+    parse_function_body_expression(std::unique_ptr<Token> lparen,
+                                   std::unique_ptr<Token> rparen,
+                                   std::unique_ptr<Token> arrow,
+                                   const std::vector<std::shared_ptr<Property>>& params) {
+        const auto* t = peek();
+        if (t->tok == TokenType::LBrace) {
+            auto block = parse_block();
+            auto expr = std::make_unique<Expression>(Expression::Type::FunctionExpr);
+            auto base = base_node_from_other_end(lparen.get(), block->base.get());
+            auto fbody = std::make_unique<FunctionBody>(FunctionBody::Type::Block);
+            fbody->body = std::move(block);
+            auto func =
+                std::make_shared<FunctionExpr>(std::move(base), lparen->comments, params,
+                                               rparen->comments, arrow->comments, std::move(fbody));
+            expr->expr = std::move(func);
+            return expr;
+        }
+        auto expr = parse_expression();
+        auto ret = std::make_unique<Expression>(Expression::Type::FunctionExpr);
+        auto base = base_node_from_other_end(lparen.get(), expr->base().get());
+        auto fbody = std::make_unique<FunctionBody>(FunctionBody::Type::Expression);
+        fbody->body = std::move(expr);
+        auto func =
+            std::make_shared<FunctionExpr>(std::move(base), lparen->comments, params,
+                                           rparen->comments, arrow->comments, std::move(fbody));
+        ret->expr = std::move(func);
+        return ret;
+    }
+
+    std::unique_ptr<Expression>
+    parse_function_expression(std::unique_ptr<Token> lparen,
+                              std::unique_ptr<Token> rparen,
+                              const std::vector<std::shared_ptr<Property>>& params) {
+        auto arrow = expect_or_skip(TokenType::Arrow);
+        return parse_function_body_expression(std::move(lparen), std::move(rparen),
+                                              std::move(arrow), params);
+    }
 
     // TODO
     std::unique_ptr<Expression> parse_paren_ident_expression(std::unique_ptr<Token> lparen,

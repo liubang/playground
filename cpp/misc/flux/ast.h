@@ -274,6 +274,20 @@ struct FunctionExpr {
     std::vector<std::shared_ptr<Comment>> rparen;
     std::vector<std::shared_ptr<Comment>> arrow;
     std::shared_ptr<FunctionBody> body;
+
+    FunctionExpr() = default;
+    FunctionExpr(std::unique_ptr<BaseNode> base,
+                 const std::vector<std::shared_ptr<Comment>>& lparen,
+                 const std::vector<std::shared_ptr<Property>>& params,
+                 const std::vector<std::shared_ptr<Comment>>& rparen,
+                 const std::vector<std::shared_ptr<Comment>>& arrow,
+                 std::unique_ptr<FunctionBody> body)
+        : base(std::move(base)),
+          lparen(lparen),
+          params(params),
+          rparen(rparen),
+          arrow(arrow),
+          body(std::move(body)) {}
 };
 
 struct LogicalExpr {
@@ -501,6 +515,9 @@ struct Expression {
                  std::shared_ptr<BadExpr>>
         expr;
 
+    Expression() = default;
+    Expression(Type t) : type(t) {}
+
     std::shared_ptr<BaseNode> base() {
         switch (type) {
         case Type::Identifier:
@@ -707,11 +724,19 @@ struct Block {
     std::vector<std::shared_ptr<Comment>> lbrace;
     std::vector<std::shared_ptr<Statement>> body;
     std::vector<std::shared_ptr<Comment>> rbrace;
+
+    Block() = default;
+    Block(std::unique_ptr<BaseNode> base,
+          const std::vector<std::shared_ptr<Comment>>& lbrace,
+          const std::vector<std::shared_ptr<Statement>>& body,
+          const std::vector<std::shared_ptr<Comment>>& rbrace)
+        : base(std::move(base)), lbrace(lbrace), body(body), rbrace(rbrace) {}
 };
 
 struct FunctionBody {
     enum class Type { Block, Expression };
     Type type;
+    FunctionBody(Type t) : type(t) {}
     std::variant<std::shared_ptr<Block>, std::shared_ptr<Expression>> body;
 };
 
