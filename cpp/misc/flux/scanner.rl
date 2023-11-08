@@ -152,7 +152,6 @@ namespace pl {
 %% write data nofinal;
 
 uint32_t real_scan(
-    const char* data,
     int32_t mode,
     const char** pp,
     const char* _data,

@@ -12,8 +12,7 @@
 
 namespace pl {
 
-extern uint32_t real_scan(const char* data,
-                          int32_t mode,
+extern uint32_t real_scan(int32_t mode,
                           const char** p,
                           const char* ps,
                           const char* pe,
@@ -57,7 +56,7 @@ std::unique_ptr<Token> Scanner::scan(int32_t mode) {
     int32_t token_end_col = 0;
 
     auto err =
-        real_scan(data_, mode, &p_, ps_, pe_, eof_, &last_newline_, cur_line_, token_, token_start,
+        real_scan(mode, &p_, ps_, pe_, eof_, &last_newline_, cur_line_, token_, token_start,
                   token_start_line, token_start_col, token_end, token_end_line, token_end_col);
     std::unique_ptr<Token> t;
     if (err != 0) {
@@ -70,7 +69,7 @@ std::unique_ptr<Token> Scanner::scan(int32_t mode) {
     } else {
         t = std::make_unique<Token>();
         t->tok = token_;
-        t->lit = std::move(std::string(data_ + token_start, token_end - token_start));
+        t->lit = std::string(data_ + token_start, token_end - token_start);
         t->start_offset = token_start;
         t->end_offset = token_end;
         t->start_pos = Position(token_start_line, token_start_col);
