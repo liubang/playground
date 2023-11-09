@@ -684,12 +684,10 @@ struct MemberAssgn {
     std::shared_ptr<Expression> init;
 };
 
-enum class AssignmentType { VariableAssignment, MemberAssignment };
-
 struct Assignment {
-    AssignmentType type;
-    std::shared_ptr<VariableAssgn> variable;
-    std::shared_ptr<MemberAssgn> member;
+    enum class Type { VariableAssignment, MemberAssignment };
+    Type type;
+    std::variant<std::shared_ptr<VariableAssgn>, std::shared_ptr<MemberAssgn>> value;
 };
 
 // property
@@ -803,16 +801,18 @@ struct MonoType {
         Label,
     };
     Type type;
-    std::shared_ptr<TvarType> tvar;
-    std::shared_ptr<NamedType> basic;
-    std::shared_ptr<ArrayType> array;
-    std::shared_ptr<StreamType> stream;
-    std::shared_ptr<VectorType> vector;
-    std::shared_ptr<DictType> dict;
-    std::shared_ptr<DynamicType> dynamic;
-    std::shared_ptr<RecordType> record;
-    std::shared_ptr<FunctionType> func;
-    std::shared_ptr<LabelLit> label;
+
+    std::variant<std::shared_ptr<TvarType>,
+                 std::shared_ptr<NamedType>,
+                 std::shared_ptr<ArrayType>,
+                 std::shared_ptr<StreamType>,
+                 std::shared_ptr<VectorType>,
+                 std::shared_ptr<DictType>,
+                 std::shared_ptr<DynamicType>,
+                 std::shared_ptr<RecordType>,
+                 std::shared_ptr<FunctionType>,
+                 std::shared_ptr<LabelLit>>
+        value;
 };
 
 struct Required {
@@ -841,9 +841,8 @@ struct ParameterType {
         Pipe,
     };
     Type type;
-    std::shared_ptr<Required> required;
-    std::shared_ptr<Optional> optional;
-    std::shared_ptr<Pipe> pipe;
+
+    std::variant<std::shared_ptr<Required>, std::shared_ptr<Optional>, std::shared_ptr<Pipe>> value;
 };
 
 } // namespace pl
