@@ -9,6 +9,7 @@
 #pragma once
 
 #include <algorithm>
+#include <functional>
 #include <memory>
 #include <set>
 #include <sstream>
@@ -49,21 +50,21 @@ public:
         fname_ = fname;
         auto start_pos = peek()->start_pos;
         auto end = Position::invalid();
-        auto inner_attributes = parse_attribute_inner_list();
-        auto pkg = parse_package_clause(&inner_attributes);
+        auto inner_attrs = parse_attribute_inner_list();
+        auto [pkg, inner_attrs1] = parse_package_clause(inner_attrs);
         if (pkg) {
             end = pkg->base->location.end;
         }
-        auto imports = parse_import_list(&inner_attributes);
+        auto [imports, inner_attrs2] = parse_import_list(inner_attrs1);
         if (!imports.empty()) {
             end = imports.rbegin()->get()->base->location.end;
         }
-        auto body = parse_statement_list(&inner_attributes);
-        if (!inner_attributes.empty()) {
+        auto body = parse_statement_list(inner_attrs2);
+        if (!inner_attrs.empty()) {
             // We have left over attributes from the beginning of the file.
             auto badstmt = std::make_shared<BadStmt>();
-            badstmt->base = base_node_from_others(inner_attributes[0]->base.get(),
-                                                  inner_attributes.rbegin()->get()->base.get());
+            badstmt->base = base_node_from_others(inner_attrs[0]->base.get(),
+                                                  inner_attrs.rbegin()->get()->base.get());
             badstmt->text = "extra attributes not associated with anything";
             std::shared_ptr<Statement> stmt = std::make_shared<Statement>();
             stmt->type = Statement::Type::BadStatement;
@@ -1357,22 +1358,88 @@ private:
     }
 
     // TODO:
-    std::unique_ptr<PackageClause>
-    parse_package_clause(std::vector<std::shared_ptr<Attribute>>* attributes) {
-        return nullptr;
-    }
-
-    // TODO:
-    std::vector<std::shared_ptr<ImportDeclaration>>
-    parse_import_list(std::vector<std::shared_ptr<Attribute>>* attributes) {
+    std::tuple<std::unique_ptr<PackageClause>,
+               std::optional<std::vector<std::shared_ptr<Attribute>>>>
+    parse_package_clause(const std::vector<std::shared_ptr<Attribute>>& attributes) {
         return {};
     }
 
+    // TODO:
+    std::tuple<std::vector<std::shared_ptr<ImportDeclaration>>,
+               std::optional<std::vector<std::shared_ptr<Attribute>>>>
+    parse_import_list(std::optional<std::vector<std::shared_ptr<Attribute>>> attributes) {
+        return {};
+    }
+
+    // TODO
+    std::unique_ptr<Statement> parse_expression_statement() {}
+
+    // TODO
+    std::unique_ptr<Statement> parse_ident_statement() {}
+
+    // TODO
+    std::unique_ptr<Statement> parse_option_assignment() {}
+
+    // TODO
+    std::unique_ptr<Statement> parse_builtin_statement() {}
+
+    // TODO
+    std::unique_ptr<Statement> parse_testcase_statement() {}
+
+    // TODO
+    std::unique_ptr<Statement> parse_return_statement() {}
+
+    // TODO: attributes
     std::unique_ptr<Statement>
-    parse_statement_inner(std::vector<std::shared_ptr<Attribute>>* attributes) {}
+    parse_statement_inner(std::optional<std::vector<std::shared_ptr<Attribute>>> attributes) {
+        auto t = peek();
+        std::unique_ptr<Statement> stmt;
+        switch (t->tok) {
+        case TokenType::Int:
+        case TokenType::Float:
+        case TokenType::String:
+        case TokenType::Div:
+        case TokenType::Time:
+        case TokenType::Duration:
+        case TokenType::PipeReceive:
+        case TokenType::LParen:
+        case TokenType::LBrack:
+        case TokenType::LBrace:
+        case TokenType::Add:
+        case TokenType::Sub:
+        case TokenType::Not:
+        case TokenType::If:
+        case TokenType::Exists:
+        case TokenType::Quote:
+            stmt = parse_expression_statement();
+            break;
+        case TokenType::Ident:
+            stmt = parse_ident_statement();
+            break;
+        case TokenType::Option:
+            stmt = parse_option_assignment();
+            break;
+        case TokenType::Builtin:
+            stmt = parse_builtin_statement();
+            break;
+        case TokenType::TestCase:
+            stmt = parse_testcase_statement();
+            break;
+        case TokenType::Return:
+            stmt = parse_return_statement();
+            break;
+        default:
+            auto tt = consume();
+            stmt = std::make_unique<Statement>(Statement::Type::BadStatement);
+            auto bad_stmt = std::make_shared<BadStmt>(base_node_from_token(tt.get()), t->lit);
+            stmt->stmt = std::move(bad_stmt);
+        }
+        stmt->base()->attributes = *attributes;
+        return stmt;
+    }
 
     std::unique_ptr<Statement>
-    parse_statement(std::vector<std::shared_ptr<Attribute>>* attributes) {
+    parse_statement(std::optional<std::vector<std::shared_ptr<Attribute>>> attributes) {
         auto opt = depth_guard<std::unique_ptr<Statement>>([this, attributes] {
             return parse_statement_inner(attributes);
         });
@@ -1389,7 +1456,7 @@ private:
     }
 
     std::vector<std::shared_ptr<Statement>>
-    parse_statement_list(std::vector<std::shared_ptr<Attribute>>* attributes) {
+    parse_statement_list(std::optional<std::vector<std::shared_ptr<Attribute>>> attributes) {
         std::vector<std::shared_ptr<Statement>> stmts;
         for (;;) {
             if (!more()) {
