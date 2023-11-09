@@ -178,6 +178,10 @@ struct ReturnStmt {
 struct BadStmt {
     std::shared_ptr<BaseNode> base;
     std::string text;
+
+    BadStmt() = default;
+    BadStmt(std::unique_ptr<BaseNode> base, std::string text)
+        : base(std::move(base)), text(std::move(text)) {}
 };
 
 struct TestCaseStmt {
@@ -205,6 +209,9 @@ struct Statement {
         BuiltinStatement
     };
     Type type;
+
+    Statement() = default;
+    Statement(Type type) : type(type) {}
 
     std::variant<std::shared_ptr<ExprStmt>,
                  std::shared_ptr<VariableAssgn>,
