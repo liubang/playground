@@ -88,6 +88,7 @@ public:
 
 private:
     constexpr static char METADATA[] = "parser-type=rust";
+    constexpr static uint32_t MAX_DEPTH = 80;
 
     // scan will read the next token from the Scanner. If peek has been used,
     // this will return the peeked token and consume it.
@@ -1367,10 +1368,48 @@ private:
         return {};
     }
 
-    // TODO:
+    std::unique_ptr<Statement>
+    parse_statement_inner(std::vector<std::shared_ptr<Attribute>>* attributes) {}
+
+    std::unique_ptr<Statement>
+    parse_statement(std::vector<std::shared_ptr<Attribute>>* attributes) {
+        auto opt = depth_guard<std::unique_ptr<Statement>>([this, attributes] {
+            return parse_statement_inner(attributes);
+        });
+        if (!opt) {
+            auto t = consume();
+            auto ret = std::make_unique<Statement>();
+            ret->type = Statement::Type::BadStatement;
+            auto bad = std::make_shared<BadExpr>();
+            bad->base = base_node_from_token(t.get());
+            bad->text = t->lit;
+            return ret;
+        }
+        return std::move(opt.value());
+    }
+
     std::vector<std::shared_ptr<Statement>>
     parse_statement_list(std::vector<std::shared_ptr<Attribute>>* attributes) {
-        return {};
+        std::vector<std::shared_ptr<Statement>> stmts;
+        for (;;) {
+            if (!more()) {
+                return stmts;
+            }
+            stmts.emplace_back(parse_statement(attributes));
+            *attributes = {};
+        }
+        return stmts;
+    }
+
+    template <typename T> std::optional<T> depth_guard(std::function<T()> fn) {
+        depth_++;
+        if (depth_ > MAX_DEPTH) {
+            errs_.emplace_back("Program is nested too deep");
+            return std::nullopt;
+        }
+        T ret = fn();
+        depth_--;
+        return std::move(ret);
     }
 
 private:

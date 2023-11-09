@@ -69,3 +69,15 @@ cc_library(
         ":scanner",
     ],
 )
+
+cc_binary(
+    name = "parser_test",
+    srcs = [
+        "parser_test.cpp",
+    ],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        ":parser",
+    ],
+)
