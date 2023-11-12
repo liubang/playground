@@ -176,11 +176,17 @@ struct VariableAssgn {
 struct OptionStmt {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Assignment> assignment;
+    OptionStmt() = default;
+    OptionStmt(std::unique_ptr<BaseNode> base, std::unique_ptr<Assignment> assignment)
+        : base(std::move(base)), assignment(std::move(assignment)) {}
 };
 
 struct ReturnStmt {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Expression> argument;
+    ReturnStmt() = default;
+    ReturnStmt(std::unique_ptr<BaseNode> base, std::unique_ptr<Expression> argument)
+        : base(std::move(base)), argument(std::move(argument)) {}
 };
 
 struct BadStmt {
@@ -361,6 +367,18 @@ struct IndexExpr {
     std::vector<std::shared_ptr<Comment>> lbrack;
     std::shared_ptr<Expression> index;
     std::vector<std::shared_ptr<Comment>> rbrack;
+
+    IndexExpr() = default;
+    IndexExpr(std::unique_ptr<BaseNode> base,
+              std::unique_ptr<Expression> array,
+              const std::vector<std::shared_ptr<Comment>>& lbrack,
+              std::unique_ptr<Expression> index,
+              const std::vector<std::shared_ptr<Comment>>& rbrack)
+        : base(std::move(base)),
+          array(std::move(array)),
+          lbrack(lbrack),
+          index(std::move(index)),
+          rbrack(rbrack) {}
 };
 
 struct BinaryExpr {
@@ -368,6 +386,13 @@ struct BinaryExpr {
     Operator op;
     std::shared_ptr<Expression> left;
     std::shared_ptr<Expression> right;
+
+    BinaryExpr() = default;
+    BinaryExpr(std::unique_ptr<BaseNode> base,
+               Operator op,
+               std::unique_ptr<Expression> left,
+               std::unique_ptr<Expression> right)
+        : base(std::move(base)), op(op), left(std::move(left)), right(std::move(right)) {}
 };
 
 struct UnaryExpr {
@@ -452,6 +477,9 @@ struct ParenExpr {
 struct IntegerLit {
     std::shared_ptr<BaseNode> base;
     int64_t value;
+    IntegerLit() = default;
+    IntegerLit(std::unique_ptr<BaseNode> base, int64_t value)
+        : base(std::move(base)), value(value) {}
 };
 
 struct FloatLit {
@@ -535,32 +563,32 @@ struct Expression {
     };
     Type type;
 
-    std::variant<std::shared_ptr<Identifier>,
-                 std::shared_ptr<ArrayExpr>,
-                 std::shared_ptr<DictExpr>,
-                 std::shared_ptr<FunctionExpr>,
-                 std::shared_ptr<LogicalExpr>,
-                 std::shared_ptr<ObjectExpr>,
-                 std::shared_ptr<MemberExpr>,
-                 std::shared_ptr<IndexExpr>,
-                 std::shared_ptr<BinaryExpr>,
-                 std::shared_ptr<UnaryExpr>,
-                 std::shared_ptr<PipeExpr>,
-                 std::shared_ptr<CallExpr>,
-                 std::shared_ptr<ConditionalExpr>,
-                 std::shared_ptr<StringExpr>,
-                 std::shared_ptr<ParenExpr>,
-                 std::shared_ptr<IntegerLit>,
-                 std::shared_ptr<FloatLit>,
-                 std::shared_ptr<StringLit>,
-                 std::shared_ptr<DurationLit>,
-                 std::shared_ptr<UintLit>,
-                 std::shared_ptr<BooleanLit>,
-                 std::shared_ptr<DateTimeLit>,
-                 std::shared_ptr<RegexpLit>,
-                 std::shared_ptr<PipeLit>,
-                 std::shared_ptr<LabelLit>,
-                 std::shared_ptr<BadExpr>>
+    std::variant<std::unique_ptr<Identifier>,
+                 std::unique_ptr<ArrayExpr>,
+                 std::unique_ptr<DictExpr>,
+                 std::unique_ptr<FunctionExpr>,
+                 std::unique_ptr<LogicalExpr>,
+                 std::unique_ptr<ObjectExpr>,
+                 std::unique_ptr<MemberExpr>,
+                 std::unique_ptr<IndexExpr>,
+                 std::unique_ptr<BinaryExpr>,
+                 std::unique_ptr<UnaryExpr>,
+                 std::unique_ptr<PipeExpr>,
+                 std::unique_ptr<CallExpr>,
+                 std::unique_ptr<ConditionalExpr>,
+                 std::unique_ptr<StringExpr>,
+                 std::unique_ptr<ParenExpr>,
+                 std::unique_ptr<IntegerLit>,
+                 std::unique_ptr<FloatLit>,
+                 std::unique_ptr<StringLit>,
+                 std::unique_ptr<DurationLit>,
+                 std::unique_ptr<UintLit>,
+                 std::unique_ptr<BooleanLit>,
+                 std::unique_ptr<DateTimeLit>,
+                 std::unique_ptr<RegexpLit>,
+                 std::unique_ptr<PipeLit>,
+                 std::unique_ptr<LabelLit>,
+                 std::unique_ptr<BadExpr>>
         expr;
 
     Expression() = default;
@@ -569,58 +597,94 @@ struct Expression {
     std::shared_ptr<BaseNode> base() {
         switch (type) {
         case Type::Identifier:
-            return std::get<std::shared_ptr<Identifier>>(expr)->base;
+            return std::get<std::unique_ptr<Identifier>>(expr)->base;
         case Type::ArrayExpr:
-            return std::get<std::shared_ptr<ArrayExpr>>(expr)->base;
+            return std::get<std::unique_ptr<ArrayExpr>>(expr)->base;
         case Type::DictExpr:
-            return std::get<std::shared_ptr<DictExpr>>(expr)->base;
+            return std::get<std::unique_ptr<DictExpr>>(expr)->base;
         case Type::FunctionExpr:
-            return std::get<std::shared_ptr<FunctionExpr>>(expr)->base;
+            return std::get<std::unique_ptr<FunctionExpr>>(expr)->base;
         case Type::LogicalExpr:
-            return std::get<std::shared_ptr<LogicalExpr>>(expr)->base;
+            return std::get<std::unique_ptr<LogicalExpr>>(expr)->base;
         case Type::ObjectExpr:
-            return std::get<std::shared_ptr<ObjectExpr>>(expr)->base;
+            return std::get<std::unique_ptr<ObjectExpr>>(expr)->base;
         case Type::MemberExpr:
-            return std::get<std::shared_ptr<MemberExpr>>(expr)->base;
+            return std::get<std::unique_ptr<MemberExpr>>(expr)->base;
         case Type::IndexExpr:
-            return std::get<std::shared_ptr<IndexExpr>>(expr)->base;
+            return std::get<std::unique_ptr<IndexExpr>>(expr)->base;
         case Type::BinaryExpr:
-            return std::get<std::shared_ptr<BinaryExpr>>(expr)->base;
+            return std::get<std::unique_ptr<BinaryExpr>>(expr)->base;
         case Type::UnaryExpr:
-            return std::get<std::shared_ptr<UnaryExpr>>(expr)->base;
+            return std::get<std::unique_ptr<UnaryExpr>>(expr)->base;
         case Type::PipeExpr:
-            return std::get<std::shared_ptr<PipeExpr>>(expr)->base;
+            return std::get<std::unique_ptr<PipeExpr>>(expr)->base;
         case Type::CallExpr:
-            return std::get<std::shared_ptr<CallExpr>>(expr)->base;
+            return std::get<std::unique_ptr<CallExpr>>(expr)->base;
         case Type::ConditionalExpr:
-            return std::get<std::shared_ptr<ConditionalExpr>>(expr)->base;
+            return std::get<std::unique_ptr<ConditionalExpr>>(expr)->base;
         case Type::IntegerLit:
-            return std::get<std::shared_ptr<IntegerLit>>(expr)->base;
+            return std::get<std::unique_ptr<IntegerLit>>(expr)->base;
         case Type::FloatLit:
-            return std::get<std::shared_ptr<FloatLit>>(expr)->base;
+            return std::get<std::unique_ptr<FloatLit>>(expr)->base;
         case Type::StringLit:
-            return std::get<std::shared_ptr<StringLit>>(expr)->base;
+            return std::get<std::unique_ptr<StringLit>>(expr)->base;
         case Type::DurationLit:
-            return std::get<std::shared_ptr<DurationLit>>(expr)->base;
+            return std::get<std::unique_ptr<DurationLit>>(expr)->base;
         case Type::UnsignedIntegerLit:
-            return std::get<std::shared_ptr<UintLit>>(expr)->base;
+            return std::get<std::unique_ptr<UintLit>>(expr)->base;
         case Type::BooleanLit:
-            return std::get<std::shared_ptr<BooleanLit>>(expr)->base;
+            return std::get<std::unique_ptr<BooleanLit>>(expr)->base;
         case Type::DateTimeLit:
-            return std::get<std::shared_ptr<DateTimeLit>>(expr)->base;
+            return std::get<std::unique_ptr<DateTimeLit>>(expr)->base;
         case Type::RegexpLit:
-            return std::get<std::shared_ptr<RegexpLit>>(expr)->base;
+            return std::get<std::unique_ptr<RegexpLit>>(expr)->base;
         case Type::PipeLit:
-            return std::get<std::shared_ptr<PipeLit>>(expr)->base;
+            return std::get<std::unique_ptr<PipeLit>>(expr)->base;
         case Type::LabelLit:
-            return std::get<std::shared_ptr<LabelLit>>(expr)->base;
+            return std::get<std::unique_ptr<LabelLit>>(expr)->base;
         case Type::BadExpr:
-            return std::get<std::shared_ptr<BadExpr>>(expr)->base;
+            return std::get<std::unique_ptr<BadExpr>>(expr)->base;
         case Type::StringExpr:
-            return std::get<std::shared_ptr<StringExpr>>(expr)->base;
+            return std::get<std::unique_ptr<StringExpr>>(expr)->base;
         case Type::ParenExpr:
-            return std::get<std::shared_ptr<ParenExpr>>(expr)->base;
+            return std::get<std::unique_ptr<ParenExpr>>(expr)->base;
         }
+    }
+
+    static std::unique_ptr<Expression> Id(std::unique_ptr<Identifier> ex) {
+        auto expr = std::make_unique<Expression>(Expression::Type::Identifier);
+        expr->expr = std::move(ex);
+        return expr;
+    }
+
+    static std::unique_ptr<Expression> Paren(std::unique_ptr<ParenExpr> ex) {
+        auto expr = std::make_unique<Expression>(Expression::Type::ParenExpr);
+        expr->expr = std::move(ex);
+        return expr;
+    }
+
+    static std::unique_ptr<Expression> Binary(std::unique_ptr<BinaryExpr> ex) {
+        auto expr = std::make_unique<Expression>(Expression::Type::BinaryExpr);
+        expr->expr = std::move(ex);
+        return expr;
+    }
+
+    static std::unique_ptr<Expression> Index(std::unique_ptr<IndexExpr> ex) {
+        auto expr = std::make_unique<Expression>(Expression::Type::IndexExpr);
+        expr->expr = std::move(ex);
+        return expr;
+    }
+
+    static std::unique_ptr<Expression> Integer(std::unique_ptr<IntegerLit> ex) {
+        auto expr = std::make_unique<Expression>(Expression::Type::IntegerLit);
+        expr->expr = std::move(ex);
+        return expr;
+    }
+
+    static std::unique_ptr<Expression> Member(std::unique_ptr<MemberExpr> ex) {
+        auto expr = std::make_unique<Expression>(Expression::Type::MemberExpr);
+        expr->expr = std::move(ex);
+        return expr;
     }
 };
 
@@ -736,6 +800,14 @@ struct Assignment {
     enum class Type { VariableAssignment, MemberAssignment };
     Type type;
     std::variant<std::shared_ptr<VariableAssgn>, std::shared_ptr<MemberAssgn>> value;
+    std::shared_ptr<BaseNode> base() {
+        switch (type) {
+        case Type::VariableAssignment:
+            return std::get<std::shared_ptr<VariableAssgn>>(value)->base;
+        case Type::MemberAssignment:
+            return std::get<std::shared_ptr<MemberAssgn>>(value)->base;
+        }
+    }
 };
 
 // property
@@ -746,6 +818,17 @@ struct Property {
     std::vector<std::shared_ptr<Comment>> separator;
     std::shared_ptr<Expression> value;
     std::vector<std::shared_ptr<Comment>> comma;
+    Property() = default;
+    Property(std::unique_ptr<BaseNode> base,
+             std::unique_ptr<PropertyKey> key,
+             const std::vector<std::shared_ptr<Comment>>& separator,
+             std::unique_ptr<Expression> value,
+             const std::vector<std::shared_ptr<Comment>>& comma)
+        : base(std::move(base)),
+          key(std::move(key)),
+          separator(separator),
+          value(std::move(value)),
+          comma(comma) {}
 };
 
 struct PropertyKey {
@@ -760,6 +843,18 @@ struct PropertyKey {
         case Type::StringLiteral:
             return std::get<std::shared_ptr<StringLit>>(key)->base;
         }
+    }
+
+    static std::unique_ptr<PropertyKey> Str(std::unique_ptr<StringLit> str) {
+        auto ret = std::make_unique<PropertyKey>(PropertyKey::Type::StringLiteral);
+        ret->key = std::move(str);
+        return ret;
+    }
+
+    static std::unique_ptr<PropertyKey> Id(std::unique_ptr<Identifier> id) {
+        auto ret = std::make_unique<PropertyKey>(PropertyKey::Type::Identifier);
+        ret->key = std::move(id);
+        return ret;
     }
 };
 
