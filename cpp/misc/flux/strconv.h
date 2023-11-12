@@ -65,8 +65,9 @@ public:
         return true;
     }
 
-    static Result<std::string, std::string>
-    push_hex_byte(const std::string& lit, size_t start, std::string* s) {
+    static Result<std::string, std::string> push_hex_byte(const std::string& lit,
+                                                          size_t start,
+                                                          std::string* s) {
         if (start == lit.length() - 1) {
             return Result<std::string, std::string>::Err(R"(\x followed by 0 char, must be 2)");
         }
@@ -193,8 +194,8 @@ public:
         return Result<std::tm, std::string>::Ok(std::move(t));
     }
 
-    static Result<std::vector<std::shared_ptr<Duration>>, std::string>
-    parse_duration(const std::string& lit) {
+    static Result<std::vector<std::shared_ptr<Duration>>, std::string> parse_duration(
+        const std::string& lit) {
         std::vector<std::shared_ptr<Duration>> values;
         for (size_t i = 0; i < lit.length(); ++i) {
         }
