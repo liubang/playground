@@ -157,12 +157,20 @@ struct ImportDeclaration {
 struct ExprStmt {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Expression> expression;
+    ExprStmt() = default;
+    ExprStmt(std::unique_ptr<BaseNode> base, std::unique_ptr<Expression> expr)
+        : base(std::move(base)), expression(std::move(expr)) {}
 };
 
 struct VariableAssgn {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Identifier> id;
     std::shared_ptr<Expression> init;
+    VariableAssgn() = default;
+    VariableAssgn(std::unique_ptr<BaseNode> base,
+                  std::unique_ptr<Identifier> id,
+                  std::unique_ptr<Expression> init)
+        : base(std::move(base)), id(std::move(id)), init(std::move(init)) {}
 };
 
 struct OptionStmt {
@@ -315,6 +323,17 @@ struct ObjectExpr {
     std::shared_ptr<WithSource> with;
     std::vector<std::shared_ptr<Property>> properties;
     std::vector<std::shared_ptr<Comment>> rbrace;
+    ObjectExpr() = default;
+    ObjectExpr(std::unique_ptr<BaseNode> base,
+               const std::vector<std::shared_ptr<Comment>>& lbrace,
+               std::shared_ptr<WithSource> with,
+               const std::vector<std::shared_ptr<Property>>& properties,
+               const std::vector<std::shared_ptr<Comment>>& rbrace)
+        : base(std::move(base)),
+          lbrace(lbrace),
+          with(std::move(with)),
+          properties(properties),
+          rbrace(rbrace) {}
 };
 
 struct MemberExpr {
@@ -323,6 +342,17 @@ struct MemberExpr {
     std::vector<std::shared_ptr<Comment>> lbrack;
     std::shared_ptr<PropertyKey> property;
     std::vector<std::shared_ptr<Comment>> rbrack;
+    MemberExpr() = default;
+    MemberExpr(std::unique_ptr<BaseNode> base,
+               std::unique_ptr<Expression> expr,
+               const std::vector<std::shared_ptr<Comment>>& lbrack,
+               std::unique_ptr<PropertyKey> property,
+               const std::vector<std::shared_ptr<Comment>>& rbrack)
+        : base(std::move(base)),
+          object(std::move(expr)),
+          lbrack(lbrack),
+          property(std::move(property)),
+          rbrack(rbrack) {}
 };
 
 struct IndexExpr {
@@ -358,6 +388,17 @@ struct CallExpr {
     std::vector<std::shared_ptr<Comment>> lparen;
     std::vector<std::shared_ptr<Expression>> arguments;
     std::vector<std::shared_ptr<Comment>> rparen;
+    CallExpr() = default;
+    CallExpr(std::unique_ptr<BaseNode> base,
+             std::unique_ptr<Expression> callee,
+             const std::vector<std::shared_ptr<Comment>>& lparen,
+             const std::vector<std::shared_ptr<Expression>>& arguments,
+             const std::vector<std::shared_ptr<Comment>>& rparen)
+        : base(std::move(base)),
+          callee(std::move(callee)),
+          lparen(lparen),
+          arguments(arguments),
+          rparen(rparen) {}
 };
 
 struct ConditionalExpr {
