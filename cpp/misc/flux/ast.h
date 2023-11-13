@@ -316,6 +316,12 @@ struct LogicalExpr {
     LogicalOperator op;
     std::shared_ptr<Expression> left;
     std::shared_ptr<Expression> right;
+    LogicalExpr() = default;
+    LogicalExpr(std::unique_ptr<BaseNode> base,
+                LogicalOperator op,
+                std::unique_ptr<Expression> left,
+                std::unique_ptr<Expression> right)
+        : base(std::move(base)), op(op), left(std::move(left)), right(std::move(right)) {}
 };
 
 struct WithSource {
@@ -399,12 +405,20 @@ struct UnaryExpr {
     std::shared_ptr<BaseNode> base;
     Operator op;
     std::shared_ptr<Expression> argument;
+    UnaryExpr() = default;
+    UnaryExpr(std::unique_ptr<BaseNode> base, Operator op, std::unique_ptr<Expression> argument)
+        : base(std::move(base)), op(op), argument(std::move(argument)) {}
 };
 
 struct PipeExpr {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Expression> argument;
     std::shared_ptr<CallExpr> call;
+    PipeExpr() = default;
+    PipeExpr(std::unique_ptr<BaseNode> base,
+             std::unique_ptr<Expression> argument,
+             std::unique_ptr<CallExpr> call)
+        : base(std::move(base)), argument(std::move(argument)), call(std::move(call)) {}
 };
 
 struct CallExpr {
@@ -527,6 +541,10 @@ struct PipeLit {
 struct LabelLit {
     std::shared_ptr<BaseNode> base;
     std::string value;
+
+    LabelLit() = default;
+    LabelLit(std::unique_ptr<BaseNode> base, const std::string& value)
+        : base(std::move(base)), value(value) {}
 };
 
 struct BadExpr {
@@ -689,6 +707,24 @@ struct Expression {
         expr->expr = std::move(ex);
         return expr;
     }
+
+    static std::unique_ptr<Expression> Unary(std::unique_ptr<UnaryExpr> ex) {
+        auto expr = std::make_unique<Expression>(Expression::Type::UnaryExpr);
+        expr->expr = std::move(ex);
+        return expr;
+    }
+
+    static std::unique_ptr<Expression> Pipe(std::unique_ptr<PipeExpr> ex) {
+        auto expr = std::make_unique<Expression>(Expression::Type::PipeExpr);
+        expr->expr = std::move(ex);
+        return expr;
+    }
+
+    static std::unique_ptr<Expression> Logical(std::unique_ptr<LogicalExpr> ex) {
+        auto expr = std::make_unique<Expression>(Expression::Type::LogicalExpr);
+        expr->expr = std::move(ex);
+        return expr;
+    }
 };
 
 // operator
@@ -797,19 +833,39 @@ struct MemberAssgn {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<MemberExpr> member;
     std::shared_ptr<Expression> init;
+    MemberAssgn() = default;
+    MemberAssgn(std::unique_ptr<BaseNode> base,
+                std::unique_ptr<MemberExpr> member,
+                std::unique_ptr<Expression> init)
+        : base(std::move(base)), member(std::move(member)), init(std::move(init)) {}
 };
 
 struct Assignment {
     enum class Type { VariableAssignment, MemberAssignment };
     Type type;
-    std::variant<std::shared_ptr<VariableAssgn>, std::shared_ptr<MemberAssgn>> value;
+    std::variant<std::unique_ptr<VariableAssgn>, std::unique_ptr<MemberAssgn>> value;
+
     std::shared_ptr<BaseNode> base() {
         switch (type) {
         case Type::VariableAssignment:
-            return std::get<std::shared_ptr<VariableAssgn>>(value)->base;
+            return std::get<std::unique_ptr<VariableAssgn>>(value)->base;
         case Type::MemberAssignment:
-            return std::get<std::shared_ptr<MemberAssgn>>(value)->base;
+            return std::get<std::unique_ptr<MemberAssgn>>(value)->base;
         }
+    }
+
+    static std::unique_ptr<Assignment> Var(std::unique_ptr<VariableAssgn> value) {
+        auto ret = std::make_unique<Assignment>();
+        ret->type = Assignment::Type::VariableAssignment;
+        ret->value = std::move(value);
+        return ret;
+    }
+
+    static std::unique_ptr<Assignment> Member(std::unique_ptr<MemberAssgn> value) {
+        auto ret = std::make_unique<Assignment>();
+        ret->type = Assignment::Type::MemberAssignment;
+        ret->value = std::move(value);
+        return ret;
     }
 };
 
