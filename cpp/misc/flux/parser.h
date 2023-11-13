@@ -671,8 +671,18 @@ private:
         return parse_paren_body_expression(std::move(lparen));
     }
 
-    // TODO
-    std::unique_ptr<LabelLit> parse_label_literal() {}
+    std::unique_ptr<LabelLit> parse_label_literal() {
+        auto dot = expect(TokenType::Dot);
+        auto tok = expect_one_of({TokenType::Ident, TokenType::String});
+        auto base = base_node_from_tokens(dot.get(), tok.get());
+        std::string value;
+        if (tok->tok == TokenType::String) {
+            value = new_string_literal(std::move(tok))->value;
+        } else {
+            value = tok->lit;
+        }
+        return std::make_unique<LabelLit>(std::move(base), value);
+    }
 
     std::tuple<std::unique_ptr<StringExpr>, TokenError> parse_string_expression() {
         auto start = expect(TokenType::Quote);
@@ -1286,9 +1296,6 @@ private:
         }
     }
 
-    // TODO
-    std::unique_ptr<Expression> parse_multiplicative_expression() { return nullptr; }
-
     std::unique_ptr<Expression> parse_additive_expression() {
         auto expr = parse_multiplicative_expression();
         return parse_additive_expression_suffix(std::move(expr));
@@ -1353,10 +1360,29 @@ private:
         return parse_logical_and_expression_suffix(std::move(expr));
     }
 
-    // TODO
+    std::optional<LogicalOperator> parse_or_operator() {
+        auto t = peek()->tok;
+        if (t == TokenType::Or) {
+            return LogicalOperator::OrOperator;
+        }
+        return std::nullopt;
+    }
+
     std::unique_ptr<Expression> parse_logical_or_expression_suffix(
-        const std::shared_ptr<Expression>& expr) {
-        return nullptr;
+        std::unique_ptr<Expression> expr) {
+        auto res = std::move(expr);
+        for (;;) {
+            auto op = parse_or_operator();
+            if (!op) {
+                break;
+            }
+            auto t = scan();
+            auto rhs = parse_logical_and_expression();
+            auto base = base_node_from_others_c(res->base().get(), rhs->base().get(), t.get());
+            res = Expression::Logical(std::make_unique<LogicalExpr>(
+                std::move(base), op.value(), std::move(res), std::move(rhs)));
+        }
+        return res;
     }
 
     std::unique_ptr<Expression> parse_logical_or_expression() {
@@ -1564,16 +1590,135 @@ private:
         }
     }
 
-    // TODO
-    std::unique_ptr<Expression> parse_pipe_expression_suffix(std::unique_ptr<Expression> expr) {}
-
-    // TODO
-    std::unique_ptr<Expression> parse_exponent_expression_suffix(std::unique_ptr<Expression> expr) {
+    std::unique_ptr<Expression> parse_postfix_expression() {
+        auto expr = parse_primary_expression();
+        for (;;) {
+            bool ret = false;
+            auto po = parse_postfix_operator(std::move(expr), &ret);
+            if (!ret) {
+                return po;
+            }
+            expr = std::move(po);
+        }
     }
 
-    // TODO
+    std::unique_ptr<Expression> parse_unary_expression() {
+        const auto* t = peek();
+        auto op = parse_additive_operator();
+        if (op) {
+            consume();
+            auto expr = parse_unary_expression();
+            auto base = base_node_from_other_end_c(t, expr->base().get(), t);
+            return Expression::Unary(
+                std::make_unique<UnaryExpr>(std::move(base), op.value(), std::move(expr)));
+        }
+        return parse_postfix_expression();
+    }
+
+    std::unique_ptr<Expression> parse_pipe_expression() {
+        auto expr = parse_unary_expression();
+        return parse_pipe_expression_suffix(std::move(expr));
+    }
+
+    std::unique_ptr<Expression> parse_exponent_expression() {
+        auto expr = parse_pipe_expression();
+        return parse_exponent_expression_suffix(std::move(expr));
+    }
+
+    std::unique_ptr<Expression> parse_multiplicative_expression() {
+        auto expr = parse_exponent_expression();
+        return parse_multiplicative_expression_suffix(std::move(expr));
+    }
+
+    bool parse_pipe_operator() {
+        auto t = peek()->tok;
+        return t == TokenType::PipeForward;
+    }
+
+    std::unique_ptr<Expression> parse_pipe_expression_suffix(std::unique_ptr<Expression> expr) {
+        auto res = std::move(expr);
+        for (;;) {
+            auto op = parse_pipe_operator();
+            if (!op) {
+                break;
+            }
+            auto t = scan();
+            auto rhs = parse_unary_expression();
+            if (rhs->type == Expression::Type::CallExpr) {
+                auto base = base_node_from_others_c(res->base().get(), rhs->base().get(), t.get());
+                res = Expression::Pipe(std::make_unique<PipeExpr>(
+                    std::move(base), std::move(res),
+                    std::move(std::get<std::unique_ptr<CallExpr>>(rhs->expr))));
+            } else {
+                errs_.emplace_back("pipe destination must be a function call");
+                auto base = base_node(rhs->base()->location);
+                auto call = std::make_unique<CallExpr>(std::move(base), std::move(rhs),
+                                                       std::vector<std::shared_ptr<Comment>>{},
+                                                       std::vector<std::shared_ptr<Expression>>{},
+                                                       std::vector<std::shared_ptr<Comment>>{});
+
+                auto base1 = base_node_from_others_c(res->base().get(), call->base.get(), t.get());
+                res = Expression::Pipe(
+                    std::make_unique<PipeExpr>(std::move(base), std::move(res), std::move(call)));
+            }
+        }
+        return res;
+    }
+
+    std::optional<Operator> parse_exponent_operator() {
+        auto t = peek()->tok;
+        if (t == TokenType::Pow) {
+            return Operator::PowerOperator;
+        }
+        return std::nullopt;
+    }
+
+    std::unique_ptr<Expression> parse_exponent_expression_suffix(std::unique_ptr<Expression> expr) {
+        auto res = std::move(expr);
+        for (;;) {
+            auto op = parse_exponent_operator();
+            if (!op) {
+                break;
+            }
+            auto t = scan();
+            auto rhs = parse_pipe_expression();
+            auto base = base_node_from_others_c(res->base().get(), rhs->base().get(), t.get());
+            res = Expression::Binary(std::make_unique<BinaryExpr>(std::move(base), op.value(),
+                                                                  std::move(res), std::move(rhs)));
+        }
+        return res;
+    }
+
+    std::optional<Operator> parse_multiplicative_operator() {
+        auto t = peek()->tok;
+        switch (t) {
+        case TokenType::Mul:
+            return Operator::MultiplicationOperator;
+        case TokenType::Div:
+            return Operator::DivisionOperator;
+        case TokenType::Mod:
+            return Operator::ModuloOperator;
+        default:
+            return std::nullopt;
+        }
+    }
+
     std::unique_ptr<Expression> parse_multiplicative_expression_suffix(
-        std::unique_ptr<Expression> expr) {}
+        std::unique_ptr<Expression> expr) {
+        auto res = std::move(expr);
+        for (;;) {
+            auto op = parse_multiplicative_operator();
+            if (!op) {
+                break;
+            }
+            auto t = scan();
+            auto rhs = parse_exponent_expression();
+            auto base = base_node_from_others_c(res->base().get(), rhs->base().get(), t.get());
+            res = Expression::Binary(std::make_unique<BinaryExpr>(std::move(base), op.value(),
+                                                                  std::move(res), std::move(rhs)));
+        }
+        return res;
+    }
 
     std::unique_ptr<Expression> parse_expression_suffix(std::unique_ptr<Expression> expr) {
         expr = parse_postfix_operator_suffix(std::move(expr));
@@ -1610,8 +1755,30 @@ private:
         return ret;
     }
 
-    // TODO
-    std::unique_ptr<Assignment> parse_option_assignment_suffix(std::unique_ptr<Identifier> id) {}
+    std::unique_ptr<Assignment> parse_option_assignment_suffix(std::unique_ptr<Identifier> id) {
+        const auto* t = peek();
+        if (t->tok == TokenType::Assign) {
+            auto init = parse_assign_statement();
+            auto base = base_node_from_others_c(id->base.get(), init->base().get(), t);
+            return Assignment::Var(
+                std::make_unique<VariableAssgn>(std::move(base), std::move(id), std::move(init)));
+        }
+        if (t->tok == TokenType::Dot) {
+            auto tt = consume();
+            auto prop = parse_identifier();
+            auto assign = expect(TokenType::Assign);
+            auto init = parse_expression();
+            auto base = base_node_from_others_c(id->base.get(), init->base().get(), assign.get());
+            auto base1 = base_node_from_others(id->base.get(), prop->base.get());
+            return Assignment::Member(std::make_unique<MemberAssgn>(
+                std::move(base),
+                std::make_unique<MemberExpr>(std::move(base1), Expression::Id(std::move(id)),
+                                             t->comments, PropertyKey::Id(std::move(prop)),
+                                             std::vector<std::shared_ptr<Comment>>{}),
+                std::move(init)));
+        }
+        return nullptr;
+    }
 
     std::unique_ptr<Statement> parse_option_assignment() {
         auto t = expect(TokenType::Option);
@@ -1633,10 +1800,10 @@ private:
     }
 
     // TODO
-    std::unique_ptr<Statement> parse_builtin_statement() {}
+    std::unique_ptr<Statement> parse_builtin_statement() { return nullptr; }
 
     // TODO
-    std::unique_ptr<Statement> parse_testcase_statement() {}
+    std::unique_ptr<Statement> parse_testcase_statement() { return nullptr; }
 
     std::unique_ptr<Statement> parse_return_statement() {
         auto t = expect(TokenType::Return);
