@@ -490,6 +490,9 @@ struct FloatLit {
 struct StringLit {
     std::shared_ptr<BaseNode> base;
     std::string value;
+    StringLit() = default;
+    StringLit(std::unique_ptr<BaseNode> base, const std::string& value)
+        : base(std::move(base)), value(value) {}
 };
 
 struct DurationLit {
@@ -835,6 +838,9 @@ struct PropertyKey {
     enum class Type { Identifier, StringLiteral };
     Type type;
     std::variant<std::shared_ptr<Identifier>, std::shared_ptr<StringLit>> key;
+
+    PropertyKey() = default;
+    PropertyKey(PropertyKey::Type type) : type(type) {}
 
     std::shared_ptr<BaseNode> base() {
         switch (type) {
