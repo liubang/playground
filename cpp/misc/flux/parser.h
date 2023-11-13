@@ -755,9 +755,7 @@ private:
         }
         if (t->tok == TokenType::String) {
             auto s = parse_string_literal();
-            auto propk = std::make_unique<PropertyKey>();
-            propk->type = PropertyKey::Type::StringLiteral;
-            propk->key = std::move(s);
+            auto propk = PropertyKey::Str(std::move(s));
             auto props = parse_property_list_suffix(std::move(propk));
             auto objexpr = std::make_unique<ObjectExpr>();
             objexpr->base = std::make_shared<BaseNode>();
@@ -800,17 +798,13 @@ private:
 
     std::unique_ptr<Property> parse_string_property() {
         auto key = parse_string_literal();
-        auto pk = std::unique_ptr<PropertyKey>();
-        pk->type = PropertyKey::Type::StringLiteral;
-        pk->key = std::move(key);
+        auto pk = PropertyKey::Str(std::move(key));
         return parse_property_suffix(std::move(pk));
     }
 
     std::unique_ptr<Property> parse_ident_property() {
         auto key = parse_identifier();
-        auto pk = std::unique_ptr<PropertyKey>();
-        pk->type = PropertyKey::Type::Identifier;
-        pk->key = std::move(key);
+        auto pk = PropertyKey::Id(std::move(key));
         return parse_property_suffix(std::move(pk));
     }
 
@@ -839,12 +833,8 @@ private:
         }
         auto end_start_pos = peek()->start_pos;
         std::unique_ptr<Property> p;
-        std::shared_ptr<PropertyKey> k;
-        k->type = PropertyKey::Type::StringLiteral;
-        std::shared_ptr<StringLit> sk;
-        sk->base = base_node_from_pos(t->start_pos, t->start_pos);
-        sk->value = "<invalid>";
-        k->key = std::move(sk);
+        auto k = PropertyKey::Str(std::make_unique<StringLit>(
+            base_node_from_pos(t->start_pos, t->start_pos), "<invali>"));
 
         p->base = base_node_from_pos(t->start_pos, end_start_pos);
         p->value = std::move(value);
@@ -955,9 +945,10 @@ private:
             obj_expr->with = std::move(with_source);
             obj_expr->properties = std::move(props);
         } else {
-            std::unique_ptr<PropertyKey> ident = std::make_unique<PropertyKey>();
-            ident->type = PropertyKey::Type::Identifier;
-            ident->key = std::move(id);
+            auto ident = PropertyKey::Id(std::move(id));
+            // std::unique_ptr<PropertyKey> ident = std::make_unique<PropertyKey>();
+            // ident->type = PropertyKey::Type::Identifier;
+            // ident->key = std::move(id);
             auto props = parse_property_list_suffix(std::move(ident));
             obj_expr->properties = std::move(props);
         }
