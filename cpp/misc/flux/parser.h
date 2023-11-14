@@ -330,7 +330,7 @@ private:
     }
 
     std::vector<std::shared_ptr<Attribute>> parse_attribute_inner_list() {
-        auto attributes = std::vector<std::shared_ptr<Attribute>>();
+        std::vector<std::shared_ptr<Attribute>> attributes;
         while (peek()->tok == TokenType::Attribute) {
             attributes.emplace_back(parse_attribute_inner());
         }
@@ -1472,18 +1472,54 @@ private:
         }
     }
 
-    // TODO:
     std::tuple<std::unique_ptr<PackageClause>,
                std::optional<std::vector<std::shared_ptr<Attribute>>>>
     parse_package_clause(const std::vector<std::shared_ptr<Attribute>>& attributes) {
-        return {};
+        const auto* t = peek();
+        if (t->tok == TokenType::Package) {
+            auto tt = consume();
+            auto ident = parse_identifier();
+            auto base =
+                base_node_from_other_end_c_a(tt.get(), ident->base.get(), tt.get(), attributes);
+            return {std::make_unique<PackageClause>(), std::nullopt};
+        }
+        return {nullptr, attributes};
     }
 
-    // TODO:
+    std::unique_ptr<ImportDeclaration> parse_import_declaration(
+        const std::optional<std::vector<std::shared_ptr<Attribute>>>& attributes) {
+        std::optional<std::vector<std::shared_ptr<Attribute>>> attrs =
+            attributes ? attributes : parse_attribute_inner_list();
+        auto t = expect(TokenType::Import);
+        std::unique_ptr<Identifier> alias = nullptr;
+        if (peek()->tok == TokenType::Ident) {
+            alias = parse_identifier();
+        }
+        auto path = parse_string_literal();
+        auto base = base_node_from_other_end_c_a(t.get(), path->base.get(), t.get(), attrs.value());
+        return std::make_unique<ImportDeclaration>(std::move(base), std::move(alias),
+                                                   std::move(path));
+    }
+
     std::tuple<std::vector<std::shared_ptr<ImportDeclaration>>,
                std::optional<std::vector<std::shared_ptr<Attribute>>>>
     parse_import_list(std::optional<std::vector<std::shared_ptr<Attribute>>> attributes) {
-        return {};
+        std::vector<std::shared_ptr<ImportDeclaration>> imports;
+        auto attrs = std::move(attributes);
+        for (;;) {
+            const auto* t = peek();
+            if (t->tok == TokenType::Attribute) {
+                if (attrs) {
+                    errs_.emplace_back("found multiple attribute lists");
+                }
+                attrs = parse_attribute_inner_list();
+            } else if (t->tok == TokenType::Import) {
+                imports.push_back(parse_import_declaration(attrs));
+                attrs = std::nullopt;
+            } else {
+                return {imports, attrs};
+            }
+        }
     }
 
     std::unique_ptr<Statement> parse_expression_statement() {
