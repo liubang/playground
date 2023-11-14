@@ -144,12 +144,20 @@ struct File {
 struct PackageClause {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Identifier> name;
+    PackageClause() : base(nullptr), name(nullptr) {}
+    PackageClause(std::unique_ptr<BaseNode> base, std::unique_ptr<Identifier> name)
+        : base(std::move(base)), name(std::move(name)) {}
 };
 
 struct ImportDeclaration {
     std::shared_ptr<BaseNode> base;
     std::shared_ptr<Identifier> alias;
     std::shared_ptr<StringLit> path;
+    ImportDeclaration() : base(nullptr), alias(nullptr), path(nullptr) {}
+    ImportDeclaration(std::unique_ptr<BaseNode> base,
+                      std::unique_ptr<Identifier> alias,
+                      std::unique_ptr<StringLit> path)
+        : base(std::move(base)), alias(std::move(alias)), path(std::move(path)) {}
 };
 
 // stmt
