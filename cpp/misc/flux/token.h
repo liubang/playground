@@ -11,6 +11,7 @@
 #include <memory>
 #include <ostream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace pl {
@@ -226,14 +227,14 @@ struct SourceLocation {
     SourceLocation() = default;
     SourceLocation(const Position& start, const Position& end)
         : file(""), start(start), end(end), source("") {}
-    SourceLocation(const std::string& file,
+    SourceLocation(std::string file,
                    const Position& start,
                    const Position& end,
                    const std::string& source)
-        : file(file), start(start), end(end), source(source) {}
+        : file(std::move(file)), start(start), end(end), source(source) {}
 
-    bool is_valid() const { return start.is_valid() && end.is_valid(); }
-    static SourceLocation _default() { return SourceLocation(); }
+    [[nodiscard]] bool is_valid() const { return start.is_valid() && end.is_valid(); }
+    static SourceLocation _default() { return {}; }
 };
 
 inline std::ostream& operator<<(std::ostream& os, const SourceLocation& loc) {
@@ -244,7 +245,7 @@ inline std::ostream& operator<<(std::ostream& os, const SourceLocation& loc) {
 struct Comment {
     std::string text;
     Comment() = default;
-    Comment(const std::string& text) : text(text) {}
+    Comment(std::string text) : text(std::move(text)) {}
 };
 
 struct Token {
