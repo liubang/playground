@@ -705,7 +705,7 @@ enum class Operator {
     InvalidOperator,
 };
 
-std::unordered_map<std::string, Operator> operator_map = {
+static std::unordered_map<std::string, Operator> operator_map = {
     {"*", Operator::MultiplicationOperator},
     {"/", Operator::DivisionOperator},
     {"%", Operator::ModuloOperator},
