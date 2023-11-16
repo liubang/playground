@@ -592,36 +592,35 @@ struct Expression {
     };
     Type type;
 
-    std::variant<std::unique_ptr<Identifier>,
-                 std::unique_ptr<ArrayExpr>,
-                 std::unique_ptr<DictExpr>,
-                 std::unique_ptr<FunctionExpr>,
-                 std::unique_ptr<LogicalExpr>,
-                 std::unique_ptr<ObjectExpr>,
-                 std::unique_ptr<MemberExpr>,
-                 std::unique_ptr<IndexExpr>,
-                 std::unique_ptr<BinaryExpr>,
-                 std::unique_ptr<UnaryExpr>,
-                 std::unique_ptr<PipeExpr>,
-                 std::unique_ptr<CallExpr>,
-                 std::unique_ptr<ConditionalExpr>,
-                 std::unique_ptr<StringExpr>,
-                 std::unique_ptr<ParenExpr>,
-                 std::unique_ptr<IntegerLit>,
-                 std::unique_ptr<FloatLit>,
-                 std::unique_ptr<StringLit>,
-                 std::unique_ptr<DurationLit>,
-                 std::unique_ptr<UintLit>,
-                 std::unique_ptr<BooleanLit>,
-                 std::unique_ptr<DateTimeLit>,
-                 std::unique_ptr<RegexpLit>,
-                 std::unique_ptr<PipeLit>,
-                 std::unique_ptr<LabelLit>,
-                 std::unique_ptr<BadExpr>>
-        expr;
-
+    using ExprVari = std::variant<std::unique_ptr<Identifier>,
+                                  std::unique_ptr<ArrayExpr>,
+                                  std::unique_ptr<DictExpr>,
+                                  std::unique_ptr<FunctionExpr>,
+                                  std::unique_ptr<LogicalExpr>,
+                                  std::unique_ptr<ObjectExpr>,
+                                  std::unique_ptr<MemberExpr>,
+                                  std::unique_ptr<IndexExpr>,
+                                  std::unique_ptr<BinaryExpr>,
+                                  std::unique_ptr<UnaryExpr>,
+                                  std::unique_ptr<PipeExpr>,
+                                  std::unique_ptr<CallExpr>,
+                                  std::unique_ptr<ConditionalExpr>,
+                                  std::unique_ptr<StringExpr>,
+                                  std::unique_ptr<ParenExpr>,
+                                  std::unique_ptr<IntegerLit>,
+                                  std::unique_ptr<FloatLit>,
+                                  std::unique_ptr<StringLit>,
+                                  std::unique_ptr<DurationLit>,
+                                  std::unique_ptr<UintLit>,
+                                  std::unique_ptr<BooleanLit>,
+                                  std::unique_ptr<DateTimeLit>,
+                                  std::unique_ptr<RegexpLit>,
+                                  std::unique_ptr<PipeLit>,
+                                  std::unique_ptr<LabelLit>,
+                                  std::unique_ptr<BadExpr>>;
+    ExprVari expr;
     Expression() = default;
-    Expression(Type t) : type(t) {}
+    Expression(Type t, ExprVari expr) : type(t), expr(std::move(expr)) {}
 
     std::shared_ptr<BaseNode> base() {
         switch (type) {
@@ -678,60 +677,6 @@ struct Expression {
         case Type::ParenExpr:
             return std::get<std::unique_ptr<ParenExpr>>(expr)->base;
         }
-    }
-
-    static std::unique_ptr<Expression> Id(std::unique_ptr<Identifier> ex) {
-        auto expr = std::make_unique<Expression>(Expression::Type::Identifier);
-        expr->expr = std::move(ex);
-        return expr;
-    }
-
-    static std::unique_ptr<Expression> Paren(std::unique_ptr<ParenExpr> ex) {
-        auto expr = std::make_unique<Expression>(Expression::Type::ParenExpr);
-        expr->expr = std::move(ex);
-        return expr;
-    }
-
-    static std::unique_ptr<Expression> Binary(std::unique_ptr<BinaryExpr> ex) {
-        auto expr = std::make_unique<Expression>(Expression::Type::BinaryExpr);
-        expr->expr = std::move(ex);
-        return expr;
-    }
-
-    static std::unique_ptr<Expression> Index(std::unique_ptr<IndexExpr> ex) {
-        auto expr = std::make_unique<Expression>(Expression::Type::IndexExpr);
-        expr->expr = std::move(ex);
-        return expr;
-    }
-
-    static std::unique_ptr<Expression> Integer(std::unique_ptr<IntegerLit> ex) {
-        auto expr = std::make_unique<Expression>(Expression::Type::IntegerLit);
-        expr->expr = std::move(ex);
-        return expr;
-    }
-
-    static std::unique_ptr<Expression> Member(std::unique_ptr<MemberExpr> ex) {
-        auto expr = std::make_unique<Expression>(Expression::Type::MemberExpr);
-        expr->expr = std::move(ex);
-        return expr;
-    }
-
-    static std::unique_ptr<Expression> Unary(std::unique_ptr<UnaryExpr> ex) {
-        auto expr = std::make_unique<Expression>(Expression::Type::UnaryExpr);
-        expr->expr = std::move(ex);
-        return expr;
-    }
-
-    static std::unique_ptr<Expression> Pipe(std::unique_ptr<PipeExpr> ex) {
-        auto expr = std::make_unique<Expression>(Expression::Type::PipeExpr);
-        expr->expr = std::move(ex);
-        return expr;
-    }
-
-    static std::unique_ptr<Expression> Logical(std::unique_ptr<LogicalExpr> ex) {
-        auto expr = std::make_unique<Expression>(Expression::Type::LogicalExpr);
-        expr->expr = std::move(ex);
-        return expr;
     }
 };
 
@@ -849,9 +794,13 @@ struct MemberAssgn {
 };
 
 struct Assignment {
+    using AssiVari = std::variant<std::unique_ptr<VariableAssgn>, std::unique_ptr<MemberAssgn>>;
     enum class Type { VariableAssignment, MemberAssignment };
     Type type;
-    std::variant<std::unique_ptr<VariableAssgn>, std::unique_ptr<MemberAssgn>> value;
+    AssiVari value;
+
+    Assignment() = default;
+    Assignment(Assignment::Type type, AssiVari value) : type(type), value(std::move(value)) {}
 
     std::shared_ptr<BaseNode> base() {
         switch (type) {
@@ -860,20 +809,6 @@ struct Assignment {
         case Type::MemberAssignment:
             return std::get<std::unique_ptr<MemberAssgn>>(value)->base;
         }
-    }
-
-    static std::unique_ptr<Assignment> Var(std::unique_ptr<VariableAssgn> value) {
-        auto ret = std::make_unique<Assignment>();
-        ret->type = Assignment::Type::VariableAssignment;
-        ret->value = std::move(value);
-        return ret;
-    }
-
-    static std::unique_ptr<Assignment> Member(std::unique_ptr<MemberAssgn> value) {
-        auto ret = std::make_unique<Assignment>();
-        ret->type = Assignment::Type::MemberAssignment;
-        ret->value = std::move(value);
-        return ret;
     }
 };
 
@@ -899,12 +834,14 @@ struct Property {
 };
 
 struct PropertyKey {
+    using PropKeyVari = std::variant<std::shared_ptr<Identifier>, std::shared_ptr<StringLit>>;
     enum class Type { Identifier, StringLiteral };
+
     Type type;
-    std::variant<std::shared_ptr<Identifier>, std::shared_ptr<StringLit>> key;
+    PropKeyVari key;
 
     PropertyKey() = default;
-    PropertyKey(PropertyKey::Type type) : type(type) {}
+    PropertyKey(PropertyKey::Type type, PropKeyVari key) : type(type), key(std::move(key)) {}
 
     std::shared_ptr<BaseNode> base() {
         switch (type) {
@@ -913,18 +850,6 @@ struct PropertyKey {
         case Type::StringLiteral:
             return std::get<std::shared_ptr<StringLit>>(key)->base;
         }
-    }
-
-    static std::unique_ptr<PropertyKey> Str(std::unique_ptr<StringLit> str) {
-        auto ret = std::make_unique<PropertyKey>(PropertyKey::Type::StringLiteral);
-        ret->key = std::move(str);
-        return ret;
-    }
-
-    static std::unique_ptr<PropertyKey> Id(std::unique_ptr<Identifier> id) {
-        auto ret = std::make_unique<PropertyKey>(PropertyKey::Type::Identifier);
-        ret->key = std::move(id);
-        return ret;
     }
 };
 
@@ -946,9 +871,10 @@ struct Block {
 
 struct FunctionBody {
     enum class Type { Block, Expression };
+    using FuncVari = std::variant<std::shared_ptr<Block>, std::shared_ptr<Expression>>;
     Type type;
-    FunctionBody(Type t) : type(t) {}
-    std::variant<std::shared_ptr<Block>, std::shared_ptr<Expression>> body;
+    FuncVari body;
+    FunctionBody(Type t, FuncVari body) : type(t), body(std::move(body)) {}
 };
 
 // parameter
@@ -1013,19 +939,22 @@ struct MonoType {
         Function,
         Label,
     };
-    Type type;
 
-    std::variant<std::shared_ptr<TvarType>,
-                 std::shared_ptr<NamedType>,
-                 std::shared_ptr<ArrayType>,
-                 std::shared_ptr<StreamType>,
-                 std::shared_ptr<VectorType>,
-                 std::shared_ptr<DictType>,
-                 std::shared_ptr<DynamicType>,
-                 std::shared_ptr<RecordType>,
-                 std::shared_ptr<FunctionType>,
-                 std::shared_ptr<LabelLit>>
-        value;
+    using MonoVari = std::variant<std::shared_ptr<TvarType>,
+                                  std::shared_ptr<NamedType>,
+                                  std::shared_ptr<ArrayType>,
+                                  std::shared_ptr<StreamType>,
+                                  std::shared_ptr<VectorType>,
+                                  std::shared_ptr<DictType>,
+                                  std::shared_ptr<DynamicType>,
+                                  std::shared_ptr<RecordType>,
+                                  std::shared_ptr<FunctionType>,
+                                  std::shared_ptr<LabelLit>>;
+    Type type;
+    MonoVari value;
+
+    MonoType() = default;
+    MonoType(MonoType::Type type, MonoVari value) : type(type), value(std::move(value)) {}
 };
 
 struct Required {
@@ -1053,9 +982,16 @@ struct ParameterType {
         Optional,
         Pipe,
     };
-    Type type;
 
-    std::variant<std::shared_ptr<Required>, std::shared_ptr<Optional>, std::shared_ptr<Pipe>> value;
+    using ParamVari =
+        std::variant<std::shared_ptr<Required>, std::shared_ptr<Optional>, std::shared_ptr<Pipe>>;
+
+    Type type;
+    ParamVari value;
+
+    ParameterType() = default;
+    ParameterType(ParameterType::Type type, ParamVari value)
+        : type(type), value(std::move(value)) {}
 };
 
 } // namespace pl
