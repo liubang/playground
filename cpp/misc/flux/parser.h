@@ -507,25 +507,25 @@ private:
         const auto* t = peek();
         if (t->tok == TokenType::LBrace) {
             auto block = parse_block();
-            auto expr = std::make_unique<Expression>(Expression::Type::FunctionExpr);
             auto base = base_node_from_other_end(lparen.get(), block->base.get());
-            auto fbody = std::make_unique<FunctionBody>(FunctionBody::Type::Block);
-            fbody->body = std::move(block);
+            auto fbody =
+                std::make_unique<FunctionBody>(FunctionBody::Type::Block, std::move(block));
             auto func =
                 std::make_unique<FunctionExpr>(std::move(base), lparen->comments, params,
                                                rparen->comments, arrow->comments, std::move(fbody));
-            expr->expr = std::move(func);
+
+            auto expr =
+                std::make_unique<Expression>(Expression::Type::FunctionExpr, std::move(func));
             return expr;
         }
         auto expr = parse_expression();
-        auto ret = std::make_unique<Expression>(Expression::Type::FunctionExpr);
         auto base = base_node_from_other_end(lparen.get(), expr->base().get());
-        auto fbody = std::make_unique<FunctionBody>(FunctionBody::Type::Expression);
-        fbody->body = std::move(expr);
+        auto fbody =
+            std::make_unique<FunctionBody>(FunctionBody::Type::Expression, std::move(expr));
         auto func =
             std::make_unique<FunctionExpr>(std::move(base), lparen->comments, params,
                                            rparen->comments, arrow->comments, std::move(fbody));
-        ret->expr = std::move(func);
+        auto ret = std::make_unique<Expression>(Expression::Type::FunctionExpr, std::move(func));
         return ret;
     }
 
@@ -546,23 +546,27 @@ private:
             const auto* next = peek();
             if (next->tok == TokenType::Arrow) {
                 auto prop = std::make_shared<Property>(
-                    base_node(key->base->location), PropertyKey::Id(std::move(key)),
+                    base_node(key->base->location),
+                    std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
                     std::vector<std::shared_ptr<Comment>>{}, nullptr,
                     std::vector<std::shared_ptr<Comment>>{});
                 std::vector<std::shared_ptr<Property>> params = {prop};
                 return parse_function_expression(std::move(lparen), std::move(tt), params);
             }
-            return Expression::Paren(std::make_unique<ParenExpr>(
-                base_node_from_tokens(lparen.get(), tt.get()), lparen->comments,
-                Expression::Id(std::move(key)), t->comments));
+            return std::make_unique<Expression>(
+                Expression::Type::ParenExpr,
+                std::make_unique<ParenExpr>(
+                    base_node_from_tokens(lparen.get(), tt.get()), lparen->comments,
+                    std::make_unique<Expression>(Expression::Type::Identifier, std::move(key)),
+                    t->comments));
         }
         if (t->tok == TokenType::Assign) {
             auto tt = consume();
             auto value = parse_expression();
             auto prop = std::make_shared<Property>(
                 base_node_from_others(key->base.get(), value->base().get()),
-                PropertyKey::Id(std::move(key)), t->comments, std::move(value),
-                std::vector<std::shared_ptr<Comment>>{});
+                std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
+                t->comments, std::move(value), std::vector<std::shared_ptr<Comment>>{});
             std::vector<std::shared_ptr<Property>> params = {prop};
             if (peek()->tok == TokenType::Comma) {
                 auto comma = scan();
@@ -576,7 +580,8 @@ private:
         if (t->tok == TokenType::Comma) {
             auto tt = consume();
             auto prop = std::make_shared<Property>(
-                base_node(key->base->location), PropertyKey::Id(std::move(key)),
+                base_node(key->base->location),
+                std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
                 std::vector<std::shared_ptr<Comment>>{}, nullptr, t->comments);
             std::vector<std::shared_ptr<Property>> params = {prop};
             auto others = parse_parameter_list();
@@ -584,7 +589,8 @@ private:
             auto rparen = close(TokenType::RParen);
             return parse_function_expression(std::move(lparen), std::move(rparen), params);
         }
-        auto expr = parse_expression_suffix(Expression::Id(std::move(key)));
+        auto expr = parse_expression_suffix(
+            std::make_unique<Expression>(Expression::Type::Identifier, std::move(key)));
         while (more()) {
             auto rhs = parse_expression();
             if (rhs->type == Expression::Type::BadExpr) {
@@ -596,11 +602,14 @@ private:
                 continue;
             }
             auto base = base_node_from_others(expr->base().get(), rhs->base().get());
-            expr = Expression::Binary(std::make_unique<BinaryExpr>(
-                std::move(base), Operator::InvalidOperator, std::move(expr), std::move(rhs)));
+            expr = std::make_unique<Expression>(
+                Expression::Type::BinaryExpr,
+                std::make_unique<BinaryExpr>(std::move(base), Operator::InvalidOperator,
+                                             std::move(expr), std::move(rhs)));
         }
         auto rparen = close(TokenType::RParen);
-        return Expression::Paren(
+        return std::make_unique<Expression>(
+            Expression::Type::ParenExpr,
             std::make_unique<ParenExpr>(base_node_from_tokens(lparen.get(), rparen.get()),
                                         lparen->comments, std::move(expr), rparen->comments));
     }
@@ -619,9 +628,10 @@ private:
         } else {
             base = base_node(key->base->location);
         }
-        return std::make_unique<Property>(std::move(base), PropertyKey::Id(std::move(key)),
-                                          std::vector<std::shared_ptr<Comment>>{}, std::move(value),
-                                          separator);
+        return std::make_unique<Property>(
+            std::move(base),
+            std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
+            std::vector<std::shared_ptr<Comment>>{}, std::move(value), separator);
     }
 
     std::vector<std::shared_ptr<Property>> parse_parameter_list() {
@@ -765,7 +775,8 @@ private:
         }
         if (t->tok == TokenType::String) {
             auto s = parse_string_literal();
-            auto propk = PropertyKey::Str(std::move(s));
+            auto propk =
+                std::make_unique<PropertyKey>(PropertyKey::Type::StringLiteral, std::move(s));
             auto props = parse_property_list_suffix(std::move(propk));
             auto objexpr = std::make_unique<ObjectExpr>();
             objexpr->base = std::make_shared<BaseNode>();
@@ -808,13 +819,13 @@ private:
 
     std::unique_ptr<Property> parse_string_property() {
         auto key = parse_string_literal();
-        auto pk = PropertyKey::Str(std::move(key));
+        auto pk = std::make_unique<PropertyKey>(PropertyKey::Type::StringLiteral, std::move(key));
         return parse_property_suffix(std::move(pk));
     }
 
     std::unique_ptr<Property> parse_ident_property() {
         auto key = parse_identifier();
-        auto pk = PropertyKey::Id(std::move(key));
+        auto pk = std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key));
         return parse_property_suffix(std::move(pk));
     }
 
@@ -843,8 +854,10 @@ private:
         }
         auto end_start_pos = peek()->start_pos;
         std::unique_ptr<Property> p;
-        auto k = PropertyKey::Str(std::make_unique<StringLit>(
-            base_node_from_pos(t->start_pos, t->start_pos), "<invali>"));
+        auto k = std::make_unique<PropertyKey>(
+            PropertyKey::Type::StringLiteral,
+            std::make_unique<StringLit>(base_node_from_pos(t->start_pos, t->start_pos),
+                                        "<invali>"));
 
         p->base = base_node_from_pos(t->start_pos, end_start_pos);
         p->value = std::move(value);
@@ -955,10 +968,8 @@ private:
             obj_expr->with = std::move(with_source);
             obj_expr->properties = std::move(props);
         } else {
-            auto ident = PropertyKey::Id(std::move(id));
-            // std::unique_ptr<PropertyKey> ident = std::make_unique<PropertyKey>();
-            // ident->type = PropertyKey::Type::Identifier;
-            // ident->key = std::move(id);
+            auto ident =
+                std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(id));
             auto props = parse_property_list_suffix(std::move(ident));
             obj_expr->properties = std::move(props);
         }
@@ -1379,8 +1390,10 @@ private:
             auto t = scan();
             auto rhs = parse_logical_and_expression();
             auto base = base_node_from_others_c(res->base().get(), rhs->base().get(), t.get());
-            res = Expression::Logical(std::make_unique<LogicalExpr>(
-                std::move(base), op.value(), std::move(res), std::move(rhs)));
+            res = std::make_unique<Expression>(
+                Expression::Type::LogicalExpr,
+                std::make_unique<LogicalExpr>(std::move(base), op.value(), std::move(res),
+                                              std::move(rhs)));
         }
         return res;
     }
@@ -1539,14 +1552,12 @@ private:
     std::unique_ptr<Expression> parse_dot_expression(std::unique_ptr<Expression> expr) {
         auto dot = expect(TokenType::Dot);
         auto id = parse_identifier();
-        auto ret = std::make_unique<Expression>(Expression::Type::MemberExpr);
         auto base = base_node_from_others(expr->base().get(), id->base.get());
-        auto prop = std::make_unique<PropertyKey>(PropertyKey::Type::Identifier);
-        prop->key = std::move(id);
+        auto prop = std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(id));
         auto member =
             std::make_unique<MemberExpr>(std::move(base), std::move(expr), dot->comments,
                                          std::move(prop), std::vector<std::shared_ptr<Comment>>{});
-        ret->expr = std::move(member);
+        auto ret = std::make_unique<Expression>(Expression::Type::MemberExpr, std::move(member));
         return ret;
     }
 
@@ -1558,16 +1569,15 @@ private:
             base_node_from_other_start(expr->base().get(), end.get()), std::move(expr),
             lparen->comments, std::vector<std::shared_ptr<Expression>>{}, end->comments);
         if (!params.empty()) {
-            auto exp_param = std::make_shared<Expression>(Expression::Type::ObjectExpr);
             auto obj_expr = std::make_unique<ObjectExpr>(
                 base_node_from_others(params.front()->base.get(), params.back()->base.get()),
                 std::vector<std::shared_ptr<Comment>>{}, nullptr, params,
                 std::vector<std::shared_ptr<Comment>>{});
-            exp_param->expr = std::move(obj_expr);
+            auto exp_param =
+                std::make_unique<Expression>(Expression::Type::ObjectExpr, std::move(obj_expr));
             call->arguments.push_back(std::move(exp_param));
         }
-        auto ret = std::make_unique<Expression>(Expression::Type::CallExpr);
-        ret->expr = std::move(call);
+        auto ret = std::make_unique<Expression>(Expression::Type::CallExpr, std::move(call));
         return ret;
     }
 
@@ -1578,22 +1588,32 @@ private:
         if (!iexpr) {
             errs_.emplace_back("no expression included in brackets");
             auto base = base_node_from_other_start(expr->base().get(), end.get());
-            return Expression::Index(std::make_unique<IndexExpr>(
-                std::move(base), std::move(expr), std::vector<std::shared_ptr<Comment>>{},
-                Expression::Integer(std::make_unique<IntegerLit>(
-                    base_node_from_tokens(start.get(), end.get()), -1)),
-                std::vector<std::shared_ptr<Comment>>{}));
+            return std::make_unique<Expression>(
+                Expression::Type::IndexExpr,
+                std::make_unique<IndexExpr>(
+                    std::move(base), std::move(expr), std::vector<std::shared_ptr<Comment>>{},
+                    std::make_unique<Expression>(
+                        Expression::Type::IntegerLit,
+                        std::make_unique<IntegerLit>(base_node_from_tokens(start.get(), end.get()),
+                                                     -1)),
+                    std::vector<std::shared_ptr<Comment>>{}));
         }
         if (iexpr->type == Expression::Type::StringLit) {
             auto base = base_node_from_other_start(expr->base().get(), end.get());
-            return Expression::Member(std::make_unique<MemberExpr>(
-                std::move(base), std::move(expr), start->comments,
-                PropertyKey::Str(std::move(std::get<std::unique_ptr<StringLit>>(iexpr->expr))),
-                end->comments));
+            return std::make_unique<Expression>(
+                Expression::Type::MemberExpr,
+                std::make_unique<MemberExpr>(
+                    std::move(base), std::move(expr), start->comments,
+                    std::make_unique<PropertyKey>(
+                        PropertyKey::Type::StringLiteral,
+                        std::move(std::get<std::unique_ptr<StringLit>>(iexpr->expr))),
+                    end->comments));
         }
         auto base = base_node_from_other_start(expr->base().get(), end.get());
-        return Expression::Index(std::make_unique<IndexExpr>(
-            std::move(base), std::move(expr), start->comments, std::move(iexpr), end->comments));
+        return std::make_unique<Expression>(
+            Expression::Type::IndexExpr,
+            std::make_unique<IndexExpr>(std::move(base), std::move(expr), start->comments,
+                                        std::move(iexpr), end->comments));
     }
 
     std::unique_ptr<Expression> parse_postfix_operator(std::unique_ptr<Expression> expr,
@@ -1645,7 +1665,8 @@ private:
             consume();
             auto expr = parse_unary_expression();
             auto base = base_node_from_other_end_c(t, expr->base().get(), t);
-            return Expression::Unary(
+            return std::make_unique<Expression>(
+                Expression::Type::UnaryExpr,
                 std::make_unique<UnaryExpr>(std::move(base), op.value(), std::move(expr)));
         }
         return parse_postfix_expression();
@@ -1682,9 +1703,11 @@ private:
             auto rhs = parse_unary_expression();
             if (rhs->type == Expression::Type::CallExpr) {
                 auto base = base_node_from_others_c(res->base().get(), rhs->base().get(), t.get());
-                res = Expression::Pipe(std::make_unique<PipeExpr>(
-                    std::move(base), std::move(res),
-                    std::move(std::get<std::unique_ptr<CallExpr>>(rhs->expr))));
+                res = std::make_unique<Expression>(
+                    Expression::Type::PipeExpr,
+                    std::make_unique<PipeExpr>(
+                        std::move(base), std::move(res),
+                        std::move(std::get<std::unique_ptr<CallExpr>>(rhs->expr))));
             } else {
                 errs_.emplace_back("pipe destination must be a function call");
                 auto base = base_node(rhs->base()->location);
@@ -1694,7 +1717,8 @@ private:
                                                        std::vector<std::shared_ptr<Comment>>{});
 
                 auto base1 = base_node_from_others_c(res->base().get(), call->base.get(), t.get());
-                res = Expression::Pipe(
+                res = std::make_unique<Expression>(
+                    Expression::Type::PipeExpr,
                     std::make_unique<PipeExpr>(std::move(base), std::move(res), std::move(call)));
             }
         }
@@ -1719,8 +1743,10 @@ private:
             auto t = scan();
             auto rhs = parse_pipe_expression();
             auto base = base_node_from_others_c(res->base().get(), rhs->base().get(), t.get());
-            res = Expression::Binary(std::make_unique<BinaryExpr>(std::move(base), op.value(),
-                                                                  std::move(res), std::move(rhs)));
+            res = std::make_unique<Expression>(
+                Expression::Type::BinaryExpr,
+                std::make_unique<BinaryExpr>(std::move(base), op.value(), std::move(res),
+                                             std::move(rhs)));
         }
         return res;
     }
@@ -1750,8 +1776,10 @@ private:
             auto t = scan();
             auto rhs = parse_exponent_expression();
             auto base = base_node_from_others_c(res->base().get(), rhs->base().get(), t.get());
-            res = Expression::Binary(std::make_unique<BinaryExpr>(std::move(base), op.value(),
-                                                                  std::move(res), std::move(rhs)));
+            res = std::make_unique<Expression>(
+                Expression::Type::BinaryExpr,
+                std::make_unique<BinaryExpr>(std::move(base), op.value(), std::move(res),
+                                             std::move(rhs)));
         }
         return res;
     }
@@ -1779,8 +1807,7 @@ private:
                 std::move(init));
             ret->stmt = std::move(stmt);
         } else {
-            auto idexpr = std::make_unique<Expression>(Expression::Type::Identifier);
-            idexpr->expr = std::move(id);
+            auto idexpr = std::make_unique<Expression>(Expression::Type::Identifier, std::move(id));
             auto expr = parse_expression_suffix(std::move(idexpr));
             ret->type = Statement::Type::ExpressionStatement;
             auto stmt =
@@ -1796,7 +1823,8 @@ private:
         if (t->tok == TokenType::Assign) {
             auto init = parse_assign_statement();
             auto base = base_node_from_others_c(id->base.get(), init->base().get(), t);
-            return Assignment::Var(
+            return std::make_unique<Assignment>(
+                Assignment::Type::VariableAssignment,
                 std::make_unique<VariableAssgn>(std::move(base), std::move(id), std::move(init)));
         }
         if (t->tok == TokenType::Dot) {
@@ -1806,12 +1834,18 @@ private:
             auto init = parse_expression();
             auto base = base_node_from_others_c(id->base.get(), init->base().get(), assign.get());
             auto base1 = base_node_from_others(id->base.get(), prop->base.get());
-            return Assignment::Member(std::make_unique<MemberAssgn>(
-                std::move(base),
-                std::make_unique<MemberExpr>(std::move(base1), Expression::Id(std::move(id)),
-                                             t->comments, PropertyKey::Id(std::move(prop)),
-                                             std::vector<std::shared_ptr<Comment>>{}),
-                std::move(init)));
+            return std::make_unique<Assignment>(
+                Assignment::Type::MemberAssignment,
+                std::make_unique<MemberAssgn>(
+                    std::move(base),
+                    std::make_unique<MemberExpr>(
+                        std::move(base1),
+                        std::make_unique<Expression>(Expression::Type::Identifier, std::move(id)),
+                        t->comments,
+                        std::make_unique<PropertyKey>(PropertyKey::Type::Identifier,
+                                                      std::move(prop)),
+                        std::vector<std::shared_ptr<Comment>>{}),
+                    std::move(init)));
         }
         return nullptr;
     }
