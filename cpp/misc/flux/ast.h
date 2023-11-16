@@ -729,7 +729,7 @@ static std::unordered_map<std::string, Operator> operator_map = {
     {"<INVALID_OP>", Operator::InvalidOperator},
 };
 
-std::string operator_to_string(Operator op) {
+inline std::string operator_to_string(Operator op) {
     switch (op) {
     case Operator::MultiplicationOperator:
         return "MultiplicationOperator";
