@@ -10,6 +10,7 @@
 
 #include <chrono>
 #include <unordered_map>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -111,19 +112,19 @@ struct BaseNode {
 };
 
 struct AttributeParam {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<Expression> value;
+    std::unique_ptr<Expression> value;
     std::vector<std::shared_ptr<Comment>> comma;
 };
 
 struct Attribute {
-    std::shared_ptr<BaseNode> base;
     std::string name;
     std::vector<std::shared_ptr<AttributeParam>> params;
+    Attribute() = default;
+    Attribute(std::string name, const std::vector<std::shared_ptr<AttributeParam>>& params)
+        : name(std::move(name)), params(params) {}
 };
 
 struct Package {
-    std::shared_ptr<BaseNode> base;
     std::string path;
     std::string package;
     std::vector<std::shared_ptr<File>> files;
@@ -132,98 +133,81 @@ struct Package {
 };
 
 struct File {
-    std::shared_ptr<BaseNode> base;
     std::string name;
     std::string metadata;
-    std::shared_ptr<PackageClause> package;
+    std::unique_ptr<PackageClause> package;
     std::vector<std::shared_ptr<ImportDeclaration>> imports;
     std::vector<std::shared_ptr<Statement>> body;
     std::vector<std::shared_ptr<Comment>> eof;
 };
 
 struct PackageClause {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<Identifier> name;
-    PackageClause() : base(nullptr), name(nullptr) {}
-    PackageClause(std::unique_ptr<BaseNode> base, std::unique_ptr<Identifier> name)
-        : base(std::move(base)), name(std::move(name)) {}
+    std::unique_ptr<Identifier> name;
+    PackageClause() : name(nullptr) {}
+    PackageClause(std::unique_ptr<Identifier> name) : name(std::move(name)) {}
 };
 
 struct ImportDeclaration {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<Identifier> alias;
-    std::shared_ptr<StringLit> path;
-    ImportDeclaration() : base(nullptr), alias(nullptr), path(nullptr) {}
-    ImportDeclaration(std::unique_ptr<BaseNode> base,
-                      std::unique_ptr<Identifier> alias,
-                      std::unique_ptr<StringLit> path)
-        : base(std::move(base)), alias(std::move(alias)), path(std::move(path)) {}
+    std::unique_ptr<Identifier> alias;
+    std::unique_ptr<StringLit> path;
+    ImportDeclaration() : alias(nullptr), path(nullptr) {}
+    ImportDeclaration(std::unique_ptr<Identifier> alias, std::unique_ptr<StringLit> path)
+        : alias(std::move(alias)), path(std::move(path)) {}
 };
 
 // stmt
-
 struct ExprStmt {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<Expression> expression;
+    std::unique_ptr<Expression> expression;
     ExprStmt() = default;
-    ExprStmt(std::unique_ptr<BaseNode> base, std::unique_ptr<Expression> expr)
-        : base(std::move(base)), expression(std::move(expr)) {}
+    ExprStmt(std::unique_ptr<Expression> expr) : expression(std::move(expr)) {}
 };
 
 struct VariableAssgn {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<Identifier> id;
-    std::shared_ptr<Expression> init;
+    std::unique_ptr<Identifier> id;
+    std::unique_ptr<Expression> init;
     VariableAssgn() = default;
-    VariableAssgn(std::unique_ptr<BaseNode> base,
-                  std::unique_ptr<Identifier> id,
-                  std::unique_ptr<Expression> init)
-        : base(std::move(base)), id(std::move(id)), init(std::move(init)) {}
+    VariableAssgn(std::unique_ptr<Identifier> id, std::unique_ptr<Expression> init)
+        : id(std::move(id)), init(std::move(init)) {}
 };
 
 struct OptionStmt {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<Assignment> assignment;
+    std::unique_ptr<Assignment> assignment;
     OptionStmt() = default;
-    OptionStmt(std::unique_ptr<BaseNode> base, std::unique_ptr<Assignment> assignment)
-        : base(std::move(base)), assignment(std::move(assignment)) {}
+    OptionStmt(std::unique_ptr<Assignment> assignment) : assignment(std::move(assignment)) {}
 };
 
 struct ReturnStmt {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<Expression> argument;
+    std::unique_ptr<Expression> argument;
     ReturnStmt() = default;
-    ReturnStmt(std::unique_ptr<BaseNode> base, std::unique_ptr<Expression> argument)
-        : base(std::move(base)), argument(std::move(argument)) {}
+    ReturnStmt(std::unique_ptr<Expression> argument) : argument(std::move(argument)) {}
 };
 
 struct BadStmt {
-    std::shared_ptr<BaseNode> base;
     std::string text;
-
     BadStmt() = default;
-    BadStmt(std::unique_ptr<BaseNode> base, std::string text)
-        : base(std::move(base)), text(std::move(text)) {}
+    BadStmt(std::string text) : text(std::move(text)) {}
 };
 
 struct TestCaseStmt {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<Identifier> id;
-    std::shared_ptr<StringLit> extends;
-    std::shared_ptr<Block> block;
+    std::unique_ptr<Identifier> id;
+    std::unique_ptr<StringLit> extends;
+    std::unique_ptr<Block> block;
+    TestCaseStmt() = default;
+    TestCaseStmt(std::unique_ptr<Identifier> id,
+                 std::unique_ptr<StringLit> extends,
+                 std::unique_ptr<Block> block)
+        : id(std::move(id)), extends(std::move(extends)), block(std::move(block)) {}
 };
 
 struct BuiltinStmt {
-    std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<Comment>> colon;
-    std::shared_ptr<Identifier> id;
-    std::shared_ptr<TypeExpression> ty;
+    std::unique_ptr<Identifier> id;
+    std::unique_ptr<TypeExpression> ty;
     BuiltinStmt() = default;
-    BuiltinStmt(std::unique_ptr<BaseNode> base,
-                const std::vector<std::shared_ptr<Comment>>& colon,
+    BuiltinStmt(const std::vector<std::shared_ptr<Comment>>& colon,
                 std::unique_ptr<Identifier> id,
                 std::unique_ptr<TypeExpression> ty)
-        : base(std::move(base)), colon(colon), id(std::move(id)), ty(std::move(ty)) {}
+        : colon(colon), id(std::move(id)), ty(std::move(ty)) {}
 };
 
 struct Statement {
@@ -250,222 +234,179 @@ struct Statement {
     Statement() = default;
     Statement(Type type, StmtVari stmt) : type(type), stmt(std::move(stmt)) {}
 
-    std::shared_ptr<BaseNode> base() {
-        switch (type) {
-        case Type::ExpressionStatement:
-            return std::get<std::unique_ptr<ExprStmt>>(stmt)->base;
-        case Type::VariableAssignment:
-            return std::get<std::unique_ptr<VariableAssgn>>(stmt)->base;
-        case Type::OptionStatement:
-            return std::get<std::unique_ptr<OptionStmt>>(stmt)->base;
-        case Type::ReturnStatement:
-            return std::get<std::unique_ptr<ReturnStmt>>(stmt)->base;
-        case Type::BadStatement:
-            return std::get<std::unique_ptr<BadStmt>>(stmt)->base;
-        case Type::TestCaseStatement:
-            return std::get<std::unique_ptr<TestCaseStmt>>(stmt)->base;
-        case Type::BuiltinStatement:
-            return std::get<std::unique_ptr<BuiltinStmt>>(stmt)->base;
-        }
-    }
+    std::shared_ptr<BaseNode> base() { return nullptr; }
 };
 
 // expr
 
 struct Identifier {
-    std::shared_ptr<BaseNode> base;
     std::string name;
+    Identifier() = default;
+    Identifier(std::string name) : name(std::move(name)) {}
 };
 
 struct ArrayItem {
-    std::shared_ptr<Expression> expression;
+    std::unique_ptr<Expression> expression;
     std::vector<std::shared_ptr<Comment>> comma;
+    ArrayItem() = default;
+    ArrayItem(std::unique_ptr<Expression> expression,
+              const std::vector<std::shared_ptr<Comment>>& comma)
+        : expression(std::move(expression)), comma(comma) {}
 };
 
 struct ArrayExpr {
-    std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<Comment>> lbrack;
     std::vector<std::shared_ptr<ArrayItem>> elements;
     std::vector<std::shared_ptr<Comment>> rbrack;
+    ArrayExpr() = default;
+    ArrayExpr(const std::vector<std::shared_ptr<Comment>>& lbrack,
+              const std::vector<std::shared_ptr<ArrayItem>>& elements,
+              const std::vector<std::shared_ptr<Comment>>& rbrack)
+        : lbrack(lbrack), elements(elements), rbrack(rbrack) {}
 };
 
 struct DictItem {
-    std::shared_ptr<Expression> key;
-    std::shared_ptr<Expression> val;
+    std::unique_ptr<Expression> key;
+    std::unique_ptr<Expression> val;
     std::vector<std::shared_ptr<Comment>> comma;
+    DictItem() = default;
+    DictItem(std::unique_ptr<Expression> key,
+             std::unique_ptr<Expression> val,
+             const std::vector<std::shared_ptr<Comment>>& comma)
+        : key(std::move(key)), val(std::move(val)), comma(comma) {}
 };
 
 struct DictExpr {
-    std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<Comment>> lbrack;
     std::vector<std::shared_ptr<DictItem>> elements;
     std::vector<std::shared_ptr<Comment>> rbrack;
+    DictExpr() = default;
+    DictExpr(const std::vector<std::shared_ptr<Comment>>& lbrack,
+             const std::vector<std::shared_ptr<DictItem>>& elements,
+             const std::vector<std::shared_ptr<Comment>>& rbrack)
+        : lbrack(lbrack), elements(elements), rbrack(rbrack) {}
 };
 
 struct FunctionExpr {
-    std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<Comment>> lparen;
     std::vector<std::shared_ptr<Property>> params;
     std::vector<std::shared_ptr<Comment>> rparen;
     std::vector<std::shared_ptr<Comment>> arrow;
-    std::shared_ptr<FunctionBody> body;
+    std::unique_ptr<FunctionBody> body;
 
     FunctionExpr() = default;
-    FunctionExpr(std::unique_ptr<BaseNode> base,
-                 const std::vector<std::shared_ptr<Comment>>& lparen,
+    FunctionExpr(const std::vector<std::shared_ptr<Comment>>& lparen,
                  const std::vector<std::shared_ptr<Property>>& params,
                  const std::vector<std::shared_ptr<Comment>>& rparen,
                  const std::vector<std::shared_ptr<Comment>>& arrow,
                  std::unique_ptr<FunctionBody> body)
-        : base(std::move(base)),
-          lparen(lparen),
-          params(params),
-          rparen(rparen),
-          arrow(arrow),
-          body(std::move(body)) {}
+        : lparen(lparen), params(params), rparen(rparen), arrow(arrow), body(std::move(body)) {}
 };
 
 struct LogicalExpr {
-    std::shared_ptr<BaseNode> base;
     LogicalOperator op;
-    std::shared_ptr<Expression> left;
-    std::shared_ptr<Expression> right;
+    std::unique_ptr<Expression> left;
+    std::unique_ptr<Expression> right;
     LogicalExpr() = default;
-    LogicalExpr(std::unique_ptr<BaseNode> base,
-                LogicalOperator op,
+    LogicalExpr(LogicalOperator op,
                 std::unique_ptr<Expression> left,
                 std::unique_ptr<Expression> right)
-        : base(std::move(base)), op(op), left(std::move(left)), right(std::move(right)) {}
+        : op(op), left(std::move(left)), right(std::move(right)) {}
 };
 
 struct WithSource {
-    std::shared_ptr<Identifier> source;
+    std::unique_ptr<Identifier> source;
     std::vector<std::shared_ptr<Comment>> with;
 };
 
 struct ObjectExpr {
-    std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<Comment>> lbrace;
-    std::shared_ptr<WithSource> with;
+    std::unique_ptr<WithSource> with;
     std::vector<std::shared_ptr<Property>> properties;
     std::vector<std::shared_ptr<Comment>> rbrace;
     ObjectExpr() = default;
-    ObjectExpr(std::unique_ptr<BaseNode> base,
-               const std::vector<std::shared_ptr<Comment>>& lbrace,
-               std::shared_ptr<WithSource> with,
+    ObjectExpr(const std::vector<std::shared_ptr<Comment>>& lbrace,
+               std::unique_ptr<WithSource> with,
                const std::vector<std::shared_ptr<Property>>& properties,
                const std::vector<std::shared_ptr<Comment>>& rbrace)
-        : base(std::move(base)),
-          lbrace(lbrace),
-          with(std::move(with)),
-          properties(properties),
-          rbrace(rbrace) {}
+        : lbrace(lbrace), with(std::move(with)), properties(properties), rbrace(rbrace) {}
 };
 
 struct MemberExpr {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<Expression> object;
+    std::unique_ptr<Expression> object;
     std::vector<std::shared_ptr<Comment>> lbrack;
-    std::shared_ptr<PropertyKey> property;
+    std::unique_ptr<PropertyKey> property;
     std::vector<std::shared_ptr<Comment>> rbrack;
     MemberExpr() = default;
-    MemberExpr(std::unique_ptr<BaseNode> base,
-               std::unique_ptr<Expression> expr,
+    MemberExpr(std::unique_ptr<Expression> expr,
                const std::vector<std::shared_ptr<Comment>>& lbrack,
                std::unique_ptr<PropertyKey> property,
                const std::vector<std::shared_ptr<Comment>>& rbrack)
-        : base(std::move(base)),
-          object(std::move(expr)),
-          lbrack(lbrack),
-          property(std::move(property)),
-          rbrack(rbrack) {}
+        : object(std::move(expr)), lbrack(lbrack), property(std::move(property)), rbrack(rbrack) {}
 };
 
 struct IndexExpr {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<Expression> array;
+    std::unique_ptr<Expression> array;
     std::vector<std::shared_ptr<Comment>> lbrack;
-    std::shared_ptr<Expression> index;
+    std::unique_ptr<Expression> index;
     std::vector<std::shared_ptr<Comment>> rbrack;
 
     IndexExpr() = default;
-    IndexExpr(std::unique_ptr<BaseNode> base,
-              std::unique_ptr<Expression> array,
+    IndexExpr(std::unique_ptr<Expression> array,
               const std::vector<std::shared_ptr<Comment>>& lbrack,
               std::unique_ptr<Expression> index,
               const std::vector<std::shared_ptr<Comment>>& rbrack)
-        : base(std::move(base)),
-          array(std::move(array)),
-          lbrack(lbrack),
-          index(std::move(index)),
-          rbrack(rbrack) {}
+        : array(std::move(array)), lbrack(lbrack), index(std::move(index)), rbrack(rbrack) {}
 };
 
 struct BinaryExpr {
-    std::shared_ptr<BaseNode> base;
     Operator op;
-    std::shared_ptr<Expression> left;
-    std::shared_ptr<Expression> right;
-
+    std::unique_ptr<Expression> left;
+    std::unique_ptr<Expression> right;
     BinaryExpr() = default;
-    BinaryExpr(std::unique_ptr<BaseNode> base,
-               Operator op,
-               std::unique_ptr<Expression> left,
-               std::unique_ptr<Expression> right)
-        : base(std::move(base)), op(op), left(std::move(left)), right(std::move(right)) {}
+    BinaryExpr(Operator op, std::unique_ptr<Expression> left, std::unique_ptr<Expression> right)
+        : op(op), left(std::move(left)), right(std::move(right)) {}
 };
 
 struct UnaryExpr {
-    std::shared_ptr<BaseNode> base;
     Operator op;
-    std::shared_ptr<Expression> argument;
+    std::unique_ptr<Expression> argument;
     UnaryExpr() = default;
-    UnaryExpr(std::unique_ptr<BaseNode> base, Operator op, std::unique_ptr<Expression> argument)
-        : base(std::move(base)), op(op), argument(std::move(argument)) {}
+    UnaryExpr(Operator op, std::unique_ptr<Expression> argument)
+        : op(op), argument(std::move(argument)) {}
 };
 
 struct PipeExpr {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<Expression> argument;
-    std::shared_ptr<CallExpr> call;
+    std::unique_ptr<Expression> argument;
+    std::unique_ptr<CallExpr> call;
     PipeExpr() = default;
-    PipeExpr(std::unique_ptr<BaseNode> base,
-             std::unique_ptr<Expression> argument,
-             std::unique_ptr<CallExpr> call)
-        : base(std::move(base)), argument(std::move(argument)), call(std::move(call)) {}
+    PipeExpr(std::unique_ptr<Expression> argument, std::unique_ptr<CallExpr> call)
+        : argument(std::move(argument)), call(std::move(call)) {}
 };
 
 struct CallExpr {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<Expression> callee;
+    std::unique_ptr<Expression> callee;
     std::vector<std::shared_ptr<Comment>> lparen;
     std::vector<std::shared_ptr<Expression>> arguments;
     std::vector<std::shared_ptr<Comment>> rparen;
     CallExpr() = default;
-    CallExpr(std::unique_ptr<BaseNode> base,
-             std::unique_ptr<Expression> callee,
+    CallExpr(std::unique_ptr<Expression> callee,
              const std::vector<std::shared_ptr<Comment>>& lparen,
              const std::vector<std::shared_ptr<Expression>>& arguments,
              const std::vector<std::shared_ptr<Comment>>& rparen)
-        : base(std::move(base)),
-          callee(std::move(callee)),
-          lparen(lparen),
-          arguments(arguments),
-          rparen(rparen) {}
+        : callee(std::move(callee)), lparen(lparen), arguments(arguments), rparen(rparen) {}
 };
 
 struct ConditionalExpr {
-    std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<Comment>> tk_if;
-    std::shared_ptr<Expression> test;
+    std::unique_ptr<Expression> test;
     std::vector<std::shared_ptr<Comment>> tk_then;
-    std::shared_ptr<Expression> consequent;
+    std::unique_ptr<Expression> consequent;
     std::vector<std::shared_ptr<Comment>> tk_else;
-    std::shared_ptr<Expression> alternate;
+    std::unique_ptr<Expression> alternate;
 };
 
 struct StringExpr {
-    std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<StringExprPart>> parts;
 };
 
@@ -474,94 +415,98 @@ struct StringExprPart {
         Text,
         Interpolated,
     };
-    Type type;
+    using StringExprType =
+        std::variant<std::unique_ptr<TextPart>, std::unique_ptr<InterpolatedPart>>;
 
-    std::variant<std::shared_ptr<TextPart>, std::shared_ptr<InterpolatedPart>> part;
+    Type type;
+    StringExprType part;
+    StringExprPart() = default;
+    StringExprPart(Type type, StringExprType part) : type(type), part(std::move(part)) {}
 };
 
 struct TextPart {
-    std::shared_ptr<BaseNode> base;
     std::string value;
 };
 
 struct InterpolatedPart {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<Expression> expression;
+    std::unique_ptr<Expression> expression;
+    InterpolatedPart() = default;
+    InterpolatedPart(std::unique_ptr<Expression> expression) : expression(std::move(expression)) {}
 };
 
 struct ParenExpr {
-    std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<Comment>> lparen;
-    std::shared_ptr<Expression> expression;
+    std::unique_ptr<Expression> expression;
     std::vector<std::shared_ptr<Comment>> rparen;
     ParenExpr() = default;
-    ParenExpr(std::unique_ptr<BaseNode> base,
-              const std::vector<std::shared_ptr<Comment>>& lparen,
+    ParenExpr(const std::vector<std::shared_ptr<Comment>>& lparen,
               std::unique_ptr<Expression> expr,
               const std::vector<std::shared_ptr<Comment>>& rparen)
-        : base(std::move(base)), lparen(lparen), expression(std::move(expr)), rparen(rparen) {}
+        : lparen(lparen), expression(std::move(expr)), rparen(rparen) {}
 };
 
 struct IntegerLit {
-    std::shared_ptr<BaseNode> base;
     int64_t value;
     IntegerLit() = default;
-    IntegerLit(std::unique_ptr<BaseNode> base, int64_t value)
-        : base(std::move(base)), value(value) {}
+    IntegerLit(int64_t value) : value(value) {}
 };
 
 struct FloatLit {
-    std::shared_ptr<BaseNode> base;
     double value;
+    FloatLit() = default;
+    FloatLit(double value) : value(value) {}
 };
 
 struct StringLit {
-    std::shared_ptr<BaseNode> base;
     std::string value;
     StringLit() = default;
-    StringLit(std::unique_ptr<BaseNode> base, const std::string& value)
-        : base(std::move(base)), value(value) {}
+    StringLit(std::string value) : value(std::move(value)) {}
 };
 
 struct DurationLit {
-    std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<Duration>> values;
+    DurationLit() = default;
+    DurationLit(const std::vector<std::shared_ptr<Duration>>& values) : values(values) {}
 };
 
 struct UintLit {
-    std::shared_ptr<BaseNode> base;
     uint64_t value;
+    UintLit() : value(0) {}
+    UintLit(uint64_t value) : value(value) {}
 };
 
 struct BooleanLit {
-    std::shared_ptr<BaseNode> base;
     bool value;
+    BooleanLit() : value(false) {}
+    BooleanLit(bool value) : value(value) {}
 };
 
 struct DateTimeLit {
-    std::shared_ptr<BaseNode> base;
     std::tm value;
+    DateTimeLit() : value({}) {}
+    DateTimeLit(const std::tm& value) : value(value) {}
 };
 
 struct RegexpLit {
-    std::shared_ptr<BaseNode> base;
     std::string value;
+    RegexpLit() = default;
+    RegexpLit(std::string value) : value(std::move(value)) {}
 };
 
-struct PipeLit {
-    std::shared_ptr<BaseNode> base;
-};
+struct PipeLit {};
 
 struct LabelLit {
     std::string value;
     LabelLit() = default;
-    LabelLit(const std::string& value) : value(value) {}
+    LabelLit(std::string value) : value(std::move(value)) {}
 };
 
 struct BadExpr {
-    std::shared_ptr<BaseNode> base;
     std::string text;
-    std::shared_ptr<Expression> expression;
+    std::unique_ptr<Expression> expression;
+    BadExpr() = default;
+    BadExpr(std::string text, std::unique_ptr<Expression> expression)
+        : text(std::move(text)), expression(std::move(expression)) {}
 };
 
 struct Expression {
@@ -595,7 +540,7 @@ struct Expression {
     };
     Type type;
 
-    using ExprVari = std::variant<std::unique_ptr<Identifier>,
+    using ExprType = std::variant<std::unique_ptr<Identifier>,
                                   std::unique_ptr<ArrayExpr>,
                                   std::unique_ptr<DictExpr>,
                                   std::unique_ptr<FunctionExpr>,
@@ -621,64 +566,9 @@ struct Expression {
                                   std::unique_ptr<PipeLit>,
                                   std::unique_ptr<LabelLit>,
                                   std::unique_ptr<BadExpr>>;
-    ExprVari expr;
+    ExprType expr;
     Expression() = default;
-    Expression(Type t, ExprVari expr) : type(t), expr(std::move(expr)) {}
-
-    std::shared_ptr<BaseNode> base() {
-        switch (type) {
-        case Type::Identifier:
-            return std::get<std::unique_ptr<Identifier>>(expr)->base;
-        case Type::ArrayExpr:
-            return std::get<std::unique_ptr<ArrayExpr>>(expr)->base;
-        case Type::DictExpr:
-            return std::get<std::unique_ptr<DictExpr>>(expr)->base;
-        case Type::FunctionExpr:
-            return std::get<std::unique_ptr<FunctionExpr>>(expr)->base;
-        case Type::LogicalExpr:
-            return std::get<std::unique_ptr<LogicalExpr>>(expr)->base;
-        case Type::ObjectExpr:
-            return std::get<std::unique_ptr<ObjectExpr>>(expr)->base;
-        case Type::MemberExpr:
-            return std::get<std::unique_ptr<MemberExpr>>(expr)->base;
-        case Type::IndexExpr:
-            return std::get<std::unique_ptr<IndexExpr>>(expr)->base;
-        case Type::BinaryExpr:
-            return std::get<std::unique_ptr<BinaryExpr>>(expr)->base;
-        case Type::UnaryExpr:
-            return std::get<std::unique_ptr<UnaryExpr>>(expr)->base;
-        case Type::PipeExpr:
-            return std::get<std::unique_ptr<PipeExpr>>(expr)->base;
-        case Type::CallExpr:
-            return std::get<std::unique_ptr<CallExpr>>(expr)->base;
-        case Type::ConditionalExpr:
-            return std::get<std::unique_ptr<ConditionalExpr>>(expr)->base;
-        case Type::IntegerLit:
-            return std::get<std::unique_ptr<IntegerLit>>(expr)->base;
-        case Type::FloatLit:
-            return std::get<std::unique_ptr<FloatLit>>(expr)->base;
-        case Type::StringLit:
-            return std::get<std::unique_ptr<StringLit>>(expr)->base;
-        case Type::DurationLit:
-            return std::get<std::unique_ptr<DurationLit>>(expr)->base;
-        case Type::UnsignedIntegerLit:
-            return std::get<std::unique_ptr<UintLit>>(expr)->base;
-        case Type::BooleanLit:
-            return std::get<std::unique_ptr<BooleanLit>>(expr)->base;
-        case Type::DateTimeLit:
-            return std::get<std::unique_ptr<DateTimeLit>>(expr)->base;
-        case Type::RegexpLit:
-            return std::get<std::unique_ptr<RegexpLit>>(expr)->base;
-        case Type::PipeLit:
-            return std::get<std::unique_ptr<PipeLit>>(expr)->base;
-        case Type::BadExpr:
-            return std::get<std::unique_ptr<BadExpr>>(expr)->base;
-        case Type::StringExpr:
-            return std::get<std::unique_ptr<StringExpr>>(expr)->base;
-        case Type::ParenExpr:
-            return std::get<std::unique_ptr<ParenExpr>>(expr)->base;
-        }
-    }
+    Expression(Type t, ExprType expr) : type(t), expr(std::move(expr)) {}
 };
 
 // operator
@@ -784,98 +674,69 @@ enum class LogicalOperator {
 
 // assign
 struct MemberAssgn {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<MemberExpr> member;
-    std::shared_ptr<Expression> init;
+    std::unique_ptr<MemberExpr> member;
+    std::unique_ptr<Expression> init;
     MemberAssgn() = default;
-    MemberAssgn(std::unique_ptr<BaseNode> base,
-                std::unique_ptr<MemberExpr> member,
-                std::unique_ptr<Expression> init)
-        : base(std::move(base)), member(std::move(member)), init(std::move(init)) {}
+    MemberAssgn(std::unique_ptr<MemberExpr> member, std::unique_ptr<Expression> init)
+        : member(std::move(member)), init(std::move(init)) {}
 };
 
 struct Assignment {
-    using AssiVari = std::variant<std::unique_ptr<VariableAssgn>, std::unique_ptr<MemberAssgn>>;
+    using AssiType = std::variant<std::unique_ptr<VariableAssgn>, std::unique_ptr<MemberAssgn>>;
     enum class Type { VariableAssignment, MemberAssignment };
     Type type;
-    AssiVari value;
+    AssiType value;
 
     Assignment() = default;
-    Assignment(Assignment::Type type, AssiVari value) : type(type), value(std::move(value)) {}
-
-    std::shared_ptr<BaseNode> base() {
-        switch (type) {
-        case Type::VariableAssignment:
-            return std::get<std::unique_ptr<VariableAssgn>>(value)->base;
-        case Type::MemberAssignment:
-            return std::get<std::unique_ptr<MemberAssgn>>(value)->base;
-        }
-    }
+    Assignment(Assignment::Type type, AssiType value) : type(type), value(std::move(value)) {}
 };
 
 // property
 
 struct Property {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<PropertyKey> key;
+    std::unique_ptr<PropertyKey> key;
     std::vector<std::shared_ptr<Comment>> separator;
-    std::shared_ptr<Expression> value;
+    std::unique_ptr<Expression> value;
     std::vector<std::shared_ptr<Comment>> comma;
     Property() = default;
-    Property(std::unique_ptr<BaseNode> base,
-             std::unique_ptr<PropertyKey> key,
+    Property(std::unique_ptr<PropertyKey> key,
              const std::vector<std::shared_ptr<Comment>>& separator,
              std::unique_ptr<Expression> value,
              const std::vector<std::shared_ptr<Comment>>& comma)
-        : base(std::move(base)),
-          key(std::move(key)),
-          separator(separator),
-          value(std::move(value)),
-          comma(comma) {}
+        : key(std::move(key)), separator(separator), value(std::move(value)), comma(comma) {}
 };
 
 struct PropertyKey {
-    using PropKeyVari = std::variant<std::shared_ptr<Identifier>, std::shared_ptr<StringLit>>;
+    using PropKeyType = std::variant<std::shared_ptr<Identifier>, std::shared_ptr<StringLit>>;
     enum class Type { Identifier, StringLiteral };
 
     Type type;
-    PropKeyVari key;
+    PropKeyType key;
 
     PropertyKey() = default;
-    PropertyKey(PropertyKey::Type type, PropKeyVari key) : type(type), key(std::move(key)) {}
-
-    std::shared_ptr<BaseNode> base() {
-        switch (type) {
-        case Type::Identifier:
-            return std::get<std::shared_ptr<Identifier>>(key)->base;
-        case Type::StringLiteral:
-            return std::get<std::shared_ptr<StringLit>>(key)->base;
-        }
-    }
+    PropertyKey(PropertyKey::Type type, PropKeyType key) : type(type), key(std::move(key)) {}
 };
 
 // function
 
 struct Block {
-    std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<Comment>> lbrace;
     std::vector<std::shared_ptr<Statement>> body;
     std::vector<std::shared_ptr<Comment>> rbrace;
 
     Block() = default;
-    Block(std::unique_ptr<BaseNode> base,
-          const std::vector<std::shared_ptr<Comment>>& lbrace,
+    Block(const std::vector<std::shared_ptr<Comment>>& lbrace,
           const std::vector<std::shared_ptr<Statement>>& body,
           const std::vector<std::shared_ptr<Comment>>& rbrace)
-        : base(std::move(base)), lbrace(lbrace), body(body), rbrace(rbrace) {}
+        : lbrace(lbrace), body(body), rbrace(rbrace) {}
 };
 
 struct FunctionBody {
     enum class Type { Block, Expression };
-    using FuncVari = std::variant<std::shared_ptr<Block>, std::shared_ptr<Expression>>;
+    using FuncType = std::variant<std::shared_ptr<Block>, std::shared_ptr<Expression>>;
     Type type;
-    FuncVari body;
-    FunctionBody(Type t, FuncVari body) : type(t), body(std::move(body)) {}
+    FuncType body;
+    FunctionBody(Type t, FuncType body) : type(t), body(std::move(body)) {}
 };
 
 // parameter
@@ -980,22 +841,19 @@ struct MonoType {
 };
 
 struct Required {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<Identifier> name;
-    std::shared_ptr<MonoType> monotype;
+    std::unique_ptr<Identifier> name;
+    std::unique_ptr<MonoType> monotype;
 };
 
 struct Optional {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<Identifier> name;
-    std::shared_ptr<MonoType> monotype;
-    std::shared_ptr<LabelLit> _default;
+    std::unique_ptr<Identifier> name;
+    std::unique_ptr<MonoType> monotype;
+    std::unique_ptr<LabelLit> _default;
 };
 
 struct Pipe {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<Identifier> name;
-    std::shared_ptr<MonoType> monotype;
+    std::unique_ptr<Identifier> name;
+    std::unique_ptr<MonoType> monotype;
 };
 
 struct ParameterType {
@@ -1005,14 +863,14 @@ struct ParameterType {
         Pipe,
     };
 
-    using ParamVari =
+    using ParamType =
         std::variant<std::shared_ptr<Required>, std::shared_ptr<Optional>, std::shared_ptr<Pipe>>;
 
     Type type;
-    ParamVari value;
+    ParamType value;
 
     ParameterType() = default;
-    ParameterType(ParameterType::Type type, ParamVari value)
+    ParameterType(ParameterType::Type type, ParamType value)
         : type(type), value(std::move(value)) {}
 };
 
