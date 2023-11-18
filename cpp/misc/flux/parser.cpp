@@ -15,7 +15,6 @@ std::unique_ptr<Package> Parser::parse_single_package(const std::string& pkgpath
     std::shared_ptr<File> ast_file = parse_file(fname);
     auto package = std::make_unique<Package>();
     package->package = ast_file->package->name->name;
-    package->base = ast_file->base;
     package->path = pkgpath;
     package->files.emplace_back(ast_file);
     return package;
@@ -23,36 +22,22 @@ std::unique_ptr<Package> Parser::parse_single_package(const std::string& pkgpath
 
 std::unique_ptr<File> Parser::parse_file(const std::string& fname) {
     fname_ = fname;
-    auto start_pos = peek()->start_pos;
-    auto end = Position::invalid();
     auto inner_attrs = parse_attribute_inner_list();
     auto [pkg, inner_attrs1] = parse_package_clause(inner_attrs);
-    if (pkg) {
-        end = pkg->base->location.end;
-    }
     auto [imports, inner_attrs2] = parse_import_list(inner_attrs1);
-    if (!imports.empty()) {
-        end = imports.rbegin()->get()->base->location.end;
-    }
     auto body = parse_statement_list(inner_attrs2);
     if (!inner_attrs.empty()) {
         // We have left over attributes from the beginning of the file.
         auto badstmt = std::make_unique<BadStmt>();
-        badstmt->base = base_node_from_others(inner_attrs[0]->base.get(),
-                                              inner_attrs.rbegin()->get()->base.get());
         badstmt->text = "extra attributes not associated with anything";
         std::shared_ptr<Statement> stmt = std::make_shared<Statement>();
         stmt->type = Statement::Type::BadStatement;
         stmt->stmt = std::move(badstmt);
         body.emplace_back(std::move(stmt));
     }
-    if (!body.empty()) {
-        end = body.rbegin()->get()->base()->location.end;
-    }
+
     auto eof = peek()->comments;
     auto ret = std::make_unique<File>();
-    ret->base = std::make_shared<BaseNode>();
-    ret->base->location = source_location(start_pos, end);
     ret->name = fname_;
     ret->metadata = METADATA;
     ret->package = std::move(pkg);
@@ -85,7 +70,7 @@ std::unique_ptr<Statement> Parser::parse_statement(
         auto ret = std::make_unique<Statement>();
         ret->type = Statement::Type::BadStatement;
         auto bad = std::make_shared<BadExpr>();
-        bad->base = base_node_from_token(t.get());
+        // bad->base = base_node_from_token(t.get());
         bad->text = t->lit;
         return ret;
     }
@@ -132,7 +117,7 @@ std::unique_ptr<Statement> Parser::parse_statement_inner(
         break;
     default:
         auto tt = consume();
-        auto bad_stmt = std::make_unique<BadStmt>(base_node_from_token(tt.get()), t->lit);
+        auto bad_stmt = std::make_unique<BadStmt>(t->lit);
         stmt = std::make_unique<Statement>(Statement::Type::BadStatement, std::move(bad_stmt));
     }
     stmt->base()->attributes = *attributes;
@@ -142,8 +127,7 @@ std::unique_ptr<Statement> Parser::parse_statement_inner(
 std::unique_ptr<Statement> Parser::parse_return_statement() {
     auto t = expect(TokenType::Return);
     auto expr = parse_expression();
-    auto retstmt = std::make_unique<ReturnStmt>(
-        base_node_from_other_end_c(t.get(), expr->base().get(), t.get()), std::move(expr));
+    auto retstmt = std::make_unique<ReturnStmt>(std::move(expr));
     auto stmt = std::make_unique<Statement>(Statement::Type::ReturnStatement, std::move(retstmt));
     return stmt;
 }
@@ -155,12 +139,10 @@ std::unique_ptr<Statement> Parser::parse_option_assignment() {
     auto stmt = std::make_unique<Statement>();
     if (assignment) {
         stmt->type = Statement::Type::OptionStatement;
-        auto assstmt = std::make_unique<OptionStmt>(
-            base_node_from_other_end_c(t.get(), assignment->base().get(), t.get()),
-            std::move(assignment));
+        auto assstmt = std::make_unique<OptionStmt>(std::move(assignment));
         stmt->stmt = std::move(assstmt);
     } else {
-        auto badstmt = std::make_unique<BadStmt>(base_node_from_token(t.get()), t->lit);
+        auto badstmt = std::make_unique<BadStmt>(t->lit);
         stmt->type = Statement::Type::BadStatement;
         stmt->stmt = std::move(badstmt);
     }
@@ -168,10 +150,10 @@ std::unique_ptr<Statement> Parser::parse_option_assignment() {
 }
 
 // TODO
-std::unique_ptr<MonoType> Parser::parse_record_type() {}
+std::unique_ptr<MonoType> Parser::parse_record_type() { return nullptr; }
 
 // "(" [Parameters] ")" "=>" MonoType
-std::unique_ptr<MonoType> Parser::parse_function_type() {}
+std::unique_ptr<MonoType> Parser::parse_function_type() { return nullptr; }
 
 std::unique_ptr<MonoType> Parser::parse_dynamic_type() {
     expect(TokenType::Ident);
@@ -287,24 +269,19 @@ std::unique_ptr<Assignment> Parser::parse_option_assignment_suffix(std::unique_p
     const auto* t = peek();
     if (t->tok == TokenType::Assign) {
         auto init = parse_assign_statement();
-        auto base = base_node_from_others_c(id->base.get(), init->base().get(), t);
         return std::make_unique<Assignment>(
             Assignment::Type::VariableAssignment,
-            std::make_unique<VariableAssgn>(std::move(base), std::move(id), std::move(init)));
+            std::make_unique<VariableAssgn>(std::move(id), std::move(init)));
     }
     if (t->tok == TokenType::Dot) {
         auto tt = consume();
         auto prop = parse_identifier();
         auto assign = expect(TokenType::Assign);
         auto init = parse_expression();
-        auto base = base_node_from_others_c(id->base.get(), init->base().get(), assign.get());
-        auto base1 = base_node_from_others(id->base.get(), prop->base.get());
         return std::make_unique<Assignment>(
             Assignment::Type::MemberAssignment,
             std::make_unique<MemberAssgn>(
-                std::move(base),
                 std::make_unique<MemberExpr>(
-                    std::move(base1),
                     std::make_unique<Expression>(Expression::Type::Identifier, std::move(id)),
                     t->comments,
                     std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(prop)),
@@ -321,15 +298,13 @@ std::unique_ptr<Statement> Parser::parse_ident_statement() {
     if (t->tok == TokenType::Assign) {
         auto init = parse_assign_statement();
         ret->type = Statement::Type::VariableAssignment;
-        auto stmt = std::make_unique<VariableAssgn>(
-            base_node_from_others_c(id->base.get(), init->base().get(), t), std::move(id),
-            std::move(init));
+        auto stmt = std::make_unique<VariableAssgn>(std::move(id), std::move(init));
         ret->stmt = std::move(stmt);
     } else {
         auto idexpr = std::make_unique<Expression>(Expression::Type::Identifier, std::move(id));
         auto expr = parse_expression_suffix(std::move(idexpr));
         ret->type = Statement::Type::ExpressionStatement;
-        auto stmt = std::make_unique<ExprStmt>(base_node(expr->base()->location), std::move(expr));
+        auto stmt = std::make_unique<ExprStmt>(std::move(expr));
         ret->stmt = std::move(stmt);
     }
 
@@ -357,11 +332,9 @@ std::unique_ptr<Expression> Parser::parse_multiplicative_expression_suffix(
         }
         auto t = scan();
         auto rhs = parse_exponent_expression();
-        auto base = base_node_from_others_c(res->base().get(), rhs->base().get(), t.get());
-        res = std::make_unique<Expression>(Expression::Type::BinaryExpr,
-                                           std::make_unique<BinaryExpr>(std::move(base), op.value(),
-                                                                        std::move(res),
-                                                                        std::move(rhs)));
+        res = std::make_unique<Expression>(
+            Expression::Type::BinaryExpr,
+            std::make_unique<BinaryExpr>(op.value(), std::move(res), std::move(rhs)));
     }
     return res;
 }
@@ -390,11 +363,9 @@ std::unique_ptr<Expression> Parser::parse_exponent_expression_suffix(
         }
         auto t = scan();
         auto rhs = parse_pipe_expression();
-        auto base = base_node_from_others_c(res->base().get(), rhs->base().get(), t.get());
-        res = std::make_unique<Expression>(Expression::Type::BinaryExpr,
-                                           std::make_unique<BinaryExpr>(std::move(base), op.value(),
-                                                                        std::move(res),
-                                                                        std::move(rhs)));
+        res = std::make_unique<Expression>(
+            Expression::Type::BinaryExpr,
+            std::make_unique<BinaryExpr>(op.value(), std::move(res), std::move(rhs)));
     }
     return res;
 }
@@ -417,24 +388,20 @@ std::unique_ptr<Expression> Parser::parse_pipe_expression_suffix(std::unique_ptr
         auto t = scan();
         auto rhs = parse_unary_expression();
         if (rhs->type == Expression::Type::CallExpr) {
-            auto base = base_node_from_others_c(res->base().get(), rhs->base().get(), t.get());
             res = std::make_unique<Expression>(
                 Expression::Type::PipeExpr,
                 std::make_unique<PipeExpr>(
-                    std::move(base), std::move(res),
-                    std::move(std::get<std::unique_ptr<CallExpr>>(rhs->expr))));
+                    std::move(res), std::move(std::get<std::unique_ptr<CallExpr>>(rhs->expr))));
         } else {
             errs_.emplace_back("pipe destination must be a function call");
-            auto base = base_node(rhs->base()->location);
-            auto call = std::make_unique<CallExpr>(std::move(base), std::move(rhs),
-                                                   std::vector<std::shared_ptr<Comment>>{},
-                                                   std::vector<std::shared_ptr<Expression>>{},
-                                                   std::vector<std::shared_ptr<Comment>>{});
+            auto call =
+                std::make_unique<CallExpr>(std::move(rhs), std::vector<std::shared_ptr<Comment>>{},
+                                           std::vector<std::shared_ptr<Expression>>{},
+                                           std::vector<std::shared_ptr<Comment>>{});
 
-            auto base1 = base_node_from_others_c(res->base().get(), call->base.get(), t.get());
             res = std::make_unique<Expression>(
                 Expression::Type::PipeExpr,
-                std::make_unique<PipeExpr>(std::move(base), std::move(res), std::move(call)));
+                std::make_unique<PipeExpr>(std::move(res), std::move(call)));
         }
     }
     return res;
@@ -461,15 +428,13 @@ std::unique_ptr<Expression> Parser::parse_pipe_expression() {
 }
 
 std::unique_ptr<Expression> Parser::parse_unary_expression() {
-    const auto* t = peek();
+    // const auto* t = peek();
     auto op = parse_additive_operator();
     if (op) {
         consume();
         auto expr = parse_unary_expression();
-        auto base = base_node_from_other_end_c(t, expr->base().get(), t);
         return std::make_unique<Expression>(
-            Expression::Type::UnaryExpr,
-            std::make_unique<UnaryExpr>(std::move(base), op.value(), std::move(expr)));
+            Expression::Type::UnaryExpr, std::make_unique<UnaryExpr>(op.value(), std::move(expr)));
     }
     return parse_postfix_expression();
 }
@@ -523,47 +488,40 @@ std::unique_ptr<Expression> Parser::parse_index_expression(std::unique_ptr<Expre
     auto end = close(TokenType::RBrack);
     if (!iexpr) {
         errs_.emplace_back("no expression included in brackets");
-        auto base = base_node_from_other_start(expr->base().get(), end.get());
         return std::make_unique<Expression>(
             Expression::Type::IndexExpr,
-            std::make_unique<IndexExpr>(std::move(base), std::move(expr),
-                                        std::vector<std::shared_ptr<Comment>>{},
-                                        std::make_unique<Expression>(
-                                            Expression::Type::IntegerLit,
-                                            std::make_unique<IntegerLit>(
-                                                base_node_from_tokens(start.get(), end.get()), -1)),
-                                        std::vector<std::shared_ptr<Comment>>{}));
+            std::make_unique<IndexExpr>(
+                std::move(expr), std::vector<std::shared_ptr<Comment>>{},
+                std::make_unique<Expression>(Expression::Type::IntegerLit,
+                                             std::make_unique<IntegerLit>(-1)),
+                std::vector<std::shared_ptr<Comment>>{}));
     }
     if (iexpr->type == Expression::Type::StringLit) {
-        auto base = base_node_from_other_start(expr->base().get(), end.get());
         return std::make_unique<Expression>(
             Expression::Type::MemberExpr,
             std::make_unique<MemberExpr>(
-                std::move(base), std::move(expr), start->comments,
+                std::move(expr), start->comments,
                 std::make_unique<PropertyKey>(
                     PropertyKey::Type::StringLiteral,
                     std::move(std::get<std::unique_ptr<StringLit>>(iexpr->expr))),
                 end->comments));
     }
-    auto base = base_node_from_other_start(expr->base().get(), end.get());
     return std::make_unique<Expression>(
-        Expression::Type::IndexExpr,
-        std::make_unique<IndexExpr>(std::move(base), std::move(expr), start->comments,
-                                    std::move(iexpr), end->comments));
+        Expression::Type::IndexExpr, std::make_unique<IndexExpr>(std::move(expr), start->comments,
+                                                                 std::move(iexpr), end->comments));
 }
 
 std::unique_ptr<Expression> Parser::parse_call_expression(std::unique_ptr<Expression> expr) {
     auto lparen = open(TokenType::LParen, TokenType::RParen);
     auto params = parse_property_list();
     auto end = close(TokenType::RParen);
-    auto call = std::make_unique<CallExpr>(
-        base_node_from_other_start(expr->base().get(), end.get()), std::move(expr),
-        lparen->comments, std::vector<std::shared_ptr<Expression>>{}, end->comments);
+    auto call =
+        std::make_unique<CallExpr>(std::move(expr), lparen->comments,
+                                   std::vector<std::shared_ptr<Expression>>{}, end->comments);
     if (!params.empty()) {
-        auto obj_expr = std::make_unique<ObjectExpr>(
-            base_node_from_others(params.front()->base.get(), params.back()->base.get()),
-            std::vector<std::shared_ptr<Comment>>{}, nullptr, params,
-            std::vector<std::shared_ptr<Comment>>{});
+        auto obj_expr =
+            std::make_unique<ObjectExpr>(std::vector<std::shared_ptr<Comment>>{}, nullptr, params,
+                                         std::vector<std::shared_ptr<Comment>>{});
         auto exp_param =
             std::make_unique<Expression>(Expression::Type::ObjectExpr, std::move(obj_expr));
         call->arguments.push_back(std::move(exp_param));
@@ -575,11 +533,9 @@ std::unique_ptr<Expression> Parser::parse_call_expression(std::unique_ptr<Expres
 std::unique_ptr<Expression> Parser::parse_dot_expression(std::unique_ptr<Expression> expr) {
     auto dot = expect(TokenType::Dot);
     auto id = parse_identifier();
-    auto base = base_node_from_others(expr->base().get(), id->base.get());
     auto prop = std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(id));
-    auto member =
-        std::make_unique<MemberExpr>(std::move(base), std::move(expr), dot->comments,
-                                     std::move(prop), std::vector<std::shared_ptr<Comment>>{});
+    auto member = std::make_unique<MemberExpr>(std::move(expr), dot->comments, std::move(prop),
+                                               std::vector<std::shared_ptr<Comment>>{});
     auto ret = std::make_unique<Expression>(Expression::Type::MemberExpr, std::move(member));
     return ret;
 }
@@ -591,7 +547,7 @@ std::unique_ptr<Expression> Parser::parse_assign_statement() {
 
 std::unique_ptr<Statement> Parser::parse_expression_statement() {
     auto expr = parse_expression();
-    auto expr_stmt = std::make_unique<ExprStmt>(base_node(expr->base()->location), std::move(expr));
+    auto expr_stmt = std::make_unique<ExprStmt>(std::move(expr));
     auto stmt =
         std::make_unique<Statement>(Statement::Type::ExpressionStatement, std::move(expr_stmt));
     return stmt;
@@ -627,9 +583,7 @@ std::unique_ptr<ImportDeclaration> Parser::parse_import_declaration(
     if (peek()->tok == TokenType::Ident) {
         alias = parse_identifier();
     }
-    auto path = parse_string_literal();
-    auto base = base_node_from_other_end_c_a(t.get(), path->base.get(), t.get(), attrs.value());
-    return std::make_unique<ImportDeclaration>(std::move(base), std::move(alias), std::move(path));
+    return std::make_unique<ImportDeclaration>(std::move(alias), parse_string_literal());
 }
 
 std::tuple<std::unique_ptr<PackageClause>, std::optional<std::vector<std::shared_ptr<Attribute>>>>
@@ -638,7 +592,6 @@ Parser::parse_package_clause(const std::vector<std::shared_ptr<Attribute>>& attr
     if (t->tok == TokenType::Package) {
         auto tt = consume();
         auto ident = parse_identifier();
-        auto base = base_node_from_other_end_c_a(tt.get(), ident->base.get(), tt.get(), attributes);
         return {std::make_unique<PackageClause>(), std::nullopt};
     }
     return {nullptr, attributes};
@@ -648,9 +601,7 @@ std::tuple<std::unique_ptr<FloatLit>, TokenError> Parser::parse_float_literal() 
     auto t = expect(TokenType::Float);
     try {
         long double value = std::stod(t->lit);
-        auto ret = std::make_unique<FloatLit>();
-        ret->base = base_node_from_token(t.get());
-        ret->value = value;
+        auto ret = std::make_unique<FloatLit>(value);
         return {std::move(ret), TokenError()};
     } catch (...) {
         TokenError tok_err;
@@ -662,7 +613,6 @@ std::tuple<std::unique_ptr<FloatLit>, TokenError> Parser::parse_float_literal() 
 std::unique_ptr<IntegerLit> Parser::parse_int_literal() {
     auto t = expect(TokenType::Int);
     auto ret = std::make_unique<IntegerLit>();
-    ret->base = base_node_from_token(t.get());
     if (t->lit.starts_with('0') && t->lit.length() > 1) {
         errs_.emplace_back("invalid integer literal " + t->lit +
                            ": nonzero value cannot start with 0");
@@ -683,20 +633,13 @@ std::unique_ptr<IntegerLit> Parser::parse_int_literal() {
 
 std::unique_ptr<Identifier> Parser::parse_identifier() {
     auto t = expect_or_skip(TokenType::Ident);
-    auto ret = std::make_unique<Identifier>();
-    ret->base = base_node_from_token(t.get());
-    ret->name = t->lit;
-    return ret;
+    return std::make_unique<Identifier>(std::move(t->lit));
 }
 
-std::unique_ptr<Expression> Parser::create_bad_expression_with_text(std::unique_ptr<Token> tok,
-                                                                    std::string_view text) {
-    auto base = std::make_shared<BaseNode>();
-    base->location = source_location(tok->start_pos, tok->end_pos);
-
+std::unique_ptr<Expression> Parser::create_bad_expression_with_text(
+    [[__maybe_unused__]] std::unique_ptr<Token> tok, std::string_view text) {
     auto expr = std::make_unique<BadExpr>();
     expr->text = text;
-    expr->base = base;
 
     auto ret = std::make_unique<Expression>();
     ret->type = Expression::Type::BadExpr;
@@ -715,10 +658,7 @@ std::unique_ptr<StringLit> Parser::new_string_literal(std::unique_ptr<Token> t) 
     if (!result.ok()) {
         return nullptr;
     }
-    auto ret = std::make_unique<StringLit>();
-    ret->base = base_node_from_token(t.get());
-    ret->value = result.t();
-    return ret;
+    return std::make_unique<StringLit>(result.t());
 }
 
 std::unique_ptr<StringLit> Parser::parse_string_literal() {
@@ -741,11 +681,9 @@ std::unique_ptr<Expression> Parser::parse_logical_or_expression_suffix(
         }
         auto t = scan();
         auto rhs = parse_logical_and_expression();
-        auto base = base_node_from_others_c(res->base().get(), rhs->base().get(), t.get());
-        res = std::make_unique<Expression>(Expression::Type::LogicalExpr,
-                                           std::make_unique<LogicalExpr>(std::move(base),
-                                                                         op.value(), std::move(res),
-                                                                         std::move(rhs)));
+        res = std::make_unique<Expression>(
+            Expression::Type::LogicalExpr,
+            std::make_unique<LogicalExpr>(op.value(), std::move(res), std::move(rhs)));
     }
     return res;
 }
@@ -776,7 +714,6 @@ std::unique_ptr<Expression> Parser::parse_comparison_expression_suffix(
         auto nret = std::make_unique<Expression>();
         nret->type = Expression::Type::BinaryExpr;
         auto binexpr = std::make_unique<BinaryExpr>();
-        binexpr->base = base_node_from_others_c(ret->base().get(), rhs->base().get(), t.get());
         binexpr->left = std::move(ret);
         binexpr->right = std::move(rhs);
         nret->expr = std::move(binexpr);
@@ -798,7 +735,6 @@ std::unique_ptr<Expression> Parser::parse_additive_expression_suffix(
         auto nret = std::make_unique<Expression>();
         nret->type = Expression::Type::BinaryExpr;
         auto binexpr = std::make_unique<BinaryExpr>();
-        binexpr->base = base_node_from_others_c(ret->base().get(), rhs->base().get(), t.get());
         binexpr->left = std::move(ret);
         binexpr->right = std::move(rhs);
         nret->expr = std::move(binexpr);
@@ -853,7 +789,7 @@ std::unique_ptr<Expression> Parser::parse_comparison_expression() {
 }
 
 std::unique_ptr<Expression> Parser::parse_logical_unary_expression() {
-    const auto* t = peek();
+    // const auto* t = peek();
     auto op = parse_logical_unary_operator();
     if (op) {
         consume();
@@ -861,7 +797,6 @@ std::unique_ptr<Expression> Parser::parse_logical_unary_expression() {
         auto ret = std::make_unique<Expression>();
         ret->type = Expression::Type::UnaryExpr;
         auto uexpr = std::make_unique<UnaryExpr>();
-        uexpr->base = base_node_from_other_end_c(t, expr->base().get(), t);
         uexpr->op = op.value();
         uexpr->argument = std::move(expr);
         ret->expr = std::move(uexpr);
@@ -884,7 +819,6 @@ std::unique_ptr<Expression> Parser::parse_logical_and_expression_suffix(
         nexpr->type = Expression::Type::LogicalExpr;
 
         auto logicexpr = std::make_unique<LogicalExpr>();
-        logicexpr->base = base_node_from_others_c(res->base().get(), rhs->base().get(), t.get());
         logicexpr->op = and_op.value();
         logicexpr->left = std::move(res);
         logicexpr->right = std::move(rhs);
@@ -914,15 +848,12 @@ std::optional<Operator> Parser::parse_logical_unary_operator() {
     return std::nullopt;
 }
 
-std::unique_ptr<Expression> Parser::create_placeholder_expression(const Token* tok) {
+std::unique_ptr<Expression> Parser::create_placeholder_expression(
+    [[__maybe_unused__]] const Token* tok) {
     auto expr = std::make_unique<Expression>();
     auto bad_expr = std::make_unique<BadExpr>();
-    bad_expr->base = std::make_shared<BaseNode>();
-    bad_expr->base->location = source_location(tok->start_pos, tok->end_pos);
-
     expr->type = Expression::Type::BadExpr;
     expr->expr = std::move(bad_expr);
-
     return expr;
 }
 
@@ -940,7 +871,6 @@ std::unique_ptr<Expression> Parser::parse_conditional_expression() {
                                                     : create_placeholder_expression(else_tok.get());
 
         auto cond_expr = std::make_unique<ConditionalExpr>();
-        cond_expr->base = base_node_from_other_end(t, alt->base().get());
         cond_expr->tk_if = if_tok->comments;
         cond_expr->tk_then = then_tok->comments;
         cond_expr->test = std::move(test);
@@ -959,7 +889,6 @@ std::unique_ptr<RegexpLit> Parser::parse_regexp_literral() {
     auto t = expect(TokenType::Regex);
     auto value = StrConv::parse_regex(t->lit);
     auto ret = std::make_unique<RegexpLit>();
-    ret->base = base_node_from_token(t.get());
     if (!value.ok()) {
         errs_.emplace_back(value.e());
     } else {
@@ -972,9 +901,7 @@ std::tuple<std::unique_ptr<DateTimeLit>, TokenError> Parser::parse_time_literal(
     auto t = expect(TokenType::Time);
     auto value = StrConv::parse_time(t->lit);
     if (value.ok()) {
-        auto datetime_lit = std::make_unique<DateTimeLit>();
-        datetime_lit->base = base_node_from_token(t.get());
-        datetime_lit->value = value.t();
+        auto datetime_lit = std::make_unique<DateTimeLit>(value.t());
         return {std::move(datetime_lit), TokenError()};
     }
     return {nullptr, TokenError(std::move(t))};
@@ -984,9 +911,7 @@ std::tuple<std::unique_ptr<DurationLit>, TokenError> Parser::parse_duration_lite
     auto t = expect(TokenType::Duration);
     auto value = StrConv::parse_duration(t->lit);
     if (value.ok()) {
-        auto dl = std::make_unique<DurationLit>();
-        dl->base = base_node_from_token(t.get());
-        dl->values = value.t();
+        auto dl = std::make_unique<DurationLit>(value.t());
         return {std::move(dl), TokenError()};
     }
     return {nullptr, TokenError()};
@@ -995,7 +920,6 @@ std::tuple<std::unique_ptr<DurationLit>, TokenError> Parser::parse_duration_lite
 std::unique_ptr<PipeLit> Parser::parse_pipe_literal() {
     auto t = expect(TokenType::PipeReceive);
     auto pipe_lit = std::make_unique<PipeLit>();
-    pipe_lit->base = base_node_from_token(t.get());
     return pipe_lit;
 }
 
@@ -1008,7 +932,6 @@ std::unique_ptr<Expression> Parser::parse_dict_items_rest(std::unique_ptr<Token>
 
     if (peek()->tok == TokenType::RBrack) {
         auto end = close(TokenType::RBrack);
-        dict_expr->base = base_node_from_tokens(start.get(), end.get());
         dict_expr->lbrack = std::move(start->comments);
         dict_expr->rbrack = std::move(end->comments);
         std::shared_ptr<DictItem> item = std::make_shared<DictItem>();
@@ -1039,7 +962,6 @@ std::unique_ptr<Expression> Parser::parse_dict_items_rest(std::unique_ptr<Token>
         }
 
         auto end = close(TokenType::RBrack);
-        dict_expr->base = base_node_from_tokens(start.get(), end.get());
         dict_expr->lbrack = std::move(start->comments);
         dict_expr->rbrack = std::move(end->comments);
         dict_expr->elements = std::move(items);
@@ -1057,7 +979,6 @@ std::unique_ptr<Expression> Parser::parse_array_items_rest(std::unique_ptr<Token
 
     if (peek()->tok == TokenType::RBrack) {
         auto end = close(TokenType::RBrack);
-        arr_expr->base = base_node_from_tokens(start.get(), end.get());
         arr_expr->lbrack = std::move(start->comments);
         auto arr_item = std::make_shared<ArrayItem>();
         arr_item->expression = std::move(init);
@@ -1092,7 +1013,6 @@ std::unique_ptr<Expression> Parser::parse_array_items_rest(std::unique_ptr<Token
             last = _this;
         }
         auto end = close(TokenType::RBrack);
-        arr_expr->base = base_node_from_tokens(start.get(), end.get());
         arr_expr->lbrack = std::move(start->comments);
         arr_expr->elements = std::move(items);
         arr_expr->rbrack = std::move(end->comments);
@@ -1108,11 +1028,9 @@ std::unique_ptr<Expression> Parser::parse_array_or_dict(std::unique_ptr<Token> s
     case TokenType::Colon: {
         consume();
         auto end = close(TokenType::RBrack);
-        auto base = base_node_from_tokens(start.get(), end.get());
         auto lbrack = start->comments;
         auto rbrack = end->comments;
         auto dict_expr = std::make_unique<DictExpr>();
-        dict_expr->base = std::move(base);
         dict_expr->lbrack = std::move(lbrack);
         dict_expr->rbrack = std::move(rbrack);
 
@@ -1124,11 +1042,9 @@ std::unique_ptr<Expression> Parser::parse_array_or_dict(std::unique_ptr<Token> s
     // empty array []
     case TokenType::RBrack: {
         auto end = close(TokenType::RBrack);
-        auto base = base_node_from_tokens(start.get(), end.get());
         auto lbrack = start->comments;
         auto rbrack = end->comments;
         auto arr_expr = std::make_unique<ArrayExpr>();
-        arr_expr->base = std::move(base);
         arr_expr->lbrack = std::move(lbrack);
         arr_expr->rbrack = std::move(rbrack);
 
@@ -1155,14 +1071,13 @@ std::unique_ptr<Expression> Parser::parse_array_or_dict(std::unique_ptr<Token> s
 std::unique_ptr<ObjectExpr> Parser::parse_object_body_suffix(std::unique_ptr<Identifier> id) {
     const auto* t = peek();
     std::unique_ptr<ObjectExpr> obj_expr = std::make_unique<ObjectExpr>();
-    obj_expr->base = std::make_shared<BaseNode>();
     if (t->tok == TokenType::Ident) {
         if (t->lit != "with") {
             errs_.emplace_back("");
         }
         auto tt = consume();
         auto props = parse_property_list();
-        std::shared_ptr<WithSource> with_source = std::make_shared<WithSource>();
+        auto with_source = std::make_unique<WithSource>();
         with_source->source = std::move(id);
         with_source->with = t->comments;
         obj_expr->with = std::move(with_source);
@@ -1207,14 +1122,7 @@ std::unique_ptr<Property> Parser::parse_property_suffix(std::unique_ptr<Property
         value = parse_property_value();
         sep = t->comments;
     }
-    std::shared_ptr<BaseNode> value_base;
-    if (value) {
-        value_base = value->base();
-    } else {
-        value_base = key->base();
-    }
     std::unique_ptr<Property> ret = std::make_unique<Property>();
-    ret->base = base_node_from_others(key->base().get(), value_base.get());
     ret->key = std::move(key);
     ret->value = std::move(value);
     ret->separator = std::move(sep);
@@ -1249,7 +1157,6 @@ std::unique_ptr<Expression> Parser::parse_expression_while_more(
             std::unique_ptr<Expression> ex = std::make_unique<Expression>();
             ex->type = Expression::Type::BinaryExpr;
             std::unique_ptr<BinaryExpr> be = std::make_unique<BinaryExpr>();
-            be->base = base_node_from_others(init->base().get(), e->base().get());
             be->op = Operator::InvalidOperator;
             be->left = std::move(init);
             be->right = std::move(e);
@@ -1284,13 +1191,9 @@ std::unique_ptr<Property> Parser::parse_invalid_property() {
             value = parse_property_value();
         }
     }
-    auto end_start_pos = peek()->start_pos;
     std::unique_ptr<Property> p;
-    auto k = std::make_unique<PropertyKey>(
-        PropertyKey::Type::StringLiteral,
-        std::make_unique<StringLit>(base_node_from_pos(t->start_pos, t->start_pos), "<invali>"));
-
-    p->base = base_node_from_pos(t->start_pos, end_start_pos);
+    auto k = std::make_unique<PropertyKey>(PropertyKey::Type::StringLiteral,
+                                           std::make_unique<StringLit>("<invali>"));
     p->value = std::move(value);
     p->key = std::move(k);
     return p;
@@ -1347,12 +1250,10 @@ std::unique_ptr<ObjectExpr> Parser::parse_object_body() {
         auto propk = std::make_unique<PropertyKey>(PropertyKey::Type::StringLiteral, std::move(s));
         auto props = parse_property_list_suffix(std::move(propk));
         auto objexpr = std::make_unique<ObjectExpr>();
-        objexpr->base = std::make_shared<BaseNode>();
         objexpr->properties = std::move(props);
         return objexpr;
     }
     auto objexpr = std::make_unique<ObjectExpr>();
-    objexpr->base = std::make_shared<BaseNode>();
     objexpr->properties = parse_property_list();
     return objexpr;
 }
@@ -1361,7 +1262,6 @@ std::unique_ptr<ObjectExpr> Parser::parse_object_literal() {
     auto start = open(TokenType::LBrace, TokenType::RBrace);
     auto obj = parse_object_body();
     auto end = close(TokenType::RBrace);
-    obj->base = base_node_from_tokens(start.get(), end.get());
     obj->lbrace = std::move(start->comments);
     obj->rbrace = std::move(end->comments);
     return obj;
@@ -1389,31 +1289,23 @@ std::tuple<std::unique_ptr<StringExpr>, TokenError> Parser::parse_string_express
             if (!value.ok()) {
                 return {nullptr, TokenError(std::move(t))};
             }
-            std::shared_ptr<StringExprPart> p = std::make_shared<StringExprPart>();
-            std::shared_ptr<TextPart> tp = std::make_shared<TextPart>();
-            tp->base = base_node_from_token(t.get());
+            auto tp = std::make_unique<TextPart>();
             tp->value = value.t();
-            p->type = StringExprPart::Type::Text;
-            p->part = tp;
-            parts.emplace_back(p);
+            auto p = std::make_unique<StringExprPart>(StringExprPart::Type::Text, std::move(tp));
+            parts.emplace_back(std::move(p));
             break;
         }
         case TokenType::StringExpr: {
             auto expr = parse_expression();
             auto end = expect(TokenType::RBrace);
-            std::shared_ptr<StringExprPart> p = std::make_shared<StringExprPart>();
-            std::shared_ptr<InterpolatedPart> ip = std::make_shared<InterpolatedPart>();
-            ip->base = base_node_from_tokens(t.get(), end.get());
-            ip->expression = std::move(expr);
-            p->type = StringExprPart::Type::Interpolated;
-            p->part = ip;
-            parts.emplace_back(p);
+            auto ip = std::make_unique<InterpolatedPart>(std::move(expr));
+            auto p =
+                std::make_unique<StringExprPart>(StringExprPart::Type::Interpolated, std::move(ip));
+            parts.emplace_back(std::move(p));
             break;
         }
         case TokenType::Quote: {
-            auto string_expr = std::make_unique<StringExpr>();
-            string_expr->base = base_node_from_tokens(start.get(), t.get());
-            string_expr->parts = std::move(parts);
+            auto string_expr = std::make_unique<StringExpr>(std::move(parts));
             return {std::move(string_expr), TokenError()};
         }
         default: {
@@ -1423,7 +1315,6 @@ std::tuple<std::unique_ptr<StringExpr>, TokenError> Parser::parse_string_express
                << token_to_string(t->tok);
             errs_.emplace_back(ss.str());
             auto string_expr = std::make_unique<StringExpr>();
-            string_expr->base = base_node_from_tokens(start.get(), t.get());
             return {std::move(string_expr), TokenError()};
         }
         }
@@ -1463,15 +1354,13 @@ std::unique_ptr<Expression> Parser::parse_paren_body_expression(std::unique_ptr<
         expr->type = Expression::Type::BadExpr;
         auto bad_expr = std::make_unique<BadExpr>();
         SourceLocation sl(t->start_pos, t->end_pos);
-        bad_expr->base = std::make_shared<BaseNode>(sl);
         bad_expr->text = t->lit;
         expr->expr = std::move(bad_expr);
     }
     auto rparen = close(TokenType::RParen);
     auto ret = std::make_unique<Expression>();
     ret->type = Expression::Type::ParenExpr;
-    ret->expr = std::make_unique<ParenExpr>(base_node_from_tokens(lparen.get(), rparen.get()),
-                                            lparen->comments, std::move(expr), rparen->comments);
+    ret->expr = std::make_unique<ParenExpr>(lparen->comments, std::move(expr), rparen->comments);
     return ret;
 }
 
@@ -1490,20 +1379,15 @@ std::vector<std::shared_ptr<Property>> Parser::parse_parameter_list() {
 
 std::unique_ptr<Property> Parser::parse_parameter() {
     auto key = parse_identifier();
-    std::unique_ptr<BaseNode> base;
     std::vector<std::shared_ptr<Comment>> separator;
     std::unique_ptr<Expression> value;
     if (peek()->tok == TokenType::Assign) {
         auto t = scan();
         separator = std::move(t->comments);
         auto v = parse_expression();
-        base = base_node_from_others(key->base.get(), v->base().get());
         value = std::move(v);
-    } else {
-        base = base_node(key->base->location);
     }
     return std::make_unique<Property>(
-        std::move(base),
         std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
         std::vector<std::shared_ptr<Comment>>{}, std::move(value), separator);
 }
@@ -1516,7 +1400,6 @@ std::unique_ptr<Expression> Parser::parse_paren_ident_expression(std::unique_ptr
         const auto* next = peek();
         if (next->tok == TokenType::Arrow) {
             auto prop = std::make_shared<Property>(
-                base_node(key->base->location),
                 std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
                 std::vector<std::shared_ptr<Comment>>{}, nullptr,
                 std::vector<std::shared_ptr<Comment>>{});
@@ -1526,7 +1409,7 @@ std::unique_ptr<Expression> Parser::parse_paren_ident_expression(std::unique_ptr
         return std::make_unique<Expression>(
             Expression::Type::ParenExpr,
             std::make_unique<ParenExpr>(
-                base_node_from_tokens(lparen.get(), tt.get()), lparen->comments,
+                lparen->comments,
                 std::make_unique<Expression>(Expression::Type::Identifier, std::move(key)),
                 t->comments));
     }
@@ -1534,7 +1417,6 @@ std::unique_ptr<Expression> Parser::parse_paren_ident_expression(std::unique_ptr
         auto tt = consume();
         auto value = parse_expression();
         auto prop = std::make_shared<Property>(
-            base_node_from_others(key->base.get(), value->base().get()),
             std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
             t->comments, std::move(value), std::vector<std::shared_ptr<Comment>>{});
         std::vector<std::shared_ptr<Property>> params = {prop};
@@ -1550,7 +1432,6 @@ std::unique_ptr<Expression> Parser::parse_paren_ident_expression(std::unique_ptr
     if (t->tok == TokenType::Comma) {
         auto tt = consume();
         auto prop = std::make_shared<Property>(
-            base_node(key->base->location),
             std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
             std::vector<std::shared_ptr<Comment>>{}, nullptr, t->comments);
         std::vector<std::shared_ptr<Property>> params = {prop};
@@ -1571,17 +1452,15 @@ std::unique_ptr<Expression> Parser::parse_paren_ident_expression(std::unique_ptr
             errs_.emplace_back(ss.str());
             continue;
         }
-        auto base = base_node_from_others(expr->base().get(), rhs->base().get());
-        expr = std::make_unique<Expression>(
-            Expression::Type::BinaryExpr,
-            std::make_unique<BinaryExpr>(std::move(base), Operator::InvalidOperator,
-                                         std::move(expr), std::move(rhs)));
+        expr = std::make_unique<Expression>(Expression::Type::BinaryExpr,
+                                            std::make_unique<BinaryExpr>(Operator::InvalidOperator,
+                                                                         std::move(expr),
+                                                                         std::move(rhs)));
     }
     auto rparen = close(TokenType::RParen);
     return std::make_unique<Expression>(
         Expression::Type::ParenExpr,
-        std::make_unique<ParenExpr>(base_node_from_tokens(lparen.get(), rparen.get()),
-                                    lparen->comments, std::move(expr), rparen->comments));
+        std::make_unique<ParenExpr>(lparen->comments, std::move(expr), rparen->comments));
 }
 
 std::unique_ptr<Expression> Parser::parse_function_expression(
@@ -1601,20 +1480,17 @@ std::unique_ptr<Expression> Parser::parse_function_body_expression(
     const auto* t = peek();
     if (t->tok == TokenType::LBrace) {
         auto block = parse_block();
-        auto base = base_node_from_other_end(lparen.get(), block->base.get());
         auto fbody = std::make_unique<FunctionBody>(FunctionBody::Type::Block, std::move(block));
-        auto func =
-            std::make_unique<FunctionExpr>(std::move(base), lparen->comments, params,
-                                           rparen->comments, arrow->comments, std::move(fbody));
+        auto func = std::make_unique<FunctionExpr>(lparen->comments, params, rparen->comments,
+                                                   arrow->comments, std::move(fbody));
 
         auto expr = std::make_unique<Expression>(Expression::Type::FunctionExpr, std::move(func));
         return expr;
     }
     auto expr = parse_expression();
-    auto base = base_node_from_other_end(lparen.get(), expr->base().get());
     auto fbody = std::make_unique<FunctionBody>(FunctionBody::Type::Expression, std::move(expr));
-    auto func = std::make_unique<FunctionExpr>(std::move(base), lparen->comments, params,
-                                               rparen->comments, arrow->comments, std::move(fbody));
+    auto func = std::make_unique<FunctionExpr>(lparen->comments, params, rparen->comments,
+                                               arrow->comments, std::move(fbody));
     auto ret = std::make_unique<Expression>(Expression::Type::FunctionExpr, std::move(func));
     return ret;
 }
@@ -1623,8 +1499,7 @@ std::unique_ptr<Block> Parser::parse_block() {
     auto start = open(TokenType::LBrace, TokenType::RBrace);
     auto stmts = parse_statement_list({});
     auto end = close(TokenType::RBrace);
-    return std::make_unique<Block>(base_node_from_tokens(start.get(), end.get()), start->comments,
-                                   stmts, end->comments);
+    return std::make_unique<Block>(start->comments, stmts, end->comments);
 }
 
 std::unique_ptr<Expression> Parser::parse_primary_expression() {
@@ -1723,10 +1598,7 @@ std::vector<std::shared_ptr<AttributeParam>> Parser::parse_attribute_params() {
     std::vector<std::shared_ptr<AttributeParam>> params;
     while (more()) {
         auto value = parse_primary_expression();
-        auto start_pos = value->base()->location.start;
-        auto end_pos = value->base()->location.end;
         std::vector<std::shared_ptr<Comment>> comments;
-
         if (more()) {
             const auto* t = peek();
             if (t->tok != TokenType::Comma) {
@@ -1734,39 +1606,28 @@ std::vector<std::shared_ptr<AttributeParam>> Parser::parse_attribute_params() {
                                    token_to_string(t->tok));
             } else {
                 auto tt = consume();
-                end_pos = tt->end_pos;
                 comments = tt->comments;
             }
         }
 
         auto param = std::make_shared<AttributeParam>();
-        param->base = base_node_from_pos(start_pos, end_pos);
         param->value = std::move(value);
         param->comma = comments;
         params.emplace_back(param);
     }
     return params;
 }
-std::unique_ptr<Attribute> Parser::parse_attribute_rest(std::unique_ptr<Token> tok,
-                                                        const std::string& name) {
+
+std::unique_ptr<Attribute> Parser::parse_attribute_rest(
+    [[__maybe_unused__]] std::unique_ptr<Token> tok, const std::string& name) {
     // Parenthesis are optional. No parenthesis means no parameters.
     if (peek()->tok != TokenType::LParen) {
-        auto ret = std::make_unique<Attribute>();
-        ret->base = base_node_from_token(tok.get());
-        ret->name = name;
-        return ret;
+        return std::make_unique<Attribute>(name, std::vector<std::shared_ptr<AttributeParam>>{});
     }
-
     open(TokenType::LParen, TokenType::RParen);
     auto params = parse_attribute_params();
-    auto end = close(TokenType::RParen);
-    auto base = base_node_from_tokens(tok.get(), end.get());
-    base->comments = tok->comments;
-    auto ret = std::make_unique<Attribute>();
-    ret->base = std::move(base);
-    ret->name = name;
-    ret->params = std::move(params);
-    return ret;
+    close(TokenType::RParen);
+    return std::make_unique<Attribute>(name, params);
 }
 
 std::unique_ptr<Attribute> Parser::parse_attribute_inner() {
@@ -1799,69 +1660,6 @@ SourceLocation Parser::source_location(const Position& start, const Position& en
     auto s = scanner_->offset(start);
     auto e = scanner_->offset(end);
     ret.source = std::string(source_.data() + s, (e - s));
-    return ret;
-}
-
-std::unique_ptr<BaseNode> Parser::base_node_from_pos(const Position& start, const Position& end) {
-    return base_node(source_location(start, end));
-}
-
-std::unique_ptr<BaseNode> Parser::base_node_from_others(const BaseNode* start,
-                                                        const BaseNode* end) {
-    return base_node_from_pos(start->location.start, end->location.end);
-}
-
-std::unique_ptr<BaseNode> Parser::base_node_from_others_c(const BaseNode* start,
-                                                          const BaseNode* end,
-                                                          const Token* comments_from) {
-    auto base = base_node_from_pos(start->location.start, end->location.end);
-    base->comments = comments_from->comments;
-    return base;
-}
-
-std::unique_ptr<BaseNode> Parser::base_node_from_other_end_c_a(
-    const Token* start,
-    const BaseNode* end,
-    const Token* comments_from,
-    const std::vector<std::shared_ptr<Attribute>>& attributes) {
-    auto base = base_node(source_location(start->start_pos, end->location.end));
-    base->comments = comments_from->comments;
-    base->attributes = attributes;
-    return base;
-}
-
-std::unique_ptr<BaseNode> Parser::base_node_from_other_end_c(const Token* start,
-                                                             const BaseNode* end,
-                                                             const Token* comments_from) {
-    auto base = base_node(source_location(start->start_pos, end->location.end));
-    base->comments = comments_from->comments;
-    return base;
-}
-
-std::unique_ptr<BaseNode> Parser::base_node_from_other_end(const Token* start,
-                                                           const BaseNode* end) {
-    return base_node(source_location(start->start_pos, end->location.end));
-}
-
-std::unique_ptr<BaseNode> Parser::base_node_from_other_start(const BaseNode* start,
-                                                             const Token* end) {
-    return base_node(source_location(start->location.start, end->end_pos));
-}
-
-std::unique_ptr<BaseNode> Parser::base_node_from_tokens(const Token* start, const Token* end) {
-    return base_node(source_location(start->start_pos, end->end_pos));
-}
-
-std::unique_ptr<BaseNode> Parser::base_node_from_token(const Token* token) {
-    auto base = base_node_from_tokens(token, token);
-    base->comments = token->comments;
-    return base;
-}
-
-std::unique_ptr<BaseNode> Parser::base_node(SourceLocation location) {
-    auto ret = std::make_unique<BaseNode>();
-    ret->location = std::move(location);
-    ret->errors = errs_;
     return ret;
 }
 

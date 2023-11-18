@@ -84,24 +84,24 @@ private:
     // lit for the token. Otherwise, it will return NoPos.
     std::unique_ptr<Token> close(TokenType end);
 
-    std::unique_ptr<BaseNode> base_node(SourceLocation location);
-    std::unique_ptr<BaseNode> base_node_from_token(const Token* token);
-    std::unique_ptr<BaseNode> base_node_from_tokens(const Token* start, const Token* end);
-    std::unique_ptr<BaseNode> base_node_from_other_start(const BaseNode* start, const Token* end);
-    std::unique_ptr<BaseNode> base_node_from_other_end(const Token* start, const BaseNode* end);
-    std::unique_ptr<BaseNode> base_node_from_other_end_c(const Token* start,
-                                                         const BaseNode* end,
-                                                         const Token* comments_from);
-    std::unique_ptr<BaseNode> base_node_from_other_end_c_a(
-        const Token* start,
-        const BaseNode* end,
-        const Token* comments_from,
-        const std::vector<std::shared_ptr<Attribute>>& attributes);
-    std::unique_ptr<BaseNode> base_node_from_others_c(const BaseNode* start,
-                                                      const BaseNode* end,
-                                                      const Token* comments_from);
-    std::unique_ptr<BaseNode> base_node_from_others(const BaseNode* start, const BaseNode* end);
-    std::unique_ptr<BaseNode> base_node_from_pos(const Position& start, const Position& end);
+    // std::unique_ptr<BaseNode> base_node(SourceLocation location);
+    // std::unique_ptr<BaseNode> base_node_from_token(const Token* token);
+    // std::unique_ptr<BaseNode> base_node_from_tokens(const Token* start, const Token* end);
+    // std::unique_ptr<BaseNode> base_node_from_other_start(const BaseNode* start, const Token*
+    // end); std::unique_ptr<BaseNode> base_node_from_other_end(const Token* start, const BaseNode*
+    // end); std::unique_ptr<BaseNode> base_node_from_other_end_c(const Token* start,
+    //                                                      const BaseNode* end,
+    //                                                      const Token* comments_from);
+    // std::unique_ptr<BaseNode> base_node_from_other_end_c_a(
+    //     const Token* start,
+    //     const BaseNode* end,
+    //     const Token* comments_from,
+    //     const std::vector<std::shared_ptr<Attribute>>& attributes);
+    // std::unique_ptr<BaseNode> base_node_from_others_c(const BaseNode* start,
+    //                                                   const BaseNode* end,
+    //                                                   const Token* comments_from);
+    // std::unique_ptr<BaseNode> base_node_from_others(const BaseNode* start, const BaseNode* end);
+    // std::unique_ptr<BaseNode> base_node_from_pos(const Position& start, const Position& end);
     SourceLocation source_location(const Position& start, const Position& end);
 
     std::vector<std::shared_ptr<Attribute>> parse_attribute_inner_list();
