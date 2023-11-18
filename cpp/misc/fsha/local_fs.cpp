@@ -14,8 +14,6 @@
 
 namespace pl {
 
-ssize_t LocalFile::size() const { 
-    struct stat statbuf; 
-}
+ssize_t LocalFile::size() const { struct stat statbuf; }
 
 } // namespace pl

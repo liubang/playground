@@ -15,8 +15,8 @@
 
 namespace pl {
 
-constexpr static uint32_t FS_WRITE  = 1 << 0;
-constexpr static uint32_t FS_TRUNC  = 1 << 1;
+constexpr static uint32_t FS_WRITE = 1 << 0;
+constexpr static uint32_t FS_TRUNC = 1 << 1;
 constexpr static uint32_t FS_DIRECT = 1 << 2;
 
 enum class FsType {
