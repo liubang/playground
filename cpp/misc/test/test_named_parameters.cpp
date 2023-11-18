@@ -24,33 +24,31 @@ struct myconf {
     std::string address_ = "auto";
 };
 
-inline static void
-init_arg(myconf& conf,
-         const boost::parameter::aux::tagged_argument<tag::num_cpus, const int>& arg) {
+inline static void init_arg(
+    myconf& conf, const boost::parameter::aux::tagged_argument<tag::num_cpus, const int>& arg) {
     conf.num_cpus_ = arg[num_cpus];
 }
 
-inline static void
-init_arg(myconf& conf,
-         const boost::parameter::aux::tagged_argument<tag::num_gpus, const int>& arg) {
+inline static void init_arg(
+    myconf& conf, const boost::parameter::aux::tagged_argument<tag::num_gpus, const int>& arg) {
     conf.num_gpus_ = arg[num_gpus];
 }
 
-inline static void
-init_arg(myconf& conf,
-         const boost::parameter::aux::tagged_argument<tag::object_store_memory, const int>& arg) {
+inline static void init_arg(
+    myconf& conf,
+    const boost::parameter::aux::tagged_argument<tag::object_store_memory, const int>& arg) {
     conf.object_store_memory_ = arg[object_store_memory];
 }
 
-inline static void
-init_arg(myconf& conf,
-         const boost::parameter::aux::tagged_argument<tag::ignore_reinit_error, const bool>& arg) {
+inline static void init_arg(
+    myconf& conf,
+    const boost::parameter::aux::tagged_argument<tag::ignore_reinit_error, const bool>& arg) {
     conf.ignore_reinit_error_ = arg[ignore_reinit_error];
 }
 
-inline static void
-init_arg(myconf& conf,
-         const boost::parameter::aux::tagged_argument<tag::address, const std::string>& arg) {
+inline static void init_arg(
+    myconf& conf,
+    const boost::parameter::aux::tagged_argument<tag::address, const std::string>& arg) {
     conf.address_ = arg[address];
 }
 

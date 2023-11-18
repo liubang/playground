@@ -114,7 +114,8 @@ public:
                 case '$':
                     s.push_back('$');
                     break;
-                case 'x': {
+                case 'x':
+                {
                     auto ret = push_hex_byte(lit, i, &s);
                     if (!ret.ok()) {
                         return ret;
