@@ -48,20 +48,19 @@ std::unique_ptr<File> Parser::parse_file(const std::string& fname) {
 }
 
 std::vector<std::shared_ptr<Statement>> Parser::parse_statement_list(
-    std::optional<std::vector<std::shared_ptr<Attribute>>> attributes) {
+    const std::optional<std::vector<std::shared_ptr<Attribute>>>& attributes) {
     std::vector<std::shared_ptr<Statement>> stmts;
     for (;;) {
         if (!more()) {
             return stmts;
         }
         stmts.emplace_back(parse_statement(attributes));
-        *attributes = {};
     }
     return stmts;
 }
 
 std::unique_ptr<Statement> Parser::parse_statement(
-    std::optional<std::vector<std::shared_ptr<Attribute>>> attributes) {
+    const std::optional<std::vector<std::shared_ptr<Attribute>>>& attributes) {
     auto opt = depth_guard<std::unique_ptr<Statement>>([this, &attributes] {
         return parse_statement_inner(attributes);
     });
@@ -78,7 +77,7 @@ std::unique_ptr<Statement> Parser::parse_statement(
 }
 
 std::unique_ptr<Statement> Parser::parse_statement_inner(
-    std::optional<std::vector<std::shared_ptr<Attribute>>> attributes) {
+    [[__maybe_unused__]] const std::optional<std::vector<std::shared_ptr<Attribute>>>& attributes) {
     const auto* t = peek();
     std::unique_ptr<Statement> stmt;
     switch (t->tok) {
@@ -120,7 +119,6 @@ std::unique_ptr<Statement> Parser::parse_statement_inner(
         auto bad_stmt = std::make_unique<BadStmt>(t->lit);
         stmt = std::make_unique<Statement>(Statement::Type::BadStatement, std::move(bad_stmt));
     }
-    stmt->base()->attributes = *attributes;
     return stmt;
 }
 
