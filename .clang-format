@@ -52,8 +52,10 @@ AttributeMacros:
 BinPackArguments: true
 BinPackParameters: false
 BitFieldColonSpacing: Both
+# BreakBeforeBraces: Attach
+BreakBeforeBraces: Custom
 BraceWrapping:
-  AfterCaseLabel: false
+  AfterCaseLabel: true
   AfterClass: false
   AfterControlStatement: Never
   AfterEnum: false
@@ -76,7 +78,6 @@ BreakAfterJavaFieldAnnotations: false
 BreakArrays: true
 BreakBeforeBinaryOperators: None
 BreakBeforeConceptDeclarations: Always
-BreakBeforeBraces: Attach
 BreakBeforeInlineASMColon: OnlyMultiline
 BreakBeforeTernaryOperators: true
 BreakConstructorInitializers: BeforeColon
