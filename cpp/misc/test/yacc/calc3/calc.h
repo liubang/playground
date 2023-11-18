@@ -92,8 +92,8 @@ struct Ast* NewCall(CalcResult* result, struct Symbol* s, struct Ast* l);
 struct Ast* NewRef(CalcResult* result, struct Symbol* s);
 struct Ast* NewAssign(CalcResult* result, struct Symbol* s, struct Ast* v);
 struct Ast* NewNum(CalcResult* result, double d);
-struct Ast*
-NewFlow(CalcResult* result, int nodetype, struct Ast* cond, struct Ast* tl, struct Ast* tr);
+struct Ast* NewFlow(
+    CalcResult* result, int nodetype, struct Ast* cond, struct Ast* tl, struct Ast* tr);
 
 void DoDef(CalcResult* result, struct Symbol* name, struct SymList* syms, struct Ast* func);
 double Eval(struct Ast*);
