@@ -222,19 +222,17 @@ struct Statement {
     };
     Type type;
 
-    using StmtVari = std::variant<std::unique_ptr<ExprStmt>,
-                                  std::unique_ptr<VariableAssgn>,
-                                  std::unique_ptr<OptionStmt>,
-                                  std::unique_ptr<ReturnStmt>,
-                                  std::unique_ptr<BadStmt>,
-                                  std::unique_ptr<TestCaseStmt>,
-                                  std::unique_ptr<BuiltinStmt>>;
-    StmtVari stmt;
+    using StmtT = std::variant<std::unique_ptr<ExprStmt>,
+                               std::unique_ptr<VariableAssgn>,
+                               std::unique_ptr<OptionStmt>,
+                               std::unique_ptr<ReturnStmt>,
+                               std::unique_ptr<BadStmt>,
+                               std::unique_ptr<TestCaseStmt>,
+                               std::unique_ptr<BuiltinStmt>>;
+    StmtT stmt;
 
     Statement() = default;
-    Statement(Type type, StmtVari stmt) : type(type), stmt(std::move(stmt)) {}
-
-    std::shared_ptr<BaseNode> base() { return nullptr; }
+    Statement(Type type, StmtT stmt) : type(type), stmt(std::move(stmt)) {}
 };
 
 // expr
@@ -415,13 +413,12 @@ struct StringExprPart {
         Text,
         Interpolated,
     };
-    using StringExprType =
-        std::variant<std::unique_ptr<TextPart>, std::unique_ptr<InterpolatedPart>>;
+    using StringExprT = std::variant<std::unique_ptr<TextPart>, std::unique_ptr<InterpolatedPart>>;
 
     Type type;
-    StringExprType part;
+    StringExprT part;
     StringExprPart() = default;
-    StringExprPart(Type type, StringExprType part) : type(type), part(std::move(part)) {}
+    StringExprPart(Type type, StringExprT part) : type(type), part(std::move(part)) {}
 };
 
 struct TextPart {
@@ -540,35 +537,35 @@ struct Expression {
     };
     Type type;
 
-    using ExprType = std::variant<std::unique_ptr<Identifier>,
-                                  std::unique_ptr<ArrayExpr>,
-                                  std::unique_ptr<DictExpr>,
-                                  std::unique_ptr<FunctionExpr>,
-                                  std::unique_ptr<LogicalExpr>,
-                                  std::unique_ptr<ObjectExpr>,
-                                  std::unique_ptr<MemberExpr>,
-                                  std::unique_ptr<IndexExpr>,
-                                  std::unique_ptr<BinaryExpr>,
-                                  std::unique_ptr<UnaryExpr>,
-                                  std::unique_ptr<PipeExpr>,
-                                  std::unique_ptr<CallExpr>,
-                                  std::unique_ptr<ConditionalExpr>,
-                                  std::unique_ptr<StringExpr>,
-                                  std::unique_ptr<ParenExpr>,
-                                  std::unique_ptr<IntegerLit>,
-                                  std::unique_ptr<FloatLit>,
-                                  std::unique_ptr<StringLit>,
-                                  std::unique_ptr<DurationLit>,
-                                  std::unique_ptr<UintLit>,
-                                  std::unique_ptr<BooleanLit>,
-                                  std::unique_ptr<DateTimeLit>,
-                                  std::unique_ptr<RegexpLit>,
-                                  std::unique_ptr<PipeLit>,
-                                  std::unique_ptr<LabelLit>,
-                                  std::unique_ptr<BadExpr>>;
-    ExprType expr;
+    using ExprT = std::variant<std::unique_ptr<Identifier>,
+                               std::unique_ptr<ArrayExpr>,
+                               std::unique_ptr<DictExpr>,
+                               std::unique_ptr<FunctionExpr>,
+                               std::unique_ptr<LogicalExpr>,
+                               std::unique_ptr<ObjectExpr>,
+                               std::unique_ptr<MemberExpr>,
+                               std::unique_ptr<IndexExpr>,
+                               std::unique_ptr<BinaryExpr>,
+                               std::unique_ptr<UnaryExpr>,
+                               std::unique_ptr<PipeExpr>,
+                               std::unique_ptr<CallExpr>,
+                               std::unique_ptr<ConditionalExpr>,
+                               std::unique_ptr<StringExpr>,
+                               std::unique_ptr<ParenExpr>,
+                               std::unique_ptr<IntegerLit>,
+                               std::unique_ptr<FloatLit>,
+                               std::unique_ptr<StringLit>,
+                               std::unique_ptr<DurationLit>,
+                               std::unique_ptr<UintLit>,
+                               std::unique_ptr<BooleanLit>,
+                               std::unique_ptr<DateTimeLit>,
+                               std::unique_ptr<RegexpLit>,
+                               std::unique_ptr<PipeLit>,
+                               std::unique_ptr<LabelLit>,
+                               std::unique_ptr<BadExpr>>;
+    ExprT expr;
     Expression() = default;
-    Expression(Type t, ExprType expr) : type(t), expr(std::move(expr)) {}
+    Expression(Type t, ExprT expr) : type(t), expr(std::move(expr)) {}
 };
 
 // operator
@@ -682,13 +679,13 @@ struct MemberAssgn {
 };
 
 struct Assignment {
-    using AssiType = std::variant<std::unique_ptr<VariableAssgn>, std::unique_ptr<MemberAssgn>>;
+    using AssiT = std::variant<std::unique_ptr<VariableAssgn>, std::unique_ptr<MemberAssgn>>;
     enum class Type { VariableAssignment, MemberAssignment };
     Type type;
-    AssiType value;
+    AssiT value;
 
     Assignment() = default;
-    Assignment(Assignment::Type type, AssiType value) : type(type), value(std::move(value)) {}
+    Assignment(Assignment::Type type, AssiT value) : type(type), value(std::move(value)) {}
 };
 
 // property
@@ -707,14 +704,14 @@ struct Property {
 };
 
 struct PropertyKey {
-    using PropKeyType = std::variant<std::shared_ptr<Identifier>, std::shared_ptr<StringLit>>;
+    using PropKeyT = std::variant<std::unique_ptr<Identifier>, std::unique_ptr<StringLit>>;
     enum class Type { Identifier, StringLiteral };
 
     Type type;
-    PropKeyType key;
+    PropKeyT key;
 
     PropertyKey() = default;
-    PropertyKey(PropertyKey::Type type, PropKeyType key) : type(type), key(std::move(key)) {}
+    PropertyKey(PropertyKey::Type type, PropKeyT key) : type(type), key(std::move(key)) {}
 };
 
 // function
@@ -733,10 +730,10 @@ struct Block {
 
 struct FunctionBody {
     enum class Type { Block, Expression };
-    using FuncType = std::variant<std::shared_ptr<Block>, std::shared_ptr<Expression>>;
+    using FuncT = std::variant<std::unique_ptr<Block>, std::unique_ptr<Expression>>;
     Type type;
-    FuncType body;
-    FunctionBody(Type t, FuncType body) : type(t), body(std::move(body)) {}
+    FuncT body;
+    FunctionBody(Type t, FuncT body) : type(t), body(std::move(body)) {}
 };
 
 // parameter
@@ -823,21 +820,21 @@ struct MonoType {
         Label,
     };
 
-    using MonoVari = std::variant<std::unique_ptr<TvarType>,
-                                  std::unique_ptr<NamedType>,
-                                  std::unique_ptr<ArrayType>,
-                                  std::unique_ptr<StreamType>,
-                                  std::unique_ptr<VectorType>,
-                                  std::unique_ptr<DictType>,
-                                  std::unique_ptr<DynamicType>,
-                                  std::unique_ptr<RecordType>,
-                                  std::unique_ptr<FunctionType>,
-                                  std::unique_ptr<LabelLit>>;
+    using MonoT = std::variant<std::unique_ptr<TvarType>,
+                               std::unique_ptr<NamedType>,
+                               std::unique_ptr<ArrayType>,
+                               std::unique_ptr<StreamType>,
+                               std::unique_ptr<VectorType>,
+                               std::unique_ptr<DictType>,
+                               std::unique_ptr<DynamicType>,
+                               std::unique_ptr<RecordType>,
+                               std::unique_ptr<FunctionType>,
+                               std::unique_ptr<LabelLit>>;
     Type type;
-    MonoVari value;
+    MonoT value;
 
     MonoType() = default;
-    MonoType(MonoType::Type type, MonoVari value) : type(type), value(std::move(value)) {}
+    MonoType(MonoType::Type type, MonoT value) : type(type), value(std::move(value)) {}
 };
 
 struct Required {
@@ -863,15 +860,14 @@ struct ParameterType {
         Pipe,
     };
 
-    using ParamType =
-        std::variant<std::shared_ptr<Required>, std::shared_ptr<Optional>, std::shared_ptr<Pipe>>;
+    using ParamT =
+        std::variant<std::shared_ptr<Required>, std::unique_ptr<Optional>, std::unique_ptr<Pipe>>;
 
     Type type;
-    ParamType value;
+    ParamT value;
 
     ParameterType() = default;
-    ParameterType(ParameterType::Type type, ParamType value)
-        : type(type), value(std::move(value)) {}
+    ParameterType(ParameterType::Type type, ParamT value) : type(type), value(std::move(value)) {}
 };
 
 } // namespace pl

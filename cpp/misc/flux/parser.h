@@ -84,24 +84,6 @@ private:
     // lit for the token. Otherwise, it will return NoPos.
     std::unique_ptr<Token> close(TokenType end);
 
-    // std::unique_ptr<BaseNode> base_node(SourceLocation location);
-    // std::unique_ptr<BaseNode> base_node_from_token(const Token* token);
-    // std::unique_ptr<BaseNode> base_node_from_tokens(const Token* start, const Token* end);
-    // std::unique_ptr<BaseNode> base_node_from_other_start(const BaseNode* start, const Token*
-    // end); std::unique_ptr<BaseNode> base_node_from_other_end(const Token* start, const BaseNode*
-    // end); std::unique_ptr<BaseNode> base_node_from_other_end_c(const Token* start,
-    //                                                      const BaseNode* end,
-    //                                                      const Token* comments_from);
-    // std::unique_ptr<BaseNode> base_node_from_other_end_c_a(
-    //     const Token* start,
-    //     const BaseNode* end,
-    //     const Token* comments_from,
-    //     const std::vector<std::shared_ptr<Attribute>>& attributes);
-    // std::unique_ptr<BaseNode> base_node_from_others_c(const BaseNode* start,
-    //                                                   const BaseNode* end,
-    //                                                   const Token* comments_from);
-    // std::unique_ptr<BaseNode> base_node_from_others(const BaseNode* start, const BaseNode* end);
-    // std::unique_ptr<BaseNode> base_node_from_pos(const Position& start, const Position& end);
     SourceLocation source_location(const Position& start, const Position& end);
 
     std::vector<std::shared_ptr<Attribute>> parse_attribute_inner_list();
@@ -110,30 +92,25 @@ private:
                                                     const std::string& name);
     std::vector<std::shared_ptr<AttributeParam>> parse_attribute_params();
 
-    std::unique_ptr<Block> parse_block();
-
-    std::unique_ptr<Property> parse_parameter();
-
     std::vector<std::shared_ptr<Property>> parse_parameter_list();
-
-    std::unique_ptr<LabelLit> parse_label_literal();
-
-    std::tuple<std::unique_ptr<StringExpr>, TokenError> parse_string_expression();
-
-    std::unique_ptr<ObjectExpr> parse_object_literal();
-    std::unique_ptr<ObjectExpr> parse_object_body();
-
     std::vector<std::shared_ptr<Property>> parse_property_list();
+    std::vector<std::shared_ptr<Property>> parse_property_list_suffix(
+        std::unique_ptr<PropertyKey> key);
+    std::unique_ptr<Property> parse_parameter();
     std::unique_ptr<Property> parse_string_property();
     std::unique_ptr<Property> parse_ident_property();
     std::unique_ptr<Property> parse_invalid_property();
     std::unique_ptr<Property> parse_property_suffix(std::unique_ptr<PropertyKey> key);
 
-    std::vector<std::shared_ptr<Property>> parse_property_list_suffix(
-        std::unique_ptr<PropertyKey> key);
+    std::unique_ptr<Block> parse_block();
+
+    std::unique_ptr<LabelLit> parse_label_literal();
+    std::tuple<std::unique_ptr<StringExpr>, TokenError> parse_string_expression();
+
+    std::unique_ptr<ObjectExpr> parse_object_literal();
+    std::unique_ptr<ObjectExpr> parse_object_body();
 
     std::tuple<std::unique_ptr<DurationLit>, TokenError> parse_duration_literal();
-
     std::tuple<std::unique_ptr<DateTimeLit>, TokenError> parse_time_literal();
 
     std::optional<Operator> parse_logical_unary_operator();
@@ -233,11 +210,11 @@ private:
     std::unique_ptr<Statement> parse_testcase_statement();
     std::unique_ptr<Statement> parse_return_statement();
     std::unique_ptr<Statement> parse_statement_inner(
-        std::optional<std::vector<std::shared_ptr<Attribute>>> attributes);
+        const std::optional<std::vector<std::shared_ptr<Attribute>>>& attributes);
     std::unique_ptr<Statement> parse_statement(
-        std::optional<std::vector<std::shared_ptr<Attribute>>> attributes);
+        const std::optional<std::vector<std::shared_ptr<Attribute>>>& attributes);
     std::vector<std::shared_ptr<Statement>> parse_statement_list(
-        std::optional<std::vector<std::shared_ptr<Attribute>>> attributes);
+        const std::optional<std::vector<std::shared_ptr<Attribute>>>& attributes);
 
     std::unique_ptr<MonoType> parse_monotype();
     std::unique_ptr<TypeExpression> parse_type_expression();
