@@ -1023,7 +1023,8 @@ std::unique_ptr<Expression> Parser::parse_array_items_rest(std::unique_ptr<Token
 std::unique_ptr<Expression> Parser::parse_array_or_dict(std::unique_ptr<Token> start) {
     switch (peek()->tok) {
     // empty dictinary [:]
-    case TokenType::Colon: {
+    case TokenType::Colon:
+    {
         consume();
         auto end = close(TokenType::RBrack);
         auto lbrack = start->comments;
@@ -1038,7 +1039,8 @@ std::unique_ptr<Expression> Parser::parse_array_or_dict(std::unique_ptr<Token> s
         return expr;
     }
     // empty array []
-    case TokenType::RBrack: {
+    case TokenType::RBrack:
+    {
         auto end = close(TokenType::RBrack);
         auto lbrack = start->comments;
         auto rbrack = end->comments;
@@ -1052,7 +1054,8 @@ std::unique_ptr<Expression> Parser::parse_array_or_dict(std::unique_ptr<Token> s
 
         return expr;
     }
-    default: {
+    default:
+    {
         auto expr = parse_expression();
         if (peek()->tok == TokenType::Colon) {
             // non-empty dictionary
@@ -1282,7 +1285,8 @@ std::tuple<std::unique_ptr<StringExpr>, TokenError> Parser::parse_string_express
     for (;;) {
         auto t = scanner_->scan_with_expr();
         switch (t->tok) {
-        case TokenType::Text: {
+        case TokenType::Text:
+        {
             auto value = StrConv::parse_text(t->lit);
             if (!value.ok()) {
                 return {nullptr, TokenError(std::move(t))};
@@ -1293,7 +1297,8 @@ std::tuple<std::unique_ptr<StringExpr>, TokenError> Parser::parse_string_express
             parts.emplace_back(std::move(p));
             break;
         }
-        case TokenType::StringExpr: {
+        case TokenType::StringExpr:
+        {
             auto expr = parse_expression();
             auto end = expect(TokenType::RBrace);
             auto ip = std::make_unique<InterpolatedPart>(std::move(expr));
@@ -1302,11 +1307,13 @@ std::tuple<std::unique_ptr<StringExpr>, TokenError> Parser::parse_string_express
             parts.emplace_back(std::move(p));
             break;
         }
-        case TokenType::Quote: {
+        case TokenType::Quote:
+        {
             auto string_expr = std::make_unique<StringExpr>(std::move(parts));
             return {std::move(string_expr), TokenError()};
         }
-        default: {
+        default:
+        {
             auto loc = source_location(t->start_pos, t->end_pos);
             std::stringstream ss;
             ss << "got unexpcted token in string expression " << loc << ": "
@@ -1504,17 +1511,20 @@ std::unique_ptr<Expression> Parser::parse_primary_expression() {
     const auto* t = peek_with_regex();
     auto ret = std::make_unique<Expression>();
     switch (t->tok) {
-    case TokenType::Ident: {
+    case TokenType::Ident:
+    {
         ret->type = Expression::Type::Identifier;
         ret->expr = parse_identifier();
         break;
     }
-    case TokenType::Int: {
+    case TokenType::Int:
+    {
         ret->type = Expression::Type::IntegerLit;
         ret->expr = parse_int_literal();
         break;
     }
-    case TokenType::Float: {
+    case TokenType::Float:
+    {
         TokenError err;
         std::unique_ptr<FloatLit> fl;
         std::tie(fl, err) = parse_float_literal();
@@ -1526,12 +1536,14 @@ std::unique_ptr<Expression> Parser::parse_primary_expression() {
         }
         break;
     }
-    case TokenType::String: {
+    case TokenType::String:
+    {
         ret->type = Expression::Type::StringLit;
         ret->expr = parse_string_literal();
         break;
     }
-    case TokenType::Quote: {
+    case TokenType::Quote:
+    {
         std::unique_ptr<StringExpr> str_expr;
         TokenError err;
         std::tie(str_expr, err) = parse_string_expression();
@@ -1545,7 +1557,8 @@ std::unique_ptr<Expression> Parser::parse_primary_expression() {
         ret->type = Expression::Type::RegexpLit;
         ret->expr = parse_regexp_literral();
         break;
-    case TokenType::Time: {
+    case TokenType::Time:
+    {
         std::unique_ptr<DateTimeLit> lit;
         TokenError err;
         std::tie(lit, err) = parse_time_literal();
@@ -1557,7 +1570,8 @@ std::unique_ptr<Expression> Parser::parse_primary_expression() {
         ret->expr = std::move(lit);
         break;
     }
-    case TokenType::Duration: {
+    case TokenType::Duration:
+    {
         std::unique_ptr<DurationLit> lit;
         TokenError err;
         std::tie(lit, err) = parse_duration_literal();
@@ -1572,7 +1586,8 @@ std::unique_ptr<Expression> Parser::parse_primary_expression() {
         ret->type = Expression::Type::PipeLit;
         ret->expr = parse_pipe_literal();
         break;
-    case TokenType::LBrack: {
+    case TokenType::LBrack:
+    {
         auto start = open(TokenType::LBrack, TokenType::RBrack);
         return parse_array_or_dict(std::move(start));
     }
