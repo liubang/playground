@@ -218,6 +218,12 @@ struct BuiltinStmt {
     std::vector<std::shared_ptr<Comment>> colon;
     std::shared_ptr<Identifier> id;
     std::shared_ptr<TypeExpression> ty;
+    BuiltinStmt() = default;
+    BuiltinStmt(std::unique_ptr<BaseNode> base,
+                const std::vector<std::shared_ptr<Comment>>& colon,
+                std::unique_ptr<Identifier> id,
+                std::unique_ptr<TypeExpression> ty)
+        : base(std::move(base)), colon(colon), id(std::move(id)), ty(std::move(ty)) {}
 };
 
 struct Statement {
@@ -232,34 +238,34 @@ struct Statement {
     };
     Type type;
 
-    Statement() = default;
-    Statement(Type type) : type(type) {}
+    using StmtVari = std::variant<std::unique_ptr<ExprStmt>,
+                                  std::unique_ptr<VariableAssgn>,
+                                  std::unique_ptr<OptionStmt>,
+                                  std::unique_ptr<ReturnStmt>,
+                                  std::unique_ptr<BadStmt>,
+                                  std::unique_ptr<TestCaseStmt>,
+                                  std::unique_ptr<BuiltinStmt>>;
+    StmtVari stmt;
 
-    std::variant<std::shared_ptr<ExprStmt>,
-                 std::shared_ptr<VariableAssgn>,
-                 std::shared_ptr<OptionStmt>,
-                 std::shared_ptr<ReturnStmt>,
-                 std::shared_ptr<BadStmt>,
-                 std::shared_ptr<TestCaseStmt>,
-                 std::shared_ptr<BuiltinStmt>>
-        stmt;
+    Statement() = default;
+    Statement(Type type, StmtVari stmt) : type(type), stmt(std::move(stmt)) {}
 
     std::shared_ptr<BaseNode> base() {
         switch (type) {
         case Type::ExpressionStatement:
-            return std::get<std::shared_ptr<ExprStmt>>(stmt)->base;
+            return std::get<std::unique_ptr<ExprStmt>>(stmt)->base;
         case Type::VariableAssignment:
-            return std::get<std::shared_ptr<VariableAssgn>>(stmt)->base;
+            return std::get<std::unique_ptr<VariableAssgn>>(stmt)->base;
         case Type::OptionStatement:
-            return std::get<std::shared_ptr<OptionStmt>>(stmt)->base;
+            return std::get<std::unique_ptr<OptionStmt>>(stmt)->base;
         case Type::ReturnStatement:
-            return std::get<std::shared_ptr<ReturnStmt>>(stmt)->base;
+            return std::get<std::unique_ptr<ReturnStmt>>(stmt)->base;
         case Type::BadStatement:
-            return std::get<std::shared_ptr<BadStmt>>(stmt)->base;
+            return std::get<std::unique_ptr<BadStmt>>(stmt)->base;
         case Type::TestCaseStatement:
-            return std::get<std::shared_ptr<TestCaseStmt>>(stmt)->base;
+            return std::get<std::unique_ptr<TestCaseStmt>>(stmt)->base;
         case Type::BuiltinStatement:
-            return std::get<std::shared_ptr<BuiltinStmt>>(stmt)->base;
+            return std::get<std::unique_ptr<BuiltinStmt>>(stmt)->base;
         }
     }
 };
@@ -547,12 +553,9 @@ struct PipeLit {
 };
 
 struct LabelLit {
-    std::shared_ptr<BaseNode> base;
     std::string value;
-
     LabelLit() = default;
-    LabelLit(std::unique_ptr<BaseNode> base, const std::string& value)
-        : base(std::move(base)), value(value) {}
+    LabelLit(const std::string& value) : value(value) {}
 };
 
 struct BadExpr {
@@ -668,8 +671,6 @@ struct Expression {
             return std::get<std::unique_ptr<RegexpLit>>(expr)->base;
         case Type::PipeLit:
             return std::get<std::unique_ptr<PipeLit>>(expr)->base;
-        case Type::LabelLit:
-            return std::get<std::unique_ptr<LabelLit>>(expr)->base;
         case Type::BadExpr:
             return std::get<std::unique_ptr<BadExpr>>(expr)->base;
         case Type::StringExpr:
@@ -880,50 +881,71 @@ struct FunctionBody {
 // parameter
 
 struct TvarType {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<Identifier> name;
+    std::unique_ptr<Identifier> name;
+    TvarType() = default;
+    TvarType(std::unique_ptr<Identifier> name) : name(std::move(name)) {}
 };
 
 struct NamedType {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<Identifier> name;
+    std::unique_ptr<Identifier> name;
+    NamedType() = default;
+    NamedType(std::unique_ptr<Identifier> name) : name(std::move(name)) {}
 };
 
 struct ArrayType {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<MonoType> element;
+    std::unique_ptr<MonoType> element;
+    ArrayType() = default;
+    ArrayType(std::unique_ptr<MonoType> element) : element(std::move(element)) {}
 };
 
 struct StreamType {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<MonoType> element;
+    std::unique_ptr<MonoType> element;
+    StreamType() = default;
+    StreamType(std::unique_ptr<MonoType> element) : element(std::move(element)) {}
 };
 
 struct VectorType {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<MonoType> element;
+    std::unique_ptr<MonoType> element;
+    VectorType() = default;
+    VectorType(std::unique_ptr<MonoType> element) : element(std::move(element)) {}
 };
 
 struct DictType {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<MonoType> key;
-    std::shared_ptr<MonoType> val;
+    std::unique_ptr<MonoType> key;
+    std::unique_ptr<MonoType> val;
+    DictType() = default;
+    DictType(std::unique_ptr<MonoType> key, std::unique_ptr<MonoType> val)
+        : key(std::move(key)), val(std::move(val)) {}
 };
 
-struct DynamicType {
-    std::shared_ptr<BaseNode> base;
-};
+struct DynamicType {};
 
 struct FunctionType {
-    std::shared_ptr<BaseNode> base;
     std::vector<std::shared_ptr<ParameterType>> parameters;
-    std::shared_ptr<MonoType> monotype;
+    std::unique_ptr<MonoType> monotype;
 };
 
 struct RecordType {
-    std::shared_ptr<BaseNode> base;
-    std::shared_ptr<Identifier> tvar;
+    std::unique_ptr<Identifier> tvar;
     std::vector<std::shared_ptr<PropertyType>> properties;
+};
+
+struct TypeExpression {
+    std::unique_ptr<MonoType> monotype;
+    std::vector<std::shared_ptr<TypeConstraint>> constraints;
+    TypeExpression() = default;
+    TypeExpression(std::unique_ptr<MonoType> monotype,
+                   const std::vector<std::shared_ptr<TypeConstraint>>& constraints)
+        : monotype(std::move(monotype)), constraints(constraints) {}
+};
+
+struct TypeConstraint {
+    std::unique_ptr<Identifier> tvar;
+    std::vector<std::shared_ptr<Identifier>> kinds;
+    TypeConstraint() = default;
+    TypeConstraint(std::unique_ptr<Identifier> tvar,
+                   const std::vector<std::shared_ptr<Identifier>>& kinds)
+        : tvar(std::move(tvar)), kinds(kinds) {}
 };
 
 struct MonoType {
@@ -940,16 +962,16 @@ struct MonoType {
         Label,
     };
 
-    using MonoVari = std::variant<std::shared_ptr<TvarType>,
-                                  std::shared_ptr<NamedType>,
-                                  std::shared_ptr<ArrayType>,
-                                  std::shared_ptr<StreamType>,
-                                  std::shared_ptr<VectorType>,
-                                  std::shared_ptr<DictType>,
-                                  std::shared_ptr<DynamicType>,
-                                  std::shared_ptr<RecordType>,
-                                  std::shared_ptr<FunctionType>,
-                                  std::shared_ptr<LabelLit>>;
+    using MonoVari = std::variant<std::unique_ptr<TvarType>,
+                                  std::unique_ptr<NamedType>,
+                                  std::unique_ptr<ArrayType>,
+                                  std::unique_ptr<StreamType>,
+                                  std::unique_ptr<VectorType>,
+                                  std::unique_ptr<DictType>,
+                                  std::unique_ptr<DynamicType>,
+                                  std::unique_ptr<RecordType>,
+                                  std::unique_ptr<FunctionType>,
+                                  std::unique_ptr<LabelLit>>;
     Type type;
     MonoVari value;
 
