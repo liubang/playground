@@ -85,54 +85,95 @@ private:
     std::unique_ptr<Token> close(TokenType end);
 
     std::unique_ptr<BaseNode> base_node(SourceLocation location);
-
     std::unique_ptr<BaseNode> base_node_from_token(const Token* token);
-
     std::unique_ptr<BaseNode> base_node_from_tokens(const Token* start, const Token* end);
-
     std::unique_ptr<BaseNode> base_node_from_other_start(const BaseNode* start, const Token* end);
-
     std::unique_ptr<BaseNode> base_node_from_other_end(const Token* start, const BaseNode* end);
-
     std::unique_ptr<BaseNode> base_node_from_other_end_c(const Token* start,
                                                          const BaseNode* end,
                                                          const Token* comments_from);
-
     std::unique_ptr<BaseNode> base_node_from_other_end_c_a(
         const Token* start,
         const BaseNode* end,
         const Token* comments_from,
         const std::vector<std::shared_ptr<Attribute>>& attributes);
-
     std::unique_ptr<BaseNode> base_node_from_others_c(const BaseNode* start,
                                                       const BaseNode* end,
                                                       const Token* comments_from);
-
     std::unique_ptr<BaseNode> base_node_from_others(const BaseNode* start, const BaseNode* end);
-
     std::unique_ptr<BaseNode> base_node_from_pos(const Position& start, const Position& end);
-
     SourceLocation source_location(const Position& start, const Position& end);
 
     std::vector<std::shared_ptr<Attribute>> parse_attribute_inner_list();
-
     std::unique_ptr<Attribute> parse_attribute_inner();
-
     std::unique_ptr<Attribute> parse_attribute_rest(std::unique_ptr<Token> tok,
                                                     const std::string& name);
-
     std::vector<std::shared_ptr<AttributeParam>> parse_attribute_params();
-
-    std::unique_ptr<Expression> parse_primary_expression();
 
     std::unique_ptr<Block> parse_block();
 
+    std::unique_ptr<Property> parse_parameter();
+
+    std::vector<std::shared_ptr<Property>> parse_parameter_list();
+
+    std::unique_ptr<LabelLit> parse_label_literal();
+
+    std::tuple<std::unique_ptr<StringExpr>, TokenError> parse_string_expression();
+
+    std::unique_ptr<ObjectExpr> parse_object_literal();
+    std::unique_ptr<ObjectExpr> parse_object_body();
+
+    std::vector<std::shared_ptr<Property>> parse_property_list();
+    std::unique_ptr<Property> parse_string_property();
+    std::unique_ptr<Property> parse_ident_property();
+    std::unique_ptr<Property> parse_invalid_property();
+    std::unique_ptr<Property> parse_property_suffix(std::unique_ptr<PropertyKey> key);
+
+    std::vector<std::shared_ptr<Property>> parse_property_list_suffix(
+        std::unique_ptr<PropertyKey> key);
+
+    std::tuple<std::unique_ptr<DurationLit>, TokenError> parse_duration_literal();
+
+    std::tuple<std::unique_ptr<DateTimeLit>, TokenError> parse_time_literal();
+
+    std::optional<Operator> parse_logical_unary_operator();
+    std::optional<Operator> parse_comparison_operator();
+    std::optional<Operator> parse_additive_operator();
+    std::optional<LogicalOperator> parse_or_operator();
+    std::optional<LogicalOperator> parse_and_operator();
+
+    std::unique_ptr<PipeLit> parse_pipe_literal();
+    std::unique_ptr<RegexpLit> parse_regexp_literral();
+    std::unique_ptr<StringLit> parse_string_literal();
+    std::unique_ptr<StringLit> new_string_literal(std::unique_ptr<Token> t);
+    std::unique_ptr<Identifier> parse_identifier();
+    std::unique_ptr<IntegerLit> parse_int_literal();
+
+    std::tuple<std::unique_ptr<FloatLit>, TokenError> parse_float_literal();
+    std::tuple<std::unique_ptr<PackageClause>,
+               std::optional<std::vector<std::shared_ptr<Attribute>>>>
+    parse_package_clause(const std::vector<std::shared_ptr<Attribute>>& attributes);
+    std::unique_ptr<ImportDeclaration> parse_import_declaration(
+        const std::optional<std::vector<std::shared_ptr<Attribute>>>& attributes);
+    std::tuple<std::vector<std::shared_ptr<ImportDeclaration>>,
+               std::optional<std::vector<std::shared_ptr<Attribute>>>>
+    parse_import_list(std::optional<std::vector<std::shared_ptr<Attribute>>> attributes);
+
+    bool parse_pipe_operator();
+    std::optional<Operator> parse_exponent_operator();
+    std::optional<Operator> parse_multiplicative_operator();
+
+    std::unique_ptr<ObjectExpr> parse_object_body_suffix(std::unique_ptr<Identifier> id);
+
+    std::unique_ptr<Expression> parse_expression();
+    std::unique_ptr<Expression> parse_primary_expression();
     std::unique_ptr<Expression> parse_function_body_expression(
         std::unique_ptr<Token> lparen,
         std::unique_ptr<Token> rparen,
         std::unique_ptr<Token> arrow,
         const std::vector<std::shared_ptr<Property>>& params);
-
+    std::unique_ptr<Expression> parse_paren_body_expression(std::unique_ptr<Token> lparen);
+    std::unique_ptr<Expression> parse_paren_expression();
     std::unique_ptr<Expression> parse_function_expression(
         std::unique_ptr<Token> lparen,
         std::unique_ptr<Token> rparen,
@@ -140,191 +181,82 @@ private:
 
     std::unique_ptr<Expression> parse_paren_ident_expression(std::unique_ptr<Token> lparen,
                                                              std::unique_ptr<Identifier> key);
-
-    std::unique_ptr<Property> parse_parameter();
-
-    std::vector<std::shared_ptr<Property>> parse_parameter_list();
-
-    std::unique_ptr<Expression> parse_paren_body_expression(std::unique_ptr<Token> lparen);
-
-    std::unique_ptr<Expression> parse_paren_expression();
-
-    std::unique_ptr<LabelLit> parse_label_literal();
-
-    std::tuple<std::unique_ptr<StringExpr>, TokenError> parse_string_expression();
-
-    std::unique_ptr<Expression> parse_expression();
-
-    std::unique_ptr<ObjectExpr> parse_object_literal();
-
-    std::unique_ptr<ObjectExpr> parse_object_body();
-
-    std::vector<std::shared_ptr<Property>> parse_property_list();
-
-    std::unique_ptr<Property> parse_string_property();
-
-    std::unique_ptr<Property> parse_ident_property();
-
-    std::unique_ptr<Property> parse_invalid_property();
-
     std::unique_ptr<Expression> parse_expression_while_more(std::unique_ptr<Expression> init,
                                                             const std::set<TokenType>& stop_tokens);
-
     std::unique_ptr<Expression> parse_property_value();
-
-    std::unique_ptr<Property> parse_property_suffix(std::unique_ptr<PropertyKey> key);
-
-    std::vector<std::shared_ptr<Property>> parse_property_list_suffix(
-        std::unique_ptr<PropertyKey> key);
-
-    std::unique_ptr<ObjectExpr> parse_object_body_suffix(std::unique_ptr<Identifier> id);
-
     std::unique_ptr<Expression> parse_array_or_dict(std::unique_ptr<Token> start);
-
     std::unique_ptr<Expression> parse_array_items_rest(std::unique_ptr<Token> start,
                                                        std::unique_ptr<Expression> init);
-
     std::unique_ptr<Expression> parse_dict_items_rest(std::unique_ptr<Token> start,
                                                       std::unique_ptr<Expression> key,
                                                       std::unique_ptr<Expression> val);
-
-    std::unique_ptr<PipeLit> parse_pipe_literal();
-
-    std::tuple<std::unique_ptr<DurationLit>, TokenError> parse_duration_literal();
-
-    std::tuple<std::unique_ptr<DateTimeLit>, TokenError> parse_time_literal();
-
-    std::unique_ptr<RegexpLit> parse_regexp_literral();
-
-    std::unique_ptr<Expression> parse_conditional_expression();
-
-    std::unique_ptr<Expression> create_placeholder_expression(const Token* tok);
-
-    std::optional<Operator> parse_logical_unary_operator();
-
-    std::optional<LogicalOperator> parse_and_operator();
-
-    std::unique_ptr<Expression> parse_logical_and_expression_suffix(
-        std::unique_ptr<Expression> expr);
-
-    std::unique_ptr<Expression> parse_logical_unary_expression();
-
-    std::unique_ptr<Expression> parse_comparison_expression();
-
-    std::optional<Operator> parse_comparison_operator();
-
     std::unique_ptr<Expression> parse_additive_expression();
-
-    std::optional<Operator> parse_additive_operator();
-
     std::unique_ptr<Expression> parse_additive_expression_suffix(std::unique_ptr<Expression> expr);
-
     std::unique_ptr<Expression> parse_comparison_expression_suffix(
         std::unique_ptr<Expression> expr);
-
     std::unique_ptr<Expression> parse_logical_and_expression();
-
-    std::optional<LogicalOperator> parse_or_operator();
-
     std::unique_ptr<Expression> parse_logical_or_expression_suffix(
         std::unique_ptr<Expression> expr);
-
     std::unique_ptr<Expression> parse_logical_or_expression();
-
-    std::unique_ptr<StringLit> parse_string_literal();
-
-    std::unique_ptr<StringLit> new_string_literal(std::unique_ptr<Token> t);
-
     std::unique_ptr<Expression> create_bad_expression(std::unique_ptr<Token> tok);
-
     std::unique_ptr<Expression> create_bad_expression_with_text(std::unique_ptr<Token> tok,
                                                                 std::string_view text);
-
-    std::unique_ptr<Identifier> parse_identifier();
-
-    std::unique_ptr<IntegerLit> parse_int_literal();
-
-    std::tuple<std::unique_ptr<FloatLit>, TokenError> parse_float_literal();
-
-    std::tuple<std::unique_ptr<PackageClause>,
-               std::optional<std::vector<std::shared_ptr<Attribute>>>>
-    parse_package_clause(const std::vector<std::shared_ptr<Attribute>>& attributes);
-
-    std::unique_ptr<ImportDeclaration> parse_import_declaration(
-        const std::optional<std::vector<std::shared_ptr<Attribute>>>& attributes);
-
-    std::tuple<std::vector<std::shared_ptr<ImportDeclaration>>,
-               std::optional<std::vector<std::shared_ptr<Attribute>>>>
-    parse_import_list(std::optional<std::vector<std::shared_ptr<Attribute>>> attributes);
-
-    std::unique_ptr<Statement> parse_expression_statement();
-
+    std::unique_ptr<Expression> parse_conditional_expression();
+    std::unique_ptr<Expression> create_placeholder_expression(const Token* tok);
+    std::unique_ptr<Expression> parse_logical_and_expression_suffix(
+        std::unique_ptr<Expression> expr);
+    std::unique_ptr<Expression> parse_logical_unary_expression();
+    std::unique_ptr<Expression> parse_comparison_expression();
     std::unique_ptr<Expression> parse_assign_statement();
-
     std::unique_ptr<Expression> parse_dot_expression(std::unique_ptr<Expression> expr);
-
     std::unique_ptr<Expression> parse_call_expression(std::unique_ptr<Expression> expr);
-
     std::unique_ptr<Expression> parse_index_expression(std::unique_ptr<Expression> expr);
-
     std::unique_ptr<Expression> parse_postfix_operator(std::unique_ptr<Expression> expr, bool* ret);
-
     std::unique_ptr<Expression> parse_postfix_operator_suffix(std::unique_ptr<Expression> expr);
-
     std::unique_ptr<Expression> parse_postfix_expression();
-
     std::unique_ptr<Expression> parse_unary_expression();
-
     std::unique_ptr<Expression> parse_pipe_expression();
-
     std::unique_ptr<Expression> parse_exponent_expression();
-
     std::unique_ptr<Expression> parse_multiplicative_expression();
-
-    bool parse_pipe_operator();
-
     std::unique_ptr<Expression> parse_pipe_expression_suffix(std::unique_ptr<Expression> expr);
-
-    std::optional<Operator> parse_exponent_operator();
-
     std::unique_ptr<Expression> parse_exponent_expression_suffix(std::unique_ptr<Expression> expr);
-
-    std::optional<Operator> parse_multiplicative_operator();
-
     std::unique_ptr<Expression> parse_multiplicative_expression_suffix(
         std::unique_ptr<Expression> expr);
-
     std::unique_ptr<Expression> parse_expression_suffix(std::unique_ptr<Expression> expr);
-
-    std::unique_ptr<Statement> parse_ident_statement();
 
     std::unique_ptr<Assignment> parse_option_assignment_suffix(std::unique_ptr<Identifier> id);
 
+    std::unique_ptr<Statement> parse_expression_statement();
+    std::unique_ptr<Statement> parse_ident_statement();
     std::unique_ptr<Statement> parse_option_assignment();
-
     std::unique_ptr<Statement> parse_builtin_statement();
-
     std::unique_ptr<Statement> parse_testcase_statement();
-
     std::unique_ptr<Statement> parse_return_statement();
-
     std::unique_ptr<Statement> parse_statement_inner(
         std::optional<std::vector<std::shared_ptr<Attribute>>> attributes);
-
     std::unique_ptr<Statement> parse_statement(
         std::optional<std::vector<std::shared_ptr<Attribute>>> attributes);
-
     std::vector<std::shared_ptr<Statement>> parse_statement_list(
         std::optional<std::vector<std::shared_ptr<Attribute>>> attributes);
 
+    std::unique_ptr<MonoType> parse_monotype();
+    std::unique_ptr<TypeExpression> parse_type_expression();
+    std::vector<std::shared_ptr<TypeConstraint>> parse_constraints();
+    std::unique_ptr<TypeConstraint> parse_constraint();
+    std::unique_ptr<MonoType> parse_record_type();
+    std::unique_ptr<MonoType> parse_function_type();
+    std::unique_ptr<MonoType> parse_dynamic_type();
+    std::unique_ptr<MonoType> parse_basic_type();
+    std::unique_ptr<MonoType> parse_tvar();
+
     template <typename T> std::optional<T> depth_guard(std::function<T()> fn) {
-        depth_++;
+        ++depth_;
         if (depth_ > MAX_DEPTH) {
             errs_.emplace_back("Program is nested too deep");
             return std::nullopt;
         }
         T ret = fn();
-        depth_--;
+        --depth_;
         return std::move(ret);
     }
 
