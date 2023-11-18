@@ -37,7 +37,7 @@ std::unique_ptr<File> Parser::parse_file(const std::string& fname) {
     auto body = parse_statement_list(inner_attrs2);
     if (!inner_attrs.empty()) {
         // We have left over attributes from the beginning of the file.
-        auto badstmt = std::make_shared<BadStmt>();
+        auto badstmt = std::make_unique<BadStmt>();
         badstmt->base = base_node_from_others(inner_attrs[0]->base.get(),
                                               inner_attrs.rbegin()->get()->base.get());
         badstmt->text = "extra attributes not associated with anything";
@@ -132,9 +132,8 @@ std::unique_ptr<Statement> Parser::parse_statement_inner(
         break;
     default:
         auto tt = consume();
-        stmt = std::make_unique<Statement>(Statement::Type::BadStatement);
-        auto bad_stmt = std::make_shared<BadStmt>(base_node_from_token(tt.get()), t->lit);
-        stmt->stmt = std::move(bad_stmt);
+        auto bad_stmt = std::make_unique<BadStmt>(base_node_from_token(tt.get()), t->lit);
+        stmt = std::make_unique<Statement>(Statement::Type::BadStatement, std::move(bad_stmt));
     }
     stmt->base()->attributes = *attributes;
     return stmt;
@@ -143,10 +142,9 @@ std::unique_ptr<Statement> Parser::parse_statement_inner(
 std::unique_ptr<Statement> Parser::parse_return_statement() {
     auto t = expect(TokenType::Return);
     auto expr = parse_expression();
-    auto stmt = std::make_unique<Statement>(Statement::Type::ReturnStatement);
     auto retstmt = std::make_unique<ReturnStmt>(
         base_node_from_other_end_c(t.get(), expr->base().get(), t.get()), std::move(expr));
-    stmt->stmt = std::move(retstmt);
+    auto stmt = std::make_unique<Statement>(Statement::Type::ReturnStatement, std::move(retstmt));
     return stmt;
 }
 
@@ -170,7 +168,117 @@ std::unique_ptr<Statement> Parser::parse_option_assignment() {
 }
 
 // TODO
-std::unique_ptr<Statement> Parser::parse_builtin_statement() { return nullptr; }
+std::unique_ptr<MonoType> Parser::parse_record_type() {}
+
+// "(" [Parameters] ")" "=>" MonoType
+std::unique_ptr<MonoType> Parser::parse_function_type() {}
+
+std::unique_ptr<MonoType> Parser::parse_dynamic_type() {
+    expect(TokenType::Ident);
+    return std::make_unique<MonoType>(MonoType::Type::Dynamic, std::make_unique<DynamicType>());
+}
+
+std::unique_ptr<MonoType> Parser::parse_basic_type() {
+    return std::make_unique<MonoType>(MonoType::Type::Basic,
+                                      std::make_unique<NamedType>(parse_identifier()));
+}
+
+std::unique_ptr<MonoType> Parser::parse_tvar() {
+    return std::make_unique<MonoType>(MonoType::Type::Tvar,
+                                      std::make_unique<TvarType>(parse_identifier()));
+}
+
+std::unique_ptr<MonoType> Parser::parse_monotype() {
+    // Tvar | Basic | Array | Dict | Dynamic | Record | Function
+    const auto* t = peek();
+    if (t->tok == TokenType::LBrack) {
+        auto ty = parse_monotype();
+        if (peek()->tok == TokenType::RBrack) {
+            return std::make_unique<MonoType>(MonoType::Type::Array,
+                                              std::make_unique<ArrayType>(std::move(ty)));
+        }
+        expect(TokenType::Colon);
+        auto val = parse_monotype();
+        return std::make_unique<MonoType>(
+            MonoType::Type::Dict, std::make_unique<DictType>(std::move(ty), std::move(val)));
+    }
+    if (t->tok == TokenType::LBrack) {
+        return parse_record_type();
+    }
+    if (t->tok == TokenType::LParen) {
+        return parse_function_type();
+    }
+    if (t->tok == TokenType::Dot) {
+        return std::make_unique<MonoType>(MonoType::Type::Label, parse_label_literal());
+    }
+    if (t->tok == TokenType::Ident) {
+        if (t->lit == "stream") {
+            expect(TokenType::Ident);
+            open(TokenType::LBrack, TokenType::RBrack);
+            auto ty = parse_monotype();
+            close(TokenType::RBrack);
+            return std::make_unique<MonoType>(MonoType::Type::Stream,
+                                              std::make_unique<StreamType>(std::move(ty)));
+        }
+        if (t->lit == "vector") {
+            expect(TokenType::Ident);
+            open(TokenType::LBrack, TokenType::RBrack);
+            auto ty = parse_monotype();
+            return std::make_unique<MonoType>(MonoType::Type::Vector,
+                                              std::make_unique<VectorType>(std::move(ty)));
+        }
+        if (t->lit == "dynamic") {
+            return parse_dynamic_type();
+        }
+    }
+    if (t->lit.length() == 1) {
+        return parse_tvar();
+    }
+    return parse_basic_type();
+}
+
+std::unique_ptr<TypeConstraint> Parser::parse_constraint() {
+    std::vector<std::shared_ptr<Identifier>> id;
+    auto tvar = parse_identifier();
+    expect(TokenType::Colon);
+    auto identifier = parse_identifier();
+    id.push_back(std::move(identifier));
+    while (peek()->tok == TokenType::Add) {
+        consume();
+        identifier = parse_identifier();
+        id.push_back(std::move(identifier));
+    }
+    return std::make_unique<TypeConstraint>(std::move(tvar), id);
+}
+
+std::vector<std::shared_ptr<TypeConstraint>> Parser::parse_constraints() {
+    std::vector<std::shared_ptr<TypeConstraint>> ret;
+    while (peek()->tok == TokenType::Comma) {
+        consume();
+        ret.push_back(parse_constraint());
+    }
+    return ret;
+}
+
+std::unique_ptr<TypeExpression> Parser::parse_type_expression() {
+    auto monotype = parse_monotype();
+    const auto* t = peek();
+    std::vector<std::shared_ptr<TypeConstraint>> constraints;
+    if (t->tok == TokenType::Ident && t->lit == "where") {
+        consume();
+        constraints = parse_constraints();
+    }
+    return std::make_unique<TypeExpression>(std::move(monotype), constraints);
+}
+
+std::unique_ptr<Statement> Parser::parse_builtin_statement() {
+    auto t = expect(TokenType::Builtin);
+    auto id = parse_identifier();
+    auto colon = expect(TokenType::Colon);
+    auto type = parse_type_expression();
+    return std::make_unique<Statement>(Statement::Type::BuiltinStatement,
+                                       std::make_unique<BuiltinStmt>());
+}
 
 // TODO
 std::unique_ptr<Statement> Parser::parse_testcase_statement() { return nullptr; }
@@ -483,9 +591,9 @@ std::unique_ptr<Expression> Parser::parse_assign_statement() {
 
 std::unique_ptr<Statement> Parser::parse_expression_statement() {
     auto expr = parse_expression();
-    auto expr_stmt = std::make_shared<ExprStmt>(base_node(expr->base()->location), std::move(expr));
-    auto stmt = std::make_unique<Statement>(Statement::Type::ExpressionStatement);
-    stmt->stmt = std::move(expr_stmt);
+    auto expr_stmt = std::make_unique<ExprStmt>(base_node(expr->base()->location), std::move(expr));
+    auto stmt =
+        std::make_unique<Statement>(Statement::Type::ExpressionStatement, std::move(expr_stmt));
     return stmt;
 }
 
@@ -1325,14 +1433,13 @@ std::tuple<std::unique_ptr<StringExpr>, TokenError> Parser::parse_string_express
 std::unique_ptr<LabelLit> Parser::parse_label_literal() {
     auto dot = expect(TokenType::Dot);
     auto tok = expect_one_of({TokenType::Ident, TokenType::String});
-    auto base = base_node_from_tokens(dot.get(), tok.get());
     std::string value;
     if (tok->tok == TokenType::String) {
         value = new_string_literal(std::move(tok))->value;
     } else {
         value = tok->lit;
     }
-    return std::make_unique<LabelLit>(std::move(base), value);
+    return std::make_unique<LabelLit>(value);
 }
 
 std::unique_ptr<Expression> Parser::parse_paren_expression() {
