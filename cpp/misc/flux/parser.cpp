@@ -380,6 +380,7 @@ std::unique_ptr<Expression> Parser::parse_pipe_expression_suffix(std::unique_ptr
     auto res = std::move(expr);
     for (;;) {
         auto op = parse_pipe_operator();
+        std::cout << __FUNCTION__ << ":" << __LINE__ << " ==> " << op << '\n';
         if (!op) {
             break;
         }
@@ -429,7 +430,8 @@ std::unique_ptr<Expression> Parser::parse_unary_expression() {
     // const auto* t = peek();
     auto op = parse_additive_operator();
     if (op) {
-        consume();
+        auto t = consume();
+        std::cout << __FUNCTION__ << ":" << __LINE__ << " ==> " << t->lit << "\n";
         auto expr = parse_unary_expression();
         return std::make_unique<Expression>(
             Expression::Type::UnaryExpr, std::make_unique<UnaryExpr>(op.value(), std::move(expr)));
@@ -511,8 +513,10 @@ std::unique_ptr<Expression> Parser::parse_index_expression(std::unique_ptr<Expre
 
 std::unique_ptr<Expression> Parser::parse_call_expression(std::unique_ptr<Expression> expr) {
     auto lparen = open(TokenType::LParen, TokenType::RParen);
+    std::cout << __FUNCTION__ << ":" << __LINE__ << " ==> " << lparen->lit << "\n";
     auto params = parse_property_list();
     auto end = close(TokenType::RParen);
+    std::cout << __FUNCTION__ << ":" << __LINE__ << " ==> " << end->lit << "\n";
     auto call =
         std::make_unique<CallExpr>(std::move(expr), lparen->comments,
                                    std::vector<std::shared_ptr<Expression>>{}, end->comments);
@@ -631,7 +635,8 @@ std::unique_ptr<IntegerLit> Parser::parse_int_literal() {
 
 std::unique_ptr<Identifier> Parser::parse_identifier() {
     auto t = expect_or_skip(TokenType::Ident);
-    return std::make_unique<Identifier>(std::move(t->lit));
+    std::cout << __FUNCTION__ << ":" << __LINE__ << " ==> " << t->lit << '\n';
+    return std::make_unique<Identifier>(t->lit);
 }
 
 std::unique_ptr<Expression> Parser::create_bad_expression_with_text(
@@ -857,6 +862,7 @@ std::unique_ptr<Expression> Parser::create_placeholder_expression(
 
 std::unique_ptr<Expression> Parser::parse_conditional_expression() {
     const auto* t = peek();
+
     if (t->tok == TokenType::If) {
         auto if_tok = scan();
         auto test = parse_expression();
@@ -1120,8 +1126,9 @@ std::unique_ptr<Property> Parser::parse_property_suffix(std::unique_ptr<Property
     std::vector<std::shared_ptr<Comment>> sep;
     if (t->tok == TokenType::Colon) {
         tt = consume();
+        std::cout << __FUNCTION__ << ':' << __LINE__ << " ==> " << tt->lit << '\n';
         value = parse_property_value();
-        sep = t->comments;
+        sep = tt->comments;
     }
     std::unique_ptr<Property> ret = std::make_unique<Property>();
     ret->key = std::move(key);
@@ -1142,6 +1149,7 @@ std::unique_ptr<Expression> Parser::parse_expression_while_more(
     std::unique_ptr<Expression> init, const std::set<TokenType>& stop_tokens) {
     for (;;) {
         const auto* t = peek();
+        std::cout << __FUNCTION__ << ':' << __LINE__ << " ==> " << t->lit << '\n';
         if (stop_tokens.contains(t->tok) || !more()) {
             break;
         }
@@ -1216,7 +1224,7 @@ std::vector<std::shared_ptr<Property>> Parser::parse_property_list() {
     std::vector<std::shared_ptr<Property>> params;
     while (more()) {
         const auto* t = peek();
-        std::shared_ptr<Property> p;
+        std::unique_ptr<Property> p;
         if (t->tok == TokenType::Ident) {
             p = parse_ident_property();
         } else if (t->tok == TokenType::String) {
@@ -1231,11 +1239,13 @@ std::vector<std::shared_ptr<Property>> Parser::parse_property_list() {
                                    token_to_string(t->tok));
             } else {
                 auto nt = consume();
-                p->comma = t->comments;
+                p->comma = nt->comments;
             }
         }
         params.emplace_back(std::move(p));
     }
+
+    std::cout << __FUNCTION__ << ":" << __LINE__ << " ==> params: " << params.size() << '\n';
 
     return params;
 }
@@ -1272,7 +1282,8 @@ std::unique_ptr<Expression> Parser::parse_expression() {
     auto expr = depth_guard<std::unique_ptr<Expression>>([this] {
         return parse_conditional_expression();
     });
-    if (expr) {
+
+    if (!expr) {
         auto t = consume();
         return create_bad_expression(std::move(t));
     }
@@ -1509,6 +1520,7 @@ std::unique_ptr<Block> Parser::parse_block() {
 
 std::unique_ptr<Expression> Parser::parse_primary_expression() {
     const auto* t = peek_with_regex();
+    std::cout << __FUNCTION__ << ":" << __LINE__ << " ==> " << t->lit << "\n";
     auto ret = std::make_unique<Expression>();
     switch (t->tok) {
     case TokenType::Ident:
@@ -1519,6 +1531,7 @@ std::unique_ptr<Expression> Parser::parse_primary_expression() {
     }
     case TokenType::Int:
     {
+        std::cout << __FUNCTION__ << ":" << __LINE__ << "\n";
         ret->type = Expression::Type::IntegerLit;
         ret->expr = parse_int_literal();
         break;
@@ -1699,6 +1712,7 @@ std::unique_ptr<Token> Parser::close(TokenType end) {
     ret->end_offset = token->end_offset;
     return ret;
 }
+
 bool Parser::more() {
     auto t_tok = peek()->tok;
     if (t_tok == TokenType::Eof) {
@@ -1706,6 +1720,7 @@ bool Parser::more() {
     }
     return blocks_.find(t_tok) == blocks_.end() || blocks_[t_tok] == 0;
 }
+
 std::unique_ptr<Token> Parser::open(TokenType start, TokenType end) {
     auto t = expect(start);
     if (blocks_.find(end) != blocks_.end()) {
@@ -1715,6 +1730,7 @@ std::unique_ptr<Token> Parser::open(TokenType start, TokenType end) {
     }
     return t;
 }
+
 std::unique_ptr<Token> Parser::expect_or_skip(TokenType exp) {
     auto t = scan();
     if (t->tok == exp) {
@@ -1739,6 +1755,7 @@ std::unique_ptr<Token> Parser::expect_or_skip(TokenType exp) {
     }
     return ret;
 }
+
 std::unique_ptr<Token> Parser::expect_one_of(const std::set<TokenType>& exp) {
     auto t = scan();
     if (exp.count(t->tok) > 0) {
