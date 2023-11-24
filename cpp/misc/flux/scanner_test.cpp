@@ -13,6 +13,10 @@
 
 int main(int argc, char* argv[]) {
     std::string flux = R"(
+    import "array"
+    import "math"
+    import "influxdata/influxdb/sample"
+
     from(bucket:"telegraf/autogen")
         |> range(start:-1h)
         |> filter(fn:(r) =>

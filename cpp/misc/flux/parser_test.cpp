@@ -12,18 +12,22 @@
 #include "parser.h"
 
 int main(int argc, char* argv[]) {
+    // std::string flux = R"(
+    // import "array"
+    // import "math"
+    // import "influxdata/influxdb/sample"
+    //
+    // from(bucket:"telegraf/autogen")
+    //     |> range(start:-1h)
+    //     |> filter(fn:(r) =>
+    //         r._measurement == "cpu" and
+    //         r.cpu == "cpu-total"
+    //     )
+    //     |> aggregateWindow(every: 1m, fn: mean)
+    // )";
     std::string flux = R"(
-    import "array"
-    import "math"
-    import "influxdata/influxdb/sample"
-
     from(bucket:"telegraf/autogen")
         |> range(start:-1h)
-        |> filter(fn:(r) =>
-            r._measurement == "cpu" and
-            r.cpu == "cpu-total"
-        )
-        |> aggregateWindow(every: 1m, fn: mean)
     )";
 
     pl::Parser parser(flux);
