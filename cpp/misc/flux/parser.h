@@ -86,6 +86,15 @@ private:
 
     SourceLocation source_location(const Position& start, const Position& end);
 
+    std::tuple<std::unique_ptr<PackageClause>,
+               std::optional<std::vector<std::shared_ptr<Attribute>>>>
+    parse_package_clause(const std::vector<std::shared_ptr<Attribute>>& attributes);
+    std::unique_ptr<ImportDeclaration> parse_import_declaration(
+        const std::optional<std::vector<std::shared_ptr<Attribute>>>& attributes);
+    std::tuple<std::vector<std::shared_ptr<ImportDeclaration>>,
+               std::optional<std::vector<std::shared_ptr<Attribute>>>>
+    parse_import_list(std::optional<std::vector<std::shared_ptr<Attribute>>> attributes);
+
     std::vector<std::shared_ptr<Attribute>> parse_attribute_inner_list();
     std::unique_ptr<Attribute> parse_attribute_inner();
     std::unique_ptr<Attribute> parse_attribute_rest(std::unique_ptr<Token> tok,
@@ -102,17 +111,13 @@ private:
     std::unique_ptr<Property> parse_invalid_property();
     std::unique_ptr<Property> parse_property_suffix(std::unique_ptr<PropertyKey> key);
 
-    std::unique_ptr<Block> parse_block();
-
     std::unique_ptr<LabelLit> parse_label_literal();
-    std::tuple<std::unique_ptr<StringExpr>, TokenError> parse_string_expression();
-
-    std::unique_ptr<ObjectExpr> parse_object_literal();
-    std::unique_ptr<ObjectExpr> parse_object_body();
-
     std::tuple<std::unique_ptr<DurationLit>, TokenError> parse_duration_literal();
     std::tuple<std::unique_ptr<DateTimeLit>, TokenError> parse_time_literal();
 
+    bool parse_pipe_operator();
+    std::optional<Operator> parse_exponent_operator();
+    std::optional<Operator> parse_multiplicative_operator();
     std::optional<Operator> parse_logical_unary_operator();
     std::optional<Operator> parse_comparison_operator();
     std::optional<Operator> parse_additive_operator();
@@ -125,23 +130,15 @@ private:
     std::unique_ptr<StringLit> new_string_literal(std::unique_ptr<Token> t);
     std::unique_ptr<Identifier> parse_identifier();
     std::unique_ptr<IntegerLit> parse_int_literal();
-
     std::tuple<std::unique_ptr<FloatLit>, TokenError> parse_float_literal();
-    std::tuple<std::unique_ptr<PackageClause>,
-               std::optional<std::vector<std::shared_ptr<Attribute>>>>
-    parse_package_clause(const std::vector<std::shared_ptr<Attribute>>& attributes);
-    std::unique_ptr<ImportDeclaration> parse_import_declaration(
-        const std::optional<std::vector<std::shared_ptr<Attribute>>>& attributes);
-    std::tuple<std::vector<std::shared_ptr<ImportDeclaration>>,
-               std::optional<std::vector<std::shared_ptr<Attribute>>>>
-    parse_import_list(std::optional<std::vector<std::shared_ptr<Attribute>>> attributes);
 
-    bool parse_pipe_operator();
-    std::optional<Operator> parse_exponent_operator();
-    std::optional<Operator> parse_multiplicative_operator();
-
+    //// expression
+    std::tuple<std::unique_ptr<StringExpr>, TokenError> parse_string_expression();
+    std::unique_ptr<ObjectExpr> parse_object_literal();
+    std::unique_ptr<ObjectExpr> parse_object_body();
     std::unique_ptr<ObjectExpr> parse_object_body_suffix(std::unique_ptr<Identifier> id);
 
+    std::unique_ptr<Block> parse_block();
     std::unique_ptr<Expression> parse_expression();
     std::unique_ptr<Expression> parse_primary_expression();
     std::unique_ptr<Expression> parse_function_body_expression(
@@ -201,8 +198,10 @@ private:
         std::unique_ptr<Expression> expr);
     std::unique_ptr<Expression> parse_expression_suffix(std::unique_ptr<Expression> expr);
 
+    //// assign
     std::unique_ptr<Assignment> parse_option_assignment_suffix(std::unique_ptr<Identifier> id);
 
+    //// statement
     std::unique_ptr<Statement> parse_expression_statement();
     std::unique_ptr<Statement> parse_ident_statement();
     std::unique_ptr<Statement> parse_option_assignment();
@@ -216,6 +215,7 @@ private:
     std::vector<std::shared_ptr<Statement>> parse_statement_list(
         const std::optional<std::vector<std::shared_ptr<Attribute>>>& attributes);
 
+    //// type
     std::unique_ptr<MonoType> parse_monotype();
     std::unique_ptr<TypeExpression> parse_type_expression();
     std::vector<std::shared_ptr<TypeConstraint>> parse_constraints();
