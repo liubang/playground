@@ -406,6 +406,8 @@ struct ConditionalExpr {
 
 struct StringExpr {
     std::vector<std::shared_ptr<StringExprPart>> parts;
+    StringExpr() = default;
+    StringExpr(std::vector<std::shared_ptr<StringExprPart>> parts) : parts(std::move(parts)) {}
 };
 
 struct StringExprPart {
