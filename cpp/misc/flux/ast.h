@@ -462,6 +462,12 @@ struct StringLit {
     StringLit(std::string value) : value(std::move(value)) {}
 };
 
+struct Duration {
+    int64_t magnitude;
+    std::string unit;
+    Duration(int64_t magnitude, std::string unit) : magnitude(magnitude), unit(std::move(unit)) {}
+};
+
 struct DurationLit {
     std::vector<std::shared_ptr<Duration>> values;
     DurationLit() = default;
