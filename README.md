@@ -43,3 +43,9 @@ gazelle update-repos -from_file=go/go.mod -to_macro=go/go_deps.bzl%go_repositori
 ```sh
 REPIN=1 bazel run @unpinned_maven//:pin
 ```
+
+### 更新 rust 依赖
+
+```sh
+CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
+```

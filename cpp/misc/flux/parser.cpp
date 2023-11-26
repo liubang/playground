@@ -661,7 +661,7 @@ std::unique_ptr<StringLit> Parser::new_string_literal(std::unique_ptr<Token> t) 
     if (!result.ok()) {
         return nullptr;
     }
-    return std::make_unique<StringLit>(result.t());
+    return std::make_unique<StringLit>(result.value());
 }
 
 std::unique_ptr<StringLit> Parser::parse_string_literal() {
@@ -894,9 +894,9 @@ std::unique_ptr<RegexpLit> Parser::parse_regexp_literral() {
     auto value = StrConv::parse_regex(t->lit);
     auto ret = std::make_unique<RegexpLit>();
     if (!value.ok()) {
-        errs_.emplace_back(value.e());
+        errs_.emplace_back(value.status().message());
     } else {
-        ret->value = value.t();
+        ret->value = value.value();
     }
     return ret;
 }
@@ -905,7 +905,7 @@ std::tuple<std::unique_ptr<DateTimeLit>, TokenError> Parser::parse_time_literal(
     auto t = expect(TokenType::Time);
     auto value = StrConv::parse_time(t->lit);
     if (value.ok()) {
-        auto datetime_lit = std::make_unique<DateTimeLit>(value.t());
+        auto datetime_lit = std::make_unique<DateTimeLit>(value.value());
         return {std::move(datetime_lit), TokenError()};
     }
     return {nullptr, TokenError(std::move(t))};
@@ -915,7 +915,7 @@ std::tuple<std::unique_ptr<DurationLit>, TokenError> Parser::parse_duration_lite
     auto t = expect(TokenType::Duration);
     auto value = StrConv::parse_duration(t->lit);
     if (value.ok()) {
-        auto dl = std::make_unique<DurationLit>(value.t());
+        auto dl = std::make_unique<DurationLit>(value.value());
         return {std::move(dl), TokenError()};
     }
     return {nullptr, TokenError()};
@@ -1303,7 +1303,7 @@ std::tuple<std::unique_ptr<StringExpr>, TokenError> Parser::parse_string_express
                 return {nullptr, TokenError(std::move(t))};
             }
             auto tp = std::make_unique<TextPart>();
-            tp->value = value.t();
+            tp->value = value.value();
             auto p = std::make_unique<StringExprPart>(StringExprPart::Type::Text, std::move(tp));
             parts.emplace_back(std::move(p));
             break;
