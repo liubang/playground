@@ -46,9 +46,9 @@ load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies")
 
 # gazelle:repo bazel_gazelle
 
-load("//:go_deps.bzl", "go_repositories")
+load("//go:go_deps.bzl", "go_repositories")
 
-# gazelle:repository_macro go_deps.bzl%go_repositories
+# gazelle:repository_macro go/go_deps.bzl%go_repositories
 go_repositories()
 
 go_rules_dependencies()
