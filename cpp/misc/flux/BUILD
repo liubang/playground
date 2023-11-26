@@ -66,6 +66,7 @@ cc_library(
     ],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
+    local_defines = ["FLUX_ENABLE_DEBUG"],
     deps = [
         ":scanner",
         "@abseil-cpp//absl/status:statusor",

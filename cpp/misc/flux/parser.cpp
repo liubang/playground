@@ -10,6 +10,12 @@
 
 namespace pl {
 
+#if defined(FLUX_ENABLE_DEBUG)
+#define FLUX_DEBUG(msg) std::cout << __FUNCTION__ << ":" << __LINE__ << " ==> " << (msg) << '\n'
+#else
+#define FLUX_DEBUG(msg)
+#endif
+
 std::unique_ptr<Package> Parser::parse_single_package(const std::string& pkgpath,
                                                       const std::string& fname) {
     std::shared_ptr<File> ast_file = parse_file(fname);
@@ -28,11 +34,9 @@ std::unique_ptr<File> Parser::parse_file(const std::string& fname) {
     auto body = parse_statement_list(inner_attrs2);
     if (!inner_attrs.empty()) {
         // We have left over attributes from the beginning of the file.
-        auto badstmt = std::make_unique<BadStmt>();
-        badstmt->text = "extra attributes not associated with anything";
-        std::shared_ptr<Statement> stmt = std::make_shared<Statement>();
-        stmt->type = Statement::Type::BadStatement;
-        stmt->stmt = std::move(badstmt);
+        auto badstmt = std::make_unique<BadStmt>("extra attributes not associated with anything");
+        std::shared_ptr<Statement> stmt =
+            std::make_shared<Statement>(Statement::Type::BadStatement, std::move(badstmt));
         body.emplace_back(std::move(stmt));
     }
 
@@ -66,11 +70,8 @@ std::unique_ptr<Statement> Parser::parse_statement(
     });
     if (!opt) {
         auto t = consume();
-        auto ret = std::make_unique<Statement>();
-        ret->type = Statement::Type::BadStatement;
-        auto bad = std::make_shared<BadExpr>();
-        // bad->base = base_node_from_token(t.get());
-        bad->text = t->lit;
+        auto bad = std::make_unique<BadStmt>(t->lit);
+        auto ret = std::make_unique<Statement>(Statement::Type::BadStatement, std::move(bad));
         return ret;
     }
     return std::move(opt.value());
@@ -134,17 +135,13 @@ std::unique_ptr<Statement> Parser::parse_option_assignment() {
     auto t = expect(TokenType::Option);
     auto ident = parse_identifier();
     auto assignment = parse_option_assignment_suffix(std::move(ident));
-    auto stmt = std::make_unique<Statement>();
+    // auto stmt = std::make_unique<Statement>();
     if (assignment) {
-        stmt->type = Statement::Type::OptionStatement;
         auto assstmt = std::make_unique<OptionStmt>(std::move(assignment));
-        stmt->stmt = std::move(assstmt);
-    } else {
-        auto badstmt = std::make_unique<BadStmt>(t->lit);
-        stmt->type = Statement::Type::BadStatement;
-        stmt->stmt = std::move(badstmt);
+        return std::make_unique<Statement>(Statement::Type::OptionStatement, std::move(assstmt));
     }
-    return stmt;
+    auto badstmt = std::make_unique<BadStmt>(t->lit);
+    return std::make_unique<Statement>(Statement::Type::BadStatement, std::move(badstmt));
 }
 
 // TODO
@@ -292,21 +289,15 @@ std::unique_ptr<Assignment> Parser::parse_option_assignment_suffix(std::unique_p
 std::unique_ptr<Statement> Parser::parse_ident_statement() {
     auto id = parse_identifier();
     const auto* t = peek();
-    auto ret = std::make_unique<Statement>();
     if (t->tok == TokenType::Assign) {
         auto init = parse_assign_statement();
-        ret->type = Statement::Type::VariableAssignment;
         auto stmt = std::make_unique<VariableAssgn>(std::move(id), std::move(init));
-        ret->stmt = std::move(stmt);
-    } else {
-        auto idexpr = std::make_unique<Expression>(Expression::Type::Identifier, std::move(id));
-        auto expr = parse_expression_suffix(std::move(idexpr));
-        ret->type = Statement::Type::ExpressionStatement;
-        auto stmt = std::make_unique<ExprStmt>(std::move(expr));
-        ret->stmt = std::move(stmt);
+        return std::make_unique<Statement>(Statement::Type::VariableAssignment, std::move(stmt));
     }
-
-    return ret;
+    auto idexpr = std::make_unique<Expression>(Expression::Type::Identifier, std::move(id));
+    auto expr = parse_expression_suffix(std::move(idexpr));
+    auto stmt = std::make_unique<ExprStmt>(std::move(expr));
+    return std::make_unique<Statement>(Statement::Type::ExpressionStatement, std::move(stmt));
 }
 
 std::unique_ptr<Expression> Parser::parse_expression_suffix(std::unique_ptr<Expression> expr) {
@@ -380,7 +371,7 @@ std::unique_ptr<Expression> Parser::parse_pipe_expression_suffix(std::unique_ptr
     auto res = std::move(expr);
     for (;;) {
         auto op = parse_pipe_operator();
-        std::cout << __FUNCTION__ << ":" << __LINE__ << " ==> " << op << '\n';
+        FLUX_DEBUG("pipe_op: " + std::to_string(op));
         if (!op) {
             break;
         }
@@ -431,7 +422,7 @@ std::unique_ptr<Expression> Parser::parse_unary_expression() {
     auto op = parse_additive_operator();
     if (op) {
         auto t = consume();
-        std::cout << __FUNCTION__ << ":" << __LINE__ << " ==> " << t->lit << "\n";
+        FLUX_DEBUG(t->lit);
         auto expr = parse_unary_expression();
         return std::make_unique<Expression>(
             Expression::Type::UnaryExpr, std::make_unique<UnaryExpr>(op.value(), std::move(expr)));
@@ -513,10 +504,10 @@ std::unique_ptr<Expression> Parser::parse_index_expression(std::unique_ptr<Expre
 
 std::unique_ptr<Expression> Parser::parse_call_expression(std::unique_ptr<Expression> expr) {
     auto lparen = open(TokenType::LParen, TokenType::RParen);
-    std::cout << __FUNCTION__ << ":" << __LINE__ << " ==> " << lparen->lit << "\n";
+    FLUX_DEBUG(lparen->lit);
     auto params = parse_property_list();
     auto end = close(TokenType::RParen);
-    std::cout << __FUNCTION__ << ":" << __LINE__ << " ==> " << end->lit << "\n";
+    FLUX_DEBUG(end->lit);
     auto call =
         std::make_unique<CallExpr>(std::move(expr), lparen->comments,
                                    std::vector<std::shared_ptr<Expression>>{}, end->comments);
@@ -635,7 +626,7 @@ std::unique_ptr<IntegerLit> Parser::parse_int_literal() {
 
 std::unique_ptr<Identifier> Parser::parse_identifier() {
     auto t = expect_or_skip(TokenType::Ident);
-    std::cout << __FUNCTION__ << ":" << __LINE__ << " ==> " << t->lit << '\n';
+    FLUX_DEBUG(t->lit);
     return std::make_unique<Identifier>(t->lit);
 }
 
@@ -1126,7 +1117,7 @@ std::unique_ptr<Property> Parser::parse_property_suffix(std::unique_ptr<Property
     std::vector<std::shared_ptr<Comment>> sep;
     if (t->tok == TokenType::Colon) {
         tt = consume();
-        std::cout << __FUNCTION__ << ':' << __LINE__ << " ==> " << tt->lit << '\n';
+        FLUX_DEBUG(tt->lit);
         value = parse_property_value();
         sep = tt->comments;
     }
@@ -1149,7 +1140,7 @@ std::unique_ptr<Expression> Parser::parse_expression_while_more(
     std::unique_ptr<Expression> init, const std::set<TokenType>& stop_tokens) {
     for (;;) {
         const auto* t = peek();
-        std::cout << __FUNCTION__ << ':' << __LINE__ << " ==> " << t->lit << '\n';
+        FLUX_DEBUG(t->lit);
         if (stop_tokens.contains(t->tok) || !more()) {
             break;
         }
@@ -1245,7 +1236,7 @@ std::vector<std::shared_ptr<Property>> Parser::parse_property_list() {
         params.emplace_back(std::move(p));
     }
 
-    std::cout << __FUNCTION__ << ":" << __LINE__ << " ==> params: " << params.size() << '\n';
+    FLUX_DEBUG("params: " + std::to_string(params.size()));
 
     return params;
 }
@@ -1520,7 +1511,7 @@ std::unique_ptr<Block> Parser::parse_block() {
 
 std::unique_ptr<Expression> Parser::parse_primary_expression() {
     const auto* t = peek_with_regex();
-    std::cout << __FUNCTION__ << ":" << __LINE__ << " ==> " << t->lit << "\n";
+    FLUX_DEBUG(t->lit);
     auto ret = std::make_unique<Expression>();
     switch (t->tok) {
     case TokenType::Ident:
@@ -1531,7 +1522,6 @@ std::unique_ptr<Expression> Parser::parse_primary_expression() {
     }
     case TokenType::Int:
     {
-        std::cout << __FUNCTION__ << ":" << __LINE__ << "\n";
         ret->type = Expression::Type::IntegerLit;
         ret->expr = parse_int_literal();
         break;
