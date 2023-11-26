@@ -43,7 +43,7 @@ fn demo3() {
     loop {
         match m.next() {
             None => break,
-            Some(el) => {
+            Some(_el) => {
                 println!("OK")
             }
         }

@@ -17,7 +17,10 @@ package(default_visibility = ["//visibility:public"])
             "%s" % f,
         ],
         edition = "2021",
-        deps = ["@rules_rust//tools/runfiles"],
+        deps = [
+            "@crate_index//:rand",
+            "@rules_rust//tools/runfiles",
+        ],
     )
     for f in glob(["src/bin/*.rs"])
 ]
