@@ -15,7 +15,7 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2022/05/19 00:19
 
-use num::complex::{Complex, ComplexFloat};
+use num::complex::Complex;
 
 fn add(a: i32, b: i32) -> i32 {
     return a + b;

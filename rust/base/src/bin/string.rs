@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Authors. All rights reserved.
+// Copyright (c) 2023 The Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,10 +13,18 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2022/11/02 19:20
+// Created: 2023/11/26 22:05
+
+pub fn parse_string(lit: &str) -> Result<(), String> {
+    if lit.len() < 2 || !lit.starts_with('"') || !lit.ends_with('"') {
+        return Err("invalid string literal".to_string());
+    }
+    println!("{}", &lit[1..lit.len() - 1]);
+    println!("{}", lit);
+    Ok(())
+}
 
 fn main() {
-    let x = 1;
-    let sum = |y| x + y;
-    println!("sum is {}", sum(10));
+    let s = "\"this is test string\"";
+    let _ = parse_string(s);
 }
