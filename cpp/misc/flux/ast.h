@@ -8,7 +8,8 @@
 //=====================================================================
 #pragma once
 
-#include <chrono>
+#include <ctime>
+#include <sstream>
 #include <unordered_map>
 #include <utility>
 #include <variant>
@@ -18,10 +19,7 @@
 
 namespace pl {
 
-struct Position;
-struct SourceLocation;
 struct Comment;
-struct BaseNode;
 struct Attribute;
 struct AttributeParam;
 struct Package;
@@ -95,25 +93,13 @@ struct StringExprPart;
 enum class Operator;
 enum class LogicalOperator;
 
-struct BaseNode {
-    // implementation details
-    SourceLocation location;
-    std::vector<std::shared_ptr<Comment>> comments;
-    std::vector<std::shared_ptr<Attribute>> attributes;
-    std::vector<std::string> errors;
-
-    BaseNode() = default;
-    BaseNode(SourceLocation loc) : location(std::move(loc)) {}
-    BaseNode(SourceLocation loc,
-             const std::vector<std::shared_ptr<Comment>>& comments,
-             const std::vector<std::shared_ptr<Attribute>>& attributes,
-             const std::vector<std::string>& errors)
-        : location(std::move(loc)), comments(comments), attributes(attributes), errors(errors) {}
-};
-
 struct AttributeParam {
     std::unique_ptr<Expression> value;
     std::vector<std::shared_ptr<Comment>> comma;
+    std::string string() const {
+        std::stringstream ss;
+        return ss.str();
+    }
 };
 
 struct Attribute {
@@ -184,7 +170,6 @@ struct ReturnStmt {
 
 struct BadStmt {
     std::string text;
-    BadStmt() = default;
     BadStmt(std::string text) : text(std::move(text)) {}
 };
 
@@ -230,9 +215,9 @@ struct Statement {
                                std::unique_ptr<TestCaseStmt>,
                                std::unique_ptr<BuiltinStmt>>;
     StmtT stmt;
-
-    Statement() = default;
     Statement(Type type, StmtT stmt) : type(type), stmt(std::move(stmt)) {}
+    // TODO
+    std::string string() const { return ""; }
 };
 
 // expr
@@ -488,7 +473,7 @@ struct BooleanLit {
 
 struct DateTimeLit {
     std::tm value;
-    DateTimeLit() : value({}) {}
+    DateTimeLit() = default;
     DateTimeLit(const std::tm& value) : value(value) {}
 };
 
