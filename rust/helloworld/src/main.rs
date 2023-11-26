@@ -36,7 +36,7 @@ fn main() {
 
         let _unused = 10;
         // warning: unused variable: `unused`
-        let unused = 10;
+        let _unused = 10;
     }
 
     {
