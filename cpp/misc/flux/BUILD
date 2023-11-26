@@ -74,6 +74,7 @@ cc_library(
     name = "parser",
     srcs = [
         "parser.cpp",
+        "strconv.cpp",
     ],
     hdrs = [
         "ast.h",
@@ -84,6 +85,7 @@ cc_library(
     linkopts = DEFAULT_LINKOPTS,
     deps = [
         ":scanner",
+        "@abseil-cpp//absl/status:statusor",
     ],
 )
 
