@@ -12,7 +12,6 @@
 #include <functional>
 #include <memory>
 #include <set>
-#include <sstream>
 #include <utility>
 
 #include "ast.h"
