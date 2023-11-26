@@ -12,7 +12,7 @@ on:
 jobs:
   build-rust:
     name: rust playground
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
         with:
@@ -24,6 +24,10 @@ jobs:
         with:
           version: 12
           platform: x64
+      - name: Setup Rust
+        uses: ATiltedTree/setup-rust@v1
+        with:
+          rust-version: stable
       - uses: actions/cache@v3
         env:
           cache-name: bazel-rust
