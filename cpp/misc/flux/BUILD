@@ -56,6 +56,7 @@ cc_binary(
 cc_library(
     name = "parser",
     srcs = [
+        "ast.cpp",
         "parser.cpp",
         "strconv.cpp",
     ],
@@ -70,6 +71,7 @@ cc_library(
     deps = [
         ":scanner",
         "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings:strings",
     ],
 )
 
