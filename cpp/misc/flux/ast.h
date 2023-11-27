@@ -96,10 +96,7 @@ enum class LogicalOperator;
 struct AttributeParam {
     std::unique_ptr<Expression> value;
     std::vector<std::shared_ptr<Comment>> comma;
-    std::string string() const {
-        std::stringstream ss;
-        return ss.str();
-    }
+    std::string string() const;
 };
 
 struct Attribute {
@@ -146,6 +143,7 @@ struct ExprStmt {
     std::unique_ptr<Expression> expression;
     ExprStmt() = default;
     ExprStmt(std::unique_ptr<Expression> expr) : expression(std::move(expr)) {}
+    std::string string() const;
 };
 
 struct VariableAssgn {
@@ -154,23 +152,27 @@ struct VariableAssgn {
     VariableAssgn() = default;
     VariableAssgn(std::unique_ptr<Identifier> id, std::unique_ptr<Expression> init)
         : id(std::move(id)), init(std::move(init)) {}
+    std::string string() const;
 };
 
 struct OptionStmt {
     std::unique_ptr<Assignment> assignment;
     OptionStmt() = default;
     OptionStmt(std::unique_ptr<Assignment> assignment) : assignment(std::move(assignment)) {}
+    std::string string() const;
 };
 
 struct ReturnStmt {
     std::unique_ptr<Expression> argument;
     ReturnStmt() = default;
     ReturnStmt(std::unique_ptr<Expression> argument) : argument(std::move(argument)) {}
+    std::string string() const { return ""; }
 };
 
 struct BadStmt {
     std::string text;
     BadStmt(std::string text) : text(std::move(text)) {}
+    std::string string() const { return ""; }
 };
 
 struct TestCaseStmt {
@@ -182,6 +184,7 @@ struct TestCaseStmt {
                  std::unique_ptr<StringLit> extends,
                  std::unique_ptr<Block> block)
         : id(std::move(id)), extends(std::move(extends)), block(std::move(block)) {}
+    std::string string() const { return ""; }
 };
 
 struct BuiltinStmt {
@@ -193,6 +196,7 @@ struct BuiltinStmt {
                 std::unique_ptr<Identifier> id,
                 std::unique_ptr<TypeExpression> ty)
         : colon(colon), id(std::move(id)), ty(std::move(ty)) {}
+    std::string string() const { return ""; }
 };
 
 struct Statement {
@@ -216,8 +220,40 @@ struct Statement {
                                std::unique_ptr<BuiltinStmt>>;
     StmtT stmt;
     Statement(Type type, StmtT stmt) : type(type), stmt(std::move(stmt)) {}
-    // TODO
-    std::string string() const { return ""; }
+    std::string string() const {
+        std::stringstream ss;
+        switch (type) {
+        case Type::ExpressionStatement:
+            ss << "ExpressionStatement: ";
+            ss << std::get<std::unique_ptr<ExprStmt>>(stmt)->string();
+            break;
+        case Type::VariableAssignment:
+            ss << "VariableAssignment: ";
+            ss << std::get<std::unique_ptr<VariableAssgn>>(stmt)->string();
+            break;
+        case Type::OptionStatement:
+            ss << "OptionStatement: ";
+            ss << std::get<std::unique_ptr<OptionStmt>>(stmt)->string();
+            break;
+        case Type::ReturnStatement:
+            ss << "ReturnStatement: ";
+            ss << std::get<std::unique_ptr<ReturnStmt>>(stmt)->string();
+            break;
+        case Type::BadStatement:
+            ss << "BadStatement: ";
+            ss << std::get<std::unique_ptr<BadStmt>>(stmt)->string();
+            break;
+        case Type::TestCaseStatement:
+            ss << "TestCaseStatement: ";
+            ss << std::get<std::unique_ptr<TestCaseStmt>>(stmt)->string();
+            break;
+        case Type::BuiltinStatement:
+            ss << "BuiltinStatement: ";
+            ss << std::get<std::unique_ptr<BuiltinStmt>>(stmt)->string();
+            break;
+        }
+        return ss.str();
+    }
 };
 
 // expr
@@ -226,6 +262,7 @@ struct Identifier {
     std::string name;
     Identifier() = default;
     Identifier(std::string name) : name(std::move(name)) {}
+    std::string string() const { return "name: " + name; }
 };
 
 struct ArrayItem {
@@ -235,6 +272,7 @@ struct ArrayItem {
     ArrayItem(std::unique_ptr<Expression> expression,
               const std::vector<std::shared_ptr<Comment>>& comma)
         : expression(std::move(expression)), comma(comma) {}
+    std::string string() const;
 };
 
 struct ArrayExpr {
@@ -246,6 +284,8 @@ struct ArrayExpr {
               const std::vector<std::shared_ptr<ArrayItem>>& elements,
               const std::vector<std::shared_ptr<Comment>>& rbrack)
         : lbrack(lbrack), elements(elements), rbrack(rbrack) {}
+
+    std::string string() const;
 };
 
 struct DictItem {
@@ -268,6 +308,7 @@ struct DictExpr {
              const std::vector<std::shared_ptr<DictItem>>& elements,
              const std::vector<std::shared_ptr<Comment>>& rbrack)
         : lbrack(lbrack), elements(elements), rbrack(rbrack) {}
+    std::string string() const { return ""; }
 };
 
 struct FunctionExpr {
@@ -284,6 +325,7 @@ struct FunctionExpr {
                  const std::vector<std::shared_ptr<Comment>>& arrow,
                  std::unique_ptr<FunctionBody> body)
         : lparen(lparen), params(params), rparen(rparen), arrow(arrow), body(std::move(body)) {}
+    std::string string() const;
 };
 
 struct LogicalExpr {
@@ -559,6 +601,69 @@ struct Expression {
     ExprT expr;
     Expression() = default;
     Expression(Type t, ExprT expr) : type(t), expr(std::move(expr)) {}
+    std::string string() const {
+        std::stringstream ss;
+        ss << "expr: ";
+        switch (type) {
+        case Type::Identifier:
+            ss << std::get<std::unique_ptr<Identifier>>(expr)->string();
+            break;
+        case Type::ArrayExpr:
+            ss << std::get<std::unique_ptr<ArrayExpr>>(expr)->string();
+            break;
+        case Type::DictExpr:
+            ss << std::get<std::unique_ptr<DictExpr>>(expr)->string();
+            break;
+        case Type::FunctionExpr:
+            ss << std::get<std::unique_ptr<FunctionExpr>>(expr)->string();
+            break;
+        case Type::LogicalExpr:
+            break;
+        case Type::ObjectExpr:
+            break;
+        case Type::MemberExpr:
+            break;
+        case Type::IndexExpr:
+            break;
+        case Type::BinaryExpr:
+            break;
+        case Type::UnaryExpr:
+            break;
+        case Type::PipeExpr:
+            break;
+        case Type::CallExpr:
+            break;
+        case Type::ConditionalExpr:
+            break;
+        case Type::StringExpr:
+            break;
+        case Type::ParenExpr:
+            break;
+        case Type::IntegerLit:
+            break;
+        case Type::FloatLit:
+            break;
+        case Type::StringLit:
+            break;
+        case Type::DurationLit:
+            break;
+        case Type::UnsignedIntegerLit:
+            break;
+        case Type::BooleanLit:
+            break;
+        case Type::DateTimeLit:
+            break;
+        case Type::RegexpLit:
+            break;
+        case Type::PipeLit:
+            break;
+        case Type::LabelLit:
+            break;
+        case Type::BadExpr:
+            break;
+        }
+        return ss.str();
+    }
 };
 
 // operator
@@ -679,6 +784,7 @@ struct Assignment {
 
     Assignment() = default;
     Assignment(Assignment::Type type, AssiT value) : type(type), value(std::move(value)) {}
+    std::string string() const;
 };
 
 // property

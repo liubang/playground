@@ -20,7 +20,7 @@ constexpr unsigned char DURATION_UNIT_US[] = "µ";
 
 class StrConv {
 public:
-    static bool to_byte(char c, uint8_t* b);
+    static bool to_byte(unsigned char c, uint8_t* b);
 
     static absl::StatusOr<std::string> push_hex_byte(const std::string& lit,
                                                      size_t& start,
