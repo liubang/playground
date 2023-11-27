@@ -14,7 +14,7 @@
 
 namespace pl {
 
-bool StrConv::to_byte(char c, uint8_t* b) {
+bool StrConv::to_byte(unsigned char c, uint8_t* b) {
     if (c >= '0' && c <= '9') {
         *b = c - '0';
     } else if (c >= 'a' && c <= 'f') {
@@ -43,7 +43,7 @@ absl::StatusOr<std::string> StrConv::push_hex_byte(const std::string& lit,
         return absl::InvalidArgumentError("invalid byte value");
     }
     uint8_t b = (b1 << 4) | b2;
-    s->push_back(static_cast<unsigned char>(b));
+    s->push_back(static_cast<char>(b));
 
     return absl::OkStatus();
 }
