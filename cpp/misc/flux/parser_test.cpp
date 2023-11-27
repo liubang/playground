@@ -34,6 +34,7 @@ int main(int argc, char* argv[]) {
     auto file = parser.parse_file("");
 
     std::cout << __FILE_NAME__ << ":" << __LINE__ << " ==> " << file->name << "\n";
+    std::cout << __FILE_NAME__ << ":" << __LINE__ << " ==> " << file->imports.size() << "\n";
     std::cout << __FILE_NAME__ << ":" << __LINE__ << " ==> " << file->body.size() << "\n";
 
     for (const auto& stmt : file->body) {
