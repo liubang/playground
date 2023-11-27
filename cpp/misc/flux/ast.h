@@ -9,7 +9,6 @@
 #pragma once
 
 #include <ctime>
-#include <sstream>
 #include <unordered_map>
 #include <utility>
 #include <variant>
@@ -96,7 +95,7 @@ enum class LogicalOperator;
 struct AttributeParam {
     std::unique_ptr<Expression> value;
     std::vector<std::shared_ptr<Comment>> comma;
-    std::string string() const;
+    [[nodiscard]] std::string string() const;
 };
 
 struct Attribute {
@@ -142,8 +141,12 @@ struct ImportDeclaration {
 struct ExprStmt {
     std::unique_ptr<Expression> expression;
     ExprStmt() = default;
+    ExprStmt(const ExprStmt&) = delete;
+    ExprStmt(ExprStmt&&) = default;
+    ExprStmt& operator=(const ExprStmt&) = delete;
+    ExprStmt& operator=(ExprStmt&&) = default;
     ExprStmt(std::unique_ptr<Expression> expr) : expression(std::move(expr)) {}
-    std::string string() const;
+    [[nodiscard]] std::string string() const;
 };
 
 struct VariableAssgn {
@@ -152,27 +155,27 @@ struct VariableAssgn {
     VariableAssgn() = default;
     VariableAssgn(std::unique_ptr<Identifier> id, std::unique_ptr<Expression> init)
         : id(std::move(id)), init(std::move(init)) {}
-    std::string string() const;
+    [[nodiscard]] std::string string() const;
 };
 
 struct OptionStmt {
     std::unique_ptr<Assignment> assignment;
     OptionStmt() = default;
     OptionStmt(std::unique_ptr<Assignment> assignment) : assignment(std::move(assignment)) {}
-    std::string string() const;
+    [[nodiscard]] std::string string() const;
 };
 
 struct ReturnStmt {
     std::unique_ptr<Expression> argument;
     ReturnStmt() = default;
     ReturnStmt(std::unique_ptr<Expression> argument) : argument(std::move(argument)) {}
-    std::string string() const { return ""; }
+    [[nodiscard]] std::string string() const;
 };
 
 struct BadStmt {
     std::string text;
     BadStmt(std::string text) : text(std::move(text)) {}
-    std::string string() const { return ""; }
+    [[nodiscard]] std::string string() const { return ""; }
 };
 
 struct TestCaseStmt {
@@ -184,7 +187,7 @@ struct TestCaseStmt {
                  std::unique_ptr<StringLit> extends,
                  std::unique_ptr<Block> block)
         : id(std::move(id)), extends(std::move(extends)), block(std::move(block)) {}
-    std::string string() const { return ""; }
+    [[nodiscard]] std::string string() const { return ""; }
 };
 
 struct BuiltinStmt {
@@ -196,7 +199,7 @@ struct BuiltinStmt {
                 std::unique_ptr<Identifier> id,
                 std::unique_ptr<TypeExpression> ty)
         : colon(colon), id(std::move(id)), ty(std::move(ty)) {}
-    std::string string() const { return ""; }
+    [[nodiscard]] std::string string() const { return ""; }
 };
 
 struct Statement {
@@ -220,40 +223,7 @@ struct Statement {
                                std::unique_ptr<BuiltinStmt>>;
     StmtT stmt;
     Statement(Type type, StmtT stmt) : type(type), stmt(std::move(stmt)) {}
-    std::string string() const {
-        std::stringstream ss;
-        switch (type) {
-        case Type::ExpressionStatement:
-            ss << "ExpressionStatement: ";
-            ss << std::get<std::unique_ptr<ExprStmt>>(stmt)->string();
-            break;
-        case Type::VariableAssignment:
-            ss << "VariableAssignment: ";
-            ss << std::get<std::unique_ptr<VariableAssgn>>(stmt)->string();
-            break;
-        case Type::OptionStatement:
-            ss << "OptionStatement: ";
-            ss << std::get<std::unique_ptr<OptionStmt>>(stmt)->string();
-            break;
-        case Type::ReturnStatement:
-            ss << "ReturnStatement: ";
-            ss << std::get<std::unique_ptr<ReturnStmt>>(stmt)->string();
-            break;
-        case Type::BadStatement:
-            ss << "BadStatement: ";
-            ss << std::get<std::unique_ptr<BadStmt>>(stmt)->string();
-            break;
-        case Type::TestCaseStatement:
-            ss << "TestCaseStatement: ";
-            ss << std::get<std::unique_ptr<TestCaseStmt>>(stmt)->string();
-            break;
-        case Type::BuiltinStatement:
-            ss << "BuiltinStatement: ";
-            ss << std::get<std::unique_ptr<BuiltinStmt>>(stmt)->string();
-            break;
-        }
-        return ss.str();
-    }
+    [[nodiscard]] std::string string() const;
 };
 
 // expr
@@ -262,7 +232,7 @@ struct Identifier {
     std::string name;
     Identifier() = default;
     Identifier(std::string name) : name(std::move(name)) {}
-    std::string string() const { return "name: " + name; }
+    [[nodiscard]] std::string string() const { return "name: " + name; }
 };
 
 struct ArrayItem {
@@ -272,7 +242,7 @@ struct ArrayItem {
     ArrayItem(std::unique_ptr<Expression> expression,
               const std::vector<std::shared_ptr<Comment>>& comma)
         : expression(std::move(expression)), comma(comma) {}
-    std::string string() const;
+    [[nodiscard]] std::string string() const;
 };
 
 struct ArrayExpr {
@@ -285,7 +255,7 @@ struct ArrayExpr {
               const std::vector<std::shared_ptr<Comment>>& rbrack)
         : lbrack(lbrack), elements(elements), rbrack(rbrack) {}
 
-    std::string string() const;
+    [[nodiscard]] std::string string() const;
 };
 
 struct DictItem {
@@ -308,7 +278,7 @@ struct DictExpr {
              const std::vector<std::shared_ptr<DictItem>>& elements,
              const std::vector<std::shared_ptr<Comment>>& rbrack)
         : lbrack(lbrack), elements(elements), rbrack(rbrack) {}
-    std::string string() const { return ""; }
+    [[nodiscard]] std::string string() const { return ""; }
 };
 
 struct FunctionExpr {
@@ -325,7 +295,7 @@ struct FunctionExpr {
                  const std::vector<std::shared_ptr<Comment>>& arrow,
                  std::unique_ptr<FunctionBody> body)
         : lparen(lparen), params(params), rparen(rparen), arrow(arrow), body(std::move(body)) {}
-    std::string string() const;
+    [[nodiscard]] std::string string() const;
 };
 
 struct LogicalExpr {
@@ -337,11 +307,13 @@ struct LogicalExpr {
                 std::unique_ptr<Expression> left,
                 std::unique_ptr<Expression> right)
         : op(op), left(std::move(left)), right(std::move(right)) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct WithSource {
     std::unique_ptr<Identifier> source;
     std::vector<std::shared_ptr<Comment>> with;
+    [[nodiscard]] std::string string() const;
 };
 
 struct ObjectExpr {
@@ -355,6 +327,7 @@ struct ObjectExpr {
                const std::vector<std::shared_ptr<Property>>& properties,
                const std::vector<std::shared_ptr<Comment>>& rbrace)
         : lbrace(lbrace), with(std::move(with)), properties(properties), rbrace(rbrace) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct MemberExpr {
@@ -368,6 +341,7 @@ struct MemberExpr {
                std::unique_ptr<PropertyKey> property,
                const std::vector<std::shared_ptr<Comment>>& rbrack)
         : object(std::move(expr)), lbrack(lbrack), property(std::move(property)), rbrack(rbrack) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct IndexExpr {
@@ -382,6 +356,7 @@ struct IndexExpr {
               std::unique_ptr<Expression> index,
               const std::vector<std::shared_ptr<Comment>>& rbrack)
         : array(std::move(array)), lbrack(lbrack), index(std::move(index)), rbrack(rbrack) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct BinaryExpr {
@@ -391,6 +366,7 @@ struct BinaryExpr {
     BinaryExpr() = default;
     BinaryExpr(Operator op, std::unique_ptr<Expression> left, std::unique_ptr<Expression> right)
         : op(op), left(std::move(left)), right(std::move(right)) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct UnaryExpr {
@@ -399,6 +375,7 @@ struct UnaryExpr {
     UnaryExpr() = default;
     UnaryExpr(Operator op, std::unique_ptr<Expression> argument)
         : op(op), argument(std::move(argument)) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct PipeExpr {
@@ -407,6 +384,7 @@ struct PipeExpr {
     PipeExpr() = default;
     PipeExpr(std::unique_ptr<Expression> argument, std::unique_ptr<CallExpr> call)
         : argument(std::move(argument)), call(std::move(call)) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct CallExpr {
@@ -420,6 +398,7 @@ struct CallExpr {
              const std::vector<std::shared_ptr<Expression>>& arguments,
              const std::vector<std::shared_ptr<Comment>>& rparen)
         : callee(std::move(callee)), lparen(lparen), arguments(arguments), rparen(rparen) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct ConditionalExpr {
@@ -429,12 +408,14 @@ struct ConditionalExpr {
     std::unique_ptr<Expression> consequent;
     std::vector<std::shared_ptr<Comment>> tk_else;
     std::unique_ptr<Expression> alternate;
+    [[nodiscard]] std::string string() const;
 };
 
 struct StringExpr {
     std::vector<std::shared_ptr<StringExprPart>> parts;
     StringExpr() = default;
     StringExpr(std::vector<std::shared_ptr<StringExprPart>> parts) : parts(std::move(parts)) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct StringExprPart {
@@ -448,16 +429,19 @@ struct StringExprPart {
     StringExprT part;
     StringExprPart() = default;
     StringExprPart(Type type, StringExprT part) : type(type), part(std::move(part)) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct TextPart {
     std::string value;
+    [[nodiscard]] std::string string() const;
 };
 
 struct InterpolatedPart {
     std::unique_ptr<Expression> expression;
     InterpolatedPart() = default;
     InterpolatedPart(std::unique_ptr<Expression> expression) : expression(std::move(expression)) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct ParenExpr {
@@ -469,68 +453,81 @@ struct ParenExpr {
               std::unique_ptr<Expression> expr,
               const std::vector<std::shared_ptr<Comment>>& rparen)
         : lparen(lparen), expression(std::move(expr)), rparen(rparen) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct IntegerLit {
     int64_t value;
     IntegerLit() = default;
     IntegerLit(int64_t value) : value(value) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct FloatLit {
     double value;
     FloatLit() = default;
     FloatLit(double value) : value(value) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct StringLit {
     std::string value;
     StringLit() = default;
     StringLit(std::string value) : value(std::move(value)) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct Duration {
     int64_t magnitude;
     std::string unit;
     Duration(int64_t magnitude, std::string unit) : magnitude(magnitude), unit(std::move(unit)) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct DurationLit {
     std::vector<std::shared_ptr<Duration>> values;
     DurationLit() = default;
     DurationLit(const std::vector<std::shared_ptr<Duration>>& values) : values(values) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct UintLit {
     uint64_t value;
     UintLit() : value(0) {}
     UintLit(uint64_t value) : value(value) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct BooleanLit {
     bool value;
     BooleanLit() : value(false) {}
     BooleanLit(bool value) : value(value) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct DateTimeLit {
     std::tm value;
     DateTimeLit() = default;
     DateTimeLit(const std::tm& value) : value(value) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct RegexpLit {
     std::string value;
     RegexpLit() = default;
     RegexpLit(std::string value) : value(std::move(value)) {}
+    [[nodiscard]] std::string string() const;
 };
 
-struct PipeLit {};
+struct PipeLit {
+    [[nodiscard]] std::string string() const;
+};
 
 struct LabelLit {
     std::string value;
     LabelLit() = default;
     LabelLit(std::string value) : value(std::move(value)) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct BadExpr {
@@ -539,6 +536,7 @@ struct BadExpr {
     BadExpr() = default;
     BadExpr(std::string text, std::unique_ptr<Expression> expression)
         : text(std::move(text)), expression(std::move(expression)) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct Expression {
@@ -601,69 +599,7 @@ struct Expression {
     ExprT expr;
     Expression() = default;
     Expression(Type t, ExprT expr) : type(t), expr(std::move(expr)) {}
-    std::string string() const {
-        std::stringstream ss;
-        ss << "expr: ";
-        switch (type) {
-        case Type::Identifier:
-            ss << std::get<std::unique_ptr<Identifier>>(expr)->string();
-            break;
-        case Type::ArrayExpr:
-            ss << std::get<std::unique_ptr<ArrayExpr>>(expr)->string();
-            break;
-        case Type::DictExpr:
-            ss << std::get<std::unique_ptr<DictExpr>>(expr)->string();
-            break;
-        case Type::FunctionExpr:
-            ss << std::get<std::unique_ptr<FunctionExpr>>(expr)->string();
-            break;
-        case Type::LogicalExpr:
-            break;
-        case Type::ObjectExpr:
-            break;
-        case Type::MemberExpr:
-            break;
-        case Type::IndexExpr:
-            break;
-        case Type::BinaryExpr:
-            break;
-        case Type::UnaryExpr:
-            break;
-        case Type::PipeExpr:
-            break;
-        case Type::CallExpr:
-            break;
-        case Type::ConditionalExpr:
-            break;
-        case Type::StringExpr:
-            break;
-        case Type::ParenExpr:
-            break;
-        case Type::IntegerLit:
-            break;
-        case Type::FloatLit:
-            break;
-        case Type::StringLit:
-            break;
-        case Type::DurationLit:
-            break;
-        case Type::UnsignedIntegerLit:
-            break;
-        case Type::BooleanLit:
-            break;
-        case Type::DateTimeLit:
-            break;
-        case Type::RegexpLit:
-            break;
-        case Type::PipeLit:
-            break;
-        case Type::LabelLit:
-            break;
-        case Type::BadExpr:
-            break;
-        }
-        return ss.str();
-    }
+    [[nodiscard]] std::string string() const;
 };
 
 // operator
@@ -774,6 +710,7 @@ struct MemberAssgn {
     MemberAssgn() = default;
     MemberAssgn(std::unique_ptr<MemberExpr> member, std::unique_ptr<Expression> init)
         : member(std::move(member)), init(std::move(init)) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct Assignment {
@@ -784,7 +721,7 @@ struct Assignment {
 
     Assignment() = default;
     Assignment(Assignment::Type type, AssiT value) : type(type), value(std::move(value)) {}
-    std::string string() const;
+    [[nodiscard]] std::string string() const;
 };
 
 // property
@@ -800,6 +737,7 @@ struct Property {
              std::unique_ptr<Expression> value,
              const std::vector<std::shared_ptr<Comment>>& comma)
         : key(std::move(key)), separator(separator), value(std::move(value)), comma(comma) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct PropertyKey {
@@ -811,6 +749,7 @@ struct PropertyKey {
 
     PropertyKey() = default;
     PropertyKey(PropertyKey::Type type, PropKeyT key) : type(type), key(std::move(key)) {}
+    [[nodiscard]] std::string string() const;
 };
 
 // function
@@ -821,10 +760,15 @@ struct Block {
     std::vector<std::shared_ptr<Comment>> rbrace;
 
     Block() = default;
+    Block(const Block&) = default;
+    Block(Block&&) = default;
+    Block& operator=(const Block&) = default;
+    Block& operator=(Block&&) = default;
     Block(const std::vector<std::shared_ptr<Comment>>& lbrace,
           const std::vector<std::shared_ptr<Statement>>& body,
           const std::vector<std::shared_ptr<Comment>>& rbrace)
         : lbrace(lbrace), body(body), rbrace(rbrace) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct FunctionBody {
@@ -833,6 +777,7 @@ struct FunctionBody {
     Type type;
     FuncT body;
     FunctionBody(Type t, FuncT body) : type(t), body(std::move(body)) {}
+    [[nodiscard]] std::string string() const;
 };
 
 // parameter
