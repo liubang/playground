@@ -23,9 +23,7 @@ namespace pl {
  * @param dst
  * @param value
  */
-template <typename T,
-          typename std::enable_if<std::is_integral<T>::value && !std::is_same<T, bool>::value,
-                                  T>::type = 0>
+template <typename T, std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, bool>, T> = 0>
 void encodeInt(std::string* dst, T value) {
     // 这里统一用little endian
     value = pl::Endian::little(value);
@@ -39,9 +37,7 @@ void encodeInt(std::string* dst, T value) {
  * @param input
  * @return
  */
-template <typename T,
-          typename std::enable_if<std::is_integral<T>::value && !std::is_same<T, bool>::value,
-                                  T>::type = 0>
+template <typename T, std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, bool>, T> = 0>
 T decodeInt(const char* input) {
     T value;
     std::size_t s = sizeof(T);
