@@ -41,9 +41,7 @@ inline std::optional<std::string> getLocalIp() {
         return std::nullopt;
     }
 
-    SCOPE_EXIT {
-        ::close(sock);
-    };
+    SCOPE_EXIT { ::close(sock); };
     struct sockaddr_in local_addr;
     socklen_t local_addr_len = sizeof(local_addr);
     err = getsockname(sock, reinterpret_cast<struct sockaddr*>(&local_addr), &local_addr_len);

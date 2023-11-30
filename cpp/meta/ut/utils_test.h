@@ -12,10 +12,9 @@
 
 namespace pl {
 
-template <typename T>
-using sizeLess4 = std::bool_constant<(sizeof(T) < 4)>;
+template <typename T> using sizeLess4 = std::bool_constant<(sizeof(T) < 4)>;
 
 template <typename Acc, typename E>
 using TypeSizeAcc = std::integral_constant<std::size_t, Acc::value + sizeof(E)>;
 
-}  // namespace pl
+} // namespace pl

@@ -13,15 +13,11 @@
 
 namespace pl {
 
-#define NEW_STATUS(name)                                   \
-    static Status New##name(const std::string& msg = "") { \
-        return {k##name, msg};                             \
-    }
+#define NEW_STATUS(name) \
+    static Status New##name(const std::string& msg = "") { return {k##name, msg}; }
 
-#define IS_STATUS(name)                   \
-    [[nodiscard]] bool is##name() const { \
-        return code_ == k##name;          \
-    }
+#define IS_STATUS(name) \
+    [[nodiscard]] bool is##name() const { return code_ == k##name; }
 
 class Status {
 public:
