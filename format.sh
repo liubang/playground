@@ -1,4 +1,4 @@
-#! /bin/sh
+#! /bin/bash
 #======================================================================
 #
 # format.sh -
@@ -10,10 +10,10 @@
 
 CLANG_FORMAT='clang-format -i'
 
-dirs=('cpp/tools', 'cpp/features', 'cpp/meta', 'cpp/misc')
+dirs=('cpp/tools' 'cpp/features' 'cpp/meta' 'cpp/misc')
 
 for dir in "${dirs[@]}"; do
-    find "${dir}" -regex '.*\(\.cpp\|\.h\)$' | while read file; do
+    find "${dir}" -regex '.*\(\.cpp\|\.cc|\.h\)$' | while read file; do
         cmd="${CLANG_FORMAT} ${file}"
         echo ${cmd}
         eval ${cmd}

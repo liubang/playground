@@ -15,16 +15,13 @@
 #include <variant>
 
 TEST_CASE("meta", "[type_list]") {
-  using AList = pl::TypeList<int, char>;
-  static_assert(pl::TL<AList>);
-  static_assert(AList::size == 2);
-  static_assert(
-      std::is_same_v<AList::prepend<double>, pl::TypeList<double, int, char>>);
+    using AList = pl::TypeList<int, char>;
+    static_assert(pl::TL<AList>);
+    static_assert(AList::size == 2);
+    static_assert(std::is_same_v<AList::prepend<double>, pl::TypeList<double, int, char>>);
 
-  static_assert(
-      std::is_same_v<AList::append<double>, pl::TypeList<int, char, double>>);
+    static_assert(std::is_same_v<AList::append<double>, pl::TypeList<int, char, double>>);
 
-  static_assert(std::is_same_v<AList::to<std::tuple>, std::tuple<int, char>>);
-  static_assert(
-      std::is_same_v<AList::to<std::variant>, std::variant<int, char>>);
+    static_assert(std::is_same_v<AList::to<std::tuple>, std::tuple<int, char>>);
+    static_assert(std::is_same_v<AList::to<std::variant>, std::variant<int, char>>);
 }
