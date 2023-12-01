@@ -1687,7 +1687,7 @@ std::unique_ptr<Token> Parser::close(TokenType end) {
         // TODO: error handler
         return nullptr;
     }
-    blocks_[end] = blocks_[end] - 1;
+    blocks_[end]--;
     const auto* token = peek();
     if (token->tok == end) {
         return consume();
