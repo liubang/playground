@@ -103,7 +103,7 @@ template <typename T> struct common_type<T> {
 };
 
 template <typename T, typename S> struct common_type<T, S> {
-    using type = decltype(0 ? std::declval<T>() : std::declval<S>());
+    using type = decltype(false ? std::declval<T>() : std::declval<S>());
 };
 
 template <typename T0, typename T1, typename... Ts> struct common_type<T0, T1, Ts...> {
