@@ -44,8 +44,8 @@ template <> struct uint_types_by_size<8> {
 };
 
 template <class T> struct EndianInt {
-    static_assert((std::is_integral<T>::value && !std::is_same<T, bool>::value) ||
-                      std::is_floating_point<T>::value,
+    static_assert((std::is_integral_v<T> && !std::is_same_v<T, bool>) ||
+                      std::is_floating_point_v<T>,
                   "template type parameter must be non-bool integral or floating point");
 
     static T swap(T x) {

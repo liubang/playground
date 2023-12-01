@@ -137,9 +137,7 @@ public:
 
 //-------------------------------------------------------------------------------------------------
 
-template <
-    typename... Ts,
-    typename std::enable_if<std::conjunction<std::is_integral<Ts>...>::value>::type* = nullptr>
+template <typename... Ts, std::enable_if_t<std::conjunction_v<std::is_integral<Ts>...>>* = nullptr>
 constexpr auto sums(Ts... ts) {
     // static_assert(std::conjunction<std::is_integral<Ts>...>::value);
     return (0 + ... + ts);
