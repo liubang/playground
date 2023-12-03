@@ -15,15 +15,6 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/11/01 20:29
 
-#======================================================================
-#
-# BUILD -
-#
-# Created by liubang on 2023/11/01 20:28
-# Last Modified: 2023/11/01 20:28
-#
-#======================================================================
-
 load("@rules_ragel//ragel:ragel.bzl", "ragel")
 load(
     "//cpp:copts/configure_copts.bzl",
