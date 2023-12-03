@@ -659,7 +659,7 @@ static std::unordered_map<std::string, Operator> operator_map = {
     {"<INVALID_OP>", Operator::InvalidOperator},
 };
 
-inline std::string operator_to_string(Operator op) {
+inline std::string op_string(Operator op) {
     switch (op) {
     case Operator::MultiplicationOperator:
         return "MultiplicationOperator";
@@ -710,6 +710,15 @@ enum class LogicalOperator {
     AndOperator,
     OrOperator,
 };
+
+inline std::string op_string(LogicalOperator op) {
+    switch (op) {
+    case LogicalOperator::AndOperator:
+        return " and ";
+    case LogicalOperator::OrOperator:
+        return " or ";
+    }
+}
 
 // assign
 struct MemberAssgn {

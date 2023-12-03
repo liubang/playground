@@ -150,14 +150,27 @@ std::string DurationLit::string() const {
     });
 }
 
-std::string ReturnStmt::string() const { return ""; }
+std::string ReturnStmt::string() const { return absl::StrFormat("return %s", argument->string()); }
 
-std::string LogicalExpr::string() const {}
+std::string LogicalExpr::string() const {
+    return absl::StrFormat("%s %s %s", left->string(), op_string(op), right->string());
+}
+
 std::string WithSource::string() const {}
-std::string ObjectExpr::string() const {}
-std::string IndexExpr::string() const {}
-std::string BinaryExpr::string() const {}
-std::string UnaryExpr::string() const {}
+std::string ObjectExpr::string() const {
+    // todo
+    return absl::StrFormat("{}");
+}
+std::string IndexExpr::string() const {
+    // todo
+    return absl::StrFormat("[%s]", index->string());
+}
+std::string BinaryExpr::string() const {
+    return absl::StrFormat("%s %s %s", left->string(), op_string(op), right->string());
+}
+std::string UnaryExpr::string() const {
+    return absl::StrFormat("%s %s", op_string(op), argument->string());
+}
 std::string ConditionalExpr::string() const {}
 std::string StringExpr::string() const {}
 std::string StringExprPart::string() const {}
