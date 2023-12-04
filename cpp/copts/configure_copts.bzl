@@ -15,15 +15,6 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/06/11 01:28
 
-#======================================================================
-#
-# configure_copts.bzl -
-#
-# Created by liubang on 2023/06/11 00:18
-# Last Modified: 2023/06/11 00:18
-#
-#======================================================================
-
 load(
     "//cpp:copts/copts.bzl",
     "GCC_FLAGS",
