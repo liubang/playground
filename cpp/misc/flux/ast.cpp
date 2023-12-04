@@ -18,6 +18,7 @@
 
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
+#include <iostream>
 
 namespace pl {
 
@@ -54,13 +55,10 @@ std::string Assignment::string() const {
 }
 
 std::string FunctionExpr::string() const {
-    std::stringstream ss;
-    ss << "(";
-    ss << absl::StrJoin(params, ", ", [](std::string* out, const auto& p) {
+    auto props = absl::StrJoin(params, ", ", [](std::string* out, const auto& p) {
         out->append(p->string());
     });
-    ss << ") -> " << body->string();
-    return ss.str();
+    return absl::StrFormat("fn:(%s) => { %s }", props, body->string());
 }
 
 std::string MemberAssgn::string() const {
@@ -75,11 +73,7 @@ std::string MemberAssgn::string() const {
 }
 
 std::string MemberExpr::string() const {
-    std::stringstream ss;
-    ss << "MemberExpr: {";
-    ss << object->string() << "[" << property->string() << "]";
-    ss << "}";
-    return ss.str();
+    return absl::StrFormat("%s.%s", object->string(), property->string());
 }
 
 std::string FunctionBody::string() const {
@@ -96,42 +90,37 @@ std::string FunctionBody::string() const {
 }
 
 std::string Property::string() const {
-    std::stringstream ss;
-    ss << key->string();
-    ss << absl::StrJoin(separator, " ", [](std::string* out, const auto& sep) {
-        out->append(sep->text);
-    });
-    ss << value->string();
-    return ss.str();
+    if (!value) {
+        return key->string();
+    }
+    return absl::StrFormat("%s: %s", key->string(), value->string());
 }
 
 std::string PipeExpr::string() const {
     std::stringstream ss;
-    ss << "|> " << call->string() << "(" << argument->string() << ")";
+    ss << "|> " << call->string() << " { " << argument->string() << " } ";
     return ss.str();
 }
 
 std::string CallExpr::string() const {
-    // auto args = absl::StrJoin(arguments, ", ", [](std::string* out, const auto argument) {
-    //     out->append(argument->string());
-    // });
-    return absl::StrFormat("%s: { %s }", callee->string(), "");
+    auto args = absl::StrJoin(arguments, ", ", [](std::string* out, const auto& e) {
+        out->append(e->string());
+    });
+    return absl::StrFormat("%s: ( %s )", callee->string(), args);
 }
 
 std::string PropertyKey::string() const {
-    std::stringstream ss;
     switch (type) {
     case Type::Identifier:
-        ss << std::get<std::unique_ptr<Identifier>>(key)->string();
+        return std::get<std::unique_ptr<Identifier>>(key)->string();
         break;
     case Type::StringLiteral:
-        ss << std::get<std::unique_ptr<StringLit>>(key)->string();
+        return std::get<std::unique_ptr<StringLit>>(key)->string();
         break;
     }
-    return ss.str();
 }
 std::string Block::string() const {
-    return absl::StrFormat("{%s}", absl::StrJoin(body, ";", [](std::string* out, const auto& b) {
+    return absl::StrFormat("{%s}", absl::StrJoin(body, "; ", [](std::string* out, const auto& b) {
                                out->append(b->string());
                            }));
 }
@@ -142,7 +131,7 @@ std::string FloatLit::string() const { return absl::StrFormat("%.4f", value); }
 
 std::string IntegerLit::string() const { return absl::StrFormat("%d", value); }
 
-std::string Duration::string() const { return absl::StrFormat("%d %s", magnitude, unit); }
+std::string Duration::string() const { return absl::StrFormat("%d%s", magnitude, unit); }
 
 std::string DurationLit::string() const {
     return absl::StrJoin(values, ", ", [](std::string* out, const auto& d) {
@@ -157,17 +146,23 @@ std::string LogicalExpr::string() const {
 }
 
 std::string WithSource::string() const {}
+
 std::string ObjectExpr::string() const {
-    // todo
-    return absl::StrFormat("{}");
+    auto props = absl::StrJoin(properties, ", ", [](std::string* out, const auto& p) {
+        out->append(p->string());
+    });
+    return absl::StrFormat("{ %s }", props);
 }
+
 std::string IndexExpr::string() const {
     // todo
     return absl::StrFormat("[%s]", index->string());
 }
+
 std::string BinaryExpr::string() const {
     return absl::StrFormat("%s %s %s", left->string(), op_string(op), right->string());
 }
+
 std::string UnaryExpr::string() const {
     return absl::StrFormat("%s %s", op_string(op), argument->string());
 }
@@ -221,7 +216,6 @@ std::string Statement::string() const {
 }
 std::string Expression::string() const {
     std::stringstream ss;
-    ss << "expr: ";
     switch (type) {
     case Type::Identifier:
         ss << std::get<std::unique_ptr<Identifier>>(expr)->string();
@@ -304,4 +298,15 @@ std::string Expression::string() const {
     }
     return ss.str();
 }
+
+std::string Identifier::string() const { return name; }
+
+std::string DictExpr::string() const { return ""; }
+
+std::string BadStmt::string() const { return ""; }
+
+std::string TestCaseStmt::string() const { return ""; }
+
+std::string BuiltinStmt::string() const { return ""; }
+
 } // namespace pl
