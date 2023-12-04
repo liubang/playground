@@ -41,9 +41,9 @@ int main(int argc, char* argv[]) {
     pl::Parser parser(flux);
     auto file = parser.parse_file("");
 
-    std::cout << __FILE_NAME__ << ":" << __LINE__ << " ==> " << file->name << "\n";
-    std::cout << __FILE_NAME__ << ":" << __LINE__ << " ==> " << file->imports.size() << "\n";
-    std::cout << __FILE_NAME__ << ":" << __LINE__ << " ==> " << file->body.size() << "\n";
+    std::cout << __FILE__ << ":" << __LINE__ << " ==> " << file->name << "\n";
+    std::cout << __FILE__ << ":" << __LINE__ << " ==> " << file->imports.size() << "\n";
+    std::cout << __FILE__ << ":" << __LINE__ << " ==> " << file->body.size() << "\n";
 
     for (const auto& stmt : file->body) {
         std::cout << static_cast<int>(stmt->type) << "\n";
