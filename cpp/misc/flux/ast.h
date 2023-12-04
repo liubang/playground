@@ -183,7 +183,7 @@ struct ReturnStmt {
 struct BadStmt {
     std::string text;
     BadStmt(std::string text) : text(std::move(text)) {}
-    [[nodiscard]] std::string string() const { return ""; }
+    [[nodiscard]] std::string string() const;
 };
 
 struct TestCaseStmt {
@@ -195,7 +195,7 @@ struct TestCaseStmt {
                  std::unique_ptr<StringLit> extends,
                  std::unique_ptr<Block> block)
         : id(std::move(id)), extends(std::move(extends)), block(std::move(block)) {}
-    [[nodiscard]] std::string string() const { return ""; }
+    [[nodiscard]] std::string string() const;
 };
 
 struct BuiltinStmt {
@@ -207,7 +207,7 @@ struct BuiltinStmt {
                 std::unique_ptr<Identifier> id,
                 std::unique_ptr<TypeExpression> ty)
         : colon(colon), id(std::move(id)), ty(std::move(ty)) {}
-    [[nodiscard]] std::string string() const { return ""; }
+    [[nodiscard]] std::string string() const;
 };
 
 struct Statement {
@@ -240,7 +240,7 @@ struct Identifier {
     std::string name;
     Identifier() = default;
     Identifier(std::string name) : name(std::move(name)) {}
-    [[nodiscard]] std::string string() const { return "name: " + name; }
+    [[nodiscard]] std::string string() const;
 };
 
 struct ArrayItem {
@@ -286,7 +286,7 @@ struct DictExpr {
              const std::vector<std::shared_ptr<DictItem>>& elements,
              const std::vector<std::shared_ptr<Comment>>& rbrack)
         : lbrack(lbrack), elements(elements), rbrack(rbrack) {}
-    [[nodiscard]] std::string string() const { return ""; }
+    [[nodiscard]] std::string string() const;
 };
 
 struct FunctionExpr {
@@ -662,45 +662,45 @@ static std::unordered_map<std::string, Operator> operator_map = {
 inline std::string op_string(Operator op) {
     switch (op) {
     case Operator::MultiplicationOperator:
-        return "MultiplicationOperator";
+        return "*";
     case Operator::DivisionOperator:
-        return "DivisionOperator";
+        return "/";
     case Operator::ModuloOperator:
-        return "ModuloOperator";
+        return "%";
     case Operator::PowerOperator:
-        return "PowerOperator";
+        return "^";
     case Operator::AdditionOperator:
-        return "AdditionOperator";
+        return "+";
     case Operator::SubtractionOperator:
-        return "SubtractionOperator";
+        return "-";
     case Operator::LessThanEqualOperator:
-        return "LessThanEqualOperator";
+        return "<=";
     case Operator::LessThanOperator:
-        return "LessThanOperator";
+        return "<";
     case Operator::GreaterThanEqualOperator:
-        return "GreaterThanEqualOperator";
+        return ">=";
     case Operator::GreaterThanOperator:
-        return "GreaterThanOperator";
+        return ">";
     case Operator::StartsWithOperator:
-        return "StartsWithOperator";
+        return "startswith";
     case Operator::InOperator:
-        return "InOperator";
+        return "in";
     case Operator::NotOperator:
-        return "NotOperator";
+        return "not";
     case Operator::ExistsOperator:
-        return "ExistsOperator";
+        return "exists";
     case Operator::NotEmptyOperator:
-        return "NotEmptyOperator";
+        return "not empty";
     case Operator::EmptyOperator:
-        return "EmptyOperator";
+        return "empty";
     case Operator::EqualOperator:
-        return "EqualOperator";
+        return "==";
     case Operator::NotEqualOperator:
-        return "NotEqualOperator";
+        return "!=";
     case Operator::RegexpMatchOperator:
-        return "RegexpMatchOperator";
+        return "=~";
     case Operator::NotRegexpMatchOperator:
-        return "NotRegexpMatchOperator";
+        return "!~";
     case Operator::InvalidOperator:
         return "InvalidOperator";
     }
