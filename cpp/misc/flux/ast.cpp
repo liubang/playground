@@ -18,9 +18,15 @@
 
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
-#include <iostream>
 
 namespace pl {
+
+std::string ImportDeclaration::string() const {
+    if (alias) {
+        return "import " + alias->string() + " " + path->string();
+    }
+    return "import " + path->string();
+}
 
 std::string ArrayItem::string() const { return expression->string(); }
 
@@ -58,7 +64,7 @@ std::string FunctionExpr::string() const {
     auto props = absl::StrJoin(params, ", ", [](std::string* out, const auto& p) {
         out->append(p->string());
     });
-    return absl::StrFormat("fn:(%s) => { %s }", props, body->string());
+    return absl::StrFormat("(%s) => { %s }", props, body->string());
 }
 
 std::string MemberAssgn::string() const {

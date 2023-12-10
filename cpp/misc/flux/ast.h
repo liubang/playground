@@ -143,6 +143,7 @@ struct ImportDeclaration {
     ImportDeclaration() : alias(nullptr), path(nullptr) {}
     ImportDeclaration(std::unique_ptr<Identifier> alias, std::unique_ptr<StringLit> path)
         : alias(std::move(alias)), path(std::move(path)) {}
+    [[nodiscard]] std::string string() const;
 };
 
 // stmt

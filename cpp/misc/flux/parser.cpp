@@ -715,9 +715,7 @@ std::unique_ptr<Expression> Parser::parse_comparison_expression_suffix(
         auto rhs = parse_additive_expression();
         auto nret = std::make_unique<Expression>();
         nret->type = Expression::Type::BinaryExpr;
-        auto binexpr = std::make_unique<BinaryExpr>();
-        binexpr->left = std::move(ret);
-        binexpr->right = std::move(rhs);
+        auto binexpr = std::make_unique<BinaryExpr>(op.value(), std::move(ret), std::move(rhs));
         nret->expr = std::move(binexpr);
         ret = std::move(nret);
     }
@@ -763,6 +761,7 @@ std::unique_ptr<Expression> Parser::parse_additive_expression() {
 
 std::optional<Operator> Parser::parse_comparison_operator() {
     const auto* t = peek();
+    FLUX_DEBUG(t->lit);
     switch (t->tok) {
     case TokenType::Eq:
         return Operator::EqualOperator;

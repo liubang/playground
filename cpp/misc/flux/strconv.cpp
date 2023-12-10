@@ -100,12 +100,14 @@ absl::StatusOr<std::string> StrConv::parse_text(const std::string& lit) {
     return s;
 }
 
+// TODO(liubang): implementd
 absl::StatusOr<std::string> StrConv::parse_string(const std::string& lit) {
     if (lit.length() < 2 || !lit.starts_with('"') || !lit.ends_with('"')) {
         return absl::InvalidArgumentError("invalid string literal");
     }
+    return lit;
 
-    return parse_text(lit.substr(1, lit.length() - 1));
+    // return parse_text(lit.substr(1, lit.length() - 1));
 }
 
 absl::StatusOr<std::string> StrConv::parse_regex(const std::string& lit) {
