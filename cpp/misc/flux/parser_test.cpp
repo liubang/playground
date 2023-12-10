@@ -23,7 +23,7 @@ int main(int argc, char* argv[]) {
     std::string flux = R"(
     import "array"
     import "math"
-    import "influxdata/influxdb/sample"
+    import sample "influxdata/influxdb/sample"
 
     from(bucket:"telegraf/autogen")
         |> range(start:-1h)
@@ -41,12 +41,18 @@ int main(int argc, char* argv[]) {
     pl::Parser parser(flux);
     auto file = parser.parse_file("");
 
-    std::cout << __FILE__ << ":" << __LINE__ << " ==> " << file->name << "\n";
-    std::cout << __FILE__ << ":" << __LINE__ << " ==> " << file->imports.size() << "\n";
-    std::cout << __FILE__ << ":" << __LINE__ << " ==> " << file->body.size() << "\n";
+    std::cout << "=============================================================\n";
+    std::cout << "fname        : " << file->name << '\n';
+    std::cout << "imports size : " << file->imports.size() << '\n';
+    std::cout << "body size    : " << file->body.size() << '\n';
+    std::cout << "\n";
+
+    for (const auto& i : file->imports) {
+        std::cout << i->string() << '\n';
+    }
+    std::cout << "\n";
 
     for (const auto& stmt : file->body) {
-        std::cout << static_cast<int>(stmt->type) << "\n";
         std::cout << stmt->string() << '\n';
     }
 
