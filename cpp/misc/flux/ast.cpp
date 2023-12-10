@@ -21,6 +21,8 @@
 
 namespace pl {
 
+std::string PackageClause::string() const { return "package " + name->string(); }
+
 std::string ImportDeclaration::string() const {
     if (alias) {
         return "import " + alias->string() + " " + path->string();

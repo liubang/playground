@@ -59,42 +59,44 @@ absl::StatusOr<std::string> StrConv::parse_text(const std::string& lit) {
     std::string s;
     for (size_t i = 0; i < lit.length(); ++i) {
         char c = lit[i];
-        if (c == '\\') {
-            ++i;
-            if (i == lit.length()) {
-                return absl::InvalidArgumentError("invalid escape sequence");
+        if (c != '\\') {
+            s.push_back(c);
+            continue;
+        }
+        ++i;
+        if (i == lit.length()) {
+            return absl::InvalidArgumentError("invalid escape sequence");
+        }
+        char n = lit[i];
+        switch (n) {
+        case 'n':
+            s.push_back('\n');
+            break;
+        case 'r':
+            s.push_back('\r');
+            break;
+        case 't':
+            s.push_back('\t');
+            break;
+        case '\\':
+            s.push_back('\\');
+            break;
+        case '"':
+            s.push_back('"');
+            break;
+        case '$':
+            s.push_back('$');
+            break;
+        case 'x':
+        {
+            auto ret = push_hex_byte(lit, i, &s);
+            if (!ret.ok()) {
+                return ret;
             }
-            char n = lit[i];
-            switch (n) {
-            case 'n':
-                s.push_back('\n');
-                break;
-            case 'r':
-                s.push_back('\r');
-                break;
-            case 't':
-                s.push_back('\t');
-                break;
-            case '\\':
-                s.push_back('\\');
-                break;
-            case '"':
-                s.push_back('"');
-                break;
-            case '$':
-                s.push_back('$');
-                break;
-            case 'x':
-            {
-                auto ret = push_hex_byte(lit, i, &s);
-                if (!ret.ok()) {
-                    return ret;
-                }
-                break;
-            }
-            default:
-                return absl::InvalidArgumentError("invalid escape sequence " + std::string(n, 1));
-            }
+            break;
+        }
+        default:
+            return absl::InvalidArgumentError("invalid escape sequence " + std::string(n, 1));
         }
     }
     return s;
@@ -105,9 +107,7 @@ absl::StatusOr<std::string> StrConv::parse_string(const std::string& lit) {
     if (lit.length() < 2 || !lit.starts_with('"') || !lit.ends_with('"')) {
         return absl::InvalidArgumentError("invalid string literal");
     }
-    return lit;
-
-    // return parse_text(lit.substr(1, lit.length() - 1));
+    return parse_text(lit.substr(1, lit.length() - 1));
 }
 
 absl::StatusOr<std::string> StrConv::parse_regex(const std::string& lit) {
