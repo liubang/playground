@@ -21,6 +21,8 @@
 
 int main(int argc, char* argv[]) {
     std::string flux = R"(
+    @edition("2022.1")
+    package main
     import "array"
     import "math"
     import sample "influxdata/influxdb/sample"
@@ -46,6 +48,8 @@ int main(int argc, char* argv[]) {
     std::cout << "imports size : " << file->imports.size() << '\n';
     std::cout << "body size    : " << file->body.size() << '\n';
     std::cout << "\n";
+
+    std::cout << file->package->string() << "\n";
 
     for (const auto& i : file->imports) {
         std::cout << i->string() << '\n';

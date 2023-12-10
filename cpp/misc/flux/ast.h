@@ -135,6 +135,7 @@ struct PackageClause {
     std::unique_ptr<Identifier> name;
     PackageClause() : name(nullptr) {}
     PackageClause(std::unique_ptr<Identifier> name) : name(std::move(name)) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct ImportDeclaration {
