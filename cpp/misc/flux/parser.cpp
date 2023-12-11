@@ -593,7 +593,7 @@ Parser::parse_package_clause(const std::vector<std::shared_ptr<Attribute>>& attr
     if (t->tok == TokenType::Package) {
         auto tt = consume();
         auto ident = parse_identifier();
-        return {std::make_unique<PackageClause>(), std::nullopt};
+        return {std::make_unique<PackageClause>(std::move(ident)), std::nullopt};
     }
     return {nullptr, attributes};
 }
