@@ -50,6 +50,7 @@ int main(int argc, char* argv[]) {
     std::cout << "\n";
 
     std::cout << file->package->string() << "\n";
+    std::cout << "\n";
 
     for (const auto& i : file->imports) {
         std::cout << i->string() << '\n';
