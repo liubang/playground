@@ -15,13 +15,24 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include <boost/date_time.hpp>
+#include <boost/date_time/gregorian/gregorian.hpp>
 #include <iostream>
 
 int main(int argc, char* argv[]) {
+
     std::cout.imbue(std::locale(std::cout.getloc(),
                                 new boost::local_time::local_time_facet("%Y-%m-%dT%H:%M:%S%F%Q")));
     std::cout << boost::local_time::local_microsec_clock::local_time(
                      boost::local_time::time_zone_ptr())
               << std::endl;
+
+    std::cout << "=================================\n";
+
+    boost::gregorian::date date = boost::gregorian::from_string("2023-12-23 10:43:53");
+
+    std::cout << boost::gregorian::to_simple_string(date) << "\n";
+    std::cout << boost::gregorian::to_iso_string(date) << "\n";
+    std::cout << boost::gregorian::to_iso_extended_string(date) << "\n";
+
     return 0;
 }
