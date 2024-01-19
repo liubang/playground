@@ -42,8 +42,7 @@ void BlockBuilder::add(const Binary& key, const Binary& value) {
 
     /*
      * +----------------+--------------------+---------------+----------------+-------+
-     * | shared size 4B | non shared size 4B | value size 4B | non shared key |
-     * value |
+     * | shared size 4B | non shared size 4B | value size 4B | non shared key | value |
      * +----------------+--------------------+---------------+----------------+-------+
      */
     encodeInt<uint32_t>(&buffer_, shared);
@@ -64,8 +63,7 @@ Binary BlockBuilder::finish() {
      * restarts indexes
      *
      * +---------------+---------------+--------+---------------+------------------+
-     * | restart[0] 4B | restart[1] 4B | ...... | restart[n] 4B | restart count 4B
-     * |
+     * | restart[0] 4B | restart[1] 4B | ...... | restart[n] 4B | restart count 4B |
      * +---------------+---------------+--------+---------------+------------------+
      */
     for (uint32_t restart : restarts_) {
