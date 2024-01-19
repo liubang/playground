@@ -12,7 +12,6 @@
 #include "cpp/tools/binary.h"
 #include "cpp/tools/status.h"
 
-#include <cstddef>
 #include <cstdint>
 #include <string>
 
