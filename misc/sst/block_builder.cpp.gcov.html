@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2023-12-23 16:39:17</td>
+            <td class="headerValue">2024-01-19 11:18:37</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">5</td>
@@ -104,55 +104,53 @@
 <a name="42"><span class="lineNum">      42 </span>            : </a>
 <a name="43"><span class="lineNum">      43 </span>            :     /*</a>
 <a name="44"><span class="lineNum">      44 </span>            :      * +----------------+--------------------+---------------+----------------+-------+</a>
-<a name="45"><span class="lineNum">      45 </span>            :      * | shared size 4B | non shared size 4B | value size 4B | non shared key |</a>
-<a name="46"><span class="lineNum">      46 </span>            :      * value |</a>
-<a name="47"><span class="lineNum">      47 </span>            :      * +----------------+--------------------+---------------+----------------+-------+</a>
-<a name="48"><span class="lineNum">      48 </span>            :      */</a>
-<a name="49"><span class="lineNum">      49 </span><span class="lineCov">    1020192 :     encodeInt&lt;uint32_t&gt;(&amp;buffer_, shared);</span></a>
-<a name="50"><span class="lineNum">      50 </span><span class="lineCov">    1020192 :     encodeInt&lt;uint32_t&gt;(&amp;buffer_, non_shared);</span></a>
-<a name="51"><span class="lineNum">      51 </span><span class="lineCov">    1020192 :     encodeInt&lt;uint32_t&gt;(&amp;buffer_, value.size());</span></a>
-<a name="52"><span class="lineNum">      52 </span>            : </a>
-<a name="53"><span class="lineNum">      53 </span><span class="lineCov">    1020192 :     buffer_.append(key.data() + shared, non_shared);</span></a>
-<a name="54"><span class="lineNum">      54 </span><span class="lineCov">    1020192 :     buffer_.append(value.data(), value.size());</span></a>
-<a name="55"><span class="lineNum">      55 </span>            : </a>
-<a name="56"><span class="lineNum">      56 </span><span class="lineCov">    1020192 :     last_key_.resize(shared);</span></a>
-<a name="57"><span class="lineNum">      57 </span><span class="lineCov">    1020192 :     last_key_.append(key.data() + shared, non_shared);</span></a>
-<a name="58"><span class="lineNum">      58 </span><span class="lineCov">    1020192 :     assert(Binary(last_key_).compare(key) == 0);</span></a>
-<a name="59"><span class="lineNum">      59 </span><span class="lineCov">    1020192 :     counter_++;</span></a>
-<a name="60"><span class="lineNum">      60 </span><span class="lineCov">    1020192 : }</span></a>
-<a name="61"><span class="lineNum">      61 </span>            : </a>
-<a name="62"><span class="lineNum">      62 </span><span class="lineCov">        193 : Binary BlockBuilder::finish() {</span></a>
-<a name="63"><span class="lineNum">      63 </span>            :     /*</a>
-<a name="64"><span class="lineNum">      64 </span>            :      * restarts indexes</a>
-<a name="65"><span class="lineNum">      65 </span>            :      *</a>
-<a name="66"><span class="lineNum">      66 </span>            :      * +---------------+---------------+--------+---------------+------------------+</a>
-<a name="67"><span class="lineNum">      67 </span>            :      * | restart[0] 4B | restart[1] 4B | ...... | restart[n] 4B | restart count 4B</a>
-<a name="68"><span class="lineNum">      68 </span>            :      * |</a>
-<a name="69"><span class="lineNum">      69 </span>            :      * +---------------+---------------+--------+---------------+------------------+</a>
-<a name="70"><span class="lineNum">      70 </span>            :      */</a>
-<a name="71"><span class="lineNum">      71 </span><span class="lineCov">      64087 :     for (uint32_t restart : restarts_) {</span></a>
-<a name="72"><span class="lineNum">      72 </span><span class="lineCov">      63894 :         encodeInt&lt;uint32_t&gt;(&amp;buffer_, restart);</span></a>
-<a name="73"><span class="lineNum">      73 </span>            :     }</a>
-<a name="74"><span class="lineNum">      74 </span>            : </a>
-<a name="75"><span class="lineNum">      75 </span><span class="lineCov">        193 :     encodeInt(&amp;buffer_, static_cast&lt;uint32_t&gt;(restarts_.size()));</span></a>
-<a name="76"><span class="lineNum">      76 </span><span class="lineCov">        193 :     finished_ = true;</span></a>
-<a name="77"><span class="lineNum">      77 </span><span class="lineCov">        193 :     return {buffer_};</span></a>
-<a name="78"><span class="lineNum">      78 </span>            : }</a>
-<a name="79"><span class="lineNum">      79 </span>            : </a>
-<a name="80"><span class="lineNum">      80 </span><span class="lineCov">      10001 : std::size_t BlockBuilder::sizeEstimate() const {</span></a>
-<a name="81"><span class="lineNum">      81 </span><span class="lineCov">      10001 :     return (buffer_.size() + restarts_.size() * sizeof(uint32_t) + sizeof(uint32_t));</span></a>
-<a name="82"><span class="lineNum">      82 </span>            : }</a>
-<a name="83"><span class="lineNum">      83 </span>            : </a>
-<a name="84"><span class="lineNum">      84 </span><span class="lineCov">        191 : void BlockBuilder::reset() {</span></a>
-<a name="85"><span class="lineNum">      85 </span><span class="lineCov">        191 :     buffer_.clear();</span></a>
-<a name="86"><span class="lineNum">      86 </span><span class="lineCov">        191 :     last_key_.clear();</span></a>
-<a name="87"><span class="lineNum">      87 </span><span class="lineCov">        191 :     counter_ = 0;</span></a>
-<a name="88"><span class="lineNum">      88 </span><span class="lineCov">        191 :     finished_ = false;</span></a>
-<a name="89"><span class="lineNum">      89 </span><span class="lineCov">        191 :     restarts_.clear();</span></a>
-<a name="90"><span class="lineNum">      90 </span><span class="lineCov">        191 :     restarts_.push_back(0);</span></a>
-<a name="91"><span class="lineNum">      91 </span><span class="lineCov">        191 : }</span></a>
-<a name="92"><span class="lineNum">      92 </span>            : </a>
-<a name="93"><span class="lineNum">      93 </span>            : } // namespace pl</a>
+<a name="45"><span class="lineNum">      45 </span>            :      * | shared size 4B | non shared size 4B | value size 4B | non shared key | value |</a>
+<a name="46"><span class="lineNum">      46 </span>            :      * +----------------+--------------------+---------------+----------------+-------+</a>
+<a name="47"><span class="lineNum">      47 </span>            :      */</a>
+<a name="48"><span class="lineNum">      48 </span><span class="lineCov">    1020192 :     encodeInt&lt;uint32_t&gt;(&amp;buffer_, shared);</span></a>
+<a name="49"><span class="lineNum">      49 </span><span class="lineCov">    1020192 :     encodeInt&lt;uint32_t&gt;(&amp;buffer_, non_shared);</span></a>
+<a name="50"><span class="lineNum">      50 </span><span class="lineCov">    1020192 :     encodeInt&lt;uint32_t&gt;(&amp;buffer_, value.size());</span></a>
+<a name="51"><span class="lineNum">      51 </span>            : </a>
+<a name="52"><span class="lineNum">      52 </span><span class="lineCov">    1020192 :     buffer_.append(key.data() + shared, non_shared);</span></a>
+<a name="53"><span class="lineNum">      53 </span><span class="lineCov">    1020192 :     buffer_.append(value.data(), value.size());</span></a>
+<a name="54"><span class="lineNum">      54 </span>            : </a>
+<a name="55"><span class="lineNum">      55 </span><span class="lineCov">    1020192 :     last_key_.resize(shared);</span></a>
+<a name="56"><span class="lineNum">      56 </span><span class="lineCov">    1020192 :     last_key_.append(key.data() + shared, non_shared);</span></a>
+<a name="57"><span class="lineNum">      57 </span><span class="lineCov">    1020192 :     assert(Binary(last_key_).compare(key) == 0);</span></a>
+<a name="58"><span class="lineNum">      58 </span><span class="lineCov">    1020192 :     counter_++;</span></a>
+<a name="59"><span class="lineNum">      59 </span><span class="lineCov">    1020192 : }</span></a>
+<a name="60"><span class="lineNum">      60 </span>            : </a>
+<a name="61"><span class="lineNum">      61 </span><span class="lineCov">        193 : Binary BlockBuilder::finish() {</span></a>
+<a name="62"><span class="lineNum">      62 </span>            :     /*</a>
+<a name="63"><span class="lineNum">      63 </span>            :      * restarts indexes</a>
+<a name="64"><span class="lineNum">      64 </span>            :      *</a>
+<a name="65"><span class="lineNum">      65 </span>            :      * +---------------+---------------+--------+---------------+------------------+</a>
+<a name="66"><span class="lineNum">      66 </span>            :      * | restart[0] 4B | restart[1] 4B | ...... | restart[n] 4B | restart count 4B |</a>
+<a name="67"><span class="lineNum">      67 </span>            :      * +---------------+---------------+--------+---------------+------------------+</a>
+<a name="68"><span class="lineNum">      68 </span>            :      */</a>
+<a name="69"><span class="lineNum">      69 </span><span class="lineCov">      64087 :     for (uint32_t restart : restarts_) {</span></a>
+<a name="70"><span class="lineNum">      70 </span><span class="lineCov">      63894 :         encodeInt&lt;uint32_t&gt;(&amp;buffer_, restart);</span></a>
+<a name="71"><span class="lineNum">      71 </span>            :     }</a>
+<a name="72"><span class="lineNum">      72 </span>            : </a>
+<a name="73"><span class="lineNum">      73 </span><span class="lineCov">        193 :     encodeInt(&amp;buffer_, static_cast&lt;uint32_t&gt;(restarts_.size()));</span></a>
+<a name="74"><span class="lineNum">      74 </span><span class="lineCov">        193 :     finished_ = true;</span></a>
+<a name="75"><span class="lineNum">      75 </span><span class="lineCov">        193 :     return {buffer_};</span></a>
+<a name="76"><span class="lineNum">      76 </span>            : }</a>
+<a name="77"><span class="lineNum">      77 </span>            : </a>
+<a name="78"><span class="lineNum">      78 </span><span class="lineCov">      10001 : std::size_t BlockBuilder::sizeEstimate() const {</span></a>
+<a name="79"><span class="lineNum">      79 </span><span class="lineCov">      10001 :     return (buffer_.size() + restarts_.size() * sizeof(uint32_t) + sizeof(uint32_t));</span></a>
+<a name="80"><span class="lineNum">      80 </span>            : }</a>
+<a name="81"><span class="lineNum">      81 </span>            : </a>
+<a name="82"><span class="lineNum">      82 </span><span class="lineCov">        191 : void BlockBuilder::reset() {</span></a>
+<a name="83"><span class="lineNum">      83 </span><span class="lineCov">        191 :     buffer_.clear();</span></a>
+<a name="84"><span class="lineNum">      84 </span><span class="lineCov">        191 :     last_key_.clear();</span></a>
+<a name="85"><span class="lineNum">      85 </span><span class="lineCov">        191 :     counter_ = 0;</span></a>
+<a name="86"><span class="lineNum">      86 </span><span class="lineCov">        191 :     finished_ = false;</span></a>
+<a name="87"><span class="lineNum">      87 </span><span class="lineCov">        191 :     restarts_.clear();</span></a>
+<a name="88"><span class="lineNum">      88 </span><span class="lineCov">        191 :     restarts_.push_back(0);</span></a>
+<a name="89"><span class="lineNum">      89 </span><span class="lineCov">        191 : }</span></a>
+<a name="90"><span class="lineNum">      90 </span>            : </a>
+<a name="91"><span class="lineNum">      91 </span>            : } // namespace pl</a>
 </pre>
       </td>
     </tr>
