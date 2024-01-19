@@ -25,8 +25,6 @@ namespace pl {
  */
 template <typename T, std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, bool>, T> = 0>
 void encodeInt(std::string* dst, T value) {
-    // 这里统一用little endian
-    value = pl::Endian::little(value);
     dst->append(reinterpret_cast<const char*>(&value), sizeof(T));
 }
 
@@ -42,8 +40,6 @@ T decodeInt(const char* input) {
     T value;
     std::size_t s = sizeof(T);
     memcpy(&value, input, s);
-    // 这里统一用little endian
-    value = pl::Endian::little(value);
     return value;
 }
 

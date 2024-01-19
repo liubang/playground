@@ -9,8 +9,6 @@
 #include "cpp/misc/sst/block.h"
 #include "cpp/misc/sst/encoding.h"
 
-#include <iostream>
-
 namespace pl {
 
 Block::Block(const BlockContents& content)
