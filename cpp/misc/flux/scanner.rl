@@ -33,7 +33,7 @@
 
     float_lit = (digit+ "." digit*) | ("." digit+);
 
-    duration_unit = "y" | "mo" | "w" | "d" | "h" | "m" | "s" | "ms" | "us" | "µs" | "ns";
+    duration_unit = "y" | "mo" | "w" | "d" | "h" | "m" | "s" | "ms" | "us" | "ns";
     duration_lit = ( int_lit duration_unit )+;
 
     date = digit{4} "-" digit{2} "-" digit{2};
@@ -81,57 +81,57 @@
     main := |*
         single_line_comment => { tok = TokenType::Comment; fbreak; };
 
-        "and" => { tok = TokenType::And; fbreak; };
-        "or" => { tok = TokenType::Or; fbreak; };
-        "not" => { tok = TokenType::Not; fbreak; };
-        "import" => { tok = TokenType::Import; fbreak; };
-        "package" => { tok = TokenType::Package; fbreak; };
-        "return" => { tok = TokenType::Return; fbreak; };
-        "option" => { tok = TokenType::Option; fbreak; };
-        "builtin" => { tok = TokenType::Builtin; fbreak; };
+        "and"      => { tok = TokenType::And; fbreak; };
+        "or"       => { tok = TokenType::Or; fbreak; };
+        "not"      => { tok = TokenType::Not; fbreak; };
+        "import"   => { tok = TokenType::Import; fbreak; };
+        "package"  => { tok = TokenType::Package; fbreak; };
+        "return"   => { tok = TokenType::Return; fbreak; };
+        "option"   => { tok = TokenType::Option; fbreak; };
+        "builtin"  => { tok = TokenType::Builtin; fbreak; };
         "testcase" => { tok = TokenType::TestCase; fbreak; };
-        "if" => { tok = TokenType::If; fbreak; };
-        "then" => { tok = TokenType::Then; fbreak; };
-        "else" => { tok = TokenType::Else; fbreak; };
-        "exists" => { tok = TokenType::Exists; fbreak; };
+        "if"       => { tok = TokenType::If; fbreak; };
+        "then"     => { tok = TokenType::Then; fbreak; };
+        "else"     => { tok = TokenType::Else; fbreak; };
+        "exists"   => { tok = TokenType::Exists; fbreak; };
 
-        identifier => { tok = TokenType::Ident; fbreak; };
-        int_lit => { tok = TokenType::Int; fbreak; };
-        float_lit => { tok = TokenType::Float; fbreak; };
-        duration_lit => { tok = TokenType::Duration; fbreak; };
+        identifier    => { tok = TokenType::Ident; fbreak; };
+        int_lit       => { tok = TokenType::Int; fbreak; };
+        float_lit     => { tok = TokenType::Float; fbreak; };
+        duration_lit  => { tok = TokenType::Duration; fbreak; };
         date_time_lit => { tok = TokenType::Time; fbreak; };
-        string_lit => { tok = TokenType::String; fbreak; };
+        string_lit    => { tok = TokenType::String; fbreak; };
         attribute_lit => { tok = TokenType::Attribute; fbreak; };
 
-        "+" => { tok = TokenType::Add; fbreak; };
-        "-" => { tok = TokenType::Sub; fbreak; };
-        "*" => { tok = TokenType::Mul; fbreak; };
-        "/" => { tok = TokenType::Div; fbreak; };
-        "%" => { tok = TokenType::Mod; fbreak; };
-        "^" => { tok = TokenType::Pow; fbreak; };
+        "+"  => { tok = TokenType::Add; fbreak; };
+        "-"  => { tok = TokenType::Sub; fbreak; };
+        "*"  => { tok = TokenType::Mul; fbreak; };
+        "/"  => { tok = TokenType::Div; fbreak; };
+        "%"  => { tok = TokenType::Mod; fbreak; };
+        "^"  => { tok = TokenType::Pow; fbreak; };
         "==" => { tok = TokenType::Eq; fbreak; };
-        "<" => { tok = TokenType::Lt; fbreak; };
-        ">" => { tok = TokenType::Gt; fbreak; };
+        "<"  => { tok = TokenType::Lt; fbreak; };
+        ">"  => { tok = TokenType::Gt; fbreak; };
         "<=" => { tok = TokenType::Lte; fbreak; };
         ">=" => { tok = TokenType::Gte; fbreak; };
         "!=" => { tok = TokenType::Neq; fbreak; };
         "=~" => { tok = TokenType::RegexEq; fbreak; };
         "!~" => { tok = TokenType::RegexNeq; fbreak; };
-        "=" => { tok = TokenType::Assign; fbreak; };
+        "="  => { tok = TokenType::Assign; fbreak; };
         "=>" => { tok = TokenType::Arrow; fbreak; };
         "<-" => { tok = TokenType::PipeReceive; fbreak; };
-        "(" => { tok = TokenType::LParen; fbreak; };
-        ")" => { tok = TokenType::RParen; fbreak; };
-        "[" => { tok = TokenType::LBrack; fbreak; };
-        "]" => { tok = TokenType::RBrack; fbreak; };
-        "{" => { tok = TokenType::LBrace; fbreak; };
-        "}" => { tok = TokenType::RBrace; fbreak; };
-        ":" => { tok = TokenType::Colon; fbreak; };
+        "("  => { tok = TokenType::LParen; fbreak; };
+        ")"  => { tok = TokenType::RParen; fbreak; };
+        "["  => { tok = TokenType::LBrack; fbreak; };
+        "]"  => { tok = TokenType::RBrack; fbreak; };
+        "{"  => { tok = TokenType::LBrace; fbreak; };
+        "}"  => { tok = TokenType::RBrace; fbreak; };
+        ":"  => { tok = TokenType::Colon; fbreak; };
         "|>" => { tok = TokenType::PipeForward; fbreak; };
-        "," => { tok = TokenType::Comma; fbreak; };
-        "." => { tok = TokenType::Dot; fbreak; };
-        '"' => { tok = TokenType::Quote; fbreak; };
-        '?' => { tok = TokenType::QuestionMark; fbreak; };
+        ","  => { tok = TokenType::Comma; fbreak; };
+        "."  => { tok = TokenType::Dot; fbreak; };
+        '"'  => { tok = TokenType::Quote; fbreak; };
+        '?'  => { tok = TokenType::QuestionMark; fbreak; };
 
         whitespace;
 
