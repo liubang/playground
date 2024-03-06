@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-01-19 11:18:37</td>
+            <td class="headerValue">2024-03-06 09:44:57</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">5</td>
@@ -85,9 +85,9 @@
 <a name="23"><span class="lineNum">      23 </span><span class="lineCov">          1 :     auto start = std::chrono::system_clock::now();</span></a>
 <a name="24"><span class="lineNum">      24 </span><span class="lineCov">          1 :     results.reserve(1024);</span></a>
 <a name="25"><span class="lineNum">      25 </span><span class="lineCov">       1025 :     for (int i = 0; i &lt; 1024; ++i) {</span></a>
-<a name="26"><span class="lineNum">      26 </span><span class="lineCov">       2048 :         results.emplace_back(pool.enqueue([i] {</span></a>
-<a name="27"><span class="lineNum">      27 </span><span class="lineCov">       1024 :             std::this_thread::sleep_for(std::chrono::milliseconds(1));</span></a>
-<a name="28"><span class="lineNum">      28 </span><span class="lineCov">       1023 :             return std::make_pair(i, i);</span></a>
+<a name="26"><span class="lineNum">      26 </span><span class="lineCov">       2047 :         results.emplace_back(pool.enqueue([i] {</span></a>
+<a name="27"><span class="lineNum">      27 </span><span class="lineCov">       1023 :             std::this_thread::sleep_for(std::chrono::milliseconds(1));</span></a>
+<a name="28"><span class="lineNum">      28 </span><span class="lineCov">       1020 :             return std::make_pair(i, i);</span></a>
 <a name="29"><span class="lineNum">      29 </span>            :         }));</a>
 <a name="30"><span class="lineNum">      30 </span>            :     }</a>
 <a name="31"><span class="lineNum">      31 </span>            : </a>
