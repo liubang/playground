@@ -1,4 +1,4 @@
-// Copyright (c) 2023 The Authors. All rights reserved.
+// Copyright (c) 2024 The Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,28 +20,18 @@
 #include "scanner.h"
 
 int main(int argc, char* argv[]) {
-    std::string flux = R"(
-    import "array"
-    import "math"
-    import "influxdata/influxdb/sample"
 
-    from(bucket:"telegraf/autogen")
-        |> range(start:-1us)
-        |> filter(fn:(r) =>
-            r._measurement == "cpu" and
-            r.cpu == "cpu-total"
-        )
-        |> aggregateWindow(every: 1m, fn: mean)
-    )";
+    std::string sql =
+        R"(SELECT "level description"::field, "location"::tag, "water_level"::field FROM "h2o_feet" GROUP BY time(600000us) ORDER BY time ASC)";
 
-    std::unique_ptr<pl::Scanner> scanner = std::make_unique<pl::Scanner>(flux.data(), flux.size());
+    std::unique_ptr<pl::Scanner> scanner = std::make_unique<pl::Scanner>(sql.data(), sql.size());
 
     for (;;) {
-        auto token = scanner->scan();
-        if (token->tok == pl::TokenType::Eof) {
+        auto tok = scanner->scan();
+        if (tok->tok == pl::TokenType::Eof) {
             break;
         }
-        std::cout << (*token) << "\n";
+        std::cout << (*tok) << "\n";
     }
 
     return 0;
