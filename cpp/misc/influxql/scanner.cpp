@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "scanner.h"
-#include <iostream>
 
 namespace pl {
 

@@ -404,11 +404,11 @@ struct Position {
 
     Position() = default;
     Position(uint32_t line, uint32_t column) : line(line), column(column) {}
-    bool is_valid() const { return line > 0 && column > 0; }
+    [[nodiscard]] bool is_valid() const { return line > 0 && column > 0; }
     bool operator<(const Position& other) const {
         return line < other.line || (line == other.line && column < other.column);
     }
-    static Position invalid() { return Position(0, 0); }
+    static Position invalid() { return {0, 0}; }
 };
 
 inline std::ostream& operator<<(std::ostream& os, const Position& pos) {
