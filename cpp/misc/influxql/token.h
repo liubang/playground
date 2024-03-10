@@ -188,55 +188,55 @@ inline std::string tok_string(TokenType type) {
     case TokenType::REGEX:
         return "REGEX";
     case TokenType::ADD:
-        return "+";
+        return "ADD";
     case TokenType::SUB:
-        return "-";
+        return "SUB";
     case TokenType::MUL:
-        return "*";
+        return "MUL";
     case TokenType::DIV:
-        return "/";
+        return "DIV";
     case TokenType::MOD:
-        return "%";
+        return "MOD";
     case TokenType::BITWISE_AND:
-        return "&";
+        return "BITWISE_AND";
     case TokenType::BITWISE_OR:
-        return "|";
+        return "BITWISE_OR";
     case TokenType::BITWISE_XOR:
-        return "^";
+        return "BITWISE_XOR";
     case TokenType::AND:
         return "AND";
     case TokenType::OR:
         return "OR";
     case TokenType::EQ:
-        return "=";
+        return "EQ";
     case TokenType::NEQ:
-        return "!=";
+        return "NEQ";
     case TokenType::EQREGEX:
-        return "=~";
+        return "EQREGEX";
     case TokenType::NEQREGEX:
-        return "!~";
+        return "NEQREGEX";
     case TokenType::LT:
-        return "<";
+        return "LT";
     case TokenType::LTE:
-        return "<=";
+        return "LTE";
     case TokenType::GT:
-        return ">";
+        return "GT";
     case TokenType::GTE:
-        return ">=";
+        return "GTE";
     case TokenType::LPAREN:
-        return "(";
+        return "LPAREN";
     case TokenType::RPAREN:
-        return ")";
+        return "RPAREN";
     case TokenType::COMMA:
-        return ",";
+        return "COMMA";
     case TokenType::COLON:
-        return ":";
+        return "COLON";
     case TokenType::DOUBLECOLON:
-        return "::";
+        return "DOUBLECOLON";
     case TokenType::SEMICOLON:
-        return ";";
+        return "SEMICOLON";
     case TokenType::DOT:
-        return ".";
+        return "DOT";
     case TokenType::ALL:
         return "ALL";
     case TokenType::ALTER:
@@ -422,6 +422,9 @@ struct Comment {
     Comment(std::string text) : text(std::move(text)) {}
 };
 
+using CommentRef = std::shared_ptr<Comment>;
+using CommentPtr = std::unique_ptr<Comment>;
+
 struct Token {
     TokenType tok;
     std::string lit;
@@ -429,8 +432,11 @@ struct Token {
     uint32_t end_offset;
     Position start_pos;
     Position end_pos;
-    std::vector<std::shared_ptr<Comment>> comments;
+    std::vector<CommentRef> comments;
 };
+
+using TokenRef = std::shared_ptr<Token>;
+using TokenPtr = std::unique_ptr<Token>;
 
 inline std::ostream& operator<<(std::ostream& os, const Token& token) {
     os << "{tok: " << tok_string(token.tok) << ", lit: " << token.lit << ", offset: ["
