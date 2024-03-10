@@ -40,10 +40,10 @@ public:
           checkpoint_last_newline_(data),
           token_(TokenType::ILLEGAL) {}
 
-    std::unique_ptr<Token> scan() { return scan_with_comments(0); }
-    std::unique_ptr<Token> scan_with_regex() { return scan_with_comments(1); }
-    std::unique_ptr<Token> scan_with_expr() { return scan_with_comments(2); }
-    std::unique_ptr<Token> scan_with_comments(int32_t mode);
+    TokenPtr scan() { return scan_with_comments(0); }
+    TokenPtr scan_with_regex() { return scan_with_comments(1); }
+    TokenPtr scan_with_expr() { return scan_with_comments(2); }
+    TokenPtr scan_with_comments(int32_t mode);
 
     /**
      * unread will reset the Scanner to go back to the location before the last scan_with_regex or
@@ -75,8 +75,8 @@ public:
     }
 
 private:
-    std::unique_ptr<Token> scan(int32_t mode);
-    std::unique_ptr<Token> get_eof_token();
+    TokenPtr scan(int32_t mode);
+    TokenPtr get_eof_token();
 
 private:
     const char* data_;
