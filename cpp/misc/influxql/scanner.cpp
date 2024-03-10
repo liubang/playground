@@ -33,8 +33,8 @@ extern uint32_t real_scan(int32_t mode,
                           int32_t& token_end_line,
                           int32_t& token_end_col);
 
-std::unique_ptr<Token> Scanner::scan_with_comments(int32_t mode) {
-    std::unique_ptr<Token> token;
+TokenPtr Scanner::scan_with_comments(int32_t mode) {
+    TokenPtr token;
     for (;;) {
         token = scan(mode);
         if (token->tok != TokenType::COMMENT) {
@@ -46,7 +46,7 @@ std::unique_ptr<Token> Scanner::scan_with_comments(int32_t mode) {
     return token;
 }
 
-std::unique_ptr<Token> Scanner::scan(int32_t mode) {
+TokenPtr Scanner::scan(int32_t mode) {
     if (p_ == eof_) {
         return get_eof_token();
     }
@@ -64,7 +64,7 @@ std::unique_ptr<Token> Scanner::scan(int32_t mode) {
     auto err =
         real_scan(mode, &p_, ps_, pe_, eof_, &last_newline_, cur_line_, token_, token_start,
                   token_start_line, token_start_col, token_end, token_end_line, token_end_col);
-    std::unique_ptr<Token> t;
+    TokenPtr t;
     if (err != 0) {
         // TODO(liubang):
         t = get_eof_token();
@@ -87,7 +87,7 @@ std::unique_ptr<Token> Scanner::scan(int32_t mode) {
     return t;
 }
 
-std::unique_ptr<Token> Scanner::get_eof_token() {
+TokenPtr Scanner::get_eof_token() {
     uint32_t column = eof_ - last_newline_ + 1;
     auto token = std::make_unique<Token>();
     token->tok = TokenType::Eof;
