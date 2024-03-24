@@ -8,9 +8,7 @@
 //=====================================================================
 #pragma once
 
-#include <cassert>
 #include <cstddef>
-#include <memory>
 
 #include "cpp/tools/binary.h"
 
