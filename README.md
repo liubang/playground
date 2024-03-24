@@ -8,9 +8,6 @@
     <a href="https://github.com/liubang/playground/actions/workflows/build_go.yml">
         <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_go.yml?label=build-go&style=flat-square&branch=main" alt="build-go" />
     </a>
-    <a href="https://github.com/liubang/playground/actions/workflows/build_rust.yml">
-        <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_rust.yml?label=build-rust&style=flat-square&branch=main" alt="build-rust" />
-    </a>
     <a href="https://github.com/liubang/playground/actions/workflows/build_java.yml">
         <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_java.yml?label=build-java&style=flat-square&branch=main" alt="build-java" />
     </a>
