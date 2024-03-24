@@ -211,7 +211,7 @@ public:
     Fs* fs() { return reinterpret_cast<Fs*>(&fs_storage_); }
 
 private:
-    typename std::aligned_storage<sizeof(T), alignof(T)>::type fs_storage_;
+    std::aligned_storage_t<sizeof(T), alignof(T)> fs_storage_;
 };
 
 using PosixDefaultFs = SingletonFs<PosixFs>;
