@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-03-10 16:49:19</td>
+            <td class="headerValue">2024-03-24 12:33:21</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">20</td>
@@ -273,7 +273,7 @@
 <a name="211"><span class="lineNum">     211 </span><span class="lineCov">          2 :     Fs* fs() { return reinterpret_cast&lt;Fs*&gt;(&amp;fs_storage_); }</span></a>
 <a name="212"><span class="lineNum">     212 </span>            : </a>
 <a name="213"><span class="lineNum">     213 </span>            : private:</a>
-<a name="214"><span class="lineNum">     214 </span>            :     typename std::aligned_storage&lt;sizeof(T), alignof(T)&gt;::type fs_storage_;</a>
+<a name="214"><span class="lineNum">     214 </span>            :     std::aligned_storage_t&lt;sizeof(T), alignof(T)&gt; fs_storage_;</a>
 <a name="215"><span class="lineNum">     215 </span>            : };</a>
 <a name="216"><span class="lineNum">     216 </span>            : </a>
 <a name="217"><span class="lineNum">     217 </span>            : using PosixDefaultFs = SingletonFs&lt;PosixFs&gt;;</a>
