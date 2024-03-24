@@ -9,10 +9,7 @@
 
 #include "cpp/misc/bloom/bloom_filter.h"
 
-#include <cassert>
 #include <cstring>
-#include <iostream>
-#include <memory>
 #include <string>
 
 #include "cpp/misc/hash/murmurhash2.h"
