@@ -10,7 +10,6 @@
 
 #include <atomic>
 #include <cassert>
-#include <memory>
 #include <vector>
 
 namespace pl {

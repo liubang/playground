@@ -16,6 +16,4 @@
 
 #include "parser.h"
 
-namespace pl {
-
-}
+namespace pl {}
