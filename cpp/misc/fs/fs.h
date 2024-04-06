@@ -10,6 +10,9 @@
 
 #include "cpp/tools/binary.h"
 #include "cpp/tools/status.h"
+
+#include <cstdint>
+
 namespace pl {
 
 class FsReader;
