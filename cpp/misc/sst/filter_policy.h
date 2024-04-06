@@ -9,9 +9,10 @@
 
 #pragma once
 
-#include <string>
-
 #include "cpp/tools/binary.h"
+
+#include <cstdint>
+#include <string>
 
 namespace pl {
 
