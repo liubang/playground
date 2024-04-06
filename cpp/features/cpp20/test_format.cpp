@@ -90,7 +90,7 @@ void print_table_cpp20() {
         for (const auto& values : std::views::values(product_to_orders)) {
             std::cout << std::format("{:>{}.2f}", values[i], col_length);
         }
-        std::cout '\n';
+        std::cout << '\n';
     }
 }
 #endif
