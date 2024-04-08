@@ -17,7 +17,9 @@ build --jobs=8
 build --nojava_header_compilation
 
 # for cpp
-build --cxxopt=-std=c++20
+# build --action_env=CC=/home/liubang/opt/gcc-13.2.1/bin/gcc
+# build --action_env=CXX=/home/liubang/opt/gcc-13.2.1/bin/g++
+# build --cxxopt=-std=c++20
 
 # bazel build
 test --test_output=all --action_env="GTEST_COLOR=1"

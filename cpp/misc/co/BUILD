@@ -13,5 +13,17 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
+load(
+    "//cpp:copts/configure_copts.bzl",
+    "DEFAULT_COPTS",
+    "DEFAULT_LINKOPTS",
+)
 
-
+cc_binary(
+    name = "test1",
+    srcs = ["test1.cpp"],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+    ],
+)
