@@ -16,14 +16,45 @@
 
 #pragma once
 
+#include <array>
+#include <string_view>
+
 namespace pl {
+
+using buffer_t = std::array<char, 32>;
 
 class GeoHash {
 public:
     struct Point {
-        double lat;
-        double lng;
+        double lng; // 经度
+        double lat; // 纬度
     };
+
+    struct Rectangle {
+        Point sw; // 西南
+        Point ne; // 东北
+
+        [[nodiscard]] constexpr Point center() const {
+            return {
+                (sw.lng + ne.lng) / 2,
+                (sw.lat + ne.lat) / 2,
+            };
+        };
+    };
+
+    /**
+     * @param lng Longitude in degrees
+     * @param lat Latitude in degrees
+     * @param precision Number of characters in resulting geohash
+     * @param buffer Geohash
+     */
+    static std::string_view encode(double lng, double lat, std::size_t precision, buffer_t& buffer);
+
+    /**
+     * @param hash Geohash
+     * @return SW/NE latitude/longitude bounds of specified geohash
+     */
+    static Rectangle decode(std::string_view hash);
 };
 
 } // namespace pl
