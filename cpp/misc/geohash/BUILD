@@ -29,3 +29,18 @@ cc_library(
     linkopts = DEFAULT_LINKOPTS,
     visibility = ["//visibility:public"],
 )
+
+cc_test(
+    name = "geohash_test",
+    srcs = [
+        "geohash_test.cpp",
+    ],
+    copts = [
+        "-std=c++20",
+    ] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        "//cpp/misc/geohash",
+        "@googletest//:gtest_main",
+    ],
+)
