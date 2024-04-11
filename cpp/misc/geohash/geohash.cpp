@@ -17,6 +17,7 @@
 #include "geohash.h"
 
 #include <cassert>
+#include <cstdint>
 #include <stdexcept>
 
 namespace pl {
@@ -120,6 +121,37 @@ GeoHash::Rectangle GeoHash::decode(std::string_view hash) {
         {min_lng, min_lat},
         {max_lng, max_lat},
     };
+}
+
+std::string_view GeoHash::adjacent(std::string_view geohash,
+                                   Direction direction,
+                                   buffer_t& buffer) {
+    assert(geohash.size() > 0 && geohash.size() < MAX_HASH_LEN);
+    std::copy(geohash.begin(), geohash.end(), std::begin(buffer));
+    return do_adjacent(geohash.size(), direction, buffer);
+}
+
+std::string_view GeoHash::do_adjacent(std::size_t size, Direction direction, buffer_t& buffer) {
+    constexpr static std::string_view neighbour[4][2]{
+        {"p0r21436x8zb9dcf5h7kjnmqesgutwvy", "bc01fg45238967deuvhjyznpkmstqrwx"},
+        {"14365h7k9dcfesgujnmqp0r2twvyx8zb", "238967debc01fg45kmstqrwxuvhjyznp"},
+        {"bc01fg45238967deuvhjyznpkmstqrwx", "p0r21436x8zb9dcf5h7kjnmqesgutwvy"},
+        {"238967debc01fg45kmstqrwxuvhjyznp", "14365h7k9dcfesgujnmqp0r2twvyx8zb"}};
+
+    constexpr static std::string_view border[4][2]{
+        {"prxz", "bcfguvyz"}, {"028b", "0145hjnp"}, {"bcfguvyz", "prxz"}, {"0145hjnp", "028b"}};
+
+    const auto lastchar = buffer[size - 1];
+    const auto type = size % 2;
+    const auto idx = static_cast<uint8_t>(direction);
+
+    if (border[idx][type].find(lastchar) != std::string_view::npos && size > 1) {
+        do_adjacent(size - 1, direction, buffer);
+    }
+
+    // append letter for direction to parent
+    buffer[size - 1] = BASE32[neighbour[idx][type].find(lastchar)];
+    return {buffer.data(), size};
 }
 
 } // namespace pl
