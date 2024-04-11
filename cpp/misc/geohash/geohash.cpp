@@ -17,16 +17,18 @@
 #include "geohash.h"
 
 #include <cassert>
+#include <stdexcept>
 
 namespace pl {
 
-constexpr static inline std::string_view BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz";
-
-constexpr static inline double MIN_LAT = -90;
-constexpr static inline double MAX_LAT = 90;
-constexpr static inline double MIN_LNG = -180;
-constexpr static inline double MAX_LNG = 180;
-constexpr static inline std::size_t MAX_HASH_LEN = 12;
+namespace {
+constexpr inline std::string_view BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz";
+constexpr inline double MIN_LAT = -90;
+constexpr inline double MAX_LAT = 90;
+constexpr inline double MIN_LNG = -180;
+constexpr inline double MAX_LNG = 180;
+constexpr inline std::size_t MAX_HASH_LEN = 12;
+} // namespace
 
 std::string_view GeoHash::encode(double lng, double lat, std::size_t precision, buffer_t& buffer) {
     assert(precision > 0 && precision <= MAX_HASH_LEN);
