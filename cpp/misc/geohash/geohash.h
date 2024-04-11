@@ -21,10 +21,10 @@
 
 namespace pl {
 
-using buffer_t = std::array<char, 32>;
-
 class GeoHash {
 public:
+    using buffer_t = std::array<char, 32>;
+
     struct Point {
         double lng; // 经度
         double lat; // 纬度
