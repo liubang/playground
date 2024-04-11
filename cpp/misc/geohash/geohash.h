@@ -55,6 +55,20 @@ public:
      * @return SW/NE latitude/longitude bounds of specified geohash
      */
     static Rectangle decode(std::string_view hash);
+
+private:
+    enum class Direction : uint8_t {
+        N = 0,
+        S = 1,
+        E = 2,
+        W = 3,
+    };
+
+    static std::string_view adjacent(std::string_view geohash,
+                                     Direction direction,
+                                     buffer_t& buffer);
+
+    static std::string_view do_adjacent(std::size_t size, Direction direction, buffer_t& buffer);
 };
 
 } // namespace pl
