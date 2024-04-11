@@ -31,6 +31,15 @@ bazel_dep(name = "catch2", version = "3.4.0")
 bazel_dep(name = "googletest", version = "1.14.0")
 bazel_dep(name = "google_benchmark", version = "1.8.2")
 
+# Hedron's Compile Commands Extractor for Bazel
+# https://github.com/hedronvision/bazel-compile-commands-extractor
+bazel_dep(name = "hedron_compile_commands", dev_dependency = True)
+git_override(
+    module_name = "hedron_compile_commands",
+    commit = "a14ad3a64e7bf398ab48105aaa0348e032ac87f8",
+    remote = "https://github.com/hedronvision/bazel-compile-commands-extractor.git",
+)
+
 # bison and flex
 bazel_dep(name = "rules_m4", version = "0.2.3")
 bazel_dep(name = "rules_bison", version = "0.2.2")
