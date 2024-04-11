@@ -12,16 +12,6 @@ workspace(name = "playground")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 ################ for cpp ################
-http_archive(
-    name = "hedron_compile_commands",
-    strip_prefix = "bazel-compile-commands-extractor-3dddf205a1f5cde20faf2444c1757abe0564ff4c",
-    url = "https://github.com/hedronvision/bazel-compile-commands-extractor/archive/3dddf205a1f5cde20faf2444c1757abe0564ff4c.tar.gz",
-)
-
-load("@hedron_compile_commands//:workspace_setup.bzl", "hedron_compile_commands_setup")
-
-hedron_compile_commands_setup()
-
 load("//third_party:repos.bzl", "external_repositories")
 
 external_repositories()
@@ -40,9 +30,10 @@ load("@rules_ragel//ragel:ragel.bzl", "ragel_register_toolchains")
 
 ragel_register_toolchains("7.0.0.11")
 
+load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies")
+
 ################ for golang ################
 load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
-load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies")
 
 # gazelle:repo bazel_gazelle
 
