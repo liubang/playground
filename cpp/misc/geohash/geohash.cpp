@@ -23,10 +23,13 @@ namespace pl {
 namespace {
 
 constexpr inline std::string_view BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz";
-constexpr inline double GEO_LAT_MIN = -90;
-constexpr inline double GEO_LAT_MAX = 90;
+
+// Limits from EPSG:900913 / EPSG:3785 / OSGEO:41001
+constexpr inline double GEO_LAT_MIN = -85.05112878;
+constexpr inline double GEO_LAT_MAX = 85.05112878;
 constexpr inline double GEO_LNG_MIN = -180;
 constexpr inline double GEO_LNG_MAX = 180;
+
 constexpr inline uint8_t MAX_STEP = 32;
 
 // Ref: https://graphics.stanford.edu/~seander/bithacks.html#InterleaveBMN
@@ -135,6 +138,89 @@ bool GeoHash::decode(const Rectangle& range, const HashBits& hash, Rectangle* ar
     area->set_max_lng(range.min_lng() + ((ilono + 1) * 1.0 / (1ULL << step)) * range.lng_scale());
 
     return true;
+}
+
+void GeoHash::move_x(HashBits* hash, int8_t d) {
+    if (d == 0) {
+        return;
+    }
+
+    uint64_t x = hash->bits & 0xaaaaaaaaaaaaaaaaULL;
+    uint64_t y = hash->bits & 0x5555555555555555ULL;
+    uint64_t z = 0x5555555555555555ULL >> (64 - hash->step * 2);
+
+    if (d > 0) {
+        x = x + (z + 1);
+    } else {
+        x = x | z;
+        x = x - (z + 1);
+    }
+
+    x = x & (0xaaaaaaaaaaaaaaaaULL >> (64 - hash->step * 2));
+    hash->bits = (x | y);
+}
+
+void GeoHash::move_y(HashBits* hash, int8_t d) {
+    if (d == 0) {
+        return;
+    }
+
+    uint64_t x = hash->bits & 0xaaaaaaaaaaaaaaaaULL;
+    uint64_t y = hash->bits & 0x5555555555555555ULL;
+    uint64_t z = 0xaaaaaaaaaaaaaaaaULL >> (64 - hash->step * 2);
+
+    if (d > 0) {
+        y = y + (z + 1);
+    } else {
+        y = y | z;
+        y = y - (z + 1);
+    }
+
+    y = y & (0xaaaaaaaaaaaaaaaaULL >> (64 - hash->step * 2));
+    hash->bits = (x | y);
+}
+
+void GeoHash::neighbors(const HashBits* hash, Neighbors* neighbors) {
+    neighbors->e = *hash;
+    neighbors->w = *hash;
+    neighbors->n = *hash;
+    neighbors->s = *hash;
+    neighbors->se = *hash;
+    neighbors->sw = *hash;
+    neighbors->ne = *hash;
+    neighbors->nw = *hash;
+
+    // north
+    move_x(&neighbors->n, 0);
+    move_y(&neighbors->n, 1);
+
+    // south
+    move_x(&neighbors->s, 0);
+    move_y(&neighbors->s, -1);
+
+    // west
+    move_x(&neighbors->w, -1);
+    move_y(&neighbors->w, 0);
+
+    // east
+    move_x(&neighbors->e, 1);
+    move_y(&neighbors->e, 0);
+
+    // north-east
+    move_x(&neighbors->ne, 1);
+    move_y(&neighbors->ne, 1);
+
+    // north-west
+    move_x(&neighbors->nw, -1);
+    move_y(&neighbors->nw, 1);
+
+    // south-east
+    move_x(&neighbors->se, 1);
+    move_y(&neighbors->se, -1);
+
+    // south-west
+    move_x(&neighbors->sw, -1);
+    move_y(&neighbors->sw, -1);
 }
 
 } // namespace pl
