@@ -17,7 +17,6 @@
 #include "geohash.h"
 
 #include <array>
-#include <cstdint>
 
 namespace pl {
 
