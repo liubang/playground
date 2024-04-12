@@ -18,7 +18,6 @@
 
 #include <cstdint>
 #include <ostream>
-#include <string_view>
 
 namespace pl {
 
@@ -86,18 +85,28 @@ public:
         [[nodiscard]] constexpr bool is_zero() const { return bits == 0 && step == 0; }
     };
 
+    struct Neighbors {
+        HashBits n;
+        HashBits e;
+        HashBits w;
+        HashBits s;
+        HashBits ne;
+        HashBits nw;
+        HashBits se;
+        HashBits sw;
+    };
+
 public:
     bool encode(const Rectangle& range, double lng, double lat, uint8_t step, HashBits* hash);
 
     bool decode(const Rectangle& range, const HashBits& hash, Rectangle* area);
 
+    void neighbors(const HashBits* hash, Neighbors* neighbors);
+
 private:
-    enum class Direction : uint8_t {
-        N = 0,
-        S = 1,
-        E = 2,
-        W = 3,
-    };
+    void move_x(HashBits* hash, int8_t d);
+
+    void move_y(HashBits* hash, int8_t d);
 };
 
 } // namespace pl
