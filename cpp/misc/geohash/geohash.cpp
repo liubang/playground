@@ -16,142 +16,126 @@
 
 #include "geohash.h"
 
-#include <cassert>
+#include <array>
 #include <cstdint>
-#include <stdexcept>
 
 namespace pl {
 
 namespace {
+
 constexpr inline std::string_view BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz";
-constexpr inline double MIN_LAT = -90;
-constexpr inline double MAX_LAT = 90;
-constexpr inline double MIN_LNG = -180;
-constexpr inline double MAX_LNG = 180;
-constexpr inline std::size_t MAX_HASH_LEN = 12;
+constexpr inline double GEO_LAT_MIN = -90;
+constexpr inline double GEO_LAT_MAX = 90;
+constexpr inline double GEO_LNG_MIN = -180;
+constexpr inline double GEO_LNG_MAX = 180;
+constexpr inline uint8_t MAX_STEP = 32;
+
+// Ref: https://graphics.stanford.edu/~seander/bithacks.html#InterleaveBMN
+inline uint64_t interleave64(uint32_t xlo, uint32_t ylo) {
+    constexpr static std::array<uint64_t, 5> B = {0x5555555555555555ULL, 0x3333333333333333ULL,
+                                                  0x0F0F0F0F0F0F0F0FULL, 0x00FF00FF00FF00FFULL,
+                                                  0x0000FFFF0000FFFFULL};
+    constexpr static std::array<int, 5> S = {1, 2, 4, 8, 16};
+    uint64_t x = xlo;
+    uint64_t y = ylo;
+
+    x = (x | (x << S[4])) & B[4];
+    y = (y | (y << S[4])) & B[4];
+
+    x = (x | (x << S[3])) & B[3];
+    y = (y | (y << S[3])) & B[3];
+
+    x = (x | (x << S[2])) & B[2];
+    y = (y | (y << S[2])) & B[2];
+
+    x = (x | (x << S[1])) & B[1];
+    y = (y | (y << S[1])) & B[1];
+
+    x = (x | (x << S[0])) & B[0];
+    y = (y | (y << S[0])) & B[0];
+
+    return x | (y << 1);
+}
+
+// Ref: http://stackoverflow.com/questions/4909263
+inline uint64_t deinterleave64(uint64_t interleaved) {
+    constexpr static std::array<uint64_t, 6> B = {0x5555555555555555ULL, 0x3333333333333333ULL,
+                                                  0x0F0F0F0F0F0F0F0FULL, 0x00FF00FF00FF00FFULL,
+                                                  0x0000FFFF0000FFFFULL, 0x00000000FFFFFFFFULL};
+    constexpr static std::array<int, 6> S = {0, 1, 2, 4, 8, 16};
+
+    uint64_t x = interleaved;
+    uint64_t y = interleaved >> 1;
+
+    x = (x | (x >> S[0])) & B[0];
+    y = (y | (y >> S[0])) & B[0];
+
+    x = (x | (x >> S[1])) & B[1];
+    y = (y | (y >> S[1])) & B[1];
+
+    x = (x | (x >> S[2])) & B[2];
+    y = (y | (y >> S[2])) & B[2];
+
+    x = (x | (x >> S[3])) & B[3];
+    y = (y | (y >> S[3])) & B[3];
+
+    x = (x | (x >> S[4])) & B[4];
+    y = (y | (y >> S[4])) & B[4];
+
+    x = (x | (x >> S[5])) & B[5];
+    y = (y | (y >> S[5])) & B[5];
+
+    return x | (y << 32);
+}
+
 } // namespace
 
-std::string_view GeoHash::encode(double lng, double lat, std::size_t precision, buffer_t& buffer) {
-    assert(precision > 0 && precision <= MAX_HASH_LEN);
-    double min_lat = MIN_LAT;
-    double max_lat = MAX_LAT;
-    double min_lng = MIN_LNG;
-    double max_lng = MAX_LNG;
-
-    bool even_bit = true;
-    std::size_t ibx = 0;
-    uint8_t bit = 0;
-    std::size_t bit_len = 0;
-
-    while (ibx < precision) {
-        if (even_bit) {
-            // 基数bit位是经度
-            auto mid_lng = (min_lng + max_lng) / 2;
-            if (lng > mid_lng) {
-                bit = bit * 2 + 1;
-                min_lng = mid_lng;
-            } else {
-                bit = bit * 2;
-                max_lng = mid_lng;
-            }
-        } else {
-            // 偶数bit位是纬度
-            auto mid_lat = (min_lat + max_lat) / 2;
-            if (lat > mid_lat) {
-                bit = bit * 2 + 1;
-                min_lat = mid_lat;
-            } else {
-                bit = bit * 2;
-                max_lat = mid_lat;
-            }
-        }
-
-        // 切换奇偶位
-        even_bit = !even_bit;
-
-        if (++bit_len == 5) {
-            buffer[ibx++] = BASE32[bit];
-            bit = 0;
-            bit_len = 0;
-        }
+bool GeoHash::encode(const Rectangle& range, double lng, double lat, uint8_t step, HashBits* hash) {
+    // check basic arguments sanity
+    if (range.is_zero() || hash == nullptr || step > MAX_STEP || step == 0) {
+        return false;
     }
 
-    buffer[ibx] = '\0';
-
-    return {buffer.data(), ibx};
-}
-
-GeoHash::Rectangle GeoHash::decode(std::string_view hash) {
-    assert(hash.size() > 0 && hash.size() <= MAX_HASH_LEN);
-    double min_lng = MIN_LNG;
-    double max_lng = MAX_LNG;
-    double min_lat = MIN_LAT;
-    double max_lat = MAX_LAT;
-    bool even_bit = true;
-
-    for (char ch : hash) {
-        // check if ch is a valid base32 char
-        if (BASE32.find(ch) == std::string_view::npos) {
-            throw std::logic_error("invalid geohash");
-        }
-
-        for (std::size_t j = 4; j >= 0; --j) {
-            auto bit = (ch >> j) & 1;
-            if (even_bit) {
-                auto lng_mid = (min_lng + max_lng) / 2;
-                if (bit == 0) {
-                    min_lng = lng_mid;
-                } else {
-                    max_lng = lng_mid;
-                }
-            } else {
-                auto lat_mid = (min_lat + max_lat) / 2;
-                if (bit == 0) {
-                    min_lat = lat_mid;
-                } else {
-                    max_lat = lat_mid;
-                }
-            }
-
-            even_bit = !even_bit;
-        }
+    if (lng > GEO_LNG_MAX || lng < GEO_LNG_MIN || lat > GEO_LAT_MAX || lat < GEO_LAT_MIN) {
+        return false;
     }
 
-    return {
-        {min_lng, min_lat},
-        {max_lng, max_lat},
-    };
-}
-
-std::string_view GeoHash::adjacent(std::string_view geohash,
-                                   Direction direction,
-                                   buffer_t& buffer) {
-    assert(geohash.size() > 0 && geohash.size() < MAX_HASH_LEN);
-    std::copy(geohash.begin(), geohash.end(), std::begin(buffer));
-    return do_adjacent(geohash.size(), direction, buffer);
-}
-
-std::string_view GeoHash::do_adjacent(std::size_t size, Direction direction, buffer_t& buffer) {
-    constexpr static std::string_view neighbour[4][2]{
-        {"p0r21436x8zb9dcf5h7kjnmqesgutwvy", "bc01fg45238967deuvhjyznpkmstqrwx"},
-        {"14365h7k9dcfesgujnmqp0r2twvyx8zb", "238967debc01fg45kmstqrwxuvhjyznp"},
-        {"bc01fg45238967deuvhjyznpkmstqrwx", "p0r21436x8zb9dcf5h7kjnmqesgutwvy"},
-        {"238967debc01fg45kmstqrwxuvhjyznp", "14365h7k9dcfesgujnmqp0r2twvyx8zb"}};
-
-    constexpr static std::string_view border[4][2]{
-        {"prxz", "bcfguvyz"}, {"028b", "0145hjnp"}, {"bcfguvyz", "prxz"}, {"0145hjnp", "028b"}};
-
-    const auto lastchar = buffer[size - 1];
-    const auto type = size % 2;
-    const auto idx = static_cast<uint8_t>(direction);
-
-    if (border[idx][type].find(lastchar) != std::string_view::npos && size > 1) {
-        do_adjacent(size - 1, direction, buffer);
+    if (!range.contains(lng, lat)) {
+        return false;
     }
 
-    // append letter for direction to parent
-    buffer[size - 1] = BASE32[neighbour[idx][type].find(lastchar)];
-    return {buffer.data(), size};
+    hash->bits = 0;
+    hash->step = step;
+
+    double lng_offset = (lng - range.min_lng()) / range.lng_scale();
+    double lat_offset = (lat - range.min_lat()) / range.lat_scale();
+
+    // convert to fixed point based on the step size
+    lng_offset *= (1ULL << step);
+    lat_offset *= (1ULL << step);
+
+    hash->bits = interleave64(lat_offset, lng_offset);
+
+    return true;
+}
+
+bool GeoHash::decode(const Rectangle& range, const HashBits& hash, Rectangle* area) {
+    if (range.is_zero() || hash.is_zero() || area == nullptr) {
+        return false;
+    }
+
+    uint8_t step = hash.step;
+    uint64_t hash_sep = deinterleave64(hash.bits); // hash = [lat][lng]
+
+    uint32_t ilato = hash_sep;       // get lat part of deinterleaved hash
+    uint32_t ilono = hash_sep >> 32; // shift over to get long part of hash
+
+    area->set_min_lat(range.min_lat() + (ilato * 1.0 / (1ULL << step)) * range.lat_scale());
+    area->set_max_lat(range.min_lat() + ((ilato + 1) * 1.0 / (1ULL << step)) * range.lat_scale());
+    area->set_min_lng(range.min_lng() + (ilono * 1.0 / (1ULL << step)) * range.lng_scale());
+    area->set_max_lng(range.min_lng() + ((ilono + 1) * 1.0 / (1ULL << step)) * range.lng_scale());
+
+    return true;
 }
 
 } // namespace pl
