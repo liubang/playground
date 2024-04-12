@@ -16,23 +16,36 @@
 
 #pragma once
 
-#include <array>
+#include <ostream>
 #include <string_view>
 
 namespace pl {
 
 class GeoHash {
 public:
-    using buffer_t = std::array<char, 32>;
-
     struct Point {
         double lng; // 经度
         double lat; // 纬度
+
+        [[nodiscard]] constexpr bool is_zero() const { return lng == 0 && lat == 0; }
+
+        friend std::ostream& operator<<(std::ostream& os, const Point& point) {
+            os << "{lng: " << point.lng << ", lat: " << point.lat << "}";
+            return os;
+        }
     };
 
     struct Rectangle {
         Point sw; // 西南
         Point ne; // 东北
+
+        void set_min_lat(double lat) { sw.lat = lat; }
+
+        void set_max_lat(double lat) { ne.lat = lat; }
+
+        void set_min_lng(double lng) { sw.lng = lng; }
+
+        void set_max_lng(double lng) { ne.lng = lng; }
 
         [[nodiscard]] constexpr Point center() const {
             return {
@@ -40,21 +53,42 @@ public:
                 (sw.lat + ne.lat) / 2,
             };
         };
+
+        [[nodiscard]] constexpr bool is_zero() const { return sw.is_zero() || ne.is_zero(); }
+
+        [[nodiscard]] double min_lat() const { return sw.lat; }
+
+        [[nodiscard]] double max_lat() const { return ne.lat; }
+
+        [[nodiscard]] double min_lng() const { return sw.lng; }
+
+        [[nodiscard]] double max_lng() const { return ne.lng; }
+
+        [[nodiscard]] double lat_scale() const { return ne.lat - sw.lat; }
+
+        [[nodiscard]] double lng_scale() const { return ne.lng - sw.lng; }
+
+        [[nodiscard]] bool contains(double lng, double lat) const {
+            return lng >= min_lng() && lng <= max_lng() && lat >= min_lat() && lat <= max_lat();
+        }
+
+        friend std::ostream& operator<<(std::ostream& os, const Rectangle& rectangle) {
+            os << "{sw: " << rectangle.sw << ", ne: " << rectangle.ne << "}";
+            return os;
+        }
     };
 
-    /**
-     * @param lng Longitude in degrees
-     * @param lat Latitude in degrees
-     * @param precision Number of characters in resulting geohash
-     * @param buffer Geohash
-     */
-    static std::string_view encode(double lng, double lat, std::size_t precision, buffer_t& buffer);
+    struct HashBits {
+        uint64_t bits;
+        uint8_t step;
 
-    /**
-     * @param hash Geohash
-     * @return SW/NE latitude/longitude bounds of specified geohash
-     */
-    static Rectangle decode(std::string_view hash);
+        [[nodiscard]] constexpr bool is_zero() const { return bits == 0 && step == 0; }
+    };
+
+public:
+    bool encode(const Rectangle& range, double lng, double lat, uint8_t step, HashBits* hash);
+
+    bool decode(const Rectangle& range, const HashBits& hash, Rectangle* area);
 
 private:
     enum class Direction : uint8_t {
@@ -63,12 +97,6 @@ private:
         E = 2,
         W = 3,
     };
-
-    static std::string_view adjacent(std::string_view geohash,
-                                     Direction direction,
-                                     buffer_t& buffer);
-
-    static std::string_view do_adjacent(std::size_t size, Direction direction, buffer_t& buffer);
 };
 
 } // namespace pl
