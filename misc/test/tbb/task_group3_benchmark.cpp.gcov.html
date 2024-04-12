@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-04-10 13:22:04</td>
+            <td class="headerValue">2024-04-12 10:48:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">7</td>
@@ -100,8 +100,8 @@
 <a name="38"><span class="lineNum">      38 </span><span class="lineCov">        176 :         size_t end = std::min(n, (t + 1) * n / maxt);</span></a>
 <a name="39"><span class="lineNum">      39 </span><span class="lineCov">        176 :         tg1.run([&amp;, t, beg, end] {</span></a>
 <a name="40"><span class="lineNum">      40 </span><span class="lineCov">        176 :             float local_res = 0;</span></a>
-<a name="41"><span class="lineNum">      41 </span><span class="lineCov">  396955530 :             for (size_t i = beg; i &lt; end; ++i) {</span></a>
-<a name="42"><span class="lineNum">      42 </span><span class="lineCov">  445324091 :                 local_res += std::sin(i);</span></a>
+<a name="41"><span class="lineNum">      41 </span><span class="lineCov">  465697041 :             for (size_t i = beg; i &lt; end; ++i) {</span></a>
+<a name="42"><span class="lineNum">      42 </span><span class="lineCov">  524863108 :                 local_res += std::sin(i);</span></a>
 <a name="43"><span class="lineNum">      43 </span>            :             }</a>
 <a name="44"><span class="lineNum">      44 </span><span class="lineNoCov">          0 :             tmp_res[t] = local_res;</span></a>
 <a name="45"><span class="lineNum">      45 </span><span class="lineCov">        176 :         });</span></a>
@@ -117,9 +117,9 @@
 <a name="55"><span class="lineNum">      55 </span><span class="lineCov">        176 :         size_t end = std::min(n, (t + 1) * n / maxt) - 1;</span></a>
 <a name="56"><span class="lineNum">      56 </span><span class="lineCov">        176 :         tg2.run([&amp;, t, beg, end] {</span></a>
 <a name="57"><span class="lineNum">      57 </span><span class="lineCov">        176 :             float local_res = tmp_res[t];</span></a>
-<a name="58"><span class="lineNum">      58 </span><span class="lineCov">  470515544 :             for (size_t i = beg; i &lt; end; ++i) {</span></a>
-<a name="59"><span class="lineNum">      59 </span><span class="lineCov">  470515368 :                 local_res += std::sin(i);</span></a>
-<a name="60"><span class="lineNum">      60 </span><span class="lineCov">  461149707 :                 a[i] = local_res;</span></a>
+<a name="58"><span class="lineNum">      58 </span><span class="lineCov">  509562067 :             for (size_t i = beg; i &lt; end; ++i) {</span></a>
+<a name="59"><span class="lineNum">      59 </span><span class="lineCov">  509561891 :                 local_res += std::sin(i);</span></a>
+<a name="60"><span class="lineNum">      60 </span><span class="lineCov">  491449988 :                 a[i] = local_res;</span></a>
 <a name="61"><span class="lineNum">      61 </span>            :             }</a>
 <a name="62"><span class="lineNum">      62 </span><span class="lineCov">        176 :         });</span></a>
 <a name="63"><span class="lineNum">      63 </span>            :     }</a>
