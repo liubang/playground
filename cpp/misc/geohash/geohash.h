@@ -83,6 +83,20 @@ public:
         uint8_t step;
 
         [[nodiscard]] constexpr bool is_zero() const { return bits == 0 && step == 0; }
+
+        // [[nodiscard]] constexpr std::string to_base32() const {
+        //     constexpr std::string_view alphabet = "0123456789bcdefghjkmnpqrstuvwxyz";
+        //     char buf[12];
+        //     for (int i = 0; i < 11; ++i) {
+        //         int idx = 0;
+        //         if (i != 10) {
+        //             idx = (bits >> (52 - ((i + 1) * 5))) & 0x1f;
+        //         }
+        //         buf[i] = alphabet[idx];
+        //     }
+        //     buf[11] = '\0';
+        //     return {buf};
+        // };
     };
 
     struct Neighbors {
@@ -97,16 +111,25 @@ public:
     };
 
 public:
-    bool encode(const Rectangle& range, double lng, double lat, uint8_t step, HashBits* hash);
+    static bool encode(
+        const Rectangle& range, double lng, double lat, uint8_t step, HashBits* hash);
 
-    bool decode(const Rectangle& range, const HashBits& hash, Rectangle* area);
+    static bool encode_wgs84(double lng, double lat, uint8_t step, HashBits* hash);
 
-    void neighbors(const HashBits* hash, Neighbors* neighbors);
+    static bool decode(const Rectangle& range, const HashBits& hash, Rectangle* area);
+
+    static bool decode_wgs84(const HashBits& hash, Rectangle* area);
+
+    static bool decode_area_to_point(const Rectangle& area, Point* point);
+
+    static bool decode_to_point_wgs84(const HashBits& hash, Point* point);
+
+    static void neighbors(const HashBits* hash, Neighbors* neighbors);
 
 private:
-    void move_x(HashBits* hash, int8_t d);
+    static void move_x(HashBits* hash, int8_t d);
 
-    void move_y(HashBits* hash, int8_t d);
+    static void move_y(HashBits* hash, int8_t d);
 };
 
 } // namespace pl

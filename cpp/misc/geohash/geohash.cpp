@@ -22,8 +22,6 @@ namespace pl {
 
 namespace {
 
-constexpr inline std::string_view BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz";
-
 // Limits from EPSG:900913 / EPSG:3785 / OSGEO:41001
 constexpr inline double GEO_LAT_MIN = -85.05112878;
 constexpr inline double GEO_LAT_MAX = 85.05112878;
@@ -31,6 +29,11 @@ constexpr inline double GEO_LNG_MIN = -180;
 constexpr inline double GEO_LNG_MAX = 180;
 
 constexpr inline uint8_t MAX_STEP = 32;
+
+constexpr inline GeoHash::Rectangle WGS84_RANGE = {
+    GeoHash::Point{GEO_LNG_MIN, GEO_LAT_MIN},
+    GeoHash::Point{GEO_LNG_MAX, GEO_LAT_MAX},
+};
 
 // Ref: https://graphics.stanford.edu/~seander/bithacks.html#InterleaveBMN
 inline uint64_t interleave64(uint32_t xlo, uint32_t ylo) {
@@ -121,6 +124,10 @@ bool GeoHash::encode(const Rectangle& range, double lng, double lat, uint8_t ste
     return true;
 }
 
+bool GeoHash::encode_wgs84(double lng, double lat, uint8_t step, HashBits* hash) {
+    return encode(WGS84_RANGE, lng, lat, step, hash);
+}
+
 bool GeoHash::decode(const Rectangle& range, const HashBits& hash, Rectangle* area) {
     if (range.is_zero() || hash.is_zero() || area == nullptr) {
         return false;
@@ -140,12 +147,47 @@ bool GeoHash::decode(const Rectangle& range, const HashBits& hash, Rectangle* ar
     return true;
 }
 
+bool GeoHash::decode_wgs84(const HashBits& hash, Rectangle* area) {
+    return decode(WGS84_RANGE, hash, area);
+}
+
+bool GeoHash::decode_area_to_point(const Rectangle& area, Point* point) {
+    if (point == nullptr) {
+        return false;
+    }
+    *point = area.center();
+    if (point->lng < GEO_LNG_MIN) {
+        point->lng = GEO_LNG_MIN;
+    }
+    if (point->lng > GEO_LNG_MAX) {
+        point->lng = GEO_LNG_MAX;
+    }
+    if (point->lat < GEO_LAT_MIN) {
+        point->lat = GEO_LAT_MIN;
+    }
+    if (point->lat > GEO_LAT_MAX) {
+        point->lat = GEO_LAT_MAX;
+    }
+    return true;
+}
+
+bool GeoHash::decode_to_point_wgs84(const HashBits& hash, Point* point) {
+    Rectangle area;
+    if (point == nullptr || !decode_wgs84(hash, &area)) {
+        return false;
+    }
+
+    return decode_area_to_point(area, point);
+}
+
 void GeoHash::move_x(HashBits* hash, int8_t d) {
     if (d == 0) {
         return;
     }
 
+    // 1010101010101010101010101010101010101010101010101010101010101010
     uint64_t x = hash->bits & 0xaaaaaaaaaaaaaaaaULL;
+    // 0101010101010101010101010101010101010101010101010101010101010101
     uint64_t y = hash->bits & 0x5555555555555555ULL;
     uint64_t z = 0x5555555555555555ULL >> (64 - hash->step * 2);
 
