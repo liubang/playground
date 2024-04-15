@@ -83,20 +83,6 @@ public:
         uint8_t step;
 
         [[nodiscard]] constexpr bool is_zero() const { return bits == 0 && step == 0; }
-
-        // [[nodiscard]] constexpr std::string to_base32() const {
-        //     constexpr std::string_view alphabet = "0123456789bcdefghjkmnpqrstuvwxyz";
-        //     char buf[12];
-        //     for (int i = 0; i < 11; ++i) {
-        //         int idx = 0;
-        //         if (i != 10) {
-        //             idx = (bits >> (52 - ((i + 1) * 5))) & 0x1f;
-        //         }
-        //         buf[i] = alphabet[idx];
-        //     }
-        //     buf[11] = '\0';
-        //     return {buf};
-        // };
     };
 
     struct Neighbors {
