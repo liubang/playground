@@ -15,14 +15,6 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/05/21 23:50
 
-#======================================================================
-#
-# BUILD -
-#
-# Created by liubang on 2023/05/21 23:30
-# Last Modified: 2023/05/21 23:30
-#
-#======================================================================
 load(
     "//cpp:copts/configure_copts.bzl",
     "DEFAULT_COPTS",
@@ -167,6 +159,13 @@ cc_test(
 cc_test(
     name = "test_template_lazy",
     srcs = ["test_template_lazy.cpp"],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+)
+
+cc_test(
+    name = "test_pi",
+    srcs = ["test_pi.cpp"],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
 )
