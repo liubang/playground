@@ -18,33 +18,30 @@
 
 #include <cmath>
 
-namespace pl::geo {
+namespace pl {
 
-static constexpr double D_R = (M_PI / 180.0);
-// The usual PI/180 constant
-static constexpr double DEG_TO_RAD = 0.017453292519943295769236907684886;
-// Earth's quatratic mean radius for WGS-84
-static constexpr double EARTH_RADIUS_IN_METERS = 6372797.560856;
+class Geo {
+public:
+    static double geo_distance(const GeoHash::Point& p1, const GeoHash::Point& p2);
 
-inline double deg_rad(double ang) { return ang * D_R; }
-inline double rad_deg(double ang) { return ang / D_R; }
+    static std::string geohash_string(const GeoHash::HashBits& hash);
 
-inline double geo_lat_distance(double lat1d, double lat2d) {
-    return EARTH_RADIUS_IN_METERS * std::fabs(deg_rad(lat2d) - deg_rad(lat1d));
-}
+    static uint64_t geohash_align52bits(const GeoHash::HashBits& hash);
 
-inline double geo_distance(const GeoHash::Point& p1, const GeoHash::Point& p2) {
-    double lng1r = deg_rad(p1.lng);
-    double lng2r = deg_rad(p2.lng);
-    double v = std::sin((lng2r - lng1r) / 2);
-    if (v == 0.0) {
-        return geo_lat_distance(p1.lat, p2.lat);
+private:
+    static constexpr double D_R = (M_PI / 180.0);
+    // The usual PI/180 constant
+    static constexpr double DEG_TO_RAD = 0.017453292519943295769236907684886;
+    // Earth's quatratic mean radius for WGS-84
+    static constexpr double EARTH_RADIUS_IN_METERS = 6372797.560856;
+
+private:
+    static inline double deg_rad(double ang) { return ang * D_R; }
+    static inline double rad_deg(double ang) { return ang / D_R; }
+
+    static inline double geo_lat_distance(double lat1d, double lat2d) {
+        return EARTH_RADIUS_IN_METERS * std::fabs(deg_rad(lat2d) - deg_rad(lat1d));
     }
-    double lat1r = deg_rad(p1.lat);
-    double lat2r = deg_rad(p2.lat);
-    double u = std::sin((lat2r - lat1r) / 2);
-    double a = u * u + std::cos(lat1r) * std::cos(lat2r) * v * v;
-    return 2.0 * EARTH_RADIUS_IN_METERS * std::asin(std::sqrt(a));
-}
+};
 
-} // namespace pl::geo
+} // namespace pl

@@ -27,8 +27,7 @@ constexpr inline double GEO_LAT_MIN = -85.05112878;
 constexpr inline double GEO_LAT_MAX = 85.05112878;
 constexpr inline double GEO_LNG_MIN = -180;
 constexpr inline double GEO_LNG_MAX = 180;
-
-constexpr inline uint8_t MAX_STEP = 32;
+constexpr inline uint8_t GEO_MAX_STEP = 32; /* 32 * 2 = 64 bits */
 
 constexpr inline GeoHash::Rectangle WGS84_RANGE = {
     GeoHash::Point{GEO_LNG_MIN, GEO_LAT_MIN},
@@ -97,7 +96,7 @@ inline uint64_t deinterleave64(uint64_t interleaved) {
 
 bool GeoHash::encode(const Rectangle& range, double lng, double lat, uint8_t step, HashBits* hash) {
     // check basic arguments sanity
-    if (range.is_zero() || hash == nullptr || step > MAX_STEP || step == 0) {
+    if (range.is_zero() || hash == nullptr || step > GEO_MAX_STEP || step == 0) {
         return false;
     }
 
