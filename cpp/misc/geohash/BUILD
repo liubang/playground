@@ -30,6 +30,16 @@ cc_library(
     visibility = ["//visibility:public"],
 )
 
+cc_library(
+    name = "geo",
+    srcs = ["geo.cpp"],
+    hdrs = ["geo.h"],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    visibility = ["//visibility:public"],
+    deps = [":geohash"],
+)
+
 cc_test(
     name = "geohash_test",
     srcs = [
