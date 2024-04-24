@@ -50,7 +50,7 @@ cc_test(
     ] + TEST_COPTS,
     linkopts = DEFAULT_LINKOPTS,
     deps = [
-        "//cpp/misc/geohash",
+        "//cpp/misc/geohash:geo",
         "@googletest//:gtest_main",
     ],
 )
