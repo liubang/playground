@@ -448,6 +448,7 @@ std::unique_ptr<Expression> Parser::parse_postfix_expression() {
         }
         expr = std::move(po);
     }
+    return expr;
 }
 
 std::unique_ptr<Expression> Parser::parse_postfix_operator_suffix(
@@ -460,6 +461,7 @@ std::unique_ptr<Expression> Parser::parse_postfix_operator_suffix(
         }
         expr = std::move(po);
     }
+    return expr;
 }
 
 std::unique_ptr<Expression> Parser::parse_postfix_operator(std::unique_ptr<Expression> expr,
