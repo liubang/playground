@@ -23,14 +23,14 @@ TEST(geohash, encode) {
     std::map<std::string, pl::GeoHash::Point> cases = {
         {"wx4ey9n3gk0", pl::GeoHash::Point{116.31, 40.04}}};
 
-    constexpr pl::GeoHash::Rectangle range = {
+    constexpr pl::GeoHash::Area area = {
         pl::GeoHash::Point{-180, -90},
         pl::GeoHash::Point{180, 90},
     };
 
     for (const auto& [k, v] : cases) {
         pl::GeoHash::HashBits hash;
-        pl::GeoHash::encode(range, v.lng, v.lat, 26, &hash);
+        pl::GeoHash::encode(area, v.lng, v.lat, 26, &hash);
         EXPECT_EQ(k, pl::Geo::geohash_string(hash));
     }
 }

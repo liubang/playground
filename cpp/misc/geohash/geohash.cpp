@@ -21,17 +21,9 @@
 namespace pl {
 
 namespace {
-
-// Limits from EPSG:900913 / EPSG:3785 / OSGEO:41001
-constexpr inline double GEO_LAT_MIN = -85.05112878;
-constexpr inline double GEO_LAT_MAX = 85.05112878;
-constexpr inline double GEO_LNG_MIN = -180;
-constexpr inline double GEO_LNG_MAX = 180;
-constexpr inline uint8_t GEO_MAX_STEP = 32; /* 32 * 2 = 64 bits */
-
-constexpr inline GeoHash::Rectangle WGS84_RANGE = {
-    GeoHash::Point{GEO_LNG_MIN, GEO_LAT_MIN},
-    GeoHash::Point{GEO_LNG_MAX, GEO_LAT_MAX},
+constexpr inline GeoHash::Area WGS84_RANGE = {
+    GeoHash::Point{GeoHash::GEO_LNG_MIN, GeoHash::GEO_LAT_MIN},
+    GeoHash::Point{GeoHash::GEO_LNG_MAX, GeoHash::GEO_LAT_MAX},
 };
 
 // Ref: https://graphics.stanford.edu/~seander/bithacks.html#InterleaveBMN
@@ -94,7 +86,7 @@ inline uint64_t deinterleave64(uint64_t interleaved) {
 
 } // namespace
 
-bool GeoHash::encode(const Rectangle& range, double lng, double lat, uint8_t step, HashBits* hash) {
+bool GeoHash::encode(const Area& range, double lng, double lat, uint8_t step, HashBits* hash) {
     // check basic arguments sanity
     if (range.is_zero() || hash == nullptr || step > GEO_MAX_STEP || step == 0) {
         return false;
@@ -127,7 +119,7 @@ bool GeoHash::encode_wgs84(double lng, double lat, uint8_t step, HashBits* hash)
     return encode(WGS84_RANGE, lng, lat, step, hash);
 }
 
-bool GeoHash::decode(const Rectangle& range, const HashBits& hash, Rectangle* area) {
+bool GeoHash::decode(const Area& range, const HashBits& hash, Area* area) {
     if (range.is_zero() || hash.is_zero() || area == nullptr) {
         return false;
     }
@@ -146,11 +138,11 @@ bool GeoHash::decode(const Rectangle& range, const HashBits& hash, Rectangle* ar
     return true;
 }
 
-bool GeoHash::decode_wgs84(const HashBits& hash, Rectangle* area) {
+bool GeoHash::decode_wgs84(const HashBits& hash, Area* area) {
     return decode(WGS84_RANGE, hash, area);
 }
 
-bool GeoHash::decode_area_to_point(const Rectangle& area, Point* point) {
+bool GeoHash::decode_area_to_point(const Area& area, Point* point) {
     if (point == nullptr) {
         return false;
     }
@@ -171,7 +163,7 @@ bool GeoHash::decode_area_to_point(const Rectangle& area, Point* point) {
 }
 
 bool GeoHash::decode_to_point_wgs84(const HashBits& hash, Point* point) {
-    Rectangle area;
+    Area area;
     if (point == nullptr || !decode_wgs84(hash, &area)) {
         return false;
     }
