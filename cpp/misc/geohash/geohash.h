@@ -121,6 +121,12 @@ public:
         } t;
     };
 
+    struct GeoHashRadius {
+        HashBits hash;
+        Area area;
+        Neighbors neighbors;
+    };
+
 public:
     static bool encode(const Area& range, double lng, double lat, uint8_t step, HashBits* hash);
 
