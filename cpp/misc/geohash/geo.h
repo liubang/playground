@@ -64,11 +64,21 @@ public:
     /**
      * @brief return the bounding box of the search area by shape
      *
-     * @param shape 
-     * @param bounds 
-     * @return 
+     * @param shape
+     * @param bounds
+     * @return
      */
     static bool geohash_bouding_box(const GeoHash::GeoShape& shape, GeoHash::Area* bounds);
+
+    /**
+     * @brief calculate a set of areas (center + 8) that are able to cover a range query for the
+     * specified position and shape.
+     *
+     * @param shape
+     * @param radius
+     */
+    static void geohash_cal_area_by_shape(const GeoHash::GeoShape& shape,
+                                          GeoHash::GeoHashRadius* radius);
 
     static uint64_t geohash_align52bits(const GeoHash::HashBits& hash);
 
