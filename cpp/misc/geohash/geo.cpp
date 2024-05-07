@@ -110,6 +110,9 @@ bool Geo::geohash_bouding_box(const GeoHash::GeoShape& shape, GeoHash::Area* bou
     return true;
 }
 
+void Geo::geohash_cal_area_by_shape(const GeoHash::GeoShape& shape,
+                                    GeoHash::GeoHashRadius* radius) {}
+
 uint64_t Geo::geohash_align52bits(const GeoHash::HashBits& hash) {
     uint64_t bits = hash.bits;
     bits <<= (52 - hash.step * 2);
