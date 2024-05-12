@@ -1,4 +1,4 @@
-# Copyright (c) 2023 The Authors. All rights reserved.
+# Copyright (c) 2024 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,5 +13,21 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/11/02 20:48
+# Created: 2024/05/12 23:04
 
+load(
+    "//cpp:copts/configure_copts.bzl",
+    "DEFAULT_COPTS",
+    "DEFAULT_LINKOPTS",
+)
+
+cc_binary(
+    name = "test",
+    srcs = ["test.cpp"],
+    copts = ["-std=c++17"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        "@s2geometry//:s2",
+        "@s2geometry//:s2testing",
+    ],
+)
