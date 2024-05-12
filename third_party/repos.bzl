@@ -7,8 +7,8 @@
 #
 #======================================================================
 
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 def external_repositories():
     http_archive(
@@ -135,9 +135,17 @@ def external_repositories():
     )
 
     http_archive(
-        name = "ragel",
-        build_file = "//third_party/ragel:ragel.BUILD",
-        urls = ["https://www.colm.net/files/ragel/ragel-7.0.4.tar.gz"],
-        strip_prefix = "ragel-7.0.4",
-        sha256 = "84b1493efe967e85070c69e78b04dc55edc5c5718f9d6b77929762cb2abed278",
+        name = "s2geometry",
+        build_file = "//third_party/s2geometry:s2geometry.BUILD",
+        urls = ["https://github.com/google/s2geometry/archive/refs/tags/v0.11.1.tar.gz"],
+        strip_prefix = "s2geometry-0.11.1",
+        sha256 = "bdbeb8ebdb88fa934257caf81bb44b55711617a3ab4fdec2c3cfd6cc31b61734",
     )
+
+    # http_archive(
+    #     name = "ragel",
+    #     build_file = "//third_party/ragel:ragel.BUILD",
+    #     urls = ["https://www.colm.net/files/ragel/ragel-7.0.4.tar.gz"],
+    #     strip_prefix = "ragel-7.0.4",
+    #     sha256 = "84b1493efe967e85070c69e78b04dc55edc5c5718f9d6b77929762cb2abed278",
+    # )
