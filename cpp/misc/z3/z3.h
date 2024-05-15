@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <iostream>
 #include <ostream>
+#include <tuple>
 
 namespace pl::curve {
 
