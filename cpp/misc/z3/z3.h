@@ -14,6 +14,8 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
+#pragma once
+
 #include <bitset>
 #include <cstdint>
 #include <iostream>
@@ -29,6 +31,9 @@ public:
     // the bits will be encoded in reverse order:
     // ......z1y1x1z0y0x0
     Z3(uint64_t x, uint64_t y, uint64_t z) { zval_ = (split(x) | split(y) << 1 | split(z) << 2); }
+
+    // constructed by z3 value
+    Z3(uint64_t z) { zval_ = z; }
 
     // insert 00 between every bit in value. Only first 21 bits can be considered.
     static uint64_t split(uint64_t val) {

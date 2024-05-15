@@ -14,6 +14,8 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
+#pragma once
+
 #include <cassert>
 #include <cmath>
 #include <cstdint>
