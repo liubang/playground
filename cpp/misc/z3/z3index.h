@@ -40,7 +40,7 @@ public:
                            double y,
                            const std::chrono::time_point<std::chrono::system_clock>& time) {
         std::string rowkey;
-        rowkey.reserve(128);
+        rowkey.reserve(11 + id.size());
         auto binned_time = BinnedTime<period>::of(time);
         auto z = sfc_->index(x, y, binned_time.offset());
 
