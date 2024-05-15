@@ -19,12 +19,26 @@ load(
     "DEFAULT_LINKOPTS",
 )
 
+cc_library(
+    name = "z3",
+    hdrs = [
+        "binned_time.h",
+        "chrono_unit.h",
+        "dimension.h",
+        "z3.h",
+        "z3index.h",
+        "z3sfc.h",
+    ],
+)
+
 cc_binary(
     name = "z3_test",
     srcs = [
         "test.cpp",
-        "z3.h",
     ],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        ":z3",
+    ],
 )
