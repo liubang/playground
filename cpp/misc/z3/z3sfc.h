@@ -27,6 +27,8 @@ namespace pl::curve {
 template <TimePeriod period> class Z3SFC {
 public:
     Z3SFC(uint32_t precision) {
+        // precision (bits) per dimendion must be in [1, 21];
+        assert(precision > 0 && precision < 22);
         lon_ = std::make_unique<NormalizedLon>(precision);
         lat_ = std::make_unique<NormalizedLat>(precision);
         time_ = std::make_unique<NormalizedTime>(precision, BinnedTime<period>::max_offset());
