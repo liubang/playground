@@ -32,7 +32,7 @@ public:
         time_ = std::make_unique<NormalizedTime>(precision, BinnedTime<period>::max_offset());
     }
 
-    Z3SFC() : Z3SFC(period, 21) {}
+    Z3SFC() : Z3SFC<period>(21) {}
 
     uint64_t index(double x, double y, uint64_t t) {
         return Z3(lon_->normalize(x), lat_->normalize(y), time_->normalize(t)).val();
