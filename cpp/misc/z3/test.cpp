@@ -16,7 +16,27 @@
 
 #include "z3.h"
 
+#include "z3sfc.h"
 #include <cassert>
+#include <ctime>
+#include <iomanip>
+#include <iostream>
+#include <sstream>
+
+std::chrono::system_clock::time_point utc_string_to_time_point(const std::string& utc_string) {
+    std::tm tm = {};
+    std::istringstream ss(utc_string);
+    ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%SZ");
+    std::time_t time = std::mktime(&tm);
+    return std::chrono::system_clock::from_time_t(time);
+}
+
+void debug(pl::curve::Z3 z3) {
+    auto [x, y, z] = z3.decode();
+    std::cout << "x:" << std::bitset<32>(x) << '\n';
+    std::cout << "y:" << std::bitset<32>(y) << '\n';
+    std::cout << "z:" << std::bitset<32>(z) << '\n';
+}
 
 int main(int argc, char* argv[]) {
     {
@@ -56,6 +76,23 @@ int main(int argc, char* argv[]) {
         assert(x == 1);
         assert(y == 1);
         assert(z == 1);
+    }
+
+    {
+        pl::curve::Z3SFC<pl::curve::TimePeriod::Week> sfc;
+        auto z = sfc.index(45.0, 10.0, 1);
+        pl::curve::Z3 z3(z);
+        std::cout << z3;
+    }
+
+    {
+        auto time = utc_string_to_time_point("2024-05-15T12:30:00Z");
+        auto binned_time = pl::curve::BinnedTime<pl::curve::TimePeriod::Week>::of(time);
+        pl::curve::Z3SFC<pl::curve::TimePeriod::Week> sfc;
+        auto z = sfc.index(116.312803, 40.047735, binned_time.offset());
+        pl::curve::Z3 z3(z);
+        std::cout << z3;
+        debug(z3);
     }
 
     return 0;
