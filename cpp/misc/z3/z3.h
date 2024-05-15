@@ -26,7 +26,7 @@ namespace pl::curve {
 class Z3 {
 public:
     // (1 << 22) - 1
-    constexpr static uint64_t MAX_MASK = 0x1fffffL;
+    constexpr static uint64_t MAX_MASK = 0x1FFFFFULL;
 
     // the bits will be encoded in reverse order:
     // ......z1y1x1z0y0x0
@@ -38,21 +38,21 @@ public:
     // insert 00 between every bit in value. Only first 21 bits can be considered.
     static uint64_t split(uint64_t val) {
         uint64_t x = val & MAX_MASK;
-        x = (x | x << 32) & 0x1f00000000ffffL;
-        x = (x | x << 16) & 0x1f0000ff0000ffL;
-        x = (x | x << 8) & 0x100f00f00f00f00fL;
-        x = (x | x << 4) & 0x10c30c30c30c30c3L;
-        x = (x | x << 2) & 0x1249249249249249L;
+        x = (x | x << 32) & 0x1F00000000FFFFULL;
+        x = (x | x << 16) & 0x1F0000FF0000FFULL;
+        x = (x | x << 8) & 0x100F00F00F00F00FULL;
+        x = (x | x << 4) & 0x10C30C30C30C30C3ULL;
+        x = (x | x << 2) & 0x1249249249249249ULL;
         return x;
     }
 
     // combine every third bit to from a value. Max value is 21 bits
     static uint64_t combine(uint64_t z) {
-        uint64_t x = z & 0x1249249249249249L;
-        x = (x ^ (x >> 2)) & 0x10c30c30c30c30c3L;
-        x = (x ^ (x >> 4)) & 0x100f00f00f00f00fL;
-        x = (x ^ (x >> 8)) & 0x1f0000ff0000ffL;
-        x = (x ^ (x >> 16)) & 0x1f00000000ffffL;
+        uint64_t x = z & 0x1249249249249249ULL;
+        x = (x ^ (x >> 2)) & 0x10C30C30C30C30C3ULL;
+        x = (x ^ (x >> 4)) & 0x100F00F00F00F00FULL;
+        x = (x ^ (x >> 8)) & 0x1F0000FF0000FFULL;
+        x = (x ^ (x >> 16)) & 0x1F00000000FFFFULL;
         x = (x ^ (x >> 32)) & MAX_MASK;
         return x;
     }
