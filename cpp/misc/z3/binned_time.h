@@ -39,7 +39,7 @@ public:
             return 2678400ULL;
         } else if constexpr (period == TimePeriod::Year) {
             return 527050ULL;
-        } else {
+        } else { // Day
             return 86400000ULL;
         }
     }
@@ -50,29 +50,29 @@ public:
             uint16_t weeks = to_epochs<ChronoUnit::WEEKS>(time_point);
             std::chrono::time_point<std::chrono::system_clock> epoch;
             auto time = epoch + ChronoDuration<ChronoUnit::WEEKS>::type(weeks);
-            uint64_t offset = to_epochs<ChronoUnit::SECONDS>(time_point) =
-                to_epochs<ChronoUnit::SECONDS>(time);
+            uint64_t offset =
+                to_epochs<ChronoUnit::SECONDS>(time_point) - to_epochs<ChronoUnit::SECONDS>(time);
             return BinnedTime<period>{weeks, offset};
         } else if constexpr (period == TimePeriod::Month) {
             uint16_t months = to_epochs<ChronoUnit::MONTHS>(time_point);
             std::chrono::time_point<std::chrono::system_clock> epoch;
             auto time = epoch + ChronoDuration<ChronoUnit::MONTHS>::type(months);
-            uint64_t offset = to_epochs<ChronoUnit::SECONDS>(time_point) =
-                to_epochs<ChronoUnit::SECONDS>(time);
+            uint64_t offset =
+                to_epochs<ChronoUnit::SECONDS>(time_point) - to_epochs<ChronoUnit::SECONDS>(time);
             return BinnedTime<period>{months, offset};
         } else if constexpr (period == TimePeriod::Year) {
             uint16_t years = to_epochs<ChronoUnit::YEARS>(time_point);
             std::chrono::time_point<std::chrono::system_clock> epoch;
             auto time = epoch + ChronoDuration<ChronoUnit::YEARS>::type(years);
-            uint64_t offset = to_epochs<ChronoUnit::SECONDS>(time_point) =
-                to_epochs<ChronoUnit::SECONDS>(time);
+            uint64_t offset =
+                to_epochs<ChronoUnit::MINUTES>(time_point) - to_epochs<ChronoUnit::MINUTES>(time);
             return BinnedTime<period>{years, offset};
         } else {
             uint16_t days = to_epochs<ChronoUnit::DAYS>(time_point);
             std::chrono::time_point<std::chrono::system_clock> epoch;
             auto time = epoch + ChronoDuration<ChronoUnit::DAYS>::type(days);
-            uint64_t offset = to_epochs<ChronoUnit::MILLIS>(time_point) =
-                to_epochs<ChronoUnit::MILLIS>(time);
+            uint64_t offset =
+                to_epochs<ChronoUnit::MILLIS>(time_point) - to_epochs<ChronoUnit::MILLIS>(time);
             return BinnedTime<period>{days, offset};
         }
     }
@@ -95,9 +95,12 @@ private:
     template <ChronoUnit Unit>
     static uint64_t to_epochs(
         const std::chrono::time_point<std::chrono::system_clock>& time_point) {
-        return std::chrono::duration_cast<ChronoDuration<Unit>::type>(time_point.time_since_epoch())
+        return std::chrono::duration_cast<typename ChronoDuration<Unit>::type>(
+                   time_point.time_since_epoch())
             .count();
     }
+
+    BinnedTime(uint16_t bin, uint64_t offset) : bin_(bin), offset_(offset) {}
 
 private:
     uint16_t bin_;
