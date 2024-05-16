@@ -39,6 +39,8 @@ void debug(pl::curve::Z3 z3) {
 }
 
 int main(int argc, char* argv[]) {
+    assert(((1 << 21) - 1) == pl::curve::Z3::MAX_MASK);
+
     {
         pl::curve::Z3 z3(1, 2, 4);
         std::cout << z3;
@@ -114,6 +116,7 @@ int main(int argc, char* argv[]) {
             auto binned_time = pl::curve::BinnedTime<pl::curve::TimePeriod::Day>::of(time);
             std::cout << "[  Day] => bin: " << binned_time.bin() << ", offset: " << binned_time.offset() << '\n';
         }
+
     }
 
     return 0;

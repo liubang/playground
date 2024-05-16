@@ -26,7 +26,7 @@ namespace pl::curve {
 
 class Z3 {
 public:
-    // (1 << 22) - 1
+    // (1 << 21) - 1
     constexpr static uint64_t MAX_MASK = 0x1FFFFFULL;
 
     // the bits will be encoded in reverse order:
