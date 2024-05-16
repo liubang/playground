@@ -49,11 +49,11 @@ template <> struct ChronoDuration<ChronoUnit::WEEKS> {
 };
 
 template <> struct ChronoDuration<ChronoUnit::MONTHS> {
-    using type = std::chrono::duration<uint32_t, std::ratio<604800ULL / 12>>;
+    using type = std::chrono::duration<uint32_t, std::ratio<31556952ULL / 12>>;
 };
 
 template <> struct ChronoDuration<ChronoUnit::YEARS> {
-    using type = std::chrono::duration<uint32_t, std::ratio<31556952L>>;
+    using type = std::chrono::duration<uint32_t, std::ratio<31556952ULL>>;
 };
 
 } // namespace pl::curve
