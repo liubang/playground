@@ -24,6 +24,8 @@ namespace pl::curve {
 
 class NormalizedDimension {
 public:
+    virtual ~NormalizedDimension() = default;
+
     virtual double min() = 0;
 
     virtual double max() = 0;
