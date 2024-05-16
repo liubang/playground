@@ -18,9 +18,11 @@
 
 #include "binned_time.h"
 #include "dimension.h"
+#include "types.h"
 #include "z3.h"
 
 #include <memory>
+#include <vector>
 
 namespace pl::curve {
 
@@ -41,6 +43,12 @@ public:
     }
 
     std::tuple<double, double, uint64_t> invert(uint64_t z) { return Z3(z).decode(); }
+
+    void ranges(const std::vector<Box>& xy,
+                const std::vector<TimeRange>& t,
+                int32_t precision,
+                int32_t max_ranges,
+                std::vector<IndexRange>* idx_ranges) {}
 
 private:
     std::unique_ptr<NormalizedDimension> lon_;
