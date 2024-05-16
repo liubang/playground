@@ -95,5 +95,26 @@ int main(int argc, char* argv[]) {
         debug(z3);
     }
 
+    {
+        auto time = utc_string_to_time_point("2024-05-15T12:30:00Z");
+        // clang-format off
+        {
+            auto binned_time = pl::curve::BinnedTime<pl::curve::TimePeriod::Year>::of(time);
+            std::cout << "[ Year] => bin: " << binned_time.bin() << ", offset: " << binned_time.offset() << '\n';
+        }
+        {
+            auto binned_time = pl::curve::BinnedTime<pl::curve::TimePeriod::Month>::of(time);
+            std::cout << "[Month] => bin: " << binned_time.bin() << ", offset: " << binned_time.offset() << '\n';
+        }
+        {
+            auto binned_time = pl::curve::BinnedTime<pl::curve::TimePeriod::Week>::of(time);
+            std::cout << "[ Week] => bin: " << binned_time.bin() << ", offset: " << binned_time.offset() << '\n';
+        }
+        {
+            auto binned_time = pl::curve::BinnedTime<pl::curve::TimePeriod::Day>::of(time);
+            std::cout << "[  Day] => bin: " << binned_time.bin() << ", offset: " << binned_time.offset() << '\n';
+        }
+    }
+
     return 0;
 }
