@@ -39,13 +39,11 @@ void debug(pl::curve::Z3 z3) {
 }
 
 int main(int argc, char* argv[]) {
-    assert(((1 << 21) - 1) == pl::curve::Z3::MAX_MASK);
 
     {
         pl::curve::Z3 z3(1, 2, 4);
         std::cout << z3;
-        std::cout << std::bitset<64>(pl::curve::Z3::split((1ULL << 63) - 1)) << '\n';
-        std::cout << std::bitset<64>(pl::curve::Z3::MAX_MASK) << '\n';
+        std::cout << std::bitset<64>(z3.split((1ULL << 63) - 1)) << '\n';
     }
 
     {

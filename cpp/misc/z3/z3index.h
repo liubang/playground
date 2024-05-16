@@ -24,6 +24,26 @@
 
 namespace pl::curve {
 
+class Z3IndexKey {
+public:
+    Z3IndexKey(uint16_t bin, uint64_t z) : bin_(bin), z_(z) {}
+
+    uint16_t bin() const { return bin_; }
+
+    uint64_t z() const { return z_; }
+
+    bool compare(const Z3IndexKey& other) const {
+        if (bin_ != other.bin_) {
+            return bin_ < other.bin();
+        }
+        return z_ < other.z();
+    }
+
+private:
+    uint16_t bin_; // date epoch
+    uint64_t z_;   // z3 value within the epoch
+};
+
 template <TimePeriod period> class Z3IndexKeySpace {
 public:
     Z3IndexKeySpace() { sfc_ = std::make_unique<Z3SFC<period>>(); }
@@ -51,6 +71,9 @@ public:
         rowkey.append(id);
         return rowkey;
     }
+
+    // TODO
+    void get_ranges() {}
 
 private:
     std::unique_ptr<Z3SFC<period>> sfc_;
