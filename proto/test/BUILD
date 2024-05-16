@@ -15,15 +15,6 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/05/25 00:28
 
-#======================================================================
-#
-# BUILD -
-#
-# Created by liubang on 2023/05/25 00:02
-# Last Modified: 2023/05/25 00:02
-#
-#======================================================================
-
 load("@rules_proto//proto:defs.bzl", "proto_library")
 
 package(default_visibility = ["//visibility:public"])
