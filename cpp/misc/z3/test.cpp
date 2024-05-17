@@ -43,7 +43,6 @@ int main(int argc, char* argv[]) {
     {
         pl::curve::Z3 z3(1, 2, 4);
         std::cout << z3;
-        std::cout << std::bitset<64>(z3.split((1ULL << 63) - 1)) << '\n';
     }
 
     {
@@ -96,7 +95,7 @@ int main(int argc, char* argv[]) {
     }
 
     {
-        auto time = utc_string_to_time_point("2024-05-15T12:30:00Z");
+        auto time = utc_string_to_time_point("2024-05-17T12:30:00Z");
         // clang-format off
         {
             auto binned_time = pl::curve::BinnedTime<pl::curve::TimePeriod::Year>::of(time);
