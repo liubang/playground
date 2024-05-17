@@ -48,12 +48,12 @@ int main(int argc, char* argv[]) {
      * string，此时，我们在再后面printf中使用这个 字符串指针，
      * 就触发了heap-use-after-free 的问题。
      */
-    const char* s = to_string().c_str();
-
-    ::printf("s is %s\n", s);
-    ::printf("s is %s\n", s);
-    ::printf("s is %s\n", s);
-    ::printf("s is %s\n", s);
+    // const char* s = to_string().c_str();
+    //
+    // ::printf("s is %s\n", s);
+    // ::printf("s is %s\n", s);
+    // ::printf("s is %s\n", s);
+    // ::printf("s is %s\n", s);
 
     return 0;
 }
