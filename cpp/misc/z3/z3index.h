@@ -28,11 +28,11 @@ class Z3IndexKey {
 public:
     Z3IndexKey(uint16_t bin, uint64_t z) : bin_(bin), z_(z) {}
 
-    uint16_t bin() const { return bin_; }
+    [[nodiscard]] uint16_t bin() const { return bin_; }
 
-    uint64_t z() const { return z_; }
+    [[nodiscard]] uint64_t z() const { return z_; }
 
-    bool compare(const Z3IndexKey& other) const {
+    [[nodiscard]] bool compare(const Z3IndexKey& other) const {
         if (bin_ != other.bin_) {
             return bin_ < other.bin();
         }
@@ -42,6 +42,12 @@ public:
 private:
     uint16_t bin_; // date epoch
     uint64_t z_;   // z3 value within the epoch
+};
+
+class Z3IndexValues {
+public:
+private:
+    std::vector<Box> spatial_bounds_;
 };
 
 template <TimePeriod period> class Z3IndexKeySpace {
