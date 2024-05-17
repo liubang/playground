@@ -14,14 +14,14 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/tools/encoding.h"
+#include "cpp/tools/bits.h"
 
-#include <gtest/gtest.h>
+#include <iostream>
 
-class EncodingTest : public ::testing::Test {
-protected:
-    void SetUp() override {}
-    void TearDown() override {}
-};
+int main(int argc, char* argv[]) {
+    uint64_t i = 26;
+    uint64_t j = pl::Endian::swap(i);
+    std::cout << j << std::endl;
 
-TEST_F(EncodingTest, verify_varint) {}
+    return 0;
+}
