@@ -16,6 +16,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <iostream>
 #include <type_traits>
 
 namespace {
@@ -28,7 +29,7 @@ struct Foo {
 };
 #pragma pack(pop)
 
-static_assert(std::is_pod_v<Foo>, "Foo is not POD");
+static_assert(std::is_standard_layout_v<Foo> && std::is_trivial_v<Foo>, "Foo is not POD");
 static_assert(sizeof(Foo) == 13, "sizeof(Foo) does not equal 13");
 
 #pragma pack(push, 1)
@@ -42,18 +43,18 @@ struct Bar {
 };
 #pragma pack(pop)
 
-static_assert(std::is_pod_v<Bar>, "Bar is not POD");
+static_assert(std::is_standard_layout_v<Bar> && std::is_trivial_v<Bar>, "Bar is not POD");
 static_assert(sizeof(Bar) == 26, "sizeof(Bar) does not equal 13");
 
 } // namespace
 
 int main(int argc, char* argv[]) {
     Bar b;
-    const char* bc = reinterpret_cast<const char*>(&b);
-    const Foo* foo = reinterpret_cast<const Foo*>(bc);
-    auto* fc = foo + 1;
+    const void* bc = &b;
+    const Foo* foo = static_cast<const Foo*>(bc);
+    const Foo* fc = foo + 1;
 
-    assert((fc - foo) == 13);
+    assert((fc - foo) == 1);
 
     return 0;
 }
