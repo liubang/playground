@@ -35,10 +35,23 @@ public:
     // constructed by z3 value
     Z3(uint64_t z) { zval_ = z; }
 
-    virtual ~Z3() = default;
+    ~Z3() override = default;
 
+    [[nodiscard]] std::tuple<uint64_t, uint64_t, uint64_t> decode() const {
+        return {combine(zval_), combine(zval_ >> 1), combine(zval_ >> 2)};
+    }
+
+    [[nodiscard]] uint64_t val() const { return zval_; }
+
+    friend std::ostream& operator<<(std::ostream& os, const Z3& z3) {
+        std::bitset<64> bs(z3.zval_);
+        os << bs << '\n';
+        return os;
+    }
+
+private:
     // insert 00 between every bit in value. Only first 21 bits can be considered.
-    uint64_t split(uint64_t val) const override {
+    [[nodiscard]] uint64_t split(uint64_t val) const override {
         uint64_t x = val & MAX_MASK;
         x = (x | x << 32) & 0x1F00000000FFFFULL;
         x = (x | x << 16) & 0x1F0000FF0000FFULL;
@@ -49,7 +62,7 @@ public:
     }
 
     // combine every third bit to from a value. Max value is 21 bits
-    uint64_t combine(uint64_t z) const override {
+    [[nodiscard]] uint64_t combine(uint64_t z) const override {
         uint64_t x = z & 0x1249249249249249ULL;
         x = (x ^ (x >> 2)) & 0x10C30C30C30C30C3ULL;
         x = (x ^ (x >> 4)) & 0x100F00F00F00F00FULL;
@@ -59,28 +72,26 @@ public:
         return x;
     }
 
-    [[nodiscard]] std::tuple<uint64_t, uint64_t, uint64_t> decode() const {
-        return {combine(zval_), combine(zval_ >> 1), combine(zval_ >> 2)};
-    }
-
-    [[nodiscard]] uint64_t val() const { return zval_; }
-
-    // TODO
     [[nodiscard]] bool contains(const Zrange& range, uint64_t value) const override {
-
-        return false;
+        auto [vx, vy, vz] = Z3(value).decode();
+        auto [minx, miny, minz] = Z3(range.min).decode();
+        auto [maxx, maxy, maxz] = Z3(range.min).decode();
+        return vx >= minx && vx <= maxx && vy >= miny && vy <= maxy && vz >= minz && vz <= maxz;
     }
 
-    // TODO
-    [[nodiscard]] bool overlap(const Zrange& range, const Zrange& value) const override {
+    [[nodiscard]] bool overlaps(const Zrange& range, const Zrange& value) const override {
+        auto [minrx, minry, minrz] = Z3(range.min).decode();
+        auto [maxrx, maxry, maxrz] = Z3(range.min).decode();
 
-        return false;
+        auto [minvx, minvy, minvz] = Z3(value.min).decode();
+        auto [maxvx, maxvy, maxvz] = Z3(value.min).decode();
+
+        return overlaps(minrx, maxrx, minvx, maxvx) && overlaps(minry, maxry, minvy, maxvy) &&
+               overlaps(minrz, maxrz, minvz, maxvz);
     }
 
-    friend std::ostream& operator<<(std::ostream& os, const Z3& z3) {
-        std::bitset<64> bs(z3.zval_);
-        os << bs << '\n';
-        return os;
+    [[nodiscard]] bool overlaps(int64_t a1, int64_t a2, int64_t b1, int64_t b2) const {
+        return std::max(a1, b1) <= std::min(a2, b2);
     }
 
 private:
