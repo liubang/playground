@@ -53,21 +53,21 @@ private:
     // insert 00 between every bit in value. Only first 21 bits can be considered.
     [[nodiscard]] uint64_t split(uint64_t val) const override {
         uint64_t x = val & MAX_MASK;
-        x = (x | x << 32) & 0x1F00000000FFFFULL;
-        x = (x | x << 16) & 0x1F0000FF0000FFULL;
-        x = (x | x << 8) & 0x100F00F00F00F00FULL;
-        x = (x | x << 4) & 0x10C30C30C30C30C3ULL;
-        x = (x | x << 2) & 0x1249249249249249ULL;
+        x = (x | x << 32) & 0x1F00000000FFFFUL;
+        x = (x | x << 16) & 0x1F0000FF0000FFUL;
+        x = (x | x << 8) & 0x100F00F00F00F00FUL;
+        x = (x | x << 4) & 0x10C30C30C30C30C3UL;
+        x = (x | x << 2) & 0x1249249249249249UL;
         return x;
     }
 
     // combine every third bit to from a value. Max value is 21 bits
     [[nodiscard]] uint64_t combine(uint64_t z) const override {
-        uint64_t x = z & 0x1249249249249249ULL;
-        x = (x ^ (x >> 2)) & 0x10C30C30C30C30C3ULL;
-        x = (x ^ (x >> 4)) & 0x100F00F00F00F00FULL;
-        x = (x ^ (x >> 8)) & 0x1F0000FF0000FFULL;
-        x = (x ^ (x >> 16)) & 0x1F00000000FFFFULL;
+        uint64_t x = z & 0x1249249249249249UL;
+        x = (x ^ (x >> 2)) & 0x10C30C30C30C30C3UL;
+        x = (x ^ (x >> 4)) & 0x100F00F00F00F00FUL;
+        x = (x ^ (x >> 8)) & 0x1F0000FF0000FFUL;
+        x = (x ^ (x >> 16)) & 0x1F00000000FFFFUL;
         x = (x ^ (x >> 32)) & MAX_MASK;
         return x;
     }
