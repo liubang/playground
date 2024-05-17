@@ -15,14 +15,6 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/05/21 02:32
 
-#======================================================================
-#
-# BUILD -
-#
-# Created by liubang on 2023/05/21 00:36
-# Last Modified: 2023/05/21 00:36
-#
-#======================================================================
 load(
     "//cpp:copts/configure_copts.bzl",
     "DEFAULT_LINKOPTS",
@@ -118,4 +110,12 @@ cc_test(
         "//cpp/meta",
         "//cpp/tools",
     ],
+)
+
+cc_test(
+    name = "bits_test",
+    srcs = ["bits_test.cpp"],
+    copts = ["-std=c++20"] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = ["//cpp/tools"],
 )
