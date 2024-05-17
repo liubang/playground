@@ -20,14 +20,26 @@ load(
     "DEFAULT_LINKOPTS",
 )
 
-cc_binary(
+cc_test(
     name = "time",
     srcs = [
         "time.cpp",
     ],
-    copts = ["-std=c++17"] + DEFAULT_COPTS,
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
     deps = [
         "@boost//:date_time",
+    ],
+)
+
+cc_test(
+    name = "test_named_parameters",
+    srcs = ["test_named_parameters.cpp"],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        "@boost//:mpl",
+        "@boost//:parameter",
+        "@boost//:utility",
     ],
 )

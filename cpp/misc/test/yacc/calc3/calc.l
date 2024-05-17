@@ -67,6 +67,6 @@ EXP	([Ee][-+]?[0-9]+)
 [ \t]   /* ignore white space */ 
 \\\n    /* ignore line continuation */
 "\n"    { return EOL; }
-.	    { Calcerror("Mystery character %c", result, *yytext); }
+.	    { Calcerror("Mystery character %c", result, yytext); }
 
 %%

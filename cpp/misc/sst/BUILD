@@ -91,7 +91,6 @@ cc_test(
     linkopts = DEFAULT_LINKOPTS,
     deps = [
         ":sstable",
-        # "@abseil-cpp//absl/cleanup",
         "@googletest//:gtest_main",
     ],
 )
