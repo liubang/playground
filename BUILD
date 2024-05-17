@@ -15,15 +15,6 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/04/14 14:00
 
-#======================================================================
-#
-# BUILD -
-#
-# Created by liubang on 2023/05/21 02:05
-# Last Modified: 2023/05/21 02:05
-#
-#======================================================================
-
 load("@bazel_skylib//lib:selects.bzl", "selects")
 load("@hedron_compile_commands//:refresh_compile_commands.bzl", "refresh_compile_commands")
 
