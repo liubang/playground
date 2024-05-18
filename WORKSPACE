@@ -1,11 +1,18 @@
-#======================================================================
+# Copyright (c) 2024 The Authors. All rights reserved.
 #
-# WORKSPACE -
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# Created by liubang on 2023/05/21 00:30
-# Last Modified: 2023/05/21 00:30
+#      https://www.apache.org/licenses/LICENSE-2.0
 #
-#======================================================================
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Authors: liubang (it.liubang@gmail.com)
 
 workspace(name = "playground")
 
@@ -31,19 +38,19 @@ load("@rules_ragel//ragel:ragel.bzl", "ragel_register_toolchains")
 ragel_register_toolchains("7.0.0.11")
 
 ################ for java ################
-load("@contrib_rules_jvm//:repositories.bzl", "contrib_rules_jvm_deps", "contrib_rules_jvm_gazelle_deps")
-
-contrib_rules_jvm_deps()
-
-contrib_rules_jvm_gazelle_deps()
-
-load("@contrib_rules_jvm//:setup.bzl", "contrib_rules_jvm_setup")
-
-contrib_rules_jvm_setup()
-
-load("@contrib_rules_jvm//:gazelle_setup.bzl", "contrib_rules_jvm_gazelle_setup")
-
-contrib_rules_jvm_gazelle_setup()
+# load("@contrib_rules_jvm//:repositories.bzl", "contrib_rules_jvm_deps", "contrib_rules_jvm_gazelle_deps")
+#
+# contrib_rules_jvm_deps()
+#
+# contrib_rules_jvm_gazelle_deps()
+#
+# load("@contrib_rules_jvm//:setup.bzl", "contrib_rules_jvm_setup")
+#
+# contrib_rules_jvm_setup()
+#
+# load("@contrib_rules_jvm//:gazelle_setup.bzl", "contrib_rules_jvm_gazelle_setup")
+#
+# contrib_rules_jvm_gazelle_setup()
 
 ################ for rust ################
 # https://github.com/bazelbuild/rules_rust/releases
