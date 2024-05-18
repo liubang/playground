@@ -20,6 +20,7 @@ package main
 import (
 	"fmt"
 	"net"
+	"os"
 	"time"
 )
 
@@ -91,6 +92,6 @@ func main() {
 
 	// 计算往返时间并输出结果
 	duration := time.Since(start)
-	fmt.Println("从", host, "的回复:", reply[20:])
+	fmt.Fprintln(os.Stdout, []any{"从", host, "的回复:", reply[20:]}...)
 	fmt.Println("往返时间:", duration)
 }
