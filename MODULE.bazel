@@ -12,7 +12,7 @@ module(
     bazel_compatibility = [">=6.0.0"],
 )
 
-bazel_dep(name = "bazel_skylib", version = "1.4.2")
+bazel_dep(name = "bazel_skylib", version = "1.6.1")
 
 # dpes for c/cpp
 bazel_dep(name = "grpc", version = "1.48.1")
@@ -72,8 +72,8 @@ use_repo(flex, "flex")
 register_toolchains("@flex//:toolchain")
 
 # deps for go
-bazel_dep(name = "gazelle", version = "0.35.0", repo_name = "bazel_gazelle")
-bazel_dep(name = "rules_go", version = "0.46.0", repo_name = "io_bazel_rules_go")
+bazel_dep(name = "rules_go", version = "0.47.0", repo_name = "io_bazel_rules_go")
+bazel_dep(name = "gazelle", version = "0.36.0", repo_name = "bazel_gazelle")
 
 go_sdk = use_extension("@io_bazel_rules_go//go:extensions.bzl", "go_sdk")
 go_sdk.host()
@@ -89,9 +89,9 @@ use_repo(
 )
 
 # some rules
-bazel_dep(name = "platforms", version = "0.0.6")
+bazel_dep(name = "platforms", version = "0.0.10")
 bazel_dep(name = "rules_foreign_cc", version = "0.9.0")
-bazel_dep(name = "rules_license", version = "0.0.4")
+bazel_dep(name = "rules_license", version = "0.0.8")
 bazel_dep(name = "rules_proto", version = "5.3.0-21.7")
 bazel_dep(name = "rules_python", version = "0.24.0")
 bazel_dep(name = "rules_python_gazelle_plugin", version = "0.24.0")
