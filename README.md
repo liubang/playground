@@ -30,12 +30,6 @@ bazel test //...
 bazel run //:refresh_compile_commands
 ```
 
-### 更新 go 依赖
-
-```bash
-gazelle update-repos -from_file=go/go.mod -to_macro=go/go_deps.bzl%go_repositories
-```
-
 ### 更新 java 依赖
 
 ```bash
