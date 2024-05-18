@@ -15,15 +15,6 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/05/21 21:06
 
-#======================================================================
-#
-# BUILD -
-#
-# Created by liubang on 2023/05/21 13:17
-# Last Modified: 2023/05/21 13:17
-#
-#======================================================================
-
 load("@bazel_gazelle//:def.bzl", "DEFAULT_LANGUAGES", "gazelle", "gazelle_binary")
 
 # gazelle:java_maven_install_file maven_install.json
