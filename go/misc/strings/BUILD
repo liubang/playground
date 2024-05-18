@@ -15,7 +15,7 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/07/16 23:54
 
-load("@io_bazel_rules_go//go:def.bzl", "go_binary")
+load("@rules_go//go:def.bzl", "go_binary")
 
 go_binary(
     name = "strings",
