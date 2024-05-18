@@ -15,15 +15,6 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/06/15 13:32
 
-#======================================================================
-#
-# BUILD -
-#
-# Created by liubang on 2023/06/13 10:28
-# Last Modified: 2023/06/13 10:28
-#
-#======================================================================
-
 load("@io_bazel_rules_go//go:def.bzl", "go_binary")
 
 go_binary(
