@@ -30,24 +30,6 @@ load("@rules_ragel//ragel:ragel.bzl", "ragel_register_toolchains")
 
 ragel_register_toolchains("7.0.0.11")
 
-load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies")
-
-################ for golang ################
-load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
-
-# gazelle:repo bazel_gazelle
-
-load("//go:go_deps.bzl", "go_repositories")
-
-# gazelle:repository_macro go/go_deps.bzl%go_repositories
-go_repositories()
-
-go_rules_dependencies()
-
-go_register_toolchains(version = "1.19.5")
-
-gazelle_dependencies()
-
 ################ for java ################
 load("@contrib_rules_jvm//:repositories.bzl", "contrib_rules_jvm_deps", "contrib_rules_jvm_gazelle_deps")
 
