@@ -56,4 +56,9 @@ struct Zrange {
     [[nodiscard]] bool overlap(const Zrange& r) const { return contains(r.min) || contains(r.max); }
 };
 
+struct ZPrefix {
+    uint64_t prefix;
+    int32_t precision;
+};
+
 } // namespace pl::curve
