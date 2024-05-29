@@ -20,18 +20,11 @@
 #include "cpp/tools/scope.h"
 
 #include <gtest/gtest.h>
-#include <memory>
 #include <unordered_map>
 #include <vector>
 
 TEST(block_builder, test) {
     auto* options = new pl::Options();
-
-    // absl::Cleanup cleanup = [&]() {
-    //   delete options->comparator;
-    //   delete options->filter_policy;
-    //   delete options;
-    // };
 
     SCOPE_EXIT {
         delete options->comparator;
