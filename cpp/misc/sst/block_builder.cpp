@@ -8,11 +8,10 @@
 //=====================================================================
 
 #include "cpp/misc/sst/block_builder.h"
+#include "cpp/misc/sst/encoding.h"
 
 #include <cassert>
 #include <iostream>
-
-#include "cpp/misc/sst/encoding.h"
 
 namespace pl {
 
