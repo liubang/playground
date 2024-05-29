@@ -16,36 +16,23 @@
 
 load(
     "//cpp:copts/configure_copts.bzl",
-    "DEFAULT_COPTS",
     "DEFAULT_LINKOPTS",
     "TEST_COPTS",
 )
 
-cc_library(
-    name = "sstable",
-    srcs = [
-        "block.cpp",
-        "block_builder.cpp",
-        "bloom_filter_policy.cpp",
-        "comparator.cpp",
-        "filter_block_builder.cpp",
-        "filter_block_reader.cpp",
-        "filter_policy.cpp",
-        "iterator.cpp",
-        "options.cpp",
-        "sstable_builder.cpp",
-        "sstable_format.cpp",
-        "table.cpp",
-    ],
-    hdrs = glob(["*.h"]),
-    copts = ["-std=c++20"] + DEFAULT_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
-    visibility = ["//visibility:public"],
-    deps = [
-        "//cpp/misc/bloom:bloom_filter",
-        "//cpp/misc/fs",
-        "//cpp/tools",
-    ],
-)
-
-
+[
+    cc_test(
+        name = "%s" % f[:f.rfind(".")],
+        srcs = [
+            "%s" % f,
+        ],
+        copts = ["-std=c++20"] + TEST_COPTS,
+        linkopts = DEFAULT_LINKOPTS + ["-pthread"],
+        deps = [
+            "//cpp/misc/sst:sstable",
+            "//cpp/tools",
+            "@googletest//:gtest_main",
+        ],
+    )
+    for f in glob(["*_test.cpp"])
+]
