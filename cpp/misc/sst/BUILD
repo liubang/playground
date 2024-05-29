@@ -19,25 +19,11 @@ load(
     "//cpp:copts/configure_copts.bzl",
     "DEFAULT_COPTS",
     "DEFAULT_LINKOPTS",
-    "TEST_COPTS",
 )
 
 cc_library(
     name = "sstable",
-    srcs = [
-        "block.cpp",
-        "block_builder.cpp",
-        "bloom_filter_policy.cpp",
-        "comparator.cpp",
-        "filter_block_builder.cpp",
-        "filter_block_reader.cpp",
-        "filter_policy.cpp",
-        "iterator.cpp",
-        "options.cpp",
-        "sstable_builder.cpp",
-        "sstable_format.cpp",
-        "table.cpp",
-    ],
+    srcs = glob(["*.cpp"]),
     hdrs = glob(["*.h"]),
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
@@ -48,5 +34,3 @@ cc_library(
         "//cpp/tools",
     ],
 )
-
-
