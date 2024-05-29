@@ -72,7 +72,8 @@ void Table::readMeta(const Footer& footer) {
     }
 
     BlockContents contents;
-    if (BlockReader::readBlock(reader_, footer.metaindexHandle(), &contents).isOk()) {
+    auto s = BlockReader::readBlock(reader_, footer.metaIndexHandle(), &contents);
+    if (!s.isOk()) {
         return;
     }
 
@@ -106,7 +107,7 @@ void Table::readFilter(const Binary& filter_handle_value) {
     filter_ = new FilterBlockReader(options_->filter_policy, block.data);
 }
 
-Status Table::get(const Binary& key, Binary* value) {
+Status Table::get(const Binary& key, void* arg, HandleResult&& handle_result) {
     Status s;
     auto* iiter = index_block_->iterator(options_->comparator);
     iiter->seek(key);
@@ -124,10 +125,9 @@ Status Table::get(const Binary& key, Binary* value) {
                 delete iiter;
                 return Status::NewNotFound();
             }
-
             iter->seek(key);
             if (iter->valid()) {
-                *value = iter->val();
+                handle_result(arg, key, iter->val());
             }
             s = iter->status();
             delete iter;
@@ -145,17 +145,19 @@ Iterator* Table::blockReader(const Binary& index_value) {
     if (s.isOk()) {
         BlockContents contents;
         auto s = BlockReader::readBlock(reader_, handle, &contents);
-        if (s.isOk()) [[maybe_unused]]
-            auto* block = new Block(contents);
+        if (s.isOk()) {
+            block = new Block(contents);
+        }
     }
 
     Iterator* iter = nullptr;
     if (nullptr != block) {
         iter = block->iterator(options_->comparator);
-        iter->registerCleanup([&block]() {
+        iter->registerCleanup([block]() {
             delete block;
         });
     }
+
     return iter;
 }
 
