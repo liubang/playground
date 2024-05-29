@@ -16,30 +16,8 @@
 
 #pragma once
 
-#include "cpp/misc/sst/comparator.h"
-#include "cpp/misc/sst/iterator.h"
-#include "cpp/misc/sst/sstable_format.h"
-
 namespace pl {
 
-class Block {
-public:
-    explicit Block(const BlockContents& content);
-    Block(const Block&) = delete;
-    Block& operator=(const Block&) = delete;
-    ~Block();
-
-    Iterator* iterator(const Comparator* comparator);
-
-private:
-    class BlockIterator;
-
-private:
-    const char* data_{nullptr};
-    std::size_t size_;
-    std::size_t num_restarts_;
-    uint32_t restart_offset_;
-    bool owned_;
-};
+class Cell {};
 
 } // namespace pl

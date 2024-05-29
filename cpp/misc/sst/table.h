@@ -23,7 +23,11 @@
 #include "cpp/misc/sst/sstable_format.h"
 #include "cpp/tools/status.h"
 
+#include <functional>
+
 namespace pl {
+
+using HandleResult = std::function<void(void* arg, const Binary& k, const Binary& v)>;
 
 class Table {
 public:
@@ -35,7 +39,7 @@ public:
 
     static Status open(const Options* options, FsReader* reader, uint64_t size, Table** table);
 
-    Status get(const Binary& key, Binary* value);
+    Status get(const Binary& key, void* arg, HandleResult&& handle_result);
 
 private:
     Table(const Options* options, FsReader* reader, Block* index_block);

@@ -61,7 +61,7 @@ public:
     void setMetaindexHandle(const BlockHandle& block_handle) { metaindex_handle_ = block_handle; }
     void setIndexHandle(const BlockHandle& block_handle) { index_handle_ = block_handle; }
 
-    [[nodiscard]] const BlockHandle& metaindexHandle() const { return metaindex_handle_; }
+    [[nodiscard]] const BlockHandle& metaIndexHandle() const { return metaindex_handle_; }
     [[nodiscard]] const BlockHandle& indexHandle() const { return index_handle_; }
 
     void encodeTo(std::string* dst) const;
