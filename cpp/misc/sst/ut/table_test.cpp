@@ -15,13 +15,58 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/misc/fs/fs.h"
+#include "cpp/misc/sst/sstable_builder.h"
 #include "cpp/misc/sst/table.h"
+#include "cpp/tools/random.h"
 #include "cpp/tools/scope.h"
 
 #include <gtest/gtest.h>
 #include <iostream>
 
-TEST(table, table) {
+namespace pl {
+class SSTableTest : public ::testing::Test {
+    void SetUp() override {}
+    void TearDown() override {}
+
+public:
+    constexpr static int KEY_COUNT = 10001;
+};
+
+TEST_F(SSTableTest, sstable_build) {
+    auto* options = new pl::Options();
+    pl::FsWriter* writer;
+    auto* fs = pl::Fs::getInstance();
+    fs->newFsWriter("/tmp/test.sst", &writer);
+
+    auto* sstable_builder = new pl::SSTableBuilder(options, writer);
+
+    SCOPE_EXIT {
+        delete options->comparator;
+        delete options->filter_policy;
+        delete options;
+        delete writer;
+        delete sstable_builder;
+    };
+
+    std::vector<std::string> keys;
+    std::unordered_map<std::string, std::string> kvs;
+    const std::string key_prefix = "test_key_";
+    for (int i = 0; i < KEY_COUNT; ++i) {
+        std::string key = key_prefix + std::to_string(i);
+        keys.push_back(key);
+    }
+
+    std::sort(keys.begin(), keys.end());
+
+    for (int i = 0; i < KEY_COUNT; ++i) {
+        auto val = pl::random_string(64);
+        sstable_builder->add(keys[i], val);
+        kvs[keys[i]] = val;
+    }
+    sstable_builder->finish();
+}
+
+TEST_F(SSTableTest, table) {
     auto* options = new pl::Options();
     pl::FsReader* reader;
     auto* fs = pl::Fs::getInstance();
@@ -41,13 +86,11 @@ TEST(table, table) {
     };
 
     auto handle_result = [](void* arg, const pl::Binary& k, const pl::Binary& v) {
-        std::string* saver = reinterpret_cast<std::string*>(arg);
+        auto* saver = reinterpret_cast<std::string*>(arg);
         saver->assign(v.data(), v.size());
     };
 
-    constexpr int COUNT = 10001;
-
-    for (int i = 0; i < COUNT; ++i) {
+    for (int i = 0; i < KEY_COUNT; ++i) {
         const std::string key_prefix = "test_key_";
         std::string key = key_prefix + std::to_string(i);
         std::string val;
@@ -60,3 +103,5 @@ TEST(table, table) {
         }
     }
 }
+
+} // namespace pl
