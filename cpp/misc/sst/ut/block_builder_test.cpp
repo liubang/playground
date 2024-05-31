@@ -107,6 +107,7 @@ TEST_F(BlockBuilderTest, test) {
     }
     restarts[restart_count] = size - (4 * (restart_count + 1));
     std::string pre_key;
+
     // parse keys and values
     for (int i = 0; i < restart_count; ++i) {
         // 计算每一个restart的起始位置和结束位置

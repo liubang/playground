@@ -73,6 +73,7 @@ public:
             uint32_t shared, non_shared, value_size;
             const char* key_ptr =
                 decodeEntry(data_ + offset, data_ + restarts_, &shared, &non_shared, &value_size);
+
             if (nullptr == key_ptr || (shared != 0)) {
                 status_ = Status::NewCorruption("invalid entry in block");
                 current_ = restarts_;
@@ -81,6 +82,7 @@ public:
                 val_.clear();
                 return;
             }
+
             Binary mid_key(key_ptr, non_shared);
             if (compare(mid_key, target) < 0) {
                 left = mid;
@@ -94,6 +96,7 @@ public:
         if (!skip_seek) {
             seekToRestartPoint(left);
         }
+
         while (true) {
             if (!parseNextKeyVal()) {
                 return;
