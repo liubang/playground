@@ -16,11 +16,12 @@
 
 #pragma once
 
-#include <string>
-#include <vector>
-
 #include "cpp/misc/sst/filter_policy.h"
 #include "cpp/tools/binary.h"
+
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace pl {
 
@@ -50,5 +51,8 @@ private:
     std::vector<uint32_t> filter_offsets_; // 每个filter在result_中的offset
     std::vector<Binary> tmp_keys_;         // 生成新的filter的时候存储临时的key
 };
+
+using FilterBlockBuilderPtr = std::unique_ptr<FilterBlockBuilder>;
+using FilterBlockBuilderRef = std::shared_ptr<FilterBlockBuilder>;
 
 } // namespace pl

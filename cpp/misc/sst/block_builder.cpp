@@ -21,7 +21,7 @@
 
 namespace pl {
 
-BlockBuilder::BlockBuilder(const Options* options)
+BlockBuilder::BlockBuilder(const OptionsRef& options)
     : comparator_(options->comparator), block_restart_interval_(options->block_restart_interval) {
     restarts_.push_back(0);
 }

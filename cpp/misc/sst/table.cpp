@@ -20,50 +20,46 @@
 
 namespace pl {
 
-Table::Table(const Options* options,
-             FsReader* reader, /*const BlockHandle& metaindex_handle,*/
-             Block* index_block)
-    : options_(options), reader_(reader), index_block_(index_block) {}
+Table::Table(const OptionsRef& options,
+             const FsReaderRef& reader, /*const BlockHandle& metaindex_handle,*/
+             BlockPtr index_block)
+    : options_(options), reader_(reader), index_block_(std::move(index_block)) {}
 
-Table::~Table() {
-    if (filter_ != nullptr) {
-        delete filter_;
-    }
-    if (filter_data_ != nullptr) {
-        delete[] filter_data_;
-    }
-    if (index_block_ != nullptr) {
-        delete index_block_;
-    }
-}
-
-Status Table::open(const Options* options, FsReader* reader, uint64_t size, Table** table) {
-    *table = nullptr;
+std::unique_ptr<Table> Table::open(const OptionsRef& options,
+                                   const FsReaderRef& reader,
+                                   uint64_t size,
+                                   Status* status) {
     if (size < Footer::kEncodedLength) {
-        return Status::NewCorruption("file is too short to be an sstable");
+        *status = Status::NewCorruption("file is too short to be an sstable");
+        return nullptr;
     }
     char footer_content[Footer::kEncodedLength];
     Binary footer_input;
-    auto s = reader->read(size - Footer::kEncodedLength, Footer::kEncodedLength, &footer_input,
-                          footer_content);
-    if (!s.isOk())
-        return s;
+    *status = reader->read(size - Footer::kEncodedLength, Footer::kEncodedLength, &footer_input,
+                           footer_content);
+    if (!status->isOk()) {
+        return nullptr;
+    }
     Footer footer;
-    s = footer.decodeFrom(footer_input);
-    if (!s.isOk())
-        return s;
+    *status = footer.decodeFrom(footer_input);
+    if (!status->isOk()) {
+        return nullptr;
+    }
 
     // parse index block
     BlockContents index_block_contents;
-    s = BlockReader::readBlock(reader, footer.indexHandle(), &index_block_contents);
-    if (!s.isOk())
-        return s;
+    *status = BlockReader::readBlock(reader, footer.indexHandle(), &index_block_contents);
+    if (!status->isOk()) {
+        return nullptr;
+    }
 
-    auto* index_block = new Block(index_block_contents);
+    auto index_block = std::make_unique<Block>(index_block_contents);
 
-    *table = new Table(options, reader, /* footer.metaindexHandle(), */ index_block);
-    (*table)->readMeta(footer);
-    return s;
+    auto table =
+        std::unique_ptr<Table>(new Table(options, reader,
+                                         /* footer.metaindexHandle(), */ std::move(index_block)));
+    table->readMeta(footer);
+    return table;
 }
 
 void Table::readMeta(const Footer& footer) {
@@ -101,10 +97,10 @@ void Table::readFilter(const Binary& filter_handle_value) {
     }
 
     if (block.heap_allocated) {
-        filter_data_ = block.data.data();
+        filter_data_.reset(block.data.data());
     }
 
-    filter_ = new FilterBlockReader(options_->filter_policy, block.data);
+    filter_ = std::make_unique<FilterBlockReader>(options_->filter_policy, block.data);
 }
 
 Status Table::get(const Binary& key, void* arg, HandleResult&& handle_result) {

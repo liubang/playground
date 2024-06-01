@@ -85,7 +85,9 @@ struct BlockContents {
 
 class BlockReader {
 public:
-    static Status readBlock(FsReader* reader, const BlockHandle& handle, BlockContents* result);
+    static Status readBlock(const FsReaderRef& reader,
+                            const BlockHandle& handle,
+                            BlockContents* result);
 };
 
 } // namespace pl

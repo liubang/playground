@@ -35,27 +35,33 @@ public:
 
     Table& operator=(const Table&) = delete;
 
-    ~Table();
+    ~Table() = default;
 
-    static Status open(const Options* options, FsReader* reader, uint64_t size, Table** table);
+    static std::unique_ptr<Table> open(const OptionsRef& options,
+                                       const FsReaderRef& reader,
+                                       uint64_t size,
+                                       Status* status);
 
     Status get(const Binary& key, void* arg, HandleResult&& handle_result);
 
 private:
-    Table(const Options* options, FsReader* reader, Block* index_block);
+    Table(const OptionsRef& options, const FsReaderRef& reader, BlockPtr index_block);
 
     void readMeta(const Footer& footer);
     void readFilter(const Binary& filter_handle_content);
     Iterator* blockReader(const Binary& index_value);
 
 private:
-    const Options* options_;
-    FsReader* reader_;
+    const OptionsRef options_;
+    const FsReaderRef reader_;
     Status status_;
-    FilterBlockReader* filter_{nullptr};
-    const char* filter_data_{nullptr};
+    FilterBlockReaderPtr filter_{nullptr};
+    std::unique_ptr<const char[]> filter_data_;
+    // const char* filter_data_{nullptr};
     // BlockHandle metaindex_Handle_;
-    Block* index_block_{nullptr};
+    BlockPtr index_block_{nullptr};
 };
+
+using TablePtr = std::unique_ptr<Table>;
 
 } // namespace pl

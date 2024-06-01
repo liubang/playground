@@ -14,14 +14,12 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/misc/fs/fs.h"
+#include "cpp/misc/fs/posix_fs.h"
 #include "cpp/misc/sst/sstable_builder.h"
 #include "cpp/misc/sst/table.h"
 #include "cpp/tools/random.h"
-#include "cpp/tools/scope.h"
 
 #include <gtest/gtest.h>
-#include <iostream>
 
 namespace pl {
 class SSTableTest : public ::testing::Test {
@@ -33,18 +31,13 @@ public:
 };
 
 TEST_F(SSTableTest, sstable_build) {
-    auto* options = new pl::Options();
-    pl::FsWriter* writer;
-    auto* fs = pl::Fs::getInstance();
-    fs->newFsWriter("/tmp/test.sst", &writer);
+    auto options = std::make_unique<Options>();
+    auto fs = std::make_unique<PosixFs>();
+    Status st;
+    auto writer = fs->newFsWriter("/tmp/test.sst", &st);
 
-    auto* sstable_builder = new pl::SSTableBuilder(options, writer);
-
-    SCOPE_EXIT {
-        delete options;
-        delete writer;
-        delete sstable_builder;
-    };
+    auto sstable_builder =
+        std::make_unique<pl::SSTableBuilder>(std::move(options), std::move(writer));
 
     std::vector<std::string> keys;
     std::unordered_map<std::string, std::string> kvs;
@@ -65,21 +58,13 @@ TEST_F(SSTableTest, sstable_build) {
 }
 
 TEST_F(SSTableTest, table) {
-    auto* options = new pl::Options();
-    pl::FsReader* reader;
-    auto* fs = pl::Fs::getInstance();
-    fs->newFsReader("/tmp/test.sst", &reader);
-    pl::Table* table;
+    auto options = std::make_unique<Options>();
+    auto fs = std::make_unique<PosixFs>();
+    Status st;
+    auto reader = fs->newFsReader("/tmp/test.sst", &st);
 
-    auto s = pl::Table::open(options, reader, reader->size(), &table);
-    EXPECT_TRUE(s.isOk());
-    std::cout << s.msg() << std::endl;
-
-    SCOPE_EXIT {
-        delete options;
-        delete reader;
-        delete table;
-    };
+    auto table = pl::Table::open(std::move(options), std::move(reader), reader->size(), &st);
+    EXPECT_TRUE(st.isOk());
 
     auto handle_result = [](void* arg, const pl::Binary& k, const pl::Binary& v) {
         auto* saver = reinterpret_cast<std::string*>(arg);
