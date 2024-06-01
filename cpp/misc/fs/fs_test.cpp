@@ -1,12 +1,20 @@
-//=====================================================================
+// Copyright (c) 2024 The Authors. All rights reserved.
 //
-// fs_test.cpp -
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// Created by liubang on 2023/05/29 16:19
-// Last Modified: 2023/05/29 16:19
+//      https://www.apache.org/licenses/LICENSE-2.0
 //
-//=====================================================================
-#include "cpp/misc/fs/fs.h"
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Authors: liubang (it.liubang@gmail.com)
+
+#include "cpp/misc/fs/posix_fs.h"
 
 #include <gtest/gtest.h>
 
@@ -14,32 +22,31 @@
 #include <memory>
 
 TEST(fs, FsWriterAndFsReader) {
-    auto* fs = pl::Fs::getInstance();
-    pl::FsWriter* fw;
-    pl::FsReader* fr;
+    auto fs = std::make_unique<pl::PosixFs>();
 
     const std::string filename = "./test.log";
-    fs->newFsWriter(filename, &fw);
-    EXPECT_NE(fw, nullptr);
-    std::unique_ptr<pl::FsWriter> fw_ptr(fw);
+    pl::Status st;
+    auto fw = fs->newFsWriter(filename, &st);
+    EXPECT_NE(fw.get(), nullptr);
+    EXPECT_TRUE(st.isOk());
 
-    fs->newFsReader(filename, &fr);
-    EXPECT_NE(fr, nullptr);
-    std::unique_ptr<pl::FsReader> fr_ptr(fr);
+    auto fr = fs->newFsReader(filename, &st);
+    EXPECT_NE(fr.get(), nullptr);
+    EXPECT_TRUE(st.isOk());
 
     pl::Binary data("hello world");
-    auto st = fw_ptr->append(data);
+    st = fw->append(data);
     EXPECT_TRUE(st.isOk());
-    st = fw_ptr->flush();
+    st = fw->flush();
     EXPECT_TRUE(st.isOk());
-    st = fw_ptr->sync();
+    st = fw->sync();
     EXPECT_TRUE(st.isOk());
-    st = fw_ptr->close();
+    st = fw->close();
     EXPECT_TRUE(st.isOk());
 
     pl::Binary result;
     char buffer[1024];
-    auto status = fr_ptr->read(0, 1024, &result, buffer);
+    auto status = fr->read(0, 1024, &result, buffer);
     EXPECT_TRUE(status.isOk());
     EXPECT_EQ(std::string("hello world"), std::string(result.data(), result.size()));
 

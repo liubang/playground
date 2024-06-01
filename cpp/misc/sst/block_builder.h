@@ -31,7 +31,7 @@ namespace pl {
 class BlockBuilder {
 public:
     // BlockBuilder(const Comparator* comparator, int block_restart_interval);
-    BlockBuilder(const Options* options);
+    BlockBuilder(const OptionsRef& options);
 
     BlockBuilder(const BlockBuilder&) = delete;
 

@@ -75,7 +75,7 @@ Status Footer::decodeFrom(const Binary& input) {
     return result;
 }
 
-Status BlockReader::readBlock(FsReader* reader, const BlockHandle& handle, BlockContents* result) {
+Status BlockReader::readBlock(const FsReaderRef& reader, const BlockHandle& handle, BlockContents* result) {
     // read block trailer
     auto s = static_cast<std::size_t>(handle.size());
     char* buf = new char[s + kBlockTrailerSize];

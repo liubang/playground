@@ -20,20 +20,16 @@
 
 namespace pl {
 
-SSTableBuilder::SSTableBuilder(const Options* options, FsWriter* writer)
+SSTableBuilder::SSTableBuilder(const OptionsRef& options, const FsWriterRef& writer)
     : options_(options),
       writer_(writer),
       data_block_(options),
       index_block_(options),
       filter_block_(options->filter_policy == nullptr
                         ? nullptr
-                        : new FilterBlockBuilder(options->filter_policy)) {}
+                        : std::make_unique<FilterBlockBuilder>(options->filter_policy)) {}
 
-SSTableBuilder::~SSTableBuilder() {
-    if (filter_block_ != nullptr) {
-        delete filter_block_;
-    }
-};
+SSTableBuilder::~SSTableBuilder() = default;
 
 void SSTableBuilder::add(const Binary& key, const Binary& value) {
     assert(!closed_);

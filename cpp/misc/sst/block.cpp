@@ -17,7 +17,6 @@
 #include "cpp/misc/sst/block.h"
 
 #include "cpp/misc/sst/encoding.h"
-#include <utility>
 
 namespace pl {
 

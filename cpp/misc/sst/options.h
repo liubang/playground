@@ -20,6 +20,7 @@
 #include "cpp/misc/sst/filter_policy.h"
 
 #include <cstdint>
+#include <memory>
 
 namespace pl {
 
@@ -45,5 +46,8 @@ struct Options {
 
     const FilterPolicyRef filter_policy;
 };
+
+using OptionsPtr = std::unique_ptr<Options>;
+using OptionsRef = std::shared_ptr<Options>;
 
 } // namespace pl

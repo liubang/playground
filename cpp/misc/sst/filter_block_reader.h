@@ -35,4 +35,7 @@ private:
     size_t base_lg_;
 };
 
+using FilterBlockReaderPtr = std::unique_ptr<FilterBlockReader>;
+using FilterBlockReaderRef = std::shared_ptr<FilterBlockReader>;
+
 } // namespace pl

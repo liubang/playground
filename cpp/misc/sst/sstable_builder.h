@@ -28,7 +28,7 @@ namespace pl {
 
 class SSTableBuilder {
 public:
-    SSTableBuilder(const Options* options, FsWriter* writer);
+    SSTableBuilder(const OptionsRef& options, const FsWriterRef& writer);
 
     SSTableBuilder(const SSTableBuilder&) = delete;
 
@@ -55,12 +55,12 @@ private:
     void writeBlockRaw(const Binary& content, CompressionType type, BlockHandle* handle);
 
 private:
-    const Options* options_;
-    FsWriter* writer_;
+    const OptionsRef options_;
+    const FsWriterRef writer_;
     BlockBuilder data_block_;
     BlockBuilder index_block_;
     BlockHandle pending_handler_;
-    FilterBlockBuilder* filter_block_;
+    FilterBlockBuilderPtr filter_block_;
     std::string last_key_;
     int64_t num_entries_{0};
     uint64_t offset_{0};
