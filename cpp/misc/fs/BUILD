@@ -15,14 +15,6 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/05/26 18:23
 
-#======================================================================
-#
-# BUILD -
-#
-# Created by liubang on 2023/05/26 16:42
-# Last Modified: 2023/05/26 16:42
-#
-#======================================================================
 load(
     "//cpp:copts/configure_copts.bzl",
     "DEFAULT_COPTS",
@@ -33,10 +25,12 @@ load(
 cc_library(
     name = "fs",
     srcs = [
-        "fs.cpp",
         "posix_fs.cpp",
     ],
-    hdrs = ["fs.h"],
+    hdrs = [
+        "fs.h",
+        "posix_fs.h",
+    ],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
     visibility = ["//visibility:public"],
