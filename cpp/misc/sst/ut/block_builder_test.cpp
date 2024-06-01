@@ -35,11 +35,7 @@ TEST_F(BlockBuilderTest, test) {
     auto* options = new pl::Options();
     options->block_restart_interval = 16;
 
-    SCOPE_EXIT {
-        delete options->comparator;
-        delete options->filter_policy;
-        delete options;
-    };
+    SCOPE_EXIT { delete options; };
 
     pl::BlockBuilder block_builder(options);
     constexpr int COUNT = 10001;
