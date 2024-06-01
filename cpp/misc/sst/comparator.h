@@ -18,17 +18,31 @@
 
 #include "cpp/tools/binary.h"
 
+#include <memory>
+
 namespace pl {
 
 class Comparator {
 public:
-    virtual ~Comparator();
+    virtual ~Comparator() = default;
 
     [[nodiscard]] virtual const char* name() const = 0;
 
     [[nodiscard]] virtual int compare(const Binary& a, const Binary& b) const = 0;
 };
 
-Comparator* bytewiseComparator();
+using ComparatorPtr = std::unique_ptr<Comparator>;
+using ComparatorRef = std::shared_ptr<Comparator>;
+
+class BytewiseComparator : public Comparator {
+public:
+    BytewiseComparator() = default;
+
+    [[nodiscard]] const char* name() const override { return "BytewiseComparator"; };
+
+    [[nodiscard]] int compare(const Binary& a, const Binary& b) const override {
+        return a.compare(b);
+    }
+};
 
 } // namespace pl

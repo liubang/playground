@@ -20,7 +20,8 @@
 
 namespace pl {
 
-FilterBlockReader::FilterBlockReader(const FilterPolicy* filter_policy, const pl::Binary& contents)
+FilterBlockReader::FilterBlockReader(const FilterPolicyRef& filter_policy,
+                                     const pl::Binary& contents)
     : filter_policy_(filter_policy) {
     std::size_t n = contents.size();
     if (n < 5)

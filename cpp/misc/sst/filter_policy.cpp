@@ -15,9 +15,18 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/misc/sst/filter_policy.h"
+#include "cpp/misc/bloom/bloom_filter.h"
 
 namespace pl {
 
-FilterPolicy::~FilterPolicy() = default;
-
+void BloomFilterPolicy::createFilter(Binary* keys, std::size_t n, std::string* dst) const {
+    BloomFilter bloom_filter(bits_per_key_);
+    bloom_filter.create(keys, n, dst);
 }
+
+bool BloomFilterPolicy::keyMayMatch(const Binary& key, const Binary& filter) const {
+    BloomFilter bloom_filter(bits_per_key_);
+    return bloom_filter.contains(key, filter);
+}
+
+} // namespace pl
