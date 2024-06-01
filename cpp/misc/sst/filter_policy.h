@@ -18,14 +18,14 @@
 
 #include "cpp/tools/binary.h"
 
-#include <cstdint>
+#include <memory>
 #include <string>
 
 namespace pl {
 
 class FilterPolicy {
 public:
-    virtual ~FilterPolicy();
+    virtual ~FilterPolicy() = default;
 
     /**
      * @brief description]
@@ -53,6 +53,27 @@ public:
     [[nodiscard]] virtual bool keyMayMatch(const Binary& key, const Binary& filter) const = 0;
 };
 
-FilterPolicy* newBloomFilterPolicy(uint64_t bits_per_key);
+using FilterPolicyPtr = std::unique_ptr<FilterPolicy>;
+using FilterPolicyRef = std::shared_ptr<FilterPolicy>;
+
+/**
+ * @class BloomFilterPolicy
+ * @brief this class is a proxy of bloom::BloomFilter
+ */
+class BloomFilterPolicy : public FilterPolicy {
+public:
+    BloomFilterPolicy(std::size_t bits_per_key) : bits_per_key_(bits_per_key) {}
+
+    ~BloomFilterPolicy() override = default;
+
+    [[nodiscard]] const char* name() const override { return "BloomFilterPolicy"; }
+
+    void createFilter(Binary* keys, std::size_t n, std::string* dst) const override;
+
+    [[nodiscard]] bool keyMayMatch(const Binary& key, const Binary& filter) const override;
+
+private:
+    std::size_t bits_per_key_;
+};
 
 } // namespace pl

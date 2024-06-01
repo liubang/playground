@@ -29,7 +29,7 @@ public:
     Block& operator=(const Block&) = delete;
     ~Block();
 
-    Iterator* iterator(const Comparator* comparator);
+    Iterator* iterator(const ComparatorRef& comparator);
 
 private:
     class BlockIterator;

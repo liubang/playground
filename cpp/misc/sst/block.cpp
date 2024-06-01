@@ -15,7 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/misc/sst/block.h"
+
 #include "cpp/misc/sst/encoding.h"
+#include <utility>
 
 namespace pl {
 
@@ -40,7 +42,7 @@ Block::~Block() {
 
 class Block::BlockIterator : public Iterator {
 public:
-    BlockIterator(const Comparator* comparator,
+    BlockIterator(const ComparatorRef& comparator,
                   const char* data,
                   uint32_t restarts,
                   uint32_t num_restarts)
@@ -203,19 +205,19 @@ private:
     }
 
 private:
-    const Comparator* comparator_; // 主要是seek的时候做二分查找的
-    const char* data_;             // data block content
-    uint32_t const restarts_;      // restart的起始位置
-    uint32_t const num_restarts_;  // restart的个数
-    uint32_t current_{0};          // 当前游标的偏移
-    uint32_t current_restart_{0};  // 当前是第几个restart
-    std::string key_;              // 当前游标处的key
-    Binary val_;                   // 当前游标处的value
+    const ComparatorRef comparator_; // 主要是seek的时候做二分查找的
+    const char* data_;               // data block content
+    uint32_t const restarts_;        // restart的起始位置
+    uint32_t const num_restarts_;    // restart的个数
+    uint32_t current_{0};            // 当前游标的偏移
+    uint32_t current_restart_{0};    // 当前是第几个restart
+    std::string key_;                // 当前游标处的key
+    Binary val_;                     // 当前游标处的value
     Status status_;
 };
 
 // TODO(liubang): use unique_ptr
-Iterator* Block::iterator(const Comparator* comparator) {
+Iterator* Block::iterator(const ComparatorRef& comparator) {
     return new BlockIterator(comparator, data_, restart_offset_, num_restarts_);
 }
 
