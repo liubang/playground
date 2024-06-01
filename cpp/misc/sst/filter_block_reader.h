@@ -23,7 +23,7 @@ namespace pl {
 
 class FilterBlockReader {
 public:
-    FilterBlockReader(const FilterPolicyRef& filter_policy, const pl::Binary& contents);
+    FilterBlockReader(FilterPolicyRef filter_policy, const pl::Binary& contents);
 
     bool keyMayMatch(uint64_t block_offset, const Binary& key);
 

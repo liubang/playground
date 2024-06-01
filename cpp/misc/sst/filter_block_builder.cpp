@@ -15,17 +15,17 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/misc/sst/filter_block_builder.h"
+#include "cpp/misc/sst/encoding.h"
 
 #include <cassert>
-
-#include "cpp/misc/sst/encoding.h"
 
 namespace pl {
 
 static const size_t kFilterBaseLg = 11;
 constexpr static std::size_t kFilterBase = 1 << kFilterBaseLg; // 2048
 
-FilterBlockBuilder::FilterBlockBuilder(const FilterPolicyRef& policy) : filter_policy_(policy) {}
+FilterBlockBuilder::FilterBlockBuilder(FilterPolicyRef policy)
+    : filter_policy_(std::move(policy)) {}
 
 void FilterBlockBuilder::startBlock(uint64_t offset) {
     uint64_t filter_index = (offset / kFilterBase);
