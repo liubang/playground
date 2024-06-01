@@ -15,14 +15,12 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/misc/sst/filter_block_reader.h"
-
 #include "cpp/misc/sst/encoding.h"
 
 namespace pl {
 
-FilterBlockReader::FilterBlockReader(const FilterPolicyRef& filter_policy,
-                                     const pl::Binary& contents)
-    : filter_policy_(filter_policy) {
+FilterBlockReader::FilterBlockReader(FilterPolicyRef filter_policy, const pl::Binary& contents)
+    : filter_policy_(std::move(filter_policy)) {
     std::size_t n = contents.size();
     if (n < 5)
         return;
@@ -37,15 +35,15 @@ FilterBlockReader::FilterBlockReader(const FilterPolicyRef& filter_policy,
 
 bool FilterBlockReader::keyMayMatch(uint64_t block_offset, const Binary& key) {
     uint64_t idx = block_offset >> base_lg_;
-    if (idx < num_) {
-        auto start = decodeInt<uint32_t>(offset_ + idx * 4);
-        auto limit = decodeInt<uint32_t>(offset_ + idx * 4 + 4);
-        if (start <= limit && limit <= static_cast<size_t>(offset_ - data_)) {
-            return filter_policy_->keyMayMatch(key, Binary(data_ + start, limit - start));
-        }
-        return false;
+    if (idx >= num_) {
+        return true;
     }
-    return true;
+    auto start = decodeInt<uint32_t>(offset_ + idx * 4);
+    auto limit = decodeInt<uint32_t>(offset_ + idx * 4 + 4);
+    if (start <= limit && limit <= static_cast<size_t>(offset_ - data_)) {
+        return filter_policy_->keyMayMatch(key, Binary(data_ + start, limit - start));
+    }
+    return false;
 }
 
 } // namespace pl

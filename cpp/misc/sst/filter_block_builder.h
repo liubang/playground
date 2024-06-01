@@ -27,7 +27,7 @@ namespace pl {
 
 class FilterBlockBuilder {
 public:
-    explicit FilterBlockBuilder(const FilterPolicyRef& filter_policy);
+    explicit FilterBlockBuilder(FilterPolicyRef filter_policy);
 
     FilterBlockBuilder(const FilterBlockBuilder&) = delete;
 
