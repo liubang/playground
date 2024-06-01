@@ -41,8 +41,6 @@ TEST_F(SSTableTest, sstable_build) {
     auto* sstable_builder = new pl::SSTableBuilder(options, writer);
 
     SCOPE_EXIT {
-        delete options->comparator;
-        delete options->filter_policy;
         delete options;
         delete writer;
         delete sstable_builder;
@@ -78,8 +76,6 @@ TEST_F(SSTableTest, table) {
     std::cout << s.msg() << std::endl;
 
     SCOPE_EXIT {
-        delete options->comparator;
-        delete options->filter_policy;
         delete options;
         delete reader;
         delete table;
