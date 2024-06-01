@@ -32,12 +32,10 @@ class BlockBuilderTest : public ::testing::Test {
 };
 
 TEST_F(BlockBuilderTest, test) {
-    auto* options = new pl::Options();
+    auto options = std::make_unique<Options>();
     options->block_restart_interval = 16;
 
-    SCOPE_EXIT { delete options; };
-
-    pl::BlockBuilder block_builder(options);
+    pl::BlockBuilder block_builder(std::move(options));
     constexpr int COUNT = 10001;
 
     EXPECT_TRUE(block_builder.empty());
