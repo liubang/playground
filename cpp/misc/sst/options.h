@@ -24,24 +24,26 @@
 namespace pl {
 
 enum class CompressionType : uint8_t {
-    kNoCompression = 0x0,
-    kSnappyCompression = 0x1,
-    kZstdCompression = 0x2,
+    kNoCompression = 0,
+    kSnappyCompression = 1,
+    kZstdCompression = 2,
 };
 
 struct Options {
-    Options();
+    Options()
+        : comparator(std::make_shared<BytewiseComparator>()),
+          filter_policy(std::make_shared<BloomFilterPolicy>(bits_per_key)) {}
 
     // 4 KB
     std::size_t block_size = 4 * 1024;
 
     int block_restart_interval = 16;
 
-    uint64_t bits_per_key = 16;
+    uint64_t bits_per_key = 10;
 
-    const Comparator* comparator;
+    const ComparatorRef comparator;
 
-    const FilterPolicy* filter_policy;
+    const FilterPolicyRef filter_policy;
 };
 
 } // namespace pl

@@ -48,7 +48,7 @@ public:
     void reset();
 
 private:
-    const Comparator* comparator_;
+    const ComparatorRef comparator_;
     bool finished_{false};
     int counter_{0};
     std::string buffer_;

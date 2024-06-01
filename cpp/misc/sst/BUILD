@@ -20,13 +20,14 @@ load(
     "DEFAULT_LINKOPTS",
 )
 
+package(default_visibility = ["//visibility:public"])
+
 cc_library(
     name = "sstable",
     srcs = glob(["*.cpp"]),
     hdrs = glob(["*.h"]),
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
-    visibility = ["//visibility:public"],
     deps = [
         "//cpp/misc/bloom:bloom_filter",
         "//cpp/misc/fs",

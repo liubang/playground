@@ -31,8 +31,8 @@ class FilterBlockTest : public ::testing::Test {
 };
 
 TEST_F(FilterBlockTest, build_and_read) {
-    std::unique_ptr<pl::FilterPolicy> filter_policy_ptr(pl::newBloomFilterPolicy(64));
-    pl::FilterBlockBuilder builder(filter_policy_ptr.get());
+    auto bloom_filter = std::make_shared<pl::BloomFilterPolicy>(10);
+    pl::FilterBlockBuilder builder(bloom_filter);
 
     std::vector<std::string> keys;
 
@@ -44,7 +44,7 @@ TEST_F(FilterBlockTest, build_and_read) {
     }
 
     auto filter = builder.finish();
-    pl::FilterBlockReader reader(filter_policy_ptr.get(), filter);
+    pl::FilterBlockReader reader(bloom_filter, filter);
 
     for (int i = 0; i < 1000; ++i) {
         auto ret = reader.keyMayMatch(0, keys[i]);

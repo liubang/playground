@@ -28,8 +28,7 @@ class ComparatorTest : public ::testing::Test {
 };
 
 TEST_F(ComparatorTest, compara) {
-    auto* comparator = pl::bytewiseComparator();
-    std::unique_ptr<pl::Comparator> comparator_ptr(comparator);
+    auto comparator = std::make_unique<BytewiseComparator>();
 
     pl::Binary b1 = "abc";
     pl::Binary b2 = "abd";
@@ -38,12 +37,11 @@ TEST_F(ComparatorTest, compara) {
     pl::Binary b5 = "";
     pl::Binary b6 = "abcccc";
 
-    EXPECT_TRUE(comparator_ptr->compare(b1, b2) < 0);
-    EXPECT_TRUE(comparator_ptr->compare(b1, b3) == 0);
-    EXPECT_TRUE(comparator_ptr->compare(b1, b4) > 0);
-
-    EXPECT_TRUE(comparator_ptr->compare(b1, b5) > 0);
-    EXPECT_TRUE(comparator_ptr->compare(b1, b6) < 0);
+    EXPECT_TRUE(comparator->compare(b1, b2) < 0);
+    EXPECT_TRUE(comparator->compare(b1, b3) == 0);
+    EXPECT_TRUE(comparator->compare(b1, b4) > 0);
+    EXPECT_TRUE(comparator->compare(b1, b5) > 0);
+    EXPECT_TRUE(comparator->compare(b1, b6) < 0);
 }
 
 } // namespace pl
