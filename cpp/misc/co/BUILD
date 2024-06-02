@@ -24,6 +24,11 @@ cc_binary(
     srcs = ["test1.cpp"],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
-    deps = [
-    ],
+)
+
+cc_binary(
+    name = "setjmp_impl",
+    srcs = ["setjmp_impl.cpp"],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
 )
