@@ -27,14 +27,15 @@ class SSTableTest : public ::testing::Test {
         options = std::make_shared<Options>();
         options->compression_type = CompressionType::kSnappyCompression;
         fs = std::make_shared<PosixFs>();
+
+        build_sst();
     }
 
-    void TearDown() override {
-        // TODO: remove sst file
-    }
+    void TearDown() override { ::printf("teardown!!!!\n"); }
 
 public:
     void build_sst() {
+        ::printf("build sst\n");
         auto writer = fs->newFsWriter(sst_file, &st);
         EXPECT_TRUE(st.isOk());
         auto sstable_builder = std::make_unique<pl::SSTableBuilder>(options, std::move(writer));
@@ -63,7 +64,6 @@ public:
 };
 
 TEST_F(SSTableTest, table) {
-    this->build_sst();
     auto reader = fs->newFsReader("/tmp/test.sst", &st);
     EXPECT_TRUE(st.isOk());
     std::size_t sst_size = reader->size();
