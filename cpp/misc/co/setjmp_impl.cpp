@@ -19,27 +19,25 @@
 #include <iostream>
 #include <vector>
 
-struct Coroutine;
-
-enum class CoroutineState : uint8_t {
-    RUNNING,
+enum CoroutineState {
+    RUNNING = 1,
     STOP,
     SUSPEND,
     DIE,
 };
 
 // clang-format off
-#define CASE(x) case x: return #x
+#define __MY_CASE(x) case x: return #x
 // clang-format on
 const char* StateToString(CoroutineState state) {
     switch (state) {
-        CASE(CoroutineState::RUNNING);
-        CASE(CoroutineState::STOP);
-        CASE(CoroutineState::SUSPEND);
-        CASE(CoroutineState::DIE);
+        __MY_CASE(CoroutineState::RUNNING);
+        __MY_CASE(CoroutineState::STOP);
+        __MY_CASE(CoroutineState::SUSPEND);
+        __MY_CASE(CoroutineState::DIE);
     }
 }
-#undef CASE
+#undef __MY_CASE
 
 struct Coroutine {
     CoroutineState state = CoroutineState::STOP;
