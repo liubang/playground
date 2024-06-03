@@ -16,7 +16,6 @@
 
 #include "cpp/misc/sst/block.h"
 #include "cpp/misc/sst/encoding.h"
-#include <iostream>
 
 namespace pl {
 
@@ -29,7 +28,7 @@ Block::Block(const BlockContents& content)
         size_ = 0;
     } else {
         // 计算restart的起始地址偏移
-        restart_offset_ = size_ - (1 + num_restarts_) * 4;
+        restart_offset_ = static_cast<uint32_t>(size_ - (1 + num_restarts_) * 4);
     }
 }
 
@@ -147,11 +146,7 @@ public:
         parseNextKeyVal();
     }
 
-    ~BlockIterator() {
-        // if (block_ != nullptr) {
-        //     delete block_;
-        // }
-    }
+    ~BlockIterator() {}
 
 private:
     uint32_t getRestartOffset(uint32_t idx) {
@@ -167,7 +162,7 @@ private:
     }
 
     [[nodiscard]] inline uint32_t nextEntryOffset() const {
-        return (val_.data() + val_.size()) - data_;
+        return static_cast<uint32_t>((val_.data() + val_.size()) - data_);
     }
 
     bool parseNextKeyVal() {
@@ -181,7 +176,6 @@ private:
         }
         uint32_t shared, non_shared, value_size;
         p = decodeEntry(p, limit, &shared, &non_shared, &value_size);
-        // TODO(liubang): error handle
         // 第一次Seek的时候，key 为空，那么shared必定为0
         if (p == nullptr || key_.size() < shared) {
             return false;

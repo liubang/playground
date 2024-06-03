@@ -23,6 +23,10 @@
 
 namespace pl {
 
+class Iterator;
+
+using IteratorPtr = std::unique_ptr<Iterator>;
+
 class Iterator {
 public:
     Iterator() = default;
@@ -48,7 +52,5 @@ public:
 
     [[nodiscard]] virtual Binary val() const = 0;
 };
-
-using IteratorPtr = std::unique_ptr<Iterator>;
 
 } // namespace pl
