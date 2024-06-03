@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-06-03 05:08:26</td>
+            <td class="headerValue">2024-06-03 12:44:53</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">5</td>
@@ -114,10 +114,10 @@
 <a name="52"><span class="lineNum">      52 </span>            : </a>
 <a name="53"><span class="lineNum">      53 </span>            : class Fs {</a>
 <a name="54"><span class="lineNum">      54 </span>            : public:</a>
-<a name="55"><span class="lineNum">      55 </span><span class="lineCov">          3 :     Fs() = default;</span></a>
+<a name="55"><span class="lineNum">      55 </span><span class="lineCov">          2 :     Fs() = default;</span></a>
 <a name="56"><span class="lineNum">      56 </span>            :     Fs(const Fs&amp;) = delete;</a>
 <a name="57"><span class="lineNum">      57 </span>            :     Fs&amp; operator=(const Fs&amp;) = delete;</a>
-<a name="58"><span class="lineNum">      58 </span><span class="lineCov">          3 :     virtual ~Fs() = default;</span></a>
+<a name="58"><span class="lineNum">      58 </span><span class="lineCov">          2 :     virtual ~Fs() = default;</span></a>
 <a name="59"><span class="lineNum">      59 </span>            :     virtual FsReaderPtr newFsReader(const std::string&amp; filename, Status* status) = 0;</a>
 <a name="60"><span class="lineNum">      60 </span>            :     virtual FsWriterPtr newFsWriter(const std::string&amp; filename, Status* status) = 0;</a>
 <a name="61"><span class="lineNum">      61 </span>            : };</a>
