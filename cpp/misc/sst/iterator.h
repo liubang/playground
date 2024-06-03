@@ -16,21 +16,19 @@
 
 #pragma once
 
-#include <functional>
-#include <list>
-
 #include "cpp/tools/binary.h"
 #include "cpp/tools/status.h"
+
+#include <memory>
 
 namespace pl {
 
 class Iterator {
 public:
-    Iterator();
+    Iterator() = default;
     Iterator(const Iterator&) = delete;
     Iterator& operator=(const Iterator&) = delete;
-
-    virtual ~Iterator();
+    virtual ~Iterator() = default;
 
     virtual void first() = 0;
 
@@ -49,12 +47,8 @@ public:
     [[nodiscard]] virtual Binary key() const = 0;
 
     [[nodiscard]] virtual Binary val() const = 0;
-
-    using CleanupFunc = std::function<void()>;
-    void registerCleanup(const CleanupFunc& function);
-
-private:
-    std::list<CleanupFunc> cleanup_funcs_;
 };
+
+using IteratorPtr = std::unique_ptr<Iterator>;
 
 } // namespace pl

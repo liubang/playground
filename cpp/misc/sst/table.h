@@ -45,11 +45,11 @@ public:
     Status get(const Binary& key, void* arg, HandleResult&& handle_result);
 
 private:
-    Table(const OptionsRef& options, const FsReaderRef& reader, BlockPtr index_block);
+    Table(OptionsRef options, FsReaderRef reader, BlockRef index_block);
 
     void readMeta(const Footer& footer);
     void readFilter(const Binary& filter_handle_content);
-    Iterator* blockReader(const Binary& index_value);
+    IteratorPtr blockReader(const Binary& index_value);
 
 private:
     const OptionsRef options_;
@@ -59,7 +59,7 @@ private:
     std::unique_ptr<const char[]> filter_data_;
     // const char* filter_data_{nullptr};
     // BlockHandle metaindex_Handle_;
-    BlockPtr index_block_{nullptr};
+    BlockRef index_block_{nullptr};
 };
 
 using TablePtr = std::unique_ptr<Table>;

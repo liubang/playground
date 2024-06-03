@@ -18,7 +18,6 @@
 #include "cpp/misc/sst/block_builder.h"
 #include "cpp/misc/sst/encoding.h"
 #include "cpp/tools/random.h"
-#include "cpp/tools/scope.h"
 
 #include <gtest/gtest.h>
 #include <unordered_map>
@@ -68,9 +67,7 @@ TEST_F(BlockBuilderTest, test) {
 
     pl::Block b(block_content);
 
-    auto* itr = b.iterator(nullptr);
-
-    SCOPE_EXIT { delete itr; };
+    auto itr = b.iterator(nullptr);
 
     itr->first();
     while (itr->valid()) {

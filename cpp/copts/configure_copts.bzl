@@ -16,16 +16,23 @@
 
 load(
     "//cpp:copts/copts.bzl",
+    "ASAN_FLAGS",
     "GCC_FLAGS",
     "GCC_TEST_FLAGS",
     "LLVM_FLAGS",
     "LLVM_TEST_FLAGS",
 )
 
-DEFAULT_COPTS = select({
+COPTS = select({
     "//cpp:clang_compiler": LLVM_FLAGS,
     "//cpp:gcc_compiler": GCC_FLAGS,
     "//conditions:default": GCC_FLAGS,
+})
+
+DEFAULT_COPTS = select({
+    "//cpp:clang_compiler": LLVM_FLAGS + ASAN_FLAGS,
+    "//cpp:gcc_compiler": GCC_FLAGS + ASAN_FLAGS,
+    "//conditions:default": GCC_FLAGS + ASAN_FLAGS,
 })
 
 TEST_COPTS = select({
