@@ -25,6 +25,7 @@ namespace pl {
 class SSTableTest : public ::testing::Test {
     void SetUp() override {
         options = std::make_shared<Options>();
+        options->compression_type = CompressionType::kSnappyCompression;
         fs = std::make_shared<PosixFs>();
     }
 

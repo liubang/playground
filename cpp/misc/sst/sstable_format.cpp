@@ -19,6 +19,8 @@
 #include "cpp/misc/sst/options.h"
 #include "cpp/tools/crc.h"
 
+#include <snappy.h>
+
 namespace pl {
 
 void BlockHandle::encodeTo(std::string* dst) const {
@@ -105,18 +107,33 @@ Status BlockReader::readBlock(const FsReaderRef& reader,
 
     // TODO(liubang): support compresstion
     switch (static_cast<CompressionType>(data[s])) {
-    case CompressionType::kNoCompression:
-    default:
-        if (data != buf) {
+    case CompressionType::kSnappyCompression:
+    {
+        size_t len;
+        if (!snappy::GetUncompressedLength(data, s, &len)) {
             delete[] buf;
-            result->data = Binary(data, s);
-            result->heap_allocated = false;
-            result->cachable = false;
-        } else {
-            result->data = Binary(buf, s);
-            result->heap_allocated = true;
-            result->cachable = true;
+            return Status::NewCorruption("invalid data");
         }
+        char* new_buf = new char[len];
+        if (!snappy::RawUncompress(data, s, new_buf)) {
+            delete[] buf;
+            delete[] new_buf;
+            return Status::NewCorruption("invalid data");
+        }
+        delete[] buf;
+        result->data = Binary(new_buf, len);
+        result->heap_allocated = true;
+        result->cachable = true;
+        break;
+    }
+    default:
+    {
+
+        result->data = Binary(buf, s);
+        result->heap_allocated = true;
+        result->cachable = true;
+        break;
+    }
     }
 
     return Status::NewOk();

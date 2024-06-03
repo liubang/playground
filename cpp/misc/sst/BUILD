@@ -32,5 +32,6 @@ cc_library(
         "//cpp/misc/bloom:bloom_filter",
         "//cpp/misc/fs",
         "//cpp/tools",
+        "@snappy",
     ],
 )
