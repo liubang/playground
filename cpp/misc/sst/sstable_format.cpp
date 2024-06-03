@@ -104,8 +104,6 @@ Status BlockReader::readBlock(const FsReaderRef& reader,
         delete[] buf;
         return Status::NewCorruption("crc error");
     }
-
-    // TODO(liubang): support compresstion
     switch (static_cast<CompressionType>(data[s])) {
     case CompressionType::kSnappyCompression:
     {
@@ -128,7 +126,6 @@ Status BlockReader::readBlock(const FsReaderRef& reader,
     }
     default:
     {
-
         result->data = Binary(buf, s);
         result->heap_allocated = true;
         result->cachable = true;
