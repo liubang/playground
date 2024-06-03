@@ -23,6 +23,11 @@
 
 namespace pl {
 
+class FilterPolicy;
+
+using FilterPolicyPtr = std::unique_ptr<FilterPolicy>;
+using FilterPolicyRef = std::shared_ptr<FilterPolicy>;
+
 class FilterPolicy {
 public:
     virtual ~FilterPolicy() = default;
@@ -52,9 +57,6 @@ public:
      */
     [[nodiscard]] virtual bool keyMayMatch(const Binary& key, const Binary& filter) const = 0;
 };
-
-using FilterPolicyPtr = std::unique_ptr<FilterPolicy>;
-using FilterPolicyRef = std::shared_ptr<FilterPolicy>;
 
 /**
  * @class BloomFilterPolicy
