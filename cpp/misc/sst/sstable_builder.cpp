@@ -100,9 +100,9 @@ void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
  *                                  +----------------->+---------------------+
  *                                  |                  |   value size(4B)    |
  *                                  |                  +---------------------+
- *                                  |                  | non shared key(4B)  |
+ *                                  |                  |   non shared key    |
  *                                  |                  +---------------------+
- *                                  |                  |      value          |
+ *                                  |                  |        value        |
  *                                  |                  +---------------------+
  * +------------------+             |
  * |  <key1, value2>  +-------------+
@@ -138,20 +138,22 @@ void SSTableBuilder::writeBlockRaw(const Binary& content,
     handle->setOffset(offset_);
     handle->setSize(content.size());
     status_ = writer_->append(content);
-    if (ok()) {
-        // crc
-        char trailer[kBlockTrailerSize];
-        trailer[0] = static_cast<unsigned char>(type);
-        uint32_t crc = crc32(content.data(), content.size());
-        std::string encode_crc;
-        encodeInt<uint32_t>(&encode_crc, crc);
-        memcpy(trailer + 1, encode_crc.data(), encode_crc.size());
-        status_ = writer_->append(Binary(trailer, kBlockTrailerSize));
-        if (ok()) {
-            // 更新下一个block的offset
-            offset_ += content.size() + kBlockTrailerSize;
-        }
+    if (!ok()) {
+        assert(false);
     }
+    // crc
+    char trailer[kBlockTrailerSize];
+    trailer[0] = static_cast<char>(type);
+    uint32_t crc = crc32(content.data(), content.size());
+    std::string encode_crc;
+    encodeInt<uint32_t>(&encode_crc, crc);
+    memcpy(trailer + 1, encode_crc.data(), encode_crc.size());
+    status_ = writer_->append(Binary(trailer, kBlockTrailerSize));
+    if (!ok()) {
+        assert(false);
+    }
+    // 更新下一个block的offset
+    offset_ += content.size() + kBlockTrailerSize;
 }
 
 /*

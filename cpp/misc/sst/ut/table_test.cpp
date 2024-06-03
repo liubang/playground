@@ -23,47 +23,51 @@
 
 namespace pl {
 class SSTableTest : public ::testing::Test {
-    void SetUp() override {}
-    void TearDown() override {}
+    void SetUp() override {
+        options = std::make_shared<Options>();
+        fs = std::make_shared<PosixFs>();
+    }
+
+    void TearDown() override {
+        // TODO: remove sst file
+    }
+
+public:
+    void build_sst() {
+        auto writer = fs->newFsWriter(sst_file, &st);
+        EXPECT_TRUE(st.isOk());
+        auto sstable_builder = std::make_unique<pl::SSTableBuilder>(options, std::move(writer));
+        std::vector<std::string> keys;
+        const std::string key_prefix = "test_key_";
+        for (int i = 0; i < KEY_COUNT; ++i) {
+            std::string key = key_prefix + std::to_string(i);
+            keys.push_back(key);
+        }
+        std::sort(keys.begin(), keys.end());
+        for (int i = 0; i < KEY_COUNT; ++i) {
+            auto val = pl::random_string(64);
+            sstable_builder->add(keys[i], val);
+            kvs[keys[i]] = val;
+        }
+        sstable_builder->finish();
+    }
 
 public:
     constexpr static int KEY_COUNT = 10001;
+    const std::string sst_file = "/tmp/test.sst";
+    std::unordered_map<std::string, std::string> kvs;
+    OptionsRef options;
+    FsRef fs;
+    Status st;
 };
 
-TEST_F(SSTableTest, sstable_build) {
-    auto options = std::make_unique<Options>();
-    auto fs = std::make_unique<PosixFs>();
-    Status st;
-    auto writer = fs->newFsWriter("/tmp/test.sst", &st);
-
-    auto sstable_builder =
-        std::make_unique<pl::SSTableBuilder>(std::move(options), std::move(writer));
-
-    std::vector<std::string> keys;
-    std::unordered_map<std::string, std::string> kvs;
-    const std::string key_prefix = "test_key_";
-    for (int i = 0; i < KEY_COUNT; ++i) {
-        std::string key = key_prefix + std::to_string(i);
-        keys.push_back(key);
-    }
-
-    std::sort(keys.begin(), keys.end());
-
-    for (int i = 0; i < KEY_COUNT; ++i) {
-        auto val = pl::random_string(64);
-        sstable_builder->add(keys[i], val);
-        kvs[keys[i]] = val;
-    }
-    sstable_builder->finish();
-}
-
 TEST_F(SSTableTest, table) {
-    auto options = std::make_unique<Options>();
-    auto fs = std::make_unique<PosixFs>();
-    Status st;
+    this->build_sst();
     auto reader = fs->newFsReader("/tmp/test.sst", &st);
-
-    auto table = pl::Table::open(std::move(options), std::move(reader), reader->size(), &st);
+    EXPECT_TRUE(st.isOk());
+    std::size_t sst_size = reader->size();
+    ::printf("file: %s, size: %zu\n", "/tmp/test.sst", sst_size);
+    auto table = pl::Table::open(options, std::move(reader), sst_size, &st);
     EXPECT_TRUE(st.isOk());
 
     auto handle_result = [](void* arg, const pl::Binary& k, const pl::Binary& v) {
@@ -75,13 +79,17 @@ TEST_F(SSTableTest, table) {
         const std::string key_prefix = "test_key_";
         std::string key = key_prefix + std::to_string(i);
         std::string val;
-        auto s = table->get(key, &val, handle_result);
-        // TODO: the result is error
-        if (s.isOk()) {
-            ::printf("val is %s\n", val.c_str());
-        } else {
-            ::printf("key %s is not found\n", key.c_str());
-        }
+        st = table->get(key, &val, handle_result);
+        EXPECT_TRUE(st.isOk());
+        EXPECT_EQ(kvs[key], val);
+    }
+
+    for (int i = 0; i < KEY_COUNT; ++i) {
+        const std::string key_prefix = "key_not_exist_";
+        std::string key = key_prefix + std::to_string(i);
+        std::string val;
+        st = table->get("not exist", &val, handle_result);
+        EXPECT_TRUE(st.isNotFound());
     }
 }
 
