@@ -20,16 +20,20 @@
 #include "cpp/misc/sst/iterator.h"
 #include "cpp/misc/sst/sstable_format.h"
 
+#include <memory>
+
 namespace pl {
 
-class Block {
+class Block : public std::enable_shared_from_this<Block> {
 public:
     explicit Block(const BlockContents& content);
     Block(const Block&) = delete;
     Block& operator=(const Block&) = delete;
-    ~Block();
+    virtual ~Block();
 
-    Iterator* iterator(const ComparatorRef& comparator);
+    [[nodiscard]] bool valid() const { return size_ > 0; }
+
+    IteratorPtr iterator(const ComparatorRef& comparator);
 
 private:
     class BlockIterator;

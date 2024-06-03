@@ -118,7 +118,7 @@ std::size_t PosixFsReader::size() const {
         if (::fstat(fd_, &file_stat) == -1) {
             return 0;
         }
-        return file_stat.st_size;
+        return static_cast<std::size_t>(file_stat.st_size);
     }
     return 0;
 }
@@ -126,7 +126,7 @@ std::size_t PosixFsReader::size() const {
 Status PosixFsReader::read(uint64_t offset, std::size_t n, Binary* result, char* scratch) const {
     Status status;
     ssize_t read_size = ::pread(fd_, scratch, n, static_cast<off_t>(offset));
-    *result = Binary(scratch, (read_size < 0) ? 0 : read_size);
+    result->reset(scratch, (read_size < 0) ? 0 : read_size);
     if (read_size < 0) {
         status = posixError(filename_, errno);
     }

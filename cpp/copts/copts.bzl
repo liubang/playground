@@ -15,6 +15,10 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/06/11 01:28
 
+ASAN_FLAGS = [
+    "-fsanitize=address",
+]
+
 GCC_FLAGS = [
     "-Wall",
     "-Wextra",
@@ -30,7 +34,6 @@ GCC_FLAGS = [
     "-Wvarargs",
     "-Wvla",
     "-Wwrite-strings",
-    "-fsanitize=address",
     "-DNOMINMAX",
 ]
 
