@@ -19,6 +19,7 @@
 #include "cpp/tools/crc.h"
 
 #include <snappy.h>
+#include <zstd.h>
 
 namespace pl {
 
@@ -91,13 +92,31 @@ void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
     switch (options_->compression_type) {
     case CompressionType::kSnappyCompression:
     {
-        auto out_len = snappy::Compress(raw.data(), raw.size(), &compressed);
-        compressed.resize(out_len);
+        auto outlen = snappy::Compress(raw.data(), raw.size(), &compressed);
+        compressed.resize(outlen);
         raw.reset(compressed);
         break;
     }
     case CompressionType::kZstdCompression:
+    {
+        size_t outlen = ZSTD_compressBound(raw.size());
+        if (ZSTD_isError(outlen) != 0u) {
+            // TODO(liubang): error handler
+            assert(false);
+        }
+        compressed.resize(outlen);
+        ZSTD_CCtx* ctx = ZSTD_createCCtx();
+        ZSTD_CCtx_setParameter(ctx, ZSTD_c_compressionLevel, options_->zstd_compress_level);
+        outlen = ZSTD_compress2(ctx, &(compressed)[0], compressed.size(), raw.data(), raw.size());
+        ZSTD_freeCCtx(ctx);
+        if (ZSTD_isError(outlen) != 0u) {
+            // TODO(liubang): error handler
+            assert(false);
+        }
+        compressed.resize(outlen);
+        raw.reset(compressed);
         break;
+    }
     default:
         break;
     }
