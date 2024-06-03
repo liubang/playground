@@ -91,7 +91,8 @@ void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
     switch (options_->compression_type) {
     case CompressionType::kSnappyCompression:
     {
-        snappy::Compress(raw.data(), raw.size(), &compressed);
+        auto out_len = snappy::Compress(raw.data(), raw.size(), &compressed);
+        compressed.resize(out_len);
         raw.reset(compressed);
         break;
     }
@@ -100,7 +101,7 @@ void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
     default:
         break;
     }
-    writeBlockRaw(raw, CompressionType::kNoCompression, handle);
+    writeBlockRaw(raw, options_->compression_type, handle);
     block->reset();
 }
 
@@ -157,7 +158,7 @@ void SSTableBuilder::writeBlockRaw(const Binary& content,
     }
     // crc
     char trailer[kBlockTrailerSize];
-    trailer[0] = static_cast<char>(type);
+    trailer[0] = static_cast<const char>(type);
     uint32_t crc = crc32(content.data(), content.size());
     std::string encode_crc;
     encodeInt<uint32_t>(&encode_crc, crc);
