@@ -25,10 +25,8 @@ namespace pl {
 class SSTableTest : public ::testing::Test {
     void SetUp() override {
         options = std::make_shared<Options>();
-        options->compression_type = CompressionType::kSnappyCompression;
+        options->compression_type = CompressionType::kNoCompression;
         fs = std::make_shared<PosixFs>();
-
-        build_sst();
     }
 
     void TearDown() override { ::printf("teardown!!!!\n"); }
@@ -54,6 +52,37 @@ public:
         sstable_builder->finish();
     }
 
+    void seek_from_sst() {
+        auto reader = fs->newFsReader("/tmp/test.sst", &st);
+        EXPECT_TRUE(st.isOk());
+        std::size_t sst_size = reader->size();
+        ::printf("file: %s, size: %zu\n", "/tmp/test.sst", sst_size);
+        auto table = pl::Table::open(options, std::move(reader), sst_size, &st);
+        EXPECT_TRUE(st.isOk());
+
+        auto handle_result = [](void* arg, const pl::Binary& k, const pl::Binary& v) {
+            auto* saver = reinterpret_cast<std::string*>(arg);
+            saver->assign(v.data(), v.size());
+        };
+
+        for (int i = 0; i < KEY_COUNT; ++i) {
+            const std::string key_prefix = "test_key_";
+            std::string key = key_prefix + std::to_string(i);
+            std::string val;
+            st = table->get(key, &val, handle_result);
+            EXPECT_TRUE(st.isOk());
+            EXPECT_EQ(kvs[key], val);
+        }
+
+        for (int i = 0; i < KEY_COUNT; ++i) {
+            const std::string key_prefix = "key_not_exist_";
+            std::string key = key_prefix + std::to_string(i);
+            std::string val;
+            st = table->get("not exist", &val, handle_result);
+            EXPECT_TRUE(st.isNotFound());
+        }
+    }
+
 public:
     constexpr static int KEY_COUNT = 10001;
     const std::string sst_file = "/tmp/test.sst";
@@ -63,35 +92,22 @@ public:
     Status st;
 };
 
-TEST_F(SSTableTest, table) {
-    auto reader = fs->newFsReader("/tmp/test.sst", &st);
-    EXPECT_TRUE(st.isOk());
-    std::size_t sst_size = reader->size();
-    ::printf("file: %s, size: %zu\n", "/tmp/test.sst", sst_size);
-    auto table = pl::Table::open(options, std::move(reader), sst_size, &st);
-    EXPECT_TRUE(st.isOk());
+TEST_F(SSTableTest, table_without_compression) {
+    options->compression_type = CompressionType::kNoCompression;
+    this->build_sst();
+    this->seek_from_sst();
+}
 
-    auto handle_result = [](void* arg, const pl::Binary& k, const pl::Binary& v) {
-        auto* saver = reinterpret_cast<std::string*>(arg);
-        saver->assign(v.data(), v.size());
-    };
+TEST_F(SSTableTest, table_with_snappy_compression) {
+    options->compression_type = CompressionType::kSnappyCompression;
+    this->build_sst();
+    this->seek_from_sst();
+}
 
-    for (int i = 0; i < KEY_COUNT; ++i) {
-        const std::string key_prefix = "test_key_";
-        std::string key = key_prefix + std::to_string(i);
-        std::string val;
-        st = table->get(key, &val, handle_result);
-        EXPECT_TRUE(st.isOk());
-        EXPECT_EQ(kvs[key], val);
-    }
-
-    for (int i = 0; i < KEY_COUNT; ++i) {
-        const std::string key_prefix = "key_not_exist_";
-        std::string key = key_prefix + std::to_string(i);
-        std::string val;
-        st = table->get("not exist", &val, handle_result);
-        EXPECT_TRUE(st.isNotFound());
-    }
+TEST_F(SSTableTest, table_with_zstd_compression) {
+    options->compression_type = CompressionType::kZstdCompression;
+    this->build_sst();
+    this->seek_from_sst();
 }
 
 } // namespace pl

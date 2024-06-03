@@ -40,6 +40,7 @@ struct Options {
     int block_restart_interval = 16;
     uint64_t bits_per_key = 10;
     CompressionType compression_type = CompressionType::kNoCompression;
+    int zstd_compress_level = 1;
     const ComparatorRef comparator;
     const FilterPolicyRef filter_policy;
 };
