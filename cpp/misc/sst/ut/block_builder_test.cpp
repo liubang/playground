@@ -65,9 +65,8 @@ TEST_F(BlockBuilderTest, test) {
         false,
     };
 
-    pl::Block b(block_content);
-
-    auto itr = b.iterator(nullptr);
+    auto b = std::make_shared<Block>(block_content);
+    auto itr = b->iterator(nullptr);
 
     itr->first();
     while (itr->valid()) {
