@@ -20,6 +20,7 @@
 #include "cpp/tools/crc.h"
 
 #include <snappy.h>
+#include <zstd.h>
 
 namespace pl {
 
@@ -107,19 +108,41 @@ Status BlockReader::readBlock(const FsReaderRef& reader,
     switch (static_cast<CompressionType>(data[s])) {
     case CompressionType::kSnappyCompression:
     {
-        size_t len;
-        if (!snappy::GetUncompressedLength(data, s, &len)) {
+        size_t ulen;
+        if (!snappy::GetUncompressedLength(data, s, &ulen)) {
             delete[] buf;
             return Status::NewCorruption("invalid data");
         }
-        char* new_buf = new char[len];
-        if (!snappy::RawUncompress(data, s, new_buf)) {
+        char* ubuf = new char[ulen];
+        if (!snappy::RawUncompress(data, s, ubuf)) {
             delete[] buf;
-            delete[] new_buf;
+            delete[] ubuf;
             return Status::NewCorruption("invalid data");
         }
         delete[] buf;
-        result->data = Binary(new_buf, len);
+        result->data = Binary(ubuf, ulen);
+        result->heap_allocated = true;
+        result->cachable = true;
+        break;
+    }
+    case CompressionType::kZstdCompression:
+    {
+        size_t ulen = ZSTD_getFrameContentSize(data, s);
+        if (ulen == 0) {
+            delete[] buf;
+            return Status::NewCorruption("invalid data");
+        }
+        char* ubuf = new char[ulen];
+        ZSTD_DCtx* ctx = ZSTD_createDCtx();
+        size_t outlen = ZSTD_decompressDCtx(ctx, ubuf, ulen, data, s);
+        ZSTD_freeDCtx(ctx);
+        if (ZSTD_isError(outlen) != 0u) {
+            delete[] buf;
+            delete[] ubuf;
+            return Status::NewCorruption("invalid data");
+        }
+        delete[] buf;
+        result->data = Binary(ubuf, ulen);
         result->heap_allocated = true;
         result->cachable = true;
         break;

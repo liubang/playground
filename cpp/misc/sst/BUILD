@@ -34,5 +34,6 @@ cc_library(
         "//cpp/misc/fs",
         "//cpp/tools",
         "@snappy",
+        "@zstd",
     ],
 )
