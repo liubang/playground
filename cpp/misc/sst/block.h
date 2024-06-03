@@ -46,7 +46,6 @@ private:
     bool owned_;
 };
 
-using BlockPtr = std::unique_ptr<Block>;
 using BlockRef = std::shared_ptr<Block>;
 
 } // namespace pl
