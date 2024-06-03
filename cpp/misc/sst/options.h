@@ -37,13 +37,10 @@ struct Options {
 
     // 4 KB
     std::size_t block_size = 4 * 1024;
-
     int block_restart_interval = 16;
-
     uint64_t bits_per_key = 10;
-
+    CompressionType compression_type = CompressionType::kNoCompression;
     const ComparatorRef comparator;
-
     const FilterPolicyRef filter_policy;
 };
 
