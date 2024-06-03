@@ -29,11 +29,10 @@ class SSTableTest : public ::testing::Test {
         fs = std::make_shared<PosixFs>();
     }
 
-    void TearDown() override { ::printf("teardown!!!!\n"); }
+    void TearDown() override { kvs.clear(); }
 
 public:
     void build_sst() {
-        ::printf("build sst\n");
         auto writer = fs->newFsWriter(sst_file, &st);
         EXPECT_TRUE(st.isOk());
         auto sstable_builder = std::make_unique<pl::SSTableBuilder>(options, std::move(writer));
@@ -53,7 +52,7 @@ public:
     }
 
     void seek_from_sst() {
-        auto reader = fs->newFsReader("/tmp/test.sst", &st);
+        auto reader = fs->newFsReader(this->sst_file, &st);
         EXPECT_TRUE(st.isOk());
         std::size_t sst_size = reader->size();
         ::printf("file: %s, size: %zu\n", "/tmp/test.sst", sst_size);
@@ -85,7 +84,7 @@ public:
 
 public:
     constexpr static int KEY_COUNT = 10001;
-    const std::string sst_file = "/tmp/test.sst";
+    std::string sst_file = "/tmp/test.sst";
     std::unordered_map<std::string, std::string> kvs;
     OptionsRef options;
     FsRef fs;
@@ -94,18 +93,21 @@ public:
 
 TEST_F(SSTableTest, table_without_compression) {
     options->compression_type = CompressionType::kNoCompression;
+    this->sst_file = "/tmp/test0.sst";
     this->build_sst();
     this->seek_from_sst();
 }
 
 TEST_F(SSTableTest, table_with_snappy_compression) {
     options->compression_type = CompressionType::kSnappyCompression;
+    this->sst_file = "/tmp/test1.sst";
     this->build_sst();
     this->seek_from_sst();
 }
 
 TEST_F(SSTableTest, table_with_zstd_compression) {
     options->compression_type = CompressionType::kZstdCompression;
+    this->sst_file = "/tmp/test2.sst";
     this->build_sst();
     this->seek_from_sst();
 }
