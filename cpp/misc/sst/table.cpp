@@ -20,10 +20,12 @@
 
 namespace pl {
 
-Table::Table(const OptionsRef& options,
-             const FsReaderRef& reader, /*const BlockHandle& metaindex_handle,*/
-             BlockPtr index_block)
-    : options_(options), reader_(reader), index_block_(std::move(index_block)) {}
+Table::Table(OptionsRef options,
+             FsReaderRef reader, /*const BlockHandle& metaindex_handle,*/
+             BlockRef index_block)
+    : options_(std::move(options)),
+      reader_(std::move(reader)),
+      index_block_(std::move(index_block)) {}
 
 std::unique_ptr<Table> Table::open(const OptionsRef& options,
                                    const FsReaderRef& reader,
@@ -40,6 +42,7 @@ std::unique_ptr<Table> Table::open(const OptionsRef& options,
     if (!status->isOk()) {
         return nullptr;
     }
+
     Footer footer;
     *status = footer.decodeFrom(footer_input);
     if (!status->isOk()) {
@@ -53,7 +56,7 @@ std::unique_ptr<Table> Table::open(const OptionsRef& options,
         return nullptr;
     }
 
-    auto index_block = std::make_unique<Block>(index_block_contents);
+    auto index_block = std::make_shared<Block>(index_block_contents);
 
     auto table =
         std::unique_ptr<Table>(new Table(options, reader,
@@ -64,35 +67,43 @@ std::unique_ptr<Table> Table::open(const OptionsRef& options,
 
 void Table::readMeta(const Footer& footer) {
     if (options_->filter_policy == nullptr) {
+        assert(false);
         return;
     }
 
     BlockContents contents;
     auto s = BlockReader::readBlock(reader_, footer.metaIndexHandle(), &contents);
     if (!s.isOk()) {
+        assert(false);
         return;
     }
 
-    auto meta = std::make_unique<Block>(contents);
-    auto* iter = meta->iterator(options_->comparator);
-
+    auto meta = std::make_shared<Block>(contents);
+    if (!meta->valid()) {
+        assert(false);
+    }
+    auto iter = meta->iterator(options_->comparator);
     std::string key = "filter.";
     key.append(options_->filter_policy->name());
     iter->seek(key);
+    if (!iter->status().isOk()) {
+        assert(false);
+    }
     if (iter->valid() && iter->key() == Binary(key)) {
         readFilter(iter->val());
     }
-    delete iter;
 }
 
 void Table::readFilter(const Binary& filter_handle_value) {
     BlockHandle filter_handle;
     if (!filter_handle.decodeFrom(filter_handle_value).isOk()) {
+        assert(false);
         return;
     }
 
     BlockContents block;
     if (!BlockReader::readBlock(reader_, filter_handle, &block).isOk()) {
+        assert(false);
         return;
     }
 
@@ -104,55 +115,51 @@ void Table::readFilter(const Binary& filter_handle_value) {
 }
 
 Status Table::get(const Binary& key, void* arg, HandleResult&& handle_result) {
-    Status s;
-    auto* iiter = index_block_->iterator(options_->comparator);
+    auto iiter = index_block_->iterator(options_->comparator);
     iiter->seek(key);
-    if (iiter->valid()) {
-        Binary handle_value = iiter->val();
-        BlockHandle handle;
-        if (filter_ != nullptr && handle.decodeFrom(handle_value).isOk() &&
-            !filter_->keyMayMatch(handle.offset(), key)) {
-            // not found
-            s = Status::NewNotFound();
-        } else {
-            // key may found
-            auto* iter = blockReader(iiter->val());
-            if (nullptr == iter) {
-                delete iiter;
-                return Status::NewNotFound();
-            }
-            iter->seek(key);
-            if (iter->valid()) {
-                handle_result(arg, key, iter->val());
-            }
-            s = iter->status();
-            delete iter;
+    if (!iiter->valid()) {
+        return Status::NewNotFound();
+    }
+    Binary handle_value = iiter->val();
+    BlockHandle handle;
+    if (filter_ != nullptr) {
+        if (!handle.decodeFrom(handle_value).isOk()) {
+            assert(false);
+        }
+        if (!filter_->keyMayMatch(handle.offset(), key)) {
+            // key not found
+            return Status::NewNotFound();
         }
     }
 
-    delete iiter;
-    return s;
+    // key may found
+    auto iter = blockReader(iiter->val());
+    if (nullptr == iter) {
+        return Status::NewNotFound();
+    }
+    iter->seek(key);
+    if (iter->valid()) {
+        handle_result(arg, key, iter->val());
+    }
+    return iter->status();
 }
 
-Iterator* Table::blockReader(const Binary& index_value) {
-    Block* block = nullptr;
+IteratorPtr Table::blockReader(const Binary& index_value) {
     BlockHandle handle;
     auto s = handle.decodeFrom(index_value);
-    if (s.isOk()) {
-        BlockContents contents;
-        auto s = BlockReader::readBlock(reader_, handle, &contents);
-        if (s.isOk()) {
-            block = new Block(contents);
-        }
+    if (!s.isOk()) {
+        assert(false);
     }
 
-    Iterator* iter = nullptr;
-    if (nullptr != block) {
-        iter = block->iterator(options_->comparator);
-        iter->registerCleanup([block]() {
-            delete block;
-        });
+    BlockContents contents;
+    s = BlockReader::readBlock(reader_, handle, &contents);
+
+    if (!s.isOk()) {
+        assert(false);
     }
+
+    auto block = std::make_shared<Block>(contents);
+    auto iter = block->iterator(options_->comparator);
 
     return iter;
 }
