@@ -17,6 +17,7 @@
 #include <csetjmp>
 #include <functional>
 #include <iostream>
+#include <vector>
 
 struct Coroutine;
 
@@ -48,7 +49,8 @@ struct Coroutine {
     std::function<void(void)> func;
     const char* name;
 
-    Coroutine(const std::function<void(void)>& func, const char* name) : func(func), name(name) {}
+    Coroutine(std::function<void(void)>&& func, const char* name)
+        : func(std::move(func)), name(name) {}
     ~Coroutine() { std::cout << name << " destroyed" << std::endl; }
 };
 
@@ -119,7 +121,9 @@ struct {
         }                                                        \
     } while (0)
 
+namespace details {
 std::vector<Coroutine*> cos;
+}
 
 void ReadNextResourceName() {
     std::cout << "read source name OK" << std::endl;
@@ -130,7 +134,7 @@ void DownloadSource() {
     std::cout << "downloading" << std::endl;
     // start another coroutine
     auto* co = new Coroutine(ReadNextResourceName, "ReadNextResourceName");
-    cos.push_back(co);
+    details::cos.push_back(co);
 
     co_resume(co);
     std::cout << "coutinue download" << std::endl;
@@ -143,16 +147,16 @@ void DownloadSource() {
 
 int main(int argc, char* argv[]) {
     auto* co = new Coroutine(DownloadSource, "DownloadSource");
-    cos.push_back(co);
+    details::cos.push_back(co);
     std::cout << co->name << "'s state = " << StateToString(co->state) << std::endl;
     co_resume(co);
     std::cout << co->name << "'s state = " << StateToString(co->state) << std::endl;
     co_resume(co);
     std::cout << "at end of main" << std::endl;
 
-    for (auto* co : cos) {
-        delete co;
+    for (auto* c : details::cos) {
+        delete c;
     }
-    cos.clear();
+    details::cos.clear();
     return 0;
 }
