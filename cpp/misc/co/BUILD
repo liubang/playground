@@ -17,6 +17,7 @@
 
 load(
     "//cpp:copts/configure_copts.bzl",
+    "COPTS",
     "DEFAULT_COPTS",
     "DEFAULT_LINKOPTS",
 )
@@ -31,6 +32,12 @@ cc_binary(
 cc_binary(
     name = "setjmp_impl",
     srcs = ["setjmp_impl.cpp"],
+    copts = ["-std=c++20"] + COPTS,
+)
+
+cc_binary(
+    name = "context_impl",
+    srcs = ["context_impl.cpp"],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
 )
