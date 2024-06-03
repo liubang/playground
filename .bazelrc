@@ -19,6 +19,12 @@ build --nojava_header_compilation
 # for cpp
 # build --action_env=CC=/home/liubang/opt/gcc-13.2.1/bin/gcc
 # build --action_env=CXX=/home/liubang/opt/gcc-13.2.1/bin/g++
+
+build --enable_platform_specific_config
+build:macos --apple_crosstool_top=@local_config_apple_cc//:toolchain
+build:macos --crosstool_top=@local_config_apple_cc//:toolchain
+build:macos --host_crosstool_top=@local_config_apple_cc//:toolchain
+
 build --cxxopt=-std=c++17
 
 # bazel build
