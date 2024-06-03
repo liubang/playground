@@ -18,6 +18,7 @@
 
 #include "cpp/misc/fs/fs.h"
 #include <fcntl.h>
+#include <unistd.h>
 
 namespace pl {
 

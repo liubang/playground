@@ -1,11 +1,18 @@
-#======================================================================
+# Copyright (c) 2024 The Authors. All rights reserved.
 #
-# brpc.BUILD -
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# Created by liubang on 2023/08/17 23:16
-# Last Modified: 2023/08/17 23:16
+#      https://www.apache.org/licenses/LICENSE-2.0
 #
-#======================================================================
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Authors: liubang (it.liubang@gmail.com)
 
 COPTS = [
     "-DBTHREAD_USE_FAST_PTHREAD_MUTEX",
@@ -38,7 +45,7 @@ LINKOPTS = [
     "-pthread",
     "-ldl",
 ] + select({
-    "@bazel_tools//tools/osx:darwin": [
+    "@platforms//os:osx": [
         "-framework CoreFoundation",
         "-framework CoreGraphics",
         "-framework CoreData",
@@ -201,7 +208,7 @@ BUTIL_SRCS = [
     "src/butil/recordio.cc",
     "src/butil/popen.cpp",
 ] + select({
-    "@bazel_tools//tools/osx:darwin": [
+    "@platforms//os:osx": [
         "src/butil/time/time_mac.cc",
         "src/butil/mac/scoped_mach_port.cc",
     ],
@@ -245,6 +252,7 @@ objc_library(
         "src/butil/port.h",
         "src/butil/posix/eintr_wrapper.h",
         "src/butil/scoped_generic.h",
+        "src/butil/string_printf.h",
         "src/butil/strings/string16.h",
         "src/butil/strings/string_piece.h",
         "src/butil/strings/string_util.h",
@@ -317,7 +325,7 @@ cc_library(
         "@//:brpc_with_glog": ["@glog"],
         "//conditions:default": [],
     }) + select({
-        "@bazel_tools//tools/osx:darwin": [":macos_lib"],
+        "@platforms//os:osx": [":macos_lib"],
         "//conditions:default": [],
     }),
 )
@@ -495,9 +503,10 @@ cc_library(
     hdrs = glob([
         "src/brpc/*.h",
         "src/brpc/**/*.h",
+    ]) + [
         "src/brpc/event_dispatcher_epoll.cpp",
         "src/brpc/event_dispatcher_kqueue.cpp",
-    ]),
+    ],
     copts = COPTS,
     includes = [
         "src/",
