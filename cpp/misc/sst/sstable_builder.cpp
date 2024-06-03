@@ -18,6 +18,8 @@
 #include "cpp/misc/sst/encoding.h"
 #include "cpp/tools/crc.h"
 
+#include <snappy.h>
+
 namespace pl {
 
 SSTableBuilder::SSTableBuilder(const OptionsRef& options, const FsWriterRef& writer)
@@ -85,7 +87,19 @@ void SSTableBuilder::flush() {
 void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
     assert(ok());
     auto raw = block->finish();
-    // TODO(liubang): support compression
+    std::string compressed;
+    switch (options_->compression_type) {
+    case CompressionType::kSnappyCompression:
+    {
+        snappy::Compress(raw.data(), raw.size(), &compressed);
+        raw.reset(compressed);
+        break;
+    }
+    case CompressionType::kZstdCompression:
+        break;
+    default:
+        break;
+    }
     writeBlockRaw(raw, CompressionType::kNoCompression, handle);
     block->reset();
 }
