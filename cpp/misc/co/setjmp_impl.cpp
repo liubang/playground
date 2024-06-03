@@ -50,6 +50,8 @@ struct Coroutine {
     Coroutine(std::function<void(void)>&& func, const char* name)
         : func(std::move(func)), name(name) {}
     ~Coroutine() { std::cout << name << " destroyed" << std::endl; }
+
+    bool Done() const { return state == CoroutineState::DIE; }
 };
 
 struct {
@@ -63,9 +65,9 @@ struct {
         Context.current_co = Context.current_co->from;           \
         if (Context.current_co != nullptr) {                     \
             Context.current_co->state = CoroutineState::RUNNING; \
-            std::longjmp(Context.current_co->buf, 2);            \
+            std::longjmp(Context.current_co->buf, __LINE__);     \
         } else {                                                 \
-            std::longjmp(Context.start_buf, 2);                  \
+            std::longjmp(Context.start_buf, __LINE__);           \
         }                                                        \
     }
 
@@ -94,10 +96,10 @@ struct {
                 Context.current_co = co;                                 \
             }                                                            \
             if (Context.current_co->from) {                              \
-                std::longjmp(Context.current_co->from->buf, 2);          \
+                std::longjmp(Context.current_co->from->buf, __LINE__);   \
             } else {                                                     \
                 if (setjmp(Context.start_buf) == 0) {                    \
-                    std::longjmp(Context.current_co->buf, 2);            \
+                    std::longjmp(Context.current_co->buf, __LINE__);     \
                 }                                                        \
             }                                                            \
             break;                                                       \
@@ -111,10 +113,10 @@ struct {
             Context.current_co->state = CoroutineState::SUSPEND; \
             if (Context.current_co->from) {                      \
                 Context.current_co = Context.current_co->from;   \
-                std::longjmp(Context.current_co->buf, 2);        \
+                std::longjmp(Context.current_co->buf, __LINE__); \
             } else {                                             \
                 Context.current_co = nullptr;                    \
-                std::longjmp(Context.start_buf, 2);              \
+                std::longjmp(Context.start_buf, __LINE__);       \
             }                                                    \
         }                                                        \
     } while (0)
@@ -130,6 +132,7 @@ void ReadNextResourceName() {
 
 void DownloadSource() {
     std::cout << "downloading" << std::endl;
+
     // start another coroutine
     auto* co = new Coroutine(ReadNextResourceName, "ReadNextResourceName");
     details::cos.push_back(co);
@@ -137,8 +140,11 @@ void DownloadSource() {
     co_resume(co);
     std::cout << "coutinue download" << std::endl;
 
-    co_yield ();
-    std::cout << "after yield" << std::endl;
+    for (int i = 0; i < 10; ++i) {
+        std::cout << "before yield" << std::endl;
+        co_yield ();
+        std::cout << "after yield" << std::endl;
+    }
 
     co_return ();
 }
@@ -147,14 +153,21 @@ int main(int argc, char* argv[]) {
     auto* co = new Coroutine(DownloadSource, "DownloadSource");
     details::cos.push_back(co);
     std::cout << co->name << "'s state = " << StateToString(co->state) << std::endl;
-    co_resume(co);
-    std::cout << co->name << "'s state = " << StateToString(co->state) << std::endl;
-    co_resume(co);
+
+    while (!co->Done()) {
+        std::cout << "before call resume\n";
+        co_resume(co);
+        std::cout << co->name << "'s state = " << StateToString(co->state) << std::endl;
+    }
+
     std::cout << "at end of main" << std::endl;
 
+    // clean resource
     for (auto* c : details::cos) {
         delete c;
     }
+
     details::cos.clear();
+
     return 0;
 }

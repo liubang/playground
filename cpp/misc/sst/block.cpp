@@ -15,8 +15,8 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/misc/sst/block.h"
-
 #include "cpp/misc/sst/encoding.h"
+#include <iostream>
 
 namespace pl {
 
@@ -42,10 +42,17 @@ Block::~Block() {
 class Block::BlockIterator : public Iterator {
 public:
     BlockIterator(const ComparatorRef& comparator,
+                  const BlockRef block,
                   const char* data,
                   uint32_t restarts,
                   uint32_t num_restarts)
-        : comparator_(comparator), data_(data), restarts_(restarts), num_restarts_(num_restarts) {}
+        : comparator_(comparator),
+          block_(block),
+          data_(data),
+          restarts_(restarts),
+          num_restarts_(num_restarts),
+          current_(restarts_),
+          current_restart_(num_restarts) {}
 
     [[nodiscard]] bool valid() const override { return current_ < restarts_; }
     [[nodiscard]] Binary key() const override { return key_; }
@@ -93,7 +100,7 @@ public:
         }
 
         assert(current_key_compare == 0 || valid());
-        bool skip_seek = left == current_restart_ && current_key_compare < 0;
+        bool skip_seek = (left == current_restart_ && current_key_compare < 0);
         if (!skip_seek) {
             seekToRestartPoint(left);
         }
@@ -140,12 +147,16 @@ public:
         parseNextKeyVal();
     }
 
-    ~BlockIterator() override = default;
+    ~BlockIterator() {
+        // if (block_ != nullptr) {
+        //     delete block_;
+        // }
+    }
 
 private:
     uint32_t getRestartOffset(uint32_t idx) {
         assert(idx < num_restarts_);
-        return decodeInt<uint32_t>(data_ + idx * sizeof(uint32_t));
+        return decodeInt<uint32_t>(data_ + restarts_ + idx * sizeof(uint32_t));
     }
 
     void seekToRestartPoint(uint32_t idx) {
@@ -171,8 +182,10 @@ private:
         uint32_t shared, non_shared, value_size;
         p = decodeEntry(p, limit, &shared, &non_shared, &value_size);
         // TODO(liubang): error handle
-        if (p == nullptr || key_.size() < shared)
+        // 第一次Seek的时候，key 为空，那么shared必定为0
+        if (p == nullptr || key_.size() < shared) {
             return false;
+        }
         key_.resize(shared);
         key_.append(p, non_shared);
         val_ = Binary(p + non_shared, value_size);
@@ -190,12 +203,16 @@ private:
                             uint32_t* non_shared,
                             uint32_t* value_size) {
         constexpr std::size_t s = sizeof(uint32_t);
-        if (p + 3 > limit)
+        if (static_cast<uint32_t>(limit - p) < (s * 3)) {
             return nullptr;
+        }
         *shared = pl::decodeInt<uint32_t>(p);
         *non_shared = pl::decodeInt<uint32_t>(p + s);
         *value_size = pl::decodeInt<uint32_t>(p + s * 2);
         p += s * 3;
+        if (static_cast<uint32_t>(limit - p) < (*non_shared + *value_size)) {
+            return nullptr;
+        }
         return p;
     }
 
@@ -204,20 +221,21 @@ private:
     }
 
 private:
-    const ComparatorRef comparator_; // 主要是seek的时候做二分查找的
-    const char* data_;               // data block content
-    uint32_t const restarts_;        // restart的起始位置
-    uint32_t const num_restarts_;    // restart的个数
-    uint32_t current_{0};            // 当前游标的偏移
-    uint32_t current_restart_{0};    // 当前是第几个restart
-    std::string key_;                // 当前游标处的key
-    Binary val_;                     // 当前游标处的value
+    const ComparatorRef comparator_{nullptr}; // 主要是seek的时候做二分查找的
+    const BlockRef block_{nullptr};           // 维护block的生命周期
+    const char* data_{nullptr};               // data block content
+    uint32_t const restarts_;                 // restart的起始位置
+    uint32_t const num_restarts_;             // restart的个数
+    uint32_t current_{0};                     // 当前游标的偏移
+    uint32_t current_restart_{0};             // 当前是第几个restart
+    std::string key_;                         // 当前游标处的key
+    Binary val_;                              // 当前游标处的value
     Status status_;
 };
 
-// TODO(liubang): use unique_ptr
-Iterator* Block::iterator(const ComparatorRef& comparator) {
-    return new BlockIterator(comparator, data_, restart_offset_, num_restarts_);
+IteratorPtr Block::iterator(const ComparatorRef& comparator) {
+    return std::make_unique<BlockIterator>(comparator, shared_from_this(), data_, restart_offset_,
+                                           num_restarts_);
 }
 
 } // namespace pl
