@@ -39,6 +39,13 @@ bazel_dep(name = "catch2", version = "3.4.0")
 bazel_dep(name = "googletest", version = "1.14.0")
 bazel_dep(name = "google_benchmark", version = "1.8.2")
 
+# apple
+bazel_dep(name = "apple_support", version = "1.15.1", repo_name = "build_bazel_apple_support")
+bazel_dep(name = "rules_apple", version = "3.5.1", repo_name = "build_bazel_rules_apple")
+
+apple_cc_configure = use_extension("@build_bazel_apple_support//crosstool:setup.bzl", "apple_cc_configure_extension")
+use_repo(apple_cc_configure, "local_config_apple_cc")
+
 # Hedron's Compile Commands Extractor for Bazel
 # https://github.com/hedronvision/bazel-compile-commands-extractor
 bazel_dep(name = "hedron_compile_commands", dev_dependency = True)
