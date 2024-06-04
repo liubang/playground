@@ -1,0 +1,9 @@
+{
+  "url": "https://github.com/google/s2geometry/archive/refs/tags/v0.11.1.tar.gz",
+  "strip_prefix": "s2geometry-0.11.1",
+  "integrity": "sha256-vb6469uI+pNCV8r4G7RLVXEWF6OrT97Cw8/WzDG2FzQ=",
+  "patch_strip": 1,
+  "patches": {
+    "add-build.patch": "sha256-CiEdgZ3JsHD/STCJKfwKlceE9PzeEI6wymuqinSSpng="
+  }
+}
