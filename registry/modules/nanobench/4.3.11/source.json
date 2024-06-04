@@ -1,0 +1,9 @@
+{
+  "url": "https://github.com/martinus/nanobench/archive/refs/tags/v4.3.11.tar.gz",
+  "strip_prefix": "nanobench-4.3.11",
+  "integrity": "sha256-U6WpE/ppXCNUZmG/LNIrKZ4Qo+mU2e2X2vibXK2g2nA=",
+  "patch_strip": 1,
+  "patches": {
+    "add-build.patch": "sha256-wVYaJNz8FhbWeYv5hlmdZKzDzszrqeTsLf3VAkomeoM="
+  }
+}
