@@ -14,10 +14,10 @@
 
 # Authors: liubang (it.liubang@gmail.com)
 
-load("@rules_go//go:def.bzl", "go_binary")
+# load("@rules_go//go:def.bzl", "go_binary")
 
-go_binary(
-    name = "ping",
-    srcs = ["main.go"],
-    visibility = ["//visibility:public"],
-)
+# go_binary(
+#     name = "ping",
+#     srcs = ["main.go"],
+#     visibility = ["//visibility:public"],
+# )
