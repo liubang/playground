@@ -1,0 +1,9 @@
+{
+  "url": "https://sqlite.org/2023/sqlite-src-3420000.zip",
+  "strip_prefix": "sqlite-src-3420000",
+  "integrity": "sha256-OMpWoxe+N/sAvZK8KA2bkgm9QAiyl9SDxB7B9geb+20=",
+  "patch_strip": 1,
+  "patches": {
+    "add-build.patch": "sha256-TaWEqC2N1NmRwpQyvzsW6NG3pXXajfF0d1R239Dli98="
+  }
+}
