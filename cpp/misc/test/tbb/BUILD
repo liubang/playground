@@ -31,7 +31,7 @@ cc_library(
         deps = [
             ":tbb_common",
             "@nanobench",
-            "@oneTBB//:tbb",
+            "@onetbb//:tbb",
         ],
     )
     for f in glob(["*.cpp"])

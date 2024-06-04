@@ -11,11 +11,11 @@ load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 def external_repositories():
-    http_archive(
-        name = "oneTBB",
-        urls = ["https://github.com/oneapi-src/oneTBB/archive/c45684495599d41ba10893effa0682eceb1a3169.zip"],
-        strip_prefix = "oneTBB-c45684495599d41ba10893effa0682eceb1a3169",
-    )
+    # http_archive(
+    #     name = "oneTBB",
+    #     urls = ["https://github.com/oneapi-src/oneTBB/archive/c45684495599d41ba10893effa0682eceb1a3169.zip"],
+    #     strip_prefix = "oneTBB-c45684495599d41ba10893effa0682eceb1a3169",
+    # )
 
     http_archive(
         name = "com_github_nelhage_rules_boost",
