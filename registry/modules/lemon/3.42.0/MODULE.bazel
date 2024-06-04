@@ -14,3 +14,8 @@
 
 # Authors: liubang (it.liubang@gmail.com)
 
+module(
+    name = "lemon",
+    version = "3.42.0",
+    compatibility_level = 1,
+)
