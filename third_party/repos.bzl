@@ -11,6 +11,7 @@ load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 def external_repositories():
+    # use bzlmod
     # http_archive(
     #     name = "oneTBB",
     #     urls = ["https://github.com/oneapi-src/oneTBB/archive/c45684495599d41ba10893effa0682eceb1a3169.zip"],
@@ -57,16 +58,17 @@ def external_repositories():
         ],
     )
 
-    http_archive(
-        name = "zlib",
-        build_file = "//third_party/zlib:zlib.BUILD",
-        sha256 = "c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1",
-        strip_prefix = "zlib-1.2.11",
-        urls = [
-            "https://downloads.sourceforge.net/project/libpng/zlib/1.2.11/zlib-1.2.11.tar.gz",
-            "https://zlib.net/fossils/zlib-1.2.11.tar.gz",
-        ],
-    )
+    # use bzlmod
+    # http_archive(
+    #     name = "zlib",
+    #     build_file = "//third_party/zlib:zlib.BUILD",
+    #     sha256 = "c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1",
+    #     strip_prefix = "zlib-1.2.11",
+    #     urls = [
+    #         "https://downloads.sourceforge.net/project/libpng/zlib/1.2.11/zlib-1.2.11.tar.gz",
+    #         "https://zlib.net/fossils/zlib-1.2.11.tar.gz",
+    #     ],
+    # )
 
     http_archive(
         name = "crc32c",  # 2021-10-05T19:47:30Z
