@@ -1,4 +1,6 @@
-# Copyright (c) 2023 The Authors. All rights reserved.
+#!/bin/bash
+
+# Copyright (c) 2024 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,5 +15,13 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/08/22 01:44
+# Created: 2024/06/04 23:43
 
+if [ $# != 1 ]; then
+	echo "Usage $0 <file>"
+	return 1
+fi
+
+hash=$(openssl dgst -sha256 -binary "$1" | openssl base64 -A)
+
+echo "sha256-${hash}"
