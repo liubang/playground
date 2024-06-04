@@ -14,7 +14,7 @@
 
 # Authors: liubang (it.liubang@gmail.com)
 
-load("@rules_ragel//ragel:ragel.bzl", "ragel")
+# load("@rules_ragel//ragel:ragel.bzl", "ragel")
 load(
     "//cpp:copts/configure_copts.bzl",
     "DEFAULT_COPTS",
@@ -23,22 +23,22 @@ load(
 
 package(default_visibility = ["//visibility:public"])
 
-# flux v0.193.0
-ragel(
-    name = "scanner_generated",
-    src = "scanner.rl",
-    data = [
-        "unicode.rl",
-    ],
-    language = "c++",
-    ragel_options = ["-I ."],
-)
+# TODO(liubang): replaces with gen_rules
+# ragel(
+#     name = "scanner_generated",
+#     src = "scanner.rl",
+#     data = [
+#         "unicode.rl",
+#     ],
+#     language = "c++",
+#     ragel_options = ["-I ."],
+# )
 
 cc_library(
     name = "scanner",
     srcs = [
         "scanner.cpp",
-        ":scanner_generated",
+        "scanner_generated.cc",
     ],
     hdrs = [
         "scanner.h",
