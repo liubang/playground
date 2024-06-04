@@ -60,6 +60,7 @@ jobs:
           sudo apt install lcov -y
           bazelisk coverage --instrument_test_targets --combined_report=lcov //cpp/...
           genhtml --output coverage "./bazel-out/_coverage/_coverage_report.dat"
+          cp -r ./registry ./coverage/
       - name: Deploy 🚀
         uses: peaceiris/actions-gh-pages@v3
         if: ${{ github.ref == 'refs/heads/main' }}
