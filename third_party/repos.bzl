@@ -71,13 +71,14 @@ def external_repositories():
     #     ],
     # )
 
-    http_archive(
-        name = "crc32c",  # 2021-10-05T19:47:30Z
-        build_file = "//third_party/crc32c:crc32c.BUILD",
-        sha256 = "ac07840513072b7fcebda6e821068aa04889018f24e10e46181068fb214d7e56",
-        strip_prefix = "crc32c-1.1.2",
-        urls = ["https://github.com/google/crc32c/archive/1.1.2.tar.gz"],
-    )
+    # use bzlmod
+    # http_archive(
+    #     name = "crc32c",  # 2021-10-05T19:47:30Z
+    #     build_file = "//third_party/crc32c:crc32c.BUILD",
+    #     sha256 = "ac07840513072b7fcebda6e821068aa04889018f24e10e46181068fb214d7e56",
+    #     strip_prefix = "crc32c-1.1.2",
+    #     urls = ["https://github.com/google/crc32c/archive/1.1.2.tar.gz"],
+    # )
 
     http_archive(
         name = "openssl",  # 2021-12-14T15:45:01Z
