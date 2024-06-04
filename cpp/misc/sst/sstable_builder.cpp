@@ -18,7 +18,7 @@
 #include "cpp/misc/sst/encoding.h"
 #include "cpp/tools/crc.h"
 
-#include <snappy.h>
+#include "snappy.h"
 #include <zstd.h>
 
 namespace pl {

@@ -20,7 +20,17 @@ module(
     bazel_compatibility = [">=6.0.0"],
 )
 
-bazel_dep(name = "bazel_skylib", version = "1.6.1")
+bazel_dep(name = "bazel_skylib", version = "1.6.1", dev_dependency = True)
+bazel_dep(name = "platforms", version = "0.0.10", dev_dependency = True)
+
+# Hedron's Compile Commands Extractor for Bazel
+# https://github.com/hedronvision/bazel-compile-commands-extractor
+bazel_dep(name = "hedron_compile_commands", dev_dependency = True)
+git_override(
+    module_name = "hedron_compile_commands",
+    commit = "a14ad3a64e7bf398ab48105aaa0348e032ac87f8",
+    remote = "https://github.com/hedronvision/bazel-compile-commands-extractor.git",
+)
 
 # dpes for c/cpp
 bazel_dep(name = "grpc", version = "1.48.1")
@@ -33,14 +43,26 @@ bazel_dep(name = "zstd", version = "1.5.6")
 bazel_dep(name = "onetbb", version = "2021.12.0")
 bazel_dep(name = "liburing", version = "2.5")
 bazel_dep(name = "crc32c", version = "1.1.0")
+bazel_dep(name = "snappy", version = "1.2.0")
+bazel_dep(name = "brpc", version = "1.9.0")
+bazel_dep(name = "openssl", version = "1.1.1m.brpc")
 bazel_dep(name = "sqlite3", version = "3.42.0")
 bazel_dep(name = "nlohmann_json", version = "3.11.2")
 bazel_dep(name = "rapidjson", version = "1.1.0")
 bazel_dep(name = "glog", version = "0.6.0")
 bazel_dep(name = "gflags", version = "2.2.2")
-bazel_dep(name = "catch2", version = "3.4.0")
-bazel_dep(name = "googletest", version = "1.14.0")
-bazel_dep(name = "google_benchmark", version = "1.8.2")
+
+# for test
+bazel_dep(name = "catch2", version = "3.4.0", dev_dependency = True)
+bazel_dep(name = "googletest", version = "1.14.0", dev_dependency = True)
+bazel_dep(name = "google_benchmark", version = "1.8.2", dev_dependency = True)
+
+# --registry=https://raw.githubusercontent.com/bazelboost/registry/main
+bazel_dep(name = "boost.crc", version = "1.83.0.bzl.1")
+bazel_dep(name = "boost.date_time", version = "1.83.0.bzl.2")
+bazel_dep(name = "boost.mpl", version = "1.83.0.bzl.1")
+bazel_dep(name = "boost.parameter", version = "1.83.0.bzl.1")
+bazel_dep(name = "boost.utility", version = "1.83.0.bzl.1")
 
 # apple
 bazel_dep(name = "apple_support", version = "1.15.1", repo_name = "build_bazel_apple_support")
@@ -48,15 +70,6 @@ bazel_dep(name = "rules_apple", version = "3.5.1", repo_name = "build_bazel_rule
 
 apple_cc_configure = use_extension("@build_bazel_apple_support//crosstool:setup.bzl", "apple_cc_configure_extension")
 use_repo(apple_cc_configure, "local_config_apple_cc")
-
-# Hedron's Compile Commands Extractor for Bazel
-# https://github.com/hedronvision/bazel-compile-commands-extractor
-bazel_dep(name = "hedron_compile_commands", dev_dependency = True)
-git_override(
-    module_name = "hedron_compile_commands",
-    commit = "a14ad3a64e7bf398ab48105aaa0348e032ac87f8",
-    remote = "https://github.com/hedronvision/bazel-compile-commands-extractor.git",
-)
 
 # bison and flex
 bazel_dep(name = "rules_m4", version = "0.2.3")
@@ -107,7 +120,6 @@ use_repo(
 )
 
 # some rules
-bazel_dep(name = "platforms", version = "0.0.10")
 bazel_dep(name = "rules_foreign_cc", version = "0.9.0")
 bazel_dep(name = "rules_license", version = "0.0.8")
 bazel_dep(name = "rules_proto", version = "5.3.0-21.7")

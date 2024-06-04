@@ -19,7 +19,7 @@
 #include "cpp/misc/sst/options.h"
 #include "cpp/tools/crc.h"
 
-#include <snappy.h>
+#include "snappy.h"
 #include <zstd.h>
 
 namespace pl {
