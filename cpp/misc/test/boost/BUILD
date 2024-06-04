@@ -29,7 +29,7 @@ cc_test(
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
     deps = [
-        "@boost//:date_time",
+        "@boost.date_time",
     ],
 )
 
@@ -39,8 +39,8 @@ cc_test(
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
     deps = [
-        "@boost//:mpl",
-        "@boost//:parameter",
-        "@boost//:utility",
+        "@boost.mpl",
+        "@boost.parameter",
+        "@boost.utility",
     ],
 )
