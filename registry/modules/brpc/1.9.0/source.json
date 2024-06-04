@@ -4,6 +4,6 @@
   "integrity": "sha256-hYVtoCFnc+EpaDQRb2n56AAHt/9CHbO+XJ0YkOz66nQ=",
   "patch_strip": 1,
   "patches": {
-    "osx-darwin.patch": "sha256-HhiWH/lqS3TLLzHDJ5aPrEM9m6qXuUncIKRv5ii8zC4="
+    "osx-darwin.patch": "sha256-0meQjCCA78gcPUhnjKpjuM1mrHe3NZ7vKw+hy0tT5i0="
   }
 }
