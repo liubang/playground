@@ -41,7 +41,6 @@ public class Demo {
         t1.join();
         t2.join();
 
-
         logger.info("END");
     }
 
