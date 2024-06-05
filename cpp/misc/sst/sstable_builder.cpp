@@ -209,53 +209,64 @@ Status SSTableBuilder::finish() {
     closed_ = true;
     BlockHandle filter_block_handle, metaindex_block_handle, index_block_handle;
 
+    if (!ok()) {
+        return status();
+    }
+
     // 写filter block
-    if (ok() && filter_block_ != nullptr) {
+    if (filter_block_ != nullptr) {
         writeBlockRaw(filter_block_->finish(), CompressionType::kNoCompression,
                       &filter_block_handle);
     }
 
+    if (!ok()) {
+        return status();
+    }
+
     // 写入metaindex block
-    if (ok()) {
-        BlockBuilder meta_index_block(options_);
-        if (filter_block_ != nullptr) {
-            std::string key = "filter.";
-            key.append(options_->filter_policy->name());
-            std::string handle_encoding;
-            filter_block_handle.encodeTo(&handle_encoding);
-            // 记录filter block的类型和位置
-            meta_index_block.add(key, handle_encoding);
-        }
-        writeBlock(&meta_index_block, &metaindex_block_handle);
+    BlockBuilder meta_index_block(options_);
+    if (filter_block_ != nullptr) {
+        std::string key = "filter.";
+        key.append(options_->filter_policy->name());
+        std::string handle_encoding;
+        filter_block_handle.encodeTo(&handle_encoding);
+        // 记录filter block的类型和位置
+        meta_index_block.add(key, handle_encoding);
+    }
+    writeBlock(&meta_index_block, &metaindex_block_handle);
+
+    if (!ok()) {
+        return status();
     }
 
     // 写入index block
-    if (ok()) {
-        // 处理边界情况
-        if (pending_index_entry_) {
-            std::string handle_encoding;
-            pending_handler_.encodeTo(&handle_encoding);
-            // 记录上一个block的最后一个key和上一个block的结束位置
-            index_block_.add(last_key_, handle_encoding);
-            pending_index_entry_ = false;
-        }
-        writeBlock(&index_block_, &index_block_handle);
+    // 处理边界情况
+    if (pending_index_entry_) {
+        std::string handle_encoding;
+        pending_handler_.encodeTo(&handle_encoding);
+        // 记录上一个block的最后一个key和上一个block的结束位置
+        index_block_.add(last_key_, handle_encoding);
+        pending_index_entry_ = false;
+    }
+    writeBlock(&index_block_, &index_block_handle);
+
+    if (!ok()) {
+        return status();
     }
 
     // 写入footer
+    Footer footer;
+    footer.setMetaindexHandle(metaindex_block_handle);
+    footer.setIndexHandle(index_block_handle);
+    std::string footer_content;
+    footer.encodeTo(&footer_content);
+    status_ = writer_->append(footer_content);
     if (ok()) {
-        Footer footer;
-        footer.setMetaindexHandle(metaindex_block_handle);
-        footer.setIndexHandle(index_block_handle);
-        std::string footer_content;
-        footer.encodeTo(&footer_content);
-        status_ = writer_->append(footer_content);
-        if (ok()) {
-            offset_ += footer_content.size();
-        }
+        offset_ += footer_content.size();
     }
     writer_->flush();
-    return status_;
+
+    return status();
 }
 
 } // namespace pl

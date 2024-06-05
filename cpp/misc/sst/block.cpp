@@ -146,7 +146,7 @@ public:
         parseNextKeyVal();
     }
 
-    ~BlockIterator() {}
+    ~BlockIterator() = default;
 
 private:
     uint32_t getRestartOffset(uint32_t idx) {
