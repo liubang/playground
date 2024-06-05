@@ -15,6 +15,7 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/misc/sst/table.h"
+#include "cpp/misc/sst/table_iterator.h"
 
 namespace pl {
 
@@ -164,6 +165,13 @@ IteratorPtr Table::blockReader(const Binary& index_value) {
     auto iter = block->iterator(options_->comparator);
 
     return iter;
+}
+
+IteratorPtr Table::iterator() {
+    return std::make_unique<TableIterator>(index_block_->iterator(options_->comparator),
+                                           [this](const Binary b) {
+                                               return this->blockReader(b);
+                                           });
 }
 
 } // namespace pl
