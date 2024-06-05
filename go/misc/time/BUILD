@@ -15,10 +15,17 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/12/23 19:40
 
-load("@rules_go//go:def.bzl", "go_binary")
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_binary(
     name = "time",
-    srcs = ["main.go"],
+    embed = [":time_lib"],
     visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "time_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/playground/go/misc/time",
+    visibility = ["//visibility:private"],
 )

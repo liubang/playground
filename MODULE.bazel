@@ -23,6 +23,9 @@ module(
 bazel_dep(name = "bazel_skylib", version = "1.6.1", dev_dependency = True)
 bazel_dep(name = "platforms", version = "0.0.10", dev_dependency = True)
 
+bazel_dep(name = "rules_license", version = "0.0.8")
+bazel_dep(name = "rules_proto", version = "5.3.0-21.7")
+
 # Hedron's Compile Commands Extractor for Bazel
 # https://github.com/hedronvision/bazel-compile-commands-extractor
 bazel_dep(name = "hedron_compile_commands", dev_dependency = True)
@@ -74,6 +77,13 @@ bazel_dep(name = "rules_apple", version = "3.5.1", repo_name = "build_bazel_rule
 apple_cc_configure = use_extension("@build_bazel_apple_support//crosstool:setup.bzl", "apple_cc_configure_extension")
 use_repo(apple_cc_configure, "local_config_apple_cc")
 
+# foreign cc
+bazel_dep(name = "rules_foreign_cc", version = "0.9.0")
+
+tools = use_extension("@rules_foreign_cc//foreign_cc:extensions.bzl", "tools")
+tools.cmake(version = "3.23.1")
+tools.ninja(version = "1.11.1")
+
 # bison and flex
 bazel_dep(name = "rules_m4", version = "0.2.3")
 bazel_dep(name = "rules_bison", version = "0.2.2")
@@ -105,7 +115,9 @@ use_repo(flex, "flex")
 
 register_toolchains("@flex//:toolchain")
 
-# deps for go
+###################################################################################################
+# for go
+###################################################################################################
 bazel_dep(name = "rules_go", version = "0.48.0")
 bazel_dep(name = "gazelle", version = "0.37.0")
 
@@ -122,22 +134,13 @@ use_repo(
     "com_github_onsi_gomega",
 )
 
-# some rules
-bazel_dep(name = "rules_foreign_cc", version = "0.9.0")
-bazel_dep(name = "rules_license", version = "0.0.8")
-bazel_dep(name = "rules_proto", version = "5.3.0-21.7")
-bazel_dep(name = "rules_python", version = "0.24.0")
-bazel_dep(name = "rules_python_gazelle_plugin", version = "0.24.0")
-bazel_dep(name = "rules_java", version = "6.2.2")
-bazel_dep(name = "rules_jvm_external", version = "5.3")
-# bazel_dep(name = "contrib_rules_jvm", version = "0.13.0")
+###################################################################################################
+#  for java
+###################################################################################################
+bazel_dep(name = "rules_java", version = "7.6.1")
+bazel_dep(name = "rules_jvm_external", version = "6.1")
+bazel_dep(name = "contrib_rules_jvm", version = "0.26.0")
 
-# cc
-tools = use_extension("@rules_foreign_cc//foreign_cc:extensions.bzl", "tools")
-tools.cmake(version = "3.23.1")
-tools.ninja(version = "1.11.1")
-
-# maven
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 maven.install(
     artifacts = [
@@ -167,14 +170,51 @@ maven.install(
         "org.springframework.boot:spring-boot-starter-test:2.7.4",
         "org.springframework.statemachine:spring-statemachine-core:3.2.0",
     ],
+    fail_if_repin_required = True,
     lock_file = "//:maven_install.json",
     repositories = [
         "https://repo1.maven.org/maven2",
     ],
+    strict_visibility = True,
 )
 use_repo(maven, "maven", "unpinned_maven")
 
-# python
+java_toolchains = use_extension("@rules_java//java:extensions.bzl", "toolchains")
+use_repo(
+    java_toolchains,
+    "local_jdk",
+    # The following are required for visibility in //src:test_repos
+    "remote_java_tools",
+    "remote_java_tools_darwin_arm64",
+    "remote_java_tools_darwin_x86_64",
+    "remote_java_tools_linux",
+    "remote_java_tools_windows",
+    "remotejdk11_linux",
+    "remotejdk11_linux_aarch64",
+    "remotejdk11_linux_ppc64le",
+    "remotejdk11_linux_s390x",
+    "remotejdk11_macos",
+    "remotejdk11_macos_aarch64",
+    "remotejdk11_win",
+    "remotejdk11_win_arm64",
+    "remotejdk17_linux",
+    "remotejdk17_linux_s390x",
+    "remotejdk17_macos",
+    "remotejdk17_macos_aarch64",
+    "remotejdk17_win",
+    "remotejdk17_win_arm64",
+    "remotejdk21_linux",
+    "remotejdk21_macos",
+    "remotejdk21_macos_aarch64",
+    "remotejdk21_win",
+)
+
+###################################################################################################
+#  python
+###################################################################################################
+bazel_dep(name = "rules_python", version = "0.24.0")
+bazel_dep(name = "rules_python_gazelle_plugin", version = "0.24.0")
+
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
 python.toolchain(
     configure_coverage_tool = True,

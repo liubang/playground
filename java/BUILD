@@ -15,17 +15,3 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/05/21 21:06
 
-# load("@gazelle//:def.bzl", "DEFAULT_LANGUAGES", "gazelle", "gazelle_binary")
-#
-# # gazelle:java_maven_install_file maven_install.json
-# gazelle(
-#     name = "gazelle",
-#     gazelle = ":gazelle_bin",
-# )
-#
-# gazelle_binary(
-#     name = "gazelle_bin",
-#     languages = DEFAULT_LANGUAGES + [
-#         "@contrib_rules_jvm//java/gazelle",
-#     ],
-# )
