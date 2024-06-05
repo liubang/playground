@@ -15,14 +15,6 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/10/05 01:33
 
-#======================================================================
-#
-# BUILD -
-#
-# Created by liubang on 2023/10/04 19:19
-# Last Modified: 2023/10/04 19:19
-#
-#======================================================================
 load(
     "//cpp:copts/configure_copts.bzl",
     "DEFAULT_LINKOPTS",
@@ -40,9 +32,8 @@ load(
         ] + TEST_COPTS,
         linkopts = DEFAULT_LINKOPTS,
         deps = [
-            "//cpp/tools"
-        ]
+            "//cpp/tools",
+        ],
     )
-
     for f in glob(["*.cpp"])
 ]
