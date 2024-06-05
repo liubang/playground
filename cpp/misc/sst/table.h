@@ -44,6 +44,8 @@ public:
 
     Status get(const Binary& key, void* arg, HandleResult&& handle_result);
 
+    IteratorPtr iterator();
+
 private:
     Table(OptionsRef options, FsReaderRef reader, BlockRef index_block);
 
@@ -57,7 +59,6 @@ private:
     Status status_;
     FilterBlockReaderPtr filter_{nullptr};
     std::unique_ptr<const char[]> filter_data_;
-    // const char* filter_data_{nullptr};
     // BlockHandle metaindex_Handle_;
     BlockRef index_block_{nullptr};
 };
