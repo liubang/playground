@@ -21,14 +21,14 @@
 
 namespace pl {
 
-static const size_t kFilterBaseLg = 11;
-constexpr static std::size_t kFilterBase = 1 << kFilterBaseLg; // 2048
+constexpr static std::size_t FILTER_BASE_LG = 11;
+constexpr static std::size_t FILTER_BASE = 1 << FILTER_BASE_LG; // 2048
 
 FilterBlockBuilder::FilterBlockBuilder(FilterPolicyRef policy)
     : filter_policy_(std::move(policy)) {}
 
 void FilterBlockBuilder::startBlock(uint64_t offset) {
-    uint64_t filter_index = (offset / kFilterBase);
+    uint64_t filter_index = (offset / FILTER_BASE);
     assert(filter_index >= filter_offsets_.size());
     while (filter_index > filter_offsets_.size()) {
         genFilter();
@@ -57,7 +57,7 @@ Binary FilterBlockBuilder::finish() {
     // 记录filter
     // offset的地址偏移量，通过这个偏移量，可以找到哪一段是filter_offsets
     encodeInt(&result_, array_offset);
-    result_.push_back(kFilterBaseLg);
+    result_.push_back(FILTER_BASE_LG);
     return {result_};
 }
 

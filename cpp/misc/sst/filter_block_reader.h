@@ -29,10 +29,10 @@ public:
 
 private:
     const FilterPolicyRef filter_policy_; // filter 策略
-    const char* data_;                    //
-    const char* offset_;
-    size_t num_;
-    size_t base_lg_;
+    const char* data_;                    // filter block raw data
+    const char* offset_;                  // the start of offset array
+    size_t num_;                          // the count of filters
+    size_t base_lg_;                      // the logarithmic for calculate size of every filter
 };
 
 using FilterBlockReaderPtr = std::unique_ptr<FilterBlockReader>;
