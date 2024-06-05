@@ -43,15 +43,16 @@ public:
 
     [[nodiscard]] Status status() const override;
 
-    [[nodiscard]] bool valid() const override = 0;
+    [[nodiscard]] bool valid() const override;
 
-    [[nodiscard]] Binary key() const override = 0;
+    [[nodiscard]] Binary key() const override;
 
-    [[nodiscard]] Binary val() const override = 0;
+    [[nodiscard]] Binary val() const override;
 
 private:
     void initDataBlock();
-    void skipEmptyDataBlock();
+    void forwardSkipEmptyData();
+    void backwardSkipEmptyData();
 
 private:
     Status status_;

@@ -24,7 +24,37 @@ void TableIterator::seek(const Binary& target) {
     if (data_iter_ != nullptr) {
         data_iter_->seek(target);
     }
-    skipEmptyDataBlock();
+    forwardSkipEmptyData();
+}
+
+void TableIterator::first() {
+    index_iter_->first();
+    initDataBlock();
+    if (data_iter_ != nullptr) {
+        data_iter_->first();
+    }
+    forwardSkipEmptyData();
+}
+
+void TableIterator::last() {
+    index_iter_->last();
+    initDataBlock();
+    if (data_iter_ != nullptr) {
+        data_iter_->last();
+    }
+    backwardSkipEmptyData();
+}
+
+void TableIterator::next() {
+    assert(valid());
+    data_iter_->next();
+    forwardSkipEmptyData();
+}
+
+void TableIterator::prev() {
+    assert(valid());
+    data_iter_->prev();
+    backwardSkipEmptyData();
 }
 
 bool TableIterator::valid() const { return data_iter_ != nullptr && data_iter_->valid(); }
@@ -63,7 +93,7 @@ void TableIterator::initDataBlock() {
     }
 }
 
-void TableIterator::skipEmptyDataBlock() {
+void TableIterator::forwardSkipEmptyData() {
     while (data_iter_ == nullptr || !data_iter_->valid()) {
         if (!index_iter_->valid()) {
             data_iter_ = nullptr;
@@ -73,6 +103,20 @@ void TableIterator::skipEmptyDataBlock() {
         initDataBlock();
         if (data_iter_ != nullptr) {
             data_iter_->first();
+        }
+    }
+}
+
+void TableIterator::backwardSkipEmptyData() {
+    while (data_iter_ == nullptr || !data_iter_->valid()) {
+        if (!index_iter_->valid()) {
+            data_iter_ = nullptr;
+            return;
+        }
+        index_iter_->prev();
+        initDataBlock();
+        if (data_iter_ != nullptr) {
+            data_iter_->last();
         }
     }
 }
