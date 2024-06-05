@@ -64,7 +64,7 @@ Binary FilterBlockBuilder::finish() {
 void FilterBlockBuilder::genFilter() {
     const std::size_t num_keys = start_.size();
     if (num_keys == 0) {
-        filter_offsets_.push_back(result_.size());
+        filter_offsets_.push_back(static_cast<uint32_t>(result_.size()));
         return;
     }
     start_.push_back(keys_.size());
@@ -74,8 +74,8 @@ void FilterBlockBuilder::genFilter() {
         std::size_t len = start_[i + 1] - start_[i];
         tmp_keys_[i] = Binary(base, len);
     }
-    filter_offsets_.push_back(result_.size());
-    filter_policy_->createFilter(&tmp_keys_[0], static_cast<int>(num_keys), &result_);
+    filter_offsets_.push_back(static_cast<uint32_t>(result_.size()));
+    filter_policy_->createFilter(&tmp_keys_[0], num_keys, &result_);
 
     tmp_keys_.clear();
     keys_.clear();
