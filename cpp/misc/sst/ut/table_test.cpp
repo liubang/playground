@@ -104,6 +104,34 @@ public:
         EXPECT_EQ(ROW_COUNT, idx);
     }
 
+    void range_scan_from_sst() {
+        auto reader = fs->newFsReader(this->sst_file, &st);
+        EXPECT_TRUE(st.isOk());
+        std::size_t sst_size = reader->size();
+        ::printf("file: %s, size: %zu\n", "/tmp/test.sst", sst_size);
+        auto table = pl::Table::open(options, std::move(reader), sst_size, &st);
+        EXPECT_TRUE(st.isOk());
+
+        auto iter = table->iterator();
+        int idx = 0;
+        auto key_iter = keys.begin();
+        for (int i = 0; i < 999; ++i) {
+            key_iter++;
+        }
+        ::printf("WHERE KEY >= %s\n", key_iter->c_str());
+        iter->seek(*key_iter);
+        while (iter->valid()) {
+            auto key = iter->key();
+            auto val = iter->val();
+            EXPECT_EQ(*key_iter, key.toString());
+            EXPECT_EQ(kvs[key.toString()], val.toString());
+            idx++;
+            key_iter++;
+            iter->next();
+        }
+        EXPECT_EQ(ROW_COUNT - 999, idx);
+    }
+
 public:
     constexpr static int ROW_COUNT = 40960;
     constexpr static int KEY_LEN = 16;
@@ -122,6 +150,7 @@ TEST_F(SSTableTest, table_without_compression) {
     this->build_sst();
     this->seek_from_sst();
     this->scan_from_sst();
+    this->range_scan_from_sst();
 }
 
 TEST_F(SSTableTest, table_with_snappy_compression) {
@@ -130,6 +159,7 @@ TEST_F(SSTableTest, table_with_snappy_compression) {
     this->build_sst();
     this->seek_from_sst();
     this->scan_from_sst();
+    this->range_scan_from_sst();
 }
 
 TEST_F(SSTableTest, table_with_zstd_compression) {
@@ -138,6 +168,7 @@ TEST_F(SSTableTest, table_with_zstd_compression) {
     this->build_sst();
     this->seek_from_sst();
     this->scan_from_sst();
+    this->range_scan_from_sst();
 }
 
 } // namespace pl
