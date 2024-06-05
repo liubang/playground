@@ -15,17 +15,8 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/08/19 16:26
 
-#======================================================================
-#
-# BUILD -
-#
-# Created by liubang on 2023/08/19 16:01
-# Last Modified: 2023/08/19 16:01
-#
-#======================================================================
-
-load("@rules_flex//flex:flex.bzl", "flex")
 load("@rules_bison//bison:bison.bzl", "bison")
+load("@rules_flex//flex:flex.bzl", "flex")
 
 flex(
     name = "calc_flex",

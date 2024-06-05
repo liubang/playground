@@ -15,15 +15,6 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2020/07/20 00:32
 
-#======================================================================
-#
-# BUILD -
-#
-# Created by liubang on 2023/05/21 01:23
-# Last Modified: 2023/05/21 01:23
-#
-#======================================================================
-
 config_setting(
     name = "clang_compiler",
     flag_values = {

@@ -15,7 +15,3 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/05/21 02:32
 
-load("@gazelle//:def.bzl", "gazelle")
-
-# gazelle:prefix github.com/playground/go
-gazelle(name = "gazelle")
