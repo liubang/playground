@@ -1,8 +1,5 @@
 package cn.iliubang.exercises.primary.functional.stream;
 
-import lombok.Builder;
-import lombok.Data;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -16,24 +13,56 @@ import java.util.List;
 
 public class ArtistList {
 
-    @Data
-    @Builder
+    // @Builder
     public static class Artist {
         private int id;
         private String name;
         private String from;
 
+        public Artist() {
+        }
+
+        public Artist(int id, String name, String from) {
+            this.id = id;
+            this.name = name;
+            this.from = from;
+        }
+
         public boolean isFrom(String f) {
             return from.equals(f);
+        }
+
+        public int getId() {
+            return id;
+        }
+
+        public void setId(int id) {
+            this.id = id;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getFrom() {
+            return from;
+        }
+
+        public void setFrom(String from) {
+            this.from = from;
         }
     }
 
     public static List<Artist> buildArtistList() {
         List<Artist> artists = new ArrayList<>();
-        artists.add(Artist.builder().id(1).name("liubang1").from("Beijing").build());
-        artists.add(Artist.builder().id(2).name("liubang2").from("London").build());
-        artists.add(Artist.builder().id(3).name("liubang3").from("Shanghai").build());
-        artists.add(Artist.builder().id(4).name("liubang4").from("London").build());
+        artists.add(new Artist(1, "liubang1", "Beijing"));
+        artists.add(new Artist(2, "liubang2", "London"));
+        artists.add(new Artist(3, "liubang3", "Shanghai"));
+        artists.add(new Artist(4, "liubang4", "London"));
         return artists;
     }
 }

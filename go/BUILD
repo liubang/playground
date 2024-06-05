@@ -13,8 +13,3 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-
-load("@gazelle//:def.bzl", "gazelle")
-
-# gazelle:prefix github.com/playground/go
-gazelle(name = "gazelle")

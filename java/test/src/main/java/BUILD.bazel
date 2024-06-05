@@ -1,7 +1,16 @@
+load("@contrib_rules_jvm//java:defs.bzl", "java_test_suite")
 load("@rules_java//java:defs.bzl", "java_binary")
 
 java_binary(
     name = "Demo",
+    testonly = True,
     main_class = "Demo",
     visibility = ["//visibility:public"],
+    runtime_deps = [":java-test-lib"],
+)
+
+java_test_suite(
+    name = "java",
+    srcs = ["Demo.java"],
+    deps = ["@maven//:org_ow2_asm_asm_test"],
 )

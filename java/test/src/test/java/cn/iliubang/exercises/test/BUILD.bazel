@@ -1,7 +1,7 @@
-load("@rules_java//java:defs.bzl", "java_test")
+load("@contrib_rules_jvm//java:defs.bzl", "java_test_suite")
 
-java_test(
-    name = "TestMockito",
+java_test_suite(
+    name = "test",
     srcs = ["TestMockito.java"],
     deps = [
         "@maven//:junit_junit",

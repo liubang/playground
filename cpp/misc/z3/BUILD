@@ -25,11 +25,11 @@ cc_library(
         "binned_time.h",
         "chrono_unit.h",
         "dimension.h",
-        "z3.h",
-        "zn.h",
         "types.h",
+        "z3.h",
         "z3index.h",
         "z3sfc.h",
+        "zn.h",
     ],
 )
 

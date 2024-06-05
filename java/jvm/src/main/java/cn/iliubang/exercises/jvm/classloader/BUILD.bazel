@@ -78,3 +78,10 @@ java_binary(
     visibility = ["//visibility:public"],
     runtime_deps = [":classloader"],
 )
+
+java_binary(
+    name = "MyTest9",
+    main_class = "cn.iliubang.exercises.jvm.classloader.MyTest9",
+    visibility = ["//visibility:public"],
+    runtime_deps = [":classloader"],
+)

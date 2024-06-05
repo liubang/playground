@@ -14,10 +14,17 @@
 
 # Authors: liubang (it.liubang@gmail.com)
 
-load("@rules_go//go:def.bzl", "go_binary")
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_binary(
     name = "strings",
-    srcs = ["main.go"],
+    embed = [":strings_lib"],
     visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "strings_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/playground/go/misc/strings",
+    visibility = ["//visibility:private"],
 )

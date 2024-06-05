@@ -34,7 +34,7 @@ go_test(
     ],
     embed = [":tricks"],
     deps = [
-        "@com_github_onsi_ginkgo_v2//:go_default_library",
-        "@com_github_onsi_gomega//:go_default_library",
+        "@com_github_onsi_ginkgo_v2//:ginkgo",
+        "@com_github_onsi_gomega//:gomega",
     ],
 )

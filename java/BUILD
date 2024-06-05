@@ -13,18 +13,3 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-
-# load("@gazelle//:def.bzl", "DEFAULT_LANGUAGES", "gazelle", "gazelle_binary")
-#
-# # gazelle:java_maven_install_file maven_install.json
-# gazelle(
-#     name = "gazelle",
-#     gazelle = ":gazelle_bin",
-# )
-#
-# gazelle_binary(
-#     name = "gazelle_bin",
-#     languages = DEFAULT_LANGUAGES + [
-#         "@contrib_rules_jvm//java/gazelle",
-#     ],
-# )

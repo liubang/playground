@@ -1,22 +1,4 @@
-load("@rules_java//java:defs.bzl", "java_binary", "java_library", "java_plugin")
-
-java_plugin(
-    name = "lombok_plugin",
-    processor_class = "lombok.launch.AnnotationProcessorHider$AnnotationProcessor",
-    deps = [
-        "@maven//:org_projectlombok_lombok",
-    ],
-)
-
-java_library(
-    name = "lombok",
-    exported_plugins = [
-        ":lombok_plugin",
-    ],
-    exports = [
-        "@maven//:org_projectlombok_lombok",
-    ],
-)
+load("@rules_java//java:defs.bzl", "java_binary", "java_library")
 
 java_library(
     name = "stream",
@@ -30,10 +12,7 @@ java_library(
         "DemoMinAndMax.java",
     ],
     visibility = ["//:__subpackages__"],
-    deps = [
-        ":lombok",
-        "@maven//:junit_junit",
-    ],
+    deps = ["@maven//:junit_junit"],
 )
 
 java_binary(
