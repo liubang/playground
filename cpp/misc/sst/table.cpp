@@ -16,8 +16,6 @@
 
 #include "cpp/misc/sst/table.h"
 
-#include <memory>
-
 namespace pl {
 
 Table::Table(OptionsRef options,
@@ -82,6 +80,7 @@ void Table::readMeta(const Footer& footer) {
     if (!meta->valid()) {
         assert(false);
     }
+
     auto iter = meta->iterator(options_->comparator);
     std::string key = "filter.";
     key.append(options_->filter_policy->name());
@@ -89,6 +88,7 @@ void Table::readMeta(const Footer& footer) {
     if (!iter->status().isOk()) {
         assert(false);
     }
+
     if (iter->valid() && iter->key() == Binary(key)) {
         readFilter(iter->val());
     }
@@ -120,6 +120,7 @@ Status Table::get(const Binary& key, void* arg, HandleResult&& handle_result) {
     if (!iiter->valid()) {
         return Status::NewNotFound();
     }
+
     Binary handle_value = iiter->val();
     BlockHandle handle;
     if (filter_ != nullptr) {
@@ -141,6 +142,7 @@ Status Table::get(const Binary& key, void* arg, HandleResult&& handle_result) {
     if (iter->valid()) {
         handle_result(arg, key, iter->val());
     }
+
     return iter->status();
 }
 
