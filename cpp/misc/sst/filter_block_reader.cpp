@@ -22,12 +22,14 @@ namespace pl {
 FilterBlockReader::FilterBlockReader(FilterPolicyRef filter_policy, const pl::Binary& contents)
     : filter_policy_(std::move(filter_policy)) {
     std::size_t n = contents.size();
-    if (n < 5)
+    if (n < 5) {
         return;
+    }
     base_lg_ = static_cast<std::size_t>(contents[n - 1]);
     auto last_word = decodeInt<uint32_t>(contents.data() + n - 5);
-    if (last_word > n - 5)
+    if (last_word > n - 5) {
         return;
+    }
     data_ = contents.data();
     offset_ = data_ + last_word;
     num_ = (n - 5 - last_word) / 4;
