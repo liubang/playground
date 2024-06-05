@@ -15,16 +15,8 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/10/30 21:37
 
-#======================================================================
-#
-# BUILD -
-#
-# Created by liubang on 2023/10/30 20:01
-# Last Modified: 2023/10/30 20:01
-#
-#======================================================================
-load("@rules_flex//flex:flex.bzl", "flex", "flex_cc_library")
 load("@rules_bison//bison:bison.bzl", "bison", "bison_cc_library")
+load("@rules_flex//flex:flex.bzl", "flex", "flex_cc_library")
 
 # flex(
 #     name = "flux_lexer",

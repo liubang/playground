@@ -15,16 +15,8 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/08/20 22:40
 
-#======================================================================
-#
-# BUILD -
-#
-# Created by liubang on 2023/08/20 16:00
-# Last Modified: 2023/08/20 16:00
-#
-#======================================================================
-load("@rules_flex//flex:flex.bzl", "flex", "flex_cc_library")
 load("@rules_bison//bison:bison.bzl", "bison", "bison_cc_library")
+load("@rules_flex//flex:flex.bzl", "flex", "flex_cc_library")
 
 bison(
     name = "calc_bison",

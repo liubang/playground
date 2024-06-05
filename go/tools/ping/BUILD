@@ -15,10 +15,17 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/06/15 13:32
 
-# load("@rules_go//go:def.bzl", "go_binary")
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
 
-# go_binary(
-#     name = "ping",
-#     srcs = ["main.go"],
-#     visibility = ["//visibility:public"],
-# )
+go_library(
+    name = "ping_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/playground/go/tools/ping",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "ping",
+    embed = [":ping_lib"],
+    visibility = ["//visibility:public"],
+)

@@ -15,20 +15,11 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/08/18 01:27
 
-#======================================================================
-#
-# BUILD -
-#
-# Created by liubang on 2023/08/18 01:00
-# Last Modified: 2023/08/18 01:00
-#
-#======================================================================
 load(
     "//cpp:copts/configure_copts.bzl",
     "DEFAULT_COPTS",
     "DEFAULT_LINKOPTS",
 )
-load("@rules_proto//proto:defs.bzl", "proto_library")
 
 package(default_visibility = ["//visibility:public"])
 
