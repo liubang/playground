@@ -121,7 +121,10 @@ public:
 
     void last() override {
         seekToRestartPoint(num_restarts_ - 1);
-        while (parseNextKeyVal() && nextEntryOffset() < restarts_) {
+        for (;;) {
+            if (!parseNextKeyVal() || nextEntryOffset() >= restarts_) {
+                break;
+            }
         }
     }
 
@@ -137,8 +140,11 @@ public:
             --current_restart_;
         }
         seekToRestartPoint(current_restart_);
-        do {
-        } while (parseNextKeyVal() && nextEntryOffset() < old);
+        for (;;) {
+            if (parseNextKeyVal() && nextEntryOffset() < old) {
+                break;
+            }
+        }
     }
 
     void next() override {
@@ -146,12 +152,12 @@ public:
         parseNextKeyVal();
     }
 
-    ~BlockIterator() = default;
+    ~BlockIterator() override = default;
 
 private:
     uint32_t getRestartOffset(uint32_t idx) {
         assert(idx < num_restarts_);
-        return decodeInt<uint32_t>(data_ + restarts_ + idx * sizeof(uint32_t));
+        return decodeInt<uint32_t>(data_ + restarts_ + (idx * sizeof(uint32_t)));
     }
 
     void seekToRestartPoint(uint32_t idx) {

@@ -20,6 +20,8 @@
 #include "cpp/tools/random.h"
 
 #include <gtest/gtest.h>
+#include <set>
+#include <unordered_map>
 
 namespace pl {
 class SSTableTest : public ::testing::Test {
@@ -28,25 +30,24 @@ class SSTableTest : public ::testing::Test {
         options->compression_type = CompressionType::kNoCompression;
         fs = std::make_shared<PosixFs>();
     }
-
-    void TearDown() override { kvs.clear(); }
+    void TearDown() override {
+        kvs.clear();
+        keys.clear();
+    }
 
 public:
     void build_sst() {
         auto writer = fs->newFsWriter(sst_file, &st);
         EXPECT_TRUE(st.isOk());
         auto sstable_builder = std::make_unique<pl::SSTableBuilder>(options, std::move(writer));
-        std::vector<std::string> keys;
-        const std::string key_prefix = "test_key_";
-        for (int i = 0; i < KEY_COUNT; ++i) {
-            std::string key = key_prefix + std::to_string(i);
-            keys.push_back(key);
+        for (int i = 0; i < ROW_COUNT; ++i) {
+            std::string key = pl::random_string(KEY_LEN);
+            keys.insert(key);
         }
-        std::sort(keys.begin(), keys.end());
-        for (int i = 0; i < KEY_COUNT; ++i) {
-            auto val = pl::random_string(64);
-            sstable_builder->add(keys[i], val);
-            kvs[keys[i]] = val;
+        for (const auto& key : keys) {
+            auto val = pl::random_string(VAL_LEN);
+            sstable_builder->add(key, val);
+            kvs[key] = val;
         }
         sstable_builder->finish();
     }
@@ -55,7 +56,7 @@ public:
         auto reader = fs->newFsReader(this->sst_file, &st);
         EXPECT_TRUE(st.isOk());
         std::size_t sst_size = reader->size();
-        ::printf("file: %s, size: %zu\n", "/tmp/test.sst", sst_size);
+        ::printf("file: %s, size: %zu\n", this->sst_file.c_str(), sst_size);
         auto table = pl::Table::open(options, std::move(reader), sst_size, &st);
         EXPECT_TRUE(st.isOk());
 
@@ -64,28 +65,52 @@ public:
             saver->assign(v.data(), v.size());
         };
 
-        for (int i = 0; i < KEY_COUNT; ++i) {
-            const std::string key_prefix = "test_key_";
-            std::string key = key_prefix + std::to_string(i);
+        for (const auto& key : keys) {
             std::string val;
             st = table->get(key, &val, handle_result);
             EXPECT_TRUE(st.isOk());
             EXPECT_EQ(kvs[key], val);
         }
 
-        for (int i = 0; i < KEY_COUNT; ++i) {
-            const std::string key_prefix = "key_not_exist_";
-            std::string key = key_prefix + std::to_string(i);
+        for (int i = 0; i < ROW_COUNT; ++i) {
+            std::string key = pl::random_string(KEY_LEN + 1);
             std::string val;
             st = table->get("not exist", &val, handle_result);
             EXPECT_TRUE(st.isNotFound());
         }
     }
 
+    void scan_from_sst() {
+        auto reader = fs->newFsReader(this->sst_file, &st);
+        EXPECT_TRUE(st.isOk());
+        std::size_t sst_size = reader->size();
+        ::printf("file: %s, size: %zu\n", "/tmp/test.sst", sst_size);
+        auto table = pl::Table::open(options, std::move(reader), sst_size, &st);
+        EXPECT_TRUE(st.isOk());
+
+        auto iter = table->iterator();
+        int idx = 0;
+        auto key_iter = keys.begin();
+        iter->first();
+        while (iter->valid()) {
+            auto key = iter->key();
+            auto val = iter->val();
+            EXPECT_EQ(*key_iter, key.toString());
+            EXPECT_EQ(kvs[key.toString()], val.toString());
+            idx++;
+            key_iter++;
+            iter->next();
+        }
+        EXPECT_EQ(ROW_COUNT, idx);
+    }
+
 public:
-    constexpr static int KEY_COUNT = 10001;
-    std::string sst_file = "/tmp/test.sst";
+    constexpr static int ROW_COUNT = 40960;
+    constexpr static int KEY_LEN = 16;
+    constexpr static int VAL_LEN = 32;
+    std::string sst_file;
     std::unordered_map<std::string, std::string> kvs;
+    std::set<std::string> keys;
     OptionsRef options;
     FsRef fs;
     Status st;
@@ -96,6 +121,7 @@ TEST_F(SSTableTest, table_without_compression) {
     this->sst_file = "/tmp/test0.sst";
     this->build_sst();
     this->seek_from_sst();
+    this->scan_from_sst();
 }
 
 TEST_F(SSTableTest, table_with_snappy_compression) {
@@ -103,6 +129,7 @@ TEST_F(SSTableTest, table_with_snappy_compression) {
     this->sst_file = "/tmp/test1.sst";
     this->build_sst();
     this->seek_from_sst();
+    this->scan_from_sst();
 }
 
 TEST_F(SSTableTest, table_with_zstd_compression) {
@@ -110,6 +137,7 @@ TEST_F(SSTableTest, table_with_zstd_compression) {
     this->sst_file = "/tmp/test2.sst";
     this->build_sst();
     this->seek_from_sst();
+    this->scan_from_sst();
 }
 
 } // namespace pl
