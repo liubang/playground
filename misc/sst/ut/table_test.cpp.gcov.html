@@ -31,13 +31,13 @@
             <td class="headerValue">_coverage_report.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntry">117</td>
-            <td class="headerCovTableEntry">117</td>
+            <td class="headerCovTableEntry">112</td>
+            <td class="headerCovTableEntry">112</td>
             <td class="headerCovTableEntryHi">100.0 %</td>
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-06-05 17:38:43</td>
+            <td class="headerValue">2024-06-06 13:20:45</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">19</td>
@@ -176,64 +176,58 @@
 <a name="114"><span class="lineNum">     114 </span>            : </a>
 <a name="115"><span class="lineNum">     115 </span><span class="lineCov">          3 :         auto iter = table-&gt;iterator();</span></a>
 <a name="116"><span class="lineNum">     116 </span><span class="lineCov">          3 :         int idx = 0;</span></a>
-<a name="117"><span class="lineNum">     117 </span><span class="lineCov">          3 :         auto key_iter = keys.begin();</span></a>
-<a name="118"><span class="lineNum">     118 </span><span class="lineCov">       3000 :         for (int i = 0; i &lt; 999; ++i) {</span></a>
-<a name="119"><span class="lineNum">     119 </span><span class="lineCov">       2997 :             key_iter++;</span></a>
-<a name="120"><span class="lineNum">     120 </span>            :         }</a>
-<a name="121"><span class="lineNum">     121 </span><span class="lineCov">          3 :         ::printf(&quot;WHERE KEY &gt;= %s\n&quot;, key_iter-&gt;c_str());</span></a>
-<a name="122"><span class="lineNum">     122 </span><span class="lineCov">          3 :         iter-&gt;seek(*key_iter);</span></a>
-<a name="123"><span class="lineNum">     123 </span><span class="lineCov">     119886 :         while (iter-&gt;valid()) {</span></a>
-<a name="124"><span class="lineNum">     124 </span><span class="lineCov">     119883 :             auto key = iter-&gt;key();</span></a>
-<a name="125"><span class="lineNum">     125 </span><span class="lineCov">     119883 :             auto val = iter-&gt;val();</span></a>
-<a name="126"><span class="lineNum">     126 </span><span class="lineCov">     239766 :             EXPECT_EQ(*key_iter, key.toString());</span></a>
-<a name="127"><span class="lineNum">     127 </span><span class="lineCov">     239766 :             EXPECT_EQ(kvs[key.toString()], val.toString());</span></a>
-<a name="128"><span class="lineNum">     128 </span><span class="lineCov">     119883 :             idx++;</span></a>
-<a name="129"><span class="lineNum">     129 </span><span class="lineCov">     119883 :             key_iter++;</span></a>
-<a name="130"><span class="lineNum">     130 </span><span class="lineCov">     119883 :             iter-&gt;next();</span></a>
-<a name="131"><span class="lineNum">     131 </span>            :         }</a>
-<a name="132"><span class="lineNum">     132 </span><span class="lineCov">          3 :         EXPECT_EQ(ROW_COUNT - 999, idx);</span></a>
-<a name="133"><span class="lineNum">     133 </span><span class="lineCov">          3 :     }</span></a>
-<a name="134"><span class="lineNum">     134 </span>            : </a>
-<a name="135"><span class="lineNum">     135 </span>            : public:</a>
-<a name="136"><span class="lineNum">     136 </span>            :     constexpr static int ROW_COUNT = 40960;</a>
-<a name="137"><span class="lineNum">     137 </span>            :     constexpr static int KEY_LEN = 16;</a>
-<a name="138"><span class="lineNum">     138 </span>            :     constexpr static int VAL_LEN = 32;</a>
-<a name="139"><span class="lineNum">     139 </span>            :     std::string sst_file;</a>
-<a name="140"><span class="lineNum">     140 </span>            :     std::unordered_map&lt;std::string, std::string&gt; kvs;</a>
-<a name="141"><span class="lineNum">     141 </span>            :     std::set&lt;std::string&gt; keys;</a>
-<a name="142"><span class="lineNum">     142 </span>            :     OptionsRef options;</a>
-<a name="143"><span class="lineNum">     143 </span>            :     FsRef fs;</a>
-<a name="144"><span class="lineNum">     144 </span>            :     Status st;</a>
-<a name="145"><span class="lineNum">     145 </span>            : };</a>
-<a name="146"><span class="lineNum">     146 </span>            : </a>
-<a name="147"><span class="lineNum">     147 </span><span class="lineCov">          4 : TEST_F(SSTableTest, table_without_compression) {</span></a>
-<a name="148"><span class="lineNum">     148 </span><span class="lineCov">          1 :     options-&gt;compression_type = CompressionType::kNoCompression;</span></a>
-<a name="149"><span class="lineNum">     149 </span><span class="lineCov">          1 :     this-&gt;sst_file = &quot;/tmp/test0.sst&quot;;</span></a>
-<a name="150"><span class="lineNum">     150 </span><span class="lineCov">          1 :     this-&gt;build_sst();</span></a>
-<a name="151"><span class="lineNum">     151 </span><span class="lineCov">          1 :     this-&gt;seek_from_sst();</span></a>
-<a name="152"><span class="lineNum">     152 </span><span class="lineCov">          1 :     this-&gt;scan_from_sst();</span></a>
-<a name="153"><span class="lineNum">     153 </span><span class="lineCov">          1 :     this-&gt;range_scan_from_sst();</span></a>
-<a name="154"><span class="lineNum">     154 </span><span class="lineCov">          1 : }</span></a>
-<a name="155"><span class="lineNum">     155 </span>            : </a>
-<a name="156"><span class="lineNum">     156 </span><span class="lineCov">          4 : TEST_F(SSTableTest, table_with_snappy_compression) {</span></a>
-<a name="157"><span class="lineNum">     157 </span><span class="lineCov">          1 :     options-&gt;compression_type = CompressionType::kSnappyCompression;</span></a>
-<a name="158"><span class="lineNum">     158 </span><span class="lineCov">          1 :     this-&gt;sst_file = &quot;/tmp/test1.sst&quot;;</span></a>
-<a name="159"><span class="lineNum">     159 </span><span class="lineCov">          1 :     this-&gt;build_sst();</span></a>
-<a name="160"><span class="lineNum">     160 </span><span class="lineCov">          1 :     this-&gt;seek_from_sst();</span></a>
-<a name="161"><span class="lineNum">     161 </span><span class="lineCov">          1 :     this-&gt;scan_from_sst();</span></a>
-<a name="162"><span class="lineNum">     162 </span><span class="lineCov">          1 :     this-&gt;range_scan_from_sst();</span></a>
-<a name="163"><span class="lineNum">     163 </span><span class="lineCov">          1 : }</span></a>
-<a name="164"><span class="lineNum">     164 </span>            : </a>
-<a name="165"><span class="lineNum">     165 </span><span class="lineCov">          4 : TEST_F(SSTableTest, table_with_zstd_compression) {</span></a>
-<a name="166"><span class="lineNum">     166 </span><span class="lineCov">          1 :     options-&gt;compression_type = CompressionType::kZstdCompression;</span></a>
-<a name="167"><span class="lineNum">     167 </span><span class="lineCov">          1 :     this-&gt;sst_file = &quot;/tmp/test2.sst&quot;;</span></a>
-<a name="168"><span class="lineNum">     168 </span><span class="lineCov">          1 :     this-&gt;build_sst();</span></a>
-<a name="169"><span class="lineNum">     169 </span><span class="lineCov">          1 :     this-&gt;seek_from_sst();</span></a>
-<a name="170"><span class="lineNum">     170 </span><span class="lineCov">          1 :     this-&gt;scan_from_sst();</span></a>
-<a name="171"><span class="lineNum">     171 </span><span class="lineCov">          1 :     this-&gt;range_scan_from_sst();</span></a>
-<a name="172"><span class="lineNum">     172 </span><span class="lineCov">          1 : }</span></a>
-<a name="173"><span class="lineNum">     173 </span>            : </a>
-<a name="174"><span class="lineNum">     174 </span>            : } // namespace pl</a>
+<a name="117"><span class="lineNum">     117 </span><span class="lineCov">          6 :         std::string search_key = &quot;f&quot;;</span></a>
+<a name="118"><span class="lineNum">     118 </span><span class="lineCov">          3 :         ::printf(&quot;WHERE KEY &gt;= %s\n&quot;, search_key.c_str());</span></a>
+<a name="119"><span class="lineNum">     119 </span><span class="lineCov">          3 :         iter-&gt;seek(search_key);</span></a>
+<a name="120"><span class="lineNum">     120 </span><span class="lineCov">      41833 :         while (iter-&gt;valid()) {</span></a>
+<a name="121"><span class="lineNum">     121 </span><span class="lineCov">      41830 :             auto key = iter-&gt;key();</span></a>
+<a name="122"><span class="lineNum">     122 </span><span class="lineCov">      41830 :             EXPECT_TRUE(key.compare(search_key) &gt;= 0);</span></a>
+<a name="123"><span class="lineNum">     123 </span><span class="lineCov">      41830 :             idx++;</span></a>
+<a name="124"><span class="lineNum">     124 </span><span class="lineCov">      41830 :             iter-&gt;next();</span></a>
+<a name="125"><span class="lineNum">     125 </span>            :         }</a>
+<a name="126"><span class="lineNum">     126 </span><span class="lineCov">          3 :         ::printf(&quot;row_count: %d\n&quot;, idx);</span></a>
+<a name="127"><span class="lineNum">     127 </span><span class="lineCov">          3 :     }</span></a>
+<a name="128"><span class="lineNum">     128 </span>            : </a>
+<a name="129"><span class="lineNum">     129 </span>            : public:</a>
+<a name="130"><span class="lineNum">     130 </span>            :     constexpr static int ROW_COUNT = 40960;</a>
+<a name="131"><span class="lineNum">     131 </span>            :     constexpr static int KEY_LEN = 16;</a>
+<a name="132"><span class="lineNum">     132 </span>            :     constexpr static int VAL_LEN = 32;</a>
+<a name="133"><span class="lineNum">     133 </span>            :     std::string sst_file;</a>
+<a name="134"><span class="lineNum">     134 </span>            :     std::unordered_map&lt;std::string, std::string&gt; kvs;</a>
+<a name="135"><span class="lineNum">     135 </span>            :     std::set&lt;std::string&gt; keys;</a>
+<a name="136"><span class="lineNum">     136 </span>            :     OptionsRef options;</a>
+<a name="137"><span class="lineNum">     137 </span>            :     FsRef fs;</a>
+<a name="138"><span class="lineNum">     138 </span>            :     Status st;</a>
+<a name="139"><span class="lineNum">     139 </span>            : };</a>
+<a name="140"><span class="lineNum">     140 </span>            : </a>
+<a name="141"><span class="lineNum">     141 </span><span class="lineCov">          4 : TEST_F(SSTableTest, table_without_compression) {</span></a>
+<a name="142"><span class="lineNum">     142 </span><span class="lineCov">          1 :     options-&gt;compression_type = CompressionType::kNoCompression;</span></a>
+<a name="143"><span class="lineNum">     143 </span><span class="lineCov">          1 :     this-&gt;sst_file = &quot;/tmp/test0.sst&quot;;</span></a>
+<a name="144"><span class="lineNum">     144 </span><span class="lineCov">          1 :     this-&gt;build_sst();</span></a>
+<a name="145"><span class="lineNum">     145 </span><span class="lineCov">          1 :     this-&gt;seek_from_sst();</span></a>
+<a name="146"><span class="lineNum">     146 </span><span class="lineCov">          1 :     this-&gt;scan_from_sst();</span></a>
+<a name="147"><span class="lineNum">     147 </span><span class="lineCov">          1 :     this-&gt;range_scan_from_sst();</span></a>
+<a name="148"><span class="lineNum">     148 </span><span class="lineCov">          1 : }</span></a>
+<a name="149"><span class="lineNum">     149 </span>            : </a>
+<a name="150"><span class="lineNum">     150 </span><span class="lineCov">          4 : TEST_F(SSTableTest, table_with_snappy_compression) {</span></a>
+<a name="151"><span class="lineNum">     151 </span><span class="lineCov">          1 :     options-&gt;compression_type = CompressionType::kSnappyCompression;</span></a>
+<a name="152"><span class="lineNum">     152 </span><span class="lineCov">          1 :     this-&gt;sst_file = &quot;/tmp/test1.sst&quot;;</span></a>
+<a name="153"><span class="lineNum">     153 </span><span class="lineCov">          1 :     this-&gt;build_sst();</span></a>
+<a name="154"><span class="lineNum">     154 </span><span class="lineCov">          1 :     this-&gt;seek_from_sst();</span></a>
+<a name="155"><span class="lineNum">     155 </span><span class="lineCov">          1 :     this-&gt;scan_from_sst();</span></a>
+<a name="156"><span class="lineNum">     156 </span><span class="lineCov">          1 :     this-&gt;range_scan_from_sst();</span></a>
+<a name="157"><span class="lineNum">     157 </span><span class="lineCov">          1 : }</span></a>
+<a name="158"><span class="lineNum">     158 </span>            : </a>
+<a name="159"><span class="lineNum">     159 </span><span class="lineCov">          4 : TEST_F(SSTableTest, table_with_zstd_compression) {</span></a>
+<a name="160"><span class="lineNum">     160 </span><span class="lineCov">          1 :     options-&gt;compression_type = CompressionType::kZstdCompression;</span></a>
+<a name="161"><span class="lineNum">     161 </span><span class="lineCov">          1 :     this-&gt;sst_file = &quot;/tmp/test2.sst&quot;;</span></a>
+<a name="162"><span class="lineNum">     162 </span><span class="lineCov">          1 :     this-&gt;build_sst();</span></a>
+<a name="163"><span class="lineNum">     163 </span><span class="lineCov">          1 :     this-&gt;seek_from_sst();</span></a>
+<a name="164"><span class="lineNum">     164 </span><span class="lineCov">          1 :     this-&gt;scan_from_sst();</span></a>
+<a name="165"><span class="lineNum">     165 </span><span class="lineCov">          1 :     this-&gt;range_scan_from_sst();</span></a>
+<a name="166"><span class="lineNum">     166 </span><span class="lineCov">          1 : }</span></a>
+<a name="167"><span class="lineNum">     167 </span>            : </a>
+<a name="168"><span class="lineNum">     168 </span>            : } // namespace pl</a>
 </pre>
       </td>
     </tr>
