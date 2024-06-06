@@ -21,8 +21,8 @@
 
 namespace pl {
 
-constexpr static std::size_t FILTER_BASE_LG = 11;
-constexpr static std::size_t FILTER_BASE = 1 << FILTER_BASE_LG; // 2048
+constexpr static std::size_t FILTER_BASE_LG = 20;
+constexpr static std::size_t FILTER_BASE = 1 << FILTER_BASE_LG; // 1M
 
 FilterBlockBuilder::FilterBlockBuilder(FilterPolicyRef policy)
     : filter_policy_(std::move(policy)) {}
@@ -43,6 +43,31 @@ void FilterBlockBuilder::addKey(const Binary& key) {
     keys_.append(k.data(), k.size());
 }
 
+/**
+ *
+ *             +------------------+
+ *             |     filter1      |<---------+
+ *             +------------------+          |
+ * +---------->|     filter2      |<---------+--------+
+ * |           +------------------+          |        |
+ * |           |     ......       |          |        |
+ * |           +------------------+          |        |
+ * | +-------->|     filtern      |<---------+----+   |
+ * | |         +------------------+          |    |   |
+ * | |         |    offset1 4B    +----------+    |   |
+ * | |         +------------------+               |   |
+ * | |         |    offset2 4B    +---------------+---+
+ * | |         +------------------+               |
+ * +-+---------+    offset3 4B    +               |
+ *   |         +------------------+               |
+ *   |         |     ......       |               |
+ *   |         +------------------+               |
+ *   |         |    offsetn 4B    +---------------+
+ *   |         +------------------+
+ *   +---------+   offsetn+1 4B   |
+ *             +------------------+
+ *
+ */
 Binary FilterBlockBuilder::finish() {
     if (!start_.empty()) {
         genFilter();
