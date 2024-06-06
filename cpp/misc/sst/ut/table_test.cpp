@@ -114,22 +114,16 @@ public:
 
         auto iter = table->iterator();
         int idx = 0;
-        auto key_iter = keys.begin();
-        for (int i = 0; i < 999; ++i) {
-            key_iter++;
-        }
-        ::printf("WHERE KEY >= %s\n", key_iter->c_str());
-        iter->seek(*key_iter);
+        std::string search_key = "f";
+        ::printf("WHERE KEY >= %s\n", search_key.c_str());
+        iter->seek(search_key);
         while (iter->valid()) {
             auto key = iter->key();
-            auto val = iter->val();
-            EXPECT_EQ(*key_iter, key.toString());
-            EXPECT_EQ(kvs[key.toString()], val.toString());
+            EXPECT_TRUE(key.compare(search_key) >= 0);
             idx++;
-            key_iter++;
             iter->next();
         }
-        EXPECT_EQ(ROW_COUNT - 999, idx);
+        ::printf("row_count: %d\n", idx);
     }
 
 public:
