@@ -14,11 +14,11 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/misc/sst/table_iterator.h"
+#include "cpp/misc/sst/sstable_iterator.h"
 
 namespace pl {
 
-void TableIterator::seek(const Binary& target) {
+void SSTableIterator::seek(const Binary& target) {
     index_iter_->seek(target);
     initDataBlock();
     if (data_iter_ != nullptr) {
@@ -27,7 +27,7 @@ void TableIterator::seek(const Binary& target) {
     forwardSkipEmptyData();
 }
 
-void TableIterator::first() {
+void SSTableIterator::first() {
     index_iter_->first();
     initDataBlock();
     if (data_iter_ != nullptr) {
@@ -36,7 +36,7 @@ void TableIterator::first() {
     forwardSkipEmptyData();
 }
 
-void TableIterator::last() {
+void SSTableIterator::last() {
     index_iter_->last();
     initDataBlock();
     if (data_iter_ != nullptr) {
@@ -45,31 +45,31 @@ void TableIterator::last() {
     backwardSkipEmptyData();
 }
 
-void TableIterator::next() {
+void SSTableIterator::next() {
     assert(valid());
     data_iter_->next();
     forwardSkipEmptyData();
 }
 
-void TableIterator::prev() {
+void SSTableIterator::prev() {
     assert(valid());
     data_iter_->prev();
     backwardSkipEmptyData();
 }
 
-bool TableIterator::valid() const { return data_iter_ != nullptr && data_iter_->valid(); }
+bool SSTableIterator::valid() const { return data_iter_ != nullptr && data_iter_->valid(); }
 
-Binary TableIterator::key() const {
+Binary SSTableIterator::key() const {
     assert(valid());
     return data_iter_->key();
 }
 
-Binary TableIterator::val() const {
+Binary SSTableIterator::val() const {
     assert(valid());
     return data_iter_->val();
 }
 
-Status TableIterator::status() const {
+Status SSTableIterator::status() const {
     if (!index_iter_->status().isOk()) {
         return index_iter_->status();
     }
@@ -79,7 +79,7 @@ Status TableIterator::status() const {
     return status_;
 }
 
-void TableIterator::initDataBlock() {
+void SSTableIterator::initDataBlock() {
     if (!index_iter_->valid()) {
         data_iter_ = nullptr;
         return;
@@ -93,7 +93,7 @@ void TableIterator::initDataBlock() {
     }
 }
 
-void TableIterator::forwardSkipEmptyData() {
+void SSTableIterator::forwardSkipEmptyData() {
     while (data_iter_ == nullptr || !data_iter_->valid()) {
         if (!index_iter_->valid()) {
             data_iter_ = nullptr;
@@ -107,7 +107,7 @@ void TableIterator::forwardSkipEmptyData() {
     }
 }
 
-void TableIterator::backwardSkipEmptyData() {
+void SSTableIterator::backwardSkipEmptyData() {
     while (data_iter_ == nullptr || !data_iter_->valid()) {
         if (!index_iter_->valid()) {
             data_iter_ = nullptr;
