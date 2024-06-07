@@ -15,8 +15,8 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/misc/fs/posix_fs.h"
+#include "cpp/misc/sst/sstable.h"
 #include "cpp/misc/sst/sstable_builder.h"
-#include "cpp/misc/sst/table.h"
 #include "cpp/tools/random.h"
 
 #include <gtest/gtest.h>
@@ -28,6 +28,8 @@ class SSTableTest : public ::testing::Test {
     void SetUp() override {
         options = std::make_shared<Options>();
         options->compression_type = CompressionType::kNoCompression;
+        options->sst_type = SSTType::MAJOR;
+        options->sst_version = SSTVersion::V1;
         fs = std::make_shared<PosixFs>();
     }
     void TearDown() override {
@@ -49,7 +51,8 @@ public:
             sstable_builder->add(key, val);
             kvs[key] = val;
         }
-        sstable_builder->finish();
+        auto status = sstable_builder->finish();
+        EXPECT_TRUE(status.isOk());
     }
 
     void seek_from_sst() {
@@ -57,8 +60,10 @@ public:
         EXPECT_TRUE(st.isOk());
         std::size_t sst_size = reader->size();
         ::printf("file: %s, size: %zu\n", this->sst_file.c_str(), sst_size);
-        auto table = pl::Table::open(options, std::move(reader), sst_size, &st);
+        auto table = pl::SSTable::open(options, std::move(reader), sst_size, &st);
         EXPECT_TRUE(st.isOk());
+
+        ::printf("sst file meta: %s\n", table->fileMeta()->toString().c_str());
 
         auto handle_result = [](void* arg, const pl::Binary& k, const pl::Binary& v) {
             auto* saver = reinterpret_cast<std::string*>(arg);
@@ -85,7 +90,7 @@ public:
         EXPECT_TRUE(st.isOk());
         std::size_t sst_size = reader->size();
         ::printf("file: %s, size: %zu\n", "/tmp/test.sst", sst_size);
-        auto table = pl::Table::open(options, std::move(reader), sst_size, &st);
+        auto table = pl::SSTable::open(options, std::move(reader), sst_size, &st);
         EXPECT_TRUE(st.isOk());
 
         auto iter = table->iterator();
@@ -109,7 +114,7 @@ public:
         EXPECT_TRUE(st.isOk());
         std::size_t sst_size = reader->size();
         ::printf("file: %s, size: %zu\n", "/tmp/test.sst", sst_size);
-        auto table = pl::Table::open(options, std::move(reader), sst_size, &st);
+        auto table = pl::SSTable::open(options, std::move(reader), sst_size, &st);
         EXPECT_TRUE(st.isOk());
 
         auto iter = table->iterator();

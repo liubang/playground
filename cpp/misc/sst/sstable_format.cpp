@@ -40,41 +40,106 @@ Status BlockHandle::decodeFrom(const Binary& input) {
     return Status::NewOk();
 }
 
-/*
+void FileMeta::encodeTo(std::string* dst) const {
+    assert(dst != nullptr);
+    encodeInt(dst, static_cast<uint8_t>(sst_type_));        // 1B
+    encodeInt(dst, static_cast<uint8_t>(sst_version_));     // 1B
+    encodeInt(dst, key_number_);                            // 8B
+    encodeInt(dst, bits_per_key_);                          // 4B
+    encodeInt(dst, static_cast<uint32_t>(min_key_.size())); // 4B
+    dst->append(min_key_);
+    encodeInt(dst, static_cast<uint32_t>(max_key_.size())); // 4B
+    dst->append(max_key_);
+}
+
+Status FileMeta::decodeFrom(const Binary& input) {
+    if (input.size() < FILE_META_MIN_LEN) {
+        return Status::NewCorruption("invalid sstable format");
+    }
+    const char* data = input.data();
+    const auto s = input.size();
+    uint8_t type = decodeInt<uint8_t>(data);
+    if (type == 0 || type > static_cast<uint8_t>(SSTType::MAJOR)) {
+        return Status::NewCorruption("invalid sstable type");
+    }
+    sst_type_ = static_cast<SSTType>(type);
+    uint8_t version = decodeInt<uint8_t>(data + 1);
+    if (version == 0 || version > static_cast<uint8_t>(SSTVersion::V1)) {
+        return Status::NewCorruption("invalid sstable version");
+    }
+    sst_version_ = static_cast<SSTVersion>(version);
+    key_number_ = decodeInt<uint64_t>(data + 2);
+    bits_per_key_ = decodeInt<uint32_t>(data + 10);
+    uint32_t min_key_size = decodeInt<uint32_t>(data + 14);
+
+    if (18 + min_key_size + 4 > s) {
+        return Status::NewCorruption("invalid sstable format");
+    }
+
+    if (min_key_size > 0) {
+        min_key_.assign(data + 18, min_key_size);
+    }
+    uint32_t max_key_size = decodeInt<uint32_t>(data + 18 + min_key_size);
+
+    if (18 + min_key_size + 4 + max_key_size != s) {
+        return Status::NewCorruption("invalid sstable format");
+    }
+
+    if (max_key_size > 0) {
+        max_key_.assign(data + 18 + min_key_size + 4, max_key_size);
+    }
+
+    return Status::NewOk();
+}
+
+/**
  * footer format
- * +-----------------+-------------+--------------+-------------------+
- * | metaindex (16B) | index (16B) | padding (8B) | magic number (8B) |
- * +-----------------+-------------+--------------+-------------------+
- * | <------------------  40B ------------------> |
+ * +-----------------+-------------+----------------+---------+-------------------+
+ * | metaindex (16B) | index (16B) | filemeta (16B) | padding | magic number (8B) |
+ * +-----------------+-------------+----------------+---------+-------------------+
+ * | <------------------------- 56B ------------------------> |
+ * | <------------------------------------ 64B ---------------------------------->|
  *
  */
 void Footer::encodeTo(std::string* dst) const {
+    assert(dst != nullptr);
     const std::size_t s = dst->size();
-    metaindex_handle_.encodeTo(dst);
+    filter_handle_.encodeTo(dst);
     index_handle_.encodeTo(dst);
-    dst->resize(2 * BlockHandle::kMaxEncodedLength);
-    encodeInt(dst, static_cast<uint32_t>(kTableMagicNumber & 0xffffffffu));
-    encodeInt(dst, static_cast<uint32_t>(kTableMagicNumber >> 32));
-    assert(dst->size() == s + kEncodedLength);
+    file_meta_handle_.encodeTo(dst);
+    dst->resize(FOOTER_LEN - 8);
+    encodeInt(dst, static_cast<uint32_t>(SST_MAGIC_NUMBER & 0xffffffffu));
+    encodeInt(dst, static_cast<uint32_t>(SST_MAGIC_NUMBER >> 32));
+    assert(dst->size() == s + FOOTER_LEN);
 }
 
 Status Footer::decodeFrom(const Binary& input) {
-    if (input.size() < kEncodedLength) {
+    if (input.size() < FOOTER_LEN) {
         return Status::NewCorruption("invalid sstable format");
     }
-    const char* magic_ptr = input.data() + kEncodedLength - 8;
+    const char* magic_ptr = input.data() + FOOTER_LEN - 8;
     const auto magic_lo = decodeInt<uint32_t>(magic_ptr);
     const auto magic_hi = decodeInt<uint32_t>(magic_ptr + 4);
     const uint64_t magic =
         ((static_cast<uint64_t>(magic_hi) << 32 | (static_cast<uint64_t>(magic_lo))));
-    if (magic != kTableMagicNumber) {
+    if (magic != SST_MAGIC_NUMBER) {
         return Status::NewCorruption("invalid magic number");
     }
-    Status result = metaindex_handle_.decodeFrom(input);
-    if (result.isOk()) {
-        // TODO(liubang): 优化没必要的拷贝
-        result = index_handle_.decodeFrom(Binary(input.data() + 16, 16));
+
+    // decode metaindex offset and size
+    Status result = filter_handle_.decodeFrom(input);
+    if (!result.isOk()) {
+        return result;
     }
+
+    // decode index offset and size
+    result = index_handle_.decodeFrom(Binary(input.data() + 16, 16));
+    if (!result.isOk()) {
+        return result;
+    }
+
+    // decode file meta offset and size
+    result = file_meta_handle_.decodeFrom(Binary(input.data() + 32, 16));
     return result;
 }
 
@@ -83,16 +148,16 @@ Status BlockReader::readBlock(const FsReaderRef& reader,
                               BlockContents* result) {
     // read block trailer
     auto s = static_cast<std::size_t>(handle.size());
-    char* buf = new char[s + kBlockTrailerSize];
+    char* buf = new char[s + BLOCK_TRAILER_LEN];
 
     Binary content;
-    auto status = reader->read(handle.offset(), s + kBlockTrailerSize, &content, buf);
+    auto status = reader->read(handle.offset(), s + BLOCK_TRAILER_LEN, &content, buf);
     if (!status.isOk()) {
         delete[] buf;
         return status;
     }
     // invalid content
-    if (content.size() != s + kBlockTrailerSize) {
+    if (content.size() != s + BLOCK_TRAILER_LEN) {
         delete[] buf;
         return Status::NewCorruption("invalid block");
     }

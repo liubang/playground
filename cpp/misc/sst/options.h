@@ -18,6 +18,7 @@
 
 #include "cpp/misc/sst/comparator.h"
 #include "cpp/misc/sst/filter_policy.h"
+#include "cpp/misc/sst/sstable_format.h"
 
 #include <cstdint>
 #include <memory>
@@ -30,6 +31,7 @@ enum class CompressionType : uint8_t {
     kZstdCompression = 2,
 };
 
+// TODO: Open options and Build options
 struct Options {
     Options()
         : comparator(std::make_shared<BytewiseComparator>()),
@@ -38,11 +40,13 @@ struct Options {
     // 4 KB
     std::size_t block_size = 4 * 1024;
     int block_restart_interval = 16;
-    uint64_t bits_per_key = 10;
+    uint32_t bits_per_key = 10;
     CompressionType compression_type = CompressionType::kNoCompression;
     int zstd_compress_level = 1;
     const ComparatorRef comparator;
     const FilterPolicyRef filter_policy;
+    SSTType sst_type = SSTType::NONE;
+    SSTVersion sst_version = SSTVersion::NONE;
 };
 
 using OptionsPtr = std::unique_ptr<Options>;
