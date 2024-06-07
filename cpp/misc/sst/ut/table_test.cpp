@@ -27,9 +27,10 @@ namespace pl {
 class SSTableTest : public ::testing::Test {
     void SetUp() override {
         options = std::make_shared<Options>();
-        options->compression_type = CompressionType::kNoCompression;
+        options->compression_type = CompressionType::NONE;
         options->sst_type = SSTType::MAJOR;
         options->sst_version = SSTVersion::V1;
+        options->filter_type = FilterPolicyType::BLOOM_FILTER;
         fs = std::make_shared<PosixFs>();
     }
     void TearDown() override {
@@ -43,7 +44,7 @@ public:
         EXPECT_TRUE(st.isOk());
         auto sstable_builder = std::make_unique<pl::SSTableBuilder>(options, std::move(writer));
         for (int i = 0; i < ROW_COUNT; ++i) {
-            std::string key = pl::random_string(KEY_LEN);
+            std::string key = pl::random_string(KEY_LEN) + std::to_string(i);
             keys.insert(key);
         }
         for (const auto& key : keys) {
@@ -61,9 +62,12 @@ public:
         std::size_t sst_size = reader->size();
         ::printf("file: %s, size: %zu\n", this->sst_file.c_str(), sst_size);
         auto table = pl::SSTable::open(options, std::move(reader), sst_size, &st);
+        if (!st.isOk()) {
+            ::printf("open table failed, error: %s\n", st.msg().c_str());
+        }
         EXPECT_TRUE(st.isOk());
 
-        ::printf("sst file meta: %s\n", table->fileMeta()->toString().c_str());
+        check_table(table.get());
 
         auto handle_result = [](void* arg, const pl::Binary& k, const pl::Binary& v) {
             auto* saver = reinterpret_cast<std::string*>(arg);
@@ -78,9 +82,12 @@ public:
         }
 
         for (int i = 0; i < ROW_COUNT; ++i) {
-            std::string key = pl::random_string(KEY_LEN + 1);
+            std::string key = pl::random_string(KEY_LEN + 2);
             std::string val;
-            st = table->get("not exist", &val, handle_result);
+            st = table->get(key, &val, handle_result);
+            if (st.isOk()) {
+                ::printf("key: %s, val: %s\n", key.c_str(), val.c_str());
+            }
             EXPECT_TRUE(st.isNotFound());
         }
     }
@@ -92,6 +99,8 @@ public:
         ::printf("file: %s, size: %zu\n", "/tmp/test.sst", sst_size);
         auto table = pl::SSTable::open(options, std::move(reader), sst_size, &st);
         EXPECT_TRUE(st.isOk());
+
+        check_table(table.get());
 
         auto iter = table->iterator();
         int idx = 0;
@@ -116,7 +125,7 @@ public:
         ::printf("file: %s, size: %zu\n", "/tmp/test.sst", sst_size);
         auto table = pl::SSTable::open(options, std::move(reader), sst_size, &st);
         EXPECT_TRUE(st.isOk());
-
+        check_table(table.get());
         auto iter = table->iterator();
         int idx = 0;
         std::string search_key = "f";
@@ -131,8 +140,17 @@ public:
         ::printf("row_count: %d\n", idx);
     }
 
+private:
+    void check_table(SSTable* table) {
+        ::printf("sst file meta:\n%s\n", table->fileMeta()->toString().c_str());
+        EXPECT_EQ(SSTType::MAJOR, table->fileMeta()->sstType());
+        EXPECT_EQ(SSTVersion::V1, table->fileMeta()->sstVersion());
+        EXPECT_EQ(FilterPolicyType::BLOOM_FILTER, table->fileMeta()->filterPolicyType());
+        EXPECT_EQ(10, table->fileMeta()->bitsPerKey());
+    }
+
 public:
-    constexpr static int ROW_COUNT = 40960;
+    constexpr static int ROW_COUNT = 40960 * 2;
     constexpr static int KEY_LEN = 16;
     constexpr static int VAL_LEN = 32;
     std::string sst_file;
@@ -144,7 +162,7 @@ public:
 };
 
 TEST_F(SSTableTest, table_without_compression) {
-    options->compression_type = CompressionType::kNoCompression;
+    options->compression_type = CompressionType::NONE;
     this->sst_file = "/tmp/test0.sst";
     this->build_sst();
     this->seek_from_sst();
@@ -153,7 +171,7 @@ TEST_F(SSTableTest, table_without_compression) {
 }
 
 TEST_F(SSTableTest, table_with_snappy_compression) {
-    options->compression_type = CompressionType::kSnappyCompression;
+    options->compression_type = CompressionType::SNAPPY;
     this->sst_file = "/tmp/test1.sst";
     this->build_sst();
     this->seek_from_sst();
@@ -162,7 +180,7 @@ TEST_F(SSTableTest, table_with_snappy_compression) {
 }
 
 TEST_F(SSTableTest, table_with_zstd_compression) {
-    options->compression_type = CompressionType::kZstdCompression;
+    options->compression_type = CompressionType::ZSTD;
     this->sst_file = "/tmp/test2.sst";
     this->build_sst();
     this->seek_from_sst();
