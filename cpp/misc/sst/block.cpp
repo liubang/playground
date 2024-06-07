@@ -58,6 +58,7 @@ public:
     [[nodiscard]] Binary val() const override { return val_; }
     [[nodiscard]] Status status() const override { return status_; }
 
+    // return the first key that >= target
     void seek(const Binary& target) override {
         uint32_t left = 0;
         uint32_t right = num_restarts_ - 1;

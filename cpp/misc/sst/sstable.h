@@ -38,9 +38,9 @@ public:
     ~SSTable() = default;
 
     static std::unique_ptr<SSTable> open(const OptionsRef& options,
-                                       const FsReaderRef& reader,
-                                       uint64_t size,
-                                       Status* status);
+                                         const FsReaderRef& reader,
+                                         uint64_t size,
+                                         Status* status);
 
     [[nodiscard]] const FileMetaRef& fileMeta() const { return file_meta_; }
 
@@ -51,8 +51,7 @@ public:
 private:
     SSTable(OptionsRef options, FsReaderRef reader, FileMetaRef file_meta, BlockRef index_block);
 
-    void readMeta(const Footer& footer);
-    void readFilter(const Binary& filter_handle_content);
+    void readFilter(const Footer& footer);
     IteratorPtr blockReader(const Binary& index_value);
 
 private:
