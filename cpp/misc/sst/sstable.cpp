@@ -14,36 +14,53 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/misc/sst/table.h"
-#include "cpp/misc/sst/table_iterator.h"
+#include "cpp/misc/sst/sstable.h"
+#include "cpp/misc/sst/sstable_iterator.h"
 
 namespace pl {
 
-Table::Table(OptionsRef options,
-             FsReaderRef reader, /*const BlockHandle& metaindex_handle,*/
-             BlockRef index_block)
+SSTable::SSTable(OptionsRef options,
+                 FsReaderRef reader, /*const BlockHandle& metaindex_handle,*/
+                 FileMetaRef file_meta,
+                 BlockRef index_block)
     : options_(std::move(options)),
       reader_(std::move(reader)),
+      file_meta_(std::move(file_meta)),
       index_block_(std::move(index_block)) {}
 
-std::unique_ptr<Table> Table::open(const OptionsRef& options,
-                                   const FsReaderRef& reader,
-                                   uint64_t size,
-                                   Status* status) {
-    if (size < Footer::kEncodedLength) {
+std::unique_ptr<SSTable> SSTable::open(const OptionsRef& options,
+                                       const FsReaderRef& reader,
+                                       uint64_t size,
+                                       Status* status) {
+    if (size < FOOTER_LEN) {
         *status = Status::NewCorruption("file is too short to be an sstable");
         return nullptr;
     }
-    char footer_content[Footer::kEncodedLength];
+    char footer_content[FOOTER_LEN];
     Binary footer_input;
-    *status = reader->read(size - Footer::kEncodedLength, Footer::kEncodedLength, &footer_input,
-                           footer_content);
+    *status = reader->read(size - FOOTER_LEN, FOOTER_LEN, &footer_input, footer_content);
     if (!status->isOk()) {
         return nullptr;
     }
 
     Footer footer;
     *status = footer.decodeFrom(footer_input);
+    if (!status->isOk()) {
+        return nullptr;
+    }
+
+    // file meta
+    Binary file_meta_input;
+    std::unique_ptr<char[]> file_meta_content =
+        std::make_unique<char[]>(footer.fileMetaHandle().size());
+    *status = reader->read(footer.fileMetaHandle().offset(), footer.fileMetaHandle().size(),
+                           &file_meta_input, file_meta_content.get());
+    if (!status->isOk()) {
+        return nullptr;
+    }
+
+    auto file_meta = std::make_unique<FileMeta>();
+    *status = file_meta->decodeFrom(file_meta_input);
     if (!status->isOk()) {
         return nullptr;
     }
@@ -57,14 +74,13 @@ std::unique_ptr<Table> Table::open(const OptionsRef& options,
 
     auto index_block = std::make_shared<Block>(index_block_contents);
 
-    auto table =
-        std::unique_ptr<Table>(new Table(options, reader,
-                                         /* footer.metaindexHandle(), */ std::move(index_block)));
+    auto table = std::unique_ptr<SSTable>(
+        new SSTable(options, reader, std::move(file_meta), std::move(index_block)));
     table->readMeta(footer);
     return table;
 }
 
-void Table::readMeta(const Footer& footer) {
+void SSTable::readMeta(const Footer& footer) {
     if (options_->filter_policy == nullptr) {
         assert(false);
         return;
@@ -95,7 +111,7 @@ void Table::readMeta(const Footer& footer) {
     }
 }
 
-void Table::readFilter(const Binary& filter_handle_value) {
+void SSTable::readFilter(const Binary& filter_handle_value) {
     BlockHandle filter_handle;
     if (!filter_handle.decodeFrom(filter_handle_value).isOk()) {
         assert(false);
@@ -115,7 +131,10 @@ void Table::readFilter(const Binary& filter_handle_value) {
     filter_ = std::make_unique<FilterBlockReader>(options_->filter_policy, block.data);
 }
 
-Status Table::get(const Binary& key, void* arg, HandleResult&& handle_result) {
+Status SSTable::get(const Binary& key, void* arg, HandleResult&& handle_result) {
+    if (key.compare(file_meta_->minKey()) < 0 || key.compare(file_meta_->maxKey()) > 0) {
+        return Status::NewNotFound();
+    }
     auto iiter = index_block_->iterator(options_->comparator);
     iiter->seek(key);
     if (!iiter->valid()) {
@@ -147,7 +166,7 @@ Status Table::get(const Binary& key, void* arg, HandleResult&& handle_result) {
     return iter->status();
 }
 
-IteratorPtr Table::blockReader(const Binary& index_value) {
+IteratorPtr SSTable::blockReader(const Binary& index_value) {
     BlockHandle handle;
     auto s = handle.decodeFrom(index_value);
     if (!s.isOk()) {
@@ -167,11 +186,11 @@ IteratorPtr Table::blockReader(const Binary& index_value) {
     return iter;
 }
 
-IteratorPtr Table::iterator() {
-    return std::make_unique<TableIterator>(index_block_->iterator(options_->comparator),
-                                           [this](const Binary b) {
-                                               return this->blockReader(b);
-                                           });
+IteratorPtr SSTable::iterator() {
+    return std::make_unique<SSTableIterator>(index_block_->iterator(options_->comparator),
+                                             [this](const Binary b) {
+                                                 return this->blockReader(b);
+                                             });
 }
 
 } // namespace pl
