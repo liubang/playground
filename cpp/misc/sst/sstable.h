@@ -29,25 +29,27 @@ namespace pl {
 
 using HandleResult = std::function<void(void* arg, const Binary& k, const Binary& v)>;
 
-class Table {
+class SSTable {
 public:
-    Table(const Table&) = delete;
+    SSTable(const SSTable&) = delete;
 
-    Table& operator=(const Table&) = delete;
+    SSTable& operator=(const SSTable&) = delete;
 
-    ~Table() = default;
+    ~SSTable() = default;
 
-    static std::unique_ptr<Table> open(const OptionsRef& options,
+    static std::unique_ptr<SSTable> open(const OptionsRef& options,
                                        const FsReaderRef& reader,
                                        uint64_t size,
                                        Status* status);
+
+    [[nodiscard]] const FileMetaRef& fileMeta() const { return file_meta_; }
 
     Status get(const Binary& key, void* arg, HandleResult&& handle_result);
 
     IteratorPtr iterator();
 
 private:
-    Table(OptionsRef options, FsReaderRef reader, BlockRef index_block);
+    SSTable(OptionsRef options, FsReaderRef reader, FileMetaRef file_meta, BlockRef index_block);
 
     void readMeta(const Footer& footer);
     void readFilter(const Binary& filter_handle_content);
@@ -59,10 +61,10 @@ private:
     Status status_;
     FilterBlockReaderPtr filter_{nullptr};
     std::unique_ptr<const char[]> filter_data_;
-    // BlockHandle metaindex_Handle_;
+    FileMetaRef file_meta_{nullptr};
     BlockRef index_block_{nullptr};
 };
 
-using TablePtr = std::unique_ptr<Table>;
+using TablePtr = std::unique_ptr<SSTable>;
 
 } // namespace pl

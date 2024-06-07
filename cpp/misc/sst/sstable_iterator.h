@@ -24,12 +24,12 @@ namespace pl {
 
 using BlockFunc = std::function<IteratorPtr(const Binary)>;
 
-class TableIterator : public Iterator {
+class SSTableIterator : public Iterator {
 public:
-    TableIterator(IteratorPtr index_iter, BlockFunc block_func)
+    SSTableIterator(IteratorPtr index_iter, BlockFunc block_func)
         : index_iter_(std::move(index_iter)), block_func_(std::move(block_func)) {}
 
-    ~TableIterator() override = default;
+    ~SSTableIterator() override = default;
 
     void first() override;
 
