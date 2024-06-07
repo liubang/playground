@@ -95,14 +95,14 @@ void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
     auto raw = block->finish();
     std::string compressed;
     switch (options_->compression_type) {
-    case CompressionType::kSnappyCompression:
+    case CompressionType::SNAPPY:
     {
         auto outlen = snappy::Compress(raw.data(), raw.size(), &compressed);
         compressed.resize(outlen);
         raw.reset(compressed);
         break;
     }
-    case CompressionType::kZstdCompression:
+    case CompressionType::ZSTD:
     {
         size_t outlen = ZSTD_compressBound(raw.size());
         if (ZSTD_isError(outlen) != 0u) {
@@ -129,7 +129,9 @@ void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
     block->reset();
 }
 
-/*
+/**
+ *
+ * the block format
  *
  *
  *                                                     +---------------------+
@@ -195,15 +197,17 @@ void SSTableBuilder::writeBlockRaw(const Binary& content,
     offset_ += content.size() + BLOCK_TRAILER_LEN;
 }
 
-/*
+/**
+ * the sst file format:
+ *
  *   +--------------------+
- *   |    filter block    |
+ *   |     data block     |
  *   +--------------------+
  *   |    filter block    |
  *   +--------------------+
  *   |     index block    |
  *   +--------------------+
- *   |    filemeta block  |
+ *   |      filemeta      |
  *   +--------------------+
  *   |       footer       |
  *   +--------------------+
@@ -213,7 +217,6 @@ Status SSTableBuilder::finish() {
     flush();
     closed_ = true;
     BlockHandle filter_block_handle;
-    BlockHandle metaindex_block_handle;
     BlockHandle index_block_handle;
     BlockHandle file_meta_handle;
 
@@ -223,25 +226,8 @@ Status SSTableBuilder::finish() {
 
     // 写filter block
     if (filter_block_ != nullptr) {
-        writeBlockRaw(filter_block_->finish(), CompressionType::kNoCompression,
-                      &filter_block_handle);
+        writeBlockRaw(filter_block_->finish(), CompressionType::NONE, &filter_block_handle);
     }
-
-    if (!ok()) {
-        return status();
-    }
-
-    // 写入metaindex block，记录filter block的offset和size
-    BlockBuilder meta_index_block(options_);
-    if (filter_block_ != nullptr) {
-        std::string key = "filter.";
-        key.append(options_->filter_policy->name());
-        std::string handle_encoding;
-        filter_block_handle.encodeTo(&handle_encoding);
-        // 记录filter block的类型和位置
-        meta_index_block.add(key, handle_encoding);
-    }
-    writeBlock(&meta_index_block, &metaindex_block_handle);
 
     if (!ok()) {
         return status();
@@ -263,11 +249,14 @@ Status SSTableBuilder::finish() {
     }
 
     // 写入file meta
-    FileMeta file_meta(options_->sst_type, options_->sst_version);
+    FileMeta file_meta;
+    file_meta.setSSTType(options_->sst_type);
+    file_meta.setSSTVersion(options_->sst_version);
+    file_meta.setFilterPolicyType(options_->filter_type);
+    file_meta.setBitsPerKey(options_->bits_per_key);
     file_meta.setMinKey(first_key_);
     file_meta.setMaxKey(last_key_);
     file_meta.setKeyNum(key_nums_);
-    file_meta.setBitsPerKey(options_->bits_per_key);
 
     std::string file_meta_content;
     file_meta.encodeTo(&file_meta_content);
@@ -281,9 +270,9 @@ Status SSTableBuilder::finish() {
 
     // 写入footer
     Footer footer;
-    footer.setMetaindexHandle(metaindex_block_handle);
-    footer.setIndexHandle(index_block_handle);
     footer.setFileMetaHandle(file_meta_handle);
+    footer.setFilterHandle(filter_block_handle);
+    footer.setIndexHandle(index_block_handle);
     std::string footer_content;
     footer.encodeTo(&footer_content);
     status_ = writer_->append(footer_content);
