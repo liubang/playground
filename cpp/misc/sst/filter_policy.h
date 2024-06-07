@@ -64,7 +64,7 @@ public:
  */
 class BloomFilterPolicy : public FilterPolicy {
 public:
-    BloomFilterPolicy(std::size_t bits_per_key) : bits_per_key_(bits_per_key) {}
+    BloomFilterPolicy(uint32_t bits_per_key) : bits_per_key_(bits_per_key) {}
 
     ~BloomFilterPolicy() override = default;
 
@@ -75,7 +75,7 @@ public:
     [[nodiscard]] bool keyMayMatch(const Binary& key, const Binary& filter) const override;
 
 private:
-    std::size_t bits_per_key_;
+    uint32_t bits_per_key_;
 };
 
 } // namespace pl

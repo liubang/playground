@@ -73,51 +73,19 @@ std::unique_ptr<SSTable> SSTable::open(const OptionsRef& options,
     }
 
     auto index_block = std::make_shared<Block>(index_block_contents);
-
     auto table = std::unique_ptr<SSTable>(
         new SSTable(options, reader, std::move(file_meta), std::move(index_block)));
-    table->readMeta(footer);
+
+    table->readFilter(footer);
     return table;
 }
 
-void SSTable::readMeta(const Footer& footer) {
-    if (options_->filter_policy == nullptr) {
-        assert(false);
+void SSTable::readFilter(const Footer& footer) {
+    auto filter_type = file_meta_->filterPolicyType();
+    if (filter_type == FilterPolicyType::NONE) {
         return;
     }
-
-    BlockContents contents;
-    auto s = BlockReader::readBlock(reader_, footer.metaIndexHandle(), &contents);
-    if (!s.isOk()) {
-        assert(false);
-        return;
-    }
-
-    auto meta = std::make_shared<Block>(contents);
-    if (!meta->valid()) {
-        assert(false);
-    }
-
-    auto iter = meta->iterator(options_->comparator);
-    std::string key = "filter.";
-    key.append(options_->filter_policy->name());
-    iter->seek(key);
-    if (!iter->status().isOk()) {
-        assert(false);
-    }
-
-    if (iter->valid() && iter->key() == Binary(key)) {
-        readFilter(iter->val());
-    }
-}
-
-void SSTable::readFilter(const Binary& filter_handle_value) {
-    BlockHandle filter_handle;
-    if (!filter_handle.decodeFrom(filter_handle_value).isOk()) {
-        assert(false);
-        return;
-    }
-
+    BlockHandle filter_handle = footer.filterHandle();
     BlockContents block;
     if (!BlockReader::readBlock(reader_, filter_handle, &block).isOk()) {
         assert(false);
@@ -128,7 +96,17 @@ void SSTable::readFilter(const Binary& filter_handle_value) {
         filter_data_.reset(block.data.data());
     }
 
-    filter_ = std::make_unique<FilterBlockReader>(options_->filter_policy, block.data);
+    FilterPolicyRef filter = nullptr;
+    switch (filter_type) {
+    case FilterPolicyType::BLOOM_FILTER:
+        filter = std::make_shared<BloomFilterPolicy>(file_meta_->bitsPerKey());
+        break;
+    default:
+        assert(false);
+    }
+    assert(filter != nullptr);
+
+    filter_ = std::make_unique<FilterBlockReader>(std::move(filter), block.data);
 }
 
 Status SSTable::get(const Binary& key, void* arg, HandleResult&& handle_result) {
@@ -147,6 +125,7 @@ Status SSTable::get(const Binary& key, void* arg, HandleResult&& handle_result) 
         if (!handle.decodeFrom(handle_value).isOk()) {
             assert(false);
         }
+        // 通过block的offset来快速查找filter的位置
         if (!filter_->keyMayMatch(handle.offset(), key)) {
             // key not found
             return Status::NewNotFound();
@@ -158,6 +137,7 @@ Status SSTable::get(const Binary& key, void* arg, HandleResult&& handle_result) 
     if (nullptr == iter) {
         return Status::NewNotFound();
     }
+
     iter->seek(key);
     if (iter->valid()) {
         handle_result(arg, key, iter->val());
