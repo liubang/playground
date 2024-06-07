@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-06-06 13:20:45</td>
+            <td class="headerValue">2024-06-07 09:34:44</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">7</td>
@@ -78,13 +78,13 @@
 <a name="16"><span class="lineNum">      16 </span>            : </a>
 <a name="17"><span class="lineNum">      17 </span>            : constexpr size_t n = 1 &lt;&lt; 10;</a>
 <a name="18"><span class="lineNum">      18 </span>            : </a>
-<a name="19"><span class="lineNum">      19 </span><span class="lineCov">         27 : static void test1() {</span></a>
-<a name="20"><span class="lineNum">      20 </span><span class="lineCov">         27 :     float res = 0;</span></a>
-<a name="21"><span class="lineNum">      21 </span><span class="lineCov">      27675 :     for (size_t i = 0; i &lt; n; ++i) {</span></a>
-<a name="22"><span class="lineNum">      22 </span><span class="lineCov">      27648 :         res += std::sin(i);</span></a>
+<a name="19"><span class="lineNum">      19 </span><span class="lineCov">        304 : static void test1() {</span></a>
+<a name="20"><span class="lineNum">      20 </span><span class="lineCov">        304 :     float res = 0;</span></a>
+<a name="21"><span class="lineNum">      21 </span><span class="lineCov">     311600 :     for (size_t i = 0; i &lt; n; ++i) {</span></a>
+<a name="22"><span class="lineNum">      22 </span><span class="lineCov">     311296 :         res += std::sin(i);</span></a>
 <a name="23"><span class="lineNum">      23 </span>            :     }</a>
 <a name="24"><span class="lineNum">      24 </span>            :     // std::cout &lt;&lt; res &lt;&lt; std::endl;</a>
-<a name="25"><span class="lineNum">      25 </span><span class="lineCov">         27 : }</span></a>
+<a name="25"><span class="lineNum">      25 </span><span class="lineCov">        304 : }</span></a>
 <a name="26"><span class="lineNum">      26 </span>            : </a>
 <a name="27"><span class="lineNum">      27 </span><span class="lineCov">         11 : static void test2() {</span></a>
 <a name="28"><span class="lineNum">      28 </span><span class="lineCov">         11 :     float res = tbb::parallel_reduce(</span></a>
@@ -104,8 +104,8 @@
 <a name="42"><span class="lineNum">      42 </span>            : </a>
 <a name="43"><span class="lineNum">      43 </span><span class="lineCov">          1 : int main(int argc, char* argv[]) {</span></a>
 <a name="44"><span class="lineNum">      44 </span><span class="lineCov">          1 :     ankerl::nanobench::Bench().run(&quot;test1&quot;, [&amp;] {</span></a>
-<a name="45"><span class="lineNum">      45 </span><span class="lineCov">         27 :         test1();</span></a>
-<a name="46"><span class="lineNum">      46 </span><span class="lineCov">         27 :     });</span></a>
+<a name="45"><span class="lineNum">      45 </span><span class="lineCov">        304 :         test1();</span></a>
+<a name="46"><span class="lineNum">      46 </span><span class="lineCov">        304 :     });</span></a>
 <a name="47"><span class="lineNum">      47 </span><span class="lineCov">          1 :     ankerl::nanobench::Bench().run(&quot;test2&quot;, [&amp;] {</span></a>
 <a name="48"><span class="lineNum">      48 </span><span class="lineCov">         11 :         test2();</span></a>
 <a name="49"><span class="lineNum">      49 </span><span class="lineCov">         11 :     });</span></a>
