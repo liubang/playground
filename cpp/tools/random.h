@@ -16,22 +16,24 @@
 
 #pragma once
 
-#include <algorithm>
+#include <random>
 #include <string>
 
 namespace pl {
 
 std::string random_string(size_t length) {
-    auto randchar = []() -> char {
-        const char charset[] = "0123456789"
-                               "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                               "abcdefghijklmnopqrstuvwxyz";
-        const size_t max_index = (sizeof(charset) - 1);
-        return charset[rand() % max_index];
-    };
-    std::string str(length, 0);
-    std::generate_n(str.begin(), length, randchar);
-    return str;
+    const std::string characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+    std::random_device rd;
+    std::mt19937 generator(rd());
+    std::uniform_int_distribution<> distribution(0, characters.size() - 1);
+
+    std::string rand_str;
+    for (size_t i = 0; i < length; ++i) {
+        rand_str += characters[distribution(generator)];
+    }
+
+    return rand_str;
 }
 
 } // namespace pl
