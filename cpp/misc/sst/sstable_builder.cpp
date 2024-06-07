@@ -207,7 +207,7 @@ void SSTableBuilder::writeBlockRaw(const Binary& content,
  *   +--------------------+
  *   |     index block    |
  *   +--------------------+
- *   |      filemeta      |
+ *   |   filemeta block   |
  *   +--------------------+
  *   |       footer       |
  *   +--------------------+
@@ -248,7 +248,7 @@ Status SSTableBuilder::finish() {
         return status();
     }
 
-    // 写入file meta
+    // 写入file meta，使用block格式有crc校验
     FileMeta file_meta;
     file_meta.setSSTType(options_->sst_type);
     file_meta.setSSTVersion(options_->sst_version);
@@ -257,16 +257,9 @@ Status SSTableBuilder::finish() {
     file_meta.setMinKey(first_key_);
     file_meta.setMaxKey(last_key_);
     file_meta.setKeyNum(key_nums_);
-
     std::string file_meta_content;
     file_meta.encodeTo(&file_meta_content);
-    status_ = writer_->append(file_meta_content);
-    if (!ok()) {
-        return status();
-    }
-    file_meta_handle.setOffset(offset_);
-    file_meta_handle.setSize(file_meta_content.size());
-    offset_ += file_meta_content.size();
+    writeBlockRaw(file_meta_content, CompressionType::NONE, &file_meta_handle);
 
     // 写入footer
     Footer footer;

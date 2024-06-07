@@ -15,7 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/misc/sst/block.h"
+
 #include "cpp/misc/sst/encoding.h"
+#include <utility>
 
 namespace pl {
 
@@ -40,13 +42,13 @@ Block::~Block() {
 
 class Block::BlockIterator : public Iterator {
 public:
-    BlockIterator(const ComparatorRef& comparator,
-                  const BlockRef block,
+    BlockIterator(ComparatorRef comparator,
+                  BlockRef block,
                   const char* data,
                   uint32_t restarts,
                   uint32_t num_restarts)
-        : comparator_(comparator),
-          block_(block),
+        : comparator_(std::move(comparator)),
+          block_(std::move(block)),
           data_(data),
           restarts_(restarts),
           num_restarts_(num_restarts),
