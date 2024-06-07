@@ -36,8 +36,13 @@ SSTableBuilder::~SSTableBuilder() = default;
 
 void SSTableBuilder::add(const Binary& key, const Binary& value) {
     assert(!closed_);
+
     if (!ok()) {
         return;
+    }
+
+    if (key_nums_ == 0) {
+        first_key_.assign(key.data(), key.size());
     }
 
     if (pending_index_entry_) {
@@ -49,7 +54,7 @@ void SSTableBuilder::add(const Binary& key, const Binary& value) {
         pending_index_entry_ = false;
     }
 
-    if (num_entries_ > 0) {
+    if (key_nums_ > 0) {
         assert(options_->comparator->compare(key, last_key_) > 0);
     }
 
@@ -59,7 +64,7 @@ void SSTableBuilder::add(const Binary& key, const Binary& value) {
 
     last_key_.assign(key.data(), key.size());
     data_block_.add(key, value);
-    num_entries_++;
+    key_nums_++;
 
     const size_t s = data_block_.sizeEstimate();
     // 达到block_size后，就写入
@@ -176,38 +181,41 @@ void SSTableBuilder::writeBlockRaw(const Binary& content,
         assert(false);
     }
     // crc
-    char trailer[kBlockTrailerSize];
+    char trailer[BLOCK_TRAILER_LEN];
     trailer[0] = static_cast<const char>(type);
     uint32_t crc = crc32(content.data(), content.size());
     std::string encode_crc;
     encodeInt<uint32_t>(&encode_crc, crc);
     memcpy(trailer + 1, encode_crc.data(), encode_crc.size());
-    status_ = writer_->append(Binary(trailer, kBlockTrailerSize));
+    status_ = writer_->append(Binary(trailer, BLOCK_TRAILER_LEN));
     if (!ok()) {
         assert(false);
     }
     // 更新下一个block的offset
-    offset_ += content.size() + kBlockTrailerSize;
+    offset_ += content.size() + BLOCK_TRAILER_LEN;
 }
 
 /*
- *
- * +----------------+
- * |  filter block  |
- * +----------------+
- * | metaindex block|
- * +----------------+
- * |  index block   |
- * +----------------+
- * |   footer       |
- * +----------------+
- *
+ *   +--------------------+
+ *   |    filter block    |
+ *   +--------------------+
+ *   |    filter block    |
+ *   +--------------------+
+ *   |     index block    |
+ *   +--------------------+
+ *   |    filemeta block  |
+ *   +--------------------+
+ *   |       footer       |
+ *   +--------------------+
  */
 Status SSTableBuilder::finish() {
     assert(!closed_);
     flush();
     closed_ = true;
-    BlockHandle filter_block_handle, metaindex_block_handle, index_block_handle;
+    BlockHandle filter_block_handle;
+    BlockHandle metaindex_block_handle;
+    BlockHandle index_block_handle;
+    BlockHandle file_meta_handle;
 
     if (!ok()) {
         return status();
@@ -223,7 +231,7 @@ Status SSTableBuilder::finish() {
         return status();
     }
 
-    // 写入metaindex block
+    // 写入metaindex block，记录filter block的offset和size
     BlockBuilder meta_index_block(options_);
     if (filter_block_ != nullptr) {
         std::string key = "filter.";
@@ -254,10 +262,28 @@ Status SSTableBuilder::finish() {
         return status();
     }
 
+    // 写入file meta
+    FileMeta file_meta(options_->sst_type, options_->sst_version);
+    file_meta.setMinKey(first_key_);
+    file_meta.setMaxKey(last_key_);
+    file_meta.setKeyNum(key_nums_);
+    file_meta.setBitsPerKey(options_->bits_per_key);
+
+    std::string file_meta_content;
+    file_meta.encodeTo(&file_meta_content);
+    status_ = writer_->append(file_meta_content);
+    if (!ok()) {
+        return status();
+    }
+    file_meta_handle.setOffset(offset_);
+    file_meta_handle.setSize(file_meta_content.size());
+    offset_ += file_meta_content.size();
+
     // 写入footer
     Footer footer;
     footer.setMetaindexHandle(metaindex_block_handle);
     footer.setIndexHandle(index_block_handle);
+    footer.setFileMetaHandle(file_meta_handle);
     std::string footer_content;
     footer.encodeTo(&footer_content);
     status_ = writer_->append(footer_content);

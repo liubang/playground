@@ -61,8 +61,9 @@ private:
     BlockBuilder index_block_;
     BlockHandle pending_handler_;
     FilterBlockBuilderPtr filter_block_;
+    std::string first_key_; // min_key
     std::string last_key_;
-    int64_t num_entries_{0};
+    uint64_t key_nums_{0};
     uint64_t offset_{0};
     Status status_;
     bool pending_index_entry_{false};
