@@ -20,7 +20,7 @@
 namespace pl {
 
 SSTable::SSTable(OptionsRef options,
-                 FsReaderRef reader, /*const BlockHandle& metaindex_handle,*/
+                 FsReaderRef reader,
                  FileMetaRef file_meta,
                  BlockRef index_block)
     : options_(std::move(options)),
@@ -50,17 +50,16 @@ std::unique_ptr<SSTable> SSTable::open(const OptionsRef& options,
     }
 
     // file meta
-    Binary file_meta_input;
-    std::unique_ptr<char[]> file_meta_content =
-        std::make_unique<char[]>(footer.fileMetaHandle().size());
-    *status = reader->read(footer.fileMetaHandle().offset(), footer.fileMetaHandle().size(),
-                           &file_meta_input, file_meta_content.get());
+    BlockContents file_meta_content;
+    *status = BlockReader::readBlock(reader, footer.fileMetaHandle(), &file_meta_content);
     if (!status->isOk()) {
         return nullptr;
     }
 
+    // for RAII
+    auto meta_block = std::make_shared<Block>(file_meta_content);
     auto file_meta = std::make_unique<FileMeta>();
-    *status = file_meta->decodeFrom(file_meta_input);
+    *status = file_meta->decodeFrom(file_meta_content.data);
     if (!status->isOk()) {
         return nullptr;
     }
@@ -110,9 +109,11 @@ void SSTable::readFilter(const Footer& footer) {
 }
 
 Status SSTable::get(const Binary& key, void* arg, HandleResult&& handle_result) {
-    if (key.compare(file_meta_->minKey()) < 0 || key.compare(file_meta_->maxKey()) > 0) {
+    if (options_->comparator->compare(key, file_meta_->minKey()) < 0 ||
+        options_->comparator->compare(key, file_meta_->maxKey()) > 0) {
         return Status::NewNotFound();
     }
+
     auto iiter = index_block_->iterator(options_->comparator);
     iiter->seek(key);
     if (!iiter->valid()) {
@@ -131,7 +132,6 @@ Status SSTable::get(const Binary& key, void* arg, HandleResult&& handle_result) 
             return Status::NewNotFound();
         }
     }
-
     // key may found
     auto iter = blockReader(iiter->val());
     if (nullptr == iter) {
