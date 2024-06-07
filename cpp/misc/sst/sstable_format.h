@@ -29,7 +29,9 @@ namespace pl {
 static constexpr std::size_t FOOTER_LEN = 64;
 static constexpr uint64_t SST_MAGIC_NUMBER = 0x833859d02c1dbd75ull;
 static constexpr uint32_t BLOCK_TRAILER_LEN = 5; // compression type (1B) + crc (4B)
-static constexpr uint32_t FILE_META_MIN_LEN = 52;
+// sst_type(1B) + sst_version(1B) + filter_type(1B) + bits_per_key(4B) + key_num(8B) +
+// min_key_len(4B) + max_key_len(4B)
+static constexpr uint32_t FILE_META_MIN_LEN = 23;
 
 enum class SSTType : uint8_t {
     NONE = 0,   // invalid sst type
@@ -41,6 +43,11 @@ enum class SSTType : uint8_t {
 enum class SSTVersion : uint8_t {
     NONE = 0,
     V1 = 1, // current sst version is V1
+};
+
+enum class FilterPolicyType : uint8_t {
+    NONE = 0,
+    BLOOM_FILTER = 1,
 };
 
 /**
@@ -74,9 +81,13 @@ private:
  */
 class FileMeta {
 public:
-    FileMeta() {}
+    FileMeta() = default;
 
-    FileMeta(SSTType type, SSTVersion version) : sst_type_(type), sst_version_(version) {}
+    void setSSTType(SSTType type) { sst_type_ = type; }
+
+    void setSSTVersion(SSTVersion version) { sst_version_ = version; }
+
+    void setFilterPolicyType(FilterPolicyType type) { filter_type_ = type; }
 
     void setKeyNum(uint64_t key_number) { key_number_ = key_number; }
 
@@ -86,9 +97,11 @@ public:
 
     void setBitsPerKey(uint32_t bpk) { bits_per_key_ = bpk; }
 
-    SSTType sstType() const { return sst_type_; }
+    [[nodiscard]] SSTType sstType() const { return sst_type_; }
 
-    SSTVersion sstVersion() const { return sst_version_; }
+    [[nodiscard]] SSTVersion sstVersion() const { return sst_version_; }
+
+    [[nodiscard]] FilterPolicyType filterPolicyType() const { return filter_type_; }
 
     [[nodiscard]] const std::string& minKey() const { return min_key_; }
 
@@ -100,12 +113,13 @@ public:
 
     Status decodeFrom(const Binary& input);
 
-    std::string toString() const {
+    [[nodiscard]] std::string toString() const {
         std::stringstream ss;
-        ss << "sst type:" << static_cast<uint8_t>(sst_type_) << '\n';
-        ss << "sst version:" << static_cast<uint8_t>(sst_version_) << '\n';
-        ss << "key number:" << key_number_ << '\n';
+        ss << "sst type:" << static_cast<int>(sst_type_) << '\n';
+        ss << "sst version:" << static_cast<int>(sst_version_) << '\n';
+        ss << "filter type:" << static_cast<int>(filter_type_) << '\n';
         ss << "bits per key:" << bits_per_key_ << '\n';
+        ss << "key number:" << key_number_ << '\n';
         ss << "min key:" << min_key_ << '\n';
         ss << "max key:" << max_key_ << '\n';
         return ss.str();
@@ -114,8 +128,9 @@ public:
 private:
     SSTType sst_type_{SSTType::NONE};
     SSTVersion sst_version_{SSTVersion::NONE};
-    uint64_t key_number_;
+    FilterPolicyType filter_type_{FilterPolicyType::NONE};
     uint32_t bits_per_key_;
+    uint64_t key_number_;
     std::string min_key_;
     std::string max_key_;
 };
@@ -128,10 +143,12 @@ public:
     Footer() = default;
 
     void setMetaindexHandle(const BlockHandle& block_handle) { filter_handle_ = block_handle; }
+    void setFilterHandle(const BlockHandle& block_handle) { filter_handle_ = block_handle; }
     void setIndexHandle(const BlockHandle& block_handle) { index_handle_ = block_handle; }
     void setFileMetaHandle(const BlockHandle& block_handle) { file_meta_handle_ = block_handle; }
 
     [[nodiscard]] const BlockHandle& metaIndexHandle() const { return filter_handle_; }
+    [[nodiscard]] const BlockHandle& filterHandle() const { return filter_handle_; }
     [[nodiscard]] const BlockHandle& indexHandle() const { return index_handle_; }
     [[nodiscard]] const BlockHandle& fileMetaHandle() const { return file_meta_handle_; }
 

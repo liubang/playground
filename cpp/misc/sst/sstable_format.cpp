@@ -44,8 +44,9 @@ void FileMeta::encodeTo(std::string* dst) const {
     assert(dst != nullptr);
     encodeInt(dst, static_cast<uint8_t>(sst_type_));        // 1B
     encodeInt(dst, static_cast<uint8_t>(sst_version_));     // 1B
-    encodeInt(dst, key_number_);                            // 8B
+    encodeInt(dst, static_cast<uint8_t>(filter_type_));     // 1B
     encodeInt(dst, bits_per_key_);                          // 4B
+    encodeInt(dst, key_number_);                            // 8B
     encodeInt(dst, static_cast<uint32_t>(min_key_.size())); // 4B
     dst->append(min_key_);
     encodeInt(dst, static_cast<uint32_t>(max_key_.size())); // 4B
@@ -54,39 +55,66 @@ void FileMeta::encodeTo(std::string* dst) const {
 
 Status FileMeta::decodeFrom(const Binary& input) {
     if (input.size() < FILE_META_MIN_LEN) {
-        return Status::NewCorruption("invalid sstable format");
+        return Status::NewCorruption("file meta is too short");
     }
     const char* data = input.data();
     const auto s = input.size();
-    uint8_t type = decodeInt<uint8_t>(data);
+    uint32_t cursor = 0;
+
+    // sst type
+    auto type = decodeInt<uint8_t>(data + cursor);
+    cursor++;
     if (type == 0 || type > static_cast<uint8_t>(SSTType::MAJOR)) {
         return Status::NewCorruption("invalid sstable type");
     }
     sst_type_ = static_cast<SSTType>(type);
-    uint8_t version = decodeInt<uint8_t>(data + 1);
+
+    // sst version
+    auto version = decodeInt<uint8_t>(data + cursor);
+    cursor++;
     if (version == 0 || version > static_cast<uint8_t>(SSTVersion::V1)) {
         return Status::NewCorruption("invalid sstable version");
     }
     sst_version_ = static_cast<SSTVersion>(version);
-    key_number_ = decodeInt<uint64_t>(data + 2);
-    bits_per_key_ = decodeInt<uint32_t>(data + 10);
-    uint32_t min_key_size = decodeInt<uint32_t>(data + 14);
 
-    if (18 + min_key_size + 4 > s) {
-        return Status::NewCorruption("invalid sstable format");
+    // filter type
+    auto filter_type = decodeInt<uint8_t>(data + cursor);
+    cursor++;
+    if (filter_type > static_cast<uint8_t>(FilterPolicyType::BLOOM_FILTER)) {
+        return Status::NewCorruption("invalid filter policy type");
+    }
+    filter_type_ = static_cast<FilterPolicyType>(filter_type);
+
+    // bits_per_key
+    bits_per_key_ = decodeInt<uint32_t>(data + cursor);
+    cursor += 4;
+
+    // key number
+    key_number_ = decodeInt<uint64_t>(data + cursor);
+    cursor += 8;
+
+    // min key
+    auto min_key_size = decodeInt<uint32_t>(data + cursor);
+    cursor += 4;
+    if (cursor + min_key_size + 4 > s) {
+        return Status::NewCorruption("parse file meta error");
     }
 
     if (min_key_size > 0) {
-        min_key_.assign(data + 18, min_key_size);
+        min_key_.assign(data + cursor, min_key_size);
+        cursor += min_key_size;
     }
-    uint32_t max_key_size = decodeInt<uint32_t>(data + 18 + min_key_size);
 
-    if (18 + min_key_size + 4 + max_key_size != s) {
-        return Status::NewCorruption("invalid sstable format");
+    // max key
+    auto max_key_size = decodeInt<uint32_t>(data + cursor);
+    cursor += 4;
+
+    if (cursor + max_key_size != s) {
+        return Status::NewCorruption("parse file meta error");
     }
 
     if (max_key_size > 0) {
-        max_key_.assign(data + 18 + min_key_size + 4, max_key_size);
+        max_key_.assign(data + cursor, max_key_size);
     }
 
     return Status::NewOk();
@@ -94,11 +122,12 @@ Status FileMeta::decodeFrom(const Binary& input) {
 
 /**
  * footer format
- * +-----------------+-------------+----------------+---------+-------------------+
- * | metaindex (16B) | index (16B) | filemeta (16B) | padding | magic number (8B) |
- * +-----------------+-------------+----------------+---------+-------------------+
- * | <------------------------- 56B ------------------------> |
- * | <------------------------------------ 64B ---------------------------------->|
+ * +-----------------------+----------------------+-------------------------+--------------------+
+ * |  filter handle (16B)  |  index handle (16B)  |  filemata handle (16B)  |  magic number(8B)  |
+ * +-----------------------+----------------------+-------------------------+--------------------+
+ * | <-------------------------------- 56B -------------------------------> |
+ * |
+ * | <------------------------------------------- 64B ------------------------------------------>|
  *
  */
 void Footer::encodeTo(std::string* dst) const {
@@ -122,11 +151,12 @@ Status Footer::decodeFrom(const Binary& input) {
     const auto magic_hi = decodeInt<uint32_t>(magic_ptr + 4);
     const uint64_t magic =
         ((static_cast<uint64_t>(magic_hi) << 32 | (static_cast<uint64_t>(magic_lo))));
+
     if (magic != SST_MAGIC_NUMBER) {
         return Status::NewCorruption("invalid magic number");
     }
 
-    // decode metaindex offset and size
+    // decode filter offset and size
     Status result = filter_handle_.decodeFrom(input);
     if (!result.isOk()) {
         return result;
@@ -148,17 +178,15 @@ Status BlockReader::readBlock(const FsReaderRef& reader,
                               BlockContents* result) {
     // read block trailer
     auto s = static_cast<std::size_t>(handle.size());
-    char* buf = new char[s + BLOCK_TRAILER_LEN];
+    auto buf = std::make_unique<char[]>(s + BLOCK_TRAILER_LEN);
 
     Binary content;
-    auto status = reader->read(handle.offset(), s + BLOCK_TRAILER_LEN, &content, buf);
+    auto status = reader->read(handle.offset(), s + BLOCK_TRAILER_LEN, &content, buf.get());
     if (!status.isOk()) {
-        delete[] buf;
         return status;
     }
     // invalid content
     if (content.size() != s + BLOCK_TRAILER_LEN) {
-        delete[] buf;
         return Status::NewCorruption("invalid block");
     }
 
@@ -167,54 +195,45 @@ Status BlockReader::readBlock(const FsReaderRef& reader,
     auto crc = decodeInt<uint32_t>(data + s + 1);
     auto actual_crc = crc32(data, s);
     if (crc != actual_crc) {
-        delete[] buf;
         return Status::NewCorruption("crc error");
     }
     switch (static_cast<CompressionType>(data[s])) {
-    case CompressionType::kSnappyCompression:
+    case CompressionType::SNAPPY:
     {
         size_t ulen;
         if (!snappy::GetUncompressedLength(data, s, &ulen)) {
-            delete[] buf;
             return Status::NewCorruption("invalid data");
         }
-        char* ubuf = new char[ulen];
-        if (!snappy::RawUncompress(data, s, ubuf)) {
-            delete[] buf;
-            delete[] ubuf;
+        auto ubuf = std::make_unique<char[]>(ulen);
+        if (!snappy::RawUncompress(data, s, ubuf.get())) {
             return Status::NewCorruption("invalid data");
         }
-        delete[] buf;
-        result->data = Binary(ubuf, ulen);
+        result->data = Binary(ubuf.release(), ulen);
         result->heap_allocated = true;
         result->cachable = true;
         break;
     }
-    case CompressionType::kZstdCompression:
+    case CompressionType::ZSTD:
     {
         size_t ulen = ZSTD_getFrameContentSize(data, s);
         if (ulen == 0) {
-            delete[] buf;
             return Status::NewCorruption("invalid data");
         }
-        char* ubuf = new char[ulen];
+        auto ubuf = std::make_unique<char[]>(ulen);
         ZSTD_DCtx* ctx = ZSTD_createDCtx();
-        size_t outlen = ZSTD_decompressDCtx(ctx, ubuf, ulen, data, s);
+        size_t outlen = ZSTD_decompressDCtx(ctx, ubuf.get(), ulen, data, s);
         ZSTD_freeDCtx(ctx);
         if (ZSTD_isError(outlen) != 0u) {
-            delete[] buf;
-            delete[] ubuf;
             return Status::NewCorruption("invalid data");
         }
-        delete[] buf;
-        result->data = Binary(ubuf, ulen);
+        result->data = Binary(ubuf.release(), ulen);
         result->heap_allocated = true;
         result->cachable = true;
         break;
     }
     default:
     {
-        result->data = Binary(buf, s);
+        result->data = Binary(buf.release(), s);
         result->heap_allocated = true;
         result->cachable = true;
         break;

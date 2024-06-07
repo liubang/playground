@@ -26,9 +26,9 @@
 namespace pl {
 
 enum class CompressionType : uint8_t {
-    kNoCompression = 0,
-    kSnappyCompression = 1,
-    kZstdCompression = 2,
+    NONE = 0,
+    SNAPPY = 1,
+    ZSTD = 2,
 };
 
 // TODO: Open options and Build options
@@ -41,12 +41,13 @@ struct Options {
     std::size_t block_size = 4 * 1024;
     int block_restart_interval = 16;
     uint32_t bits_per_key = 10;
-    CompressionType compression_type = CompressionType::kNoCompression;
+    CompressionType compression_type = CompressionType::NONE;
     int zstd_compress_level = 1;
     const ComparatorRef comparator;
     const FilterPolicyRef filter_policy;
     SSTType sst_type = SSTType::NONE;
     SSTVersion sst_version = SSTVersion::NONE;
+    FilterPolicyType filter_type = FilterPolicyType::NONE;
 };
 
 using OptionsPtr = std::unique_ptr<Options>;
