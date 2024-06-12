@@ -14,7 +14,6 @@
 
 # Authors: liubang (it.liubang@gmail.com)
 
-common --enable_bzlmod
 # common --registry=https://liubang.github.io/playground/registry
 common --registry=file://%workspace%/registry
 common --registry=https://raw.githubusercontent.com/bazelboost/registry/main
