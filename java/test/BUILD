@@ -1,4 +1,4 @@
-# Copyright (c) 2023 The Authors. All rights reserved.
+# Copyright (c) 2024 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,21 +13,5 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/05/21 21:06
+# Created: 2024/06/13 20:23
 
-load("@contrib_rules_jvm//java:defs.bzl", "java_test_suite")
-load("@rules_java//java:defs.bzl", "java_binary")
-
-java_binary(
-    name = "Demo",
-    testonly = True,
-    main_class = "Demo",
-    visibility = ["//visibility:public"],
-    runtime_deps = [":java-test-lib"],
-)
-
-java_test_suite(
-    name = "java",
-    srcs = ["Demo.java"],
-    deps = ["@maven//:org_ow2_asm_asm_test"],
-)

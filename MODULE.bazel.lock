@@ -41,8 +41,8 @@
     "https://bcr.bazel.build/modules/c-ares/1.15.0/source.json": "5e3ed991616c5ec4cc09b0893b29a19232de4a1830eb78c567121bfea87453f7",
     "https://bcr.bazel.build/modules/catch2/3.4.0/MODULE.bazel": "f0c0d04e77d4e8dcb74090375fc161cc5a54f54608b76132da2e65540fcf3cad",
     "https://bcr.bazel.build/modules/catch2/3.4.0/source.json": "93a3de688129338f6181943107bdd4b70658ca3ca7b92788334579dc775057eb",
-    "https://bcr.bazel.build/modules/contrib_rules_jvm/0.26.0/MODULE.bazel": "5eaeab3b3f7a6793aa96836ca2b31b460a9bbbb44b742c88b583cbd16122b167",
-    "https://bcr.bazel.build/modules/contrib_rules_jvm/0.26.0/source.json": "08d03467e09bd55a09c0c0ed53aeae28a76b54ac770f0f4f21056f6e5587a0d8",
+    "https://bcr.bazel.build/modules/contrib_rules_jvm/0.27.0/MODULE.bazel": "47935663ea1bf540b651ceaed516c181623ae4185d37fd1f6c79066effe4601c",
+    "https://bcr.bazel.build/modules/contrib_rules_jvm/0.27.0/source.json": "966fcac19d6d8a0f3c8239fbd1a3ff0bff0a6ec34efbaa9ba5cadfd5b04729b6",
     "https://bcr.bazel.build/modules/crc32c/1.1.0/MODULE.bazel": "f11439d063a2b4e0f19b56bb8da6a931f9691bf583bd1ec0718645bce6c62b06",
     "https://bcr.bazel.build/modules/crc32c/1.1.0/source.json": "aabc6ce46d4b71343d500270c2ddfd45f59cff9fd171313bdd773bf620cf2a6f",
     "https://bcr.bazel.build/modules/fmt/10.1.0/MODULE.bazel": "597858102e801265cd33f0031150b36067d064125ef050f749de23d5fc16b673",
@@ -135,7 +135,8 @@
     "https://bcr.bazel.build/modules/rules_java/6.4.0/MODULE.bazel": "e986a9fe25aeaa84ac17ca093ef13a4637f6107375f64667a15999f77db6c8f6",
     "https://bcr.bazel.build/modules/rules_java/7.3.2/MODULE.bazel": "50dece891cfdf1741ea230d001aa9c14398062f2b7c066470accace78e412bc2",
     "https://bcr.bazel.build/modules/rules_java/7.6.1/MODULE.bazel": "2f14b7e8a1aa2f67ae92bc69d1ec0fa8d9f827c4e17ff5e5f02e91caa3b2d0fe",
-    "https://bcr.bazel.build/modules/rules_java/7.6.1/source.json": "8f3f3076554e1558e8e468b2232991c510ecbcbed9e6f8c06ac31c93bcf38362",
+    "https://bcr.bazel.build/modules/rules_java/7.6.3/MODULE.bazel": "c2b6ace50614007f95d788a50f9fc7bb35ba535deebf90b60acc2a60c01e0b1b",
+    "https://bcr.bazel.build/modules/rules_java/7.6.3/source.json": "a32ddce6b75dbe8aa73e790b11182bd23abba80012bb1390cce3f4c8e8888f6c",
     "https://bcr.bazel.build/modules/rules_jvm_external/4.4.2/MODULE.bazel": "a56b85e418c83eb1839819f0b515c431010160383306d13ec21959ac412d2fe7",
     "https://bcr.bazel.build/modules/rules_jvm_external/5.3/MODULE.bazel": "bf93870767689637164657731849fb887ad086739bd5d360d90007a581d5527d",
     "https://bcr.bazel.build/modules/rules_jvm_external/6.0/MODULE.bazel": "37c93a5a78d32e895d52f86a8d0416176e915daabd029ccb5594db422e87c495",
@@ -307,7 +308,7 @@
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/bzip2/1.0.8/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/c-ares/1.15.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/catch2/3.4.0/MODULE.bazel": "not found",
-    "https://raw.githubusercontent.com/bazelboost/registry/main/modules/contrib_rules_jvm/0.26.0/MODULE.bazel": "not found",
+    "https://raw.githubusercontent.com/bazelboost/registry/main/modules/contrib_rules_jvm/0.27.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/crc32c/1.1.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/fmt/10.1.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/gazelle/0.26.0/MODULE.bazel": "not found",
@@ -376,6 +377,7 @@
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/rules_java/6.4.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/rules_java/7.3.2/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/rules_java/7.6.1/MODULE.bazel": "not found",
+    "https://raw.githubusercontent.com/bazelboost/registry/main/modules/rules_java/7.6.3/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/rules_jvm_external/4.4.2/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/rules_jvm_external/5.3/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/rules_jvm_external/6.0/MODULE.bazel": "not found",
@@ -419,7 +421,7 @@
     "@@apple_rules_lint~//lint:extensions.bzl%linter": {
       "general": {
         "bzlTransitiveDigest": "g7izj5kLCmsajh8IospHh4ZQ35dyM0FIrA8D4HapAsM=",
-        "usagesDigest": "HJ1acfUSkJN2EPNNFjnOVaOl1fIxpK+q8oMb5lKvqDg=",
+        "usagesDigest": "kmY1ceS8ULVaLox8MSTDry8UE9PL8oYOU10Jd1t69CU=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
         "envVariables": {},
@@ -466,7 +468,7 @@
     "@@contrib_rules_jvm~//java/private:non-module-deps.bzl%non_module_deps": {
       "general": {
         "bzlTransitiveDigest": "qXELpPaHfvIDNB+pcBVku2T6mue4yAWj7Q7lnEaM3b4=",
-        "usagesDigest": "9uAjgUr+/lleR5Tw51InPWaLiOMTKgRWjdyLCLiEJyw=",
+        "usagesDigest": "opyKjBfnIxBvKDLxixkrwiOLF0ySA+hVkzTAgvBOOVU=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
         "envVariables": {},
@@ -926,10 +928,10 @@
     "@@rules_jvm_external~//:extensions.bzl%maven": {
       "general": {
         "bzlTransitiveDigest": "Pq3YnJEflPAALx/UMykUnN3aA5bve0fNm/cuLvt/zvI=",
-        "usagesDigest": "m1ZJnLHw5D3Dk0LkcE140Wca+fZ5hJjSzoflqAsSmRY=",
+        "usagesDigest": "rwoWeJPirsrNGyaDLDXdqPvINz6YQ9bpXEC7eIhWC5o=",
         "recordedFileInputs": {
           "@@rules_jvm_external~//rules_jvm_external_deps_install.json": "0bfbc915d9155df44d7a3b216e8f3c1fbcd110e358dd07637dc393583a5227e8",
-          "@@//maven_install.json": "77c419a9fa6403020a01e96ad5ae210bc17a61d9a25c02a6f77db7b41026d897",
+          "@@//maven_install.json": "36d7e66352c0523ae76d440531a3798f4885aa9df0becd5005a1709e32d53f9b",
           "@@contrib_rules_jvm~//contrib_rules_jvm_deps_install.json": "c65d8722c471d3b75be39f94e3c4a6ce19c4e377e96cb9b28746ac559f6267de"
         },
         "recordedDirentsInputs": {},
@@ -5117,17 +5119,6 @@
               "target_name": "org_slf4j_slf4j_simple"
             }
           },
-          "io_opentelemetry_opentelemetry_api_jar_sources_1_36_0": {
-            "bzlFile": "@@bazel_tools//tools/build_defs/repo:http.bzl",
-            "ruleClassName": "http_file",
-            "attributes": {
-              "sha256": "3921744942d746fd4e6131dd4db1c37cb754af39d525e9196c077445a5071c85",
-              "urls": [
-                "https://repo1.maven.org/maven2/io/opentelemetry/opentelemetry-api/1.36.0/opentelemetry-api-1.36.0-sources.jar"
-              ],
-              "downloaded_file_path": "v1/io/opentelemetry/opentelemetry-api/1.36.0/opentelemetry-api-1.36.0-sources.jar"
-            }
-          },
           "org_junit_platform_junit_platform_reporting_1_8_2": {
             "bzlFile": "@@bazel_tools//tools/build_defs/repo:http.bzl",
             "ruleClassName": "http_file",
@@ -5137,6 +5128,17 @@
                 "https://repo1.maven.org/maven2/org/junit/platform/junit-platform-reporting/1.8.2/junit-platform-reporting-1.8.2.jar"
               ],
               "downloaded_file_path": "v1/org/junit/platform/junit-platform-reporting/1.8.2/junit-platform-reporting-1.8.2.jar"
+            }
+          },
+          "io_opentelemetry_opentelemetry_api_jar_sources_1_36_0": {
+            "bzlFile": "@@bazel_tools//tools/build_defs/repo:http.bzl",
+            "ruleClassName": "http_file",
+            "attributes": {
+              "sha256": "3921744942d746fd4e6131dd4db1c37cb754af39d525e9196c077445a5071c85",
+              "urls": [
+                "https://repo1.maven.org/maven2/io/opentelemetry/opentelemetry-api/1.36.0/opentelemetry-api-1.36.0-sources.jar"
+              ],
+              "downloaded_file_path": "v1/io/opentelemetry/opentelemetry-api/1.36.0/opentelemetry-api-1.36.0-sources.jar"
             }
           },
           "net_sourceforge_pmd_pmd_plsql_6_46_0": {
@@ -5300,6 +5302,10 @@
               "artifacts": [
                 "{ \"group\": \"junit\", \"artifact\": \"junit\", \"version\": \"4.13.2\" }",
                 "{ \"group\": \"log4j\", \"artifact\": \"log4j\", \"version\": \"1.2.17\" }",
+                "{ \"group\": \"org.junit.jupiter\", \"artifact\": \"junit-jupiter-api\", \"version\": \"5.8.2\" }",
+                "{ \"group\": \"org.junit.jupiter\", \"artifact\": \"junit-jupiter-engine\", \"version\": \"5.8.2\" }",
+                "{ \"group\": \"org.junit.platform\", \"artifact\": \"junit-platform-launcher\", \"version\": \"1.8.2\" }",
+                "{ \"group\": \"org.junit.platform\", \"artifact\": \"junit-platform-reporting\", \"version\": \"1.8.2\" }",
                 "{ \"group\": \"org.ow2.asm\", \"artifact\": \"asm\", \"version\": \"7.0\" }",
                 "{ \"group\": \"org.ow2.asm\", \"artifact\": \"asm-util\", \"version\": \"7.0\" }",
                 "{ \"group\": \"org.ow2.asm\", \"artifact\": \"asm-commons\", \"version\": \"7.0\" }",
@@ -5334,13 +5340,13 @@
                 "{ \"group\": \"org.mockito\", \"artifact\": \"mockito-core\", \"version\": \"4.3.1\" }"
               ],
               "fail_on_missing_checksum": true,
-              "fetch_sources": false,
+              "fetch_sources": true,
               "fetch_javadoc": false,
               "excluded_artifacts": [],
               "generate_compat_repositories": false,
               "version_conflict_policy": "default",
               "override_targets": {},
-              "strict_visibility": true,
+              "strict_visibility": false,
               "strict_visibility_value": [
                 "@@//visibility:private"
               ],
@@ -7933,6 +7939,10 @@
               "artifacts": [
                 "{ \"group\": \"junit\", \"artifact\": \"junit\", \"version\": \"4.13.2\" }",
                 "{ \"group\": \"log4j\", \"artifact\": \"log4j\", \"version\": \"1.2.17\" }",
+                "{ \"group\": \"org.junit.jupiter\", \"artifact\": \"junit-jupiter-api\", \"version\": \"5.8.2\" }",
+                "{ \"group\": \"org.junit.jupiter\", \"artifact\": \"junit-jupiter-engine\", \"version\": \"5.8.2\" }",
+                "{ \"group\": \"org.junit.platform\", \"artifact\": \"junit-platform-launcher\", \"version\": \"1.8.2\" }",
+                "{ \"group\": \"org.junit.platform\", \"artifact\": \"junit-platform-reporting\", \"version\": \"1.8.2\" }",
                 "{ \"group\": \"org.ow2.asm\", \"artifact\": \"asm\", \"version\": \"7.0\" }",
                 "{ \"group\": \"org.ow2.asm\", \"artifact\": \"asm-util\", \"version\": \"7.0\" }",
                 "{ \"group\": \"org.ow2.asm\", \"artifact\": \"asm-commons\", \"version\": \"7.0\" }",
@@ -7966,19 +7976,19 @@
                 "{ \"group\": \"junit\", \"artifact\": \"junit\", \"version\": \"4.13.2\" }",
                 "{ \"group\": \"org.mockito\", \"artifact\": \"mockito-core\", \"version\": \"4.3.1\" }"
               ],
-              "fetch_sources": false,
+              "fetch_sources": true,
               "fetch_javadoc": false,
               "resolver": "coursier",
               "generate_compat_repositories": false,
               "maven_install_json": "@@//:maven_install.json",
               "override_targets": {},
-              "strict_visibility": true,
+              "strict_visibility": false,
               "strict_visibility_value": [
                 "@@//visibility:private"
               ],
               "additional_netrc_lines": [],
               "use_credentials_from_home_netrc_file": false,
-              "fail_if_repin_required": true,
+              "fail_if_repin_required": false,
               "use_starlark_android_rules": false,
               "aar_import_bzl_label": "@build_bazel_rules_android//android:rules.bzl",
               "duplicate_version_warning": "warn",
