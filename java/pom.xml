@@ -35,4 +35,16 @@
         <module>design-pattern</module>
         <module>jvm</module>
     </modules>
+
+    <build>
+        <resources>
+            <resource>
+                <directory>./</directory>
+                <excludes>
+                    <exclude>**/BUILD</exclude>
+                    <exclude>**/BUILD.bazel</exclude>
+                </excludes>
+            </resource>
+        </resources>
+    </build>
 </project>

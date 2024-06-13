@@ -23,7 +23,6 @@ licenses(["notice"])
 # gazelle:java_maven_install_file maven_install.json
 # gazelle:exclude cpp
 # gazelle:exclude proto
-# gazelle:exclude **/target/**
 gazelle(
     name = "gazelle",
     gazelle = ":gazelle_bin",
