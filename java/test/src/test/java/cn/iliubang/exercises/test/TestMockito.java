@@ -1,7 +1,7 @@
 package cn.iliubang.exercises.test;
 
-import org.junit.Assert;
-import org.junit.Test;
+import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.util.ArrayList;
@@ -32,11 +32,11 @@ public class TestMockito {
     public void createMockObject() {
         // 使用mock静态方法创建Mock对象
         List mockedList = mock(List.class);
-        Assert.assertTrue(mockedList instanceof List);
+        assertTrue(mockedList instanceof List);
         ArrayList mockedArrayList = mock(ArrayList.class);
 
-        Assert.assertTrue(mockedArrayList instanceof List);
-        Assert.assertTrue(mockedArrayList instanceof ArrayList);
+        assertTrue(mockedArrayList instanceof List);
+        assertTrue(mockedArrayList instanceof ArrayList);
     }
 
     @Test
@@ -48,29 +48,32 @@ public class TestMockito {
         // 当调用mockedList.size()时，返回1
         when(mockedList.size()).thenReturn(1);
 
-        Assert.assertTrue(mockedList.add("one"));
-        Assert.assertFalse(mockedList.add("One"));
-        Assert.assertEquals(1, mockedList.size());
+        assertTrue(mockedList.add("one"));
+        assertFalse(mockedList.add("One"));
+        assertEquals(1, mockedList.size());
 
         Iterator i = mock(Iterator.class);
         when(i.next()).thenReturn("hello,").thenReturn("Mockito!");
 
         String result = i.next() + " " + i.next();
 
-        Assert.assertEquals("hello, Mockito!", result);
+        assertEquals("hello, Mockito!", result);
     }
 
-    @Test(expected = NoSuchElementException.class)
+    @Test
     public void testForIOException() throws Exception {
         Iterator i = mock(Iterator.class);
         when(i.next()).thenReturn("hello,").thenReturn("Mockito!");
         String result = i.next() + " " + i.next();
-        Assert.assertEquals("hello, Mockito!", result);
+        assertEquals("hello, Mockito!", result);
 
         // doThrow(ExceptionX).when(x).methodCall, 它的含义是:
         // 当调用了 x.methodCall 方法后, 抛出异常 ExceptionX.
         doThrow(new NoSuchElementException()).when(i).next();
-        i.next();
+
+        assertThrows(NoSuchElementException.class, () -> {
+            i.next();
+        });
     }
 
     @Test
@@ -83,7 +86,7 @@ public class TestMockito {
         mockedList.add("three times");
 
         when(mockedList.size()).thenReturn(5);
-        Assert.assertEquals(5, mockedList.size());
+        assertEquals(5, mockedList.size());
         // 第一句校验 mockedList.add("one") 至少被调用了 1 次(atLeastOnce)
         // 第二句校验 mockedList.add("two") 被调用了 1 次(times(1))
         // 第三句校验 mockedList.add("three times") 被调用了 3 次(times(3))
@@ -107,10 +110,10 @@ public class TestMockito {
 
         // 因为我们没有对git(0), get(1)方法进行定制
         // 因此这些调用其实是调用的真实对象的方法
-        Assert.assertEquals(spy.get(0), "one");
-        Assert.assertEquals(spy.get(1), "two");
+        assertEquals(spy.get(0), "one");
+        assertEquals(spy.get(1), "two");
 
-        Assert.assertEquals(spy.size(), 5);
+        assertEquals(spy.size(), 5);
     }
 
     @Test
@@ -121,7 +124,7 @@ public class TestMockito {
         mockedList.addAll(list);
 
         verify(mockedList).addAll(argumentCaptor.capture());
-        Assert.assertEquals(2, argumentCaptor.getValue().size());
-        Assert.assertEquals(list, argumentCaptor.getValue());
+        assertEquals(2, argumentCaptor.getValue().size());
+        assertEquals(list, argumentCaptor.getValue());
     }
 }
