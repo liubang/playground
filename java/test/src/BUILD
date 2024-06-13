@@ -1,4 +1,4 @@
-# Copyright (c) 2023 The Authors. All rights reserved.
+# Copyright (c) 2024 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,21 +13,5 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/05/21 21:06
+# Created: 2024/06/13 20:23
 
-load("@contrib_rules_jvm//java:defs.bzl", "java_test_suite")
-
-java_test_suite(
-    name = "test",
-    srcs = ["TestMockito.java"],
-    runner = "junit5",
-    runtime_deps = [
-        "@maven//:org_junit_jupiter_junit_jupiter_engine",
-        "@maven//:org_junit_platform_junit_platform_launcher",
-        "@maven//:org_junit_platform_junit_platform_reporting",
-    ],
-    deps = [
-        "@maven//:org_junit_jupiter_junit_jupiter_api",
-        "@maven//:org_mockito_mockito_core",
-    ],
-)
