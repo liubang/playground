@@ -36,7 +36,7 @@ Status posixError(const std::string& context, int err_number) {
 Status PosixFsWriter::append(const Binary& data) {
     std::size_t write_size = data.size();
     const char* write_data = data.data();
-    std::size_t copy_size = std::min(write_size, kWritableFileBufferSize - pos_);
+    std::size_t copy_size = std::min(write_size, WRITE_BUFFER_SIZE - pos_);
     std::memcpy(buf_ + pos_, write_data, copy_size);
     write_data += copy_size;
     write_size -= copy_size;
@@ -50,7 +50,7 @@ Status PosixFsWriter::append(const Binary& data) {
         return status;
     }
 
-    if (write_size < kWritableFileBufferSize) {
+    if (write_size < WRITE_BUFFER_SIZE) {
         std::memcpy(buf_, write_data, write_size);
         pos_ = write_size;
         return Status::NewOk();
@@ -134,7 +134,7 @@ Status PosixFsReader::read(uint64_t offset, std::size_t n, Binary* result, char*
 }
 
 FsWriterPtr PosixFs::newFsWriter(const std::string& filename, Status* status) {
-    int fd = ::open(filename.c_str(), O_TRUNC | O_WRONLY | O_CREAT | kOpenBaseFlags, 0644);
+    int fd = ::open(filename.c_str(), O_TRUNC | O_WRONLY | O_CREAT | OPEN_BASE_FLAGS, 0644);
     if (fd < 0) {
         *status = posixError(filename, errno);
         return nullptr;
@@ -144,7 +144,7 @@ FsWriterPtr PosixFs::newFsWriter(const std::string& filename, Status* status) {
 }
 
 FsReaderPtr PosixFs::newFsReader(const std::string& filename, Status* status) {
-    int fd = ::open(filename.c_str(), O_RDONLY | kOpenBaseFlags);
+    int fd = ::open(filename.c_str(), O_RDONLY | OPEN_BASE_FLAGS);
     if (fd < 0) {
         *status = posixError(filename, errno);
         return nullptr;
