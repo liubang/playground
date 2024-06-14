@@ -25,15 +25,16 @@
 
 namespace pl {
 
-enum class CompressionType : uint8_t {
-    NONE = 0,
-    SNAPPY = 1,
-    ZSTD = 2,
+struct ReadOptions {
+    ReadOptions() : comparator(std::make_shared<BytewiseComparator>()) {}
+    const ComparatorRef comparator;
 };
 
-// TODO: Open options and Build options
-struct Options {
-    Options()
+using ReadOptionsPtr = std::unique_ptr<ReadOptions>;
+using ReadOptionsRef = std::shared_ptr<ReadOptions>;
+
+struct BuildOptions {
+    BuildOptions()
         : comparator(std::make_shared<BytewiseComparator>()),
           filter_policy(std::make_shared<BloomFilterPolicy>(bits_per_key)) {}
 
@@ -48,9 +49,11 @@ struct Options {
     SSTType sst_type = SSTType::NONE;
     SSTVersion sst_version = SSTVersion::NONE;
     FilterPolicyType filter_type = FilterPolicyType::NONE;
+    PatchId patch_id = 0;
+    SSTId sst_id = 0;
 };
 
-using OptionsPtr = std::unique_ptr<Options>;
-using OptionsRef = std::shared_ptr<Options>;
+using BuildOptionsPtr = std::unique_ptr<BuildOptions>;
+using BuildOptionsRef = std::shared_ptr<BuildOptions>;
 
 } // namespace pl
