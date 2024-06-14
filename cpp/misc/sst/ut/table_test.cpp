@@ -26,11 +26,13 @@
 namespace pl {
 class SSTableTest : public ::testing::Test {
     void SetUp() override {
-        options = std::make_shared<Options>();
-        options->compression_type = CompressionType::NONE;
-        options->sst_type = SSTType::MAJOR;
-        options->sst_version = SSTVersion::V1;
-        options->filter_type = FilterPolicyType::BLOOM_FILTER;
+        build_options = std::make_shared<BuildOptions>();
+        build_options->compression_type = CompressionType::NONE;
+        build_options->sst_type = SSTType::MAJOR;
+        build_options->sst_version = SSTVersion::V1;
+        build_options->filter_type = FilterPolicyType::BLOOM_FILTER;
+
+        read_options = std::make_shared<ReadOptions>();
         fs = std::make_shared<PosixFs>();
     }
     void TearDown() override {
@@ -42,7 +44,8 @@ public:
     void build_sst() {
         auto writer = fs->newFsWriter(sst_file, &st);
         EXPECT_TRUE(st.isOk());
-        auto sstable_builder = std::make_unique<pl::SSTableBuilder>(options, std::move(writer));
+        auto sstable_builder =
+            std::make_unique<pl::SSTableBuilder>(build_options, std::move(writer));
         for (int i = 0; i < ROW_COUNT; ++i) {
             std::string key = pl::random_string(KEY_LEN) + std::to_string(i);
             keys.insert(key);
@@ -61,7 +64,7 @@ public:
         EXPECT_TRUE(st.isOk());
         std::size_t sst_size = reader->size();
         ::printf("file: %s, size: %zu\n", this->sst_file.c_str(), sst_size);
-        auto table = pl::SSTable::open(options, std::move(reader), sst_size, &st);
+        auto table = pl::SSTable::open(read_options, std::move(reader), sst_size, &st);
         if (!st.isOk()) {
             ::printf("open table failed, error: %s\n", st.msg().c_str());
         }
@@ -96,8 +99,8 @@ public:
         auto reader = fs->newFsReader(this->sst_file, &st);
         EXPECT_TRUE(st.isOk());
         std::size_t sst_size = reader->size();
-        ::printf("file: %s, size: %zu\n", "/tmp/test.sst", sst_size);
-        auto table = pl::SSTable::open(options, std::move(reader), sst_size, &st);
+        ::printf("file: %s, size: %zu\n", this->sst_file.c_str(), sst_size);
+        auto table = pl::SSTable::open(read_options, std::move(reader), sst_size, &st);
         EXPECT_TRUE(st.isOk());
 
         check_table(table.get());
@@ -122,8 +125,8 @@ public:
         auto reader = fs->newFsReader(this->sst_file, &st);
         EXPECT_TRUE(st.isOk());
         std::size_t sst_size = reader->size();
-        ::printf("file: %s, size: %zu\n", "/tmp/test.sst", sst_size);
-        auto table = pl::SSTable::open(options, std::move(reader), sst_size, &st);
+        ::printf("file: %s, size: %zu\n", this->sst_file.c_str(), sst_size);
+        auto table = pl::SSTable::open(read_options, std::move(reader), sst_size, &st);
         EXPECT_TRUE(st.isOk());
         check_table(table.get());
         auto iter = table->iterator();
@@ -156,14 +159,17 @@ public:
     std::string sst_file;
     std::unordered_map<std::string, std::string> kvs;
     std::set<std::string> keys;
-    OptionsRef options;
+    BuildOptionsRef build_options;
+    ReadOptionsRef read_options;
     FsRef fs;
     Status st;
 };
 
 TEST_F(SSTableTest, table_without_compression) {
-    options->compression_type = CompressionType::NONE;
-    this->sst_file = "/tmp/test0.sst";
+    build_options->compression_type = CompressionType::NONE;
+    build_options->sst_id = 1;
+    build_options->patch_id = 1;
+    this->sst_file = "/tmp/1.sst";
     this->build_sst();
     this->seek_from_sst();
     this->scan_from_sst();
@@ -171,8 +177,10 @@ TEST_F(SSTableTest, table_without_compression) {
 }
 
 TEST_F(SSTableTest, table_with_snappy_compression) {
-    options->compression_type = CompressionType::SNAPPY;
-    this->sst_file = "/tmp/test1.sst";
+    build_options->compression_type = CompressionType::SNAPPY;
+    build_options->sst_id = 2;
+    build_options->patch_id = 2;
+    this->sst_file = "/tmp/2.sst";
     this->build_sst();
     this->seek_from_sst();
     this->scan_from_sst();
@@ -180,8 +188,10 @@ TEST_F(SSTableTest, table_with_snappy_compression) {
 }
 
 TEST_F(SSTableTest, table_with_zstd_compression) {
-    options->compression_type = CompressionType::ZSTD;
-    this->sst_file = "/tmp/test2.sst";
+    build_options->compression_type = CompressionType::ZSTD;
+    build_options->sst_id = 3;
+    build_options->patch_id = 3;
+    this->sst_file = "/tmp/3.sst";
     this->build_sst();
     this->seek_from_sst();
     this->scan_from_sst();
