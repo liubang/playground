@@ -44,6 +44,8 @@ void FileMeta::encodeTo(std::string* dst) const {
     assert(dst != nullptr);
     encodeInt(dst, static_cast<uint8_t>(sst_type_));        // 1B
     encodeInt(dst, static_cast<uint8_t>(sst_version_));     // 1B
+    encodeInt(dst, static_cast<uint64_t>(patch_id_));       // 8B
+    encodeInt(dst, static_cast<uint64_t>(sst_id_));         // 8B
     encodeInt(dst, static_cast<uint8_t>(filter_type_));     // 1B
     encodeInt(dst, bits_per_key_);                          // 4B
     encodeInt(dst, key_number_);                            // 8B
@@ -76,6 +78,14 @@ Status FileMeta::decodeFrom(const Binary& input) {
         return Status::NewCorruption("invalid sstable version");
     }
     sst_version_ = static_cast<SSTVersion>(version);
+
+    // patch_id
+    patch_id_ = decodeInt<uint64_t>(data + cursor);
+    cursor += 8;
+
+    // sst id
+    sst_id_ = decodeInt<uint64_t>(data + cursor);
+    cursor += 8;
 
     // filter type
     auto filter_type = decodeInt<uint8_t>(data + cursor);

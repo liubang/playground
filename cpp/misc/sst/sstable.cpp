@@ -19,7 +19,7 @@
 
 namespace pl {
 
-SSTable::SSTable(OptionsRef options,
+SSTable::SSTable(ReadOptionsRef options,
                  FsReaderRef reader,
                  FileMetaRef file_meta,
                  BlockRef index_block)
@@ -28,7 +28,7 @@ SSTable::SSTable(OptionsRef options,
       file_meta_(std::move(file_meta)),
       index_block_(std::move(index_block)) {}
 
-std::unique_ptr<SSTable> SSTable::open(const OptionsRef& options,
+std::unique_ptr<SSTable> SSTable::open(const ReadOptionsRef& options,
                                        const FsReaderRef& reader,
                                        uint64_t size,
                                        Status* status) {
