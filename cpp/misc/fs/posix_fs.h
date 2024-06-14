@@ -22,8 +22,9 @@
 
 namespace pl {
 
-constexpr const size_t kWritableFileBufferSize = 65536;
-constexpr const int kOpenBaseFlags = O_CLOEXEC;
+// 64K
+constexpr const size_t WRITE_BUFFER_SIZE = 65536;
+constexpr const int OPEN_BASE_FLAGS = O_CLOEXEC;
 
 Status posixError(const std::string& context, int err_number);
 
@@ -55,7 +56,7 @@ private:
     Status syncFd(int fd, const std::string& filename);
 
 private:
-    char buf_[kWritableFileBufferSize];
+    char buf_[WRITE_BUFFER_SIZE];
     std::size_t pos_{0};
     int fd_{-1};
     const std::string filename_;
