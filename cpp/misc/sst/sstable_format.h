@@ -29,9 +29,9 @@ namespace pl {
 static constexpr std::size_t FOOTER_LEN = 64;
 static constexpr uint64_t SST_MAGIC_NUMBER = 0x833859d02c1dbd75ull;
 static constexpr uint32_t BLOCK_TRAILER_LEN = 5; // compression type (1B) + crc (4B)
-// sst_type(1B) + sst_version(1B) + filter_type(1B) + bits_per_key(4B) + key_num(8B) +
-// min_key_len(4B) + max_key_len(4B)
-static constexpr uint32_t FILE_META_MIN_LEN = 23;
+// sst_type(1B) + sst_version(1B) + patch_id(8B) + sst_id(8B) + filter_type(1B) + bits_per_key(4B) +
+// key_num(8B) + min_key_len(4B) + max_key_len(4B)
+static constexpr uint32_t FILE_META_MIN_LEN = 39;
 
 // clang-format off
 #define __SST_CASE__(t) case t: return #t
@@ -77,7 +77,24 @@ inline const char* FilterPolicyType2String(FilterPolicyType t) {
     }
 }
 
+enum class CompressionType : uint8_t {
+    NONE = 0,
+    SNAPPY = 1,
+    ZSTD = 2,
+};
+
+inline const char* CompressionType2String(CompressionType t) {
+    switch (t) {
+        __SST_CASE__(CompressionType::NONE);
+        __SST_CASE__(CompressionType::SNAPPY);
+        __SST_CASE__(CompressionType::ZSTD);
+    }
+}
+
 #undef __SST_CASE__
+
+using PatchId = uint64_t;
+using SSTId = uint64_t;
 
 /**
  * @class BlockHandle
@@ -116,6 +133,10 @@ public:
 
     void setSSTVersion(SSTVersion version) { sst_version_ = version; }
 
+    void setPatchId(PatchId patch_id) { patch_id_ = patch_id; }
+
+    void setSSTId(SSTId sst_id) { sst_id_ = sst_id; }
+
     void setFilterPolicyType(FilterPolicyType type) { filter_type_ = type; }
 
     void setKeyNum(uint64_t key_number) { key_number_ = key_number; }
@@ -129,6 +150,10 @@ public:
     [[nodiscard]] SSTType sstType() const { return sst_type_; }
 
     [[nodiscard]] SSTVersion sstVersion() const { return sst_version_; }
+
+    [[nodiscard]] PatchId patchId() const { return patch_id_; }
+
+    [[nodiscard]] SSTId sstId() const { return sst_id_; }
 
     [[nodiscard]] FilterPolicyType filterPolicyType() const { return filter_type_; }
 
@@ -146,6 +171,8 @@ public:
         std::stringstream ss;
         ss << "sst type: " << SSTType2String(sst_type_) << '\n';
         ss << "sst version: " << SSTVersion2String(sst_version_) << '\n';
+        ss << "patch id: " << patch_id_ << '\n';
+        ss << "sst id: " << sst_id_ << '\n';
         ss << "filter type: " << FilterPolicyType2String(filter_type_) << '\n';
         ss << "bits per key: " << bits_per_key_ << '\n';
         ss << "key number: " << key_number_ << '\n';
@@ -157,6 +184,8 @@ public:
 private:
     SSTType sst_type_{SSTType::NONE};
     SSTVersion sst_version_{SSTVersion::NONE};
+    PatchId patch_id_{0};
+    SSTId sst_id_{0};
     FilterPolicyType filter_type_{FilterPolicyType::NONE};
     uint32_t bits_per_key_;
     uint64_t key_number_;
