@@ -31,7 +31,7 @@ class BlockBuilderTest : public ::testing::Test {
 };
 
 TEST_F(BlockBuilderTest, test) {
-    auto options = std::make_unique<Options>();
+    auto options = std::make_unique<BuildOptions>();
     options->block_restart_interval = 16;
 
     pl::BlockBuilder block_builder(std::move(options));

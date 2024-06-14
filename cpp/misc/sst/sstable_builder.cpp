@@ -23,7 +23,7 @@
 
 namespace pl {
 
-SSTableBuilder::SSTableBuilder(const OptionsRef& options, const FsWriterRef& writer)
+SSTableBuilder::SSTableBuilder(const BuildOptionsRef& options, const FsWriterRef& writer)
     : options_(options),
       writer_(writer),
       data_block_(options),
@@ -257,6 +257,8 @@ Status SSTableBuilder::finish() {
     file_meta.setMinKey(first_key_);
     file_meta.setMaxKey(last_key_);
     file_meta.setKeyNum(key_nums_);
+    file_meta.setPatchId(options_->patch_id);
+    file_meta.setSSTId(options_->sst_id);
     std::string file_meta_content;
     file_meta.encodeTo(&file_meta_content);
     writeBlockRaw(file_meta_content, CompressionType::NONE, &file_meta_handle);
