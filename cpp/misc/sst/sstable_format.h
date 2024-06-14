@@ -29,6 +29,7 @@ namespace pl {
 static constexpr std::size_t FOOTER_LEN = 64;
 static constexpr uint64_t SST_MAGIC_NUMBER = 0x833859d02c1dbd75ull;
 static constexpr uint32_t BLOCK_TRAILER_LEN = 5; // compression type (1B) + crc (4B)
+
 // sst_type(1B) + sst_version(1B) + patch_id(8B) + sst_id(8B) + filter_type(1B) + bits_per_key(4B) +
 // key_num(8B) + min_key_len(4B) + max_key_len(4B)
 static constexpr uint32_t FILE_META_MIN_LEN = 39;
