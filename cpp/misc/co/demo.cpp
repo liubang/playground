@@ -14,13 +14,25 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
+#if __has_include(<experimental/coroutine>)
+#include <experimental/coroutine>
+
+namespace std {
+using namespace std::experimental;
+}
+#elif __has_include(<coroutine>)
 #include <coroutine>
+#else
+#error "No coroutine header"
+#endif
+
 #include <iostream>
 
 struct RepeatAwaiter {
-    bool await_ready() const noexcept { return false; }
+    [[nodiscard]] bool await_ready() const noexcept { return false; }
 
-    std::coroutine_handle<> await_suspend(std::coroutine_handle<> coroutine) const noexcept {
+    [[nodiscard]] std::coroutine_handle<> await_suspend(
+        std::coroutine_handle<> coroutine) const noexcept {
         if (coroutine.done()) {
             return std::noop_coroutine();
         }
