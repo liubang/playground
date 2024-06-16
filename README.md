@@ -35,9 +35,3 @@ bazel run //:refresh_compile_commands
 ```bash
 REPIN=1 bazel run @unpinned_maven//:pin
 ```
-
-### 更新 rust 依赖
-
-```bash
-CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
-```
