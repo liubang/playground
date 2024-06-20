@@ -44,6 +44,16 @@ public:
 
     [[nodiscard]] const FileMetaRef& fileMeta() const { return file_meta_; }
 
+    SSTId sstId() const {
+        assert(file_meta_ != nullptr);
+        return file_meta_->sstId();
+    }
+
+    PatchId patchId() const {
+        assert(file_meta_ != nullptr);
+        return file_meta_->patchId();
+    }
+
     Status get(const Binary& key, void* arg, HandleResult&& handle_result);
 
     IteratorPtr iterator();
@@ -67,6 +77,7 @@ private:
     BlockRef index_block_{nullptr};
 };
 
-using TablePtr = std::unique_ptr<SSTable>;
+using SSTablePtr = std::unique_ptr<SSTable>;
+using SSTableRef = std::shared_ptr<SSTable>;
 
 } // namespace pl
