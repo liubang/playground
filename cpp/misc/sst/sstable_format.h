@@ -94,6 +94,7 @@ inline const char* CompressionType2String(CompressionType t) {
 
 #undef __SST_CASE__
 
+// patch id 单调递增
 using PatchId = uint64_t;
 using SSTId = uint64_t;
 

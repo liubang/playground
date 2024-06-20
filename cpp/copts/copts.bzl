@@ -34,6 +34,7 @@ GCC_FLAGS = [
     "-Wvla",
     "-Wwrite-strings",
     "-DNOMINMAX",
+    "-Werror=return-type",
 ]
 
 GCC_TEST_FLAGS = [
@@ -58,6 +59,7 @@ GCC_TEST_FLAGS = [
     "-Wno-unused-function",
     "-Wno-unused-parameter",
     "-Wno-unused-private-field",
+    "-Werror=return-type",
 ]
 
 LLVM_FLAGS = [
@@ -95,6 +97,7 @@ LLVM_FLAGS = [
     "-Wno-implicit-float-conversion",
     "-Wno-implicit-int-float-conversion",
     "-Wno-unknown-warning-option",
+    "-Werror=return-type",
     "-DNOMINMAX",
 ]
 
@@ -148,4 +151,5 @@ LLVM_TEST_FLAGS = [
     "-Wno-unused-template",
     "-Wno-used-but-marked-unused",
     "-Wno-gnu-zero-variadic-macro-arguments",
+    "-Werror=return-type",
 ]
