@@ -121,11 +121,10 @@ std::string PropertyKey::string() const {
     switch (type) {
     case Type::Identifier:
         return std::get<std::unique_ptr<Identifier>>(key)->string();
-        break;
     case Type::StringLiteral:
         return std::get<std::unique_ptr<StringLit>>(key)->string();
-        break;
     }
+    __builtin_unreachable();
 }
 std::string Block::string() const {
     return absl::StrFormat("{%s}", absl::StrJoin(body, "; ", [](std::string* out, const auto& b) {
