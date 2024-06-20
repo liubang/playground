@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-06-15 18:11:00</td>
+            <td class="headerValue">2024-06-20 16:42:35</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">20</td>
@@ -196,11 +196,11 @@
 <a name="134"><span class="lineNum">     134 </span><span class="lineCov">          6 :         std::string search_key = &quot;f&quot;;</span></a>
 <a name="135"><span class="lineNum">     135 </span><span class="lineCov">          3 :         ::printf(&quot;WHERE KEY &gt;= %s\n&quot;, search_key.c_str());</span></a>
 <a name="136"><span class="lineNum">     136 </span><span class="lineCov">          3 :         iter-&gt;seek(search_key);</span></a>
-<a name="137"><span class="lineNum">     137 </span><span class="lineCov">      83179 :         while (iter-&gt;valid()) {</span></a>
-<a name="138"><span class="lineNum">     138 </span><span class="lineCov">      83176 :             auto key = iter-&gt;key();</span></a>
-<a name="139"><span class="lineNum">     139 </span><span class="lineCov">      83176 :             EXPECT_TRUE(key.compare(search_key) &gt;= 0);</span></a>
-<a name="140"><span class="lineNum">     140 </span><span class="lineCov">      83176 :             idx++;</span></a>
-<a name="141"><span class="lineNum">     141 </span><span class="lineCov">      83176 :             iter-&gt;next();</span></a>
+<a name="137"><span class="lineNum">     137 </span><span class="lineCov">      82980 :         while (iter-&gt;valid()) {</span></a>
+<a name="138"><span class="lineNum">     138 </span><span class="lineCov">      82977 :             auto key = iter-&gt;key();</span></a>
+<a name="139"><span class="lineNum">     139 </span><span class="lineCov">      82977 :             EXPECT_TRUE(key.compare(search_key) &gt;= 0);</span></a>
+<a name="140"><span class="lineNum">     140 </span><span class="lineCov">      82977 :             idx++;</span></a>
+<a name="141"><span class="lineNum">     141 </span><span class="lineCov">      82977 :             iter-&gt;next();</span></a>
 <a name="142"><span class="lineNum">     142 </span>            :         }</a>
 <a name="143"><span class="lineNum">     143 </span><span class="lineCov">          3 :         ::printf(&quot;row_count: %d\n&quot;, idx);</span></a>
 <a name="144"><span class="lineNum">     144 </span><span class="lineCov">          3 :     }</span></a>
