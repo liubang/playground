@@ -36,6 +36,7 @@ const char* StateToString(CoroutineState state) {
         __MY_CASE(CoroutineState::SUSPEND);
         __MY_CASE(CoroutineState::DIE);
     }
+    __builtin_unreachable();
 }
 #undef __MY_CASE
 
@@ -51,7 +52,7 @@ struct Coroutine {
         : func(std::move(func)), name(name) {}
     ~Coroutine() { std::cout << name << " destroyed" << std::endl; }
 
-    bool Done() const { return state == CoroutineState::DIE; }
+    [[nodiscard]] bool Done() const { return state == CoroutineState::DIE; }
 };
 
 struct {

@@ -704,6 +704,7 @@ inline std::string op_string(Operator op) {
     case Operator::NotRegexpMatchOperator:
         return "!~";
     case Operator::InvalidOperator:
+    default:
         return "InvalidOperator";
     }
 }
@@ -720,6 +721,7 @@ inline std::string op_string(LogicalOperator op) {
     case LogicalOperator::OrOperator:
         return " or ";
     }
+    __builtin_unreachable();
 }
 
 // assign
