@@ -153,7 +153,7 @@ std::string LogicalExpr::string() const {
     return absl::StrFormat("%s %s %s", left->string(), op_string(op), right->string());
 }
 
-std::string WithSource::string() const {}
+std::string WithSource::string() const { return ""; }
 
 std::string ObjectExpr::string() const {
     auto props = absl::StrJoin(properties, ", ", [](std::string* out, const auto& p) {
@@ -174,19 +174,19 @@ std::string BinaryExpr::string() const {
 std::string UnaryExpr::string() const {
     return absl::StrFormat("%s %s", op_string(op), argument->string());
 }
-std::string ConditionalExpr::string() const {}
-std::string StringExpr::string() const {}
-std::string StringExprPart::string() const {}
-std::string TextPart::string() const {}
-std::string InterpolatedPart::string() const {}
-std::string ParenExpr::string() const {}
-std::string BooleanLit::string() const {}
-std::string DateTimeLit::string() const {}
-std::string RegexpLit::string() const {}
-std::string PipeLit::string() const {}
-std::string LabelLit::string() const {}
-std::string BadExpr::string() const {}
-std::string UintLit::string() const {}
+std::string ConditionalExpr::string() const { return ""; }
+std::string StringExpr::string() const { return ""; }
+std::string StringExprPart::string() const { return ""; }
+std::string TextPart::string() const { return ""; }
+std::string InterpolatedPart::string() const { return ""; }
+std::string ParenExpr::string() const { return ""; }
+std::string BooleanLit::string() const { return ""; }
+std::string DateTimeLit::string() const { return ""; }
+std::string RegexpLit::string() const { return ""; }
+std::string PipeLit::string() const { return ""; }
+std::string LabelLit::string() const { return ""; }
+std::string BadExpr::string() const { return ""; }
+std::string UintLit::string() const { return ""; }
 
 std::string Statement::string() const {
     std::stringstream ss;
