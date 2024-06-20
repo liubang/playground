@@ -52,6 +52,7 @@ inline const char* SSTType2String(SSTType t) {
         __SST_CASE__(SSTType::MINOR);
         __SST_CASE__(SSTType::MAJOR);
     }
+    __builtin_unreachable();
 }
 
 enum class SSTVersion : uint8_t {
@@ -64,6 +65,7 @@ inline const char* SSTVersion2String(SSTVersion t) {
         __SST_CASE__(SSTVersion::NONE);
         __SST_CASE__(SSTVersion::V1);
     }
+    __builtin_unreachable();
 }
 
 enum class FilterPolicyType : uint8_t {
@@ -76,6 +78,7 @@ inline const char* FilterPolicyType2String(FilterPolicyType t) {
         __SST_CASE__(FilterPolicyType::NONE);
         __SST_CASE__(FilterPolicyType::BLOOM_FILTER);
     }
+    __builtin_unreachable();
 }
 
 enum class CompressionType : uint8_t {
@@ -90,6 +93,7 @@ inline const char* CompressionType2String(CompressionType t) {
         __SST_CASE__(CompressionType::SNAPPY);
         __SST_CASE__(CompressionType::ZSTD);
     }
+    __builtin_unreachable();
 }
 
 #undef __SST_CASE__
