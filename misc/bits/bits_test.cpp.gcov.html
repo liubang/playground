@@ -4,7 +4,7 @@
 
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-  <title>LCOV - _coverage_report.dat - tools/ut/ip_test.cpp</title>
+  <title>LCOV - _coverage_report.dat - misc/bits/bits_test.cpp</title>
   <link rel="stylesheet" type="text/css" href="../../gcov.css">
 </head>
 
@@ -19,7 +19,7 @@
         <table cellpadding=1 border=0 width="100%">
           <tr>
             <td width="10%" class="headerItem">Current view:</td>
-            <td width="35%" class="headerValue"><a href="../../index.html">top level</a> - <a href="index.html">tools/ut</a> - ip_test.cpp<span style="font-size: 80%;"> (source / <a href="ip_test.cpp.func-sort-c.html">functions</a>)</span></td>
+            <td width="35%" class="headerValue"><a href="../../index.html">top level</a> - <a href="index.html">misc/bits</a> - bits_test.cpp<span style="font-size: 80%;"> (source / <a href="bits_test.cpp.func-sort-c.html">functions</a>)</span></td>
             <td width="5%"></td>
             <td width="15%"></td>
             <td width="10%" class="headerCovTableHead">Hit</td>
@@ -37,11 +37,11 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-06-20 16:42:35</td>
+            <td class="headerValue">2024-06-21 16:41:21</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntry">4</td>
-            <td class="headerCovTableEntry">4</td>
+            <td class="headerCovTableEntry">1</td>
+            <td class="headerCovTableEntry">1</td>
             <td class="headerCovTableEntryHi">100.0 %</td>
           </tr>
           <tr><td><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
@@ -76,17 +76,17 @@
 <a name="14"><span class="lineNum">      14 </span>            : </a>
 <a name="15"><span class="lineNum">      15 </span>            : // Authors: liubang (it.liubang@gmail.com)</a>
 <a name="16"><span class="lineNum">      16 </span>            : </a>
-<a name="17"><span class="lineNum">      17 </span>            : #include &quot;cpp/tools/ip.h&quot;</a>
+<a name="17"><span class="lineNum">      17 </span>            : #include &quot;cpp/misc/bits/bits.h&quot;</a>
 <a name="18"><span class="lineNum">      18 </span>            : </a>
-<a name="19"><span class="lineNum">      19 </span>            : #include &lt;gtest/gtest.h&gt;</a>
+<a name="19"><span class="lineNum">      19 </span>            : #include &lt;iostream&gt;</a>
 <a name="20"><span class="lineNum">      20 </span>            : </a>
-<a name="21"><span class="lineNum">      21 </span>            : #include &lt;iostream&gt;</a>
-<a name="22"><span class="lineNum">      22 </span>            : </a>
-<a name="23"><span class="lineNum">      23 </span><span class="lineCov">          4 : TEST(tools, ip) {</span></a>
-<a name="24"><span class="lineNum">      24 </span><span class="lineCov">          1 :     auto ip = pl::getLocalIp();</span></a>
-<a name="25"><span class="lineNum">      25 </span><span class="lineCov">          1 :     std::cout &lt;&lt; ip.value() &lt;&lt; std::endl;</span></a>
-<a name="26"><span class="lineNum">      26 </span><span class="lineCov">          1 :     EXPECT_FALSE(ip-&gt;empty());</span></a>
-<a name="27"><span class="lineNum">      27 </span><span class="lineCov">          1 : }</span></a>
+<a name="21"><span class="lineNum">      21 </span><span class="lineCov">          1 : int main(int argc, char* argv[]) {</span></a>
+<a name="22"><span class="lineNum">      22 </span><span class="lineCov">          1 :     uint64_t i = 26;</span></a>
+<a name="23"><span class="lineNum">      23 </span><span class="lineCov">          1 :     uint64_t j = pl::Endian::swap(i);</span></a>
+<a name="24"><span class="lineNum">      24 </span><span class="lineCov">          1 :     std::cout &lt;&lt; j &lt;&lt; std::endl;</span></a>
+<a name="25"><span class="lineNum">      25 </span>            : </a>
+<a name="26"><span class="lineNum">      26 </span><span class="lineCov">          1 :     return 0;</span></a>
+<a name="27"><span class="lineNum">      27 </span>            : }</a>
 </pre>
       </td>
     </tr>
