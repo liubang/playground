@@ -13,26 +13,25 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-
 load(
     "//cpp:copts/configure_copts.bzl",
     "DEFAULT_LINKOPTS",
     "TEST_COPTS",
 )
 
-[
-    cc_test(
-        name = "%s" % f[:f.rfind(".")],
-        srcs = [
-            "%s" % f,
-        ],
-        copts = [
-            "-std=c++17",
-        ] + TEST_COPTS,
-        linkopts = DEFAULT_LINKOPTS,
-        deps = [
-            "//cpp/misc/debug",
-        ],
-    )
-    for f in glob(["*.cpp"])
-]
+cc_library(
+    name = "numbers",
+    hdrs = ["numbers.h"],
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "numbers_test",
+    srcs = ["numbers_test.cpp"],
+    copts = ["-std=c++20"] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        ":numbers",
+        "@googletest//:gtest_main",
+    ],
+)

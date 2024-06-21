@@ -20,19 +20,19 @@ load(
     "TEST_COPTS",
 )
 
-[
-    cc_test(
-        name = "%s" % f[:f.rfind(".")],
-        srcs = [
-            "%s" % f,
-        ],
-        copts = [
-            "-std=c++17",
-        ] + TEST_COPTS,
-        linkopts = DEFAULT_LINKOPTS,
-        deps = [
-            "//cpp/misc/debug",
-        ],
-    )
-    for f in glob(["*.cpp"])
-]
+cc_library(
+    name = "encoding",
+    hdrs = ["encoding.h"],
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "encoding_test",
+    srcs = ["encoding_test.cpp"],
+    copts = ["-std=c++20"] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        ":encoding",
+        "@googletest//:gtest_main",
+    ],
+)

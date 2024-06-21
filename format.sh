@@ -16,7 +16,7 @@
 
 CLANG_FORMAT='clang-format -i'
 
-dirs=('cpp/tools' 'cpp/features' 'cpp/meta' 'cpp/misc')
+dirs=('cpp/features' 'cpp/meta' 'cpp/misc')
 
 for dir in "${dirs[@]}"; do
 	find "${dir}" -regex '.*\(\.cpp\|\.cc|\.h\)$' | while read file; do

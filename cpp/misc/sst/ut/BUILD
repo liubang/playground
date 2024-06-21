@@ -31,7 +31,6 @@ load(
         deps = [
             "//cpp/misc/random",
             "//cpp/misc/sst:sstable",
-            "//cpp/tools",
             "@googletest//:gtest_main",
         ],
     )

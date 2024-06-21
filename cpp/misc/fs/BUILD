@@ -35,7 +35,7 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//cpp/misc/binary",
-        "//cpp/tools",
+        "//cpp/misc/status",
     ],
 )
 

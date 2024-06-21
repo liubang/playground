@@ -20,19 +20,22 @@ load(
     "TEST_COPTS",
 )
 
-[
-    cc_test(
-        name = "%s" % f[:f.rfind(".")],
-        srcs = [
-            "%s" % f,
-        ],
-        copts = [
-            "-std=c++17",
-        ] + TEST_COPTS,
-        linkopts = DEFAULT_LINKOPTS,
-        deps = [
-            "//cpp/misc/debug",
-        ],
-    )
-    for f in glob(["*.cpp"])
-]
+cc_library(
+    name = "debug",
+    srcs = [
+        "demangle.h",
+        "measure.h",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "demangle_test",
+    srcs = ["demangle_test.cpp"],
+    copts = ["-std=c++20"] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        ":debug",
+        "//cpp/meta",
+    ],
+)
