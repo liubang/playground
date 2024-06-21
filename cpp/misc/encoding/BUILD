@@ -1,4 +1,4 @@
-# Copyright (c) 2023 The Authors. All rights reserved.
+# Copyright (c) 2024 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,31 +13,27 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/05/21 02:32
-
-#======================================================================
-#
-# BUILD -
-#
-# Created by liubang on 2023/05/21 00:32
-# Last Modified: 2023/05/21 00:32
-#
-#======================================================================
+# Created: 2024/06/22 00:42
 
 load(
     "//cpp:copts/configure_copts.bzl",
-    "DEFAULT_COPTS",
     "DEFAULT_LINKOPTS",
+    "TEST_COPTS",
 )
 
 cc_library(
-    name = "tools",
-    srcs = glob(["*.cpp"]),
-    hdrs = glob(["*.h"]),
-    copts = ["-std=c++20"] + DEFAULT_COPTS,
-    linkopts = ["-pthread"] + DEFAULT_LINKOPTS,
+    name = "encoding",
+    hdrs = ["encoding.h"],
     visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "encoding_test",
+    srcs = ["encoding_test.cpp"],
+    copts = ["-std=c++20"] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
     deps = [
-        "@boost.crc",
+        ":encoding",
+        "@googletest//:gtest_main",
     ],
 )
