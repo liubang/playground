@@ -17,7 +17,7 @@
 #pragma once
 
 #include "cpp/misc/fs/fs.h"
-#include "cpp/tools/binary.h"
+#include "cpp/misc/binary/binary.h"
 #include "cpp/tools/status.h"
 
 #include <cstdint>

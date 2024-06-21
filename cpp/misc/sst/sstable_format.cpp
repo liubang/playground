@@ -15,9 +15,8 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/misc/sst/sstable_format.h"
+#include "cpp/misc/crc/crc.h"
 #include "cpp/misc/sst/encoding.h"
-#include "cpp/misc/sst/options.h"
-#include "cpp/tools/crc.h"
 
 #include "snappy.h"
 #include <zstd.h>

@@ -17,7 +17,7 @@
 #pragma once
 
 #include "cpp/misc/sst/filter_policy.h"
-#include "cpp/tools/binary.h"
+#include "cpp/misc/binary/binary.h"
 
 namespace pl {
 

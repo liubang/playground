@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "cpp/tools/bits.h"
+#include "cpp/misc/bits/bits.h"
 
 #include <cstring>
 #include <string>
