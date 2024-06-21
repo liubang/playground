@@ -16,23 +16,40 @@
 
 load(
     "//cpp:copts/configure_copts.bzl",
+    "DEFAULT_COPTS",
     "DEFAULT_LINKOPTS",
     "TEST_COPTS",
 )
 
-[
-    cc_test(
-        name = "%s" % f[:f.rfind(".")],
-        srcs = [
-            "%s" % f,
-        ],
-        copts = [
-            "-std=c++17",
-        ] + TEST_COPTS,
-        linkopts = DEFAULT_LINKOPTS,
-        deps = [
-            "//cpp/pl/debug",
-        ],
-    )
-    for f in glob(["*.cpp"])
-]
+cc_library(
+    name = "fs",
+    srcs = [
+        "posix_fs.cpp",
+    ],
+    hdrs = [
+        "fs.h",
+        "posix_fs.h",
+    ],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    visibility = ["//visibility:public"],
+    deps = [
+        "//cpp/pl/binary",
+        "//cpp/pl/status",
+    ],
+)
+
+cc_test(
+    name = "fs_test",
+    srcs = [
+        "fs_test.cpp",
+    ],
+    copts = [
+        "-std=c++20",
+    ] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        ":fs",
+        "@googletest//:gtest_main",
+    ],
+)

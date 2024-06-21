@@ -14,14 +14,28 @@
 
 # Authors: liubang (it.liubang@gmail.com)
 
-CLANG_FORMAT='clang-format -i'
+load(
+    "//cpp:copts/configure_copts.bzl",
+    "DEFAULT_COPTS",
+    "DEFAULT_LINKOPTS",
+)
 
-dirs=('cpp/features' 'cpp/meta' 'cpp/pl')
+package(default_visibility = ["//visibility:public"])
 
-for dir in "${dirs[@]}"; do
-	find "${dir}" -regex '.*\(\.cpp\|\.cc|\.h\)$' | while read file; do
-		cmd="${CLANG_FORMAT} ${file}"
-		echo ${cmd}
-		eval ${cmd}
-	done
-done
+cc_library(
+    name = "sstable",
+    srcs = glob(["*.cpp"]),
+    hdrs = glob(["*.h"]),
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        "//cpp/pl/binary",
+        "//cpp/pl/bits",
+        "//cpp/pl/bloom:bloom_filter",
+        "//cpp/pl/crc",
+        "//cpp/pl/fs",
+        "//cpp/pl/random",
+        "@snappy",
+        "@zstd",
+    ],
+)

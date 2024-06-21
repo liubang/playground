@@ -14,14 +14,25 @@
 
 # Authors: liubang (it.liubang@gmail.com)
 
-CLANG_FORMAT='clang-format -i'
+load(
+    "//cpp:copts/configure_copts.bzl",
+    "DEFAULT_LINKOPTS",
+    "TEST_COPTS",
+)
 
-dirs=('cpp/features' 'cpp/meta' 'cpp/pl')
-
-for dir in "${dirs[@]}"; do
-	find "${dir}" -regex '.*\(\.cpp\|\.cc|\.h\)$' | while read file; do
-		cmd="${CLANG_FORMAT} ${file}"
-		echo ${cmd}
-		eval ${cmd}
-	done
-done
+[
+    cc_test(
+        name = "%s" % f[:f.rfind(".")],
+        srcs = [
+            "%s" % f,
+        ],
+        copts = ["-std=c++20"] + TEST_COPTS,
+        linkopts = DEFAULT_LINKOPTS + ["-pthread"],
+        deps = [
+            "//cpp/pl/random",
+            "//cpp/pl/sst:sstable",
+            "@googletest//:gtest_main",
+        ],
+    )
+    for f in glob(["*_test.cpp"])
+]

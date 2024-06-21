@@ -14,14 +14,32 @@
 
 # Authors: liubang (it.liubang@gmail.com)
 
-CLANG_FORMAT='clang-format -i'
+load(
+    "//cpp:copts/configure_copts.bzl",
+    "DEFAULT_LINKOPTS",
+    "TEST_COPTS",
+)
 
-dirs=('cpp/features' 'cpp/meta' 'cpp/pl')
+cc_library(
+    name = "ip",
+    hdrs = ["ip.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//cpp/pl/scope",
+    ],
+)
 
-for dir in "${dirs[@]}"; do
-	find "${dir}" -regex '.*\(\.cpp\|\.cc|\.h\)$' | while read file; do
-		cmd="${CLANG_FORMAT} ${file}"
-		echo ${cmd}
-		eval ${cmd}
-	done
-done
+cc_test(
+    name = "ip_test",
+    srcs = [
+        "ip_test.cpp",
+    ],
+    copts = [
+        "-std=c++20",
+    ] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        ":ip",
+        "@googletest//:gtest_main",
+    ],
+)

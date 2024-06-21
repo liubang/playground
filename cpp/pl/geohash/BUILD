@@ -16,23 +16,41 @@
 
 load(
     "//cpp:copts/configure_copts.bzl",
+    "DEFAULT_COPTS",
     "DEFAULT_LINKOPTS",
     "TEST_COPTS",
 )
 
-[
-    cc_test(
-        name = "%s" % f[:f.rfind(".")],
-        srcs = [
-            "%s" % f,
-        ],
-        copts = [
-            "-std=c++17",
-        ] + TEST_COPTS,
-        linkopts = DEFAULT_LINKOPTS,
-        deps = [
-            "//cpp/pl/debug",
-        ],
-    )
-    for f in glob(["*.cpp"])
-]
+cc_library(
+    name = "geohash",
+    srcs = ["geohash.cpp"],
+    hdrs = ["geohash.h"],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "geo",
+    srcs = ["geo.cpp"],
+    hdrs = ["geo.h"],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    visibility = ["//visibility:public"],
+    deps = [":geohash"],
+)
+
+cc_test(
+    name = "geohash_test",
+    srcs = [
+        "geohash_test.cpp",
+    ],
+    copts = [
+        "-std=c++20",
+    ] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        "//cpp/pl/geohash:geo",
+        "@googletest//:gtest_main",
+    ],
+)
