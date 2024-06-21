@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "cpp/tools/binary.h"
+#include "cpp/misc/binary/binary.h"
 
 #include <memory>
 

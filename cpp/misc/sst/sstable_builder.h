@@ -21,7 +21,7 @@
 #include "cpp/misc/sst/filter_block_builder.h"
 #include "cpp/misc/sst/options.h"
 #include "cpp/misc/sst/sstable_format.h"
-#include "cpp/tools/binary.h"
+#include "cpp/misc/binary/binary.h"
 #include "cpp/tools/status.h"
 
 namespace pl {

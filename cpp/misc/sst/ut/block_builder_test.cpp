@@ -14,10 +14,10 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
+#include "cpp/misc/random/random.h"
 #include "cpp/misc/sst/block.h"
 #include "cpp/misc/sst/block_builder.h"
 #include "cpp/misc/sst/encoding.h"
-#include "cpp/tools/random.h"
 
 #include <gtest/gtest.h>
 #include <unordered_map>

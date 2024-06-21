@@ -15,14 +15,6 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/05/21 22:57
 
-#======================================================================
-#
-# BUILD -
-#
-# Created by liubang on 2023/05/21 22:38
-# Last Modified: 2023/05/21 22:38
-#
-#======================================================================
 load(
     "//cpp:copts/configure_copts.bzl",
     "DEFAULT_COPTS",
@@ -38,8 +30,10 @@ cc_library(
     linkopts = DEFAULT_LINKOPTS,
     visibility = ["//visibility:public"],
     deps = [
+        "//cpp/misc/binary",
         "//cpp/misc/hash",
-        "//cpp/tools",
+        "//cpp/misc/random",
+        "//cpp/misc/scope",
     ],
 )
 

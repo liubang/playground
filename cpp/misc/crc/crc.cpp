@@ -14,7 +14,7 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/tools/crc.h"
+#include "cpp/misc/crc/crc.h"
 
 #include <boost/crc.hpp>
 
