@@ -14,10 +14,10 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
+#include "cpp/misc/random/random.h"
 #include "cpp/misc/sst/filter_block_builder.h"
 #include "cpp/misc/sst/filter_block_reader.h"
 #include "cpp/misc/sst/filter_policy.h"
-#include "cpp/tools/random.h"
 
 #include <memory>
 

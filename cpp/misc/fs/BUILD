@@ -35,6 +35,7 @@ cc_library(
     linkopts = DEFAULT_LINKOPTS,
     visibility = ["//visibility:public"],
     deps = [
+        "//cpp/misc/binary",
         "//cpp/tools",
     ],
 )
