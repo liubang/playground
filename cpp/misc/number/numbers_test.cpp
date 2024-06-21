@@ -14,7 +14,8 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/tools/numbers.h"
+#include "cpp/misc/number/numbers.h"
+
 #include <gtest/gtest.h>
 
 TEST(tools, ip) {

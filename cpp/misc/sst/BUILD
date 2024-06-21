@@ -36,7 +36,6 @@ cc_library(
         "//cpp/misc/crc",
         "//cpp/misc/fs",
         "//cpp/misc/random",
-        "//cpp/tools",
         "@snappy",
         "@zstd",
     ],
