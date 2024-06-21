@@ -21,7 +21,7 @@
 
 #include "cpp/misc/sst/comparator.h"
 #include "cpp/misc/sst/options.h"
-#include "cpp/tools/binary.h"
+#include "cpp/misc/binary/binary.h"
 
 namespace pl {
 

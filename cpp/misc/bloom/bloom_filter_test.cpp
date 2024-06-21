@@ -1,20 +1,26 @@
-//=====================================================================
+// Copyright (c) 2024 The Authors. All rights reserved.
 //
-// bloom_filter_test.cpp -
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// Created by liubang on 2023/05/21 22:51
-// Last Modified: 2023/05/21 22:51
+//      https://www.apache.org/licenses/LICENSE-2.0
 //
-//=====================================================================
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Authors: liubang (it.liubang@gmail.com)
+
 #include "cpp/misc/bloom/bloom_filter.h"
+#include "cpp/misc/scope/scope.h"
+#include "cpp/misc/random/random.h"
 
 #include <gtest/gtest.h>
-
 #include <string>
 #include <vector>
-
-#include "cpp/tools/random.h"
-#include "cpp/tools/scope.h"
 
 TEST(bloom, bloom) {
     pl::BloomFilter filter(32);

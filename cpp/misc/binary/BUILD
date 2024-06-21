@@ -16,27 +16,25 @@
 
 load(
     "//cpp:copts/configure_copts.bzl",
-    "DEFAULT_COPTS",
     "DEFAULT_LINKOPTS",
+    "TEST_COPTS",
 )
 
-package(default_visibility = ["//visibility:public"])
-
 cc_library(
-    name = "sstable",
-    srcs = glob(["*.cpp"]),
-    hdrs = glob(["*.h"]),
-    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    name = "binary",
+    hdrs = [
+        "binary.h",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "binary_test",
+    srcs = ["binary_test.cpp"],
+    copts = ["-std=c++20"] + TEST_COPTS,
     linkopts = DEFAULT_LINKOPTS,
     deps = [
-        "//cpp/misc/binary",
-        "//cpp/misc/bits",
-        "//cpp/misc/bloom:bloom_filter",
-        "//cpp/misc/crc",
-        "//cpp/misc/fs",
-        "//cpp/misc/random",
-        "//cpp/tools",
-        "@snappy",
-        "@zstd",
+        ":binary",
+        "@googletest//:gtest_main",
     ],
 )

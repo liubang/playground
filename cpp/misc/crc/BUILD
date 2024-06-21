@@ -13,30 +13,20 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-
 load(
     "//cpp:copts/configure_copts.bzl",
     "DEFAULT_COPTS",
     "DEFAULT_LINKOPTS",
 )
 
-package(default_visibility = ["//visibility:public"])
-
 cc_library(
-    name = "sstable",
-    srcs = glob(["*.cpp"]),
-    hdrs = glob(["*.h"]),
+    name = "crc",
+    srcs = ["crc.cpp"],
+    hdrs = ["crc.h"],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
+    visibility = ["//visibility:public"],
     deps = [
-        "//cpp/misc/binary",
-        "//cpp/misc/bits",
-        "//cpp/misc/bloom:bloom_filter",
-        "//cpp/misc/crc",
-        "//cpp/misc/fs",
-        "//cpp/misc/random",
-        "//cpp/tools",
-        "@snappy",
-        "@zstd",
+        "@boost.crc",
     ],
 )

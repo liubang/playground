@@ -15,7 +15,7 @@
 // Authors: liubang (it.liubang@gmail.com)
 #pragma once
 
-#include "cpp/tools/binary.h"
+#include "cpp/misc/binary/binary.h"
 #include "cpp/tools/status.h"
 
 #include <cstdint>

@@ -20,19 +20,6 @@ load(
     "TEST_COPTS",
 )
 
-cc_test(
-    name = "ip_test",
-    srcs = [
-        "ip_test.cpp",
-    ],
-    copts = ["-std=c++20"] + TEST_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
-    deps = [
-        "//cpp/tools",
-        "@googletest//:gtest_main",
-    ],
-)
-
 # the thread pool can only be running >= c++11 and <= c++17
 cc_test(
     name = "thread_pool_test",
@@ -57,30 +44,8 @@ cc_test(
 )
 
 cc_test(
-    name = "binary_test",
-    srcs = ["binary_test.cpp"],
-    copts = ["-std=c++20"] + TEST_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
-    deps = [
-        "//cpp/tools",
-        "@googletest//:gtest_main",
-    ],
-)
-
-cc_test(
     name = "status_test",
     srcs = ["status_test.cpp"],
-    copts = ["-std=c++20"] + TEST_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
-    deps = [
-        "//cpp/tools",
-        "@googletest//:gtest_main",
-    ],
-)
-
-cc_test(
-    name = "scope_test",
-    srcs = ["scope_test.cpp"],
     copts = ["-std=c++20"] + TEST_COPTS,
     linkopts = DEFAULT_LINKOPTS,
     deps = [
@@ -109,12 +74,4 @@ cc_test(
         "//cpp/meta",
         "//cpp/tools",
     ],
-)
-
-cc_test(
-    name = "bits_test",
-    srcs = ["bits_test.cpp"],
-    copts = ["-std=c++20"] + TEST_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
-    deps = ["//cpp/tools"],
 )
