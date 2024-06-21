@@ -1,4 +1,4 @@
-# Copyright (c) 2023 The Authors. All rights reserved.
+# Copyright (c) 2024 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/05/26 18:23
+# Created: 2024/06/22 00:01
 
 load(
     "//cpp:copts/configure_copts.bzl",
@@ -21,23 +21,14 @@ load(
     "DEFAULT_LINKOPTS",
 )
 
-package(default_visibility = ["//visibility:public"])
-
 cc_library(
-    name = "sstable",
-    srcs = glob(["*.cpp"]),
-    hdrs = glob(["*.h"]),
+    name = "crc",
+    srcs = ["crc.cpp"],
+    hdrs = ["crc.h"],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
+    visibility = ["//visibility:public"],
     deps = [
-        "//cpp/misc/binary",
-        "//cpp/misc/bits",
-        "//cpp/misc/bloom:bloom_filter",
-        "//cpp/misc/crc",
-        "//cpp/misc/fs",
-        "//cpp/misc/random",
-        "//cpp/tools",
-        "@snappy",
-        "@zstd",
+        "@boost.crc",
     ],
 )

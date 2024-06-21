@@ -13,15 +13,19 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-
-#include "cpp/tools/ip.h"
+#include "cpp/misc/scope/scope.h"
 
 #include <gtest/gtest.h>
 
-#include <iostream>
+TEST(tools, scope) {
+    static int i = 0;
+    {
+        ++i;
 
-TEST(tools, ip) {
-    auto ip = pl::getLocalIp();
-    std::cout << ip.value() << std::endl;
-    EXPECT_FALSE(ip->empty());
+        SCOPE_EXIT { i--; };
+
+        EXPECT_EQ(1, i);
+    }
+
+    EXPECT_EQ(0, i);
 }

@@ -14,7 +14,7 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/tools/bits.h"
+#include "cpp/misc/bits/bits.h"
 
 #include <iostream>
 

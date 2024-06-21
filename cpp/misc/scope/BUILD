@@ -1,4 +1,4 @@
-# Copyright (c) 2023 The Authors. All rights reserved.
+# Copyright (c) 2024 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,31 +13,30 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/05/26 18:23
+# Created: 2024/06/22 00:01
 
 load(
     "//cpp:copts/configure_copts.bzl",
-    "DEFAULT_COPTS",
     "DEFAULT_LINKOPTS",
+    "TEST_COPTS",
 )
 
-package(default_visibility = ["//visibility:public"])
-
 cc_library(
-    name = "sstable",
-    srcs = glob(["*.cpp"]),
-    hdrs = glob(["*.h"]),
-    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    name = "scope",
+    hdrs = [
+        "preprocessor.h",
+        "scope.h",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "scope_test",
+    srcs = ["scope_test.cpp"],
+    copts = ["-std=c++20"] + TEST_COPTS,
     linkopts = DEFAULT_LINKOPTS,
     deps = [
-        "//cpp/misc/binary",
-        "//cpp/misc/bits",
-        "//cpp/misc/bloom:bloom_filter",
-        "//cpp/misc/crc",
-        "//cpp/misc/fs",
-        "//cpp/misc/random",
-        "//cpp/tools",
-        "@snappy",
-        "@zstd",
+        ":scope",
+        "@googletest//:gtest_main",
     ],
 )

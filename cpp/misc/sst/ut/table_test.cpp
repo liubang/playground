@@ -17,7 +17,7 @@
 #include "cpp/misc/fs/posix_fs.h"
 #include "cpp/misc/sst/sstable.h"
 #include "cpp/misc/sst/sstable_builder.h"
-#include "cpp/tools/random.h"
+#include "cpp/misc/random/random.h"
 
 #include <gtest/gtest.h>
 #include <set>

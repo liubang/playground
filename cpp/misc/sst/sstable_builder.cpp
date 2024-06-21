@@ -15,8 +15,8 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/misc/sst/sstable_builder.h"
+#include "cpp/misc/crc/crc.h"
 #include "cpp/misc/sst/encoding.h"
-#include "cpp/tools/crc.h"
 
 #include "snappy.h"
 #include <zstd.h>
