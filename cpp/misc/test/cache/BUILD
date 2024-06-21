@@ -15,14 +15,6 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/10/16 00:02
 
-#======================================================================
-#
-# BUILD -
-#
-# Created by liubang on 2023/10/15 23:34
-# Last Modified: 2023/10/15 23:34
-#
-#======================================================================
 load(
     "//cpp:copts/configure_copts.bzl",
     "DEFAULT_LINKOPTS",
@@ -48,7 +40,6 @@ load(
             "//conditions:default": [],
         }),
         deps = [
-            "//cpp/tools",
             "@google_benchmark//:benchmark_main",
         ],
     )
