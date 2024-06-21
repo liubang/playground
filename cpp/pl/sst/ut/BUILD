@@ -1,4 +1,4 @@
-# Copyright (c) 2023 The Authors. All rights reserved.
+# Copyright (c) 2024 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/10/05 01:33
+# Created: 2024/05/29 20:30
 
 load(
     "//cpp:copts/configure_copts.bzl",
@@ -27,13 +27,13 @@ load(
         srcs = [
             "%s" % f,
         ],
-        copts = [
-            "-std=c++17",
-        ] + TEST_COPTS,
-        linkopts = DEFAULT_LINKOPTS,
+        copts = ["-std=c++20"] + TEST_COPTS,
+        linkopts = DEFAULT_LINKOPTS + ["-pthread"],
         deps = [
-            "//cpp/pl/debug",
+            "//cpp/pl/random",
+            "//cpp/pl/sst:sstable",
+            "@googletest//:gtest_main",
         ],
     )
-    for f in glob(["*.cpp"])
+    for f in glob(["*_test.cpp"])
 ]
