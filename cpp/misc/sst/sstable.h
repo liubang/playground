@@ -21,7 +21,7 @@
 #include "cpp/misc/sst/filter_block_reader.h"
 #include "cpp/misc/sst/options.h"
 #include "cpp/misc/sst/sstable_format.h"
-#include "cpp/tools/status.h"
+#include "cpp/misc/status/status.h"
 
 #include <functional>
 
