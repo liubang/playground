@@ -13,27 +13,30 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/10/05 01:33
+# Created: 2023/05/26 18:23
 
 load(
     "//cpp:copts/configure_copts.bzl",
+    "DEFAULT_COPTS",
     "DEFAULT_LINKOPTS",
-    "TEST_COPTS",
 )
 
-[
-    cc_test(
-        name = "%s" % f[:f.rfind(".")],
-        srcs = [
-            "%s" % f,
-        ],
-        copts = [
-            "-std=c++17",
-        ] + TEST_COPTS,
-        linkopts = DEFAULT_LINKOPTS,
-        deps = [
-            "//cpp/pl/debug",
-        ],
-    )
-    for f in glob(["*.cpp"])
-]
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "sstable",
+    srcs = glob(["*.cpp"]),
+    hdrs = glob(["*.h"]),
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        "//cpp/pl/binary",
+        "//cpp/pl/bits",
+        "//cpp/pl/bloom:bloom_filter",
+        "//cpp/pl/crc",
+        "//cpp/pl/fs",
+        "//cpp/pl/random",
+        "@snappy",
+        "@zstd",
+    ],
+)
