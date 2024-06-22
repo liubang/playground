@@ -29,7 +29,6 @@ namespace pl {
  */
 class BlockBuilder {
 public:
-    // BlockBuilder(const Comparator* comparator, int block_restart_interval);
     BlockBuilder(const BuildOptionsRef& options);
 
     BlockBuilder(const BlockBuilder&) = delete;
@@ -55,5 +54,8 @@ private:
     int block_restart_interval_{0};
     std::vector<uint32_t> restarts_;
 };
+
+using BlockBuilderPtr = std::unique_ptr<BlockBuilder>;
+using BlockBuilderRef = std::shared_ptr<BlockBuilder>;
 
 } // namespace pl

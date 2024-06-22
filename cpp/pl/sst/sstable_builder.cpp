@@ -26,13 +26,13 @@
 namespace pl {
 
 SSTableBuilder::SSTableBuilder(BuildOptionsRef options, FsWriterRef writer)
-    : options_(std::move(options)),
-      writer_(std::move(writer)),
-      data_block_(options),
-      index_block_(options),
-      filter_block_(options->filter_policy == nullptr
+    : writer_(std::move(writer)), options_(std::move(options)) {
+    data_block_ = std::make_unique<BlockBuilder>(options_);
+    index_block_ = std::make_unique<BlockBuilder>(options_);
+    filter_block_ = options_->filter_policy == nullptr
                         ? nullptr
-                        : std::make_unique<FilterBlockBuilder>(options->filter_policy)) {}
+                        : std::make_unique<FilterBlockBuilder>(options_->filter_policy);
+}
 
 SSTableBuilder::~SSTableBuilder() = default;
 
@@ -48,11 +48,11 @@ void SSTableBuilder::add(std::string_view key, std::string_view value) {
     }
 
     if (pending_index_entry_) {
-        assert(data_block_.empty());
+        assert(data_block_->empty());
         std::string handle_encoding;
         pending_handler_.encodeTo(&handle_encoding);
         // 记录上一个block的最后一个key和上一个block的结束位置
-        index_block_.add(last_key_, handle_encoding);
+        index_block_->add(last_key_, handle_encoding);
         pending_index_entry_ = false;
     }
 
@@ -65,10 +65,10 @@ void SSTableBuilder::add(std::string_view key, std::string_view value) {
     }
 
     last_key_.assign(key.data(), key.size());
-    data_block_.add(key, value);
+    data_block_->add(key, value);
     key_nums_++;
 
-    const size_t s = data_block_.sizeEstimate();
+    const size_t s = data_block_->sizeEstimate();
     // 达到block_size后，就写入
     if (s >= options_->block_size) {
         flush();
@@ -77,11 +77,11 @@ void SSTableBuilder::add(std::string_view key, std::string_view value) {
 
 void SSTableBuilder::flush() {
     assert(!closed_);
-    if (!ok() || data_block_.empty()) {
+    if (!ok() || data_block_->empty()) {
         return;
     }
     // 写入block
-    writeBlock(&data_block_, &pending_handler_);
+    writeBlock(data_block_.get(), &pending_handler_);
     if (ok()) {
         // 复位标记，下次开始一个新的block
         pending_index_entry_ = true;
@@ -241,10 +241,10 @@ Status SSTableBuilder::finish() {
         std::string handle_encoding;
         pending_handler_.encodeTo(&handle_encoding);
         // 记录上一个block的最后一个key和上一个block的结束位置
-        index_block_.add(last_key_, handle_encoding);
+        index_block_->add(last_key_, handle_encoding);
         pending_index_entry_ = false;
     }
-    writeBlock(&index_block_, &index_block_handle);
+    writeBlock(index_block_.get(), &index_block_handle);
 
     if (!ok()) {
         return status();

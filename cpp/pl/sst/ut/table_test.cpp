@@ -47,11 +47,11 @@ public:
         auto sstable_builder =
             std::make_unique<pl::SSTableBuilder>(build_options, std::move(writer));
         for (int i = 0; i < ROW_COUNT; ++i) {
-            std::string key = pl::random_string(KEY_LEN) + std::to_string(i);
+            std::string key = pl::random_string(KEY_LEN + (i % KEY_LEN)) + std::to_string(i);
             keys.insert(key);
         }
         for (const auto& key : keys) {
-            auto val = pl::random_string(VAL_LEN);
+            std::string val = pl::random_string(VAL_LEN);
             sstable_builder->add(key, val);
             kvs[key] = val;
         }
@@ -85,7 +85,7 @@ public:
         }
 
         for (int i = 0; i < ROW_COUNT; ++i) {
-            std::string key = pl::random_string(KEY_LEN + 2);
+            std::string key = pl::random_string(KEY_LEN * 2 + 2);
             std::string val;
             st = table->get(key, &val, handle_result);
             if (st.isOk()) {
