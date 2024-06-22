@@ -16,10 +16,10 @@
 
 #pragma once
 
-#include "cpp/pl/binary/binary.h"
-
 #include <memory>
 #include <string>
+#include <string_view>
+#include <vector>
 
 namespace pl {
 
@@ -39,7 +39,8 @@ public:
      * @param n parameter]
      * @param dst parameter]
      */
-    virtual void createFilter(Binary* keys, std::size_t n, std::string* dst) const = 0;
+    virtual void createFilter(const std::vector<std::string_view>& keys,
+                              std::string* dst) const = 0;
 
     /**
      * @brief description]
@@ -55,7 +56,7 @@ public:
      * @param filter parameter]
      * @return return]
      */
-    [[nodiscard]] virtual bool keyMayMatch(const Binary& key, const Binary& filter) const = 0;
+    [[nodiscard]] virtual bool keyMayMatch(std::string_view key, std::string_view filter) const = 0;
 };
 
 /**
@@ -70,9 +71,9 @@ public:
 
     [[nodiscard]] const char* name() const override { return "BloomFilterPolicy"; }
 
-    void createFilter(Binary* keys, std::size_t n, std::string* dst) const override;
+    void createFilter(const std::vector<std::string_view>& keys, std::string* dst) const override;
 
-    [[nodiscard]] bool keyMayMatch(const Binary& key, const Binary& filter) const override;
+    [[nodiscard]] bool keyMayMatch(std::string_view key, std::string_view filter) const override;
 
 private:
     uint32_t bits_per_key_;

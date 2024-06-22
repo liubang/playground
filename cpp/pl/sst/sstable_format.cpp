@@ -19,6 +19,7 @@
 #include "cpp/pl/sst/encoding.h"
 
 #include "snappy.h"
+#include <cassert>
 #include <zstd.h>
 
 namespace pl {
@@ -30,7 +31,7 @@ void BlockHandle::encodeTo(std::string* dst) const {
     encodeInt(dst, size_);
 }
 
-Status BlockHandle::decodeFrom(const Binary& input) {
+Status BlockHandle::decodeFrom(std::string_view input) {
     if (input.size() < 16) {
         return Status::NewCorruption("bad block handle");
     }
@@ -54,7 +55,7 @@ void FileMeta::encodeTo(std::string* dst) const {
     dst->append(max_key_);
 }
 
-Status FileMeta::decodeFrom(const Binary& input) {
+Status FileMeta::decodeFrom(std::string_view input) {
     if (input.size() < FILE_META_MIN_LEN) {
         return Status::NewCorruption("file meta is too short");
     }
@@ -151,7 +152,7 @@ void Footer::encodeTo(std::string* dst) const {
     assert(dst->size() == s + FOOTER_LEN);
 }
 
-Status Footer::decodeFrom(const Binary& input) {
+Status Footer::decodeFrom(std::string_view input) {
     if (input.size() < FOOTER_LEN) {
         return Status::NewCorruption("invalid sstable format");
     }
@@ -172,13 +173,13 @@ Status Footer::decodeFrom(const Binary& input) {
     }
 
     // decode index offset and size
-    result = index_handle_.decodeFrom(Binary(input.data() + 16, 16));
+    result = index_handle_.decodeFrom(std::string_view(input.data() + 16, 16));
     if (!result.isOk()) {
         return result;
     }
 
     // decode file meta offset and size
-    result = file_meta_handle_.decodeFrom(Binary(input.data() + 32, 16));
+    result = file_meta_handle_.decodeFrom(std::string_view(input.data() + 32, 16));
     return result;
 }
 
@@ -189,7 +190,7 @@ Status BlockReader::readBlock(const FsReaderRef& reader,
     auto s = static_cast<std::size_t>(handle.size());
     auto buf = std::make_unique<char[]>(s + BLOCK_TRAILER_LEN);
 
-    Binary content;
+    std::string_view content;
     auto status = reader->read(handle.offset(), s + BLOCK_TRAILER_LEN, &content, buf.get());
     if (!status.isOk()) {
         return status;
@@ -217,7 +218,7 @@ Status BlockReader::readBlock(const FsReaderRef& reader,
         if (!snappy::RawUncompress(data, s, ubuf.get())) {
             return Status::NewCorruption("invalid data");
         }
-        result->data = Binary(ubuf.release(), ulen);
+        result->data = std::string_view(ubuf.release(), ulen);
         result->heap_allocated = true;
         result->cachable = true;
         break;
@@ -235,14 +236,14 @@ Status BlockReader::readBlock(const FsReaderRef& reader,
         if (ZSTD_isError(outlen) != 0u) {
             return Status::NewCorruption("invalid data");
         }
-        result->data = Binary(ubuf.release(), ulen);
+        result->data = std::string_view(ubuf.release(), ulen);
         result->heap_allocated = true;
         result->cachable = true;
         break;
     }
     default:
     {
-        result->data = Binary(buf.release(), s);
+        result->data = std::string_view(buf.release(), s);
         result->heap_allocated = true;
         result->cachable = true;
         break;

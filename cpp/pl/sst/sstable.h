@@ -23,11 +23,12 @@
 #include "cpp/pl/sst/sstable_format.h"
 #include "cpp/pl/status/status.h"
 
+#include <cassert>
 #include <functional>
 
 namespace pl {
 
-using HandleResult = std::function<void(void* arg, const Binary& k, const Binary& v)>;
+using HandleResult = std::function<void(void* arg, std::string_view k, std::string_view v)>;
 
 class SSTable {
 public:
@@ -44,17 +45,17 @@ public:
 
     [[nodiscard]] const FileMetaRef& fileMeta() const { return file_meta_; }
 
-    SSTId sstId() const {
+    [[nodiscard]] SSTId sstId() const {
         assert(file_meta_ != nullptr);
         return file_meta_->sstId();
     }
 
-    PatchId patchId() const {
+    [[nodiscard]] PatchId patchId() const {
         assert(file_meta_ != nullptr);
         return file_meta_->patchId();
     }
 
-    Status get(const Binary& key, void* arg, HandleResult&& handle_result);
+    Status get(std::string_view key, void* arg, HandleResult&& handle_result);
 
     IteratorPtr iterator();
 
@@ -65,7 +66,7 @@ private:
             BlockRef index_block);
 
     void readFilter(const Footer& footer);
-    IteratorPtr blockReader(const Binary& index_value);
+    IteratorPtr blockReader(std::string_view index_value);
 
 private:
     const ReadOptionsRef options_;

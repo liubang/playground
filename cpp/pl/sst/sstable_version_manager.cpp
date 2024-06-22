@@ -16,6 +16,8 @@
 
 #include "cpp/pl/sst/sstable_version_manager.h"
 
+#include <cassert>
+
 namespace pl {
 
 std::vector<SSTableRef> SSTableVersion::listSSTables() {

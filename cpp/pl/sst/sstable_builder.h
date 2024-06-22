@@ -21,14 +21,13 @@
 #include "cpp/pl/sst/filter_block_builder.h"
 #include "cpp/pl/sst/options.h"
 #include "cpp/pl/sst/sstable_format.h"
-#include "cpp/pl/binary/binary.h"
 #include "cpp/pl/status/status.h"
 
 namespace pl {
 
 class SSTableBuilder {
 public:
-    SSTableBuilder(const BuildOptionsRef& options, const FsWriterRef& writer);
+    SSTableBuilder(BuildOptionsRef options, FsWriterRef writer);
 
     SSTableBuilder(const SSTableBuilder&) = delete;
 
@@ -36,7 +35,7 @@ public:
 
     ~SSTableBuilder();
 
-    void add(const Binary& key, const Binary& value);
+    void add(std::string_view key, std::string_view value);
 
     void flush();
 
@@ -52,7 +51,7 @@ public:
 
 private:
     void writeBlock(BlockBuilder* block, BlockHandle* handle);
-    void writeBlockRaw(const Binary& content, CompressionType type, BlockHandle* handle);
+    void writeBlockRaw(std::string_view content, CompressionType type, BlockHandle* handle);
 
 private:
     const BuildOptionsRef options_;

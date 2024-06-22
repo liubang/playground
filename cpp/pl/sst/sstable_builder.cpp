@@ -19,13 +19,15 @@
 #include "cpp/pl/sst/encoding.h"
 
 #include "snappy.h"
+#include <cassert>
+#include <utility>
 #include <zstd.h>
 
 namespace pl {
 
-SSTableBuilder::SSTableBuilder(const BuildOptionsRef& options, const FsWriterRef& writer)
-    : options_(options),
-      writer_(writer),
+SSTableBuilder::SSTableBuilder(BuildOptionsRef options, FsWriterRef writer)
+    : options_(std::move(options)),
+      writer_(std::move(writer)),
       data_block_(options),
       index_block_(options),
       filter_block_(options->filter_policy == nullptr
@@ -34,7 +36,7 @@ SSTableBuilder::SSTableBuilder(const BuildOptionsRef& options, const FsWriterRef
 
 SSTableBuilder::~SSTableBuilder() = default;
 
-void SSTableBuilder::add(const Binary& key, const Binary& value) {
+void SSTableBuilder::add(std::string_view key, std::string_view value) {
     assert(!closed_);
 
     if (!ok()) {
@@ -99,7 +101,7 @@ void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
     {
         auto outlen = snappy::Compress(raw.data(), raw.size(), &compressed);
         compressed.resize(outlen);
-        raw.reset(compressed);
+        raw = compressed;
         break;
     }
     case CompressionType::ZSTD:
@@ -119,7 +121,7 @@ void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
             assert(false);
         }
         compressed.resize(outlen);
-        raw.reset(compressed);
+        raw = compressed;
         break;
     }
     default:
@@ -173,7 +175,7 @@ void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
  *
  *
  */
-void SSTableBuilder::writeBlockRaw(const Binary& content,
+void SSTableBuilder::writeBlockRaw(std::string_view content,
                                    CompressionType type,
                                    BlockHandle* handle) {
     handle->setOffset(offset_);
@@ -189,7 +191,7 @@ void SSTableBuilder::writeBlockRaw(const Binary& content,
     std::string encode_crc;
     encodeInt<uint32_t>(&encode_crc, crc);
     memcpy(trailer + 1, encode_crc.data(), encode_crc.size());
-    status_ = writer_->append(Binary(trailer, BLOCK_TRAILER_LEN));
+    status_ = writer_->append(std::string_view(trailer, BLOCK_TRAILER_LEN));
     if (!ok()) {
         assert(false);
     }
