@@ -30,12 +30,12 @@ class ComparatorTest : public ::testing::Test {
 TEST_F(ComparatorTest, compara) {
     auto comparator = std::make_unique<BytewiseComparator>();
 
-    pl::Binary b1 = "abc";
-    pl::Binary b2 = "abd";
-    pl::Binary b3 = "abc";
-    pl::Binary b4 = "aba";
-    pl::Binary b5 = "";
-    pl::Binary b6 = "abcccc";
+    std::string_view b1 = "abc";
+    std::string_view b2 = "abd";
+    std::string_view b3 = "abc";
+    std::string_view b4 = "aba";
+    std::string_view b5;
+    std::string_view b6 = "abcccc";
 
     EXPECT_TRUE(comparator->compare(b1, b2) < 0);
     EXPECT_TRUE(comparator->compare(b1, b3) == 0);

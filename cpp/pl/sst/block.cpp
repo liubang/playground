@@ -15,8 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/sst/block.h"
-
 #include "cpp/pl/sst/encoding.h"
+
+#include <cassert>
 #include <utility>
 
 namespace pl {
@@ -56,12 +57,12 @@ public:
           current_restart_(num_restarts) {}
 
     [[nodiscard]] bool valid() const override { return current_ < restarts_; }
-    [[nodiscard]] Binary key() const override { return key_; }
-    [[nodiscard]] Binary val() const override { return val_; }
+    [[nodiscard]] std::string_view key() const override { return key_; }
+    [[nodiscard]] std::string_view val() const override { return val_; }
     [[nodiscard]] Status status() const override { return status_; }
 
     // return the first key that >= target
-    void seek(const Binary& target) override {
+    void seek(std::string_view target) override {
         uint32_t left = 0;
         uint32_t right = num_restarts_ - 1;
         int current_key_compare = 0;
@@ -89,11 +90,11 @@ public:
                 current_ = restarts_;
                 current_restart_ = num_restarts_;
                 key_.clear();
-                val_.clear();
+                val_ = {};
                 return;
             }
 
-            Binary mid_key(key_ptr, non_shared);
+            std::string_view mid_key(key_ptr, non_shared);
             if (compare(mid_key, target) < 0) {
                 left = mid;
             } else {
@@ -167,7 +168,7 @@ private:
         key_.clear();
         current_restart_ = idx;
         uint32_t offset = getRestartOffset(idx);
-        val_ = Binary(data_ + offset, 0);
+        val_ = std::string_view(data_ + offset, 0);
     }
 
     [[nodiscard]] inline uint32_t nextEntryOffset() const {
@@ -191,7 +192,7 @@ private:
         }
         key_.resize(shared);
         key_.append(p, non_shared);
-        val_ = Binary(p + non_shared, value_size);
+        val_ = std::string_view(p + non_shared, value_size);
         while (current_restart_ + 1 < num_restarts_ &&
                getRestartOffset(current_restart_) < current_) {
             ++current_restart_;
@@ -219,7 +220,7 @@ private:
         return p;
     }
 
-    [[nodiscard]] inline int compare(const Binary& a, const Binary& b) const {
+    [[nodiscard]] inline int compare(std::string_view a, std::string_view b) const {
         return comparator_->compare(a, b);
     }
 
@@ -232,7 +233,7 @@ private:
     uint32_t current_{0};                     // 当前游标的偏移
     uint32_t current_restart_{0};             // 当前是第几个restart
     std::string key_;                         // 当前游标处的key
-    Binary val_;                              // 当前游标处的value
+    std::string_view val_;                    // 当前游标处的value
     Status status_;
 };
 

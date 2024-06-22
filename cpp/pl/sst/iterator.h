@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include "cpp/pl/binary/binary.h"
 #include "cpp/pl/status/status.h"
 
 #include <memory>
@@ -42,15 +41,15 @@ public:
 
     virtual void prev() = 0;
 
-    virtual void seek(const Binary& target) = 0;
+    virtual void seek(std::string_view target) = 0;
 
     [[nodiscard]] virtual Status status() const = 0;
 
     [[nodiscard]] virtual bool valid() const = 0;
 
-    [[nodiscard]] virtual Binary key() const = 0;
+    [[nodiscard]] virtual std::string_view key() const = 0;
 
-    [[nodiscard]] virtual Binary val() const = 0;
+    [[nodiscard]] virtual std::string_view val() const = 0;
 };
 
 } // namespace pl

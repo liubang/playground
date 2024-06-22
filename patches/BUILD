@@ -15,27 +15,3 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2024/06/22 00:01
 
-load(
-    "//cpp:copts/configure_copts.bzl",
-    "DEFAULT_LINKOPTS",
-    "TEST_COPTS",
-)
-
-cc_library(
-    name = "binary",
-    hdrs = [
-        "binary.h",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-cc_test(
-    name = "binary_test",
-    srcs = ["binary_test.cpp"],
-    copts = ["-std=c++20"] + TEST_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
-    deps = [
-        ":binary",
-        "@googletest//:gtest_main",
-    ],
-)

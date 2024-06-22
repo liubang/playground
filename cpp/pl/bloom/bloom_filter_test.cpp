@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/bloom/bloom_filter.h"
-#include "cpp/pl/scope/scope.h"
 #include "cpp/pl/random/random.h"
 
 #include <gtest/gtest.h>
@@ -24,26 +23,20 @@
 
 TEST(bloom, bloom) {
     pl::BloomFilter filter(32);
-
-    auto* binaries = new pl::Binary[100];
-
-    SCOPE_EXIT { delete[] binaries; };
-
+    std::vector<std::string_view> binaries(100);
     std::vector<std::string> strs(100);
 
     for (int i = 0; i < 100; ++i) {
         strs[i] = pl::random_string(i + 10);
-        binaries[i] = pl::Binary(strs[i]);
+        binaries[i] = strs[i];
     }
 
     std::string dst;
-    filter.create(binaries, 100, &dst);
-
-    pl::Binary ff(dst);
+    filter.create(binaries, &dst);
 
     for (int i = 0; i < 100; ++i) {
-        EXPECT_TRUE(filter.contains(binaries[i], ff));
+        EXPECT_TRUE(filter.contains(binaries[i], dst));
         auto str = pl::random_string(128);
-        EXPECT_FALSE(filter.contains(str, ff));
+        EXPECT_FALSE(filter.contains(str, dst));
     }
 }

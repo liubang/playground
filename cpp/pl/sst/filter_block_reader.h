@@ -17,15 +17,14 @@
 #pragma once
 
 #include "cpp/pl/sst/filter_policy.h"
-#include "cpp/pl/binary/binary.h"
 
 namespace pl {
 
 class FilterBlockReader {
 public:
-    FilterBlockReader(FilterPolicyRef filter_policy, const pl::Binary& contents);
+    FilterBlockReader(FilterPolicyRef filter_policy, std::string_view contents);
 
-    bool keyMayMatch(uint64_t block_offset, const Binary& key);
+    bool keyMayMatch(uint64_t block_offset, std::string_view key);
 
 private:
     const FilterPolicyRef filter_policy_; // filter 策略

@@ -17,10 +17,10 @@
 #pragma once
 
 #include "cpp/pl/sst/filter_policy.h"
-#include "cpp/pl/binary/binary.h"
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace pl {
@@ -35,9 +35,9 @@ public:
 
     void startBlock(uint64_t offset);
 
-    void addKey(const Binary& key);
+    void addKey(std::string_view key);
 
-    Binary finish();
+    std::string_view finish();
 
 private:
     void genFilter();
@@ -49,7 +49,7 @@ private:
     std::vector<std::size_t> start_;       // 每一个key在keys_中的偏移,可以通过start_[i + 1] - start_[i] 计算出第i个key的长度
     std::string result_;                   // 所有的filter都存放在result_中
     std::vector<uint32_t> filter_offsets_; // 每个filter在result_中的offset
-    std::vector<Binary> tmp_keys_;         // 生成新的filter的时候存储临时的key
+    std::vector<std::string_view> tmp_keys_;         // 生成新的filter的时候存储临时的key
     // clang-format on
 };
 
