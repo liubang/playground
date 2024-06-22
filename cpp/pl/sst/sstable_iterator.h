@@ -22,7 +22,7 @@
 
 namespace pl {
 
-using BlockFunc = std::function<IteratorPtr(const Binary)>;
+using BlockFunc = std::function<IteratorPtr(std::string_view)>;
 
 class SSTableIterator : public Iterator {
 public:
@@ -39,15 +39,15 @@ public:
 
     void prev() override;
 
-    void seek(const Binary& target) override;
+    void seek(std::string_view target) override;
 
     [[nodiscard]] Status status() const override;
 
     [[nodiscard]] bool valid() const override;
 
-    [[nodiscard]] Binary key() const override;
+    [[nodiscard]] std::string_view key() const override;
 
-    [[nodiscard]] Binary val() const override;
+    [[nodiscard]] std::string_view val() const override;
 
 private:
     void initDataBlock();

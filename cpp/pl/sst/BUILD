@@ -29,7 +29,6 @@ cc_library(
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
     deps = [
-        "//cpp/pl/binary",
         "//cpp/pl/bits",
         "//cpp/pl/bloom:bloom_filter",
         "//cpp/pl/crc",

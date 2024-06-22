@@ -13,11 +13,14 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
+
 #pragma once
 
-#include "cpp/pl/binary/binary.h"
-
 #include <cstddef>
+#include <cstring>
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace pl {
 
@@ -30,10 +33,10 @@ public:
     BloomFilter& operator=(const BloomFilter&&) = delete;
 
     // lookup if bloomfilter contains data
-    [[nodiscard]] bool contains(const Binary& key, const Binary& filter) const;
+    [[nodiscard]] bool contains(std::string_view key, std::string_view filter) const;
 
     // add a member to bloomfilter
-    void create(const Binary* keys, std::size_t n, std::string* dst) const;
+    void create(const std::vector<std::string_view>& keys, std::string* dst) const;
 
 private:
     std::size_t bits_per_key_; // 每一个key需要占用多少bit

@@ -21,7 +21,6 @@
 
 #include "cpp/pl/sst/comparator.h"
 #include "cpp/pl/sst/options.h"
-#include "cpp/pl/binary/binary.h"
 
 namespace pl {
 
@@ -37,9 +36,9 @@ public:
 
     BlockBuilder& operator=(const BlockBuilder&) = delete;
 
-    void add(const Binary& key, const Binary& val);
+    void add(std::string_view key, std::string_view val);
 
-    Binary finish();
+    std::string_view finish();
 
     [[nodiscard]] bool empty() const { return buffer_.empty(); }
 

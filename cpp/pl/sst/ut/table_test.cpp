@@ -15,9 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/fs/posix_fs.h"
+#include "cpp/pl/random/random.h"
 #include "cpp/pl/sst/sstable.h"
 #include "cpp/pl/sst/sstable_builder.h"
-#include "cpp/pl/random/random.h"
 
 #include <gtest/gtest.h>
 #include <set>
@@ -72,7 +72,7 @@ public:
 
         check_table(table.get());
 
-        auto handle_result = [](void* arg, const pl::Binary& k, const pl::Binary& v) {
+        auto handle_result = [](void* arg, std::string_view k, std::string_view v) {
             auto* saver = reinterpret_cast<std::string*>(arg);
             saver->assign(v.data(), v.size());
         };
@@ -112,8 +112,8 @@ public:
         while (iter->valid()) {
             auto key = iter->key();
             auto val = iter->val();
-            EXPECT_EQ(*key_iter, key.toString());
-            EXPECT_EQ(kvs[key.toString()], val.toString());
+            EXPECT_EQ(*key_iter, key);
+            EXPECT_EQ(kvs[std::string(key)], val);
             idx++;
             key_iter++;
             iter->next();

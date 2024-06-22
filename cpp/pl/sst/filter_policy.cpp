@@ -19,12 +19,13 @@
 
 namespace pl {
 
-void BloomFilterPolicy::createFilter(Binary* keys, std::size_t n, std::string* dst) const {
+void BloomFilterPolicy::createFilter(const std::vector<std::string_view>& keys,
+                                     std::string* dst) const {
     BloomFilter bloom_filter(bits_per_key_);
-    bloom_filter.create(keys, n, dst);
+    bloom_filter.create(keys, dst);
 }
 
-bool BloomFilterPolicy::keyMayMatch(const Binary& key, const Binary& filter) const {
+bool BloomFilterPolicy::keyMayMatch(std::string_view key, std::string_view filter) const {
     BloomFilter bloom_filter(bits_per_key_);
     return bloom_filter.contains(key, filter);
 }

@@ -17,6 +17,7 @@
 #pragma once
 
 #include "cpp/pl/fs/fs.h"
+#include <cassert>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -45,7 +46,7 @@ public:
         }
     }
 
-    Status append(const Binary& data) override;
+    Status append(std::string_view data) override;
     Status close() override;
     Status flush() override;
     Status sync() override;
@@ -81,7 +82,10 @@ public:
 
     [[nodiscard]] std::size_t size() const override;
 
-    Status read(uint64_t offset, std::size_t n, Binary* result, char* scratch) const override;
+    Status read(uint64_t offset,
+                std::size_t n,
+                std::string_view* result,
+                char* scratch) const override;
 
 private:
     const std::string filename_;

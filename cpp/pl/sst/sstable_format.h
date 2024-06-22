@@ -17,12 +17,12 @@
 #pragma once
 
 #include "cpp/pl/fs/fs.h"
-#include "cpp/pl/binary/binary.h"
 #include "cpp/pl/status/status.h"
 
 #include <cstdint>
 #include <sstream>
 #include <string>
+#include <string_view>
 
 namespace pl {
 
@@ -120,7 +120,7 @@ public:
 
     void encodeTo(std::string* dst) const;
 
-    [[nodiscard]] Status decodeFrom(const Binary& input);
+    [[nodiscard]] Status decodeFrom(std::string_view input);
 
 private:
     uint64_t offset_;
@@ -171,7 +171,7 @@ public:
 
     void encodeTo(std::string* dst) const;
 
-    Status decodeFrom(const Binary& input);
+    Status decodeFrom(std::string_view input);
 
     [[nodiscard]] std::string toString() const {
         std::stringstream ss;
@@ -217,7 +217,7 @@ public:
     [[nodiscard]] const BlockHandle& fileMetaHandle() const { return file_meta_handle_; }
 
     void encodeTo(std::string* dst) const;
-    [[nodiscard]] Status decodeFrom(const Binary& input);
+    [[nodiscard]] Status decodeFrom(std::string_view input);
 
 private:
     BlockHandle filter_handle_;
@@ -226,7 +226,7 @@ private:
 };
 
 struct BlockContents {
-    Binary data;
+    std::string_view data;
     bool cachable;
     bool heap_allocated;
 };

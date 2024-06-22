@@ -37,7 +37,7 @@ std::unique_ptr<SSTable> SSTable::open(const ReadOptionsRef& options,
         return nullptr;
     }
     char footer_content[FOOTER_LEN];
-    Binary footer_input;
+    std::string_view footer_input;
     *status = reader->read(size - FOOTER_LEN, FOOTER_LEN, &footer_input, footer_content);
     if (!status->isOk()) {
         return nullptr;
@@ -108,7 +108,7 @@ void SSTable::readFilter(const Footer& footer) {
     filter_ = std::make_unique<FilterBlockReader>(std::move(filter), block.data);
 }
 
-Status SSTable::get(const Binary& key, void* arg, HandleResult&& handle_result) {
+Status SSTable::get(std::string_view key, void* arg, HandleResult&& handle_result) {
     if (options_->comparator->compare(key, file_meta_->minKey()) < 0 ||
         options_->comparator->compare(key, file_meta_->maxKey()) > 0) {
         return Status::NewNotFound();
@@ -120,7 +120,7 @@ Status SSTable::get(const Binary& key, void* arg, HandleResult&& handle_result) 
         return Status::NewNotFound();
     }
 
-    Binary handle_value = iiter->val();
+    std::string_view handle_value = iiter->val();
     BlockHandle handle;
     if (filter_ != nullptr) {
         if (!handle.decodeFrom(handle_value).isOk()) {
@@ -146,7 +146,7 @@ Status SSTable::get(const Binary& key, void* arg, HandleResult&& handle_result) 
     return iter->status();
 }
 
-IteratorPtr SSTable::blockReader(const Binary& index_value) {
+IteratorPtr SSTable::blockReader(std::string_view index_value) {
     BlockHandle handle;
     auto s = handle.decodeFrom(index_value);
     if (!s.isOk()) {
@@ -168,7 +168,7 @@ IteratorPtr SSTable::blockReader(const Binary& index_value) {
 
 IteratorPtr SSTable::iterator() {
     return std::make_unique<SSTableIterator>(index_block_->iterator(options_->comparator),
-                                             [this](const Binary b) {
+                                             [this](std::string_view b) {
                                                  return this->blockReader(b);
                                              });
 }

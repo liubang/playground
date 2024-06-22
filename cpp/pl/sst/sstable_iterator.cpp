@@ -16,9 +16,11 @@
 
 #include "cpp/pl/sst/sstable_iterator.h"
 
+#include <cassert>
+
 namespace pl {
 
-void SSTableIterator::seek(const Binary& target) {
+void SSTableIterator::seek(std::string_view target) {
     index_iter_->seek(target);
     initDataBlock();
     if (data_iter_ != nullptr) {
@@ -59,12 +61,12 @@ void SSTableIterator::prev() {
 
 bool SSTableIterator::valid() const { return data_iter_ != nullptr && data_iter_->valid(); }
 
-Binary SSTableIterator::key() const {
+std::string_view SSTableIterator::key() const {
     assert(valid());
     return data_iter_->key();
 }
 
-Binary SSTableIterator::val() const {
+std::string_view SSTableIterator::val() const {
     assert(valid());
     return data_iter_->val();
 }
@@ -84,7 +86,7 @@ void SSTableIterator::initDataBlock() {
         data_iter_ = nullptr;
         return;
     }
-    Binary handle = index_iter_->val();
+    std::string_view handle = index_iter_->val();
     if (data_iter_ != nullptr && handle.compare(data_block_handle_) == 0) {
         // do nothing
     } else {

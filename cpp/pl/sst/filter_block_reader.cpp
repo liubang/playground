@@ -19,7 +19,7 @@
 
 namespace pl {
 
-FilterBlockReader::FilterBlockReader(FilterPolicyRef filter_policy, const pl::Binary& contents)
+FilterBlockReader::FilterBlockReader(FilterPolicyRef filter_policy, std::string_view contents)
     : filter_policy_(std::move(filter_policy)) {
     std::size_t n = contents.size();
     if (n < 5) {
@@ -35,7 +35,7 @@ FilterBlockReader::FilterBlockReader(FilterPolicyRef filter_policy, const pl::Bi
     num_ = (n - 5 - last_word) / 4;
 }
 
-bool FilterBlockReader::keyMayMatch(uint64_t block_offset, const Binary& key) {
+bool FilterBlockReader::keyMayMatch(uint64_t block_offset, std::string_view key) {
     uint64_t idx = block_offset >> base_lg_;
     if (idx >= num_) {
         return true;
@@ -43,7 +43,7 @@ bool FilterBlockReader::keyMayMatch(uint64_t block_offset, const Binary& key) {
     auto start = decodeInt<uint32_t>(offset_ + idx * 4);
     auto limit = decodeInt<uint32_t>(offset_ + idx * 4 + 4);
     if (start <= limit && limit <= static_cast<size_t>(offset_ - data_)) {
-        return filter_policy_->keyMayMatch(key, Binary(data_ + start, limit - start));
+        return filter_policy_->keyMayMatch(key, std::string_view(data_ + start, limit - start));
     }
     return false;
 }
