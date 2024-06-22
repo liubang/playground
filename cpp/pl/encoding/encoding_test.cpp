@@ -17,6 +17,7 @@
 #include "cpp/pl/encoding/encoding.h"
 
 #include <gtest/gtest.h>
+#include <random>
 
 class EncodingTest : public ::testing::Test {
 protected:
@@ -24,4 +25,18 @@ protected:
     void TearDown() override {}
 };
 
-TEST_F(EncodingTest, verify_varint) {}
+// FIX(liubang):
+TEST_F(EncodingTest, verify_varint) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<uint64_t> dis(0, UINT_MAX);
+
+    for (int i = 0; i < 999; ++i) {
+        uint64_t number = dis(gen);
+        std::string buffer;
+        EXPECT_TRUE(pl::varint_encode(number, &buffer));
+        uint64_t exp;
+        EXPECT_TRUE(pl::varint_decode(buffer, &exp));
+        EXPECT_EQ(number, exp);
+    }
+}
