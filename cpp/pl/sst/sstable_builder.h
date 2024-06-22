@@ -54,12 +54,12 @@ private:
     void writeBlockRaw(std::string_view content, CompressionType type, BlockHandle* handle);
 
 private:
-    const BuildOptionsRef options_;
     const FsWriterRef writer_;
-    BlockBuilder data_block_;
-    BlockBuilder index_block_;
-    BlockHandle pending_handler_;
+    const BuildOptionsRef options_;
+    BlockBuilderPtr data_block_;
+    BlockBuilderPtr index_block_;
     FilterBlockBuilderPtr filter_block_;
+    BlockHandle pending_handler_;
     std::string first_key_; // min_key
     std::string last_key_;
     uint64_t key_nums_{0};
