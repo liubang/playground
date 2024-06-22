@@ -16,8 +16,6 @@
 
 #pragma once
 
-#include "cpp/pl/binary/binary.h"
-
 #include <memory>
 
 namespace pl {
@@ -28,7 +26,7 @@ public:
 
     [[nodiscard]] virtual const char* name() const = 0;
 
-    [[nodiscard]] virtual int compare(const Binary& a, const Binary& b) const = 0;
+    [[nodiscard]] virtual int compare(std::string_view a, std::string_view b) const = 0;
 };
 
 using ComparatorPtr = std::unique_ptr<Comparator>;
@@ -40,7 +38,7 @@ public:
 
     [[nodiscard]] const char* name() const override { return "BytewiseComparator"; };
 
-    [[nodiscard]] int compare(const Binary& a, const Binary& b) const override {
+    [[nodiscard]] int compare(std::string_view a, std::string_view b) const override {
         return a.compare(b);
     }
 };

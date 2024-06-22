@@ -16,16 +16,14 @@
 
 #include "cpp/pl/sst/encoding.h"
 
-#include "cpp/pl/binary/binary.h"
 #include <gtest/gtest.h>
-
-using pl::Binary;
+#include <string_view>
 
 TEST(encoding, putAndGetInt) {
     std::string dst;
     int32_t a = 12345;
     pl::encodeInt(&dst, a);
-    Binary binary(dst);
+    std::string_view binary(dst);
 
     auto aa = pl::decodeInt<uint32_t>(binary.data());
     EXPECT_EQ(a, aa);
@@ -33,7 +31,7 @@ TEST(encoding, putAndGetInt) {
     uint64_t b = 123456789;
     dst.clear();
     pl::encodeInt(&dst, b);
-    binary.reset(dst);
+    binary = dst;
 
     auto bb = pl::decodeInt<uint64_t>(binary.data());
     EXPECT_EQ(b, bb);
@@ -41,7 +39,7 @@ TEST(encoding, putAndGetInt) {
     uint8_t c = 2;
     dst.clear();
     pl::encodeInt(&dst, c);
-    binary.reset(dst);
+    binary = dst;
 
     auto cc = pl::decodeInt<uint8_t>(binary.data());
     EXPECT_EQ(c, cc);

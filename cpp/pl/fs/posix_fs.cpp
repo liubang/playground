@@ -17,6 +17,7 @@
 #include "cpp/pl/fs/posix_fs.h"
 
 #include <cstdint>
+#include <cstring>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -33,7 +34,7 @@ Status posixError(const std::string& context, int err_number) {
     return Status::NewIOError(context + std::strerror(err_number));
 }
 
-Status PosixFsWriter::append(const Binary& data) {
+Status PosixFsWriter::append(std::string_view data) {
     std::size_t write_size = data.size();
     const char* write_data = data.data();
     std::size_t copy_size = std::min(write_size, WRITE_BUFFER_SIZE - pos_);
@@ -123,10 +124,13 @@ std::size_t PosixFsReader::size() const {
     return 0;
 }
 
-Status PosixFsReader::read(uint64_t offset, std::size_t n, Binary* result, char* scratch) const {
+Status PosixFsReader::read(uint64_t offset,
+                           std::size_t n,
+                           std::string_view* result,
+                           char* scratch) const {
     Status status;
     ssize_t read_size = ::pread(fd_, scratch, n, static_cast<off_t>(offset));
-    result->reset(scratch, (read_size < 0) ? 0 : read_size);
+    *result = std::string_view(scratch, (read_size < 0) ? 0 : read_size);
     if (read_size < 0) {
         status = posixError(filename_, errno);
     }
