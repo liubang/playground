@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include "cpp/pl/binary/binary.h"
 #include "cpp/pl/status/status.h"
 
 #include <cstdint>
@@ -28,7 +27,10 @@ class FsReader {
 public:
     virtual ~FsReader() = default;
 
-    virtual Status read(uint64_t offset, size_t n, Binary* result, char* scratch) const = 0;
+    virtual Status read(uint64_t offset,
+                        size_t n,
+                        std::string_view* result,
+                        char* scratch) const = 0;
 
     [[nodiscard]] virtual std::size_t size() const = 0;
 };
@@ -42,7 +44,7 @@ public:
     FsWriter(const FsWriter&) = delete;
     FsWriter& operator=(const FsWriter&) = delete;
     virtual ~FsWriter() = default;
-    virtual Status append(const Binary& data) = 0;
+    virtual Status append(std::string_view data) = 0;
     virtual Status close() = 0;
     virtual Status flush() = 0;
     virtual Status sync() = 0;

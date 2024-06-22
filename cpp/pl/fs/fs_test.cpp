@@ -16,9 +16,8 @@
 
 #include "cpp/pl/fs/posix_fs.h"
 
-#include <gtest/gtest.h>
-
 #include <cstdio>
+#include <gtest/gtest.h>
 #include <memory>
 
 TEST(fs, FsWriterAndFsReader) {
@@ -34,7 +33,7 @@ TEST(fs, FsWriterAndFsReader) {
     EXPECT_NE(fr.get(), nullptr);
     EXPECT_TRUE(st.isOk());
 
-    pl::Binary data("hello world");
+    std::string_view data("hello world");
     st = fw->append(data);
     EXPECT_TRUE(st.isOk());
     st = fw->flush();
@@ -44,7 +43,7 @@ TEST(fs, FsWriterAndFsReader) {
     st = fw->close();
     EXPECT_TRUE(st.isOk());
 
-    pl::Binary result;
+    std::string_view result;
     char buffer[1024];
     auto status = fr->read(0, 1024, &result, buffer);
     EXPECT_TRUE(status.isOk());

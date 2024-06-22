@@ -26,9 +26,9 @@ BlockBuilder::BlockBuilder(const BuildOptionsRef& options)
     restarts_.push_back(0);
 }
 
-void BlockBuilder::add(const Binary& key, const Binary& value) {
+void BlockBuilder::add(std::string_view key, std::string_view value) {
     assert(!finished_);
-    auto last_key_pice = Binary(last_key_);
+    auto last_key_pice = std::string_view(last_key_);
     // 必须保证key按照指定的comparator的递增的顺序
     assert(buffer_.empty() || comparator_->compare(key, last_key_pice) > 0);
     uint32_t shared = 0;
@@ -59,11 +59,11 @@ void BlockBuilder::add(const Binary& key, const Binary& value) {
 
     last_key_.resize(shared);
     last_key_.append(key.data() + shared, non_shared);
-    assert(Binary(last_key_).compare(key) == 0);
+    assert(std::string_view(last_key_).compare(key) == 0);
     counter_++;
 }
 
-Binary BlockBuilder::finish() {
+std::string_view BlockBuilder::finish() {
     /*
      * restarts indexes
      *
