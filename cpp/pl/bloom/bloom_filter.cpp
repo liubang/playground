@@ -17,9 +17,6 @@
 #include "cpp/pl/bloom/bloom_filter.h"
 #include "cpp/pl/hash/murmurhash2.h"
 
-#include <cstring>
-#include <string>
-
 namespace pl {
 
 BloomFilter::BloomFilter(std::size_t bit_per_key) : bits_per_key_(bit_per_key) {
@@ -34,7 +31,7 @@ BloomFilter::BloomFilter(std::size_t bit_per_key) : bits_per_key_(bit_per_key) {
     }
 }
 
-bool BloomFilter::contains(const Binary& key, const Binary& filter) const {
+bool BloomFilter::contains(std::string_view key, std::string_view filter) const {
     std::size_t len = filter.size();
     const size_t bits = (len - 1) << 3;
     auto* array = reinterpret_cast<uint8_t*>(const_cast<char*>(filter.data()));
@@ -54,7 +51,8 @@ bool BloomFilter::contains(const Binary& key, const Binary& filter) const {
     return true;
 }
 
-void BloomFilter::create(const Binary* keys, std::size_t n, std::string* dst) const {
+void BloomFilter::create(const std::vector<std::string_view>& keys, std::string* dst) const {
+    std::size_t n = keys.size();
     std::size_t bit_count = (n * bits_per_key_) << 3;
     uint64_t actual_bit_count = 8;
     while (actual_bit_count < bit_count) {

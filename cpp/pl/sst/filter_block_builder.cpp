@@ -35,9 +35,9 @@ void FilterBlockBuilder::startBlock(uint64_t offset) {
     }
 }
 
-void FilterBlockBuilder::addKey(const Binary& key) {
+void FilterBlockBuilder::addKey(std::string_view key) {
     // make a copy
-    Binary k = key;
+    std::string_view k = key;
     // 这两行的先后顺序不能颠倒
     start_.push_back(keys_.size());
     keys_.append(k.data(), k.size());
@@ -68,7 +68,7 @@ void FilterBlockBuilder::addKey(const Binary& key) {
  *             +------------------+
  *
  */
-Binary FilterBlockBuilder::finish() {
+std::string_view FilterBlockBuilder::finish() {
     if (!start_.empty()) {
         genFilter();
     }
@@ -97,10 +97,10 @@ void FilterBlockBuilder::genFilter() {
     for (std::size_t i = 0; i < num_keys; i++) {
         const char* base = keys_.data() + start_[i];
         std::size_t len = start_[i + 1] - start_[i];
-        tmp_keys_[i] = Binary(base, len);
+        tmp_keys_[i] = std::string_view(base, len);
     }
     filter_offsets_.push_back(static_cast<uint32_t>(result_.size()));
-    filter_policy_->createFilter(&tmp_keys_[0], num_keys, &result_);
+    filter_policy_->createFilter(tmp_keys_, &result_);
 
     tmp_keys_.clear();
     keys_.clear();
