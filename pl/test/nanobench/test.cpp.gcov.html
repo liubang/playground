@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-06-21 17:25:16</td>
+            <td class="headerValue">2024-06-23 13:40:20</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">4</td>
@@ -70,8 +70,8 @@
 <a name="8"><span class="lineNum">       8 </span><span class="lineCov">          1 : int main(int, char**) {</span></a>
 <a name="9"><span class="lineNum">       9 </span><span class="lineCov">          1 :     uint64_t x = 1;</span></a>
 <a name="10"><span class="lineNum">      10 </span><span class="lineCov">          1 :     ankerl::nanobench::Bench().run(&quot;x += x&quot;, [&amp;]() {</span></a>
-<a name="11"><span class="lineNum">      11 </span><span class="lineCov">    1004233 :         ankerl::nanobench::doNotOptimizeAway(x += x);</span></a>
-<a name="12"><span class="lineNum">      12 </span><span class="lineCov">    1004233 :     });</span></a>
+<a name="11"><span class="lineNum">      11 </span><span class="lineCov">     658231 :         ankerl::nanobench::doNotOptimizeAway(x += x);</span></a>
+<a name="12"><span class="lineNum">      12 </span><span class="lineCov">     658231 :     });</span></a>
 <a name="13"><span class="lineNum">      13 </span>            : </a>
 <a name="14"><span class="lineNum">      14 </span><span class="lineCov">          1 :     ankerl::nanobench::Bench().run(&quot;sleep 10ms&quot;, [&amp;]() {</span></a>
 <a name="15"><span class="lineNum">      15 </span><span class="lineCov">         11 :         std::this_thread::sleep_for(std::chrono::milliseconds(10));</span></a>
@@ -81,11 +81,11 @@
 <a name="19"><span class="lineNum">      19 </span><span class="lineCov">          1 :     std::mt19937_64 rng(dev());</span></a>
 <a name="20"><span class="lineNum">      20 </span><span class="lineCov">          1 :     ankerl::nanobench::Bench().run(&quot;random fluctuations&quot;, [&amp;]() {</span></a>
 <a name="21"><span class="lineNum">      21 </span>            :         // each run, perform a random number of rng calls</a>
-<a name="22"><span class="lineNum">      22 </span><span class="lineCov">       7480 :         auto iterations = rng() &amp; UINT64_C(0xff);</span></a>
-<a name="23"><span class="lineNum">      23 </span><span class="lineCov">     955955 :         for (uint64_t i = 0; i &lt; iterations; ++i) {</span></a>
-<a name="24"><span class="lineNum">      24 </span><span class="lineCov">     948475 :             (void)rng();</span></a>
+<a name="22"><span class="lineNum">      22 </span><span class="lineCov">       5556 :         auto iterations = rng() &amp; UINT64_C(0xff);</span></a>
+<a name="23"><span class="lineNum">      23 </span><span class="lineCov">     707411 :         for (uint64_t i = 0; i &lt; iterations; ++i) {</span></a>
+<a name="24"><span class="lineNum">      24 </span><span class="lineCov">     701855 :             (void)rng();</span></a>
 <a name="25"><span class="lineNum">      25 </span>            :         }</a>
-<a name="26"><span class="lineNum">      26 </span><span class="lineCov">       7480 :     });</span></a>
+<a name="26"><span class="lineNum">      26 </span><span class="lineCov">       5556 :     });</span></a>
 <a name="27"><span class="lineNum">      27 </span><span class="lineCov">          1 : }</span></a>
 </pre>
       </td>
