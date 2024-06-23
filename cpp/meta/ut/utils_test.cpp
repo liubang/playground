@@ -1,17 +1,24 @@
-//=====================================================================
+// Copyright (c) 2024 The Authors. All rights reserved.
 //
-// utils_test.cpp -
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// Created by liubang on 2023/05/21 01:33
-// Last Modified: 2023/05/21 01:33
+//      https://www.apache.org/licenses/LICENSE-2.0
 //
-//=====================================================================
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Authors: liubang (it.liubang@gmail.com)
+
+#include "cpp/meta/ut/utils_test.h"
+#include "cpp/meta/traits.h"
 #include "cpp/meta/utils.h"
 
 #include <catch2/catch_test_macros.hpp>
-
-#include "cpp/meta/traits.h"
-#include "cpp/meta/ut/utils_test.h"
 
 TEST_CASE("utils", "[array]") {
     using arr345 = std::array<std::array<std::array<int, 3>, 4>, 5>;
