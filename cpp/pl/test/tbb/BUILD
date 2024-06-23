@@ -15,15 +15,6 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/06/18 01:27
 
-#======================================================================
-#
-# BUILD -
-#
-# Created by liubang on 2023/06/17 22:26
-# Last Modified: 2023/06/17 22:26
-#
-#======================================================================
-
 load(
     "//cpp:copts/configure_copts.bzl",
     "DEFAULT_LINKOPTS",
