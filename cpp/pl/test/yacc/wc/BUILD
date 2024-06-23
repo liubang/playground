@@ -15,15 +15,6 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/08/20 15:58
 
-#======================================================================
-#
-# BUILD -
-#
-# Created by liubang on 2023/08/20 01:19
-# Last Modified: 2023/08/20 01:19
-#
-#======================================================================
-
 load("@rules_flex//flex:flex.bzl", "flex")
 
 flex(

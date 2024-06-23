@@ -15,15 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2022/10/31 00:10
 
-//=====================================================================
-//
-// main.tsx -
-//
-// Created by liubang on 2022/10/30 23:58
-// Last Modified: 2022/10/30 23:58
-//
-//=====================================================================
-
 import React from "react";
 
 import ReactDOM from "react-dom/client";

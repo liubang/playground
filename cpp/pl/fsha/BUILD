@@ -15,19 +15,10 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/09/28 17:00
 
-#======================================================================
-#
-# BUILD -
-#
-# Created by liubang on 2023/09/28 16:54
-# Last Modified: 2023/09/28 16:54
-#
-#======================================================================
 load(
     "//cpp:copts/configure_copts.bzl",
     "DEFAULT_COPTS",
     "DEFAULT_LINKOPTS",
-    "TEST_COPTS",
 )
 
 cc_library(
