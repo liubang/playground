@@ -15,15 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2022/10/31 00:10
 
-//=====================================================================
-//
-// App.tsx -
-//
-// Created by liubang on 2022/10/30 23:58
-// Last Modified: 2022/10/30 23:58
-//
-//=====================================================================
-
 import react from "react";
 import { Button } from "antd";
 import * as icons from "@ant-design/icons";
