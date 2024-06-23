@@ -1,11 +1,19 @@
-//=====================================================================
+// Copyright (c) 2024 The Authors. All rights reserved.
 //
-// calc.c -
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// Created by liubang on 2023/10/29 23:47
-// Last Modified: 2023/10/29 23:47
+//      https://www.apache.org/licenses/LICENSE-2.0
 //
-//=====================================================================
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Authors: liubang (it.liubang@gmail.com)
+
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -134,8 +142,8 @@ struct Ast* NewAssign(CalcResult* result, struct Symbol* s, struct Ast* v) {
     return (struct Ast*)a;
 }
 
-struct Ast*
-NewFlow(CalcResult* result, int nodetype, struct Ast* cond, struct Ast* tl, struct Ast* el) {
+struct Ast* NewFlow(
+    CalcResult* result, int nodetype, struct Ast* cond, struct Ast* tl, struct Ast* el) {
     struct Flow* a = malloc(sizeof(struct Flow));
     if (!a) {
         Calcerror("out of space", result, NULL);
