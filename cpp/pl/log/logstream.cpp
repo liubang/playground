@@ -26,5 +26,4 @@ void LogStream::write(std::string_view data) {
     buffer_.append(data);
 }
 
-
 } // namespace pl
