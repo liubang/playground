@@ -18,15 +18,15 @@
 
 #include <cstddef>
 #include <cstring>
+#include <fmt/format.h>
 #include <string>
 #include <string_view>
 #include <type_traits>
 
 namespace pl {
-
 namespace detail {
 
-template <std::size_t SIZE> class FixedBuffer {
+template <std::size_t SIZE> class FixedBuffer final {
 public:
     FixedBuffer(const FixedBuffer&) = delete;
     FixedBuffer(FixedBuffer&&) = delete;
@@ -61,11 +61,12 @@ private:
 
 } // namespace detail
 
-class LogStream {
+class LogStream final {
     using Buffer = detail::FixedBuffer<4000>;
 
 public:
     LogStream() = default;
+
     // noncopyable and nonmoveable
     LogStream(const LogStream&) = delete;
     LogStream(LogStream&&) = delete;
@@ -87,48 +88,22 @@ public:
         return *this;
     }
 
-    template <typename T,
-              std::enable_if_t<std::disjunction_v<std::is_same<T, char>,
-                                                  std::is_same<T, signed char>,
-                                                  std::is_same<T, unsigned char>,
-                                                  std::is_arithmetic<T>,
-                                                  std::is_floating_point<T>>>* = nullptr>
+    template <typename T, std::enable_if_t<std::is_arithmetic_v<T>>* = nullptr>
     LogStream& operator<<(const T v) {
-        write<T>(v);
+        auto data = fmt::format("{}", v);
+        write(std::string_view(data));
         return *this;
     }
 
-    LogStream& operator<<(const bool v) {
-        if (v) {
-            write("true");
-        } else {
-            write("false");
-        }
+    LogStream& operator<<(void* v) {
+        auto data = fmt::format("{}", v);
+        write(std::string_view(data));
         return *this;
     }
 
-    const Buffer& buffer() const { return buffer_; }
+    [[nodiscard]] const Buffer& buffer() const { return buffer_; }
 
 private:
-    template <typename T,
-              std::enable_if_t<std::disjunction_v<std::is_same<T, char>,
-                                                  std::is_same<T, unsigned char>,
-                                                  std::is_same<T, int8_t>,
-                                                  std::is_same<T, uint8_t>>>* = nullptr>
-    void write(const T data) {
-        write(std::string_view(&data, sizeof(data)));
-    }
-
-    template <typename T, std::enable_if_t<std::is_arithmetic<T>::value>* = nullptr>
-    void write(const T data) {
-        if (buffer_.full()) {
-            return;
-        }
-        // TODO(liubang): 使用更加高效的转换
-        auto s = std::to_string(data);
-        write(std::string_view(s));
-    }
-
     void write(std::string_view data);
 
 private:

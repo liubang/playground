@@ -29,10 +29,7 @@ Logger::Logger(Logger::SourceFile source, int line) : impl_(source, line, LogLev
 Logger::Logger(Logger::SourceFile source, int line, Logger::LogLevel log_level)
     : impl_(source, line, log_level) {}
 
-Logger::~Logger() {
-    const auto& buffer = stream().buffer();
-    std::cout << std::string_view(buffer.data(), buffer.size()) << std::endl;
-}
+Logger::~Logger() { impl_.flush(); }
 
 std::string Logger::Impl::fmtTime() {
     auto now_time_t = std::chrono::system_clock::to_time_t(time_);
@@ -45,6 +42,17 @@ std::string Logger::Impl::fmtTime() {
 void Logger::Impl::startSession() {
     stream_ << logLevel2String(log_level_) << ": " << fmtTime() << ": * " << gettid() << " ["
             << source_file_.source() << ":" << line_ << "] ";
+}
+
+void Logger::Impl::flush() {
+    const auto fill = std::cout.fill();
+    const auto width = std::cout.width();
+
+    const auto& buffer = stream_.buffer();
+    std::cout << std::string_view(buffer.data(), buffer.size()) << std::endl;
+
+    std::cout.width(width);
+    std::cout.fill(fill);
 }
 
 } // namespace pl
