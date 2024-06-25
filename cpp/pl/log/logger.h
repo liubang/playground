@@ -71,7 +71,7 @@ public:
             }
         }
 
-        constexpr std::string_view source() const { return source_; }
+        [[nodiscard]] constexpr std::string_view source() const { return source_; }
 
     private:
         std::string_view source_;
@@ -95,6 +95,7 @@ private:
         }
 
         void startSession();
+        void flush();
         std::string fmtTime();
 
         friend class Logger;
