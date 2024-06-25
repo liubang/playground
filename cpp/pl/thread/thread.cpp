@@ -16,15 +16,23 @@
 
 #include "cpp/pl/thread/thread.h"
 
+#if defined(__APPLE__) && defined(__MACH__)
+#include <pthread.h>
+#else
 #include <sys/syscall.h>
 #include <unistd.h>
+#endif
 
 namespace pl {
 
 long gettid() {
     thread_local long tid = 0;
     if (tid == 0) {
+#if defined(__APPLE__) && defined(__MACH__)
+        pthread_threadid_np(nullptr, &tid);
+#else
         tid = ::syscall(SYS_gettid);
+#endif
     }
     return tid;
 }

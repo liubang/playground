@@ -17,10 +17,9 @@
 #include "cpp/pl/log/logger.h"
 #include "cpp/pl/thread/thread.h"
 
+#include <cstdio>
 #include <fmt/chrono.h>
 #include <fmt/format.h>
-#include <iostream>
-#include <string_view>
 
 namespace pl {
 
@@ -45,14 +44,9 @@ void Logger::Impl::startSession() {
 }
 
 void Logger::Impl::flush() {
-    const auto fill = std::cout.fill();
-    const auto width = std::cout.width();
-
+    stream_ << '\n';
     const auto& buffer = stream_.buffer();
-    std::cout << std::string_view(buffer.data(), buffer.size()) << std::endl;
-
-    std::cout.width(width);
-    std::cout.fill(fill);
+    fwrite(buffer.data(), 1, buffer.size(), stdout);
 }
 
 } // namespace pl
