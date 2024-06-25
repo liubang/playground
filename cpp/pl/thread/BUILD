@@ -16,6 +16,7 @@
 
 load(
     "//cpp:copts/configure_copts.bzl",
+    "DEFAULT_COPTS",
     "DEFAULT_LINKOPTS",
     "TEST_COPTS",
 )
@@ -23,6 +24,15 @@ load(
 cc_library(
     name = "thread_pool",
     hdrs = ["thread_pool.h"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "thread",
+    srcs = ["thread.cpp"],
+    hdrs = ["thread.h"],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
     visibility = ["//visibility:public"],
 )
 

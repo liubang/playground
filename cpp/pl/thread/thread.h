@@ -14,16 +14,10 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/pl/log/logstream.h"
+#pragma once
 
 namespace pl {
 
-void LogStream::write(std::string_view data) {
-    if (buffer_.full() || data.size() == 0) {
-        return;
-    }
-    buffer_.append(data);
+long gettid();
+
 }
-
-
-} // namespace pl
