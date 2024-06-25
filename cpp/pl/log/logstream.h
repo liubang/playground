@@ -18,7 +18,9 @@
 
 #include <cstddef>
 #include <cstring>
+#include <string>
 #include <string_view>
+#include <type_traits>
 
 namespace pl {
 
@@ -45,6 +47,7 @@ public:
     [[nodiscard]] const char* current() const { return cursor_; }
     [[nodiscard]] std::size_t size() const { return cursor_ - data_; }
     [[nodiscard]] std::size_t avail() const { return end() - cursor_; }
+    [[nodiscard]] bool full() const { return avail() == 0; }
 
     void reset() { cursor_ = data_; }
 
@@ -59,31 +62,74 @@ private:
 } // namespace detail
 
 class LogStream {
-    using self = LogStream;
     using Buffer = detail::FixedBuffer<4000>;
 
 public:
+    LogStream() = default;
     // noncopyable and nonmoveable
     LogStream(const LogStream&) = delete;
     LogStream(LogStream&&) = delete;
     LogStream& operator=(const LogStream&) = delete;
     LogStream& operator=(LogStream&&) = delete;
 
-    self& operator<<(bool v);
-    self& operator<<(short v);
-    self& operator<<(unsigned short v);
-    self& operator<<(int v);
-    self& operator<<(unsigned int v);
-    self& operator<<(long v);
-    self& operator<<(unsigned long v);
-    self& operator<<(long long v);
-    self& operator<<(unsigned long long v);
-    self& operator<<(float v);
-    self& operator<<(char v);
-    self& operator<<(const char* v);
-    self& operator<<(const unsigned char* v);
-    self& operator<<(const std::string& v);
-    self& operator<<(std::string_view v);
+    LogStream& operator<<(const char* const v) {
+        write(std::string_view(v));
+        return *this;
+    }
+
+    LogStream& operator<<(const std::string& v) {
+        write(std::string_view(v));
+        return *this;
+    }
+
+    LogStream& operator<<(std::string_view v) {
+        write(v);
+        return *this;
+    }
+
+    template <typename T,
+              std::enable_if_t<std::disjunction_v<std::is_same<T, char>,
+                                                  std::is_same<T, signed char>,
+                                                  std::is_same<T, unsigned char>,
+                                                  std::is_arithmetic<T>,
+                                                  std::is_floating_point<T>>>* = nullptr>
+    LogStream& operator<<(const T v) {
+        write<T>(v);
+        return *this;
+    }
+
+    LogStream& operator<<(const bool v) {
+        if (v) {
+            write("true");
+        } else {
+            write("false");
+        }
+        return *this;
+    }
+
+    const Buffer& buffer() const { return buffer_; }
+
+private:
+    template <typename T,
+              std::enable_if_t<std::disjunction_v<std::is_same<T, char>,
+                                                  std::is_same<T, unsigned char>,
+                                                  std::is_same<T, int8_t>,
+                                                  std::is_same<T, uint8_t>>>* = nullptr>
+    void write(const T data) {
+        write(std::string_view(&data, sizeof(data)));
+    }
+
+    template <typename T, std::enable_if_t<std::is_arithmetic<T>::value>* = nullptr>
+    void write(const T data) {
+        if (buffer_.full()) {
+            return;
+        }
+        // TODO(liubang): 使用更加高效的转换
+        auto s = std::to_string(data);
+        write(std::string_view(s));
+    }
+
+    void write(std::string_view data);
 
 private:
     Buffer buffer_;
