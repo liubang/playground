@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-06-25 11:45:07</td>
+            <td class="headerValue">2024-06-25 17:28:34</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">21</td>
@@ -98,23 +98,23 @@
 <a name="36"><span class="lineNum">      36 </span><span class="lineCov">          6 :     FixedBuffer() : cursor_(data_) {}</span></a>
 <a name="37"><span class="lineNum">      37 </span>            :     ~FixedBuffer() = default;</a>
 <a name="38"><span class="lineNum">      38 </span>            : </a>
-<a name="39"><span class="lineNum">      39 </span><span class="lineCov">        204 :     void append(std::string_view buf) {</span></a>
-<a name="40"><span class="lineNum">      40 </span><span class="lineCov">        204 :         if (avail() &gt; buf.size()) {</span></a>
-<a name="41"><span class="lineNum">      41 </span><span class="lineCov">        204 :             std::memcpy(cursor_, buf.data(), buf.size());</span></a>
-<a name="42"><span class="lineNum">      42 </span><span class="lineCov">        204 :             cursor_ += buf.size();</span></a>
+<a name="39"><span class="lineNum">      39 </span><span class="lineCov">        210 :     void append(std::string_view buf) {</span></a>
+<a name="40"><span class="lineNum">      40 </span><span class="lineCov">        210 :         if (avail() &gt; buf.size()) {</span></a>
+<a name="41"><span class="lineNum">      41 </span><span class="lineCov">        210 :             std::memcpy(cursor_, buf.data(), buf.size());</span></a>
+<a name="42"><span class="lineNum">      42 </span><span class="lineCov">        210 :             cursor_ += buf.size();</span></a>
 <a name="43"><span class="lineNum">      43 </span>            :         }</a>
-<a name="44"><span class="lineNum">      44 </span><span class="lineCov">        204 :     }</span></a>
+<a name="44"><span class="lineNum">      44 </span><span class="lineCov">        210 :     }</span></a>
 <a name="45"><span class="lineNum">      45 </span>            : </a>
 <a name="46"><span class="lineNum">      46 </span><span class="lineCov">          6 :     [[nodiscard]] const char* data() const { return data_; }</span></a>
 <a name="47"><span class="lineNum">      47 </span>            :     [[nodiscard]] const char* current() const { return cursor_; }</a>
 <a name="48"><span class="lineNum">      48 </span><span class="lineCov">          6 :     [[nodiscard]] std::size_t size() const { return cursor_ - data_; }</span></a>
-<a name="49"><span class="lineNum">      49 </span><span class="lineCov">        408 :     [[nodiscard]] std::size_t avail() const { return end() - cursor_; }</span></a>
-<a name="50"><span class="lineNum">      50 </span><span class="lineCov">        204 :     [[nodiscard]] bool full() const { return avail() == 0; }</span></a>
+<a name="49"><span class="lineNum">      49 </span><span class="lineCov">        420 :     [[nodiscard]] std::size_t avail() const { return end() - cursor_; }</span></a>
+<a name="50"><span class="lineNum">      50 </span><span class="lineCov">        210 :     [[nodiscard]] bool full() const { return avail() == 0; }</span></a>
 <a name="51"><span class="lineNum">      51 </span>            : </a>
 <a name="52"><span class="lineNum">      52 </span>            :     void reset() { cursor_ = data_; }</a>
 <a name="53"><span class="lineNum">      53 </span>            : </a>
 <a name="54"><span class="lineNum">      54 </span>            : private:</a>
-<a name="55"><span class="lineNum">      55 </span><span class="lineCov">        408 :     [[nodiscard]] const char* end() const { return data_ + sizeof(data_); }</span></a>
+<a name="55"><span class="lineNum">      55 </span><span class="lineCov">        420 :     [[nodiscard]] const char* end() const { return data_ + sizeof(data_); }</span></a>
 <a name="56"><span class="lineNum">      56 </span>            : </a>
 <a name="57"><span class="lineNum">      57 </span>            : private:</a>
 <a name="58"><span class="lineNum">      58 </span>            :     char data_[SIZE];</a>
@@ -151,11 +151,11 @@
 <a name="89"><span class="lineNum">      89 </span>            :     }</a>
 <a name="90"><span class="lineNum">      90 </span>            : </a>
 <a name="91"><span class="lineNum">      91 </span>            :     template &lt;typename T, std::enable_if_t&lt;std::is_arithmetic_v&lt;T&gt;&gt;* = nullptr&gt;</a>
-<a name="92"><span class="lineNum">      92 </span><span class="lineCov">         72 :     LogStream&amp; operator&lt;&lt;(const T v) {</span></a>
-<a name="93"><span class="lineNum">      93 </span><span class="lineCov">         72 :         auto data = fmt::format(&quot;{}&quot;, v);</span></a>
-<a name="94"><span class="lineNum">      94 </span><span class="lineCov">         72 :         write(std::string_view(data));</span></a>
-<a name="95"><span class="lineNum">      95 </span><span class="lineCov">         72 :         return *this;</span></a>
-<a name="96"><span class="lineNum">      96 </span><span class="lineCov">         72 :     }</span></a>
+<a name="92"><span class="lineNum">      92 </span><span class="lineCov">         78 :     LogStream&amp; operator&lt;&lt;(const T v) {</span></a>
+<a name="93"><span class="lineNum">      93 </span><span class="lineCov">         78 :         auto data = fmt::format(&quot;{}&quot;, v);</span></a>
+<a name="94"><span class="lineNum">      94 </span><span class="lineCov">         78 :         write(std::string_view(data));</span></a>
+<a name="95"><span class="lineNum">      95 </span><span class="lineCov">         78 :         return *this;</span></a>
+<a name="96"><span class="lineNum">      96 </span><span class="lineCov">         78 :     }</span></a>
 <a name="97"><span class="lineNum">      97 </span>            : </a>
 <a name="98"><span class="lineNum">      98 </span><span class="lineCov">          6 :     LogStream&amp; operator&lt;&lt;(void* v) {</span></a>
 <a name="99"><span class="lineNum">      99 </span><span class="lineCov">          6 :         auto data = fmt::format(&quot;{}&quot;, v);</span></a>
