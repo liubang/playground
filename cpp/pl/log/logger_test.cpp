@@ -16,6 +16,8 @@
 
 #include "cpp/pl/log/logger.h"
 
+#include <thread>
+
 int main(int argc, char* argv[]) {
     int8_t i8 = 1;
     char c = 'c';
@@ -25,28 +27,52 @@ int main(int argc, char* argv[]) {
     uint32_t ui32 = 22;
     float f = 3.14;
     double d = 3.14;
-    const char* str = "hello world";
     bool bt = true;
     bool bf = false;
+    const char* str = "hello world";
 
-    LOG_TRACE << "char: " << c << ", i8: " << i8 << "int: " << a << ", long: " << l
-              << ", i32: " << i32 << ", ui32: " << ui32 << ", float: " << f << ", double: " << d
-              << ", str: " << str << ", bool: " << bf << ", bool: " << bt << ", ptr: " << &bt;
-    LOG_DEBUG << "char: " << c << ", i8: " << i8 << "int: " << a << ", long: " << l
-              << ", i32: " << i32 << ", ui32: " << ui32 << ", float: " << f << ", double: " << d
-              << ", str: " << str << ", bool: " << bf << ", bool: " << bt << ", ptr: " << &bt;
-    LOG_INFO << "char: " << c << ", i8: " << i8 << "int: " << a << ", long: " << l
-             << ", i32: " << i32 << ", ui32: " << ui32 << ", float: " << f << ", double: " << d
-             << ", str: " << str << ", bool: " << bf << ", bool: " << bt << ", ptr: " << &bt;
-    LOG_WARN << "char: " << c << ", i8: " << i8 << "int: " << a << ", long: " << l
-             << ", i32: " << i32 << ", ui32: " << ui32 << ", float: " << f << ", double: " << d
-             << ", str: " << str << ", bool: " << bf << ", bool: " << bt << ", ptr: " << &bt;
-    LOG_ERROR << "char: " << c << ", i8: " << i8 << "int: " << a << ", long: " << l
-              << ", i32: " << i32 << ", ui32: " << ui32 << ", float: " << f << ", double: " << d
-              << ", str: " << str << ", bool: " << bf << ", bool: " << bt << ", ptr: " << &bt;
-    LOG_FATAL << "char: " << c << ", i8: " << i8 << "int: " << a << ", long: " << l
-              << ", i32: " << i32 << ", ui32: " << ui32 << ", float: " << f << ", double: " << d
-              << ", str: " << str << ", bool: " << bf << ", bool: " << bt << ", ptr: " << &bt;
+    std::thread t1([&] {
+        LOG_TRACE << "char: " << c << ", i8: " << i8 << "int: " << a << ", long: " << l
+                  << ", i32: " << i32 << ", ui32: " << ui32 << ", float: " << f << ", double: " << d
+                  << ", str: " << str << ", bool: " << bf << ", bool: " << bt << ", ptr: " << &bt;
+    });
+
+    std::thread t2([&] {
+        LOG_DEBUG << "char: " << c << ", i8: " << i8 << "int: " << a << ", long: " << l
+                  << ", i32: " << i32 << ", ui32: " << ui32 << ", float: " << f << ", double: " << d
+                  << ", str: " << str << ", bool: " << bf << ", bool: " << bt << ", ptr: " << &bt;
+    });
+
+    std::thread t3([&] {
+        LOG_INFO << "char: " << c << ", i8: " << i8 << "int: " << a << ", long: " << l
+                 << ", i32: " << i32 << ", ui32: " << ui32 << ", float: " << f << ", double: " << d
+                 << ", str: " << str << ", bool: " << bf << ", bool: " << bt << ", ptr: " << &bt;
+    });
+
+    std::thread t4([&] {
+        LOG_WARN << "char: " << c << ", i8: " << i8 << "int: " << a << ", long: " << l
+                 << ", i32: " << i32 << ", ui32: " << ui32 << ", float: " << f << ", double: " << d
+                 << ", str: " << str << ", bool: " << bf << ", bool: " << bt << ", ptr: " << &bt;
+    });
+
+    std::thread t5([&] {
+        LOG_ERROR << "char: " << c << ", i8: " << i8 << "int: " << a << ", long: " << l
+                  << ", i32: " << i32 << ", ui32: " << ui32 << ", float: " << f << ", double: " << d
+                  << ", str: " << str << ", bool: " << bf << ", bool: " << bt << ", ptr: " << &bt;
+    });
+
+    std::thread t6([&] {
+        LOG_FATAL << "char: " << c << ", i8: " << i8 << "int: " << a << ", long: " << l
+                  << ", i32: " << i32 << ", ui32: " << ui32 << ", float: " << f << ", double: " << d
+                  << ", str: " << str << ", bool: " << bf << ", bool: " << bt << ", ptr: " << &bt;
+    });
+
+    t1.join();
+    t2.join();
+    t3.join();
+    t4.join();
+    t5.join();
+    t6.join();
 
     return 0;
 }
