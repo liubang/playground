@@ -13,18 +13,12 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2024/06/24 01:07
+// Created: 2024/06/25 17:55
 
-#include "cpp/pl/log/logstream.h"
+#pragma once
 
 namespace pl {
 
-void LogStream::write(std::string_view data) {
-    if (buffer_.full() || data.size() == 0) {
-        return;
-    }
-    buffer_.append(data);
+long gettid();
+
 }
-
-
-} // namespace pl
