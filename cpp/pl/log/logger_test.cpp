@@ -17,12 +17,36 @@
 #include "cpp/pl/log/logger.h"
 
 int main(int argc, char* argv[]) {
-    // clang-format off
-    LOG_TRACE << "msg: hello world" << ", age: " << 10 << ", result: " << true << ", func: " << __FUNCTION__;
-    LOG_DEBUG << "msg: hello world" << ", age: " << 10 << ", result: " << true << ", func: " << __FUNCTION__;
-    LOG_INFO  << "msg: hello world" << ", age: " << 10 << ", result: " << true << ", func: " << __FUNCTION__;
-    LOG_WARN  << "msg: hello world" << ", age: " << 10 << ", result: " << true << ", func: " << __FUNCTION__;
-    LOG_ERROR << "msg: hello world" << ", age: " << 10 << ", result: " << true << ", func: " << __FUNCTION__;
-    LOG_FATAL << "msg: hello world" << ", age: " << 10 << ", result: " << true << ", func: " << __FUNCTION__;
+    int8_t i8 = 1;
+    char c = 'c';
+    int a = 20;
+    long l = 20;
+    int32_t i32 = 21;
+    uint32_t ui32 = 22;
+    float f = 3.14;
+    double d = 3.14;
+    const char* str = "hello world";
+    bool bt = true;
+    bool bf = false;
+
+    LOG_TRACE << "char: " << c << ", i8: " << i8 << "int: " << a << ", long: " << l
+              << ", i32: " << i32 << ", ui32: " << ui32 << ", float: " << f << ", double: " << d
+              << ", str: " << str << ", bool: " << bf << ", bool: " << bt << ", ptr: " << &bt;
+    LOG_DEBUG << "char: " << c << ", i8: " << i8 << "int: " << a << ", long: " << l
+              << ", i32: " << i32 << ", ui32: " << ui32 << ", float: " << f << ", double: " << d
+              << ", str: " << str << ", bool: " << bf << ", bool: " << bt << ", ptr: " << &bt;
+    LOG_INFO << "char: " << c << ", i8: " << i8 << "int: " << a << ", long: " << l
+             << ", i32: " << i32 << ", ui32: " << ui32 << ", float: " << f << ", double: " << d
+             << ", str: " << str << ", bool: " << bf << ", bool: " << bt << ", ptr: " << &bt;
+    LOG_WARN << "char: " << c << ", i8: " << i8 << "int: " << a << ", long: " << l
+             << ", i32: " << i32 << ", ui32: " << ui32 << ", float: " << f << ", double: " << d
+             << ", str: " << str << ", bool: " << bf << ", bool: " << bt << ", ptr: " << &bt;
+    LOG_ERROR << "char: " << c << ", i8: " << i8 << "int: " << a << ", long: " << l
+              << ", i32: " << i32 << ", ui32: " << ui32 << ", float: " << f << ", double: " << d
+              << ", str: " << str << ", bool: " << bf << ", bool: " << bt << ", ptr: " << &bt;
+    LOG_FATAL << "char: " << c << ", i8: " << i8 << "int: " << a << ", long: " << l
+              << ", i32: " << i32 << ", ui32: " << ui32 << ", float: " << f << ", double: " << d
+              << ", str: " << str << ", bool: " << bf << ", bool: " << bt << ", ptr: " << &bt;
+
     return 0;
 }
