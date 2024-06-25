@@ -13,18 +13,21 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2024/06/24 01:07
+// Created: 2024/06/25 17:55
 
-#include "cpp/pl/log/logstream.h"
+#include "cpp/pl/thread/thread.h"
+
+#include <sys/syscall.h>
+#include <unistd.h>
 
 namespace pl {
 
-void LogStream::write(std::string_view data) {
-    if (buffer_.full() || data.size() == 0) {
-        return;
+long gettid() {
+    thread_local long tid = 0;
+    if (tid == 0) {
+        tid = ::syscall(SYS_gettid);
     }
-    buffer_.append(data);
+    return tid;
 }
-
 
 } // namespace pl

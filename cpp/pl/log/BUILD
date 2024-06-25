@@ -33,4 +33,18 @@ cc_library(
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
     visibility = ["//visibility:public"],
+    deps = [
+        "//cpp/pl/thread",
+        "@fmt",
+    ],
+)
+
+cc_test(
+    name = "logger_test",
+    srcs = ["logger_test.cpp"],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        ":logger",
+    ],
 )
