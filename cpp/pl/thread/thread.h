@@ -16,8 +16,10 @@
 
 #pragma once
 
+#include <sys/types.h>
+
 namespace pl {
 
-long gettid();
+pid_t gettid();
 
 }
