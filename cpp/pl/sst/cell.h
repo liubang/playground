@@ -16,8 +16,39 @@
 
 #pragma once
 
+#include <cstdint>
+
 namespace pl {
 
-class Cell {};
+enum class CellType : uint8_t {
+    CT_DEL = 0,
+    CT_PUT = 1,
+    CT_READ = 2,
+    CT_NONE = 3,
+};
+
+struct CellHeader {
+    uint16_t rowkey_len;
+    uint8_t cf_len;
+    uint8_t col_len;
+    uint32_t body_len;
+};
+
+struct CellKey {
+    const char* rowkey{nullptr};
+    const char* qualifier{nullptr};
+};
+
+class Cell {
+public:
+    Cell() = default;
+
+private:
+    CellHeader header_;
+    CellKey cell_key_;
+    const char* value_{nullptr};
+    uint64_t timestamp_;
+    CellType type_;
+};
 
 } // namespace pl
