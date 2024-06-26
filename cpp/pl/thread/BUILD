@@ -32,7 +32,7 @@ cc_library(
     srcs = ["thread.cpp"],
     hdrs = ["thread.h"],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
+    linkopts = DEFAULT_LINKOPTS + ["-pthread"],
     visibility = ["//visibility:public"],
 )
 

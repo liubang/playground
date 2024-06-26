@@ -90,7 +90,7 @@ public:
 
     template <typename T, std::enable_if_t<std::is_arithmetic_v<T>>* = nullptr>
     LogStream& operator<<(const T v) {
-        auto data = fmt::format("{}", v);
+        const auto data = fmt::format("{}", v);
         write(std::string_view(data));
         return *this;
     }
