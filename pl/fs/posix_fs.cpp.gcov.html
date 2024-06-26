@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-06-25 17:28:34</td>
+            <td class="headerValue">2024-06-26 13:31:54</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">11</td>
@@ -186,17 +186,17 @@
 <a name="124"><span class="lineNum">     124 </span><span class="lineNoCov">          0 :     return 0;</span></a>
 <a name="125"><span class="lineNum">     125 </span>            : }</a>
 <a name="126"><span class="lineNum">     126 </span>            : </a>
-<a name="127"><span class="lineNum">     127 </span><span class="lineCov">     251432 : Status PosixFsReader::read(uint64_t offset,</span></a>
+<a name="127"><span class="lineNum">     127 </span><span class="lineCov">     251437 : Status PosixFsReader::read(uint64_t offset,</span></a>
 <a name="128"><span class="lineNum">     128 </span>            :                            std::size_t n,</a>
 <a name="129"><span class="lineNum">     129 </span>            :                            std::string_view* result,</a>
 <a name="130"><span class="lineNum">     130 </span>            :                            char* scratch) const {</a>
-<a name="131"><span class="lineNum">     131 </span><span class="lineCov">     251432 :     Status status;</span></a>
-<a name="132"><span class="lineNum">     132 </span><span class="lineCov">     251432 :     ssize_t read_size = ::pread(fd_, scratch, n, static_cast&lt;off_t&gt;(offset));</span></a>
-<a name="133"><span class="lineNum">     133 </span><span class="lineCov">     251432 :     *result = std::string_view(scratch, (read_size &lt; 0) ? 0 : read_size);</span></a>
-<a name="134"><span class="lineNum">     134 </span><span class="lineCov">     251432 :     if (read_size &lt; 0) {</span></a>
+<a name="131"><span class="lineNum">     131 </span><span class="lineCov">     251437 :     Status status;</span></a>
+<a name="132"><span class="lineNum">     132 </span><span class="lineCov">     251437 :     ssize_t read_size = ::pread(fd_, scratch, n, static_cast&lt;off_t&gt;(offset));</span></a>
+<a name="133"><span class="lineNum">     133 </span><span class="lineCov">     251437 :     *result = std::string_view(scratch, (read_size &lt; 0) ? 0 : read_size);</span></a>
+<a name="134"><span class="lineNum">     134 </span><span class="lineCov">     251437 :     if (read_size &lt; 0) {</span></a>
 <a name="135"><span class="lineNum">     135 </span><span class="lineNoCov">          0 :         status = posixError(filename_, errno);</span></a>
 <a name="136"><span class="lineNum">     136 </span>            :     }</a>
-<a name="137"><span class="lineNum">     137 </span><span class="lineCov">     251432 :     return status;</span></a>
+<a name="137"><span class="lineNum">     137 </span><span class="lineCov">     251437 :     return status;</span></a>
 <a name="138"><span class="lineNum">     138 </span><span class="lineNoCov">          0 : }</span></a>
 <a name="139"><span class="lineNum">     139 </span>            : </a>
 <a name="140"><span class="lineNum">     140 </span><span class="lineCov">          4 : FsWriterPtr PosixFs::newFsWriter(const std::string&amp; filename, Status* status) {</span></a>

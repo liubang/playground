@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-06-25 17:28:34</td>
+            <td class="headerValue">2024-06-26 13:31:54</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">21</td>
@@ -152,7 +152,7 @@
 <a name="90"><span class="lineNum">      90 </span>            : </a>
 <a name="91"><span class="lineNum">      91 </span>            :     template &lt;typename T, std::enable_if_t&lt;std::is_arithmetic_v&lt;T&gt;&gt;* = nullptr&gt;</a>
 <a name="92"><span class="lineNum">      92 </span><span class="lineCov">         78 :     LogStream&amp; operator&lt;&lt;(const T v) {</span></a>
-<a name="93"><span class="lineNum">      93 </span><span class="lineCov">         78 :         auto data = fmt::format(&quot;{}&quot;, v);</span></a>
+<a name="93"><span class="lineNum">      93 </span><span class="lineCov">         78 :         const auto data = fmt::format(&quot;{}&quot;, v);</span></a>
 <a name="94"><span class="lineNum">      94 </span><span class="lineCov">         78 :         write(std::string_view(data));</span></a>
 <a name="95"><span class="lineNum">      95 </span><span class="lineCov">         78 :         return *this;</span></a>
 <a name="96"><span class="lineNum">      96 </span><span class="lineCov">         78 :     }</span></a>

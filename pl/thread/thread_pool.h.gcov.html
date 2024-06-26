@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-06-25 17:28:34</td>
+            <td class="headerValue">2024-06-26 13:31:54</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">6</td>
@@ -114,20 +114,20 @@
 <a name="52"><span class="lineNum">      52 </span><span class="lineCov">       1025 :     for (size_t i = 0; i &lt; threads; ++i)</span></a>
 <a name="53"><span class="lineNum">      53 </span><span class="lineCov">       1024 :         workers_.emplace_back([this] {</span></a>
 <a name="54"><span class="lineNum">      54 </span>            :             for (;;) {</a>
-<a name="55"><span class="lineNum">      55 </span><span class="lineCov">       2047 :                 std::function&lt;void()&gt; task;</span></a>
+<a name="55"><span class="lineNum">      55 </span><span class="lineCov">       2046 :                 std::function&lt;void()&gt; task;</span></a>
 <a name="56"><span class="lineNum">      56 </span>            :                 {</a>
-<a name="57"><span class="lineNum">      57 </span><span class="lineCov">       2046 :                     std::unique_lock&lt;std::mutex&gt; lock(this-&gt;queue_mutex_);</span></a>
+<a name="57"><span class="lineNum">      57 </span><span class="lineCov">       2045 :                     std::unique_lock&lt;std::mutex&gt; lock(this-&gt;queue_mutex_);</span></a>
 <a name="58"><span class="lineNum">      58 </span><span class="lineCov">       2048 :                     this-&gt;condition_.wait(lock, [this] {</span></a>
 <a name="59"><span class="lineNum">      59 </span><span class="lineCov">       4096 :                         return this-&gt;stop_ || !this-&gt;tasks_.empty();</span></a>
 <a name="60"><span class="lineNum">      60 </span>            :                     });</a>
 <a name="61"><span class="lineNum">      61 </span><span class="lineCov">       2048 :                     if (this-&gt;stop_ &amp;&amp; this-&gt;tasks_.empty()) {</span></a>
-<a name="62"><span class="lineNum">      62 </span><span class="lineCov">       2047 :                         return;</span></a>
+<a name="62"><span class="lineNum">      62 </span><span class="lineCov">       2045 :                         return;</span></a>
 <a name="63"><span class="lineNum">      63 </span>            :                     }</a>
 <a name="64"><span class="lineNum">      64 </span><span class="lineCov">       1024 :                     task = std::move(this-&gt;tasks_.front());</span></a>
 <a name="65"><span class="lineNum">      65 </span><span class="lineCov">       1024 :                     this-&gt;tasks_.pop();</span></a>
 <a name="66"><span class="lineNum">      66 </span><span class="lineCov">       2048 :                 }</span></a>
-<a name="67"><span class="lineNum">      67 </span><span class="lineCov">       1023 :                 task();</span></a>
-<a name="68"><span class="lineNum">      68 </span><span class="lineCov">       3070 :             }</span></a>
+<a name="67"><span class="lineNum">      67 </span><span class="lineCov">       1024 :                 task();</span></a>
+<a name="68"><span class="lineNum">      68 </span><span class="lineCov">       3066 :             }</span></a>
 <a name="69"><span class="lineNum">      69 </span>            :         });</a>
 <a name="70"><span class="lineNum">      70 </span><span class="lineCov">          1 : }</span></a>
 <a name="71"><span class="lineNum">      71 </span>            : </a>
@@ -150,7 +150,7 @@
 <a name="88"><span class="lineNum">      88 </span>            :         }</a>
 <a name="89"><span class="lineNum">      89 </span>            : </a>
 <a name="90"><span class="lineNum">      90 </span><span class="lineCov">       1024 :         tasks_.emplace([task]() {</span></a>
-<a name="91"><span class="lineNum">      91 </span><span class="lineCov">       1021 :             (*task)();</span></a>
+<a name="91"><span class="lineNum">      91 </span><span class="lineCov">       1024 :             (*task)();</span></a>
 <a name="92"><span class="lineNum">      92 </span>            :         });</a>
 <a name="93"><span class="lineNum">      93 </span><span class="lineCov">       1024 :     }</span></a>
 <a name="94"><span class="lineNum">      94 </span><span class="lineCov">       1024 :     condition_.notify_one();</span></a>
