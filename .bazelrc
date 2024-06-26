@@ -22,7 +22,7 @@ common --registry=https://bcr.bazel.build
 common --color=yes
 common --experimental_ui_max_stdouterr_bytes=1073741819
 
-build --jobs=8
+build --jobs=10
 build --cxxopt=-std=c++17
 
 build:linux --linkopt=-fuse-ld=gold
