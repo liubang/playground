@@ -15,6 +15,8 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/05/29 23:00
 
+#pragma once
+
 #include <bit>
 #include <cstdint>
 #include <type_traits>
