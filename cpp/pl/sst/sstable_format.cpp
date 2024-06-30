@@ -42,6 +42,7 @@ Status BlockHandle::decodeFrom(std::string_view input) {
 
 void FileMeta::encodeTo(std::string* dst) const {
     assert(dst != nullptr);
+    encodeInt(dst, FILE_META_MAGIC_NUMBER);                 // 4B
     encodeInt(dst, static_cast<uint8_t>(sst_type_));        // 1B
     encodeInt(dst, static_cast<uint8_t>(sst_version_));     // 1B
     encodeInt(dst, static_cast<uint64_t>(patch_id_));       // 8B
@@ -49,6 +50,9 @@ void FileMeta::encodeTo(std::string* dst) const {
     encodeInt(dst, static_cast<uint8_t>(filter_type_));     // 1B
     encodeInt(dst, bits_per_key_);                          // 4B
     encodeInt(dst, key_number_);                            // 8B
+    encodeInt(dst, row_number_);                            // 8B
+    encodeInt(dst, min_timestamp_);                         // 8B
+    encodeInt(dst, max_timestamp_);                         // 8B
     encodeInt(dst, static_cast<uint32_t>(min_key_.size())); // 4B
     dst->append(min_key_);
     encodeInt(dst, static_cast<uint32_t>(max_key_.size())); // 4B
@@ -62,6 +66,13 @@ Status FileMeta::decodeFrom(std::string_view input) {
     const char* data = input.data();
     const auto s = input.size();
     uint32_t cursor = 0;
+
+    // magic number
+    auto magic = decodeInt<uint32_t>(data + cursor);
+    cursor += 4;
+    if (magic != FILE_META_MAGIC_NUMBER) {
+        return Status::NewCorruption("invalid file meta, the magic number is mismatch");
+    }
 
     // sst type
     auto type = decodeInt<uint8_t>(data + cursor);
@@ -101,6 +112,18 @@ Status FileMeta::decodeFrom(std::string_view input) {
 
     // key number
     key_number_ = decodeInt<uint64_t>(data + cursor);
+    cursor += 8;
+
+    // row number
+    row_number_ = decodeInt<uint64_t>(data + cursor);
+    cursor += 8;
+
+    // min timestamp
+    min_timestamp_ = decodeInt<uint64_t>(data + cursor);
+    cursor += 8;
+
+    // max timestamp
+    max_timestamp_ = decodeInt<uint64_t>(data + cursor);
     cursor += 8;
 
     // min key
