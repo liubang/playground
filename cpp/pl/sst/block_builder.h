@@ -17,11 +17,12 @@
 
 #pragma once
 
-#include <string>
-#include <vector>
-
+#include "cpp/pl/sst/cell.h"
 #include "cpp/pl/sst/comparator.h"
 #include "cpp/pl/sst/options.h"
+
+#include <string>
+#include <vector>
 
 namespace pl {
 
@@ -37,6 +38,8 @@ public:
     BlockBuilder& operator=(const BlockBuilder&) = delete;
 
     void add(std::string_view key, std::string_view val);
+
+    void add(const Cell& cell);
 
     std::string_view finish();
 
