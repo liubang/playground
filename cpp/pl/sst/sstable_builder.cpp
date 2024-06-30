@@ -16,6 +16,7 @@
 
 #include "cpp/pl/sst/sstable_builder.h"
 #include "cpp/pl/crc/crc.h"
+#include "cpp/pl/log/logger.h"
 #include "cpp/pl/sst/encoding.h"
 
 #include "snappy.h"
@@ -40,6 +41,7 @@ void SSTableBuilder::add(std::string_view key, std::string_view value) {
     assert(!closed_);
 
     if (!ok()) {
+        LOG_ERROR << "failed to add kv, error " << status_.msg();
         return;
     }
 
@@ -64,7 +66,7 @@ void SSTableBuilder::add(std::string_view key, std::string_view value) {
         filter_block_->addKey(key);
     }
 
-    last_key_.assign(key.data(), key.size());
+    last_key_.assign(key);
     data_block_->add(key, value);
     key_nums_++;
 
@@ -73,6 +75,43 @@ void SSTableBuilder::add(std::string_view key, std::string_view value) {
     if (s >= options_->block_size) {
         flush();
     }
+}
+
+void SSTableBuilder::add(const Cell& cell) {
+    assert(!closed_);
+    if (!ok()) {
+        LOG_ERROR << "failed to add kv, error " << status_.msg();
+        return;
+    }
+    if (key_nums_ == 0) {
+        first_key_.assign(cell.rowkey());
+    }
+    if (pending_index_entry_) {
+        assert(data_block_->empty());
+        std::string handle_encoding;
+        pending_handler_.encodeTo(&handle_encoding);
+        // 记录上一个block的最后一个key和上一个block的结束位置
+        index_block_->add(last_key_, handle_encoding);
+        pending_index_entry_ = false;
+    }
+    int comp = 0;
+    if (key_nums_ > 0) {
+        comp = options_->comparator->compare(cell.rowkey(), last_key_);
+    } else {
+        comp = 1;
+    }
+    // 数据递增, = 0 表示同一行的不同列，或者同一列的不同版本
+    assert(comp >= 0);
+    if (comp == 0) {
+        // 同一行数据
+    } else {
+        if (filter_block_ != nullptr) {
+            filter_block_->addKey(cell.rowkey());
+        }
+        last_key_.assign(cell.rowkey());
+    }
+
+    data_block_->add(cell);
 }
 
 void SSTableBuilder::flush() {
