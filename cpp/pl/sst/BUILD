@@ -33,6 +33,7 @@ cc_library(
         "//cpp/pl/bloom:bloom_filter",
         "//cpp/pl/crc",
         "//cpp/pl/fs",
+        "//cpp/pl/log:logger",
         "//cpp/pl/random",
         "@snappy",
         "@zstd",

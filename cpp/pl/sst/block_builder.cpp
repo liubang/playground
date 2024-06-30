@@ -63,6 +63,52 @@ void BlockBuilder::add(std::string_view key, std::string_view value) {
     counter_++;
 }
 
+void BlockBuilder::add(const Cell& cell) {
+    assert(!finished_);
+    auto last_key_pice = std::string_view(last_key_);
+    auto rowkey = cell.rowkey();
+    auto cellkey = cell.cellKey().encode();
+    auto value = cell.value();
+    // 必须保证rowkey按照指定的comparator的递增的顺序
+    assert(buffer_.empty() || comparator_->compare(rowkey, last_key_pice) >= 0);
+    uint32_t shared = 0;
+    if (counter_ < block_restart_interval_) {
+        // 计算当前rowkey和前一个rowkey的最大公共前缀
+        const uint32_t min_length = std::min(last_key_pice.size(), rowkey.size());
+        while (shared < min_length && (last_key_pice[shared] == rowkey[shared])) {
+            shared++;
+        }
+    } else {
+        restarts_.push_back(buffer_.size());
+        counter_ = 0;
+    }
+
+    // clang-format off
+    /**
+     * +-------------+----------------+-----------------+----------------+----------------+-------+
+     * | shared (4B) | non shared(4B) | rowkey size(4B) | value size(4B) | non shared key | value |
+     * +-------------+----------------+-----------------+----------------+----------------+-------+
+     *
+     */
+    // clang-format on
+
+    // NOTE(liubang): 这里计算公共前缀的时候，只考虑了rowkey，但是计算non shared的时候，需要将整个
+    // cellkey都考虑进去，后面写入non shared key的时候，是整个cellkey去掉rowkey shared的部分后的内容
+    const uint32_t non_shared = cellkey.size() - shared;
+    encodeInt<uint32_t>(&buffer_, shared);
+    encodeInt<uint32_t>(&buffer_, non_shared);
+    encodeInt<uint32_t>(&buffer_, rowkey.size());
+    encodeInt<uint32_t>(&buffer_, value.size());
+
+    buffer_.append(cellkey.data() + shared, non_shared);
+    buffer_.append(value.data(), value.size());
+
+    last_key_.resize(shared);
+    last_key_.append(rowkey.data() + shared, non_shared);
+    assert(std::string_view(last_key_).compare(rowkey) == 0);
+    counter_++;
+}
+
 std::string_view BlockBuilder::finish() {
     /*
      * restarts indexes

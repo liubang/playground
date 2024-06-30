@@ -133,11 +133,11 @@ Status FileMeta::decodeFrom(std::string_view input) {
 /**
  * footer format
  * +-----------------------+----------------------+-------------------------+--------------------+
- * |  filter handle (16B)  |  index handle (16B)  |  filemata handle (16B)  |  magic number(8B)  |
+ * |  filter handle (16B)  |  index handle (16B)  |  filemata handle (16B)  |  magic number(4B)  |
  * +-----------------------+----------------------+-------------------------+--------------------+
  * | <-------------------------------- 56B -------------------------------> |
  * |
- * | <------------------------------------------- 64B ------------------------------------------>|
+ * | <------------------------------------------- 60B ------------------------------------------>|
  *
  */
 void Footer::encodeTo(std::string* dst) const {
@@ -146,9 +146,8 @@ void Footer::encodeTo(std::string* dst) const {
     filter_handle_.encodeTo(dst);
     index_handle_.encodeTo(dst);
     file_meta_handle_.encodeTo(dst);
-    dst->resize(FOOTER_LEN - 8);
-    encodeInt(dst, static_cast<uint32_t>(SST_MAGIC_NUMBER & 0xffffffffu));
-    encodeInt(dst, static_cast<uint32_t>(SST_MAGIC_NUMBER >> 32));
+    dst->resize(FOOTER_LEN - sizeof(SST_MAGIC_NUMBER));
+    encodeInt(dst, static_cast<uint32_t>(SST_MAGIC_NUMBER));
     assert(dst->size() == s + FOOTER_LEN);
 }
 
@@ -156,11 +155,8 @@ Status Footer::decodeFrom(std::string_view input) {
     if (input.size() < FOOTER_LEN) {
         return Status::NewCorruption("invalid sstable format");
     }
-    const char* magic_ptr = input.data() + FOOTER_LEN - 8;
-    const auto magic_lo = decodeInt<uint32_t>(magic_ptr);
-    const auto magic_hi = decodeInt<uint32_t>(magic_ptr + 4);
-    const uint64_t magic =
-        ((static_cast<uint64_t>(magic_hi) << 32 | (static_cast<uint64_t>(magic_lo))));
+    const char* magic_ptr = input.data() + FOOTER_LEN - sizeof(SST_MAGIC_NUMBER);
+    const auto magic = decodeInt<uint32_t>(magic_ptr);
 
     if (magic != SST_MAGIC_NUMBER) {
         return Status::NewCorruption("invalid magic number");
