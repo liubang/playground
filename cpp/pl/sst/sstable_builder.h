@@ -18,6 +18,7 @@
 
 #include "cpp/pl/fs/fs.h"
 #include "cpp/pl/sst/block_builder.h"
+#include "cpp/pl/sst/cell.h"
 #include "cpp/pl/sst/filter_block_builder.h"
 #include "cpp/pl/sst/options.h"
 #include "cpp/pl/sst/sstable_format.h"
@@ -36,6 +37,8 @@ public:
     ~SSTableBuilder();
 
     void add(std::string_view key, std::string_view value);
+
+    void add(const Cell& cell);
 
     void flush();
 
