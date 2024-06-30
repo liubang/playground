@@ -86,6 +86,7 @@ void SSTableBuilder::add(const Cell& cell) {
     if (key_nums_ == 0) {
         first_key_.assign(cell.rowkey());
     }
+
     if (pending_index_entry_) {
         assert(data_block_->empty());
         std::string handle_encoding;
@@ -94,6 +95,7 @@ void SSTableBuilder::add(const Cell& cell) {
         index_block_->add(last_key_, handle_encoding);
         pending_index_entry_ = false;
     }
+
     int comp = 0;
     if (key_nums_ > 0) {
         comp = options_->comparator->compare(cell.rowkey(), last_key_);
@@ -102,13 +104,24 @@ void SSTableBuilder::add(const Cell& cell) {
     }
     // 数据递增, = 0 表示同一行的不同列，或者同一列的不同版本
     assert(comp >= 0);
-    if (comp == 0) {
-        // 同一行数据
-    } else {
+
+    min_timestamp_ = std::min(min_timestamp_, cell.timestamp());
+    max_timestamp_ = std::max(max_timestamp_, cell.timestamp());
+    assert(min_timestamp_ <= max_timestamp_);
+
+    // 同一行的所有列都在同一个data block中，因为索引是基于rowkey构建的
+    // 如果此时换行且达到block_size限制后，就先flush
+    if (comp > 0) {
+        const size_t s = data_block_->sizeEstimate();
+        if (s >= options_->block_size) {
+            flush();
+        }
+
         if (filter_block_ != nullptr) {
             filter_block_->addKey(cell.rowkey());
         }
         last_key_.assign(cell.rowkey());
+        row_num_++;
     }
 
     data_block_->add(cell);
@@ -298,6 +311,9 @@ Status SSTableBuilder::finish() {
     file_meta.setMinKey(first_key_);
     file_meta.setMaxKey(last_key_);
     file_meta.setKeyNum(key_nums_);
+    file_meta.setRowNum(row_num_);
+    file_meta.setMinTimestamp(min_timestamp_);
+    file_meta.setMaxTimestamp(max_timestamp_);
     file_meta.setPatchId(options_->patch_id);
     file_meta.setSSTId(options_->sst_id);
     std::string file_meta_content;

@@ -27,12 +27,10 @@
 namespace pl {
 
 static constexpr std::size_t FOOTER_LEN = 60;
-static constexpr uint32_t SST_MAGIC_NUMBER = 0x00545353;
-static constexpr uint32_t BLOCK_TRAILER_LEN = 5; // compression type (1B) + crc (4B)
-
-// sst_type(1B) + sst_version(1B) + patch_id(8B) + sst_id(8B) + filter_type(1B) + bits_per_key(4B) +
-// key_num(8B) + min_key_len(4B) + max_key_len(4B)
-static constexpr uint32_t FILE_META_MIN_LEN = 39;
+static constexpr uint32_t SST_MAGIC_NUMBER = 0x00545353;       // the hex of 'SST'
+static constexpr uint32_t BLOCK_TRAILER_LEN = 5;               // compression type (1B) + crc (4B)
+static constexpr uint32_t FILE_META_MAGIC_NUMBER = 0x4154454d; // the hex of 'META'
+static constexpr uint32_t FILE_META_MIN_LEN = 67;
 
 // clang-format off
 #define __SST_CASE__(t) case t: return #t
@@ -149,6 +147,12 @@ public:
 
     void setKeyNum(uint64_t key_number) { key_number_ = key_number; }
 
+    void setRowNum(uint64_t row_number) { row_number_ = row_number; }
+
+    void setMinTimestamp(uint64_t min_timestamp) { min_timestamp_ = min_timestamp; }
+
+    void setMaxTimestamp(uint64_t max_timestamp) { max_timestamp_ = max_timestamp; }
+
     void setMinKey(const std::string& key) { min_key_ = key; }
 
     void setMaxKey(const std::string& key) { max_key_ = key; }
@@ -164,6 +168,14 @@ public:
     [[nodiscard]] SSTId sstId() const { return sst_id_; }
 
     [[nodiscard]] FilterPolicyType filterPolicyType() const { return filter_type_; }
+
+    [[nodiscard]] uint64_t keyNum() const { return key_number_; }
+
+    [[nodiscard]] uint64_t rowNum() const { return row_number_; }
+
+    [[nodiscard]] uint64_t minTimestamp() const { return min_timestamp_; }
+
+    [[nodiscard]] uint64_t maxTimestamp() const { return max_timestamp_; }
 
     [[nodiscard]] const std::string& minKey() const { return min_key_; }
 
@@ -184,6 +196,9 @@ public:
         ss << "filter type: " << FilterPolicyType2String(filter_type_) << '\n';
         ss << "bits per key: " << bits_per_key_ << '\n';
         ss << "key number: " << key_number_ << '\n';
+        ss << "row number: " << row_number_ << '\n';
+        ss << "min timestamp: " << min_timestamp_ << '\n';
+        ss << "max timestamp: " << max_timestamp_ << '\n';
         ss << "min key: " << min_key_ << '\n';
         ss << "max key: " << max_key_ << '\n';
         return ss.str();
@@ -195,8 +210,11 @@ private:
     PatchId patch_id_{0};
     SSTId sst_id_{0};
     FilterPolicyType filter_type_{FilterPolicyType::NONE};
-    uint32_t bits_per_key_;
-    uint64_t key_number_;
+    uint32_t bits_per_key_{0};
+    uint64_t key_number_{0};
+    uint64_t row_number_{0};
+    uint64_t min_timestamp_{0};
+    uint64_t max_timestamp_{0};
     std::string min_key_;
     std::string max_key_;
 };
