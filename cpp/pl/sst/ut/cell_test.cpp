@@ -14,33 +14,32 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/pl/sst/comparator.h"
+#include "cpp/pl/sst/cell.h"
 
 #include <gtest/gtest.h>
-#include <memory>
 
 namespace pl {
-
-class ComparatorTest : public ::testing::Test {
+class CellTest : public ::testing::Test {
     void SetUp() override {}
     void TearDown() override {}
 };
 
-TEST_F(ComparatorTest, compara) {
-    auto comparator = std::make_unique<BytewiseComparator>();
+TEST_F(CellTest, test) {
+    std::string rowkey = "rowkey";
+    std::string cf = "cf";
+    std::string col = "col";
+    std::string val = "this is test cell";
+    uint64_t ts = 123456;
+    Cell cell(CellType::CT_PUT, rowkey, cf, col, val, ts);
+    std::string encoded_cell_key = cell.cellKey().encode();
 
-    std::string_view b1 = "abc";
-    std::string_view b2 = "abd";
-    std::string_view b3 = "abc";
-    std::string_view b4 = "aba";
-    std::string_view b5;
-    std::string_view b6 = "abcccc";
-
-    EXPECT_TRUE(comparator->compare(b1, b2) < 0);
-    EXPECT_TRUE(comparator->compare(b1, b3) == 0);
-    EXPECT_TRUE(comparator->compare(b1, b4) > 0);
-    EXPECT_TRUE(comparator->compare(b1, b5) > 0);
-    EXPECT_TRUE(comparator->compare(b1, b6) < 0);
+    CellKey other_ck;
+    other_ck.decode(encoded_cell_key, rowkey.size());
+    EXPECT_EQ(CellType::CT_PUT, other_ck.cell_type);
+    EXPECT_EQ(rowkey, other_ck.rowkey);
+    EXPECT_EQ(cf, other_ck.cf);
+    EXPECT_EQ(col, other_ck.col);
+    EXPECT_EQ(ts, other_ck.timestamp);
 }
 
 } // namespace pl
