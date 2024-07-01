@@ -46,7 +46,8 @@ void Logger::Impl::startSession() {
 void Logger::Impl::flush() {
     stream_ << '\n';
     const auto& buffer = stream_.buffer();
-    fwrite(buffer.data(), 1, buffer.size(), stdout);
+    ::fwrite(buffer.data(), 1, buffer.size(), stdout);
+    ::fflush(stdout);
 }
 
 } // namespace pl

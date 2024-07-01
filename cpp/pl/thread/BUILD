@@ -39,10 +39,11 @@ cc_library(
 cc_test(
     name = "thread_pool_test",
     srcs = ["thread_pool_test.cpp"],
-    copts = ["-std=c++20"] + TEST_COPTS,
+    copts = ["-std=c++17"] + TEST_COPTS,
     linkopts = DEFAULT_LINKOPTS,
     deps = [
         ":thread_pool",
+        "//cpp/pl/log:logger",
         "@googletest//:gtest_main",
     ],
 )
