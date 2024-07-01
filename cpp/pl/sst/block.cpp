@@ -228,8 +228,8 @@ private:
     const ComparatorRef comparator_{nullptr}; // 主要是seek的时候做二分查找的
     const BlockRef block_{nullptr};           // 维护block的生命周期
     const char* data_{nullptr};               // data block content
-    uint32_t const restarts_;                 // restart的起始位置
-    uint32_t const num_restarts_;             // restart的个数
+    const uint32_t restarts_;                 // restart的起始位置
+    const uint32_t num_restarts_;             // restart的个数
     uint32_t current_{0};                     // 当前游标的偏移
     uint32_t current_restart_{0};             // 当前是第几个restart
     std::string key_;                         // 当前游标处的key
