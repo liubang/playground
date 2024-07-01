@@ -30,7 +30,7 @@ TEST(thread_pool, thread_pool) {
     auto start = std::chrono::system_clock::now();
     results.reserve(1024);
     for (int i = 0; i < 1024; ++i) {
-        results.emplace_back(pool.enqueue([i] {
+        results.emplace_back(pool.submit([i] {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
             return std::make_pair(i, i);
         }));

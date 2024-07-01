@@ -53,19 +53,6 @@ struct CellKey {
         cell_type = CellType::CT_NONE;
     }
 
-    void decode(std::string_view encoded, uint32_t rowkey_len) {
-        const char* data = encoded.data();
-        rowkey = std::string_view(data, rowkey_len);
-        int cf_len = ::strlen(data + rowkey_len);
-        cf = std::string_view(data + rowkey_len, cf_len);
-        int col_len = ::strlen(data + rowkey_len + cf_len + 1);
-        col = std::string_view(data + rowkey_len + cf_len + 1, col_len);
-        timestamp = decodeInt<uint64_t>(data + rowkey_len + cf_len + col_len + 2);
-        auto ct = *reinterpret_cast<const uint8_t*>(data + rowkey_len + cf_len + col_len + 2 +
-                                                    sizeof(uint64_t));
-        cell_type = static_cast<CellType>(ct);
-    }
-
     [[nodiscard]] std::string encode() const {
         std::string dist;
         dist.append(rowkey);
@@ -76,6 +63,18 @@ struct CellKey {
         dist.append(reinterpret_cast<const char*>(&timestamp), sizeof(timestamp));
         dist.append(reinterpret_cast<const char*>(&cell_type), sizeof(cell_type));
         return dist;
+    }
+
+    void decode(std::string_view encoded, uint32_t rowkey_len) {
+        const char* data = encoded.data();
+        rowkey = std::string_view(data, rowkey_len);
+        int cf_len = ::strlen(data + rowkey_len);
+        cf = std::string_view(data + rowkey_len, cf_len);
+        int col_len = ::strlen(data + rowkey_len + cf_len + 1);
+        col = std::string_view(data + rowkey_len + cf_len + 1, col_len);
+        timestamp = decodeInt<uint64_t>(data + rowkey_len + cf_len + col_len + 2);
+        cell_type =
+            static_cast<CellType>(*(data + rowkey_len + cf_len + col_len + 2 + sizeof(uint64_t)));
     }
 
     [[nodiscard]] int compare(const ComparatorRef& rowkey_comparator, const CellKey& other) const {
