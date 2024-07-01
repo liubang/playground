@@ -41,10 +41,10 @@ private:
 
 private:
     const char* data_{nullptr};
-    std::size_t size_;
-    std::size_t num_restarts_;
-    uint32_t restart_offset_;
-    bool owned_;
+    std::size_t size_{0};
+    std::size_t num_restarts_{0};
+    uint32_t restart_offset_{0};
+    bool owned_{false};
 };
 
 using BlockRef = std::shared_ptr<Block>;
