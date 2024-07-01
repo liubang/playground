@@ -25,6 +25,8 @@
 #include <thread>
 #include <vector>
 
+#include "cpp/pl/log/logger.h"
+
 namespace pl {
 
 class ThreadPool {
@@ -49,19 +51,18 @@ public:
     }
 
     template <class F, class... Args>
-    auto submit(F&& f, Args&&... args) -> std::future<std::invoke_result_t<F(Args...)>> {
-        using RetrunType = std::invoke_result_t<F(Args...)>;
-        auto task = std::packaged_task<RetrunType>(
+    auto submit(F&& f, Args&&... args) -> std::future<std::invoke_result_t<F&&, Args&&...>> {
+        using R = std::invoke_result_t<F&&, Args&&...>;
+        auto task = std::make_shared<std::packaged_task<R(Args && ...)>>(
             std::bind(std::forward<F>(f), std::forward<Args>(args)...));
-
-        auto future = task.get_future();
+        auto future = task->get_future();
         {
             std::unique_lock<std::mutex> lk(queue_mutex_);
             if (stop_) {
                 throw std::runtime_error("");
             }
             tasks_.emplace([task = std::move(task)]() {
-                task();
+                (*task)();
             });
         }
         condition_.notify_one();
@@ -74,14 +75,15 @@ private:
             Task task;
             {
                 std::unique_lock<std::mutex> lk(queue_mutex_);
+                condition_.wait(lk, [that = this] {
+                    return that->stop_ || !that->tasks_.empty();
+                });
                 if (stop_ && tasks_.empty()) {
+                    LOG_DEBUG << "thread stopped";
                     break;
                 }
-                condition_.wait(lk, [this] {
-                    return this->stop_ || !this->tasks_.empty();
-                });
-                task = this->tasks_.front();
-                this->tasks_.pop();
+                task = std::move(tasks_.front());
+                tasks_.pop();
             }
             task();
         }
@@ -92,7 +94,7 @@ private:
     std::queue<Task> tasks_;
     std::mutex queue_mutex_;
     std::condition_variable condition_;
-    std::atomic<bool> stop_{false};
+    bool stop_{false};
 };
 
 } // namespace pl
