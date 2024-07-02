@@ -36,6 +36,7 @@ cc_library(
         "//cpp/pl/fs",
         "//cpp/pl/log:logger",
         "//cpp/pl/random",
+        "//cpp/pl/scope",
         "@snappy",
         "@zstd",
     ],

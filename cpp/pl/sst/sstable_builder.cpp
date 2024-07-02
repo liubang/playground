@@ -87,15 +87,6 @@ void SSTableBuilder::add(const Cell& cell) {
         first_key_.assign(cell.rowkey());
     }
 
-    if (pending_index_entry_) {
-        assert(data_block_->empty());
-        std::string handle_encoding;
-        pending_handler_.encodeTo(&handle_encoding);
-        // 记录上一个block的最后一个key和上一个block的结束位置
-        index_block_->add(last_key_, handle_encoding);
-        pending_index_entry_ = false;
-    }
-
     int comp = 0;
     if (key_nums_ > 0) {
         comp = options_->comparator->compare(cell.rowkey(), last_key_);
@@ -105,10 +96,6 @@ void SSTableBuilder::add(const Cell& cell) {
     // 数据递增, = 0 表示同一行的不同列，或者同一列的不同版本
     assert(comp >= 0);
 
-    min_timestamp_ = std::min(min_timestamp_, cell.timestamp());
-    max_timestamp_ = std::max(max_timestamp_, cell.timestamp());
-    assert(min_timestamp_ <= max_timestamp_);
-
     // 同一行的所有列都在同一个data block中，因为索引是基于rowkey构建的
     // 如果此时换行且达到block_size限制后，就先flush
     if (comp > 0) {
@@ -116,7 +103,18 @@ void SSTableBuilder::add(const Cell& cell) {
         if (s >= options_->block_size) {
             flush();
         }
+    }
 
+    if (pending_index_entry_) {
+        assert(data_block_->empty());
+        std::string handle_encoding;
+        pending_handler_.encodeTo(&handle_encoding);
+        // 记录上一个block的最后一个key和上一个block的结束位置
+        index_block_->add(last_key_, handle_encoding);
+        pending_index_entry_ = false;
+    }
+
+    if (comp > 0) {
         if (filter_block_ != nullptr) {
             filter_block_->addKey(cell.rowkey());
         }
@@ -124,7 +122,12 @@ void SSTableBuilder::add(const Cell& cell) {
         row_num_++;
     }
 
+    min_timestamp_ = std::min(min_timestamp_, cell.timestamp());
+    max_timestamp_ = std::max(max_timestamp_, cell.timestamp());
+    assert(min_timestamp_ <= max_timestamp_);
+
     data_block_->add(cell);
+    key_nums_++;
 }
 
 void SSTableBuilder::flush() {
