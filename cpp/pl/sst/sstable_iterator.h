@@ -49,6 +49,8 @@ public:
 
     [[nodiscard]] std::string_view val() const override;
 
+    [[nodiscard]] CellPtr cell() const override;
+
 private:
     void initDataBlock();
     void forwardSkipEmptyData();

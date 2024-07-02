@@ -71,6 +71,11 @@ std::string_view SSTableIterator::val() const {
     return data_iter_->val();
 }
 
+CellPtr SSTableIterator::cell() const {
+    assert(valid());
+    return data_iter_->cell();
+}
+
 Status SSTableIterator::status() const {
     if (!index_iter_->status().isOk()) {
         return index_iter_->status();

@@ -53,7 +53,8 @@ private:
     bool finished_{false};
     int counter_{0};
     std::string buffer_;
-    std::string last_key_;
+    std::string last_key_;        // last cell key
+    uint32_t last_rowkey_len_{0}; // last rowkey len
     int block_restart_interval_{0};
     std::vector<uint32_t> restarts_;
 };
