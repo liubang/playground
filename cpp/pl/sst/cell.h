@@ -45,6 +45,13 @@ struct CellKey {
 
     CellKey() = default;
 
+    CellKey(std::string_view rowkey,
+            std::string_view cf,
+            std::string_view col,
+            uint64_t ts,
+            CellType type)
+        : rowkey(rowkey), cf(cf), col(col), timestamp(ts), cell_type(type) {}
+
     void reset() {
         rowkey = "";
         cf = "";
@@ -60,21 +67,33 @@ struct CellKey {
         dist.append(1, '\0');
         dist.append(col);
         dist.append(1, '\0');
-        dist.append(reinterpret_cast<const char*>(&timestamp), sizeof(timestamp));
-        dist.append(reinterpret_cast<const char*>(&cell_type), sizeof(cell_type));
+        encodeInt<uint64_t>(&dist, timestamp);
+        encodeInt<uint8_t>(&dist, static_cast<uint8_t>(cell_type));
         return dist;
     }
 
     void decode(std::string_view encoded, uint32_t rowkey_len) {
         const char* data = encoded.data();
+
+        // decode rowkey
         rowkey = std::string_view(data, rowkey_len);
-        int cf_len = ::strlen(data + rowkey_len);
-        cf = std::string_view(data + rowkey_len, cf_len);
-        int col_len = ::strlen(data + rowkey_len + cf_len + 1);
-        col = std::string_view(data + rowkey_len + cf_len + 1, col_len);
-        timestamp = decodeInt<uint64_t>(data + rowkey_len + cf_len + col_len + 2);
-        cell_type =
-            static_cast<CellType>(*(data + rowkey_len + cf_len + col_len + 2 + sizeof(uint64_t)));
+
+        // decode cf
+        const char* cf_start = data + rowkey_len;
+        int cf_len = ::strlen(cf_start);
+        cf = std::string_view(cf_start, cf_len);
+
+        // decode col
+        const char* col_start = cf_start + cf_len + 1;
+        int col_len = ::strlen(col_start);
+        col = std::string_view(col_start, col_len);
+
+        // decode timestamp
+        const char* ts_start = col_start + col_len + 1;
+        timestamp = decodeInt<uint64_t>(ts_start);
+
+        // decode celltype
+        cell_type = static_cast<CellType>(*(ts_start + sizeof(uint64_t)));
     }
 
     [[nodiscard]] int compare(const ComparatorRef& rowkey_comparator, const CellKey& other) const {
@@ -112,19 +131,13 @@ class Cell {
 public:
     Cell() = default;
 
-    Cell(CellType ct,
+    Cell(CellType type,
          std::string_view rowkey,
          std::string_view cf,
          std::string_view col,
          std::string_view value,
-         uint64_t timestamp) {
-        cell_key_.cell_type = ct;
-        cell_key_.rowkey = rowkey;
-        cell_key_.cf = cf;
-        cell_key_.col = col;
-        cell_key_.timestamp = timestamp;
-        value_ = value;
-    }
+         uint64_t timestamp)
+        : cell_key_(rowkey, cf, col, timestamp, type), value_(value) {}
 
     Cell(std::string_view cell_key, uint32_t rowkey_size, std::string_view val) {
         cell_key_.decode(cell_key, rowkey_size);
