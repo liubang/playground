@@ -68,7 +68,7 @@ private:
     uint64_t key_nums_{0};
     uint64_t offset_{0};
     uint64_t row_num_{0};
-    uint64_t min_timestamp_{0};
+    uint64_t min_timestamp_{UINT_MAX};
     uint64_t max_timestamp_{0};
     Status status_;
     bool pending_index_entry_{false};

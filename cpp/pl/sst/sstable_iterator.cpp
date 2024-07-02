@@ -15,13 +15,16 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/sst/sstable_iterator.h"
+#include "cpp/pl/log/logger.h"
 
 #include <cassert>
 
 namespace pl {
 
 void SSTableIterator::seek(std::string_view target) {
+    LOG_INFO << "index_seek begin";
     index_iter_->seek(target);
+    LOG_INFO << "index_seek end";
     initDataBlock();
     if (data_iter_ != nullptr) {
         data_iter_->seek(target);

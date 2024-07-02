@@ -60,6 +60,7 @@ void BlockBuilder::add(std::string_view key, std::string_view value) {
 
     last_key_.resize(shared);
     last_key_.append(key.data() + shared, non_shared);
+
     assert(std::string_view(last_key_).compare(key) == 0);
     counter_++;
 }
@@ -98,8 +99,11 @@ void BlockBuilder::add(const Cell& cell) {
     const uint32_t non_shared = cellkey.size() - shared;
     encodeInt<uint32_t>(&buffer_, shared);
     encodeInt<uint32_t>(&buffer_, non_shared);
-    encodeInt<uint32_t>(&buffer_, rowkey.size());
-    encodeInt<uint32_t>(&buffer_, value.size());
+    encodeInt<uint32_t>(&buffer_, static_cast<uint32_t>(rowkey.size()));
+    encodeInt<uint32_t>(&buffer_, static_cast<uint32_t>(value.size()));
+
+    // LOG_DEBUG << "shared:" << shared << ", non_shared:" << non_shared
+    //           << ", rowkey:" << rowkey.size() << ", value:" << value.size();
 
     buffer_.append(cellkey.data() + shared, non_shared);
     buffer_.append(value.data(), value.size());
@@ -123,7 +127,8 @@ std::string_view BlockBuilder::finish() {
         encodeInt<uint32_t>(&buffer_, restart);
     }
 
-    encodeInt(&buffer_, static_cast<uint32_t>(restarts_.size()));
+    encodeInt<uint32_t>(&buffer_, static_cast<uint32_t>(restarts_.size()));
+    // LOG_INFO << "block finish: size:" << buffer_.size() << ", num_restarts:" << restarts_.size();
     finished_ = true;
     return {buffer_};
 }
