@@ -14,6 +14,7 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
+#include "cpp/pl/random/random.h"
 #include "cpp/pl/sst/cell.h"
 
 #include <gtest/gtest.h>
@@ -24,22 +25,27 @@ class CellTest : public ::testing::Test {
     void TearDown() override {}
 };
 
-TEST_F(CellTest, test) {
-    std::string rowkey = "rowkey";
-    std::string cf = "cf";
-    std::string col = "col";
-    std::string val = "this is test cell";
-    uint64_t ts = 123456;
-    Cell cell(CellType::CT_PUT, rowkey, cf, col, val, ts);
-    std::string encoded_cell_key = cell.cellKey().encode();
+TEST_F(CellTest, cell) {
+    for (int i = 0; i < 10; ++i) {
+        std::string rowkey = random_string(32);
+        std::string cf = random_string(8);
+        std::string col = random_string(16);
+        std::string val = random_string(16 * 1024);
+        uint64_t ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+                          std::chrono::system_clock::now().time_since_epoch())
+                          .count();
+        CellType ct = (CellType)(i % 4);
+        Cell cell(ct, rowkey, cf, col, val, ts);
+        std::string encoded_cell_key = cell.cellKey().encode();
 
-    CellKey other_ck;
-    other_ck.decode(encoded_cell_key, rowkey.size());
-    EXPECT_EQ(CellType::CT_PUT, other_ck.cell_type);
-    EXPECT_EQ(rowkey, other_ck.rowkey);
-    EXPECT_EQ(cf, other_ck.cf);
-    EXPECT_EQ(col, other_ck.col);
-    EXPECT_EQ(ts, other_ck.timestamp);
+        CellKey other_ck;
+        other_ck.decode(encoded_cell_key, rowkey.size());
+        EXPECT_EQ(ct, other_ck.cell_type);
+        EXPECT_EQ(rowkey, other_ck.rowkey);
+        EXPECT_EQ(cf, other_ck.cf);
+        EXPECT_EQ(col, other_ck.col);
+        EXPECT_EQ(ts, other_ck.timestamp);
+    }
 }
 
 } // namespace pl
