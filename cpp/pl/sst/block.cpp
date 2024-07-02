@@ -16,6 +16,7 @@
 // Created: 2023/06/01 21:09
 
 #include "cpp/pl/sst/block.h"
+#include "cpp/pl/log/logger.h"
 #include "cpp/pl/sst/cell.h"
 #include "cpp/pl/sst/encoding.h"
 
@@ -35,6 +36,8 @@ Block::Block(const BlockContents& content)
         // 计算restart的起始地址偏移
         restart_offset_ = static_cast<uint32_t>(size_ - (1 + num_restarts_) * 4);
     }
+    LOG_DEBUG << "block size:" << content.data.size() << ", num_restarts: " << num_restarts_
+              << ", restart_offset:" << restart_offset_;
 }
 
 Block::~Block() {
@@ -192,12 +195,14 @@ private:
         if (p >= limit) {
             current_ = restarts_;
             current_restart_ = num_restarts_;
+            status_ = Status::NewCorruption("invalid block");
             return false;
         }
         uint32_t shared, non_shared, rowkey_size, value_size;
         p = decodeEntry(p, limit, &shared, &non_shared, &rowkey_size, &value_size);
         // 第一次Seek的时候，key 为空，那么shared必定为0
         if (p == nullptr || rowkey_.size() < shared) {
+            status_ = Status::NewCorruption("invalid block");
             return false;
         }
         cell_key_.resize(shared);
@@ -238,7 +243,7 @@ private:
                             uint32_t* rowkey_size,
                             uint32_t* value_size) {
         constexpr std::size_t s = sizeof(uint32_t);
-        if (static_cast<uint32_t>(limit - p) < (s * 3)) {
+        if (static_cast<uint32_t>(limit - p) < (s * 4)) {
             return nullptr;
         }
         *shared = pl::decodeInt<uint32_t>(p);
@@ -246,6 +251,8 @@ private:
         *rowkey_size = pl::decodeInt<uint32_t>(p + s * 2);
         *value_size = pl::decodeInt<uint32_t>(p + s * 3);
         p += s * 4;
+        LOG_INFO << "data: " << static_cast<uint32_t>(limit - p);
+        LOG_INFO << (*non_shared + *value_size + *rowkey_size);
         if (static_cast<uint32_t>(limit - p) < (*non_shared + *value_size)) {
             return nullptr;
         }
