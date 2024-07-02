@@ -168,4 +168,6 @@ private:
     std::string_view value_;
 };
 
+using CellPtr = std::unique_ptr<Cell>;
+
 } // namespace pl

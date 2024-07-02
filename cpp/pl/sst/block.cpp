@@ -15,6 +15,7 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/sst/block.h"
+#include "cpp/pl/sst/cell.h"
 #include "cpp/pl/sst/encoding.h"
 
 #include <cassert>
@@ -57,8 +58,14 @@ public:
           current_restart_(num_restarts) {}
 
     [[nodiscard]] bool valid() const override { return current_ < restarts_; }
-    [[nodiscard]] std::string_view key() const override { return key_; }
+    [[nodiscard]] std::string_view key() const override { return cell_key_; }
     [[nodiscard]] std::string_view val() const override { return val_; }
+    [[nodiscard]] CellPtr cell() const override {
+        if (!valid()) {
+            return nullptr;
+        }
+        return std::make_unique<Cell>(cell_key_, rowkey_.size(), val_);
+    }
     [[nodiscard]] Status status() const override { return status_; }
 
     // return the first key that >= target
@@ -67,7 +74,7 @@ public:
         uint32_t right = num_restarts_ - 1;
         int current_key_compare = 0;
         if (valid()) {
-            current_key_compare = compare(key_, target);
+            current_key_compare = compare(rowkey_, target);
             if (current_key_compare < 0) {
                 left = current_restart_;
             } else if (current_key_compare > 0) {
@@ -81,20 +88,21 @@ public:
         while (left < right) {
             uint32_t mid = (left + right + 1) / 2;
             uint32_t offset = getRestartOffset(mid);
-            uint32_t shared, non_shared, value_size;
-            const char* key_ptr =
-                decodeEntry(data_ + offset, data_ + restarts_, &shared, &non_shared, &value_size);
+            uint32_t shared, non_shared, rowkey_size, value_size;
+            const char* key_ptr = decodeEntry(data_ + offset, data_ + restarts_, &shared,
+                                              &non_shared, &rowkey_size, &value_size);
 
-            if (nullptr == key_ptr || (shared != 0)) {
+            if (nullptr == key_ptr || (shared != 0) || (rowkey_size >= non_shared)) {
                 status_ = Status::NewCorruption("invalid entry in block");
                 current_ = restarts_;
                 current_restart_ = num_restarts_;
-                key_.clear();
+                cell_key_.clear();
+                rowkey_ = "";
                 val_ = {};
                 return;
             }
-
-            std::string_view mid_key(key_ptr, non_shared);
+            // 比较restart处的rowkey和当前target
+            std::string_view mid_key(key_ptr, rowkey_size);
             if (compare(mid_key, target) < 0) {
                 left = mid;
             } else {
@@ -112,7 +120,7 @@ public:
             if (!parseNextKeyVal()) {
                 return;
             }
-            if (compare(key_, target) >= 0) {
+            if (compare(rowkey_, target) >= 0) {
                 return;
             }
         }
@@ -165,7 +173,8 @@ private:
     }
 
     void seekToRestartPoint(uint32_t idx) {
-        key_.clear();
+        cell_key_.clear();
+        rowkey_ = "";
         current_restart_ = idx;
         uint32_t offset = getRestartOffset(idx);
         val_ = std::string_view(data_ + offset, 0);
@@ -184,14 +193,15 @@ private:
             current_restart_ = num_restarts_;
             return false;
         }
-        uint32_t shared, non_shared, value_size;
-        p = decodeEntry(p, limit, &shared, &non_shared, &value_size);
+        uint32_t shared, non_shared, rowkey_size, value_size;
+        p = decodeEntry(p, limit, &shared, &non_shared, &rowkey_size, &value_size);
         // 第一次Seek的时候，key 为空，那么shared必定为0
-        if (p == nullptr || key_.size() < shared) {
+        if (p == nullptr || rowkey_.size() < shared) {
             return false;
         }
-        key_.resize(shared);
-        key_.append(p, non_shared);
+        cell_key_.resize(shared);
+        cell_key_.append(p, non_shared);
+        rowkey_ = std::string_view(p, rowkey_size);
         val_ = std::string_view(p + non_shared, value_size);
         while (current_restart_ + 1 < num_restarts_ &&
                getRestartOffset(current_restart_) < current_) {
@@ -220,6 +230,27 @@ private:
         return p;
     }
 
+    const char* decodeEntry(const char* p,
+                            const char* limit,
+                            uint32_t* shared,
+                            uint32_t* non_shared,
+                            uint32_t* rowkey_size,
+                            uint32_t* value_size) {
+        constexpr std::size_t s = sizeof(uint32_t);
+        if (static_cast<uint32_t>(limit - p) < (s * 3)) {
+            return nullptr;
+        }
+        *shared = pl::decodeInt<uint32_t>(p);
+        *non_shared = pl::decodeInt<uint32_t>(p + s);
+        *rowkey_size = pl::decodeInt<uint32_t>(p + s * 2);
+        *value_size = pl::decodeInt<uint32_t>(p + s * 3);
+        p += s * 4;
+        if (static_cast<uint32_t>(limit - p) < (*non_shared + *value_size)) {
+            return nullptr;
+        }
+        return p;
+    }
+
     [[nodiscard]] inline int compare(std::string_view a, std::string_view b) const {
         return comparator_->compare(a, b);
     }
@@ -232,7 +263,8 @@ private:
     const uint32_t num_restarts_;             // restart的个数
     uint32_t current_{0};                     // 当前游标的偏移
     uint32_t current_restart_{0};             // 当前是第几个restart
-    std::string key_;                         // 当前游标处的key
+    std::string cell_key_;                    // 当前游标处的cellkey
+    std::string_view rowkey_;                 // 当前游标处的rowkey
     std::string_view val_;                    // 当前游标处的value
     Status status_;
 };

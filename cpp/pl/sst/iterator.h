@@ -16,15 +16,12 @@
 
 #pragma once
 
+#include "cpp/pl/sst/cell.h"
 #include "cpp/pl/status/status.h"
 
 #include <memory>
 
 namespace pl {
-
-class Iterator;
-
-using IteratorPtr = std::unique_ptr<Iterator>;
 
 class Iterator {
 public:
@@ -47,9 +44,13 @@ public:
 
     [[nodiscard]] virtual bool valid() const = 0;
 
+    [[nodiscard]] virtual CellPtr cell() const = 0;
+
     [[nodiscard]] virtual std::string_view key() const = 0;
 
     [[nodiscard]] virtual std::string_view val() const = 0;
 };
+
+using IteratorPtr = std::unique_ptr<Iterator>;
 
 } // namespace pl
