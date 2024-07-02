@@ -16,6 +16,8 @@
 // Created: 2023/06/04 16:53
 
 #include "cpp/pl/sst/sstable.h"
+#include "cpp/pl/log/logger.h"
+#include "cpp/pl/scope/scope.h"
 #include "cpp/pl/sst/sstable_iterator.h"
 
 namespace pl {
@@ -57,8 +59,11 @@ std::unique_ptr<SSTable> SSTable::open(const ReadOptionsRef& options,
         return nullptr;
     }
 
-    // for RAII
-    auto meta_block = std::make_shared<Block>(file_meta_content);
+    SCOPE_EXIT {
+        if (file_meta_content.heap_allocated) {
+            delete[] file_meta_content.data.data();
+        }
+    };
     auto file_meta = std::make_unique<FileMeta>();
     *status = file_meta->decodeFrom(file_meta_content.data);
     if (!status->isOk()) {
