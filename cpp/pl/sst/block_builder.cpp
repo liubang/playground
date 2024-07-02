@@ -15,6 +15,7 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/sst/block_builder.h"
+#include "cpp/pl/log/logger.h"
 #include "cpp/pl/sst/encoding.h"
 
 #include <cassert>
@@ -65,7 +66,7 @@ void BlockBuilder::add(std::string_view key, std::string_view value) {
 
 void BlockBuilder::add(const Cell& cell) {
     assert(!finished_);
-    auto last_key_pice = std::string_view(last_key_);
+    auto last_key_pice = std::string_view(last_key_.data(), last_rowkey_len_);
     auto rowkey = cell.rowkey();
     auto cellkey = cell.cellKey().encode();
     auto value = cell.value();
@@ -104,8 +105,9 @@ void BlockBuilder::add(const Cell& cell) {
     buffer_.append(value.data(), value.size());
 
     last_key_.resize(shared);
-    last_key_.append(rowkey.data() + shared, non_shared);
-    assert(std::string_view(last_key_).compare(rowkey) == 0);
+    last_key_.append(cellkey.data() + shared, non_shared);
+    last_rowkey_len_ = rowkey.size();
+    assert(std::string_view(last_key_).compare(cellkey) == 0);
     counter_++;
 }
 

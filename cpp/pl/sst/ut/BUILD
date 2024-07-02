@@ -29,6 +29,7 @@ load(
         copts = ["-std=c++20"] + TEST_COPTS,
         linkopts = DEFAULT_LINKOPTS + ["-pthread"],
         deps = [
+            "//cpp/pl/log:logger",
             "//cpp/pl/random",
             "//cpp/pl/sst:sstable",
             "@googletest//:gtest_main",
