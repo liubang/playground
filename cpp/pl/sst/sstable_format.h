@@ -145,7 +145,7 @@ public:
 
     void setFilterPolicyType(FilterPolicyType type) { filter_type_ = type; }
 
-    void setKeyNum(uint64_t key_number) { key_number_ = key_number; }
+    void setCellNum(uint64_t cell_number) { cell_number_ = cell_number; }
 
     void setRowNum(uint64_t row_number) { row_number_ = row_number; }
 
@@ -169,7 +169,7 @@ public:
 
     [[nodiscard]] FilterPolicyType filterPolicyType() const { return filter_type_; }
 
-    [[nodiscard]] uint64_t keyNum() const { return key_number_; }
+    [[nodiscard]] uint64_t cellNum() const { return cell_number_; }
 
     [[nodiscard]] uint64_t rowNum() const { return row_number_; }
 
@@ -195,7 +195,7 @@ public:
         ss << "sst id: " << sst_id_ << '\n';
         ss << "filter type: " << FilterPolicyType2String(filter_type_) << '\n';
         ss << "bits per key: " << bits_per_key_ << '\n';
-        ss << "key number: " << key_number_ << '\n';
+        ss << "cell number: " << cell_number_ << '\n';
         ss << "row number: " << row_number_ << '\n';
         ss << "min timestamp: " << min_timestamp_ << '\n';
         ss << "max timestamp: " << max_timestamp_ << '\n';
@@ -211,7 +211,7 @@ private:
     SSTId sst_id_{0};
     FilterPolicyType filter_type_{FilterPolicyType::NONE};
     uint32_t bits_per_key_{0};
-    uint64_t key_number_{0};
+    uint64_t cell_number_{0};
     uint64_t row_number_{0};
     uint64_t min_timestamp_{0};
     uint64_t max_timestamp_{0};
