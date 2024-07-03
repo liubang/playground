@@ -29,7 +29,9 @@ cc_library(
     hdrs = [
         "arena.h",
     ],
-    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    copts = [
+        "-std=c++20",
+    ] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
     visibility = ["//visibility:public"],
 )
