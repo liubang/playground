@@ -22,13 +22,16 @@
 
 namespace pl {
 
-// Reference from Google's leveldb
 class Arena {
 public:
     Arena();
     ~Arena();
+
+    // not copyable and moveabel
     Arena(const Arena&) = delete;
     Arena& operator=(const Arena&) = delete;
+    Arena(Arena&&) = delete;
+    Arena& operator=(Arena&&) = delete;
 
     inline char* allocate(std::size_t bytes) {
         assert(bytes > 0);
@@ -45,8 +48,12 @@ public:
     char* allocate_aligned(std::size_t bytes);
 
     [[nodiscard]] std::size_t memory_usage() const {
+        // 只需要保持原子性，不需要确保执行序
         return memory_usage_.load(std::memory_order_relaxed);
     }
+
+    static constexpr int BLOCK_SIZE = 4096;
+    static constexpr int POINTER_SIZE = 8;
 
 private:
     char* allocate_fallback(std::size_t bytes);
