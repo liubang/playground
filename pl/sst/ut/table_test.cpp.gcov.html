@@ -31,13 +31,13 @@
             <td class="headerValue">_coverage_report.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntry">206</td>
-            <td class="headerCovTableEntry">211</td>
+            <td class="headerCovTableEntry">200</td>
+            <td class="headerCovTableEntry">205</td>
             <td class="headerCovTableEntryHi">97.6 %</td>
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-07-03 16:24:57</td>
+            <td class="headerValue">2024-07-03 17:09:48</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">40</td>
@@ -99,15 +99,15 @@
 <a name="37"><span class="lineNum">      37 </span>            : };</a>
 <a name="38"><span class="lineNum">      38 </span>            : </a>
 <a name="39"><span class="lineNum">      39 </span>            : struct CaseCellComparator {</a>
-<a name="40"><span class="lineNum">      40 </span><span class="lineCov">    3571771 :     bool operator()(const CaseCell&amp; lhs, const CaseCell&amp; rhs) const {</span></a>
-<a name="41"><span class="lineNum">      41 </span><span class="lineCov">    3571771 :         if (lhs.rowkey != rhs.rowkey) {</span></a>
-<a name="42"><span class="lineNum">      42 </span><span class="lineCov">    2659905 :             return lhs.rowkey &lt; rhs.rowkey;</span></a>
+<a name="40"><span class="lineNum">      40 </span><span class="lineCov">    3571324 :     bool operator()(const CaseCell&amp; lhs, const CaseCell&amp; rhs) const {</span></a>
+<a name="41"><span class="lineNum">      41 </span><span class="lineCov">    3571324 :         if (lhs.rowkey != rhs.rowkey) {</span></a>
+<a name="42"><span class="lineNum">      42 </span><span class="lineCov">    2661145 :             return lhs.rowkey &lt; rhs.rowkey;</span></a>
 <a name="43"><span class="lineNum">      43 </span>            :         }</a>
-<a name="44"><span class="lineNum">      44 </span><span class="lineCov">     911866 :         if (lhs.cf != rhs.cf) {</span></a>
-<a name="45"><span class="lineNum">      45 </span><span class="lineCov">     243598 :             return lhs.cf &lt; rhs.cf;</span></a>
+<a name="44"><span class="lineNum">      44 </span><span class="lineCov">     910179 :         if (lhs.cf != rhs.cf) {</span></a>
+<a name="45"><span class="lineNum">      45 </span><span class="lineCov">     243241 :             return lhs.cf &lt; rhs.cf;</span></a>
 <a name="46"><span class="lineNum">      46 </span>            :         }</a>
-<a name="47"><span class="lineNum">      47 </span><span class="lineCov">     668268 :         if (lhs.col != rhs.col) {</span></a>
-<a name="48"><span class="lineNum">      48 </span><span class="lineCov">     668268 :             return lhs.col &lt; rhs.col;</span></a>
+<a name="47"><span class="lineNum">      47 </span><span class="lineCov">     666938 :         if (lhs.col != rhs.col) {</span></a>
+<a name="48"><span class="lineNum">      48 </span><span class="lineCov">     666938 :             return lhs.col &lt; rhs.col;</span></a>
 <a name="49"><span class="lineNum">      49 </span>            :         }</a>
 <a name="50"><span class="lineNum">      50 </span><span class="lineNoCov">          0 :         if (lhs.ts != rhs.ts) {</span></a>
 <a name="51"><span class="lineNum">      51 </span><span class="lineNoCov">          0 :             return lhs.ts &gt; rhs.ts;</span></a>
@@ -151,7 +151,7 @@
 <a name="89"><span class="lineNum">      89 </span><span class="lineCov">          3 :         EXPECT_TRUE(st.isOk());</span></a>
 <a name="90"><span class="lineNum">      90 </span>            :         auto sstable_builder =</a>
 <a name="91"><span class="lineNum">      91 </span><span class="lineCov">          3 :             std::make_unique&lt;pl::SSTableBuilder&gt;(build_options, std::move(writer));</span></a>
-<a name="92"><span class="lineNum">      92 </span><span class="lineCov">      12291 :         for (int i = 0; i &lt; ROW_COUNT; ++i) {</span></a>
+<a name="92"><span class="lineNum">      92 </span><span class="lineCov">      12291 :         for (int i = 0; i &lt; ROW_NUM; ++i) {</span></a>
 <a name="93"><span class="lineNum">      93 </span>            :             std::string rowkey =</a>
 <a name="94"><span class="lineNum">      94 </span><span class="lineCov">      24576 :                 pl::random_string(ROWKEY_LEN + (i % ROWKEY_LEN)) + std::to_string(i);</span></a>
 <a name="95"><span class="lineNum">      95 </span><span class="lineCov">     110592 :             for (int j = 0; j &lt; COL_NUM; ++j) {</span></a>
@@ -213,11 +213,11 @@
 <a name="151"><span class="lineNum">     151 </span><span class="lineCov">          6 :         EXPECT_EQ(SSTVersion::V1, table-&gt;fileMeta()-&gt;sstVersion());</span></a>
 <a name="152"><span class="lineNum">     152 </span><span class="lineCov">          6 :         EXPECT_EQ(FilterPolicyType::BLOOM_FILTER, table-&gt;fileMeta()-&gt;filterPolicyType());</span></a>
 <a name="153"><span class="lineNum">     153 </span><span class="lineCov">          6 :         EXPECT_EQ(10, table-&gt;fileMeta()-&gt;bitsPerKey());</span></a>
-<a name="154"><span class="lineNum">     154 </span><span class="lineCov">          6 :         EXPECT_EQ(ROW_COUNT * 2 * COL_NUM, table-&gt;fileMeta()-&gt;cellNum());</span></a>
+<a name="154"><span class="lineNum">     154 </span><span class="lineCov">          6 :         EXPECT_EQ(ROW_NUM * 2 * COL_NUM, table-&gt;fileMeta()-&gt;cellNum());</span></a>
 <a name="155"><span class="lineNum">     155 </span><span class="lineCov">          6 :     }</span></a>
 <a name="156"><span class="lineNum">     156 </span>            : </a>
 <a name="157"><span class="lineNum">     157 </span>            : public:</a>
-<a name="158"><span class="lineNum">     158 </span>            :     constexpr static int ROW_COUNT = 2048 * 2;</a>
+<a name="158"><span class="lineNum">     158 </span>            :     constexpr static int ROW_NUM = 2048 * 2;</a>
 <a name="159"><span class="lineNum">     159 </span>            :     constexpr static int ROWKEY_LEN = 16;</a>
 <a name="160"><span class="lineNum">     160 </span>            :     constexpr static int COL_NUM = 8;</a>
 <a name="161"><span class="lineNum">     161 </span>            :     constexpr static int COL_LEN = 8;</a>
@@ -297,105 +297,96 @@
 <a name="235"><span class="lineNum">     235 </span><span class="lineCov">          1 :     std::srand(std::time(nullptr));</span></a>
 <a name="236"><span class="lineNum">     236 </span><span class="lineCov">          2 :     std::random_device rd;</span></a>
 <a name="237"><span class="lineNum">     237 </span><span class="lineCov">          1 :     std::mt19937 gen(rd());</span></a>
-<a name="238"><span class="lineNum">     238 </span><span class="lineCov">          1 :     std::uniform_int_distribution&lt;&gt; dis(cells.size() / 3, cells.size() * 2 / 3);</span></a>
+<a name="238"><span class="lineNum">     238 </span><span class="lineCov">          1 :     std::uniform_int_distribution&lt;&gt; dis(0, ROW_NUM);</span></a>
 <a name="239"><span class="lineNum">     239 </span>            : </a>
 <a name="240"><span class="lineNum">     240 </span><span class="lineCov">          2 :     auto iter = table-&gt;iterator();</span></a>
 <a name="241"><span class="lineNum">     241 </span><span class="lineCov">          4 :     for (int i = 0; i &lt; 3; ++i) {</span></a>
 <a name="242"><span class="lineNum">     242 </span><span class="lineCov">          3 :         auto citer = cells.begin();</span></a>
-<a name="243"><span class="lineNum">     243 </span><span class="lineCov">          3 :         int j = dis(gen);</span></a>
-<a name="244"><span class="lineNum">     244 </span><span class="lineCov">     106862 :         for (int m = 0; m &lt; j; ++m) {</span></a>
-<a name="245"><span class="lineNum">     245 </span><span class="lineCov">     106859 :             ++citer;</span></a>
+<a name="243"><span class="lineNum">     243 </span><span class="lineCov">          3 :         int j = dis(gen) * 2 * COL_NUM;</span></a>
+<a name="244"><span class="lineNum">     244 </span><span class="lineCov">      58531 :         for (int m = 0; m &lt; j; ++m) {</span></a>
+<a name="245"><span class="lineNum">     245 </span><span class="lineCov">      58528 :             ++citer;</span></a>
 <a name="246"><span class="lineNum">     246 </span>            :         }</a>
 <a name="247"><span class="lineNum">     247 </span><span class="lineCov">          3 :         std::string_view search_key = citer-&gt;rowkey;</span></a>
-<a name="248"><span class="lineNum">     248 </span><span class="lineCov">         33 :         while (citer-&gt;rowkey == search_key) {</span></a>
-<a name="249"><span class="lineNum">     249 </span><span class="lineCov">         30 :             --citer;</span></a>
-<a name="250"><span class="lineNum">     250 </span>            :         }</a>
-<a name="251"><span class="lineNum">     251 </span><span class="lineCov">          3 :         ++citer;</span></a>
-<a name="252"><span class="lineNum">     252 </span>            : </a>
-<a name="253"><span class="lineNum">     253 </span><span class="lineCov">          3 :         LOG_INFO &lt;&lt; &quot;scan rowkey &gt;= &quot; &lt;&lt; search_key;</span></a>
-<a name="254"><span class="lineNum">     254 </span><span class="lineCov">          3 :         iter-&gt;seek(search_key);</span></a>
-<a name="255"><span class="lineNum">     255 </span><span class="lineCov">      89779 :         while (iter-&gt;valid()) {</span></a>
-<a name="256"><span class="lineNum">     256 </span><span class="lineCov">      89776 :             EXPECT_TRUE(citer != cells.end());</span></a>
-<a name="257"><span class="lineNum">     257 </span><span class="lineCov">      89776 :             auto cell = iter-&gt;cell();</span></a>
-<a name="258"><span class="lineNum">     258 </span><span class="lineCov">      89776 :             auto cexp = *citer;</span></a>
-<a name="259"><span class="lineNum">     259 </span><span class="lineCov">      89776 :             EXPECT_EQ(cexp.rowkey, cell-&gt;rowkey());</span></a>
-<a name="260"><span class="lineNum">     260 </span><span class="lineCov">      89776 :             EXPECT_EQ(cexp.cf, cell-&gt;cf());</span></a>
-<a name="261"><span class="lineNum">     261 </span><span class="lineCov">      89776 :             EXPECT_EQ(cexp.col, cell-&gt;col());</span></a>
-<a name="262"><span class="lineNum">     262 </span><span class="lineCov">      89776 :             EXPECT_EQ(cexp.type, cell-&gt;cellType());</span></a>
-<a name="263"><span class="lineNum">     263 </span><span class="lineCov">      89776 :             EXPECT_EQ(cexp.ts, cell-&gt;timestamp());</span></a>
-<a name="264"><span class="lineNum">     264 </span>            : </a>
-<a name="265"><span class="lineNum">     265 </span><span class="lineCov">      89776 :             iter-&gt;next();</span></a>
-<a name="266"><span class="lineNum">     266 </span><span class="lineCov">      89776 :             ++citer;</span></a>
-<a name="267"><span class="lineNum">     267 </span><span class="lineCov">      89776 :         }</span></a>
-<a name="268"><span class="lineNum">     268 </span>            :     }</a>
-<a name="269"><span class="lineNum">     269 </span><span class="lineCov">          1 : }</span></a>
+<a name="248"><span class="lineNum">     248 </span><span class="lineCov">          3 :         LOG_INFO &lt;&lt; &quot;scan rowkey &gt;= &quot; &lt;&lt; search_key;</span></a>
+<a name="249"><span class="lineNum">     249 </span><span class="lineCov">          3 :         iter-&gt;seek(search_key);</span></a>
+<a name="250"><span class="lineNum">     250 </span><span class="lineCov">     138083 :         while (iter-&gt;valid()) {</span></a>
+<a name="251"><span class="lineNum">     251 </span><span class="lineCov">     138080 :             EXPECT_TRUE(citer != cells.end());</span></a>
+<a name="252"><span class="lineNum">     252 </span><span class="lineCov">     138080 :             auto cell = iter-&gt;cell();</span></a>
+<a name="253"><span class="lineNum">     253 </span><span class="lineCov">     138080 :             auto cexp = *citer;</span></a>
+<a name="254"><span class="lineNum">     254 </span><span class="lineCov">     138080 :             EXPECT_EQ(cexp.rowkey, cell-&gt;rowkey());</span></a>
+<a name="255"><span class="lineNum">     255 </span><span class="lineCov">     138080 :             EXPECT_EQ(cexp.cf, cell-&gt;cf());</span></a>
+<a name="256"><span class="lineNum">     256 </span><span class="lineCov">     138080 :             EXPECT_EQ(cexp.col, cell-&gt;col());</span></a>
+<a name="257"><span class="lineNum">     257 </span><span class="lineCov">     138080 :             EXPECT_EQ(cexp.type, cell-&gt;cellType());</span></a>
+<a name="258"><span class="lineNum">     258 </span><span class="lineCov">     138080 :             EXPECT_EQ(cexp.ts, cell-&gt;timestamp());</span></a>
+<a name="259"><span class="lineNum">     259 </span>            : </a>
+<a name="260"><span class="lineNum">     260 </span><span class="lineCov">     138080 :             iter-&gt;next();</span></a>
+<a name="261"><span class="lineNum">     261 </span><span class="lineCov">     138080 :             ++citer;</span></a>
+<a name="262"><span class="lineNum">     262 </span><span class="lineCov">     138080 :         }</span></a>
+<a name="263"><span class="lineNum">     263 </span>            :     }</a>
+<a name="264"><span class="lineNum">     264 </span><span class="lineCov">          1 : }</span></a>
+<a name="265"><span class="lineNum">     265 </span>            : </a>
+<a name="266"><span class="lineNum">     266 </span><span class="lineCov">          4 : TEST_F(SSTableTest, query) {</span></a>
+<a name="267"><span class="lineNum">     267 </span><span class="lineCov">          1 :     auto sst_file = sst_files[0];</span></a>
+<a name="268"><span class="lineNum">     268 </span><span class="lineCov">          1 :     auto cells = cellses[0];</span></a>
+<a name="269"><span class="lineNum">     269 </span><span class="lineCov">          1 :     LOG_INFO &lt;&lt; &quot;cells: &quot; &lt;&lt; cells.size();</span></a>
 <a name="270"><span class="lineNum">     270 </span>            : </a>
-<a name="271"><span class="lineNum">     271 </span><span class="lineCov">          4 : TEST_F(SSTableTest, query) {</span></a>
-<a name="272"><span class="lineNum">     272 </span><span class="lineCov">          1 :     auto sst_file = sst_files[0];</span></a>
-<a name="273"><span class="lineNum">     273 </span><span class="lineCov">          1 :     auto cells = cellses[0];</span></a>
-<a name="274"><span class="lineNum">     274 </span><span class="lineCov">          1 :     LOG_INFO &lt;&lt; &quot;cells: &quot; &lt;&lt; cells.size();</span></a>
-<a name="275"><span class="lineNum">     275 </span>            : </a>
-<a name="276"><span class="lineNum">     276 </span><span class="lineCov">          1 :     auto reader = fs-&gt;newFsReader(sst_file, &amp;st);</span></a>
-<a name="277"><span class="lineNum">     277 </span><span class="lineCov">          1 :     EXPECT_TRUE(st.isOk());</span></a>
-<a name="278"><span class="lineNum">     278 </span><span class="lineCov">          1 :     std::size_t sst_size = reader-&gt;size();</span></a>
-<a name="279"><span class="lineNum">     279 </span><span class="lineCov">          1 :     LOG_INFO &lt;&lt; &quot;file: &quot; &lt;&lt; sst_file &lt;&lt; &quot;, size: &quot; &lt;&lt; sst_size;</span></a>
-<a name="280"><span class="lineNum">     280 </span><span class="lineCov">          1 :     auto table = pl::SSTable::open(read_options, std::move(reader), sst_size, &amp;st);</span></a>
-<a name="281"><span class="lineNum">     281 </span><span class="lineCov">          1 :     EXPECT_TRUE(st.isOk());</span></a>
-<a name="282"><span class="lineNum">     282 </span>            : </a>
-<a name="283"><span class="lineNum">     283 </span><span class="lineCov">          1 :     check_table(table.get());</span></a>
-<a name="284"><span class="lineNum">     284 </span>            : </a>
-<a name="285"><span class="lineNum">     285 </span>            :     // 整行query</a>
-<a name="286"><span class="lineNum">     286 </span><span class="lineCov">          1 :     std::srand(std::time(nullptr));</span></a>
-<a name="287"><span class="lineNum">     287 </span><span class="lineCov">          2 :     std::random_device rd;</span></a>
-<a name="288"><span class="lineNum">     288 </span><span class="lineCov">          1 :     std::mt19937 gen(rd());</span></a>
-<a name="289"><span class="lineNum">     289 </span><span class="lineCov">          1 :     std::uniform_int_distribution&lt;&gt; dis(0, cells.size() * 2 / 3);</span></a>
-<a name="290"><span class="lineNum">     290 </span><span class="lineCov">          2 :     Arena buf;</span></a>
-<a name="291"><span class="lineNum">     291 </span><span class="lineCov">        334 :     for (int i = 0; i &lt; 333; ++i) {</span></a>
-<a name="292"><span class="lineNum">     292 </span><span class="lineCov">        333 :         int idx = dis(gen);</span></a>
-<a name="293"><span class="lineNum">     293 </span><span class="lineCov">        333 :         auto citer = cells.begin();</span></a>
-<a name="294"><span class="lineNum">     294 </span><span class="lineCov">    7164138 :         for (int j = 0; j &lt; idx; ++j) {</span></a>
-<a name="295"><span class="lineNum">     295 </span><span class="lineCov">    7163805 :             ++citer;</span></a>
-<a name="296"><span class="lineNum">     296 </span>            :         }</a>
-<a name="297"><span class="lineNum">     297 </span>            : </a>
-<a name="298"><span class="lineNum">     298 </span><span class="lineCov">        333 :         std::string search_key = citer-&gt;rowkey;</span></a>
-<a name="299"><span class="lineNum">     299 </span><span class="lineCov">       3271 :         while (citer-&gt;rowkey == search_key) {</span></a>
-<a name="300"><span class="lineNum">     300 </span><span class="lineCov">       2938 :             --citer;</span></a>
-<a name="301"><span class="lineNum">     301 </span>            :         }</a>
-<a name="302"><span class="lineNum">     302 </span><span class="lineCov">        333 :         ++citer;</span></a>
-<a name="303"><span class="lineNum">     303 </span>            : </a>
-<a name="304"><span class="lineNum">     304 </span><span class="lineCov">        333 :         CellVecRef row;</span></a>
-<a name="305"><span class="lineNum">     305 </span><span class="lineCov">        333 :         auto st = table-&gt;get(search_key, &amp;buf, &amp;row);</span></a>
-<a name="306"><span class="lineNum">     306 </span><span class="lineCov">        333 :         EXPECT_TRUE(st.isOk());</span></a>
-<a name="307"><span class="lineNum">     307 </span><span class="lineCov">        333 :         EXPECT_EQ(16, row.size());</span></a>
-<a name="308"><span class="lineNum">     308 </span>            : </a>
-<a name="309"><span class="lineNum">     309 </span><span class="lineCov">       5661 :         for (auto&amp; cell : row) {</span></a>
-<a name="310"><span class="lineNum">     310 </span><span class="lineCov">       5328 :             auto cexp = *citer;</span></a>
-<a name="311"><span class="lineNum">     311 </span><span class="lineCov">       5328 :             EXPECT_EQ(cexp.rowkey, cell-&gt;rowkey());</span></a>
-<a name="312"><span class="lineNum">     312 </span><span class="lineCov">       5328 :             EXPECT_EQ(cexp.cf, cell-&gt;cf());</span></a>
-<a name="313"><span class="lineNum">     313 </span><span class="lineCov">       5328 :             EXPECT_EQ(cexp.col, cell-&gt;col());</span></a>
-<a name="314"><span class="lineNum">     314 </span><span class="lineCov">       5328 :             EXPECT_EQ(cexp.ts, cell-&gt;timestamp());</span></a>
-<a name="315"><span class="lineNum">     315 </span><span class="lineCov">       5328 :             EXPECT_EQ(cexp.type, cell-&gt;cellType());</span></a>
-<a name="316"><span class="lineNum">     316 </span><span class="lineCov">       5328 :             ++citer;</span></a>
-<a name="317"><span class="lineNum">     317 </span><span class="lineCov">       5328 :         }</span></a>
-<a name="318"><span class="lineNum">     318 </span><span class="lineCov">        333 :     }</span></a>
-<a name="319"><span class="lineNum">     319 </span>            : </a>
-<a name="320"><span class="lineNum">     320 </span>            :     // 空query</a>
-<a name="321"><span class="lineNum">     321 </span><span class="lineCov">        667 :     for (int i = 0; i &lt; 666; ++i) {</span></a>
-<a name="322"><span class="lineNum">     322 </span><span class="lineCov">        666 :         auto rowkey = pl::random_string(ROWKEY_LEN * 3);</span></a>
-<a name="323"><span class="lineNum">     323 </span><span class="lineCov">        666 :         CellVecRef cells;</span></a>
-<a name="324"><span class="lineNum">     324 </span><span class="lineCov">        666 :         auto st = table-&gt;get(rowkey, &amp;buf, &amp;cells);</span></a>
-<a name="325"><span class="lineNum">     325 </span><span class="lineCov">        666 :         EXPECT_TRUE(st.isNotFound());</span></a>
-<a name="326"><span class="lineNum">     326 </span><span class="lineCov">        666 :         EXPECT_TRUE(cells.empty());</span></a>
-<a name="327"><span class="lineNum">     327 </span><span class="lineCov">        666 :     }</span></a>
-<a name="328"><span class="lineNum">     328 </span><span class="lineCov">          1 : }</span></a>
-<a name="329"><span class="lineNum">     329 </span>            : </a>
-<a name="330"><span class="lineNum">     330 </span><span class="lineCov">          4 : TEST_F(SSTableTest, cleanup) {</span></a>
-<a name="331"><span class="lineNum">     331 </span><span class="lineCov">          4 :     for (const auto&amp; sst_file : sst_files) {</span></a>
-<a name="332"><span class="lineNum">     332 </span><span class="lineCov">          3 :         std::remove(sst_file.c_str());</span></a>
-<a name="333"><span class="lineNum">     333 </span>            :     }</a>
-<a name="334"><span class="lineNum">     334 </span><span class="lineCov">          1 : }</span></a>
-<a name="335"><span class="lineNum">     335 </span>            : </a>
-<a name="336"><span class="lineNum">     336 </span>            : } // namespace pl</a>
+<a name="271"><span class="lineNum">     271 </span><span class="lineCov">          1 :     auto reader = fs-&gt;newFsReader(sst_file, &amp;st);</span></a>
+<a name="272"><span class="lineNum">     272 </span><span class="lineCov">          1 :     EXPECT_TRUE(st.isOk());</span></a>
+<a name="273"><span class="lineNum">     273 </span><span class="lineCov">          1 :     std::size_t sst_size = reader-&gt;size();</span></a>
+<a name="274"><span class="lineNum">     274 </span><span class="lineCov">          1 :     LOG_INFO &lt;&lt; &quot;file: &quot; &lt;&lt; sst_file &lt;&lt; &quot;, size: &quot; &lt;&lt; sst_size;</span></a>
+<a name="275"><span class="lineNum">     275 </span><span class="lineCov">          1 :     auto table = pl::SSTable::open(read_options, std::move(reader), sst_size, &amp;st);</span></a>
+<a name="276"><span class="lineNum">     276 </span><span class="lineCov">          1 :     EXPECT_TRUE(st.isOk());</span></a>
+<a name="277"><span class="lineNum">     277 </span>            : </a>
+<a name="278"><span class="lineNum">     278 </span><span class="lineCov">          1 :     check_table(table.get());</span></a>
+<a name="279"><span class="lineNum">     279 </span>            : </a>
+<a name="280"><span class="lineNum">     280 </span>            :     // 整行query</a>
+<a name="281"><span class="lineNum">     281 </span><span class="lineCov">          1 :     std::srand(std::time(nullptr));</span></a>
+<a name="282"><span class="lineNum">     282 </span><span class="lineCov">          2 :     std::random_device rd;</span></a>
+<a name="283"><span class="lineNum">     283 </span><span class="lineCov">          1 :     std::mt19937 gen(rd());</span></a>
+<a name="284"><span class="lineNum">     284 </span><span class="lineCov">          1 :     std::uniform_int_distribution&lt;&gt; dis(0, ROW_NUM);</span></a>
+<a name="285"><span class="lineNum">     285 </span><span class="lineCov">          2 :     Arena buf;</span></a>
+<a name="286"><span class="lineNum">     286 </span><span class="lineCov">        334 :     for (int i = 0; i &lt; 333; ++i) {</span></a>
+<a name="287"><span class="lineNum">     287 </span><span class="lineCov">        333 :         int idx = dis(gen) * 2 * COL_NUM;</span></a>
+<a name="288"><span class="lineNum">     288 </span><span class="lineCov">        333 :         auto citer = cells.begin();</span></a>
+<a name="289"><span class="lineNum">     289 </span><span class="lineCov">   11319565 :         for (int j = 0; j &lt; idx; ++j) {</span></a>
+<a name="290"><span class="lineNum">     290 </span><span class="lineCov">   11319232 :             ++citer;</span></a>
+<a name="291"><span class="lineNum">     291 </span>            :         }</a>
+<a name="292"><span class="lineNum">     292 </span>            : </a>
+<a name="293"><span class="lineNum">     293 </span><span class="lineCov">        333 :         std::string search_key = citer-&gt;rowkey;</span></a>
+<a name="294"><span class="lineNum">     294 </span>            : </a>
+<a name="295"><span class="lineNum">     295 </span><span class="lineCov">        333 :         CellVecRef row;</span></a>
+<a name="296"><span class="lineNum">     296 </span><span class="lineCov">        333 :         auto st = table-&gt;get(search_key, &amp;buf, &amp;row);</span></a>
+<a name="297"><span class="lineNum">     297 </span><span class="lineCov">        333 :         EXPECT_TRUE(st.isOk());</span></a>
+<a name="298"><span class="lineNum">     298 </span><span class="lineCov">        333 :         EXPECT_EQ(16, row.size());</span></a>
+<a name="299"><span class="lineNum">     299 </span>            : </a>
+<a name="300"><span class="lineNum">     300 </span><span class="lineCov">       5661 :         for (auto&amp; cell : row) {</span></a>
+<a name="301"><span class="lineNum">     301 </span><span class="lineCov">       5328 :             auto cexp = *citer;</span></a>
+<a name="302"><span class="lineNum">     302 </span><span class="lineCov">       5328 :             EXPECT_EQ(cexp.rowkey, cell-&gt;rowkey());</span></a>
+<a name="303"><span class="lineNum">     303 </span><span class="lineCov">       5328 :             EXPECT_EQ(cexp.cf, cell-&gt;cf());</span></a>
+<a name="304"><span class="lineNum">     304 </span><span class="lineCov">       5328 :             EXPECT_EQ(cexp.col, cell-&gt;col());</span></a>
+<a name="305"><span class="lineNum">     305 </span><span class="lineCov">       5328 :             EXPECT_EQ(cexp.ts, cell-&gt;timestamp());</span></a>
+<a name="306"><span class="lineNum">     306 </span><span class="lineCov">       5328 :             EXPECT_EQ(cexp.type, cell-&gt;cellType());</span></a>
+<a name="307"><span class="lineNum">     307 </span><span class="lineCov">       5328 :             ++citer;</span></a>
+<a name="308"><span class="lineNum">     308 </span><span class="lineCov">       5328 :         }</span></a>
+<a name="309"><span class="lineNum">     309 </span><span class="lineCov">        333 :     }</span></a>
+<a name="310"><span class="lineNum">     310 </span>            : </a>
+<a name="311"><span class="lineNum">     311 </span>            :     // 空query</a>
+<a name="312"><span class="lineNum">     312 </span><span class="lineCov">        667 :     for (int i = 0; i &lt; 666; ++i) {</span></a>
+<a name="313"><span class="lineNum">     313 </span><span class="lineCov">        666 :         auto rowkey = pl::random_string(ROWKEY_LEN * 3);</span></a>
+<a name="314"><span class="lineNum">     314 </span><span class="lineCov">        666 :         CellVecRef cells;</span></a>
+<a name="315"><span class="lineNum">     315 </span><span class="lineCov">        666 :         auto st = table-&gt;get(rowkey, &amp;buf, &amp;cells);</span></a>
+<a name="316"><span class="lineNum">     316 </span><span class="lineCov">        666 :         EXPECT_TRUE(st.isNotFound());</span></a>
+<a name="317"><span class="lineNum">     317 </span><span class="lineCov">        666 :         EXPECT_TRUE(cells.empty());</span></a>
+<a name="318"><span class="lineNum">     318 </span><span class="lineCov">        666 :     }</span></a>
+<a name="319"><span class="lineNum">     319 </span><span class="lineCov">          1 : }</span></a>
+<a name="320"><span class="lineNum">     320 </span>            : </a>
+<a name="321"><span class="lineNum">     321 </span><span class="lineCov">          4 : TEST_F(SSTableTest, cleanup) {</span></a>
+<a name="322"><span class="lineNum">     322 </span><span class="lineCov">          4 :     for (const auto&amp; sst_file : sst_files) {</span></a>
+<a name="323"><span class="lineNum">     323 </span><span class="lineCov">          3 :         std::remove(sst_file.c_str());</span></a>
+<a name="324"><span class="lineNum">     324 </span>            :     }</a>
+<a name="325"><span class="lineNum">     325 </span><span class="lineCov">          1 : }</span></a>
+<a name="326"><span class="lineNum">     326 </span>            : </a>
+<a name="327"><span class="lineNum">     327 </span>            : } // namespace pl</a>
 </pre>
       </td>
     </tr>
