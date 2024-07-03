@@ -89,7 +89,7 @@ public:
         EXPECT_TRUE(st.isOk());
         auto sstable_builder =
             std::make_unique<pl::SSTableBuilder>(build_options, std::move(writer));
-        for (int i = 0; i < ROW_COUNT; ++i) {
+        for (int i = 0; i < ROW_NUM; ++i) {
             std::string rowkey =
                 pl::random_string(ROWKEY_LEN + (i % ROWKEY_LEN)) + std::to_string(i);
             for (int j = 0; j < COL_NUM; ++j) {
@@ -151,11 +151,11 @@ public:
         EXPECT_EQ(SSTVersion::V1, table->fileMeta()->sstVersion());
         EXPECT_EQ(FilterPolicyType::BLOOM_FILTER, table->fileMeta()->filterPolicyType());
         EXPECT_EQ(10, table->fileMeta()->bitsPerKey());
-        EXPECT_EQ(ROW_COUNT * 2 * COL_NUM, table->fileMeta()->cellNum());
+        EXPECT_EQ(ROW_NUM * 2 * COL_NUM, table->fileMeta()->cellNum());
     }
 
 public:
-    constexpr static int ROW_COUNT = 2048 * 2;
+    constexpr static int ROW_NUM = 2048 * 2;
     constexpr static int ROWKEY_LEN = 16;
     constexpr static int COL_NUM = 8;
     constexpr static int COL_LEN = 8;
@@ -235,21 +235,16 @@ TEST_F(SSTableTest, range_scan) {
     std::srand(std::time(nullptr));
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dis(cells.size() / 3, cells.size() * 2 / 3);
+    std::uniform_int_distribution<> dis(0, ROW_NUM);
 
     auto iter = table->iterator();
     for (int i = 0; i < 3; ++i) {
         auto citer = cells.begin();
-        int j = dis(gen);
+        int j = dis(gen) * 2 * COL_NUM;
         for (int m = 0; m < j; ++m) {
             ++citer;
         }
         std::string_view search_key = citer->rowkey;
-        while (citer->rowkey == search_key) {
-            --citer;
-        }
-        ++citer;
-
         LOG_INFO << "scan rowkey >= " << search_key;
         iter->seek(search_key);
         while (iter->valid()) {
@@ -286,20 +281,16 @@ TEST_F(SSTableTest, query) {
     std::srand(std::time(nullptr));
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dis(0, cells.size() * 2 / 3);
+    std::uniform_int_distribution<> dis(0, ROW_NUM);
     Arena buf;
     for (int i = 0; i < 333; ++i) {
-        int idx = dis(gen);
+        int idx = dis(gen) * 2 * COL_NUM;
         auto citer = cells.begin();
         for (int j = 0; j < idx; ++j) {
             ++citer;
         }
 
         std::string search_key = citer->rowkey;
-        while (citer->rowkey == search_key) {
-            --citer;
-        }
-        ++citer;
 
         CellVecRef row;
         auto st = table->get(search_key, &buf, &row);
