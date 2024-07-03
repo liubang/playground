@@ -20,9 +20,6 @@
 
 namespace pl {
 
-constexpr int BLOCK_SIZE = 4096;
-constexpr int POINTER_SIZE = 8;
-
 Arena::Arena() : alloc_ptr_(nullptr), alloc_bytes_remaining_(0), memory_usage_(0) {}
 
 Arena::~Arena() {
