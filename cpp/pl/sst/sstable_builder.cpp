@@ -37,58 +37,18 @@ SSTableBuilder::SSTableBuilder(BuildOptionsRef options, FsWriterRef writer)
 
 SSTableBuilder::~SSTableBuilder() = default;
 
-void SSTableBuilder::add(std::string_view key, std::string_view value) {
-    assert(!closed_);
-
-    if (!ok()) {
-        LOG_ERROR << "failed to add kv, error " << status_.msg();
-        return;
-    }
-
-    if (key_nums_ == 0) {
-        first_key_.assign(key.data(), key.size());
-    }
-
-    if (pending_index_entry_) {
-        assert(data_block_->empty());
-        std::string handle_encoding;
-        pending_handler_.encodeTo(&handle_encoding);
-        // 记录上一个block的最后一个key和上一个block的结束位置
-        index_block_->add(last_key_, handle_encoding);
-        pending_index_entry_ = false;
-    }
-
-    if (key_nums_ > 0) {
-        assert(options_->comparator->compare(key, last_key_) > 0);
-    }
-
-    if (filter_block_ != nullptr) {
-        filter_block_->addKey(key);
-    }
-
-    last_key_.assign(key);
-    data_block_->add(key, value);
-    key_nums_++;
-
-    const size_t s = data_block_->sizeEstimate();
-    // 达到block_size后，就写入
-    if (s >= options_->block_size) {
-        flush();
-    }
-}
-
 void SSTableBuilder::add(const Cell& cell) {
     assert(!closed_);
     if (!ok()) {
         LOG_ERROR << "failed to add kv, error " << status_.msg();
         return;
     }
-    if (key_nums_ == 0) {
+    if (cell_nums_ == 0) {
         first_key_.assign(cell.rowkey());
     }
 
     int comp = 0;
-    if (key_nums_ > 0) {
+    if (cell_nums_ > 0) {
         comp = options_->comparator->compare(cell.rowkey(), last_key_);
     } else {
         comp = 1;
@@ -110,7 +70,8 @@ void SSTableBuilder::add(const Cell& cell) {
         std::string handle_encoding;
         pending_handler_.encodeTo(&handle_encoding);
         // 记录上一个block的最后一个key和上一个block的结束位置
-        index_block_->add(last_key_, handle_encoding);
+        // index_block_->add(last_key_, handle_encoding);
+        index_block_->add(Cell(CellType::CT_NONE, last_key_, "", "", handle_encoding, 0));
         pending_index_entry_ = false;
     }
 
@@ -127,7 +88,7 @@ void SSTableBuilder::add(const Cell& cell) {
     assert(min_timestamp_ <= max_timestamp_);
 
     data_block_->add(cell);
-    key_nums_++;
+    cell_nums_++;
 }
 
 void SSTableBuilder::flush() {
@@ -296,7 +257,7 @@ Status SSTableBuilder::finish() {
         std::string handle_encoding;
         pending_handler_.encodeTo(&handle_encoding);
         // 记录上一个block的最后一个key和上一个block的结束位置
-        index_block_->add(last_key_, handle_encoding);
+        index_block_->add(Cell(CellType::CT_NONE, last_key_, "", "", handle_encoding, 0));
         pending_index_entry_ = false;
     }
     writeBlock(index_block_.get(), &index_block_handle);
@@ -313,7 +274,7 @@ Status SSTableBuilder::finish() {
     file_meta.setBitsPerKey(options_->bits_per_key);
     file_meta.setMinKey(first_key_);
     file_meta.setMaxKey(last_key_);
-    file_meta.setKeyNum(key_nums_);
+    file_meta.setCellNum(cell_nums_);
     file_meta.setRowNum(row_num_);
     file_meta.setMinTimestamp(min_timestamp_);
     file_meta.setMaxTimestamp(max_timestamp_);

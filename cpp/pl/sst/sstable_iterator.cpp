@@ -16,15 +16,14 @@
 
 #include "cpp/pl/sst/sstable_iterator.h"
 #include "cpp/pl/log/logger.h"
+#include "cpp/pl/sst/sstable_format.h"
 
 #include <cassert>
 
 namespace pl {
 
 void SSTableIterator::seek(std::string_view target) {
-    LOG_INFO << "index_seek begin";
     index_iter_->seek(target);
-    LOG_INFO << "index_seek end";
     initDataBlock();
     if (data_iter_ != nullptr) {
         data_iter_->seek(target);
@@ -64,17 +63,7 @@ void SSTableIterator::prev() {
 
 bool SSTableIterator::valid() const { return data_iter_ != nullptr && data_iter_->valid(); }
 
-std::string_view SSTableIterator::key() const {
-    assert(valid());
-    return data_iter_->key();
-}
-
-std::string_view SSTableIterator::val() const {
-    assert(valid());
-    return data_iter_->val();
-}
-
-CellPtr SSTableIterator::cell() const {
+CellRef SSTableIterator::cell() const {
     assert(valid());
     return data_iter_->cell();
 }
@@ -94,11 +83,13 @@ void SSTableIterator::initDataBlock() {
         data_iter_ = nullptr;
         return;
     }
-    std::string_view handle = index_iter_->val();
+    auto idx_cell = index_iter_->cell();
+    assert(idx_cell != nullptr);
+    std::string_view handle = idx_cell->value();
     if (data_iter_ != nullptr && handle.compare(data_block_handle_) == 0) {
         // do nothing
     } else {
-        data_iter_ = block_func_(handle);
+        data_iter_ = data_block_func_(handle);
         data_block_handle_.assign(handle.data(), handle.size());
     }
 }
