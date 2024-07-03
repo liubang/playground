@@ -36,7 +36,7 @@ public:
 
     BlockBuilder& operator=(const BlockBuilder&) = delete;
 
-    void add(std::string_view key, std::string_view val);
+    // void add(std::string_view key, std::string_view val);
 
     void add(const Cell& cell);
 

@@ -49,7 +49,7 @@ void FileMeta::encodeTo(std::string* dst) const {
     encodeInt(dst, static_cast<uint64_t>(sst_id_));         // 8B
     encodeInt(dst, static_cast<uint8_t>(filter_type_));     // 1B
     encodeInt(dst, bits_per_key_);                          // 4B
-    encodeInt(dst, key_number_);                            // 8B
+    encodeInt(dst, cell_number_);                           // 8B
     encodeInt(dst, row_number_);                            // 8B
     encodeInt(dst, min_timestamp_);                         // 8B
     encodeInt(dst, max_timestamp_);                         // 8B
@@ -110,8 +110,8 @@ Status FileMeta::decodeFrom(std::string_view input) {
     bits_per_key_ = decodeInt<uint32_t>(data + cursor);
     cursor += 4;
 
-    // key number
-    key_number_ = decodeInt<uint64_t>(data + cursor);
+    // cell number
+    cell_number_ = decodeInt<uint64_t>(data + cursor);
     cursor += 8;
 
     // row number

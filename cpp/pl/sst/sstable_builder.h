@@ -36,8 +36,6 @@ public:
 
     ~SSTableBuilder();
 
-    void add(std::string_view key, std::string_view value);
-
     void add(const Cell& cell);
 
     void flush();
@@ -63,12 +61,12 @@ private:
     BlockBuilderPtr index_block_;
     FilterBlockBuilderPtr filter_block_;
     BlockHandle pending_handler_;
-    std::string first_key_; // min_key
-    std::string last_key_;
-    uint64_t key_nums_{0};
+    std::string first_key_; // min rowkey
+    std::string last_key_;  // max rowkey
+    uint64_t cell_nums_{0};
     uint64_t offset_{0};
     uint64_t row_num_{0};
-    uint64_t min_timestamp_{UINT_MAX};
+    uint64_t min_timestamp_{UINT64_MAX};
     uint64_t max_timestamp_{0};
     Status status_;
     bool pending_index_entry_{false};

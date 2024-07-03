@@ -44,11 +44,7 @@ public:
 
     [[nodiscard]] virtual bool valid() const = 0;
 
-    [[nodiscard]] virtual CellPtr cell() const = 0;
-
-    [[nodiscard]] virtual std::string_view key() const = 0;
-
-    [[nodiscard]] virtual std::string_view val() const = 0;
+    [[nodiscard]] virtual CellRef cell() const = 0;
 };
 
 using IteratorPtr = std::unique_ptr<Iterator>;

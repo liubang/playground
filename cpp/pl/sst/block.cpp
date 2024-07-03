@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/sst/block.h"
-#include "cpp/pl/log/logger.h"
 #include "cpp/pl/sst/cell.h"
 #include "cpp/pl/sst/encoding.h"
 
@@ -35,8 +34,6 @@ Block::Block(const BlockContents& content)
         // 计算restart的起始地址偏移
         restart_offset_ = static_cast<uint32_t>(size_ - (1 + num_restarts_) * 4);
     }
-    LOG_DEBUG << "block size:" << content.data.size() << ", num_restarts: " << num_restarts_
-              << ", restart_offset:" << restart_offset_;
 }
 
 Block::~Block() {
@@ -61,69 +58,28 @@ public:
           current_restart_(num_restarts) {}
 
     [[nodiscard]] bool valid() const override { return current_ < restarts_; }
-    [[nodiscard]] std::string_view key() const override { return cell_key_; }
-    [[nodiscard]] std::string_view val() const override { return val_; }
-    [[nodiscard]] CellPtr cell() const override {
+
+    [[nodiscard]] CellRef cell() const override {
         if (!valid()) {
             return nullptr;
         }
-        return std::make_unique<Cell>(cell_key_, rowkey_.size(), val_);
+        return cell_;
     }
+
     [[nodiscard]] Status status() const override { return status_; }
 
     // return the first key that >= target
     void seek(std::string_view target) override {
         uint32_t left = 0;
-        uint32_t right = num_restarts_ - 1;
-        int current_key_compare = 0;
-        if (valid()) {
-            current_key_compare = compare(rowkey_, target);
-            if (current_key_compare < 0) {
-                left = current_restart_;
-            } else if (current_key_compare > 0) {
-                right = current_restart_;
-            } else {
-                return;
-            }
+        if (!binarySearchIndex(target, &left)) {
+            return;
         }
-
-        // binary search
-        while (left < right) {
-            uint32_t mid = (left + right + 1) / 2;
-            uint32_t offset = getRestartOffset(mid);
-            uint32_t shared, non_shared, rowkey_size, value_size;
-            const char* key_ptr = decodeEntry(data_ + offset, data_ + restarts_, &shared,
-                                              &non_shared, &rowkey_size, &value_size);
-
-            if (nullptr == key_ptr || (shared != 0) || (rowkey_size >= non_shared)) {
-                status_ = Status::NewCorruption("invalid entry in block");
-                current_ = restarts_;
-                current_restart_ = num_restarts_;
-                cell_key_.clear();
-                rowkey_ = "";
-                val_ = {};
-                return;
-            }
-            // 比较restart处的rowkey和当前target
-            std::string_view mid_key(key_ptr, rowkey_size);
-            if (compare(mid_key, target) < 0) {
-                left = mid;
-            } else {
-                right = mid - 1;
-            }
-        }
-
-        assert(current_key_compare == 0 || valid());
-        bool skip_seek = (left == current_restart_ && current_key_compare < 0);
-        if (!skip_seek) {
-            seekToRestartPoint(left);
-        }
-
+        seekToRestartPoint(left);
         while (true) {
-            if (!parseNextKeyVal()) {
+            if (!parseNextCell()) {
                 return;
             }
-            if (compare(rowkey_, target) >= 0) {
+            if (compare(cell_->rowkey(), target) >= 0) {
                 return;
             }
         }
@@ -131,13 +87,13 @@ public:
 
     void first() override {
         seekToRestartPoint(0);
-        parseNextKeyVal();
+        parseNextCell();
     }
 
     void last() override {
         seekToRestartPoint(num_restarts_ - 1);
         for (;;) {
-            if (!parseNextKeyVal() || nextEntryOffset() >= restarts_) {
+            if (!parseNextCell() || nextEntryOffset() >= restarts_) {
                 break;
             }
         }
@@ -156,7 +112,7 @@ public:
         }
         seekToRestartPoint(current_restart_);
         for (;;) {
-            if (parseNextKeyVal() && nextEntryOffset() < old) {
+            if (parseNextCell() && nextEntryOffset() < old) {
                 break;
             }
         }
@@ -164,12 +120,50 @@ public:
 
     void next() override {
         assert(valid());
-        parseNextKeyVal();
+        parseNextCell();
     }
 
     ~BlockIterator() override = default;
 
 private:
+    bool binarySearchIndex(std::string_view target, uint32_t* idx) {
+        uint32_t left = 0;
+        uint32_t right = num_restarts_ - 1;
+        uint32_t offset = 0;
+        while (left < right) {
+            auto mid = (left + right + 1) / 2;
+            offset = getRestartOffset(mid);
+            uint32_t shared, non_shared, rowkey_size, value_size;
+            const char* key_ptr = decodeEntry(data_ + offset, data_ + restarts_, &shared,
+                                              &non_shared, &rowkey_size, &value_size);
+            if (key_ptr == nullptr || (shared != 0) || (rowkey_size >= non_shared)) {
+                status_ = Status::NewCorruption("invalid entry in block");
+                current_ = restarts_;
+                current_restart_ = num_restarts_;
+                cell_key_.clear();
+                val_ = {};
+                return false;
+            }
+
+            std::string_view mid_key(key_ptr, rowkey_size);
+            int cmp = compare(mid_key, target);
+
+            if (cmp == 0) {
+                left = mid;
+                break;
+            }
+
+            if (cmp < 0) {
+                left = mid;
+            } else {
+                right = mid - 1;
+            }
+        }
+
+        *idx = left;
+        return true;
+    }
+
     uint32_t getRestartOffset(uint32_t idx) {
         assert(idx < num_restarts_);
         return decodeInt<uint32_t>(data_ + restarts_ + (idx * sizeof(uint32_t)));
@@ -177,7 +171,6 @@ private:
 
     void seekToRestartPoint(uint32_t idx) {
         cell_key_.clear();
-        rowkey_ = "";
         current_restart_ = idx;
         uint32_t offset = getRestartOffset(idx);
         val_ = std::string_view(data_ + offset, 0);
@@ -187,7 +180,7 @@ private:
         return static_cast<uint32_t>((val_.data() + val_.size()) - data_);
     }
 
-    bool parseNextKeyVal() {
+    bool parseNextCell() {
         current_ = nextEntryOffset();
         const char* p = data_ + current_;
         const char* limit = data_ + restarts_;
@@ -200,39 +193,20 @@ private:
         uint32_t shared, non_shared, rowkey_size, value_size;
         p = decodeEntry(p, limit, &shared, &non_shared, &rowkey_size, &value_size);
         // 第一次Seek的时候，key 为空，那么shared必定为0
-        if (p == nullptr || rowkey_.size() < shared) {
+        if (p == nullptr || cell_key_.size() < shared) {
             status_ = Status::NewCorruption("invalid block");
             return false;
         }
         cell_key_.resize(shared);
         cell_key_.append(p, non_shared);
-        rowkey_ = std::string_view(p, rowkey_size);
         val_ = std::string_view(p + non_shared, value_size);
+        cell_ = std::make_shared<Cell>(cell_key_, rowkey_size, val_);
         while (current_restart_ + 1 < num_restarts_ &&
                getRestartOffset(current_restart_) < current_) {
             ++current_restart_;
         }
 
         return true;
-    }
-
-    const char* decodeEntry(const char* p,
-                            const char* limit,
-                            uint32_t* shared,
-                            uint32_t* non_shared,
-                            uint32_t* value_size) {
-        constexpr std::size_t s = sizeof(uint32_t);
-        if (static_cast<uint32_t>(limit - p) < (s * 3)) {
-            return nullptr;
-        }
-        *shared = pl::decodeInt<uint32_t>(p);
-        *non_shared = pl::decodeInt<uint32_t>(p + s);
-        *value_size = pl::decodeInt<uint32_t>(p + s * 2);
-        p += s * 3;
-        if (static_cast<uint32_t>(limit - p) < (*non_shared + *value_size)) {
-            return nullptr;
-        }
-        return p;
     }
 
     const char* decodeEntry(const char* p,
@@ -250,8 +224,6 @@ private:
         *rowkey_size = pl::decodeInt<uint32_t>(p + s * 2);
         *value_size = pl::decodeInt<uint32_t>(p + s * 3);
         p += s * 4;
-        LOG_INFO << "data: " << static_cast<uint32_t>(limit - p);
-        LOG_INFO << (*non_shared + *value_size + *rowkey_size);
         if (static_cast<uint32_t>(limit - p) < (*non_shared + *value_size)) {
             return nullptr;
         }
@@ -271,7 +243,7 @@ private:
     uint32_t current_{0};                     // 当前游标的偏移
     uint32_t current_restart_{0};             // 当前是第几个restart
     std::string cell_key_;                    // 当前游标处的cellkey
-    std::string_view rowkey_;                 // 当前游标处的rowkey
+    CellRef cell_{nullptr};                   // 当前的cell
     std::string_view val_;                    // 当前游标处的value
     Status status_;
 };
