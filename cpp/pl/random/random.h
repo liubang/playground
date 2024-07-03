@@ -24,6 +24,7 @@ namespace pl {
 std::string random_string(size_t length) {
     const std::string characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
+    std::srand(std::time(nullptr));
     std::random_device rd;
     std::mt19937 generator(rd());
     std::uniform_int_distribution<> distribution(0, characters.size() - 1);

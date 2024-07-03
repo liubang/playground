@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "cpp/pl/arena/arena.h"
 #include "cpp/pl/sst/comparator.h"
 #include "cpp/pl/sst/encoding.h"
 
@@ -35,6 +36,12 @@ enum class CellType : uint8_t {
     CT_NONE = 3,
 };
 // clang-format on
+
+class Cell;
+
+using CellPtr = std::unique_ptr<Cell>;
+using CellRef = std::shared_ptr<Cell>;
+using CellVecRef = std::vector<CellRef>;
 
 struct CellKey {
     std::string_view rowkey;
@@ -144,18 +151,37 @@ public:
         value_ = val;
     }
 
-    [[nodiscard]] std::string_view rowkey() const { return cell_key_.rowkey; }
+    CellPtr clone(Arena* arena) const {
+        CellPtr new_cell = std::make_unique<Cell>();
+        new_cell->cell_key_.cell_type = cellType();
+        new_cell->cell_key_.timestamp = timestamp();
 
-    [[nodiscard]] std::string_view cf() const { return cell_key_.cf; }
+        size_t size = rowkey().size() + cf().size() + col().size() + value().size();
+        char* buf = arena->allocate_aligned(size);
+        std::memcpy(buf, rowkey().data(), rowkey().size());
+        new_cell->cell_key_.rowkey = {buf, rowkey().size()};
+        buf += rowkey().size();
 
-    [[nodiscard]] std::string_view col() const { return cell_key_.col; }
+        std::memcpy(buf, cf().data(), cf().size());
+        new_cell->cell_key_.cf = {buf, cf().size()};
+        buf += cf().size();
 
-    [[nodiscard]] uint64_t timestamp() const { return cell_key_.timestamp; }
+        std::memcpy(buf, col().data(), col().size());
+        new_cell->cell_key_.col = {buf, col().size()};
+        buf += col().size();
 
-    [[nodiscard]] CellType cellType() const { return cell_key_.cell_type; }
+        std::memcpy(buf, value().data(), value().size());
+        new_cell->value_ = {buf, value().size()};
+
+        return new_cell;
+    }
 
     [[nodiscard]] const CellKey& cellKey() const { return cell_key_; }
-
+    [[nodiscard]] std::string_view rowkey() const { return cell_key_.rowkey; }
+    [[nodiscard]] std::string_view cf() const { return cell_key_.cf; }
+    [[nodiscard]] std::string_view col() const { return cell_key_.col; }
+    [[nodiscard]] uint64_t timestamp() const { return cell_key_.timestamp; }
+    [[nodiscard]] CellType cellType() const { return cell_key_.cell_type; }
     [[nodiscard]] std::string_view value() const { return value_; }
 
     void reset() {
@@ -167,7 +193,5 @@ private:
     CellKey cell_key_;
     std::string_view value_;
 };
-
-using CellPtr = std::unique_ptr<Cell>;
 
 } // namespace pl

@@ -91,8 +91,9 @@ void SSTable::readFilter(const Footer& footer) {
     }
     BlockHandle filter_handle = footer.filterHandle();
     BlockContents block;
-    if (!BlockReader::readBlock(reader_, filter_handle, &block).isOk()) {
-        assert(false);
+    auto st = BlockReader::readBlock(reader_, filter_handle, &block);
+    if (!st.isOk()) {
+        LOG_ERROR << "read block error: " << st.msg();
         return;
     }
 
@@ -110,59 +111,23 @@ void SSTable::readFilter(const Footer& footer) {
     }
     assert(filter != nullptr);
 
-    filter_ = std::make_unique<FilterBlockReader>(std::move(filter), block.data);
-}
-
-Status SSTable::get(std::string_view key, void* arg, HandleResult&& handle_result) {
-    if (options_->comparator->compare(key, file_meta_->minKey()) < 0 ||
-        options_->comparator->compare(key, file_meta_->maxKey()) > 0) {
-        return Status::NewNotFound();
-    }
-
-    auto iiter = index_block_->iterator(options_->comparator);
-    iiter->seek(key);
-    if (!iiter->valid()) {
-        return Status::NewNotFound();
-    }
-
-    std::string_view handle_value = iiter->val();
-    BlockHandle handle;
-    if (filter_ != nullptr) {
-        if (!handle.decodeFrom(handle_value).isOk()) {
-            assert(false);
-        }
-        // 通过block的offset来快速查找filter的位置
-        if (!filter_->keyMayMatch(handle.offset(), key)) {
-            // key not found
-            return Status::NewNotFound();
-        }
-    }
-    // key may found
-    auto iter = blockReader(iiter->val());
-    if (nullptr == iter) {
-        return Status::NewNotFound();
-    }
-
-    iter->seek(key);
-    if (iter->valid()) {
-        handle_result(arg, key, iter->val());
-    }
-
-    return iter->status();
+    filter_ = std::make_shared<FilterBlockReader>(std::move(filter), block.data);
 }
 
 IteratorPtr SSTable::blockReader(std::string_view index_value) {
     BlockHandle handle;
     auto s = handle.decodeFrom(index_value);
     if (!s.isOk()) {
-        assert(false);
+        LOG_ERROR << "decode block index error: " << s.msg();
+        return nullptr;
     }
 
     BlockContents contents;
     s = BlockReader::readBlock(reader_, handle, &contents);
 
     if (!s.isOk()) {
-        assert(false);
+        LOG_ERROR << "read block error: " << s.msg();
+        return nullptr;
     }
 
     auto block = std::make_shared<Block>(contents);
@@ -171,10 +136,69 @@ IteratorPtr SSTable::blockReader(std::string_view index_value) {
     return iter;
 }
 
+// 将来会废弃这个接口，在上层统一实现query和scan操作语义
+Status SSTable::get(std::string_view rowkey, Arena* buf, CellVecRef* cells) {
+    auto iiter = index_block_->iterator(options_->comparator);
+    iiter->seek(rowkey);
+    if (!iiter->valid()) {
+        return iiter->status();
+    }
+    Status st = Status::NewOk();
+    auto idx_cell = iiter->cell();
+    assert(idx_cell != nullptr);
+    auto idx_handle = idx_cell->value();
+    if (filter_ != nullptr) {
+        BlockHandle handle;
+        st = handle.decodeFrom(idx_handle);
+        if (!st.isOk()) {
+            return st;
+        }
+        if (!filter_->keyMayMatch(handle.offset(), rowkey)) {
+            st = Status::NewNotFound();
+            // LOG_DEBUG << "key not found, rowkey:" << rowkey;
+            return st;
+        }
+    }
+    auto data_iter = blockReader(idx_handle);
+    if (data_iter == nullptr) {
+        st = Status::NewCorruption("invalid data block");
+        return st;
+    }
+    data_iter->seek(rowkey);
+    if (!data_iter->valid()) {
+        st = Status::NewNotFound();
+        return st;
+    }
+
+    // first cell
+    auto cell = data_iter->cell();
+    if (options_->comparator->compare(cell->rowkey(), rowkey) != 0) {
+        st = Status::NewNotFound();
+        return st;
+    }
+
+    // should copy
+    cells->emplace_back(cell->clone(buf));
+    data_iter->next();
+
+    // get all cells of the row
+    // TODO(liubang): cell merger
+    while (data_iter->valid()) {
+        cell = data_iter->cell();
+        if (options_->comparator->compare(cell->rowkey(), rowkey) != 0) {
+            break;
+        }
+        cells->emplace_back(cell->clone(buf));
+        data_iter->next();
+    }
+
+    return st;
+}
+
 IteratorPtr SSTable::iterator() {
-    return std::make_unique<SSTableIterator>(index_block_->iterator(options_->comparator),
-                                             [this](std::string_view b) {
-                                                 return this->blockReader(b);
+    return std::make_unique<SSTableIterator>(index_block_->iterator(options_->comparator), filter_,
+                                             [that = this](std::string_view b) {
+                                                 return that->blockReader(b);
                                              });
 }
 

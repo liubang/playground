@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "cpp/pl/arena/arena.h"
 #include "cpp/pl/fs/fs.h"
 #include "cpp/pl/sst/block.h"
 #include "cpp/pl/sst/filter_block_reader.h"
@@ -55,7 +56,7 @@ public:
         return file_meta_->patchId();
     }
 
-    Status get(std::string_view key, void* arg, HandleResult&& handle_result);
+    Status get(std::string_view rowkey, Arena* buf, CellVecRef* cells);
 
     IteratorPtr iterator();
 
@@ -72,7 +73,7 @@ private:
     const ReadOptionsRef options_;
     const FsReaderRef reader_;
     Status status_;
-    FilterBlockReaderPtr filter_{nullptr};
+    FilterBlockReaderRef filter_;
     std::unique_ptr<const char[]> filter_data_;
     FileMetaRef file_meta_{nullptr};
     BlockRef index_block_{nullptr};
