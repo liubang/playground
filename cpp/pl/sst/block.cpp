@@ -187,7 +187,7 @@ private:
         if (p >= limit) {
             current_ = restarts_;
             current_restart_ = num_restarts_;
-            status_ = Status::NewCorruption("invalid block");
+            status_ = Status::NewNotFound();
             return false;
         }
         uint32_t shared, non_shared, rowkey_size, value_size;
