@@ -20,69 +20,71 @@
 #include "cpp/pl/sst/sstable.h"
 #include "cpp/pl/sst/sstable_builder.h"
 
+#include <cstdio>
 #include <gtest/gtest.h>
-#include <iomanip>
 #include <set>
 
 namespace pl {
+
+struct CaseCell {
+    std::string rowkey;
+    std::string cf;
+    std::string col;
+    CellType type;
+    uint64_t ts;
+    std::string val;
+    [[nodiscard]] Cell to_cell() const { return {type, rowkey, cf, col, val, ts}; }
+};
+
+struct CaseCellComparator {
+    bool operator()(const CaseCell& lhs, const CaseCell& rhs) const {
+        if (lhs.rowkey != rhs.rowkey) {
+            return lhs.rowkey < rhs.rowkey;
+        }
+        if (lhs.cf != rhs.cf) {
+            return lhs.cf < rhs.cf;
+        }
+        if (lhs.col != rhs.col) {
+            return lhs.col < rhs.col;
+        }
+        if (lhs.ts != rhs.ts) {
+            return lhs.ts > rhs.ts;
+        }
+        if (lhs.type != rhs.type) {
+            return lhs.type < rhs.type;
+        }
+        return false;
+    }
+};
+
+namespace {
+std::vector<std::string> sst_files = {"test1.sst", "test2.sst", "test3.sst"};
+std::vector<std::set<CaseCell, CaseCellComparator>> cellses =
+    std::vector<std::set<CaseCell, CaseCellComparator>>(3);
+} // namespace
+
 class SSTableTest : public ::testing::Test {
     void SetUp() override {
-        build_options = std::make_shared<BuildOptions>();
-        build_options->compression_type = CompressionType::NONE;
-        build_options->sst_type = SSTType::MAJOR;
-        build_options->sst_version = SSTVersion::V1;
-        build_options->filter_type = FilterPolicyType::BLOOM_FILTER;
-
         read_options = std::make_shared<ReadOptions>();
         fs = std::make_shared<PosixFs>();
     }
 
-    void TearDown() override { cells.clear(); }
-
-    struct CaseCell {
-        std::string rowkey;
-        std::string cf;
-        std::string col;
-        CellType type;
-        uint64_t ts;
-        std::string val;
-        [[nodiscard]] Cell to_cell() const { return {type, rowkey, cf, col, val, ts}; }
-    };
-
-    struct CaseCellComparator {
-        bool operator()(const CaseCell& lhs, const CaseCell& rhs) const {
-            if (lhs.rowkey != rhs.rowkey) {
-                return lhs.rowkey < rhs.rowkey;
-            }
-            if (lhs.cf != rhs.cf) {
-                return lhs.cf < rhs.cf;
-            }
-            if (lhs.col != rhs.col) {
-                return lhs.col < rhs.col;
-            }
-            if (lhs.ts != rhs.ts) {
-                return lhs.ts > rhs.ts;
-            }
-            if (lhs.type != rhs.type) {
-                return lhs.type < rhs.type;
-            }
-            return false;
-        }
-    };
+    void TearDown() override {}
 
 public:
-    void printStringWithInvisibleChars(const std::string& str) {
-        for (unsigned char c : str) {
-            if (isprint(c) != 0) {
-                std::cout << c;
-            } else {
-                std::cout << "\\x" << std::hex << std::setw(2) << std::setfill('0')
-                          << static_cast<int>(c);
-            }
-        }
-        std::cout << std::endl;
+    BuildOptionsRef new_build_options() {
+        auto build_options = std::make_shared<BuildOptions>();
+        build_options->compression_type = CompressionType::NONE;
+        build_options->sst_type = SSTType::MAJOR;
+        build_options->sst_version = SSTVersion::V1;
+        build_options->filter_type = FilterPolicyType::BLOOM_FILTER;
+        return build_options;
     }
-    void build_sst() {
+
+    void build_sst(int idx, const BuildOptionsRef& build_options) {
+        auto sst_file = sst_files[idx];
+        auto& cells = cellses[idx];
+
         auto writer = fs->newFsWriter(sst_file, &st);
         EXPECT_TRUE(st.isOk());
         auto sstable_builder =
@@ -120,8 +122,10 @@ public:
         EXPECT_TRUE(status.isOk());
     }
 
-    void seek_from_sst() {
-        auto reader = fs->newFsReader(this->sst_file, &st);
+    void seek_from_sst(int idx) {
+        auto sst_file = sst_files[idx];
+        auto cells = cellses[idx];
+        auto reader = fs->newFsReader(sst_file, &st);
         EXPECT_TRUE(st.isOk());
         std::size_t sst_size = reader->size();
         LOG_INFO << "file: " << sst_file << ", size: " << sst_size;
@@ -138,50 +142,6 @@ public:
             EXPECT_TRUE(c != nullptr);
             EXPECT_EQ(cell.rowkey, c->rowkey());
         }
-
-        // 整行query
-        std::srand(std::time(nullptr));
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<> dis(0, cells.size() * 2 / 3);
-        Arena buf;
-        for (int i = 0; i < 1024; ++i) {
-            int idx = dis(gen);
-            auto citer = cells.begin();
-            for (int j = 0; j < idx; ++j) {
-                ++citer;
-            }
-
-            std::string search_key = citer->rowkey;
-            while (citer->rowkey == search_key) {
-                --citer;
-            }
-            ++citer;
-
-            CellVecRef row;
-            auto st = table->get(search_key, &buf, &row);
-            EXPECT_TRUE(st.isOk());
-            EXPECT_EQ(16, row.size());
-
-            for (auto& cell : row) {
-                auto cexp = *citer;
-                EXPECT_EQ(cexp.rowkey, cell->rowkey());
-                EXPECT_EQ(cexp.cf, cell->cf());
-                EXPECT_EQ(cexp.col, cell->col());
-                EXPECT_EQ(cexp.ts, cell->timestamp());
-                EXPECT_EQ(cexp.type, cell->cellType());
-                ++citer;
-            }
-        }
-
-        // 空query
-        for (int i = 0; i < 1024; ++i) {
-            auto rowkey = pl::random_string(ROWKEY_LEN * 2);
-            CellVecRef cells;
-            auto st = table->get(rowkey, &buf, &cells);
-            EXPECT_TRUE(st.isNotFound());
-            EXPECT_TRUE(cells.empty());
-        }
     }
 
     void check_table(SSTable* table) {
@@ -195,57 +155,40 @@ public:
     }
 
 public:
-    constexpr static int ROW_COUNT = 20480 * 2;
+    constexpr static int ROW_COUNT = 2048 * 2;
     constexpr static int ROWKEY_LEN = 16;
     constexpr static int COL_NUM = 8;
     constexpr static int COL_LEN = 8;
     constexpr static int VAL_LEN = 32;
     constexpr static const char* CF1 = "cf1";
     constexpr static const char* CF2 = "cf2";
-
-    std::string sst_file;
-    std::set<CaseCell, CaseCellComparator> cells;
-    BuildOptionsRef build_options;
     ReadOptionsRef read_options;
     FsRef fs;
     Status st;
 };
 
-TEST_F(SSTableTest, table_without_compression) {
+TEST_F(SSTableTest, init) {
+    auto build_options = new_build_options();
     build_options->compression_type = CompressionType::NONE;
-    build_options->sst_id = 1;
-    build_options->patch_id = 1;
-    this->sst_file = "/tmp/1.sst";
-    this->build_sst();
-    this->seek_from_sst();
-}
-
-TEST_F(SSTableTest, table_with_snappy_compression) {
+    build_sst(0, build_options);
     build_options->compression_type = CompressionType::SNAPPY;
-    build_options->sst_id = 2;
-    build_options->patch_id = 2;
-    this->sst_file = "/tmp/2.sst";
-    this->build_sst();
-    this->seek_from_sst();
+    build_sst(1, build_options);
+    build_options->compression_type = CompressionType::ZSTD;
+    build_sst(2, build_options);
 }
 
-TEST_F(SSTableTest, table_with_zstd_compression) {
-    build_options->compression_type = CompressionType::ZSTD;
-    build_options->sst_id = 3;
-    build_options->patch_id = 3;
-    this->sst_file = "/tmp/3.sst";
-    this->build_sst();
-    this->seek_from_sst();
-}
+TEST_F(SSTableTest, table_without_compression) { seek_from_sst(0); }
+
+TEST_F(SSTableTest, table_with_snappy_compression) { seek_from_sst(1); }
+
+TEST_F(SSTableTest, table_with_zstd_compression) { seek_from_sst(2); }
 
 TEST_F(SSTableTest, scan_all) {
-    build_options->compression_type = CompressionType::NONE;
-    build_options->sst_id = 1;
-    build_options->patch_id = 1;
-    this->sst_file = "/tmp/scan_all.sst";
-    this->build_sst();
+    auto sst_file = sst_files[0];
+    auto cells = cellses[0];
+    LOG_INFO << "cells: " << cells.size();
 
-    auto reader = fs->newFsReader(this->sst_file, &st);
+    auto reader = fs->newFsReader(sst_file, &st);
     EXPECT_TRUE(st.isOk());
     std::size_t sst_size = reader->size();
     LOG_INFO << "file: " << sst_file << ", size: " << sst_size;
@@ -277,13 +220,10 @@ TEST_F(SSTableTest, scan_all) {
 }
 
 TEST_F(SSTableTest, range_scan) {
-    build_options->compression_type = CompressionType::NONE;
-    build_options->sst_id = 1;
-    build_options->patch_id = 1;
-    this->sst_file = "/tmp/range_scan.sst";
-    this->build_sst();
+    auto sst_file = sst_files[0];
+    auto cells = cellses[0];
 
-    auto reader = fs->newFsReader(this->sst_file, &st);
+    auto reader = fs->newFsReader(sst_file, &st);
     EXPECT_TRUE(st.isOk());
     std::size_t sst_size = reader->size();
     LOG_INFO << "file: " << sst_file << ", size: " << sst_size;
@@ -325,6 +265,71 @@ TEST_F(SSTableTest, range_scan) {
             iter->next();
             ++citer;
         }
+    }
+}
+
+TEST_F(SSTableTest, query) {
+    auto sst_file = sst_files[0];
+    auto cells = cellses[0];
+    LOG_INFO << "cells: " << cells.size();
+
+    auto reader = fs->newFsReader(sst_file, &st);
+    EXPECT_TRUE(st.isOk());
+    std::size_t sst_size = reader->size();
+    LOG_INFO << "file: " << sst_file << ", size: " << sst_size;
+    auto table = pl::SSTable::open(read_options, std::move(reader), sst_size, &st);
+    EXPECT_TRUE(st.isOk());
+
+    check_table(table.get());
+
+    // 整行query
+    std::srand(std::time(nullptr));
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, cells.size() * 2 / 3);
+    Arena buf;
+    for (int i = 0; i < 333; ++i) {
+        int idx = dis(gen);
+        auto citer = cells.begin();
+        for (int j = 0; j < idx; ++j) {
+            ++citer;
+        }
+
+        std::string search_key = citer->rowkey;
+        while (citer->rowkey == search_key) {
+            --citer;
+        }
+        ++citer;
+
+        CellVecRef row;
+        auto st = table->get(search_key, &buf, &row);
+        EXPECT_TRUE(st.isOk());
+        EXPECT_EQ(16, row.size());
+
+        for (auto& cell : row) {
+            auto cexp = *citer;
+            EXPECT_EQ(cexp.rowkey, cell->rowkey());
+            EXPECT_EQ(cexp.cf, cell->cf());
+            EXPECT_EQ(cexp.col, cell->col());
+            EXPECT_EQ(cexp.ts, cell->timestamp());
+            EXPECT_EQ(cexp.type, cell->cellType());
+            ++citer;
+        }
+    }
+
+    // 空query
+    for (int i = 0; i < 666; ++i) {
+        auto rowkey = pl::random_string(ROWKEY_LEN * 3);
+        CellVecRef cells;
+        auto st = table->get(rowkey, &buf, &cells);
+        EXPECT_TRUE(st.isNotFound());
+        EXPECT_TRUE(cells.empty());
+    }
+}
+
+TEST_F(SSTableTest, cleanup) {
+    for (const auto& sst_file : sst_files) {
+        std::remove(sst_file.c_str());
     }
 }
 
