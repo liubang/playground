@@ -43,4 +43,74 @@ TEST_F(ComparatorTest, compara) {
     EXPECT_TRUE(comparator->compare(b1, b6) < 0);
 }
 
+TEST_F(ComparatorTest, findShortestSeparator) {
+    auto comparator = std::make_unique<BytewiseComparator>();
+
+    {
+        std::string start = "hello";
+        std::string limit = "hellos";
+        comparator->findShortestSeparator(&start, limit);
+        EXPECT_EQ("hello", start);
+    }
+
+    {
+        std::string start = "hello";
+        std::string limit = "hello";
+        comparator->findShortestSeparator(&start, limit);
+        EXPECT_EQ("hello", start);
+    }
+
+    {
+        std::string start = "hello";
+        std::string limit = "hellp";
+        comparator->findShortestSeparator(&start, limit);
+        EXPECT_EQ("hello", start);
+    }
+
+    {
+        std::string start = "hello";
+        std::string limit = "hellqr";
+        comparator->findShortestSeparator(&start, limit);
+        EXPECT_EQ("hellp", start);
+    }
+
+    {
+        std::string start = "hello";
+        std::string limit = "i";
+        comparator->findShortestSeparator(&start, limit);
+        EXPECT_EQ("hello", start);
+    }
+
+    {
+        std::string start = "hello";
+        std::string limit = "jqsfadq";
+        comparator->findShortestSeparator(&start, limit);
+        EXPECT_EQ("i", start);
+    }
+}
+
+TEST_F(ComparatorTest, findShortSucessor) {
+    auto comparator = std::make_unique<BytewiseComparator>();
+    {
+        std::string key = "hello";
+        comparator->findShortSucessor(&key);
+        EXPECT_EQ("i", key);
+    }
+    {
+        std::string key;
+        key.push_back(0xff);
+        key.push_back(0xff);
+        key.push_back(0xff);
+        key.push_back('a');
+        key.push_back(0xff);
+        comparator->findShortSucessor(&key);
+        EXPECT_EQ(4, key.size());
+        // 需要注意的是，key[0]默认是char类型，带符号，这里需要转成无符号才能直接跟0xff做比较
+        EXPECT_EQ(0xff, static_cast<uint8_t>(key[0]));
+        EXPECT_EQ(0xff, static_cast<uint8_t>(key[1]));
+        EXPECT_EQ(0xff, static_cast<uint8_t>(key[2]));
+        EXPECT_EQ('b', key[3]);
+    }
+}
+
 } // namespace pl
