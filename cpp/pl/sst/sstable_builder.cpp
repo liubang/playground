@@ -158,6 +158,8 @@ void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
  *                                                     +---------------------+
  *                                                     | non shared size(4B) |
  *                                  +----------------->+---------------------+
+ *                                  |                  |   rowkey size(4B)   |
+ *                                  |                  +---------------------+
  *                                  |                  |   value size(4B)    |
  *                                  |                  +---------------------+
  *                                  |                  |   non shared key    |
