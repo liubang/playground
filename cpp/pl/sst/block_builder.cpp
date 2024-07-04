@@ -27,44 +27,6 @@ BlockBuilder::BlockBuilder(const BuildOptionsRef& options)
     restarts_.push_back(0);
 }
 
-// void BlockBuilder::add(std::string_view key, std::string_view value) {
-//     assert(!finished_);
-//     auto last_key_pice = std::string_view(last_key_);
-//     // 必须保证key按照指定的comparator的递增的顺序
-//     assert(buffer_.empty() || comparator_->compare(key, last_key_pice) > 0);
-//     uint32_t shared = 0;
-//     if (counter_ < block_restart_interval_) {
-//         // 计算当前key和前一个key的最大公共前缀
-//         const uint32_t min_length = std::min(last_key_pice.size(), key.size());
-//         while (shared < min_length && (last_key_pice[shared] == key[shared])) {
-//             shared++;
-//         }
-//     } else {
-//         restarts_.push_back(buffer_.size());
-//         counter_ = 0;
-//     }
-//
-//     const uint32_t non_shared = key.size() - shared;
-//
-//     /*
-//      * +----------------+--------------------+---------------+----------------+-------+
-//      * | shared size 4B | non shared size 4B | value size 4B | non shared key | value |
-//      * +----------------+--------------------+---------------+----------------+-------+
-//      */
-//     encodeInt<uint32_t>(&buffer_, shared);
-//     encodeInt<uint32_t>(&buffer_, non_shared);
-//     encodeInt<uint32_t>(&buffer_, value.size());
-//
-//     buffer_.append(key.data() + shared, non_shared);
-//     buffer_.append(value.data(), value.size());
-//
-//     last_key_.resize(shared);
-//     last_key_.append(key.data() + shared, non_shared);
-//
-//     assert(std::string_view(last_key_).compare(key) == 0);
-//     counter_++;
-// }
-
 void BlockBuilder::add(const Cell& cell) {
     assert(!finished_);
     auto last_key_pice = std::string_view(last_key_.data(), last_rowkey_len_);
@@ -104,7 +66,7 @@ void BlockBuilder::add(const Cell& cell) {
 
     // LOG_DEBUG << "shared:" << shared << ", non_shared:" << non_shared
     //           << ", rowkey:" << rowkey.size() << ", value:" << value.size();
-    
+
     buffer_.append(cellkey.data() + shared, non_shared);
     buffer_.append(value.data(), value.size());
 
