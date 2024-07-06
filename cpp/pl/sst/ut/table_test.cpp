@@ -128,7 +128,7 @@ public:
         auto reader = fs->newFsReader(sst_file, &st);
         EXPECT_TRUE(st.isOk());
         std::size_t sst_size = reader->size();
-        LOG_INFO << "file: " << sst_file << ", size: " << sst_size;
+        LOG(INFO) << "file: " << sst_file << ", size: " << sst_size;
         auto table = pl::SSTable::open(read_options, std::move(reader), sst_size, &st);
         EXPECT_TRUE(st.isOk());
 
@@ -145,8 +145,8 @@ public:
     }
 
     void check_table(SSTable* table) {
-        LOG_INFO << "======== sst file meta: =========";
-        LOG_INFO << table->fileMeta()->toString();
+        LOG(INFO) << "======== sst file meta: =========";
+        LOG(INFO) << table->fileMeta()->toString();
         EXPECT_EQ(SSTType::MAJOR, table->fileMeta()->sstType());
         EXPECT_EQ(SSTVersion::V1, table->fileMeta()->sstVersion());
         EXPECT_EQ(FilterPolicyType::BLOOM_FILTER, table->fileMeta()->filterPolicyType());
@@ -186,12 +186,12 @@ TEST_F(SSTableTest, table_with_zstd_compression) { seek_from_sst(2); }
 TEST_F(SSTableTest, scan_all) {
     auto sst_file = sst_files[0];
     auto cells = cellses[0];
-    LOG_INFO << "cells: " << cells.size();
+    LOG(INFO) << "cells: " << cells.size();
 
     auto reader = fs->newFsReader(sst_file, &st);
     EXPECT_TRUE(st.isOk());
     std::size_t sst_size = reader->size();
-    LOG_INFO << "file: " << sst_file << ", size: " << sst_size;
+    LOG(INFO) << "file: " << sst_file << ", size: " << sst_size;
     auto table = pl::SSTable::open(read_options, std::move(reader), sst_size, &st);
     EXPECT_TRUE(st.isOk());
 
@@ -226,7 +226,7 @@ TEST_F(SSTableTest, range_scan) {
     auto reader = fs->newFsReader(sst_file, &st);
     EXPECT_TRUE(st.isOk());
     std::size_t sst_size = reader->size();
-    LOG_INFO << "file: " << sst_file << ", size: " << sst_size;
+    LOG(INFO) << "file: " << sst_file << ", size: " << sst_size;
     auto table = pl::SSTable::open(read_options, std::move(reader), sst_size, &st);
     EXPECT_TRUE(st.isOk());
     check_table(table.get());
@@ -245,7 +245,7 @@ TEST_F(SSTableTest, range_scan) {
             ++citer;
         }
         std::string_view search_key = citer->rowkey;
-        LOG_INFO << "scan rowkey >= " << search_key;
+        LOG(INFO) << "scan rowkey >= " << search_key;
         iter->seek(search_key);
         while (iter->valid()) {
             EXPECT_TRUE(citer != cells.end());
@@ -266,12 +266,12 @@ TEST_F(SSTableTest, range_scan) {
 TEST_F(SSTableTest, query) {
     auto sst_file = sst_files[0];
     auto cells = cellses[0];
-    LOG_INFO << "cells: " << cells.size();
+    LOG(INFO) << "cells: " << cells.size();
 
     auto reader = fs->newFsReader(sst_file, &st);
     EXPECT_TRUE(st.isOk());
     std::size_t sst_size = reader->size();
-    LOG_INFO << "file: " << sst_file << ", size: " << sst_size;
+    LOG(INFO) << "file: " << sst_file << ", size: " << sst_size;
     auto table = pl::SSTable::open(read_options, std::move(reader), sst_size, &st);
     EXPECT_TRUE(st.isOk());
 

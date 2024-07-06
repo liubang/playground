@@ -25,14 +25,16 @@ namespace pl {
 
 class Logger {
 public:
+    // clang-format off
     enum class LogLevel : uint8_t {
         PL_TRACE = 0,
         PL_DEBUG = 1,
-        PL_INFO = 2,
-        PL_WARN = 3,
+        PL_INFO  = 2,
+        PL_WARN  = 3,
         PL_ERROR = 4,
         PL_FATAL = 5,
     };
+    // clang-format on
 
     static const char* logLevel2String(LogLevel log_level) {
         switch (log_level) {
@@ -106,11 +108,14 @@ private:
     } impl_;
 };
 
-#define LOG_TRACE pl::Logger(__FILE__, __LINE__, pl::Logger::LogLevel::PL_TRACE).stream()
-#define LOG_DEBUG pl::Logger(__FILE__, __LINE__, pl::Logger::LogLevel::PL_DEBUG).stream()
-#define LOG_INFO  pl::Logger(__FILE__, __LINE__, pl::Logger::LogLevel::PL_INFO).stream()
-#define LOG_WARN  pl::Logger(__FILE__, __LINE__, pl::Logger::LogLevel::PL_WARN).stream()
-#define LOG_ERROR pl::Logger(__FILE__, __LINE__, pl::Logger::LogLevel::PL_ERROR).stream()
-#define LOG_FATAL pl::Logger(__FILE__, __LINE__, pl::Logger::LogLevel::PL_FATAL).stream()
+#define __PL_LOG(level) pl::Logger(__FILE__, __LINE__, pl::Logger::LogLevel::PL##level).stream()
+
+#define LOG(level) __PL_LOG(_##level)
+#define LOG_TRACE  LOG(TRACE)
+#define LOG_DEBUG  LOG(DEBUG)
+#define LOG_INFO   LOG(INFO)
+#define LOG_WARN   LOG(WARN)
+#define LOG_ERROR  LOG(ERROR)
+#define LOG_FATAL  LOG(FATAL)
 
 } // namespace pl
