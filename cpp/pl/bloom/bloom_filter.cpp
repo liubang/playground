@@ -17,18 +17,12 @@
 #include "cpp/pl/bloom/bloom_filter.h"
 #include "cpp/pl/hash/murmurhash2.h"
 
+#include <algorithm>
+
 namespace pl {
 
 BloomFilter::BloomFilter(std::size_t bit_per_key) : bits_per_key_(bit_per_key) {
-    hash_count_ = static_cast<size_t>(bit_per_key * 0.69);
-
-    if (hash_count_ < 1) {
-        hash_count_ = 1;
-    }
-
-    if (hash_count_ > 30) {
-        hash_count_ = 30;
-    }
+    hash_count_ = std::min(30, std::max(1, static_cast<int>(bit_per_key * 0.69)));
 }
 
 bool BloomFilter::contains(std::string_view key, std::string_view filter) const {

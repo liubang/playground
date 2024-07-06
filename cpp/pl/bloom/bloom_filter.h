@@ -27,6 +27,8 @@ namespace pl {
 class BloomFilter final {
 public:
     explicit BloomFilter(std::size_t bit_per_key);
+
+    // not copyable and moveabel
     BloomFilter(const BloomFilter&) = delete;
     BloomFilter(const BloomFilter&&) = delete;
     BloomFilter& operator=(const BloomFilter&) = delete;
@@ -39,8 +41,8 @@ public:
     void create(const std::vector<std::string_view>& keys, std::string* dst) const;
 
 private:
-    std::size_t bits_per_key_; // 每一个key需要占用多少bit
-    std::size_t hash_count_;   // hash函数的个数
+    std::size_t bits_per_key_{0}; // 每一个key需要占用多少bit
+    std::size_t hash_count_{0};   // hash函数的个数
 };
 
 } // namespace pl
