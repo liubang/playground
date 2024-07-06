@@ -20,15 +20,18 @@
 
 namespace pl {
 
-Arena::Arena() : alloc_ptr_(nullptr), alloc_bytes_remaining_(0), memory_usage_(0) {}
-
-Arena::~Arena() {
-    for (auto& block : blocks_) {
-        delete[] block;
+[[nodiscard]] char* Arena::allocate(std::size_t bytes) {
+    assert(bytes > 0);
+    if (bytes <= alloc_bytes_remaining_) {
+        char* result = alloc_ptr_;
+        alloc_ptr_ += bytes;
+        alloc_bytes_remaining_ -= bytes;
+        return result;
     }
+    return allocate_fallback(bytes);
 }
 
-char* Arena::allocate_aligned(std::size_t bytes) {
+[[nodiscard]] char* Arena::allocate_aligned(std::size_t bytes) {
     constexpr int align = (sizeof(void*) > POINTER_SIZE) ? sizeof(void*) : POINTER_SIZE;
     static_assert((align & (align - 1)) == 0, "Pointer size should be power of 2");
 
@@ -47,7 +50,7 @@ char* Arena::allocate_aligned(std::size_t bytes) {
     return result;
 }
 
-char* Arena::allocate_fallback(std::size_t bytes) {
+[[nodiscard]] char* Arena::allocate_fallback(std::size_t bytes) {
     // 如果申请的内存大于一个Block的1/4，则需要多少内存就申请多少内存
     // 否则，申请的内存太小的话，就按一个block来申请
     if (bytes > BLOCK_SIZE / 4) {
@@ -64,12 +67,16 @@ char* Arena::allocate_fallback(std::size_t bytes) {
     return result;
 }
 
-char* Arena::allocate_new_block(std::size_t bytes) {
-    char* result = new char[bytes];
-    blocks_.push_back(result);
+[[nodiscard]] char* Arena::allocate_new_block(std::size_t bytes) {
+    blocks_.emplace_back(std::make_unique<char[]>(bytes));
     // block_bytes + pointer
     memory_usage_.fetch_add(bytes + sizeof(char*), std::memory_order_relaxed);
-    return result;
+    return blocks_[blocks_.size() - 1].get();
+}
+
+[[nodiscard]] std::size_t Arena::memory_usage() const {
+    // 只需要保持原子性，不需要确保执行序
+    return memory_usage_.load(std::memory_order_relaxed);
 }
 
 } // namespace pl
