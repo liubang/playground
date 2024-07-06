@@ -18,57 +18,39 @@
 
 #include <atomic>
 #include <cassert>
+#include <memory>
 #include <vector>
 
 namespace pl {
 
-class Arena {
+class Arena final {
 public:
-    Arena();
-    ~Arena();
-
+    Arena() = default;
+    ~Arena() = default;
     // not copyable and moveabel
     Arena(const Arena&) = delete;
     Arena& operator=(const Arena&) = delete;
     Arena(Arena&&) = delete;
     Arena& operator=(Arena&&) = delete;
 
-    inline char* allocate(std::size_t bytes) {
-        assert(bytes > 0);
-        if (bytes <= alloc_bytes_remaining_) {
-            char* result = alloc_ptr_;
-            alloc_ptr_ += bytes;
-            alloc_bytes_remaining_ -= bytes;
-            return result;
-        }
-
-        return allocate_fallback(bytes);
-    }
-
-    char* allocate_aligned(std::size_t bytes);
-
-    [[nodiscard]] std::size_t memory_usage() const {
-        // 只需要保持原子性，不需要确保执行序
-        return memory_usage_.load(std::memory_order_relaxed);
-    }
+    [[nodiscard]] char* allocate(std::size_t bytes);
+    [[nodiscard]] char* allocate_aligned(std::size_t bytes);
+    [[nodiscard]] std::size_t memory_usage() const;
 
     static constexpr int BLOCK_SIZE = 4096;
     static constexpr int POINTER_SIZE = 8;
 
 private:
-    char* allocate_fallback(std::size_t bytes);
-    char* allocate_new_block(std::size_t block_bytes);
+    [[nodiscard]] char* allocate_fallback(std::size_t bytes);
+    [[nodiscard]] char* allocate_new_block(std::size_t block_bytes);
 
 private:
     // allocation state
-    char* alloc_ptr_;
-
-    std::size_t alloc_bytes_remaining_;
-
+    char* alloc_ptr_{nullptr};
+    std::size_t alloc_bytes_remaining_{0};
     // array of new[] allocated memory blocks
-    std::vector<char*> blocks_;
-
-    std::atomic<std::size_t> memory_usage_;
+    std::vector<std::unique_ptr<char[]>> blocks_;
+    std::atomic<std::size_t> memory_usage_{0};
 };
 
 } // namespace pl
