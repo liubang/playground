@@ -67,6 +67,8 @@ int main(int argc, char* argv[]) {
                   << ", str: " << str << ", bool: " << bf << ", bool: " << bt << ", ptr: " << &bt;
     });
 
+    LOG(DEBUG) << "hello world";
+
     t1.join();
     t2.join();
     t3.join();
