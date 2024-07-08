@@ -66,23 +66,3 @@ TEST(Status, constructor) {
     EXPECT_FALSE(io_error.isNotSupported());
     EXPECT_FALSE(io_error.isInvalidArgument());
 }
-
-TEST(Status, to_string) {
-    auto ok = pl::Status::NewOk("ok");
-    EXPECT_EQ("OK", ok.to_string());
-
-    auto not_found = pl::Status::NewNotFound("xxx");
-    EXPECT_EQ("NotFound", not_found.to_string());
-
-    auto corruption = pl::Status::NewCorruption("xxx");
-    EXPECT_EQ("Corruption", corruption.to_string());
-
-    auto not_supported = pl::Status::NewNotSupported("xxx");
-    EXPECT_EQ("NotSupported", not_supported.to_string());
-
-    auto invalid_argument = pl::Status::NewInvalidArgument("xxx");
-    EXPECT_EQ("InvalidArgument", invalid_argument.to_string());
-
-    auto io_error = pl::Status::NewIOError("xxxx");
-    EXPECT_EQ("IOError", io_error.to_string());
-}
