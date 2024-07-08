@@ -152,7 +152,6 @@ private:
                 left = mid;
                 break;
             }
-
             if (cmp < 0) {
                 left = mid;
             } else {
