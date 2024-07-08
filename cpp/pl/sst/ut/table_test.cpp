@@ -58,7 +58,7 @@ struct CaseCellComparator {
 };
 
 namespace {
-std::vector<std::string> sst_files = {"test1.sst", "test2.sst", "test3.sst"};
+std::vector<std::string> sst_files = {"/tmp/test1.sst", "/tmp/test2.sst", "/tmp/test3.sst"};
 std::vector<std::set<CaseCell, CaseCellComparator>> cellses =
     std::vector<std::set<CaseCell, CaseCellComparator>>(3);
 } // namespace

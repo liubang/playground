@@ -67,6 +67,7 @@ void SSTableBuilder::add(const Cell& cell) {
 
     if (pending_index_entry_) {
         assert(data_block_->empty());
+        options_->comparator->findShortestSeparator(&last_key_, cell.rowkey());
         std::string handle_encoding;
         pending_handler_.encodeTo(&handle_encoding);
         // 记录上一个block的最后一个key和上一个block的结束位置
@@ -256,6 +257,7 @@ Status SSTableBuilder::finish() {
     // 写入index block
     // 处理边界情况
     if (pending_index_entry_) {
+        options_->comparator->findShortSucessor(&last_key_);
         std::string handle_encoding;
         pending_handler_.encodeTo(&handle_encoding);
         // 记录上一个block的最后一个key和上一个block的结束位置
