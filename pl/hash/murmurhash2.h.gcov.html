@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-07-08 02:35:24</td>
+            <td class="headerValue">2024-07-08 16:47:38</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">5</td>
@@ -97,51 +97,51 @@
 <a name="35"><span class="lineNum">      35 </span>            : </a>
 <a name="36"><span class="lineNum">      36 </span>            :     ~CMurmurHash() = default;</a>
 <a name="37"><span class="lineNum">      37 </span>            : </a>
-<a name="38"><span class="lineNum">      38 </span><span class="lineCov">      93972 :     void begin(const T seed = 0) {</span></a>
-<a name="39"><span class="lineNum">      39 </span><span class="lineCov">      93972 :         size_ = 0;</span></a>
-<a name="40"><span class="lineNum">      40 </span><span class="lineCov">      93972 :         tail_ = 0;</span></a>
-<a name="41"><span class="lineNum">      41 </span><span class="lineCov">      93972 :         count_ = 0;</span></a>
-<a name="42"><span class="lineNum">      42 </span><span class="lineCov">      93972 :         hash_ = seed;</span></a>
-<a name="43"><span class="lineNum">      43 </span><span class="lineCov">      93972 :     }</span></a>
+<a name="38"><span class="lineNum">      38 </span><span class="lineCov">      93967 :     void begin(const T seed = 0) {</span></a>
+<a name="39"><span class="lineNum">      39 </span><span class="lineCov">      93967 :         size_ = 0;</span></a>
+<a name="40"><span class="lineNum">      40 </span><span class="lineCov">      93967 :         tail_ = 0;</span></a>
+<a name="41"><span class="lineNum">      41 </span><span class="lineCov">      93967 :         count_ = 0;</span></a>
+<a name="42"><span class="lineNum">      42 </span><span class="lineCov">      93967 :         hash_ = seed;</span></a>
+<a name="43"><span class="lineNum">      43 </span><span class="lineCov">      93967 :     }</span></a>
 <a name="44"><span class="lineNum">      44 </span>            : </a>
-<a name="45"><span class="lineNum">      45 </span><span class="lineCov">      93972 :     void __attribute__((no_sanitize(&quot;alignment&quot;))) add(const void* const data,</span></a>
+<a name="45"><span class="lineNum">      45 </span><span class="lineCov">      93967 :     void __attribute__((no_sanitize(&quot;alignment&quot;))) add(const void* const data,</span></a>
 <a name="46"><span class="lineNum">      46 </span>            :                                                        const T length,</a>
 <a name="47"><span class="lineNum">      47 </span>            :                                                        const bool lower_case) {</a>
-<a name="48"><span class="lineNum">      48 </span><span class="lineCov">      93972 :         const auto* data1 = static_cast&lt;const uint8_t*&gt;(data);</span></a>
-<a name="49"><span class="lineNum">      49 </span><span class="lineCov">      93972 :         T data_size = length;</span></a>
+<a name="48"><span class="lineNum">      48 </span><span class="lineCov">      93967 :         const auto* data1 = static_cast&lt;const uint8_t*&gt;(data);</span></a>
+<a name="49"><span class="lineNum">      49 </span><span class="lineCov">      93967 :         T data_size = length;</span></a>
 <a name="50"><span class="lineNum">      50 </span>            : </a>
-<a name="51"><span class="lineNum">      51 </span><span class="lineCov">      93972 :         size_ += data_size;</span></a>
-<a name="52"><span class="lineNum">      52 </span><span class="lineCov">      93972 :         process_tail(data1, data_size, lower_case);</span></a>
+<a name="51"><span class="lineNum">      51 </span><span class="lineCov">      93967 :         size_ += data_size;</span></a>
+<a name="52"><span class="lineNum">      52 </span><span class="lineCov">      93967 :         process_tail(data1, data_size, lower_case);</span></a>
 <a name="53"><span class="lineNum">      53 </span>            : </a>
-<a name="54"><span class="lineNum">      54 </span><span class="lineCov">      93972 :         auto data2 = reinterpret_cast&lt;const T*&gt;(data1);</span></a>
-<a name="55"><span class="lineNum">      55 </span><span class="lineCov">      93972 :         auto stop = data2 + (data_size &gt;&gt; _shift);</span></a>
+<a name="54"><span class="lineNum">      54 </span><span class="lineCov">      93967 :         auto data2 = reinterpret_cast&lt;const T*&gt;(data1);</span></a>
+<a name="55"><span class="lineNum">      55 </span><span class="lineCov">      93967 :         auto stop = data2 + (data_size &gt;&gt; _shift);</span></a>
 <a name="56"><span class="lineNum">      56 </span>            : </a>
-<a name="57"><span class="lineNum">      57 </span><span class="lineCov">      93972 :         if (lower_case) {</span></a>
+<a name="57"><span class="lineNum">      57 </span><span class="lineCov">      93967 :         if (lower_case) {</span></a>
 <a name="58"><span class="lineNum">      58 </span><span class="lineNoCov">          0 :             while (data2 != stop) {</span></a>
 <a name="59"><span class="lineNum">      59 </span><span class="lineNoCov">          0 :                 T k = *data2++;</span></a>
 <a name="60"><span class="lineNum">      60 </span><span class="lineNoCov">          0 :                 k = std::tolower(k);</span></a>
 <a name="61"><span class="lineNum">      61 </span><span class="lineNoCov">          0 :                 mmix(hash_, k);</span></a>
 <a name="62"><span class="lineNum">      62 </span>            :             }</a>
 <a name="63"><span class="lineNum">      63 </span>            :         } else {</a>
-<a name="64"><span class="lineNum">      64 </span><span class="lineCov">     555682 :             while (data2 != stop) {</span></a>
-<a name="65"><span class="lineNum">      65 </span><span class="lineCov">     461710 :                 T k = *data2++;</span></a>
-<a name="66"><span class="lineNum">      66 </span><span class="lineCov">     461710 :                 mmix(hash_, k);</span></a>
+<a name="64"><span class="lineNum">      64 </span><span class="lineCov">     555463 :             while (data2 != stop) {</span></a>
+<a name="65"><span class="lineNum">      65 </span><span class="lineCov">     461496 :                 T k = *data2++;</span></a>
+<a name="66"><span class="lineNum">      66 </span><span class="lineCov">     461496 :                 mmix(hash_, k);</span></a>
 <a name="67"><span class="lineNum">      67 </span>            :             }</a>
 <a name="68"><span class="lineNum">      68 </span>            :         }</a>
 <a name="69"><span class="lineNum">      69 </span>            : </a>
-<a name="70"><span class="lineNum">      70 </span><span class="lineCov">      93972 :         data1 = reinterpret_cast&lt;const uint8_t*&gt;(data2);</span></a>
-<a name="71"><span class="lineNum">      71 </span><span class="lineCov">      93972 :         data_size &amp;= _mask;</span></a>
+<a name="70"><span class="lineNum">      70 </span><span class="lineCov">      93967 :         data1 = reinterpret_cast&lt;const uint8_t*&gt;(data2);</span></a>
+<a name="71"><span class="lineNum">      71 </span><span class="lineCov">      93967 :         data_size &amp;= _mask;</span></a>
 <a name="72"><span class="lineNum">      72 </span>            : </a>
-<a name="73"><span class="lineNum">      73 </span><span class="lineCov">      93972 :         process_tail(data1, data_size, lower_case);</span></a>
-<a name="74"><span class="lineNum">      74 </span><span class="lineCov">      93972 :     }</span></a>
+<a name="73"><span class="lineNum">      73 </span><span class="lineCov">      93967 :         process_tail(data1, data_size, lower_case);</span></a>
+<a name="74"><span class="lineNum">      74 </span><span class="lineCov">      93967 :     }</span></a>
 <a name="75"><span class="lineNum">      75 </span>            : </a>
-<a name="76"><span class="lineNum">      76 </span><span class="lineCov">      93972 :     T end() {</span></a>
-<a name="77"><span class="lineNum">      77 </span><span class="lineCov">      93972 :         mmix(hash_, tail_);</span></a>
-<a name="78"><span class="lineNum">      78 </span><span class="lineCov">      93972 :         mmix(hash_, size_);</span></a>
-<a name="79"><span class="lineNum">      79 </span><span class="lineCov">      93972 :         hash_ ^= hash_ &gt;&gt; x;</span></a>
-<a name="80"><span class="lineNum">      80 </span><span class="lineCov">      93972 :         hash_ *= m;</span></a>
-<a name="81"><span class="lineNum">      81 </span><span class="lineCov">      93972 :         hash_ ^= hash_ &gt;&gt; y;</span></a>
-<a name="82"><span class="lineNum">      82 </span><span class="lineCov">      93972 :         return hash_;</span></a>
+<a name="76"><span class="lineNum">      76 </span><span class="lineCov">      93967 :     T end() {</span></a>
+<a name="77"><span class="lineNum">      77 </span><span class="lineCov">      93967 :         mmix(hash_, tail_);</span></a>
+<a name="78"><span class="lineNum">      78 </span><span class="lineCov">      93967 :         mmix(hash_, size_);</span></a>
+<a name="79"><span class="lineNum">      79 </span><span class="lineCov">      93967 :         hash_ ^= hash_ &gt;&gt; x;</span></a>
+<a name="80"><span class="lineNum">      80 </span><span class="lineCov">      93967 :         hash_ *= m;</span></a>
+<a name="81"><span class="lineNum">      81 </span><span class="lineCov">      93967 :         hash_ ^= hash_ &gt;&gt; y;</span></a>
+<a name="82"><span class="lineNum">      82 </span><span class="lineCov">      93967 :         return hash_;</span></a>
 <a name="83"><span class="lineNum">      83 </span>            :     }</a>
 <a name="84"><span class="lineNum">      84 </span>            : </a>
 <a name="85"><span class="lineNum">      85 </span>            : private:</a>
@@ -153,30 +153,30 @@
 <a name="91"><span class="lineNum">      91 </span>            :         h ^= k;</a>
 <a name="92"><span class="lineNum">      92 </span>            :     }</a>
 <a name="93"><span class="lineNum">      93 </span>            : </a>
-<a name="94"><span class="lineNum">      94 </span><span class="lineCov">     649654 :     void mmix(uint64_t&amp; h, uint64_t&amp; k) const {</span></a>
-<a name="95"><span class="lineNum">      95 </span><span class="lineCov">     649654 :         k *= m;</span></a>
-<a name="96"><span class="lineNum">      96 </span><span class="lineCov">     649654 :         k ^= k &gt;&gt; r;</span></a>
-<a name="97"><span class="lineNum">      97 </span><span class="lineCov">     649654 :         k *= m;</span></a>
-<a name="98"><span class="lineNum">      98 </span><span class="lineCov">     649654 :         h ^= k;</span></a>
-<a name="99"><span class="lineNum">      99 </span><span class="lineCov">     649654 :         h *= m;</span></a>
-<a name="100"><span class="lineNum">     100 </span><span class="lineCov">     649654 :     }</span></a>
+<a name="94"><span class="lineNum">      94 </span><span class="lineCov">     649430 :     void mmix(uint64_t&amp; h, uint64_t&amp; k) const {</span></a>
+<a name="95"><span class="lineNum">      95 </span><span class="lineCov">     649430 :         k *= m;</span></a>
+<a name="96"><span class="lineNum">      96 </span><span class="lineCov">     649430 :         k ^= k &gt;&gt; r;</span></a>
+<a name="97"><span class="lineNum">      97 </span><span class="lineCov">     649430 :         k *= m;</span></a>
+<a name="98"><span class="lineNum">      98 </span><span class="lineCov">     649430 :         h ^= k;</span></a>
+<a name="99"><span class="lineNum">      99 </span><span class="lineCov">     649430 :         h *= m;</span></a>
+<a name="100"><span class="lineNum">     100 </span><span class="lineCov">     649430 :     }</span></a>
 <a name="101"><span class="lineNum">     101 </span>            : </a>
-<a name="102"><span class="lineNum">     102 </span><span class="lineCov">     187944 :     void process_tail(const uint8_t*&amp; data, T&amp; length, const bool lower_case) {</span></a>
-<a name="103"><span class="lineNum">     103 </span><span class="lineCov">     467698 :         while (length &gt; 0 &amp;&amp; (length &lt; sizeof(T) || count_ &gt; 0)) {</span></a>
-<a name="104"><span class="lineNum">     104 </span><span class="lineCov">     279754 :             uint8_t value = *data++;</span></a>
-<a name="105"><span class="lineNum">     105 </span><span class="lineCov">     279754 :             if (lower_case &amp;&amp; (value &gt;= 'A' &amp;&amp; value &lt;= 'Z')) {</span></a>
+<a name="102"><span class="lineNum">     102 </span><span class="lineCov">     187934 :     void process_tail(const uint8_t*&amp; data, T&amp; length, const bool lower_case) {</span></a>
+<a name="103"><span class="lineNum">     103 </span><span class="lineCov">     468528 :         while (length &gt; 0 &amp;&amp; (length &lt; sizeof(T) || count_ &gt; 0)) {</span></a>
+<a name="104"><span class="lineNum">     104 </span><span class="lineCov">     280594 :             uint8_t value = *data++;</span></a>
+<a name="105"><span class="lineNum">     105 </span><span class="lineCov">     280594 :             if (lower_case &amp;&amp; (value &gt;= 'A' &amp;&amp; value &lt;= 'Z')) {</span></a>
 <a name="106"><span class="lineNum">     106 </span><span class="lineNoCov">          0 :                 value += 'a' - 'A';</span></a>
 <a name="107"><span class="lineNum">     107 </span>            :             }</a>
-<a name="108"><span class="lineNum">     108 </span><span class="lineCov">     279754 :             tail_ |= static_cast&lt;T&gt;(value) &lt;&lt; (count_ &lt;&lt; 3);</span></a>
-<a name="109"><span class="lineNum">     109 </span><span class="lineCov">     279754 :             count_++;</span></a>
-<a name="110"><span class="lineNum">     110 </span><span class="lineCov">     279754 :             length--;</span></a>
-<a name="111"><span class="lineNum">     111 </span><span class="lineCov">     279754 :             if (count_ == sizeof(T)) {</span></a>
+<a name="108"><span class="lineNum">     108 </span><span class="lineCov">     280594 :             tail_ |= static_cast&lt;T&gt;(value) &lt;&lt; (count_ &lt;&lt; 3);</span></a>
+<a name="109"><span class="lineNum">     109 </span><span class="lineCov">     280594 :             count_++;</span></a>
+<a name="110"><span class="lineNum">     110 </span><span class="lineCov">     280594 :             length--;</span></a>
+<a name="111"><span class="lineNum">     111 </span><span class="lineCov">     280594 :             if (count_ == sizeof(T)) {</span></a>
 <a name="112"><span class="lineNum">     112 </span><span class="lineNoCov">          0 :                 mmix(hash_, tail_);</span></a>
 <a name="113"><span class="lineNum">     113 </span><span class="lineNoCov">          0 :                 tail_ = 0;</span></a>
 <a name="114"><span class="lineNum">     114 </span><span class="lineNoCov">          0 :                 count_ = 0;</span></a>
 <a name="115"><span class="lineNum">     115 </span>            :             }</a>
 <a name="116"><span class="lineNum">     116 </span>            :         }</a>
-<a name="117"><span class="lineNum">     117 </span><span class="lineCov">     187944 :     }</span></a>
+<a name="117"><span class="lineNum">     117 </span><span class="lineCov">     187934 :     }</span></a>
 <a name="118"><span class="lineNum">     118 </span>            : </a>
 <a name="119"><span class="lineNum">     119 </span>            : private:</a>
 <a name="120"><span class="lineNum">     120 </span>            :     static constexpr T _mask = sizeof(T) - 1;</a>
