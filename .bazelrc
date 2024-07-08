@@ -30,12 +30,12 @@ build:macos --linkopt=-fuse-ld=lld
 
 # for java
 build --nojava_header_compilation
-test --nojava_header_compilation
 
 build --java_runtime_version=21
 build --java_language_version=21
 build --tool_java_language_version=21
 build --tool_java_runtime_version=21
 
-# bazel build
-test --test_output=all --action_env="GTEST_COLOR=1"
+test --test_output=all --action_env="GTEST_COLOR=1" --action_env="GTEST_BREAK_ON_FAILURE=1"
+test --nocache_test_results
+test --nojava_header_compilation 
