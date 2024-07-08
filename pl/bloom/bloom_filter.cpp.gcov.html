@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-07-07 15:10:04</td>
+            <td class="headerValue">2024-07-08 02:35:24</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">3</td>
@@ -95,12 +95,12 @@
 <a name="33"><span class="lineNum">      33 </span>            : </a>
 <a name="34"><span class="lineNum">      34 </span><span class="lineCov">       3199 :     uint64_t seed = 0;</span></a>
 <a name="35"><span class="lineNum">      35 </span><span class="lineCov">       3199 :     pl::CMurmurHash64 hasher;</span></a>
-<a name="36"><span class="lineNum">      36 </span><span class="lineCov">      13489 :     for (std::size_t i = 0; i &lt; hash_count; ++i) {</span></a>
-<a name="37"><span class="lineNum">      37 </span><span class="lineCov">      12056 :         hasher.begin(seed);</span></a>
-<a name="38"><span class="lineNum">      38 </span><span class="lineCov">      12056 :         hasher.add(key.data(), key.size(), false);</span></a>
-<a name="39"><span class="lineNum">      39 </span><span class="lineCov">      12056 :         seed = hasher.end();</span></a>
-<a name="40"><span class="lineNum">      40 </span><span class="lineCov">      12056 :         uint64_t bit_index = seed % bits;</span></a>
-<a name="41"><span class="lineNum">      41 </span><span class="lineCov">      12056 :         if ((array[bit_index &gt;&gt; 3] &amp; static_cast&lt;uint8_t&gt;(1 &lt;&lt; (bit_index &amp; 0x7))) == 0) {</span></a>
+<a name="36"><span class="lineNum">      36 </span><span class="lineCov">      13473 :     for (std::size_t i = 0; i &lt; hash_count; ++i) {</span></a>
+<a name="37"><span class="lineNum">      37 </span><span class="lineCov">      12040 :         hasher.begin(seed);</span></a>
+<a name="38"><span class="lineNum">      38 </span><span class="lineCov">      12040 :         hasher.add(key.data(), key.size(), false);</span></a>
+<a name="39"><span class="lineNum">      39 </span><span class="lineCov">      12040 :         seed = hasher.end();</span></a>
+<a name="40"><span class="lineNum">      40 </span><span class="lineCov">      12040 :         uint64_t bit_index = seed % bits;</span></a>
+<a name="41"><span class="lineNum">      41 </span><span class="lineCov">      12040 :         if ((array[bit_index &gt;&gt; 3] &amp; static_cast&lt;uint8_t&gt;(1 &lt;&lt; (bit_index &amp; 0x7))) == 0) {</span></a>
 <a name="42"><span class="lineNum">      42 </span><span class="lineCov">       1766 :             return false;</span></a>
 <a name="43"><span class="lineNum">      43 </span>            :         }</a>
 <a name="44"><span class="lineNum">      44 </span>            :     }</a>
