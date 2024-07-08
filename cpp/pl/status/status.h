@@ -16,76 +16,72 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 
 namespace pl {
 
-#define NEW_STATUS(name) \
-    static Status New##name(const std::string& msg = "") { return {k##name, msg}; }
+// clang-format off
+enum class Code : uint32_t {
+    ST_Ok              = 0,
+    ST_NotFound        = 1,
+    ST_Corruption      = 2,
+    ST_NotSupported    = 3,
+    ST_InvalidArgument = 4,
+    ST_IOError         = 5
+};
+// clang-format on
 
-#define IS_STATUS(name) \
-    [[nodiscard]] bool is##name() const { return code_ == k##name; }
+#define __PL_CONCAT(a, b) a##b
+#define __PL_ENUM(code)   __PL_CONCAT(Code::ST_, code)
+#define __PL_NEW_STATUS_FUNC(code) \
+    static Status New##code(const std::string& msg = "") { return {__PL_ENUM(code), msg}; }
+#define __PL_IS_STATUS_FUNC(code) \
+    [[nodiscard]] bool is##code() const { return code_ == __PL_ENUM(code); }
 
 class Status {
 public:
     Status() = default;
+    // default copy and move
     Status(const Status&) = default;
-
+    Status(Status&&) = default;
     Status& operator=(const Status&) = default;
+    Status& operator=(Status&&) = default;
 
-    NEW_STATUS(Ok)
-    NEW_STATUS(NotFound)
-    NEW_STATUS(Corruption)
-    NEW_STATUS(NotSupported)
-    NEW_STATUS(InvalidArgument)
-    NEW_STATUS(IOError)
+    [[nodiscard]] bool ok() const { return code_ == Code::ST_Ok; }
+    [[nodiscard]] Code code() const { return code_; }
 
-    IS_STATUS(Ok)
-    IS_STATUS(NotFound)
-    IS_STATUS(Corruption)
-    IS_STATUS(NotSupported)
-    IS_STATUS(InvalidArgument)
-    IS_STATUS(IOError)
+    __PL_NEW_STATUS_FUNC(Ok)
+    __PL_NEW_STATUS_FUNC(NotFound)
+    __PL_NEW_STATUS_FUNC(Corruption)
+    __PL_NEW_STATUS_FUNC(NotSupported)
+    __PL_NEW_STATUS_FUNC(InvalidArgument)
+    __PL_NEW_STATUS_FUNC(IOError)
 
-    [[nodiscard]] const std::string& msg() const { return msg_; }
+    __PL_IS_STATUS_FUNC(Ok)
+    __PL_IS_STATUS_FUNC(NotFound)
+    __PL_IS_STATUS_FUNC(Corruption)
+    __PL_IS_STATUS_FUNC(NotSupported)
+    __PL_IS_STATUS_FUNC(InvalidArgument)
+    __PL_IS_STATUS_FUNC(IOError)
 
-    [[nodiscard]] std::string to_string() const {
-        switch (code_) {
-        case kOk:
-            return "OK";
-        case kNotFound:
-            return "NotFound";
-        case kCorruption:
-            return "Corruption";
-        case kNotSupported:
-            return "NotSupported";
-        case kInvalidArgument:
-            return "InvalidArgument";
-        case kIOError:
-            return "IOError";
-        default:
-            return "Unknown";
+    [[nodiscard]] const std::string_view msg() const {
+        if (msg_ != nullptr) {
+            return *msg_;
+        }
+        return std::string_view();
+    }
+
+private:
+    Status(Code code, std::string_view msg) : code_(code) {
+        if (!msg.empty()) {
+            msg_ = std::make_shared<std::string>(msg);
         }
     }
 
 private:
-    enum Code {
-        kOk = 0,
-        kNotFound = 1,
-        kCorruption = 2,
-        kNotSupported = 3,
-        kInvalidArgument = 4,
-        kIOError = 5
-    };
-
-    Status(Code code, std::string_view msg) : code_(code), msg_(msg) {}
-
-private:
-    Code code_{kOk};
-    std::string msg_;
+    Code code_{Code::ST_Ok};
+    std::shared_ptr<std::string> msg_;
 };
-
-#undef IS_STATUS
-#undef NEW_STATUS
 
 } // namespace pl
