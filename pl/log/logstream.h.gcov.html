@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-07-09 16:55:46</td>
+            <td class="headerValue">2024-07-09 17:22:51</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">22</td>
@@ -98,23 +98,23 @@
 <a name="36"><span class="lineNum">      36 </span><span class="lineCov">       1054 :     FixedBuffer() : cursor_(data_) {}</span></a>
 <a name="37"><span class="lineNum">      37 </span>            :     ~FixedBuffer() = default;</a>
 <a name="38"><span class="lineNum">      38 </span>            : </a>
-<a name="39"><span class="lineNum">      39 </span><span class="lineCov">      12809 :     void append(std::string_view buf) {</span></a>
-<a name="40"><span class="lineNum">      40 </span><span class="lineCov">      12809 :         if (avail() &gt; buf.size()) {</span></a>
-<a name="41"><span class="lineNum">      41 </span><span class="lineCov">      12809 :             std::memcpy(cursor_, buf.data(), buf.size());</span></a>
-<a name="42"><span class="lineNum">      42 </span><span class="lineCov">      12809 :             cursor_ += buf.size();</span></a>
+<a name="39"><span class="lineNum">      39 </span><span class="lineCov">      12808 :     void append(std::string_view buf) {</span></a>
+<a name="40"><span class="lineNum">      40 </span><span class="lineCov">      12808 :         if (avail() &gt; buf.size()) {</span></a>
+<a name="41"><span class="lineNum">      41 </span><span class="lineCov">      12808 :             std::memcpy(cursor_, buf.data(), buf.size());</span></a>
+<a name="42"><span class="lineNum">      42 </span><span class="lineCov">      12807 :             cursor_ += buf.size();</span></a>
 <a name="43"><span class="lineNum">      43 </span>            :         }</a>
-<a name="44"><span class="lineNum">      44 </span><span class="lineCov">      12809 :     }</span></a>
+<a name="44"><span class="lineNum">      44 </span><span class="lineCov">      12808 :     }</span></a>
 <a name="45"><span class="lineNum">      45 </span>            : </a>
 <a name="46"><span class="lineNum">      46 </span><span class="lineCov">       1054 :     [[nodiscard]] const char* data() const { return data_; }</span></a>
 <a name="47"><span class="lineNum">      47 </span>            :     [[nodiscard]] const char* current() const { return cursor_; }</a>
 <a name="48"><span class="lineNum">      48 </span><span class="lineCov">       1054 :     [[nodiscard]] std::size_t size() const { return cursor_ - data_; }</span></a>
-<a name="49"><span class="lineNum">      49 </span><span class="lineCov">      25618 :     [[nodiscard]] std::size_t avail() const { return end() - cursor_; }</span></a>
+<a name="49"><span class="lineNum">      49 </span><span class="lineCov">      25615 :     [[nodiscard]] std::size_t avail() const { return end() - cursor_; }</span></a>
 <a name="50"><span class="lineNum">      50 </span><span class="lineCov">      12809 :     [[nodiscard]] bool full() const { return avail() == 0; }</span></a>
 <a name="51"><span class="lineNum">      51 </span>            : </a>
 <a name="52"><span class="lineNum">      52 </span>            :     void reset() { cursor_ = data_; }</a>
 <a name="53"><span class="lineNum">      53 </span>            : </a>
 <a name="54"><span class="lineNum">      54 </span>            : private:</a>
-<a name="55"><span class="lineNum">      55 </span><span class="lineCov">      25618 :     [[nodiscard]] const char* end() const { return data_ + sizeof(data_); }</span></a>
+<a name="55"><span class="lineNum">      55 </span><span class="lineCov">      25615 :     [[nodiscard]] const char* end() const { return data_ + sizeof(data_); }</span></a>
 <a name="56"><span class="lineNum">      56 </span>            : </a>
 <a name="57"><span class="lineNum">      57 </span>            : private:</a>
 <a name="58"><span class="lineNum">      58 </span>            :     char data_[SIZE];</a>
@@ -142,7 +142,7 @@
 <a name="80"><span class="lineNum">      80 </span>            : </a>
 <a name="81"><span class="lineNum">      81 </span><span class="lineCov">       1066 :     LogStream&amp; operator&lt;&lt;(const std::string&amp; v) {</span></a>
 <a name="82"><span class="lineNum">      82 </span><span class="lineCov">       1066 :         write(std::string_view(v));</span></a>
-<a name="83"><span class="lineNum">      83 </span><span class="lineCov">       1066 :         return *this;</span></a>
+<a name="83"><span class="lineNum">      83 </span><span class="lineCov">       1065 :         return *this;</span></a>
 <a name="84"><span class="lineNum">      84 </span>            :     }</a>
 <a name="85"><span class="lineNum">      85 </span>            : </a>
 <a name="86"><span class="lineNum">      86 </span><span class="lineCov">       1057 :     LogStream&amp; operator&lt;&lt;(std::string_view v) {</span></a>
