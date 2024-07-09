@@ -20,34 +20,43 @@
 #include <gtest/gtest.h>
 #include <memory>
 
-TEST(fs, FsWriterAndFsReader) {
-    auto fs = std::make_unique<pl::PosixFs>();
+TEST(file_system, posix_filesystem) {
+    pl::FileSystemPtr fs = std::make_unique<pl::PosixFileSystem>();
+    pl::FileDescriptorRef fd;
+    // open for write
+    auto st = fs->open("/tmp/test.file", O_TRUNC | O_WRONLY | O_APPEND | O_CREAT, &fd);
+    EXPECT_TRUE(st.ok());
+    EXPECT_TRUE(fd != nullptr);
 
-    const std::string filename = "./test.log";
-    pl::Status st;
-    auto fw = fs->newFsWriter(filename, &st);
-    EXPECT_NE(fw.get(), nullptr);
-    EXPECT_TRUE(st.isOk());
+    st = fs->append(fd, 0, "this is test content");
+    EXPECT_TRUE(st.ok());
 
-    auto fr = fs->newFsReader(filename, &st);
-    EXPECT_NE(fr.get(), nullptr);
-    EXPECT_TRUE(st.isOk());
+    st = fs->fsync(fd, 0);
+    EXPECT_TRUE(st.ok());
 
-    std::string_view data("hello world");
-    st = fw->append(data);
-    EXPECT_TRUE(st.isOk());
-    st = fw->flush();
-    EXPECT_TRUE(st.isOk());
-    st = fw->sync();
-    EXPECT_TRUE(st.isOk());
-    st = fw->close();
-    EXPECT_TRUE(st.isOk());
+    uint64_t size;
+    st = fs->size(fd, &size);
+    EXPECT_TRUE(st.ok());
+    EXPECT_EQ(20, size);
 
+    bool exist = false;
+    st = fs->exist("/tmp/test.file", &exist);
+    EXPECT_TRUE(st.ok());
+    EXPECT_TRUE(exist);
+
+    st = fs->exist("/tmp/test.file.notfound", &exist);
+    EXPECT_TRUE(st.ok());
+    EXPECT_TRUE(!exist);
+
+    // open for read
+    st = fs->open("/tmp/test.file", O_RDONLY, &fd);
+    EXPECT_TRUE(st.ok());
+    char buffer[10];
     std::string_view result;
-    char buffer[1024];
-    auto status = fr->read(0, 1024, &result, buffer);
-    EXPECT_TRUE(status.isOk());
-    EXPECT_EQ(std::string("hello world"), std::string(result.data(), result.size()));
+    st = fs->pread(fd, 0, 10, buffer, &result);
+    EXPECT_TRUE(st.ok());
+    EXPECT_EQ("this is te", result);
 
-    ::remove(filename.data());
+    st = fs->remove("/tmp/test.file");
+    EXPECT_TRUE(st.ok());
 }

@@ -58,8 +58,13 @@ private:
 
 Status PosixFileSystem::open(std::string_view path, uint64_t flags, FileDescriptorRef* fd) {
     // TODO use custom flags
-    int ret = ::open(path.data(), O_TRUNC | O_WRONLY | O_APPEND | O_CREAT,
-                     S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    // open for write
+    int ret = 0;
+    if ((flags & O_WRONLY) == O_WRONLY) {
+        ret = ::open(path.data(), flags, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    } else {
+        ret = ::open(path.data(), flags);
+    }
     if (ret == -1) {
         return Status::NewIOError();
     }
@@ -100,6 +105,8 @@ Status PosixFileSystem::pread(const FileDescriptorRef& fd,
                               offset + read_count);
         if (len == -1) {
             // TODO:
+            LOG(WARN) << "failed pread, fd: " << posix_fd->fd_ << ", file: " << posix_fd->file_path_
+                      << ", errno: " << errno << ", message: " << std::strerror(errno);
             return Status::NewIOError();
         }
         read_count += len;
@@ -188,6 +195,7 @@ Status PosixFileSystem::exist(std::string_view path, bool* result) {
     int errnum = errno;
     if (ret != 0) {
         if (errnum == ENOENT) {
+            *result = false;
             return Status::NewOk();
         }
         return Status::NewIOError();
