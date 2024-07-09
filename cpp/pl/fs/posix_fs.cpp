@@ -57,24 +57,83 @@ private:
 };
 
 Status PosixFileSystem::open(std::string_view path, uint64_t flags, FileDescriptorRef* fd) {
+    // TODO use custom flags
+    int ret = ::open(path.data(), O_TRUNC | O_WRONLY | O_APPEND | O_CREAT,
+                     S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if (ret == -1) {
+        return Status::NewIOError();
+    }
+    auto posix_fd = std::make_shared<PosixFileDescriptor>(ret, path);
+    *fd = std::move(posix_fd);
     return Status::NewOk();
 }
 
-Status PosixFileSystem::close(const FileDescriptorRef& fd) { return Status::NewOk(); }
+Status PosixFileSystem::close(const FileDescriptorRef& fd) {
+    auto* posix_fd = static_cast<PosixFileDescriptor*>(fd.get());
+    if (posix_fd->fd_ != -1) {
+        int ret = ::fsync(posix_fd->fd_);
+        if (ret != 0) {
+            LOG(WARN) << "fsync failed. fd: " << posix_fd->fd_ << ", file: " << posix_fd->file_path_
+                      << ", errno: " << errno << ", message: " << std::strerror(errno);
+            return Status::NewIOError();
+        }
+
+        ret = ::close(posix_fd->fd_);
+        if (ret != 0) {
+            LOG(WARN) << "close failed. fd: " << posix_fd->fd_ << ", file: " << posix_fd->file_path_
+                      << ", errno: " << errno << ", message: " << std::strerror(errno);
+            return Status::NewIOError();
+        }
+    }
+    return Status::NewOk();
+}
 
 Status PosixFileSystem::pread(const FileDescriptorRef& fd,
                               uint64_t offset,
                               std::size_t n,
                               const char* buffer,
                               std::string_view* result) {
+    auto* posix_fd = static_cast<PosixFileDescriptor*>(fd.get());
+    uint64_t read_count = 0;
+    while (read_count < n) {
+        ssize_t len = ::pread(posix_fd->fd_, (void*)(buffer + read_count), n - read_count,
+                              offset + read_count);
+        if (len == -1) {
+            // TODO:
+            return Status::NewIOError();
+        }
+        read_count += len;
+        if (len == 0) {
+            break;
+        }
+    }
+    *result = std::string_view(buffer, read_count);
     return Status::NewOk();
 }
 
 Status PosixFileSystem::append(const FileDescriptorRef& fd, uint64_t flags, std::string_view data) {
+    auto* posix_fd = static_cast<PosixFileDescriptor*>(fd.get());
+    std::size_t write_size = data.size();
+    const char* write_data = data.data();
+    uint64_t writed_size = 0;
+    while (writed_size < write_size) {
+        ssize_t len = ::write(posix_fd->fd_, write_data + writed_size, write_size - writed_size);
+        if (len == -1) {
+            // TODO: linux system errno
+            return Status::NewIOError();
+        }
+        writed_size += len;
+    }
     return Status::NewOk();
 }
 
 Status PosixFileSystem::fsync(const FileDescriptorRef& fd, uint64_t flags) {
+    auto* posix_fd = static_cast<PosixFileDescriptor*>(fd.get());
+    int ret = ::fsync(posix_fd->fd_);
+    if (ret != 0) {
+        // TODO: linux system errno
+        return Status::NewIOError();
+    }
     return Status::NewOk();
 }
 
@@ -124,9 +183,18 @@ Status PosixFileSystem::mtime(const FileDescriptorRef& fd, std::time_t* result) 
     return Status::NewOk();
 }
 
-Status PosixFileSystem::exist(std::string_view path, bool* result) { return Status::NewOk(); }
-
-Status PosixFileSystem::exist(const FileDescriptorRef& fd, bool* result) { return Status::NewOk(); }
+Status PosixFileSystem::exist(std::string_view path, bool* result) {
+    int ret = ::access(path.data(), F_OK);
+    int errnum = errno;
+    if (ret != 0) {
+        if (errnum == ENOENT) {
+            return Status::NewOk();
+        }
+        return Status::NewIOError();
+    }
+    *result = true;
+    return Status::NewOk();
+}
 
 Status PosixFileSystem::rename(std::string_view old_path, std::string_view new_path) {
     return Status::NewOk();
@@ -134,7 +202,22 @@ Status PosixFileSystem::rename(std::string_view old_path, std::string_view new_p
 
 Status PosixFileSystem::mkdir(std::string_view path, uint64_t flags) { return Status::NewOk(); }
 
-Status PosixFileSystem::remove(std::string_view path) { return Status::NewOk(); }
+Status PosixFileSystem::remove(std::string_view path) {
+    struct stat buffer;
+    int ret = ::stat(path.data(), &buffer);
+    if (ret != 0) {
+        return Status::NewIOError();
+    }
+    if (S_ISDIR(buffer.st_mode)) {
+        // TODO: remove directory
+    } else {
+        ret = std::remove(path.data());
+        if (ret != 0) {
+            return Status::NewIOError();
+        }
+    }
+    return Status::NewOk();
+}
 
 Status posixError(const std::string& context, int err_number) {
     if (errno == ENOENT) {
