@@ -51,8 +51,6 @@ public:
 
     Status exist(std::string_view path, bool* result) override;
 
-    Status exist(const FileDescriptorRef& fd, bool* result) override;
-
     Status rename(std::string_view old_path, std::string_view new_path) override;
 
     Status mkdir(std::string_view path, uint64_t flags) override;
