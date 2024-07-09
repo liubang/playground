@@ -73,8 +73,6 @@ public:
 
     virtual Status exist(std::string_view path, bool* result) = 0;
 
-    virtual Status exist(const FileDescriptorRef& fd, bool* result) = 0;
-
     virtual Status rename(std::string_view old_path, std::string_view new_path) = 0;
 
     virtual Status mkdir(std::string_view path, uint64_t flags) = 0;
