@@ -23,6 +23,64 @@
 
 namespace pl {
 
+class FileDescriptor {
+public:
+    FileDescriptor() = default;
+    virtual ~FileDescriptor() = default;
+
+    // disable copy and move
+    FileDescriptor(const FileDescriptor&) = delete;
+    FileDescriptor(FileDescriptor&&) = delete;
+    FileDescriptor& operator=(const FileDescriptor&) = delete;
+    FileDescriptor& operator=(FileDescriptor&&) = delete;
+};
+
+using FileDescriptorRef = std::shared_ptr<FileDescriptor>;
+
+class FileSystem {
+public:
+    FileSystem() = default;
+    virtual ~FileSystem() = default;
+
+    // disable copy and move
+    FileSystem(const FileSystem&) = delete;
+    FileSystem(FileSystem&&) = delete;
+    FileSystem& operator=(const FileSystem&) = delete;
+    FileSystem& operator=(FileSystem&&) = delete;
+
+    virtual Status open(std::string_view path, uint64_t flags, FileDescriptorRef* fd) = 0;
+
+    virtual Status close(const FileDescriptorRef& fd) = 0;
+
+    virtual Status pread(const FileDescriptorRef& fd,
+                         uint64_t offset,
+                         std::size_t n,
+                         const char* buffer,
+                         std::string_view* result) = 0;
+
+    virtual Status append(const FileDescriptorRef& fd, uint64_t flags, std::string_view data) = 0;
+
+    virtual Status fsync(const FileDescriptorRef& fd, uint64_t flags) = 0;
+
+    virtual Status size(std::string_view path, uint64_t* result) = 0;
+
+    virtual Status size(const FileDescriptorRef& fd, uint64_t* result) = 0;
+
+    virtual Status mtime(std::string_view path, std::time_t* result) = 0;
+
+    virtual Status mtime(const FileDescriptorRef& fd, std::time_t* result) = 0;
+
+    virtual Status exist(std::string_view path, bool* result) = 0;
+
+    virtual Status exist(const FileDescriptorRef& fd, bool* result) = 0;
+
+    virtual Status rename(std::string_view old_path, std::string_view new_path) = 0;
+
+    virtual Status mkdir(std::string_view path, uint64_t flags) = 0;
+
+    virtual Status remove(std::string_view path) = 0;
+};
+
 class FsReader {
 public:
     virtual ~FsReader() = default;

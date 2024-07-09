@@ -23,6 +23,43 @@
 
 namespace pl {
 
+class PosixFileSystem final : public FileSystem {
+public:
+    ~PosixFileSystem() override = default;
+
+    Status open(std::string_view path, uint64_t flags, FileDescriptorRef* fd) override;
+
+    Status close(const FileDescriptorRef& fd) override;
+
+    Status pread(const FileDescriptorRef& fd,
+                 uint64_t offset,
+                 std::size_t n,
+                 const char* buffer,
+                 std::string_view* result) override;
+
+    Status append(const FileDescriptorRef& fd, uint64_t flags, std::string_view data) override;
+
+    Status fsync(const FileDescriptorRef& fd, uint64_t flags) override;
+
+    Status size(std::string_view path, uint64_t* result) override;
+
+    Status size(const FileDescriptorRef& fd, uint64_t* result) override;
+
+    Status mtime(std::string_view path, std::time_t* result) override;
+
+    Status mtime(const FileDescriptorRef& fd, std::time_t* result) override;
+
+    Status exist(std::string_view path, bool* result) override;
+
+    Status exist(const FileDescriptorRef& fd, bool* result) override;
+
+    Status rename(std::string_view old_path, std::string_view new_path) override;
+
+    Status mkdir(std::string_view path, uint64_t flags) override;
+
+    Status remove(std::string_view path) override;
+};
+
 // 64K
 constexpr const size_t WRITE_BUFFER_SIZE = 65536;
 constexpr const int OPEN_BASE_FLAGS = O_CLOEXEC;
