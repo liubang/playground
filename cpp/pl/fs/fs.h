@@ -80,6 +80,9 @@ public:
     virtual Status remove(std::string_view path) = 0;
 };
 
+using FileSystemPtr = std::unique_ptr<FileSystem>;
+using FileSystemRef = std::shared_ptr<FileSystem>;
+
 class FsReader {
 public:
     virtual ~FsReader() = default;
