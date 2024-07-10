@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-07-09 17:22:51</td>
+            <td class="headerValue">2024-07-10 12:27:53</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">7</td>
@@ -95,20 +95,20 @@
 <a name="33"><span class="lineNum">      33 </span><span class="lineCov">       2816 :     });</span></a>
 <a name="34"><span class="lineNum">      34 </span><span class="lineCov">         11 : }</span></a>
 <a name="35"><span class="lineNum">      35 </span>            : </a>
-<a name="36"><span class="lineNum">      36 </span><span class="lineCov">         13 : static void test2() {</span></a>
-<a name="37"><span class="lineNum">      37 </span><span class="lineCov">         13 :     tbb::concurrent_vector&lt;float&gt; a;</span></a>
-<a name="38"><span class="lineNum">      38 </span><span class="lineCov">         13 :     tbb::parallel_for(tbb::blocked_range&lt;size_t&gt;(0, n), [&amp;](tbb::blocked_range&lt;size_t&gt; r) {</span></a>
-<a name="39"><span class="lineNum">      39 </span><span class="lineCov">       3557 :         std::vector&lt;float&gt; local_a;</span></a>
-<a name="40"><span class="lineNum">      40 </span><span class="lineCov">      16854 :         for (size_t i = r.begin(); i &lt; r.end(); ++i) {</span></a>
-<a name="41"><span class="lineNum">      41 </span><span class="lineCov">      13293 :             float val = std::sin(i);</span></a>
-<a name="42"><span class="lineNum">      42 </span><span class="lineCov">      13292 :             if (val &gt; 0)</span></a>
-<a name="43"><span class="lineNum">      43 </span><span class="lineCov">       6651 :                 local_a.push_back(val);</span></a>
+<a name="36"><span class="lineNum">      36 </span><span class="lineCov">         11 : static void test2() {</span></a>
+<a name="37"><span class="lineNum">      37 </span><span class="lineCov">         11 :     tbb::concurrent_vector&lt;float&gt; a;</span></a>
+<a name="38"><span class="lineNum">      38 </span><span class="lineCov">         11 :     tbb::parallel_for(tbb::blocked_range&lt;size_t&gt;(0, n), [&amp;](tbb::blocked_range&lt;size_t&gt; r) {</span></a>
+<a name="39"><span class="lineNum">      39 </span><span class="lineCov">       3024 :         std::vector&lt;float&gt; local_a;</span></a>
+<a name="40"><span class="lineNum">      40 </span><span class="lineCov">      14262 :         for (size_t i = r.begin(); i &lt; r.end(); ++i) {</span></a>
+<a name="41"><span class="lineNum">      41 </span><span class="lineCov">      11219 :             float val = std::sin(i);</span></a>
+<a name="42"><span class="lineNum">      42 </span><span class="lineCov">      11220 :             if (val &gt; 0)</span></a>
+<a name="43"><span class="lineNum">      43 </span><span class="lineCov">       5626 :                 local_a.push_back(val);</span></a>
 <a name="44"><span class="lineNum">      44 </span>            :         }</a>
 <a name="45"><span class="lineNum">      45 </span>            : </a>
-<a name="46"><span class="lineNum">      46 </span><span class="lineCov">       3550 :         auto it = a.grow_by(local_a.size());</span></a>
-<a name="47"><span class="lineNum">      47 </span><span class="lineCov">       3556 :         std::copy(local_a.begin(), local_a.end(), it);</span></a>
-<a name="48"><span class="lineNum">      48 </span><span class="lineCov">       3557 :     });</span></a>
-<a name="49"><span class="lineNum">      49 </span><span class="lineCov">         13 : }</span></a>
+<a name="46"><span class="lineNum">      46 </span><span class="lineCov">       3026 :         auto it = a.grow_by(local_a.size());</span></a>
+<a name="47"><span class="lineNum">      47 </span><span class="lineCov">       3031 :         std::copy(local_a.begin(), local_a.end(), it);</span></a>
+<a name="48"><span class="lineNum">      48 </span><span class="lineCov">       3029 :     });</span></a>
+<a name="49"><span class="lineNum">      49 </span><span class="lineCov">         11 : }</span></a>
 <a name="50"><span class="lineNum">      50 </span>            : </a>
 <a name="51"><span class="lineNum">      51 </span><span class="lineCov">          1 : int main(int argc, char* argv[]) {</span></a>
 <a name="52"><span class="lineNum">      52 </span>            :     // put your code here</a>
@@ -116,8 +116,8 @@
 <a name="54"><span class="lineNum">      54 </span><span class="lineCov">         11 :         test1();</span></a>
 <a name="55"><span class="lineNum">      55 </span><span class="lineCov">         11 :     });</span></a>
 <a name="56"><span class="lineNum">      56 </span><span class="lineCov">          1 :     ankerl::nanobench::Bench().run(&quot;test2&quot;, [&amp;] {</span></a>
-<a name="57"><span class="lineNum">      57 </span><span class="lineCov">         13 :         test2();</span></a>
-<a name="58"><span class="lineNum">      58 </span><span class="lineCov">         13 :     });</span></a>
+<a name="57"><span class="lineNum">      57 </span><span class="lineCov">         11 :         test2();</span></a>
+<a name="58"><span class="lineNum">      58 </span><span class="lineCov">         11 :     });</span></a>
 <a name="59"><span class="lineNum">      59 </span><span class="lineCov">          1 :     return 0;</span></a>
 <a name="60"><span class="lineNum">      60 </span>            : }</a>
 </pre>

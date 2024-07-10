@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-07-09 17:22:51</td>
+            <td class="headerValue">2024-07-10 12:27:53</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">7</td>
@@ -98,14 +98,14 @@
 <a name="36"><span class="lineNum">      36 </span>            :     };</a>
 <a name="37"><span class="lineNum">      37 </span>            :     // clang-format on</a>
 <a name="38"><span class="lineNum">      38 </span>            : </a>
-<a name="39"><span class="lineNum">      39 </span><span class="lineCov">       1054 :     static const char* logLevel2String(LogLevel log_level) {</span></a>
-<a name="40"><span class="lineNum">      40 </span><span class="lineCov">       1054 :         switch (log_level) {</span></a>
+<a name="39"><span class="lineNum">      39 </span><span class="lineCov">       1048 :     static const char* logLevel2String(LogLevel log_level) {</span></a>
+<a name="40"><span class="lineNum">      40 </span><span class="lineCov">       1048 :         switch (log_level) {</span></a>
 <a name="41"><span class="lineNum">      41 </span><span class="lineCov">          1 :         case LogLevel::PL_TRACE:</span></a>
 <a name="42"><span class="lineNum">      42 </span><span class="lineCov">          1 :             return &quot;TRACE&quot;;</span></a>
 <a name="43"><span class="lineNum">      43 </span><span class="lineCov">       1026 :         case LogLevel::PL_DEBUG:</span></a>
 <a name="44"><span class="lineNum">      44 </span><span class="lineCov">       1026 :             return &quot;DEBUG&quot;;</span></a>
-<a name="45"><span class="lineNum">      45 </span><span class="lineCov">         24 :         case LogLevel::PL_INFO:</span></a>
-<a name="46"><span class="lineNum">      46 </span><span class="lineCov">         24 :             return &quot;INFO&quot;;</span></a>
+<a name="45"><span class="lineNum">      45 </span><span class="lineCov">         18 :         case LogLevel::PL_INFO:</span></a>
+<a name="46"><span class="lineNum">      46 </span><span class="lineCov">         18 :             return &quot;INFO&quot;;</span></a>
 <a name="47"><span class="lineNum">      47 </span><span class="lineCov">          1 :         case LogLevel::PL_WARN:</span></a>
 <a name="48"><span class="lineNum">      48 </span><span class="lineCov">          1 :             return &quot;WARN&quot;;</span></a>
 <a name="49"><span class="lineNum">      49 </span><span class="lineCov">          1 :         case LogLevel::PL_ERROR:</span></a>
@@ -118,13 +118,13 @@
 <a name="56"><span class="lineNum">      56 </span>            : </a>
 <a name="57"><span class="lineNum">      57 </span>            :     class SourceFile {</a>
 <a name="58"><span class="lineNum">      58 </span>            :     public:</a>
-<a name="59"><span class="lineNum">      59 </span><span class="lineCov">       1054 :         template &lt;int N&gt; constexpr SourceFile(const char (&amp;source)[N]) {</span></a>
-<a name="60"><span class="lineNum">      60 </span><span class="lineCov">       1054 :             source_ = source;</span></a>
-<a name="61"><span class="lineNum">      61 </span><span class="lineCov">       1054 :             auto pos = source_.find_last_of('/');</span></a>
-<a name="62"><span class="lineNum">      62 </span><span class="lineCov">       1054 :             if (pos != std::string_view::npos) {</span></a>
-<a name="63"><span class="lineNum">      63 </span><span class="lineCov">       1054 :                 source_ = source_.substr(pos + 1);</span></a>
+<a name="59"><span class="lineNum">      59 </span><span class="lineCov">       1048 :         template &lt;int N&gt; constexpr SourceFile(const char (&amp;source)[N]) {</span></a>
+<a name="60"><span class="lineNum">      60 </span><span class="lineCov">       1048 :             source_ = source;</span></a>
+<a name="61"><span class="lineNum">      61 </span><span class="lineCov">       1048 :             auto pos = source_.find_last_of('/');</span></a>
+<a name="62"><span class="lineNum">      62 </span><span class="lineCov">       1048 :             if (pos != std::string_view::npos) {</span></a>
+<a name="63"><span class="lineNum">      63 </span><span class="lineCov">       1048 :                 source_ = source_.substr(pos + 1);</span></a>
 <a name="64"><span class="lineNum">      64 </span>            :             }</a>
-<a name="65"><span class="lineNum">      65 </span><span class="lineCov">       1054 :         }</span></a>
+<a name="65"><span class="lineNum">      65 </span><span class="lineCov">       1048 :         }</span></a>
 <a name="66"><span class="lineNum">      66 </span>            : </a>
 <a name="67"><span class="lineNum">      67 </span>            :         explicit SourceFile(const char* source) {</a>
 <a name="68"><span class="lineNum">      68 </span>            :             source_ = source;</a>
@@ -134,7 +134,7 @@
 <a name="72"><span class="lineNum">      72 </span>            :             }</a>
 <a name="73"><span class="lineNum">      73 </span>            :         }</a>
 <a name="74"><span class="lineNum">      74 </span>            : </a>
-<a name="75"><span class="lineNum">      75 </span><span class="lineCov">       1054 :         [[nodiscard]] constexpr std::string_view source() const { return source_; }</span></a>
+<a name="75"><span class="lineNum">      75 </span><span class="lineCov">       1048 :         [[nodiscard]] constexpr std::string_view source() const { return source_; }</span></a>
 <a name="76"><span class="lineNum">      76 </span>            : </a>
 <a name="77"><span class="lineNum">      77 </span>            :     private:</a>
 <a name="78"><span class="lineNum">      78 </span>            :         std::string_view source_;</a>
@@ -144,18 +144,18 @@
 <a name="82"><span class="lineNum">      82 </span>            :     Logger(SourceFile source, int line, LogLevel level);</a>
 <a name="83"><span class="lineNum">      83 </span>            :     ~Logger();</a>
 <a name="84"><span class="lineNum">      84 </span>            : </a>
-<a name="85"><span class="lineNum">      85 </span><span class="lineCov">       1054 :     LogStream&amp; stream() { return impl_.stream_; }</span></a>
+<a name="85"><span class="lineNum">      85 </span><span class="lineCov">       1048 :     LogStream&amp; stream() { return impl_.stream_; }</span></a>
 <a name="86"><span class="lineNum">      86 </span>            : </a>
 <a name="87"><span class="lineNum">      87 </span>            : private:</a>
 <a name="88"><span class="lineNum">      88 </span>            :     class Impl {</a>
 <a name="89"><span class="lineNum">      89 </span>            :     private:</a>
-<a name="90"><span class="lineNum">      90 </span><span class="lineCov">       1054 :         Impl(const Logger::SourceFile&amp; source_file, int line, Logger::LogLevel log_level)</span></a>
-<a name="91"><span class="lineNum">      91 </span><span class="lineCov">       1054 :             : time_(std::chrono::system_clock::now()),</span></a>
-<a name="92"><span class="lineNum">      92 </span><span class="lineCov">       1054 :               source_file_(source_file),</span></a>
-<a name="93"><span class="lineNum">      93 </span><span class="lineCov">       1054 :               line_(line),</span></a>
-<a name="94"><span class="lineNum">      94 </span><span class="lineCov">       1054 :               log_level_(log_level) {</span></a>
-<a name="95"><span class="lineNum">      95 </span><span class="lineCov">       1054 :             startSession();</span></a>
-<a name="96"><span class="lineNum">      96 </span><span class="lineCov">       1054 :         }</span></a>
+<a name="90"><span class="lineNum">      90 </span><span class="lineCov">       1048 :         Impl(const Logger::SourceFile&amp; source_file, int line, Logger::LogLevel log_level)</span></a>
+<a name="91"><span class="lineNum">      91 </span><span class="lineCov">       1048 :             : time_(std::chrono::system_clock::now()),</span></a>
+<a name="92"><span class="lineNum">      92 </span><span class="lineCov">       1048 :               source_file_(source_file),</span></a>
+<a name="93"><span class="lineNum">      93 </span><span class="lineCov">       1048 :               line_(line),</span></a>
+<a name="94"><span class="lineNum">      94 </span><span class="lineCov">       1048 :               log_level_(log_level) {</span></a>
+<a name="95"><span class="lineNum">      95 </span><span class="lineCov">       1048 :             startSession();</span></a>
+<a name="96"><span class="lineNum">      96 </span><span class="lineCov">       1048 :         }</span></a>
 <a name="97"><span class="lineNum">      97 </span>            : </a>
 <a name="98"><span class="lineNum">      98 </span>            :         void startSession();</a>
 <a name="99"><span class="lineNum">      99 </span>            :         void flush();</a>
