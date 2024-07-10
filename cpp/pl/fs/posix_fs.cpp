@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <cstring>
 #include <fcntl.h>
+#include <filesystem>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -193,38 +194,25 @@ Status PosixFileSystem::mtime(const FileDescriptorRef& fd, std::time_t* result) 
 }
 
 Status PosixFileSystem::exist(std::string_view path, bool* result) {
-    int ret = ::access(path.data(), F_OK);
-    int errnum = errno;
-    if (ret != 0) {
-        if (errnum == ENOENT) {
-            *result = false;
-            return Status::NewOk();
-        }
-        return Status::NewIOError();
-    }
-    *result = true;
+    *result = std::filesystem::exists(path);
     return Status::NewOk();
 }
 
 Status PosixFileSystem::rename(std::string_view old_path, std::string_view new_path) {
+    std::filesystem::rename(old_path, new_path);
     return Status::NewOk();
 }
 
-Status PosixFileSystem::mkdir(std::string_view path, uint64_t flags) { return Status::NewOk(); }
+Status PosixFileSystem::mkdir(std::string_view path, uint64_t flags) {
+    std::filesystem::create_directory(path);
+    return Status::NewOk();
+}
 
 Status PosixFileSystem::remove(std::string_view path) {
-    struct stat buffer;
-    int ret = ::stat(path.data(), &buffer);
-    if (ret != 0) {
+    std::error_code err;
+    bool ret = std::filesystem::remove_all(path, err);
+    if (!ret) {
         return Status::NewIOError();
-    }
-    if (S_ISDIR(buffer.st_mode)) {
-        // TODO: remove directory
-    } else {
-        ret = std::remove(path.data());
-        if (ret != 0) {
-            return Status::NewIOError();
-        }
     }
     return Status::NewOk();
 }
