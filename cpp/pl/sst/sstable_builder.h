@@ -28,13 +28,17 @@ namespace pl {
 
 class SSTableBuilder {
 public:
-    SSTableBuilder(BuildOptionsRef options, FsWriterRef writer);
+    SSTableBuilder(BuildOptionsRef options);
 
+    // disable copy and move
     SSTableBuilder(const SSTableBuilder&) = delete;
-
+    SSTableBuilder(SSTableBuilder&&) = delete;
     SSTableBuilder& operator=(const SSTableBuilder&) = delete;
+    SSTableBuilder& operator=(SSTableBuilder&&) = delete;
 
-    ~SSTableBuilder();
+    ~SSTableBuilder() = default;
+
+    Status open();
 
     void add(const Cell& cell);
 
@@ -55,8 +59,10 @@ private:
     void writeBlockRaw(std::string_view content, CompressionType type, BlockHandle* handle);
 
 private:
-    const FsWriterRef writer_;
     const BuildOptionsRef options_;
+    std::string sst_file_;
+    FileDescriptorRef fd_;
+    FileSystemPtr writer_;
     BlockBuilderPtr data_block_;
     BlockBuilderPtr index_block_;
     FilterBlockBuilderPtr filter_block_;

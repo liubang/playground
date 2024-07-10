@@ -16,6 +16,7 @@
 
 #include "cpp/pl/sst/sstable_builder.h"
 #include "cpp/pl/crc/crc.h"
+#include "cpp/pl/fs/posix_fs.h"
 #include "cpp/pl/log/logger.h"
 #include "cpp/pl/sst/encoding.h"
 
@@ -26,16 +27,24 @@
 
 namespace pl {
 
-SSTableBuilder::SSTableBuilder(BuildOptionsRef options, FsWriterRef writer)
-    : writer_(std::move(writer)), options_(std::move(options)) {
+SSTableBuilder::SSTableBuilder(BuildOptionsRef options) : options_(std::move(options)) {}
+
+Status SSTableBuilder::open() {
+    // TODO(liubang): check option
     data_block_ = std::make_unique<BlockBuilder>(options_);
     index_block_ = std::make_unique<BlockBuilder>(options_);
     filter_block_ = options_->filter_policy == nullptr
                         ? nullptr
                         : std::make_unique<FilterBlockBuilder>(options_->filter_policy);
-}
 
-SSTableBuilder::~SSTableBuilder() = default;
+    sst_file_ = (options_->data_dir / SSTType2String(options_->sst_type) /
+                 (std::to_string(options_->sst_id) + ".sst"))
+                    .string();
+
+    writer_ = std::make_unique<PosixFileSystem>();
+    auto st = writer_->open(sst_file_, O_TRUNC | O_WRONLY | O_CREAT, &fd_);
+    return st;
+}
 
 void SSTableBuilder::add(const Cell& cell) {
     assert(!closed_);
@@ -102,7 +111,7 @@ void SSTableBuilder::flush() {
     if (ok()) {
         // 复位标记，下次开始一个新的block
         pending_index_entry_ = true;
-        status_ = writer_->flush();
+        // status_ = writer_->fsync();
     }
     if (filter_block_ != nullptr) {
         filter_block_->startBlock(offset_);
@@ -199,7 +208,7 @@ void SSTableBuilder::writeBlockRaw(std::string_view content,
                                    BlockHandle* handle) {
     handle->setOffset(offset_);
     handle->setSize(content.size());
-    status_ = writer_->append(content);
+    status_ = writer_->append(fd_, 0, content);
     if (!ok()) {
         assert(false);
     }
@@ -210,7 +219,7 @@ void SSTableBuilder::writeBlockRaw(std::string_view content,
     std::string encode_crc;
     encodeInt<uint32_t>(&encode_crc, crc);
     memcpy(trailer + 1, encode_crc.data(), encode_crc.size());
-    status_ = writer_->append(std::string_view(trailer, BLOCK_TRAILER_LEN));
+    status_ = writer_->append(fd_, 0, std::string_view(trailer, BLOCK_TRAILER_LEN));
     if (!ok()) {
         assert(false);
     }
@@ -295,11 +304,11 @@ Status SSTableBuilder::finish() {
     footer.setIndexHandle(index_block_handle);
     std::string footer_content;
     footer.encodeTo(&footer_content);
-    status_ = writer_->append(footer_content);
+    status_ = writer_->append(fd_, 0, footer_content);
     if (ok()) {
         offset_ += footer_content.size();
     }
-    writer_->flush();
+    writer_->fsync(fd_, 0);
 
     return status();
 }

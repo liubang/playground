@@ -202,7 +202,8 @@ Status Footer::decodeFrom(std::string_view input) {
     return result;
 }
 
-Status BlockReader::readBlock(const FsReaderRef& reader,
+Status BlockReader::readBlock(const FileSystemRef& reader,
+                              const FileDescriptorRef& fd,
                               const BlockHandle& handle,
                               BlockContents* result) {
     // read block trailer
@@ -210,7 +211,7 @@ Status BlockReader::readBlock(const FsReaderRef& reader,
     auto buf = std::make_unique<char[]>(s + BLOCK_TRAILER_LEN);
 
     std::string_view content;
-    auto status = reader->read(handle.offset(), s + BLOCK_TRAILER_LEN, &content, buf.get());
+    auto status = reader->pread(fd, handle.offset(), s + BLOCK_TRAILER_LEN, buf.get(), &content);
     if (!status.isOk()) {
         return status;
     }

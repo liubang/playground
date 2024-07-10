@@ -66,6 +66,8 @@ Status PosixFileSystem::open(std::string_view path, uint64_t flags, FileDescript
         ret = ::open(path.data(), flags);
     }
     if (ret == -1) {
+        LOG(WARN) << "open failed. path: " << path << ", errno: " << errno
+                  << ", message: " << std::strerror(errno);
         return Status::NewIOError();
     }
     auto posix_fd = std::make_shared<PosixFileDescriptor>(ret, path);
@@ -225,136 +227,6 @@ Status PosixFileSystem::remove(std::string_view path) {
         }
     }
     return Status::NewOk();
-}
-
-Status posixError(const std::string& context, int err_number) {
-    if (errno == ENOENT) {
-        return Status::NewNotFound(context + std::strerror(err_number));
-    }
-    return Status::NewIOError(context + std::strerror(err_number));
-}
-
-Status PosixFsWriter::append(std::string_view data) {
-    std::size_t write_size = data.size();
-    const char* write_data = data.data();
-    std::size_t copy_size = std::min(write_size, WRITE_BUFFER_SIZE - pos_);
-    std::memcpy(buf_ + pos_, write_data, copy_size);
-    write_data += copy_size;
-    write_size -= copy_size;
-    pos_ += copy_size;
-    if (write_size == 0) {
-        return Status::NewOk();
-    }
-
-    auto status = flushBuffer();
-    if (!status.isOk()) {
-        return status;
-    }
-
-    if (write_size < WRITE_BUFFER_SIZE) {
-        std::memcpy(buf_, write_data, write_size);
-        pos_ = write_size;
-        return Status::NewOk();
-    }
-
-    return writeUnbuffered(write_data, write_size);
-}
-
-Status PosixFsWriter::flush() { return flushBuffer(); }
-
-Status PosixFsWriter::close() {
-    Status status = flushBuffer();
-    int result = ::close(fd_);
-    if (result < 0 && status.isOk()) {
-        status = posixError(filename_, errno);
-    }
-    fd_ = -1;
-    return status;
-}
-
-Status PosixFsWriter::sync() {
-    Status status = flushBuffer();
-    if (!status.isOk()) {
-        return status;
-    }
-    return syncFd(fd_, filename_);
-}
-
-Status PosixFsWriter::writeUnbuffered(const char* data, std::size_t size) {
-    while (size > 0) {
-        ssize_t write_result = ::write(fd_, data, size);
-        if (write_result < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            return posixError(filename_, errno);
-        }
-        data += write_result;
-        size -= write_result;
-    }
-    return Status::NewOk();
-}
-
-Status PosixFsWriter::flushBuffer() {
-    Status status = writeUnbuffered(buf_, pos_);
-    pos_ = 0;
-    return status;
-}
-
-Status PosixFsWriter::syncFd(int fd, const std::string& filename) {
-    // 这里简单粗暴的区分Linux和macos
-#if defined(__APPLE__) && defined(__MACH__)
-    if (::fsync(fd) == 0) {
-#else
-    if (::fdatasync(fd) == 0) {
-#endif
-        return Status::NewOk();
-    }
-    return posixError(filename, errno);
-}
-
-std::size_t PosixFsReader::size() const {
-    if (fd_ >= 0) {
-        struct stat file_stat;
-        if (::fstat(fd_, &file_stat) == -1) {
-            return 0;
-        }
-        return static_cast<std::size_t>(file_stat.st_size);
-    }
-    return 0;
-}
-
-Status PosixFsReader::read(uint64_t offset,
-                           std::size_t n,
-                           std::string_view* result,
-                           char* scratch) const {
-    Status status;
-    ssize_t read_size = ::pread(fd_, scratch, n, static_cast<off_t>(offset));
-    *result = std::string_view(scratch, (read_size < 0) ? 0 : read_size);
-    if (read_size < 0) {
-        status = posixError(filename_, errno);
-    }
-    return status;
-}
-
-FsWriterPtr PosixFs::newFsWriter(const std::string& filename, Status* status) {
-    int fd = ::open(filename.c_str(), O_TRUNC | O_WRONLY | O_CREAT | OPEN_BASE_FLAGS, 0644);
-    if (fd < 0) {
-        *status = posixError(filename, errno);
-        return nullptr;
-    }
-    *status = Status::NewOk();
-    return std::make_unique<PosixFsWriter>(filename, fd);
-}
-
-FsReaderPtr PosixFs::newFsReader(const std::string& filename, Status* status) {
-    int fd = ::open(filename.c_str(), O_RDONLY | OPEN_BASE_FLAGS);
-    if (fd < 0) {
-        *status = posixError(filename, errno);
-        return nullptr;
-    }
-    *status = Status::NewOk();
-    return std::make_unique<PosixFsReader>(filename, fd);
 }
 
 } // namespace pl
