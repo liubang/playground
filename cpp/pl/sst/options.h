@@ -21,6 +21,7 @@
 #include "cpp/pl/sst/sstable_format.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 
 namespace pl {
@@ -39,6 +40,7 @@ struct BuildOptions {
           filter_policy(std::make_shared<BloomFilterPolicy>(bits_per_key)) {}
 
     // 4 KB
+    std::filesystem::path data_dir;
     std::size_t block_size = 4 * 1024;
     int block_restart_interval = 16;
     uint32_t bits_per_key = 10;
