@@ -63,7 +63,10 @@ std::vector<std::set<CaseCell, CaseCellComparator>> cellses =
 } // namespace
 
 class SSTableTest : public ::testing::Test {
-    void SetUp() override { read_options = std::make_shared<ReadOptions>(); }
+    void SetUp() override {
+        read_options = std::make_shared<ReadOptions>();
+        std::filesystem::create_directory("/tmp/MAJOR");
+    }
 
     void TearDown() override {}
 
