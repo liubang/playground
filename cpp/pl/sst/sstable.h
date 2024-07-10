@@ -25,6 +25,7 @@
 #include "cpp/pl/status/status.h"
 
 #include <cassert>
+#include <filesystem>
 #include <functional>
 
 namespace pl {
@@ -40,8 +41,7 @@ public:
     ~SSTable() = default;
 
     static std::unique_ptr<SSTable> open(const ReadOptionsRef& options,
-                                         const FsReaderRef& reader,
-                                         uint64_t size,
+                                         const std::filesystem::path& sst_file,
                                          Status* status);
 
     [[nodiscard]] const FileMetaRef& fileMeta() const { return file_meta_; }
@@ -62,7 +62,8 @@ public:
 
 private:
     SSTable(ReadOptionsRef options,
-            FsReaderRef reader,
+            FileDescriptorRef fd,
+            FileSystemRef reader,
             FileMetaRef file_meta,
             BlockRef index_block);
 
@@ -71,7 +72,8 @@ private:
 
 private:
     const ReadOptionsRef options_;
-    const FsReaderRef reader_;
+    FileDescriptorRef fd_;
+    FileSystemRef reader_;
     Status status_;
     FilterBlockReaderRef filter_;
     std::unique_ptr<const char[]> filter_data_;

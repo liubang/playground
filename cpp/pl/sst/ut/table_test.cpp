@@ -14,7 +14,6 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/pl/fs/posix_fs.h"
 #include "cpp/pl/log/logger.h"
 #include "cpp/pl/random/random.h"
 #include "cpp/pl/sst/sstable.h"
@@ -58,22 +57,20 @@ struct CaseCellComparator {
 };
 
 namespace {
-std::vector<std::string> sst_files = {"/tmp/test1.sst", "/tmp/test2.sst", "/tmp/test3.sst"};
+std::vector<std::string> sst_files = {"/tmp/MAJOR/1.sst", "/tmp/MAJOR/2.sst", "/tmp/MAJOR/3.sst"};
 std::vector<std::set<CaseCell, CaseCellComparator>> cellses =
     std::vector<std::set<CaseCell, CaseCellComparator>>(3);
 } // namespace
 
 class SSTableTest : public ::testing::Test {
-    void SetUp() override {
-        read_options = std::make_shared<ReadOptions>();
-        fs = std::make_shared<PosixFs>();
-    }
+    void SetUp() override { read_options = std::make_shared<ReadOptions>(); }
 
     void TearDown() override {}
 
 public:
     BuildOptionsRef new_build_options() {
         auto build_options = std::make_shared<BuildOptions>();
+        build_options->data_dir = "/tmp";
         build_options->compression_type = CompressionType::NONE;
         build_options->sst_type = SSTType::MAJOR;
         build_options->sst_version = SSTVersion::V1;
@@ -85,10 +82,12 @@ public:
         auto sst_file = sst_files[idx];
         auto& cells = cellses[idx];
 
-        auto writer = fs->newFsWriter(sst_file, &st);
-        EXPECT_TRUE(st.isOk());
-        auto sstable_builder =
-            std::make_unique<pl::SSTableBuilder>(build_options, std::move(writer));
+        auto sstable_builder = std::make_unique<pl::SSTableBuilder>(build_options);
+        auto st = sstable_builder->open();
+        if (!st.ok()) {
+            LOG(ERROR) << "error: " << (int)st.code() << ", message: " << st.msg();
+        }
+        EXPECT_EQ(Code::ST_Ok, st.code());
         for (int i = 0; i < ROW_NUM; ++i) {
             std::string rowkey =
                 pl::random_string(ROWKEY_LEN + (i % ROWKEY_LEN)) + std::to_string(i);
@@ -125,11 +124,7 @@ public:
     void seek_from_sst(int idx) {
         auto sst_file = sst_files[idx];
         auto cells = cellses[idx];
-        auto reader = fs->newFsReader(sst_file, &st);
-        EXPECT_TRUE(st.isOk());
-        std::size_t sst_size = reader->size();
-        LOG(INFO) << "file: " << sst_file << ", size: " << sst_size;
-        auto table = pl::SSTable::open(read_options, std::move(reader), sst_size, &st);
+        auto table = pl::SSTable::open(read_options, sst_file, &st);
         EXPECT_TRUE(st.isOk());
 
         check_table(table.get());
@@ -163,17 +158,19 @@ public:
     constexpr static const char* CF1 = "cf1";
     constexpr static const char* CF2 = "cf2";
     ReadOptionsRef read_options;
-    FsRef fs;
     Status st;
 };
 
 TEST_F(SSTableTest, init) {
     auto build_options = new_build_options();
     build_options->compression_type = CompressionType::NONE;
+    build_options->sst_id = 1;
     build_sst(0, build_options);
     build_options->compression_type = CompressionType::SNAPPY;
+    build_options->sst_id = 2;
     build_sst(1, build_options);
     build_options->compression_type = CompressionType::ZSTD;
+    build_options->sst_id = 3;
     build_sst(2, build_options);
 }
 
@@ -188,11 +185,7 @@ TEST_F(SSTableTest, scan_all) {
     auto cells = cellses[0];
     LOG(INFO) << "cells: " << cells.size();
 
-    auto reader = fs->newFsReader(sst_file, &st);
-    EXPECT_TRUE(st.isOk());
-    std::size_t sst_size = reader->size();
-    LOG(INFO) << "file: " << sst_file << ", size: " << sst_size;
-    auto table = pl::SSTable::open(read_options, std::move(reader), sst_size, &st);
+    auto table = pl::SSTable::open(read_options, sst_file, &st);
     EXPECT_TRUE(st.isOk());
 
     check_table(table.get());
@@ -223,11 +216,7 @@ TEST_F(SSTableTest, range_scan) {
     auto sst_file = sst_files[0];
     auto cells = cellses[0];
 
-    auto reader = fs->newFsReader(sst_file, &st);
-    EXPECT_TRUE(st.isOk());
-    std::size_t sst_size = reader->size();
-    LOG(INFO) << "file: " << sst_file << ", size: " << sst_size;
-    auto table = pl::SSTable::open(read_options, std::move(reader), sst_size, &st);
+    auto table = pl::SSTable::open(read_options, sst_file, &st);
     EXPECT_TRUE(st.isOk());
     check_table(table.get());
 
@@ -268,11 +257,7 @@ TEST_F(SSTableTest, query) {
     auto cells = cellses[0];
     LOG(INFO) << "cells: " << cells.size();
 
-    auto reader = fs->newFsReader(sst_file, &st);
-    EXPECT_TRUE(st.isOk());
-    std::size_t sst_size = reader->size();
-    LOG(INFO) << "file: " << sst_file << ", size: " << sst_size;
-    auto table = pl::SSTable::open(read_options, std::move(reader), sst_size, &st);
+    auto table = pl::SSTable::open(read_options, sst_file, &st);
     EXPECT_TRUE(st.isOk());
 
     check_table(table.get());

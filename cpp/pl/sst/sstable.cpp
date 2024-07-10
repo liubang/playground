@@ -15,6 +15,7 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/sst/sstable.h"
+#include "cpp/pl/fs/posix_fs.h"
 #include "cpp/pl/log/logger.h"
 #include "cpp/pl/scope/scope.h"
 #include "cpp/pl/sst/sstable_iterator.h"
@@ -22,25 +23,38 @@
 namespace pl {
 
 SSTable::SSTable(ReadOptionsRef options,
-                 FsReaderRef reader,
+                 FileDescriptorRef fd,
+                 FileSystemRef reader,
                  FileMetaRef file_meta,
                  BlockRef index_block)
     : options_(std::move(options)),
+      fd_(std::move(fd)),
       reader_(std::move(reader)),
       file_meta_(std::move(file_meta)),
       index_block_(std::move(index_block)) {}
 
 std::unique_ptr<SSTable> SSTable::open(const ReadOptionsRef& options,
-                                       const FsReaderRef& reader,
-                                       uint64_t size,
+                                       const std::filesystem::path& sst_file,
                                        Status* status) {
+    FileSystemRef fs = std::make_shared<PosixFileSystem>();
+    FileDescriptorRef fd;
+    *status = fs->open(sst_file.string(), 0, &fd);
+    if (!status->ok()) {
+        return nullptr;
+    }
+    uint64_t size;
+    *status = fs->size(fd, &size);
+    if (!status->ok()) {
+        return nullptr;
+    }
+
     if (size < FOOTER_LEN) {
         *status = Status::NewCorruption("file is too short to be an sstable");
         return nullptr;
     }
     char footer_content[FOOTER_LEN];
     std::string_view footer_input;
-    *status = reader->read(size - FOOTER_LEN, FOOTER_LEN, &footer_input, footer_content);
+    *status = fs->pread(fd, size - FOOTER_LEN, FOOTER_LEN, footer_content, &footer_input);
     if (!status->isOk()) {
         return nullptr;
     }
@@ -53,7 +67,7 @@ std::unique_ptr<SSTable> SSTable::open(const ReadOptionsRef& options,
 
     // file meta
     BlockContents file_meta_content;
-    *status = BlockReader::readBlock(reader, footer.fileMetaHandle(), &file_meta_content);
+    *status = BlockReader::readBlock(fs, fd, footer.fileMetaHandle(), &file_meta_content);
     if (!status->isOk()) {
         return nullptr;
     }
@@ -71,14 +85,14 @@ std::unique_ptr<SSTable> SSTable::open(const ReadOptionsRef& options,
 
     // parse index block
     BlockContents index_block_contents;
-    *status = BlockReader::readBlock(reader, footer.indexHandle(), &index_block_contents);
+    *status = BlockReader::readBlock(fs, fd, footer.indexHandle(), &index_block_contents);
     if (!status->isOk()) {
         return nullptr;
     }
 
     auto index_block = std::make_shared<Block>(index_block_contents);
     auto table = std::unique_ptr<SSTable>(
-        new SSTable(options, reader, std::move(file_meta), std::move(index_block)));
+        new SSTable(options, fd, fs, std::move(file_meta), std::move(index_block)));
 
     table->readFilter(footer);
     return table;
@@ -91,7 +105,7 @@ void SSTable::readFilter(const Footer& footer) {
     }
     BlockHandle filter_handle = footer.filterHandle();
     BlockContents block;
-    auto st = BlockReader::readBlock(reader_, filter_handle, &block);
+    auto st = BlockReader::readBlock(reader_, fd_, filter_handle, &block);
     if (!st.isOk()) {
         LOG_ERROR << "read block error: " << st.msg();
         return;
@@ -123,7 +137,7 @@ IteratorPtr SSTable::blockReader(std::string_view index_value) {
     }
 
     BlockContents contents;
-    s = BlockReader::readBlock(reader_, handle, &contents);
+    s = BlockReader::readBlock(reader_, fd_, handle, &contents);
 
     if (!s.isOk()) {
         LOG_ERROR << "read block error: " << s.msg();

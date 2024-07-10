@@ -83,47 +83,4 @@ public:
 using FileSystemPtr = std::unique_ptr<FileSystem>;
 using FileSystemRef = std::shared_ptr<FileSystem>;
 
-class FsReader {
-public:
-    virtual ~FsReader() = default;
-
-    virtual Status read(uint64_t offset,
-                        size_t n,
-                        std::string_view* result,
-                        char* scratch) const = 0;
-
-    [[nodiscard]] virtual std::size_t size() const = 0;
-};
-
-using FsReaderPtr = std::unique_ptr<FsReader>;
-using FsReaderRef = std::shared_ptr<FsReader>;
-
-class FsWriter {
-public:
-    FsWriter() = default;
-    FsWriter(const FsWriter&) = delete;
-    FsWriter& operator=(const FsWriter&) = delete;
-    virtual ~FsWriter() = default;
-    virtual Status append(std::string_view data) = 0;
-    virtual Status close() = 0;
-    virtual Status flush() = 0;
-    virtual Status sync() = 0;
-};
-
-using FsWriterPtr = std::unique_ptr<FsWriter>;
-using FsWriterRef = std::shared_ptr<FsWriter>;
-
-class Fs {
-public:
-    Fs() = default;
-    Fs(const Fs&) = delete;
-    Fs& operator=(const Fs&) = delete;
-    virtual ~Fs() = default;
-    virtual FsReaderPtr newFsReader(const std::string& filename, Status* status) = 0;
-    virtual FsWriterPtr newFsWriter(const std::string& filename, Status* status) = 0;
-};
-
-using FsPtr = std::unique_ptr<Fs>;
-using FsRef = std::shared_ptr<Fs>;
-
 } // namespace pl

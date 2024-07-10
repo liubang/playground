@@ -33,7 +33,7 @@ static constexpr uint32_t FILE_META_MAGIC_NUMBER = 0x4154454d; // the hex of 'ME
 static constexpr uint32_t FILE_META_MIN_LEN = 67;
 
 // clang-format off
-#define __SST_CASE__(t) case t: return #t
+#define __SST_CASE__(t, v) case t::v: return #v
 // clang-format on
 
 // clang-format off
@@ -47,10 +47,10 @@ enum class SSTType : uint8_t {
 
 inline const char* SSTType2String(SSTType t) {
     switch (t) {
-        __SST_CASE__(SSTType::NONE);
-        __SST_CASE__(SSTType::MEMORY);
-        __SST_CASE__(SSTType::MINOR);
-        __SST_CASE__(SSTType::MAJOR);
+        __SST_CASE__(SSTType, NONE);
+        __SST_CASE__(SSTType, MEMORY);
+        __SST_CASE__(SSTType, MINOR);
+        __SST_CASE__(SSTType, MAJOR);
     }
     __builtin_unreachable();
 }
@@ -62,8 +62,8 @@ enum class SSTVersion : uint8_t {
 
 inline const char* SSTVersion2String(SSTVersion t) {
     switch (t) {
-        __SST_CASE__(SSTVersion::NONE);
-        __SST_CASE__(SSTVersion::V1);
+        __SST_CASE__(SSTVersion, NONE);
+        __SST_CASE__(SSTVersion, V1);
     }
     __builtin_unreachable();
 }
@@ -75,8 +75,8 @@ enum class FilterPolicyType : uint8_t {
 
 inline const char* FilterPolicyType2String(FilterPolicyType t) {
     switch (t) {
-        __SST_CASE__(FilterPolicyType::NONE);
-        __SST_CASE__(FilterPolicyType::BLOOM_FILTER);
+        __SST_CASE__(FilterPolicyType, NONE);
+        __SST_CASE__(FilterPolicyType, BLOOM_FILTER);
     }
     __builtin_unreachable();
 }
@@ -89,9 +89,9 @@ enum class CompressionType : uint8_t {
 
 inline const char* CompressionType2String(CompressionType t) {
     switch (t) {
-        __SST_CASE__(CompressionType::NONE);
-        __SST_CASE__(CompressionType::SNAPPY);
-        __SST_CASE__(CompressionType::ZSTD);
+        __SST_CASE__(CompressionType, NONE);
+        __SST_CASE__(CompressionType, SNAPPY);
+        __SST_CASE__(CompressionType, ZSTD);
     }
     __builtin_unreachable();
 }
@@ -253,7 +253,8 @@ struct BlockContents {
 
 class BlockReader {
 public:
-    static Status readBlock(const FsReaderRef& reader,
+    static Status readBlock(const FileSystemRef& reader,
+                            const FileDescriptorRef& fd,
                             const BlockHandle& handle,
                             BlockContents* result);
 };
