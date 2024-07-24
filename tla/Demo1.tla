@@ -15,7 +15,7 @@ define {
 
 process(wire \in 1..NumTransfers) \* 模拟1~NumTransfers次转账
     variables
-        amnt \in 1..5;
+        amnt \in 1..6;
         from \in People;
         to \in People;
 {
@@ -28,7 +28,7 @@ Check:
 
 } end algorithm *)
 
-\* BEGIN TRANSLATION (chksum(pcal) = "f5b568c8" /\ chksum(tla) = "f118e70a")
+\* BEGIN TRANSLATION (chksum(pcal) = "aa01fc4f" /\ chksum(tla) = "ef804eb5")
 VARIABLES acct, pc
 
 (* define statement *)
@@ -43,7 +43,7 @@ ProcSet == (1..NumTransfers)
 Init == (* Global variables *)
         /\ acct \in [People -> Money]
         (* Process wire *)
-        /\ amnt \in [1..NumTransfers -> 1..5]
+        /\ amnt \in [1..NumTransfers -> 1..6]
         /\ from \in [1..NumTransfers -> People]
         /\ to \in [1..NumTransfers -> People]
         /\ pc = [self \in ProcSet |-> "Check"]
