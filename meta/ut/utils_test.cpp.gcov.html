@@ -31,17 +31,17 @@
             <td class="headerValue">_coverage_report.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntry">17</td>
-            <td class="headerCovTableEntry">17</td>
+            <td class="headerCovTableEntry">31</td>
+            <td class="headerCovTableEntry">31</td>
             <td class="headerCovTableEntryHi">100.0 %</td>
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-07-28 04:30:33</td>
+            <td class="headerValue">2024-07-28 10:48:03</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntry">8</td>
-            <td class="headerCovTableEntry">8</td>
+            <td class="headerCovTableEntry">9</td>
+            <td class="headerCovTableEntry">9</td>
             <td class="headerCovTableEntryHi">100.0 %</td>
           </tr>
           <tr><td><img src="../../glass.png" width=3 height=3 alt=""></td></tr>
@@ -125,10 +125,28 @@
 <a name="63"><span class="lineNum">      63 </span>            :         std::is_same_v&lt;pl::Unique&lt;longList&gt;::type, pl::TypeList&lt;char, float, int, double&gt;::type&gt;);</a>
 <a name="64"><span class="lineNum">      64 </span><span class="lineCov">          1 : };</span></a>
 <a name="65"><span class="lineNum">      65 </span>            : </a>
-<a name="66"><span class="lineNum">      66 </span><span class="lineCov">          1 : TEST_CASE(&quot;utils&quot;, &quot;[sums]&quot;) {</span></a>
-<a name="67"><span class="lineNum">      67 </span>            :     //</a>
-<a name="68"><span class="lineNum">      68 </span>            :     static_assert(pl::sums(1, 2, 3, 4) == 10);</a>
-<a name="69"><span class="lineNum">      69 </span><span class="lineCov">          1 : };</span></a>
+<a name="66"><span class="lineNum">      66 </span><span class="lineCov">          1 : TEST_CASE(&quot;utils&quot;, &quot;[sums]&quot;) { static_assert(pl::sums(1, 2, 3, 4) == 10); };</span></a>
+<a name="67"><span class="lineNum">      67 </span>            : </a>
+<a name="68"><span class="lineNum">      68 </span><span class="lineCov">          1 : TEST_CASE(&quot;utils&quot;, &quot;[no_destructor]&quot;) {</span></a>
+<a name="69"><span class="lineNum">      69 </span>            :     // smoke test</a>
+<a name="70"><span class="lineNum">      70 </span><span class="lineCov">          1 :     pl::NoDestructor&lt;pl::DoNotDestruct&gt; instance(12, 10);</span></a>
+<a name="71"><span class="lineNum">      71 </span><span class="lineCov">          1 :     REQUIRE(12 == instance.get()-&gt;a);</span></a>
+<a name="72"><span class="lineNum">      72 </span><span class="lineCov">          1 :     REQUIRE(10 == instance.get()-&gt;b);</span></a>
+<a name="73"><span class="lineNum">      73 </span><span class="lineCov">          1 :     REQUIRE(12 == instance-&gt;a);</span></a>
+<a name="74"><span class="lineNum">      74 </span><span class="lineCov">          1 :     REQUIRE(10 == instance-&gt;b);</span></a>
+<a name="75"><span class="lineNum">      75 </span>            : </a>
+<a name="76"><span class="lineNum">      76 </span>            :     // no copyable</a>
+<a name="77"><span class="lineNum">      77 </span>            :     using T = pl::NoDestructor&lt;int&gt;;</a>
+<a name="78"><span class="lineNum">      78 </span><span class="lineCov">          1 :     REQUIRE(!(std::is_constructible&lt;T, T&gt;::value));</span></a>
+<a name="79"><span class="lineNum">      79 </span><span class="lineCov">          1 :     REQUIRE(!(std::is_constructible&lt;T, const T&gt;::value));</span></a>
+<a name="80"><span class="lineNum">      80 </span><span class="lineCov">          1 :     REQUIRE(!(std::is_constructible&lt;T, T&amp;&gt;::value));</span></a>
+<a name="81"><span class="lineNum">      81 </span><span class="lineCov">          1 :     REQUIRE(!(std::is_constructible&lt;T, const T&amp;&gt;::value));</span></a>
+<a name="82"><span class="lineNum">      82 </span>            : </a>
+<a name="83"><span class="lineNum">      83 </span><span class="lineCov">          1 :     REQUIRE(!(std::is_assignable&lt;T, T&gt;::value));</span></a>
+<a name="84"><span class="lineNum">      84 </span><span class="lineCov">          1 :     REQUIRE(!(std::is_assignable&lt;T, const T&gt;::value));</span></a>
+<a name="85"><span class="lineNum">      85 </span><span class="lineCov">          1 :     REQUIRE(!(std::is_assignable&lt;T, T&amp;&gt;::value));</span></a>
+<a name="86"><span class="lineNum">      86 </span><span class="lineCov">          1 :     REQUIRE(!(std::is_assignable&lt;T, const T&amp;&gt;::value));</span></a>
+<a name="87"><span class="lineNum">      87 </span><span class="lineCov">          1 : }</span></a>
 </pre>
       </td>
     </tr>
