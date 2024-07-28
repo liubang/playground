@@ -29,7 +29,7 @@ cc_binary(
     copts = DEFAULT_COPTS + ["-std=c++20"],
     linkopts = DEFAULT_LINKOPTS,
     deps = [
+        "//cpp/pl/log:logger",
         "//cpp/pl/scope",
-        "@fmt",
     ],
 )
