@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2024/07/28 11:09
+# Created: 2024/07/28 22:11
 
 load(
     "//cpp:copts/configure_copts.bzl",
@@ -21,22 +21,14 @@ load(
     "DEFAULT_LINKOPTS",
 )
 
-package(default_visibility = ["//visibility:public"])
-
-cc_library(
-    name = "server",
+cc_binary(
+    name = "sample_http_server",
     srcs = [
-        "http.cpp",
-        "tcp.cpp",
-    ],
-    hdrs = [
-        "http.h",
-        "tcp.h",
+        "http_server.cpp",
     ],
     copts = DEFAULT_COPTS + ["-std=c++20"],
     linkopts = DEFAULT_LINKOPTS,
     deps = [
-        "//cpp/pl/log:logger",
-        "//cpp/pl/scope",
+        "//cpp/pl/http:server",
     ],
 )
