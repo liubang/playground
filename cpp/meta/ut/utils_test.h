@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <cstdint>
+#include <cstdlib>
 #include <type_traits>
 
 namespace pl {
@@ -24,5 +26,14 @@ template <typename T> using sizeLess4 = std::bool_constant<(sizeof(T) < 4)>;
 
 template <typename Acc, typename E>
 using TypeSizeAcc = std::integral_constant<std::size_t, Acc::value + sizeof(E)>;
+
+struct DoNotDestruct {
+public:
+    DoNotDestruct(uint32_t a, uint32_t b) : a(a), b(b) {}
+    ~DoNotDestruct() { std::abort(); }
+
+    uint32_t a;
+    uint32_t b;
+};
 
 } // namespace pl

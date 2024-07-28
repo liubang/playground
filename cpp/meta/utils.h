@@ -151,4 +151,56 @@ constexpr auto sums(Ts... ts) {
     return (0 + ... + ts);
 }
 
+//-------------------------------------------------------------------------------------------------
+
+// 构造T类型的实例，并且析构的时候不会调用T的destructor
+template <typename T> class NoDestructor {
+public:
+    template <
+        typename... Ts,
+        std::enable_if_t<!std::is_same_v<void(std::decay_t<Ts>&...), void(NoDestructor&)>, int> = 0>
+    explicit constexpr NoDestructor(Ts&&... args) : impl_(std::forward<Ts>(args)...) {}
+
+    NoDestructor(const NoDestructor&) = delete;
+    NoDestructor& operator=(const NoDestructor&) = delete;
+
+    T* get() { return impl_.get(); }
+    T* operator->() { return get(); }
+    T& operator*() { return *get(); }
+    const T* get() const { return impl_.get(); }
+    const T* operator->() const { return get(); }
+    const T& operator*() const { return *get(); }
+
+private:
+    class DirectImpl {
+    public:
+        template <typename... Args>
+        explicit constexpr DirectImpl(Args&&... args) : value_(std::forward<Args>(args)...) {}
+        const T* get() const { return &value_; }
+        T* get() { return &value_; }
+
+    private:
+        T value_;
+    };
+
+    class PlacementImpl {
+    public:
+        template <typename... Args> explicit PlacementImpl(Args&&... args) {
+            new (&space_) T(std::forward<Args>(args)...);
+        }
+
+        const T* get() const { return std::launder(reinterpret_cast<const T*>(&space_)); }
+        T* get() { return std::launder(reinterpret_cast<T*>(&space_)); }
+
+    private:
+        std::aligned_storage_t<sizeof(T), alignof(T)> space_;
+    };
+
+private:
+    std::conditional_t<std::is_trivially_destructible_v<T>, DirectImpl, PlacementImpl> impl_;
+};
+
+// Class Template Argument Deduction (CTAD)
+template <typename T> NoDestructor(T) -> NoDestructor<T>;
+
 } // namespace pl
