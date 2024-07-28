@@ -26,8 +26,9 @@ template <typename Fn> class ScopeGuard {
 public:
     ScopeGuard(Fn&& fn) : fn_(std::move(fn)) {}
     ~ScopeGuard() {
-        if (enabled_)
+        if (enabled_) {
             fn_();
+        }
     }
 
     void dismiss() { enabled_ = false; }
