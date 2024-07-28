@@ -63,7 +63,25 @@ TEST_CASE("utils", "[unique]") {
         std::is_same_v<pl::Unique<longList>::type, pl::TypeList<char, float, int, double>::type>);
 };
 
-TEST_CASE("utils", "[sums]") {
-    //
-    static_assert(pl::sums(1, 2, 3, 4) == 10);
-};
+TEST_CASE("utils", "[sums]") { static_assert(pl::sums(1, 2, 3, 4) == 10); };
+
+TEST_CASE("utils", "[no_destructor]") {
+    // smoke test
+    pl::NoDestructor<pl::DoNotDestruct> instance(12, 10);
+    REQUIRE(12 == instance.get()->a);
+    REQUIRE(10 == instance.get()->b);
+    REQUIRE(12 == instance->a);
+    REQUIRE(10 == instance->b);
+
+    // no copyable
+    using T = pl::NoDestructor<int>;
+    REQUIRE(!(std::is_constructible<T, T>::value));
+    REQUIRE(!(std::is_constructible<T, const T>::value));
+    REQUIRE(!(std::is_constructible<T, T&>::value));
+    REQUIRE(!(std::is_constructible<T, const T&>::value));
+
+    REQUIRE(!(std::is_assignable<T, T>::value));
+    REQUIRE(!(std::is_assignable<T, const T>::value));
+    REQUIRE(!(std::is_assignable<T, T&>::value));
+    REQUIRE(!(std::is_assignable<T, const T&>::value));
+}

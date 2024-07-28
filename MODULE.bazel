@@ -21,7 +21,7 @@ module(
 )
 
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
-bazel_dep(name = "platforms", version = "0.0.10")
+bazel_dep(name = "platforms", version = "0.0.4")
 bazel_dep(name = "rules_license", version = "0.0.8")
 bazel_dep(name = "rules_proto", version = "5.3.0-21.7")
 
@@ -52,21 +52,21 @@ bazel_dep(name = "onetbb", version = "2021.13.0")
 bazel_dep(name = "liburing", version = "2.5")
 bazel_dep(name = "crc32c", version = "1.1.0")
 bazel_dep(name = "snappy", version = "1.2.0")
-bazel_dep(name = "brpc", version = "1.9.0")
-bazel_dep(name = "openssl", version = "1.1.1m.brpc")
+bazel_dep(name = "brpc", version = "1.10.0")
+bazel_dep(name = "openssl", version = "3.3.1")
 bazel_dep(name = "lemon", version = "3.42.0")
 bazel_dep(name = "sqlite3", version = "3.42.0")
 bazel_dep(name = "nlohmann_json", version = "3.11.2")
 bazel_dep(name = "rapidjson", version = "1.1.0")
-bazel_dep(name = "glog", version = "0.6.0")
+bazel_dep(name = "glog", version = "0.7.1")
 bazel_dep(name = "gflags", version = "2.2.2")
 bazel_dep(name = "s2geometry", version = "0.11.1")
 bazel_dep(name = "asio", version = "1.28.2")
 
 # for test
-bazel_dep(name = "catch2", version = "3.4.0", dev_dependency = True)
-bazel_dep(name = "googletest", version = "1.14.0", dev_dependency = True)
-bazel_dep(name = "google_benchmark", version = "1.8.2", dev_dependency = True)
+bazel_dep(name = "catch2", version = "3.6.0", dev_dependency = True)
+bazel_dep(name = "googletest", version = "1.15.0", dev_dependency = True)
+bazel_dep(name = "google_benchmark", version = "1.8.5", dev_dependency = True)
 bazel_dep(name = "nanobench", version = "4.3.11", dev_dependency = True)
 
 # --registry=https://raw.githubusercontent.com/bazelboost/registry/main
