@@ -24,7 +24,7 @@
 #include <netdb.h>
 #if defined(__APPLE__) && defined(__MACH__)
 #include <sys/event.h>
-#elif defined(__LINUX__)
+#elif defined(__linux__)
 #include <sys/epoll.h>
 #else
 #error "unsupported operation system"
