@@ -23,7 +23,7 @@ module(
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(name = "platforms", version = "0.0.4")
 bazel_dep(name = "rules_license", version = "0.0.8")
-bazel_dep(name = "rules_proto", version = "5.3.0-21.7")
+bazel_dep(name = "rules_proto", version = "4.0.0")
 
 # Hedron's Compile Commands Extractor for Bazel
 # https://github.com/hedronvision/bazel-compile-commands-extractor
@@ -83,13 +83,13 @@ bazel_dep(name = "rules_apple", version = "3.5.1", repo_name = "build_bazel_rule
 apple_cc_configure = use_extension("@build_bazel_apple_support//crosstool:setup.bzl", "apple_cc_configure_extension")
 use_repo(apple_cc_configure, "local_config_apple_cc")
 
-# foreign cc
-bazel_dep(name = "rules_foreign_cc", version = "0.11.1")
-
-tools = use_extension("@rules_foreign_cc//foreign_cc:extensions.bzl", "tools")
-tools.cmake(version = "3.23.1")
-tools.ninja(version = "1.11.1")
-use_repo(tools, "meson_src")
+# # foreign cc
+# bazel_dep(name = "rules_foreign_cc", version = "0.9.0")
+#
+# tools = use_extension("@rules_foreign_cc//foreign_cc:extensions.bzl", "tools")
+# tools.cmake(version = "3.23.1")
+# tools.ninja(version = "1.11.1")
+# use_repo(tools, "meson_src")
 
 # bison and flex
 bazel_dep(name = "rules_m4", version = "0.2.3")
