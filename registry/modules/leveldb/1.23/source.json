@@ -4,6 +4,6 @@
   "integrity": "sha256-mjf4phdPCb1iK8cjtViB3FQc1QdHy9CIMcKoLWIPbXY=",
   "patch_strip": 1,
   "patches": {
-    "add-build.patch": "sha256-gwN67RMJVwmzg1C3gOI+kJqFCrWpi2bAgxsSXin1MpI="
+    "add-build.patch": "sha256-E8j3NG5FV3hVeAMNQzGEJtK/pGr5hSSBbjJ/e5QOu94"
   }
 }
