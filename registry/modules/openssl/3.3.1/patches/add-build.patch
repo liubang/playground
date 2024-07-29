@@ -1,58 +1,53 @@
-diff --color=auto -ruN a/BUILD b/BUILD
---- a/BUILD	1970-01-01 08:00:00
-+++ b/BUILD	2024-07-29 19:28:18
-@@ -0,0 +1,52 @@
-+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
-+
+diff --git a/BUILD b/BUILD
+new file mode 100644
+index 0000000000..be015cd2c9
+--- /dev/null
++++ b/BUILD
+@@ -0,0 +1,45 @@
 +package(
-+    default_visibility = ["//:__pkg__"],
++  default_visibility = ['//:__pkg__'],
 +)
 +
++load('@rules_foreign_cc//foreign_cc:defs.bzl', 'configure_make')
++
 +filegroup(
-+    name = "all_srcs",
-+    srcs = glob(
-+        ["**"],
-+        exclude = ["bazel-*/**"],
-+    ),
++  name = 'all_srcs',
++  srcs = glob(['**'], exclude = ['bazel-*/**']),
 +)
 +
 +CONFIGURE_OPTIONS = [
-+    "no-shared",
-+    "zlib",
-+    "--with-zlib-include=$$EXT_BUILD_DEPS$$/include",
-+    "--with-zlib-lib=$$EXT_BUILD_DEPS$$/lib",
++  'no-shared',
++  'zlib',
++  '--with-zlib-include=$$EXT_BUILD_DEPS$$/include',
++  '--with-zlib-lib=$$EXT_BUILD_DEPS$$/lib',
 +]
 +
 +alias(
-+    name = "ssl",
-+    actual = "openssl",
-+    visibility = ["//visibility:public"],
++  name = 'ssl',
++  actual = 'openssl',
++  visibility = ['//visibility:public'],
 +)
 +
 +alias(
-+    name = "crypto",
-+    actual = "openssl",
-+    visibility = ["//visibility:public"],
++  name = 'crypto',
++  actual = 'openssl',
++  visibility = ['//visibility:public'],
 +)
 +
 +configure_make(
-+    name = "openssl",
-+    configure_command = "Configure",
-+    configure_options = CONFIGURE_OPTIONS,
-+    env = select({
-+        "@platforms//os:macos": {"AR": ""},
-+        "//conditions:default": {},
-+    }),
-+    lib_source = ":all_srcs",
-+    out_lib_dir = "lib",
-+    out_static_libs = [
-+        "libssl.a",
-+        "libcrypto.a",
-+    ],
-+    targets = ["install_dev"],
-+    deps = [
-+        "@zlib",
-+    ],
++  name = 'openssl',
++  lib_source = ':all_srcs',
++  configure_command = 'Configure',
++  configure_options = CONFIGURE_OPTIONS,
++  targets = ['install_dev'],
++  postfix_script = 'mkdir -p $INSTALLDIR/lib; mv $INSTALLDIR/lib64/*.a $INSTALLDIR/lib',
++  out_static_libs = [
++    'libssl.a',
++    'libcrypto.a',
++  ],
++  deps = [
++    '@zlib',
++  ],
 +)
 diff --git a/Configure b/Configure
 index 3b6617c177..c569e796e7 100755
