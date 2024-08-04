@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Date:</td>
-            <td class="headerValue">2024-07-28 10:48:03</td>
+            <td class="headerValue">2024-08-04 15:35:44</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntry">9</td>
@@ -158,29 +158,29 @@
 <a name="96"><span class="lineNum">      96 </span><span class="lineNoCov">          0 :     return Status::NewOk();</span></a>
 <a name="97"><span class="lineNum">      97 </span>            : }</a>
 <a name="98"><span class="lineNum">      98 </span>            : </a>
-<a name="99"><span class="lineNum">      99 </span><span class="lineCov">       6721 : Status PosixFileSystem::pread(const FileDescriptorRef&amp; fd,</span></a>
+<a name="99"><span class="lineNum">      99 </span><span class="lineCov">       5580 : Status PosixFileSystem::pread(const FileDescriptorRef&amp; fd,</span></a>
 <a name="100"><span class="lineNum">     100 </span>            :                               uint64_t offset,</a>
 <a name="101"><span class="lineNum">     101 </span>            :                               std::size_t n,</a>
 <a name="102"><span class="lineNum">     102 </span>            :                               const char* buffer,</a>
 <a name="103"><span class="lineNum">     103 </span>            :                               std::string_view* result) {</a>
-<a name="104"><span class="lineNum">     104 </span><span class="lineCov">       6721 :     auto* posix_fd = static_cast&lt;PosixFileDescriptor*&gt;(fd.get());</span></a>
-<a name="105"><span class="lineNum">     105 </span><span class="lineCov">       6721 :     uint64_t read_count = 0;</span></a>
-<a name="106"><span class="lineNum">     106 </span><span class="lineCov">      13442 :     while (read_count &lt; n) {</span></a>
-<a name="107"><span class="lineNum">     107 </span><span class="lineCov">      13442 :         ssize_t len = ::pread(posix_fd-&gt;fd_, (void*)(buffer + read_count), n - read_count,</span></a>
-<a name="108"><span class="lineNum">     108 </span><span class="lineCov">       6721 :                               offset + read_count);</span></a>
-<a name="109"><span class="lineNum">     109 </span><span class="lineCov">       6721 :         if (len == -1) {</span></a>
+<a name="104"><span class="lineNum">     104 </span><span class="lineCov">       5580 :     auto* posix_fd = static_cast&lt;PosixFileDescriptor*&gt;(fd.get());</span></a>
+<a name="105"><span class="lineNum">     105 </span><span class="lineCov">       5580 :     uint64_t read_count = 0;</span></a>
+<a name="106"><span class="lineNum">     106 </span><span class="lineCov">      11160 :     while (read_count &lt; n) {</span></a>
+<a name="107"><span class="lineNum">     107 </span><span class="lineCov">      11160 :         ssize_t len = ::pread(posix_fd-&gt;fd_, (void*)(buffer + read_count), n - read_count,</span></a>
+<a name="108"><span class="lineNum">     108 </span><span class="lineCov">       5580 :                               offset + read_count);</span></a>
+<a name="109"><span class="lineNum">     109 </span><span class="lineCov">       5580 :         if (len == -1) {</span></a>
 <a name="110"><span class="lineNum">     110 </span>            :             // TODO:</a>
 <a name="111"><span class="lineNum">     111 </span><span class="lineNoCov">          0 :             LOG(WARN) &lt;&lt; &quot;failed pread, fd: &quot; &lt;&lt; posix_fd-&gt;fd_ &lt;&lt; &quot;, file: &quot; &lt;&lt; posix_fd-&gt;file_path_</span></a>
 <a name="112"><span class="lineNum">     112 </span><span class="lineNoCov">          0 :                       &lt;&lt; &quot;, errno: &quot; &lt;&lt; errno &lt;&lt; &quot;, message: &quot; &lt;&lt; std::strerror(errno);</span></a>
 <a name="113"><span class="lineNum">     113 </span><span class="lineNoCov">          0 :             return Status::NewIOError();</span></a>
 <a name="114"><span class="lineNum">     114 </span>            :         }</a>
-<a name="115"><span class="lineNum">     115 </span><span class="lineCov">       6721 :         read_count += len;</span></a>
-<a name="116"><span class="lineNum">     116 </span><span class="lineCov">       6721 :         if (len == 0) {</span></a>
+<a name="115"><span class="lineNum">     115 </span><span class="lineCov">       5580 :         read_count += len;</span></a>
+<a name="116"><span class="lineNum">     116 </span><span class="lineCov">       5580 :         if (len == 0) {</span></a>
 <a name="117"><span class="lineNum">     117 </span><span class="lineNoCov">          0 :             break;</span></a>
 <a name="118"><span class="lineNum">     118 </span>            :         }</a>
 <a name="119"><span class="lineNum">     119 </span>            :     }</a>
-<a name="120"><span class="lineNum">     120 </span><span class="lineCov">       6721 :     *result = std::string_view(buffer, read_count);</span></a>
-<a name="121"><span class="lineNum">     121 </span><span class="lineCov">       6721 :     return Status::NewOk();</span></a>
+<a name="120"><span class="lineNum">     120 </span><span class="lineCov">       5580 :     *result = std::string_view(buffer, read_count);</span></a>
+<a name="121"><span class="lineNum">     121 </span><span class="lineCov">       5580 :     return Status::NewOk();</span></a>
 <a name="122"><span class="lineNum">     122 </span>            : }</a>
 <a name="123"><span class="lineNum">     123 </span>            : </a>
 <a name="124"><span class="lineNum">     124 </span><span class="lineCov">       6166 : Status PosixFileSystem::append(const FileDescriptorRef&amp; fd, uint64_t flags, std::string_view data) {</span></a>
