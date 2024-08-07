@@ -186,13 +186,15 @@ private:
     class PlacementImpl {
     public:
         template <typename... Args> explicit PlacementImpl(Args&&... args) {
-            new (&space_) T(std::forward<Args>(args)...);
+            // new (&space_) T(std::forward<Args>(args)...);
+            std::construct_at(reinterpret_cast<T*>(&space_), std::forward<Args>(args)...);
         }
 
         const T* get() const { return std::launder(reinterpret_cast<const T*>(&space_)); }
         T* get() { return std::launder(reinterpret_cast<T*>(&space_)); }
 
     private:
+        // alignas(T) unsigned char space_[sizeof(T)];
         std::aligned_storage_t<sizeof(T), alignof(T)> space_;
     };
 
