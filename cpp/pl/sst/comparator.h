@@ -59,7 +59,7 @@ public:
             // do nothing
             return;
         }
-        uint8_t diff_byte = static_cast<uint8_t>((*start)[diff_index]);
+        auto diff_byte = static_cast<uint8_t>((*start)[diff_index]);
         // start: hello , limit: heln => helm
         if (diff_byte < static_cast<uint8_t>(0xff) &&
             diff_byte + 1 < static_cast<uint8_t>(limit[diff_index])) {
@@ -71,7 +71,7 @@ public:
     void findShortSucessor(std::string* key) const override {
         size_t n = key->size();
         for (size_t i = 0; i < n; ++i) {
-            const uint8_t byte = static_cast<uint8_t>((*key)[i]);
+            const auto byte = static_cast<uint8_t>((*key)[i]);
             if (byte != static_cast<uint8_t>(0xff)) {
                 (*key)[i]++;
                 key->resize(i + 1);

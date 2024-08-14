@@ -15,8 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/sst/sstable_iterator.h"
-#include "cpp/pl/log/logger.h"
-#include "cpp/pl/sst/sstable_format.h"
 
 #include <cassert>
 
