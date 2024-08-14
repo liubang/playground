@@ -30,9 +30,12 @@ load(
         copts = [
             "-std=c++20",
             "-ffast-math",
-            "-march=native",
         ] + TEST_COPTS + select({
-            "//:linux_x86_64": ["-fopenmp"],
+            "//:linux_x86_64": [
+                "-fopenmp",
+                "-march=native",
+            ],
+            "//:darwin": ["-mcpu=apple-m1"],
             "//conditions:default": [],
         }),
         linkopts = DEFAULT_LINKOPTS + select({
