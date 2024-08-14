@@ -13,28 +13,5 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2024/08/04 22:21
+# Created: 2024/08/14 13:02
 
-load(
-    "//cpp:copts/configure_copts.bzl",
-    "DEFAULT_LINKOPTS",
-    "TEST_COPTS",
-)
-
-# cc_library(
-#     name = "defer",
-#     hdrs = [
-#         "defer.h",
-#     ],
-#     visibility = ["//visibility:public"],
-# )
-#
-# cc_test(
-#     name = "defer_test",
-#     srcs = ["defer_test.cpp"],
-#     copts = ["-std=c++20"] + TEST_COPTS,
-#     linkopts = DEFAULT_LINKOPTS,
-#     deps = [
-#         ":defer",
-#     ],
-# )
