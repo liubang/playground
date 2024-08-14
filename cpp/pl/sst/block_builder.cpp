@@ -16,7 +16,6 @@
 // Created: 2023/05/29 21:04
 
 #include "cpp/pl/sst/block_builder.h"
-#include "cpp/pl/log/logger.h"
 #include "cpp/pl/sst/encoding.h"
 
 #include <cassert>
