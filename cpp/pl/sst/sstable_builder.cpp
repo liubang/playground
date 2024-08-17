@@ -16,13 +16,13 @@
 // Created: 2023/05/31 21:04
 
 #include "cpp/pl/sst/sstable_builder.h"
-#include "cpp/pl/crc/crc.h"
 #include "cpp/pl/fs/posix_fs.h"
 #include "cpp/pl/log/logger.h"
 #include "cpp/pl/sst/encoding.h"
 
 #include "snappy.h"
 #include <cassert>
+#include <isa-l/crc.h>
 #include <utility>
 #include <zstd.h>
 
@@ -216,7 +216,7 @@ void SSTableBuilder::writeBlockRaw(std::string_view content,
     // crc
     char trailer[BLOCK_TRAILER_LEN];
     trailer[0] = static_cast<const char>(type);
-    uint32_t crc = crc32(content.data(), content.size());
+    uint32_t crc = ::crc32_iscsi((unsigned char*)content.data(), content.size(), 0);
     std::string encode_crc;
     encodeInt<uint32_t>(&encode_crc, crc);
     memcpy(trailer + 1, encode_crc.data(), encode_crc.size());
