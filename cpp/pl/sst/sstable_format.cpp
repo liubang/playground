@@ -15,11 +15,11 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/sst/sstable_format.h"
-#include "cpp/pl/crc/crc.h"
 #include "cpp/pl/sst/encoding.h"
 
 #include "snappy.h"
 #include <cassert>
+#include <isa-l/crc.h>
 #include <zstd.h>
 
 namespace pl {
@@ -223,7 +223,7 @@ Status BlockReader::readBlock(const FileSystemRef& reader,
     // crc check
     const char* data = content.data();
     auto crc = decodeInt<uint32_t>(data + s + 1);
-    auto actual_crc = crc32(data, s);
+    auto actual_crc = ::crc32_iscsi((unsigned char*)data, s, 0);
     if (crc != actual_crc) {
         return Status::NewCorruption("crc error");
     }
