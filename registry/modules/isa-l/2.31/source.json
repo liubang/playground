@@ -1,0 +1,9 @@
+{
+  "url": "https://github.com/intel/isa-l/archive/refs/tags/v2.31.0.tar.gz",
+  "strip_prefix": "isa-l-2.31.0",
+  "integrity": "sha256-4hi3suJBz7joto9UpuXu2AlozDh8SxrwNwi1Tp+yNvE=",
+  "patch_strip": 1,
+  "patches": {
+    "add-build.patch": "sha256-ZZ/xGUs8Fg7T6IJbbEc+D7LHcNLTOQ56nZQhEdW8ZOA="
+  }
+}
