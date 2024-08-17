@@ -14,4 +14,21 @@
 
 # Authors: liubang (it.liubang@gmail.com)
 
+load(
+    "//cpp:copts/configure_copts.bzl",
+    "DEFAULT_LINKOPTS",
+    "TEST_COPTS",
+)
 
+cc_test(
+    name = "crc_benchmark",
+    srcs = ["crc_benchmark.cpp"],
+    copts = ["-std=c++20"] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        "@boost.crc",
+        "@crc32c",
+        "@google_benchmark//:benchmark_main",
+        "@isa-l",
+    ],
+)
