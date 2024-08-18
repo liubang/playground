@@ -31,9 +31,10 @@ jobs:
           restore-keys: |
             ${{ env.cache-name }}-${{ runner.os }}
       - run: go install github.com/bazelbuild/bazelisk@latest
+      - run: sudo apt install yasm
+      - run: sudo apt install nasm
       - name: build and test
         run: |
-          sudo apt install yasm nasm -y
           bazelisk clean
           rm -rf ~/.cache/bazel
           bazelisk build //cpp/...
@@ -48,7 +49,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v3
         with:
-          go-version: "^1.19.0"
+          go-version: "^1.23.0"
       - uses: actions/cache@v3
         env:
           cache-name: bazel-coverage
@@ -58,9 +59,11 @@ jobs:
           restore-keys: |
             ${{ env.cache-name }}-${{ runner.os }}
       - run: go install github.com/bazelbuild/bazelisk@latest
+      - run: sudo apt install lcov
+      - run: sudo apt install yasm
+      - run: sudo apt install nasm
       - name: run build
         run: |
-          sudo apt install lcov yasm nasm -y
           bazelisk coverage --instrument_test_targets --combined_report=lcov //cpp/...
           genhtml --output coverage "./bazel-out/_coverage/_coverage_report.dat"
           cp -r ./registry ./coverage/
