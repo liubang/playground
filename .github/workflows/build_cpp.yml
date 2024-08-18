@@ -55,14 +55,14 @@ jobs:
           key: ${{ env.cache-name }}-${{ runner.os }}
           restore-keys: ${{ env.cache-name }}-${{ runner.os }}
       - run: go install github.com/bazelbuild/bazelisk@latest
-      - run: sudo apt update
       - run: sudo apt install lcov
       - run: sudo apt install yasm
       - run: sudo apt install nasm
       - name: run build
         run: |
           bazelisk coverage --disk_cache=bazel-disk --action_env=CC=gcc-12 --instrument_test_targets --combined_report=lcov //cpp/...
-          ls ./bazel-out/_coverage/_coverage_report.dat
+          ls -lh ./bazel-out/_coverage/_coverage_report.dat
+          cat ./bazel-out/_coverage/_coverage_report.dat
           genhtml --output coverage ./bazel-out/_coverage/_coverage_report.dat
           cp -r ./registry ./coverage/
       - name: Deploy 🚀
