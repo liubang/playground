@@ -12,59 +12,56 @@ on:
 jobs:
   build-cpp:
     name: cpp playground
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v5
         with:
           go-version: "^1.23.0"
-      - uses: bazelbuild/setup-bazelisk@v2
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         env:
           cache-name: bazel-cpp
         with:
-          path: "~/.cache/bazel"
+          path: bazel-disk
           key: ${{ env.cache-name }}-${{ runner.os }}
-          restore-keys: |
-            ${{ env.cache-name }}-${{ runner.os }}
+          restore-keys: ${{ env.cache-name }}-${{ runner.os }}
+          save-always: true
       - run: go install github.com/bazelbuild/bazelisk@latest
-      - run: sudo apt update 
+      - run: sudo apt update
       - run: sudo apt install yasm
       - run: sudo apt install nasm
       - name: build and test
         run: |
-          bazelisk clean
-          rm -rf ~/.cache/bazel
-          bazelisk build --action_env=CC=gcc-12 //cpp/...
-          bazelisk test --action_env=CC=gcc-12  //cpp/...
+          bazelisk build --action_env=CC=gcc-12 --disk_cache=bazel-disk //cpp/...
+          bazelisk test --action_env=CC=gcc-12 --disk_cache=bazel-disk //cpp/...
   coverage:
     name: code coverage
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     needs: [build-cpp]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v5
         with:
           go-version: "^1.23.0"
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         env:
           cache-name: bazel-coverage
         with:
-          path: ~/.cache/bazelisk
+          path: bazel-disk
           key: ${{ env.cache-name }}-${{ runner.os }}
-          restore-keys: |
-            ${{ env.cache-name }}-${{ runner.os }}
+          restore-keys: ${{ env.cache-name }}-${{ runner.os }}
       - run: go install github.com/bazelbuild/bazelisk@latest
+      - run: sudo apt update
       - run: sudo apt install lcov
       - run: sudo apt install yasm
       - run: sudo apt install nasm
       - name: run build
         run: |
-          bazelisk coverage --action_env=CC=gcc-12 --instrument_test_targets --combined_report=lcov //cpp/...
+          bazelisk coverage --disk_cache=bazel-disk --action_env=CC=gcc-12 --instrument_test_targets --combined_report=lcov //cpp/...
           genhtml --output coverage "./bazel-out/_coverage/_coverage_report.dat"
           cp -r ./registry ./coverage/
       - name: Deploy 🚀
