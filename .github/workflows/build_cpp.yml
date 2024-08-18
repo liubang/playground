@@ -62,6 +62,9 @@ jobs:
       - name: run build
         run: |
           bazelisk coverage --disk_cache=bazel-disk --action_env=CC=gcc-12 --instrument_test_targets --combined_report=lcov //cpp/...
+          ls
+          cd ./bazel-out
+          find . -name "*.dat"
           genhtml --output coverage "./bazel-out/_coverage/_coverage_report.dat"
           cp -r ./registry ./coverage/
       - name: Deploy 🚀
