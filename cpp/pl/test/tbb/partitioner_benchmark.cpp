@@ -21,7 +21,7 @@
 #include <cmath>
 #include <vector>
 
-constexpr size_t n = 1 << 14;
+constexpr size_t n = 1 << 5;
 
 static void test1() {
     std::vector<float> a(n * n);
