@@ -12,8 +12,7 @@ on:
 jobs:
   build-cpp:
     name: cpp playground
-    runs-on: ubuntu-latest
-    container: gcc:13
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v3
         with:
@@ -31,17 +30,18 @@ jobs:
           restore-keys: |
             ${{ env.cache-name }}-${{ runner.os }}
       - run: go install github.com/bazelbuild/bazelisk@latest
+      - run: sudo apt update 
       - run: sudo apt install yasm
       - run: sudo apt install nasm
       - name: build and test
         run: |
           bazelisk clean
           rm -rf ~/.cache/bazel
-          bazelisk build //cpp/...
-          bazelisk test  //cpp/...
+          bazelisk build --action_env=CC=gcc-12 //cpp/...
+          bazelisk test --action_env=CC=gcc-12  //cpp/...
   coverage:
     name: code coverage
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [build-cpp]
     steps:
       - uses: actions/checkout@v3
@@ -64,7 +64,7 @@ jobs:
       - run: sudo apt install nasm
       - name: run build
         run: |
-          bazelisk coverage --instrument_test_targets --combined_report=lcov //cpp/...
+          bazelisk coverage --action_env=CC=gcc-12 --instrument_test_targets --combined_report=lcov //cpp/...
           genhtml --output coverage "./bazel-out/_coverage/_coverage_report.dat"
           cp -r ./registry ./coverage/
       - name: Deploy 🚀
