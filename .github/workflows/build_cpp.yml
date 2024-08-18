@@ -65,7 +65,7 @@ jobs:
           genhtml --output coverage "./bazel-out/_coverage/_coverage_report.dat"
           cp -r ./registry ./coverage/
       - name: Deploy 🚀
-        uses: peaceiris/actions-gh-pages@v3
+        uses: peaceiris/actions-gh-pages@v4
         if: ${{ github.ref == 'refs/heads/main' }}
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
