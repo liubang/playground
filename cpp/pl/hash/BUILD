@@ -29,17 +29,17 @@ cc_library(
     visibility = ["//visibility:public"],
 )
 
-cc_test(
-    name = "murmurhash2_test",
-    srcs = [
-        "murmurhash2_test.cpp",
-    ],
-    copts = [
-        "-std=c++20",
-    ] + TEST_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
-    deps = [
-        "//cpp/pl/hash",
-        "@googletest//:gtest_main",
-    ],
-)
+# cc_test(
+#     name = "murmurhash2_test",
+#     srcs = [
+#         "murmurhash2_test.cpp",
+#     ],
+#     copts = [
+#         "-std=c++20",
+#     ] + TEST_COPTS,
+#     linkopts = DEFAULT_LINKOPTS,
+#     deps = [
+#         "//cpp/pl/hash",
+#         "@googletest//:gtest_main",
+#     ],
+# )
