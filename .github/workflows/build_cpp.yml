@@ -34,8 +34,8 @@ jobs:
       - run: sudo apt install nasm
       - name: build and test
         run: |
-          bazelisk build --action_env=CC=gcc-12 --disk_cache=bazel-disk //cpp/...
-          bazelisk test --action_env=CC=gcc-12 --disk_cache=bazel-disk //cpp/...
+          bazelisk build -c opt --action_env=CC=gcc-12 --disk_cache=bazel-disk //cpp/...
+          bazelisk test -c opt --action_env=CC=gcc-12 --disk_cache=bazel-disk //cpp/...
   coverage:
     name: code coverage
     runs-on: ubuntu-latest
@@ -60,7 +60,7 @@ jobs:
       - run: sudo apt install nasm
       - name: run build
         run: |
-          bazelisk coverage --disk_cache=bazel-disk --action_env=CC=gcc-12 --instrument_test_targets --combined_report=lcov //cpp/...
+          bazelisk coverage -c dbg --disk_cache=bazel-disk --action_env=CC=gcc-12 --instrument_test_targets --combined_report=lcov //cpp/...
           ls -lh ./bazel-out/_coverage/_coverage_report.dat
           cat ./bazel-out/_coverage/_coverage_report.dat
           genhtml --output coverage ./bazel-out/_coverage/_coverage_report.dat
