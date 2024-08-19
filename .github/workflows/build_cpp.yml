@@ -9,17 +9,21 @@ on:
       - ".github/workflows/build_cpp.yml"
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: actions/cache@v4
         env:
-          cache-name: build 
+          cache-name: build
         with:
           path: bazel-disk
           key: ${{ github.workflow }}-${{ env.cache-name }}-${{ runner.os }}-${{github.sha}}
@@ -38,11 +42,8 @@ jobs:
           bazel build -c opt --action_env=CC=gcc-12 --disk_cache=bazel-disk //cpp/...
   test:
     name: test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [build]
-    concurrency:
-      group: test-and-coverage
-      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
         with:
@@ -68,11 +69,8 @@ jobs:
           bazel test -c opt --action_env=CC=gcc-12 --disk_cache=bazel-disk //cpp/...
   coverage:
     name: coverage
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [build]
-    concurrency:
-      group: test-and-coverage
-      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
         with:
