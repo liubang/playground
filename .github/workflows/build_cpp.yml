@@ -32,8 +32,8 @@ jobs:
       - uses: bazel-contrib/setup-bazel@0.8.5
         with:
           bazelisk-cache: true
-          disk-cache: ${{ github.workflow }}
-          repository-cache: true
+          disk-cache: false
+          repository-cache: false
       - run: sudo apt update
       - run: sudo apt install yasm
       - run: sudo apt install nasm
@@ -59,8 +59,8 @@ jobs:
       - uses: bazel-contrib/setup-bazel@0.8.5
         with:
           bazelisk-cache: true
-          disk-cache: ${{ github.workflow }}
-          repository-cache: true
+          disk-cache: false
+          repository-cache: false
       - run: sudo apt update
       - run: sudo apt install yasm
       - run: sudo apt install nasm
@@ -86,16 +86,16 @@ jobs:
       - uses: bazel-contrib/setup-bazel@0.8.5
         with:
           bazelisk-cache: true
-          disk-cache: ${{ github.workflow }}
+          disk-cache: false
           repository-cache: true
       - run: sudo apt install lcov
       - run: sudo apt install yasm
       - run: sudo apt install nasm
       - name: run coverage
         run: |
-          bazel coverage --action_env=CC=gcc-12 --disk_cache=bazel-disk --verbose_failures --combined_report=lcov --instrumentation_filter='cpp,-cpp/copts' cpp/...
+          bazel coverage --action_env=CC=gcc-12 --disk_cache=bazel-disk --verbose_failures --combined_report=lcov --instrument_test_targets cpp/...
           ls -lh ./bazel-out/_coverage/_coverage_report.dat
-          genhtml --output coverage ./bazel-out/_coverage/_coverage_report.dat
+          genhtml --ignore-errors --output coverage ./bazel-out/_coverage/_coverage_report.dat
           cp -r ./registry ./coverage/
       - name: Deploy 🚀
         uses: peaceiris/actions-gh-pages@v4
