@@ -24,7 +24,6 @@ common --experimental_ui_max_stdouterr_bytes=1073741819
 
 build --jobs=10
 build --cxxopt=-std=c++17
-build -c opt
 
 build:linux --linkopt=-fuse-ld=gold
 build:macos --linkopt=-fuse-ld=lld
@@ -37,7 +36,6 @@ build --java_language_version=21
 build --tool_java_language_version=21
 build --tool_java_runtime_version=21
 
-test -c opt
 test --test_output=all --action_env="GTEST_COLOR=1" --action_env="GTEST_BREAK_ON_FAILURE=1"
 test --nocache_test_results
 test --nojava_header_compilation 
