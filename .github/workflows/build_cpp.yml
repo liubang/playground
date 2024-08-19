@@ -10,57 +10,86 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-cpp:
-    name: cpp playground
+  build:
+    name: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: bazel-contrib/setup-bazel@0.8.5
-        with:
-          bazelisk-cache: true
-          disk-cache: ${{ github.workflow }}
-          repository-cache: true
       - uses: actions/cache@v4
         env:
-          cache-name: bazel-cpp
+          cache-name: build 
         with:
           path: bazel-disk
           key: ${{ github.workflow }}-${{ env.cache-name }}-${{ runner.os }}-${{github.sha}}
           restore-keys: ${{ github.workflow }}-${{ env.cache-name }}-${{ runner.os }}-
           save-always: true
+      - uses: bazel-contrib/setup-bazel@0.8.5
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          repository-cache: true
       - run: sudo apt update
       - run: sudo apt install yasm
       - run: sudo apt install nasm
       - name: build and test
         run: |
           bazel build -c opt --action_env=CC=gcc-12 --disk_cache=bazel-disk //cpp/...
-          bazel test -c opt --action_env=CC=gcc-12 --disk_cache=bazel-disk //cpp/...
-  coverage:
-    name: code coverage
+  test:
+    name: test
     runs-on: ubuntu-latest
-    needs: [build-cpp]
+    needs: [build]
+    concurrency:
+      group: test-and-coverage
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "^1.23.0"
-      - uses: bazel-contrib/setup-bazel@0.8.5
-        with:
-          bazelisk-cache: true
-          disk-cache: ${{ github.workflow }}
-          repository-cache: true
       - uses: actions/cache@v4
         env:
-          cache-name: bazel-coverage
+          cache-name: test
         with:
           path: bazel-disk
           key: ${{ github.workflow }}-${{ env.cache-name }}-${{ runner.os }}-${{github.sha}}
           restore-keys: ${{ github.workflow }}-${{ env.cache-name }}-${{ runner.os }}-
           save-always: true
+      - uses: bazel-contrib/setup-bazel@0.8.5
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          repository-cache: true
+      - run: sudo apt update
+      - run: sudo apt install yasm
+      - run: sudo apt install nasm
+      - name: test
+        run: |
+          bazel test -c opt --action_env=CC=gcc-12 --disk_cache=bazel-disk //cpp/...
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    needs: [build]
+    concurrency:
+      group: test-and-coverage
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/cache@v4
+        env:
+          cache-name: coverage
+        with:
+          path: bazel-disk
+          key: ${{ github.workflow }}-${{ env.cache-name }}-${{ runner.os }}-${{github.sha}}
+          restore-keys: ${{ github.workflow }}-${{ env.cache-name }}-${{ runner.os }}-
+          save-always: true
+      - uses: bazel-contrib/setup-bazel@0.8.5
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          repository-cache: true
       - run: sudo apt install lcov
       - run: sudo apt install yasm
       - run: sudo apt install nasm
