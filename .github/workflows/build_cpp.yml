@@ -95,7 +95,7 @@ jobs:
         run: |
           bazel coverage --action_env=CC=gcc-12 --disk_cache=bazel-disk --verbose_failures --combined_report=lcov --instrument_test_targets cpp/...
           ls -lh ./bazel-out/_coverage/_coverage_report.dat
-          genhtml --output coverage ./bazel-out/_coverage/_coverage_report.dat
+          genhtml --ignore-errors negative --output coverage ./bazel-out/_coverage/_coverage_report.dat
           cp -r ./registry ./coverage/
       - name: Deploy 🚀
         uses: peaceiris/actions-gh-pages@v4
