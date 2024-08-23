@@ -31,13 +31,13 @@
             <td class="headerValue">_coverage_report.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">95.8&nbsp;%</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
             <td class="headerCovTableEntry">24</td>
-            <td class="headerCovTableEntry">23</td>
+            <td class="headerCovTableEntry">24</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-08-20 05:56:37</td>
+            <td class="headerValue">2024-08-23 17:48:33</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -95,11 +95,11 @@
 <span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">          44 :         std::size_t end = std::min(n, (t + 1) * n / maxt);</span></span>
 <span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">          44 :         tg.run([&amp;, t, beg, end] {</span></span>
 <span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">          44 :             float local_res = 0;</span></span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">   620925837 :             for (std::size_t i = beg; i &lt; end; ++i) {</span></span>
-<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">   623478973 :                 local_res += std::sin(i);</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">   677685819 :             for (std::size_t i = beg; i &lt; end; ++i) {</span></span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">   677034048 :                 local_res += std::sin(i);</span></span>
 <span id="L38"><span class="lineNum">      38</span>              :             }</span>
-<span id="L39"><span class="lineNum">      39</span> <span class="tlaUNC tlaBgUNC">           0 :             tmp_res[t] = local_res;</span></span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC tlaBgGNC">          44 :         });</span></span>
+<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">      651771 :             tmp_res[t] = local_res;</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">          44 :         });</span></span>
 <span id="L41"><span class="lineNum">      41</span>              :     }</span>
 <span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">          11 :     tg.wait();</span></span>
 <span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">          55 :     for (std::size_t t = 0; t &lt; maxt; ++t) {</span></span>
