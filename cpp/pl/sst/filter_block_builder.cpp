@@ -36,11 +36,9 @@ void FilterBlockBuilder::startBlock(uint64_t offset) {
 }
 
 void FilterBlockBuilder::addKey(std::string_view key) {
-    // make a copy
-    std::string_view k = key;
     // 这两行的先后顺序不能颠倒
     start_.push_back(keys_.size());
-    keys_.append(k.data(), k.size());
+    keys_.append(key.data(), key.size());
 }
 
 /**
