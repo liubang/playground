@@ -712,7 +712,7 @@
     "@@rules_foreign_cc~//foreign_cc:extensions.bzl%tools": {
       "general": {
         "bzlTransitiveDigest": "f6RBwbUKS3C3FNQJAYhIWLiHaTLQDr1nKJidK7iQTBg=",
-        "usagesDigest": "mPUf4drbXxJrS7Krhb/PucezPoMOB/lnRw9OI4jo02o=",
+        "usagesDigest": "rcono0M8vAWDAJxsr93rRa5vX8s73ZexMVAKXNZRFTg=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
         "envVariables": {},
