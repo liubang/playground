@@ -23,12 +23,18 @@ load(
 cc_test(
     name = "crc_benchmark",
     srcs = ["crc_benchmark.cpp"],
-    copts = ["-std=c++20"] + TEST_COPTS,
+    copts = [
+        "-std=c++20",
+    ] + TEST_COPTS,
     linkopts = DEFAULT_LINKOPTS,
     deps = [
         "@boost.crc",
-        "@crc32c",
         "@google_benchmark//:benchmark_main",
-        "@isa-l",
-    ],
+    ] + select({
+        "//:linux_x86_64": [
+            "@crc32c",
+            "@isa-l",
+        ],
+        "//conditions:default": [],
+    }),
 )
