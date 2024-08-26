@@ -31,7 +31,6 @@ build --host_cxxopt=-std=c++17
 
 build:linux --linkopt=-fuse-ld=gold
 build:macos --action_env=CC=/opt/homebrew/opt/llvm@17/bin/clang
-# build:macos --linkopt=-fuse-ld=lld
 
 # for java
 build --nojava_header_compilation
