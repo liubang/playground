@@ -29,7 +29,14 @@ build --jobs=10
 build --cxxopt=-std=c++17
 build --host_cxxopt=-std=c++17
 
+# for llvm
+build:llvm --action_env=CC=clang
+build:llvm --linkopt=-fuse-ld=lld
+
+# default linux
 build:linux --linkopt=-fuse-ld=gold
+
+# default macos
 build:macos --action_env=CC=/opt/homebrew/opt/llvm@17/bin/clang
 
 # for java
