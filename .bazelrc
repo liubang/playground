@@ -14,6 +14,9 @@
 
 # Authors: liubang (it.liubang@gmail.com)
 
+# 自动启用基于平台的特定配置
+common --enable_platform_specific_config
+
 # common --registry=https://liubang.github.io/playground/registry
 common --registry=file://%workspace%/registry
 common --registry=https://raw.githubusercontent.com/bazelboost/registry/main
@@ -24,13 +27,13 @@ common --experimental_ui_max_stdouterr_bytes=1073741819
 
 build --jobs=10
 build --cxxopt=-std=c++17
+build --host_cxxopt=-std=c++17
 
 build:linux --linkopt=-fuse-ld=gold
 build:macos --linkopt=-fuse-ld=lld
 
 # for java
 build --nojava_header_compilation
-
 build --java_runtime_version=21
 build --java_language_version=21
 build --tool_java_language_version=21
