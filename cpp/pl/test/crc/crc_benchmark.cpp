@@ -16,8 +16,11 @@
 
 #include <benchmark/benchmark.h>
 #include <boost/crc.hpp>
+
+#if defined(__linux__)
 #include <crc32c/crc32c.h>
 #include <isa-l/crc.h>
+#endif
 
 class CRC32Benchmark : public benchmark::Fixture {
 public:
@@ -47,6 +50,7 @@ BENCHMARK_REGISTER_F(CRC32Benchmark, boost_crc)
     ->RangeMultiplier(16)
     ->Range(256, 16777216); // Block size.
 
+#if defined(__linux__)
 BENCHMARK_DEFINE_F(CRC32Benchmark, CRC32C_Public)(benchmark::State& state) {
     uint32_t crc = 0;
     for (auto _ : state)
@@ -101,3 +105,4 @@ BENCHMARK_DEFINE_F(CRC32Benchmark, isal_iscsi)(benchmark::State& state) {
 BENCHMARK_REGISTER_F(CRC32Benchmark, isal_iscsi)
     ->RangeMultiplier(16)
     ->Range(256, 16777216); // Block size.
+#endif
