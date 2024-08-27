@@ -20,7 +20,10 @@ jobs:
         compiler:
           [
             { name: gcc, flag: --action_env=CC=gcc-12 --linkopt=-fuse-ld=gold },
-            { name: clang, flag: --action_env=CC=clang-18 --linkopt=-fuse-ld=lld },
+            {
+              name: clang,
+              flag: --action_env=CC=clang-18 --linkopt=-fuse-ld=lld --linkopt=-stdlib=libc++ --cxxopt=-stdlib=libc++ --cxxopt=-Wno-error=unused-but-set-variable --cxxopt=-Wno-error=unused-but-set-parameter,
+            },
           ]
     name: build
     runs-on: ubuntu-24.04
@@ -53,7 +56,10 @@ jobs:
         compiler:
           [
             { name: gcc, flag: --action_env=CC=gcc-12 --linkopt=-fuse-ld=gold },
-            { name: clang, flag: --action_env=CC=clang-18 --linkopt=-fuse-ld=lld },
+            {
+              name: clang,
+              flag: --action_env=CC=clang-18 --linkopt=-fuse-ld=lld --linkopt=-stdlib=libc++ --cxxopt=-stdlib=libc++ --cxxopt=-Wno-error=unused-but-set-variable --cxxopt=-Wno-error=unused-but-set-parameter,
+            },
           ]
     name: test
     runs-on: ubuntu-24.04
