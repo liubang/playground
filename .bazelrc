@@ -33,8 +33,11 @@ build --host_cxxopt=-std=c++17
 build:llvm --action_env=CC=clang
 build:llvm --linkopt=-fuse-ld=lld
 
-# default linux
-build:linux --linkopt=-fuse-ld=gold
+# for gcc
+build:gcc --linkopt=-fuse-ld=gold
+
+# default linux using gcc
+build:linux --config=gcc
 
 # default macos
 build:macos --action_env=CC=/opt/homebrew/opt/llvm@17/bin/clang
