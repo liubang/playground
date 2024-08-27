@@ -32,6 +32,10 @@ build --host_cxxopt=-std=c++17
 # for llvm
 build:llvm --action_env=CC=clang
 build:llvm --linkopt=-fuse-ld=lld
+build:llvm --linkopt=-stdlib=libc++
+build:llvm --cxxopt=-stdlib=libc++ 
+build:llvm --cxxopt=-Wno-error=unused-but-set-variable
+build:llvm --cxxopt=-Wno-error=unused-but-set-parameter
 
 # for gcc
 build:gcc --linkopt=-fuse-ld=gold
