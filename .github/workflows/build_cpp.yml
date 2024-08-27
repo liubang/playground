@@ -15,6 +15,13 @@ concurrency:
 
 jobs:
   build:
+    strategy:
+      matrix:
+        compiler:
+          [
+            { name: gcc, flag: --action_env=CC=gcc-12 --linkopt=-fuse-ld=gold },
+            { name: clang, flag: --action_env=CC=clang-18 --linkopt=-fuse-ld=lld },
+          ]
     name: build
     runs-on: ubuntu-24.04
     steps:
@@ -26,8 +33,8 @@ jobs:
           cache-name: build
         with:
           path: bazel-disk
-          key: ${{ github.workflow }}-${{ env.cache-name }}-${{ runner.os }}-${{github.sha}}
-          restore-keys: ${{ github.workflow }}-${{ env.cache-name }}-${{ runner.os }}-
+          key: build-${{ matrix.compiler.name }}-${{ env.cache-name }}-${{ runner.os }}-${{github.sha}}
+          restore-keys: build-${{ matrix.compiler.name }}-${{ env.cache-name }}-${{ runner.os }}-
           save-always: true
       - uses: bazel-contrib/setup-bazel@0.8.5
         with:
@@ -39,8 +46,15 @@ jobs:
       - run: sudo apt install nasm
       - name: run build
         run: |
-          bazel build -c opt --action_env=CC=gcc-12 --disk_cache=bazel-disk //cpp/...
+          bazel build -c opt --action_env=CC=${{ matrix.compiler.flag }} --disk_cache=bazel-disk //cpp/...
   test:
+    strategy:
+      matrix:
+        compiler:
+          [
+            { name: gcc, flag: --action_env=CC=gcc-12 --linkopt=-fuse-ld=gold },
+            { name: clang, flag: --action_env=CC=clang-18 --linkopt=-fuse-ld=lld },
+          ]
     name: test
     runs-on: ubuntu-24.04
     needs: [build]
@@ -53,8 +67,8 @@ jobs:
           cache-name: test
         with:
           path: bazel-disk
-          key: ${{ github.workflow }}-${{ env.cache-name }}-${{ runner.os }}-${{github.sha}}
-          restore-keys: ${{ github.workflow }}-${{ env.cache-name }}-${{ runner.os }}-
+          key: test-${{ matrix.compiler.name }}-${{ env.cache-name }}-${{ runner.os }}-${{github.sha}}
+          restore-keys: test-${{ matrix.compiler.name }}-${{ env.cache-name }}-${{ runner.os }}-
           save-always: true
       - uses: bazel-contrib/setup-bazel@0.8.5
         with:
@@ -66,7 +80,7 @@ jobs:
       - run: sudo apt install nasm
       - name: run test
         run: |
-          bazel test -c opt --action_env=CC=gcc-12 --disk_cache=bazel-disk //cpp/...
+          bazel test -c opt --action_env=CC=${{ matrix.compiler.flag }} --disk_cache=bazel-disk //cpp/...
   coverage:
     name: coverage
     runs-on: ubuntu-24.04
