@@ -46,7 +46,7 @@ jobs:
       - run: sudo apt install nasm
       - name: run build
         run: |
-          bazel build -c opt --action_env=CC=${{ matrix.compiler.flag }} --disk_cache=bazel-disk //cpp/...
+          bazel build -c opt ${{ matrix.compiler.flag }} --disk_cache=bazel-disk //cpp/...
   test:
     strategy:
       matrix:
@@ -80,7 +80,7 @@ jobs:
       - run: sudo apt install nasm
       - name: run test
         run: |
-          bazel test -c opt --action_env=CC=${{ matrix.compiler.flag }} --disk_cache=bazel-disk //cpp/...
+          bazel test -c opt ${{ matrix.compiler.flag }} --disk_cache=bazel-disk //cpp/...
   coverage:
     name: coverage
     runs-on: ubuntu-24.04
