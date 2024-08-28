@@ -45,8 +45,8 @@ jobs:
           disk-cache: false
           repository-cache: false
       - run: sudo apt update
-      - run: sudo apt install yasm
       - run: sudo apt install nasm
+      - run: sudo apt install libomp-dev
       - name: run build
         run: |
           bazel build -c opt ${{ matrix.compiler.flag }} --disk_cache=bazel-disk //cpp/...
@@ -109,8 +109,8 @@ jobs:
           disk-cache: false
           repository-cache: true
       - run: sudo apt install lcov
-      - run: sudo apt install yasm
       - run: sudo apt install nasm
+      - run: sudo apt install libomp-dev
       - name: run coverage
         run: |
           bazel coverage --action_env=CC=gcc-12 --disk_cache=bazel-disk --verbose_failures --combined_report=lcov --instrument_test_targets cpp/...
