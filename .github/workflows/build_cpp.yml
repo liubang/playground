@@ -82,8 +82,8 @@ jobs:
           disk-cache: false
           repository-cache: false
       - run: sudo apt update
-      - run: sudo apt install yasm
       - run: sudo apt install nasm
+      - run: sudo apt install libomp-dev
       - name: run test
         run: |
           bazel test -c opt ${{ matrix.compiler.flag }} --disk_cache=bazel-disk //cpp/...
