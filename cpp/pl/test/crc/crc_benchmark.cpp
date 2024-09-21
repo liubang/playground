@@ -20,6 +20,7 @@
 #if defined(__linux__)
 #include <crc32c/crc32c.h>
 #include <isa-l/crc.h>
+#include <isa-l/crc64.h>
 #endif
 
 class CRC32Benchmark : public benchmark::Fixture {
@@ -106,3 +107,41 @@ BENCHMARK_REGISTER_F(CRC32Benchmark, isal_iscsi)
     ->RangeMultiplier(16)
     ->Range(256, 16777216); // Block size.
 #endif
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+#define BENCHMARK_CRC64_FUNC(func)                                              \
+    BENCHMARK_DEFINE_F(CRC32Benchmark, func)(benchmark::State & state) {        \
+        uint64_t crc = 0;                                                       \
+        for (auto _ : state) {                                                  \
+            crc = ::func(crc, (unsigned char*)block_data_.data(), block_size_); \
+            benchmark::DoNotOptimize(crc);                                      \
+        }                                                                       \
+        state.SetBytesProcessed(state.iterations() * block_size_);              \
+    }                                                                           \
+    BENCHMARK_REGISTER_F(CRC32Benchmark, func)->RangeMultiplier(16)->Range(256, 16777216)
+
+BENCHMARK_CRC64_FUNC(crc64_ecma_refl);
+BENCHMARK_CRC64_FUNC(crc64_ecma_norm);
+BENCHMARK_CRC64_FUNC(crc64_iso_refl);
+BENCHMARK_CRC64_FUNC(crc64_iso_norm);
+BENCHMARK_CRC64_FUNC(crc64_jones_refl);
+BENCHMARK_CRC64_FUNC(crc64_jones_norm);
+BENCHMARK_CRC64_FUNC(crc64_rocksoft_refl);
+BENCHMARK_CRC64_FUNC(crc64_rocksoft_norm);
+BENCHMARK_CRC64_FUNC(crc64_ecma_refl_by8);
+BENCHMARK_CRC64_FUNC(crc64_ecma_norm_by8);
+BENCHMARK_CRC64_FUNC(crc64_ecma_refl_base);
+BENCHMARK_CRC64_FUNC(crc64_ecma_norm_base);
+BENCHMARK_CRC64_FUNC(crc64_iso_refl_by8);
+BENCHMARK_CRC64_FUNC(crc64_iso_norm_by8);
+BENCHMARK_CRC64_FUNC(crc64_iso_refl_base);
+BENCHMARK_CRC64_FUNC(crc64_iso_norm_base);
+BENCHMARK_CRC64_FUNC(crc64_jones_refl_by8);
+BENCHMARK_CRC64_FUNC(crc64_jones_norm_by8);
+BENCHMARK_CRC64_FUNC(crc64_jones_refl_base);
+BENCHMARK_CRC64_FUNC(crc64_jones_norm_base);
+BENCHMARK_CRC64_FUNC(crc64_rocksoft_refl_by8);
+BENCHMARK_CRC64_FUNC(crc64_rocksoft_refl_base);
+BENCHMARK_CRC64_FUNC(crc64_rocksoft_norm_by8);
+BENCHMARK_CRC64_FUNC(crc64_rocksoft_norm_base);
