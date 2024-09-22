@@ -4,6 +4,7 @@
   "integrity": "sha256-4hi3suJBz7joto9UpuXu2AlozDh8SxrwNwi1Tp+yNvE=",
   "patch_strip": 1,
   "patches": {
-    "add-build.patch": "sha256-ZZ/xGUs8Fg7T6IJbbEc+D7LHcNLTOQ56nZQhEdW8ZOA="
+    "add-build.patch": "sha256-kAzTC5fICH7zBhRGXZ5JUCaZnTbEAJ5B+Ioyzvom5B8=",
+    "fix-mach-compilation.patch": "sha256-QaMA4xVaKB2/Bap51UJQsZ7aA1qBZvU2jBiGdGdHXAs="
   }
 }
