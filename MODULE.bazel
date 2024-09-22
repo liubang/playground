@@ -39,7 +39,7 @@ git_override(
 )
 
 # apple support
-bazel_dep(name = "apple_support", version = "1.16.0", repo_name = "build_bazel_apple_support")
+bazel_dep(name = "apple_support", version = "1.17.0", repo_name = "build_bazel_apple_support")
 
 # foreign cc
 bazel_dep(name = "rules_foreign_cc", version = "0.12.0")
