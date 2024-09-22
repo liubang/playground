@@ -27,11 +27,8 @@
 
 #include <cassert>
 #include <filesystem>
-#include <functional>
 
 namespace pl {
-
-using HandleResult = std::function<void(void* arg, std::string_view k, std::string_view v)>;
 
 class SSTable {
 public:
