@@ -30,10 +30,10 @@ cc_test(
     deps = [
         "@boost.crc",
         "@google_benchmark//:benchmark_main",
+        "@isa-l",
     ] + select({
         "//:linux_x86_64": [
             "@crc32c",
-            "@isa-l",
         ],
         "//conditions:default": [],
     }),

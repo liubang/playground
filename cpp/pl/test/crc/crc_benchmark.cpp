@@ -16,12 +16,11 @@
 
 #include <benchmark/benchmark.h>
 #include <boost/crc.hpp>
-
 #if defined(__linux__)
 #include <crc32c/crc32c.h>
+#endif
 #include <isa-l/crc.h>
 #include <isa-l/crc64.h>
-#endif
 
 class CRC32Benchmark : public benchmark::Fixture {
 public:
@@ -129,19 +128,22 @@ BENCHMARK_CRC64_FUNC(crc64_jones_refl);
 BENCHMARK_CRC64_FUNC(crc64_jones_norm);
 BENCHMARK_CRC64_FUNC(crc64_rocksoft_refl);
 BENCHMARK_CRC64_FUNC(crc64_rocksoft_norm);
-BENCHMARK_CRC64_FUNC(crc64_ecma_refl_by8);
-BENCHMARK_CRC64_FUNC(crc64_ecma_norm_by8);
 BENCHMARK_CRC64_FUNC(crc64_ecma_refl_base);
 BENCHMARK_CRC64_FUNC(crc64_ecma_norm_base);
-BENCHMARK_CRC64_FUNC(crc64_iso_refl_by8);
-BENCHMARK_CRC64_FUNC(crc64_iso_norm_by8);
 BENCHMARK_CRC64_FUNC(crc64_iso_refl_base);
 BENCHMARK_CRC64_FUNC(crc64_iso_norm_base);
-BENCHMARK_CRC64_FUNC(crc64_jones_refl_by8);
-BENCHMARK_CRC64_FUNC(crc64_jones_norm_by8);
 BENCHMARK_CRC64_FUNC(crc64_jones_refl_base);
 BENCHMARK_CRC64_FUNC(crc64_jones_norm_base);
-BENCHMARK_CRC64_FUNC(crc64_rocksoft_refl_by8);
 BENCHMARK_CRC64_FUNC(crc64_rocksoft_refl_base);
-BENCHMARK_CRC64_FUNC(crc64_rocksoft_norm_by8);
 BENCHMARK_CRC64_FUNC(crc64_rocksoft_norm_base);
+
+#if defined(__linux__)
+BENCHMARK_CRC64_FUNC(crc64_ecma_refl_by8);
+BENCHMARK_CRC64_FUNC(crc64_ecma_norm_by8);
+BENCHMARK_CRC64_FUNC(crc64_iso_refl_by8);
+BENCHMARK_CRC64_FUNC(crc64_iso_norm_by8);
+BENCHMARK_CRC64_FUNC(crc64_jones_refl_by8);
+BENCHMARK_CRC64_FUNC(crc64_jones_norm_by8);
+BENCHMARK_CRC64_FUNC(crc64_rocksoft_refl_by8);
+BENCHMARK_CRC64_FUNC(crc64_rocksoft_norm_by8);
+#endif
