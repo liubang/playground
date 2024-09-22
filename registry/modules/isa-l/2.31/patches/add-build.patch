@@ -1,6 +1,6 @@
---- /dev/null	2024-09-05 20:57:55
-+++ a/BUILD	2024-09-05 20:57:52
-@@ -0,0 +1,50 @@
+--- /dev/null	2024-09-22 17:33:53
++++ b/BUILD	2024-09-22 17:33:51
+@@ -0,0 +1,53 @@
 +# Copyright (c) 2024 The Authors. All rights reserved.
 +#
 +# Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,6 +45,9 @@
 +    configure_options = [
 +        "ASFLAGS=\" \"",
 +    ],
++    env = {
++        "AR": "",
++    },
 +    lib_source = ":all_srcs",
 +    out_static_libs = [
 +        "libisal.a",
