@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-09-21 16:46:06</td>
+            <td class="headerValue">2024-09-22 10:40:52</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -94,9 +94,9 @@
 <span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">          44 :         std::size_t beg = t * n / maxt;</span></span>
 <span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">          44 :         std::size_t end = std::min(n, (t + 1) * n / maxt);</span></span>
 <span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">          44 :         tg.run([&amp;, t, beg, end] {</span></span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">          43 :             float local_res = 0;</span></span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">   504615308 :             for (std::size_t i = beg; i &lt; end; ++i) {</span></span>
-<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">   543361703 :                 local_res += std::sin(i);</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">          44 :             float local_res = 0;</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">   499388090 :             for (std::size_t i = beg; i &lt; end; ++i) {</span></span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">   549832711 :                 local_res += std::sin(i);</span></span>
 <span id="L38"><span class="lineNum">      38</span>              :             }</span>
 <span id="L39"><span class="lineNum">      39</span> <span class="tlaUNC tlaBgUNC">           0 :             tmp_res[t] = local_res;</span></span>
 <span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC tlaBgGNC">          44 :         });</span></span>
