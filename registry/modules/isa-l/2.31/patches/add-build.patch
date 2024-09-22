@@ -1,9 +1,6 @@
-diff --git c/BUILD i/BUILD
-new file mode 100644
-index 0000000..63da4a1
---- /dev/null
-+++ i/BUILD
-@@ -0,0 +1,40 @@
+--- /dev/null	2024-09-05 20:57:55
++++ a/BUILD	2024-09-05 20:57:52
+@@ -0,0 +1,50 @@
 +# Copyright (c) 2024 The Authors. All rights reserved.
 +#
 +# Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,8 +33,18 @@ index 0000000..63da4a1
 +
 +configure_make(
 +    name = "isa-l",
-+    autogen = True,
++    autogen = False,
++    autoreconf = True,
++    autoreconf_options = [
++        "--install",
++        "--symlink",
++        "-f",
++        "-Wno-obsolete",
++    ],
 +    configure_in_place = True,
++    configure_options = [
++        "ASFLAGS=\" \"",
++    ],
 +    lib_source = ":all_srcs",
 +    out_static_libs = [
 +        "libisal.a",
