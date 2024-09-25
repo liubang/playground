@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-09-22 10:40:52</td>
+            <td class="headerValue">2024-09-25 16:28:20</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -86,11 +86,11 @@
 <span id="L24"><span class="lineNum">      24</span>              : </span>
 <span id="L25"><span class="lineNum">      25</span>              : class CRC32Benchmark : public benchmark::Fixture {</span>
 <span id="L26"><span class="lineNum">      26</span>              : public:</span>
-<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC tlaBgGNC">         819 :     void SetUp(const benchmark::State&amp; state) override {</span></span>
-<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">         819 :         block_size_ = static_cast&lt;size_t&gt;(state.range(0));</span></span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">         819 :         block_data_ = std::string(block_size_, 'x');</span></span>
-<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">         819 :         block_buffer_ = reinterpret_cast&lt;const uint8_t*&gt;(block_data_.data());</span></span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">         819 :     }</span></span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC tlaBgGNC">         818 :     void SetUp(const benchmark::State&amp; state) override {</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">         818 :         block_size_ = static_cast&lt;size_t&gt;(state.range(0));</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">         818 :         block_data_ = std::string(block_size_, 'x');</span></span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">         818 :         block_buffer_ = reinterpret_cast&lt;const uint8_t*&gt;(block_data_.data());</span></span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">         818 :     }</span></span>
 <span id="L32"><span class="lineNum">      32</span>              : </span>
 <span id="L33"><span class="lineNum">      33</span>              : protected:</span>
 <span id="L34"><span class="lineNum">      34</span>              :     std::string block_data_;</span>
@@ -100,10 +100,10 @@
 <span id="L38"><span class="lineNum">      38</span>              : </span>
 <span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">          24 : BENCHMARK_DEFINE_F(CRC32Benchmark, boost_crc)(benchmark::State&amp; state) {</span></span>
 <span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">          23 :     uint32_t crc = 0;</span></span>
-<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">      659701 :     for (auto _ : state) {</span></span>
-<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">      659609 :         boost::crc_32_type result;</span></span>
-<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">      659609 :         result.process_bytes(block_buffer_, block_size_);</span></span>
-<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">      659609 :         crc = result.checksum();</span></span>
+<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">      647366 :     for (auto _ : state) {</span></span>
+<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">      647274 :         boost::crc_32_type result;</span></span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">      647274 :         result.process_bytes(block_buffer_, block_size_);</span></span>
+<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">      647274 :         crc = result.checksum();</span></span>
 <span id="L45"><span class="lineNum">      45</span>              :         benchmark::DoNotOptimize(crc);</span>
 <span id="L46"><span class="lineNum">      46</span>              :     }</span>
 <span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">          23 :     state.SetBytesProcessed(state.iterations() * block_size_);</span></span>
@@ -115,8 +115,8 @@
 <span id="L53"><span class="lineNum">      53</span>              : #if defined(__linux__)</span>
 <span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">          28 : BENCHMARK_DEFINE_F(CRC32Benchmark, CRC32C_Public)(benchmark::State&amp; state) {</span></span>
 <span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">          27 :     uint32_t crc = 0;</span></span>
-<span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">     4348103 :     for (auto _ : state)</span></span>
-<span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">     4347995 :         crc = crc32c::Extend(crc, block_buffer_, block_size_);</span></span>
+<span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">     4265514 :     for (auto _ : state)</span></span>
+<span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">     4265406 :         crc = crc32c::Extend(crc, block_buffer_, block_size_);</span></span>
 <span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">          27 :     state.SetBytesProcessed(state.iterations() * block_size_);</span></span>
 <span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC">          27 : }</span></span>
 <span id="L60"><span class="lineNum">      60</span>              : </span>
@@ -144,8 +144,8 @@
 <span id="L82"><span class="lineNum">      82</span>              : </span>
 <span id="L83"><span class="lineNum">      83</span> <span class="tlaGNC">          33 : BENCHMARK_DEFINE_F(CRC32Benchmark, isal_ieee)(benchmark::State&amp; state) {</span></span>
 <span id="L84"><span class="lineNum">      84</span> <span class="tlaGNC">          32 :     uint32_t crc = 0;</span></span>
-<span id="L85"><span class="lineNum">      85</span> <span class="tlaGNC">    31117360 :     for (auto _ : state) {</span></span>
-<span id="L86"><span class="lineNum">      86</span> <span class="tlaGNC">    31117232 :         crc = ::crc32_ieee(0, (unsigned char*)block_data_.data(), block_size_);</span></span>
+<span id="L85"><span class="lineNum">      85</span> <span class="tlaGNC">    31196879 :     for (auto _ : state) {</span></span>
+<span id="L86"><span class="lineNum">      86</span> <span class="tlaGNC">    31196751 :         crc = ::crc32_ieee(0, (unsigned char*)block_data_.data(), block_size_);</span></span>
 <span id="L87"><span class="lineNum">      87</span>              :         benchmark::DoNotOptimize(crc);</span>
 <span id="L88"><span class="lineNum">      88</span>              :     }</span>
 <span id="L89"><span class="lineNum">      89</span> <span class="tlaGNC">          32 :     state.SetBytesProcessed(state.iterations() * block_size_);</span></span>
@@ -157,8 +157,8 @@
 <span id="L95"><span class="lineNum">      95</span>              : </span>
 <span id="L96"><span class="lineNum">      96</span> <span class="tlaGNC">          34 : BENCHMARK_DEFINE_F(CRC32Benchmark, isal_iscsi)(benchmark::State&amp; state) {</span></span>
 <span id="L97"><span class="lineNum">      97</span> <span class="tlaGNC">          33 :     uint32_t crc = 0;</span></span>
-<span id="L98"><span class="lineNum">      98</span> <span class="tlaGNC">    42166200 :     for (auto _ : state) {</span></span>
-<span id="L99"><span class="lineNum">      99</span> <span class="tlaGNC">    42166068 :         crc = ::crc32_iscsi((unsigned char*)block_data_.data(), block_size_, 0);</span></span>
+<span id="L98"><span class="lineNum">      98</span> <span class="tlaGNC">    41216251 :     for (auto _ : state) {</span></span>
+<span id="L99"><span class="lineNum">      99</span> <span class="tlaGNC">    41216119 :         crc = ::crc32_iscsi((unsigned char*)block_data_.data(), block_size_, 0);</span></span>
 <span id="L100"><span class="lineNum">     100</span>              :         benchmark::DoNotOptimize(crc);</span>
 <span id="L101"><span class="lineNum">     101</span>              :     }</span>
 <span id="L102"><span class="lineNum">     102</span> <span class="tlaGNC">          33 :     state.SetBytesProcessed(state.iterations() * block_size_);</span></span>
@@ -182,32 +182,32 @@
 <span id="L120"><span class="lineNum">     120</span>              :     }                                                                           \</span>
 <span id="L121"><span class="lineNum">     121</span>              :     BENCHMARK_REGISTER_F(CRC32Benchmark, func)-&gt;RangeMultiplier(16)-&gt;Range(256, 16777216)</span>
 <span id="L122"><span class="lineNum">     122</span>              : </span>
-<span id="L123"><span class="lineNum">     123</span> <span class="tlaGNC">    61428595 : BENCHMARK_CRC64_FUNC(crc64_ecma_refl);</span></span>
-<span id="L124"><span class="lineNum">     124</span> <span class="tlaGNC">    62456189 : BENCHMARK_CRC64_FUNC(crc64_ecma_norm);</span></span>
-<span id="L125"><span class="lineNum">     125</span> <span class="tlaGNC">    60974203 : BENCHMARK_CRC64_FUNC(crc64_iso_refl);</span></span>
-<span id="L126"><span class="lineNum">     126</span> <span class="tlaGNC">    61128555 : BENCHMARK_CRC64_FUNC(crc64_iso_norm);</span></span>
-<span id="L127"><span class="lineNum">     127</span> <span class="tlaGNC">    61229103 : BENCHMARK_CRC64_FUNC(crc64_jones_refl);</span></span>
-<span id="L128"><span class="lineNum">     128</span> <span class="tlaGNC">    62541515 : BENCHMARK_CRC64_FUNC(crc64_jones_norm);</span></span>
-<span id="L129"><span class="lineNum">     129</span> <span class="tlaGNC">    63819057 : BENCHMARK_CRC64_FUNC(crc64_rocksoft_refl);</span></span>
-<span id="L130"><span class="lineNum">     130</span> <span class="tlaGNC">    61460339 : BENCHMARK_CRC64_FUNC(crc64_rocksoft_norm);</span></span>
-<span id="L131"><span class="lineNum">     131</span> <span class="tlaGNC">     1899283 : BENCHMARK_CRC64_FUNC(crc64_ecma_refl_base);</span></span>
-<span id="L132"><span class="lineNum">     132</span> <span class="tlaGNC">     1976073 : BENCHMARK_CRC64_FUNC(crc64_ecma_norm_base);</span></span>
-<span id="L133"><span class="lineNum">     133</span> <span class="tlaGNC">     1967363 : BENCHMARK_CRC64_FUNC(crc64_iso_refl_base);</span></span>
-<span id="L134"><span class="lineNum">     134</span> <span class="tlaGNC">     2017867 : BENCHMARK_CRC64_FUNC(crc64_iso_norm_base);</span></span>
-<span id="L135"><span class="lineNum">     135</span> <span class="tlaGNC">     1965899 : BENCHMARK_CRC64_FUNC(crc64_jones_refl_base);</span></span>
-<span id="L136"><span class="lineNum">     136</span> <span class="tlaGNC">     1970077 : BENCHMARK_CRC64_FUNC(crc64_jones_norm_base);</span></span>
-<span id="L137"><span class="lineNum">     137</span> <span class="tlaGNC">     1923569 : BENCHMARK_CRC64_FUNC(crc64_rocksoft_refl_base);</span></span>
-<span id="L138"><span class="lineNum">     138</span> <span class="tlaGNC">     2021935 : BENCHMARK_CRC64_FUNC(crc64_rocksoft_norm_base);</span></span>
+<span id="L123"><span class="lineNum">     123</span> <span class="tlaGNC">    60498413 : BENCHMARK_CRC64_FUNC(crc64_ecma_refl);</span></span>
+<span id="L124"><span class="lineNum">     124</span> <span class="tlaGNC">    59830767 : BENCHMARK_CRC64_FUNC(crc64_ecma_norm);</span></span>
+<span id="L125"><span class="lineNum">     125</span> <span class="tlaGNC">    63525867 : BENCHMARK_CRC64_FUNC(crc64_iso_refl);</span></span>
+<span id="L126"><span class="lineNum">     126</span> <span class="tlaGNC">    67001819 : BENCHMARK_CRC64_FUNC(crc64_iso_norm);</span></span>
+<span id="L127"><span class="lineNum">     127</span> <span class="tlaGNC">    67779153 : BENCHMARK_CRC64_FUNC(crc64_jones_refl);</span></span>
+<span id="L128"><span class="lineNum">     128</span> <span class="tlaGNC">    68047829 : BENCHMARK_CRC64_FUNC(crc64_jones_norm);</span></span>
+<span id="L129"><span class="lineNum">     129</span> <span class="tlaGNC">    69162869 : BENCHMARK_CRC64_FUNC(crc64_rocksoft_refl);</span></span>
+<span id="L130"><span class="lineNum">     130</span> <span class="tlaGNC">    66381679 : BENCHMARK_CRC64_FUNC(crc64_rocksoft_norm);</span></span>
+<span id="L131"><span class="lineNum">     131</span> <span class="tlaGNC">     1982973 : BENCHMARK_CRC64_FUNC(crc64_ecma_refl_base);</span></span>
+<span id="L132"><span class="lineNum">     132</span> <span class="tlaGNC">     2125507 : BENCHMARK_CRC64_FUNC(crc64_ecma_norm_base);</span></span>
+<span id="L133"><span class="lineNum">     133</span> <span class="tlaGNC">     1944739 : BENCHMARK_CRC64_FUNC(crc64_iso_refl_base);</span></span>
+<span id="L134"><span class="lineNum">     134</span> <span class="tlaGNC">     2172583 : BENCHMARK_CRC64_FUNC(crc64_iso_norm_base);</span></span>
+<span id="L135"><span class="lineNum">     135</span> <span class="tlaGNC">     1966659 : BENCHMARK_CRC64_FUNC(crc64_jones_refl_base);</span></span>
+<span id="L136"><span class="lineNum">     136</span> <span class="tlaGNC">     2127717 : BENCHMARK_CRC64_FUNC(crc64_jones_norm_base);</span></span>
+<span id="L137"><span class="lineNum">     137</span> <span class="tlaGNC">     1963989 : BENCHMARK_CRC64_FUNC(crc64_rocksoft_refl_base);</span></span>
+<span id="L138"><span class="lineNum">     138</span> <span class="tlaGNC">     2182889 : BENCHMARK_CRC64_FUNC(crc64_rocksoft_norm_base);</span></span>
 <span id="L139"><span class="lineNum">     139</span>              : </span>
 <span id="L140"><span class="lineNum">     140</span>              : #if defined(__linux__)</span>
-<span id="L141"><span class="lineNum">     141</span> <span class="tlaGNC">    60957979 : BENCHMARK_CRC64_FUNC(crc64_ecma_refl_by8);</span></span>
-<span id="L142"><span class="lineNum">     142</span> <span class="tlaGNC">    62174583 : BENCHMARK_CRC64_FUNC(crc64_ecma_norm_by8);</span></span>
-<span id="L143"><span class="lineNum">     143</span> <span class="tlaGNC">    63725939 : BENCHMARK_CRC64_FUNC(crc64_iso_refl_by8);</span></span>
-<span id="L144"><span class="lineNum">     144</span> <span class="tlaGNC">    61592339 : BENCHMARK_CRC64_FUNC(crc64_iso_norm_by8);</span></span>
-<span id="L145"><span class="lineNum">     145</span> <span class="tlaGNC">    63001443 : BENCHMARK_CRC64_FUNC(crc64_jones_refl_by8);</span></span>
-<span id="L146"><span class="lineNum">     146</span> <span class="tlaGNC">    62595499 : BENCHMARK_CRC64_FUNC(crc64_jones_norm_by8);</span></span>
-<span id="L147"><span class="lineNum">     147</span> <span class="tlaGNC">    64018599 : BENCHMARK_CRC64_FUNC(crc64_rocksoft_refl_by8);</span></span>
-<span id="L148"><span class="lineNum">     148</span> <span class="tlaGNC">    61696487 : BENCHMARK_CRC64_FUNC(crc64_rocksoft_norm_by8);</span></span>
+<span id="L141"><span class="lineNum">     141</span> <span class="tlaGNC">    83199479 : BENCHMARK_CRC64_FUNC(crc64_ecma_refl_by8);</span></span>
+<span id="L142"><span class="lineNum">     142</span> <span class="tlaGNC">    82621955 : BENCHMARK_CRC64_FUNC(crc64_ecma_norm_by8);</span></span>
+<span id="L143"><span class="lineNum">     143</span> <span class="tlaGNC">    83308099 : BENCHMARK_CRC64_FUNC(crc64_iso_refl_by8);</span></span>
+<span id="L144"><span class="lineNum">     144</span> <span class="tlaGNC">    81989081 : BENCHMARK_CRC64_FUNC(crc64_iso_norm_by8);</span></span>
+<span id="L145"><span class="lineNum">     145</span> <span class="tlaGNC">    83065773 : BENCHMARK_CRC64_FUNC(crc64_jones_refl_by8);</span></span>
+<span id="L146"><span class="lineNum">     146</span> <span class="tlaGNC">    82009683 : BENCHMARK_CRC64_FUNC(crc64_jones_norm_by8);</span></span>
+<span id="L147"><span class="lineNum">     147</span> <span class="tlaGNC">    83939495 : BENCHMARK_CRC64_FUNC(crc64_rocksoft_refl_by8);</span></span>
+<span id="L148"><span class="lineNum">     148</span> <span class="tlaGNC">    81358519 : BENCHMARK_CRC64_FUNC(crc64_rocksoft_norm_by8);</span></span>
 <span id="L149"><span class="lineNum">     149</span>              : #endif</span>
         </pre>
               </td>
