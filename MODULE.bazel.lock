@@ -301,6 +301,8 @@
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/boost.rational/1.83.0.bzl.1/source.json": "043a730041f6071064d86d9b616c8d87278489f5747f622d600e4c7481a7c83f",
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/boost.regex/1.83.0.bzl.1/MODULE.bazel": "2d37b8e0717b7f0c8588bf49c1d1209d0436e5c32009f023ee04637b52f2327a",
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/boost.regex/1.83.0.bzl.1/source.json": "95710b15c3bea1a7dd1da77e135f04f42f02c0a550df3ef935e91faf0655e609",
+    "https://raw.githubusercontent.com/bazelboost/registry/main/modules/boost.scope_exit/1.83.0.bzl.1/MODULE.bazel": "a1ff345daa0874d405fb288d0190d0b7d38d879f5c0cddda88c79a8d97fde10a",
+    "https://raw.githubusercontent.com/bazelboost/registry/main/modules/boost.scope_exit/1.83.0.bzl.1/source.json": "8c4283ebbc8d282861ab32e7ad2b3faa66de6f14b008007c02af9f5f37a869d3",
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/boost.smart_ptr/1.83.0.bzl.1/MODULE.bazel": "f8f89eae3f9596b15c93a31d6048db4251b3076db314e99033b679a3b525408f",
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/boost.smart_ptr/1.83.0.bzl.1/source.json": "8bfe46ab210ce804ea43166b1327dc297846f12aa8868b1e9d99de5a15798c28",
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/boost.static_assert/1.83.0.bzl.1/MODULE.bazel": "00ee796d2db4c1f757d4ee3326e496b3a52f552dc1aafea103db8e2ead44b266",
