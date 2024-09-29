@@ -43,3 +43,13 @@ cc_test(
         "@boost.utility",
     ],
 )
+
+cc_test(
+    name = "test_scope_exit",
+    srcs = ["test_scope_exit.cpp"],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        "@boost.scope_exit",
+    ],
+)
