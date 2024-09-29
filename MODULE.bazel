@@ -73,6 +73,7 @@ bazel_dep(name = "isa-l", version = "2.31")
 
 # --registry=https://raw.githubusercontent.com/bazelboost/registry/main
 bazel_dep(name = "boost.crc", version = "1.83.0.bzl.1")
+bazel_dep(name = "boost.scope_exit", version = "1.83.0.bzl.1")
 bazel_dep(name = "boost.date_time", version = "1.83.0.bzl.2")
 bazel_dep(name = "boost.mpl", version = "1.83.0.bzl.1")
 bazel_dep(name = "boost.parameter", version = "1.83.0.bzl.1")
