@@ -5,6 +5,7 @@ on:
     branches:
       - main
     paths:
+      - "MODULE.bazel"
       - "cpp/**"
       - ".github/workflows/build_cpp.yml"
   workflow_dispatch:
