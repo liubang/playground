@@ -5,6 +5,7 @@ on:
     branches:
       - main
     paths:
+      - "MODULE.bazel"
       - "go/**"
       - ".github/workflows/build_go.yml"
   workflow_dispatch:
@@ -12,19 +13,12 @@ on:
 jobs:
   build-go:
     name: go playground
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v3
-        with:
-          go-version: "^1.22.0"
-      - uses: egor-tensin/setup-gcc@v1
-        with:
-          version: 12
-          platform: x64
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         env:
           cache-name: bazel-go
         with:
@@ -32,8 +26,12 @@ jobs:
           key: ${{ env.cache-name }}-${{ runner.os }}
           restore-keys: |
             ${{ env.cache-name }}-${{ runner.os }}
-
+      - uses: bazel-contrib/setup-bazel@0.8.5
+        with:
+          bazelisk-cache: true
+          disk-cache: false
+          repository-cache: true
       - name: build and test
         run: |
-          bazelisk build //go/...
-          bazelisk test  //go/...
+          bazel build //go/...
+          bazel test  //go/...
