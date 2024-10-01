@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-09-29 13:53:31</td>
+            <td class="headerValue">2024-10-01 16:07:55</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -76,18 +76,18 @@
 <span id="L14"><span class="lineNum">      14</span> <span class="tlaGNC">          22 :     std::mt19937 gen(rd());</span></span>
 <span id="L15"><span class="lineNum">      15</span> <span class="tlaGNC">          22 :     std::uniform_int_distribution&lt;int&gt; dist(1, num_elements * 10);</span></span>
 <span id="L16"><span class="lineNum">      16</span>              : </span>
-<span id="L17"><span class="lineNum">      17</span> <span class="tlaGNC">      120438 :     for (auto _ : state) {</span></span>
-<span id="L18"><span class="lineNum">      18</span> <span class="tlaGNC">     4355974 :         for (int i = 0; i &lt; num_elements; ++i) {</span></span>
-<span id="L19"><span class="lineNum">      19</span> <span class="tlaGNC">     4235624 :             keys[i] = dist(gen);</span></span>
+<span id="L17"><span class="lineNum">      17</span> <span class="tlaGNC">      113248 :     for (auto _ : state) {</span></span>
+<span id="L18"><span class="lineNum">      18</span> <span class="tlaGNC">     4222320 :         for (int i = 0; i &lt; num_elements; ++i) {</span></span>
+<span id="L19"><span class="lineNum">      19</span> <span class="tlaGNC">     4109160 :             keys[i] = dist(gen);</span></span>
 <span id="L20"><span class="lineNum">      20</span>              :         }</span>
 <span id="L21"><span class="lineNum">      21</span>              : </span>
-<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">     4355974 :         for (int i = 0; i &lt; num_elements; ++i) {</span></span>
-<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">     4235624 :             ordered_map[keys[i]] = i;</span></span>
+<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">     4222320 :         for (int i = 0; i &lt; num_elements; ++i) {</span></span>
+<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">     4109160 :             ordered_map[keys[i]] = i;</span></span>
 <span id="L24"><span class="lineNum">      24</span>              :         }</span>
 <span id="L25"><span class="lineNum">      25</span>              : </span>
-<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">      120350 :         state.PauseTiming(); // 暂停计时以准备下一个迭代</span></span>
-<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">      120350 :         ordered_map.clear();</span></span>
-<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">      120350 :         state.ResumeTiming(); // 恢复计时</span></span>
+<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">      113160 :         state.PauseTiming(); // 暂停计时以准备下一个迭代</span></span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">      113160 :         ordered_map.clear();</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">      113160 :         state.ResumeTiming(); // 恢复计时</span></span>
 <span id="L29"><span class="lineNum">      29</span>              :     }</span>
 <span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">          22 : }</span></span>
 <span id="L31"><span class="lineNum">      31</span>              : BENCHMARK(BM_MapInsert)-&gt;Range(8, 8 &lt;&lt; 10);</span>
@@ -101,18 +101,18 @@
 <span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">          24 :     std::mt19937 gen(rd());</span></span>
 <span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">          24 :     std::uniform_int_distribution&lt;int&gt; dist(1, num_elements * 10);</span></span>
 <span id="L41"><span class="lineNum">      41</span>              : </span>
-<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">      155792 :     for (auto _ : state) {</span></span>
-<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">     7274984 :         for (int i = 0; i &lt; num_elements; ++i) {</span></span>
-<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">     7119288 :             keys[i] = dist(gen);</span></span>
+<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">      181244 :     for (auto _ : state) {</span></span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">     7480636 :         for (int i = 0; i &lt; num_elements; ++i) {</span></span>
+<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">     7299488 :             keys[i] = dist(gen);</span></span>
 <span id="L45"><span class="lineNum">      45</span>              :         }</span>
 <span id="L46"><span class="lineNum">      46</span>              : </span>
-<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">     7274984 :         for (int i = 0; i &lt; num_elements; ++i) {</span></span>
-<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">     7119288 :             unordered_map[keys[i]] = i;</span></span>
+<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">     7480636 :         for (int i = 0; i &lt; num_elements; ++i) {</span></span>
+<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">     7299488 :             unordered_map[keys[i]] = i;</span></span>
 <span id="L49"><span class="lineNum">      49</span>              :         }</span>
 <span id="L50"><span class="lineNum">      50</span>              : </span>
-<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">      155696 :         state.PauseTiming(); // 暂停计时以准备下一个迭代</span></span>
-<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">      155696 :         unordered_map.clear();</span></span>
-<span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC">      155696 :         state.ResumeTiming(); // 恢复计时</span></span>
+<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">      181148 :         state.PauseTiming(); // 暂停计时以准备下一个迭代</span></span>
+<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">      181148 :         unordered_map.clear();</span></span>
+<span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC">      181148 :         state.ResumeTiming(); // 恢复计时</span></span>
 <span id="L54"><span class="lineNum">      54</span>              :     }</span>
 <span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">          24 : }</span></span>
 <span id="L56"><span class="lineNum">      56</span>              : BENCHMARK(BM_UnorderedMapInsert)-&gt;Range(8, 8 &lt;&lt; 10);</span>
@@ -131,9 +131,9 @@
 <span id="L69"><span class="lineNum">      69</span> <span class="tlaGNC">       52152 :         ordered_map[keys[i]] = i;</span></span>
 <span id="L70"><span class="lineNum">      70</span>              :     }</span>
 <span id="L71"><span class="lineNum">      71</span>              : </span>
-<span id="L72"><span class="lineNum">      72</span> <span class="tlaGNC">      727814 :     for (auto _ : state) {</span></span>
-<span id="L73"><span class="lineNum">      73</span> <span class="tlaGNC">    17712062 :         for (int i = 0; i &lt; num_elements; ++i) {</span></span>
-<span id="L74"><span class="lineNum">      74</span> <span class="tlaGNC">    16984352 :             int value = ordered_map[keys[i]];</span></span>
+<span id="L72"><span class="lineNum">      72</span> <span class="tlaGNC">      731964 :     for (auto _ : state) {</span></span>
+<span id="L73"><span class="lineNum">      73</span> <span class="tlaGNC">    17184980 :         for (int i = 0; i &lt; num_elements; ++i) {</span></span>
+<span id="L74"><span class="lineNum">      74</span> <span class="tlaGNC">    16453120 :             int value = ordered_map[keys[i]];</span></span>
 <span id="L75"><span class="lineNum">      75</span>              :             benchmark::DoNotOptimize(value); // 防止编译器优化</span>
 <span id="L76"><span class="lineNum">      76</span>              :         }</span>
 <span id="L77"><span class="lineNum">      77</span>              :     }</span>
@@ -154,9 +154,9 @@
 <span id="L92"><span class="lineNum">      92</span> <span class="tlaGNC">       52152 :         unordered_map[keys[i]] = i;</span></span>
 <span id="L93"><span class="lineNum">      93</span>              :     }</span>
 <span id="L94"><span class="lineNum">      94</span>              : </span>
-<span id="L95"><span class="lineNum">      95</span> <span class="tlaGNC">     1256457 :     for (auto _ : state) {</span></span>
-<span id="L96"><span class="lineNum">      96</span> <span class="tlaGNC">    35101313 :         for (int i = 0; i &lt; num_elements; ++i) {</span></span>
-<span id="L97"><span class="lineNum">      97</span> <span class="tlaGNC">    33844960 :             int value = unordered_map[keys[i]];</span></span>
+<span id="L95"><span class="lineNum">      95</span> <span class="tlaGNC">      988563 :     for (auto _ : state) {</span></span>
+<span id="L96"><span class="lineNum">      96</span> <span class="tlaGNC">    31277771 :         for (int i = 0; i &lt; num_elements; ++i) {</span></span>
+<span id="L97"><span class="lineNum">      97</span> <span class="tlaGNC">    30289312 :             int value = unordered_map[keys[i]];</span></span>
 <span id="L98"><span class="lineNum">      98</span>              :             benchmark::DoNotOptimize(value); // 防止编译器优化</span>
 <span id="L99"><span class="lineNum">      99</span>              :         }</span>
 <span id="L100"><span class="lineNum">     100</span>              :     }</span>
