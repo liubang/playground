@@ -7,8 +7,8 @@
     "https://bcr.bazel.build/modules/apple_rules_lint/0.3.2/MODULE.bazel": "025c849b118da09af75afe0785bade64f082d27bb6aa1e078bfcbd1dc5a5bb26",
     "https://bcr.bazel.build/modules/apple_rules_lint/0.3.2/source.json": "eea39d44eba88408573363151dfe63a01be1229d463dff18b9fbb412589e79f2",
     "https://bcr.bazel.build/modules/apple_support/1.15.1/MODULE.bazel": "a0556fefca0b1bb2de8567b8827518f94db6a6e7e7d632b4c48dc5f865bc7c85",
-    "https://bcr.bazel.build/modules/apple_support/1.17.0/MODULE.bazel": "340961c8c68c74af23aaf8334ec531e1619fd50fb961dbdeefa282bae84f56ff",
-    "https://bcr.bazel.build/modules/apple_support/1.17.0/source.json": "13917e301141c02b5eb8a3aa922fc29f5f153953fb6c9b43998692a367dd1375",
+    "https://bcr.bazel.build/modules/apple_support/1.17.1/MODULE.bazel": "655c922ab1209978a94ef6ca7d9d43e940cd97d9c172fb55f94d91ac53f8610b",
+    "https://bcr.bazel.build/modules/apple_support/1.17.1/source.json": "6b2b8c74d14e8d485528a938e44bdb72a5ba17632b9e14ef6e68a5ee96c8347f",
     "https://bcr.bazel.build/modules/apple_support/1.5.0/MODULE.bazel": "50341a62efbc483e8a2a6aec30994a58749bd7b885e18dd96aa8c33031e558ef",
     "https://bcr.bazel.build/modules/asio/1.28.2/MODULE.bazel": "c985926a85680be7047309db9fb56f2e1c590394adbe48f309ee76d4c78ab8ce",
     "https://bcr.bazel.build/modules/asio/1.28.2/source.json": "10d8d6af06420092fa73c6e7e79e36dee3c166c1e668ab2edefd4c497c37bbcf",
@@ -204,7 +204,7 @@
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/abseil-cpp/20240722.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/apple_rules_lint/0.3.2/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/apple_support/1.15.1/MODULE.bazel": "not found",
-    "https://raw.githubusercontent.com/bazelboost/registry/main/modules/apple_support/1.17.0/MODULE.bazel": "not found",
+    "https://raw.githubusercontent.com/bazelboost/registry/main/modules/apple_support/1.17.1/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/apple_support/1.5.0/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/asio/1.28.2/MODULE.bazel": "not found",
     "https://raw.githubusercontent.com/bazelboost/registry/main/modules/bazel_features/1.1.0/MODULE.bazel": "not found",
@@ -480,7 +480,7 @@
     "@@apple_support~//crosstool:setup.bzl%apple_cc_configure_extension": {
       "general": {
         "bzlTransitiveDigest": "7ii+gFxWSxHhQPrBxfMEHhtrGvHmBTvsh+KOyGunP/s=",
-        "usagesDigest": "1WAZYB4l4e6H6oA/J4sUcra9YA+P7XleDo71Pzb3KK8=",
+        "usagesDigest": "lTon/N84OKzwOBzHgfdF8vJqtH0gCUX9FqtuRj2zj44=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
         "envVariables": {},
