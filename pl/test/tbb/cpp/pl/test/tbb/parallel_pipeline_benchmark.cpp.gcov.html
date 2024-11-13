@@ -31,13 +31,13 @@
             <td class="headerValue">_coverage_report.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">93.8&nbsp;%</td>
+            <td class="headerCovTableEntryHi">92.8&nbsp;%</td>
             <td class="headerCovTableEntry">97</td>
-            <td class="headerCovTableEntry">91</td>
+            <td class="headerCovTableEntry">90</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-10-03 08:22:00</td>
+            <td class="headerValue">2024-11-13 11:53:50</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -93,29 +93,29 @@
 <span id="L31"><span class="lineNum">      31</span>              :         }</span>
 <span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">        2816 :     }</span></span>
 <span id="L33"><span class="lineNum">      33</span>              : </span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">        2815 :     void step1() {</span></span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">    90345179 :         for (size_t i = 0; i &lt; arr.size(); ++i)</span></span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">    91437655 :             arr[i] += 3.14f;</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">        2816 :     void step1() {</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">    88508712 :         for (size_t i = 0; i &lt; arr.size(); ++i)</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">    89677314 :             arr[i] += 3.14f;</span></span>
 <span id="L37"><span class="lineNum">      37</span> <span class="tlaUNC tlaBgUNC">           0 :     }</span></span>
 <span id="L38"><span class="lineNum">      38</span>              : </span>
 <span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC tlaBgGNC">        2816 :     void step2() {</span></span>
 <span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">        2816 :         std::vector&lt;float&gt; tmp(arr.size());</span></span>
-<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">    93411044 :         for (size_t i = 1; i &lt; arr.size() - 1; ++i) {</span></span>
-<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">    93998550 :             tmp[i] = arr[i - 1] + arr[i] + arr[i + 1];</span></span>
+<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">    91018781 :         for (size_t i = 1; i &lt; arr.size() - 1; ++i) {</span></span>
+<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">    90190965 :             tmp[i] = arr[i - 1] + arr[i] + arr[i + 1];</span></span>
 <span id="L43"><span class="lineNum">      43</span>              :         }</span>
 <span id="L44"><span class="lineNum">      44</span> <span class="tlaUNC tlaBgUNC">           0 :         std::swap(tmp, arr);</span></span>
 <span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC tlaBgGNC">        2816 :     }</span></span>
 <span id="L46"><span class="lineNum">      46</span>              : </span>
 <span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">        2816 :     void step3() {</span></span>
-<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">    91934938 :         for (size_t i = 0; i &lt; arr.size(); ++i) {</span></span>
-<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">    90743826 :             arr[i] = std::sqrt(std::abs(arr[i]));</span></span>
+<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">    87575419 :         for (size_t i = 0; i &lt; arr.size(); ++i) {</span></span>
+<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">    89440045 :             arr[i] = std::sqrt(std::abs(arr[i]));</span></span>
 <span id="L50"><span class="lineNum">      50</span>              :         }</span>
-<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">      577175 :     }</span></span>
+<span id="L51"><span class="lineNum">      51</span> <span class="tlaUNC tlaBgUNC">           0 :     }</span></span>
 <span id="L52"><span class="lineNum">      52</span>              : </span>
-<span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC">        2815 :     void step4() {</span></span>
+<span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC tlaBgGNC">        2815 :     void step4() {</span></span>
 <span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">        2815 :         std::vector&lt;float&gt; tmp(arr.size());</span></span>
-<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">    93170249 :         for (size_t i = 1; i &lt; arr.size() - 1; ++i) {</span></span>
-<span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">    93829011 :             tmp[i] = arr[i - 1] - 2 * arr[i] + arr[i + 1];</span></span>
+<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">    90087042 :         for (size_t i = 1; i &lt; arr.size() - 1; ++i) {</span></span>
+<span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">    91292655 :             tmp[i] = arr[i - 1] - 2 * arr[i] + arr[i + 1];</span></span>
 <span id="L57"><span class="lineNum">      57</span>              :         }</span>
 <span id="L58"><span class="lineNum">      58</span> <span class="tlaUNC tlaBgUNC">           0 :         std::swap(tmp, arr);</span></span>
 <span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC tlaBgGNC">        2816 :     }</span></span>
@@ -136,7 +136,7 @@
 <span id="L74"><span class="lineNum">      74</span> <span class="tlaGNC">          11 : static void test2() {</span></span>
 <span id="L75"><span class="lineNum">      75</span> <span class="tlaGNC">          11 :     std::vector&lt;Data&gt; datas(n);</span></span>
 <span id="L76"><span class="lineNum">      76</span> <span class="tlaGNC">          11 :     tbb::parallel_for_each(datas.begin(), datas.end(), [&amp;](Data&amp; data) {</span></span>
-<span id="L77"><span class="lineNum">      77</span> <span class="tlaGNC">         703 :         data.step1();</span></span>
+<span id="L77"><span class="lineNum">      77</span> <span class="tlaGNC">         704 :         data.step1();</span></span>
 <span id="L78"><span class="lineNum">      78</span> <span class="tlaGNC">         704 :         data.step2();</span></span>
 <span id="L79"><span class="lineNum">      79</span> <span class="tlaGNC">         704 :         data.step3();</span></span>
 <span id="L80"><span class="lineNum">      80</span> <span class="tlaGNC">         704 :         data.step4();</span></span>
@@ -150,15 +150,15 @@
 <span id="L88"><span class="lineNum">      88</span> <span class="tlaGNC">         704 :     });</span></span>
 <span id="L89"><span class="lineNum">      89</span>              : </span>
 <span id="L90"><span class="lineNum">      90</span> <span class="tlaGNC">          11 :     tbb::parallel_for_each(datas.begin(), datas.end(), [&amp;](Data&amp; data) {</span></span>
-<span id="L91"><span class="lineNum">      91</span> <span class="tlaGNC">         704 :         data.step2();</span></span>
+<span id="L91"><span class="lineNum">      91</span> <span class="tlaGNC">         703 :         data.step2();</span></span>
 <span id="L92"><span class="lineNum">      92</span> <span class="tlaGNC">         704 :     });</span></span>
 <span id="L93"><span class="lineNum">      93</span>              : </span>
 <span id="L94"><span class="lineNum">      94</span> <span class="tlaGNC">          11 :     tbb::parallel_for_each(datas.begin(), datas.end(), [&amp;](Data&amp; data) {</span></span>
-<span id="L95"><span class="lineNum">      95</span> <span class="tlaGNC">         703 :         data.step3();</span></span>
+<span id="L95"><span class="lineNum">      95</span> <span class="tlaGNC">         704 :         data.step3();</span></span>
 <span id="L96"><span class="lineNum">      96</span> <span class="tlaGNC">         704 :     });</span></span>
 <span id="L97"><span class="lineNum">      97</span>              : </span>
 <span id="L98"><span class="lineNum">      98</span> <span class="tlaGNC">          11 :     tbb::parallel_for_each(datas.begin(), datas.end(), [&amp;](Data&amp; data) {</span></span>
-<span id="L99"><span class="lineNum">      99</span> <span class="tlaGNC">         703 :         data.step4();</span></span>
+<span id="L99"><span class="lineNum">      99</span> <span class="tlaGNC">         704 :         data.step4();</span></span>
 <span id="L100"><span class="lineNum">     100</span> <span class="tlaGNC">         704 :     });</span></span>
 <span id="L101"><span class="lineNum">     101</span> <span class="tlaGNC">          11 : }</span></span>
 <span id="L102"><span class="lineNum">     102</span>              : </span>
