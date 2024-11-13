@@ -14,6 +14,8 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
+#ifdef __linux__
+
 #include <brpc/server.h>
 #include <butil/logging.h>
 #include <gflags/gflags.h>
@@ -70,3 +72,13 @@ int main(int argc, char* argv[]) {
     server.RunUntilAskedToQuit();
     return 0;
 }
+
+#else
+
+#include <iostream>
+int main(int argc, char* argv[]) {
+    std::cout << "hello world\n";
+    return 0;
+}
+
+#endif // __linux__

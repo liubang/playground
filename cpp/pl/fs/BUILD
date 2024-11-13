@@ -39,6 +39,13 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "fslock",
+    hdrs = [
+        "fslock.h",
+    ],
+)
+
 cc_test(
     name = "fs_test",
     srcs = [
@@ -50,6 +57,21 @@ cc_test(
     linkopts = DEFAULT_LINKOPTS,
     deps = [
         ":fs",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "fslock_test",
+    srcs = [
+        "fslock_test.cpp",
+    ],
+    copts = [
+        "-std=c++20",
+    ] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        ":fslock",
         "@googletest//:gtest_main",
     ],
 )

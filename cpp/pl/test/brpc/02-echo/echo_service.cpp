@@ -14,6 +14,7 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
+#ifdef __linux__
 #include "echo_service.h"
 
 #include <brpc/controller.h>
@@ -26,3 +27,5 @@ void pl::brpc::EchoServiceImpl::Echo(::google::protobuf::RpcController* cntl_bas
     [[__maybe_unused__]] auto* cntl = static_cast<::brpc::Controller*>(cntl_base);
     response->set_message(request->message());
 }
+
+#endif // __linux__
