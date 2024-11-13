@@ -25,10 +25,13 @@ cc_binary(
     srcs = ["test.cpp"],
     copts = ["-std=c++17"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
-    deps = [
-        "@brpc",
-        "@brpc//:bthread",
-        "@brpc//:butil",
-        "@brpc//:bvar",
-    ],
+    deps = select({
+        "//:linux_x86_64": [
+            "@brpc",
+            "@brpc//:bthread",
+            "@brpc//:butil",
+            "@brpc//:bvar",
+        ],
+        "//conditions:default": [],
+    }),
 )

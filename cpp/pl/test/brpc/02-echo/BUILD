@@ -41,8 +41,11 @@ cc_binary(
     ],
     copts = ["-std=c++17"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
-    deps = [
-        ":cc_echo_pb",
-        "@brpc",
-    ],
+    deps = select({
+        "//:linux_x86_64": [
+            ":cc_echo_pb",
+            "@brpc",
+        ],
+        "//conditions:default": [],
+    }),
 )
