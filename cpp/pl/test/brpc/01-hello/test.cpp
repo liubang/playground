@@ -1,3 +1,4 @@
+#ifdef __linux__
 #include <bthread/bthread.h>
 
 void* PrintHellobRPC(void* arg) {
@@ -11,3 +12,12 @@ int main(int argc, char** argv) {
     bthread_join(th_1, nullptr);
     return 0;
 }
+#else
+
+#include <iostream>
+int main (int argc, char *argv[]) {
+    std::cout << "hello world\n";
+    return 0;
+}
+
+#endif
