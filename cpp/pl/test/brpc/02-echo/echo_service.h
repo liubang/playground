@@ -1,5 +1,6 @@
 #pragma once
 
+#ifdef __linux__
 #include "cpp/pl/test/brpc/02-echo/echo.pb.h"
 
 namespace pl::brpc {
@@ -11,3 +12,4 @@ public:
               ::google::protobuf::Closure* done) override;
 };
 } // namespace pl::brpc
+#endif // __linux__
