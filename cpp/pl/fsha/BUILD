@@ -15,6 +15,7 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/09/28 17:00
 
+load("@hedron_compile_commands//:refresh_compile_commands.bzl", "refresh_compile_commands")
 load(
     "//cpp:copts/configure_copts.bzl",
     "DEFAULT_COPTS",
@@ -25,9 +26,18 @@ cc_library(
     name = "fsha",
     srcs = [],
     hdrs = [
-        "fs_adaptor.h",
     ],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
     visibility = ["//visibility:public"],
+    deps = [
+        "//cpp/pl/fs",
+    ],
+)
+
+refresh_compile_commands(
+    name = "refresh_compile_commands",
+    targets = {
+        "//cpp/pl/fsha/...": "",
+    },
 )
