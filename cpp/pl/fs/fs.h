@@ -73,11 +73,15 @@ public:
 
     virtual Status exist(std::string_view path, bool* result) = 0;
 
+    virtual Status isdir(std::string_view path, bool* result) = 0;
+
     virtual Status rename(std::string_view old_path, std::string_view new_path) = 0;
 
     virtual Status mkdir(std::string_view path, uint64_t flags) = 0;
 
     virtual Status remove(std::string_view path) = 0;
+
+    virtual Status utime(std::string_view path, time_t set_time) = 0;
 };
 
 using FileSystemPtr = std::unique_ptr<FileSystem>;

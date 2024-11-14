@@ -23,6 +23,7 @@
 #include <filesystem>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <utime.h>
 
 #include <cassert>
 #include <string>
@@ -198,13 +199,26 @@ Status PosixFileSystem::exist(std::string_view path, bool* result) {
     return Status::NewOk();
 }
 
+Status PosixFileSystem::isdir(std::string_view path, bool* result) {
+    struct stat buffer;
+    int ret = ::stat(path.data(), &buffer);
+    if (ret != 0) {
+        *result = false;
+        return Status::NewIOError();
+    }
+    *result = S_ISDIR(statbuf.st_mode);
+    return Status::NewOk();
+}
+
 Status PosixFileSystem::rename(std::string_view old_path, std::string_view new_path) {
     std::filesystem::rename(old_path, new_path);
     return Status::NewOk();
 }
 
 Status PosixFileSystem::mkdir(std::string_view path, uint64_t flags) {
-    std::filesystem::create_directory(path);
+    if (::mkdir(path.data(), flags) != 0) {
+        return Status::NewIOError();
+    }
     return Status::NewOk();
 }
 
@@ -212,6 +226,20 @@ Status PosixFileSystem::remove(std::string_view path) {
     std::error_code err;
     bool ret = std::filesystem::remove_all(path, err);
     if (!ret) {
+        return Status::NewIOError();
+    }
+    return Status::NewOk();
+}
+
+Status PosixFileSystem::utime(std::string_view path, time_t set_time) {
+    struct utimbuf utimeb;
+    struct utimbuf* utimeb_p = nullptr;
+    if (set_time != -1) {
+        utimeb.actime = time(nullptr);
+        utimeb.modtime = set_time;
+        utimeb_p = &utimeb;
+    }
+    if (::utime(path.data(), utimeb_p) != 0) {
         return Status::NewIOError();
     }
     return Status::NewOk();

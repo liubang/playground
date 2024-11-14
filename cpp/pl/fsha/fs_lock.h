@@ -14,13 +14,47 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/pl/fsha/local_fs.h"
+#pragma once
+
+#include "cpp/pl/fs/fs.h"
 
 #include <sys/stat.h>
-#include <sys/types.h>
+
+#include <string>
+#include <string_view>
+#include <thread>
 
 namespace pl {
 
-ssize_t LocalFile::size() const { struct stat statbuf; }
+class FsLock final {
+public:
+    explicit FsLock(std::unique_ptr<FileSystem> fs,
+                    std::string_view lock_name,
+                    std::string_view indicator)
+        : fs_(std::move(fs)), lock_name_(lock_name), indicator_(indicator) {}
+
+    ~FsLock() {
+        if (th_ != nullptr) {
+            th_->join();
+        }
+    };
+
+    bool lock();
+
+    bool try_lock();
+
+    bool unlock();
+
+private:
+    bool extend();
+
+    bool check_lock_holder();
+
+private:
+    std::string lock_name_;
+    std::string indicator_;
+    std::unique_ptr<FileSystem> fs_;
+    std::unique_ptr<std::thread> th_;
+};
 
 } // namespace pl
