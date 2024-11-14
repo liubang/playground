@@ -51,11 +51,15 @@ public:
 
     Status exist(std::string_view path, bool* result) override;
 
+    Status isdir(std::string_view path, bool* result) override;
+
     Status rename(std::string_view old_path, std::string_view new_path) override;
 
     Status mkdir(std::string_view path, uint64_t flags) override;
 
     Status remove(std::string_view path) override;
+
+    Status utime(std::string_view path, time_t set_time) override;
 };
 
 } // namespace pl

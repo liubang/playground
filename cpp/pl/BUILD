@@ -13,3 +13,25 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
+load("@hedron_compile_commands//:refresh_compile_commands.bzl", "refresh_compile_commands")
+
+refresh_compile_commands(
+    name = "refresh_compile_commands",
+    targets = {
+        "//cpp/pl/fs/...": "",
+        "//cpp/pl/fsha/...": "",
+        "//cpp/pl/sst/...": "",
+        "//cpp/pl/status/...": "",
+        "//cpp/pl/hash/...": "",
+        "//cpp/pl/http/...": "",
+        "//cpp/pl/log/...": "",
+        "//cpp/pl/scope/...": "",
+        "//cpp/pl/random/...": "",
+        "//cpp/pl/number/...": "",
+        "//cpp/pl/skiplist/...": "",
+        "//cpp/pl/thread/...": "",
+        "//cpp/pl/bits/...": "",
+        "//cpp/pl/bloom/...": "",
+        "//cpp/pl/arena/...": "",
+    },
+)
