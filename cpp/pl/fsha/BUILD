@@ -20,27 +20,3 @@ load(
     "DEFAULT_COPTS",
     "DEFAULT_LINKOPTS",
 )
-
-cc_library(
-    name = "fsha",
-    srcs = [
-        "fs_lock.cpp",
-    ],
-    hdrs = [
-        "fs_lock.h",
-        "timer.h",
-    ],
-    copts = ["-std=c++20"] + DEFAULT_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
-    visibility = ["//visibility:public"],
-    deps = [
-        "//cpp/pl/fs",
-    ],
-)
-
-refresh_compile_commands(
-    name = "refresh_compile_commands",
-    targets = {
-        "//cpp/pl/fsha/...": "",
-    },
-)
