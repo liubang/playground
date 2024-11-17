@@ -16,51 +16,69 @@
 
 #include "fs_lock.h"
 
-#include <string>
-
 namespace pl {
 
-bool FsLock::lock() {
-
-}
+bool FsLock::lock() { return true; }
 
 bool FsLock::try_lock() {
     std::string indicator_path = lock_name_ + '/' + indicator_;
-    if (fs_->utime(indicator_path, -1) && extend()) {
+    Status st = fs_->utime(indicator_path, -1);
+    if (st.isOk() && extend()) {
         return true;
     }
 
     uint64_t flag = S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH;
 
-    auto st = fs_->mkdir(lock_name_, flag);
-    if (!st.IsOk()) {
-        return false;
+    st = fs_->mkdir(lock_name_, flag);
+    if (!st.isOk()) {
+        bool ok;
+        st = fs_->isdir(lock_name_, &ok);
+        if (!st.isOk() || !ok) {
+            return false;
+        }
+        uint64_t modify_time = 0;
+        st = fs_->mtime(lock_name_, &modify_time);
+        if (!st.isOk() ||
+            (((gettimeofday_s() - modify_time) * 1000) < (LOCK_EXTEND_INTERVAL.count() * 5))) {
+            return false;
+        }
+
+        // get current lock holder
     }
+
     st = fs_->mkdir(indicator_path, flag);
-    if (!st.IsOk()) {
+    if (!st.isOk()) {
         fs_->remove(lock_name_);
         return false;
     }
+
+    timer_->start(
+        [this]() {
+            extend();
+        },
+        LOCK_EXTEND_INTERVAL);
+
     return true;
 }
 
 bool FsLock::unlock() {
+    timer_->stop();
     if (!check_lock_holder()) {
         return false;
     }
     std::string indicator_path = lock_name_ + '/' + indicator_;
     auto st = fs_->remove(indicator_path);
-    if (!st.IsOk()) {
+    if (!st.isOk()) {
         return false;
     }
     st = fs_->remove(lock_name_);
-    return st.IsOk();
+    return st.isOk();
 }
 
 bool FsLock::extend() {
     if (check_lock_holder()) {
         auto st = fs_->utime(lock_name_, -1);
-        if (!st.IsOk()) {
+        if (!st.isOk()) {
             return false;
         }
         return check_lock_holder();
@@ -72,7 +90,7 @@ bool FsLock::check_lock_holder() {
     std::string indicator_path = lock_name_ + '/' + indicator_;
     bool ok;
     auto st = fs_->isdir(indicator_path, &ok);
-    return st.IsOk() && ok;
+    return st.isOk() && ok;
 }
 
 } // namespace pl

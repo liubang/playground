@@ -206,7 +206,7 @@ Status PosixFileSystem::isdir(std::string_view path, bool* result) {
         *result = false;
         return Status::NewIOError();
     }
-    *result = S_ISDIR(statbuf.st_mode);
+    *result = S_ISDIR(buffer.st_mode);
     return Status::NewOk();
 }
 
