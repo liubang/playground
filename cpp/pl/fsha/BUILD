@@ -23,8 +23,12 @@ load(
 
 cc_library(
     name = "fsha",
-    srcs = [],
+    srcs = [
+        "fs_lock.cpp",
+    ],
     hdrs = [
+        "fs_lock.h",
+        "timer.h",
     ],
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
