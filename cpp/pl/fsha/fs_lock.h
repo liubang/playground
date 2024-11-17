@@ -17,6 +17,7 @@
 #pragma once
 
 #include "cpp/pl/fs/fs.h"
+#include "cpp/pl/fsha/timer.h"
 
 #include <sys/stat.h>
 
@@ -27,17 +28,18 @@
 namespace pl {
 
 class FsLock final {
+    constexpr static std::chrono::milliseconds LOCK_EXTEND_INTERVAL =
+        std::chrono::milliseconds(5000);
+
 public:
     explicit FsLock(std::unique_ptr<FileSystem> fs,
                     std::string_view lock_name,
                     std::string_view indicator)
-        : fs_(std::move(fs)), lock_name_(lock_name), indicator_(indicator) {}
+        : fs_(std::move(fs)), lock_name_(lock_name), indicator_(indicator) {
+        timer_ = std::make_unique<Timer>();
+    }
 
-    ~FsLock() {
-        if (th_ != nullptr) {
-            th_->join();
-        }
-    };
+    ~FsLock() {};
 
     bool lock();
 
@@ -50,11 +52,15 @@ private:
 
     bool check_lock_holder();
 
+    bool extend_lock();
+
+    bool get_current_lock_holder(std::string* lock_holder);
+
 private:
     std::string lock_name_;
     std::string indicator_;
     std::unique_ptr<FileSystem> fs_;
-    std::unique_ptr<std::thread> th_;
+    std::unique_ptr<Timer> timer_;
 };
 
 } // namespace pl
