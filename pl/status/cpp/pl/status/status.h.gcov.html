@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-11-13 11:53:50</td>
+            <td class="headerValue">2024-11-17 16:44:38</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">95.0&nbsp;%</td>
@@ -103,24 +103,24 @@
 <span id="L41"><span class="lineNum">      41</span>              : </span>
 <span id="L42"><span class="lineNum">      42</span>              : class Status {</span>
 <span id="L43"><span class="lineNum">      43</span>              : public:</span>
-<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC tlaBgGNC">        6182 :     Status() = default;</span></span>
+<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC tlaBgGNC">        6482 :     Status() = default;</span></span>
 <span id="L45"><span class="lineNum">      45</span>              :     // default copy and move</span>
 <span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">      212004 :     Status(const Status&amp;) = default;</span></span>
 <span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">        1005 :     Status(Status&amp;&amp;) = default;</span></span>
 <span id="L48"><span class="lineNum">      48</span>              :     Status&amp; operator=(const Status&amp;) = default;</span>
-<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">       14890 :     Status&amp; operator=(Status&amp;&amp;) = default;</span></span>
+<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">       15490 :     Status&amp; operator=(Status&amp;&amp;) = default;</span></span>
 <span id="L50"><span class="lineNum">      50</span>              : </span>
 <span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">          24 :     [[nodiscard]] bool ok() const { return code_ == Code::ST_Ok; }</span></span>
 <span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">           3 :     [[nodiscard]] Code code() const { return code_; }</span></span>
 <span id="L53"><span class="lineNum">      53</span>              : </span>
-<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">       23725 :     __PL_NEW_STATUS_FUNC(Ok)</span></span>
-<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">        2509 :     __PL_NEW_STATUS_FUNC(NotFound)</span></span>
+<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">       24625 :     __PL_NEW_STATUS_FUNC(Ok)</span></span>
+<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">        2809 :     __PL_NEW_STATUS_FUNC(NotFound)</span></span>
 <span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">           1 :     __PL_NEW_STATUS_FUNC(Corruption)</span></span>
 <span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">           1 :     __PL_NEW_STATUS_FUNC(NotSupported)</span></span>
 <span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">           1 :     __PL_NEW_STATUS_FUNC(InvalidArgument)</span></span>
 <span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC">           1 :     __PL_NEW_STATUS_FUNC(IOError)</span></span>
 <span id="L60"><span class="lineNum">      60</span>              : </span>
-<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">      228882 :     __PL_IS_STATUS_FUNC(Ok)</span></span>
+<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">      229782 :     __PL_IS_STATUS_FUNC(Ok)</span></span>
 <span id="L62"><span class="lineNum">      62</span> <span class="tlaGNC">         672 :     __PL_IS_STATUS_FUNC(NotFound)</span></span>
 <span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">           6 :     __PL_IS_STATUS_FUNC(Corruption)</span></span>
 <span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC">           6 :     __PL_IS_STATUS_FUNC(NotSupported)</span></span>
@@ -135,11 +135,11 @@
 <span id="L73"><span class="lineNum">      73</span>              :     }</span>
 <span id="L74"><span class="lineNum">      74</span>              : </span>
 <span id="L75"><span class="lineNum">      75</span>              : private:</span>
-<span id="L76"><span class="lineNum">      76</span> <span class="tlaGNC tlaBgGNC">       26238 :     Status(Code code, std::string_view msg) : code_(code) {</span></span>
-<span id="L77"><span class="lineNum">      77</span> <span class="tlaGNC">       26238 :         if (!msg.empty()) {</span></span>
+<span id="L76"><span class="lineNum">      76</span> <span class="tlaGNC tlaBgGNC">       27438 :     Status(Code code, std::string_view msg) : code_(code) {</span></span>
+<span id="L77"><span class="lineNum">      77</span> <span class="tlaGNC">       27438 :         if (!msg.empty()) {</span></span>
 <span id="L78"><span class="lineNum">      78</span> <span class="tlaGNC">           6 :             msg_ = std::make_shared&lt;std::string&gt;(msg);</span></span>
 <span id="L79"><span class="lineNum">      79</span>              :         }</span>
-<span id="L80"><span class="lineNum">      80</span> <span class="tlaGNC">       26238 :     }</span></span>
+<span id="L80"><span class="lineNum">      80</span> <span class="tlaGNC">       27438 :     }</span></span>
 <span id="L81"><span class="lineNum">      81</span>              : </span>
 <span id="L82"><span class="lineNum">      82</span>              : private:</span>
 <span id="L83"><span class="lineNum">      83</span>              :     Code code_{Code::ST_Ok};</span>
