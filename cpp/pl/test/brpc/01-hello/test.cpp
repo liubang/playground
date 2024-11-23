@@ -15,7 +15,7 @@ int main(int argc, char** argv) {
 #else
 
 #include <iostream>
-int main (int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     std::cout << "hello world\n";
     return 0;
 }
