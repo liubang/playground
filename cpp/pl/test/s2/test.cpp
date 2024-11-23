@@ -14,24 +14,37 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include <s2/s2closest_point_query.h>
-#include <s2/s2earth.h>
-#include <s2/s2point.h>
-#include <s2/s2point_index.h>
-#include <s2/s2testing.h>
+#include "absl/strings/str_format.h"
+#include "s2/base/commandlineflags.h"
+#include "s2/s1angle.h"
+#include "s2/s2closest_point_query.h"
+#include "s2/s2earth.h"
+#include "s2/s2point_index.h"
+#include "s2/s2random.h"
 
 int main(int argc, char* argv[]) {
+    static constexpr uint64_t count = 10000;
+
+    std::mt19937_64 bitgen;
+    // Build an index containing random points anywhere on the Earth.
     S2PointIndex<int> index;
-    for (int i = 0; i < 9999999; ++i) {
-        S2Point point = S2Testing::RandomPoint();
-        index.Add(point, i);
+    for (int i = 0; i < count; ++i) {
+        index.Add(s2random::Point(bitgen), i);
     }
 
+    // Create a query to search within the given radius of a target point.
     S2ClosestPointQuery<int> query(&index);
     query.mutable_options()->set_max_distance(S1Angle::Radians(S2Earth::KmToRadians(100)));
-    S2ClosestPointQuery<int>::PointTarget target(S2Testing::RandomPoint());
-    auto results = query.FindClosestPoints(&target);
-    std::cout << results.size() << '\n';
+
+    // Repeatedly choose a random target point, and count how many index points
+    // are within the given radius of that point.
+    int64_t num_found = 0;
+    for (int i = 0; i < count; ++i) {
+        S2ClosestPointQuery<int>::PointTarget target(s2random::Point(bitgen));
+        num_found += query.FindClosestPoints(&target).size();
+    }
+
+    absl::PrintF("Found %d points in %d queries\n", num_found, count);
 
     return 0;
 }
