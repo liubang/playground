@@ -17,10 +17,10 @@
 # 自动启用基于平台的特定配置
 common --enable_platform_specific_config
 
-# common --registry=https://liubang.github.io/playground/registry
 common --registry=file://%workspace%/registry
-common --registry=https://raw.githubusercontent.com/bazelboost/registry/main
 common --registry=https://bcr.bazel.build
+common --registry=https://baidu.github.io/babylon/registry
+common --registry=https://raw.githubusercontent.com/bazelboost/registry/main
 
 common --color=yes
 common --experimental_ui_max_stdouterr_bytes=1073741819
