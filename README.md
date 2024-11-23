@@ -30,7 +30,7 @@ bazel test //...
 ### 更新 C/C++ compile_commands.json
 
 ```bash
-bazel run //:refresh_compile_commands
+bazel run @hedron_compile_commands//:refresh_all
 ```
 
 ### 更新 java 依赖
