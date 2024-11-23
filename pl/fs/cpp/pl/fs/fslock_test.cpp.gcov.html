@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-11-17 16:44:38</td>
+            <td class="headerValue">2024-11-23 13:01:10</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -82,7 +82,7 @@
 <span id="L20"><span class="lineNum">      20</span> <span class="tlaGNC">           1 :     int sum = 0;</span></span>
 <span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC">           1 :     int concurrent = rand_int(3, 33);</span></span>
 <span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">          23 :     for (int i = 0; i &lt; concurrent; ++i) {</span></span>
-<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">         154 :         threads.emplace_back([i, &amp;sum]() {</span></span>
+<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">          44 :         threads.emplace_back([i, &amp;sum]() {</span></span>
 <span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">          22 :             pl::FsLock lock(&quot;./test.lock&quot;);</span></span>
 <span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">          22 :             if (!lock.lock()) {</span></span>
 <span id="L26"><span class="lineNum">      26</span> <span class="tlaUNC tlaBgUNC">           0 :                 ::printf(&quot;[%d] failed to get lock\n&quot;, i);</span></span>

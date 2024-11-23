@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-11-17 16:44:38</td>
+            <td class="headerValue">2024-11-23 13:01:10</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -93,9 +93,9 @@
 <span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">           1 :     auto start = std::chrono::system_clock::now();</span></span>
 <span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">           1 :     results.reserve(2 * n);</span></span>
 <span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">        2049 :     for (int i = 0; i &lt; 2 * n; ++i) {</span></span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">        4094 :         results.emplace_back(pool.submit([i] {</span></span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">        2046 :             std::this_thread::sleep_for(std::chrono::milliseconds(1));</span></span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">        2047 :             return std::make_pair(i, i);</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">        4089 :         results.emplace_back(pool.submit([i] {</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">        2041 :             std::this_thread::sleep_for(std::chrono::milliseconds(1));</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">        2048 :             return std::make_pair(i, i);</span></span>
 <span id="L37"><span class="lineNum">      37</span>              :         }));</span>
 <span id="L38"><span class="lineNum">      38</span>              :     }</span>
 <span id="L39"><span class="lineNum">      39</span>              : </span>

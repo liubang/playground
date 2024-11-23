@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-11-17 16:44:38</td>
+            <td class="headerValue">2024-11-23 13:01:10</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -99,7 +99,7 @@
 <span id="L37"><span class="lineNum">      37</span>              : </span>
 <span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">           1 : auto main(int argc, char* argv[]) -&gt; int {</span></span>
 <span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">           1 :     tbb::task_group tg;</span></span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">           1 :     tg.run([&amp;] {</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">           2 :     tg.run([&amp;] {</span></span>
 <span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">           1 :         download(&quot;hello.zip&quot;);</span></span>
 <span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">           1 :     });</span></span>
 <span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">           1 :     tg.run([&amp;] {</span></span>

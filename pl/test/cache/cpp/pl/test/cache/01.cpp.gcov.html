@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-11-17 16:44:38</td>
+            <td class="headerValue">2024-11-23 13:01:10</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -81,7 +81,7 @@
 <span id="L19"><span class="lineNum">      19</span>              : constexpr size_t n = 1 &lt;&lt; 26;</span>
 <span id="L20"><span class="lineNum">      20</span>              : </span>
 <span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC tlaBgGNC">           1 : static void write_0(benchmark::State&amp; state) {</span></span>
-<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">           5 :     for (auto _ : state) {</span></span>
+<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">           6 :     for (auto _ : state) {</span></span>
 <span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">           1 :         std::vector&lt;int&gt; arr(n);</span></span>
 <span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">    67108865 :         for (size_t i = 0; i &lt; n; ++i) {</span></span>
 <span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">    67108864 :             arr[i] = 0;</span></span>
@@ -93,7 +93,7 @@
 <span id="L31"><span class="lineNum">      31</span>              : BENCHMARK(write_0);</span>
 <span id="L32"><span class="lineNum">      32</span>              : </span>
 <span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">           1 : static void write_1(benchmark::State&amp; state) {</span></span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">           5 :     for (auto _ : state) {</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">           6 :     for (auto _ : state) {</span></span>
 <span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">           1 :         std::vector&lt;int&gt; arr(n);</span></span>
 <span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">    67108865 :         for (size_t i = 0; i &lt; n; ++i) {</span></span>
 <span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">    67108864 :             arr[i] = 1;</span></span>
