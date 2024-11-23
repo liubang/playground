@@ -20,7 +20,7 @@ jobs:
       matrix:
         compiler:
           [
-            { name: gcc, flag: --action_env=CC=gcc-12 --linkopt=-fuse-ld=gold },
+            { name: gcc, flag: --action_env=CC=gcc-13 --linkopt=-fuse-ld=gold },
             {
               name: clang,
               flag: --action_env=CC=clang-18 --cxxopt=-stdlib=libstdc++ --cxxopt=-Wno-error=unused-but-set-variable --cxxopt=-Wno-error=unused-but-set-parameter --linkopt=-stdlib=libstdc++,
@@ -56,7 +56,7 @@ jobs:
       matrix:
         compiler:
           [
-            { name: gcc, flag: --action_env=CC=gcc-12 --linkopt=-fuse-ld=gold },
+            { name: gcc, flag: --action_env=CC=gcc-13 --linkopt=-fuse-ld=gold },
             {
               name: clang,
               flag: --action_env=CC=clang-18 --cxxopt=-stdlib=libstdc++ --cxxopt=-Wno-error=unused-but-set-variable --cxxopt=-Wno-error=unused-but-set-parameter --linkopt=-stdlib=libstdc++,
@@ -114,7 +114,7 @@ jobs:
       - run: sudo apt install libomp-dev
       - name: run coverage
         run: |
-          bazel coverage --action_env=CC=gcc-12 --disk_cache=bazel-disk --verbose_failures --combined_report=lcov --instrument_test_targets cpp/...
+          bazel coverage --action_env=CC=gcc-13 --disk_cache=bazel-disk --verbose_failures --combined_report=lcov --instrument_test_targets cpp/...
           ls -lh ./bazel-out/_coverage/_coverage_report.dat
           genhtml --ignore-errors negative --output coverage ./bazel-out/_coverage/_coverage_report.dat
           cp -r ./registry ./coverage/
