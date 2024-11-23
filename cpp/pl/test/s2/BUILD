@@ -20,13 +20,13 @@ load(
     "DEFAULT_LINKOPTS",
 )
 
-cc_binary(
+cc_test(
     name = "test",
     srcs = ["test.cpp"],
     copts = ["-std=c++17"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
     deps = [
         "@s2geometry//:s2",
-        "@s2geometry//:s2testing",
+        "@s2geometry//:s2_testing_headers",
     ],
 )
