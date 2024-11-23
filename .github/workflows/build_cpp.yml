@@ -34,7 +34,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/cache@v4
         env:
-          cache-name: build
+          cache-name: build-v1
         with:
           path: bazel-disk
           key: build-${{ matrix.compiler.name }}-${{ env.cache-name }}-${{ runner.os }}-${{github.sha}}
@@ -71,7 +71,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/cache@v4
         env:
-          cache-name: test
+          cache-name: test-v1
         with:
           path: bazel-disk
           key: test-${{ matrix.compiler.name }}-${{ env.cache-name }}-${{ runner.os }}-${{github.sha}}
@@ -98,7 +98,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/cache@v4
         env:
-          cache-name: coverage
+          cache-name: coverage-v1
         with:
           path: bazel-disk
           key: ${{ github.workflow }}-${{ env.cache-name }}-${{ runner.os }}-${{github.sha}}
