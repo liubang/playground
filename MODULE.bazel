@@ -103,7 +103,7 @@ bazel_dep(name = "boost.utility", version = "1.83.0.bzl.1")
 
 # for test
 bazel_dep(name = "catch2", version = "3.6.0", dev_dependency = True)
-bazel_dep(name = "googletest", version = "1.15.0", dev_dependency = True)
+bazel_dep(name = "googletest", version = "1.15.2", dev_dependency = True)
 bazel_dep(name = "google_benchmark", version = "1.8.5", dev_dependency = True)
 bazel_dep(name = "nanobench", version = "4.3.11", dev_dependency = True)
 
