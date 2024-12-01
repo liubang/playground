@@ -28,30 +28,9 @@ load(
         ],
         copts = ["-std=c++20"] + DEFAULT_COPTS,
         linkopts = DEFAULT_LINKOPTS + ["-pthread"],
+        deps = [
+            "@curl",
+        ],
     )
     for f in glob(["test_*.cpp"])
 ]
-
-# cc_test(
-#     name = "test_liburing",
-#     srcs = ["test_liburing.cpp"],
-#     copts = ["-std=c++20"] + DEFAULT_COPTS,
-#     linkopts = DEFAULT_LINKOPTS,
-#     deps = select({
-#         "//:linux_x86_64": ["@liburing"],
-#         "//conditions:default": [],
-#     }),
-# )
-#
-# cc_proto_library(
-#     name = "cc_sensor_proto",
-#     deps = ["//proto/test:sensor"],
-# )
-#
-# cc_test(
-#     name = "test_pb",
-#     srcs = ["test_pb.cpp"],
-#     copts = ["-std=c++20"] + DEFAULT_COPTS,
-#     linkopts = DEFAULT_LINKOPTS,
-#     deps = [":cc_sensor_proto"],
-# )
