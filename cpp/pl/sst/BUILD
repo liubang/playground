@@ -34,6 +34,7 @@ cc_library(
         "//cpp/pl/bits",
         "//cpp/pl/bloom:bloom_filter",
         "//cpp/pl/fs",
+        "//cpp/pl/lang",
         "//cpp/pl/log:logger",
         "//cpp/pl/random",
         "//cpp/pl/scope",
