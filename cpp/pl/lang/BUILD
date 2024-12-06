@@ -13,27 +13,13 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2024/06/16 01:30
+# Created: 2024/12/06 17:18
 
-load(
-    "//cpp:copts/configure_copts.bzl",
-    "COPTS",
-    "DEFAULT_COPTS",
-    "DEFAULT_LINKOPTS",
-)
-
-cc_binary(
-    name = "setjmp_impl",
-    srcs = ["setjmp_impl.cpp"],
-    copts = ["-std=c++20"] + COPTS,
-    deps = [
-        "//cpp/pl/lang",
+cc_library(
+    name = "lang",
+    hdrs = [
+        "assume.h",
+        "common.h",
     ],
-)
-
-cc_binary(
-    name = "context_impl",
-    srcs = ["context_impl.cpp"],
-    copts = ["-std=c++20"] + DEFAULT_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
+    visibility = ["//visibility:public"],
 )
