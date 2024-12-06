@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include "cpp/pl/lang/assume.h"
+
 #include <ctime>
 #include <unordered_map>
 #include <utility>
@@ -722,7 +724,7 @@ inline std::string op_string(LogicalOperator op) {
     case LogicalOperator::OrOperator:
         return " or ";
     }
-    __builtin_unreachable();
+    pl::assume_unreachable();
 }
 
 // assign
