@@ -77,6 +77,7 @@ cc_library(
     local_defines = ["FLUX_ENABLE_DEBUG"],
     deps = [
         ":scanner",
+        "//cpp/pl/lang",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:strings",
     ],

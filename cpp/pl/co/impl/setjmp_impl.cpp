@@ -15,6 +15,7 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2024/06/03 00:23
 
+#include "cpp/pl/lang/assume.h"
 #include <csetjmp>
 #include <functional>
 #include <iostream>
@@ -37,7 +38,7 @@ const char* StateToString(CoroutineState state) {
         __MY_CASE(CoroutineState::SUSPEND);
         __MY_CASE(CoroutineState::DIE);
     }
-    __builtin_unreachable();
+    pl::assume_unreachable();
 }
 #undef __MY_CASE
 
