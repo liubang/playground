@@ -14,7 +14,9 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include <memory>
+#include "cpp/pl/utility/utility.h"
+
+#include <vector>
 
 namespace pl {
 
@@ -23,15 +25,9 @@ template <typename Key> struct SkipListNode {
     std::vector<SkipListNode<Key>*> next;
 };
 
-template <typename Key, typename Comparator> class SkipList {
+template <typename Key, typename Comparator> class SkipList : private DisableCopyAndMove {
 public:
     SkipList(int max_height) : max_height_(max_height) {}
-
-    // disable copy and move
-    SkipList(const SkipList&) = delete;
-    SkipList(SkipList&&) = delete;
-    SkipList& operator=(const SkipList&) = delete;
-    SkipList& operator=(SkipList&&) = delete;
 
     ~SkipList() {
         SkipListNode<Key>* cur = head_;

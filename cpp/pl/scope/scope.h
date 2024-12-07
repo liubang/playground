@@ -41,6 +41,7 @@ private:
 namespace detail {
 
 enum class ScopeGuardOnExit {};
+
 template <typename Fn>
 inline ScopeGuard<std::decay_t<Fn>> operator+(detail::ScopeGuardOnExit, Fn&& fn) {
     return ScopeGuard<Fn>(std::forward<Fn>(fn));

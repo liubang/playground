@@ -37,6 +37,7 @@ cc_library(
     deps = [
         "//cpp/pl/log:logger",
         "//cpp/pl/status",
+        "//cpp/pl/utility",
     ],
 )
 
