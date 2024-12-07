@@ -27,8 +27,8 @@ template <typename T,
           T r,
           T x,
           T y,
-          std::enable_if_t<std::disjunction<std::is_same<T, uint32_t>,
-                                            std::is_same<T, uint64_t>>::value>* = nullptr>
+          std::enable_if_t<
+              std::disjunction_v<std::is_same<T, uint32_t>, std::is_same<T, uint64_t>>>* = nullptr>
 class CMurmurHash final {
 public:
     CMurmurHash() = default;
