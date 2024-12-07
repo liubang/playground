@@ -13,15 +13,10 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2024/08/14 13:02
+# Created: 2024/12/07 23:42
 
 cc_library(
-    name = "skiplist",
-    hdrs = [
-        "skiplist.h",
-    ],
+    name = "utility",
+    hdrs = glob(["*.h"]),
     visibility = ["//visibility:public"],
-    deps = [
-        "//cpp/pl/utility",
-    ],
 )
