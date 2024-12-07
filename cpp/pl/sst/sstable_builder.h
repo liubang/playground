@@ -23,18 +23,13 @@
 #include "cpp/pl/sst/options.h"
 #include "cpp/pl/sst/sstable_format.h"
 #include "cpp/pl/status/status.h"
+#include "cpp/pl/utility/utility.h"
 
 namespace pl {
 
-class SSTableBuilder {
+class SSTableBuilder : public DisableCopyAndMove {
 public:
     SSTableBuilder(BuildOptionsRef options);
-
-    // disable copy and move
-    SSTableBuilder(const SSTableBuilder&) = delete;
-    SSTableBuilder(SSTableBuilder&&) = delete;
-    SSTableBuilder& operator=(const SSTableBuilder&) = delete;
-    SSTableBuilder& operator=(SSTableBuilder&&) = delete;
 
     ~SSTableBuilder() = default;
 

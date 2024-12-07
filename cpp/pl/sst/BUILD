@@ -38,6 +38,7 @@ cc_library(
         "//cpp/pl/log:logger",
         "//cpp/pl/random",
         "//cpp/pl/scope",
+        "//cpp/pl/utility",
         "@isa-l",
         "@snappy",
         "@zstd",

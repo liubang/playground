@@ -15,12 +15,7 @@
 # Authors: liubang (it.liubang@gmail.com)
 
 cc_library(
-    name = "skiplist",
-    hdrs = [
-        "skiplist.h",
-    ],
+    name = "utility",
+    hdrs = glob(["*.h"]),
     visibility = ["//visibility:public"],
-    deps = [
-        "//cpp/pl/utility",
-    ],
 )

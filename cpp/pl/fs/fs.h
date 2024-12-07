@@ -17,6 +17,7 @@
 #pragma once
 
 #include "cpp/pl/status/status.h"
+#include "cpp/pl/utility/utility.h"
 
 #include <cstdint>
 #include <ctime>
@@ -24,30 +25,18 @@
 
 namespace pl {
 
-class FileDescriptor {
+class FileDescriptor : public DisableCopyAndMove {
 public:
     FileDescriptor() = default;
     virtual ~FileDescriptor() = default;
-
-    // disable copy and move
-    FileDescriptor(const FileDescriptor&) = delete;
-    FileDescriptor(FileDescriptor&&) = delete;
-    FileDescriptor& operator=(const FileDescriptor&) = delete;
-    FileDescriptor& operator=(FileDescriptor&&) = delete;
 };
 
 using FileDescriptorRef = std::shared_ptr<FileDescriptor>;
 
-class FileSystem {
+class FileSystem : public DisableCopyAndMove {
 public:
     FileSystem() = default;
     virtual ~FileSystem() = default;
-
-    // disable copy and move
-    FileSystem(const FileSystem&) = delete;
-    FileSystem(FileSystem&&) = delete;
-    FileSystem& operator=(const FileSystem&) = delete;
-    FileSystem& operator=(FileSystem&&) = delete;
 
     virtual Status open(std::string_view path, uint64_t flags, FileDescriptorRef* fd) = 0;
 
