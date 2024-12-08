@@ -16,6 +16,8 @@
 
 #include "cpp/pl/utility/utility.h"
 
+#include <iostream>
+#include <random>
 #include <vector>
 
 namespace pl {
@@ -23,30 +25,66 @@ namespace pl {
 template <typename Key> struct SkipListNode {
     Key key;
     std::vector<SkipListNode<Key>*> next;
+
+    SkipListNode(const Key& key, int height) : key(key), next(height + 1, nullptr) {}
 };
 
-template <typename Key, typename Comparator> class SkipList : private DisableCopyAndMove {
+template <typename Key, typename Comparator, int MAX_HEIGHT = 31>
+class SkipList final : public DisableCopyAndMove {
 public:
-    SkipList(int max_height) : max_height_(max_height) {}
+    SkipList() : head_(new SkipListNode<Key>(0, MAX_HEIGHT)) {}
 
     ~SkipList() {
         SkipListNode<Key>* cur = head_;
-        while (head_ != nullptr) {
-            auto* next = head_->next[0];
+        while (cur != nullptr) {
+            auto* next = cur->next[0];
             delete cur;
             cur = next;
         }
     }
 
-    void add(const Key& key) {
-        // 1. 获取一个随机高度
-        // 2. 查找该高度下所有位于key之前的节点
-        // 3. 创建一个新的节点
-        // 4. 依次将该节点插入到2中获取的节点之后
+    void insert(const Key& key) {
+        int height = random_height();
+        ::printf("height: %d\n", height);
+        SkipListNode<Key>* node = new SkipListNode<Key>(key, height);
+        for (int i = height; i >= 0; --i) {
+            SkipListNode<Key>* pre = head_;
+            SkipListNode<Key>* cur = head_->next[i];
+            while (cur != nullptr && comparator_.compare(cur, node) < 0) {
+                pre = cur;
+                cur = cur->next[i];
+            }
+            node->next[i] = pre->next[i];
+            pre->next[i] = node;
+        }
+    }
+
+    void remove(const Key& key) {
+        // TODO
+    }
+
+    void display() {
+        for (int i = MAX_HEIGHT; i >= 0; --i) {
+            SkipListNode<Key>* cur = head_->next[i];
+            std::cout << '[' << i << "]\t: ";
+            while (cur != nullptr) {
+                std::cout << (*cur->key) << ",";
+                cur = cur->next[i];
+            }
+            std::cout << "nullptr\n";
+        }
     }
 
 private:
-    int max_height_{0};
+    // TODO
+    int random_height() {
+        std::random_device dev;
+        std::mt19937 rng(dev());
+        std::uniform_int_distribution<std::mt19937::result_type> dist(0, MAX_HEIGHT);
+        return dist(rng);
+    }
+
+private:
     SkipListNode<Key>* head_{nullptr};
     Comparator comparator_;
 };
