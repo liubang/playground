@@ -14,6 +14,12 @@
 
 # Authors: liubang (it.liubang@gmail.com)
 
+load(
+    "//cpp:copts/configure_copts.bzl",
+    "DEFAULT_LINKOPTS",
+    "TEST_COPTS",
+)
+
 cc_library(
     name = "skiplist",
     hdrs = [
@@ -22,5 +28,18 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//cpp/pl/utility",
+    ],
+)
+
+cc_test(
+    name = "skiplist_test",
+    srcs = [
+        "skiplist_test.cpp",
+    ],
+    copts = ["-std=c++20"] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        ":skiplist",
+        "@googletest//:gtest_main",
     ],
 )
