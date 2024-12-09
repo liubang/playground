@@ -17,6 +17,7 @@
 #include "cpp/pl/utility/utility.h"
 
 #include <iostream>
+#include <map>
 #include <random>
 #include <vector>
 
@@ -45,8 +46,7 @@ public:
 
     void insert(const Key& key) {
         int height = random_height();
-        ::printf("height: %d\n", height);
-        SkipListNode<Key>* node = new SkipListNode<Key>(key, height);
+        auto* node = new SkipListNode<Key>(key, height);
         for (int i = height; i >= 0; --i) {
             SkipListNode<Key>* pre = head_;
             SkipListNode<Key>* cur = head_->next[i];
