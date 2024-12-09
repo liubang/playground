@@ -15,10 +15,13 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2024/12/09 00:05
 
+#include "cpp/pl/random/random.h"
 #include "cpp/pl/skiplist/skiplist.h"
 
 #include <gtest/gtest.h>
+#include <memory>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -33,11 +36,10 @@ struct StrComparator {
 
 TEST(skiplist, test) {
     pl::SkipList<std::string*, StrComparator> skiplist;
-    std::unique_ptr<std::string> a = std::make_unique<std::string>("a");
-    std::unique_ptr<std::string> b = std::make_unique<std::string>("b");
-    std::unique_ptr<std::string> c = std::make_unique<std::string>("c");
-    skiplist.insert(a.get());
-    skiplist.insert(b.get());
-    skiplist.insert(c.get());
+    std::vector<std::shared_ptr<std::string>> keys;
+    for (int i = 0; i < 50; ++i) {
+        keys.push_back(std::make_shared<std::string>(pl::random_string(3)));
+        skiplist.insert(keys.back().get());
+    }
     skiplist.display();
 }
