@@ -40,6 +40,7 @@ cc_test(
     linkopts = DEFAULT_LINKOPTS,
     deps = [
         ":skiplist",
+        "//cpp/pl/random",
         "@googletest//:gtest_main",
     ],
 )
