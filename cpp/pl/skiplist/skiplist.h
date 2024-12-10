@@ -64,19 +64,18 @@ public:
     }
 
     void display() {
-        for (int i = MAX_HEIGHT; i >= 0; --i) {
-            SkipListNode<Key>* cur = head_->next[i];
-            std::cout << '[' << i << "]\t: ";
-            while (cur != nullptr) {
-                std::cout << (*cur->key) << ",";
-                cur = cur->next[i];
+        SkipListNode<Key>* cur = head_->next[0];
+        while (cur != nullptr) {
+            for (int i = 0; i < cur->next.size(); ++i) {
+                std::cout << (*cur->key) << ", ";
             }
-            std::cout << "nullptr\n";
+            std::cout << "\n";
+            cur = cur->next[0];
         }
     }
 
 private:
-    // TODO
+    // TODO: 优化
     int random_height() {
         std::random_device dev;
         std::mt19937 rng(dev());
