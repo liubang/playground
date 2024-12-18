@@ -96,6 +96,7 @@ bazel_dep(name = "glog", version = "0.7.1")
 bazel_dep(name = "gflags", version = "2.2.2")
 bazel_dep(name = "asio", version = "1.28.2")
 bazel_dep(name = "isa-l", version = "2.31")
+bazel_dep(name = "xxhash", version = "0.8.2")
 
 # --registry=https://raw.githubusercontent.com/bazelboost/registry/main
 bazel_dep(name = "boost.crc", version = "1.83.0.bzl.1")

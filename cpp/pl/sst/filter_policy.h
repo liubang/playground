@@ -16,12 +16,74 @@
 
 #pragma once
 
+#include "xxhash.h"
+#include <deque>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace pl {
+
+class FilterBuilder;
+class FilterReader;
+
+class FilterBuilder {
+public:
+    virtual ~FilterBuilder();
+
+    virtual void add_key(std::string_view key) = 0;
+
+    virtual std::string_view finish(std::unique_ptr<const char[]>* buf) = 0;
+};
+
+class BlockedBloomFilterBuilder : public FilterBuilder {
+    constexpr static int kMetadataLen = 5;
+
+public:
+    BlockedBloomFilterBuilder(int millibits_per_key) : millibits_per_key_(millibits_per_key) {}
+
+    void add_key(std::string_view key) {
+        uint64_t hash = XXH3_64bits(key.data(), key.size());
+        if (hashes_.empty() || hashes_.back() != hash) {
+            hashes_.push_back(hash);
+            xor_checksum_ ^= hash;
+        }
+    }
+
+    std::string_view finish(std::unique_ptr<const char[]>* buf) {
+        std::size_t num_keys = hashes_.size();
+        if (num_keys == 0) {
+            return {};
+        }
+        return {};
+    }
+
+private:
+    std::size_t calculate_space(std::size_t num_hashes) {
+        size_t raw_target_len =
+            static_cast<size_t>((uint64_t{num_hashes} * millibits_per_key_ + 7999) / 8000);
+
+        if (raw_target_len >= size_t{0xffffffc0}) {
+            raw_target_len = size_t{0xffffffc0};
+        }
+
+        return ((raw_target_len + 63) & ~size_t{63}) + kMetadataLen;
+        return 0;
+    }
+
+private:
+    std::deque<uint64_t> hashes_;
+    uint64_t xor_checksum_{0};
+    int millibits_per_key_{0};
+};
+
+class FilterReader {
+public:
+    virtual ~FilterReader() = 0;
+
+    virtual bool key_may_match(std::string_view key) = 0;
+};
 
 class FilterPolicy;
 
