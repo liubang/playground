@@ -42,6 +42,7 @@ cc_library(
         "//cpp/pl/utility",
         "@isa-l",
         "@snappy",
+        "@xxhash",
         "@zstd",
     ],
 )
