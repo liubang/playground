@@ -34,6 +34,16 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "bloom_filter_v2",
+    hdrs = ["bloom.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//cpp/pl/fastrange",
+        "//cpp/pl/lang",
+    ],
+)
+
 cc_test(
     name = "bloom_filter_test",
     srcs = [
