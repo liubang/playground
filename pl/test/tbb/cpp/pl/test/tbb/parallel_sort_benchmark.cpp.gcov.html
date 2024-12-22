@@ -32,17 +32,17 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">10</td>
-            <td class="headerCovTableEntry">10</td>
+            <td class="headerCovTableEntry">8</td>
+            <td class="headerCovTableEntry">8</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-12-18 14:22:55</td>
+            <td class="headerValue">2024-12-22 13:45:27</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">3</td>
-            <td class="headerCovTableEntry">3</td>
+            <td class="headerCovTableEntry">2</td>
+            <td class="headerCovTableEntry">2</td>
           </tr>
                   <tr><td><img src="../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -86,7 +86,7 @@
 <span id="L24"><span class="lineNum">      24</span>              : </span>
 <span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC tlaBgGNC">          11 : static void test1() {</span></span>
 <span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">          11 :     std::vector&lt;int&gt; arr(n);</span></span>
-<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">          11 :     std::generate(arr.begin(), arr.end(), std::rand);</span></span>
+<span id="L27"><span class="lineNum">      27</span>              :     std::generate(arr.begin(), arr.end(), std::rand);</span>
 <span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">          11 :     tbb::parallel_sort(arr.begin(), arr.end(), std::less&lt;int&gt;{});</span></span>
 <span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">          11 : }</span></span>
 <span id="L30"><span class="lineNum">      30</span>              : </span>
@@ -94,7 +94,7 @@
 <span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">           1 :     ankerl::nanobench::Bench().run(&quot;test1&quot;, [&amp;] {</span></span>
 <span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">          11 :         test1();</span></span>
 <span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">          11 :     });</span></span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">           1 :     return 0;</span></span>
+<span id="L35"><span class="lineNum">      35</span>              :     return 0;</span>
 <span id="L36"><span class="lineNum">      36</span>              : }</span>
         </pre>
               </td>

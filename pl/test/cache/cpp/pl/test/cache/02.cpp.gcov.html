@@ -32,12 +32,12 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">8</td>
-            <td class="headerCovTableEntry">8</td>
+            <td class="headerCovTableEntry">6</td>
+            <td class="headerCovTableEntry">6</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-12-18 14:22:55</td>
+            <td class="headerValue">2024-12-22 13:45:27</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -84,7 +84,7 @@
 <span id="L22"><span class="lineNum">      22</span>              : std::vector&lt;float&gt; a(n);</span>
 <span id="L23"><span class="lineNum">      23</span>              : </span>
 <span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC tlaBgGNC">           1 : void BM_serial_add(benchmark::State&amp; bm) {</span></span>
-<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">           5 :     for (auto _ : bm) {</span></span>
+<span id="L25"><span class="lineNum">      25</span>              :     for (auto _ : bm) {</span>
 <span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">   268435457 :         for (size_t i = 0; i &lt; n; ++i) {</span></span>
 <span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">   268435456 :             a[i] = a[i] + 1;</span></span>
 <span id="L28"><span class="lineNum">      28</span>              :         }</span>
@@ -95,7 +95,7 @@
 <span id="L33"><span class="lineNum">      33</span>              : BENCHMARK(BM_serial_add);</span>
 <span id="L34"><span class="lineNum">      34</span>              : </span>
 <span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">           1 : void BM_parallel_add(benchmark::State&amp; bm) {</span></span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">           6 :     for (auto _ : bm) {</span></span>
+<span id="L36"><span class="lineNum">      36</span>              :     for (auto _ : bm) {</span>
 <span id="L37"><span class="lineNum">      37</span>              : #pragma omp parallel for</span>
 <span id="L38"><span class="lineNum">      38</span>              :         for (size_t i = 0; i &lt; n; ++i) {</span>
 <span id="L39"><span class="lineNum">      39</span>              :             a[i] = a[i] + 1;</span>

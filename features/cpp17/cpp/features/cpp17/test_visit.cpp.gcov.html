@@ -31,18 +31,18 @@
             <td class="headerValue">_coverage_report.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">22</td>
-            <td class="headerCovTableEntry">22</td>
+            <td class="headerCovTableEntryMed">75.0&nbsp;%</td>
+            <td class="headerCovTableEntry">20</td>
+            <td class="headerCovTableEntry">15</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-12-18 14:22:55</td>
+            <td class="headerValue">2024-12-22 13:45:27</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntryLo">71.4&nbsp;%</td>
-            <td class="headerCovTableEntry">7</td>
-            <td class="headerCovTableEntry">5</td>
+            <td class="headerCovTableEntryMed">75.0&nbsp;%</td>
+            <td class="headerCovTableEntry">4</td>
+            <td class="headerCovTableEntry">3</td>
           </tr>
                   <tr><td><img src="../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -79,27 +79,27 @@
 <span id="L17"><span class="lineNum">      17</span>              : #include &lt;variant&gt;</span>
 <span id="L18"><span class="lineNum">      18</span>              : #include &lt;vector&gt;</span>
 <span id="L19"><span class="lineNum">      19</span>              : </span>
-<span id="L20"><span class="lineNum">      20</span> <span class="tlaGNC tlaBgGNC">           8 : std::variant&lt;std::false_type, std::true_type&gt; bool_variant(bool x) {</span></span>
-<span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC">           8 :     if (x) {</span></span>
-<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">           6 :         return std::true_type{};</span></span>
+<span id="L20"><span class="lineNum">      20</span> <span class="tlaUNC tlaBgUNC">           0 : std::variant&lt;std::false_type, std::true_type&gt; bool_variant(bool x) {</span></span>
+<span id="L21"><span class="lineNum">      21</span> <span class="tlaUNC">           0 :     if (x) {</span></span>
+<span id="L22"><span class="lineNum">      22</span> <span class="tlaUNC">           0 :         return std::true_type{};</span></span>
 <span id="L23"><span class="lineNum">      23</span>              :     }</span>
-<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">           2 :     return std::false_type{};</span></span>
+<span id="L24"><span class="lineNum">      24</span> <span class="tlaUNC">           0 :     return std::false_type{};</span></span>
 <span id="L25"><span class="lineNum">      25</span>              : }</span>
 <span id="L26"><span class="lineNum">      26</span>              : </span>
-<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">           4 : void saxpy(std::vector&lt;float&gt; a, float b, float c) {</span></span>
-<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">           4 :     auto has_b = bool_variant(b != 1);</span></span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC tlaBgGNC">           4 : void saxpy(std::vector&lt;float&gt; a, float b, float c) {</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">           6 :     auto has_b = bool_variant(b != 1);</span></span>
 <span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">           4 :     auto has_c = bool_variant(b != 0);</span></span>
-<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">           4 :     std::visit(</span></span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">           8 :         [&amp;](auto has_b, auto has_c) {</span></span>
+<span id="L30"><span class="lineNum">      30</span>              :     std::visit(</span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">           4 :         [&amp;](auto has_b, auto has_c) {</span></span>
 <span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">        4100 :             for (auto&amp; ai : a) {</span></span>
 <span id="L33"><span class="lineNum">      33</span>              :                 if constexpr (has_b) {</span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">        2048 :                     ai *= b;</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaUNC tlaBgUNC">           0 :                     ai *= b;</span></span>
 <span id="L35"><span class="lineNum">      35</span>              :                 }</span>
 <span id="L36"><span class="lineNum">      36</span>              :                 if constexpr (has_c) {</span>
-<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">        4096 :                     ai += c;</span></span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC tlaBgGNC">        4096 :                     ai += c;</span></span>
 <span id="L38"><span class="lineNum">      38</span>              :                 }</span>
 <span id="L39"><span class="lineNum">      39</span>              :             }</span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">           4 :         },</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">           2 :         },</span></span>
 <span id="L41"><span class="lineNum">      41</span>              :         has_b, has_c);</span>
 <span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">           4 : }</span></span>
 <span id="L43"><span class="lineNum">      43</span>              : </span>
@@ -135,7 +135,7 @@
 <span id="L73"><span class="lineNum">      73</span> <span class="tlaGNC">           1 :     saxpy(a, 2, 0);</span></span>
 <span id="L74"><span class="lineNum">      74</span> <span class="tlaGNC">           1 :     saxpy(a, 2, 3.14);</span></span>
 <span id="L75"><span class="lineNum">      75</span>              : </span>
-<span id="L76"><span class="lineNum">      76</span> <span class="tlaGNC">           1 :     return 0;</span></span>
+<span id="L76"><span class="lineNum">      76</span>              :     return 0;</span>
 <span id="L77"><span class="lineNum">      77</span> <span class="tlaGNC">           1 : }</span></span>
         </pre>
               </td>

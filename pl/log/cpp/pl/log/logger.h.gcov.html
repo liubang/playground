@@ -31,18 +31,18 @@
             <td class="headerValue">_coverage_report.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">96.7&nbsp;%</td>
-            <td class="headerCovTableEntry">30</td>
-            <td class="headerCovTableEntry">29</td>
+            <td class="headerCovTableEntryHi">96.0&nbsp;%</td>
+            <td class="headerCovTableEntry">25</td>
+            <td class="headerCovTableEntry">24</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-12-18 14:22:55</td>
+            <td class="headerValue">2024-12-22 13:45:27</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntryMed">77.8&nbsp;%</td>
-            <td class="headerCovTableEntry">9</td>
-            <td class="headerCovTableEntry">7</td>
+            <td class="headerCovTableEntryLo">66.7&nbsp;%</td>
+            <td class="headerCovTableEntry">6</td>
+            <td class="headerCovTableEntry">4</td>
           </tr>
                   <tr><td><img src="../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -100,8 +100,8 @@
 <span id="L38"><span class="lineNum">      38</span>              : </span>
 <span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC tlaBgGNC">        1048 :     static const char* logLevel2String(LogLevel log_level) {</span></span>
 <span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">        1048 :         switch (log_level) {</span></span>
-<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">           1 :         case LogLevel::PL_TRACE:</span></span>
-<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">           1 :             return &quot;TRACE&quot;;</span></span>
+<span id="L41"><span class="lineNum">      41</span>              :         case LogLevel::PL_TRACE:</span>
+<span id="L42"><span class="lineNum">      42</span>              :             return &quot;TRACE&quot;;</span>
 <span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">        1026 :         case LogLevel::PL_DEBUG:</span></span>
 <span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">        1026 :             return &quot;DEBUG&quot;;</span></span>
 <span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">          18 :         case LogLevel::PL_INFO:</span></span>
@@ -144,18 +144,18 @@
 <span id="L82"><span class="lineNum">      82</span>              :     Logger(SourceFile source, int line, LogLevel level);</span>
 <span id="L83"><span class="lineNum">      83</span>              :     ~Logger();</span>
 <span id="L84"><span class="lineNum">      84</span>              : </span>
-<span id="L85"><span class="lineNum">      85</span> <span class="tlaGNC">        1048 :     LogStream&amp; stream() { return impl_.stream_; }</span></span>
+<span id="L85"><span class="lineNum">      85</span>              :     LogStream&amp; stream() { return impl_.stream_; }</span>
 <span id="L86"><span class="lineNum">      86</span>              : </span>
 <span id="L87"><span class="lineNum">      87</span>              : private:</span>
 <span id="L88"><span class="lineNum">      88</span>              :     class Impl {</span>
 <span id="L89"><span class="lineNum">      89</span>              :     private:</span>
-<span id="L90"><span class="lineNum">      90</span> <span class="tlaGNC">        1048 :         Impl(const Logger::SourceFile&amp; source_file, int line, Logger::LogLevel log_level)</span></span>
+<span id="L90"><span class="lineNum">      90</span>              :         Impl(const Logger::SourceFile&amp; source_file, int line, Logger::LogLevel log_level)</span>
 <span id="L91"><span class="lineNum">      91</span> <span class="tlaGNC">        1048 :             : time_(std::chrono::system_clock::now()),</span></span>
 <span id="L92"><span class="lineNum">      92</span> <span class="tlaGNC">        1048 :               source_file_(source_file),</span></span>
 <span id="L93"><span class="lineNum">      93</span> <span class="tlaGNC">        1048 :               line_(line),</span></span>
 <span id="L94"><span class="lineNum">      94</span> <span class="tlaGNC">        1048 :               log_level_(log_level) {</span></span>
 <span id="L95"><span class="lineNum">      95</span> <span class="tlaGNC">        1048 :             startSession();</span></span>
-<span id="L96"><span class="lineNum">      96</span> <span class="tlaGNC">        1048 :         }</span></span>
+<span id="L96"><span class="lineNum">      96</span>              :         }</span>
 <span id="L97"><span class="lineNum">      97</span>              : </span>
 <span id="L98"><span class="lineNum">      98</span>              :         void startSession();</span>
 <span id="L99"><span class="lineNum">      99</span>              :         void flush();</span>

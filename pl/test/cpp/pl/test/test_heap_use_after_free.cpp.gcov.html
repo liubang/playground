@@ -31,17 +31,17 @@
             <td class="headerValue">_coverage_report.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryLo">14.3&nbsp;%</td>
-            <td class="headerCovTableEntry">14</td>
-            <td class="headerCovTableEntry">2</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">1</td>
+            <td class="headerCovTableEntry">1</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-12-18 14:22:55</td>
+            <td class="headerValue">2024-12-22 13:45:27</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntryLo">50.0&nbsp;%</td>
-            <td class="headerCovTableEntry">2</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">1</td>
             <td class="headerCovTableEntry">1</td>
           </tr>
                   <tr><td><img src="../../../../../glass.png" width=3 height=3 alt=""></td></tr>
@@ -82,19 +82,19 @@
 <span id="L20"><span class="lineNum">      20</span>              : #include &lt;string&gt;</span>
 <span id="L21"><span class="lineNum">      21</span>              : </span>
 <span id="L22"><span class="lineNum">      22</span>              : namespace {</span>
-<span id="L23"><span class="lineNum">      23</span> <span class="tlaUNC tlaBgUNC">           0 : auto to_string() -&gt; std::string {</span></span>
-<span id="L24"><span class="lineNum">      24</span> <span class="tlaUNC">           0 :     std::string s;</span></span>
-<span id="L25"><span class="lineNum">      25</span> <span class="tlaUNC">           0 :     uint32_t ip = 168362032;</span></span>
-<span id="L26"><span class="lineNum">      26</span> <span class="tlaUNC">           0 :     uint16_t port = 80;</span></span>
-<span id="L27"><span class="lineNum">      27</span> <span class="tlaUNC">           0 :     uint64_t start_time = 1684743618;</span></span>
-<span id="L28"><span class="lineNum">      28</span> <span class="tlaUNC">           0 :     char ip_port_str[64];</span></span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaUNC">           0 :     auto* ip_str = (unsigned char*)(&amp;ip);</span></span>
-<span id="L30"><span class="lineNum">      30</span> <span class="tlaUNC">           0 :     ::memset(ip_port_str, '\0', 64);</span></span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaUNC">           0 :     ::snprintf(ip_port_str, 64, &quot;%d.%d.%d.%d:%d:%lu&quot;, ip_str[0], ip_str[1], ip_str[2], ip_str[3],</span></span>
+<span id="L23"><span class="lineNum">      23</span>              : auto to_string() -&gt; std::string {</span>
+<span id="L24"><span class="lineNum">      24</span>              :     std::string s;</span>
+<span id="L25"><span class="lineNum">      25</span>              :     uint32_t ip = 168362032;</span>
+<span id="L26"><span class="lineNum">      26</span>              :     uint16_t port = 80;</span>
+<span id="L27"><span class="lineNum">      27</span>              :     uint64_t start_time = 1684743618;</span>
+<span id="L28"><span class="lineNum">      28</span>              :     char ip_port_str[64];</span>
+<span id="L29"><span class="lineNum">      29</span>              :     auto* ip_str = (unsigned char*)(&amp;ip);</span>
+<span id="L30"><span class="lineNum">      30</span>              :     ::memset(ip_port_str, '\0', 64);</span>
+<span id="L31"><span class="lineNum">      31</span>              :     ::snprintf(ip_port_str, 64, &quot;%d.%d.%d.%d:%d:%lu&quot;, ip_str[0], ip_str[1], ip_str[2], ip_str[3],</span>
 <span id="L32"><span class="lineNum">      32</span>              :                port, start_time);</span>
-<span id="L33"><span class="lineNum">      33</span> <span class="tlaUNC">           0 :     s.assign(ip_port_str);</span></span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaUNC">           0 :     return s;</span></span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaUNC">           0 : }</span></span>
+<span id="L33"><span class="lineNum">      33</span>              :     s.assign(ip_port_str);</span>
+<span id="L34"><span class="lineNum">      34</span>              :     return s;</span>
+<span id="L35"><span class="lineNum">      35</span>              : }</span>
 <span id="L36"><span class="lineNum">      36</span>              : } // namespace</span>
 <span id="L37"><span class="lineNum">      37</span>              : </span>
 <span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC tlaBgGNC">           1 : int main(int argc, char* argv[]) {</span></span>
@@ -117,7 +117,7 @@
 <span id="L55"><span class="lineNum">      55</span>              :     // ::printf(&quot;s is %s\n&quot;, s);</span>
 <span id="L56"><span class="lineNum">      56</span>              :     // ::printf(&quot;s is %s\n&quot;, s);</span>
 <span id="L57"><span class="lineNum">      57</span>              : </span>
-<span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">           1 :     return 0;</span></span>
+<span id="L58"><span class="lineNum">      58</span>              :     return 0;</span>
 <span id="L59"><span class="lineNum">      59</span>              : }</span>
         </pre>
               </td>

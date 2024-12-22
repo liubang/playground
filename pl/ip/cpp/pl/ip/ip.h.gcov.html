@@ -31,18 +31,18 @@
             <td class="headerValue">_coverage_report.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">90.0&nbsp;%</td>
-            <td class="headerCovTableEntry">20</td>
-            <td class="headerCovTableEntry">18</td>
+            <td class="headerCovTableEntryMed">88.2&nbsp;%</td>
+            <td class="headerCovTableEntry">17</td>
+            <td class="headerCovTableEntry">15</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-12-18 14:22:55</td>
+            <td class="headerValue">2024-12-22 13:45:27</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">2</td>
-            <td class="headerCovTableEntry">2</td>
+            <td class="headerCovTableEntry">1</td>
+            <td class="headerCovTableEntry">1</td>
           </tr>
                   <tr><td><img src="../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -101,8 +101,8 @@
 <span id="L39"><span class="lineNum">      39</span> <span class="tlaUNC tlaBgUNC">           0 :         return std::nullopt;</span></span>
 <span id="L40"><span class="lineNum">      40</span>              :     }</span>
 <span id="L41"><span class="lineNum">      41</span>              : </span>
-<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC tlaBgGNC">           1 :     memset(&amp;remote_server, 0, sizeof(remote_server));</span></span>
-<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">           1 :     remote_server.sin_family = AF_INET;</span></span>
+<span id="L42"><span class="lineNum">      42</span>              :     memset(&amp;remote_server, 0, sizeof(remote_server));</span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC tlaBgGNC">           1 :     remote_server.sin_family = AF_INET;</span></span>
 <span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">           1 :     remote_server.sin_addr.s_addr = inet_addr(REMOTE_ADDRESS.data());</span></span>
 <span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">           1 :     remote_server.sin_port = htons(22);</span></span>
 <span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">           1 :     int err = ::connect(sock, reinterpret_cast&lt;const struct sockaddr*&gt;(&amp;remote_server),</span></span>
@@ -111,19 +111,19 @@
 <span id="L49"><span class="lineNum">      49</span> <span class="tlaUNC tlaBgUNC">           0 :         return std::nullopt;</span></span>
 <span id="L50"><span class="lineNum">      50</span>              :     }</span>
 <span id="L51"><span class="lineNum">      51</span>              : </span>
-<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC tlaBgGNC">           2 :     SCOPE_EXIT { ::close(sock); };</span></span>
+<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC tlaBgGNC">           1 :     SCOPE_EXIT { ::close(sock); };</span></span>
 <span id="L53"><span class="lineNum">      53</span>              :     struct sockaddr_in local_addr;</span>
 <span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">           1 :     socklen_t local_addr_len = sizeof(local_addr);</span></span>
 <span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">           1 :     err = getsockname(sock, reinterpret_cast&lt;struct sockaddr*&gt;(&amp;local_addr), &amp;local_addr_len);</span></span>
 <span id="L56"><span class="lineNum">      56</span>              :     char buffer[INET_ADDRSTRLEN];</span>
-<span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">           1 :     std::string local_ip;</span></span>
+<span id="L57"><span class="lineNum">      57</span>              :     std::string local_ip;</span>
 <span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">           1 :     const char* p = inet_ntop(AF_INET, &amp;local_addr.sin_addr, buffer, INET_ADDRSTRLEN);</span></span>
 <span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC">           1 :     if (p != nullptr) {</span></span>
-<span id="L60"><span class="lineNum">      60</span> <span class="tlaGNC">           2 :         local_ip = std::string(buffer);</span></span>
+<span id="L60"><span class="lineNum">      60</span> <span class="tlaGNC">           1 :         local_ip = std::string(buffer);</span></span>
 <span id="L61"><span class="lineNum">      61</span>              :     }</span>
 <span id="L62"><span class="lineNum">      62</span>              : </span>
-<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">           1 :     return local_ip;</span></span>
-<span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L63"><span class="lineNum">      63</span>              :     return local_ip;</span>
+<span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC">           3 : }</span></span>
 <span id="L65"><span class="lineNum">      65</span>              : </span>
 <span id="L66"><span class="lineNum">      66</span>              : } // namespace pl</span>
         </pre>

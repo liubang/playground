@@ -32,12 +32,12 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">13</td>
-            <td class="headerCovTableEntry">13</td>
+            <td class="headerCovTableEntry">11</td>
+            <td class="headerCovTableEntry">11</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-12-18 14:22:55</td>
+            <td class="headerValue">2024-12-22 13:45:27</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -90,17 +90,17 @@
 <span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">           1 :     std::ostringstream oss;</span></span>
 <span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">           1 :     oss &lt;&lt; std::put_time(tm, format.c_str());</span></span>
 <span id="L30"><span class="lineNum">      30</span>              : </span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">           2 :     return oss.str();</span></span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">           1 :     return oss.str();</span></span>
 <span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">           1 : }</span></span>
 <span id="L33"><span class="lineNum">      33</span>              : </span>
 <span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">           1 : int main() {</span></span>
 <span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">           1 :     std::chrono::system_clock::time_point timestamp = std::chrono::system_clock::now();</span></span>
 <span id="L36"><span class="lineNum">      36</span>              : </span>
-<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">           3 :     std::string formattedTimestamp = formatTimestamp(timestamp, &quot;%Y-%m-%d %H:%M:%S&quot;);</span></span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">           2 :     std::string formattedTimestamp = formatTimestamp(timestamp, &quot;%Y-%m-%d %H:%M:%S&quot;);</span></span>
 <span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">           1 :     std::cout &lt;&lt; &quot;Formatted timestamp: &quot; &lt;&lt; formattedTimestamp &lt;&lt; std::endl;</span></span>
 <span id="L39"><span class="lineNum">      39</span>              : </span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">           1 :     return 0;</span></span>
-<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L40"><span class="lineNum">      40</span>              :     return 0;</span>
+<span id="L41"><span class="lineNum">      41</span>              : }</span>
         </pre>
               </td>
             </tr>

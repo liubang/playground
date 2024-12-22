@@ -32,17 +32,17 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">10</td>
-            <td class="headerCovTableEntry">10</td>
+            <td class="headerCovTableEntry">9</td>
+            <td class="headerCovTableEntry">9</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-12-18 14:22:55</td>
+            <td class="headerValue">2024-12-22 13:45:27</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">5</td>
-            <td class="headerCovTableEntry">5</td>
+            <td class="headerCovTableEntryLo">66.7&nbsp;%</td>
+            <td class="headerCovTableEntry">3</td>
+            <td class="headerCovTableEntry">2</td>
           </tr>
                   <tr><td><img src="../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -87,19 +87,19 @@
 <span id="L25"><span class="lineNum">      25</span>              : namespace {</span>
 <span id="L26"><span class="lineNum">      26</span>              : </span>
 <span id="L27"><span class="lineNum">      27</span>              : struct StrComparator {</span>
-<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC tlaBgGNC">        8254 :     [[nodiscard]] int compare(const pl::SkipListNode&lt;std::string*&gt;* a,</span></span>
+<span id="L28"><span class="lineNum">      28</span>              :     [[nodiscard]] int compare(const pl::SkipListNode&lt;std::string*&gt;* a,</span>
 <span id="L29"><span class="lineNum">      29</span>              :                               const pl::SkipListNode&lt;std::string*&gt;* b) const {</span>
-<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">        8254 :         return a-&gt;key-&gt;compare(*(b-&gt;key));</span></span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC tlaBgGNC">        7371 :         return a-&gt;key-&gt;compare(*(b-&gt;key));</span></span>
 <span id="L31"><span class="lineNum">      31</span>              :     }</span>
 <span id="L32"><span class="lineNum">      32</span>              : };</span>
 <span id="L33"><span class="lineNum">      33</span>              : </span>
 <span id="L34"><span class="lineNum">      34</span>              : } // namespace</span>
 <span id="L35"><span class="lineNum">      35</span>              : </span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">           4 : TEST(skiplist, test) {</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">           3 : TEST(skiplist, test) {</span></span>
 <span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">           1 :     pl::SkipList&lt;std::string*, StrComparator&gt; skiplist;</span></span>
 <span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">           1 :     std::vector&lt;std::shared_ptr&lt;std::string&gt;&gt; keys;</span></span>
 <span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">          51 :     for (int i = 0; i &lt; 50; ++i) {</span></span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">          50 :         keys.push_back(std::make_shared&lt;std::string&gt;(pl::random_string(3)));</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">         100 :         keys.push_back(std::make_shared&lt;std::string&gt;(pl::random_string(3)));</span></span>
 <span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">          50 :         skiplist.insert(keys.back().get());</span></span>
 <span id="L42"><span class="lineNum">      42</span>              :     }</span>
 <span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">           1 :     skiplist.display();</span></span>

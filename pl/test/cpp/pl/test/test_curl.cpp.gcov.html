@@ -31,13 +31,13 @@
             <td class="headerValue">_coverage_report.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryMed">89.5&nbsp;%</td>
-            <td class="headerCovTableEntry">19</td>
-            <td class="headerCovTableEntry">17</td>
+            <td class="headerCovTableEntryMed">87.5&nbsp;%</td>
+            <td class="headerCovTableEntry">16</td>
+            <td class="headerCovTableEntry">14</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-12-18 14:22:55</td>
+            <td class="headerValue">2024-12-22 13:45:27</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -71,11 +71,11 @@
 <span id="L9"><span class="lineNum">       9</span> <span class="tlaUNC">           0 :         return 1;</span></span>
 <span id="L10"><span class="lineNum">      10</span>              :     }</span>
 <span id="L11"><span class="lineNum">      11</span>              : </span>
-<span id="L12"><span class="lineNum">      12</span> <span class="tlaGNC tlaBgGNC">           1 :     const char* url = &quot;https://baidu.com&quot;;</span></span>
-<span id="L13"><span class="lineNum">      13</span> <span class="tlaGNC">           1 :     const char* json = &quot;{}&quot;;</span></span>
+<span id="L12"><span class="lineNum">      12</span>              :     const char* url = &quot;https://baidu.com&quot;;</span>
+<span id="L13"><span class="lineNum">      13</span>              :     const char* json = &quot;{}&quot;;</span>
 <span id="L14"><span class="lineNum">      14</span>              : </span>
-<span id="L15"><span class="lineNum">      15</span> <span class="tlaGNC">           1 :     struct curl_slist* headers = nullptr;</span></span>
-<span id="L16"><span class="lineNum">      16</span> <span class="tlaGNC">           1 :     headers = curl_slist_append(headers, &quot;Content-Type: application/json&quot;);</span></span>
+<span id="L15"><span class="lineNum">      15</span>              :     struct curl_slist* headers = nullptr;</span>
+<span id="L16"><span class="lineNum">      16</span> <span class="tlaGNC tlaBgGNC">           1 :     headers = curl_slist_append(headers, &quot;Content-Type: application/json&quot;);</span></span>
 <span id="L17"><span class="lineNum">      17</span>              : </span>
 <span id="L18"><span class="lineNum">      18</span> <span class="tlaGNC">           1 :     curl_easy_setopt(curl, CURLOPT_URL, url);</span></span>
 <span id="L19"><span class="lineNum">      19</span> <span class="tlaGNC">           1 :     curl_easy_setopt(curl, CURLOPT_POST, 1L);</span></span>

@@ -32,12 +32,12 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">12</td>
-            <td class="headerCovTableEntry">12</td>
+            <td class="headerCovTableEntry">10</td>
+            <td class="headerCovTableEntry">10</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-12-18 14:22:55</td>
+            <td class="headerValue">2024-12-22 13:45:27</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -68,11 +68,11 @@
 <span id="L6"><span class="lineNum">       6</span> <span class="tlaGNC">          65 :     for (size_t i = 0; i &lt; 64; ++i) {</span></span>
 <span id="L7"><span class="lineNum">       7</span> <span class="tlaGNC">          64 :         uint64_t a = static_cast&lt;uint64_t&gt;(1) &lt;&lt; i;</span></span>
 <span id="L8"><span class="lineNum">       8</span> <span class="tlaGNC">          64 :         std::bitset&lt;64&gt; bs = a;</span></span>
-<span id="L9"><span class="lineNum">       9</span> <span class="tlaGNC">          64 :         std::cout &lt;&lt; &quot;i ==&gt; &quot; &lt;&lt; i &lt;&lt; &quot;, a ==&gt; &quot; &lt;&lt; bs &lt;&lt; std::endl;</span></span>
+<span id="L9"><span class="lineNum">       9</span> <span class="tlaGNC">         128 :         std::cout &lt;&lt; &quot;i ==&gt; &quot; &lt;&lt; i &lt;&lt; &quot;, a ==&gt; &quot; &lt;&lt; bs &lt;&lt; std::endl;</span></span>
 <span id="L10"><span class="lineNum">      10</span>              :     }</span>
 <span id="L11"><span class="lineNum">      11</span>              : </span>
 <span id="L12"><span class="lineNum">      12</span>              :     // 逐位字节反转</span>
-<span id="L13"><span class="lineNum">      13</span> <span class="tlaGNC">           1 :     uint64_t a = 10245567210864513;</span></span>
+<span id="L13"><span class="lineNum">      13</span>              :     uint64_t a = 10245567210864513;</span>
 <span id="L14"><span class="lineNum">      14</span> <span class="tlaGNC">          65 :     for (size_t i = 0; i &lt; 64; ++i) {</span></span>
 <span id="L15"><span class="lineNum">      15</span> <span class="tlaGNC">          64 :         uint64_t b = static_cast&lt;uint64_t&gt;(1) &lt;&lt; i;</span></span>
 <span id="L16"><span class="lineNum">      16</span> <span class="tlaGNC">          64 :         uint64_t c = a ^ b;</span></span>
@@ -80,7 +80,7 @@
 <span id="L18"><span class="lineNum">      18</span> <span class="tlaGNC">          64 :         std::cout &lt;&lt; bs &lt;&lt; &quot;\n&quot;;</span></span>
 <span id="L19"><span class="lineNum">      19</span>              :     }</span>
 <span id="L20"><span class="lineNum">      20</span>              : </span>
-<span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC">           1 :     return 0;</span></span>
+<span id="L21"><span class="lineNum">      21</span>              :     return 0;</span>
 <span id="L22"><span class="lineNum">      22</span>              : }</span>
         </pre>
               </td>

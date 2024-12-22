@@ -32,12 +32,12 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">8</td>
-            <td class="headerCovTableEntry">8</td>
+            <td class="headerCovTableEntry">6</td>
+            <td class="headerCovTableEntry">6</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-12-18 14:22:55</td>
+            <td class="headerValue">2024-12-22 13:45:27</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -132,9 +132,9 @@
 <span id="L70"><span class="lineNum">      70</span>              :     if constexpr (std::is_void_v&lt;std::invoke_result_t&lt;Fn&gt;&gt;) {</span>
 <span id="L71"><span class="lineNum">      71</span> <span class="tlaGNC">           7 :         fn();</span></span>
 <span id="L72"><span class="lineNum">      72</span> <span class="tlaGNC">           7 :         auto end = std::chrono::high_resolution_clock::now();</span></span>
-<span id="L73"><span class="lineNum">      73</span> <span class="tlaGNC">           7 :         auto elapsed = std::chrono::duration_cast&lt;std::chrono::microseconds&gt;(end - start);</span></span>
-<span id="L74"><span class="lineNum">      74</span> <span class="tlaGNC">           7 :         std::cout &lt;&lt; &quot;[&quot; &lt;&lt; name &lt;&lt; &quot;]&quot; &lt;&lt; &quot; &gt;&gt; Elapsed time: &quot; &lt;&lt; elapsed.count() &lt;&lt; &quot;(us)&quot;</span></span>
-<span id="L75"><span class="lineNum">      75</span> <span class="tlaGNC">           7 :                   &lt;&lt; std::endl;</span></span>
+<span id="L73"><span class="lineNum">      73</span>              :         auto elapsed = std::chrono::duration_cast&lt;std::chrono::microseconds&gt;(end - start);</span>
+<span id="L74"><span class="lineNum">      74</span> <span class="tlaGNC">          21 :         std::cout &lt;&lt; &quot;[&quot; &lt;&lt; name &lt;&lt; &quot;]&quot; &lt;&lt; &quot; &gt;&gt; Elapsed time: &quot; &lt;&lt; elapsed.count() &lt;&lt; &quot;(us)&quot;</span></span>
+<span id="L75"><span class="lineNum">      75</span>              :                   &lt;&lt; std::endl;</span>
 <span id="L76"><span class="lineNum">      76</span>              :     } else {</span>
 <span id="L77"><span class="lineNum">      77</span>              :         auto ret = fn();</span>
 <span id="L78"><span class="lineNum">      78</span>              :         auto end = std::chrono::high_resolution_clock::now();</span>

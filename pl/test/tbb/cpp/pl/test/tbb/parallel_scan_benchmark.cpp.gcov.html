@@ -31,18 +31,18 @@
             <td class="headerValue">_coverage_report.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">90.0&nbsp;%</td>
-            <td class="headerCovTableEntry">20</td>
-            <td class="headerCovTableEntry">18</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">17</td>
+            <td class="headerCovTableEntry">17</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-12-18 14:22:55</td>
+            <td class="headerValue">2024-12-22 13:45:27</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">6</td>
-            <td class="headerCovTableEntry">6</td>
+            <td class="headerCovTableEntry">3</td>
+            <td class="headerCovTableEntry">3</td>
           </tr>
                   <tr><td><img src="../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -89,29 +89,29 @@
 <span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC tlaBgGNC">          11 : static void test1() {</span></span>
 <span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">          11 :     std::vector&lt;float&gt; a(n);</span></span>
 <span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">          11 :     float res = tbb::parallel_scan(</span></span>
-<span id="L30"><span class="lineNum">      30</span> <span class="tlaUNC tlaBgUNC">           0 :         tbb::blocked_range&lt;size_t&gt;(0, n), (float)0,</span></span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC tlaBgGNC">         305 :         [&amp;](tbb::blocked_range&lt;size_t&gt; r, float local_res, auto is_final) {</span></span>
-<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">   926515017 :             for (size_t i = r.begin(); i &lt; r.end(); ++i) {</span></span>
-<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">   909124469 :                 local_res += std::sin(i);</span></span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">   911138687 :                 if (is_final) {</span></span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">   552855756 :                     a[i] = local_res;</span></span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">          22 :         tbb::blocked_range&lt;size_t&gt;(0, n), (float)0,</span></span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">         119 :         [&amp;](tbb::blocked_range&lt;size_t&gt; r, float local_res, auto is_final) {</span></span>
+<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">   501219637 :             for (size_t i = r.begin(); i &lt; r.end(); ++i) {</span></span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">   190840832 :                 local_res += std::sin(i);</span></span>
+<span id="L34"><span class="lineNum">      34</span>              :                 if (is_final) {</span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">   310378496 :                     a[i] = local_res;</span></span>
 <span id="L36"><span class="lineNum">      36</span>              :                 }</span>
 <span id="L37"><span class="lineNum">      37</span>              :             }</span>
-<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">         294 :             return local_res;</span></span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">         108 :             return local_res;</span></span>
 <span id="L39"><span class="lineNum">      39</span>              :         },</span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaUNC tlaBgUNC">           0 :         [](float x, float y) {</span></span>
-<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC tlaBgGNC">         125 :             return x + y;</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">          11 :         [](float x, float y) {</span></span>
+<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">         137 :             return x + y;</span></span>
 <span id="L42"><span class="lineNum">      42</span>              :         });</span>
 <span id="L43"><span class="lineNum">      43</span>              : </span>
 <span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">          11 :     std::cout &lt;&lt; a[n / 2] &lt;&lt; std::endl;</span></span>
-<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">          11 :     std::cout &lt;&lt; res &lt;&lt; std::endl;</span></span>
+<span id="L45"><span class="lineNum">      45</span>              :     std::cout &lt;&lt; res &lt;&lt; std::endl;</span>
 <span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">          11 : }</span></span>
 <span id="L47"><span class="lineNum">      47</span>              : </span>
 <span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">           1 : int main(int argc, char* argv[]) {</span></span>
 <span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">           1 :     ankerl::nanobench::Bench().run(&quot;test1&quot;, [&amp;] {</span></span>
 <span id="L50"><span class="lineNum">      50</span> <span class="tlaGNC">          11 :         test1();</span></span>
 <span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">          11 :     });</span></span>
-<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">           1 :     return 0;</span></span>
+<span id="L52"><span class="lineNum">      52</span>              :     return 0;</span>
 <span id="L53"><span class="lineNum">      53</span>              : }</span>
         </pre>
               </td>

@@ -32,16 +32,16 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryLo">0.0&nbsp;%</td>
-            <td class="headerCovTableEntry">4</td>
+            <td class="headerCovTableEntry">3</td>
             <td class="headerCovTableEntry">0</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-12-18 14:22:55</td>
+            <td class="headerValue">2024-12-22 13:45:27</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntryLo">0.0&nbsp;%</td>
-            <td class="headerCovTableEntry">3</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
             <td class="headerCovTableEntry">0</td>
           </tr>
                   <tr><td><img src="../../../../../glass.png" width=3 height=3 alt=""></td></tr>
@@ -160,7 +160,7 @@
 <span id="L98"><span class="lineNum">      98</span> <span class="tlaUNC tlaBgUNC">           0 :     static inline double deg_rad(double ang) { return ang * D_R; }</span></span>
 <span id="L99"><span class="lineNum">      99</span> <span class="tlaUNC">           0 :     static inline double rad_deg(double ang) { return ang / D_R; }</span></span>
 <span id="L100"><span class="lineNum">     100</span>              : </span>
-<span id="L101"><span class="lineNum">     101</span> <span class="tlaUNC">           0 :     static inline double geo_lat_distance(double lat1d, double lat2d) {</span></span>
+<span id="L101"><span class="lineNum">     101</span>              :     static inline double geo_lat_distance(double lat1d, double lat2d) {</span>
 <span id="L102"><span class="lineNum">     102</span> <span class="tlaUNC">           0 :         return EARTH_RADIUS_IN_METERS * std::fabs(deg_rad(lat2d) - deg_rad(lat1d));</span></span>
 <span id="L103"><span class="lineNum">     103</span>              :     }</span>
 <span id="L104"><span class="lineNum">     104</span>              : </span>
