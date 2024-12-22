@@ -43,5 +43,5 @@
 // non-temporal prefetch
 #define PL_PREFETCH(addr, rw, locality) __builtin_prefetch(addr, rw, locality >= 1 ? 3 : locality)
 #else
-#define PLPREFETCH(addr, rw, locality) __builtin_prefetch(addr, rw, locality)
+#define PL_PREFETCH(addr, rw, locality) __builtin_prefetch(addr, rw, locality)
 #endif
