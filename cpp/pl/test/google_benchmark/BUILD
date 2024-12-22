@@ -20,12 +20,20 @@ load(
     "TEST_COPTS",
 )
 
-cc_test(
-    name = "fibonacci",
-    srcs = ["fibonacci.cpp"],
-    copts = TEST_COPTS + ["-std=c++17"],
-    linkopts = DEFAULT_LINKOPTS,
-    deps = [
-        "@google_benchmark//:benchmark_main",
-    ],
-)
+[
+    cc_test(
+        name = "%s" % f[:f.rfind(".")],
+        srcs = [
+            "%s" % f,
+        ],
+        copts = [
+            "-std=c++20",
+        ] + TEST_COPTS,
+        linkopts = DEFAULT_LINKOPTS + ["-pthread"],
+        deps = [
+            "//cpp/pl/lang",
+            "@google_benchmark//:benchmark_main",
+        ],
+    )
+    for f in glob(["*.cpp"])
+]
