@@ -19,12 +19,14 @@
 #include "cpp/pl/bloom/bloom.h"
 
 #include <array>
+#include <cstring>
 #include <deque>
 #include <memory>
 #include <string>
 #include <string_view>
 
 #include "xxhash.h"
+#include <vector>
 
 namespace pl {
 
@@ -85,7 +87,7 @@ private:
         std::array<uint32_t, kBufferMask + 1> byte_offsets;
 
         std::size_t i = 0;
-        std::deque<uint64_t>::iterator hash_entries_it = hashes_.begin();
+        auto hash_entries_it = hashes_.begin();
         for (; i <= kBufferMask && i < num_hashes; ++i) {
             uint64_t h = *hash_entries_it;
             BlockedBloomFilter::prepare_hash(Lower32of64(h), buf_len, buf, &byte_offsets[i]);
