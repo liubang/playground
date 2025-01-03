@@ -68,7 +68,7 @@ public:
 
     [[nodiscard]] const std::string_view msg() const {
         if (msg_ != nullptr) {
-            return *msg_;
+            return {msg_->data(), msg_->size()};
         }
         return std::string_view();
     }
