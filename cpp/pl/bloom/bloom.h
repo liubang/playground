@@ -62,41 +62,53 @@ public:
         // smaller than standard bloom, e.g. 9 instead of 11 @ 16 b/k.
         if (millibits_per_key <= 2080) {
             return 1;
-        } else if (millibits_per_key <= 3580) {
+        }
+        if (millibits_per_key <= 3580) {
             return 2;
-        } else if (millibits_per_key <= 5100) {
+        }
+        if (millibits_per_key <= 5100) {
             return 3;
-        } else if (millibits_per_key <= 6640) {
+        }
+        if (millibits_per_key <= 6640) {
             return 4;
-        } else if (millibits_per_key <= 8300) {
+        }
+        if (millibits_per_key <= 8300) {
             return 5;
-        } else if (millibits_per_key <= 10070) {
+        }
+        if (millibits_per_key <= 10070) {
             return 6;
-        } else if (millibits_per_key <= 11720) {
+        }
+        if (millibits_per_key <= 11720) {
             return 7;
-        } else if (millibits_per_key <= 14001) {
+        }
+        if (millibits_per_key <= 14001) {
             // Would be something like <= 13800 but sacrificing *slightly* for
             // more settings using <= 8 probes.
             return 8;
-        } else if (millibits_per_key <= 16050) {
+        }
+        if (millibits_per_key <= 16050) {
             return 9;
-        } else if (millibits_per_key <= 18300) {
+        }
+        if (millibits_per_key <= 18300) {
             return 10;
-        } else if (millibits_per_key <= 22001) {
+        }
+        if (millibits_per_key <= 22001) {
             return 11;
-        } else if (millibits_per_key <= 25501) {
+        }
+        if (millibits_per_key <= 25501) {
             return 12;
-        } else if (millibits_per_key > 50000) {
+        }
+        if (millibits_per_key > 50000) {
             // Top out at 24 probes (three sets of 8)
             return 24;
-        } else {
-            // Roughly optimal choices for remaining range
-            // e.g.
-            // 28000 -> 12, 28001 -> 13
-            // 50000 -> 23, 50001 -> 24
-            return (millibits_per_key - 1) / 2000 - 1;
         }
+        // Roughly optimal choices for remaining range
+        // e.g.
+        // 28000 -> 12, 28001 -> 13
+        // 50000 -> 23, 50001 -> 24
+        return (millibits_per_key - 1) / 2000 - 1;
     }
+
     static void add_hash(uint32_t h1, uint32_t h2, uint32_t bytes_len, int num_probes, char* data) {
         // Use h1 to choese which cache-line-aligned block to be used.
         uint32_t bytes_to_cache_line = fastrange32(h1, bytes_len >> 6) << 6;
