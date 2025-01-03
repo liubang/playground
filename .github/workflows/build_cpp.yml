@@ -23,7 +23,7 @@ jobs:
             { name: gcc, flag: --action_env=CC=gcc-14 --linkopt=-fuse-ld=gold },
             {
               name: clang,
-              flag: --action_env=CC=clang-19 --cxxopt=-stdlib=libstdc++ --cxxopt=-Wno-error=unused-but-set-variable --cxxopt=-Wno-error=unused-but-set-parameter --linkopt=-stdlib=libstdc++,
+              flag: --action_env=CC=clang-18 --cxxopt=-stdlib=libstdc++ --cxxopt=-Wno-error=unused-but-set-variable --cxxopt=-Wno-error=unused-but-set-parameter --linkopt=-stdlib=libstdc++,
             },
           ]
     name: build
@@ -59,7 +59,7 @@ jobs:
             { name: gcc, flag: --action_env=CC=gcc-14 --linkopt=-fuse-ld=gold },
             {
               name: clang,
-              flag: --action_env=CC=clang-19 --cxxopt=-stdlib=libstdc++ --cxxopt=-Wno-error=unused-but-set-variable --cxxopt=-Wno-error=unused-but-set-parameter --linkopt=-stdlib=libstdc++,
+              flag: --action_env=CC=clang-18 --cxxopt=-stdlib=libstdc++ --cxxopt=-Wno-error=unused-but-set-variable --cxxopt=-Wno-error=unused-but-set-parameter --linkopt=-stdlib=libstdc++,
             },
           ]
     name: test
