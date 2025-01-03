@@ -36,6 +36,7 @@ GCC_FLAGS = [
     "-Wwrite-strings",
     "-DNOMINMAX",
     "-Werror=return-type",
+    "-fno-omit-frame-pointer",
 ]
 
 GCC_TEST_FLAGS = [
@@ -61,6 +62,7 @@ GCC_TEST_FLAGS = [
     "-Wno-unused-parameter",
     "-Wno-unused-private-field",
     "-Werror=return-type",
+    "-fno-omit-frame-pointer",
 ]
 
 LLVM_FLAGS = [
@@ -100,6 +102,7 @@ LLVM_FLAGS = [
     "-Wno-unknown-warning-option",
     "-Werror=return-type",
     "-DNOMINMAX",
+    "-fno-omit-frame-pointer",
 ]
 
 LLVM_TEST_FLAGS = [
@@ -153,4 +156,5 @@ LLVM_TEST_FLAGS = [
     "-Wno-used-but-marked-unused",
     "-Wno-gnu-zero-variadic-macro-arguments",
     "-Werror=return-type",
+    "-fno-omit-frame-pointer",
 ]
