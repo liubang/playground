@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-12-23 01:56:45</td>
+            <td class="headerValue">2025-01-03 07:24:19</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">83.3&nbsp;%</td>
@@ -97,7 +97,7 @@
 <span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">        1048 :     std::tm now_tm = *std::localtime(&amp;now_time_t);</span></span>
 <span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">        1048 :     auto duration = time_.time_since_epoch();</span></span>
 <span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">        3144 :     auto millis = std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(duration) % 1000;</span></span>
-<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">        3144 :     return fmt::format(&quot;{:%m-%d %H:%M:%S}:{:03}&quot;, now_tm, millis.count());</span></span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">        1048 :     return fmt::format(&quot;{:%m-%d %H:%M:%S}:{:03}&quot;, now_tm, millis.count());</span></span>
 <span id="L39"><span class="lineNum">      39</span>              : }</span>
 <span id="L40"><span class="lineNum">      40</span>              : </span>
 <span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">        1048 : void Logger::Impl::startSession() {</span></span>

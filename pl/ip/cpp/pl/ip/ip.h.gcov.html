@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2024-12-23 01:56:45</td>
+            <td class="headerValue">2025-01-03 07:24:19</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -119,11 +119,11 @@
 <span id="L57"><span class="lineNum">      57</span>              :     std::string local_ip;</span>
 <span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">           1 :     const char* p = inet_ntop(AF_INET, &amp;local_addr.sin_addr, buffer, INET_ADDRSTRLEN);</span></span>
 <span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC">           1 :     if (p != nullptr) {</span></span>
-<span id="L60"><span class="lineNum">      60</span> <span class="tlaGNC">           1 :         local_ip = std::string(buffer);</span></span>
+<span id="L60"><span class="lineNum">      60</span> <span class="tlaGNC">           2 :         local_ip = std::string(buffer);</span></span>
 <span id="L61"><span class="lineNum">      61</span>              :     }</span>
 <span id="L62"><span class="lineNum">      62</span>              : </span>
 <span id="L63"><span class="lineNum">      63</span>              :     return local_ip;</span>
-<span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC">           3 : }</span></span>
+<span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC">           1 : }</span></span>
 <span id="L65"><span class="lineNum">      65</span>              : </span>
 <span id="L66"><span class="lineNum">      66</span>              : } // namespace pl</span>
         </pre>
