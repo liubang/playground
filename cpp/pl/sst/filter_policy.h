@@ -17,6 +17,7 @@
 #pragma once
 
 #include "cpp/pl/bloom/bloom.h"
+#include "cpp/pl/status/status.h"
 
 #include <array>
 #include <cstring>
@@ -32,9 +33,11 @@ namespace pl {
 
 class FilterBuilder {
 public:
-    virtual ~FilterBuilder();
+    virtual ~FilterBuilder() = default;
 
     virtual void add_key(std::string_view key) = 0;
+
+    virtual void add_key_alt(std::string_view key, std::string_view prefix) = 0;
 
     virtual std::string_view finish(std::unique_ptr<const char[]>* buf) = 0;
 };
@@ -56,10 +59,11 @@ public:
         uint64_t hash = XXH3_64bits(key.data(), key.size());
         if (hashes_.empty() || hashes_.back() != hash) {
             hashes_.push_back(hash);
-            // TODO: to use xor_checksum
-            xor_checksum_ ^= hash;
         }
     }
+
+    // TODO:
+    void add_key_alt(std::string_view key, std::string_view prefix) {}
 
     std::string_view finish(std::unique_ptr<const char[]>* buf) override {
         std::size_t num_hashes = hashes_.size();
@@ -131,7 +135,6 @@ private:
 
 private:
     std::deque<uint64_t> hashes_;
-    uint64_t xor_checksum_{0};
     int millibits_per_key_{0};
 };
 
