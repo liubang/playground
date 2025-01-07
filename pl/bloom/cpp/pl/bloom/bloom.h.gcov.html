@@ -1,0 +1,266 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>LCOV - _coverage_report.dat - pl/bloom/cpp/pl/bloom/bloom.h</title>
+  <link rel="stylesheet" type="text/css" href="../../../../../gcov.css">
+</head>
+
+<body>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="title">LCOV - code coverage report</td></tr>
+            <tr><td class="ruler"><img src="../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+
+            <tr>
+              <td width="100%">
+                <table cellpadding=1 border=0 width="100%">
+          <tr>
+            <td width="10%" class="headerItem">Current view:</td>
+            <td width="10%" class="headerValue"><a href="../../../../../index.html">top level</a> - <a href="index.html">pl/bloom/cpp/pl/bloom</a> - bloom.h<span style="font-size: 80%;"> (source / <a href="bloom.h.func-c.html">functions</a>)</span></td>
+            <td width="5%"></td>
+            <td width="5%"></td>
+            <td width="5%" class="headerCovTableHead">Coverage</td>
+            <td width="5%" class="headerCovTableHead" title="Covered + Uncovered code">Total</td>
+            <td width="5%" class="headerCovTableHead" title="Exercised code only">Hit</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test:</td>
+            <td class="headerValue">_coverage_report.dat</td>
+            <td></td>
+            <td class="headerItem">Lines:</td>
+            <td class="headerCovTableEntryLo">0.0&nbsp;%</td>
+            <td class="headerCovTableEntry">28</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td class="headerItem">Test Date:</td>
+            <td class="headerValue">2025-01-07 11:57:28</td>
+            <td></td>
+            <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryLo">0.0&nbsp;%</td>
+            <td class="headerCovTableEntry">3</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+                  <tr><td><img src="../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr><td class="ruler"><img src="../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+          </table>
+
+          <table cellpadding=0 cellspacing=0 border=0>
+            <tr>
+              <td><br></td>
+            </tr>
+            <tr>
+              <td>
+<pre class="sourceHeading">            Line data    Source code</pre>
+<pre class="source">
+<span id="L1"><span class="lineNum">       1</span>              : // Copyright (c) 2024 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>              : //</span>
+<span id="L3"><span class="lineNum">       3</span>              : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>              : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>              : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>              : //</span>
+<span id="L7"><span class="lineNum">       7</span>              : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>              : //</span>
+<span id="L9"><span class="lineNum">       9</span>              : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>              : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>              : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>              : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>              : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>              : </span>
+<span id="L15"><span class="lineNum">      15</span>              : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>              : </span>
+<span id="L17"><span class="lineNum">      17</span>              : #include &quot;cpp/pl/fastrange/fastrange.h&quot;</span>
+<span id="L18"><span class="lineNum">      18</span>              : #include &quot;cpp/pl/lang/common.h&quot;</span>
+<span id="L19"><span class="lineNum">      19</span>              : </span>
+<span id="L20"><span class="lineNum">      20</span>              : #include &lt;algorithm&gt;</span>
+<span id="L21"><span class="lineNum">      21</span>              : #include &lt;cmath&gt;</span>
+<span id="L22"><span class="lineNum">      22</span>              : #include &lt;cstdint&gt;</span>
+<span id="L23"><span class="lineNum">      23</span>              : </span>
+<span id="L24"><span class="lineNum">      24</span>              : namespace pl {</span>
+<span id="L25"><span class="lineNum">      25</span>              : </span>
+<span id="L26"><span class="lineNum">      26</span>              : class BloomMath {</span>
+<span id="L27"><span class="lineNum">      27</span>              : public:</span>
+<span id="L28"><span class="lineNum">      28</span>              :     // Standard bloom filter false positive rate</span>
+<span id="L29"><span class="lineNum">      29</span>              :     static double standard_fp_rate(double bits_per_key, int num_probes) {</span>
+<span id="L30"><span class="lineNum">      30</span>              :         // Standard very-good-estimate formula. See</span>
+<span id="L31"><span class="lineNum">      31</span>              :         // https://en.wikipedia.org/wiki/Bloom_filter#Probability_of_false_positives</span>
+<span id="L32"><span class="lineNum">      32</span>              :         return std::pow(1.0 - std::exp(-num_probes / bits_per_key), num_probes);</span>
+<span id="L33"><span class="lineNum">      33</span>              :     }</span>
+<span id="L34"><span class="lineNum">      34</span>              : </span>
+<span id="L35"><span class="lineNum">      35</span>              :     static double blocked_bloom_fp_rate(double bits_per_key, int num_probes, int cache_line_bits) {</span>
+<span id="L36"><span class="lineNum">      36</span>              :         if (bits_per_key &lt;= 0.0) {</span>
+<span id="L37"><span class="lineNum">      37</span>              :             return 1.0;</span>
+<span id="L38"><span class="lineNum">      38</span>              :         }</span>
+<span id="L39"><span class="lineNum">      39</span>              :         double keys_per_cache_line = cache_line_bits / bits_per_key;</span>
+<span id="L40"><span class="lineNum">      40</span>              :         double keys_stddev = std::sqrt(keys_per_cache_line);</span>
+<span id="L41"><span class="lineNum">      41</span>              :         double crowded_fp =</span>
+<span id="L42"><span class="lineNum">      42</span>              :             standard_fp_rate(cache_line_bits / (keys_per_cache_line + keys_stddev), num_probes);</span>
+<span id="L43"><span class="lineNum">      43</span>              :         double uncrowded_fp =</span>
+<span id="L44"><span class="lineNum">      44</span>              :             standard_fp_rate(cache_line_bits / (keys_per_cache_line - keys_stddev), num_probes);</span>
+<span id="L45"><span class="lineNum">      45</span>              :         return (crowded_fp + uncrowded_fp) / 2;</span>
+<span id="L46"><span class="lineNum">      46</span>              :     }</span>
+<span id="L47"><span class="lineNum">      47</span>              : };</span>
+<span id="L48"><span class="lineNum">      48</span>              : </span>
+<span id="L49"><span class="lineNum">      49</span>              : // It consists of a sequence of block comparatively small standard Bloom filters, each of which fits</span>
+<span id="L50"><span class="lineNum">      50</span>              : // into once cache-line. Nowadays, a common cache line size is 64 bytes, thus 512 bits. For best</span>
+<span id="L51"><span class="lineNum">      51</span>              : // performance, those small filters are stored cache-line-aligned. For each potential element, the</span>
+<span id="L52"><span class="lineNum">      52</span>              : // first hash value selects the Bloom filter block to be used. Additional hash values are then used</span>
+<span id="L53"><span class="lineNum">      53</span>              : // to set or test bits as usual, but only inside this one block. A blocked Bloom filter therefore</span>
+<span id="L54"><span class="lineNum">      54</span>              : // only needs one cache miss for every operation.</span>
+<span id="L55"><span class="lineNum">      55</span>              : class BlockedBloomFilter {</span>
+<span id="L56"><span class="lineNum">      56</span>              : public:</span>
+<span id="L57"><span class="lineNum">      57</span> <span class="tlaUNC tlaBgUNC">           0 :     static int choose_num_probes(int millibits_per_key) {</span></span>
+<span id="L58"><span class="lineNum">      58</span>              :         // Since this implementation can (with AVX2) make up to 8 probes</span>
+<span id="L59"><span class="lineNum">      59</span>              :         // for the same cost, we pick the most accurate num_probes, based</span>
+<span id="L60"><span class="lineNum">      60</span>              :         // on actual tests of the implementation. Note that for higher</span>
+<span id="L61"><span class="lineNum">      61</span>              :         // bits/key, the best choice for cache-local Bloom can be notably</span>
+<span id="L62"><span class="lineNum">      62</span>              :         // smaller than standard bloom, e.g. 9 instead of 11 @ 16 b/k.</span>
+<span id="L63"><span class="lineNum">      63</span> <span class="tlaUNC">           0 :         if (millibits_per_key &lt;= 2080) {</span></span>
+<span id="L64"><span class="lineNum">      64</span>              :             return 1;</span>
+<span id="L65"><span class="lineNum">      65</span>              :         }</span>
+<span id="L66"><span class="lineNum">      66</span> <span class="tlaUNC">           0 :         if (millibits_per_key &lt;= 3580) {</span></span>
+<span id="L67"><span class="lineNum">      67</span>              :             return 2;</span>
+<span id="L68"><span class="lineNum">      68</span>              :         }</span>
+<span id="L69"><span class="lineNum">      69</span> <span class="tlaUNC">           0 :         if (millibits_per_key &lt;= 5100) {</span></span>
+<span id="L70"><span class="lineNum">      70</span>              :             return 3;</span>
+<span id="L71"><span class="lineNum">      71</span>              :         }</span>
+<span id="L72"><span class="lineNum">      72</span> <span class="tlaUNC">           0 :         if (millibits_per_key &lt;= 6640) {</span></span>
+<span id="L73"><span class="lineNum">      73</span>              :             return 4;</span>
+<span id="L74"><span class="lineNum">      74</span>              :         }</span>
+<span id="L75"><span class="lineNum">      75</span> <span class="tlaUNC">           0 :         if (millibits_per_key &lt;= 8300) {</span></span>
+<span id="L76"><span class="lineNum">      76</span>              :             return 5;</span>
+<span id="L77"><span class="lineNum">      77</span>              :         }</span>
+<span id="L78"><span class="lineNum">      78</span> <span class="tlaUNC">           0 :         if (millibits_per_key &lt;= 10070) {</span></span>
+<span id="L79"><span class="lineNum">      79</span>              :             return 6;</span>
+<span id="L80"><span class="lineNum">      80</span>              :         }</span>
+<span id="L81"><span class="lineNum">      81</span> <span class="tlaUNC">           0 :         if (millibits_per_key &lt;= 11720) {</span></span>
+<span id="L82"><span class="lineNum">      82</span>              :             return 7;</span>
+<span id="L83"><span class="lineNum">      83</span>              :         }</span>
+<span id="L84"><span class="lineNum">      84</span> <span class="tlaUNC">           0 :         if (millibits_per_key &lt;= 14001) {</span></span>
+<span id="L85"><span class="lineNum">      85</span>              :             // Would be something like &lt;= 13800 but sacrificing *slightly* for</span>
+<span id="L86"><span class="lineNum">      86</span>              :             // more settings using &lt;= 8 probes.</span>
+<span id="L87"><span class="lineNum">      87</span>              :             return 8;</span>
+<span id="L88"><span class="lineNum">      88</span>              :         }</span>
+<span id="L89"><span class="lineNum">      89</span> <span class="tlaUNC">           0 :         if (millibits_per_key &lt;= 16050) {</span></span>
+<span id="L90"><span class="lineNum">      90</span>              :             return 9;</span>
+<span id="L91"><span class="lineNum">      91</span>              :         }</span>
+<span id="L92"><span class="lineNum">      92</span> <span class="tlaUNC">           0 :         if (millibits_per_key &lt;= 18300) {</span></span>
+<span id="L93"><span class="lineNum">      93</span>              :             return 10;</span>
+<span id="L94"><span class="lineNum">      94</span>              :         }</span>
+<span id="L95"><span class="lineNum">      95</span> <span class="tlaUNC">           0 :         if (millibits_per_key &lt;= 22001) {</span></span>
+<span id="L96"><span class="lineNum">      96</span>              :             return 11;</span>
+<span id="L97"><span class="lineNum">      97</span>              :         }</span>
+<span id="L98"><span class="lineNum">      98</span> <span class="tlaUNC">           0 :         if (millibits_per_key &lt;= 25501) {</span></span>
+<span id="L99"><span class="lineNum">      99</span>              :             return 12;</span>
+<span id="L100"><span class="lineNum">     100</span>              :         }</span>
+<span id="L101"><span class="lineNum">     101</span> <span class="tlaUNC">           0 :         if (millibits_per_key &gt; 50000) {</span></span>
+<span id="L102"><span class="lineNum">     102</span>              :             // Top out at 24 probes (three sets of 8)</span>
+<span id="L103"><span class="lineNum">     103</span>              :             return 24;</span>
+<span id="L104"><span class="lineNum">     104</span>              :         }</span>
+<span id="L105"><span class="lineNum">     105</span>              :         // Roughly optimal choices for remaining range</span>
+<span id="L106"><span class="lineNum">     106</span>              :         // e.g.</span>
+<span id="L107"><span class="lineNum">     107</span>              :         // 28000 -&gt; 12, 28001 -&gt; 13</span>
+<span id="L108"><span class="lineNum">     108</span>              :         // 50000 -&gt; 23, 50001 -&gt; 24</span>
+<span id="L109"><span class="lineNum">     109</span> <span class="tlaUNC">           0 :         return (millibits_per_key - 1) / 2000 - 1;</span></span>
+<span id="L110"><span class="lineNum">     110</span>              :     }</span>
+<span id="L111"><span class="lineNum">     111</span>              : </span>
+<span id="L112"><span class="lineNum">     112</span>              :     static void add_hash(uint32_t h1, uint32_t h2, uint32_t bytes_len, int num_probes, char* data) {</span>
+<span id="L113"><span class="lineNum">     113</span>              :         // Use h1 to choese which cache-line-aligned block to be used.</span>
+<span id="L114"><span class="lineNum">     114</span>              :         uint32_t bytes_to_cache_line = fastrange32(h1, bytes_len &gt;&gt; 6) &lt;&lt; 6;</span>
+<span id="L115"><span class="lineNum">     115</span>              :         add_hash_prepared(h2, num_probes, data + bytes_to_cache_line);</span>
+<span id="L116"><span class="lineNum">     116</span>              :     }</span>
+<span id="L117"><span class="lineNum">     117</span>              : </span>
+<span id="L118"><span class="lineNum">     118</span> <span class="tlaUNC">           0 :     static void add_hash_prepared(uint32_t h2, int num_probes, char* data_at_cache_line) {</span></span>
+<span id="L119"><span class="lineNum">     119</span>              :         uint32_t h = h2;</span>
+<span id="L120"><span class="lineNum">     120</span> <span class="tlaUNC">           0 :         for (int i = 0; i &lt; num_probes; ++i, h *= uint32_t{0x9e3779b9}) {</span></span>
+<span id="L121"><span class="lineNum">     121</span>              :             // 9-bit address within 512 bit cache line</span>
+<span id="L122"><span class="lineNum">     122</span> <span class="tlaUNC">           0 :             int bitpos = h &gt;&gt; (32 - 9);</span></span>
+<span id="L123"><span class="lineNum">     123</span> <span class="tlaUNC">           0 :             data_at_cache_line[bitpos &gt;&gt; 3] |= (uint8_t{1} &lt;&lt; (bitpos &amp; 7));</span></span>
+<span id="L124"><span class="lineNum">     124</span>              :         }</span>
+<span id="L125"><span class="lineNum">     125</span> <span class="tlaUNC">           0 :     }</span></span>
+<span id="L126"><span class="lineNum">     126</span>              : </span>
+<span id="L127"><span class="lineNum">     127</span>              :     static void prepare_hash(uint32_t h1,</span>
+<span id="L128"><span class="lineNum">     128</span>              :                              uint32_t bytes_len,</span>
+<span id="L129"><span class="lineNum">     129</span>              :                              const char* data,</span>
+<span id="L130"><span class="lineNum">     130</span>              :                              uint32_t* byte_offset) {</span>
+<span id="L131"><span class="lineNum">     131</span> <span class="tlaUNC">           0 :         uint32_t bytes_to_cache_line = fastrange32(h1, bytes_len &gt;&gt; 6) &lt;&lt; 6;</span></span>
+<span id="L132"><span class="lineNum">     132</span> <span class="tlaUNC">           0 :         PL_PREFETCH(data + bytes_to_cache_line, 0 /* rw */, 1 /* locality */);</span></span>
+<span id="L133"><span class="lineNum">     133</span> <span class="tlaUNC">           0 :         PL_PREFETCH(data + bytes_to_cache_line + 63, 0 /* rw */, 1 /* locality */);</span></span>
+<span id="L134"><span class="lineNum">     134</span> <span class="tlaUNC">           0 :         *byte_offset = bytes_to_cache_line;</span></span>
+<span id="L135"><span class="lineNum">     135</span>              :     }</span>
+<span id="L136"><span class="lineNum">     136</span>              : </span>
+<span id="L137"><span class="lineNum">     137</span>              :     static bool hash_may_match(</span>
+<span id="L138"><span class="lineNum">     138</span>              :         uint32_t h1, uint32_t h2, uint32_t bytes_len, int num_probes, const char* data) {</span>
+<span id="L139"><span class="lineNum">     139</span>              :         // Use h1 to choese which cache-line-aligned block to be used.</span>
+<span id="L140"><span class="lineNum">     140</span>              :         uint32_t bytes_to_cache_line = fastrange32(h1, bytes_len &gt;&gt; 6) &lt;&lt; 6;</span>
+<span id="L141"><span class="lineNum">     141</span>              :         return hash_may_match_prepared(h2, num_probes, data + bytes_to_cache_line);</span>
+<span id="L142"><span class="lineNum">     142</span>              :     }</span>
+<span id="L143"><span class="lineNum">     143</span>              : </span>
+<span id="L144"><span class="lineNum">     144</span> <span class="tlaUNC">           0 :     static bool hash_may_match_prepared(uint32_t h2,</span></span>
+<span id="L145"><span class="lineNum">     145</span>              :                                         int num_probes,</span>
+<span id="L146"><span class="lineNum">     146</span>              :                                         const char* data_at_cache_line) {</span>
+<span id="L147"><span class="lineNum">     147</span>              :         uint32_t h = h2;</span>
+<span id="L148"><span class="lineNum">     148</span>              :         // TODO(liubang): use SIMD</span>
+<span id="L149"><span class="lineNum">     149</span> <span class="tlaUNC">           0 :         for (int i = 0; i &lt; num_probes; ++i, h *= uint32_t{0x9e3779b9}) {</span></span>
+<span id="L150"><span class="lineNum">     150</span>              :             // 9-bit address within 512 bit cache line</span>
+<span id="L151"><span class="lineNum">     151</span> <span class="tlaUNC">           0 :             int bitpos = h &gt;&gt; (32 - 9);</span></span>
+<span id="L152"><span class="lineNum">     152</span> <span class="tlaUNC">           0 :             if ((data_at_cache_line[bitpos &gt;&gt; 3] &amp; (uint8_t{1} &lt;&lt; (bitpos &amp; 7))) == 0) {</span></span>
+<span id="L153"><span class="lineNum">     153</span>              :                 return false;</span>
+<span id="L154"><span class="lineNum">     154</span>              :             }</span>
+<span id="L155"><span class="lineNum">     155</span>              :         }</span>
+<span id="L156"><span class="lineNum">     156</span>              : </span>
+<span id="L157"><span class="lineNum">     157</span>              :         return true;</span>
+<span id="L158"><span class="lineNum">     158</span>              :     }</span>
+<span id="L159"><span class="lineNum">     159</span>              : };</span>
+<span id="L160"><span class="lineNum">     160</span>              : </span>
+<span id="L161"><span class="lineNum">     161</span>              : class StandardBloomFilter {</span>
+<span id="L162"><span class="lineNum">     162</span>              : public:</span>
+<span id="L163"><span class="lineNum">     163</span>              :     static int choose_num_probes(int bits_per_key) {</span>
+<span id="L164"><span class="lineNum">     164</span>              :         // 0.69 =~ ln(2)</span>
+<span id="L165"><span class="lineNum">     165</span>              :         return std::min(30, std::max(1, static_cast&lt;int&gt;(bits_per_key * 0.69)));</span>
+<span id="L166"><span class="lineNum">     166</span>              :     }</span>
+<span id="L167"><span class="lineNum">     167</span>              : </span>
+<span id="L168"><span class="lineNum">     168</span>              :     static void add_hash(uint32_t h, uint32_t total_bits, int num_probes, /* output */ char* data) {</span>
+<span id="L169"><span class="lineNum">     169</span>              :         const uint32_t delta = (h &gt;&gt; 17) | (h &lt;&lt; 15); // Rotate right 17 bits</span>
+<span id="L170"><span class="lineNum">     170</span>              :         for (int i = 0; i &lt; num_probes; ++i) {</span>
+<span id="L171"><span class="lineNum">     171</span>              :             const uint32_t bitpos = h % total_bits;</span>
+<span id="L172"><span class="lineNum">     172</span>              :             data[bitpos &gt;&gt; 3] |= (uint8_t{1} &lt;&lt; (bitpos &amp; 7));</span>
+<span id="L173"><span class="lineNum">     173</span>              :             h += delta;</span>
+<span id="L174"><span class="lineNum">     174</span>              :         }</span>
+<span id="L175"><span class="lineNum">     175</span>              :     }</span>
+<span id="L176"><span class="lineNum">     176</span>              : </span>
+<span id="L177"><span class="lineNum">     177</span>              :     static bool hash_may_match(uint32_t h, uint32_t total_bits, int num_probes, const char* data) {</span>
+<span id="L178"><span class="lineNum">     178</span>              :         const uint32_t delta = (h &gt;&gt; 17) | (h &lt;&lt; 15); // Rotate right 17 bits</span>
+<span id="L179"><span class="lineNum">     179</span>              :         for (int i = 0; i &lt; num_probes; ++i) {</span>
+<span id="L180"><span class="lineNum">     180</span>              :             const uint32_t bitpos = h % total_bits;</span>
+<span id="L181"><span class="lineNum">     181</span>              :             if ((data[bitpos &gt;&gt; 3] &amp; (uint8_t{1} &lt;&lt; (bitpos &amp; 7))) == 0) {</span>
+<span id="L182"><span class="lineNum">     182</span>              :                 return false;</span>
+<span id="L183"><span class="lineNum">     183</span>              :             }</span>
+<span id="L184"><span class="lineNum">     184</span>              :             h += delta;</span>
+<span id="L185"><span class="lineNum">     185</span>              :         }</span>
+<span id="L186"><span class="lineNum">     186</span>              :         return true;</span>
+<span id="L187"><span class="lineNum">     187</span>              :     }</span>
+<span id="L188"><span class="lineNum">     188</span>              : };</span>
+<span id="L189"><span class="lineNum">     189</span>              : </span>
+<span id="L190"><span class="lineNum">     190</span>              : } // namespace pl</span>
+        </pre>
+              </td>
+            </tr>
+          </table>
+          <br>
+
+          <table width="100%" border=0 cellspacing=0 cellpadding=0>
+            <tr><td class="ruler"><img src="../../../../../glass.png" width=3 height=3 alt=""></td></tr>
+            <tr><td class="versionInfo">Generated by: <a href="https://github.com//linux-test-project/lcov" target="_parent">LCOV version 2.0-1</a></td></tr>
+          </table>
+          <br>
+
+</body>
+</html>
