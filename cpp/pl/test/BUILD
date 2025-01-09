@@ -34,3 +34,17 @@ load(
     )
     for f in glob(["test_*.cpp"])
 ]
+
+[
+    cc_test(
+        name = "%s" % f[:f.rfind(".")],
+        srcs = [
+            "%s" % f,
+        ],
+        copts = ["-std=c11"] + DEFAULT_COPTS,
+        linkopts = DEFAULT_LINKOPTS + ["-pthread"],
+        deps = [
+        ],
+    )
+    for f in glob(["test_*.c"])
+]
