@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-01-07 11:57:28</td>
+            <td class="headerValue">2025-01-09 15:47:32</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -93,29 +93,29 @@
 <span id="L31"><span class="lineNum">      31</span>              :     std::cout &lt;&lt; res &lt;&lt; std::endl;</span>
 <span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">         334 : }</span></span>
 <span id="L33"><span class="lineNum">      33</span>              : </span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">          56 : static void test2() {</span></span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">          56 :     float res = tbb::parallel_reduce(</span></span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">          56 :         tbb::blocked_range&lt;size_t&gt;(0, n), (float)0,</span></span>
-<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">          56 :         [&amp;](tbb::blocked_range&lt;size_t&gt; r, float local_res) {</span></span>
-<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">       58984 :             for (size_t i = r.begin(); i &lt; r.end(); ++i) {</span></span>
-<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">       44811 :                 local_res += std::sin(i);</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">         119 : static void test2() {</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">         119 :     float res = tbb::parallel_reduce(</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">         119 :         tbb::blocked_range&lt;size_t&gt;(0, n), (float)0,</span></span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">         119 :         [&amp;](tbb::blocked_range&lt;size_t&gt; r, float local_res) {</span></span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">      145359 :             for (size_t i = r.begin(); i &lt; r.end(); ++i) {</span></span>
+<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">      114953 :                 local_res += std::sin(i);</span></span>
 <span id="L40"><span class="lineNum">      40</span>              :             }</span>
 <span id="L41"><span class="lineNum">      41</span>              :             return local_res;</span>
 <span id="L42"><span class="lineNum">      42</span>              :         },</span>
-<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">          56 :         [](float x, float y) {</span></span>
-<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">          56 :             return x + y;</span></span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">         119 :         [](float x, float y) {</span></span>
+<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">          39 :             return x + y;</span></span>
 <span id="L45"><span class="lineNum">      45</span>              :         });</span>
 <span id="L46"><span class="lineNum">      46</span>              : </span>
 <span id="L47"><span class="lineNum">      47</span>              :     std::cout &lt;&lt; res &lt;&lt; std::endl;</span>
-<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">          56 : }</span></span>
+<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">         119 : }</span></span>
 <span id="L49"><span class="lineNum">      49</span>              : </span>
 <span id="L50"><span class="lineNum">      50</span> <span class="tlaGNC">           1 : int main(int argc, char* argv[]) {</span></span>
 <span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">           1 :     ankerl::nanobench::Bench().run(&quot;test1&quot;, [&amp;] {</span></span>
 <span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">         334 :         test1();</span></span>
 <span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC">         334 :     });</span></span>
 <span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">           1 :     ankerl::nanobench::Bench().run(&quot;test2&quot;, [&amp;] {</span></span>
-<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">          56 :         test2();</span></span>
-<span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">          56 :     });</span></span>
+<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">         119 :         test2();</span></span>
+<span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">         119 :     });</span></span>
 <span id="L57"><span class="lineNum">      57</span>              :     return 0;</span>
 <span id="L58"><span class="lineNum">      58</span>              : }</span>
         </pre>
