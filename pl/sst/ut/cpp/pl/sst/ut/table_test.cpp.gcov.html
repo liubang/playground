@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-01-09 15:47:32</td>
+            <td class="headerValue">2025-01-13 15:07:40</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">74.2&nbsp;%</td>
@@ -98,15 +98,15 @@
 <span id="L36"><span class="lineNum">      36</span>              : };</span>
 <span id="L37"><span class="lineNum">      37</span>              : </span>
 <span id="L38"><span class="lineNum">      38</span>              : struct CaseCellComparator {</span>
-<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">     3575638 :     bool operator()(const CaseCell&amp; lhs, const CaseCell&amp; rhs) const {</span></span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">     3575638 :         if (lhs.rowkey != rhs.rowkey) {</span></span>
-<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">     2665422 :             return lhs.rowkey &lt; rhs.rowkey;</span></span>
+<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">     3571907 :     bool operator()(const CaseCell&amp; lhs, const CaseCell&amp; rhs) const {</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">     3571907 :         if (lhs.rowkey != rhs.rowkey) {</span></span>
+<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">     2662509 :             return lhs.rowkey &lt; rhs.rowkey;</span></span>
 <span id="L42"><span class="lineNum">      42</span>              :         }</span>
-<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">      910216 :         if (lhs.cf != rhs.cf) {</span></span>
-<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">      243261 :             return lhs.cf &lt; rhs.cf;</span></span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">      909398 :         if (lhs.cf != rhs.cf) {</span></span>
+<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">      243849 :             return lhs.cf &lt; rhs.cf;</span></span>
 <span id="L45"><span class="lineNum">      45</span>              :         }</span>
-<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">      666955 :         if (lhs.col != rhs.col) {</span></span>
-<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">      666955 :             return lhs.col &lt; rhs.col;</span></span>
+<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">      665549 :         if (lhs.col != rhs.col) {</span></span>
+<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">      665549 :             return lhs.col &lt; rhs.col;</span></span>
 <span id="L48"><span class="lineNum">      48</span>              :         }</span>
 <span id="L49"><span class="lineNum">      49</span> <span class="tlaUNC tlaBgUNC">           0 :         if (lhs.ts != rhs.ts) {</span></span>
 <span id="L50"><span class="lineNum">      50</span> <span class="tlaUNC">           0 :             return lhs.ts &gt; rhs.ts;</span></span>
@@ -295,25 +295,25 @@
 <span id="L233"><span class="lineNum">     233</span> <span class="tlaGNC">           4 :     for (int i = 0; i &lt; 3; ++i) {</span></span>
 <span id="L234"><span class="lineNum">     234</span>              :         auto citer = cells.begin();</span>
 <span id="L235"><span class="lineNum">     235</span> <span class="tlaGNC">           3 :         int j = dis(gen) * 2 * COL_NUM;</span></span>
-<span id="L236"><span class="lineNum">     236</span> <span class="tlaGNC">       99811 :         for (int m = 0; m &lt; j; ++m) {</span></span>
+<span id="L236"><span class="lineNum">     236</span> <span class="tlaGNC">       68435 :         for (int m = 0; m &lt; j; ++m) {</span></span>
 <span id="L237"><span class="lineNum">     237</span>              :             ++citer;</span>
 <span id="L238"><span class="lineNum">     238</span>              :         }</span>
 <span id="L239"><span class="lineNum">     239</span>              :         std::string_view search_key = citer-&gt;rowkey;</span>
 <span id="L240"><span class="lineNum">     240</span> <span class="tlaGNC">           6 :         LOG(INFO) &lt;&lt; &quot;scan rowkey &gt;= &quot; &lt;&lt; search_key;</span></span>
 <span id="L241"><span class="lineNum">     241</span> <span class="tlaGNC">           3 :         iter-&gt;seek(search_key);</span></span>
-<span id="L242"><span class="lineNum">     242</span> <span class="tlaGNC">       96803 :         while (iter-&gt;valid()) {</span></span>
-<span id="L243"><span class="lineNum">     243</span> <span class="tlaGNC">       96800 :             EXPECT_TRUE(citer != cells.end());</span></span>
-<span id="L244"><span class="lineNum">     244</span> <span class="tlaGNC">       96800 :             auto cell = iter-&gt;cell();</span></span>
-<span id="L245"><span class="lineNum">     245</span> <span class="tlaGNC">       96800 :             auto cexp = *citer;</span></span>
-<span id="L246"><span class="lineNum">     246</span> <span class="tlaGNC">       96800 :             EXPECT_EQ(cexp.rowkey, cell-&gt;rowkey());</span></span>
-<span id="L247"><span class="lineNum">     247</span> <span class="tlaGNC">       96800 :             EXPECT_EQ(cexp.cf, cell-&gt;cf());</span></span>
-<span id="L248"><span class="lineNum">     248</span> <span class="tlaGNC">       96800 :             EXPECT_EQ(cexp.col, cell-&gt;col());</span></span>
-<span id="L249"><span class="lineNum">     249</span> <span class="tlaGNC">       96800 :             EXPECT_EQ(cexp.type, cell-&gt;cellType());</span></span>
-<span id="L250"><span class="lineNum">     250</span> <span class="tlaGNC">       96800 :             EXPECT_EQ(cexp.ts, cell-&gt;timestamp());</span></span>
+<span id="L242"><span class="lineNum">     242</span> <span class="tlaGNC">      128179 :         while (iter-&gt;valid()) {</span></span>
+<span id="L243"><span class="lineNum">     243</span> <span class="tlaGNC">      128176 :             EXPECT_TRUE(citer != cells.end());</span></span>
+<span id="L244"><span class="lineNum">     244</span> <span class="tlaGNC">      128176 :             auto cell = iter-&gt;cell();</span></span>
+<span id="L245"><span class="lineNum">     245</span> <span class="tlaGNC">      128176 :             auto cexp = *citer;</span></span>
+<span id="L246"><span class="lineNum">     246</span> <span class="tlaGNC">      128176 :             EXPECT_EQ(cexp.rowkey, cell-&gt;rowkey());</span></span>
+<span id="L247"><span class="lineNum">     247</span> <span class="tlaGNC">      128176 :             EXPECT_EQ(cexp.cf, cell-&gt;cf());</span></span>
+<span id="L248"><span class="lineNum">     248</span> <span class="tlaGNC">      128176 :             EXPECT_EQ(cexp.col, cell-&gt;col());</span></span>
+<span id="L249"><span class="lineNum">     249</span> <span class="tlaGNC">      128176 :             EXPECT_EQ(cexp.type, cell-&gt;cellType());</span></span>
+<span id="L250"><span class="lineNum">     250</span> <span class="tlaGNC">      128176 :             EXPECT_EQ(cexp.ts, cell-&gt;timestamp());</span></span>
 <span id="L251"><span class="lineNum">     251</span>              : </span>
-<span id="L252"><span class="lineNum">     252</span> <span class="tlaGNC">       96800 :             iter-&gt;next();</span></span>
+<span id="L252"><span class="lineNum">     252</span> <span class="tlaGNC">      128176 :             iter-&gt;next();</span></span>
 <span id="L253"><span class="lineNum">     253</span>              :             ++citer;</span>
-<span id="L254"><span class="lineNum">     254</span> <span class="tlaGNC">       96800 :         }</span></span>
+<span id="L254"><span class="lineNum">     254</span> <span class="tlaGNC">      128176 :         }</span></span>
 <span id="L255"><span class="lineNum">     255</span>              :     }</span>
 <span id="L256"><span class="lineNum">     256</span> <span class="tlaGNC">           2 : }</span></span>
 <span id="L257"><span class="lineNum">     257</span>              : </span>
@@ -336,7 +336,7 @@
 <span id="L274"><span class="lineNum">     274</span> <span class="tlaGNC">         334 :     for (int i = 0; i &lt; 333; ++i) {</span></span>
 <span id="L275"><span class="lineNum">     275</span> <span class="tlaGNC">         333 :         int idx = dis(gen) * 2 * COL_NUM;</span></span>
 <span id="L276"><span class="lineNum">     276</span>              :         auto citer = cells.begin();</span>
-<span id="L277"><span class="lineNum">     277</span> <span class="tlaGNC">    10750093 :         for (int j = 0; j &lt; idx; ++j) {</span></span>
+<span id="L277"><span class="lineNum">     277</span> <span class="tlaGNC">    10582285 :         for (int j = 0; j &lt; idx; ++j) {</span></span>
 <span id="L278"><span class="lineNum">     278</span>              :             ++citer;</span>
 <span id="L279"><span class="lineNum">     279</span>              :         }</span>
 <span id="L280"><span class="lineNum">     280</span>              : </span>
