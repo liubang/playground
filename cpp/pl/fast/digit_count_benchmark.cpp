@@ -17,12 +17,7 @@
 #include "cpp/pl/fast/digit_count.h"
 #include <benchmark/benchmark.h>
 
-class DigitCountBenchmark : public ::benchmark::Fixture {
-public:
-    void SetUp(const benchmark::State& state) override {}
-};
-
-BENCHMARK_DEFINE_F(DigitCountBenchmark, digit_count)(benchmark::State& state) {
+static void BM_digit_count(benchmark::State& state) {
     const uint64_t numbers = state.range(0);
     for (auto _ : state) {
         for (uint64_t i = 0; i < numbers; ++i) {
@@ -32,9 +27,9 @@ BENCHMARK_DEFINE_F(DigitCountBenchmark, digit_count)(benchmark::State& state) {
     }
 }
 
-BENCHMARK_REGISTER_F(DigitCountBenchmark, digit_count)->RangeMultiplier(32)->Range(255, 16777216);
+BENCHMARK(BM_digit_count)->Range(1 << 16, 1 << 20);
 
-BENCHMARK_DEFINE_F(DigitCountBenchmark, alternative_digit_count)(benchmark::State& state) {
+static void BM_alternative_digit_count(benchmark::State& state) {
     const uint64_t numbers = state.range(0);
     for (auto _ : state) {
         for (uint64_t i = 0; i < numbers; ++i) {
@@ -43,12 +38,9 @@ BENCHMARK_DEFINE_F(DigitCountBenchmark, alternative_digit_count)(benchmark::Stat
         state.SetItemsProcessed(numbers);
     }
 }
+BENCHMARK(BM_alternative_digit_count)->Range(1 << 16, 1 << 20);
 
-BENCHMARK_REGISTER_F(DigitCountBenchmark, alternative_digit_count)
-    ->RangeMultiplier(32)
-    ->Range(255, 16777216);
-
-BENCHMARK_DEFINE_F(DigitCountBenchmark, fast_digit_count)(benchmark::State& state) {
+static void BM_fast_digit_count(benchmark::State& state) {
     const uint64_t numbers = state.range(0);
     for (auto _ : state) {
         for (uint64_t i = 0; i < numbers; ++i) {
@@ -57,7 +49,4 @@ BENCHMARK_DEFINE_F(DigitCountBenchmark, fast_digit_count)(benchmark::State& stat
         state.SetItemsProcessed(numbers);
     }
 }
-
-BENCHMARK_REGISTER_F(DigitCountBenchmark, fast_digit_count)
-    ->RangeMultiplier(32)
-    ->Range(255, 16777216);
+BENCHMARK(BM_fast_digit_count)->Range(1 << 16, 1 << 20);
