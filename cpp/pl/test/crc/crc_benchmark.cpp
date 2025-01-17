@@ -32,9 +32,13 @@ public:
 
 protected:
     std::string block_data_;
-    const uint8_t* block_buffer_;
     size_t block_size_;
+    const uint8_t* block_buffer_;
 };
+
+static constexpr uint32_t MULTIPLIER = 256;
+static constexpr uint32_t MIN_BLOCK = 256;
+static constexpr uint32_t MAX_BLOCK = 16777216;
 
 BENCHMARK_DEFINE_F(CRC32Benchmark, boost_crc)(benchmark::State& state) {
     uint32_t crc = 0;
@@ -47,8 +51,8 @@ BENCHMARK_DEFINE_F(CRC32Benchmark, boost_crc)(benchmark::State& state) {
     state.SetBytesProcessed(state.iterations() * block_size_);
 }
 BENCHMARK_REGISTER_F(CRC32Benchmark, boost_crc)
-    ->RangeMultiplier(16)
-    ->Range(256, 16777216); // Block size.
+    ->RangeMultiplier(MULTIPLIER)
+    ->Range(MIN_BLOCK, MAX_BLOCK); // Block size.
 
 #if defined(__linux__)
 BENCHMARK_DEFINE_F(CRC32Benchmark, CRC32C_Public)(benchmark::State& state) {
@@ -59,8 +63,8 @@ BENCHMARK_DEFINE_F(CRC32Benchmark, CRC32C_Public)(benchmark::State& state) {
 }
 
 BENCHMARK_REGISTER_F(CRC32Benchmark, CRC32C_Public)
-    ->RangeMultiplier(16)
-    ->Range(256, 16777216); // Block size.
+    ->RangeMultiplier(MULTIPLIER)
+    ->Range(MIN_BLOCK, MAX_BLOCK); // Block size.
 
 #if HAVE_SSE42 && (defined(_M_X64) || defined(__x86_64__))
 BENCHMARK_DEFINE_F(CRC32CBenchmark, CRC32C_Sse42)(benchmark::State& state) {
@@ -76,8 +80,8 @@ BENCHMARK_DEFINE_F(CRC32CBenchmark, CRC32C_Sse42)(benchmark::State& state) {
 }
 
 BENCHMARK_REGISTER_F(CRC32CBenchmark, CRC32C_Sse42)
-    ->RangeMultiplier(16)
-    ->Range(256, 16777216); // Block size.
+    ->RangeMultiplier(MULTIPLIER)
+    ->Range(MIN_BLOCK, MAX_BLOCK); // Block size.
 #endif
 
 BENCHMARK_DEFINE_F(CRC32Benchmark, isal_ieee)(benchmark::State& state) {
@@ -90,8 +94,8 @@ BENCHMARK_DEFINE_F(CRC32Benchmark, isal_ieee)(benchmark::State& state) {
 }
 
 BENCHMARK_REGISTER_F(CRC32Benchmark, isal_ieee)
-    ->RangeMultiplier(16)
-    ->Range(256, 16777216); // Block size.
+    ->RangeMultiplier(MULTIPLIER)
+    ->Range(MIN_BLOCK, MAX_BLOCK); // Block size.
 
 BENCHMARK_DEFINE_F(CRC32Benchmark, isal_iscsi)(benchmark::State& state) {
     uint32_t crc = 0;
@@ -103,8 +107,8 @@ BENCHMARK_DEFINE_F(CRC32Benchmark, isal_iscsi)(benchmark::State& state) {
 }
 
 BENCHMARK_REGISTER_F(CRC32Benchmark, isal_iscsi)
-    ->RangeMultiplier(16)
-    ->Range(256, 16777216); // Block size.
+    ->RangeMultiplier(MULTIPLIER)
+    ->Range(MIN_BLOCK, MAX_BLOCK); // Block size.
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -118,7 +122,9 @@ BENCHMARK_REGISTER_F(CRC32Benchmark, isal_iscsi)
         }                                                                       \
         state.SetBytesProcessed(state.iterations() * block_size_);              \
     }                                                                           \
-    BENCHMARK_REGISTER_F(CRC32Benchmark, func)->RangeMultiplier(16)->Range(256, 16777216)
+    BENCHMARK_REGISTER_F(CRC32Benchmark, func)                                  \
+        ->RangeMultiplier(MULTIPLIER)                                           \
+        ->Range(MIN_BLOCK, MAX_BLOCK)
 
 BENCHMARK_CRC64_FUNC(crc64_ecma_refl);
 BENCHMARK_CRC64_FUNC(crc64_ecma_norm);
