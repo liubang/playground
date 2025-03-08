@@ -14,8 +14,29 @@
 
 # Authors: liubang (it.liubang@gmail.com)
 
+load(
+    "//cpp:copts/configure_copts.bzl",
+    "DEFAULT_COPTS",
+    "DEFAULT_LINKOPTS",
+)
+
 cc_library(
     name = "utility",
     hdrs = glob(["*.h"]),
     visibility = ["//visibility:public"],
+    deps = [
+        "//cpp/pl/log:logger",
+    ],
+)
+
+cc_test(
+    name = "construct_log_test",
+    srcs = [
+        "construct_log_test.cpp",
+    ],
+    copts = ["-std=c++20"] + DEFAULT_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        ":utility",
+    ],
 )
