@@ -86,6 +86,7 @@ enum class CompressionType : uint8_t {
     NONE = 0,
     SNAPPY = 1,
     ZSTD = 2,
+    ISAL = 3,
 };
 
 inline const char* CompressionType2String(CompressionType t) {

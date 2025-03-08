@@ -21,7 +21,7 @@
 
 #include "snappy.h"
 #include <cassert>
-#include <isa-l/crc.h>
+#include <isa-l.h>
 #include <utility>
 #include <zstd.h>
 
@@ -149,6 +149,10 @@ void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
         compressed.resize(outlen);
         raw = compressed;
         break;
+    }
+    case CompressionType::ISAL:
+    {
+        // TODO(liubang):
     }
     default:
         break;
