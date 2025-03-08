@@ -262,6 +262,10 @@ Status BlockReader::readBlock(const FileSystemRef& reader,
         result->cachable = true;
         break;
     }
+    case CompressionType::ISAL:
+    {
+        // TODO(liubang):
+    }
     default:
     {
         result->data = std::string_view(buf.release(), s);
