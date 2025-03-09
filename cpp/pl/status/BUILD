@@ -22,7 +22,15 @@ load(
 
 cc_library(
     name = "status",
-    hdrs = ["status.h"],
+    srcs = [
+        "status_code.cpp",
+        "status_code_detail.h",
+    ],
+    hdrs = [
+        "status.h",
+        "status_code.h",
+        "status_new.h",
+    ],
     visibility = ["//visibility:public"],
 )
 
