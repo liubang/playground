@@ -20,10 +20,10 @@ load(
     "TEST_COPTS",
 )
 
-cc_library(
-    name = "common",
-    hdrs = glob(["*.h"]),
-)
+# cc_library(
+#     name = "common",
+#     hdrs = glob(["*.h"]),
+# )
 
 [
     cc_test(
@@ -42,7 +42,6 @@ cc_library(
             "//conditions:default": [],
         }),
         deps = [
-            ":common",
             "@nanobench",
         ],
     )
