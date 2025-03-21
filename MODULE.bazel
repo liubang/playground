@@ -20,9 +20,9 @@ module(
 )
 
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
-bazel_dep(name = "platforms", version = "0.0.10")
-bazel_dep(name = "rules_license", version = "0.0.8")
-bazel_dep(name = "rules_proto", version = "4.0.0")
+bazel_dep(name = "platforms", version = "0.0.11")
+bazel_dep(name = "rules_license", version = "1.0.0")
+bazel_dep(name = "rules_proto", version = "7.1.0")
 
 # Hedron's Compile Commands Extractor for Bazel
 # https://github.com/hedronvision/bazel-compile-commands-extractor
@@ -41,13 +41,13 @@ git_override(
 bazel_dep(name = "apple_support", version = "1.19.0", repo_name = "build_bazel_apple_support")
 
 # foreign cc
-bazel_dep(name = "rules_foreign_cc", version = "0.12.0")
+bazel_dep(name = "rules_foreign_cc", version = "0.14.0")
 
 # dpes for c/cpp
-bazel_dep(name = "abseil-cpp", version = "20240722.0")
+bazel_dep(name = "abseil-cpp", version = "20250127.1")
 single_version_override(
     module_name = "abseil-cpp",
-    version = "20240722.0",
+    version = "20250127.1",
 )
 
 bazel_dep(name = "s2geometry")
@@ -70,21 +70,19 @@ bazel_dep(name = "zlib", version = "1.3")
 bazel_dep(name = "zstd", version = "1.5.6")
 bazel_dep(name = "libuv", version = "1.48.0")
 bazel_dep(name = "curl", version = "8.8.0")
-bazel_dep(name = "onetbb", version = "2021.13.0")
+bazel_dep(name = "onetbb", version = "2022.0.0")
 bazel_dep(name = "liburing", version = "2.5")
 bazel_dep(name = "crc32c", version = "1.1.0")
 bazel_dep(name = "snappy", version = "1.2.1")
 bazel_dep(name = "lemon", version = "3.42.0")
 bazel_dep(name = "sqlite3", version = "3.42.0")
 bazel_dep(name = "nlohmann_json", version = "3.11.2")
-bazel_dep(name = "rapidjson", version = "1.1.0")
 bazel_dep(name = "glog", version = "0.7.1")
 bazel_dep(name = "gflags", version = "2.2.2")
 bazel_dep(name = "asio", version = "1.28.2")
 bazel_dep(name = "isa-l", version = "2.31")
 bazel_dep(name = "xxhash", version = "0.8.2")
 bazel_dep(name = "magic_enum", version = "0.9.6")
-
 bazel_dep(name = "proxygen", version = "2025.02.10.00")
 bazel_dep(name = "folly", version = "2025.01.13.00.bcr.1")
 bazel_dep(name = "rocksdb", version = "9.10.0")
@@ -238,8 +236,8 @@ register_toolchains("@flex//:toolchain")
 ###################################################################################################
 # for go
 ###################################################################################################
-bazel_dep(name = "rules_go", version = "0.50.1")
-bazel_dep(name = "gazelle", version = "0.37.0")
+bazel_dep(name = "rules_go", version = "0.53.0")
+bazel_dep(name = "gazelle", version = "0.42.0")
 
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
 go_sdk.download(version = "1.23.0")
@@ -257,9 +255,10 @@ use_repo(
 ###################################################################################################
 #  for java
 ###################################################################################################
-bazel_dep(name = "rules_jvm_external", version = "6.4")  # for maven
-bazel_dep(name = "rules_java", version = "7.12.1")
-bazel_dep(name = "contrib_rules_jvm", version = "0.27.0")
+bazel_dep(name = "rules_jvm_external", version = "6.7")  # for maven
+bazel_dep(name = "rules_java", version = "8.11.0")
+bazel_dep(name = "contrib_rules_jvm", version = "0.28.0")
+bazel_dep(name = "grpc-java", version = "1.71.0")
 
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 maven.install(
@@ -336,9 +335,8 @@ use_repo(
 ###################################################################################################
 #  python
 ###################################################################################################
-# bazel_dep(name = "rules_python", version = "0.29.0")
-bazel_dep(name = "rules_python", version = "0.40.0")
-bazel_dep(name = "rules_python_gazelle_plugin", version = "0.40.0")
+bazel_dep(name = "rules_python", version = "1.2.0")
+bazel_dep(name = "rules_python_gazelle_plugin", version = "1.2.0")
 
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
 python.toolchain(
