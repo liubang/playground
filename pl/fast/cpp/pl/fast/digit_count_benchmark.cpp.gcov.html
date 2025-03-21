@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-03-21 08:34:34</td>
+            <td class="headerValue">2025-03-21 16:52:50</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -82,8 +82,8 @@
 <span id="L20"><span class="lineNum">      20</span> <span class="tlaGNC tlaBgGNC">          13 : static void BM_digit_count(benchmark::State&amp; state) {</span></span>
 <span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC">          13 :     const uint64_t numbers = state.range(0);</span></span>
 <span id="L22"><span class="lineNum">      22</span>              :     for (auto _ : state) {</span>
-<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">   847910347 :         for (uint64_t i = 0; i &lt; numbers; ++i) {</span></span>
-<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">   847904768 :             benchmark::DoNotOptimize(pl::digit_count(i));</span></span>
+<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">   804394130 :         for (uint64_t i = 0; i &lt; numbers; ++i) {</span></span>
+<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">   804388864 :             benchmark::DoNotOptimize(pl::digit_count(i));</span></span>
 <span id="L25"><span class="lineNum">      25</span>              :         }</span>
 <span id="L26"><span class="lineNum">      26</span>              :         state.SetItemsProcessed(numbers);</span>
 <span id="L27"><span class="lineNum">      27</span>              :     }</span>
@@ -91,21 +91,21 @@
 <span id="L29"><span class="lineNum">      29</span>              : </span>
 <span id="L30"><span class="lineNum">      30</span>              : BENCHMARK(BM_digit_count)-&gt;Range(1 &lt;&lt; 16, 1 &lt;&lt; 20);</span>
 <span id="L31"><span class="lineNum">      31</span>              : </span>
-<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">          12 : static void BM_alternative_digit_count(benchmark::State&amp; state) {</span></span>
-<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">          12 :     const uint64_t numbers = state.range(0);</span></span>
+<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">          13 : static void BM_alternative_digit_count(benchmark::State&amp; state) {</span></span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">          13 :     const uint64_t numbers = state.range(0);</span></span>
 <span id="L34"><span class="lineNum">      34</span>              :     for (auto _ : state) {</span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">   495718451 :         for (uint64_t i = 0; i &lt; numbers; ++i) {</span></span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">   495714304 :             benchmark::DoNotOptimize(pl::alternative_digit_count(i));</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">   685969767 :         for (uint64_t i = 0; i &lt; numbers; ++i) {</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">   685965312 :             benchmark::DoNotOptimize(pl::alternative_digit_count(i));</span></span>
 <span id="L37"><span class="lineNum">      37</span>              :         }</span>
 <span id="L38"><span class="lineNum">      38</span>              :         state.SetItemsProcessed(numbers);</span>
 <span id="L39"><span class="lineNum">      39</span>              :     }</span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">          12 : }</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">          13 : }</span></span>
 <span id="L41"><span class="lineNum">      41</span>              : BENCHMARK(BM_alternative_digit_count)-&gt;Range(1 &lt;&lt; 16, 1 &lt;&lt; 20);</span>
 <span id="L42"><span class="lineNum">      42</span>              : </span>
 <span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">          12 : static void BM_fast_digit_count(benchmark::State&amp; state) {</span></span>
 <span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">          12 :     const uint64_t numbers = state.range(0);</span></span>
 <span id="L45"><span class="lineNum">      45</span>              :     for (auto _ : state) {</span>
-<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">   542969851 :         for (uint64_t i = 0; i &lt; numbers; ++i) {</span></span>
+<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">   541003762 :         for (uint64_t i = 0; i &lt; numbers; ++i) {</span></span>
 <span id="L47"><span class="lineNum">      47</span>              :             benchmark::DoNotOptimize(pl::fast_digit_count(i));</span>
 <span id="L48"><span class="lineNum">      48</span>              :         }</span>
 <span id="L49"><span class="lineNum">      49</span>              :         state.SetItemsProcessed(numbers);</span>
