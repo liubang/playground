@@ -17,7 +17,6 @@
 module(
     name = "playground",
     version = "1.0",
-    bazel_compatibility = [">=7.0.0"],
 )
 
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
@@ -39,7 +38,7 @@ git_override(
 )
 
 # apple support
-bazel_dep(name = "apple_support", version = "1.17.1", repo_name = "build_bazel_apple_support")
+bazel_dep(name = "apple_support", version = "1.19.0", repo_name = "build_bazel_apple_support")
 
 # foreign cc
 bazel_dep(name = "rules_foreign_cc", version = "0.12.0")
@@ -51,18 +50,18 @@ single_version_override(
     version = "20240722.0",
 )
 
-bazel_dep(name = "protobuf", version = "27.3", repo_name = "com_google_protobuf")
-single_version_override(
-    module_name = "protobuf",
-    version = "27.3",
-)
-
-bazel_dep(name = "brpc")
-git_override(
-    module_name = "brpc",
-    commit = "72ce354a1df5839afe29c4c86263d26bf896779c",
-    remote = "https://github.com/apache/brpc.git",
-)
+# bazel_dep(name = "protobuf", version = "27.3", repo_name = "com_google_protobuf")
+# single_version_override(
+#     module_name = "protobuf",
+#     version = "27.3",
+# )
+#
+# bazel_dep(name = "brpc")
+# git_override(
+#     module_name = "brpc",
+#     commit = "72ce354a1df5839afe29c4c86263d26bf896779c",
+#     remote = "https://github.com/apache/brpc.git",
+# )
 
 bazel_dep(name = "s2geometry")
 git_override(
@@ -99,13 +98,12 @@ bazel_dep(name = "isa-l", version = "2.31")
 bazel_dep(name = "xxhash", version = "0.8.2")
 bazel_dep(name = "magic_enum", version = "0.9.6")
 
-# --registry=https://raw.githubusercontent.com/bazelboost/registry/main
-bazel_dep(name = "boost.crc", version = "1.83.0.bzl.1")
-bazel_dep(name = "boost.scope_exit", version = "1.83.0.bzl.1")
-bazel_dep(name = "boost.date_time", version = "1.83.0.bzl.2")
-bazel_dep(name = "boost.mpl", version = "1.83.0.bzl.1")
-bazel_dep(name = "boost.parameter", version = "1.83.0.bzl.1")
-bazel_dep(name = "boost.utility", version = "1.83.0.bzl.1")
+bazel_dep(name = "boost.crc", version = "1.87.0")
+bazel_dep(name = "boost.scope", version = "1.87.0")
+bazel_dep(name = "boost.date_time", version = "1.87.0")
+bazel_dep(name = "boost.mpl", version = "1.87.0")
+bazel_dep(name = "boost.parameter", version = "1.87.0")
+bazel_dep(name = "boost.utility", version = "1.87.0")
 
 # for test
 bazel_dep(name = "catch2", version = "3.6.0", dev_dependency = True)
