@@ -14,7 +14,7 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include <boost/scope_exit.hpp>
+#include <boost/scope/scope_exit.hpp>
 #include <iostream>
 
 class Foo {
@@ -29,8 +29,9 @@ int main(int argc, char* argv[]) {
 
     int a = 10;
 
-    BOOST_SCOPE_EXIT(&a) { std::cout << "scope exit, a=" << a << '\n'; }
-    BOOST_SCOPE_EXIT_END;
+    boost::scope::scope_exit scope([&a] {
+        std::cout << "scope exit, a=" << a << '\n';
+    });
 
     a++;
 

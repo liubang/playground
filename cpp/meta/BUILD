@@ -23,7 +23,6 @@ load(
 
 cc_library(
     name = "meta",
-    srcs = glob(["*.cpp"]),
     hdrs = glob(["*.h"]),
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,

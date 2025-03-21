@@ -51,6 +51,6 @@ cc_test(
     copts = ["-std=c++20"] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
     deps = [
-        "@boost.scope_exit",
+        "@boost.scope",
     ],
 )
