@@ -1,5 +1,8 @@
 #include <cstdint>
 
+/**
+ * 统计整数中数字的个数，例如1234，有4个数字
+ */
 namespace pl {
 
 // c++20可以用bit_width

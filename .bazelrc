@@ -30,7 +30,10 @@ build --cxxopt=-std=c++17
 build --host_cxxopt=-std=c++17
 
 # for llvm
-build:llvm --action_env=CC=clang
+build:llvm --action_env=CC=/opt/app/llvm/bin/clang
+build:llvm --action_env=CXX=/opt/app/llvm/bin/clang++
+build:llvm --action_env=LD=/opt/app/llvm/bin/lld
+build:llvm --action_env=LD_LIBRARY_PATH=/opt/app/llvm/lib:/opt/app/llvm/lib/x86_64-unknown-linux-gnu
 build:llvm --linkopt=-fuse-ld=lld
 build:llvm --linkopt=-stdlib=libc++
 build:llvm --cxxopt=-stdlib=libc++ 
