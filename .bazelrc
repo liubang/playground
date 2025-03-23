@@ -17,11 +17,11 @@
 # 自动启用基于平台的特定配置
 common --enable_platform_specific_config
 
-common --noincompatible_disallow_empty_glob
-
 common --registry=file://%workspace%/registry
 common --registry=https://bcr.bazel.build
 
+common --verbose_failures
+common --noincompatible_disallow_empty_glob
 common --color=yes
 common --experimental_ui_max_stdouterr_bytes=1073741819
 
@@ -42,6 +42,8 @@ build:llvm --cxxopt=-Wno-error=unused-but-set-parameter
 
 # for gcc
 build:gcc --linkopt=-fuse-ld=gold
+
+build:release --compilation_mode=opt
 
 # default linux using gcc
 build:linux --config=gcc
