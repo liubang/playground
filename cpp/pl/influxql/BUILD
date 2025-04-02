@@ -15,6 +15,8 @@
 # Authors: liubang (it.liubang@gmail.com)
 
 # load("@rules_ragel//ragel:ragel.bzl", "ragel")
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_binary")
 load(
     "//cpp:copts/configure_copts.bzl",
     "DEFAULT_COPTS",

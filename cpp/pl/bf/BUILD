@@ -14,6 +14,7 @@
 
 # Authors: liubang (it.liubang@gmail.com)
 
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_binary")
 cc_library(
     name = "yabf",
     hdrs = ["yabf.h"],
