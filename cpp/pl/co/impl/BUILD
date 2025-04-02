@@ -14,6 +14,7 @@
 
 # Authors: liubang (it.liubang@gmail.com)
 
+load("@rules_cc//cc:defs.bzl", "cc_binary")
 load(
     "//cpp:copts/configure_copts.bzl",
     "COPTS",

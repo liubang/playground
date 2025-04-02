@@ -13,6 +13,8 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
     "DEFAULT_LINKOPTS",
