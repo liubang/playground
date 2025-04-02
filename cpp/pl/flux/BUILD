@@ -15,6 +15,7 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/11/01 20:29
 
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_binary")
 # load("@rules_ragel//ragel:ragel.bzl", "ragel")
 load(
     "//cpp:copts/configure_copts.bzl",
