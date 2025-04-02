@@ -15,6 +15,7 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2024/05/29 20:30
 
+load("@rules_cc//cc:defs.bzl", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
     "DEFAULT_LINKOPTS",
