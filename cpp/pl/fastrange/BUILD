@@ -15,6 +15,7 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2024/12/17 23:13
 
+load("@rules_cc//cc:defs.bzl", "cc_library")
 cc_library(
     name = "fastrange",
     hdrs = ["fastrange.h"],
