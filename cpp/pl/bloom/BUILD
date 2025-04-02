@@ -15,6 +15,7 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/05/21 22:57
 
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
     "DEFAULT_COPTS",
