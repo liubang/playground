@@ -198,9 +198,9 @@ single_version_override(
 )
 
 # for test
-bazel_dep(name = "catch2", version = "3.8.0", dev_dependency = True)
+bazel_dep(name = "catch2", version = "3.8.1", dev_dependency = True)
 bazel_dep(name = "googletest", version = "1.16.0", dev_dependency = True)
-bazel_dep(name = "google_benchmark", version = "1.9.1", dev_dependency = True)
+bazel_dep(name = "google_benchmark", version = "1.9.2", dev_dependency = True)
 bazel_dep(name = "nanobench", version = "4.3.11", dev_dependency = True)
 
 # bison and flex
