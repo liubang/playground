@@ -16,7 +16,7 @@
 
 #include "status_code.h"
 
-namespace pl::test::StatusCode {
+namespace pl::StatusCode {
 
 std::string_view toString(status_code_t code) {
     switch (code) {
@@ -48,4 +48,4 @@ StatusCodeType typeOf(status_code_t code) {
     return StatusCodeType::Invalid;
 }
 
-} // namespace pl::test::StatusCode
+} // namespace pl::StatusCode

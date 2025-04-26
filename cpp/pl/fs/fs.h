@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "cpp/pl/status/status.h"
+#include "cpp/pl/status/result.h"
 #include "cpp/pl/utility/utility.h"
 
 #include <cstdint>
@@ -38,39 +38,41 @@ public:
     FileSystem() = default;
     virtual ~FileSystem() = default;
 
-    virtual Status open(std::string_view path, uint64_t flags, FileDescriptorRef* fd) = 0;
+    virtual Result<Void> open(std::string_view path, uint64_t flags, FileDescriptorRef* fd) = 0;
 
-    virtual Status close(const FileDescriptorRef& fd) = 0;
+    virtual Result<Void> close(const FileDescriptorRef& fd) = 0;
 
-    virtual Status pread(const FileDescriptorRef& fd,
-                         uint64_t offset,
-                         std::size_t n,
-                         const char* buffer,
-                         std::string_view* result) = 0;
+    virtual Result<Void> pread(const FileDescriptorRef& fd,
+                               uint64_t offset,
+                               std::size_t n,
+                               const char* buffer,
+                               std::string_view* result) = 0;
 
-    virtual Status append(const FileDescriptorRef& fd, uint64_t flags, std::string_view data) = 0;
+    virtual Result<Void> append(const FileDescriptorRef& fd,
+                                uint64_t flags,
+                                std::string_view data) = 0;
 
-    virtual Status fsync(const FileDescriptorRef& fd, uint64_t flags) = 0;
+    virtual Result<Void> fsync(const FileDescriptorRef& fd, uint64_t flags) = 0;
 
-    virtual Status size(std::string_view path, uint64_t* result) = 0;
+    virtual Result<Void> size(std::string_view path, uint64_t* result) = 0;
 
-    virtual Status size(const FileDescriptorRef& fd, uint64_t* result) = 0;
+    virtual Result<Void> size(const FileDescriptorRef& fd, uint64_t* result) = 0;
 
-    virtual Status mtime(std::string_view path, std::time_t* result) = 0;
+    virtual Result<Void> mtime(std::string_view path, std::time_t* result) = 0;
 
-    virtual Status mtime(const FileDescriptorRef& fd, std::time_t* result) = 0;
+    virtual Result<Void> mtime(const FileDescriptorRef& fd, std::time_t* result) = 0;
 
-    virtual Status exist(std::string_view path, bool* result) = 0;
+    virtual Result<Void> exist(std::string_view path, bool* result) = 0;
 
-    virtual Status isdir(std::string_view path, bool* result) = 0;
+    virtual Result<Void> isdir(std::string_view path, bool* result) = 0;
 
-    virtual Status rename(std::string_view old_path, std::string_view new_path) = 0;
+    virtual Result<Void> rename(std::string_view old_path, std::string_view new_path) = 0;
 
-    virtual Status mkdir(std::string_view path, uint64_t flags) = 0;
+    virtual Result<Void> mkdir(std::string_view path, uint64_t flags) = 0;
 
-    virtual Status remove(std::string_view path) = 0;
+    virtual Result<Void> remove(std::string_view path) = 0;
 
-    virtual Status utime(std::string_view path, time_t set_time) = 0;
+    virtual Result<Void> utime(std::string_view path, time_t set_time) = 0;
 };
 
 using FileSystemPtr = std::unique_ptr<FileSystem>;

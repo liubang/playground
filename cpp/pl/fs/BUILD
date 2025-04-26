@@ -35,7 +35,6 @@ cc_library(
     linkopts = DEFAULT_LINKOPTS,
     visibility = ["//visibility:public"],
     deps = [
-        "//cpp/pl/log:logger",
         "//cpp/pl/status",
         "//cpp/pl/utility",
     ],

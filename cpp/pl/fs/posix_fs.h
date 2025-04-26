@@ -17,6 +17,7 @@
 #pragma once
 
 #include "cpp/pl/fs/fs.h"
+
 #include <cassert>
 #include <fcntl.h>
 #include <unistd.h>
@@ -27,39 +28,41 @@ class PosixFileSystem final : public FileSystem {
 public:
     ~PosixFileSystem() override = default;
 
-    Status open(std::string_view path, uint64_t flags, FileDescriptorRef* fd) override;
+    Result<Void> open(std::string_view path, uint64_t flags, FileDescriptorRef* fd) override;
 
-    Status close(const FileDescriptorRef& fd) override;
+    Result<Void> close(const FileDescriptorRef& fd) override;
 
-    Status pread(const FileDescriptorRef& fd,
-                 uint64_t offset,
-                 std::size_t n,
-                 const char* buffer,
-                 std::string_view* result) override;
+    Result<Void> pread(const FileDescriptorRef& fd,
+                       uint64_t offset,
+                       std::size_t n,
+                       const char* buffer,
+                       std::string_view* result) override;
 
-    Status append(const FileDescriptorRef& fd, uint64_t flags, std::string_view data) override;
+    Result<Void> append(const FileDescriptorRef& fd,
+                        uint64_t flags,
+                        std::string_view data) override;
 
-    Status fsync(const FileDescriptorRef& fd, uint64_t flags) override;
+    Result<Void> fsync(const FileDescriptorRef& fd, uint64_t flags) override;
 
-    Status size(std::string_view path, uint64_t* result) override;
+    Result<Void> size(std::string_view path, uint64_t* result) override;
 
-    Status size(const FileDescriptorRef& fd, uint64_t* result) override;
+    Result<Void> size(const FileDescriptorRef& fd, uint64_t* result) override;
 
-    Status mtime(std::string_view path, std::time_t* result) override;
+    Result<Void> mtime(std::string_view path, std::time_t* result) override;
 
-    Status mtime(const FileDescriptorRef& fd, std::time_t* result) override;
+    Result<Void> mtime(const FileDescriptorRef& fd, std::time_t* result) override;
 
-    Status exist(std::string_view path, bool* result) override;
+    Result<Void> exist(std::string_view path, bool* result) override;
 
-    Status isdir(std::string_view path, bool* result) override;
+    Result<Void> isdir(std::string_view path, bool* result) override;
 
-    Status rename(std::string_view old_path, std::string_view new_path) override;
+    Result<Void> rename(std::string_view old_path, std::string_view new_path) override;
 
-    Status mkdir(std::string_view path, uint64_t flags) override;
+    Result<Void> mkdir(std::string_view path, uint64_t flags) override;
 
-    Status remove(std::string_view path) override;
+    Result<Void> remove(std::string_view path) override;
 
-    Status utime(std::string_view path, time_t set_time) override;
+    Result<Void> utime(std::string_view path, time_t set_time) override;
 };
 
 } // namespace pl

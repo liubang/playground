@@ -25,38 +25,38 @@ TEST(file_system, posix_filesystem) {
     pl::FileDescriptorRef fd;
     // open for write
     auto st = fs->open("/tmp/test.file", O_TRUNC | O_WRONLY | O_APPEND | O_CREAT, &fd);
-    EXPECT_TRUE(st.ok());
+    EXPECT_FALSE(st.hasError());
     EXPECT_TRUE(fd != nullptr);
 
     st = fs->append(fd, 0, "this is test content");
-    EXPECT_TRUE(st.ok());
+    EXPECT_FALSE(st.hasError());
 
     st = fs->fsync(fd, 0);
-    EXPECT_TRUE(st.ok());
+    EXPECT_FALSE(st.hasError());
 
     uint64_t size;
     st = fs->size(fd, &size);
-    EXPECT_TRUE(st.ok());
+    EXPECT_FALSE(st.hasError());
     EXPECT_EQ(20, size);
 
     bool exist = false;
     st = fs->exist("/tmp/test.file", &exist);
-    EXPECT_TRUE(st.ok());
+    EXPECT_FALSE(st.hasError());
     EXPECT_TRUE(exist);
 
     st = fs->exist("/tmp/test.file.notfound", &exist);
-    EXPECT_TRUE(st.ok());
+    EXPECT_FALSE(st.hasError());
     EXPECT_TRUE(!exist);
 
     // open for read
     st = fs->open("/tmp/test.file", O_RDONLY, &fd);
-    EXPECT_TRUE(st.ok());
+    EXPECT_FALSE(st.hasError());
     char buffer[10];
     std::string_view result;
     st = fs->pread(fd, 0, 10, buffer, &result);
-    EXPECT_TRUE(st.ok());
+    EXPECT_FALSE(st.hasError());
     EXPECT_EQ("this is te", result);
 
     st = fs->remove("/tmp/test.file");
-    EXPECT_TRUE(st.ok());
+    EXPECT_FALSE(st.hasError());
 }

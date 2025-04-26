@@ -15,7 +15,7 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/fs/posix_fs.h"
-#include "cpp/pl/log/logger.h"
+#include "cpp/pl/status/result.h"
 
 #include <cstdint>
 #include <cstring>
@@ -38,14 +38,14 @@ public:
         if (fd_ != -1) {
             int ret = ::fsync(fd_);
             if (ret != 0) {
-                LOG(WARN) << "fsync failed. fd: " << fd_ << ", file: " << file_path_
-                          << ", errno: " << errno << ", message: " << std::strerror(errno);
+                XLOGF(WARN, "fsync failed, fd: {}, file: {}, errno: {}, message: {}", fd_,
+                      file_path_, errno, std::strerror(errno));
             }
 
             ret = ::close(fd_);
             if (ret != 0) {
-                LOG(WARN) << "close failed. fd: " << fd_ << ", file: " << file_path_
-                          << ", errno: " << errno << ", message: " << std::strerror(errno);
+                XLOGF(WARN, "close failed, fd: {}, file: {}, errno: {}, message: {}", fd_,
+                      file_path_, errno, std::strerror(errno));
             }
         }
         fd_ = -1;
@@ -58,7 +58,7 @@ private:
     friend class PosixFileSystem;
 };
 
-Status PosixFileSystem::open(std::string_view path, uint64_t flags, FileDescriptorRef* fd) {
+Result<Void> PosixFileSystem::open(std::string_view path, uint64_t flags, FileDescriptorRef* fd) {
     // TODO use custom flags
     // open for write
     int ret = 0;
@@ -68,50 +68,49 @@ Status PosixFileSystem::open(std::string_view path, uint64_t flags, FileDescript
         ret = ::open(path.data(), flags);
     }
     if (ret == -1) {
-        LOG(WARN) << "open failed. path: " << path << ", errno: " << errno
-                  << ", message: " << std::strerror(errno);
-        return Status::NewIOError();
+        XLOGF(WARN, "open failed, path: {}, errno: {}, message: {}", path, errno,
+              std::strerror(errno));
+        return makeError(StatusCode::kIOError);
     }
     auto posix_fd = std::make_shared<PosixFileDescriptor>(ret, path);
     *fd = std::move(posix_fd);
-    return Status::NewOk();
+    RETURN_VOID;
 }
 
-Status PosixFileSystem::close(const FileDescriptorRef& fd) {
+Result<Void> PosixFileSystem::close(const FileDescriptorRef& fd) {
     auto* posix_fd = static_cast<PosixFileDescriptor*>(fd.get());
     if (posix_fd->fd_ != -1) {
         int ret = ::fsync(posix_fd->fd_);
         if (ret != 0) {
-            LOG(WARN) << "fsync failed. fd: " << posix_fd->fd_ << ", file: " << posix_fd->file_path_
-                      << ", errno: " << errno << ", message: " << std::strerror(errno);
-            return Status::NewIOError();
+            XLOGF(WARN, "fsync failed, fd: {}, file: {}, errno: {}, message: {}", posix_fd->fd_,
+                  posix_fd->file_path_, errno, std::strerror(errno));
+            return makeError(StatusCode::kIOError);
         }
 
         ret = ::close(posix_fd->fd_);
         if (ret != 0) {
-            LOG(WARN) << "close failed. fd: " << posix_fd->fd_ << ", file: " << posix_fd->file_path_
-                      << ", errno: " << errno << ", message: " << std::strerror(errno);
-            return Status::NewIOError();
+            XLOGF(WARN, "close failed, fd: {}, file: {}, errno: {}, message: {}", posix_fd->fd_,
+                  posix_fd->file_path_, errno, std::strerror(errno));
+            return makeError(StatusCode::kIOError);
         }
     }
-    return Status::NewOk();
+    RETURN_VOID;
 }
 
-Status PosixFileSystem::pread(const FileDescriptorRef& fd,
-                              uint64_t offset,
-                              std::size_t n,
-                              const char* buffer,
-                              std::string_view* result) {
+Result<Void> PosixFileSystem::pread(const FileDescriptorRef& fd,
+                                    uint64_t offset,
+                                    std::size_t n,
+                                    const char* buffer,
+                                    std::string_view* result) {
     auto* posix_fd = static_cast<PosixFileDescriptor*>(fd.get());
     uint64_t read_count = 0;
     while (read_count < n) {
         ssize_t len = ::pread(posix_fd->fd_, (void*)(buffer + read_count), n - read_count,
                               offset + read_count);
         if (len == -1) {
-            // TODO:
-            LOG(WARN) << "failed pread, fd: " << posix_fd->fd_ << ", file: " << posix_fd->file_path_
-                      << ", errno: " << errno << ", message: " << std::strerror(errno);
-            return Status::NewIOError();
+            XLOGF(WARN, "pread failed, fd: {}, file: {}, errno: {}, message: {}", posix_fd->fd_,
+                  posix_fd->file_path_, errno, std::strerror(errno));
+            return makeError(StatusCode::kIOError);
         }
         read_count += len;
         if (len == 0) {
@@ -119,10 +118,12 @@ Status PosixFileSystem::pread(const FileDescriptorRef& fd,
         }
     }
     *result = std::string_view(buffer, read_count);
-    return Status::NewOk();
+    RETURN_VOID;
 }
 
-Status PosixFileSystem::append(const FileDescriptorRef& fd, uint64_t flags, std::string_view data) {
+Result<Void> PosixFileSystem::append(const FileDescriptorRef& fd,
+                                     uint64_t flags,
+                                     std::string_view data) {
     auto* posix_fd = static_cast<PosixFileDescriptor*>(fd.get());
     std::size_t write_size = data.size();
     const char* write_data = data.data();
@@ -130,108 +131,120 @@ Status PosixFileSystem::append(const FileDescriptorRef& fd, uint64_t flags, std:
     while (writed_size < write_size) {
         ssize_t len = ::write(posix_fd->fd_, write_data + writed_size, write_size - writed_size);
         if (len == -1) {
-            // TODO: linux system errno
-            return Status::NewIOError();
+            XLOGF(WARN, "append failed, fd: {}, file: {}, errno: {}, message: {}", posix_fd->fd_,
+                  posix_fd->file_path_, errno, std::strerror(errno));
+            return makeError(StatusCode::kIOError);
         }
         writed_size += len;
     }
-    return Status::NewOk();
+    RETURN_VOID;
 }
 
-Status PosixFileSystem::fsync(const FileDescriptorRef& fd, uint64_t flags) {
+Result<Void> PosixFileSystem::fsync(const FileDescriptorRef& fd, uint64_t flags) {
     auto* posix_fd = static_cast<PosixFileDescriptor*>(fd.get());
     int ret = ::fsync(posix_fd->fd_);
     if (ret != 0) {
-        // TODO: linux system errno
-        return Status::NewIOError();
+        XLOGF(WARN, "fsync failed, fd: {}, file: {}, errno: {}, message: {}", posix_fd->fd_,
+              posix_fd->file_path_, errno, std::strerror(errno));
+        return makeError(StatusCode::kIOError);
     }
-    return Status::NewOk();
+    RETURN_VOID;
 }
 
-Status PosixFileSystem::size(std::string_view path, uint64_t* result) {
+Result<Void> PosixFileSystem::size(std::string_view path, uint64_t* result) {
     struct stat buffer;
     int ret = ::stat(path.data(), &buffer);
     if (ret != 0) {
-        // TODO: linux system errno
-        return Status::NewIOError();
+        XLOGF(WARN, "stat failed,  file: {}, errno: {}, message: {}", path, errno,
+              std::strerror(errno));
+        return makeError(StatusCode::kIOError);
     }
     *result = static_cast<uint64_t>(buffer.st_size);
-    return Status::NewOk();
+    RETURN_VOID;
 }
 
-Status PosixFileSystem::size(const FileDescriptorRef& fd, uint64_t* result) {
+Result<Void> PosixFileSystem::size(const FileDescriptorRef& fd, uint64_t* result) {
     auto* posix_fd = static_cast<PosixFileDescriptor*>(fd.get());
     struct stat buffer;
     int ret = ::fstat(posix_fd->fd_, &buffer);
     if (ret != 0) {
-        // TODO: linux system errno
-        return Status::NewIOError();
+        XLOGF(WARN, "fstat failed, fd: {}, file: {}, errno: {}, message: {}", posix_fd->fd_,
+              posix_fd->file_path_, errno, std::strerror(errno));
+        return makeError(StatusCode::kIOError);
     }
     *result = static_cast<uint64_t>(buffer.st_size);
-    return Status::NewOk();
+    RETURN_VOID;
 }
 
-Status PosixFileSystem::mtime(std::string_view path, std::time_t* result) {
+Result<Void> PosixFileSystem::mtime(std::string_view path, std::time_t* result) {
     struct stat buffer;
     int ret = ::stat(path.data(), &buffer);
     if (ret != 0) {
-        // TODO: linux system error
-        return Status::NewIOError();
+        XLOGF(WARN, "stat failed, file: {}, errno: {}, message: {}", path, errno,
+              std::strerror(errno));
+        return makeError(StatusCode::kIOError);
     }
     *result = buffer.st_mtime;
-    return Status::NewOk();
+    RETURN_VOID;
 }
 
-Status PosixFileSystem::mtime(const FileDescriptorRef& fd, std::time_t* result) {
+Result<Void> PosixFileSystem::mtime(const FileDescriptorRef& fd, std::time_t* result) {
     auto* posix_fd = static_cast<PosixFileDescriptor*>(fd.get());
     struct stat buffer;
     int ret = ::fstat(posix_fd->fd_, &buffer);
     if (ret != 0) {
-        // TODO: linux system error
-        return Status::NewIOError();
+        XLOGF(WARN, "fstat failed, fd: {}, file: {}, errno: {}, message: {}", posix_fd->fd_,
+              posix_fd->file_path_, errno, std::strerror(errno));
+        return makeError(StatusCode::kIOError);
     }
     *result = buffer.st_mtime;
-    return Status::NewOk();
+    RETURN_VOID;
 }
 
-Status PosixFileSystem::exist(std::string_view path, bool* result) {
+Result<Void> PosixFileSystem::exist(std::string_view path, bool* result) {
     *result = std::filesystem::exists(path);
-    return Status::NewOk();
+    RETURN_VOID;
 }
 
-Status PosixFileSystem::isdir(std::string_view path, bool* result) {
+Result<Void> PosixFileSystem::isdir(std::string_view path, bool* result) {
     struct stat buffer;
     int ret = ::stat(path.data(), &buffer);
     if (ret != 0) {
         *result = false;
-        return Status::NewIOError();
+        XLOGF(WARN, "stat failed, file: {}, errno: {}, message: {}", path, errno,
+              std::strerror(errno));
+        return makeError(StatusCode::kIOError);
     }
     *result = S_ISDIR(buffer.st_mode);
-    return Status::NewOk();
+    RETURN_VOID;
 }
 
-Status PosixFileSystem::rename(std::string_view old_path, std::string_view new_path) {
+Result<Void> PosixFileSystem::rename(std::string_view old_path, std::string_view new_path) {
     std::filesystem::rename(old_path, new_path);
-    return Status::NewOk();
+    RETURN_VOID;
 }
 
-Status PosixFileSystem::mkdir(std::string_view path, uint64_t flags) {
+Result<Void> PosixFileSystem::mkdir(std::string_view path, uint64_t flags) {
     if (::mkdir(path.data(), flags) != 0) {
-        return Status::NewIOError();
+        XLOGF(WARN, "mkdir failed, file: {}, errno: {}, message: {}", path, errno,
+              std::strerror(errno));
+        return makeError(StatusCode::kIOError);
     }
-    return Status::NewOk();
+    RETURN_VOID;
 }
 
-Status PosixFileSystem::remove(std::string_view path) {
+Result<Void> PosixFileSystem::remove(std::string_view path) {
     std::error_code err;
-    bool ret = std::filesystem::remove_all(path, err);
+    bool ret = std::filesystem::remove_all(path, err) != 0u;
     if (!ret) {
-        return Status::NewIOError();
+        XLOGF(WARN, "remove failed, file: {}, errno: {}, message: {}", path, errno,
+              std::strerror(errno));
+        return makeError(StatusCode::kIOError);
     }
-    return Status::NewOk();
+    RETURN_VOID;
 }
 
-Status PosixFileSystem::utime(std::string_view path, time_t set_time) {
+Result<Void> PosixFileSystem::utime(std::string_view path, time_t set_time) {
     struct utimbuf utimeb;
     struct utimbuf* utimeb_p = nullptr;
     if (set_time != -1) {
@@ -240,9 +253,12 @@ Status PosixFileSystem::utime(std::string_view path, time_t set_time) {
         utimeb_p = &utimeb;
     }
     if (::utime(path.data(), utimeb_p) != 0) {
-        return Status::NewIOError();
+        XLOGF(WARN, "utime failed, file: {}, errno: {}, message: {}", path, errno,
+              std::strerror(errno));
+        return makeError(StatusCode::kIOError);
     }
-    return Status::NewOk();
+
+    RETURN_VOID;
 }
 
 } // namespace pl
