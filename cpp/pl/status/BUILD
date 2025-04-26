@@ -25,14 +25,19 @@ cc_library(
     name = "status",
     srcs = [
         "status_code.cpp",
-        "status_code_detail.h",
     ],
     hdrs = [
+        "result.h",
         "status.h",
         "status_code.h",
-        "status_new.h",
+        "status_code_detail.h",
     ],
     visibility = ["//visibility:public"],
+    deps = [
+        "@folly//folly:expected",
+        "@folly//folly:unit",
+        "@folly//folly/logging",
+    ],
 )
 
 cc_test(
