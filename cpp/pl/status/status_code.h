@@ -19,7 +19,7 @@
 #include <cstdint>
 #include <string_view>
 
-namespace pl::test {
+namespace pl {
 
 using status_code_t = uint16_t;
 
@@ -49,4 +49,4 @@ std::string_view toString(status_code_t code);
 StatusCodeType typeOf(status_code_t code);
 } // namespace StatusCode
 
-} // namespace pl::test
+} // namespace pl
