@@ -31,13 +31,13 @@ void BlockHandle::encodeTo(std::string* dst) const {
     encodeInt(dst, size_);
 }
 
-Status BlockHandle::decodeFrom(std::string_view input) {
+Result<Void> BlockHandle::decodeFrom(std::string_view input) {
     if (input.size() < 16) {
-        return Status::NewCorruption("bad block handle");
+        return makeError(StatusCode::kDataCorruption, "bad block handle");
     }
     offset_ = decodeInt<uint64_t>(input.data());
     size_ = decodeInt<uint64_t>(input.data() + 8);
-    return Status::NewOk();
+    RETURN_VOID;
 }
 
 void FileMeta::encodeTo(std::string* dst) const {
@@ -59,9 +59,9 @@ void FileMeta::encodeTo(std::string* dst) const {
     dst->append(max_key_);
 }
 
-Status FileMeta::decodeFrom(std::string_view input) {
+Result<Void> FileMeta::decodeFrom(std::string_view input) {
     if (input.size() < FILE_META_MIN_LEN) {
-        return Status::NewCorruption("file meta is too short");
+        return makeError(StatusCode::kDataCorruption, "file meta is too short");
     }
     const char* data = input.data();
     const auto s = input.size();
@@ -71,14 +71,15 @@ Status FileMeta::decodeFrom(std::string_view input) {
     auto magic = decodeInt<uint32_t>(data + cursor);
     cursor += 4;
     if (magic != FILE_META_MAGIC_NUMBER) {
-        return Status::NewCorruption("invalid file meta, the magic number is mismatch");
+        return makeError(StatusCode::kDataCorruption,
+                         "invalid file meta, the matic number is mismatch");
     }
 
     // sst type
     auto type = decodeInt<uint8_t>(data + cursor);
     cursor++;
     if (type == 0 || type > static_cast<uint8_t>(SSTType::MAJOR)) {
-        return Status::NewCorruption("invalid sstable type");
+        return makeError(StatusCode::kDataCorruption, "invalid sstable type");
     }
     sst_type_ = static_cast<SSTType>(type);
 
@@ -86,7 +87,7 @@ Status FileMeta::decodeFrom(std::string_view input) {
     auto version = decodeInt<uint8_t>(data + cursor);
     cursor++;
     if (version == 0 || version > static_cast<uint8_t>(SSTVersion::V1)) {
-        return Status::NewCorruption("invalid sstable version");
+        return makeError(StatusCode::kDataCorruption, "invalid sstable version");
     }
     sst_version_ = static_cast<SSTVersion>(version);
 
@@ -102,7 +103,7 @@ Status FileMeta::decodeFrom(std::string_view input) {
     auto filter_type = decodeInt<uint8_t>(data + cursor);
     cursor++;
     if (filter_type > static_cast<uint8_t>(FilterPolicyType::BLOOM_FILTER)) {
-        return Status::NewCorruption("invalid filter policy type");
+        return makeError(StatusCode::kDataCorruption, "invalid filter policy type");
     }
     filter_type_ = static_cast<FilterPolicyType>(filter_type);
 
@@ -130,7 +131,7 @@ Status FileMeta::decodeFrom(std::string_view input) {
     auto min_key_size = decodeInt<uint32_t>(data + cursor);
     cursor += 4;
     if (cursor + min_key_size + 4 > s) {
-        return Status::NewCorruption("parse file meta error");
+        return makeError(StatusCode::kDataCorruption, "parse file meta error");
     }
 
     if (min_key_size > 0) {
@@ -143,14 +144,14 @@ Status FileMeta::decodeFrom(std::string_view input) {
     cursor += 4;
 
     if (cursor + max_key_size != s) {
-        return Status::NewCorruption("parse file meta error");
+        return makeError(StatusCode::kDataCorruption, "parse file meta error");
     }
 
     if (max_key_size > 0) {
         max_key_.assign(data + cursor, max_key_size);
     }
 
-    return Status::NewOk();
+    RETURN_VOID;
 }
 
 /**
@@ -174,50 +175,46 @@ void Footer::encodeTo(std::string* dst) const {
     assert(dst->size() == s + FOOTER_LEN);
 }
 
-Status Footer::decodeFrom(std::string_view input) {
+Result<Void> Footer::decodeFrom(std::string_view input) {
     if (input.size() < FOOTER_LEN) {
-        return Status::NewCorruption("invalid sstable format");
+        return makeError(StatusCode::kDataCorruption, "invalid sstable format");
     }
     const char* magic_ptr = input.data() + FOOTER_LEN - sizeof(SST_MAGIC_NUMBER);
     const auto magic = decodeInt<uint32_t>(magic_ptr);
 
     if (magic != SST_MAGIC_NUMBER) {
-        return Status::NewCorruption("invalid magic number");
+        return makeError(StatusCode::kDataCorruption, "invalid magic number");
     }
 
     // decode filter offset and size
-    Status result = filter_handle_.decodeFrom(input);
-    if (!result.isOk()) {
-        return result;
-    }
+    auto result = filter_handle_.decodeFrom(input);
+    RETURN_AND_LOG_ON_ERROR(result);
 
     // decode index offset and size
     result = index_handle_.decodeFrom(std::string_view(input.data() + 16, 16));
-    if (!result.isOk()) {
-        return result;
-    }
+    RETURN_AND_LOG_ON_ERROR(result);
 
     // decode file meta offset and size
     result = file_meta_handle_.decodeFrom(std::string_view(input.data() + 32, 16));
-    return result;
+    RETURN_AND_LOG_ON_ERROR(result);
+
+    RETURN_VOID;
 }
 
-Status BlockReader::readBlock(const FileSystemRef& reader,
-                              const FileDescriptorRef& fd,
-                              const BlockHandle& handle,
-                              BlockContents* result) {
+Result<BlockContents> BlockReader::readBlock(const FileSystemRef& reader,
+                                             const FileDescriptorRef& fd,
+                                             const BlockHandle& handle) {
     // read block trailer
     auto s = static_cast<std::size_t>(handle.size());
     auto buf = std::make_unique<char[]>(s + BLOCK_TRAILER_LEN);
 
     std::string_view content;
-    auto status = reader->pread(fd, handle.offset(), s + BLOCK_TRAILER_LEN, buf.get(), &content);
-    if (!status.isOk()) {
-        return status;
-    }
+    auto result = reader->pread(fd, handle.offset(), s + BLOCK_TRAILER_LEN, buf.get(), &content);
+    RETURN_AND_LOG_ON_ERROR(result);
+
     // invalid content
     if (content.size() != s + BLOCK_TRAILER_LEN) {
-        return Status::NewCorruption("invalid block");
+        return makeError(StatusCode::kDataCorruption, "invalid block");
     }
 
     // crc check
@@ -225,40 +222,43 @@ Status BlockReader::readBlock(const FileSystemRef& reader,
     auto crc = decodeInt<uint32_t>(data + s + 1);
     auto actual_crc = ::crc32_iscsi((unsigned char*)data, s, 0);
     if (crc != actual_crc) {
-        return Status::NewCorruption("crc error");
+        return makeError(StatusCode::kDataCorruption, "crc error");
     }
+
+    BlockContents block_contents;
+
     switch (static_cast<CompressionType>(data[s])) {
     case CompressionType::SNAPPY:
     {
         size_t ulen;
         if (!snappy::GetUncompressedLength(data, s, &ulen)) {
-            return Status::NewCorruption("invalid data");
+            return makeError(StatusCode::kDataCorruption, "can't get snappy uncompressed length");
         }
         auto ubuf = std::make_unique<char[]>(ulen);
         if (!snappy::RawUncompress(data, s, ubuf.get())) {
-            return Status::NewCorruption("invalid data");
+            return makeError(StatusCode::kDataCorruption, "uncompress error");
         }
-        result->data = std::string_view(ubuf.release(), ulen);
-        result->heap_allocated = true;
-        result->cachable = true;
+        block_contents.data = std::string_view(ubuf.release(), ulen);
+        block_contents.heap_allocated = true;
+        block_contents.cachable = true;
         break;
     }
     case CompressionType::ZSTD:
     {
         size_t ulen = ZSTD_getFrameContentSize(data, s);
         if (ulen == 0) {
-            return Status::NewCorruption("invalid data");
+            return makeError(StatusCode::kDataCorruption, "can't get zstd uncompressed length");
         }
         auto ubuf = std::make_unique<char[]>(ulen);
         ZSTD_DCtx* ctx = ZSTD_createDCtx();
         size_t outlen = ZSTD_decompressDCtx(ctx, ubuf.get(), ulen, data, s);
         ZSTD_freeDCtx(ctx);
         if (ZSTD_isError(outlen) != 0u) {
-            return Status::NewCorruption("invalid data");
+            return makeError(StatusCode::kDataCorruption, "uncompress error");
         }
-        result->data = std::string_view(ubuf.release(), ulen);
-        result->heap_allocated = true;
-        result->cachable = true;
+        block_contents.data = std::string_view(ubuf.release(), ulen);
+        block_contents.heap_allocated = true;
+        block_contents.cachable = true;
         break;
     }
     case CompressionType::ISAL:
@@ -267,14 +267,14 @@ Status BlockReader::readBlock(const FileSystemRef& reader,
     }
     default:
     {
-        result->data = std::string_view(buf.release(), s);
-        result->heap_allocated = true;
-        result->cachable = true;
+        block_contents.data = std::string_view(buf.release(), s);
+        block_contents.heap_allocated = true;
+        block_contents.cachable = true;
         break;
     }
     }
 
-    return Status::NewOk();
+    return block_contents;
 }
 
 } // namespace pl

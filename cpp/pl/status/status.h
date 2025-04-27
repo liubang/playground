@@ -87,15 +87,16 @@ public:
     [[nodiscard]] bool isOk() const { return code() == StatusCode::kOK; }
     explicit operator bool() const { return isOk(); }
 
-    template <typename T> T* payload() { return std::any_cast<T>(&rep()->payload); }
-    template <typename T> const T* payload() const { return std::any_cast<T>(&rep()->payload); }
+    template <typename T> T* payload() { return std::any_cast<T>(&(rep()->payload)); }
+    template <typename T> const T* payload() const {
+        return std::any_cast<const T>(&(rep()->payload));
+    }
 
     [[nodiscard]] bool hasPayload() const {
         return (rep() != nullptr) && rep()->payload.has_value();
     }
 
     template <typename T> void setPayload(T&& payload) {
-        ::printf("xxxxxxxxxxxxxxxxxxx\n");
         ensuredRep()->payload = std::forward<T>(payload);
     }
 
@@ -140,7 +141,7 @@ private:
     }
 
 private:
-    StatusPtr data_;
+    StatusPtr data_; // |<-- low 48 bits: rep ptr -->|<-- high 16 bits: status code -->|
 };
 
 } // namespace pl
