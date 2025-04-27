@@ -18,20 +18,30 @@
 #include <gtest/gtest.h>
 
 TEST(Status, constructor) {
-    pl::Status ok(pl::StatusCode::kOK, "OK");
-    EXPECT_TRUE(ok);
-    EXPECT_TRUE(ok.isOk());
-    EXPECT_FALSE(ok.hasPayload());
-    EXPECT_EQ(pl::StatusCode::kOK, ok.code());
-    EXPECT_EQ("OK", ok.message());
-    std::cout << ok.describe() << std::endl;
+    pl::Status st1(pl::StatusCode::kOK, "OK");
+    EXPECT_TRUE(st1);
+    EXPECT_TRUE(st1.isOk());
+    EXPECT_FALSE(st1.hasPayload());
+    EXPECT_EQ(pl::StatusCode::kOK, st1.code());
+    EXPECT_EQ("OK", st1.message());
+    std::cout << st1.describe() << std::endl;
 
-    pl::Status st(pl::StatusCode::kOK, "OK", "payload");
-    EXPECT_TRUE(st);
-    EXPECT_TRUE(st.isOk());
-    EXPECT_TRUE(st.hasPayload());
-    EXPECT_EQ(0, st.payload<std::string>()->compare("payload"));
-    EXPECT_EQ(pl::StatusCode::kOK, st.code());
-    EXPECT_EQ("OK", st.message());
-    std::cout << st.describe() << std::endl;
+    pl::Status st2(pl::StatusCode::kOK, "OK");
+    st2.setPayload<std::string>("payload");
+    EXPECT_TRUE(st2);
+    EXPECT_TRUE(st2.isOk());
+    EXPECT_TRUE(st2.hasPayload());
+    EXPECT_EQ(pl::StatusCode::kOK, st2.code());
+    EXPECT_EQ("OK", st2.message());
+    std::cout << st2.describe() << std::endl;
+    EXPECT_EQ("payload", *st2.payload<std::string>());
+
+    pl::Status st3(pl::StatusCode::kOK, "OK", std::string("payload"));
+    EXPECT_TRUE(st3);
+    EXPECT_TRUE(st3.isOk());
+    EXPECT_TRUE(st3.hasPayload());
+    EXPECT_EQ(pl::StatusCode::kOK, st3.code());
+    EXPECT_EQ("OK", st3.message());
+    std::cout << st3.describe() << std::endl;
+    EXPECT_EQ("payload", *st3.payload<std::string>());
 }

@@ -22,24 +22,25 @@
 #include "cpp/pl/sst/filter_block_reader.h"
 #include "cpp/pl/sst/options.h"
 #include "cpp/pl/sst/sstable_format.h"
-#include "cpp/pl/status/status.h"
+#include "cpp/pl/status/result.h"
 
 #include <cassert>
 #include <filesystem>
 
 namespace pl {
 
+class SSTable;
+using SSTablePtr = std::unique_ptr<SSTable>;
+using SSTableRef = std::shared_ptr<SSTable>;
+
 class SSTable {
 public:
     SSTable(const SSTable&) = delete;
-
     SSTable& operator=(const SSTable&) = delete;
-
     ~SSTable() = default;
 
-    static std::unique_ptr<SSTable> open(const ReadOptionsRef& options,
-                                         const std::filesystem::path& sst_file,
-                                         Status* status);
+    static Result<SSTablePtr> open(const ReadOptionsRef& options,
+                                   const std::filesystem::path& sst_file);
 
     [[nodiscard]] const FileMetaRef& fileMeta() const { return file_meta_; }
 
@@ -53,7 +54,7 @@ public:
         return file_meta_->patchId();
     }
 
-    Status get(std::string_view rowkey, Arena* buf, CellVecRef* cells);
+    Result<CellVecRef> get(std::string_view rowkey, Arena* buf);
 
     IteratorPtr iterator();
 
@@ -64,21 +65,17 @@ private:
             FileMetaRef file_meta,
             BlockRef index_block);
 
-    void readFilter(const Footer& footer);
+    Result<Void> readFilter(const Footer& footer);
     IteratorPtr blockReader(std::string_view index_value);
 
 private:
     const ReadOptionsRef options_;
     FileDescriptorRef fd_;
     FileSystemRef reader_;
-    Status status_;
     FilterBlockReaderRef filter_;
     std::unique_ptr<const char[]> filter_data_;
     FileMetaRef file_meta_{nullptr};
     BlockRef index_block_{nullptr};
 };
-
-using SSTablePtr = std::unique_ptr<SSTable>;
-using SSTableRef = std::shared_ptr<SSTable>;
 
 } // namespace pl
