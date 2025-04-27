@@ -33,44 +33,36 @@ SSTable::SSTable(ReadOptionsRef options,
       file_meta_(std::move(file_meta)),
       index_block_(std::move(index_block)) {}
 
-std::unique_ptr<SSTable> SSTable::open(const ReadOptionsRef& options,
-                                       const std::filesystem::path& sst_file,
-                                       Status* status) {
+Result<SSTablePtr> SSTable::open(const ReadOptionsRef& options,
+                                 const std::filesystem::path& sst_file) {
     FileSystemRef fs = std::make_shared<PosixFileSystem>();
     FileDescriptorRef fd;
-    *status = fs->open(sst_file.string(), 0, &fd);
-    if (!status->ok()) {
-        return nullptr;
-    }
+    auto result = fs->open(sst_file.string(), 0, &fd);
+    RETURN_AND_LOG_ON_ERROR(result);
+
     uint64_t size;
-    *status = fs->size(fd, &size);
-    if (!status->ok()) {
-        return nullptr;
+    result = fs->size(fd, &size);
+    RETURN_AND_LOG_ON_ERROR(result);
+
+    // check footer
+    if (size < FOOTER_LEN) {
+        return makeError(StatusCode::kDataCorruption, "file is too short to be an sstable");
     }
 
-    if (size < FOOTER_LEN) {
-        *status = Status::NewCorruption("file is too short to be an sstable");
-        return nullptr;
-    }
     char footer_content[FOOTER_LEN];
     std::string_view footer_input;
-    *status = fs->pread(fd, size - FOOTER_LEN, FOOTER_LEN, footer_content, &footer_input);
-    if (!status->isOk()) {
-        return nullptr;
-    }
+    result = fs->pread(fd, size - FOOTER_LEN, FOOTER_LEN, footer_content, &footer_input);
+    RETURN_AND_LOG_ON_ERROR(result);
 
     Footer footer;
-    *status = footer.decodeFrom(footer_input);
-    if (!status->isOk()) {
-        return nullptr;
-    }
+    result = footer.decodeFrom(footer_input);
+    RETURN_AND_LOG_ON_ERROR(result);
 
     // file meta
     BlockContents file_meta_content;
-    *status = BlockReader::readBlock(fs, fd, footer.fileMetaHandle(), &file_meta_content);
-    if (!status->isOk()) {
-        return nullptr;
-    }
+    auto file_block_result = BlockReader::readBlock(fs, fd, footer.fileMetaHandle());
+    RETURN_AND_LOG_ON_ERROR(file_block_result);
+    file_meta_content = file_block_result.value();
 
     SCOPE_EXIT {
         if (file_meta_content.heap_allocated) {
@@ -78,17 +70,14 @@ std::unique_ptr<SSTable> SSTable::open(const ReadOptionsRef& options,
         }
     };
     auto file_meta = std::make_unique<FileMeta>();
-    *status = file_meta->decodeFrom(file_meta_content.data);
-    if (!status->isOk()) {
-        return nullptr;
-    }
+    result = file_meta->decodeFrom(file_meta_content.data);
+    RETURN_AND_LOG_ON_ERROR(result);
 
     // parse index block
     BlockContents index_block_contents;
-    *status = BlockReader::readBlock(fs, fd, footer.indexHandle(), &index_block_contents);
-    if (!status->isOk()) {
-        return nullptr;
-    }
+    auto index_block_result = BlockReader::readBlock(fs, fd, footer.indexHandle());
+    RETURN_AND_LOG_ON_ERROR(index_block_result);
+    index_block_contents = index_block_result.value();
 
     auto index_block = std::make_shared<Block>(index_block_contents);
     auto table = std::unique_ptr<SSTable>(
@@ -98,18 +87,16 @@ std::unique_ptr<SSTable> SSTable::open(const ReadOptionsRef& options,
     return table;
 }
 
-void SSTable::readFilter(const Footer& footer) {
+Result<Void> SSTable::readFilter(const Footer& footer) {
     auto filter_type = file_meta_->filterPolicyType();
     if (filter_type == FilterPolicyType::NONE) {
-        return;
+        RETURN_VOID;
     }
     BlockHandle filter_handle = footer.filterHandle();
-    BlockContents block;
-    auto st = BlockReader::readBlock(reader_, fd_, filter_handle, &block);
-    if (!st.isOk()) {
-        LOG_ERROR << "read block error: " << st.msg();
-        return;
-    }
+    auto filter_block_result = BlockReader::readBlock(reader_, fd_, filter_handle);
+    RETURN_AND_LOG_ON_ERROR(filter_block_result);
+
+    BlockContents block = filter_block_result.value();
 
     if (block.heap_allocated) {
         filter_data_.reset(block.data.data());
@@ -126,6 +113,8 @@ void SSTable::readFilter(const Footer& footer) {
     assert(filter != nullptr);
 
     filter_ = std::make_shared<FilterBlockReader>(std::move(filter), block.data);
+
+    RETURN_VOID;
 }
 
 IteratorPtr SSTable::blockReader(std::string_view index_value) {
