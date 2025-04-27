@@ -18,7 +18,7 @@
 
 #include "cpp/pl/fs/fs.h"
 #include "cpp/pl/lang/assume.h"
-#include "cpp/pl/status/status.h"
+#include "cpp/pl/status/result.h"
 
 #include <cstdint>
 #include <sstream>
@@ -122,7 +122,7 @@ public:
 
     void encodeTo(std::string* dst) const;
 
-    [[nodiscard]] Status decodeFrom(std::string_view input);
+    [[nodiscard]] Result<Void> decodeFrom(std::string_view input);
 
 private:
     uint64_t offset_;
@@ -187,7 +187,7 @@ public:
 
     void encodeTo(std::string* dst) const;
 
-    Status decodeFrom(std::string_view input);
+    Result<Void> decodeFrom(std::string_view input);
 
     [[nodiscard]] std::string toString() const {
         std::stringstream ss;
@@ -239,7 +239,7 @@ public:
     [[nodiscard]] const BlockHandle& fileMetaHandle() const { return file_meta_handle_; }
 
     void encodeTo(std::string* dst) const;
-    [[nodiscard]] Status decodeFrom(std::string_view input);
+    [[nodiscard]] Result<Void> decodeFrom(std::string_view input);
 
 private:
     BlockHandle filter_handle_;
@@ -255,10 +255,9 @@ struct BlockContents {
 
 class BlockReader {
 public:
-    static Status readBlock(const FileSystemRef& reader,
-                            const FileDescriptorRef& fd,
-                            const BlockHandle& handle,
-                            BlockContents* result);
+    static Result<BlockContents> readBlock(const FileSystemRef& reader,
+                                           const FileDescriptorRef& fd,
+                                           const BlockHandle& handle);
 };
 
 } // namespace pl
