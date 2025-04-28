@@ -86,11 +86,12 @@ public:
         auto& cells = cellses[idx];
 
         auto sstable_builder = std::make_unique<pl::SSTableBuilder>(build_options);
-        auto st = sstable_builder->open();
-        if (!st.ok()) {
-            LOG(ERROR) << "error: " << (int)st.code() << ", message: " << st.msg();
+        auto result = sstable_builder->open();
+        if (result.hasError()) {
+            XLOGF(ERR, "open table error: {}", result.error());
+            return;
         }
-        EXPECT_EQ(Code::ST_Ok, st.code());
+        EXPECT_TRUE(result.hasValue());
         for (int i = 0; i < ROW_NUM; ++i) {
             std::string rowkey =
                 pl::random_string(ROWKEY_LEN + (i % ROWKEY_LEN)) + std::to_string(i);
@@ -120,19 +121,19 @@ public:
         for (const auto& cell : cells) {
             sstable_builder->add(cell.to_cell());
         }
-        auto status = sstable_builder->finish();
-        EXPECT_TRUE(status.isOk());
+        result = sstable_builder->finish();
+        EXPECT_TRUE(result.hasValue());
     }
 
     void seek_from_sst(int idx) {
         auto sst_file = sst_files[idx];
         auto cells = cellses[idx];
-        auto table = pl::SSTable::open(read_options, sst_file, &st);
-        EXPECT_TRUE(st.isOk());
+        auto result = pl::SSTable::open(read_options, sst_file);
+        EXPECT_TRUE(result.hasValue());
 
-        check_table(table.get());
+        check_table(result.value().get());
 
-        auto it = table->iterator();
+        auto it = result.value()->iterator();
         for (const auto& cell : cells) {
             it->seek(cell.rowkey);
             EXPECT_TRUE(it->valid());
@@ -161,7 +162,6 @@ public:
     constexpr static const char* CF1 = "cf1";
     constexpr static const char* CF2 = "cf2";
     ReadOptionsRef read_options;
-    Status st;
 };
 
 TEST_F(SSTableTest, init) {
@@ -188,13 +188,13 @@ TEST_F(SSTableTest, scan_all) {
     auto cells = cellses[0];
     LOG(INFO) << "cells: " << cells.size();
 
-    auto table = pl::SSTable::open(read_options, sst_file, &st);
-    EXPECT_TRUE(st.isOk());
+    auto result = pl::SSTable::open(read_options, sst_file);
+    EXPECT_TRUE(result.hasValue());
 
-    check_table(table.get());
+    check_table(result.value().get());
 
     auto citer = cells.begin();
-    auto iter = table->iterator();
+    auto iter = result.value()->iterator();
 
     iter->first();
     while (iter->valid()) {
@@ -219,9 +219,9 @@ TEST_F(SSTableTest, range_scan) {
     auto sst_file = sst_files[0];
     auto cells = cellses[0];
 
-    auto table = pl::SSTable::open(read_options, sst_file, &st);
-    EXPECT_TRUE(st.isOk());
-    check_table(table.get());
+    auto result = pl::SSTable::open(read_options, sst_file);
+    EXPECT_TRUE(result.hasValue());
+    check_table(result.value().get());
 
     // 随机取一个范围的起始位置
     std::srand(std::time(nullptr));
@@ -229,7 +229,7 @@ TEST_F(SSTableTest, range_scan) {
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dis(0, ROW_NUM);
 
-    auto iter = table->iterator();
+    auto iter = result.value()->iterator();
     for (int i = 0; i < 3; ++i) {
         auto citer = cells.begin();
         int j = dis(gen) * 2 * COL_NUM;
@@ -260,10 +260,10 @@ TEST_F(SSTableTest, query) {
     auto cells = cellses[0];
     LOG(INFO) << "cells: " << cells.size();
 
-    auto table = pl::SSTable::open(read_options, sst_file, &st);
-    EXPECT_TRUE(st.isOk());
+    auto result = pl::SSTable::open(read_options, sst_file);
+    EXPECT_TRUE(result.hasValue());
 
-    check_table(table.get());
+    check_table(result.value().get());
 
     // 整行query
     std::srand(std::time(nullptr));
@@ -279,10 +279,9 @@ TEST_F(SSTableTest, query) {
         }
 
         std::string search_key = citer->rowkey;
-
-        CellVecRef row;
-        auto st = table->get(search_key, &buf, &row);
-        EXPECT_TRUE(st.isOk());
+        auto cell_result = result.value()->get(search_key, &buf);
+        EXPECT_TRUE(cell_result.hasValue());
+        CellVecRef row = cell_result.value();
         EXPECT_EQ(16, row.size());
 
         for (auto& cell : row) {
@@ -298,10 +297,11 @@ TEST_F(SSTableTest, query) {
 
     // 空query
     for (int i = 0; i < 666; ++i) {
+        cells.clear();
         auto rowkey = pl::random_string(ROWKEY_LEN * 3);
-        CellVecRef cells;
-        auto st = table->get(rowkey, &buf, &cells);
-        EXPECT_TRUE(st.isNotFound());
+        auto cell_result = result.value()->get(rowkey, &buf);
+        EXPECT_TRUE(cell_result.hasError());
+        EXPECT_EQ(StatusCode::kKVStoreNotFound, cell_result.error().code());
         EXPECT_TRUE(cells.empty());
     }
 }
