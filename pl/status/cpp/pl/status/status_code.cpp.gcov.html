@@ -31,18 +31,18 @@
             <td class="headerValue">_coverage_report.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryLo">0.0&nbsp;%</td>
+            <td class="headerCovTableEntryLo">33.3&nbsp;%</td>
             <td class="headerCovTableEntry">6</td>
-            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">2</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-04-19 17:25:42</td>
+            <td class="headerValue">2025-04-28 17:05:59</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntryLo">0.0&nbsp;%</td>
+            <td class="headerCovTableEntryLo">50.0&nbsp;%</td>
             <td class="headerCovTableEntry">2</td>
-            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">1</td>
           </tr>
                   <tr><td><img src="../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -78,10 +78,10 @@
 <span id="L16"><span class="lineNum">      16</span>              : </span>
 <span id="L17"><span class="lineNum">      17</span>              : #include &quot;status_code.h&quot;</span>
 <span id="L18"><span class="lineNum">      18</span>              : </span>
-<span id="L19"><span class="lineNum">      19</span>              : namespace pl::test::StatusCode {</span>
+<span id="L19"><span class="lineNum">      19</span>              : namespace pl::StatusCode {</span>
 <span id="L20"><span class="lineNum">      20</span>              : </span>
-<span id="L21"><span class="lineNum">      21</span> <span class="tlaUNC tlaBgUNC">           0 : std::string_view toString(status_code_t code) {</span></span>
-<span id="L22"><span class="lineNum">      22</span> <span class="tlaUNC">           0 :     switch (code) {</span></span>
+<span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC tlaBgGNC">           3 : std::string_view toString(status_code_t code) {</span></span>
+<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">           3 :     switch (code) {</span></span>
 <span id="L23"><span class="lineNum">      23</span>              : #define RAW_STATUS(name, ...) \</span>
 <span id="L24"><span class="lineNum">      24</span>              :     case k##name:             \</span>
 <span id="L25"><span class="lineNum">      25</span>              :         return #name;</span>
@@ -92,7 +92,7 @@
 <span id="L30"><span class="lineNum">      30</span>              : #undef RAW_STATUS</span>
 <span id="L31"><span class="lineNum">      31</span>              : #undef STATUS</span>
 <span id="L32"><span class="lineNum">      32</span>              :     };</span>
-<span id="L33"><span class="lineNum">      33</span> <span class="tlaUNC">           0 :     return &quot;UnknownStatusCode&quot;;</span></span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaUNC tlaBgUNC">           0 :     return &quot;UnknownStatusCode&quot;;</span></span>
 <span id="L34"><span class="lineNum">      34</span>              : }</span>
 <span id="L35"><span class="lineNum">      35</span>              : </span>
 <span id="L36"><span class="lineNum">      36</span> <span class="tlaUNC">           0 : StatusCodeType typeOf(status_code_t code) {</span></span>
@@ -110,7 +110,7 @@
 <span id="L48"><span class="lineNum">      48</span> <span class="tlaUNC">           0 :     return StatusCodeType::Invalid;</span></span>
 <span id="L49"><span class="lineNum">      49</span>              : }</span>
 <span id="L50"><span class="lineNum">      50</span>              : </span>
-<span id="L51"><span class="lineNum">      51</span>              : } // namespace pl::test::StatusCode</span>
+<span id="L51"><span class="lineNum">      51</span>              : } // namespace pl::StatusCode</span>
         </pre>
               </td>
             </tr>

@@ -31,18 +31,18 @@
             <td class="headerValue">_coverage_report.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">96.0&nbsp;%</td>
-            <td class="headerCovTableEntry">174</td>
-            <td class="headerCovTableEntry">167</td>
+            <td class="headerCovTableEntryHi">95.9&nbsp;%</td>
+            <td class="headerCovTableEntry">172</td>
+            <td class="headerCovTableEntry">165</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-04-19 17:25:42</td>
+            <td class="headerValue">2025-04-28 17:05:59</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntryLo">74.2&nbsp;%</td>
-            <td class="headerCovTableEntry">31</td>
-            <td class="headerCovTableEntry">23</td>
+            <td class="headerCovTableEntryMed">75.7&nbsp;%</td>
+            <td class="headerCovTableEntry">37</td>
+            <td class="headerCovTableEntry">28</td>
           </tr>
                   <tr><td><img src="../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -76,83 +76,83 @@
 <span id="L14"><span class="lineNum">      14</span>              : </span>
 <span id="L15"><span class="lineNum">      15</span>              : // Authors: liubang (it.liubang@gmail.com)</span>
 <span id="L16"><span class="lineNum">      16</span>              : </span>
-<span id="L17"><span class="lineNum">      17</span>              : #include &quot;cpp/pl/log/logger.h&quot;</span>
-<span id="L18"><span class="lineNum">      18</span>              : #include &quot;cpp/pl/random/random.h&quot;</span>
-<span id="L19"><span class="lineNum">      19</span>              : #include &quot;cpp/pl/sst/sstable.h&quot;</span>
-<span id="L20"><span class="lineNum">      20</span>              : #include &quot;cpp/pl/sst/sstable_builder.h&quot;</span>
-<span id="L21"><span class="lineNum">      21</span>              : </span>
-<span id="L22"><span class="lineNum">      22</span>              : #include &lt;cstdio&gt;</span>
-<span id="L23"><span class="lineNum">      23</span>              : #include &lt;gtest/gtest.h&gt;</span>
-<span id="L24"><span class="lineNum">      24</span>              : #include &lt;set&gt;</span>
-<span id="L25"><span class="lineNum">      25</span>              : </span>
-<span id="L26"><span class="lineNum">      26</span>              : namespace pl {</span>
-<span id="L27"><span class="lineNum">      27</span>              : </span>
-<span id="L28"><span class="lineNum">      28</span>              : struct CaseCell {</span>
-<span id="L29"><span class="lineNum">      29</span>              :     std::string rowkey;</span>
-<span id="L30"><span class="lineNum">      30</span>              :     std::string cf;</span>
-<span id="L31"><span class="lineNum">      31</span>              :     std::string col;</span>
-<span id="L32"><span class="lineNum">      32</span>              :     CellType type;</span>
-<span id="L33"><span class="lineNum">      33</span>              :     uint64_t ts;</span>
-<span id="L34"><span class="lineNum">      34</span>              :     std::string val;</span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC tlaBgGNC">      196608 :     [[nodiscard]] Cell to_cell() const { return {type, rowkey, cf, col, val, ts}; }</span></span>
-<span id="L36"><span class="lineNum">      36</span>              : };</span>
-<span id="L37"><span class="lineNum">      37</span>              : </span>
-<span id="L38"><span class="lineNum">      38</span>              : struct CaseCellComparator {</span>
-<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">     3574651 :     bool operator()(const CaseCell&amp; lhs, const CaseCell&amp; rhs) const {</span></span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">     3574651 :         if (lhs.rowkey != rhs.rowkey) {</span></span>
-<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">     2664654 :             return lhs.rowkey &lt; rhs.rowkey;</span></span>
-<span id="L42"><span class="lineNum">      42</span>              :         }</span>
-<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">      909997 :         if (lhs.cf != rhs.cf) {</span></span>
-<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">      242734 :             return lhs.cf &lt; rhs.cf;</span></span>
-<span id="L45"><span class="lineNum">      45</span>              :         }</span>
-<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">      667263 :         if (lhs.col != rhs.col) {</span></span>
-<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">      667263 :             return lhs.col &lt; rhs.col;</span></span>
-<span id="L48"><span class="lineNum">      48</span>              :         }</span>
-<span id="L49"><span class="lineNum">      49</span> <span class="tlaUNC tlaBgUNC">           0 :         if (lhs.ts != rhs.ts) {</span></span>
-<span id="L50"><span class="lineNum">      50</span> <span class="tlaUNC">           0 :             return lhs.ts &gt; rhs.ts;</span></span>
-<span id="L51"><span class="lineNum">      51</span>              :         }</span>
-<span id="L52"><span class="lineNum">      52</span> <span class="tlaUNC">           0 :         if (lhs.type != rhs.type) {</span></span>
-<span id="L53"><span class="lineNum">      53</span> <span class="tlaUNC">           0 :             return lhs.type &lt; rhs.type;</span></span>
-<span id="L54"><span class="lineNum">      54</span>              :         }</span>
-<span id="L55"><span class="lineNum">      55</span>              :         return false;</span>
-<span id="L56"><span class="lineNum">      56</span>              :     }</span>
-<span id="L57"><span class="lineNum">      57</span>              : };</span>
-<span id="L58"><span class="lineNum">      58</span>              : </span>
-<span id="L59"><span class="lineNum">      59</span>              : namespace {</span>
-<span id="L60"><span class="lineNum">      60</span>              : std::vector&lt;std::string&gt; sst_files = {&quot;/tmp/MAJOR/1.sst&quot;, &quot;/tmp/MAJOR/2.sst&quot;, &quot;/tmp/MAJOR/3.sst&quot;};</span>
-<span id="L61"><span class="lineNum">      61</span>              : std::vector&lt;std::set&lt;CaseCell, CaseCellComparator&gt;&gt; cellses =</span>
-<span id="L62"><span class="lineNum">      62</span>              :     std::vector&lt;std::set&lt;CaseCell, CaseCellComparator&gt;&gt;(3);</span>
-<span id="L63"><span class="lineNum">      63</span>              : } // namespace</span>
-<span id="L64"><span class="lineNum">      64</span>              : </span>
-<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC tlaBgGNC">           8 : class SSTableTest : public ::testing::Test {</span></span>
-<span id="L66"><span class="lineNum">      66</span> <span class="tlaGNC">           8 :     void SetUp() override {</span></span>
-<span id="L67"><span class="lineNum">      67</span> <span class="tlaGNC">           8 :         read_options = std::make_shared&lt;ReadOptions&gt;();</span></span>
-<span id="L68"><span class="lineNum">      68</span> <span class="tlaGNC">           8 :         std::filesystem::create_directory(&quot;/tmp/MAJOR&quot;);</span></span>
-<span id="L69"><span class="lineNum">      69</span> <span class="tlaGNC">           8 :     }</span></span>
-<span id="L70"><span class="lineNum">      70</span>              : </span>
-<span id="L71"><span class="lineNum">      71</span> <span class="tlaGNC">           8 :     void TearDown() override {}</span></span>
-<span id="L72"><span class="lineNum">      72</span>              : </span>
-<span id="L73"><span class="lineNum">      73</span>              : public:</span>
-<span id="L74"><span class="lineNum">      74</span> <span class="tlaGNC">           1 :     BuildOptionsRef new_build_options() {</span></span>
-<span id="L75"><span class="lineNum">      75</span>              :         auto build_options = std::make_shared&lt;BuildOptions&gt;();</span>
-<span id="L76"><span class="lineNum">      76</span> <span class="tlaGNC">           1 :         build_options-&gt;data_dir = &quot;/tmp&quot;;</span></span>
-<span id="L77"><span class="lineNum">      77</span> <span class="tlaGNC">           1 :         build_options-&gt;compression_type = CompressionType::NONE;</span></span>
-<span id="L78"><span class="lineNum">      78</span> <span class="tlaGNC">           1 :         build_options-&gt;sst_type = SSTType::MAJOR;</span></span>
-<span id="L79"><span class="lineNum">      79</span> <span class="tlaGNC">           1 :         build_options-&gt;sst_version = SSTVersion::V1;</span></span>
-<span id="L80"><span class="lineNum">      80</span> <span class="tlaGNC">           1 :         build_options-&gt;filter_type = FilterPolicyType::BLOOM_FILTER;</span></span>
-<span id="L81"><span class="lineNum">      81</span> <span class="tlaGNC">           1 :         return build_options;</span></span>
-<span id="L82"><span class="lineNum">      82</span>              :     }</span>
-<span id="L83"><span class="lineNum">      83</span>              : </span>
-<span id="L84"><span class="lineNum">      84</span> <span class="tlaGNC">           3 :     void build_sst(int idx, const BuildOptionsRef&amp; build_options) {</span></span>
-<span id="L85"><span class="lineNum">      85</span> <span class="tlaGNC">           3 :         auto sst_file = sst_files[idx];</span></span>
-<span id="L86"><span class="lineNum">      86</span>              :         auto&amp; cells = cellses[idx];</span>
-<span id="L87"><span class="lineNum">      87</span>              : </span>
-<span id="L88"><span class="lineNum">      88</span> <span class="tlaGNC">           3 :         auto sstable_builder = std::make_unique&lt;pl::SSTableBuilder&gt;(build_options);</span></span>
-<span id="L89"><span class="lineNum">      89</span> <span class="tlaGNC">           3 :         auto st = sstable_builder-&gt;open();</span></span>
-<span id="L90"><span class="lineNum">      90</span> <span class="tlaGNC">           3 :         if (!st.ok()) {</span></span>
-<span id="L91"><span class="lineNum">      91</span> <span class="tlaUNC tlaBgUNC">           0 :             LOG(ERROR) &lt;&lt; &quot;error: &quot; &lt;&lt; (int)st.code() &lt;&lt; &quot;, message: &quot; &lt;&lt; st.msg();</span></span>
+<span id="L17"><span class="lineNum">      17</span>              : #include &quot;cpp/pl/random/random.h&quot;</span>
+<span id="L18"><span class="lineNum">      18</span>              : #include &quot;cpp/pl/sst/sstable.h&quot;</span>
+<span id="L19"><span class="lineNum">      19</span>              : #include &quot;cpp/pl/sst/sstable_builder.h&quot;</span>
+<span id="L20"><span class="lineNum">      20</span>              : </span>
+<span id="L21"><span class="lineNum">      21</span>              : #include &lt;cstdio&gt;</span>
+<span id="L22"><span class="lineNum">      22</span>              : #include &lt;gtest/gtest.h&gt;</span>
+<span id="L23"><span class="lineNum">      23</span>              : #include &lt;set&gt;</span>
+<span id="L24"><span class="lineNum">      24</span>              : </span>
+<span id="L25"><span class="lineNum">      25</span>              : namespace pl {</span>
+<span id="L26"><span class="lineNum">      26</span>              : </span>
+<span id="L27"><span class="lineNum">      27</span>              : struct CaseCell {</span>
+<span id="L28"><span class="lineNum">      28</span>              :     std::string rowkey;</span>
+<span id="L29"><span class="lineNum">      29</span>              :     std::string cf;</span>
+<span id="L30"><span class="lineNum">      30</span>              :     std::string col;</span>
+<span id="L31"><span class="lineNum">      31</span>              :     CellType type;</span>
+<span id="L32"><span class="lineNum">      32</span>              :     uint64_t ts;</span>
+<span id="L33"><span class="lineNum">      33</span>              :     std::string val;</span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC tlaBgGNC">      196608 :     [[nodiscard]] Cell to_cell() const { return {type, rowkey, cf, col, val, ts}; }</span></span>
+<span id="L35"><span class="lineNum">      35</span>              : };</span>
+<span id="L36"><span class="lineNum">      36</span>              : </span>
+<span id="L37"><span class="lineNum">      37</span>              : struct CaseCellComparator {</span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">     3567153 :     bool operator()(const CaseCell&amp; lhs, const CaseCell&amp; rhs) const {</span></span>
+<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">     3567153 :         if (lhs.rowkey != rhs.rowkey) {</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">     2655928 :             return lhs.rowkey &lt; rhs.rowkey;</span></span>
+<span id="L41"><span class="lineNum">      41</span>              :         }</span>
+<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">      911225 :         if (lhs.cf != rhs.cf) {</span></span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">      243719 :             return lhs.cf &lt; rhs.cf;</span></span>
+<span id="L44"><span class="lineNum">      44</span>              :         }</span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">      667506 :         if (lhs.col != rhs.col) {</span></span>
+<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">      667506 :             return lhs.col &lt; rhs.col;</span></span>
+<span id="L47"><span class="lineNum">      47</span>              :         }</span>
+<span id="L48"><span class="lineNum">      48</span> <span class="tlaUNC tlaBgUNC">           0 :         if (lhs.ts != rhs.ts) {</span></span>
+<span id="L49"><span class="lineNum">      49</span> <span class="tlaUNC">           0 :             return lhs.ts &gt; rhs.ts;</span></span>
+<span id="L50"><span class="lineNum">      50</span>              :         }</span>
+<span id="L51"><span class="lineNum">      51</span> <span class="tlaUNC">           0 :         if (lhs.type != rhs.type) {</span></span>
+<span id="L52"><span class="lineNum">      52</span> <span class="tlaUNC">           0 :             return lhs.type &lt; rhs.type;</span></span>
+<span id="L53"><span class="lineNum">      53</span>              :         }</span>
+<span id="L54"><span class="lineNum">      54</span>              :         return false;</span>
+<span id="L55"><span class="lineNum">      55</span>              :     }</span>
+<span id="L56"><span class="lineNum">      56</span>              : };</span>
+<span id="L57"><span class="lineNum">      57</span>              : </span>
+<span id="L58"><span class="lineNum">      58</span>              : namespace {</span>
+<span id="L59"><span class="lineNum">      59</span>              : std::vector&lt;std::string&gt; sst_files = {&quot;/tmp/MAJOR/1.sst&quot;, &quot;/tmp/MAJOR/2.sst&quot;, &quot;/tmp/MAJOR/3.sst&quot;};</span>
+<span id="L60"><span class="lineNum">      60</span>              : std::vector&lt;std::set&lt;CaseCell, CaseCellComparator&gt;&gt; cellses =</span>
+<span id="L61"><span class="lineNum">      61</span>              :     std::vector&lt;std::set&lt;CaseCell, CaseCellComparator&gt;&gt;(3);</span>
+<span id="L62"><span class="lineNum">      62</span>              : } // namespace</span>
+<span id="L63"><span class="lineNum">      63</span>              : </span>
+<span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC tlaBgGNC">           8 : class SSTableTest : public ::testing::Test {</span></span>
+<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC">           8 :     void SetUp() override {</span></span>
+<span id="L66"><span class="lineNum">      66</span> <span class="tlaGNC">           8 :         read_options = std::make_shared&lt;ReadOptions&gt;();</span></span>
+<span id="L67"><span class="lineNum">      67</span> <span class="tlaGNC">           8 :         std::filesystem::create_directory(&quot;/tmp/MAJOR&quot;);</span></span>
+<span id="L68"><span class="lineNum">      68</span> <span class="tlaGNC">           8 :     }</span></span>
+<span id="L69"><span class="lineNum">      69</span>              : </span>
+<span id="L70"><span class="lineNum">      70</span> <span class="tlaGNC">           8 :     void TearDown() override {}</span></span>
+<span id="L71"><span class="lineNum">      71</span>              : </span>
+<span id="L72"><span class="lineNum">      72</span>              : public:</span>
+<span id="L73"><span class="lineNum">      73</span> <span class="tlaGNC">           1 :     BuildOptionsRef new_build_options() {</span></span>
+<span id="L74"><span class="lineNum">      74</span>              :         auto build_options = std::make_shared&lt;BuildOptions&gt;();</span>
+<span id="L75"><span class="lineNum">      75</span> <span class="tlaGNC">           1 :         build_options-&gt;data_dir = &quot;/tmp&quot;;</span></span>
+<span id="L76"><span class="lineNum">      76</span> <span class="tlaGNC">           1 :         build_options-&gt;compression_type = CompressionType::NONE;</span></span>
+<span id="L77"><span class="lineNum">      77</span> <span class="tlaGNC">           1 :         build_options-&gt;sst_type = SSTType::MAJOR;</span></span>
+<span id="L78"><span class="lineNum">      78</span> <span class="tlaGNC">           1 :         build_options-&gt;sst_version = SSTVersion::V1;</span></span>
+<span id="L79"><span class="lineNum">      79</span> <span class="tlaGNC">           1 :         build_options-&gt;filter_type = FilterPolicyType::BLOOM_FILTER;</span></span>
+<span id="L80"><span class="lineNum">      80</span> <span class="tlaGNC">           1 :         return build_options;</span></span>
+<span id="L81"><span class="lineNum">      81</span>              :     }</span>
+<span id="L82"><span class="lineNum">      82</span>              : </span>
+<span id="L83"><span class="lineNum">      83</span> <span class="tlaGNC">           3 :     void build_sst(int idx, const BuildOptionsRef&amp; build_options) {</span></span>
+<span id="L84"><span class="lineNum">      84</span> <span class="tlaGNC">           3 :         auto sst_file = sst_files[idx];</span></span>
+<span id="L85"><span class="lineNum">      85</span>              :         auto&amp; cells = cellses[idx];</span>
+<span id="L86"><span class="lineNum">      86</span>              : </span>
+<span id="L87"><span class="lineNum">      87</span> <span class="tlaGNC">           3 :         auto sstable_builder = std::make_unique&lt;pl::SSTableBuilder&gt;(build_options);</span></span>
+<span id="L88"><span class="lineNum">      88</span> <span class="tlaGNC">           3 :         auto result = sstable_builder-&gt;open();</span></span>
+<span id="L89"><span class="lineNum">      89</span> <span class="tlaGNC">           3 :         if (result.hasError()) {</span></span>
+<span id="L90"><span class="lineNum">      90</span> <span class="tlaUNC tlaBgUNC">           0 :             XLOGF(ERR, &quot;open table error: {}&quot;, result.error());</span></span>
+<span id="L91"><span class="lineNum">      91</span>              :             return;</span>
 <span id="L92"><span class="lineNum">      92</span>              :         }</span>
-<span id="L93"><span class="lineNum">      93</span> <span class="tlaGNC tlaBgGNC">           3 :         EXPECT_EQ(Code::ST_Ok, st.code());</span></span>
+<span id="L93"><span class="lineNum">      93</span> <span class="tlaGNC tlaBgGNC">           3 :         EXPECT_TRUE(result.hasValue());</span></span>
 <span id="L94"><span class="lineNum">      94</span> <span class="tlaGNC">       12291 :         for (int i = 0; i &lt; ROW_NUM; ++i) {</span></span>
 <span id="L95"><span class="lineNum">      95</span>              :             std::string rowkey =</span>
 <span id="L96"><span class="lineNum">      96</span> <span class="tlaGNC">       24576 :                 pl::random_string(ROWKEY_LEN + (i % ROWKEY_LEN)) + std::to_string(i);</span></span>
@@ -180,21 +180,21 @@
 <span id="L118"><span class="lineNum">     118</span>              :         }</span>
 <span id="L119"><span class="lineNum">     119</span>              : </span>
 <span id="L120"><span class="lineNum">     120</span> <span class="tlaGNC">      196611 :         for (const auto&amp; cell : cells) {</span></span>
-<span id="L121"><span class="lineNum">     121</span> <span class="tlaGNC">      196608 :             sstable_builder-&gt;add(cell.to_cell());</span></span>
+<span id="L121"><span class="lineNum">     121</span> <span class="tlaGNC">      393216 :             sstable_builder-&gt;add(cell.to_cell());</span></span>
 <span id="L122"><span class="lineNum">     122</span>              :         }</span>
-<span id="L123"><span class="lineNum">     123</span> <span class="tlaGNC">           3 :         auto status = sstable_builder-&gt;finish();</span></span>
-<span id="L124"><span class="lineNum">     124</span> <span class="tlaGNC">           3 :         EXPECT_TRUE(status.isOk());</span></span>
-<span id="L125"><span class="lineNum">     125</span> <span class="tlaGNC">           6 :     }</span></span>
+<span id="L123"><span class="lineNum">     123</span> <span class="tlaGNC">           6 :         result = sstable_builder-&gt;finish();</span></span>
+<span id="L124"><span class="lineNum">     124</span> <span class="tlaGNC">           3 :         EXPECT_TRUE(result.hasValue());</span></span>
+<span id="L125"><span class="lineNum">     125</span> <span class="tlaGNC">           3 :     }</span></span>
 <span id="L126"><span class="lineNum">     126</span>              : </span>
 <span id="L127"><span class="lineNum">     127</span> <span class="tlaGNC">           3 :     void seek_from_sst(int idx) {</span></span>
 <span id="L128"><span class="lineNum">     128</span> <span class="tlaGNC">           3 :         auto sst_file = sst_files[idx];</span></span>
 <span id="L129"><span class="lineNum">     129</span>              :         auto cells = cellses[idx];</span>
-<span id="L130"><span class="lineNum">     130</span> <span class="tlaGNC">           6 :         auto table = pl::SSTable::open(read_options, sst_file, &amp;st);</span></span>
-<span id="L131"><span class="lineNum">     131</span> <span class="tlaGNC">           3 :         EXPECT_TRUE(st.isOk());</span></span>
+<span id="L130"><span class="lineNum">     130</span> <span class="tlaGNC">           6 :         auto result = pl::SSTable::open(read_options, sst_file);</span></span>
+<span id="L131"><span class="lineNum">     131</span> <span class="tlaGNC">           3 :         EXPECT_TRUE(result.hasValue());</span></span>
 <span id="L132"><span class="lineNum">     132</span>              : </span>
-<span id="L133"><span class="lineNum">     133</span> <span class="tlaGNC">           3 :         check_table(table.get());</span></span>
+<span id="L133"><span class="lineNum">     133</span> <span class="tlaGNC">           3 :         check_table(result.value().get());</span></span>
 <span id="L134"><span class="lineNum">     134</span>              : </span>
-<span id="L135"><span class="lineNum">     135</span> <span class="tlaGNC">           3 :         auto it = table-&gt;iterator();</span></span>
+<span id="L135"><span class="lineNum">     135</span> <span class="tlaGNC">           3 :         auto it = result.value()-&gt;iterator();</span></span>
 <span id="L136"><span class="lineNum">     136</span> <span class="tlaGNC">      196611 :         for (const auto&amp; cell : cells) {</span></span>
 <span id="L137"><span class="lineNum">     137</span> <span class="tlaGNC">      196608 :             it-&gt;seek(cell.rowkey);</span></span>
 <span id="L138"><span class="lineNum">     138</span> <span class="tlaGNC">      196608 :             EXPECT_TRUE(it-&gt;valid());</span></span>
@@ -205,8 +205,8 @@
 <span id="L143"><span class="lineNum">     143</span> <span class="tlaGNC">           6 :     }</span></span>
 <span id="L144"><span class="lineNum">     144</span>              : </span>
 <span id="L145"><span class="lineNum">     145</span> <span class="tlaGNC">           6 :     void check_table(SSTable* table) {</span></span>
-<span id="L146"><span class="lineNum">     146</span> <span class="tlaGNC">           6 :         LOG(INFO) &lt;&lt; &quot;======== sst file meta: =========&quot;;</span></span>
-<span id="L147"><span class="lineNum">     147</span> <span class="tlaGNC">          12 :         LOG(INFO) &lt;&lt; table-&gt;fileMeta()-&gt;toString();</span></span>
+<span id="L146"><span class="lineNum">     146</span> <span class="tlaGNC">          18 :         XLOGF(INFO, &quot;======= sst file meta: =======&quot;);</span></span>
+<span id="L147"><span class="lineNum">     147</span> <span class="tlaGNC">          24 :         XLOGF(INFO, &quot;{}&quot;, table-&gt;fileMeta()-&gt;toString());</span></span>
 <span id="L148"><span class="lineNum">     148</span> <span class="tlaGNC">           6 :         EXPECT_EQ(SSTType::MAJOR, table-&gt;fileMeta()-&gt;sstType());</span></span>
 <span id="L149"><span class="lineNum">     149</span> <span class="tlaGNC">           6 :         EXPECT_EQ(SSTVersion::V1, table-&gt;fileMeta()-&gt;sstVersion());</span></span>
 <span id="L150"><span class="lineNum">     150</span> <span class="tlaGNC">           6 :         EXPECT_EQ(FilterPolicyType::BLOOM_FILTER, table-&gt;fileMeta()-&gt;filterPolicyType());</span></span>
@@ -223,158 +223,156 @@
 <span id="L161"><span class="lineNum">     161</span>              :     constexpr static const char* CF1 = &quot;cf1&quot;;</span>
 <span id="L162"><span class="lineNum">     162</span>              :     constexpr static const char* CF2 = &quot;cf2&quot;;</span>
 <span id="L163"><span class="lineNum">     163</span>              :     ReadOptionsRef read_options;</span>
-<span id="L164"><span class="lineNum">     164</span>              :     Status st;</span>
-<span id="L165"><span class="lineNum">     165</span>              : };</span>
-<span id="L166"><span class="lineNum">     166</span>              : </span>
-<span id="L167"><span class="lineNum">     167</span> <span class="tlaGNC">           3 : TEST_F(SSTableTest, init) {</span></span>
-<span id="L168"><span class="lineNum">     168</span> <span class="tlaGNC">           1 :     auto build_options = new_build_options();</span></span>
-<span id="L169"><span class="lineNum">     169</span> <span class="tlaGNC">           1 :     build_options-&gt;compression_type = CompressionType::NONE;</span></span>
-<span id="L170"><span class="lineNum">     170</span> <span class="tlaGNC">           1 :     build_options-&gt;sst_id = 1;</span></span>
-<span id="L171"><span class="lineNum">     171</span> <span class="tlaGNC">           1 :     build_sst(0, build_options);</span></span>
-<span id="L172"><span class="lineNum">     172</span> <span class="tlaGNC">           1 :     build_options-&gt;compression_type = CompressionType::SNAPPY;</span></span>
-<span id="L173"><span class="lineNum">     173</span> <span class="tlaGNC">           1 :     build_options-&gt;sst_id = 2;</span></span>
-<span id="L174"><span class="lineNum">     174</span> <span class="tlaGNC">           1 :     build_sst(1, build_options);</span></span>
-<span id="L175"><span class="lineNum">     175</span> <span class="tlaGNC">           1 :     build_options-&gt;compression_type = CompressionType::ZSTD;</span></span>
-<span id="L176"><span class="lineNum">     176</span> <span class="tlaGNC">           1 :     build_options-&gt;sst_id = 3;</span></span>
-<span id="L177"><span class="lineNum">     177</span> <span class="tlaGNC">           1 :     build_sst(2, build_options);</span></span>
-<span id="L178"><span class="lineNum">     178</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L179"><span class="lineNum">     179</span>              : </span>
-<span id="L180"><span class="lineNum">     180</span> <span class="tlaGNC">           3 : TEST_F(SSTableTest, table_without_compression) { seek_from_sst(0); }</span></span>
-<span id="L181"><span class="lineNum">     181</span>              : </span>
-<span id="L182"><span class="lineNum">     182</span> <span class="tlaGNC">           3 : TEST_F(SSTableTest, table_with_snappy_compression) { seek_from_sst(1); }</span></span>
-<span id="L183"><span class="lineNum">     183</span>              : </span>
-<span id="L184"><span class="lineNum">     184</span> <span class="tlaGNC">           3 : TEST_F(SSTableTest, table_with_zstd_compression) { seek_from_sst(2); }</span></span>
-<span id="L185"><span class="lineNum">     185</span>              : </span>
-<span id="L186"><span class="lineNum">     186</span> <span class="tlaGNC">           3 : TEST_F(SSTableTest, scan_all) {</span></span>
-<span id="L187"><span class="lineNum">     187</span> <span class="tlaGNC">           1 :     auto sst_file = sst_files[0];</span></span>
-<span id="L188"><span class="lineNum">     188</span>              :     auto cells = cellses[0];</span>
-<span id="L189"><span class="lineNum">     189</span> <span class="tlaGNC">           1 :     LOG(INFO) &lt;&lt; &quot;cells: &quot; &lt;&lt; cells.size();</span></span>
-<span id="L190"><span class="lineNum">     190</span>              : </span>
-<span id="L191"><span class="lineNum">     191</span> <span class="tlaGNC">           2 :     auto table = pl::SSTable::open(read_options, sst_file, &amp;st);</span></span>
-<span id="L192"><span class="lineNum">     192</span> <span class="tlaGNC">           1 :     EXPECT_TRUE(st.isOk());</span></span>
-<span id="L193"><span class="lineNum">     193</span>              : </span>
-<span id="L194"><span class="lineNum">     194</span> <span class="tlaGNC">           1 :     check_table(table.get());</span></span>
-<span id="L195"><span class="lineNum">     195</span>              : </span>
-<span id="L196"><span class="lineNum">     196</span>              :     auto citer = cells.begin();</span>
-<span id="L197"><span class="lineNum">     197</span> <span class="tlaGNC">           1 :     auto iter = table-&gt;iterator();</span></span>
-<span id="L198"><span class="lineNum">     198</span>              : </span>
-<span id="L199"><span class="lineNum">     199</span> <span class="tlaGNC">           1 :     iter-&gt;first();</span></span>
-<span id="L200"><span class="lineNum">     200</span> <span class="tlaGNC">       65537 :     while (iter-&gt;valid()) {</span></span>
-<span id="L201"><span class="lineNum">     201</span> <span class="tlaGNC">       65536 :         EXPECT_TRUE(citer != cells.end());</span></span>
-<span id="L202"><span class="lineNum">     202</span>              : </span>
-<span id="L203"><span class="lineNum">     203</span> <span class="tlaGNC">       65536 :         auto cell = iter-&gt;cell();</span></span>
-<span id="L204"><span class="lineNum">     204</span> <span class="tlaGNC">       65536 :         auto cexp = *citer;</span></span>
-<span id="L205"><span class="lineNum">     205</span>              : </span>
-<span id="L206"><span class="lineNum">     206</span> <span class="tlaGNC">       65536 :         EXPECT_EQ(cexp.rowkey, cell-&gt;rowkey());</span></span>
-<span id="L207"><span class="lineNum">     207</span> <span class="tlaGNC">       65536 :         EXPECT_EQ(cexp.cf, cell-&gt;cf());</span></span>
-<span id="L208"><span class="lineNum">     208</span> <span class="tlaGNC">       65536 :         EXPECT_EQ(cexp.col, cell-&gt;col());</span></span>
-<span id="L209"><span class="lineNum">     209</span> <span class="tlaGNC">       65536 :         EXPECT_EQ(cexp.type, cell-&gt;cellType());</span></span>
-<span id="L210"><span class="lineNum">     210</span> <span class="tlaGNC">       65536 :         EXPECT_EQ(cexp.ts, cell-&gt;timestamp());</span></span>
-<span id="L211"><span class="lineNum">     211</span>              : </span>
-<span id="L212"><span class="lineNum">     212</span> <span class="tlaGNC">       65536 :         iter-&gt;next();</span></span>
-<span id="L213"><span class="lineNum">     213</span>              :         ++citer;</span>
-<span id="L214"><span class="lineNum">     214</span> <span class="tlaGNC">       65536 :     }</span></span>
-<span id="L215"><span class="lineNum">     215</span> <span class="tlaGNC">           1 :     EXPECT_TRUE(citer == cells.end());</span></span>
-<span id="L216"><span class="lineNum">     216</span> <span class="tlaGNC">           2 : }</span></span>
-<span id="L217"><span class="lineNum">     217</span>              : </span>
-<span id="L218"><span class="lineNum">     218</span> <span class="tlaGNC">           3 : TEST_F(SSTableTest, range_scan) {</span></span>
-<span id="L219"><span class="lineNum">     219</span> <span class="tlaGNC">           1 :     auto sst_file = sst_files[0];</span></span>
-<span id="L220"><span class="lineNum">     220</span>              :     auto cells = cellses[0];</span>
-<span id="L221"><span class="lineNum">     221</span>              : </span>
-<span id="L222"><span class="lineNum">     222</span> <span class="tlaGNC">           2 :     auto table = pl::SSTable::open(read_options, sst_file, &amp;st);</span></span>
-<span id="L223"><span class="lineNum">     223</span> <span class="tlaGNC">           1 :     EXPECT_TRUE(st.isOk());</span></span>
-<span id="L224"><span class="lineNum">     224</span> <span class="tlaGNC">           1 :     check_table(table.get());</span></span>
-<span id="L225"><span class="lineNum">     225</span>              : </span>
-<span id="L226"><span class="lineNum">     226</span>              :     // 随机取一个范围的起始位置</span>
-<span id="L227"><span class="lineNum">     227</span> <span class="tlaGNC">           1 :     std::srand(std::time(nullptr));</span></span>
-<span id="L228"><span class="lineNum">     228</span> <span class="tlaGNC">           1 :     std::random_device rd;</span></span>
-<span id="L229"><span class="lineNum">     229</span> <span class="tlaGNC">           1 :     std::mt19937 gen(rd());</span></span>
-<span id="L230"><span class="lineNum">     230</span>              :     std::uniform_int_distribution&lt;&gt; dis(0, ROW_NUM);</span>
-<span id="L231"><span class="lineNum">     231</span>              : </span>
-<span id="L232"><span class="lineNum">     232</span> <span class="tlaGNC">           2 :     auto iter = table-&gt;iterator();</span></span>
-<span id="L233"><span class="lineNum">     233</span> <span class="tlaGNC">           4 :     for (int i = 0; i &lt; 3; ++i) {</span></span>
-<span id="L234"><span class="lineNum">     234</span>              :         auto citer = cells.begin();</span>
-<span id="L235"><span class="lineNum">     235</span> <span class="tlaGNC">           3 :         int j = dis(gen) * 2 * COL_NUM;</span></span>
-<span id="L236"><span class="lineNum">     236</span> <span class="tlaGNC">       41699 :         for (int m = 0; m &lt; j; ++m) {</span></span>
-<span id="L237"><span class="lineNum">     237</span>              :             ++citer;</span>
-<span id="L238"><span class="lineNum">     238</span>              :         }</span>
-<span id="L239"><span class="lineNum">     239</span>              :         std::string_view search_key = citer-&gt;rowkey;</span>
-<span id="L240"><span class="lineNum">     240</span> <span class="tlaGNC">           6 :         LOG(INFO) &lt;&lt; &quot;scan rowkey &gt;= &quot; &lt;&lt; search_key;</span></span>
-<span id="L241"><span class="lineNum">     241</span> <span class="tlaGNC">           3 :         iter-&gt;seek(search_key);</span></span>
-<span id="L242"><span class="lineNum">     242</span> <span class="tlaGNC">      154915 :         while (iter-&gt;valid()) {</span></span>
-<span id="L243"><span class="lineNum">     243</span> <span class="tlaGNC">      154912 :             EXPECT_TRUE(citer != cells.end());</span></span>
-<span id="L244"><span class="lineNum">     244</span> <span class="tlaGNC">      154912 :             auto cell = iter-&gt;cell();</span></span>
-<span id="L245"><span class="lineNum">     245</span> <span class="tlaGNC">      154912 :             auto cexp = *citer;</span></span>
-<span id="L246"><span class="lineNum">     246</span> <span class="tlaGNC">      154912 :             EXPECT_EQ(cexp.rowkey, cell-&gt;rowkey());</span></span>
-<span id="L247"><span class="lineNum">     247</span> <span class="tlaGNC">      154912 :             EXPECT_EQ(cexp.cf, cell-&gt;cf());</span></span>
-<span id="L248"><span class="lineNum">     248</span> <span class="tlaGNC">      154912 :             EXPECT_EQ(cexp.col, cell-&gt;col());</span></span>
-<span id="L249"><span class="lineNum">     249</span> <span class="tlaGNC">      154912 :             EXPECT_EQ(cexp.type, cell-&gt;cellType());</span></span>
-<span id="L250"><span class="lineNum">     250</span> <span class="tlaGNC">      154912 :             EXPECT_EQ(cexp.ts, cell-&gt;timestamp());</span></span>
-<span id="L251"><span class="lineNum">     251</span>              : </span>
-<span id="L252"><span class="lineNum">     252</span> <span class="tlaGNC">      154912 :             iter-&gt;next();</span></span>
-<span id="L253"><span class="lineNum">     253</span>              :             ++citer;</span>
-<span id="L254"><span class="lineNum">     254</span> <span class="tlaGNC">      154912 :         }</span></span>
-<span id="L255"><span class="lineNum">     255</span>              :     }</span>
-<span id="L256"><span class="lineNum">     256</span> <span class="tlaGNC">           2 : }</span></span>
-<span id="L257"><span class="lineNum">     257</span>              : </span>
-<span id="L258"><span class="lineNum">     258</span> <span class="tlaGNC">           3 : TEST_F(SSTableTest, query) {</span></span>
-<span id="L259"><span class="lineNum">     259</span> <span class="tlaGNC">           1 :     auto sst_file = sst_files[0];</span></span>
-<span id="L260"><span class="lineNum">     260</span>              :     auto cells = cellses[0];</span>
-<span id="L261"><span class="lineNum">     261</span> <span class="tlaGNC">           1 :     LOG(INFO) &lt;&lt; &quot;cells: &quot; &lt;&lt; cells.size();</span></span>
-<span id="L262"><span class="lineNum">     262</span>              : </span>
-<span id="L263"><span class="lineNum">     263</span> <span class="tlaGNC">           2 :     auto table = pl::SSTable::open(read_options, sst_file, &amp;st);</span></span>
-<span id="L264"><span class="lineNum">     264</span> <span class="tlaGNC">           1 :     EXPECT_TRUE(st.isOk());</span></span>
-<span id="L265"><span class="lineNum">     265</span>              : </span>
-<span id="L266"><span class="lineNum">     266</span> <span class="tlaGNC">           1 :     check_table(table.get());</span></span>
-<span id="L267"><span class="lineNum">     267</span>              : </span>
-<span id="L268"><span class="lineNum">     268</span>              :     // 整行query</span>
-<span id="L269"><span class="lineNum">     269</span> <span class="tlaGNC">           1 :     std::srand(std::time(nullptr));</span></span>
-<span id="L270"><span class="lineNum">     270</span> <span class="tlaGNC">           1 :     std::random_device rd;</span></span>
-<span id="L271"><span class="lineNum">     271</span> <span class="tlaGNC">           1 :     std::mt19937 gen(rd());</span></span>
-<span id="L272"><span class="lineNum">     272</span>              :     std::uniform_int_distribution&lt;&gt; dis(0, ROW_NUM);</span>
-<span id="L273"><span class="lineNum">     273</span> <span class="tlaGNC">           1 :     Arena buf;</span></span>
-<span id="L274"><span class="lineNum">     274</span> <span class="tlaGNC">         334 :     for (int i = 0; i &lt; 333; ++i) {</span></span>
-<span id="L275"><span class="lineNum">     275</span> <span class="tlaGNC">         333 :         int idx = dis(gen) * 2 * COL_NUM;</span></span>
-<span id="L276"><span class="lineNum">     276</span>              :         auto citer = cells.begin();</span>
-<span id="L277"><span class="lineNum">     277</span> <span class="tlaGNC">    11103373 :         for (int j = 0; j &lt; idx; ++j) {</span></span>
-<span id="L278"><span class="lineNum">     278</span>              :             ++citer;</span>
-<span id="L279"><span class="lineNum">     279</span>              :         }</span>
-<span id="L280"><span class="lineNum">     280</span>              : </span>
-<span id="L281"><span class="lineNum">     281</span> <span class="tlaGNC">         333 :         std::string search_key = citer-&gt;rowkey;</span></span>
-<span id="L282"><span class="lineNum">     282</span>              : </span>
-<span id="L283"><span class="lineNum">     283</span> <span class="tlaGNC">         333 :         CellVecRef row;</span></span>
-<span id="L284"><span class="lineNum">     284</span> <span class="tlaGNC">         333 :         auto st = table-&gt;get(search_key, &amp;buf, &amp;row);</span></span>
-<span id="L285"><span class="lineNum">     285</span> <span class="tlaGNC">         333 :         EXPECT_TRUE(st.isOk());</span></span>
-<span id="L286"><span class="lineNum">     286</span> <span class="tlaGNC">         333 :         EXPECT_EQ(16, row.size());</span></span>
-<span id="L287"><span class="lineNum">     287</span>              : </span>
-<span id="L288"><span class="lineNum">     288</span> <span class="tlaGNC">        5661 :         for (auto&amp; cell : row) {</span></span>
-<span id="L289"><span class="lineNum">     289</span> <span class="tlaGNC">        5328 :             auto cexp = *citer;</span></span>
-<span id="L290"><span class="lineNum">     290</span> <span class="tlaGNC">        5328 :             EXPECT_EQ(cexp.rowkey, cell-&gt;rowkey());</span></span>
-<span id="L291"><span class="lineNum">     291</span> <span class="tlaGNC">        5328 :             EXPECT_EQ(cexp.cf, cell-&gt;cf());</span></span>
-<span id="L292"><span class="lineNum">     292</span> <span class="tlaGNC">        5328 :             EXPECT_EQ(cexp.col, cell-&gt;col());</span></span>
-<span id="L293"><span class="lineNum">     293</span> <span class="tlaGNC">        5328 :             EXPECT_EQ(cexp.ts, cell-&gt;timestamp());</span></span>
-<span id="L294"><span class="lineNum">     294</span> <span class="tlaGNC">        5328 :             EXPECT_EQ(cexp.type, cell-&gt;cellType());</span></span>
-<span id="L295"><span class="lineNum">     295</span>              :             ++citer;</span>
-<span id="L296"><span class="lineNum">     296</span> <span class="tlaGNC">        5328 :         }</span></span>
-<span id="L297"><span class="lineNum">     297</span> <span class="tlaGNC">         333 :     }</span></span>
-<span id="L298"><span class="lineNum">     298</span>              : </span>
-<span id="L299"><span class="lineNum">     299</span>              :     // 空query</span>
-<span id="L300"><span class="lineNum">     300</span> <span class="tlaGNC">         667 :     for (int i = 0; i &lt; 666; ++i) {</span></span>
-<span id="L301"><span class="lineNum">     301</span> <span class="tlaGNC">         666 :         auto rowkey = pl::random_string(ROWKEY_LEN * 3);</span></span>
-<span id="L302"><span class="lineNum">     302</span> <span class="tlaGNC">         666 :         CellVecRef cells;</span></span>
-<span id="L303"><span class="lineNum">     303</span> <span class="tlaGNC">         666 :         auto st = table-&gt;get(rowkey, &amp;buf, &amp;cells);</span></span>
-<span id="L304"><span class="lineNum">     304</span> <span class="tlaGNC">         666 :         EXPECT_TRUE(st.isNotFound());</span></span>
-<span id="L305"><span class="lineNum">     305</span> <span class="tlaGNC">         666 :         EXPECT_TRUE(cells.empty());</span></span>
-<span id="L306"><span class="lineNum">     306</span> <span class="tlaGNC">         666 :     }</span></span>
-<span id="L307"><span class="lineNum">     307</span> <span class="tlaGNC">           2 : }</span></span>
-<span id="L308"><span class="lineNum">     308</span>              : </span>
-<span id="L309"><span class="lineNum">     309</span> <span class="tlaGNC">           3 : TEST_F(SSTableTest, cleanup) {</span></span>
-<span id="L310"><span class="lineNum">     310</span> <span class="tlaGNC">           4 :     for (const auto&amp; sst_file : sst_files) {</span></span>
-<span id="L311"><span class="lineNum">     311</span> <span class="tlaGNC">           3 :         std::remove(sst_file.c_str());</span></span>
-<span id="L312"><span class="lineNum">     312</span>              :     }</span>
-<span id="L313"><span class="lineNum">     313</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L314"><span class="lineNum">     314</span>              : </span>
-<span id="L315"><span class="lineNum">     315</span>              : } // namespace pl</span>
+<span id="L164"><span class="lineNum">     164</span>              : };</span>
+<span id="L165"><span class="lineNum">     165</span>              : </span>
+<span id="L166"><span class="lineNum">     166</span> <span class="tlaGNC">           3 : TEST_F(SSTableTest, init) {</span></span>
+<span id="L167"><span class="lineNum">     167</span> <span class="tlaGNC">           1 :     auto build_options = new_build_options();</span></span>
+<span id="L168"><span class="lineNum">     168</span> <span class="tlaGNC">           1 :     build_options-&gt;compression_type = CompressionType::NONE;</span></span>
+<span id="L169"><span class="lineNum">     169</span> <span class="tlaGNC">           1 :     build_options-&gt;sst_id = 1;</span></span>
+<span id="L170"><span class="lineNum">     170</span> <span class="tlaGNC">           1 :     build_sst(0, build_options);</span></span>
+<span id="L171"><span class="lineNum">     171</span> <span class="tlaGNC">           1 :     build_options-&gt;compression_type = CompressionType::SNAPPY;</span></span>
+<span id="L172"><span class="lineNum">     172</span> <span class="tlaGNC">           1 :     build_options-&gt;sst_id = 2;</span></span>
+<span id="L173"><span class="lineNum">     173</span> <span class="tlaGNC">           1 :     build_sst(1, build_options);</span></span>
+<span id="L174"><span class="lineNum">     174</span> <span class="tlaGNC">           1 :     build_options-&gt;compression_type = CompressionType::ZSTD;</span></span>
+<span id="L175"><span class="lineNum">     175</span> <span class="tlaGNC">           1 :     build_options-&gt;sst_id = 3;</span></span>
+<span id="L176"><span class="lineNum">     176</span> <span class="tlaGNC">           1 :     build_sst(2, build_options);</span></span>
+<span id="L177"><span class="lineNum">     177</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L178"><span class="lineNum">     178</span>              : </span>
+<span id="L179"><span class="lineNum">     179</span> <span class="tlaGNC">           3 : TEST_F(SSTableTest, table_without_compression) { seek_from_sst(0); }</span></span>
+<span id="L180"><span class="lineNum">     180</span>              : </span>
+<span id="L181"><span class="lineNum">     181</span> <span class="tlaGNC">           3 : TEST_F(SSTableTest, table_with_snappy_compression) { seek_from_sst(1); }</span></span>
+<span id="L182"><span class="lineNum">     182</span>              : </span>
+<span id="L183"><span class="lineNum">     183</span> <span class="tlaGNC">           3 : TEST_F(SSTableTest, table_with_zstd_compression) { seek_from_sst(2); }</span></span>
+<span id="L184"><span class="lineNum">     184</span>              : </span>
+<span id="L185"><span class="lineNum">     185</span> <span class="tlaGNC">           3 : TEST_F(SSTableTest, scan_all) {</span></span>
+<span id="L186"><span class="lineNum">     186</span> <span class="tlaGNC">           1 :     auto sst_file = sst_files[0];</span></span>
+<span id="L187"><span class="lineNum">     187</span>              :     auto cells = cellses[0];</span>
+<span id="L188"><span class="lineNum">     188</span> <span class="tlaGNC">           3 :     XLOGF(INFO, &quot;cells: {}&quot;, cells.size());</span></span>
+<span id="L189"><span class="lineNum">     189</span>              : </span>
+<span id="L190"><span class="lineNum">     190</span> <span class="tlaGNC">           2 :     auto result = pl::SSTable::open(read_options, sst_file);</span></span>
+<span id="L191"><span class="lineNum">     191</span> <span class="tlaGNC">           1 :     EXPECT_TRUE(result.hasValue());</span></span>
+<span id="L192"><span class="lineNum">     192</span>              : </span>
+<span id="L193"><span class="lineNum">     193</span> <span class="tlaGNC">           1 :     check_table(result.value().get());</span></span>
+<span id="L194"><span class="lineNum">     194</span>              : </span>
+<span id="L195"><span class="lineNum">     195</span>              :     auto citer = cells.begin();</span>
+<span id="L196"><span class="lineNum">     196</span> <span class="tlaGNC">           1 :     auto iter = result.value()-&gt;iterator();</span></span>
+<span id="L197"><span class="lineNum">     197</span>              : </span>
+<span id="L198"><span class="lineNum">     198</span> <span class="tlaGNC">           1 :     iter-&gt;first();</span></span>
+<span id="L199"><span class="lineNum">     199</span> <span class="tlaGNC">       65537 :     while (iter-&gt;valid()) {</span></span>
+<span id="L200"><span class="lineNum">     200</span> <span class="tlaGNC">       65536 :         EXPECT_TRUE(citer != cells.end());</span></span>
+<span id="L201"><span class="lineNum">     201</span>              : </span>
+<span id="L202"><span class="lineNum">     202</span> <span class="tlaGNC">       65536 :         auto cell = iter-&gt;cell();</span></span>
+<span id="L203"><span class="lineNum">     203</span> <span class="tlaGNC">       65536 :         auto cexp = *citer;</span></span>
+<span id="L204"><span class="lineNum">     204</span>              : </span>
+<span id="L205"><span class="lineNum">     205</span> <span class="tlaGNC">       65536 :         EXPECT_EQ(cexp.rowkey, cell-&gt;rowkey());</span></span>
+<span id="L206"><span class="lineNum">     206</span> <span class="tlaGNC">       65536 :         EXPECT_EQ(cexp.cf, cell-&gt;cf());</span></span>
+<span id="L207"><span class="lineNum">     207</span> <span class="tlaGNC">       65536 :         EXPECT_EQ(cexp.col, cell-&gt;col());</span></span>
+<span id="L208"><span class="lineNum">     208</span> <span class="tlaGNC">       65536 :         EXPECT_EQ(cexp.type, cell-&gt;cellType());</span></span>
+<span id="L209"><span class="lineNum">     209</span> <span class="tlaGNC">       65536 :         EXPECT_EQ(cexp.ts, cell-&gt;timestamp());</span></span>
+<span id="L210"><span class="lineNum">     210</span>              : </span>
+<span id="L211"><span class="lineNum">     211</span> <span class="tlaGNC">       65536 :         iter-&gt;next();</span></span>
+<span id="L212"><span class="lineNum">     212</span>              :         ++citer;</span>
+<span id="L213"><span class="lineNum">     213</span> <span class="tlaGNC">       65536 :     }</span></span>
+<span id="L214"><span class="lineNum">     214</span> <span class="tlaGNC">           1 :     EXPECT_TRUE(citer == cells.end());</span></span>
+<span id="L215"><span class="lineNum">     215</span> <span class="tlaGNC">           2 : }</span></span>
+<span id="L216"><span class="lineNum">     216</span>              : </span>
+<span id="L217"><span class="lineNum">     217</span> <span class="tlaGNC">           3 : TEST_F(SSTableTest, range_scan) {</span></span>
+<span id="L218"><span class="lineNum">     218</span> <span class="tlaGNC">           1 :     auto sst_file = sst_files[0];</span></span>
+<span id="L219"><span class="lineNum">     219</span>              :     auto cells = cellses[0];</span>
+<span id="L220"><span class="lineNum">     220</span>              : </span>
+<span id="L221"><span class="lineNum">     221</span> <span class="tlaGNC">           2 :     auto result = pl::SSTable::open(read_options, sst_file);</span></span>
+<span id="L222"><span class="lineNum">     222</span> <span class="tlaGNC">           1 :     EXPECT_TRUE(result.hasValue());</span></span>
+<span id="L223"><span class="lineNum">     223</span> <span class="tlaGNC">           1 :     check_table(result.value().get());</span></span>
+<span id="L224"><span class="lineNum">     224</span>              : </span>
+<span id="L225"><span class="lineNum">     225</span>              :     // 随机取一个范围的起始位置</span>
+<span id="L226"><span class="lineNum">     226</span> <span class="tlaGNC">           1 :     std::srand(std::time(nullptr));</span></span>
+<span id="L227"><span class="lineNum">     227</span> <span class="tlaGNC">           1 :     std::random_device rd;</span></span>
+<span id="L228"><span class="lineNum">     228</span> <span class="tlaGNC">           1 :     std::mt19937 gen(rd());</span></span>
+<span id="L229"><span class="lineNum">     229</span>              :     std::uniform_int_distribution&lt;&gt; dis(0, ROW_NUM);</span>
+<span id="L230"><span class="lineNum">     230</span>              : </span>
+<span id="L231"><span class="lineNum">     231</span> <span class="tlaGNC">           2 :     auto iter = result.value()-&gt;iterator();</span></span>
+<span id="L232"><span class="lineNum">     232</span> <span class="tlaGNC">           4 :     for (int i = 0; i &lt; 3; ++i) {</span></span>
+<span id="L233"><span class="lineNum">     233</span>              :         auto citer = cells.begin();</span>
+<span id="L234"><span class="lineNum">     234</span> <span class="tlaGNC">           3 :         int j = dis(gen) * 2 * COL_NUM;</span></span>
+<span id="L235"><span class="lineNum">     235</span> <span class="tlaGNC">      108707 :         for (int m = 0; m &lt; j; ++m) {</span></span>
+<span id="L236"><span class="lineNum">     236</span>              :             ++citer;</span>
+<span id="L237"><span class="lineNum">     237</span>              :         }</span>
+<span id="L238"><span class="lineNum">     238</span> <span class="tlaGNC">           3 :         std::string_view search_key = citer-&gt;rowkey;</span></span>
+<span id="L239"><span class="lineNum">     239</span> <span class="tlaGNC">           9 :         XLOGF(INFO, &quot;scan rowkey &gt;= {}&quot;, search_key);</span></span>
+<span id="L240"><span class="lineNum">     240</span> <span class="tlaGNC">           3 :         iter-&gt;seek(search_key);</span></span>
+<span id="L241"><span class="lineNum">     241</span> <span class="tlaGNC">       87907 :         while (iter-&gt;valid()) {</span></span>
+<span id="L242"><span class="lineNum">     242</span> <span class="tlaGNC">       87904 :             EXPECT_TRUE(citer != cells.end());</span></span>
+<span id="L243"><span class="lineNum">     243</span> <span class="tlaGNC">       87904 :             auto cell = iter-&gt;cell();</span></span>
+<span id="L244"><span class="lineNum">     244</span> <span class="tlaGNC">       87904 :             auto cexp = *citer;</span></span>
+<span id="L245"><span class="lineNum">     245</span> <span class="tlaGNC">       87904 :             EXPECT_EQ(cexp.rowkey, cell-&gt;rowkey());</span></span>
+<span id="L246"><span class="lineNum">     246</span> <span class="tlaGNC">       87904 :             EXPECT_EQ(cexp.cf, cell-&gt;cf());</span></span>
+<span id="L247"><span class="lineNum">     247</span> <span class="tlaGNC">       87904 :             EXPECT_EQ(cexp.col, cell-&gt;col());</span></span>
+<span id="L248"><span class="lineNum">     248</span> <span class="tlaGNC">       87904 :             EXPECT_EQ(cexp.type, cell-&gt;cellType());</span></span>
+<span id="L249"><span class="lineNum">     249</span> <span class="tlaGNC">       87904 :             EXPECT_EQ(cexp.ts, cell-&gt;timestamp());</span></span>
+<span id="L250"><span class="lineNum">     250</span>              : </span>
+<span id="L251"><span class="lineNum">     251</span> <span class="tlaGNC">       87904 :             iter-&gt;next();</span></span>
+<span id="L252"><span class="lineNum">     252</span>              :             ++citer;</span>
+<span id="L253"><span class="lineNum">     253</span> <span class="tlaGNC">       87904 :         }</span></span>
+<span id="L254"><span class="lineNum">     254</span>              :     }</span>
+<span id="L255"><span class="lineNum">     255</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L256"><span class="lineNum">     256</span>              : </span>
+<span id="L257"><span class="lineNum">     257</span> <span class="tlaGNC">           3 : TEST_F(SSTableTest, query) {</span></span>
+<span id="L258"><span class="lineNum">     258</span> <span class="tlaGNC">           1 :     auto sst_file = sst_files[0];</span></span>
+<span id="L259"><span class="lineNum">     259</span>              :     auto cells = cellses[0];</span>
+<span id="L260"><span class="lineNum">     260</span> <span class="tlaGNC">           3 :     XLOGF(INFO, &quot;cells: {}&quot;, cells.size());</span></span>
+<span id="L261"><span class="lineNum">     261</span>              : </span>
+<span id="L262"><span class="lineNum">     262</span> <span class="tlaGNC">           2 :     auto result = pl::SSTable::open(read_options, sst_file);</span></span>
+<span id="L263"><span class="lineNum">     263</span> <span class="tlaGNC">           1 :     EXPECT_TRUE(result.hasValue());</span></span>
+<span id="L264"><span class="lineNum">     264</span>              : </span>
+<span id="L265"><span class="lineNum">     265</span> <span class="tlaGNC">           1 :     check_table(result.value().get());</span></span>
+<span id="L266"><span class="lineNum">     266</span>              : </span>
+<span id="L267"><span class="lineNum">     267</span>              :     // 整行query</span>
+<span id="L268"><span class="lineNum">     268</span> <span class="tlaGNC">           1 :     std::srand(std::time(nullptr));</span></span>
+<span id="L269"><span class="lineNum">     269</span> <span class="tlaGNC">           1 :     std::random_device rd;</span></span>
+<span id="L270"><span class="lineNum">     270</span> <span class="tlaGNC">           1 :     std::mt19937 gen(rd());</span></span>
+<span id="L271"><span class="lineNum">     271</span>              :     std::uniform_int_distribution&lt;&gt; dis(0, ROW_NUM);</span>
+<span id="L272"><span class="lineNum">     272</span> <span class="tlaGNC">           1 :     Arena buf;</span></span>
+<span id="L273"><span class="lineNum">     273</span> <span class="tlaGNC">         334 :     for (int i = 0; i &lt; 333; ++i) {</span></span>
+<span id="L274"><span class="lineNum">     274</span> <span class="tlaGNC">         333 :         int idx = dis(gen) * 2 * COL_NUM;</span></span>
+<span id="L275"><span class="lineNum">     275</span>              :         auto citer = cells.begin();</span>
+<span id="L276"><span class="lineNum">     276</span> <span class="tlaGNC">    11131821 :         for (int j = 0; j &lt; idx; ++j) {</span></span>
+<span id="L277"><span class="lineNum">     277</span>              :             ++citer;</span>
+<span id="L278"><span class="lineNum">     278</span>              :         }</span>
+<span id="L279"><span class="lineNum">     279</span>              : </span>
+<span id="L280"><span class="lineNum">     280</span> <span class="tlaGNC">         333 :         std::string search_key = citer-&gt;rowkey;</span></span>
+<span id="L281"><span class="lineNum">     281</span> <span class="tlaGNC">         333 :         auto cell_result = result.value()-&gt;get(search_key, &amp;buf);</span></span>
+<span id="L282"><span class="lineNum">     282</span> <span class="tlaGNC">         333 :         EXPECT_TRUE(cell_result.hasValue());</span></span>
+<span id="L283"><span class="lineNum">     283</span> <span class="tlaGNC">         666 :         CellVecRef row = cell_result.value();</span></span>
+<span id="L284"><span class="lineNum">     284</span> <span class="tlaGNC">         333 :         EXPECT_EQ(16, row.size());</span></span>
+<span id="L285"><span class="lineNum">     285</span>              : </span>
+<span id="L286"><span class="lineNum">     286</span> <span class="tlaGNC">        5661 :         for (auto&amp; cell : row) {</span></span>
+<span id="L287"><span class="lineNum">     287</span> <span class="tlaGNC">        5328 :             auto cexp = *citer;</span></span>
+<span id="L288"><span class="lineNum">     288</span> <span class="tlaGNC">        5328 :             EXPECT_EQ(cexp.rowkey, cell-&gt;rowkey());</span></span>
+<span id="L289"><span class="lineNum">     289</span> <span class="tlaGNC">        5328 :             EXPECT_EQ(cexp.cf, cell-&gt;cf());</span></span>
+<span id="L290"><span class="lineNum">     290</span> <span class="tlaGNC">        5328 :             EXPECT_EQ(cexp.col, cell-&gt;col());</span></span>
+<span id="L291"><span class="lineNum">     291</span> <span class="tlaGNC">        5328 :             EXPECT_EQ(cexp.ts, cell-&gt;timestamp());</span></span>
+<span id="L292"><span class="lineNum">     292</span> <span class="tlaGNC">        5328 :             EXPECT_EQ(cexp.type, cell-&gt;cellType());</span></span>
+<span id="L293"><span class="lineNum">     293</span>              :             ++citer;</span>
+<span id="L294"><span class="lineNum">     294</span> <span class="tlaGNC">        5328 :         }</span></span>
+<span id="L295"><span class="lineNum">     295</span>              :     }</span>
+<span id="L296"><span class="lineNum">     296</span>              : </span>
+<span id="L297"><span class="lineNum">     297</span>              :     // 空query</span>
+<span id="L298"><span class="lineNum">     298</span> <span class="tlaGNC">         667 :     for (int i = 0; i &lt; 666; ++i) {</span></span>
+<span id="L299"><span class="lineNum">     299</span>              :         cells.clear();</span>
+<span id="L300"><span class="lineNum">     300</span> <span class="tlaGNC">         666 :         auto rowkey = pl::random_string(ROWKEY_LEN * 3);</span></span>
+<span id="L301"><span class="lineNum">     301</span> <span class="tlaGNC">         666 :         auto cell_result = result.value()-&gt;get(rowkey, &amp;buf);</span></span>
+<span id="L302"><span class="lineNum">     302</span> <span class="tlaGNC">         666 :         EXPECT_TRUE(cell_result.hasError());</span></span>
+<span id="L303"><span class="lineNum">     303</span> <span class="tlaGNC">         666 :         EXPECT_EQ(StatusCode::kKVStoreNotFound, cell_result.error().code());</span></span>
+<span id="L304"><span class="lineNum">     304</span>              :     }</span>
+<span id="L305"><span class="lineNum">     305</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L306"><span class="lineNum">     306</span>              : </span>
+<span id="L307"><span class="lineNum">     307</span> <span class="tlaGNC">           3 : TEST_F(SSTableTest, cleanup) {</span></span>
+<span id="L308"><span class="lineNum">     308</span> <span class="tlaGNC">           4 :     for (const auto&amp; sst_file : sst_files) {</span></span>
+<span id="L309"><span class="lineNum">     309</span> <span class="tlaGNC">           3 :         std::remove(sst_file.c_str());</span></span>
+<span id="L310"><span class="lineNum">     310</span>              :     }</span>
+<span id="L311"><span class="lineNum">     311</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L312"><span class="lineNum">     312</span>              : </span>
+<span id="L313"><span class="lineNum">     313</span>              : } // namespace pl</span>
         </pre>
               </td>
             </tr>

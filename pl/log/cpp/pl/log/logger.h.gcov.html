@@ -37,12 +37,12 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-04-19 17:25:42</td>
+            <td class="headerValue">2025-04-28 17:05:59</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntryMed">85.7&nbsp;%</td>
-            <td class="headerCovTableEntry">7</td>
-            <td class="headerCovTableEntry">6</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
+            <td class="headerCovTableEntry">5</td>
+            <td class="headerCovTableEntry">5</td>
           </tr>
                   <tr><td><img src="../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -98,14 +98,14 @@
 <span id="L36"><span class="lineNum">      36</span>              :     };</span>
 <span id="L37"><span class="lineNum">      37</span>              :     // clang-format on</span>
 <span id="L38"><span class="lineNum">      38</span>              : </span>
-<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC tlaBgGNC">        1054 :     static const char* logLevel2String(LogLevel log_level) {</span></span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">        1054 :         switch (log_level) {</span></span>
+<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC tlaBgGNC">        1037 :     static const char* logLevel2String(LogLevel log_level) {</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">        1037 :         switch (log_level) {</span></span>
 <span id="L41"><span class="lineNum">      41</span>              :         case LogLevel::PL_TRACE:</span>
 <span id="L42"><span class="lineNum">      42</span>              :             return &quot;TRACE&quot;;</span>
 <span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">        1026 :         case LogLevel::PL_DEBUG:</span></span>
 <span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">        1026 :             return &quot;DEBUG&quot;;</span></span>
-<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">          24 :         case LogLevel::PL_INFO:</span></span>
-<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">          24 :             return &quot;INFO&quot;;</span></span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">           7 :         case LogLevel::PL_INFO:</span></span>
+<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">           7 :             return &quot;INFO&quot;;</span></span>
 <span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">           1 :         case LogLevel::PL_WARN:</span></span>
 <span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">           1 :             return &quot;WARN&quot;;</span></span>
 <span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">           1 :         case LogLevel::PL_ERROR:</span></span>
@@ -118,13 +118,13 @@
 <span id="L56"><span class="lineNum">      56</span>              : </span>
 <span id="L57"><span class="lineNum">      57</span>              :     class SourceFile {</span>
 <span id="L58"><span class="lineNum">      58</span>              :     public:</span>
-<span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC tlaBgGNC">        1054 :         template &lt;int N&gt; constexpr SourceFile(const char (&amp;source)[N]) {</span></span>
-<span id="L60"><span class="lineNum">      60</span> <span class="tlaGNC">        1054 :             source_ = source;</span></span>
-<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">        1054 :             auto pos = source_.find_last_of('/');</span></span>
-<span id="L62"><span class="lineNum">      62</span> <span class="tlaGNC">        1054 :             if (pos != std::string_view::npos) {</span></span>
-<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">        1054 :                 source_ = source_.substr(pos + 1);</span></span>
+<span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC tlaBgGNC">        1037 :         template &lt;int N&gt; constexpr SourceFile(const char (&amp;source)[N]) {</span></span>
+<span id="L60"><span class="lineNum">      60</span> <span class="tlaGNC">        1037 :             source_ = source;</span></span>
+<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">        1037 :             auto pos = source_.find_last_of('/');</span></span>
+<span id="L62"><span class="lineNum">      62</span> <span class="tlaGNC">        1037 :             if (pos != std::string_view::npos) {</span></span>
+<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">        1037 :                 source_ = source_.substr(pos + 1);</span></span>
 <span id="L64"><span class="lineNum">      64</span>              :             }</span>
-<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC">        1054 :         }</span></span>
+<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC">        1037 :         }</span></span>
 <span id="L66"><span class="lineNum">      66</span>              : </span>
 <span id="L67"><span class="lineNum">      67</span>              :         explicit SourceFile(const char* source) {</span>
 <span id="L68"><span class="lineNum">      68</span>              :             source_ = source;</span>
@@ -134,7 +134,7 @@
 <span id="L72"><span class="lineNum">      72</span>              :             }</span>
 <span id="L73"><span class="lineNum">      73</span>              :         }</span>
 <span id="L74"><span class="lineNum">      74</span>              : </span>
-<span id="L75"><span class="lineNum">      75</span> <span class="tlaGNC">        1054 :         [[nodiscard]] constexpr std::string_view source() const { return source_; }</span></span>
+<span id="L75"><span class="lineNum">      75</span> <span class="tlaGNC">        1037 :         [[nodiscard]] constexpr std::string_view source() const { return source_; }</span></span>
 <span id="L76"><span class="lineNum">      76</span>              : </span>
 <span id="L77"><span class="lineNum">      77</span>              :     private:</span>
 <span id="L78"><span class="lineNum">      78</span>              :         std::string_view source_;</span>
@@ -150,11 +150,11 @@
 <span id="L88"><span class="lineNum">      88</span>              :     class Impl {</span>
 <span id="L89"><span class="lineNum">      89</span>              :     private:</span>
 <span id="L90"><span class="lineNum">      90</span>              :         Impl(const Logger::SourceFile&amp; source_file, int line, Logger::LogLevel log_level)</span>
-<span id="L91"><span class="lineNum">      91</span> <span class="tlaGNC">        1054 :             : time_(std::chrono::system_clock::now()),</span></span>
-<span id="L92"><span class="lineNum">      92</span> <span class="tlaGNC">        1054 :               source_file_(source_file),</span></span>
-<span id="L93"><span class="lineNum">      93</span> <span class="tlaGNC">        1054 :               line_(line),</span></span>
-<span id="L94"><span class="lineNum">      94</span> <span class="tlaGNC">        1054 :               log_level_(log_level) {</span></span>
-<span id="L95"><span class="lineNum">      95</span> <span class="tlaGNC">        1054 :             startSession();</span></span>
+<span id="L91"><span class="lineNum">      91</span> <span class="tlaGNC">        1037 :             : time_(std::chrono::system_clock::now()),</span></span>
+<span id="L92"><span class="lineNum">      92</span> <span class="tlaGNC">        1037 :               source_file_(source_file),</span></span>
+<span id="L93"><span class="lineNum">      93</span> <span class="tlaGNC">        1037 :               line_(line),</span></span>
+<span id="L94"><span class="lineNum">      94</span> <span class="tlaGNC">        1037 :               log_level_(log_level) {</span></span>
+<span id="L95"><span class="lineNum">      95</span> <span class="tlaGNC">        1037 :             startSession();</span></span>
 <span id="L96"><span class="lineNum">      96</span>              :         }</span>
 <span id="L97"><span class="lineNum">      97</span>              : </span>
 <span id="L98"><span class="lineNum">      98</span>              :         void startSession();</span>
