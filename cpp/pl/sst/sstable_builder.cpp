@@ -16,7 +16,6 @@
 
 #include "cpp/pl/sst/sstable_builder.h"
 #include "cpp/pl/fs/posix_fs.h"
-#include "cpp/pl/log/logger.h"
 #include "cpp/pl/sst/encoding.h"
 
 #include "snappy.h"
@@ -29,7 +28,7 @@ namespace pl {
 
 SSTableBuilder::SSTableBuilder(BuildOptionsRef options) : options_(std::move(options)) {}
 
-Status SSTableBuilder::open() {
+Result<Void> SSTableBuilder::open() {
     // TODO(liubang): check option
     data_block_ = std::make_unique<BlockBuilder>(options_);
     index_block_ = std::make_unique<BlockBuilder>(options_);
@@ -42,16 +41,13 @@ Status SSTableBuilder::open() {
                     .string();
 
     writer_ = std::make_unique<PosixFileSystem>();
-    auto st = writer_->open(sst_file_, O_TRUNC | O_WRONLY | O_CREAT, &fd_);
-    return st;
+    auto result = writer_->open(sst_file_, O_TRUNC | O_WRONLY | O_CREAT, &fd_);
+    RETURN_AND_LOG_ON_ERROR(result);
+    RETURN_VOID;
 }
 
-void SSTableBuilder::add(const Cell& cell) {
+Result<Void> SSTableBuilder::add(const Cell& cell) {
     assert(!closed_);
-    if (!ok()) {
-        LOG_ERROR << "failed to add kv, error " << status_.msg();
-        return;
-    }
     if (cell_nums_ == 0) {
         first_key_.assign(cell.rowkey());
     }
@@ -80,7 +76,6 @@ void SSTableBuilder::add(const Cell& cell) {
         std::string handle_encoding;
         pending_handler_.encodeTo(&handle_encoding);
         // 记录上一个block的最后一个key和上一个block的结束位置
-        // index_block_->add(last_key_, handle_encoding);
         index_block_->add(Cell(CellType::CT_NONE, last_key_, "", "", handle_encoding, 0));
         pending_index_entry_ = false;
     }
@@ -99,27 +94,28 @@ void SSTableBuilder::add(const Cell& cell) {
 
     data_block_->add(cell);
     cell_nums_++;
+
+    RETURN_VOID;
 }
 
-void SSTableBuilder::flush() {
+Result<Void> SSTableBuilder::flush() {
     assert(!closed_);
-    if (!ok() || data_block_->empty()) {
-        return;
+    if (data_block_->empty()) {
+        RETURN_VOID;
     }
     // 写入block
-    writeBlock(data_block_.get(), &pending_handler_);
-    if (ok()) {
-        // 复位标记，下次开始一个新的block
-        pending_index_entry_ = true;
-        // status_ = writer_->fsync();
-    }
+    auto result = writeBlock(data_block_.get(), &pending_handler_);
+    RETURN_AND_LOG_ON_ERROR(result);
+    // 复位标记，下次开始一个新的block
+    pending_index_entry_ = true;
+    // status_ = writer_->fsync();
     if (filter_block_ != nullptr) {
         filter_block_->startBlock(offset_);
     }
+    RETURN_VOID;
 }
 
-void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
-    assert(ok());
+Result<Void> SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
     auto raw = block->finish();
     std::string compressed;
     switch (options_->compression_type) {
@@ -157,8 +153,9 @@ void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
     default:
         break;
     }
-    writeBlockRaw(raw, options_->compression_type, handle);
+    auto result = writeBlockRaw(raw, options_->compression_type, handle);
     block->reset();
+    return result;
 }
 
 /**
@@ -207,15 +204,14 @@ void SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle) {
  *
  *
  */
-void SSTableBuilder::writeBlockRaw(std::string_view content,
-                                   CompressionType type,
-                                   BlockHandle* handle) {
+Result<Void> SSTableBuilder::writeBlockRaw(std::string_view content,
+                                           CompressionType type,
+                                           BlockHandle* handle) {
     handle->setOffset(offset_);
     handle->setSize(content.size());
-    status_ = writer_->append(fd_, 0, content);
-    if (!ok()) {
-        assert(false);
-    }
+    auto result = writer_->append(fd_, 0, content);
+    RETURN_AND_LOG_ON_ERROR(result);
+
     // crc
     char trailer[BLOCK_TRAILER_LEN];
     trailer[0] = static_cast<const char>(type);
@@ -223,12 +219,12 @@ void SSTableBuilder::writeBlockRaw(std::string_view content,
     std::string encode_crc;
     encodeInt<uint32_t>(&encode_crc, crc);
     memcpy(trailer + 1, encode_crc.data(), encode_crc.size());
-    status_ = writer_->append(fd_, 0, std::string_view(trailer, BLOCK_TRAILER_LEN));
-    if (!ok()) {
-        assert(false);
-    }
+    result = writer_->append(fd_, 0, std::string_view(trailer, BLOCK_TRAILER_LEN));
+    RETURN_AND_LOG_ON_ERROR(result);
+
     // 更新下一个block的offset
     offset_ += content.size() + BLOCK_TRAILER_LEN;
+    RETURN_VOID;
 }
 
 /**
@@ -246,7 +242,7 @@ void SSTableBuilder::writeBlockRaw(std::string_view content,
  *   |       footer       |
  *   +--------------------+
  */
-Status SSTableBuilder::finish() {
+Result<Void> SSTableBuilder::finish() {
     assert(!closed_);
     flush();
     closed_ = true;
@@ -254,17 +250,11 @@ Status SSTableBuilder::finish() {
     BlockHandle index_block_handle;
     BlockHandle file_meta_handle;
 
-    if (!ok()) {
-        return status();
-    }
-
     // 写filter block
     if (filter_block_ != nullptr) {
-        writeBlockRaw(filter_block_->finish(), CompressionType::NONE, &filter_block_handle);
-    }
-
-    if (!ok()) {
-        return status();
+        auto result =
+            writeBlockRaw(filter_block_->finish(), CompressionType::NONE, &filter_block_handle);
+        RETURN_AND_LOG_ON_ERROR(result);
     }
 
     // 写入index block
@@ -277,11 +267,8 @@ Status SSTableBuilder::finish() {
         index_block_->add(Cell(CellType::CT_NONE, last_key_, "", "", handle_encoding, 0));
         pending_index_entry_ = false;
     }
-    writeBlock(index_block_.get(), &index_block_handle);
-
-    if (!ok()) {
-        return status();
-    }
+    auto result = writeBlock(index_block_.get(), &index_block_handle);
+    RETURN_AND_LOG_ON_ERROR(result);
 
     // 写入file meta，使用block格式有crc校验
     FileMeta file_meta;
@@ -299,7 +286,8 @@ Status SSTableBuilder::finish() {
     file_meta.setSSTId(options_->sst_id);
     std::string file_meta_content;
     file_meta.encodeTo(&file_meta_content);
-    writeBlockRaw(file_meta_content, CompressionType::NONE, &file_meta_handle);
+    result = writeBlockRaw(file_meta_content, CompressionType::NONE, &file_meta_handle);
+    RETURN_AND_LOG_ON_ERROR(result);
 
     // 写入footer
     Footer footer;
@@ -308,13 +296,12 @@ Status SSTableBuilder::finish() {
     footer.setIndexHandle(index_block_handle);
     std::string footer_content;
     footer.encodeTo(&footer_content);
-    status_ = writer_->append(fd_, 0, footer_content);
-    if (ok()) {
-        offset_ += footer_content.size();
-    }
-    writer_->fsync(fd_, 0);
-
-    return status();
+    result = writer_->append(fd_, 0, footer_content);
+    RETURN_AND_LOG_ON_ERROR(result);
+    offset_ += footer_content.size();
+    result = writer_->fsync(fd_, 0);
+    RETURN_AND_LOG_ON_ERROR(result);
+    RETURN_VOID;
 }
 
 } // namespace pl

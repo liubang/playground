@@ -21,23 +21,23 @@
 
 namespace pl {
 
-Status SnappyCompressionAdapter::compress(std::string_view input, std::string* output) {
+Result<Void> SnappyCompressionAdapter::compress(std::string_view input, std::string* output) {
     // TODO(liubang): implement
-    return Status::NewOk();
+    RETURN_VOID;
 }
 
-Status SnappyCompressionAdapter::uncompress(std::string_view input, std::string* output) {
+Result<Void> SnappyCompressionAdapter::uncompress(std::string_view input, std::string* output) {
     size_t ulen;
     if (!snappy::GetUncompressedLength(input.data(), input.size(), &ulen)) {
-        return Status::NewCorruption("invalid data");
+        return makeError(StatusCode::kDataCorruption);
     }
     auto ubuf = std::make_unique<char[]>(ulen);
     if (!snappy::RawUncompress(input.data(), input.size(), ubuf.get())) {
-        return Status::NewCorruption("invalid data");
+        return makeError(StatusCode::kDataCorruption);
     }
     output->assign(ubuf.release(), ulen);
 
-    return Status::NewOk();
+    RETURN_VOID;
 }
 
 } // namespace pl
