@@ -16,7 +16,7 @@
 // Created: 2025/03/21 20:29
 #pragma once
 
-#include "cpp/pl/status/status.h"
+#include "cpp/pl/status/result.h"
 #include "cpp/pl/utility/utility.h"
 
 namespace pl {
@@ -25,36 +25,36 @@ class CompressionAdapter : public DisableCopyAndMove {
 public:
     virtual ~CompressionAdapter() = default;
 
-    virtual Status compress(std::string_view input, std::string* output) = 0;
+    virtual Result<Void> compress(std::string_view input, std::string* output) = 0;
 
-    virtual Status uncompress(std::string_view input, std::string* output) = 0;
+    virtual Result<Void> uncompress(std::string_view input, std::string* output) = 0;
 };
 
 class SnappyCompressionAdapter : public CompressionAdapter {
 public:
     ~SnappyCompressionAdapter() override = default;
 
-    Status compress(std::string_view input, std::string* output) override;
+    Result<Void> compress(std::string_view input, std::string* output) override;
 
-    Status uncompress(std::string_view input, std::string* output) override;
+    Result<Void> uncompress(std::string_view input, std::string* output) override;
 };
 
 class ZstdCompressionAdapter : public CompressionAdapter {
 public:
     ~ZstdCompressionAdapter() override = default;
 
-    Status compress(std::string_view input, std::string* output) override;
+    Result<Void> compress(std::string_view input, std::string* output) override;
 
-    Status uncompress(std::string_view input, std::string* output) override;
+    Result<Void> uncompress(std::string_view input, std::string* output) override;
 };
 
 class IsalCompressionAdapter : public CompressionAdapter {
 public:
     ~IsalCompressionAdapter() override = default;
 
-    Status compress(std::string_view input, std::string* output) override;
+    Result<Void> compress(std::string_view input, std::string* output) override;
 
-    Status uncompress(std::string_view input, std::string* output) override;
+    Result<Void> uncompress(std::string_view input, std::string* output) override;
 };
 
 } // namespace pl
