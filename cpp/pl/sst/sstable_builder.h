@@ -22,7 +22,7 @@
 #include "cpp/pl/sst/filter_block_builder.h"
 #include "cpp/pl/sst/options.h"
 #include "cpp/pl/sst/sstable_format.h"
-#include "cpp/pl/status/status.h"
+#include "cpp/pl/status/result.h"
 #include "cpp/pl/utility/utility.h"
 
 namespace pl {
@@ -33,25 +33,22 @@ public:
 
     ~SSTableBuilder() = default;
 
-    Status open();
+    Result<Void> open();
 
-    void add(const Cell& cell);
+    Result<Void> add(const Cell& cell);
 
-    void flush();
+    Result<Void> flush();
 
-    Status finish();
+    Result<Void> finish();
 
     uint64_t entriesCount();
 
     uint64_t fileSize();
 
-    [[nodiscard]] Status status() const { return status_; }
-
-    [[nodiscard]] bool ok() const { return status().isOk(); }
-
 private:
-    void writeBlock(BlockBuilder* block, BlockHandle* handle);
-    void writeBlockRaw(std::string_view content, CompressionType type, BlockHandle* handle);
+    Result<Void> writeBlock(BlockBuilder* block, BlockHandle* handle);
+
+    Result<Void> writeBlockRaw(std::string_view content, CompressionType type, BlockHandle* handle);
 
 private:
     const BuildOptionsRef options_;
@@ -69,7 +66,6 @@ private:
     uint64_t row_num_{0};
     uint64_t min_timestamp_{UINT64_MAX};
     uint64_t max_timestamp_{0};
-    Status status_;
     bool pending_index_entry_{false};
     bool closed_{false};
 };

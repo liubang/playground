@@ -17,7 +17,7 @@
 #pragma once
 
 #include "cpp/pl/sst/cell.h"
-#include "cpp/pl/status/result.h"
+#include "cpp/pl/status/status.h"
 
 #include <memory>
 
@@ -40,7 +40,7 @@ public:
 
     virtual void seek(std::string_view target) = 0;
 
-    [[nodiscard]] virtual Result<Void> status() const = 0;
+    [[nodiscard]] virtual Status status() const = 0;
 
     [[nodiscard]] virtual bool valid() const = 0;
 
