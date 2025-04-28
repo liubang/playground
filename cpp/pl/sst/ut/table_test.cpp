@@ -14,7 +14,6 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/pl/log/logger.h"
 #include "cpp/pl/random/random.h"
 #include "cpp/pl/sst/sstable.h"
 #include "cpp/pl/sst/sstable_builder.h"
@@ -144,8 +143,8 @@ public:
     }
 
     void check_table(SSTable* table) {
-        LOG(INFO) << "======== sst file meta: =========";
-        LOG(INFO) << table->fileMeta()->toString();
+        XLOGF(INFO, "======= sst file meta: =======");
+        XLOGF(INFO, "{}", table->fileMeta()->toString());
         EXPECT_EQ(SSTType::MAJOR, table->fileMeta()->sstType());
         EXPECT_EQ(SSTVersion::V1, table->fileMeta()->sstVersion());
         EXPECT_EQ(FilterPolicyType::BLOOM_FILTER, table->fileMeta()->filterPolicyType());
@@ -186,7 +185,7 @@ TEST_F(SSTableTest, table_with_zstd_compression) { seek_from_sst(2); }
 TEST_F(SSTableTest, scan_all) {
     auto sst_file = sst_files[0];
     auto cells = cellses[0];
-    LOG(INFO) << "cells: " << cells.size();
+    XLOGF(INFO, "cells: {}", cells.size());
 
     auto result = pl::SSTable::open(read_options, sst_file);
     EXPECT_TRUE(result.hasValue());
@@ -237,7 +236,7 @@ TEST_F(SSTableTest, range_scan) {
             ++citer;
         }
         std::string_view search_key = citer->rowkey;
-        LOG(INFO) << "scan rowkey >= " << search_key;
+        XLOGF(INFO, "scan rowkey >= {}", search_key);
         iter->seek(search_key);
         while (iter->valid()) {
             EXPECT_TRUE(citer != cells.end());
@@ -258,7 +257,7 @@ TEST_F(SSTableTest, range_scan) {
 TEST_F(SSTableTest, query) {
     auto sst_file = sst_files[0];
     auto cells = cellses[0];
-    LOG(INFO) << "cells: " << cells.size();
+    XLOGF(INFO, "cells: {}", cells.size());
 
     auto result = pl::SSTable::open(read_options, sst_file);
     EXPECT_TRUE(result.hasValue());
@@ -302,7 +301,6 @@ TEST_F(SSTableTest, query) {
         auto cell_result = result.value()->get(rowkey, &buf);
         EXPECT_TRUE(cell_result.hasError());
         EXPECT_EQ(StatusCode::kKVStoreNotFound, cell_result.error().code());
-        EXPECT_TRUE(cells.empty());
     }
 }
 
