@@ -137,7 +137,7 @@ private:
             const char* key_ptr = decodeEntry(data_ + offset, data_ + restarts_, &shared,
                                               &non_shared, &rowkey_size, &value_size);
             if (key_ptr == nullptr || (shared != 0) || (rowkey_size >= non_shared)) {
-                status_ = Status::NewCorruption("invalid entry in block");
+                status_ = Status(StatusCode::kDataCorruption, "invalid entry in block");
                 current_ = restarts_;
                 current_restart_ = num_restarts_;
                 cell_key_.clear();
@@ -186,14 +186,14 @@ private:
         if (p >= limit) {
             current_ = restarts_;
             current_restart_ = num_restarts_;
-            status_ = Status::NewNotFound();
+            status_ = Status(StatusCode::kKVStoreNotFound);
             return false;
         }
         uint32_t shared, non_shared, rowkey_size, value_size;
         p = decodeEntry(p, limit, &shared, &non_shared, &rowkey_size, &value_size);
         // 第一次Seek的时候，key 为空，那么shared必定为0
         if (p == nullptr || cell_key_.size() < shared) {
-            status_ = Status::NewCorruption("invalid block");
+            status_ = Status(StatusCode::kDataCorruption, "invalid block");
             return false;
         }
         cell_key_.resize(shared);
@@ -244,7 +244,7 @@ private:
     std::string cell_key_;                    // 当前游标处的cellkey
     CellRef cell_{nullptr};                   // 当前的cell
     std::string_view val_;                    // 当前游标处的value
-    Status status_;
+    Status status_{StatusCode::kOK};
 };
 
 IteratorPtr Block::iterator(const ComparatorRef& comparator) {

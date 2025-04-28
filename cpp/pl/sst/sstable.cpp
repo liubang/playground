@@ -16,7 +16,6 @@
 
 #include "cpp/pl/sst/sstable.h"
 #include "cpp/pl/fs/posix_fs.h"
-#include "cpp/pl/log/logger.h"
 #include "cpp/pl/scope/scope.h"
 #include "cpp/pl/sst/sstable_iterator.h"
 
@@ -120,19 +119,19 @@ Result<Void> SSTable::readFilter(const Footer& footer) {
 IteratorPtr SSTable::blockReader(std::string_view index_value) {
     BlockHandle handle;
     auto s = handle.decodeFrom(index_value);
-    if (!s.isOk()) {
-        LOG_ERROR << "decode block index error: " << s.msg();
+    if (s.hasError()) {
+        XLOGF(ERR, "decode block index error: {}", s.error());
         return nullptr;
     }
 
-    BlockContents contents;
-    s = BlockReader::readBlock(reader_, fd_, handle, &contents);
+    auto block_content_result = BlockReader::readBlock(reader_, fd_, handle);
 
-    if (!s.isOk()) {
-        LOG_ERROR << "read block error: " << s.msg();
+    if (block_content_result.hasError()) {
+        XLOGF(ERR, "read block error: {}", block_content_result.error());
         return nullptr;
     }
 
+    BlockContents contents = block_content_result.value();
     auto block = std::make_shared<Block>(contents);
     auto iter = block->iterator(options_->comparator);
 
@@ -140,48 +139,43 @@ IteratorPtr SSTable::blockReader(std::string_view index_value) {
 }
 
 // 将来会废弃这个接口，在上层统一实现query和scan操作语义
-Status SSTable::get(std::string_view rowkey, Arena* buf, CellVecRef* cells) {
+Result<CellVecRef> SSTable::get(std::string_view rowkey, Arena* buf) {
     auto iiter = index_block_->iterator(options_->comparator);
     iiter->seek(rowkey);
     if (!iiter->valid()) {
-        return iiter->status();
+        return makeError(iiter->status());
     }
-    Status st = Status::NewOk();
     auto idx_cell = iiter->cell();
     assert(idx_cell != nullptr);
     auto idx_handle = idx_cell->value();
     if (filter_ != nullptr) {
         BlockHandle handle;
-        st = handle.decodeFrom(idx_handle);
-        if (!st.isOk()) {
-            return st;
-        }
+        auto result = handle.decodeFrom(idx_handle);
+        RETURN_AND_LOG_ON_ERROR(result);
+
         if (!filter_->keyMayMatch(handle.offset(), rowkey)) {
-            st = Status::NewNotFound();
-            // LOG_DEBUG << "key not found, rowkey:" << rowkey;
-            return st;
+            return makeError(StatusCode::kKVStoreNotFound);
         }
     }
     auto data_iter = blockReader(idx_handle);
     if (data_iter == nullptr) {
-        st = Status::NewCorruption("invalid data block");
-        return st;
+        return makeError(StatusCode::kDataCorruption, "invalid data block");
     }
     data_iter->seek(rowkey);
     if (!data_iter->valid()) {
-        st = Status::NewNotFound();
-        return st;
+        return makeError(StatusCode::kKVStoreNotFound);
     }
 
     // first cell
     auto cell = data_iter->cell();
     if (options_->comparator->compare(cell->rowkey(), rowkey) != 0) {
-        st = Status::NewNotFound();
-        return st;
+        return makeError(StatusCode::kKVStoreNotFound);
     }
 
+    CellVecRef cells;
+
     // should copy
-    cells->emplace_back(cell->clone(buf));
+    cells.emplace_back(cell->clone(buf));
     data_iter->next();
 
     // get all cells of the row
@@ -191,11 +185,11 @@ Status SSTable::get(std::string_view rowkey, Arena* buf, CellVecRef* cells) {
         if (options_->comparator->compare(cell->rowkey(), rowkey) != 0) {
             break;
         }
-        cells->emplace_back(cell->clone(buf));
+        cells.emplace_back(cell->clone(buf));
         data_iter->next();
     }
 
-    return st;
+    return std::move(cells);
 }
 
 IteratorPtr SSTable::iterator() {
