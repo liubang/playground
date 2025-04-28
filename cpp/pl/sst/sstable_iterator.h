@@ -57,7 +57,7 @@ private:
     void backwardSkipEmptyData();
 
 private:
-    Status status_;
+    Status status_{StatusCode::kOK};
     IteratorPtr index_iter_;
     IteratorPtr data_iter_;
     FilterBlockReaderRef filter_;
