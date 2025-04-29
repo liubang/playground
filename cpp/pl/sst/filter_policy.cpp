@@ -93,7 +93,7 @@ int BlockedBloomFilterBuilder::get_num_probes(std::size_t num_hashes,
 }
 
 std::size_t BlockedBloomFilterBuilder::calculate_space(std::size_t num_hashes) {
-    std::size_t raw_target_len =
+    auto raw_target_len =
         static_cast<std::size_t>((uint64_t{num_hashes} * millibits_per_key_ + 7999) / 8000);
     if (raw_target_len >= std::size_t{0xffffffc0}) {
         raw_target_len = std::size_t{0xffffffc0};
