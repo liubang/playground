@@ -81,7 +81,6 @@ public:
     }
 
     void build_sst(int idx, const BuildOptionsRef& build_options) {
-        auto sst_file = sst_files[idx];
         auto& cells = cellses[idx];
 
         auto sstable_builder = std::make_unique<pl::SSTableBuilder>(build_options);
@@ -125,7 +124,7 @@ public:
     }
 
     void seek_from_sst(int idx) {
-        auto sst_file = sst_files[idx];
+        auto& sst_file = sst_files[idx];
         auto cells = cellses[idx];
         auto result = pl::SSTable::open(read_options, sst_file);
         EXPECT_TRUE(result.hasValue());
@@ -183,8 +182,8 @@ TEST_F(SSTableTest, table_with_snappy_compression) { seek_from_sst(1); }
 TEST_F(SSTableTest, table_with_zstd_compression) { seek_from_sst(2); }
 
 TEST_F(SSTableTest, scan_all) {
-    auto sst_file = sst_files[0];
-    auto cells = cellses[0];
+    auto& sst_file = sst_files[0];
+    auto& cells = cellses[0];
     XLOGF(INFO, "cells: {}", cells.size());
 
     auto result = pl::SSTable::open(read_options, sst_file);
@@ -215,8 +214,8 @@ TEST_F(SSTableTest, scan_all) {
 }
 
 TEST_F(SSTableTest, range_scan) {
-    auto sst_file = sst_files[0];
-    auto cells = cellses[0];
+    auto& sst_file = sst_files[0];
+    auto& cells = cellses[0];
 
     auto result = pl::SSTable::open(read_options, sst_file);
     EXPECT_TRUE(result.hasValue());
@@ -255,8 +254,8 @@ TEST_F(SSTableTest, range_scan) {
 }
 
 TEST_F(SSTableTest, query) {
-    auto sst_file = sst_files[0];
-    auto cells = cellses[0];
+    auto& sst_file = sst_files[0];
+    auto& cells = cellses[0];
     XLOGF(INFO, "cells: {}", cells.size());
 
     auto result = pl::SSTable::open(read_options, sst_file);
