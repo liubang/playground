@@ -23,19 +23,34 @@
 namespace pl {
 
 std::string random_string(size_t length) {
-    const std::string characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-
-    std::srand(std::time(nullptr));
-    std::random_device rd;
-    std::mt19937 generator(rd());
-    std::uniform_int_distribution<> distribution(0, characters.size() - 1);
+    static const std::string characters =
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    static std::random_device rd;
+    static std::mt19937 generator(rd());
+    static std::uniform_int_distribution<> distribution(0, characters.size() - 1);
 
     std::string rand_str;
+    rand_str.reserve(length);
     for (size_t i = 0; i < length; ++i) {
         rand_str += characters[distribution(generator)];
     }
 
     return rand_str;
+}
+
+std::vector<uint8_t> random_bytes(size_t size) {
+    static std::random_device rd;
+    static std::mt19937 generator(rd());
+    static std::uniform_int_distribution<uint16_t> distribution(0, 255);
+
+    std::vector<uint8_t> result;
+    result.reserve(size);
+
+    for (size_t i = 0; i < size; ++i) {
+        result.push_back(static_cast<uint8_t>(distribution(generator)));
+    }
+
+    return result;
 }
 
 } // namespace pl

@@ -18,6 +18,7 @@
 #include "cpp/pl/bloom/bloom_filter.h"
 
 #include "xxhash.h"
+#include <array>
 
 namespace pl {
 
@@ -26,14 +27,25 @@ inline uint32_t Lower32of64(uint64_t v) { return static_cast<uint32_t>(v); }
 inline uint32_t Upper32of64(uint64_t v) { return static_cast<uint32_t>(v >> 32); }
 } // namespace
 
-void BlockedBloomFilterBuilder::add_key(std::string_view key) {
+void FilterBuilder::add_key(std::string_view key) {
     uint64_t hash = ::XXH3_64bits(key.data(), key.size());
     if (hashes_.empty() || hashes_.back() != hash) {
         hashes_.push_back(hash);
     }
 }
 
-void BlockedBloomFilterBuilder::add_key_alt(std::string_view key, std::string_view prefix) {}
+// TODO
+void FilterBuilder::add_key_alt(std::string_view key, std::string_view prefix) {}
+
+// TODO
+std::string_view StandardBloomFilterBuilder::finish(std::unique_ptr<const char[]>* buf) {
+    std::size_t num_hashes = hashes_.size();
+    if (num_hashes == 0) {
+        return {};
+    }
+    int probes = StandardBloomFilter::choose_num_probes(bits_per_key_);
+    return {};
+}
 
 std::string_view BlockedBloomFilterBuilder::finish(std::unique_ptr<const char[]>* buf) {
     std::size_t num_hashes = hashes_.size();
@@ -92,7 +104,7 @@ int BlockedBloomFilterBuilder::get_num_probes(std::size_t num_hashes,
     return BlockedBloomFilter::choose_num_probes(actual_millibits_per_key);
 }
 
-std::size_t BlockedBloomFilterBuilder::calculate_space(std::size_t num_hashes) {
+std::size_t BlockedBloomFilterBuilder::calculate_space(std::size_t num_hashes) const {
     auto raw_target_len =
         static_cast<std::size_t>((uint64_t{num_hashes} * millibits_per_key_ + 7999) / 8000);
     if (raw_target_len >= std::size_t{0xffffffc0}) {
@@ -109,6 +121,7 @@ bool BlockedBloomFilterReader::key_may_match(std::string_view key) {
                                                        buf_ + byte_offset);
 }
 
+//=================================================================================================
 void BloomFilterPolicy::createFilter(const std::vector<std::string_view>& keys,
                                      std::string* dst) const {
     BloomFilter bloom_filter(bits_per_key_);

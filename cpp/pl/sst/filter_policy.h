@@ -17,15 +17,12 @@
 #pragma once
 
 #include "cpp/pl/bloom/bloom.h"
-#include "cpp/pl/status/status.h"
 
-#include <array>
 #include <cstring>
 #include <deque>
 #include <memory>
 #include <string>
 #include <string_view>
-
 #include <vector>
 
 namespace pl {
@@ -34,11 +31,26 @@ class FilterBuilder {
 public:
     virtual ~FilterBuilder() = default;
 
-    virtual void add_key(std::string_view key) = 0;
+    virtual void add_key(std::string_view key);
 
-    virtual void add_key_alt(std::string_view key, std::string_view prefix) = 0;
+    virtual void add_key_alt(std::string_view key, std::string_view prefix);
 
     virtual std::string_view finish(std::unique_ptr<const char[]>* buf) = 0;
+
+protected:
+    std::deque<uint64_t> hashes_;
+};
+
+class StandardBloomFilterBuilder : public FilterBuilder {
+public:
+    StandardBloomFilterBuilder(int bits_per_key) : bits_per_key_(bits_per_key) {}
+
+    ~StandardBloomFilterBuilder() = default;
+
+    std::string_view finish(std::unique_ptr<const char[]>* buf) override;
+
+private:
+    int bits_per_key_{0};
 };
 
 class BlockedBloomFilterBuilder : public FilterBuilder {
@@ -51,10 +63,6 @@ public:
 
     ~BlockedBloomFilterBuilder() override = default;
 
-    void add_key(std::string_view key) override;
-
-    void add_key_alt(std::string_view key, std::string_view prefix) override;
-
     std::string_view finish(std::unique_ptr<const char[]>* buf) override;
 
 private:
@@ -62,10 +70,9 @@ private:
 
     int get_num_probes(std::size_t num_hashes, std::size_t length_with_metadata);
 
-    std::size_t calculate_space(std::size_t num_hashes);
+    std::size_t calculate_space(std::size_t num_hashes) const;
 
 private:
-    std::deque<uint64_t> hashes_;
     int millibits_per_key_{0};
 };
 
@@ -81,7 +88,7 @@ public:
     BlockedBloomFilterReader(const char* buf, uint32_t buf_length, int num_probes)
         : buf_(buf), buf_length_(buf_length), num_probes_(num_probes) {}
 
-    ~BlockedBloomFilterReader() override {}
+    ~BlockedBloomFilterReader() override = default;
 
     bool key_may_match(std::string_view key) override;
 
@@ -90,6 +97,8 @@ private:
     const uint32_t buf_length_{0};
     const int num_probes_{0};
 };
+
+//=================================================================================================
 
 class FilterPolicy;
 
@@ -100,37 +109,14 @@ class FilterPolicy {
 public:
     virtual ~FilterPolicy() = default;
 
-    /**
-     * @brief description]
-     *
-     * @param keys parameter]
-     * @param n parameter]
-     * @param dst parameter]
-     */
     virtual void createFilter(const std::vector<std::string_view>& keys,
                               std::string* dst) const = 0;
 
-    /**
-     * @brief description]
-     *
-     * @return return]
-     */
     [[nodiscard]] virtual const char* name() const = 0;
 
-    /**
-     * @brief description]
-     *
-     * @param key parameter]
-     * @param filter parameter]
-     * @return return]
-     */
     [[nodiscard]] virtual bool keyMayMatch(std::string_view key, std::string_view filter) const = 0;
 };
 
-/**
- * @class BloomFilterPolicy
- * @brief this class is a proxy of bloom::BloomFilter
- */
 class BloomFilterPolicy : public FilterPolicy {
 public:
     BloomFilterPolicy(uint32_t bits_per_key) : bits_per_key_(bits_per_key) {}
