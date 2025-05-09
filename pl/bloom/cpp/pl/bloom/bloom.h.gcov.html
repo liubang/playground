@@ -32,16 +32,16 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryLo">0.0&nbsp;%</td>
-            <td class="headerCovTableEntry">37</td>
+            <td class="headerCovTableEntry">43</td>
             <td class="headerCovTableEntry">0</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-05-09 15:54:31</td>
+            <td class="headerValue">2025-05-09 16:09:56</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">0.0&nbsp;%</td>
-            <td class="headerCovTableEntry">5</td>
+            <td class="headerCovTableEntry">6</td>
             <td class="headerCovTableEntry">0</td>
           </tr>
                   <tr><td><img src="../../../../../glass.png" width=3 height=3 alt=""></td></tr>
@@ -236,14 +236,14 @@
 <span id="L174"><span class="lineNum">     174</span>              :         }</span>
 <span id="L175"><span class="lineNum">     175</span> <span class="tlaUNC">           0 :     }</span></span>
 <span id="L176"><span class="lineNum">     176</span>              : </span>
-<span id="L177"><span class="lineNum">     177</span>              :     static bool hash_may_match(uint32_t h, uint32_t total_bits, int num_probes, const char* data) {</span>
-<span id="L178"><span class="lineNum">     178</span>              :         const uint32_t delta = (h &gt;&gt; 17) | (h &lt;&lt; 15); // Rotate right 17 bits</span>
-<span id="L179"><span class="lineNum">     179</span>              :         for (int i = 0; i &lt; num_probes; ++i) {</span>
-<span id="L180"><span class="lineNum">     180</span>              :             const uint32_t bitpos = h % total_bits;</span>
-<span id="L181"><span class="lineNum">     181</span>              :             if ((data[bitpos &gt;&gt; 3] &amp; (uint8_t{1} &lt;&lt; (bitpos &amp; 7))) == 0) {</span>
+<span id="L177"><span class="lineNum">     177</span> <span class="tlaUNC">           0 :     static bool hash_may_match(uint32_t h, uint32_t total_bits, int num_probes, const char* data) {</span></span>
+<span id="L178"><span class="lineNum">     178</span> <span class="tlaUNC">           0 :         const uint32_t delta = (h &gt;&gt; 17) | (h &lt;&lt; 15); // Rotate right 17 bits</span></span>
+<span id="L179"><span class="lineNum">     179</span> <span class="tlaUNC">           0 :         for (int i = 0; i &lt; num_probes; ++i) {</span></span>
+<span id="L180"><span class="lineNum">     180</span> <span class="tlaUNC">           0 :             const uint32_t bitpos = h % total_bits;</span></span>
+<span id="L181"><span class="lineNum">     181</span> <span class="tlaUNC">           0 :             if ((data[bitpos &gt;&gt; 3] &amp; (uint8_t{1} &lt;&lt; (bitpos &amp; 7))) == 0) {</span></span>
 <span id="L182"><span class="lineNum">     182</span>              :                 return false;</span>
 <span id="L183"><span class="lineNum">     183</span>              :             }</span>
-<span id="L184"><span class="lineNum">     184</span>              :             h += delta;</span>
+<span id="L184"><span class="lineNum">     184</span> <span class="tlaUNC">           0 :             h += delta;</span></span>
 <span id="L185"><span class="lineNum">     185</span>              :         }</span>
 <span id="L186"><span class="lineNum">     186</span>              :         return true;</span>
 <span id="L187"><span class="lineNum">     187</span>              :     }</span>
