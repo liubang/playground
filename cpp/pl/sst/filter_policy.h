@@ -86,6 +86,21 @@ public:
     virtual bool key_may_match(std::string_view key) = 0;
 };
 
+class StandardBloomFilterReader : public FilterReader {
+public:
+    StandardBloomFilterReader(const char* buf, uint32_t buf_length, int num_probes)
+        : buf_(buf), buf_length_(buf_length), num_probes_(num_probes) {}
+
+    ~StandardBloomFilterReader() override = default;
+
+    bool key_may_match(std::string_view key) override;
+
+private:
+    const char* buf_{nullptr};
+    const uint32_t buf_length_{0};
+    const int num_probes_{0};
+};
+
 class BlockedBloomFilterReader : public FilterReader {
 public:
     BlockedBloomFilterReader(const char* buf, uint32_t buf_length, int num_probes)
