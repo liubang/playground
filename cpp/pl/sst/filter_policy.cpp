@@ -142,6 +142,11 @@ std::size_t BlockedBloomFilterBuilder::calculate_space(std::size_t num_hashes) c
     return ((raw_target_len + 63) & ~size_t{63}) + kMetadataLen;
 }
 
+bool StandardBloomFilterReader::key_may_match(std::string_view key) {
+    uint64_t hash = ::XXH3_64bits(key.data(), key.size());
+    return StandardBloomFilter::hash_may_match(hash, buf_length_ << 3, num_probes_, buf_);
+}
+
 bool BlockedBloomFilterReader::key_may_match(std::string_view key) {
     uint64_t hash = ::XXH3_64bits(key.data(), key.size());
     uint32_t byte_offset;
