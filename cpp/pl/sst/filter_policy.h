@@ -42,21 +42,24 @@ protected:
 };
 
 class StandardBloomFilterBuilder : public FilterBuilder {
+
 public:
     StandardBloomFilterBuilder(int bits_per_key) : bits_per_key_(bits_per_key) {}
 
-    ~StandardBloomFilterBuilder() = default;
+    ~StandardBloomFilterBuilder() override = default;
 
     std::string_view finish(std::unique_ptr<const char[]>* buf) override;
+
+private:
+    [[nodiscard]] std::size_t calculate_space(std::size_t num_hashes) const;
+
+    void add_all_hashes(char* buf, std::size_t buf_len, int num_probes);
 
 private:
     int bits_per_key_{0};
 };
 
 class BlockedBloomFilterBuilder : public FilterBuilder {
-    constexpr static int kMetadataLen = 5; // magic_code + num_probes
-    constexpr static std::size_t kBufferMask = 7;
-    constexpr static uint32_t kMagicCode = 0x4D4F4C42;
 
 public:
     BlockedBloomFilterBuilder(int millibits_per_key) : millibits_per_key_(millibits_per_key) {}
@@ -70,7 +73,7 @@ private:
 
     int get_num_probes(std::size_t num_hashes, std::size_t length_with_metadata);
 
-    std::size_t calculate_space(std::size_t num_hashes) const;
+    [[nodiscard]] std::size_t calculate_space(std::size_t num_hashes) const;
 
 private:
     int millibits_per_key_{0};
