@@ -32,16 +32,16 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryLo">0.0&nbsp;%</td>
-            <td class="headerCovTableEntry">28</td>
+            <td class="headerCovTableEntry">37</td>
             <td class="headerCovTableEntry">0</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-04-30 12:51:45</td>
+            <td class="headerValue">2025-05-09 15:54:31</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">0.0&nbsp;%</td>
-            <td class="headerCovTableEntry">3</td>
+            <td class="headerCovTableEntry">5</td>
             <td class="headerCovTableEntry">0</td>
           </tr>
                   <tr><td><img src="../../../../../glass.png" width=3 height=3 alt=""></td></tr>
@@ -222,19 +222,19 @@
 <span id="L160"><span class="lineNum">     160</span>              : </span>
 <span id="L161"><span class="lineNum">     161</span>              : class StandardBloomFilter {</span>
 <span id="L162"><span class="lineNum">     162</span>              : public:</span>
-<span id="L163"><span class="lineNum">     163</span>              :     static int choose_num_probes(int bits_per_key) {</span>
+<span id="L163"><span class="lineNum">     163</span> <span class="tlaUNC">           0 :     static int choose_num_probes(int bits_per_key) {</span></span>
 <span id="L164"><span class="lineNum">     164</span>              :         // 0.69 =~ ln(2)</span>
-<span id="L165"><span class="lineNum">     165</span>              :         return std::min(30, std::max(1, static_cast&lt;int&gt;(bits_per_key * 0.69)));</span>
+<span id="L165"><span class="lineNum">     165</span> <span class="tlaUNC">           0 :         return std::min(30, std::max(1, static_cast&lt;int&gt;(bits_per_key * 0.69)));</span></span>
 <span id="L166"><span class="lineNum">     166</span>              :     }</span>
 <span id="L167"><span class="lineNum">     167</span>              : </span>
-<span id="L168"><span class="lineNum">     168</span>              :     static void add_hash(uint32_t h, uint32_t total_bits, int num_probes, /* output */ char* data) {</span>
-<span id="L169"><span class="lineNum">     169</span>              :         const uint32_t delta = (h &gt;&gt; 17) | (h &lt;&lt; 15); // Rotate right 17 bits</span>
-<span id="L170"><span class="lineNum">     170</span>              :         for (int i = 0; i &lt; num_probes; ++i) {</span>
-<span id="L171"><span class="lineNum">     171</span>              :             const uint32_t bitpos = h % total_bits;</span>
-<span id="L172"><span class="lineNum">     172</span>              :             data[bitpos &gt;&gt; 3] |= (uint8_t{1} &lt;&lt; (bitpos &amp; 7));</span>
-<span id="L173"><span class="lineNum">     173</span>              :             h += delta;</span>
+<span id="L168"><span class="lineNum">     168</span> <span class="tlaUNC">           0 :     static void add_hash(uint32_t h, uint32_t total_bits, int num_probes, /* output */ char* data) {</span></span>
+<span id="L169"><span class="lineNum">     169</span> <span class="tlaUNC">           0 :         const uint32_t delta = (h &gt;&gt; 17) | (h &lt;&lt; 15); // Rotate right 17 bits</span></span>
+<span id="L170"><span class="lineNum">     170</span> <span class="tlaUNC">           0 :         for (int i = 0; i &lt; num_probes; ++i) {</span></span>
+<span id="L171"><span class="lineNum">     171</span> <span class="tlaUNC">           0 :             const uint32_t bitpos = h % total_bits;</span></span>
+<span id="L172"><span class="lineNum">     172</span> <span class="tlaUNC">           0 :             data[bitpos &gt;&gt; 3] |= (uint8_t{1} &lt;&lt; (bitpos &amp; 7));</span></span>
+<span id="L173"><span class="lineNum">     173</span> <span class="tlaUNC">           0 :             h += delta;</span></span>
 <span id="L174"><span class="lineNum">     174</span>              :         }</span>
-<span id="L175"><span class="lineNum">     175</span>              :     }</span>
+<span id="L175"><span class="lineNum">     175</span> <span class="tlaUNC">           0 :     }</span></span>
 <span id="L176"><span class="lineNum">     176</span>              : </span>
 <span id="L177"><span class="lineNum">     177</span>              :     static bool hash_may_match(uint32_t h, uint32_t total_bits, int num_probes, const char* data) {</span>
 <span id="L178"><span class="lineNum">     178</span>              :         const uint32_t delta = (h &gt;&gt; 17) | (h &lt;&lt; 15); // Rotate right 17 bits</span>
