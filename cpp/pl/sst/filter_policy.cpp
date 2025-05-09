@@ -22,6 +22,9 @@
 
 namespace pl {
 
+static constexpr uint32_t kMetadataLen = 5;        // magic_code + num_probes
+static constexpr uint32_t kMagicCode = 0x4D4F4C42; // TODO:
+
 namespace {
 inline uint32_t Lower32of64(uint64_t v) { return static_cast<uint32_t>(v); }
 inline uint32_t Upper32of64(uint64_t v) { return static_cast<uint32_t>(v >> 32); }
@@ -37,14 +40,39 @@ void FilterBuilder::add_key(std::string_view key) {
 // TODO
 void FilterBuilder::add_key_alt(std::string_view key, std::string_view prefix) {}
 
-// TODO
+std::size_t StandardBloomFilterBuilder::calculate_space(std::size_t num_hashes) const {
+    std::size_t bit_count = (num_hashes * bits_per_key_) << 3;
+    std::size_t actual_bit_count = 8;
+    while (actual_bit_count < bit_count) {
+        actual_bit_count <<= 1;
+    }
+    return (actual_bit_count >> 3) + kMetadataLen;
+}
+
 std::string_view StandardBloomFilterBuilder::finish(std::unique_ptr<const char[]>* buf) {
     std::size_t num_hashes = hashes_.size();
     if (num_hashes == 0) {
         return {};
     }
-    int probes = StandardBloomFilter::choose_num_probes(bits_per_key_);
-    return {};
+    std::size_t length_with_metadata = calculate_space(num_hashes);
+    std::size_t length = length_with_metadata - kMetadataLen;
+    std::unique_ptr<char[]> mutable_buf = std::make_unique<char[]>(length);
+    int num_probes = StandardBloomFilter::choose_num_probes(bits_per_key_);
+    add_all_hashes(mutable_buf.get(), length, num_probes);
+
+    memcpy(mutable_buf.get() + length, &kMagicCode, sizeof(uint32_t));
+    mutable_buf[length + sizeof(uint32_t)] = static_cast<char>(num_probes);
+
+    std::string_view result(mutable_buf.get(), length_with_metadata);
+    *buf = std::move(mutable_buf);
+    return result;
+}
+
+void StandardBloomFilterBuilder::add_all_hashes(char* buf, std::size_t buf_len, int num_probes) {
+    std::size_t total_bits = buf_len << 3;
+    for (auto hash : hashes_) {
+        StandardBloomFilter::add_hash(hash, total_bits, num_probes, buf);
+    }
 }
 
 std::string_view BlockedBloomFilterBuilder::finish(std::unique_ptr<const char[]>* buf) {
@@ -67,6 +95,7 @@ std::string_view BlockedBloomFilterBuilder::finish(std::unique_ptr<const char[]>
 }
 
 void BlockedBloomFilterBuilder::add_all_hashes(char* buf, std::size_t buf_len, int num_probes) {
+    constexpr std::size_t kBufferMask = 7;
     std::size_t num_hashes = hashes_.size();
     std::array<uint32_t, kBufferMask + 1> hashes;
     std::array<uint32_t, kBufferMask + 1> byte_offsets;
