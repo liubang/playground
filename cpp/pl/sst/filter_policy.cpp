@@ -22,8 +22,9 @@
 
 namespace pl {
 
-static constexpr uint32_t kMetadataLen = 5;        // magic_code + num_probes
-static constexpr uint32_t kMagicCode = 0x4D4F4C42; // TODO:
+static constexpr uint32_t kMetadataLen = 5;   // version(4B)+ num_probes(1B)
+static constexpr uint32_t kBloomFilterV1 = 1; // Standard BloomFilter
+static constexpr uint32_t kBloomFilterV2 = 2; // Blocked BloomFilter
 
 namespace {
 inline uint32_t Lower32of64(uint64_t v) { return static_cast<uint32_t>(v); }
@@ -56,11 +57,11 @@ std::string_view StandardBloomFilterBuilder::finish(std::unique_ptr<const char[]
     }
     std::size_t length_with_metadata = calculate_space(num_hashes);
     std::size_t length = length_with_metadata - kMetadataLen;
-    std::unique_ptr<char[]> mutable_buf = std::make_unique<char[]>(length);
+    std::unique_ptr<char[]> mutable_buf = std::make_unique<char[]>(length_with_metadata);
     int num_probes = StandardBloomFilter::choose_num_probes(bits_per_key_);
     add_all_hashes(mutable_buf.get(), length, num_probes);
 
-    memcpy(mutable_buf.get() + length, &kMagicCode, sizeof(uint32_t));
+    memcpy(mutable_buf.get() + length, &kBloomFilterV1, sizeof(uint32_t));
     mutable_buf[length + sizeof(uint32_t)] = static_cast<char>(num_probes);
 
     std::string_view result(mutable_buf.get(), length_with_metadata);
@@ -86,7 +87,7 @@ std::string_view BlockedBloomFilterBuilder::finish(std::unique_ptr<const char[]>
     int num_probes = get_num_probes(num_hashes, length_with_metadata);
     add_all_hashes(mutable_buf.get(), length, num_probes);
 
-    memcpy(mutable_buf.get() + length, &kMagicCode, sizeof(uint32_t));
+    memcpy(mutable_buf.get() + length, &kBloomFilterV2, sizeof(uint32_t));
     mutable_buf[length + sizeof(uint32_t)] = static_cast<char>(num_probes);
 
     std::string_view result(mutable_buf.get(), length_with_metadata);
@@ -156,6 +157,7 @@ bool BlockedBloomFilterReader::key_may_match(std::string_view key) {
 }
 
 //=================================================================================================
+// deprecated code below
 void BloomFilterPolicy::createFilter(const std::vector<std::string_view>& keys,
                                      std::string* dst) const {
     BloomFilter bloom_filter(bits_per_key_);

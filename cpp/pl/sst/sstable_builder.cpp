@@ -32,9 +32,12 @@ Result<Void> SSTableBuilder::open() {
     // TODO(liubang): check option
     data_block_ = std::make_unique<BlockBuilder>(options_);
     index_block_ = std::make_unique<BlockBuilder>(options_);
-    filter_block_ = options_->filter_policy == nullptr
-                        ? nullptr
-                        : std::make_unique<FilterBlockBuilder>(options_->filter_policy);
+    if (options_->filter_type == FilterPolicyType::STANDARD_BLOOM_FILTER) {
+        filter_builder_ = std::make_unique<StandardBloomFilterBuilder>(options_->bits_per_key);
+    } else if (options_->filter_type == FilterPolicyType::BLOCKED_BLOOM_FILTER) {
+        filter_builder_ =
+            std::make_unique<BlockedBloomFilterBuilder>(options_->bits_per_key * 1000.0 + 0.500001);
+    }
 
     sst_file_ = (options_->data_dir / SSTType2String(options_->sst_type) /
                  (std::to_string(options_->sst_id) + ".sst"))
@@ -81,8 +84,8 @@ Result<Void> SSTableBuilder::add(const Cell& cell) {
     }
 
     if (comp > 0) {
-        if (filter_block_ != nullptr) {
-            filter_block_->addKey(cell.rowkey());
+        if (filter_builder_ != nullptr) {
+            filter_builder_->add_key(cell.rowkey());
         }
         last_key_.assign(cell.rowkey());
         row_num_++;
@@ -108,10 +111,6 @@ Result<Void> SSTableBuilder::flush() {
     RETURN_AND_LOG_ON_ERROR(result);
     // 复位标记，下次开始一个新的block
     pending_index_entry_ = true;
-    // status_ = writer_->fsync();
-    if (filter_block_ != nullptr) {
-        filter_block_->startBlock(offset_);
-    }
     RETURN_VOID;
 }
 
@@ -251,9 +250,10 @@ Result<Void> SSTableBuilder::finish() {
     BlockHandle file_meta_handle;
 
     // 写filter block
-    if (filter_block_ != nullptr) {
-        auto result =
-            writeBlockRaw(filter_block_->finish(), CompressionType::NONE, &filter_block_handle);
+    if (filter_builder_ != nullptr) {
+        std::unique_ptr<const char[]> filter_buf;
+        auto result = writeBlockRaw(filter_builder_->finish(&filter_buf), CompressionType::NONE,
+                                    &filter_block_handle);
         RETURN_AND_LOG_ON_ERROR(result);
     }
 

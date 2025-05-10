@@ -19,7 +19,7 @@
 #include "cpp/pl/fs/fs.h"
 #include "cpp/pl/sst/block_builder.h"
 #include "cpp/pl/sst/cell.h"
-#include "cpp/pl/sst/filter_block_builder.h"
+#include "cpp/pl/sst/filter_policy.h"
 #include "cpp/pl/sst/options.h"
 #include "cpp/pl/sst/sstable_format.h"
 #include "cpp/pl/status/result.h"
@@ -57,7 +57,7 @@ private:
     FileSystemPtr writer_;
     BlockBuilderPtr data_block_;
     BlockBuilderPtr index_block_;
-    FilterBlockBuilderPtr filter_block_;
+    FilterBuilderPtr filter_builder_;
     BlockHandle pending_handler_;
     std::string first_key_; // min rowkey
     std::string last_key_;  // max rowkey
