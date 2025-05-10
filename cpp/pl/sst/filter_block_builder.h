@@ -26,6 +26,11 @@
 
 namespace pl {
 
+/**
+ * @class FilterBlockBuilder
+ * @brief [TODO:description]
+ * @deprecated
+ */
 class FilterBlockBuilder {
 public:
     explicit FilterBlockBuilder(FilterPolicyRef filter_policy);
@@ -54,7 +59,9 @@ private:
     // clang-format on
 };
 
+// @deprecated
 using FilterBlockBuilderPtr = std::unique_ptr<FilterBlockBuilder>;
+// @deprecated
 using FilterBlockBuilderRef = std::shared_ptr<FilterBlockBuilder>;
 
 } // namespace pl
