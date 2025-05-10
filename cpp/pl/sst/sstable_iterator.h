@@ -16,10 +16,10 @@
 
 #pragma once
 
-#include "cpp/pl/sst/filter_block_reader.h"
 #include "cpp/pl/sst/iterator.h"
 
 #include <functional>
+#include <utility>
 
 namespace pl {
 
@@ -27,10 +27,8 @@ using BlockFunc = std::function<IteratorPtr(std::string_view)>;
 
 class SSTableIterator : public Iterator {
 public:
-    SSTableIterator(IteratorPtr index_iter, FilterBlockReaderRef filter, BlockFunc block_func)
-        : index_iter_(std::move(index_iter)),
-          filter_(std::move(filter)),
-          data_block_func_(std::move(block_func)) {}
+    SSTableIterator(IteratorPtr index_iter, BlockFunc block_func)
+        : index_iter_(std::move(index_iter)), data_block_func_(std::move(block_func)) {}
 
     ~SSTableIterator() override = default;
 
@@ -59,7 +57,6 @@ private:
     Status status_{StatusCode::kOK};
     IteratorPtr index_iter_;
     IteratorPtr data_iter_;
-    FilterBlockReaderRef filter_;
     std::string data_block_handle_;
     BlockFunc data_block_func_;
 };

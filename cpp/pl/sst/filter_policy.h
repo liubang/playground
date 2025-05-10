@@ -41,6 +41,9 @@ protected:
     std::deque<uint64_t> hashes_;
 };
 
+using FilterBuilderPtr = std::unique_ptr<FilterBuilder>;
+using FilterBuilderRef = std::shared_ptr<FilterBuilder>;
+
 class StandardBloomFilterBuilder : public FilterBuilder {
 
 public:
@@ -86,6 +89,9 @@ public:
     virtual bool key_may_match(std::string_view key) = 0;
 };
 
+using FilterReaderPtr = std::unique_ptr<FilterReader>;
+using FilterReaderRef = std::shared_ptr<FilterReader>;
+
 class StandardBloomFilterReader : public FilterReader {
 public:
     StandardBloomFilterReader(const char* buf, uint32_t buf_length, int num_probes)
@@ -117,12 +123,17 @@ private:
 };
 
 //=================================================================================================
-
+// @deprecated
 class FilterPolicy;
 
+// @deprecated
 using FilterPolicyPtr = std::unique_ptr<FilterPolicy>;
+// @deprecated
 using FilterPolicyRef = std::shared_ptr<FilterPolicy>;
 
+/**
+ * @deprecated
+ */
 class FilterPolicy {
 public:
     virtual ~FilterPolicy() = default;
@@ -135,6 +146,9 @@ public:
     [[nodiscard]] virtual bool keyMayMatch(std::string_view key, std::string_view filter) const = 0;
 };
 
+/**
+ * @deprecated
+ */
 class BloomFilterPolicy : public FilterPolicy {
 public:
     BloomFilterPolicy(uint32_t bits_per_key) : bits_per_key_(bits_per_key) {}

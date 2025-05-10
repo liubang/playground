@@ -35,9 +35,7 @@ using ReadOptionsPtr = std::unique_ptr<ReadOptions>;
 using ReadOptionsRef = std::shared_ptr<ReadOptions>;
 
 struct BuildOptions {
-    BuildOptions()
-        : comparator(std::make_shared<BytewiseComparator>()),
-          filter_policy(std::make_shared<BloomFilterPolicy>(bits_per_key)) {}
+    BuildOptions() : comparator(std::make_shared<BytewiseComparator>()) {}
 
     // 4 KB
     std::filesystem::path data_dir;
@@ -47,10 +45,10 @@ struct BuildOptions {
     CompressionType compression_type = CompressionType::NONE;
     int zstd_compress_level = 1;
     const ComparatorRef comparator;
-    const FilterPolicyRef filter_policy;
+    // const FilterPolicyRef filter_policy;
     SSTType sst_type = SSTType::NONE;
     SSTVersion sst_version = SSTVersion::NONE;
-    FilterPolicyType filter_type = FilterPolicyType::NONE;
+    FilterPolicyType filter_type = FilterPolicyType::STANDARD_BLOOM_FILTER;
     PatchId patch_id = 0;
     SSTId sst_id = 0;
 };

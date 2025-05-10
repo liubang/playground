@@ -71,13 +71,15 @@ inline const char* SSTVersion2String(SSTVersion t) {
 
 enum class FilterPolicyType : uint8_t {
     NONE = 0,
-    BLOOM_FILTER = 1,
+    STANDARD_BLOOM_FILTER = 1,
+    BLOCKED_BLOOM_FILTER = 2,
 };
 
 inline const char* FilterPolicyType2String(FilterPolicyType t) {
     switch (t) {
         __SST_CASE__(FilterPolicyType, NONE);
-        __SST_CASE__(FilterPolicyType, BLOOM_FILTER);
+        __SST_CASE__(FilterPolicyType, STANDARD_BLOOM_FILTER);
+        __SST_CASE__(FilterPolicyType, BLOCKED_BLOOM_FILTER);
     }
     pl::assume_unreachable();
 }
@@ -94,6 +96,7 @@ inline const char* CompressionType2String(CompressionType t) {
         __SST_CASE__(CompressionType, NONE);
         __SST_CASE__(CompressionType, SNAPPY);
         __SST_CASE__(CompressionType, ZSTD);
+        __SST_CASE__(CompressionType, ISAL);
     }
     pl::assume_unreachable();
 }
