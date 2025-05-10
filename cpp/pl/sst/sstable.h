@@ -73,7 +73,7 @@ private:
     const ReadOptionsRef options_;
     FileDescriptorRef fd_;
     FileSystemRef reader_;
-    FilterBlockReaderRef filter_;
+    FilterReaderPtr filter_;
     std::unique_ptr<const char[]> filter_data_;
     FileMetaRef file_meta_{nullptr};
     BlockRef index_block_{nullptr};
