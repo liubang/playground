@@ -102,7 +102,7 @@ Result<Void> FileMeta::decodeFrom(std::string_view input) {
     // filter type
     auto filter_type = decodeInt<uint8_t>(data + cursor);
     cursor++;
-    if (filter_type > static_cast<uint8_t>(FilterPolicyType::BLOOM_FILTER)) {
+    if (filter_type > static_cast<uint8_t>(FilterPolicyType::STANDARD_BLOOM_FILTER)) {
         return makeError(StatusCode::kDataCorruption, "invalid filter policy type");
     }
     filter_type_ = static_cast<FilterPolicyType>(filter_type);

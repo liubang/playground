@@ -16,8 +16,10 @@
 
 #include "cpp/pl/sst/sstable.h"
 #include "cpp/pl/fs/posix_fs.h"
-#include "cpp/pl/scope/scope.h"
+#include "cpp/pl/sst/encoding.h"
 #include "cpp/pl/sst/sstable_iterator.h"
+
+#include <folly/ScopeGuard.h>
 
 namespace pl {
 
@@ -101,17 +103,20 @@ Result<Void> SSTable::readFilter(const Footer& footer) {
         filter_data_.reset(block.data.data());
     }
 
-    FilterPolicyRef filter = nullptr;
+    uint8_t num_probes = decodeInt<uint8_t>(block.data.data() + (block.data.size() - 1));
+
     switch (filter_type) {
-    case FilterPolicyType::BLOOM_FILTER:
-        filter = std::make_shared<BloomFilterPolicy>(file_meta_->bitsPerKey());
+    case FilterPolicyType::STANDARD_BLOOM_FILTER:
+        filter_ = std::make_unique<StandardBloomFilterReader>(block.data.data(), block.data.size(),
+                                                              num_probes);
+        break;
+    case pl::FilterPolicyType::BLOCKED_BLOOM_FILTER:
+        filter_ = std::make_unique<BlockedBloomFilterReader>(block.data.data(), block.data.size(),
+                                                             num_probes);
         break;
     default:
         assert(false);
     }
-    assert(filter != nullptr);
-
-    filter_ = std::make_shared<FilterBlockReader>(std::move(filter), block.data);
 
     RETURN_VOID;
 }
@@ -153,7 +158,7 @@ Result<CellVecRef> SSTable::get(std::string_view rowkey, Arena* buf) {
         auto result = handle.decodeFrom(idx_handle);
         RETURN_AND_LOG_ON_ERROR(result);
 
-        if (!filter_->keyMayMatch(handle.offset(), rowkey)) {
+        if (!filter_->key_may_match(rowkey)) {
             return makeError(StatusCode::kKVStoreNotFound);
         }
     }
@@ -193,7 +198,7 @@ Result<CellVecRef> SSTable::get(std::string_view rowkey, Arena* buf) {
 }
 
 IteratorPtr SSTable::iterator() {
-    return std::make_unique<SSTableIterator>(index_block_->iterator(options_->comparator), filter_,
+    return std::make_unique<SSTableIterator>(index_block_->iterator(options_->comparator),
                                              [that = this](std::string_view b) {
                                                  return that->blockReader(b);
                                              });
