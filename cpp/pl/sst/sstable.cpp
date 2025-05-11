@@ -147,6 +147,7 @@ Result<CellVecRef> SSTable::get(std::string_view rowkey, Arena* buf) {
     auto iiter = index_block_->iterator(options_->comparator);
     iiter->seek(rowkey);
     if (!iiter->valid()) {
+        XLOGF(WARN, "index iterator is invalid");
         return makeError(iiter->status());
     }
     auto idx_cell = iiter->cell();
@@ -158,7 +159,7 @@ Result<CellVecRef> SSTable::get(std::string_view rowkey, Arena* buf) {
         RETURN_AND_LOG_ON_ERROR(result);
 
         if (!filter_->key_may_match(rowkey)) {
-            XLOGF(INFO, "search_key: {} filted by bloom filter", rowkey);
+            XLOGF(DBG, "search_key: {} filted by bloom filter", rowkey);
             return makeError(StatusCode::kKVStoreNotFound);
         }
     }
