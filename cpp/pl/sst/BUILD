@@ -33,7 +33,6 @@ cc_library(
         "//cpp/pl/arena",
         "//cpp/pl/bits",
         "//cpp/pl/bloom:bloom_filter",
-        "//cpp/pl/bloom:bloom_filter_v2",
         "//cpp/pl/fs",
         "//cpp/pl/lang",
         "//cpp/pl/random",
