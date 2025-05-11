@@ -32,17 +32,17 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryHi">95.9&nbsp;%</td>
-            <td class="headerCovTableEntry">169</td>
-            <td class="headerCovTableEntry">162</td>
+            <td class="headerCovTableEntry">170</td>
+            <td class="headerCovTableEntry">163</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-05-09 16:09:56</td>
+            <td class="headerValue">2025-05-11 15:16:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntryMed">75.7&nbsp;%</td>
-            <td class="headerCovTableEntry">37</td>
-            <td class="headerCovTableEntry">28</td>
+            <td class="headerCovTableEntryMed">76.3&nbsp;%</td>
+            <td class="headerCovTableEntry">38</td>
+            <td class="headerCovTableEntry">29</td>
           </tr>
                   <tr><td><img src="../../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -97,15 +97,15 @@
 <span id="L35"><span class="lineNum">      35</span>              : };</span>
 <span id="L36"><span class="lineNum">      36</span>              : </span>
 <span id="L37"><span class="lineNum">      37</span>              : struct CaseCellComparator {</span>
-<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">     3570320 :     bool operator()(const CaseCell&amp; lhs, const CaseCell&amp; rhs) const {</span></span>
-<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">     3570320 :         if (lhs.rowkey != rhs.rowkey) {</span></span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">     2658949 :             return lhs.rowkey &lt; rhs.rowkey;</span></span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">     3572547 :     bool operator()(const CaseCell&amp; lhs, const CaseCell&amp; rhs) const {</span></span>
+<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">     3572547 :         if (lhs.rowkey != rhs.rowkey) {</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">     2662552 :             return lhs.rowkey &lt; rhs.rowkey;</span></span>
 <span id="L41"><span class="lineNum">      41</span>              :         }</span>
-<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">      911371 :         if (lhs.cf != rhs.cf) {</span></span>
-<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">      244212 :             return lhs.cf &lt; rhs.cf;</span></span>
+<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">      909995 :         if (lhs.cf != rhs.cf) {</span></span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">      242671 :             return lhs.cf &lt; rhs.cf;</span></span>
 <span id="L44"><span class="lineNum">      44</span>              :         }</span>
-<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">      667159 :         if (lhs.col != rhs.col) {</span></span>
-<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">      667159 :             return lhs.col &lt; rhs.col;</span></span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">      667324 :         if (lhs.col != rhs.col) {</span></span>
+<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">      667324 :             return lhs.col &lt; rhs.col;</span></span>
 <span id="L47"><span class="lineNum">      47</span>              :         }</span>
 <span id="L48"><span class="lineNum">      48</span> <span class="tlaUNC tlaBgUNC">           0 :         if (lhs.ts != rhs.ts) {</span></span>
 <span id="L49"><span class="lineNum">      49</span> <span class="tlaUNC">           0 :             return lhs.ts &gt; rhs.ts;</span></span>
@@ -138,7 +138,7 @@
 <span id="L76"><span class="lineNum">      76</span> <span class="tlaGNC">           1 :         build_options-&gt;compression_type = CompressionType::NONE;</span></span>
 <span id="L77"><span class="lineNum">      77</span> <span class="tlaGNC">           1 :         build_options-&gt;sst_type = SSTType::MAJOR;</span></span>
 <span id="L78"><span class="lineNum">      78</span> <span class="tlaGNC">           1 :         build_options-&gt;sst_version = SSTVersion::V1;</span></span>
-<span id="L79"><span class="lineNum">      79</span> <span class="tlaGNC">           1 :         build_options-&gt;filter_type = FilterPolicyType::BLOOM_FILTER;</span></span>
+<span id="L79"><span class="lineNum">      79</span> <span class="tlaGNC">           1 :         build_options-&gt;filter_type = FilterPolicyType::STANDARD_BLOOM_FILTER;</span></span>
 <span id="L80"><span class="lineNum">      80</span> <span class="tlaGNC">           1 :         return build_options;</span></span>
 <span id="L81"><span class="lineNum">      81</span>              :     }</span>
 <span id="L82"><span class="lineNum">      82</span>              : </span>
@@ -208,7 +208,7 @@
 <span id="L146"><span class="lineNum">     146</span> <span class="tlaGNC">          24 :         XLOGF(INFO, &quot;{}&quot;, table-&gt;fileMeta()-&gt;toString());</span></span>
 <span id="L147"><span class="lineNum">     147</span> <span class="tlaGNC">           6 :         EXPECT_EQ(SSTType::MAJOR, table-&gt;fileMeta()-&gt;sstType());</span></span>
 <span id="L148"><span class="lineNum">     148</span> <span class="tlaGNC">           6 :         EXPECT_EQ(SSTVersion::V1, table-&gt;fileMeta()-&gt;sstVersion());</span></span>
-<span id="L149"><span class="lineNum">     149</span> <span class="tlaGNC">           6 :         EXPECT_EQ(FilterPolicyType::BLOOM_FILTER, table-&gt;fileMeta()-&gt;filterPolicyType());</span></span>
+<span id="L149"><span class="lineNum">     149</span> <span class="tlaGNC">           6 :         EXPECT_EQ(FilterPolicyType::STANDARD_BLOOM_FILTER, table-&gt;fileMeta()-&gt;filterPolicyType());</span></span>
 <span id="L150"><span class="lineNum">     150</span> <span class="tlaGNC">           6 :         EXPECT_EQ(10, table-&gt;fileMeta()-&gt;bitsPerKey());</span></span>
 <span id="L151"><span class="lineNum">     151</span> <span class="tlaGNC">           6 :         EXPECT_EQ(ROW_NUM * 2 * COL_NUM, table-&gt;fileMeta()-&gt;cellNum());</span></span>
 <span id="L152"><span class="lineNum">     152</span> <span class="tlaGNC">           6 :     }</span></span>
@@ -293,25 +293,25 @@
 <span id="L231"><span class="lineNum">     231</span> <span class="tlaGNC">           4 :     for (int i = 0; i &lt; 3; ++i) {</span></span>
 <span id="L232"><span class="lineNum">     232</span>              :         auto citer = cells.begin();</span>
 <span id="L233"><span class="lineNum">     233</span> <span class="tlaGNC">           3 :         int j = dis(gen) * 2 * COL_NUM;</span></span>
-<span id="L234"><span class="lineNum">     234</span> <span class="tlaGNC">       89139 :         for (int m = 0; m &lt; j; ++m) {</span></span>
+<span id="L234"><span class="lineNum">     234</span> <span class="tlaGNC">       86659 :         for (int m = 0; m &lt; j; ++m) {</span></span>
 <span id="L235"><span class="lineNum">     235</span>              :             ++citer;</span>
 <span id="L236"><span class="lineNum">     236</span>              :         }</span>
 <span id="L237"><span class="lineNum">     237</span> <span class="tlaGNC">           3 :         std::string_view search_key = citer-&gt;rowkey;</span></span>
 <span id="L238"><span class="lineNum">     238</span> <span class="tlaGNC">           9 :         XLOGF(INFO, &quot;scan rowkey &gt;= {}&quot;, search_key);</span></span>
 <span id="L239"><span class="lineNum">     239</span> <span class="tlaGNC">           3 :         iter-&gt;seek(search_key);</span></span>
-<span id="L240"><span class="lineNum">     240</span> <span class="tlaGNC">      107475 :         while (iter-&gt;valid()) {</span></span>
-<span id="L241"><span class="lineNum">     241</span> <span class="tlaGNC">      107472 :             EXPECT_TRUE(citer != cells.end());</span></span>
-<span id="L242"><span class="lineNum">     242</span> <span class="tlaGNC">      107472 :             auto cell = iter-&gt;cell();</span></span>
-<span id="L243"><span class="lineNum">     243</span> <span class="tlaGNC">      107472 :             auto cexp = *citer;</span></span>
-<span id="L244"><span class="lineNum">     244</span> <span class="tlaGNC">      107472 :             EXPECT_EQ(cexp.rowkey, cell-&gt;rowkey());</span></span>
-<span id="L245"><span class="lineNum">     245</span> <span class="tlaGNC">      107472 :             EXPECT_EQ(cexp.cf, cell-&gt;cf());</span></span>
-<span id="L246"><span class="lineNum">     246</span> <span class="tlaGNC">      107472 :             EXPECT_EQ(cexp.col, cell-&gt;col());</span></span>
-<span id="L247"><span class="lineNum">     247</span> <span class="tlaGNC">      107472 :             EXPECT_EQ(cexp.type, cell-&gt;cellType());</span></span>
-<span id="L248"><span class="lineNum">     248</span> <span class="tlaGNC">      107472 :             EXPECT_EQ(cexp.ts, cell-&gt;timestamp());</span></span>
+<span id="L240"><span class="lineNum">     240</span> <span class="tlaGNC">      109955 :         while (iter-&gt;valid()) {</span></span>
+<span id="L241"><span class="lineNum">     241</span> <span class="tlaGNC">      109952 :             EXPECT_TRUE(citer != cells.end());</span></span>
+<span id="L242"><span class="lineNum">     242</span> <span class="tlaGNC">      109952 :             auto cell = iter-&gt;cell();</span></span>
+<span id="L243"><span class="lineNum">     243</span> <span class="tlaGNC">      109952 :             auto cexp = *citer;</span></span>
+<span id="L244"><span class="lineNum">     244</span> <span class="tlaGNC">      109952 :             EXPECT_EQ(cexp.rowkey, cell-&gt;rowkey());</span></span>
+<span id="L245"><span class="lineNum">     245</span> <span class="tlaGNC">      109952 :             EXPECT_EQ(cexp.cf, cell-&gt;cf());</span></span>
+<span id="L246"><span class="lineNum">     246</span> <span class="tlaGNC">      109952 :             EXPECT_EQ(cexp.col, cell-&gt;col());</span></span>
+<span id="L247"><span class="lineNum">     247</span> <span class="tlaGNC">      109952 :             EXPECT_EQ(cexp.type, cell-&gt;cellType());</span></span>
+<span id="L248"><span class="lineNum">     248</span> <span class="tlaGNC">      109952 :             EXPECT_EQ(cexp.ts, cell-&gt;timestamp());</span></span>
 <span id="L249"><span class="lineNum">     249</span>              : </span>
-<span id="L250"><span class="lineNum">     250</span> <span class="tlaGNC">      107472 :             iter-&gt;next();</span></span>
+<span id="L250"><span class="lineNum">     250</span> <span class="tlaGNC">      109952 :             iter-&gt;next();</span></span>
 <span id="L251"><span class="lineNum">     251</span>              :             ++citer;</span>
-<span id="L252"><span class="lineNum">     252</span> <span class="tlaGNC">      107472 :         }</span></span>
+<span id="L252"><span class="lineNum">     252</span> <span class="tlaGNC">      109952 :         }</span></span>
 <span id="L253"><span class="lineNum">     253</span>              :     }</span>
 <span id="L254"><span class="lineNum">     254</span> <span class="tlaGNC">           1 : }</span></span>
 <span id="L255"><span class="lineNum">     255</span>              : </span>
@@ -334,44 +334,45 @@
 <span id="L272"><span class="lineNum">     272</span> <span class="tlaGNC">         334 :     for (int i = 0; i &lt; 333; ++i) {</span></span>
 <span id="L273"><span class="lineNum">     273</span> <span class="tlaGNC">         333 :         int idx = dis(gen) * 2 * COL_NUM;</span></span>
 <span id="L274"><span class="lineNum">     274</span>              :         auto citer = cells.begin();</span>
-<span id="L275"><span class="lineNum">     275</span> <span class="tlaGNC">    11419917 :         for (int j = 0; j &lt; idx; ++j) {</span></span>
+<span id="L275"><span class="lineNum">     275</span> <span class="tlaGNC">    10717709 :         for (int j = 0; j &lt; idx; ++j) {</span></span>
 <span id="L276"><span class="lineNum">     276</span>              :             ++citer;</span>
 <span id="L277"><span class="lineNum">     277</span>              :         }</span>
 <span id="L278"><span class="lineNum">     278</span>              : </span>
 <span id="L279"><span class="lineNum">     279</span> <span class="tlaGNC">         333 :         std::string search_key = citer-&gt;rowkey;</span></span>
-<span id="L280"><span class="lineNum">     280</span> <span class="tlaGNC">         333 :         auto cell_result = result.value()-&gt;get(search_key, &amp;buf);</span></span>
-<span id="L281"><span class="lineNum">     281</span> <span class="tlaGNC">         333 :         EXPECT_TRUE(cell_result.hasValue());</span></span>
-<span id="L282"><span class="lineNum">     282</span> <span class="tlaGNC">         666 :         CellVecRef row = cell_result.value();</span></span>
-<span id="L283"><span class="lineNum">     283</span> <span class="tlaGNC">         333 :         EXPECT_EQ(16, row.size());</span></span>
-<span id="L284"><span class="lineNum">     284</span>              : </span>
-<span id="L285"><span class="lineNum">     285</span> <span class="tlaGNC">        5661 :         for (auto&amp; cell : row) {</span></span>
-<span id="L286"><span class="lineNum">     286</span> <span class="tlaGNC">        5328 :             auto cexp = *citer;</span></span>
-<span id="L287"><span class="lineNum">     287</span> <span class="tlaGNC">        5328 :             EXPECT_EQ(cexp.rowkey, cell-&gt;rowkey());</span></span>
-<span id="L288"><span class="lineNum">     288</span> <span class="tlaGNC">        5328 :             EXPECT_EQ(cexp.cf, cell-&gt;cf());</span></span>
-<span id="L289"><span class="lineNum">     289</span> <span class="tlaGNC">        5328 :             EXPECT_EQ(cexp.col, cell-&gt;col());</span></span>
-<span id="L290"><span class="lineNum">     290</span> <span class="tlaGNC">        5328 :             EXPECT_EQ(cexp.ts, cell-&gt;timestamp());</span></span>
-<span id="L291"><span class="lineNum">     291</span> <span class="tlaGNC">        5328 :             EXPECT_EQ(cexp.type, cell-&gt;cellType());</span></span>
-<span id="L292"><span class="lineNum">     292</span>              :             ++citer;</span>
-<span id="L293"><span class="lineNum">     293</span> <span class="tlaGNC">        5328 :         }</span></span>
-<span id="L294"><span class="lineNum">     294</span>              :     }</span>
-<span id="L295"><span class="lineNum">     295</span>              : </span>
-<span id="L296"><span class="lineNum">     296</span>              :     // 空query</span>
-<span id="L297"><span class="lineNum">     297</span> <span class="tlaGNC">         667 :     for (int i = 0; i &lt; 666; ++i) {</span></span>
-<span id="L298"><span class="lineNum">     298</span>              :         cells.clear();</span>
-<span id="L299"><span class="lineNum">     299</span> <span class="tlaGNC">         666 :         auto rowkey = pl::random_string(ROWKEY_LEN * 3);</span></span>
-<span id="L300"><span class="lineNum">     300</span> <span class="tlaGNC">         666 :         auto cell_result = result.value()-&gt;get(rowkey, &amp;buf);</span></span>
-<span id="L301"><span class="lineNum">     301</span> <span class="tlaGNC">         666 :         EXPECT_TRUE(cell_result.hasError());</span></span>
-<span id="L302"><span class="lineNum">     302</span> <span class="tlaGNC">         666 :         EXPECT_EQ(StatusCode::kKVStoreNotFound, cell_result.error().code());</span></span>
-<span id="L303"><span class="lineNum">     303</span>              :     }</span>
-<span id="L304"><span class="lineNum">     304</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L305"><span class="lineNum">     305</span>              : </span>
-<span id="L306"><span class="lineNum">     306</span> <span class="tlaGNC">           3 : TEST_F(SSTableTest, cleanup) {</span></span>
-<span id="L307"><span class="lineNum">     307</span> <span class="tlaGNC">           4 :     for (const auto&amp; sst_file : sst_files) {</span></span>
-<span id="L308"><span class="lineNum">     308</span> <span class="tlaGNC">           3 :         std::remove(sst_file.c_str());</span></span>
-<span id="L309"><span class="lineNum">     309</span>              :     }</span>
-<span id="L310"><span class="lineNum">     310</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L311"><span class="lineNum">     311</span>              : </span>
-<span id="L312"><span class="lineNum">     312</span>              : } // namespace pl</span>
+<span id="L280"><span class="lineNum">     280</span> <span class="tlaGNC">         999 :         XLOGF(INFO, &quot;search_key: {}&quot;, search_key);</span></span>
+<span id="L281"><span class="lineNum">     281</span> <span class="tlaGNC">         333 :         auto cell_result = result.value()-&gt;get(search_key, &amp;buf);</span></span>
+<span id="L282"><span class="lineNum">     282</span> <span class="tlaGNC">         333 :         EXPECT_TRUE(cell_result.hasValue());</span></span>
+<span id="L283"><span class="lineNum">     283</span> <span class="tlaGNC">         666 :         CellVecRef row = cell_result.value();</span></span>
+<span id="L284"><span class="lineNum">     284</span> <span class="tlaGNC">         333 :         EXPECT_EQ(16, row.size());</span></span>
+<span id="L285"><span class="lineNum">     285</span>              : </span>
+<span id="L286"><span class="lineNum">     286</span> <span class="tlaGNC">        5661 :         for (auto&amp; cell : row) {</span></span>
+<span id="L287"><span class="lineNum">     287</span> <span class="tlaGNC">        5328 :             auto cexp = *citer;</span></span>
+<span id="L288"><span class="lineNum">     288</span> <span class="tlaGNC">        5328 :             EXPECT_EQ(cexp.rowkey, cell-&gt;rowkey());</span></span>
+<span id="L289"><span class="lineNum">     289</span> <span class="tlaGNC">        5328 :             EXPECT_EQ(cexp.cf, cell-&gt;cf());</span></span>
+<span id="L290"><span class="lineNum">     290</span> <span class="tlaGNC">        5328 :             EXPECT_EQ(cexp.col, cell-&gt;col());</span></span>
+<span id="L291"><span class="lineNum">     291</span> <span class="tlaGNC">        5328 :             EXPECT_EQ(cexp.ts, cell-&gt;timestamp());</span></span>
+<span id="L292"><span class="lineNum">     292</span> <span class="tlaGNC">        5328 :             EXPECT_EQ(cexp.type, cell-&gt;cellType());</span></span>
+<span id="L293"><span class="lineNum">     293</span>              :             ++citer;</span>
+<span id="L294"><span class="lineNum">     294</span> <span class="tlaGNC">        5328 :         }</span></span>
+<span id="L295"><span class="lineNum">     295</span>              :     }</span>
+<span id="L296"><span class="lineNum">     296</span>              : </span>
+<span id="L297"><span class="lineNum">     297</span>              :     // 空query</span>
+<span id="L298"><span class="lineNum">     298</span> <span class="tlaGNC">         667 :     for (int i = 0; i &lt; 666; ++i) {</span></span>
+<span id="L299"><span class="lineNum">     299</span>              :         cells.clear();</span>
+<span id="L300"><span class="lineNum">     300</span> <span class="tlaGNC">         666 :         auto rowkey = pl::random_string(ROWKEY_LEN * 3);</span></span>
+<span id="L301"><span class="lineNum">     301</span> <span class="tlaGNC">         666 :         auto cell_result = result.value()-&gt;get(rowkey, &amp;buf);</span></span>
+<span id="L302"><span class="lineNum">     302</span> <span class="tlaGNC">         666 :         EXPECT_TRUE(cell_result.hasError());</span></span>
+<span id="L303"><span class="lineNum">     303</span> <span class="tlaGNC">         666 :         EXPECT_EQ(StatusCode::kKVStoreNotFound, cell_result.error().code());</span></span>
+<span id="L304"><span class="lineNum">     304</span>              :     }</span>
+<span id="L305"><span class="lineNum">     305</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L306"><span class="lineNum">     306</span>              : </span>
+<span id="L307"><span class="lineNum">     307</span> <span class="tlaGNC">           3 : TEST_F(SSTableTest, cleanup) {</span></span>
+<span id="L308"><span class="lineNum">     308</span> <span class="tlaGNC">           4 :     for (const auto&amp; sst_file : sst_files) {</span></span>
+<span id="L309"><span class="lineNum">     309</span> <span class="tlaGNC">           3 :         std::remove(sst_file.c_str());</span></span>
+<span id="L310"><span class="lineNum">     310</span>              :     }</span>
+<span id="L311"><span class="lineNum">     311</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L312"><span class="lineNum">     312</span>              : </span>
+<span id="L313"><span class="lineNum">     313</span>              : } // namespace pl</span>
         </pre>
               </td>
             </tr>

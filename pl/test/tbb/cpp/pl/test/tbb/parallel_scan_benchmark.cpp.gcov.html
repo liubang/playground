@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-05-09 16:09:56</td>
+            <td class="headerValue">2025-05-11 15:16:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -90,17 +90,17 @@
 <span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">          11 :     std::vector&lt;float&gt; a(n);</span></span>
 <span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">          11 :     float res = tbb::parallel_scan(</span></span>
 <span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">          22 :         tbb::blocked_range&lt;size_t&gt;(0, n), (float)0,</span></span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">          95 :         [&amp;](tbb::blocked_range&lt;size_t&gt; r, float local_res, auto is_final) {</span></span>
-<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">   530579687 :             for (size_t i = r.begin(); i &lt; r.end(); ++i) {</span></span>
-<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">   180355072 :                 local_res += std::sin(i);</span></span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">         149 :         [&amp;](tbb::blocked_range&lt;size_t&gt; r, float local_res, auto is_final) {</span></span>
+<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">   507511177 :             for (size_t i = r.begin(); i &lt; r.end(); ++i) {</span></span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">   171966464 :                 local_res += std::sin(i);</span></span>
 <span id="L34"><span class="lineNum">      34</span>              :                 if (is_final) {</span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">   350224384 :                     a[i] = local_res;</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">   335544320 :                     a[i] = local_res;</span></span>
 <span id="L36"><span class="lineNum">      36</span>              :                 }</span>
 <span id="L37"><span class="lineNum">      37</span>              :             }</span>
-<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">          84 :             return local_res;</span></span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">         138 :             return local_res;</span></span>
 <span id="L39"><span class="lineNum">      39</span>              :         },</span>
 <span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">          11 :         [](float x, float y) {</span></span>
-<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">          90 :             return x + y;</span></span>
+<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">         179 :             return x + y;</span></span>
 <span id="L42"><span class="lineNum">      42</span>              :         });</span>
 <span id="L43"><span class="lineNum">      43</span>              : </span>
 <span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">          11 :     std::cout &lt;&lt; a[n / 2] &lt;&lt; std::endl;</span></span>

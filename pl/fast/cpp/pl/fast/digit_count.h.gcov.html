@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-05-09 16:09:56</td>
+            <td class="headerValue">2025-05-11 15:16:36</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">66.7&nbsp;%</td>
@@ -68,9 +68,9 @@
 <span id="L6"><span class="lineNum">       6</span>              : namespace pl {</span>
 <span id="L7"><span class="lineNum">       7</span>              : </span>
 <span id="L8"><span class="lineNum">       8</span>              : // c++20可以用bit_width</span>
-<span id="L9"><span class="lineNum">       9</span> <span class="tlaGNC tlaBgGNC">  1908200600 : int int_log2(uint64_t x) { return 63 - __builtin_clzll(x | 1); }</span></span>
+<span id="L9"><span class="lineNum">       9</span> <span class="tlaGNC tlaBgGNC">  1801426200 : int int_log2(uint64_t x) { return 63 - __builtin_clzll(x | 1); }</span></span>
 <span id="L10"><span class="lineNum">      10</span>              : </span>
-<span id="L11"><span class="lineNum">      11</span> <span class="tlaGNC">   963866500 : int digit_count(uint64_t x) {</span></span>
+<span id="L11"><span class="lineNum">      11</span> <span class="tlaGNC">   859509800 : int digit_count(uint64_t x) {</span></span>
 <span id="L12"><span class="lineNum">      12</span>              :     static uint64_t table[] = {9,</span>
 <span id="L13"><span class="lineNum">      13</span>              :                                99,</span>
 <span id="L14"><span class="lineNum">      14</span>              :                                999,</span>
@@ -90,12 +90,12 @@
 <span id="L28"><span class="lineNum">      28</span>              :                                99999999999999999ULL,</span>
 <span id="L29"><span class="lineNum">      29</span>              :                                999999999999999999ULL,</span>
 <span id="L30"><span class="lineNum">      30</span>              :                                9999999999999999999ULL};</span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">   963866500 :     int y = (19 * int_log2(x) &gt;&gt; 6);</span></span>
-<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">   963866500 :     y += x &gt; table[y];</span></span>
-<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">   963866500 :     return y + 1;</span></span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">   859509800 :     int y = (19 * int_log2(x) &gt;&gt; 6);</span></span>
+<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">   859509800 :     y += x &gt; table[y];</span></span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">   859509800 :     return y + 1;</span></span>
 <span id="L34"><span class="lineNum">      34</span>              : }</span>
 <span id="L35"><span class="lineNum">      35</span>              : </span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">   944334100 : int alternative_digit_count(uint64_t x) {</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">   941916400 : int alternative_digit_count(uint64_t x) {</span></span>
 <span id="L37"><span class="lineNum">      37</span>              :     static uint64_t table[64][2] = {</span>
 <span id="L38"><span class="lineNum">      38</span>              :         {0x01, 0xfffffffffffffff6ULL}, {0x01, 0xfffffffffffffff6ULL}, {0x01, 0xfffffffffffffff6ULL},</span>
 <span id="L39"><span class="lineNum">      39</span>              :         {0x01, 0xfffffffffffffff6ULL}, {0x02, 0xffffffffffffff9cULL}, {0x02, 0xffffffffffffff9cULL},</span>
@@ -121,9 +121,9 @@
 <span id="L59"><span class="lineNum">      59</span>              :         {0x13, 0x7538dcfb76180000ULL},</span>
 <span id="L60"><span class="lineNum">      60</span>              :     };</span>
 <span id="L61"><span class="lineNum">      61</span>              :     int log = int_log2(x);</span>
-<span id="L62"><span class="lineNum">      62</span> <span class="tlaGNC">   944334100 :     uint64_t low = table[log][1];</span></span>
-<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">   944334100 :     uint64_t high = table[log][0];</span></span>
-<span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC">   944334100 :     return (x + low &lt; x) + high;</span></span>
+<span id="L62"><span class="lineNum">      62</span> <span class="tlaGNC">   941916400 :     uint64_t low = table[log][1];</span></span>
+<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">   941916400 :     uint64_t high = table[log][0];</span></span>
+<span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC">   941916400 :     return (x + low &lt; x) + high;</span></span>
 <span id="L65"><span class="lineNum">      65</span>              : }</span>
 <span id="L66"><span class="lineNum">      66</span>              : </span>
 <span id="L67"><span class="lineNum">      67</span>              : //=================================================================================================</span>
@@ -154,8 +154,8 @@
 <span id="L92"><span class="lineNum">      92</span>              :                                            9999999999999999999ull};</span>
 <span id="L93"><span class="lineNum">      93</span>              : </span>
 <span id="L94"><span class="lineNum">      94</span>              : inline uint64_t fast_digit_count(const uint64_t inputValue) {</span>
-<span id="L95"><span class="lineNum">      95</span> <span class="tlaGNC">   620028300 :     const uint64_t original_digit_count{digit_counts64[__builtin_clzll(inputValue)]};</span></span>
-<span id="L96"><span class="lineNum">      96</span> <span class="tlaGNC">   620028300 :     return original_digit_count + (inputValue &gt; digit_count_thresholds64[original_digit_count]);</span></span>
+<span id="L95"><span class="lineNum">      95</span> <span class="tlaGNC">   769965700 :     const uint64_t original_digit_count{digit_counts64[__builtin_clzll(inputValue)]};</span></span>
+<span id="L96"><span class="lineNum">      96</span> <span class="tlaGNC">   769965700 :     return original_digit_count + (inputValue &gt; digit_count_thresholds64[original_digit_count]);</span></span>
 <span id="L97"><span class="lineNum">      97</span>              : }</span>
 <span id="L98"><span class="lineNum">      98</span>              : </span>
 <span id="L99"><span class="lineNum">      99</span>              : } // namespace pl</span>
