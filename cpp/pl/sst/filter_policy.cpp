@@ -42,7 +42,7 @@ void FilterBuilder::add_key(std::string_view key) {
 void FilterBuilder::add_key_alt(std::string_view key, std::string_view prefix) {}
 
 std::size_t StandardBloomFilterBuilder::calculate_space(std::size_t num_hashes) const {
-    std::size_t bit_count = (num_hashes * bits_per_key_) << 3;
+    std::size_t bit_count = num_hashes * bits_per_key_;
     std::size_t actual_bit_count = 8;
     while (actual_bit_count < bit_count) {
         actual_bit_count <<= 1;
@@ -145,13 +145,15 @@ std::size_t BlockedBloomFilterBuilder::calculate_space(std::size_t num_hashes) c
 
 bool StandardBloomFilterReader::key_may_match(std::string_view key) {
     uint64_t hash = ::XXH3_64bits(key.data(), key.size());
-    return StandardBloomFilter::hash_may_match(hash, buf_length_ << 3, num_probes_, buf_);
+    return StandardBloomFilter::hash_may_match(hash, (buf_length_ - kMetadataLen) << 3, num_probes_,
+                                               buf_);
 }
 
 bool BlockedBloomFilterReader::key_may_match(std::string_view key) {
     uint64_t hash = ::XXH3_64bits(key.data(), key.size());
     uint32_t byte_offset;
-    BlockedBloomFilter::prepare_hash(Lower32of64(hash), buf_length_, buf_, &byte_offset);
+    BlockedBloomFilter::prepare_hash(Lower32of64(hash), buf_length_ - kMetadataLen, buf_,
+                                     &byte_offset);
     return BlockedBloomFilter::hash_may_match_prepared(Upper32of64(hash), num_probes_,
                                                        buf_ + byte_offset);
 }

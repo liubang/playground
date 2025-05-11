@@ -47,7 +47,7 @@ bool BloomFilter::contains(std::string_view key, std::string_view filter) const 
 
 void BloomFilter::create(const std::vector<std::string_view>& keys, std::string* dst) const {
     std::size_t n = keys.size();
-    std::size_t bit_count = (n * bits_per_key_) << 3;
+    std::size_t bit_count = n * bits_per_key_;
     uint64_t actual_bit_count = 8;
     while (actual_bit_count < bit_count) {
         actual_bit_count <<= 1;

@@ -277,6 +277,7 @@ TEST_F(SSTableTest, query) {
         }
 
         std::string search_key = citer->rowkey;
+        XLOGF(INFO, "search_key: {}", search_key);
         auto cell_result = result.value()->get(search_key, &buf);
         EXPECT_TRUE(cell_result.hasValue());
         CellVecRef row = cell_result.value();
