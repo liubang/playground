@@ -4,7 +4,7 @@
 
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-  <title>LCOV - _coverage_report.dat - pl/bloom/cpp/pl/bloom/bloom_filter_test.cpp</title>
+  <title>LCOV - _coverage_report.dat - pl/bloom/cpp/pl/bloom/bloom_test.cpp</title>
   <link rel="stylesheet" type="text/css" href="../../../../../gcov.css">
 </head>
 
@@ -19,7 +19,7 @@
                 <table cellpadding=1 border=0 width="100%">
           <tr>
             <td width="10%" class="headerItem">Current view:</td>
-            <td width="10%" class="headerValue"><a href="../../../../../index.html">top level</a> - <a href="index.html">pl/bloom/cpp/pl/bloom</a> - bloom_filter_test.cpp<span style="font-size: 80%;"> (source / <a href="bloom_filter_test.cpp.func-c.html">functions</a>)</span></td>
+            <td width="10%" class="headerValue"><a href="../../../../../index.html">top level</a> - <a href="index.html">pl/bloom/cpp/pl/bloom</a> - bloom_test.cpp<span style="font-size: 80%;"> (source / <a href="bloom_test.cpp.func-c.html">functions</a>)</span></td>
             <td width="5%"></td>
             <td width="5%"></td>
             <td width="5%" class="headerCovTableHead">Coverage</td>
@@ -32,12 +32,12 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">13</td>
-            <td class="headerCovTableEntry">13</td>
+            <td class="headerCovTableEntry">1</td>
+            <td class="headerCovTableEntry">1</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-05-11 15:16:36</td>
+            <td class="headerValue">2025-05-11 16:10:06</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">66.7&nbsp;%</td>
@@ -76,32 +76,11 @@
 <span id="L14"><span class="lineNum">      14</span>              : </span>
 <span id="L15"><span class="lineNum">      15</span>              : // Authors: liubang (it.liubang@gmail.com)</span>
 <span id="L16"><span class="lineNum">      16</span>              : </span>
-<span id="L17"><span class="lineNum">      17</span>              : #include &quot;cpp/pl/bloom/bloom_filter.h&quot;</span>
-<span id="L18"><span class="lineNum">      18</span>              : #include &quot;cpp/pl/random/random.h&quot;</span>
-<span id="L19"><span class="lineNum">      19</span>              : </span>
-<span id="L20"><span class="lineNum">      20</span>              : #include &lt;gtest/gtest.h&gt;</span>
-<span id="L21"><span class="lineNum">      21</span>              : #include &lt;string&gt;</span>
-<span id="L22"><span class="lineNum">      22</span>              : #include &lt;vector&gt;</span>
-<span id="L23"><span class="lineNum">      23</span>              : </span>
-<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC tlaBgGNC">           3 : TEST(bloom, bloom) {</span></span>
-<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">           1 :     pl::BloomFilter filter(32);</span></span>
-<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">           1 :     std::vector&lt;std::string_view&gt; binaries(100);</span></span>
-<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">           1 :     std::vector&lt;std::string&gt; strs(100);</span></span>
-<span id="L28"><span class="lineNum">      28</span>              : </span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">         101 :     for (int i = 0; i &lt; 100; ++i) {</span></span>
-<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">         200 :         strs[i] = pl::random_string(i + 10);</span></span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">         100 :         binaries[i] = strs[i];</span></span>
-<span id="L32"><span class="lineNum">      32</span>              :     }</span>
-<span id="L33"><span class="lineNum">      33</span>              : </span>
-<span id="L34"><span class="lineNum">      34</span>              :     std::string dst;</span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">           1 :     filter.create(binaries, &amp;dst);</span></span>
-<span id="L36"><span class="lineNum">      36</span>              : </span>
-<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">         101 :     for (int i = 0; i &lt; 100; ++i) {</span></span>
-<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">         100 :         EXPECT_TRUE(filter.contains(binaries[i], dst));</span></span>
-<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">         100 :         auto str = pl::random_string(128);</span></span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">         100 :         EXPECT_FALSE(filter.contains(str, dst));</span></span>
-<span id="L41"><span class="lineNum">      41</span>              :     }</span>
-<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">           2 : }</span></span>
+<span id="L17"><span class="lineNum">      17</span>              : #include &quot;cpp/pl/bloom/bloom.h&quot;</span>
+<span id="L18"><span class="lineNum">      18</span>              : </span>
+<span id="L19"><span class="lineNum">      19</span>              : #include &lt;gtest/gtest.h&gt;</span>
+<span id="L20"><span class="lineNum">      20</span>              : </span>
+<span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC tlaBgGNC">           3 : TEST(bloom, blocked_bloom_filter) {}</span></span>
         </pre>
               </td>
             </tr>
