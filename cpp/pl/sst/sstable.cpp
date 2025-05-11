@@ -103,8 +103,7 @@ Result<Void> SSTable::readFilter(const Footer& footer) {
         filter_data_.reset(block.data.data());
     }
 
-    uint8_t num_probes = decodeInt<uint8_t>(block.data.data() + (block.data.size() - 1));
-
+    auto num_probes = decodeInt<uint8_t>(block.data.data() + (block.data.size() - 1));
     switch (filter_type) {
     case FilterPolicyType::STANDARD_BLOOM_FILTER:
         filter_ = std::make_unique<StandardBloomFilterReader>(block.data.data(), block.data.size(),
@@ -159,6 +158,7 @@ Result<CellVecRef> SSTable::get(std::string_view rowkey, Arena* buf) {
         RETURN_AND_LOG_ON_ERROR(result);
 
         if (!filter_->key_may_match(rowkey)) {
+            XLOGF(INFO, "search_key: {} filted by bloom filter", rowkey);
             return makeError(StatusCode::kKVStoreNotFound);
         }
     }
