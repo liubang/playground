@@ -25,19 +25,6 @@ load(
 
 cc_library(
     name = "bloom_filter",
-    srcs = ["bloom_filter.cpp"],
-    hdrs = ["bloom_filter.h"],
-    copts = ["-std=c++20"] + DEFAULT_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
-    visibility = ["//visibility:public"],
-    deps = [
-        "//cpp/pl/hash",
-        "//cpp/pl/random",
-    ],
-)
-
-cc_library(
-    name = "bloom_filter_v2",
     hdrs = ["bloom.h"],
     visibility = ["//visibility:public"],
     deps = [
@@ -49,7 +36,7 @@ cc_library(
 cc_test(
     name = "bloom_filter_test",
     srcs = [
-        "bloom_filter_test.cpp",
+        "bloom_test.cpp",
     ],
     copts = [
         "-std=c++20",

@@ -16,7 +16,6 @@
 // Created: 2023/05/29 21:04
 
 #include "cpp/pl/sst/filter_policy.h"
-#include "cpp/pl/bloom/bloom_filter.h"
 
 #include "xxhash.h"
 #include <array>
@@ -157,19 +156,6 @@ bool BlockedBloomFilterReader::key_may_match(std::string_view key) {
                                      &byte_offset);
     return BlockedBloomFilter::hash_may_match_prepared(Upper32of64(hash), num_probes_,
                                                        buf_ + byte_offset);
-}
-
-//=================================================================================================
-// deprecated code below
-void BloomFilterPolicy::createFilter(const std::vector<std::string_view>& keys,
-                                     std::string* dst) const {
-    BloomFilter bloom_filter(bits_per_key_);
-    bloom_filter.create(keys, dst);
-}
-
-bool BloomFilterPolicy::keyMayMatch(std::string_view key, std::string_view filter) const {
-    BloomFilter bloom_filter(bits_per_key_);
-    return bloom_filter.contains(key, filter);
 }
 
 } // namespace pl
