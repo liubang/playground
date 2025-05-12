@@ -122,47 +122,4 @@ private:
     const int num_probes_{0};
 };
 
-//=================================================================================================
-// @deprecated
-class FilterPolicy;
-
-// @deprecated
-using FilterPolicyPtr = std::unique_ptr<FilterPolicy>;
-// @deprecated
-using FilterPolicyRef = std::shared_ptr<FilterPolicy>;
-
-/**
- * @deprecated
- */
-class FilterPolicy {
-public:
-    virtual ~FilterPolicy() = default;
-
-    virtual void createFilter(const std::vector<std::string_view>& keys,
-                              std::string* dst) const = 0;
-
-    [[nodiscard]] virtual const char* name() const = 0;
-
-    [[nodiscard]] virtual bool keyMayMatch(std::string_view key, std::string_view filter) const = 0;
-};
-
-/**
- * @deprecated
- */
-class BloomFilterPolicy : public FilterPolicy {
-public:
-    BloomFilterPolicy(uint32_t bits_per_key) : bits_per_key_(bits_per_key) {}
-
-    ~BloomFilterPolicy() override = default;
-
-    [[nodiscard]] const char* name() const override { return "BloomFilterPolicy"; }
-
-    void createFilter(const std::vector<std::string_view>& keys, std::string* dst) const override;
-
-    [[nodiscard]] bool keyMayMatch(std::string_view key, std::string_view filter) const override;
-
-private:
-    uint32_t bits_per_key_;
-};
-
 } // namespace pl
