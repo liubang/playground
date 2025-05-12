@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-05-11 16:10:06</td>
+            <td class="headerValue">2025-05-12 16:32:01</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -92,15 +92,15 @@
 <span id="L30"><span class="lineNum">      30</span>              : </span>
 <span id="L31"><span class="lineNum">      31</span>              : BENCHMARK(write_0);</span>
 <span id="L32"><span class="lineNum">      32</span>              : </span>
-<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">           1 : static void write_1(benchmark::State&amp; state) {</span></span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">           2 : static void write_1(benchmark::State&amp; state) {</span></span>
 <span id="L34"><span class="lineNum">      34</span>              :     for (auto _ : state) {</span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">           1 :         std::vector&lt;int&gt; arr(n);</span></span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">    67108865 :         for (size_t i = 0; i &lt; n; ++i) {</span></span>
-<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">    67108864 :             arr[i] = 1;</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">           3 :         std::vector&lt;int&gt; arr(n);</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">   201326595 :         for (size_t i = 0; i &lt; n; ++i) {</span></span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">   201326592 :             arr[i] = 1;</span></span>
 <span id="L38"><span class="lineNum">      38</span>              :         }</span>
 <span id="L39"><span class="lineNum">      39</span>              :         benchmark::DoNotOptimize(arr);</span>
 <span id="L40"><span class="lineNum">      40</span>              :     }</span>
-<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">           2 : }</span></span>
 <span id="L42"><span class="lineNum">      42</span>              : </span>
 <span id="L43"><span class="lineNum">      43</span>              : BENCHMARK(write_1);</span>
         </pre>
