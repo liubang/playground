@@ -87,12 +87,14 @@ inline const char* FilterPolicyType2String(FilterPolicyType t) {
     pl::assume_unreachable();
 }
 
+// clang-format off
 enum class CompressionType : uint8_t {
-    NONE = 0,
+    NONE   = 0,
     SNAPPY = 1,
-    ZSTD = 2,
-    ISAL = 3,
+    ZSTD   = 2,
+    ISAL   = 3,
 };
+// clang-format on
 
 inline const char* CompressionType2String(CompressionType t) {
     switch (t) {
