@@ -146,7 +146,6 @@ public:
         XLOGF(INFO, "{}", table->fileMeta()->toString());
         EXPECT_EQ(SSTType::MAJOR, table->fileMeta()->sstType());
         EXPECT_EQ(SSTVersion::V1, table->fileMeta()->sstVersion());
-        EXPECT_EQ(FilterPolicyType::STANDARD_BLOOM_FILTER, table->fileMeta()->filterPolicyType());
         EXPECT_EQ(10, table->fileMeta()->bitsPerKey());
         EXPECT_EQ(ROW_NUM * 2 * COL_NUM, table->fileMeta()->cellNum());
     }
@@ -171,6 +170,7 @@ TEST_F(SSTableTest, init) {
     build_options->sst_id = 2;
     build_sst(1, build_options);
     build_options->compression_type = CompressionType::ZSTD;
+    build_options->filter_type = FilterPolicyType::BLOCKED_BLOOM_FILTER;
     build_options->sst_id = 3;
     build_sst(2, build_options);
 }
