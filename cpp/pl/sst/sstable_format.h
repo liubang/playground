@@ -69,11 +69,14 @@ inline const char* SSTVersion2String(SSTVersion t) {
     pl::assume_unreachable();
 }
 
+// clang-format off
 enum class FilterPolicyType : uint8_t {
-    NONE = 0,
+    NONE                  = 0,
     STANDARD_BLOOM_FILTER = 1,
-    BLOCKED_BLOOM_FILTER = 2,
+    BLOCKED_BLOOM_FILTER  = 2,
+    END                   = 2,
 };
+// clang-format on
 
 inline const char* FilterPolicyType2String(FilterPolicyType t) {
     switch (t) {
