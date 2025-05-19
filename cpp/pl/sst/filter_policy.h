@@ -21,9 +21,8 @@
 #include <cstring>
 #include <deque>
 #include <memory>
-#include <string>
+#include <optional>
 #include <string_view>
-#include <vector>
 
 namespace pl {
 
@@ -33,12 +32,17 @@ public:
 
     virtual void add_key(std::string_view key);
 
-    virtual void add_key_alt(std::string_view key, std::string_view prefix);
+    virtual void add_key_and_alt(std::string_view key, std::string_view alt);
 
     virtual std::string_view finish(std::unique_ptr<const char[]>* buf) = 0;
 
+    virtual size_t estimate_hashes_added();
+
+    virtual const char* name() = 0;
+
 protected:
     std::deque<uint64_t> hashes_;
+    std::optional<uint64_t> prev_alt_hash_;
 };
 
 using FilterBuilderPtr = std::unique_ptr<FilterBuilder>;
@@ -53,6 +57,10 @@ public:
 
     std::string_view finish(std::unique_ptr<const char[]>* buf) override;
 
+    const char* name() override { return kClassName(); }
+
+    static const char* kClassName() { return "StandardBloomFilterBuilder"; }
+
 private:
     [[nodiscard]] std::size_t calculate_space(std::size_t num_hashes) const;
 
@@ -65,11 +73,17 @@ private:
 class BlockedBloomFilterBuilder : public FilterBuilder {
 
 public:
-    BlockedBloomFilterBuilder(int millibits_per_key) : millibits_per_key_(millibits_per_key) {}
+    BlockedBloomFilterBuilder(int bits_per_key) {
+        millibits_per_key_ = static_cast<int>(bits_per_key * 1000.0 + 0.500001);
+    }
 
     ~BlockedBloomFilterBuilder() override = default;
 
     std::string_view finish(std::unique_ptr<const char[]>* buf) override;
+
+    const char* name() override { return kClassName(); }
+
+    static const char* kClassName() { return "BlockedBloomFilterBuilder"; }
 
 private:
     void add_all_hashes(char* buf, std::size_t buf_len, int num_probes);
