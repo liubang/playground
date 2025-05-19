@@ -37,8 +37,26 @@ void FilterBuilder::add_key(std::string_view key) {
     }
 }
 
-// TODO
-void FilterBuilder::add_key_alt(std::string_view key, std::string_view prefix) {}
+void FilterBuilder::add_key_and_alt(std::string_view key, std::string_view alt) {
+    uint64_t key_hash = ::XXH3_64bits(key.data(), key.size());
+    uint64_t alt_hash = ::XXH3_64bits(alt.data(), alt.size());
+
+    std::optional<uint64_t> prev_key_hash;
+    std::optional<uint64_t> prev_alt_hash = prev_alt_hash_;
+    if (!hashes_.empty()) {
+        prev_key_hash = hashes_.back();
+    }
+
+    if (alt_hash != prev_alt_hash && alt_hash != key_hash && alt_hash != prev_key_hash) {
+        hashes_.push_back(alt_hash);
+    }
+    prev_alt_hash_ = alt_hash;
+    if (key_hash != prev_key_hash && key_hash != prev_alt_hash) {
+        hashes_.push_back(key_hash);
+    }
+}
+
+size_t FilterBuilder::estimate_hashes_added() { return hashes_.size(); }
 
 std::size_t StandardBloomFilterBuilder::calculate_space(std::size_t num_hashes) const {
     std::size_t bit_count = num_hashes * bits_per_key_;
