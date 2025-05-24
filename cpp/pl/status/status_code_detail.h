@@ -74,6 +74,7 @@ COMMON_STATUS(IOError, 69)
 COMMON_STATUS(FaultInjection, 70)
 COMMON_STATUS(ConfigParseError, 71)
 COMMON_STATUS(OSError, 72)
+COMMON_STATUS(InvalidCell, 73)
 
 COMMON_STATUS(SSTableBuilderClosed, 100)
 
