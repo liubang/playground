@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-05-24 07:49:37</td>
+            <td class="headerValue">2025-05-24 08:52:52</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -102,38 +102,38 @@
 <span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">        5328 :     std::size_t needed = bytes + slop;</span></span>
 <span id="L41"><span class="lineNum">      41</span>              :     char* result;</span>
 <span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">        5328 :     if (needed &lt;= alloc_bytes_remaining_) {</span></span>
-<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">        5230 :         result = alloc_ptr_ + slop;</span></span>
-<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">        5230 :         alloc_ptr_ += needed;</span></span>
-<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">        5230 :         alloc_bytes_remaining_ -= needed;</span></span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">        5231 :         result = alloc_ptr_ + slop;</span></span>
+<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">        5231 :         alloc_ptr_ += needed;</span></span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">        5231 :         alloc_bytes_remaining_ -= needed;</span></span>
 <span id="L46"><span class="lineNum">      46</span>              :     } else {</span>
-<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">          98 :         result = allocate_fallback(bytes);</span></span>
+<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">          97 :         result = allocate_fallback(bytes);</span></span>
 <span id="L48"><span class="lineNum">      48</span>              :     }</span>
 <span id="L49"><span class="lineNum">      49</span>              :     assert((reinterpret_cast&lt;uintptr_t&gt;(result) &amp; (align - 1)) == 0);</span>
 <span id="L50"><span class="lineNum">      50</span> <span class="tlaGNC">        5328 :     return result;</span></span>
 <span id="L51"><span class="lineNum">      51</span>              : }</span>
 <span id="L52"><span class="lineNum">      52</span>              : </span>
-<span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC">         101 : [[nodiscard]] char* Arena::allocate_fallback(std::size_t bytes) {</span></span>
+<span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC">         100 : [[nodiscard]] char* Arena::allocate_fallback(std::size_t bytes) {</span></span>
 <span id="L54"><span class="lineNum">      54</span>              :     // 如果申请的内存大于一个Block的1/4，则需要多少内存就申请多少内存</span>
 <span id="L55"><span class="lineNum">      55</span>              :     // 否则，申请的内存太小的话，就按一个block来申请</span>
-<span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">         101 :     if (bytes &gt; BLOCK_SIZE / 4) {</span></span>
+<span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">         100 :     if (bytes &gt; BLOCK_SIZE / 4) {</span></span>
 <span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">           2 :         char* result = allocate_new_block(bytes);</span></span>
 <span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">           2 :         return result;</span></span>
 <span id="L59"><span class="lineNum">      59</span>              :     }</span>
 <span id="L60"><span class="lineNum">      60</span>              : </span>
-<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">          99 :     alloc_ptr_ = allocate_new_block(BLOCK_SIZE);</span></span>
+<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">          98 :     alloc_ptr_ = allocate_new_block(BLOCK_SIZE);</span></span>
 <span id="L62"><span class="lineNum">      62</span>              :     alloc_bytes_remaining_ = BLOCK_SIZE;</span>
 <span id="L63"><span class="lineNum">      63</span>              : </span>
 <span id="L64"><span class="lineNum">      64</span>              :     char* result = alloc_ptr_;</span>
-<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC">          99 :     alloc_ptr_ += bytes;</span></span>
-<span id="L66"><span class="lineNum">      66</span> <span class="tlaGNC">          99 :     alloc_bytes_remaining_ -= bytes;</span></span>
-<span id="L67"><span class="lineNum">      67</span> <span class="tlaGNC">          99 :     return result;</span></span>
+<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC">          98 :     alloc_ptr_ += bytes;</span></span>
+<span id="L66"><span class="lineNum">      66</span> <span class="tlaGNC">          98 :     alloc_bytes_remaining_ -= bytes;</span></span>
+<span id="L67"><span class="lineNum">      67</span> <span class="tlaGNC">          98 :     return result;</span></span>
 <span id="L68"><span class="lineNum">      68</span>              : }</span>
 <span id="L69"><span class="lineNum">      69</span>              : </span>
-<span id="L70"><span class="lineNum">      70</span> <span class="tlaGNC">         101 : [[nodiscard]] char* Arena::allocate_new_block(std::size_t bytes) {</span></span>
-<span id="L71"><span class="lineNum">      71</span> <span class="tlaGNC">         202 :     blocks_.emplace_back(std::make_unique&lt;char[]&gt;(bytes));</span></span>
+<span id="L70"><span class="lineNum">      70</span> <span class="tlaGNC">         100 : [[nodiscard]] char* Arena::allocate_new_block(std::size_t bytes) {</span></span>
+<span id="L71"><span class="lineNum">      71</span> <span class="tlaGNC">         200 :     blocks_.emplace_back(std::make_unique&lt;char[]&gt;(bytes));</span></span>
 <span id="L72"><span class="lineNum">      72</span>              :     // block_bytes + pointer</span>
-<span id="L73"><span class="lineNum">      73</span> <span class="tlaGNC">         101 :     memory_usage_.fetch_add(bytes + sizeof(char*), std::memory_order_relaxed);</span></span>
-<span id="L74"><span class="lineNum">      74</span> <span class="tlaGNC">         101 :     return blocks_[blocks_.size() - 1].get();</span></span>
+<span id="L73"><span class="lineNum">      73</span> <span class="tlaGNC">         100 :     memory_usage_.fetch_add(bytes + sizeof(char*), std::memory_order_relaxed);</span></span>
+<span id="L74"><span class="lineNum">      74</span> <span class="tlaGNC">         100 :     return blocks_[blocks_.size() - 1].get();</span></span>
 <span id="L75"><span class="lineNum">      75</span>              : }</span>
 <span id="L76"><span class="lineNum">      76</span>              : </span>
 <span id="L77"><span class="lineNum">      77</span> <span class="tlaGNC">           5 : [[nodiscard]] std::size_t Arena::memory_usage() const {</span></span>
