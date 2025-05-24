@@ -24,9 +24,16 @@
 
 namespace pl {
 
+namespace {
+// 检查边界的辅助函数
+inline bool checkBounds(size_t current, size_t needed, size_t total) {
+    return current + needed <= total;
+}
+
+} // namespace
+
 void BlockHandle::encodeTo(std::string* dst) const {
-    assert(offset_ != ~static_cast<uint64_t>(0));
-    assert(size_ != ~static_cast<uint64_t>(0));
+    assert(isValid());
     encodeInt(dst, offset_);
     encodeInt(dst, size_);
 }
@@ -64,92 +71,91 @@ Result<Void> FileMeta::decodeFrom(std::string_view input) {
         return makeError(StatusCode::kDataCorruption, "file meta is too short");
     }
     const char* data = input.data();
-    const auto s = input.size();
+    const auto total_size = input.size();
     uint32_t cursor = 0;
 
+    // 辅助宏，简化边界检查和错误处理
+#define CHECK_BOUNDS_AND_DECODE(type, var, error_msg)                 \
+    do {                                                              \
+        if (!checkBounds(cursor, sizeof(type), total_size)) {         \
+            return makeError(StatusCode::kDataCorruption, error_msg); \
+        }                                                             \
+        var = decodeInt<type>(data + cursor);                         \
+        cursor += sizeof(type);                                       \
+    } while (0)
+
     // magic number
-    auto magic = decodeInt<uint32_t>(data + cursor);
-    cursor += 4;
+
+    uint32_t magic = 0;
+    CHECK_BOUNDS_AND_DECODE(uint32_t, magic, "insufficient data for magic number");
     if (magic != FILE_META_MAGIC_NUMBER) {
         return makeError(StatusCode::kDataCorruption,
                          "invalid file meta, the matic number is mismatch");
     }
 
     // sst type
-    auto type = decodeInt<uint8_t>(data + cursor);
-    cursor++;
+    uint8_t type = 0;
+    CHECK_BOUNDS_AND_DECODE(uint8_t, type, "insufficient data for sst type");
     if (type == 0 || type > static_cast<uint8_t>(SSTType::MAJOR)) {
         return makeError(StatusCode::kDataCorruption, "invalid sstable type");
     }
     sst_type_ = static_cast<SSTType>(type);
 
     // sst version
-    auto version = decodeInt<uint8_t>(data + cursor);
-    cursor++;
+    uint8_t version = 0;
+    CHECK_BOUNDS_AND_DECODE(uint8_t, version, "insufficient data for sst version");
     if (version == 0 || version > static_cast<uint8_t>(SSTVersion::V1)) {
         return makeError(StatusCode::kDataCorruption, "invalid sstable version");
     }
     sst_version_ = static_cast<SSTVersion>(version);
 
     // patch_id
-    patch_id_ = decodeInt<uint64_t>(data + cursor);
-    cursor += 8;
-
+    CHECK_BOUNDS_AND_DECODE(uint64_t, patch_id_, "insufficient data for patch_id");
     // sst id
-    sst_id_ = decodeInt<uint64_t>(data + cursor);
-    cursor += 8;
+    CHECK_BOUNDS_AND_DECODE(uint64_t, sst_id_, "insufficient data for sst_id");
 
     // filter type
-    auto filter_type = decodeInt<uint8_t>(data + cursor);
-    cursor++;
+    uint8_t filter_type = 0;
+    CHECK_BOUNDS_AND_DECODE(uint8_t, filter_type, "insufficient data for filter_type");
     if (filter_type > static_cast<uint8_t>(FilterPolicyType::END)) {
         return makeError(StatusCode::kDataCorruption, "invalid filter policy type");
     }
     filter_type_ = static_cast<FilterPolicyType>(filter_type);
 
-    // bits_per_key
-    bits_per_key_ = decodeInt<uint32_t>(data + cursor);
-    cursor += 4;
-
-    // cell number
-    cell_number_ = decodeInt<uint64_t>(data + cursor);
-    cursor += 8;
-
-    // row number
-    row_number_ = decodeInt<uint64_t>(data + cursor);
-    cursor += 8;
-
-    // min timestamp
-    min_timestamp_ = decodeInt<uint64_t>(data + cursor);
-    cursor += 8;
-
-    // max timestamp
-    max_timestamp_ = decodeInt<uint64_t>(data + cursor);
-    cursor += 8;
+    CHECK_BOUNDS_AND_DECODE(uint32_t, bits_per_key_, "insufficient data for bits_per_key");
+    CHECK_BOUNDS_AND_DECODE(uint64_t, cell_number_, "insufficient data for cell_number");
+    CHECK_BOUNDS_AND_DECODE(uint64_t, row_number_, "insufficient data for row_number");
+    CHECK_BOUNDS_AND_DECODE(uint64_t, min_timestamp_, "insufficient data for min_timestamp");
+    CHECK_BOUNDS_AND_DECODE(uint64_t, max_timestamp_, "insufficient data for max_timestamp");
 
     // min key
-    auto min_key_size = decodeInt<uint32_t>(data + cursor);
-    cursor += 4;
-    if (cursor + min_key_size + 4 > s) {
+    uint32_t min_key_size = 0;
+    CHECK_BOUNDS_AND_DECODE(uint32_t, min_key_size, "insufficient data for min_key_size");
+    if (!checkBounds(cursor, min_key_size + sizeof(uint32_t), total_size)) {
         return makeError(StatusCode::kDataCorruption, "parse file meta error");
     }
-
     if (min_key_size > 0) {
         min_key_.assign(data + cursor, min_key_size);
         cursor += min_key_size;
+    } else {
+        min_key_.clear();
     }
 
     // max key
-    auto max_key_size = decodeInt<uint32_t>(data + cursor);
-    cursor += 4;
+    uint32_t max_key_size = 0;
+    CHECK_BOUNDS_AND_DECODE(uint32_t, max_key_size, "insufficient data for max_key_size");
 
-    if (cursor + max_key_size != s) {
+    if (cursor + max_key_size != total_size) {
         return makeError(StatusCode::kDataCorruption, "parse file meta error");
     }
 
     if (max_key_size > 0) {
         max_key_.assign(data + cursor, max_key_size);
+    } else {
+        max_key_.clear();
     }
+
+#undef CHECK_BOUNDS_AND_DECODE
 
     RETURN_VOID;
 }
@@ -186,17 +192,14 @@ Result<Void> Footer::decodeFrom(std::string_view input) {
         return makeError(StatusCode::kDataCorruption, "invalid magic number");
     }
 
-    // decode filter offset and size
-    auto result = filter_handle_.decodeFrom(input);
-    RETURN_AND_LOG_ON_ERROR(result);
+    // 依次解码三个句柄
+    const std::array<std::pair<BlockHandle*, size_t>, 3> handles = {
+        {{&filter_handle_, 0}, {&index_handle_, 16}, {&file_meta_handle_, 32}}};
 
-    // decode index offset and size
-    result = index_handle_.decodeFrom(std::string_view(input.data() + 16, 16));
-    RETURN_AND_LOG_ON_ERROR(result);
-
-    // decode file meta offset and size
-    result = file_meta_handle_.decodeFrom(std::string_view(input.data() + 32, 16));
-    RETURN_AND_LOG_ON_ERROR(result);
+    for (const auto& [handle, offset] : handles) {
+        auto result = handle->decodeFrom(std::string_view(input.data() + offset, 16));
+        RETURN_AND_LOG_ON_ERROR(result);
+    }
 
     RETURN_VOID;
 }
@@ -264,6 +267,7 @@ Result<BlockContents> BlockReader::readBlock(const FileSystemRef& reader,
     case CompressionType::ISAL:
     {
         // TODO(liubang):
+        return makeError(StatusCode::kNotImplemented, "ISAL compression not implemented");
     }
     default:
     {
