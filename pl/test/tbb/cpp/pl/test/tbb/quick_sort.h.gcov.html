@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-05-24 16:12:57</td>
+            <td class="headerValue">2025-05-24 16:26:15</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">71.4&nbsp;%</td>
@@ -85,65 +85,65 @@
 <span id="L23"><span class="lineNum">      23</span>              : </span>
 <span id="L24"><span class="lineNum">      24</span>              : namespace pl {</span>
 <span id="L25"><span class="lineNum">      25</span>              : </span>
-<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC tlaBgGNC">      166930 : template &lt;typename T&gt; void quick_sort(T* data, size_t size) {</span></span>
-<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">      333862 :     if (size &lt; 1)</span></span>
+<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC tlaBgGNC">      118880 : template &lt;typename T&gt; void quick_sort(T* data, size_t size) {</span></span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">      237613 :     if (size &lt; 1)</span></span>
 <span id="L28"><span class="lineNum">      28</span>              :         return;</span>
 <span id="L29"><span class="lineNum">      29</span>              :     size_t mid = std::hash&lt;size_t&gt;{}(size);</span>
-<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">      166645 :     mid ^= std::hash&lt;void*&gt;{}(static_cast&lt;void*&gt;(data));</span></span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">      166645 :     mid %= size;</span></span>
-<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">      166645 :     std::swap(data[0], data[mid]);</span></span>
-<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">      166645 :     T pivot = data[0];</span></span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">      166645 :     size_t left = 0, right = size - 1;</span></span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">      533153 :     while (left &lt; right) {</span></span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">      966259 :         while (left &lt; right &amp;&amp; !(data[right] &lt; pivot))</span></span>
-<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">      599751 :             right--;</span></span>
-<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">      366508 :         if (left &lt; right)</span></span>
-<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">      326490 :             data[left++] = data[right];</span></span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">      919891 :         while (left &lt; right &amp;&amp; data[left] &lt; pivot)</span></span>
-<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">      553383 :             left++;</span></span>
-<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">      366508 :         if (left &lt; right)</span></span>
-<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">      273099 :             data[right--] = data[left];</span></span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">      118729 :     mid ^= std::hash&lt;void*&gt;{}(static_cast&lt;void*&gt;(data));</span></span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">      118729 :     mid %= size;</span></span>
+<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">      118729 :     std::swap(data[0], data[mid]);</span></span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">      118729 :     T pivot = data[0];</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">      118729 :     size_t left = 0, right = size - 1;</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">      387873 :     while (left &lt; right) {</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">      707750 :         while (left &lt; right &amp;&amp; !(data[right] &lt; pivot))</span></span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">      438606 :             right--;</span></span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">      269144 :         if (left &lt; right)</span></span>
+<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">      239339 :             data[left++] = data[right];</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">      674493 :         while (left &lt; right &amp;&amp; data[left] &lt; pivot)</span></span>
+<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">      405349 :             left++;</span></span>
+<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">      269144 :         if (left &lt; right)</span></span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">      199749 :             data[right--] = data[left];</span></span>
 <span id="L44"><span class="lineNum">      44</span>              :     }</span>
-<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">      166645 :     data[left] = pivot;</span></span>
-<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">      166645 :     quick_sort(data, left);</span></span>
-<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">      166932 :     quick_sort(data + left + 1, size - left - 1);</span></span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">      118729 :     data[left] = pivot;</span></span>
+<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">      118729 :     quick_sort(data, left);</span></span>
+<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">      118733 :     quick_sort(data + left + 1, size - left - 1);</span></span>
 <span id="L48"><span class="lineNum">      48</span>              : }</span>
 <span id="L49"><span class="lineNum">      49</span>              : </span>
-<span id="L50"><span class="lineNum">      50</span> <span class="tlaGNC">          58 : template &lt;typename T&gt; void quick_sort2(T* data, size_t size) {</span></span>
-<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">          58 :     if (size &lt; 1)</span></span>
+<span id="L50"><span class="lineNum">      50</span> <span class="tlaGNC">          33 : template &lt;typename T&gt; void quick_sort2(T* data, size_t size) {</span></span>
+<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">          33 :     if (size &lt; 1)</span></span>
 <span id="L52"><span class="lineNum">      52</span> <span class="tlaUNC tlaBgUNC">           0 :         return;</span></span>
 <span id="L53"><span class="lineNum">      53</span>              :     size_t mid = std::hash&lt;size_t&gt;{}(size);</span>
-<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC tlaBgGNC">          58 :     mid ^= std::hash&lt;void*&gt;{}(static_cast&lt;void*&gt;(data));</span></span>
-<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">          58 :     mid %= size;</span></span>
-<span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">          58 :     std::swap(data[0], data[mid]);</span></span>
-<span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">          58 :     T pivot = data[0];</span></span>
-<span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">          58 :     size_t left = 0, right = size - 1;</span></span>
-<span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC">        9500 :     while (left &lt; right) {</span></span>
-<span id="L60"><span class="lineNum">      60</span> <span class="tlaGNC">       27148 :         while (left &lt; right &amp;&amp; !(data[right] &lt; pivot))</span></span>
-<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">       17764 :             right--;</span></span>
-<span id="L62"><span class="lineNum">      62</span> <span class="tlaGNC">        9384 :         if (left &lt; right)</span></span>
-<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">        9371 :             data[left++] = data[right];</span></span>
-<span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC">       32246 :         while (left &lt; right &amp;&amp; data[left] &lt; pivot)</span></span>
-<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC">       22862 :             left++;</span></span>
-<span id="L66"><span class="lineNum">      66</span> <span class="tlaGNC">        9384 :         if (left &lt; right)</span></span>
-<span id="L67"><span class="lineNum">      67</span> <span class="tlaGNC">        9337 :             data[right--] = data[left];</span></span>
+<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC tlaBgGNC">          33 :     mid ^= std::hash&lt;void*&gt;{}(static_cast&lt;void*&gt;(data));</span></span>
+<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">          33 :     mid %= size;</span></span>
+<span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">          33 :     std::swap(data[0], data[mid]);</span></span>
+<span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">          33 :     T pivot = data[0];</span></span>
+<span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">          33 :     size_t left = 0, right = size - 1;</span></span>
+<span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC">        5179 :     while (left &lt; right) {</span></span>
+<span id="L60"><span class="lineNum">      60</span> <span class="tlaGNC">       15753 :         while (left &lt; right &amp;&amp; !(data[right] &lt; pivot))</span></span>
+<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">       10640 :             right--;</span></span>
+<span id="L62"><span class="lineNum">      62</span> <span class="tlaGNC">        5113 :         if (left &lt; right)</span></span>
+<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">        5105 :             data[left++] = data[right];</span></span>
+<span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC">       18043 :         while (left &lt; right &amp;&amp; data[left] &lt; pivot)</span></span>
+<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC">       12930 :             left++;</span></span>
+<span id="L66"><span class="lineNum">      66</span> <span class="tlaGNC">        5113 :         if (left &lt; right)</span></span>
+<span id="L67"><span class="lineNum">      67</span> <span class="tlaGNC">        5084 :             data[right--] = data[left];</span></span>
 <span id="L68"><span class="lineNum">      68</span>              :     }</span>
-<span id="L69"><span class="lineNum">      69</span> <span class="tlaGNC">          58 :     data[left] = pivot;</span></span>
+<span id="L69"><span class="lineNum">      69</span> <span class="tlaGNC">          33 :     data[left] = pivot;</span></span>
 <span id="L70"><span class="lineNum">      70</span>              :     tbb::parallel_invoke(</span>
-<span id="L71"><span class="lineNum">      71</span> <span class="tlaGNC">         232 :         [&amp;] {</span></span>
-<span id="L72"><span class="lineNum">      72</span> <span class="tlaGNC">          58 :             quick_sort(data, left);</span></span>
+<span id="L71"><span class="lineNum">      71</span> <span class="tlaGNC">         132 :         [&amp;] {</span></span>
+<span id="L72"><span class="lineNum">      72</span> <span class="tlaGNC">          33 :             quick_sort(data, left);</span></span>
 <span id="L73"><span class="lineNum">      73</span>              :         },</span>
-<span id="L74"><span class="lineNum">      74</span> <span class="tlaGNC">          58 :         [&amp;] {</span></span>
-<span id="L75"><span class="lineNum">      75</span> <span class="tlaGNC">          58 :             quick_sort(data + left + 1, size - left - 1);</span></span>
+<span id="L74"><span class="lineNum">      74</span> <span class="tlaGNC">          33 :         [&amp;] {</span></span>
+<span id="L75"><span class="lineNum">      75</span> <span class="tlaGNC">          33 :             quick_sort(data + left + 1, size - left - 1);</span></span>
 <span id="L76"><span class="lineNum">      76</span>              :         });</span>
 <span id="L77"><span class="lineNum">      77</span>              : }</span>
 <span id="L78"><span class="lineNum">      78</span>              : </span>
-<span id="L79"><span class="lineNum">      79</span> <span class="tlaGNC">         223 : template &lt;typename T&gt; void quick_sort3(T* data, size_t size) {</span></span>
-<span id="L80"><span class="lineNum">      80</span> <span class="tlaGNC">         223 :     if (size &lt; 1)</span></span>
-<span id="L81"><span class="lineNum">      81</span> <span class="tlaGNC">         223 :         return;</span></span>
-<span id="L82"><span class="lineNum">      82</span> <span class="tlaGNC">         223 :     if (size &lt; (1 &lt;&lt; 16)) {</span></span>
-<span id="L83"><span class="lineNum">      83</span> <span class="tlaGNC">         223 :         std::sort(data, data + size, std::less&lt;T&gt;{});</span></span>
-<span id="L84"><span class="lineNum">      84</span> <span class="tlaGNC">         223 :         return;</span></span>
+<span id="L79"><span class="lineNum">      79</span> <span class="tlaGNC">         127 : template &lt;typename T&gt; void quick_sort3(T* data, size_t size) {</span></span>
+<span id="L80"><span class="lineNum">      80</span> <span class="tlaGNC">         127 :     if (size &lt; 1)</span></span>
+<span id="L81"><span class="lineNum">      81</span> <span class="tlaGNC">         127 :         return;</span></span>
+<span id="L82"><span class="lineNum">      82</span> <span class="tlaGNC">         127 :     if (size &lt; (1 &lt;&lt; 16)) {</span></span>
+<span id="L83"><span class="lineNum">      83</span> <span class="tlaGNC">         127 :         std::sort(data, data + size, std::less&lt;T&gt;{});</span></span>
+<span id="L84"><span class="lineNum">      84</span> <span class="tlaGNC">         127 :         return;</span></span>
 <span id="L85"><span class="lineNum">      85</span>              :     }</span>
 <span id="L86"><span class="lineNum">      86</span>              :     size_t mid = std::hash&lt;size_t&gt;{}(size);</span>
 <span id="L87"><span class="lineNum">      87</span> <span class="tlaUNC tlaBgUNC">           0 :     mid ^= std::hash&lt;void*&gt;{}(static_cast&lt;void*&gt;(data));</span></span>

@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-05-24 16:12:57</td>
+            <td class="headerValue">2025-05-24 16:26:15</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -85,43 +85,43 @@
 <span id="L23"><span class="lineNum">      23</span>              : </span>
 <span id="L24"><span class="lineNum">      24</span>              : constexpr size_t n = 1 &lt;&lt; 5;</span>
 <span id="L25"><span class="lineNum">      25</span>              : </span>
-<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC tlaBgGNC">          94 : static void test1() {</span></span>
-<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">          94 :     std::vector&lt;float&gt; a(n * n);</span></span>
-<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">          94 :     std::vector&lt;float&gt; b(n * n);</span></span>
+<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC tlaBgGNC">         123 : static void test1() {</span></span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">         123 :     std::vector&lt;float&gt; a(n * n);</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">         123 :     std::vector&lt;float&gt; b(n * n);</span></span>
 <span id="L29"><span class="lineNum">      29</span>              : </span>
-<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">          94 :     tbb::parallel_for(tbb::blocked_range2d&lt;size_t&gt;(0, n, 0, n),</span></span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">       24192 :                       [&amp;](tbb::blocked_range2d&lt;size_t&gt; r) {</span></span>
-<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">       72270 :                           for (size_t i = r.cols().begin(); i &lt; r.cols().end(); ++i) {</span></span>
-<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">      144428 :                               for (size_t j = r.rows().begin(); j &lt; r.rows().end(); ++j) {</span></span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">       96256 :                                   b[i * n + j] = a[j * n + i];</span></span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">         123 :     tbb::parallel_for(tbb::blocked_range2d&lt;size_t&gt;(0, n, 0, n),</span></span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">       31611 :                       [&amp;](tbb::blocked_range2d&lt;size_t&gt; r) {</span></span>
+<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">       94464 :                           for (size_t i = r.cols().begin(); i &lt; r.cols().end(); ++i) {</span></span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">      188928 :                               for (size_t j = r.rows().begin(); j &lt; r.rows().end(); ++j) {</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">      125952 :                                   b[i * n + j] = a[j * n + i];</span></span>
 <span id="L35"><span class="lineNum">      35</span>              :                               }</span>
 <span id="L36"><span class="lineNum">      36</span>              :                           }</span>
-<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">       24098 :                       });</span></span>
-<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">          94 : }</span></span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">       31488 :                       });</span></span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">         123 : }</span></span>
 <span id="L39"><span class="lineNum">      39</span>              : </span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">          94 : static void test2() {</span></span>
-<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">          94 :     std::vector&lt;float&gt; a(n * n);</span></span>
-<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">          94 :     std::vector&lt;float&gt; b(n * n);</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">         360 : static void test2() {</span></span>
+<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">         360 :     std::vector&lt;float&gt; a(n * n);</span></span>
+<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">         360 :     std::vector&lt;float&gt; b(n * n);</span></span>
 <span id="L43"><span class="lineNum">      43</span>              :     size_t grain = 24;</span>
 <span id="L44"><span class="lineNum">      44</span>              :     tbb::parallel_for(</span>
-<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">          94 :         tbb::blocked_range2d&lt;size_t&gt;(0, n, grain, 0, n, grain),</span></span>
-<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">         470 :         [&amp;](tbb::blocked_range2d&lt;size_t&gt; r) {</span></span>
-<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">        6264 :             for (size_t i = r.cols().begin(); i &lt; r.cols().end(); ++i) {</span></span>
-<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">      100096 :                 for (size_t j = r.rows().begin(); j &lt; r.rows().end(); ++j) {</span></span>
-<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">       94208 :                     b[i * n + j] = a[j * n + i];</span></span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">         360 :         tbb::blocked_range2d&lt;size_t&gt;(0, n, grain, 0, n, grain),</span></span>
+<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">        1800 :         [&amp;](tbb::blocked_range2d&lt;size_t&gt; r) {</span></span>
+<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">       24480 :             for (size_t i = r.cols().begin(); i &lt; r.cols().end(); ++i) {</span></span>
+<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">      391680 :                 for (size_t j = r.rows().begin(); j &lt; r.rows().end(); ++j) {</span></span>
+<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">      368640 :                     b[i * n + j] = a[j * n + i];</span></span>
 <span id="L50"><span class="lineNum">      50</span>              :                 }</span>
 <span id="L51"><span class="lineNum">      51</span>              :             }</span>
-<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">         376 :         },</span></span>
-<span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC">          94 :         tbb::simple_partitioner{});</span></span>
-<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">          94 : }</span></span>
+<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">        1440 :         },</span></span>
+<span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC">         360 :         tbb::simple_partitioner{});</span></span>
+<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">         360 : }</span></span>
 <span id="L55"><span class="lineNum">      55</span>              : </span>
 <span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">           1 : int main(int argc, char* argv[]) {</span></span>
 <span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">           1 :     ankerl::nanobench::Bench().run(&quot;test1&quot;, [&amp;] {</span></span>
-<span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">          94 :         test1();</span></span>
-<span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC">          94 :     });</span></span>
+<span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">         123 :         test1();</span></span>
+<span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC">         123 :     });</span></span>
 <span id="L60"><span class="lineNum">      60</span> <span class="tlaGNC">           1 :     ankerl::nanobench::Bench().run(&quot;test2&quot;, [&amp;] {</span></span>
-<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">          94 :         test2();</span></span>
-<span id="L62"><span class="lineNum">      62</span> <span class="tlaGNC">          94 :     });</span></span>
+<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">         360 :         test2();</span></span>
+<span id="L62"><span class="lineNum">      62</span> <span class="tlaGNC">         360 :     });</span></span>
 <span id="L63"><span class="lineNum">      63</span>              :     return 0;</span>
 <span id="L64"><span class="lineNum">      64</span>              : }</span>
         </pre>
