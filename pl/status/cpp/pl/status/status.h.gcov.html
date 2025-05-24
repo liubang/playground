@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-05-19 16:38:21</td>
+            <td class="headerValue">2025-05-24 07:49:37</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">72.7&nbsp;%</td>
@@ -88,12 +88,12 @@
 <span id="L26"><span class="lineNum">      26</span>              : </span>
 <span id="L27"><span class="lineNum">      27</span>              : namespace pl {</span>
 <span id="L28"><span class="lineNum">      28</span>              : </span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC tlaBgGNC">        9663 : class [[nodiscard]] Status {</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC tlaBgGNC">       12705 : class [[nodiscard]] Status {</span></span>
 <span id="L30"><span class="lineNum">      30</span>              :     struct status_ok_t {};</span>
 <span id="L31"><span class="lineNum">      31</span>              : </span>
 <span id="L32"><span class="lineNum">      32</span>              : public:</span>
 <span id="L33"><span class="lineNum">      33</span>              :     Status() = delete;</span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">        8330 :     explicit Status(status_code_t code) : data_(construct(code, nullptr)) {}</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">       11372 :     explicit Status(status_code_t code) : data_(construct(code, nullptr)) {}</span></span>
 <span id="L35"><span class="lineNum">      35</span>              : </span>
 <span id="L36"><span class="lineNum">      36</span> <span class="tlaUNC tlaBgUNC">           0 :     Status(const Status&amp; other) { *this = other; }</span></span>
 <span id="L37"><span class="lineNum">      37</span>              :     Status(Status&amp;&amp; other) = default;</span>
@@ -189,7 +189,7 @@
 <span id="L127"><span class="lineNum">     127</span>              :     }</span>
 <span id="L128"><span class="lineNum">     128</span>              : </span>
 <span id="L129"><span class="lineNum">     129</span>              :     static StatusRep* extractPtr(StatusRep* rep) {</span>
-<span id="L130"><span class="lineNum">     130</span> <span class="tlaGNC">        2348 :         return reinterpret_cast&lt;StatusRep*&gt;(reinterpret_cast&lt;uintptr_t&gt;(rep) &amp; kPtrMask);</span></span>
+<span id="L130"><span class="lineNum">     130</span> <span class="tlaGNC">        3867 :         return reinterpret_cast&lt;StatusRep*&gt;(reinterpret_cast&lt;uintptr_t&gt;(rep) &amp; kPtrMask);</span></span>
 <span id="L131"><span class="lineNum">     131</span>              :     }</span>
 <span id="L132"><span class="lineNum">     132</span>              : </span>
 <span id="L133"><span class="lineNum">     133</span>              :     StatusRep* rep() { return extractPtr(data_.get()); }</span>
