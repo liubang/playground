@@ -27,14 +27,14 @@
 
 namespace pl {
 
-static constexpr std::size_t FOOTER_LEN = 60;
-static constexpr uint32_t SST_MAGIC_NUMBER = 0x00545353;       // the hex of 'SST'
-static constexpr uint32_t BLOCK_TRAILER_LEN = 5;               // compression type (1B) + crc (4B)
-static constexpr uint32_t FILE_META_MAGIC_NUMBER = 0x4154454d; // the hex of 'META'
-static constexpr uint32_t FILE_META_MIN_LEN = 67;
+inline constexpr std::size_t FOOTER_LEN = 60;
+inline constexpr uint32_t SST_MAGIC_NUMBER = 0x00545353;       // the hex of 'SST'
+inline constexpr uint32_t BLOCK_TRAILER_LEN = 5;               // compression type (1B) + crc (4B)
+inline constexpr uint32_t FILE_META_MAGIC_NUMBER = 0x4154454d; // the hex of 'META'
+inline constexpr uint32_t FILE_META_MIN_LEN = 67;
 
 // clang-format off
-#define __SST_CASE__(t, v) case t::v: return #v
+#define PL_ENUM_TO_STRING_CASE(t, v) case t::v: return #v
 // clang-format on
 
 // clang-format off
@@ -46,12 +46,12 @@ enum class SSTType : uint8_t {
 };
 // clang-format on
 
-inline const char* SSTType2String(SSTType t) {
+[[nodiscard]] constexpr const char* toString(SSTType t) noexcept {
     switch (t) {
-        __SST_CASE__(SSTType, NONE);
-        __SST_CASE__(SSTType, MEMORY);
-        __SST_CASE__(SSTType, MINOR);
-        __SST_CASE__(SSTType, MAJOR);
+        PL_ENUM_TO_STRING_CASE(SSTType, NONE);
+        PL_ENUM_TO_STRING_CASE(SSTType, MEMORY);
+        PL_ENUM_TO_STRING_CASE(SSTType, MINOR);
+        PL_ENUM_TO_STRING_CASE(SSTType, MAJOR);
     }
     pl::assume_unreachable();
 }
@@ -61,10 +61,10 @@ enum class SSTVersion : uint8_t {
     V1 = 1, // current sst version is V1
 };
 
-inline const char* SSTVersion2String(SSTVersion t) {
+[[nodiscard]] constexpr const char* toString(SSTVersion t) noexcept {
     switch (t) {
-        __SST_CASE__(SSTVersion, NONE);
-        __SST_CASE__(SSTVersion, V1);
+        PL_ENUM_TO_STRING_CASE(SSTVersion, NONE);
+        PL_ENUM_TO_STRING_CASE(SSTVersion, V1);
     }
     pl::assume_unreachable();
 }
@@ -78,11 +78,11 @@ enum class FilterPolicyType : uint8_t {
 };
 // clang-format on
 
-inline const char* FilterPolicyType2String(FilterPolicyType t) {
+[[nodiscard]] constexpr const char* toString(FilterPolicyType t) noexcept {
     switch (t) {
-        __SST_CASE__(FilterPolicyType, NONE);
-        __SST_CASE__(FilterPolicyType, STANDARD_BLOOM_FILTER);
-        __SST_CASE__(FilterPolicyType, BLOCKED_BLOOM_FILTER);
+        PL_ENUM_TO_STRING_CASE(FilterPolicyType, NONE);
+        PL_ENUM_TO_STRING_CASE(FilterPolicyType, STANDARD_BLOOM_FILTER);
+        PL_ENUM_TO_STRING_CASE(FilterPolicyType, BLOCKED_BLOOM_FILTER);
     }
     pl::assume_unreachable();
 }
@@ -96,17 +96,17 @@ enum class CompressionType : uint8_t {
 };
 // clang-format on
 
-inline const char* CompressionType2String(CompressionType t) {
+[[nodiscard]] constexpr const char* toString(CompressionType t) noexcept {
     switch (t) {
-        __SST_CASE__(CompressionType, NONE);
-        __SST_CASE__(CompressionType, SNAPPY);
-        __SST_CASE__(CompressionType, ZSTD);
-        __SST_CASE__(CompressionType, ISAL);
+        PL_ENUM_TO_STRING_CASE(CompressionType, NONE);
+        PL_ENUM_TO_STRING_CASE(CompressionType, SNAPPY);
+        PL_ENUM_TO_STRING_CASE(CompressionType, ZSTD);
+        PL_ENUM_TO_STRING_CASE(CompressionType, ISAL);
     }
     pl::assume_unreachable();
 }
 
-#undef __SST_CASE__
+#undef PL_ENUM_TO_STRING_CASE
 
 // patch id 单调递增
 using PatchId = uint64_t;
@@ -118,15 +118,23 @@ using SSTId = uint64_t;
  */
 class BlockHandle {
 public:
-    BlockHandle() : offset_(~static_cast<uint64_t>(0)), size_(~static_cast<uint64_t>(0)) {}
+    static constexpr uint64_t INVALID_VALUE = ~static_cast<uint64_t>(0);
+
+    BlockHandle() : offset_(INVALID_VALUE), size_(INVALID_VALUE) {}
 
     [[nodiscard]] uint64_t offset() const { return offset_; }
 
     [[nodiscard]] uint64_t size() const { return size_; }
 
+    [[nodiscard]] bool isValid() const noexcept {
+        return offset_ != INVALID_VALUE && size_ != INVALID_VALUE;
+    }
+
     void setOffset(uint64_t offset) { offset_ = offset; }
 
     void setSize(uint64_t size) { size_ = size; }
+
+    void reset() noexcept { offset_ = size_ = INVALID_VALUE; }
 
     void encodeTo(std::string* dst) const;
 
@@ -144,6 +152,14 @@ private:
 class FileMeta {
 public:
     FileMeta() = default;
+
+    // 移动构造和赋值
+    FileMeta(FileMeta&&) = default;
+    FileMeta& operator=(FileMeta&&) = default;
+
+    // 禁用拷贝构造和赋值
+    FileMeta(const FileMeta&) = delete;
+    FileMeta& operator=(const FileMeta&) = delete;
 
     void setSSTType(SSTType type) { sst_type_ = type; }
 
@@ -199,18 +215,18 @@ public:
 
     [[nodiscard]] std::string toString() const {
         std::stringstream ss;
-        ss << "sst type: " << SSTType2String(sst_type_) << '\n';
-        ss << "sst version: " << SSTVersion2String(sst_version_) << '\n';
-        ss << "patch id: " << patch_id_ << '\n';
-        ss << "sst id: " << sst_id_ << '\n';
-        ss << "filter type: " << FilterPolicyType2String(filter_type_) << '\n';
-        ss << "bits per key: " << bits_per_key_ << '\n';
-        ss << "cell number: " << cell_number_ << '\n';
-        ss << "row number: " << row_number_ << '\n';
-        ss << "min timestamp: " << min_timestamp_ << '\n';
-        ss << "max timestamp: " << max_timestamp_ << '\n';
-        ss << "min key: " << min_key_ << '\n';
-        ss << "max key: " << max_key_ << '\n';
+        ss << "SST Type: " << pl::toString(sst_type_) << '\n'
+           << "SST Version: " << pl::toString(sst_version_) << '\n'
+           << "Patch ID: " << patch_id_ << '\n'
+           << "SST ID: " << sst_id_ << '\n'
+           << "Filter Type: " << pl::toString(filter_type_) << '\n'
+           << "Bits Per Key: " << bits_per_key_ << '\n'
+           << "Cell Number: " << cell_number_ << '\n'
+           << "Row Number: " << row_number_ << '\n'
+           << "Min Timestamp: " << min_timestamp_ << '\n'
+           << "Max Timestamp: " << max_timestamp_ << '\n'
+           << "Min Key: " << min_key_ << '\n'
+           << "Max Key: " << max_key_;
         return ss.str();
     }
 
@@ -236,7 +252,6 @@ class Footer {
 public:
     Footer() = default;
 
-    void setMetaindexHandle(const BlockHandle& block_handle) { filter_handle_ = block_handle; }
     void setFilterHandle(const BlockHandle& block_handle) { filter_handle_ = block_handle; }
     void setIndexHandle(const BlockHandle& block_handle) { index_handle_ = block_handle; }
     void setFileMetaHandle(const BlockHandle& block_handle) { file_meta_handle_ = block_handle; }
@@ -263,6 +278,8 @@ struct BlockContents {
 
 class BlockReader {
 public:
+    BlockReader() = delete; // 静态类，禁止实例化
+
     static Result<BlockContents> readBlock(const FileSystemRef& reader,
                                            const FileDescriptorRef& fd,
                                            const BlockHandle& handle);
