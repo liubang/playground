@@ -39,7 +39,7 @@ Result<Void> SSTableBuilder::open() {
             std::make_unique<BlockedBloomFilterBuilder>(options_->bits_per_key * 1000.0 + 0.500001);
     }
 
-    sst_file_ = (options_->data_dir / SSTType2String(options_->sst_type) /
+    sst_file_ = (options_->data_dir / toString(options_->sst_type) /
                  (std::to_string(options_->sst_id) + ".sst"))
                     .string();
 
