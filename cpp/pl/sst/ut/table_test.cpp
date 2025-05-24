@@ -227,7 +227,7 @@ protected:
         EXPECT_EQ(expected.rowkey, actual->rowkey());
         EXPECT_EQ(expected.cf, actual->cf());
         EXPECT_EQ(expected.col, actual->col());
-        EXPECT_EQ(expected.type, actual->cellType());
+        EXPECT_EQ(expected.type, actual->cell_type());
         EXPECT_EQ(expected.ts, actual->timestamp());
     }
 
