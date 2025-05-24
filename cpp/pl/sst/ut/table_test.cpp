@@ -31,7 +31,14 @@ struct CaseCell {
     CellType type;
     uint64_t ts;
     std::string val;
+
     [[nodiscard]] Cell to_cell() const { return {type, rowkey, cf, col, val, ts}; }
+
+    // 添加相等比较操作符，便于测试验证
+    bool operator==(const CaseCell& other) const {
+        return rowkey == other.rowkey && cf == other.cf && col == other.col && type == other.type &&
+               ts == other.ts && val == other.val;
+    }
 };
 
 struct CaseCellComparator {
