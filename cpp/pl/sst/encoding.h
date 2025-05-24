@@ -29,8 +29,10 @@ namespace pl {
  * @param dst
  * @param value
  */
-template <typename T, std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, bool>, T> = 0>
-void encodeInt(std::string* dst, T value) {
+template <typename T> void encodeInt(std::string* dst, T value) {
+    static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool>,
+                  "T must be an integral type but not bool");
+    dst->reserve(dst->size() + sizeof(T));
     dst->append(reinterpret_cast<const char*>(&value), sizeof(T));
 }
 
@@ -41,11 +43,11 @@ void encodeInt(std::string* dst, T value) {
  * @param input
  * @return
  */
-template <typename T, std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, bool>, T> = 0>
-T decodeInt(const char* input) {
+template <typename T> T decodeInt(const char* input) {
+    static_assert(std::is_integral_v<T> && !std::is_same_v<T, bool>,
+                  "T must be an integral type but not bool");
     T value;
-    std::size_t s = sizeof(T);
-    memcpy(&value, input, s);
+    memcpy(&value, input, sizeof(T));
     return value;
 }
 
