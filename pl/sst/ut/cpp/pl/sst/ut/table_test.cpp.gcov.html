@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-05-25 04:55:41</td>
+            <td class="headerValue">2025-05-25 15:24:29</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">85.7&nbsp;%</td>
@@ -104,10 +104,10 @@
 <span id="L42"><span class="lineNum">      42</span>              : };</span>
 <span id="L43"><span class="lineNum">      43</span>              : </span>
 <span id="L44"><span class="lineNum">      44</span>              : struct CaseCellComparator {</span>
-<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">     3565730 :     bool operator()(const CaseCell&amp; lhs, const CaseCell&amp; rhs) const {</span></span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">     3574281 :     bool operator()(const CaseCell&amp; lhs, const CaseCell&amp; rhs) const {</span></span>
 <span id="L46"><span class="lineNum">      46</span>              :         // 使用 tie 简化比较逻辑</span>
-<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">     3565730 :         return std::tie(lhs.rowkey, lhs.cf, lhs.col, rhs.ts, lhs.type) &lt;</span></span>
-<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">     3565730 :                std::tie(rhs.rowkey, rhs.cf, rhs.col, lhs.ts, rhs.type);</span></span>
+<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">     3574281 :         return std::tie(lhs.rowkey, lhs.cf, lhs.col, rhs.ts, lhs.type) &lt;</span></span>
+<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">     3574281 :                std::tie(rhs.rowkey, rhs.cf, rhs.col, lhs.ts, rhs.type);</span></span>
 <span id="L49"><span class="lineNum">      49</span>              :     }</span>
 <span id="L50"><span class="lineNum">      50</span>              : };</span>
 <span id="L51"><span class="lineNum">      51</span>              : </span>
@@ -285,13 +285,13 @@
 <span id="L223"><span class="lineNum">     223</span> <span class="tlaGNC">           6 :     }</span></span>
 <span id="L224"><span class="lineNum">     224</span>              : </span>
 <span id="L225"><span class="lineNum">     225</span>              :     // 辅助方法：验证cell内容</span>
-<span id="L226"><span class="lineNum">     226</span> <span class="tlaGNC">      207664 :     static void verify_cell_content(const CaseCell&amp; expected, const CellRef&amp; actual) {</span></span>
-<span id="L227"><span class="lineNum">     227</span> <span class="tlaGNC">      207664 :         EXPECT_EQ(expected.rowkey, actual-&gt;rowkey());</span></span>
-<span id="L228"><span class="lineNum">     228</span> <span class="tlaGNC">      207664 :         EXPECT_EQ(expected.cf, actual-&gt;cf());</span></span>
-<span id="L229"><span class="lineNum">     229</span> <span class="tlaGNC">      207664 :         EXPECT_EQ(expected.col, actual-&gt;col());</span></span>
-<span id="L230"><span class="lineNum">     230</span> <span class="tlaGNC">      207664 :         EXPECT_EQ(expected.type, actual-&gt;cell_type());</span></span>
-<span id="L231"><span class="lineNum">     231</span> <span class="tlaGNC">      207664 :         EXPECT_EQ(expected.ts, actual-&gt;timestamp());</span></span>
-<span id="L232"><span class="lineNum">     232</span> <span class="tlaGNC">      207664 :     }</span></span>
+<span id="L226"><span class="lineNum">     226</span> <span class="tlaGNC">      159776 :     static void verify_cell_content(const CaseCell&amp; expected, const CellRef&amp; actual) {</span></span>
+<span id="L227"><span class="lineNum">     227</span> <span class="tlaGNC">      159776 :         EXPECT_EQ(expected.rowkey, actual-&gt;rowkey());</span></span>
+<span id="L228"><span class="lineNum">     228</span> <span class="tlaGNC">      159776 :         EXPECT_EQ(expected.cf, actual-&gt;cf());</span></span>
+<span id="L229"><span class="lineNum">     229</span> <span class="tlaGNC">      159776 :         EXPECT_EQ(expected.col, actual-&gt;col());</span></span>
+<span id="L230"><span class="lineNum">     230</span> <span class="tlaGNC">      159776 :         EXPECT_EQ(expected.type, actual-&gt;cell_type());</span></span>
+<span id="L231"><span class="lineNum">     231</span> <span class="tlaGNC">      159776 :         EXPECT_EQ(expected.ts, actual-&gt;timestamp());</span></span>
+<span id="L232"><span class="lineNum">     232</span> <span class="tlaGNC">      159776 :     }</span></span>
 <span id="L233"><span class="lineNum">     233</span>              : </span>
 <span id="L234"><span class="lineNum">     234</span> <span class="tlaGNC">           3 :     static void seek_from_sst(int idx, const ReadOptionsRef&amp; read_options = nullptr) {</span></span>
 <span id="L235"><span class="lineNum">     235</span> <span class="tlaGNC">           3 :         const auto&amp; cells = TestDataManager::instance().cell_sets()[idx];</span></span>
@@ -357,58 +357,57 @@
 <span id="L295"><span class="lineNum">     295</span> <span class="tlaGNC">           3 :         std::string_view search_key = cell_iter-&gt;rowkey;</span></span>
 <span id="L296"><span class="lineNum">     296</span> <span class="tlaGNC">           9 :         XLOGF(INFO, &quot;scan rowkey &gt;= {}&quot;, search_key);</span></span>
 <span id="L297"><span class="lineNum">     297</span> <span class="tlaGNC">           3 :         table_iter-&gt;seek(search_key);</span></span>
-<span id="L298"><span class="lineNum">     298</span> <span class="tlaGNC">      136803 :         while (table_iter-&gt;valid()) {</span></span>
-<span id="L299"><span class="lineNum">     299</span> <span class="tlaGNC">      136800 :             EXPECT_TRUE(cell_iter != cells.end());</span></span>
-<span id="L300"><span class="lineNum">     300</span> <span class="tlaGNC">      136800 :             auto actual_cell = table_iter-&gt;cell();</span></span>
-<span id="L301"><span class="lineNum">     301</span> <span class="tlaGNC">      136800 :             verify_cell_content(*cell_iter, actual_cell);</span></span>
-<span id="L302"><span class="lineNum">     302</span>              : </span>
-<span id="L303"><span class="lineNum">     303</span> <span class="tlaGNC">      136800 :             table_iter-&gt;next();</span></span>
-<span id="L304"><span class="lineNum">     304</span>              :             ++cell_iter;</span>
-<span id="L305"><span class="lineNum">     305</span>              :         }</span>
-<span id="L306"><span class="lineNum">     306</span>              :     }</span>
-<span id="L307"><span class="lineNum">     307</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L308"><span class="lineNum">     308</span>              : </span>
-<span id="L309"><span class="lineNum">     309</span> <span class="tlaGNC">           3 : TEST_F(SSTableTest, query) {</span></span>
-<span id="L310"><span class="lineNum">     310</span> <span class="tlaGNC">           1 :     const auto&amp; cells = TestDataManager::instance().cell_sets()[0];</span></span>
-<span id="L311"><span class="lineNum">     311</span> <span class="tlaGNC">           1 :     auto table = open_sstable(0);</span></span>
-<span id="L312"><span class="lineNum">     312</span> <span class="tlaGNC">           1 :     ASSERT_NE(table, nullptr);</span></span>
-<span id="L313"><span class="lineNum">     313</span> <span class="tlaGNC">           1 :     check_table(table.get());</span></span>
-<span id="L314"><span class="lineNum">     314</span> <span class="tlaGNC">           3 :     XLOGF(INFO, &quot;cells: {}&quot;, cells.size());</span></span>
-<span id="L315"><span class="lineNum">     315</span>              : </span>
-<span id="L316"><span class="lineNum">     316</span>              :     // 整行query</span>
-<span id="L317"><span class="lineNum">     317</span> <span class="tlaGNC">           1 :     auto&amp; random_gen = RandomGenerator::instance();</span></span>
-<span id="L318"><span class="lineNum">     318</span> <span class="tlaGNC">           1 :     Arena buf;</span></span>
-<span id="L319"><span class="lineNum">     319</span> <span class="tlaGNC">         334 :     for (int i = 0; i &lt; TestConfig::QUERY_TEST_COUNT; ++i) {</span></span>
-<span id="L320"><span class="lineNum">     320</span> <span class="tlaGNC">         333 :         auto cell_iter = cells.begin();</span></span>
-<span id="L321"><span class="lineNum">     321</span> <span class="tlaGNC">         333 :         int advance_count = random_gen.random_int(0, TestConfig::ROW_NUM) * 2 * TestConfig::COL_NUM;</span></span>
-<span id="L322"><span class="lineNum">     322</span> <span class="tlaGNC">         333 :         std::advance(cell_iter, std::min(advance_count, static_cast&lt;int&gt;(cells.size()) - 1));</span></span>
-<span id="L323"><span class="lineNum">     323</span>              : </span>
-<span id="L324"><span class="lineNum">     324</span> <span class="tlaGNC">         333 :         std::string search_key = cell_iter-&gt;rowkey;</span></span>
-<span id="L325"><span class="lineNum">     325</span> <span class="tlaGNC">         999 :         XLOGF(INFO, &quot;search_key: {}&quot;, search_key);</span></span>
-<span id="L326"><span class="lineNum">     326</span> <span class="tlaGNC">         333 :         auto query_result = table-&gt;get(search_key, &amp;buf);</span></span>
-<span id="L327"><span class="lineNum">     327</span> <span class="tlaGNC">         333 :         EXPECT_TRUE(query_result.hasValue());</span></span>
-<span id="L328"><span class="lineNum">     328</span>              :         const CellVecRef&amp; row_cells = query_result.value();</span>
-<span id="L329"><span class="lineNum">     329</span> <span class="tlaGNC">         333 :         EXPECT_EQ(16, row_cells.size());</span></span>
-<span id="L330"><span class="lineNum">     330</span>              : </span>
-<span id="L331"><span class="lineNum">     331</span> <span class="tlaGNC">        5661 :         for (const auto&amp; actual_cell : row_cells) {</span></span>
-<span id="L332"><span class="lineNum">     332</span> <span class="tlaGNC">        5328 :             verify_cell_content(*cell_iter, actual_cell);</span></span>
-<span id="L333"><span class="lineNum">     333</span>              :             ++cell_iter;</span>
-<span id="L334"><span class="lineNum">     334</span>              :         }</span>
-<span id="L335"><span class="lineNum">     335</span>              :     }</span>
-<span id="L336"><span class="lineNum">     336</span>              : </span>
-<span id="L337"><span class="lineNum">     337</span>              :     // 空query</span>
-<span id="L338"><span class="lineNum">     338</span> <span class="tlaGNC">         667 :     for (int i = 0; i &lt; TestConfig::EMPTY_QUERY_TEST_COUNT; ++i) {</span></span>
-<span id="L339"><span class="lineNum">     339</span> <span class="tlaGNC">         666 :         std::string non_existent_rowkey = pl::random_string(TestConfig::ROWKEY_LEN * 3);</span></span>
-<span id="L340"><span class="lineNum">     340</span> <span class="tlaGNC">         666 :         auto query_result = table-&gt;get(non_existent_rowkey, &amp;buf);</span></span>
-<span id="L341"><span class="lineNum">     341</span> <span class="tlaGNC">         666 :         EXPECT_TRUE(query_result.hasError())</span></span>
-<span id="L342"><span class="lineNum">     342</span>              :             &lt;&lt; &quot;Query should fail for non-existent rowkey: &quot; &lt;&lt; non_existent_rowkey;</span>
-<span id="L343"><span class="lineNum">     343</span> <span class="tlaGNC">         666 :         if (query_result.hasError()) {</span></span>
-<span id="L344"><span class="lineNum">     344</span> <span class="tlaGNC">         666 :             EXPECT_EQ(StatusCode::kKVStoreNotFound, query_result.error().code());</span></span>
-<span id="L345"><span class="lineNum">     345</span>              :         }</span>
-<span id="L346"><span class="lineNum">     346</span>              :     }</span>
-<span id="L347"><span class="lineNum">     347</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L348"><span class="lineNum">     348</span>              : </span>
-<span id="L349"><span class="lineNum">     349</span>              : } // namespace pl</span>
+<span id="L298"><span class="lineNum">     298</span> <span class="tlaGNC">       88915 :         while (table_iter-&gt;valid()) {</span></span>
+<span id="L299"><span class="lineNum">     299</span> <span class="tlaGNC">       88912 :             EXPECT_TRUE(cell_iter != cells.end());</span></span>
+<span id="L300"><span class="lineNum">     300</span> <span class="tlaGNC">       88912 :             auto actual_cell = table_iter-&gt;cell();</span></span>
+<span id="L301"><span class="lineNum">     301</span> <span class="tlaGNC">       88912 :             verify_cell_content(*cell_iter, actual_cell);</span></span>
+<span id="L302"><span class="lineNum">     302</span> <span class="tlaGNC">       88912 :             table_iter-&gt;next();</span></span>
+<span id="L303"><span class="lineNum">     303</span>              :             ++cell_iter;</span>
+<span id="L304"><span class="lineNum">     304</span>              :         }</span>
+<span id="L305"><span class="lineNum">     305</span>              :     }</span>
+<span id="L306"><span class="lineNum">     306</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L307"><span class="lineNum">     307</span>              : </span>
+<span id="L308"><span class="lineNum">     308</span> <span class="tlaGNC">           3 : TEST_F(SSTableTest, query) {</span></span>
+<span id="L309"><span class="lineNum">     309</span> <span class="tlaGNC">           1 :     const auto&amp; cells = TestDataManager::instance().cell_sets()[0];</span></span>
+<span id="L310"><span class="lineNum">     310</span> <span class="tlaGNC">           1 :     auto table = open_sstable(0);</span></span>
+<span id="L311"><span class="lineNum">     311</span> <span class="tlaGNC">           1 :     ASSERT_NE(table, nullptr);</span></span>
+<span id="L312"><span class="lineNum">     312</span> <span class="tlaGNC">           1 :     check_table(table.get());</span></span>
+<span id="L313"><span class="lineNum">     313</span> <span class="tlaGNC">           3 :     XLOGF(INFO, &quot;cells: {}&quot;, cells.size());</span></span>
+<span id="L314"><span class="lineNum">     314</span>              : </span>
+<span id="L315"><span class="lineNum">     315</span>              :     // 整行query</span>
+<span id="L316"><span class="lineNum">     316</span> <span class="tlaGNC">           1 :     auto&amp; random_gen = RandomGenerator::instance();</span></span>
+<span id="L317"><span class="lineNum">     317</span> <span class="tlaGNC">           1 :     Arena buf;</span></span>
+<span id="L318"><span class="lineNum">     318</span> <span class="tlaGNC">         334 :     for (int i = 0; i &lt; TestConfig::QUERY_TEST_COUNT; ++i) {</span></span>
+<span id="L319"><span class="lineNum">     319</span> <span class="tlaGNC">         333 :         auto cell_iter = cells.begin();</span></span>
+<span id="L320"><span class="lineNum">     320</span> <span class="tlaGNC">         333 :         int advance_count = random_gen.random_int(0, TestConfig::ROW_NUM) * 2 * TestConfig::COL_NUM;</span></span>
+<span id="L321"><span class="lineNum">     321</span> <span class="tlaGNC">         333 :         std::advance(cell_iter, std::min(advance_count, static_cast&lt;int&gt;(cells.size()) - 1));</span></span>
+<span id="L322"><span class="lineNum">     322</span>              : </span>
+<span id="L323"><span class="lineNum">     323</span> <span class="tlaGNC">         333 :         std::string search_key = cell_iter-&gt;rowkey;</span></span>
+<span id="L324"><span class="lineNum">     324</span> <span class="tlaGNC">         999 :         XLOGF(INFO, &quot;search_key: {}&quot;, search_key);</span></span>
+<span id="L325"><span class="lineNum">     325</span> <span class="tlaGNC">         333 :         auto query_result = table-&gt;get(search_key, &amp;buf);</span></span>
+<span id="L326"><span class="lineNum">     326</span> <span class="tlaGNC">         333 :         EXPECT_TRUE(query_result.hasValue());</span></span>
+<span id="L327"><span class="lineNum">     327</span>              :         const CellVecRef&amp; row_cells = query_result.value();</span>
+<span id="L328"><span class="lineNum">     328</span> <span class="tlaGNC">         333 :         EXPECT_EQ(16, row_cells.size());</span></span>
+<span id="L329"><span class="lineNum">     329</span>              : </span>
+<span id="L330"><span class="lineNum">     330</span> <span class="tlaGNC">        5661 :         for (const auto&amp; actual_cell : row_cells) {</span></span>
+<span id="L331"><span class="lineNum">     331</span> <span class="tlaGNC">        5328 :             verify_cell_content(*cell_iter, actual_cell);</span></span>
+<span id="L332"><span class="lineNum">     332</span>              :             ++cell_iter;</span>
+<span id="L333"><span class="lineNum">     333</span>              :         }</span>
+<span id="L334"><span class="lineNum">     334</span>              :     }</span>
+<span id="L335"><span class="lineNum">     335</span>              : </span>
+<span id="L336"><span class="lineNum">     336</span>              :     // 空query</span>
+<span id="L337"><span class="lineNum">     337</span> <span class="tlaGNC">         667 :     for (int i = 0; i &lt; TestConfig::EMPTY_QUERY_TEST_COUNT; ++i) {</span></span>
+<span id="L338"><span class="lineNum">     338</span> <span class="tlaGNC">         666 :         std::string non_existent_rowkey = pl::random_string(TestConfig::ROWKEY_LEN * 3);</span></span>
+<span id="L339"><span class="lineNum">     339</span> <span class="tlaGNC">         666 :         auto query_result = table-&gt;get(non_existent_rowkey, &amp;buf);</span></span>
+<span id="L340"><span class="lineNum">     340</span> <span class="tlaGNC">         666 :         EXPECT_TRUE(query_result.hasError())</span></span>
+<span id="L341"><span class="lineNum">     341</span>              :             &lt;&lt; &quot;Query should fail for non-existent rowkey: &quot; &lt;&lt; non_existent_rowkey;</span>
+<span id="L342"><span class="lineNum">     342</span> <span class="tlaGNC">         666 :         if (query_result.hasError()) {</span></span>
+<span id="L343"><span class="lineNum">     343</span> <span class="tlaGNC">         666 :             EXPECT_EQ(StatusCode::kKVStoreNotFound, query_result.error().code());</span></span>
+<span id="L344"><span class="lineNum">     344</span>              :         }</span>
+<span id="L345"><span class="lineNum">     345</span>              :     }</span>
+<span id="L346"><span class="lineNum">     346</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L347"><span class="lineNum">     347</span>              : </span>
+<span id="L348"><span class="lineNum">     348</span>              : } // namespace pl</span>
         </pre>
               </td>
             </tr>
