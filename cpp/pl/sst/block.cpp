@@ -36,11 +36,37 @@ Block::Block(const BlockContents& content)
     }
 }
 
-Block::~Block() {
-    if (owned_) {
+Block::Block(Block&& other) noexcept
+    : data_(std::exchange(other.data_, nullptr)),
+      size_(std::exchange(other.size_, 0)),
+      num_restarts_(std::exchange(other.num_restarts_, 0)),
+      restart_offset_(std::exchange(other.restart_offset_, 0)),
+      owned_(std::exchange(other.owned_, false)) {}
+
+Block& Block::operator=(Block&& other) noexcept {
+    if (this != &other) {
+        cleanup();
+        data_ = std::exchange(other.data_, nullptr);
+        size_ = std::exchange(other.size_, 0);
+        num_restarts_ = std::exchange(other.num_restarts_, 0);
+        restart_offset_ = std::exchange(other.restart_offset_, 0);
+        owned_ = std::exchange(other.owned_, false);
+    }
+    return *this;
+}
+
+void Block::cleanup() noexcept {
+    if (owned_ && (data_ != nullptr)) {
         delete[] data_;
     }
+    data_ = nullptr;
+    size_ = 0;
+    num_restarts_ = 0;
+    restart_offset_ = 0;
+    owned_ = false;
 }
+
+Block::~Block() { cleanup(); }
 
 class Block::BlockIterator : public Iterator {
 public:
@@ -55,7 +81,10 @@ public:
           restarts_(restarts),
           num_restarts_(num_restarts),
           current_(restarts_),
-          current_restart_(num_restarts) {}
+          current_restart_(num_restarts) {
+        // 预分配 key 缓冲区，减少重分配
+        cell_key_.reserve(256);
+    }
 
     [[nodiscard]] bool valid() const override { return current_ < restarts_; }
 
@@ -75,10 +104,7 @@ public:
             return;
         }
         seekToRestartPoint(left);
-        while (true) {
-            if (!parseNextCell()) {
-                return;
-            }
+        while (parseNextCell()) {
             if (compare(cell_->rowkey(), target) >= 0) {
                 return;
             }
@@ -131,12 +157,12 @@ private:
         uint32_t right = num_restarts_ - 1;
         uint32_t offset = 0;
         while (left < right) {
-            auto mid = (left + right + 1) / 2;
+            const auto mid = (left + right + 1) / 2;
             offset = getRestartOffset(mid);
-            uint32_t shared, non_shared, rowkey_size, value_size;
-            const char* key_ptr = decodeEntry(data_ + offset, data_ + restarts_, &shared,
-                                              &non_shared, &rowkey_size, &value_size);
-            if (key_ptr == nullptr || (shared != 0) || (rowkey_size >= non_shared)) {
+            EntryInfo entry;
+            const char* key_ptr = parseEntryAt(offset, &entry);
+            if (key_ptr == nullptr || (entry.shared != 0) ||
+                (entry.rowkey_size >= entry.non_shared)) {
                 status_ = Status(StatusCode::kDataCorruption, "invalid entry in block");
                 current_ = restarts_;
                 current_restart_ = num_restarts_;
@@ -145,7 +171,7 @@ private:
                 return false;
             }
 
-            std::string_view mid_key(key_ptr, rowkey_size);
+            std::string_view mid_key(key_ptr, entry.rowkey_size);
             int cmp = compare(mid_key, target);
 
             if (cmp == 0) {
@@ -189,17 +215,17 @@ private:
             status_ = Status(StatusCode::kKVStoreNotFound);
             return false;
         }
-        uint32_t shared, non_shared, rowkey_size, value_size;
-        p = decodeEntry(p, limit, &shared, &non_shared, &rowkey_size, &value_size);
+        EntryInfo entry;
+        p = parseEntryAt(current_, &entry);
         // 第一次Seek的时候，key 为空，那么shared必定为0
-        if (p == nullptr || cell_key_.size() < shared) {
+        if (p == nullptr || cell_key_.size() < entry.shared) {
             status_ = Status(StatusCode::kDataCorruption, "invalid block");
             return false;
         }
-        cell_key_.resize(shared);
-        cell_key_.append(p, non_shared);
-        val_ = std::string_view(p + non_shared, value_size);
-        cell_ = std::make_shared<Cell>(cell_key_, rowkey_size, val_);
+        cell_key_.resize(entry.shared);
+        cell_key_.append(p, entry.non_shared);
+        val_ = std::string_view(p + entry.non_shared, entry.value_size);
+        cell_ = std::make_shared<Cell>(cell_key_, entry.rowkey_size, val_);
         while (current_restart_ + 1 < num_restarts_ &&
                getRestartOffset(current_restart_) < current_) {
             ++current_restart_;
@@ -208,24 +234,34 @@ private:
         return true;
     }
 
-    const char* decodeEntry(const char* p,
-                            const char* limit,
-                            uint32_t* shared,
-                            uint32_t* non_shared,
-                            uint32_t* rowkey_size,
-                            uint32_t* value_size) {
+    // Entry 信息结构
+    struct EntryInfo {
+        uint32_t shared;
+        uint32_t non_shared;
+        uint32_t rowkey_size;
+        uint32_t value_size;
+        const char* key_data;
+        const char* value_data;
+    };
+
+    const char* parseEntryAt(uint32_t offset, EntryInfo* info) {
+        const char* p = data_ + offset;
+        const char* limit = data_ + restarts_;
         constexpr std::size_t s = sizeof(uint32_t);
         if (static_cast<uint32_t>(limit - p) < (s * 4)) {
             return nullptr;
         }
-        *shared = pl::decodeInt<uint32_t>(p);
-        *non_shared = pl::decodeInt<uint32_t>(p + s);
-        *rowkey_size = pl::decodeInt<uint32_t>(p + s * 2);
-        *value_size = pl::decodeInt<uint32_t>(p + s * 3);
+        info->shared = pl::decodeInt<uint32_t>(p);
+        info->non_shared = pl::decodeInt<uint32_t>(p + s);
+        info->rowkey_size = pl::decodeInt<uint32_t>(p + s * 2);
+        info->value_size = pl::decodeInt<uint32_t>(p + s * 3);
         p += s * 4;
-        if (static_cast<uint32_t>(limit - p) < (*non_shared + *value_size)) {
+
+        const size_t data_size = info->non_shared + info->value_size;
+        if (static_cast<uint32_t>(limit - p) < data_size) {
             return nullptr;
         }
+
         return p;
     }
 
