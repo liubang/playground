@@ -299,7 +299,6 @@ TEST_F(SSTableTest, range_scan) {
             EXPECT_TRUE(cell_iter != cells.end());
             auto actual_cell = table_iter->cell();
             verify_cell_content(*cell_iter, actual_cell);
-
             table_iter->next();
             ++cell_iter;
         }
