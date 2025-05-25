@@ -28,8 +28,12 @@ namespace pl {
 class Block : public std::enable_shared_from_this<Block> {
 public:
     explicit Block(const BlockContents& content);
+
     Block(const Block&) = delete;
     Block& operator=(const Block&) = delete;
+    Block(Block&& other) noexcept;
+    Block& operator=(Block&& other) noexcept;
+
     virtual ~Block();
 
     [[nodiscard]] bool valid() const { return size_ > 0; }
@@ -38,6 +42,8 @@ public:
 
 private:
     class BlockIterator;
+
+    void cleanup() noexcept;
 
 private:
     const char* data_{nullptr};
