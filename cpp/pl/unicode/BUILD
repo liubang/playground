@@ -13,36 +13,12 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2025/05/25 23:16
+# Created: 2025/05/26 23:59
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
-load(
-    "//cpp:copts/configure_copts.bzl",
-    "DEFAULT_COPTS",
-    "DEFAULT_LINKOPTS",
-)
+load("@rules_cc//cc:defs.bzl", "cc_library")
 
 cc_library(
-    name = "ascii_table",
-    hdrs = ["ascii_table.h"],
+    name = "unicode",
+    hdrs = glob(["*.h"]),
     visibility = ["//visibility:public"],
-    deps = [
-        "//cpp/pl/status",
-        "//cpp/pl/unicode",
-        "@fmt",
-        "@folly//folly:conv",
-        "@folly//folly:expected",
-        "@folly//folly:json",
-        "@folly//folly:unit",
-    ],
-)
-
-cc_binary(
-    name = "ascii_table_test",
-    srcs = ["ascii_table_test.cpp"],
-    copts = ["-std=c++20"] + DEFAULT_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
-    deps = [
-        ":ascii_table",
-    ],
 )
