@@ -32,6 +32,10 @@ int main(int argc, char* argv[]) {
     table.addRow("John Doe", 25, "New York", "$50,000");
     table.addRow("Alice Smith", 30, "London", "$60,000");
     table.addRow("Bob Johnson", 28, "Tokyo", "$55,000");
+    table.addRow("张三", 28, "Beijing", "$1024,000");
+    // table.addRow("🌟⭐", 28, "Henan", "$1024,000");
+    // table.addRow("café", 30, "Guangdong", "$1201");
+    // table.addRow("ｈｅｌｌｏ", 18, "Ok", "$1201");
 
     // 设置样式
     table.setColumnStyle(1, pl::ascii_table::CellStyle{pl::ascii_table::Alignment::CENTER,
