@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include "cpp/pl/unicode/display_width.h"
+
 #include <cstdint>
 #include <iostream>
 #include <map>
@@ -96,7 +98,19 @@ struct BorderChars {
     char left_tee;
     char right_tee;
 
-    static BorderChars ascii() { return {'+', '+', '+', '+', '-', '|', '+', '+', '+', '+', '+'}; }
+    static BorderChars ascii() {
+        return {.top_left = '+',
+                .top_right = '+',
+                .bottom_left = '+',
+                .bottom_right = '+',
+                .horizontal = '-',
+                .vertical = '|',
+                .cross = '+',
+                .top_tee = '+',
+                .bottom_tee = '+',
+                .left_tee = '+',
+                .right_tee = '+'};
+    }
 };
 
 // 表格配置
@@ -104,7 +118,7 @@ struct TableConfig {
     bool show_header{true};
     bool show_row_numbers{false};
     size_t padding{1};
-    size_t max_column_width{50};
+    size_t max_column_width{128};
     std::string title;
     CellStyle header_style{Alignment::CENTER, Color::CYAN, true};
     CellStyle default_style{Alignment::LEFT};
@@ -331,8 +345,7 @@ private:
 
     // 获取字符串显示宽度（处理 UTF-8）
     [[nodiscard]] size_t getDisplayWidth(const std::string& str) const {
-        // 简化版本，实际应该处理 Unicode 字符宽度
-        return str.size();
+        return pl::UTF8DisplayWidth::getDisplayWidth(str);
     }
 
     [[nodiscard]] ascii_table::BorderChars getBorderChars() const {
