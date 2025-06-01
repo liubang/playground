@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Authors. All rights reserved.
+// Copyright (c) 2024 The Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,13 +13,12 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2022/01/05 20:44
 
-#include "cpp/pl/arena/arena.h"
+#include "cpp/pl/arena/arena_old.h"
 
 #include <cassert>
 
-namespace pl {
+namespace pl::old {
 
 [[nodiscard]] char* Arena::allocate(std::size_t bytes) {
     assert(bytes > 0);
@@ -39,6 +38,7 @@ namespace pl {
     std::size_t current_mod = reinterpret_cast<uintptr_t>(alloc_ptr_) & (align - 1);
     std::size_t slop = (current_mod == 0 ? 0 : align - current_mod);
     std::size_t needed = bytes + slop;
+
     char* result;
     if (needed <= alloc_bytes_remaining_) {
         result = alloc_ptr_ + slop;
@@ -80,4 +80,4 @@ namespace pl {
     return memory_usage_.load(std::memory_order_relaxed);
 }
 
-} // namespace pl
+} // namespace pl::old
