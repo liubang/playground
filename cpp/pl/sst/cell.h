@@ -209,7 +209,7 @@ public:
             return new_cell;
         }
 
-        char* buf = arena->allocate_aligned(total_size);
+        char* buf = static_cast<char*>(arena->allocate(total_size));
         if (buf == nullptr) {
             return nullptr;
         }
