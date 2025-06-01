@@ -26,8 +26,11 @@ namespace pl {
 class Iterator {
 public:
     Iterator() = default;
+
     Iterator(const Iterator&) = delete;
+
     Iterator& operator=(const Iterator&) = delete;
+
     virtual ~Iterator() = default;
 
     virtual void first() = 0;
