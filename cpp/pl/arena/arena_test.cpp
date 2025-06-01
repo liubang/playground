@@ -1,4 +1,4 @@
-// Copyright (c) 2024 The Authors. All rights reserved.
+// Copyright (c) 2025 The Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,25 +18,30 @@
 
 #include <gtest/gtest.h>
 
-TEST(arena, allocate) {
-    constexpr std::size_t ptr_char_size = sizeof(char*);
-    pl::Arena arena;
+#include <utility>
 
-    (void)arena.allocate(1024);
-    int usage = 4096 + ptr_char_size;
-    EXPECT_EQ(arena.memory_usage(), usage);
+namespace {
+struct TestObject {
+    int value = 0;
+    std::string name;
 
-    (void)arena.allocate(2048);
-    EXPECT_EQ(arena.memory_usage(), usage);
+    TestObject(int v, std::string n) : value(v), name(std::move(n)) {
+        std::cout << "TestObject constructed: " << value << ", " << name << '\n';
+    }
 
-    (void)arena.allocate(2048);
-    usage += 2048 + ptr_char_size;
-    EXPECT_EQ(arena.memory_usage(), usage);
+    ~TestObject() { std::cout << "TestObject destructed: " << value << ", " << name << '\n'; }
+};
 
-    (void)arena.allocate(1);
-    EXPECT_EQ(arena.memory_usage(), usage);
+} // namespace
 
-    (void)arena.allocate(12345);
-    usage += 12345 + ptr_char_size;
-    EXPECT_EQ(arena.memory_usage(), usage);
+TEST(ArenaNew, normal) {
+    pl::Arena arena(1024);
+    void* raw_ptr = arena.allocate(100);
+    auto stats = arena.get_stats();
+    ASSERT_EQ(1, stats.block_count);
+    ASSERT_EQ(1024, stats.total_allocated);
+    ASSERT_EQ(112, stats.total_used);
+    auto* obj = arena.allocate_object<TestObject>(42, "Hell world");
+    stats = arena.get_stats();
+    ASSERT_EQ(112 + sizeof(TestObject), stats.total_used);
 }
