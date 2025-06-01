@@ -25,22 +25,41 @@ load(
 cc_library(
     name = "arena",
     srcs = [
-        "arena.cpp",
+        "arena_old.cpp",
     ],
     hdrs = [
         "arena.h",
+        "arena_old.h",
     ],
     copts = [
         "-std=c++20",
     ] + DEFAULT_COPTS,
     linkopts = DEFAULT_LINKOPTS,
     visibility = ["//visibility:public"],
+    deps = [
+        "//cpp/pl/utility",
+    ],
 )
 
 cc_test(
     name = "arena_test",
     srcs = [
         "arena_test.cpp",
+    ],
+    copts = [
+        "-std=c++20",
+    ] + TEST_COPTS,
+    linkopts = DEFAULT_LINKOPTS,
+    deps = [
+        "//cpp/pl/arena",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "arena_old_test",
+    srcs = [
+        "arena_old_test.cpp",
     ],
     copts = [
         "-std=c++20",

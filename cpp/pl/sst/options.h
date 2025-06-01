@@ -17,7 +17,6 @@
 #pragma once
 
 #include "cpp/pl/sst/comparator.h"
-#include "cpp/pl/sst/filter_policy.h"
 #include "cpp/pl/sst/sstable_format.h"
 
 #include <cstdint>
@@ -45,7 +44,6 @@ struct BuildOptions {
     CompressionType compression_type = CompressionType::NONE;
     int zstd_compress_level = 1;
     const ComparatorRef comparator;
-    // const FilterPolicyRef filter_policy;
     SSTType sst_type = SSTType::NONE;
     SSTVersion sst_version = SSTVersion::NONE;
     FilterPolicyType filter_type = FilterPolicyType::STANDARD_BLOOM_FILTER;

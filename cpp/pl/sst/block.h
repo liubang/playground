@@ -24,7 +24,6 @@
 
 namespace pl {
 
-// TODO: 这个实现不好，需要优化
 class Block : public std::enable_shared_from_this<Block> {
 public:
     explicit Block(const BlockContents& content);
