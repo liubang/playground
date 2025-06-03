@@ -19,7 +19,7 @@
 
 #include "snappy.h"
 #include <cassert>
-#include <isa-l/crc.h>
+#include <crc32c/crc32c.h>
 #include <zstd.h>
 
 namespace pl {
@@ -223,7 +223,7 @@ Result<BlockContents> BlockReader::readBlock(const FileSystemRef& reader,
     // crc check
     const char* data = content.data();
     auto crc = decodeInt<uint32_t>(data + s + 1);
-    auto actual_crc = ::crc32_iscsi((unsigned char*)data, s, 0);
+    auto actual_crc = ::crc32c::Crc32c(data, s);
     if (crc != actual_crc) {
         return makeError(StatusCode::kDataCorruption, "crc error");
     }
