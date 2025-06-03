@@ -20,7 +20,7 @@
 
 #include "snappy.h"
 #include <cassert>
-#include <isa-l.h>
+#include <crc32c/crc32c.h>
 #include <utility>
 #include <zstd.h>
 
@@ -214,7 +214,7 @@ Result<Void> SSTableBuilder::writeBlockRaw(std::string_view content,
     // crc
     char trailer[BLOCK_TRAILER_LEN];
     trailer[0] = static_cast<const char>(type);
-    uint32_t crc = ::crc32_iscsi((unsigned char*)content.data(), content.size(), 0);
+    uint32_t crc = ::crc32c::Crc32c(content);
     std::string encode_crc;
     encodeInt<uint32_t>(&encode_crc, crc);
     memcpy(trailer + 1, encode_crc.data(), encode_crc.size());
