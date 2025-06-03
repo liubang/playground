@@ -17,7 +17,6 @@
 
 #include "cpp/pl/sst/compression.h"
 #include "snappy.h"
-#include <isa-l/crc.h>
 #include <zstd.h>
 
 namespace pl {
