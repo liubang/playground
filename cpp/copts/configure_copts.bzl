@@ -31,7 +31,7 @@ COPTS = select({
 })
 
 DEFAULT_COPTS = select({
-    "//cpp:clang_compiler": LLVM_FLAGS + ASAN_FLAGS,
+    "//cpp:clang_compiler": LLVM_FLAGS,
     "//cpp:gcc_compiler": GCC_FLAGS + ASAN_FLAGS,
     "//conditions:default": GCC_FLAGS + ASAN_FLAGS,
 })
@@ -43,6 +43,7 @@ TEST_COPTS = select({
 })
 
 DEFAULT_LINKOPTS = select({
+    "//cpp:clang_compiler": [],
     "//conditions:default": [
         "-fsanitize=address",
     ],
