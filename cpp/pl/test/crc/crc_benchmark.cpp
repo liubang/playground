@@ -18,9 +18,13 @@
 #include <boost/crc.hpp>
 #if defined(__linux__)
 #include <crc32c/crc32c.h>
-#endif
 #include <isa-l/crc.h>
 #include <isa-l/crc64.h>
+#endif
+
+#if defined(__APPLE__) && defined(__MACH__)
+#include <crc32c/crc32c.h>
+#endif
 
 class CRC32Benchmark : public benchmark::Fixture {
 public:
@@ -126,6 +130,7 @@ BENCHMARK_REGISTER_F(CRC32Benchmark, isal_iscsi)
         ->RangeMultiplier(MULTIPLIER)                                           \
         ->Range(MIN_BLOCK, MAX_BLOCK)
 
+#if defined(__linux__)
 BENCHMARK_CRC64_FUNC(crc64_ecma_refl);
 BENCHMARK_CRC64_FUNC(crc64_ecma_norm);
 BENCHMARK_CRC64_FUNC(crc64_iso_refl);
@@ -143,7 +148,6 @@ BENCHMARK_CRC64_FUNC(crc64_jones_norm_base);
 BENCHMARK_CRC64_FUNC(crc64_rocksoft_refl_base);
 BENCHMARK_CRC64_FUNC(crc64_rocksoft_norm_base);
 
-#if defined(__linux__)
 BENCHMARK_CRC64_FUNC(crc64_ecma_refl_by8);
 BENCHMARK_CRC64_FUNC(crc64_ecma_norm_by8);
 BENCHMARK_CRC64_FUNC(crc64_iso_refl_by8);
