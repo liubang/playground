@@ -52,6 +52,6 @@ tiktoken==0.7.0
 tokenizers==0.20.0
 tqdm==4.66.5
 typing_extensions==4.12.2
-urllib3==2.2.3
+urllib3==2.5.0
 yarl==1.13.1
 zipp==3.20.2
