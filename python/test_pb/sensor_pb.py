@@ -20,11 +20,11 @@ from proto.test.sensor_pb2 import Sensor
 import argparse
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='这是一个简单的程序示例')
-    parser.add_argument("-f", "--file", type=str, help='文件路径')
+    parser = argparse.ArgumentParser(description="这是一个简单的程序示例")
+    parser.add_argument("-f", "--file", type=str, help="文件路径")
     args = parser.parse_args()
 
-    with open(args.file, 'rb') as file:
+    with open(args.file, "rb") as file:
         content = file.read()
         print("Retrieve Sensor object from sensor.data")
         sensor = Sensor()
