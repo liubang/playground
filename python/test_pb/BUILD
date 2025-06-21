@@ -16,6 +16,8 @@
 
 load("@rules_python//python:defs.bzl", "py_binary")
 load("@rules_python//python:proto.bzl", "py_proto_library")
+# load("@protobuf//:protobuf.bzl", "py_proto_library")
+
 
 py_proto_library(
     name = "py_sensor_proto",
