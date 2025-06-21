@@ -32,9 +32,3 @@ bazel test //...
 ```bash
 bazel run @hedron_compile_commands//:refresh_all
 ```
-
-### 更新 java 依赖
-
-```bash
-REPIN=1 bazel run @unpinned_maven//:pin
-```

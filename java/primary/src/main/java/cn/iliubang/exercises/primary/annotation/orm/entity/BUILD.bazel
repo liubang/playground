@@ -1,8 +1,0 @@
-load("@rules_java//java:defs.bzl", "java_library")
-
-java_library(
-    name = "entity",
-    srcs = ["Student.java"],
-    visibility = ["//:__subpackages__"],
-    deps = ["//java/primary/src/main/java/cn/iliubang/exercises/primary/annotation/orm/annotation"],
-)
