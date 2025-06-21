@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-06-21 12:37:27</td>
+            <td class="headerValue">2025-06-21 15:12:35</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">80.0&nbsp;%</td>
@@ -68,12 +68,12 @@
 <span id="L6"><span class="lineNum">       6</span>              : #include &lt;vector&gt;</span>
 <span id="L7"><span class="lineNum">       7</span>              : </span>
 <span id="L8"><span class="lineNum">       8</span>              : namespace {</span>
-<span id="L9"><span class="lineNum">       9</span> <span class="tlaGNC tlaBgGNC">          34 : int64_t rand_int(int64_t min, int64_t max) {</span></span>
-<span id="L10"><span class="lineNum">      10</span> <span class="tlaGNC">          34 :     std::srand(std::time(nullptr));</span></span>
-<span id="L11"><span class="lineNum">      11</span> <span class="tlaGNC">          34 :     std::random_device rd;</span></span>
-<span id="L12"><span class="lineNum">      12</span> <span class="tlaGNC">          34 :     std::mt19937 generator(rd());</span></span>
-<span id="L13"><span class="lineNum">      13</span> <span class="tlaGNC">          34 :     std::uniform_int_distribution&lt;&gt; distribution(min, max);</span></span>
-<span id="L14"><span class="lineNum">      14</span> <span class="tlaGNC">          34 :     return distribution(generator);</span></span>
+<span id="L9"><span class="lineNum">       9</span> <span class="tlaGNC tlaBgGNC">          10 : int64_t rand_int(int64_t min, int64_t max) {</span></span>
+<span id="L10"><span class="lineNum">      10</span> <span class="tlaGNC">          10 :     std::srand(std::time(nullptr));</span></span>
+<span id="L11"><span class="lineNum">      11</span> <span class="tlaGNC">          10 :     std::random_device rd;</span></span>
+<span id="L12"><span class="lineNum">      12</span> <span class="tlaGNC">          10 :     std::mt19937 generator(rd());</span></span>
+<span id="L13"><span class="lineNum">      13</span> <span class="tlaGNC">          10 :     std::uniform_int_distribution&lt;&gt; distribution(min, max);</span></span>
+<span id="L14"><span class="lineNum">      14</span> <span class="tlaGNC">          10 :     return distribution(generator);</span></span>
 <span id="L15"><span class="lineNum">      15</span>              : }</span>
 <span id="L16"><span class="lineNum">      16</span>              : } // namespace</span>
 <span id="L17"><span class="lineNum">      17</span>              : </span>
@@ -81,32 +81,32 @@
 <span id="L19"><span class="lineNum">      19</span> <span class="tlaGNC">           1 :     std::vector&lt;std::thread&gt; threads;</span></span>
 <span id="L20"><span class="lineNum">      20</span> <span class="tlaGNC">           1 :     int sum = 0;</span></span>
 <span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC">           1 :     int concurrent = rand_int(3, 33);</span></span>
-<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">          34 :     for (int i = 0; i &lt; concurrent; ++i) {</span></span>
-<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">          66 :         threads.emplace_back([i, &amp;sum]() {</span></span>
+<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">          10 :     for (int i = 0; i &lt; concurrent; ++i) {</span></span>
+<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">          18 :         threads.emplace_back([i, &amp;sum]() {</span></span>
 <span id="L24"><span class="lineNum">      24</span>              :             pl::FsLock lock(&quot;./test.lock&quot;);</span>
-<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">          33 :             if (!lock.lock()) {</span></span>
+<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">           9 :             if (!lock.lock()) {</span></span>
 <span id="L26"><span class="lineNum">      26</span> <span class="tlaUNC tlaBgUNC">           0 :                 ::printf(&quot;[%d] failed to get lock\n&quot;, i);</span></span>
 <span id="L27"><span class="lineNum">      27</span> <span class="tlaUNC">           0 :                 EXPECT_TRUE(false);</span></span>
 <span id="L28"><span class="lineNum">      28</span>              :             } else {</span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC tlaBgGNC">          33 :                 ::printf(&quot;[%d] success to get lock\n&quot;, i);</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC tlaBgGNC">           9 :                 ::printf(&quot;[%d] success to get lock\n&quot;, i);</span></span>
 <span id="L30"><span class="lineNum">      30</span>              :             }</span>
 <span id="L31"><span class="lineNum">      31</span>              : </span>
-<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">          33 :             ::printf(&quot;[%d] do something long time...\n&quot;, i);</span></span>
-<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">          33 :             std::this_thread::sleep_for(std::chrono::milliseconds(rand_int(10, 1000)));</span></span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">          33 :             ::printf(&quot;[%d] finished do something long time...\n&quot;, i);</span></span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">          33 :             sum++;</span></span>
+<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">           9 :             ::printf(&quot;[%d] do something long time...\n&quot;, i);</span></span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">           9 :             std::this_thread::sleep_for(std::chrono::milliseconds(rand_int(10, 1000)));</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">           9 :             ::printf(&quot;[%d] finished do something long time...\n&quot;, i);</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">           9 :             sum++;</span></span>
 <span id="L36"><span class="lineNum">      36</span>              : </span>
-<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">          33 :             if (!lock.unlock()) {</span></span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">           9 :             if (!lock.unlock()) {</span></span>
 <span id="L38"><span class="lineNum">      38</span> <span class="tlaUNC tlaBgUNC">           0 :                 ::printf(&quot;[%d] failed to release lock\n&quot;, i);</span></span>
 <span id="L39"><span class="lineNum">      39</span> <span class="tlaUNC">           0 :                 EXPECT_TRUE(false);</span></span>
 <span id="L40"><span class="lineNum">      40</span>              :             } else {</span>
-<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC tlaBgGNC">          33 :                 ::printf(&quot;[%d] success to release lock\n&quot;, i);</span></span>
+<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC tlaBgGNC">           9 :                 ::printf(&quot;[%d] success to release lock\n&quot;, i);</span></span>
 <span id="L42"><span class="lineNum">      42</span>              :             }</span>
-<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">          33 :         });</span></span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">           9 :         });</span></span>
 <span id="L44"><span class="lineNum">      44</span>              :     }</span>
 <span id="L45"><span class="lineNum">      45</span>              : </span>
-<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">          34 :     for (int i = 0; i &lt; concurrent; ++i) {</span></span>
-<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">          33 :         threads[i].join();</span></span>
+<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">          10 :     for (int i = 0; i &lt; concurrent; ++i) {</span></span>
+<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">           9 :         threads[i].join();</span></span>
 <span id="L48"><span class="lineNum">      48</span>              :     }</span>
 <span id="L49"><span class="lineNum">      49</span>              : </span>
 <span id="L50"><span class="lineNum">      50</span> <span class="tlaGNC">           1 :     EXPECT_EQ(concurrent, sum);</span></span>
