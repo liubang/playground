@@ -15,29 +15,9 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/04/14 14:00
 
-load("@gazelle//:def.bzl", "gazelle", "gazelle_binary")
 load("@hedron_compile_commands//:refresh_compile_commands.bzl", "refresh_compile_commands")
 
 licenses(["notice"])
-
-# gazelle:java_maven_install_file maven_install.json
-# gazelle:exclude cpp
-# gazelle:exclude proto
-# gazelle:exclude **/target
-gazelle(
-    name = "gazelle",
-    args = ["-r"],
-    gazelle = ":gazelle_bin",
-)
-
-gazelle_binary(
-    name = "gazelle_bin",
-    languages = [
-        "@gazelle//language/proto:go_default_library",
-        "@contrib_rules_jvm//java/gazelle",
-    ],
-    visibility = ["//visibility:private"],
-)
 
 exports_files([
     "LICENSE",
