@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-06-07 13:12:07</td>
+            <td class="headerValue">2025-06-21 12:37:27</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -63,8 +63,8 @@
 <span id="L1"><span class="lineNum">       1</span>              : #include &lt;catch2/catch_all.hpp&gt;</span>
 <span id="L2"><span class="lineNum">       2</span>              : #include &lt;cstdint&gt;</span>
 <span id="L3"><span class="lineNum">       3</span>              : </span>
-<span id="L4"><span class="lineNum">       4</span> <span class="tlaGNC tlaBgGNC">  1877357705 : std::uint64_t Fibonacci(std::uint64_t number) {</span></span>
-<span id="L5"><span class="lineNum">       5</span> <span class="tlaGNC">  3754710336 :     return number &lt; 2 ? 1 : Fibonacci(number - 1) + Fibonacci(number - 2);</span></span>
+<span id="L4"><span class="lineNum">       4</span> <span class="tlaGNC tlaBgGNC">  1878452305 : std::uint64_t Fibonacci(std::uint64_t number) {</span></span>
+<span id="L5"><span class="lineNum">       5</span> <span class="tlaGNC">  3756899436 :     return number &lt; 2 ? 1 : Fibonacci(number - 1) + Fibonacci(number - 2);</span></span>
 <span id="L6"><span class="lineNum">       6</span>              : }</span>
 <span id="L7"><span class="lineNum">       7</span>              : </span>
 <span id="L8"><span class="lineNum">       8</span> <span class="tlaGNC">           1 : TEST_CASE(&quot;Fibonacci&quot;) {</span></span>
@@ -74,7 +74,7 @@
 <span id="L12"><span class="lineNum">      12</span>              :     // some more asserts..</span>
 <span id="L13"><span class="lineNum">      13</span>              : </span>
 <span id="L14"><span class="lineNum">      14</span>              :     // now let's benchmark:</span>
-<span id="L15"><span class="lineNum">      15</span> <span class="tlaGNC">        4197 :     BENCHMARK(&quot;Fibonacci 20&quot;) { return Fibonacci(20); };</span></span>
+<span id="L15"><span class="lineNum">      15</span> <span class="tlaGNC">        4297 :     BENCHMARK(&quot;Fibonacci 20&quot;) { return Fibonacci(20); };</span></span>
 <span id="L16"><span class="lineNum">      16</span>              : </span>
 <span id="L17"><span class="lineNum">      17</span> <span class="tlaGNC">         613 :     BENCHMARK(&quot;Fibonacci 25&quot;) { return Fibonacci(25); };</span></span>
 <span id="L18"><span class="lineNum">      18</span>              : </span>
