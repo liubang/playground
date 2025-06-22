@@ -19,6 +19,7 @@
 #include "cpp/pl/grpc/proto/echo.grpc.pb.h"
 
 #include <grpcpp/grpcpp.h>
+#include <mutex>
 
 namespace pl {
 
@@ -30,6 +31,14 @@ public:
     ::grpc::Status Echo(::grpc::ServerContext* context,
                         const ::pl::grpc::proto::EchoRequest* request,
                         ::pl::grpc::proto::EchoResponse* response) override;
+
+    ::grpc::Status Chat(
+        ::grpc::ServerContext* context,
+        ::grpc::ServerReaderWriter<::pl::grpc::proto::EchoResponse, ::pl::grpc::proto::EchoRequest>*
+            stream) override;
+
+private:
+    std::mutex mutex_;
 };
 
 } // namespace pl

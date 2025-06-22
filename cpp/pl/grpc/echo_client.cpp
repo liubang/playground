@@ -29,5 +29,8 @@ int main(int argc, char* argv[]) {
     std::cout << "-------------- Echo --------------" << std::endl;
     client.Echo("hello world");
 
+    std::cout << "-------------- Chat --------------" << std::endl;
+    client.Chat();
+
     return 0;
 }
