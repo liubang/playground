@@ -19,6 +19,7 @@
 #include "cpp/pl/grpc/proto/echo.grpc.pb.h"
 
 #include <grpcpp/grpcpp.h>
+#include <thread>
 
 namespace pl {
 class EchoServiceClient {
@@ -36,6 +37,41 @@ public:
             std::cout << "Echo rpc failed." << std::endl;
         } else {
             std::cout << "Echo rpc response: " << resp.message() << std::endl;
+        }
+    }
+
+    void Chat() {
+        ::grpc::ClientContext context;
+        std::shared_ptr<::grpc::ClientReaderWriter<::pl::grpc::proto::EchoRequest,
+                                                   ::pl::grpc::proto::EchoResponse>>
+            stream(stub_->Chat(&context));
+
+        std::thread writer([stream]() {
+            std::vector<std::string> messages = {
+                "First message",
+                "Second message",
+                "Third message",
+                "Forth message",
+            };
+
+            for (const auto& message : messages) {
+                std::cout << "Sending message " << message << std::endl;
+                ::pl::grpc::proto::EchoRequest request;
+                request.set_message(message);
+                stream->Write(request);
+            }
+
+            stream->WritesDone();
+        });
+
+        pl::grpc::proto::EchoResponse response;
+        while (stream->Read(&response)) {
+            std::cout << "Got message " << response.message() << std::endl;
+        }
+        writer.join();
+        ::grpc::Status status = stream->Finish();
+        if (!status.ok()) {
+            std::cout << "Chat rpc failed." << std::endl;
         }
     }
 

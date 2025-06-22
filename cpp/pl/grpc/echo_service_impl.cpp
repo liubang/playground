@@ -25,4 +25,21 @@ namespace pl {
     response->set_message(request->message());
     return ::grpc::Status::OK;
 }
+
+::grpc::Status EchoServiceImpl::Chat(
+    ::grpc::ServerContext* context,
+    ::grpc::ServerReaderWriter<::pl::grpc::proto::EchoResponse, ::pl::grpc::proto::EchoRequest>*
+        stream) {
+    std::ignore = context;
+    ::pl::grpc::proto::EchoRequest request;
+    ::pl::grpc::proto::EchoResponse response;
+    while (stream->Read(&request)) {
+        std::cout << "read stream" << std::endl;
+        response.set_message(request.message());
+        std::cout << "write stream" << std::endl;
+        stream->Write(response);
+    }
+    return ::grpc::Status::OK;
+}
+
 } // namespace pl
