@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-06-21 15:12:35</td>
+            <td class="headerValue">2025-06-22 03:51:51</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -84,40 +84,40 @@
 <span id="L22"><span class="lineNum">      22</span>              : </span>
 <span id="L23"><span class="lineNum">      23</span>              : constexpr size_t n = 1 &lt;&lt; 10;</span>
 <span id="L24"><span class="lineNum">      24</span>              : </span>
-<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC tlaBgGNC">          80 : static void test1() {</span></span>
+<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC tlaBgGNC">          22 : static void test1() {</span></span>
 <span id="L26"><span class="lineNum">      26</span>              :     tbb::concurrent_vector&lt;float&gt; a;</span>
-<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">       21050 :     tbb::parallel_for(tbb::blocked_range&lt;size_t&gt;(0, n), [&amp;](tbb::blocked_range&lt;size_t&gt; r) {</span></span>
-<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">       98902 :         for (size_t i = r.begin(); i &lt; r.end(); ++i) {</span></span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">       77824 :             float val = std::sin(i);</span></span>
-<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">       77824 :             if (val &gt; 0)</span></span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">       39902 :                 a.push_back(val);</span></span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">        5654 :     tbb::parallel_for(tbb::blocked_range&lt;size_t&gt;(0, n), [&amp;](tbb::blocked_range&lt;size_t&gt; r) {</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">       28160 :         for (size_t i = r.begin(); i &lt; r.end(); ++i) {</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">       22528 :             float val = std::sin(i);</span></span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">       22528 :             if (val &gt; 0)</span></span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">       11264 :                 a.push_back(val);</span></span>
 <span id="L32"><span class="lineNum">      32</span>              :         }</span>
-<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">       21078 :     });</span></span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">          80 : }</span></span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">        5632 :     });</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">          22 : }</span></span>
 <span id="L35"><span class="lineNum">      35</span>              : </span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">          32 : static void test2() {</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">          21 : static void test2() {</span></span>
 <span id="L37"><span class="lineNum">      37</span>              :     tbb::concurrent_vector&lt;float&gt; a;</span>
-<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">          32 :     tbb::parallel_for(tbb::blocked_range&lt;size_t&gt;(0, n), [&amp;](tbb::blocked_range&lt;size_t&gt; r) {</span></span>
-<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">        9597 :         std::vector&lt;float&gt; local_a;</span></span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">       41521 :         for (size_t i = r.begin(); i &lt; r.end(); ++i) {</span></span>
-<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">       31907 :             float val = std::sin(i);</span></span>
-<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">       31907 :             if (val &gt; 0)</span></span>
-<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">       16028 :                 local_a.push_back(val);</span></span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">          21 :     tbb::parallel_for(tbb::blocked_range&lt;size_t&gt;(0, n), [&amp;](tbb::blocked_range&lt;size_t&gt; r) {</span></span>
+<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">        5968 :         std::vector&lt;float&gt; local_a;</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">       27226 :         for (size_t i = r.begin(); i &lt; r.end(); ++i) {</span></span>
+<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">       21245 :             float val = std::sin(i);</span></span>
+<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">       21245 :             if (val &gt; 0)</span></span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">       10632 :                 local_a.push_back(val);</span></span>
 <span id="L44"><span class="lineNum">      44</span>              :         }</span>
 <span id="L45"><span class="lineNum">      45</span>              : </span>
-<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">        9614 :         auto it = a.grow_by(local_a.size());</span></span>
-<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">        9630 :         std::copy(local_a.begin(), local_a.end(), it);</span></span>
-<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">        9626 :     });</span></span>
-<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">          32 : }</span></span>
+<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">        5981 :         auto it = a.grow_by(local_a.size());</span></span>
+<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">        5972 :         std::copy(local_a.begin(), local_a.end(), it);</span></span>
+<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">        5988 :     });</span></span>
+<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">          21 : }</span></span>
 <span id="L50"><span class="lineNum">      50</span>              : </span>
 <span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">           1 : int main(int argc, char* argv[]) {</span></span>
 <span id="L52"><span class="lineNum">      52</span>              :     // put your code here</span>
 <span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC">           1 :     ankerl::nanobench::Bench().run(&quot;test1&quot;, [&amp;] {</span></span>
-<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">          80 :         test1();</span></span>
-<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">          80 :     });</span></span>
+<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">          22 :         test1();</span></span>
+<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">          22 :     });</span></span>
 <span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">           1 :     ankerl::nanobench::Bench().run(&quot;test2&quot;, [&amp;] {</span></span>
-<span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">          32 :         test2();</span></span>
-<span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">          32 :     });</span></span>
+<span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">          21 :         test2();</span></span>
+<span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">          21 :     });</span></span>
 <span id="L59"><span class="lineNum">      59</span>              :     return 0;</span>
 <span id="L60"><span class="lineNum">      60</span>              : }</span>
         </pre>

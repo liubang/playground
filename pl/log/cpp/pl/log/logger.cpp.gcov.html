@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-06-21 15:12:35</td>
+            <td class="headerValue">2025-06-22 03:51:51</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">83.3&nbsp;%</td>
@@ -87,8 +87,8 @@
 <span id="L25"><span class="lineNum">      25</span>              : </span>
 <span id="L26"><span class="lineNum">      26</span> <span class="tlaUNC tlaBgUNC">           0 : Logger::Logger(Logger::SourceFile source, int line) : impl_(source, line, LogLevel::PL_INFO) {}</span></span>
 <span id="L27"><span class="lineNum">      27</span>              : </span>
-<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC tlaBgGNC">        1036 : Logger::Logger(Logger::SourceFile source, int line, Logger::LogLevel log_level)</span></span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">        1036 :     : impl_(source, line, log_level) {}</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC tlaBgGNC">        1037 : Logger::Logger(Logger::SourceFile source, int line, Logger::LogLevel log_level)</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">        1037 :     : impl_(source, line, log_level) {}</span></span>
 <span id="L30"><span class="lineNum">      30</span>              : </span>
 <span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">        1037 : Logger::~Logger() { impl_.flush(); }</span></span>
 <span id="L32"><span class="lineNum">      32</span>              : </span>
@@ -108,7 +108,7 @@
 <span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">        1037 : void Logger::Impl::flush() {</span></span>
 <span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">        1037 :     stream_ &lt;&lt; '\n';</span></span>
 <span id="L48"><span class="lineNum">      48</span>              :     const auto&amp; buffer = stream_.buffer();</span>
-<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">        1036 :     ::fwrite(buffer.data(), 1, buffer.size(), stdout);</span></span>
+<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">        1037 :     ::fwrite(buffer.data(), 1, buffer.size(), stdout);</span></span>
 <span id="L50"><span class="lineNum">      50</span> <span class="tlaGNC">        1037 :     ::fflush(stdout);</span></span>
 <span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">        1037 : }</span></span>
 <span id="L52"><span class="lineNum">      52</span>              : </span>
