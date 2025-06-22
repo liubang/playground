@@ -29,4 +29,6 @@ message EchoResponse {
 
 service Echo {
   rpc Echo(EchoRequest) returns (EchoResponse);
+
+  rpc Chat(stream EchoRequest) returns (stream EchoResponse);
 }
