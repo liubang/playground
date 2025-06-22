@@ -1,4 +1,4 @@
-# Copyright (c) 2024 The Authors. All rights reserved.
+# Copyright (c) 2025 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,18 +14,17 @@
 
 # Authors: liubang (it.liubang@gmail.com)
 
-load("@protobuf//bazel:py_proto_library.bzl", "py_proto_library")
-load("@rules_python//python:defs.bzl", "py_binary")
+load("@grpc//bazel:grpc_build_system.bzl", "grpc_proto_library")
+load("@rules_proto//proto:defs.bzl", "proto_library")
 
-py_proto_library(
-    name = "py_sensor_proto",
-    deps = [
-        "//proto/test:sensor",
-    ],
+package(default_visibility = ["//visibility:public"])
+
+proto_library(
+    name = "echo_pb",
+    srcs = ["echo.proto"],
 )
 
-py_binary(
-    name = "sensor_pb",
-    srcs = ["sensor_pb.py"],
-    deps = [":py_sensor_proto"],
+grpc_proto_library(
+    name = "grpc_echo_pb",
+    srcs = ["echo.proto"],
 )
