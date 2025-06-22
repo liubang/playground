@@ -16,10 +16,12 @@
 
 #include "print.h"
 
+#if !defined(__APPLE__) && !defined(__MACH__)
 #include <immintrin.h>
+#endif
 
 void t1() {
-#ifdef __GNUC__
+#if defined(__GNUC__) && !defined(__APPLE__) && !defined(__MACH__)
     float x = 0.5f;
     float y = 0.6f;
     float z = 0.7f;
@@ -32,6 +34,7 @@ void t1() {
 }
 
 void t2() {
+#if !defined(__APPLE__) && !defined(__MACH__)
     float x = 0.5f;
     float y = 0.6f;
     float z = 0.7f;
@@ -42,6 +45,7 @@ void t2() {
     __m128 one = _mm_set1_ps(1.0f);
     m = _mm_add_ps(m, one);
     pl::println_simd<__m128, 4>(m);
+#endif
 }
 
 int main(int argc, char* argv[]) {
