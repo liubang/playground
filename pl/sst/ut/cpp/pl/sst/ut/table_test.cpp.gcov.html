@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-06-22 03:51:51</td>
+            <td class="headerValue">2025-06-22 16:36:24</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">85.7&nbsp;%</td>
@@ -104,10 +104,10 @@
 <span id="L42"><span class="lineNum">      42</span>              : };</span>
 <span id="L43"><span class="lineNum">      43</span>              : </span>
 <span id="L44"><span class="lineNum">      44</span>              : struct CaseCellComparator {</span>
-<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">     3565640 :     bool operator()(const CaseCell&amp; lhs, const CaseCell&amp; rhs) const {</span></span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">     3579928 :     bool operator()(const CaseCell&amp; lhs, const CaseCell&amp; rhs) const {</span></span>
 <span id="L46"><span class="lineNum">      46</span>              :         // 使用 tie 简化比较逻辑</span>
-<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">     3565640 :         return std::tie(lhs.rowkey, lhs.cf, lhs.col, rhs.ts, lhs.type) &lt;</span></span>
-<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">     3565640 :                std::tie(rhs.rowkey, rhs.cf, rhs.col, lhs.ts, rhs.type);</span></span>
+<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">     3579928 :         return std::tie(lhs.rowkey, lhs.cf, lhs.col, rhs.ts, lhs.type) &lt;</span></span>
+<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">     3579928 :                std::tie(rhs.rowkey, rhs.cf, rhs.col, lhs.ts, rhs.type);</span></span>
 <span id="L49"><span class="lineNum">      49</span>              :     }</span>
 <span id="L50"><span class="lineNum">      50</span>              : };</span>
 <span id="L51"><span class="lineNum">      51</span>              : </span>
@@ -285,13 +285,13 @@
 <span id="L223"><span class="lineNum">     223</span> <span class="tlaGNC">           6 :     }</span></span>
 <span id="L224"><span class="lineNum">     224</span>              : </span>
 <span id="L225"><span class="lineNum">     225</span>              :     // 辅助方法：验证cell内容</span>
-<span id="L226"><span class="lineNum">     226</span> <span class="tlaGNC">      131392 :     static void verify_cell_content(const CaseCell&amp; expected, const CellRef&amp; actual) {</span></span>
-<span id="L227"><span class="lineNum">     227</span> <span class="tlaGNC">      131392 :         EXPECT_EQ(expected.rowkey, actual-&gt;rowkey());</span></span>
-<span id="L228"><span class="lineNum">     228</span> <span class="tlaGNC">      131392 :         EXPECT_EQ(expected.cf, actual-&gt;cf());</span></span>
-<span id="L229"><span class="lineNum">     229</span> <span class="tlaGNC">      131392 :         EXPECT_EQ(expected.col, actual-&gt;col());</span></span>
-<span id="L230"><span class="lineNum">     230</span> <span class="tlaGNC">      131392 :         EXPECT_EQ(expected.type, actual-&gt;cell_type());</span></span>
-<span id="L231"><span class="lineNum">     231</span> <span class="tlaGNC">      131392 :         EXPECT_EQ(expected.ts, actual-&gt;timestamp());</span></span>
-<span id="L232"><span class="lineNum">     232</span> <span class="tlaGNC">      131392 :     }</span></span>
+<span id="L226"><span class="lineNum">     226</span> <span class="tlaGNC">      170496 :     static void verify_cell_content(const CaseCell&amp; expected, const CellRef&amp; actual) {</span></span>
+<span id="L227"><span class="lineNum">     227</span> <span class="tlaGNC">      170496 :         EXPECT_EQ(expected.rowkey, actual-&gt;rowkey());</span></span>
+<span id="L228"><span class="lineNum">     228</span> <span class="tlaGNC">      170496 :         EXPECT_EQ(expected.cf, actual-&gt;cf());</span></span>
+<span id="L229"><span class="lineNum">     229</span> <span class="tlaGNC">      170496 :         EXPECT_EQ(expected.col, actual-&gt;col());</span></span>
+<span id="L230"><span class="lineNum">     230</span> <span class="tlaGNC">      170496 :         EXPECT_EQ(expected.type, actual-&gt;cell_type());</span></span>
+<span id="L231"><span class="lineNum">     231</span> <span class="tlaGNC">      170496 :         EXPECT_EQ(expected.ts, actual-&gt;timestamp());</span></span>
+<span id="L232"><span class="lineNum">     232</span> <span class="tlaGNC">      170496 :     }</span></span>
 <span id="L233"><span class="lineNum">     233</span>              : </span>
 <span id="L234"><span class="lineNum">     234</span> <span class="tlaGNC">           3 :     static void seek_from_sst(int idx, const ReadOptionsRef&amp; read_options = nullptr) {</span></span>
 <span id="L235"><span class="lineNum">     235</span> <span class="tlaGNC">           3 :         const auto&amp; cells = TestDataManager::instance().cell_sets()[idx];</span></span>
@@ -357,11 +357,11 @@
 <span id="L295"><span class="lineNum">     295</span> <span class="tlaGNC">           3 :         std::string_view search_key = cell_iter-&gt;rowkey;</span></span>
 <span id="L296"><span class="lineNum">     296</span> <span class="tlaGNC">           9 :         XLOGF(INFO, &quot;scan rowkey &gt;= {}&quot;, search_key);</span></span>
 <span id="L297"><span class="lineNum">     297</span> <span class="tlaGNC">           3 :         table_iter-&gt;seek(search_key);</span></span>
-<span id="L298"><span class="lineNum">     298</span> <span class="tlaGNC">       60531 :         while (table_iter-&gt;valid()) {</span></span>
-<span id="L299"><span class="lineNum">     299</span> <span class="tlaGNC">       60528 :             EXPECT_TRUE(cell_iter != cells.end());</span></span>
-<span id="L300"><span class="lineNum">     300</span> <span class="tlaGNC">       60528 :             auto actual_cell = table_iter-&gt;cell();</span></span>
-<span id="L301"><span class="lineNum">     301</span> <span class="tlaGNC">       60528 :             verify_cell_content(*cell_iter, actual_cell);</span></span>
-<span id="L302"><span class="lineNum">     302</span> <span class="tlaGNC">       60528 :             table_iter-&gt;next();</span></span>
+<span id="L298"><span class="lineNum">     298</span> <span class="tlaGNC">       99635 :         while (table_iter-&gt;valid()) {</span></span>
+<span id="L299"><span class="lineNum">     299</span> <span class="tlaGNC">       99632 :             EXPECT_TRUE(cell_iter != cells.end());</span></span>
+<span id="L300"><span class="lineNum">     300</span> <span class="tlaGNC">       99632 :             auto actual_cell = table_iter-&gt;cell();</span></span>
+<span id="L301"><span class="lineNum">     301</span> <span class="tlaGNC">       99632 :             verify_cell_content(*cell_iter, actual_cell);</span></span>
+<span id="L302"><span class="lineNum">     302</span> <span class="tlaGNC">       99632 :             table_iter-&gt;next();</span></span>
 <span id="L303"><span class="lineNum">     303</span>              :             ++cell_iter;</span>
 <span id="L304"><span class="lineNum">     304</span>              :         }</span>
 <span id="L305"><span class="lineNum">     305</span>              :     }</span>
