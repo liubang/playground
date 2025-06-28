@@ -18,8 +18,8 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "DEFAULT_COPTS",
-    "DEFAULT_LINKOPTS",
+    "COPTS",
+    "LINKOPTS",
 )
 
 cc_binary(
@@ -29,8 +29,8 @@ cc_binary(
         "echo_service_impl.cpp",
         "echo_service_impl.h",
     ],
-    copts = DEFAULT_COPTS + ["-std=c++20"],
-    linkopts = DEFAULT_LINKOPTS,
+    copts = COPTS + ["-std=c++20"],
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/grpc/proto:grpc_echo_pb",
         "@abseil-cpp//absl/flags:parse",
@@ -45,8 +45,8 @@ cc_binary(
         "echo_client.cpp",
         "echo_client.h",
     ],
-    copts = DEFAULT_COPTS + ["-std=c++20"],
-    linkopts = DEFAULT_LINKOPTS,
+    copts = COPTS + ["-std=c++20"],
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/grpc/proto:grpc_echo_pb",
         "@abseil-cpp//absl/flags:parse",
