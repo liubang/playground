@@ -16,7 +16,7 @@
 
 load(
     "//cpp:copts/configure_copts.bzl",
-    "DEFAULT_LINKOPTS",
+    "LINKOPTS_WITH_ASAN",
     "TEST_COPTS",
 )
 
@@ -34,7 +34,7 @@ cc_library(
         copts = [
             "-std=c++20",
         ] + TEST_COPTS,
-        linkopts = DEFAULT_LINKOPTS,
+        linkopts = LINKOPTS_WITH_ASAN,
         deps = [
             ":tbb_common",
             "@nanobench",

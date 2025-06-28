@@ -29,21 +29,23 @@ COPTS = select({
     "//conditions:default": GCC_FLAGS,
 })
 
-DEFAULT_COPTS = select({
+LINKOPTS = []
+
+COPTS_WITH_ASAN = select({
     "//cpp:clang_compiler": LLVM_FLAGS,
     "//cpp:gcc_compiler": GCC_FLAGS + ASAN_FLAGS,
     "//conditions:default": GCC_FLAGS + ASAN_FLAGS,
+})
+
+LINKOPTS_WITH_ASAN = select({
+    "//cpp:clang_compiler": LINKOPTS,
+    "//conditions:default": LINKOPTS + [
+        "-fsanitize=address",
+    ],
 })
 
 TEST_COPTS = select({
     "//cpp:clang_compiler": LLVM_TEST_FLAGS,
     "//cpp:gcc_compiler": GCC_TEST_FLAGS,
     "//conditions:default": GCC_TEST_FLAGS,
-})
-
-DEFAULT_LINKOPTS = select({
-    "//cpp:clang_compiler": [],
-    "//conditions:default": [
-        "-fsanitize=address",
-    ],
 })

@@ -17,8 +17,8 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "DEFAULT_COPTS",
-    "DEFAULT_LINKOPTS",
+    "COPTS_WITH_ASAN",
+    "LINKOPTS_WITH_ASAN",
     "TEST_COPTS",
 )
 
@@ -31,8 +31,8 @@ cc_library(
         "fs.h",
         "posix_fs.h",
     ],
-    copts = ["-std=c++20"] + DEFAULT_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
     visibility = ["//visibility:public"],
     deps = [
         "//cpp/pl/status",
@@ -55,7 +55,7 @@ cc_test(
     copts = [
         "-std=c++20",
     ] + TEST_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
+    linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":fs",
         "@googletest//:gtest_main",
@@ -70,7 +70,7 @@ cc_test(
     copts = [
         "-std=c++20",
     ] + TEST_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
+    linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":fslock",
         "@googletest//:gtest_main",

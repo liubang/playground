@@ -16,7 +16,7 @@
 
 load(
     "//cpp:copts/configure_copts.bzl",
-    "DEFAULT_LINKOPTS",
+    "LINKOPTS_WITH_ASAN",
     "TEST_COPTS",
 )
 
@@ -24,7 +24,7 @@ cc_test(
     name = "map_benchmark",
     srcs = ["map_benchmark.cpp"],
     copts = TEST_COPTS + ["-std=c++17"],
-    linkopts = DEFAULT_LINKOPTS,
+    linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "@google_benchmark//:benchmark_main",
     ],

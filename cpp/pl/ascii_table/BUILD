@@ -17,8 +17,8 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "DEFAULT_COPTS",
-    "DEFAULT_LINKOPTS",
+    "COPTS_WITH_ASAN",
+    "LINKOPTS_WITH_ASAN",
 )
 
 cc_library(
@@ -39,8 +39,8 @@ cc_library(
 cc_binary(
     name = "ascii_table_test",
     srcs = ["ascii_table_test.cpp"],
-    copts = ["-std=c++20"] + DEFAULT_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":ascii_table",
     ],

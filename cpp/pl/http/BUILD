@@ -17,8 +17,8 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "DEFAULT_COPTS",
-    "DEFAULT_LINKOPTS",
+    "COPTS_WITH_ASAN",
+    "LINKOPTS_WITH_ASAN",
 )
 
 package(default_visibility = ["//visibility:public"])
@@ -33,8 +33,8 @@ cc_library(
         "http.h",
         "tcp.h",
     ],
-    copts = DEFAULT_COPTS + ["-std=c++20"],
-    linkopts = DEFAULT_LINKOPTS,
+    copts = COPTS_WITH_ASAN + ["-std=c++20"],
+    linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "//cpp/pl/log:logger",
         "//cpp/pl/scope",
