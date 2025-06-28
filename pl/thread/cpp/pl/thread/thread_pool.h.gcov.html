@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-06-22 16:36:24</td>
+            <td class="headerValue">2025-06-28 06:39:20</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -124,7 +124,7 @@
 <span id="L62"><span class="lineNum">      62</span> <span class="tlaUNC tlaBgUNC">           0 :                 throw std::runtime_error(&quot;&quot;);</span></span>
 <span id="L63"><span class="lineNum">      63</span>              :             }</span>
 <span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC tlaBgGNC">        4093 :             tasks_.emplace([task = std::move(task)]() {</span></span>
-<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC">        2048 :                 (*task)();</span></span>
+<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC">        2047 :                 (*task)();</span></span>
 <span id="L66"><span class="lineNum">      66</span>              :             });</span>
 <span id="L67"><span class="lineNum">      67</span>              :         }</span>
 <span id="L68"><span class="lineNum">      68</span> <span class="tlaGNC">        2048 :         condition_.notify_one();</span></span>
@@ -136,9 +136,9 @@
 <span id="L74"><span class="lineNum">      74</span>              :         for (;;) {</span>
 <span id="L75"><span class="lineNum">      75</span>              :             Task task;</span>
 <span id="L76"><span class="lineNum">      76</span>              :             {</span>
-<span id="L77"><span class="lineNum">      77</span> <span class="tlaGNC">        3070 :                 std::unique_lock&lt;std::mutex&gt; lk(queue_mutex_);</span></span>
+<span id="L77"><span class="lineNum">      77</span> <span class="tlaGNC">        3067 :                 std::unique_lock&lt;std::mutex&gt; lk(queue_mutex_);</span></span>
 <span id="L78"><span class="lineNum">      78</span> <span class="tlaGNC">        3072 :                 condition_.wait(lk, [that = this] {</span></span>
-<span id="L79"><span class="lineNum">      79</span> <span class="tlaGNC">        6144 :                     return that-&gt;stop_ || !that-&gt;tasks_.empty();</span></span>
+<span id="L79"><span class="lineNum">      79</span> <span class="tlaGNC">        6093 :                     return that-&gt;stop_ || !that-&gt;tasks_.empty();</span></span>
 <span id="L80"><span class="lineNum">      80</span>              :                 });</span>
 <span id="L81"><span class="lineNum">      81</span> <span class="tlaGNC">        3072 :                 if (stop_ &amp;&amp; tasks_.empty()) {</span></span>
 <span id="L82"><span class="lineNum">      82</span> <span class="tlaGNC">        1024 :                     LOG_DEBUG &lt;&lt; &quot;thread stopped&quot;;</span></span>
@@ -147,7 +147,7 @@
 <span id="L85"><span class="lineNum">      85</span> <span class="tlaGNC">        2048 :                 task = std::move(tasks_.front());</span></span>
 <span id="L86"><span class="lineNum">      86</span>              :                 tasks_.pop();</span>
 <span id="L87"><span class="lineNum">      87</span>              :             }</span>
-<span id="L88"><span class="lineNum">      88</span> <span class="tlaGNC">        2048 :             task();</span></span>
+<span id="L88"><span class="lineNum">      88</span> <span class="tlaGNC">        2047 :             task();</span></span>
 <span id="L89"><span class="lineNum">      89</span>              :         }</span>
 <span id="L90"><span class="lineNum">      90</span> <span class="tlaGNC">        1024 :     }</span></span>
 <span id="L91"><span class="lineNum">      91</span>              : </span>
