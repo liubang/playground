@@ -16,15 +16,15 @@
 
 load(
     "//cpp:copts/configure_copts.bzl",
-    "DEFAULT_COPTS",
-    "DEFAULT_LINKOPTS",
+    "COPTS_WITH_ASAN",
+    "LINKOPTS_WITH_ASAN",
 )
 
 cc_test(
     name = "test",
     srcs = ["test.cpp"],
-    copts = ["-std=c++17"] + DEFAULT_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
+    copts = ["-std=c++17"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "@s2geometry//:s2",
         "@s2geometry//:s2_testing_headers",

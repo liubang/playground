@@ -16,7 +16,7 @@
 
 load(
     "//cpp:copts/configure_copts.bzl",
-    "DEFAULT_LINKOPTS",
+    "LINKOPTS_WITH_ASAN",
     "TEST_COPTS",
 )
 
@@ -37,7 +37,7 @@ load(
             "//:linux_x86_64": ["-fopenmp"],
             "//conditions:default": [],
         }),
-        linkopts = DEFAULT_LINKOPTS + select({
+        linkopts = LINKOPTS_WITH_ASAN + select({
             "//:linux_x86_64": ["-fopenmp"],
             "//conditions:default": [],
         }),

@@ -17,16 +17,16 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "DEFAULT_COPTS",
-    "DEFAULT_LINKOPTS",
+    "COPTS_WITH_ASAN",
+    "LINKOPTS_WITH_ASAN",
     "TEST_COPTS",
 )
 
 cc_library(
     name = "hash",
     hdrs = glob(["*.h"]),
-    copts = ["-std=c++20"] + DEFAULT_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
     visibility = ["//visibility:public"],
 )
 
@@ -38,7 +38,7 @@ cc_library(
 #     copts = [
 #         "-std=c++20",
 #     ] + TEST_COPTS,
-#     linkopts = DEFAULT_LINKOPTS,
+#     linkopts = LINKOPTS_WITH_ASAN,
 #     deps = [
 #         "//cpp/pl/hash",
 #         "@googletest//:gtest_main",

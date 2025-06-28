@@ -19,8 +19,8 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_binary")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "DEFAULT_COPTS",
-    "DEFAULT_LINKOPTS",
+    "COPTS_WITH_ASAN",
+    "LINKOPTS_WITH_ASAN",
 )
 
 package(default_visibility = ["//visibility:public"])
@@ -46,8 +46,8 @@ cc_library(
         "scanner.h",
         "token.h",
     ],
-    copts = ["-std=c++20"] + DEFAULT_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
 )
 
 cc_binary(
@@ -55,8 +55,8 @@ cc_binary(
     srcs = [
         "scanner_test.cpp",
     ],
-    copts = ["-std=c++20"] + DEFAULT_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":scanner",
     ],

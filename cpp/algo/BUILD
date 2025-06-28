@@ -17,8 +17,8 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "DEFAULT_COPTS",
-    "DEFAULT_LINKOPTS",
+    "COPTS_WITH_ASAN",
+    "LINKOPTS_WITH_ASAN",
 )
 
 cc_binary(
@@ -26,7 +26,7 @@ cc_binary(
     srcs = ["print_heart.cpp"],
     copts = [
         "-std=c++20",
-    ] + DEFAULT_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
+    ] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
     visibility = ["//visibility:public"],
 )

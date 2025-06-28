@@ -17,7 +17,7 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "DEFAULT_LINKOPTS",
+    "LINKOPTS_WITH_ASAN",
     "TEST_COPTS",
 )
 
@@ -34,7 +34,7 @@ cc_test(
     name = "demangle_test",
     srcs = ["demangle_test.cpp"],
     copts = ["-std=c++20"] + TEST_COPTS,
-    linkopts = DEFAULT_LINKOPTS,
+    linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":debug",
         "//cpp/meta",
