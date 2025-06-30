@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-06-29 16:53:19</td>
+            <td class="headerValue">2025-06-30 16:52:27</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -84,30 +84,30 @@
 <span id="L22"><span class="lineNum">      22</span>              : </span>
 <span id="L23"><span class="lineNum">      23</span>              : constexpr std::size_t n = 1 &lt;&lt; 10;</span>
 <span id="L24"><span class="lineNum">      24</span>              : </span>
-<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC tlaBgGNC">         296 : static void test1() {</span></span>
-<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">         296 :     std::vector&lt;float&gt; a(n);</span></span>
-<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">      303400 :     for (std::size_t i = 0; i &lt; n; ++i) {</span></span>
-<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">      303104 :         a[i] = std::sin(i);</span></span>
+<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC tlaBgGNC">         521 : static void test1() {</span></span>
+<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">         521 :     std::vector&lt;float&gt; a(n);</span></span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">      534025 :     for (std::size_t i = 0; i &lt; n; ++i) {</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">      533504 :         a[i] = std::sin(i);</span></span>
 <span id="L29"><span class="lineNum">      29</span>              :     }</span>
-<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">         296 : }</span></span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">         521 : }</span></span>
 <span id="L31"><span class="lineNum">      31</span>              : </span>
-<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">         101 : static void test2() {</span></span>
-<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">         101 :     std::vector&lt;float&gt; a(n);</span></span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">         101 :     tbb::parallel_for(tbb::blocked_range&lt;std::size_t&gt;(0, n),</span></span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">       25787 :                       [&amp;](tbb::blocked_range&lt;std::size_t&gt; r) {</span></span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">      112118 :                           for (std::size_t i = r.begin(); i &lt; r.end(); ++i) {</span></span>
-<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">       86432 :                               a[i] = std::sin(i);</span></span>
+<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">         106 : static void test2() {</span></span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">         106 :     std::vector&lt;float&gt; a(n);</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">         106 :     tbb::parallel_for(tbb::blocked_range&lt;std::size_t&gt;(0, n),</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">       27128 :                       [&amp;](tbb::blocked_range&lt;std::size_t&gt; r) {</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">      108678 :                           for (std::size_t i = r.begin(); i &lt; r.end(); ++i) {</span></span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">       81656 :                               a[i] = std::sin(i);</span></span>
 <span id="L38"><span class="lineNum">      38</span>              :                           }</span>
-<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">       25686 :                       });</span></span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">         101 : }</span></span>
+<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">       27022 :                       });</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">         106 : }</span></span>
 <span id="L41"><span class="lineNum">      41</span>              : </span>
 <span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">           1 : int main(int argc, char* argv[]) {</span></span>
 <span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">           1 :     ankerl::nanobench::Bench().run(&quot;test1&quot;, [&amp;] {</span></span>
-<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">         296 :         test1();</span></span>
-<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">         296 :     });</span></span>
+<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">         521 :         test1();</span></span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">         521 :     });</span></span>
 <span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">           1 :     ankerl::nanobench::Bench().run(&quot;test2&quot;, [&amp;] {</span></span>
-<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">         101 :         test2();</span></span>
-<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">         101 :     });</span></span>
+<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">         106 :         test2();</span></span>
+<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">         106 :     });</span></span>
 <span id="L49"><span class="lineNum">      49</span>              :     return 0;</span>
 <span id="L50"><span class="lineNum">      50</span>              : }</span>
         </pre>
