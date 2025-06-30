@@ -13,19 +13,21 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2025/06/30 00:47
+# Created: 2025/07/01 00:45
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
+load(
+    "//cpp:copts/configure_copts.bzl",
+    "COPTS_WITH_ASAN",
+    "LINKOPTS_WITH_ASAN",
+)
+
+package(default_visibility = ["//visibility:public"])
 
 cc_library(
-    name = "datanode_lib",
-    srcs = [
-        "block.cpp",
-    ],
-    hdrs = [
-        "block.h",
-    ],
-    deps = [
-        "//cpp/pl/dfs/common",
-    ],
+    name = "common",
+    srcs = glob(["*.cpp"]),
+    hdrs = glob(["*.h"]),
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
 )
