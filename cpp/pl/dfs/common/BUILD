@@ -13,3 +13,20 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load(
+    "//cpp:copts/configure_copts.bzl",
+    "COPTS_WITH_ASAN",
+    "LINKOPTS_WITH_ASAN",
+)
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "common",
+    srcs = glob(["*.cpp"]),
+    hdrs = glob(["*.h"]),
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+)
