@@ -17,6 +17,4 @@
 
 #include "block.h"
 
-namespace pl::dfs {
-
-}
+namespace pl::dfs {}
