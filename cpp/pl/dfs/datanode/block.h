@@ -49,4 +49,6 @@ struct Block {
     uint32_t block_idx = UINT32_MAX;
 };
 
+class BlockManager {};
+
 } // namespace pl::dfs
