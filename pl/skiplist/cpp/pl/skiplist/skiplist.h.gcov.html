@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-06-30 16:52:27</td>
+            <td class="headerValue">2025-07-09 17:59:31</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -109,15 +109,15 @@
 <span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">          50 :     void insert(const Key&amp; key) {</span></span>
 <span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">          50 :         int height = random_height();</span></span>
 <span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">          50 :         auto* node = new SkipListNode&lt;Key&gt;(key, height);</span></span>
-<span id="L50"><span class="lineNum">      50</span> <span class="tlaGNC">         727 :         for (int i = height; i &gt;= 0; --i) {</span></span>
-<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">         677 :             SkipListNode&lt;Key&gt;* pre = head_;</span></span>
-<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">         677 :             SkipListNode&lt;Key&gt;* cur = head_-&gt;next[i];</span></span>
-<span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC">        6315 :             while (cur != nullptr &amp;&amp; comparator_.compare(cur, node) &lt; 0) {</span></span>
+<span id="L50"><span class="lineNum">      50</span> <span class="tlaGNC">         853 :         for (int i = height; i &gt;= 0; --i) {</span></span>
+<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">         803 :             SkipListNode&lt;Key&gt;* pre = head_;</span></span>
+<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">         803 :             SkipListNode&lt;Key&gt;* cur = head_-&gt;next[i];</span></span>
+<span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC">        6232 :             while (cur != nullptr &amp;&amp; comparator_.compare(cur, node) &lt; 0) {</span></span>
 <span id="L54"><span class="lineNum">      54</span>              :                 pre = cur;</span>
-<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">        5638 :                 cur = cur-&gt;next[i];</span></span>
+<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">        5429 :                 cur = cur-&gt;next[i];</span></span>
 <span id="L56"><span class="lineNum">      56</span>              :             }</span>
-<span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">         677 :             node-&gt;next[i] = pre-&gt;next[i];</span></span>
-<span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">         677 :             pre-&gt;next[i] = node;</span></span>
+<span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">         803 :             node-&gt;next[i] = pre-&gt;next[i];</span></span>
+<span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">         803 :             pre-&gt;next[i] = node;</span></span>
 <span id="L59"><span class="lineNum">      59</span>              :         }</span>
 <span id="L60"><span class="lineNum">      60</span> <span class="tlaGNC">          50 :     }</span></span>
 <span id="L61"><span class="lineNum">      61</span>              : </span>
@@ -128,8 +128,8 @@
 <span id="L66"><span class="lineNum">      66</span> <span class="tlaGNC">           1 :     void display() {</span></span>
 <span id="L67"><span class="lineNum">      67</span> <span class="tlaGNC">           1 :         SkipListNode&lt;Key&gt;* cur = head_-&gt;next[0];</span></span>
 <span id="L68"><span class="lineNum">      68</span> <span class="tlaGNC">          51 :         while (cur != nullptr) {</span></span>
-<span id="L69"><span class="lineNum">      69</span> <span class="tlaGNC">         727 :             for (int i = 0; i &lt; cur-&gt;next.size(); ++i) {</span></span>
-<span id="L70"><span class="lineNum">      70</span> <span class="tlaGNC">         677 :                 std::cout &lt;&lt; (*cur-&gt;key) &lt;&lt; &quot;, &quot;;</span></span>
+<span id="L69"><span class="lineNum">      69</span> <span class="tlaGNC">         853 :             for (int i = 0; i &lt; cur-&gt;next.size(); ++i) {</span></span>
+<span id="L70"><span class="lineNum">      70</span> <span class="tlaGNC">         803 :                 std::cout &lt;&lt; (*cur-&gt;key) &lt;&lt; &quot;, &quot;;</span></span>
 <span id="L71"><span class="lineNum">      71</span>              :             }</span>
 <span id="L72"><span class="lineNum">      72</span> <span class="tlaGNC">          50 :             std::cout &lt;&lt; &quot;\n&quot;;</span></span>
 <span id="L73"><span class="lineNum">      73</span> <span class="tlaGNC">          50 :             cur = cur-&gt;next[0];</span></span>
