@@ -27,5 +27,6 @@ cc_library(
     ],
     deps = [
         "//cpp/pl/dfs/common",
+        "//cpp/pl/status",
     ],
 )
