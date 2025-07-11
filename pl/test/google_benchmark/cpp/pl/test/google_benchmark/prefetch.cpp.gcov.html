@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-07-09 17:59:31</td>
+            <td class="headerValue">2025-07-11 08:59:21</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -82,18 +82,18 @@
 <span id="L20"><span class="lineNum">      20</span>              : #include &lt;vector&gt;</span>
 <span id="L21"><span class="lineNum">      21</span>              : </span>
 <span id="L22"><span class="lineNum">      22</span>              : // Function without __builtin_prefetch</span>
-<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC tlaBgGNC">           4 : void NoPrefetch(benchmark::State&amp; state) {</span></span>
+<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC tlaBgGNC">           5 : void NoPrefetch(benchmark::State&amp; state) {</span></span>
 <span id="L24"><span class="lineNum">      24</span>              :     // Create a large vector to iterate over</span>
-<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">           4 :     std::vector&lt;int&gt; data(state.range(0), 1);</span></span>
+<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">           5 :     std::vector&lt;int&gt; data(state.range(0), 1);</span></span>
 <span id="L26"><span class="lineNum">      26</span>              :     for (auto _ : state) {</span>
 <span id="L27"><span class="lineNum">      27</span>              :         long sum = 0;</span>
-<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">  1071645694 :         for (const auto&amp; i : data) {</span></span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">  1071644672 :             sum += i;</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">  2564819342 :         for (const auto&amp; i : data) {</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">  2564816896 :             sum += i;</span></span>
 <span id="L30"><span class="lineNum">      30</span>              :         }</span>
 <span id="L31"><span class="lineNum">      31</span>              :         // Prevent compiler optimization to discard the sum</span>
 <span id="L32"><span class="lineNum">      32</span>              :         benchmark::DoNotOptimize(sum);</span>
 <span id="L33"><span class="lineNum">      33</span>              :     }</span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">           4 : }</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">           5 : }</span></span>
 <span id="L35"><span class="lineNum">      35</span>              : BENCHMARK(NoPrefetch)-&gt;Arg(1 &lt;&lt; 20); // Run with 1MB of data (2^20 integers)</span>
 <span id="L36"><span class="lineNum">      36</span>              : </span>
 <span id="L37"><span class="lineNum">      37</span>              : // Function with __builtin_prefetch</span>
@@ -103,11 +103,11 @@
 <span id="L41"><span class="lineNum">      41</span>              :     for (auto _ : state) {</span>
 <span id="L42"><span class="lineNum">      42</span>              :         long sum = 0;</span>
 <span id="L43"><span class="lineNum">      43</span>              :         int prefetch_distance = 10;</span>
-<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">   724566707 :         for (int i = 0; i &lt; data.size(); i++) {</span></span>
-<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">   724566016 :             if (i + prefetch_distance &lt; data.size()) {</span></span>
-<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">   724559106 :                 PL_PREFETCH(&amp;data[i + prefetch_distance], 0, 3);</span></span>
+<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">   745538247 :         for (int i = 0; i &lt; data.size(); i++) {</span></span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">   745537536 :             if (i + prefetch_distance &lt; data.size()) {</span></span>
+<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">   745530426 :                 PL_PREFETCH(&amp;data[i + prefetch_distance], 0, 3);</span></span>
 <span id="L47"><span class="lineNum">      47</span>              :             }</span>
-<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">   724566016 :             sum += data[i];</span></span>
+<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">   745537536 :             sum += data[i];</span></span>
 <span id="L49"><span class="lineNum">      49</span>              :         }</span>
 <span id="L50"><span class="lineNum">      50</span>              :         // Prevent compiler optimization to discard the sum</span>
 <span id="L51"><span class="lineNum">      51</span>              :         benchmark::DoNotOptimize(sum);</span>
