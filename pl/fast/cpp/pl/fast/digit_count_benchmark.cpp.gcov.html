@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-07-11 08:59:21</td>
+            <td class="headerValue">2025-07-12 17:43:12</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -98,8 +98,8 @@
 <span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">          21 :     const uint64_t numbers = state.range(0);</span></span>
 <span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">          21 :     auto test_cases = generate_test_cases(numbers);</span></span>
 <span id="L38"><span class="lineNum">      38</span>              :     for (auto _ : state) {</span>
-<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">   905969360 :         for (const auto&amp; i : test_cases) {</span></span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">   902413000 :             auto result = pl::digit_count(i);</span></span>
+<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">   896531164 :         for (const auto&amp; i : test_cases) {</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">   893090600 :             auto result = pl::digit_count(i);</span></span>
 <span id="L41"><span class="lineNum">      41</span>              :             benchmark::DoNotOptimize(result);</span>
 <span id="L42"><span class="lineNum">      42</span>              :         }</span>
 <span id="L43"><span class="lineNum">      43</span>              :     }</span>
@@ -110,8 +110,8 @@
 <span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">          21 :     const uint64_t numbers = state.range(0);</span></span>
 <span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">          21 :     auto test_cases = generate_test_cases(numbers);</span></span>
 <span id="L50"><span class="lineNum">      50</span>              :     for (auto _ : state) {</span>
-<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">   863108396 :         for (const auto&amp; i : test_cases) {</span></span>
-<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">   860051200 :             auto result = pl::alternative_digit_count(i);</span></span>
+<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">   868763091 :         for (const auto&amp; i : test_cases) {</span></span>
+<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">   865585500 :             auto result = pl::alternative_digit_count(i);</span></span>
 <span id="L53"><span class="lineNum">      53</span>              :             benchmark::DoNotOptimize(result);</span>
 <span id="L54"><span class="lineNum">      54</span>              :         }</span>
 <span id="L55"><span class="lineNum">      55</span>              :     }</span>
@@ -122,8 +122,8 @@
 <span id="L60"><span class="lineNum">      60</span> <span class="tlaGNC">          21 :     const uint64_t numbers = state.range(0);</span></span>
 <span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">          21 :     auto test_cases = generate_test_cases(numbers);</span></span>
 <span id="L62"><span class="lineNum">      62</span>              :     for (auto _ : state) {</span>
-<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">   785086381 :         for (const auto&amp; i : test_cases) {</span></span>
-<span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC">   782193200 :             auto result = pl::fast_digit_count(i);</span></span>
+<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">   765902344 :         for (const auto&amp; i : test_cases) {</span></span>
+<span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC">   763070600 :             auto result = pl::fast_digit_count(i);</span></span>
 <span id="L65"><span class="lineNum">      65</span>              :             benchmark::DoNotOptimize(result);</span>
 <span id="L66"><span class="lineNum">      66</span>              :         }</span>
 <span id="L67"><span class="lineNum">      67</span>              :     }</span>
