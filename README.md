@@ -10,10 +10,6 @@
         <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_go.yml?label=build-go&style=flat-square&branch=main" alt="build-go" />
     </a>
     &nbsp;
-    <a href="https://github.com/liubang/playground/actions/workflows/build_java.yml">
-        <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_java.yml?label=build-java&style=flat-square&branch=main" alt="build-java" />
-    </a>
-    &nbsp;
     <a href="https://github.com/liubang/playground/actions/workflows/build_python.yml">
         <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_python.yml?label=build-python&style=flat-square&branch=main" alt="build-python" />
     </a>
