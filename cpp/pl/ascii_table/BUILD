@@ -23,7 +23,10 @@ load(
 
 cc_library(
     name = "pretty",
+    srcs = ["pretty.cpp"],
     hdrs = ["pretty.h"],
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
     visibility = ["//visibility:public"],
 )
 
