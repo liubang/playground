@@ -22,26 +22,17 @@ load(
 )
 
 cc_library(
-    name = "ascii_table",
-    hdrs = ["ascii_table.h"],
+    name = "pretty",
+    hdrs = ["pretty.h"],
     visibility = ["//visibility:public"],
-    deps = [
-        "//cpp/pl/status",
-        "//cpp/pl/unicode",
-        "@fmt",
-        "@folly//folly:conv",
-        "@folly//folly:expected",
-        "@folly//folly:json",
-        "@folly//folly:unit",
-    ],
 )
 
 cc_binary(
-    name = "ascii_table_test",
-    srcs = ["ascii_table_test.cpp"],
+    name = "pretty_test",
+    srcs = ["pretty_test.cpp"],
     copts = ["-std=c++20"] + COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
-        ":ascii_table",
+        ":pretty",
     ],
 )
