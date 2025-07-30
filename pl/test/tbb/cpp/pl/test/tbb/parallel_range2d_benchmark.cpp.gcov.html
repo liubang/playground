@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-07-27 15:48:09</td>
+            <td class="headerValue">2025-07-30 02:17:21</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -88,13 +88,13 @@
 <span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC tlaBgGNC">          11 : static void test1() {</span></span>
 <span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">          11 :     std::vector&lt;float&gt; a(n * n);</span></span>
 <span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">          11 :     tbb::parallel_for(tbb::blocked_range2d&lt;std::size_t&gt;(0, n, 0, n),</span></span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">        5375 :                       [&amp;](tbb::blocked_range2d&lt;std::size_t&gt; r) {</span></span>
-<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">      472398 :                           for (std::size_t i = r.cols().begin(); i &lt; r.cols().end(); ++i) {</span></span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">   185914734 :                               for (std::size_t j = r.rows().begin(); j &lt; r.rows().end(); ++j) {</span></span>
-<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">   185447700 :                                   a[i * n + j] = std::sin(i) * std::sin(j);</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">        5756 :                       [&amp;](tbb::blocked_range2d&lt;std::size_t&gt; r) {</span></span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">      511345 :                           for (std::size_t i = r.cols().begin(); i &lt; r.cols().end(); ++i) {</span></span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">   194670336 :                               for (std::size_t j = r.rows().begin(); j &lt; r.rows().end(); ++j) {</span></span>
+<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">   194164736 :                                   a[i * n + j] = std::sin(i) * std::sin(j);</span></span>
 <span id="L33"><span class="lineNum">      33</span>              :                               }</span>
 <span id="L34"><span class="lineNum">      34</span>              :                           }</span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">        5364 :                       });</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">        5745 :                       });</span></span>
 <span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">          11 : }</span></span>
 <span id="L37"><span class="lineNum">      37</span>              : </span>
 <span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">           1 : int main(int argc, char* argv[]) {</span></span>
