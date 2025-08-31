@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-08-31 13:46:49</td>
+            <td class="headerValue">2025-08-31 15:26:35</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -87,8 +87,8 @@
 <span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">          62 :     std::mt19937_64 gen(rd());</span></span>
 <span id="L26"><span class="lineNum">      26</span>              :     std::uniform_int_distribution&lt;int64_t&gt; dis(0, INT64_MAX);</span>
 <span id="L27"><span class="lineNum">      27</span>              : </span>
-<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">      202462 :     for (int i = 0; i &lt; count; ++i) {</span></span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">      202400 :         test_cases[i] = dis(gen);</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">      193462 :     for (int i = 0; i &lt; count; ++i) {</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">      193400 :         test_cases[i] = dis(gen);</span></span>
 <span id="L30"><span class="lineNum">      30</span>              :     }</span>
 <span id="L31"><span class="lineNum">      31</span>              : </span>
 <span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">          62 :     return test_cases;</span></span>
@@ -98,8 +98,8 @@
 <span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">          21 :     const uint64_t numbers = state.range(0);</span></span>
 <span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">          21 :     auto test_cases = generate_test_cases(numbers);</span></span>
 <span id="L38"><span class="lineNum">      38</span>              :     for (auto _ : state) {</span>
-<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">   953636539 :         for (const auto&amp; i : test_cases) {</span></span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">   950334500 :             auto result = pl::digit_count(i);</span></span>
+<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">   966493010 :         for (const auto&amp; i : test_cases) {</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">   962494300 :             auto result = pl::digit_count(i);</span></span>
 <span id="L41"><span class="lineNum">      41</span>              :             benchmark::DoNotOptimize(result);</span>
 <span id="L42"><span class="lineNum">      42</span>              :         }</span>
 <span id="L43"><span class="lineNum">      43</span>              :     }</span>
@@ -110,8 +110,8 @@
 <span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">          21 :     const uint64_t numbers = state.range(0);</span></span>
 <span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">          21 :     auto test_cases = generate_test_cases(numbers);</span></span>
 <span id="L50"><span class="lineNum">      50</span>              :     for (auto _ : state) {</span>
-<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">  1031773613 :         for (const auto&amp; i : test_cases) {</span></span>
-<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">  1028135500 :             auto result = pl::alternative_digit_count(i);</span></span>
+<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">   920148622 :         for (const auto&amp; i : test_cases) {</span></span>
+<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">   916875800 :             auto result = pl::alternative_digit_count(i);</span></span>
 <span id="L53"><span class="lineNum">      53</span>              :             benchmark::DoNotOptimize(result);</span>
 <span id="L54"><span class="lineNum">      54</span>              :         }</span>
 <span id="L55"><span class="lineNum">      55</span>              :     }</span>
@@ -122,8 +122,8 @@
 <span id="L60"><span class="lineNum">      60</span> <span class="tlaGNC">          20 :     const uint64_t numbers = state.range(0);</span></span>
 <span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">          20 :     auto test_cases = generate_test_cases(numbers);</span></span>
 <span id="L62"><span class="lineNum">      62</span>              :     for (auto _ : state) {</span>
-<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">   626960111 :         for (const auto&amp; i : test_cases) {</span></span>
-<span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC">   624261400 :             auto result = pl::fast_digit_count(i);</span></span>
+<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">   663057115 :         for (const auto&amp; i : test_cases) {</span></span>
+<span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC">   660216500 :             auto result = pl::fast_digit_count(i);</span></span>
 <span id="L65"><span class="lineNum">      65</span>              :             benchmark::DoNotOptimize(result);</span>
 <span id="L66"><span class="lineNum">      66</span>              :         }</span>
 <span id="L67"><span class="lineNum">      67</span>              :     }</span>
