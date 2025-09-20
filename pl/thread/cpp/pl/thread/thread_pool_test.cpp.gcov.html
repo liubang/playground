@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-08-31 15:26:35</td>
+            <td class="headerValue">2025-09-20 14:36:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">66.7&nbsp;%</td>
@@ -77,38 +77,36 @@
 <span id="L15"><span class="lineNum">      15</span>              : // Authors: liubang (it.liubang@gmail.com)</span>
 <span id="L16"><span class="lineNum">      16</span>              : </span>
 <span id="L17"><span class="lineNum">      17</span>              : #include &quot;cpp/pl/thread/thread_pool.h&quot;</span>
-<span id="L18"><span class="lineNum">      18</span>              : </span>
-<span id="L19"><span class="lineNum">      19</span>              : #include &lt;chrono&gt;</span>
-<span id="L20"><span class="lineNum">      20</span>              : #include &lt;future&gt;</span>
+<span id="L18"><span class="lineNum">      18</span>              : #include &lt;chrono&gt;</span>
+<span id="L19"><span class="lineNum">      19</span>              : #include &lt;future&gt;</span>
+<span id="L20"><span class="lineNum">      20</span>              : #include &lt;gtest/gtest.h&gt;</span>
 <span id="L21"><span class="lineNum">      21</span>              : #include &lt;iostream&gt;</span>
 <span id="L22"><span class="lineNum">      22</span>              : #include &lt;utility&gt;</span>
 <span id="L23"><span class="lineNum">      23</span>              : #include &lt;vector&gt;</span>
 <span id="L24"><span class="lineNum">      24</span>              : </span>
-<span id="L25"><span class="lineNum">      25</span>              : #include &lt;gtest/gtest.h&gt;</span>
-<span id="L26"><span class="lineNum">      26</span>              : </span>
-<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC tlaBgGNC">           3 : TEST(thread_pool, thread_pool) {</span></span>
-<span id="L28"><span class="lineNum">      28</span>              :     int n = 1024;</span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">           1 :     pl::ThreadPool pool(n);</span></span>
-<span id="L30"><span class="lineNum">      30</span>              :     std::vector&lt;std::future&lt;std::pair&lt;int, int&gt;&gt;&gt; results;</span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">           1 :     auto start = std::chrono::system_clock::now();</span></span>
-<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">           1 :     results.reserve(2 * n);</span></span>
-<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">        2049 :     for (int i = 0; i &lt; 2 * n; ++i) {</span></span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">        4096 :         results.emplace_back(pool.submit([i] {</span></span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">        2048 :             std::this_thread::sleep_for(std::chrono::milliseconds(1));</span></span>
-<span id="L36"><span class="lineNum">      36</span>              :             return std::make_pair(i, i);</span>
-<span id="L37"><span class="lineNum">      37</span>              :         }));</span>
-<span id="L38"><span class="lineNum">      38</span>              :     }</span>
-<span id="L39"><span class="lineNum">      39</span>              : </span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">        2049 :     for (auto&amp; result : results) {</span></span>
-<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">        2048 :         std::pair&lt;int, int&gt; pair = result.get();</span></span>
-<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">        2048 :         EXPECT_EQ(pair.first, pair.second);</span></span>
-<span id="L43"><span class="lineNum">      43</span>              :     }</span>
-<span id="L44"><span class="lineNum">      44</span>              : </span>
-<span id="L45"><span class="lineNum">      45</span>              :     auto duration = std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(</span>
-<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">           1 :         std::chrono::system_clock::now() - start);</span></span>
-<span id="L47"><span class="lineNum">      47</span>              : </span>
-<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">           2 :     std::cout &lt;&lt; &quot;Elapsed time: &quot; &lt;&lt; duration.count() &lt;&lt; &quot;(ms)&quot; &lt;&lt; std::endl;</span></span>
-<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC tlaBgGNC">           3 : TEST(thread_pool, thread_pool) {</span></span>
+<span id="L26"><span class="lineNum">      26</span>              :     int n = 1024;</span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">           1 :     pl::ThreadPool pool(n);</span></span>
+<span id="L28"><span class="lineNum">      28</span>              :     std::vector&lt;std::future&lt;std::pair&lt;int, int&gt;&gt;&gt; results;</span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">           1 :     auto start = std::chrono::system_clock::now();</span></span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">           1 :     results.reserve(2 * n);</span></span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">        2049 :     for (int i = 0; i &lt; 2 * n; ++i) {</span></span>
+<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">        4096 :         results.emplace_back(pool.submit([i] {</span></span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">        2047 :             std::this_thread::sleep_for(std::chrono::milliseconds(1));</span></span>
+<span id="L34"><span class="lineNum">      34</span>              :             return std::make_pair(i, i);</span>
+<span id="L35"><span class="lineNum">      35</span>              :         }));</span>
+<span id="L36"><span class="lineNum">      36</span>              :     }</span>
+<span id="L37"><span class="lineNum">      37</span>              : </span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">        2049 :     for (auto&amp; result : results) {</span></span>
+<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">        2048 :         std::pair&lt;int, int&gt; pair = result.get();</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">        2048 :         EXPECT_EQ(pair.first, pair.second);</span></span>
+<span id="L41"><span class="lineNum">      41</span>              :     }</span>
+<span id="L42"><span class="lineNum">      42</span>              : </span>
+<span id="L43"><span class="lineNum">      43</span>              :     auto duration = std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(</span>
+<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">           1 :         std::chrono::system_clock::now() - start);</span></span>
+<span id="L45"><span class="lineNum">      45</span>              : </span>
+<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">           2 :     std::cout &lt;&lt; &quot;Elapsed time: &quot; &lt;&lt; duration.count() &lt;&lt; &quot;(ms)&quot; &lt;&lt; std::endl;</span></span>
+<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">           1 : }</span></span>
         </pre>
               </td>
             </tr>

@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-08-31 15:26:35</td>
+            <td class="headerValue">2025-09-20 14:36:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">66.7&nbsp;%</td>
@@ -77,35 +77,34 @@
 <span id="L15"><span class="lineNum">      15</span>              : // Authors: liubang (it.liubang@gmail.com)</span>
 <span id="L16"><span class="lineNum">      16</span>              : </span>
 <span id="L17"><span class="lineNum">      17</span>              : #include &quot;cpp/pl/sst/encoding.h&quot;</span>
-<span id="L18"><span class="lineNum">      18</span>              : </span>
-<span id="L19"><span class="lineNum">      19</span>              : #include &lt;gtest/gtest.h&gt;</span>
-<span id="L20"><span class="lineNum">      20</span>              : #include &lt;string_view&gt;</span>
-<span id="L21"><span class="lineNum">      21</span>              : </span>
-<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC tlaBgGNC">           3 : TEST(encoding, putAndGetInt) {</span></span>
-<span id="L23"><span class="lineNum">      23</span>              :     std::string dst;</span>
-<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">           1 :     int32_t a = 12345;</span></span>
-<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">           1 :     pl::encodeInt(&amp;dst, a);</span></span>
-<span id="L26"><span class="lineNum">      26</span>              :     std::string_view binary(dst);</span>
-<span id="L27"><span class="lineNum">      27</span>              : </span>
-<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">           1 :     auto aa = pl::decodeInt&lt;uint32_t&gt;(binary.data());</span></span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">           1 :     EXPECT_EQ(a, aa);</span></span>
-<span id="L30"><span class="lineNum">      30</span>              : </span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">           1 :     uint64_t b = 123456789;</span></span>
-<span id="L32"><span class="lineNum">      32</span>              :     dst.clear();</span>
-<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">           1 :     pl::encodeInt(&amp;dst, b);</span></span>
-<span id="L34"><span class="lineNum">      34</span>              :     binary = dst;</span>
-<span id="L35"><span class="lineNum">      35</span>              : </span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">           1 :     auto bb = pl::decodeInt&lt;uint64_t&gt;(binary.data());</span></span>
-<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">           1 :     EXPECT_EQ(b, bb);</span></span>
-<span id="L38"><span class="lineNum">      38</span>              : </span>
-<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">           1 :     uint8_t c = 2;</span></span>
-<span id="L40"><span class="lineNum">      40</span>              :     dst.clear();</span>
-<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">           1 :     pl::encodeInt(&amp;dst, c);</span></span>
-<span id="L42"><span class="lineNum">      42</span>              :     binary = dst;</span>
-<span id="L43"><span class="lineNum">      43</span>              : </span>
-<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">           1 :     auto cc = pl::decodeInt&lt;uint8_t&gt;(binary.data());</span></span>
-<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">           1 :     EXPECT_EQ(c, cc);</span></span>
-<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L18"><span class="lineNum">      18</span>              : #include &lt;gtest/gtest.h&gt;</span>
+<span id="L19"><span class="lineNum">      19</span>              : #include &lt;string_view&gt;</span>
+<span id="L20"><span class="lineNum">      20</span>              : </span>
+<span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC tlaBgGNC">           3 : TEST(encoding, putAndGetInt) {</span></span>
+<span id="L22"><span class="lineNum">      22</span>              :     std::string dst;</span>
+<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">           1 :     int32_t a = 12345;</span></span>
+<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">           1 :     pl::encodeInt(&amp;dst, a);</span></span>
+<span id="L25"><span class="lineNum">      25</span>              :     std::string_view binary(dst);</span>
+<span id="L26"><span class="lineNum">      26</span>              : </span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">           1 :     auto aa = pl::decodeInt&lt;uint32_t&gt;(binary.data());</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">           1 :     EXPECT_EQ(a, aa);</span></span>
+<span id="L29"><span class="lineNum">      29</span>              : </span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">           1 :     uint64_t b = 123456789;</span></span>
+<span id="L31"><span class="lineNum">      31</span>              :     dst.clear();</span>
+<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">           1 :     pl::encodeInt(&amp;dst, b);</span></span>
+<span id="L33"><span class="lineNum">      33</span>              :     binary = dst;</span>
+<span id="L34"><span class="lineNum">      34</span>              : </span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">           1 :     auto bb = pl::decodeInt&lt;uint64_t&gt;(binary.data());</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">           1 :     EXPECT_EQ(b, bb);</span></span>
+<span id="L37"><span class="lineNum">      37</span>              : </span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">           1 :     uint8_t c = 2;</span></span>
+<span id="L39"><span class="lineNum">      39</span>              :     dst.clear();</span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">           1 :     pl::encodeInt(&amp;dst, c);</span></span>
+<span id="L41"><span class="lineNum">      41</span>              :     binary = dst;</span>
+<span id="L42"><span class="lineNum">      42</span>              : </span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">           1 :     auto cc = pl::decodeInt&lt;uint8_t&gt;(binary.data());</span></span>
+<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">           1 :     EXPECT_EQ(c, cc);</span></span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">           1 : }</span></span>
         </pre>
               </td>
             </tr>

@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-08-31 15:26:35</td>
+            <td class="headerValue">2025-09-20 14:36:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -76,53 +76,52 @@
 <span id="L14"><span class="lineNum">      14</span>              : </span>
 <span id="L15"><span class="lineNum">      15</span>              : // Authors: liubang (it.liubang@gmail.com)</span>
 <span id="L16"><span class="lineNum">      16</span>              : </span>
-<span id="L17"><span class="lineNum">      17</span>              : #include &quot;cpp/meta/traits.h&quot;</span>
+<span id="L17"><span class="lineNum">      17</span>              : #include &quot;cpp/meta/ut/traits_test.h&quot;</span>
 <span id="L18"><span class="lineNum">      18</span>              : </span>
-<span id="L19"><span class="lineNum">      19</span>              : #include &lt;cassert&gt;</span>
-<span id="L20"><span class="lineNum">      20</span>              : #include &lt;catch2/catch_test_macros.hpp&gt;</span>
-<span id="L21"><span class="lineNum">      21</span>              : #include &lt;string&gt;</span>
-<span id="L22"><span class="lineNum">      22</span>              : </span>
-<span id="L23"><span class="lineNum">      23</span>              : #include &quot;cpp/meta/ut/traits_test.h&quot;</span>
-<span id="L24"><span class="lineNum">      24</span>              : </span>
-<span id="L25"><span class="lineNum">      25</span>              : namespace {</span>
-<span id="L26"><span class="lineNum">      26</span>              : struct Foo {</span>
-<span id="L27"><span class="lineNum">      27</span>              :     void Init() {}</span>
-<span id="L28"><span class="lineNum">      28</span>              : };</span>
-<span id="L29"><span class="lineNum">      29</span>              : } // namespace</span>
-<span id="L30"><span class="lineNum">      30</span>              : </span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC tlaBgGNC">           1 : TEST_CASE(&quot;meta&quot;, &quot;[traits]&quot;) {</span></span>
-<span id="L32"><span class="lineNum">      32</span>              :     static_assert(pl::is_floating_point&lt;float&gt;::value);</span>
-<span id="L33"><span class="lineNum">      33</span>              :     static_assert(pl::is_floating_point&lt;double&gt;::value);</span>
-<span id="L34"><span class="lineNum">      34</span>              :     static_assert(pl::is_floating_point&lt;long double&gt;::value);</span>
-<span id="L35"><span class="lineNum">      35</span>              :     static_assert(!pl::is_floating_point&lt;int&gt;::value);</span>
-<span id="L36"><span class="lineNum">      36</span>              : </span>
-<span id="L37"><span class="lineNum">      37</span>              :     static_assert(pl::is_same&lt;int, int&gt;::value);</span>
-<span id="L38"><span class="lineNum">      38</span>              :     static_assert(pl::is_same&lt;std::string, std::string&gt;::value);</span>
-<span id="L39"><span class="lineNum">      39</span>              :     static_assert(!pl::is_same&lt;int, long&gt;::value);</span>
-<span id="L40"><span class="lineNum">      40</span>              : </span>
-<span id="L41"><span class="lineNum">      41</span>              :     static_assert(pl::is_same&lt;int, pl::remove_const_t&lt;const int&gt;&gt;::value);</span>
-<span id="L42"><span class="lineNum">      42</span>              : </span>
-<span id="L43"><span class="lineNum">      43</span>              :     static_assert(pl::is_same&lt;int, pl::conditional&lt;true, int, std::string&gt;::type&gt;::value);</span>
-<span id="L44"><span class="lineNum">      44</span>              : </span>
-<span id="L45"><span class="lineNum">      45</span>              :     static_assert(pl::is_same&lt;std::string, pl::conditional&lt;false, int, std::string&gt;::type&gt;::value);</span>
-<span id="L46"><span class="lineNum">      46</span>              : </span>
-<span id="L47"><span class="lineNum">      47</span>              :     static_assert(pl::is_same_v&lt;int, pl::array_size&lt;int[5]&gt;::value_type&gt;);</span>
-<span id="L48"><span class="lineNum">      48</span>              : </span>
-<span id="L49"><span class="lineNum">      49</span>              :     static_assert(pl::array_size&lt;int[5]&gt;::value == 5);</span>
-<span id="L50"><span class="lineNum">      50</span>              : </span>
-<span id="L51"><span class="lineNum">      51</span>              :     static_assert(pl::ut::numEq(3, 3));</span>
-<span id="L52"><span class="lineNum">      52</span>              : </span>
-<span id="L53"><span class="lineNum">      53</span>              :     assert(pl::ut::numEq(3.1, 3.1));</span>
-<span id="L54"><span class="lineNum">      54</span>              : </span>
-<span id="L55"><span class="lineNum">      55</span>              :     assert(pl::ut::numEqNew(3, 3));</span>
-<span id="L56"><span class="lineNum">      56</span>              :     assert(pl::ut::numEqNew(3.1, 3.1));</span>
-<span id="L57"><span class="lineNum">      57</span>              : </span>
-<span id="L58"><span class="lineNum">      58</span>              :     assert(!pl::HasTypeMember&lt;int&gt;::value);</span>
-<span id="L59"><span class="lineNum">      59</span>              :     assert(pl::HasTypeMember&lt;std::true_type&gt;::value);</span>
-<span id="L60"><span class="lineNum">      60</span>              : </span>
-<span id="L61"><span class="lineNum">      61</span>              :     assert(!pl::HasInit&lt;int&gt;::value);</span>
-<span id="L62"><span class="lineNum">      62</span>              :     assert(pl::HasInit&lt;Foo&gt;::value);</span>
-<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L19"><span class="lineNum">      19</span>              : #include &quot;cpp/meta/traits.h&quot;</span>
+<span id="L20"><span class="lineNum">      20</span>              : #include &lt;cassert&gt;</span>
+<span id="L21"><span class="lineNum">      21</span>              : #include &lt;catch2/catch_test_macros.hpp&gt;</span>
+<span id="L22"><span class="lineNum">      22</span>              : #include &lt;string&gt;</span>
+<span id="L23"><span class="lineNum">      23</span>              : </span>
+<span id="L24"><span class="lineNum">      24</span>              : namespace {</span>
+<span id="L25"><span class="lineNum">      25</span>              : struct Foo {</span>
+<span id="L26"><span class="lineNum">      26</span>              :     void Init() {}</span>
+<span id="L27"><span class="lineNum">      27</span>              : };</span>
+<span id="L28"><span class="lineNum">      28</span>              : } // namespace</span>
+<span id="L29"><span class="lineNum">      29</span>              : </span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC tlaBgGNC">           1 : TEST_CASE(&quot;meta&quot;, &quot;[traits]&quot;) {</span></span>
+<span id="L31"><span class="lineNum">      31</span>              :     static_assert(pl::is_floating_point&lt;float&gt;::value);</span>
+<span id="L32"><span class="lineNum">      32</span>              :     static_assert(pl::is_floating_point&lt;double&gt;::value);</span>
+<span id="L33"><span class="lineNum">      33</span>              :     static_assert(pl::is_floating_point&lt;long double&gt;::value);</span>
+<span id="L34"><span class="lineNum">      34</span>              :     static_assert(!pl::is_floating_point&lt;int&gt;::value);</span>
+<span id="L35"><span class="lineNum">      35</span>              : </span>
+<span id="L36"><span class="lineNum">      36</span>              :     static_assert(pl::is_same&lt;int, int&gt;::value);</span>
+<span id="L37"><span class="lineNum">      37</span>              :     static_assert(pl::is_same&lt;std::string, std::string&gt;::value);</span>
+<span id="L38"><span class="lineNum">      38</span>              :     static_assert(!pl::is_same&lt;int, long&gt;::value);</span>
+<span id="L39"><span class="lineNum">      39</span>              : </span>
+<span id="L40"><span class="lineNum">      40</span>              :     static_assert(pl::is_same&lt;int, pl::remove_const_t&lt;const int&gt;&gt;::value);</span>
+<span id="L41"><span class="lineNum">      41</span>              : </span>
+<span id="L42"><span class="lineNum">      42</span>              :     static_assert(pl::is_same&lt;int, pl::conditional&lt;true, int, std::string&gt;::type&gt;::value);</span>
+<span id="L43"><span class="lineNum">      43</span>              : </span>
+<span id="L44"><span class="lineNum">      44</span>              :     static_assert(pl::is_same&lt;std::string, pl::conditional&lt;false, int, std::string&gt;::type&gt;::value);</span>
+<span id="L45"><span class="lineNum">      45</span>              : </span>
+<span id="L46"><span class="lineNum">      46</span>              :     static_assert(pl::is_same_v&lt;int, pl::array_size&lt;int[5]&gt;::value_type&gt;);</span>
+<span id="L47"><span class="lineNum">      47</span>              : </span>
+<span id="L48"><span class="lineNum">      48</span>              :     static_assert(pl::array_size&lt;int[5]&gt;::value == 5);</span>
+<span id="L49"><span class="lineNum">      49</span>              : </span>
+<span id="L50"><span class="lineNum">      50</span>              :     static_assert(pl::ut::numEq(3, 3));</span>
+<span id="L51"><span class="lineNum">      51</span>              : </span>
+<span id="L52"><span class="lineNum">      52</span>              :     assert(pl::ut::numEq(3.1, 3.1));</span>
+<span id="L53"><span class="lineNum">      53</span>              : </span>
+<span id="L54"><span class="lineNum">      54</span>              :     assert(pl::ut::numEqNew(3, 3));</span>
+<span id="L55"><span class="lineNum">      55</span>              :     assert(pl::ut::numEqNew(3.1, 3.1));</span>
+<span id="L56"><span class="lineNum">      56</span>              : </span>
+<span id="L57"><span class="lineNum">      57</span>              :     assert(!pl::HasTypeMember&lt;int&gt;::value);</span>
+<span id="L58"><span class="lineNum">      58</span>              :     assert(pl::HasTypeMember&lt;std::true_type&gt;::value);</span>
+<span id="L59"><span class="lineNum">      59</span>              : </span>
+<span id="L60"><span class="lineNum">      60</span>              :     assert(!pl::HasInit&lt;int&gt;::value);</span>
+<span id="L61"><span class="lineNum">      61</span>              :     assert(pl::HasInit&lt;Foo&gt;::value);</span>
+<span id="L62"><span class="lineNum">      62</span> <span class="tlaGNC">           1 : }</span></span>
         </pre>
               </td>
             </tr>

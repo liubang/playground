@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-08-31 15:26:35</td>
+            <td class="headerValue">2025-09-20 14:36:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -77,73 +77,72 @@
 <span id="L15"><span class="lineNum">      15</span>              : // Authors: liubang (it.liubang@gmail.com)</span>
 <span id="L16"><span class="lineNum">      16</span>              : </span>
 <span id="L17"><span class="lineNum">      17</span>              : #include &quot;cpp/pl/sst/filter_policy.h&quot;</span>
-<span id="L18"><span class="lineNum">      18</span>              : </span>
-<span id="L19"><span class="lineNum">      19</span>              : #include &lt;gtest/gtest.h&gt;</span>
-<span id="L20"><span class="lineNum">      20</span>              : </span>
-<span id="L21"><span class="lineNum">      21</span>              : namespace pl {</span>
-<span id="L22"><span class="lineNum">      22</span>              : </span>
-<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC tlaBgGNC">           2 : class FilterPolicyTest : public ::testing::Test,</span></span>
-<span id="L24"><span class="lineNum">      24</span>              :                          public ::testing::WithParamInterface&lt;std::tuple&lt;std::string, uint32_t&gt;&gt; {</span>
-<span id="L25"><span class="lineNum">      25</span>              : public:</span>
-<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">           2 :     void SetUp() override {</span></span>
-<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">           2 :         filter_policy_name_ = std::get&lt;0&gt;(GetParam());</span></span>
-<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">           2 :         bits_per_key_ = std::get&lt;1&gt;(GetParam());</span></span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">           2 :     }</span></span>
-<span id="L30"><span class="lineNum">      30</span>              : </span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">           2 :     void TearDown() override {}</span></span>
-<span id="L32"><span class="lineNum">      32</span>              : </span>
-<span id="L33"><span class="lineNum">      33</span>              : protected:</span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">           2 :     static FilterBuilderPtr create(uint32_t bits_per_key, const std::string&amp; name) {</span></span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">           2 :         if (name == StandardBloomFilterBuilder::kClassName()) {</span></span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">           1 :             return std::make_unique&lt;StandardBloomFilterBuilder&gt;(bits_per_key);</span></span>
-<span id="L37"><span class="lineNum">      37</span>              :         }</span>
-<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">           1 :         if (name == BlockedBloomFilterBuilder::kClassName()) {</span></span>
-<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">           1 :             return std::make_unique&lt;BlockedBloomFilterBuilder&gt;(bits_per_key);</span></span>
-<span id="L40"><span class="lineNum">      40</span>              :         }</span>
-<span id="L41"><span class="lineNum">      41</span>              :         return nullptr;</span>
-<span id="L42"><span class="lineNum">      42</span>              :     }</span>
-<span id="L43"><span class="lineNum">      43</span>              : </span>
-<span id="L44"><span class="lineNum">      44</span>              : protected:</span>
-<span id="L45"><span class="lineNum">      45</span>              :     std::string filter_policy_name_;</span>
-<span id="L46"><span class="lineNum">      46</span>              :     uint32_t bits_per_key_;</span>
-<span id="L47"><span class="lineNum">      47</span>              : };</span>
-<span id="L48"><span class="lineNum">      48</span>              : </span>
-<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">           9 : TEST_P(FilterPolicyTest, BloomFilterDedup) {</span></span>
-<span id="L50"><span class="lineNum">      50</span> <span class="tlaGNC">           2 :     auto builder = create(bits_per_key_, filter_policy_name_);</span></span>
-<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">           2 :     EXPECT_EQ(0U, builder-&gt;estimate_hashes_added());</span></span>
-<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">           2 :     builder-&gt;add_key(&quot;abc&quot;);</span></span>
-<span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC">           2 :     EXPECT_EQ(1U, builder-&gt;estimate_hashes_added());</span></span>
-<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">           2 :     builder-&gt;add_key_and_alt(&quot;abc1&quot;, &quot;abc&quot;);</span></span>
-<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">           2 :     EXPECT_EQ(2U, builder-&gt;estimate_hashes_added());</span></span>
-<span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">           2 :     builder-&gt;add_key_and_alt(&quot;bcd&quot;, &quot;bcd&quot;);</span></span>
-<span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">           2 :     EXPECT_EQ(3U, builder-&gt;estimate_hashes_added());</span></span>
-<span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">           2 :     builder-&gt;add_key_and_alt(&quot;cde-1&quot;, &quot;cde&quot;);</span></span>
-<span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC">           2 :     EXPECT_EQ(5U, builder-&gt;estimate_hashes_added());</span></span>
-<span id="L60"><span class="lineNum">      60</span> <span class="tlaGNC">           2 :     builder-&gt;add_key_and_alt(&quot;cde&quot;, &quot;cde&quot;);</span></span>
-<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">           2 :     EXPECT_EQ(5U, builder-&gt;estimate_hashes_added());</span></span>
-<span id="L62"><span class="lineNum">      62</span> <span class="tlaGNC">           2 :     builder-&gt;add_key_and_alt(&quot;cde1&quot;, &quot;cde&quot;);</span></span>
-<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">           2 :     EXPECT_EQ(6U, builder-&gt;estimate_hashes_added());</span></span>
-<span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC">           2 :     builder-&gt;add_key_and_alt(&quot;def-1&quot;, &quot;def&quot;);</span></span>
-<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC">           2 :     EXPECT_EQ(8U, builder-&gt;estimate_hashes_added());</span></span>
-<span id="L66"><span class="lineNum">      66</span> <span class="tlaGNC">           2 :     builder-&gt;add_key_and_alt(&quot;def&quot;, &quot;def&quot;);</span></span>
-<span id="L67"><span class="lineNum">      67</span> <span class="tlaGNC">           2 :     EXPECT_EQ(8U, builder-&gt;estimate_hashes_added());</span></span>
-<span id="L68"><span class="lineNum">      68</span> <span class="tlaGNC">           2 :     builder-&gt;add_key(&quot;def$$&quot;); // Like not in extractor domain</span></span>
-<span id="L69"><span class="lineNum">      69</span> <span class="tlaGNC">           2 :     EXPECT_EQ(9U, builder-&gt;estimate_hashes_added());</span></span>
-<span id="L70"><span class="lineNum">      70</span> <span class="tlaGNC">           2 :     builder-&gt;add_key(&quot;def$$&quot;);</span></span>
-<span id="L71"><span class="lineNum">      71</span> <span class="tlaGNC">           2 :     EXPECT_EQ(9U, builder-&gt;estimate_hashes_added());</span></span>
-<span id="L72"><span class="lineNum">      72</span> <span class="tlaGNC">           2 :     builder-&gt;add_key_and_alt(&quot;efg42&quot;, &quot;efg&quot;);</span></span>
-<span id="L73"><span class="lineNum">      73</span> <span class="tlaGNC">           2 :     EXPECT_EQ(11U, builder-&gt;estimate_hashes_added());</span></span>
-<span id="L74"><span class="lineNum">      74</span> <span class="tlaGNC">           2 :     builder-&gt;add_key_and_alt(&quot;efg&quot;, &quot;efg&quot;); // Like extra &quot;alt&quot; on a partition</span></span>
-<span id="L75"><span class="lineNum">      75</span> <span class="tlaGNC">           2 :     EXPECT_EQ(11U, builder-&gt;estimate_hashes_added());</span></span>
-<span id="L76"><span class="lineNum">      76</span> <span class="tlaGNC">           2 : }</span></span>
-<span id="L77"><span class="lineNum">      77</span>              : </span>
-<span id="L78"><span class="lineNum">      78</span> <span class="tlaGNC">           3 : INSTANTIATE_TEST_CASE_P(</span></span>
-<span id="L79"><span class="lineNum">      79</span>              :     FormatDef,</span>
-<span id="L80"><span class="lineNum">      80</span>              :     FilterPolicyTest,</span>
-<span id="L81"><span class="lineNum">      81</span>              :     ::testing::Values(std::make_tuple(StandardBloomFilterBuilder::kClassName(), 10),</span>
-<span id="L82"><span class="lineNum">      82</span>              :                       std::make_tuple(BlockedBloomFilterBuilder::kClassName(), 10)));</span>
-<span id="L83"><span class="lineNum">      83</span>              : </span>
-<span id="L84"><span class="lineNum">      84</span>              : } // namespace pl</span>
+<span id="L18"><span class="lineNum">      18</span>              : #include &lt;gtest/gtest.h&gt;</span>
+<span id="L19"><span class="lineNum">      19</span>              : </span>
+<span id="L20"><span class="lineNum">      20</span>              : namespace pl {</span>
+<span id="L21"><span class="lineNum">      21</span>              : </span>
+<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC tlaBgGNC">           2 : class FilterPolicyTest : public ::testing::Test,</span></span>
+<span id="L23"><span class="lineNum">      23</span>              :                          public ::testing::WithParamInterface&lt;std::tuple&lt;std::string, uint32_t&gt;&gt; {</span>
+<span id="L24"><span class="lineNum">      24</span>              : public:</span>
+<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">           2 :     void SetUp() override {</span></span>
+<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">           2 :         filter_policy_name_ = std::get&lt;0&gt;(GetParam());</span></span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">           2 :         bits_per_key_ = std::get&lt;1&gt;(GetParam());</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">           2 :     }</span></span>
+<span id="L29"><span class="lineNum">      29</span>              : </span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">           2 :     void TearDown() override {}</span></span>
+<span id="L31"><span class="lineNum">      31</span>              : </span>
+<span id="L32"><span class="lineNum">      32</span>              : protected:</span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">           2 :     static FilterBuilderPtr create(uint32_t bits_per_key, const std::string&amp; name) {</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">           2 :         if (name == StandardBloomFilterBuilder::kClassName()) {</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">           1 :             return std::make_unique&lt;StandardBloomFilterBuilder&gt;(bits_per_key);</span></span>
+<span id="L36"><span class="lineNum">      36</span>              :         }</span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">           1 :         if (name == BlockedBloomFilterBuilder::kClassName()) {</span></span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">           1 :             return std::make_unique&lt;BlockedBloomFilterBuilder&gt;(bits_per_key);</span></span>
+<span id="L39"><span class="lineNum">      39</span>              :         }</span>
+<span id="L40"><span class="lineNum">      40</span>              :         return nullptr;</span>
+<span id="L41"><span class="lineNum">      41</span>              :     }</span>
+<span id="L42"><span class="lineNum">      42</span>              : </span>
+<span id="L43"><span class="lineNum">      43</span>              : protected:</span>
+<span id="L44"><span class="lineNum">      44</span>              :     std::string filter_policy_name_;</span>
+<span id="L45"><span class="lineNum">      45</span>              :     uint32_t bits_per_key_;</span>
+<span id="L46"><span class="lineNum">      46</span>              : };</span>
+<span id="L47"><span class="lineNum">      47</span>              : </span>
+<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">           9 : TEST_P(FilterPolicyTest, BloomFilterDedup) {</span></span>
+<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">           2 :     auto builder = create(bits_per_key_, filter_policy_name_);</span></span>
+<span id="L50"><span class="lineNum">      50</span> <span class="tlaGNC">           2 :     EXPECT_EQ(0U, builder-&gt;estimate_hashes_added());</span></span>
+<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">           2 :     builder-&gt;add_key(&quot;abc&quot;);</span></span>
+<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">           2 :     EXPECT_EQ(1U, builder-&gt;estimate_hashes_added());</span></span>
+<span id="L53"><span class="lineNum">      53</span> <span class="tlaGNC">           2 :     builder-&gt;add_key_and_alt(&quot;abc1&quot;, &quot;abc&quot;);</span></span>
+<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC">           2 :     EXPECT_EQ(2U, builder-&gt;estimate_hashes_added());</span></span>
+<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">           2 :     builder-&gt;add_key_and_alt(&quot;bcd&quot;, &quot;bcd&quot;);</span></span>
+<span id="L56"><span class="lineNum">      56</span> <span class="tlaGNC">           2 :     EXPECT_EQ(3U, builder-&gt;estimate_hashes_added());</span></span>
+<span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">           2 :     builder-&gt;add_key_and_alt(&quot;cde-1&quot;, &quot;cde&quot;);</span></span>
+<span id="L58"><span class="lineNum">      58</span> <span class="tlaGNC">           2 :     EXPECT_EQ(5U, builder-&gt;estimate_hashes_added());</span></span>
+<span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC">           2 :     builder-&gt;add_key_and_alt(&quot;cde&quot;, &quot;cde&quot;);</span></span>
+<span id="L60"><span class="lineNum">      60</span> <span class="tlaGNC">           2 :     EXPECT_EQ(5U, builder-&gt;estimate_hashes_added());</span></span>
+<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">           2 :     builder-&gt;add_key_and_alt(&quot;cde1&quot;, &quot;cde&quot;);</span></span>
+<span id="L62"><span class="lineNum">      62</span> <span class="tlaGNC">           2 :     EXPECT_EQ(6U, builder-&gt;estimate_hashes_added());</span></span>
+<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">           2 :     builder-&gt;add_key_and_alt(&quot;def-1&quot;, &quot;def&quot;);</span></span>
+<span id="L64"><span class="lineNum">      64</span> <span class="tlaGNC">           2 :     EXPECT_EQ(8U, builder-&gt;estimate_hashes_added());</span></span>
+<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC">           2 :     builder-&gt;add_key_and_alt(&quot;def&quot;, &quot;def&quot;);</span></span>
+<span id="L66"><span class="lineNum">      66</span> <span class="tlaGNC">           2 :     EXPECT_EQ(8U, builder-&gt;estimate_hashes_added());</span></span>
+<span id="L67"><span class="lineNum">      67</span> <span class="tlaGNC">           2 :     builder-&gt;add_key(&quot;def$$&quot;); // Like not in extractor domain</span></span>
+<span id="L68"><span class="lineNum">      68</span> <span class="tlaGNC">           2 :     EXPECT_EQ(9U, builder-&gt;estimate_hashes_added());</span></span>
+<span id="L69"><span class="lineNum">      69</span> <span class="tlaGNC">           2 :     builder-&gt;add_key(&quot;def$$&quot;);</span></span>
+<span id="L70"><span class="lineNum">      70</span> <span class="tlaGNC">           2 :     EXPECT_EQ(9U, builder-&gt;estimate_hashes_added());</span></span>
+<span id="L71"><span class="lineNum">      71</span> <span class="tlaGNC">           2 :     builder-&gt;add_key_and_alt(&quot;efg42&quot;, &quot;efg&quot;);</span></span>
+<span id="L72"><span class="lineNum">      72</span> <span class="tlaGNC">           2 :     EXPECT_EQ(11U, builder-&gt;estimate_hashes_added());</span></span>
+<span id="L73"><span class="lineNum">      73</span> <span class="tlaGNC">           2 :     builder-&gt;add_key_and_alt(&quot;efg&quot;, &quot;efg&quot;); // Like extra &quot;alt&quot; on a partition</span></span>
+<span id="L74"><span class="lineNum">      74</span> <span class="tlaGNC">           2 :     EXPECT_EQ(11U, builder-&gt;estimate_hashes_added());</span></span>
+<span id="L75"><span class="lineNum">      75</span> <span class="tlaGNC">           2 : }</span></span>
+<span id="L76"><span class="lineNum">      76</span>              : </span>
+<span id="L77"><span class="lineNum">      77</span> <span class="tlaGNC">           3 : INSTANTIATE_TEST_CASE_P(</span></span>
+<span id="L78"><span class="lineNum">      78</span>              :     FormatDef,</span>
+<span id="L79"><span class="lineNum">      79</span>              :     FilterPolicyTest,</span>
+<span id="L80"><span class="lineNum">      80</span>              :     ::testing::Values(std::make_tuple(StandardBloomFilterBuilder::kClassName(), 10),</span>
+<span id="L81"><span class="lineNum">      81</span>              :                       std::make_tuple(BlockedBloomFilterBuilder::kClassName(), 10)));</span>
+<span id="L82"><span class="lineNum">      82</span>              : </span>
+<span id="L83"><span class="lineNum">      83</span>              : } // namespace pl</span>
         </pre>
               </td>
             </tr>

@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-08-31 15:26:35</td>
+            <td class="headerValue">2025-09-20 14:36:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">66.7&nbsp;%</td>
@@ -77,31 +77,30 @@
 <span id="L15"><span class="lineNum">      15</span>              : // Authors: liubang (it.liubang@gmail.com)</span>
 <span id="L16"><span class="lineNum">      16</span>              : </span>
 <span id="L17"><span class="lineNum">      17</span>              : #include &quot;cpp/pl/arena/arena_old.h&quot;</span>
-<span id="L18"><span class="lineNum">      18</span>              : </span>
-<span id="L19"><span class="lineNum">      19</span>              : #include &lt;gtest/gtest.h&gt;</span>
-<span id="L20"><span class="lineNum">      20</span>              : </span>
-<span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC tlaBgGNC">           3 : TEST(arena, allocate) {</span></span>
-<span id="L22"><span class="lineNum">      22</span>              :     constexpr std::size_t ptr_char_size = sizeof(char*);</span>
-<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">           1 :     pl::old::Arena arena;</span></span>
-<span id="L24"><span class="lineNum">      24</span>              : </span>
-<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">           1 :     (void)arena.allocate(1024);</span></span>
-<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">           1 :     int usage = 4096 + ptr_char_size;</span></span>
-<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">           1 :     EXPECT_EQ(arena.memory_usage(), usage);</span></span>
-<span id="L28"><span class="lineNum">      28</span>              : </span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">           1 :     (void)arena.allocate(2048);</span></span>
-<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">           1 :     EXPECT_EQ(arena.memory_usage(), usage);</span></span>
-<span id="L31"><span class="lineNum">      31</span>              : </span>
-<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">           1 :     (void)arena.allocate(2048);</span></span>
-<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">           1 :     usage += 2048 + ptr_char_size;</span></span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">           1 :     EXPECT_EQ(arena.memory_usage(), usage);</span></span>
-<span id="L35"><span class="lineNum">      35</span>              : </span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">           1 :     (void)arena.allocate(1);</span></span>
-<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">           1 :     EXPECT_EQ(arena.memory_usage(), usage);</span></span>
-<span id="L38"><span class="lineNum">      38</span>              : </span>
-<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">           1 :     (void)arena.allocate(12345);</span></span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">           1 :     usage += 12345 + ptr_char_size;</span></span>
-<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">           1 :     EXPECT_EQ(arena.memory_usage(), usage);</span></span>
-<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L18"><span class="lineNum">      18</span>              : #include &lt;gtest/gtest.h&gt;</span>
+<span id="L19"><span class="lineNum">      19</span>              : </span>
+<span id="L20"><span class="lineNum">      20</span> <span class="tlaGNC tlaBgGNC">           3 : TEST(arena, allocate) {</span></span>
+<span id="L21"><span class="lineNum">      21</span>              :     constexpr std::size_t ptr_char_size = sizeof(char*);</span>
+<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">           1 :     pl::old::Arena arena;</span></span>
+<span id="L23"><span class="lineNum">      23</span>              : </span>
+<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">           1 :     (void)arena.allocate(1024);</span></span>
+<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">           1 :     int usage = 4096 + ptr_char_size;</span></span>
+<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">           1 :     EXPECT_EQ(arena.memory_usage(), usage);</span></span>
+<span id="L27"><span class="lineNum">      27</span>              : </span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">           1 :     (void)arena.allocate(2048);</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">           1 :     EXPECT_EQ(arena.memory_usage(), usage);</span></span>
+<span id="L30"><span class="lineNum">      30</span>              : </span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">           1 :     (void)arena.allocate(2048);</span></span>
+<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">           1 :     usage += 2048 + ptr_char_size;</span></span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">           1 :     EXPECT_EQ(arena.memory_usage(), usage);</span></span>
+<span id="L34"><span class="lineNum">      34</span>              : </span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">           1 :     (void)arena.allocate(1);</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">           1 :     EXPECT_EQ(arena.memory_usage(), usage);</span></span>
+<span id="L37"><span class="lineNum">      37</span>              : </span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">           1 :     (void)arena.allocate(12345);</span></span>
+<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">           1 :     usage += 12345 + ptr_char_size;</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">           1 :     EXPECT_EQ(arena.memory_usage(), usage);</span></span>
+<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">           1 : }</span></span>
         </pre>
               </td>
             </tr>

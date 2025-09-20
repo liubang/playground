@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-08-31 15:26:35</td>
+            <td class="headerValue">2025-09-20 14:36:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">80.0&nbsp;%</td>
@@ -78,39 +78,38 @@
 <span id="L16"><span class="lineNum">      16</span>              : </span>
 <span id="L17"><span class="lineNum">      17</span>              : #include &quot;cpp/pl/random/random.h&quot;</span>
 <span id="L18"><span class="lineNum">      18</span>              : #include &quot;cpp/pl/sst/cell.h&quot;</span>
-<span id="L19"><span class="lineNum">      19</span>              : </span>
-<span id="L20"><span class="lineNum">      20</span>              : #include &lt;gtest/gtest.h&gt;</span>
-<span id="L21"><span class="lineNum">      21</span>              : </span>
-<span id="L22"><span class="lineNum">      22</span>              : namespace pl {</span>
-<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC tlaBgGNC">           1 : class CellTest : public ::testing::Test {</span></span>
-<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">           1 :     void SetUp() override {}</span></span>
-<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">           1 :     void TearDown() override {}</span></span>
-<span id="L26"><span class="lineNum">      26</span>              : };</span>
-<span id="L27"><span class="lineNum">      27</span>              : </span>
-<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">           3 : TEST_F(CellTest, cell) {</span></span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">          11 :     for (int i = 0; i &lt; 10; ++i) {</span></span>
-<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">          10 :         std::string rowkey = random_string(32);</span></span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">          10 :         std::string cf = random_string(8);</span></span>
-<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">          10 :         std::string col = random_string(16);</span></span>
-<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">          10 :         std::string val = random_string(16 * 1024);</span></span>
-<span id="L34"><span class="lineNum">      34</span>              :         uint64_t ts = std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(</span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">          10 :                           std::chrono::system_clock::now().time_since_epoch())</span></span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">          10 :                           .count();</span></span>
-<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">          10 :         CellType ct = (CellType)(i % 4);</span></span>
-<span id="L38"><span class="lineNum">      38</span>              :         Cell cell(ct, rowkey, cf, col, val, ts);</span>
-<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">          10 :         std::string encoded_cell_key = cell.cellKey().encode();</span></span>
-<span id="L40"><span class="lineNum">      40</span>              : </span>
-<span id="L41"><span class="lineNum">      41</span>              :         CellKey other_ck;</span>
-<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">          20 :         other_ck.decode(encoded_cell_key, rowkey.size());</span></span>
-<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">          10 :         EXPECT_EQ(ct, other_ck.cell_type);</span></span>
-<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">          10 :         EXPECT_EQ(rowkey, other_ck.rowkey);</span></span>
-<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">          10 :         EXPECT_EQ(cf, other_ck.cf);</span></span>
-<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">          10 :         EXPECT_EQ(col, other_ck.col);</span></span>
-<span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">          10 :         EXPECT_EQ(ts, other_ck.timestamp);</span></span>
-<span id="L48"><span class="lineNum">      48</span>              :     }</span>
-<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L50"><span class="lineNum">      50</span>              : </span>
-<span id="L51"><span class="lineNum">      51</span>              : } // namespace pl</span>
+<span id="L19"><span class="lineNum">      19</span>              : #include &lt;gtest/gtest.h&gt;</span>
+<span id="L20"><span class="lineNum">      20</span>              : </span>
+<span id="L21"><span class="lineNum">      21</span>              : namespace pl {</span>
+<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC tlaBgGNC">           1 : class CellTest : public ::testing::Test {</span></span>
+<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">           1 :     void SetUp() override {}</span></span>
+<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">           1 :     void TearDown() override {}</span></span>
+<span id="L25"><span class="lineNum">      25</span>              : };</span>
+<span id="L26"><span class="lineNum">      26</span>              : </span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">           3 : TEST_F(CellTest, cell) {</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">          11 :     for (int i = 0; i &lt; 10; ++i) {</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">          10 :         std::string rowkey = random_string(32);</span></span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">          10 :         std::string cf = random_string(8);</span></span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC">          10 :         std::string col = random_string(16);</span></span>
+<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">          10 :         std::string val = random_string(16 * 1024);</span></span>
+<span id="L33"><span class="lineNum">      33</span>              :         uint64_t ts = std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(</span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">          10 :                           std::chrono::system_clock::now().time_since_epoch())</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">          10 :                           .count();</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">          10 :         CellType ct = (CellType)(i % 4);</span></span>
+<span id="L37"><span class="lineNum">      37</span>              :         Cell cell(ct, rowkey, cf, col, val, ts);</span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">          10 :         std::string encoded_cell_key = cell.cellKey().encode();</span></span>
+<span id="L39"><span class="lineNum">      39</span>              : </span>
+<span id="L40"><span class="lineNum">      40</span>              :         CellKey other_ck;</span>
+<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">          20 :         other_ck.decode(encoded_cell_key, rowkey.size());</span></span>
+<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">          10 :         EXPECT_EQ(ct, other_ck.cell_type);</span></span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">          10 :         EXPECT_EQ(rowkey, other_ck.rowkey);</span></span>
+<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">          10 :         EXPECT_EQ(cf, other_ck.cf);</span></span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">          10 :         EXPECT_EQ(col, other_ck.col);</span></span>
+<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">          10 :         EXPECT_EQ(ts, other_ck.timestamp);</span></span>
+<span id="L47"><span class="lineNum">      47</span>              :     }</span>
+<span id="L48"><span class="lineNum">      48</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L49"><span class="lineNum">      49</span>              : </span>
+<span id="L50"><span class="lineNum">      50</span>              : } // namespace pl</span>
         </pre>
               </td>
             </tr>

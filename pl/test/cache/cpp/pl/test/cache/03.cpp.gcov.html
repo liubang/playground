@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-08-31 15:26:35</td>
+            <td class="headerValue">2025-09-20 14:36:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -76,38 +76,37 @@
 <span id="L14"><span class="lineNum">      14</span>              : </span>
 <span id="L15"><span class="lineNum">      15</span>              : // Authors: liubang (it.liubang@gmail.com)</span>
 <span id="L16"><span class="lineNum">      16</span>              : </span>
-<span id="L17"><span class="lineNum">      17</span>              : #include &lt;cstddef&gt;</span>
-<span id="L18"><span class="lineNum">      18</span>              : #include &lt;vector&gt;</span>
-<span id="L19"><span class="lineNum">      19</span>              : </span>
-<span id="L20"><span class="lineNum">      20</span>              : #include &lt;benchmark/benchmark.h&gt;</span>
-<span id="L21"><span class="lineNum">      21</span>              : </span>
-<span id="L22"><span class="lineNum">      22</span>              : constexpr size_t n = 1 &lt;&lt; 28;</span>
-<span id="L23"><span class="lineNum">      23</span>              : std::vector&lt;float&gt; a(n);</span>
-<span id="L24"><span class="lineNum">      24</span>              : </span>
-<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC tlaBgGNC">   268435456 : static float func(float x) { return x * (x * x + x * 3.14f - 1 / (x + 1)) + 42 / (2.718f - x); }</span></span>
-<span id="L26"><span class="lineNum">      26</span>              : </span>
-<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">           1 : void BM_serial_func(benchmark::State&amp; bm) {</span></span>
-<span id="L28"><span class="lineNum">      28</span>              :     for (auto _ : bm) {</span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">   268435457 :         for (size_t i = 0; i &lt; n; ++i) {</span></span>
-<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">   268435456 :             a[i] = func(a[i]);</span></span>
-<span id="L31"><span class="lineNum">      31</span>              :         }</span>
-<span id="L32"><span class="lineNum">      32</span>              :         benchmark::DoNotOptimize(a);</span>
-<span id="L33"><span class="lineNum">      33</span>              :     }</span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L35"><span class="lineNum">      35</span>              : </span>
-<span id="L36"><span class="lineNum">      36</span>              : BENCHMARK(BM_serial_func);</span>
-<span id="L37"><span class="lineNum">      37</span>              : </span>
-<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">           1 : void BM_parallel_func(benchmark::State&amp; bm) {</span></span>
-<span id="L39"><span class="lineNum">      39</span>              :     for (auto _ : bm) {</span>
-<span id="L40"><span class="lineNum">      40</span>              : #pragma omp parallel for</span>
-<span id="L41"><span class="lineNum">      41</span>              :         for (size_t i = 0; i &lt; n; ++i) {</span>
-<span id="L42"><span class="lineNum">      42</span>              :             a[i] = func(a[i]);</span>
-<span id="L43"><span class="lineNum">      43</span>              :         }</span>
-<span id="L44"><span class="lineNum">      44</span>              :         benchmark::DoNotOptimize(a);</span>
-<span id="L45"><span class="lineNum">      45</span>              :     }</span>
-<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">           1 : }</span></span>
-<span id="L47"><span class="lineNum">      47</span>              : </span>
-<span id="L48"><span class="lineNum">      48</span>              : BENCHMARK(BM_parallel_func);</span>
+<span id="L17"><span class="lineNum">      17</span>              : #include &lt;benchmark/benchmark.h&gt;</span>
+<span id="L18"><span class="lineNum">      18</span>              : #include &lt;cstddef&gt;</span>
+<span id="L19"><span class="lineNum">      19</span>              : #include &lt;vector&gt;</span>
+<span id="L20"><span class="lineNum">      20</span>              : </span>
+<span id="L21"><span class="lineNum">      21</span>              : constexpr size_t n = 1 &lt;&lt; 28;</span>
+<span id="L22"><span class="lineNum">      22</span>              : std::vector&lt;float&gt; a(n);</span>
+<span id="L23"><span class="lineNum">      23</span>              : </span>
+<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC tlaBgGNC">   268435456 : static float func(float x) { return x * (x * x + x * 3.14f - 1 / (x + 1)) + 42 / (2.718f - x); }</span></span>
+<span id="L25"><span class="lineNum">      25</span>              : </span>
+<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">           1 : void BM_serial_func(benchmark::State&amp; bm) {</span></span>
+<span id="L27"><span class="lineNum">      27</span>              :     for (auto _ : bm) {</span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">   268435457 :         for (size_t i = 0; i &lt; n; ++i) {</span></span>
+<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">   268435456 :             a[i] = func(a[i]);</span></span>
+<span id="L30"><span class="lineNum">      30</span>              :         }</span>
+<span id="L31"><span class="lineNum">      31</span>              :         benchmark::DoNotOptimize(a);</span>
+<span id="L32"><span class="lineNum">      32</span>              :     }</span>
+<span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L34"><span class="lineNum">      34</span>              : </span>
+<span id="L35"><span class="lineNum">      35</span>              : BENCHMARK(BM_serial_func);</span>
+<span id="L36"><span class="lineNum">      36</span>              : </span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">           1 : void BM_parallel_func(benchmark::State&amp; bm) {</span></span>
+<span id="L38"><span class="lineNum">      38</span>              :     for (auto _ : bm) {</span>
+<span id="L39"><span class="lineNum">      39</span>              : #pragma omp parallel for</span>
+<span id="L40"><span class="lineNum">      40</span>              :         for (size_t i = 0; i &lt; n; ++i) {</span>
+<span id="L41"><span class="lineNum">      41</span>              :             a[i] = func(a[i]);</span>
+<span id="L42"><span class="lineNum">      42</span>              :         }</span>
+<span id="L43"><span class="lineNum">      43</span>              :         benchmark::DoNotOptimize(a);</span>
+<span id="L44"><span class="lineNum">      44</span>              :     }</span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L46"><span class="lineNum">      46</span>              : </span>
+<span id="L47"><span class="lineNum">      47</span>              : BENCHMARK(BM_parallel_func);</span>
         </pre>
               </td>
             </tr>

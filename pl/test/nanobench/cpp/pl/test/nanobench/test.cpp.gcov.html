@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-08-31 15:26:35</td>
+            <td class="headerValue">2025-09-20 14:36:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -61,32 +61,31 @@
 <pre class="sourceHeading">            Line data    Source code</pre>
 <pre class="source">
 <span id="L1"><span class="lineNum">       1</span>              : #define ANKERL_NANOBENCH_IMPLEMENT</span>
-<span id="L2"><span class="lineNum">       2</span>              : #include &lt;nanobench.h&gt;</span>
-<span id="L3"><span class="lineNum">       3</span>              : </span>
-<span id="L4"><span class="lineNum">       4</span>              : #include &lt;chrono&gt;</span>
-<span id="L5"><span class="lineNum">       5</span>              : #include &lt;random&gt;</span>
-<span id="L6"><span class="lineNum">       6</span>              : #include &lt;thread&gt;</span>
-<span id="L7"><span class="lineNum">       7</span>              : </span>
-<span id="L8"><span class="lineNum">       8</span> <span class="tlaGNC tlaBgGNC">           1 : int main(int, char**) {</span></span>
-<span id="L9"><span class="lineNum">       9</span> <span class="tlaGNC">           1 :     uint64_t x = 1;</span></span>
-<span id="L10"><span class="lineNum">      10</span> <span class="tlaGNC">           2 :     ankerl::nanobench::Bench().run(&quot;x += x&quot;, [&amp;]() {</span></span>
-<span id="L11"><span class="lineNum">      11</span> <span class="tlaGNC">     5184477 :         ankerl::nanobench::doNotOptimizeAway(x += x);</span></span>
-<span id="L12"><span class="lineNum">      12</span> <span class="tlaGNC">     5184477 :     });</span></span>
-<span id="L13"><span class="lineNum">      13</span>              : </span>
-<span id="L14"><span class="lineNum">      14</span> <span class="tlaGNC">           1 :     ankerl::nanobench::Bench().run(&quot;sleep 10ms&quot;, [&amp;]() {</span></span>
-<span id="L15"><span class="lineNum">      15</span> <span class="tlaGNC">          11 :         std::this_thread::sleep_for(std::chrono::milliseconds(10));</span></span>
-<span id="L16"><span class="lineNum">      16</span> <span class="tlaGNC">          11 :     });</span></span>
-<span id="L17"><span class="lineNum">      17</span>              : </span>
-<span id="L18"><span class="lineNum">      18</span> <span class="tlaGNC">           1 :     std::random_device dev;</span></span>
-<span id="L19"><span class="lineNum">      19</span> <span class="tlaGNC">           1 :     std::mt19937_64 rng(dev());</span></span>
-<span id="L20"><span class="lineNum">      20</span> <span class="tlaGNC">           2 :     ankerl::nanobench::Bench().run(&quot;random fluctuations&quot;, [&amp;]() {</span></span>
-<span id="L21"><span class="lineNum">      21</span>              :         // each run, perform a random number of rng calls</span>
-<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">       14845 :         auto iterations = rng() &amp; UINT64_C(0xff);</span></span>
-<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">     1904815 :         for (uint64_t i = 0; i &lt; iterations; ++i) {</span></span>
-<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">     1889970 :             (void)rng();</span></span>
-<span id="L25"><span class="lineNum">      25</span>              :         }</span>
-<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">       14845 :     });</span></span>
-<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L2"><span class="lineNum">       2</span>              : #include &lt;chrono&gt;</span>
+<span id="L3"><span class="lineNum">       3</span>              : #include &lt;nanobench.h&gt;</span>
+<span id="L4"><span class="lineNum">       4</span>              : #include &lt;random&gt;</span>
+<span id="L5"><span class="lineNum">       5</span>              : #include &lt;thread&gt;</span>
+<span id="L6"><span class="lineNum">       6</span>              : </span>
+<span id="L7"><span class="lineNum">       7</span> <span class="tlaGNC tlaBgGNC">           1 : int main(int, char**) {</span></span>
+<span id="L8"><span class="lineNum">       8</span> <span class="tlaGNC">           1 :     uint64_t x = 1;</span></span>
+<span id="L9"><span class="lineNum">       9</span> <span class="tlaGNC">           2 :     ankerl::nanobench::Bench().run(&quot;x += x&quot;, [&amp;]() {</span></span>
+<span id="L10"><span class="lineNum">      10</span> <span class="tlaGNC">    13532699 :         ankerl::nanobench::doNotOptimizeAway(x += x);</span></span>
+<span id="L11"><span class="lineNum">      11</span> <span class="tlaGNC">    13532699 :     });</span></span>
+<span id="L12"><span class="lineNum">      12</span>              : </span>
+<span id="L13"><span class="lineNum">      13</span> <span class="tlaGNC">           1 :     ankerl::nanobench::Bench().run(&quot;sleep 10ms&quot;, [&amp;]() {</span></span>
+<span id="L14"><span class="lineNum">      14</span> <span class="tlaGNC">          11 :         std::this_thread::sleep_for(std::chrono::milliseconds(10));</span></span>
+<span id="L15"><span class="lineNum">      15</span> <span class="tlaGNC">          11 :     });</span></span>
+<span id="L16"><span class="lineNum">      16</span>              : </span>
+<span id="L17"><span class="lineNum">      17</span> <span class="tlaGNC">           1 :     std::random_device dev;</span></span>
+<span id="L18"><span class="lineNum">      18</span> <span class="tlaGNC">           1 :     std::mt19937_64 rng(dev());</span></span>
+<span id="L19"><span class="lineNum">      19</span> <span class="tlaGNC">           2 :     ankerl::nanobench::Bench().run(&quot;random fluctuations&quot;, [&amp;]() {</span></span>
+<span id="L20"><span class="lineNum">      20</span>              :         // each run, perform a random number of rng calls</span>
+<span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC">       13858 :         auto iterations = rng() &amp; UINT64_C(0xff);</span></span>
+<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC">     1785922 :         for (uint64_t i = 0; i &lt; iterations; ++i) {</span></span>
+<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">     1772064 :             (void)rng();</span></span>
+<span id="L24"><span class="lineNum">      24</span>              :         }</span>
+<span id="L25"><span class="lineNum">      25</span> <span class="tlaGNC">       13858 :     });</span></span>
+<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">           1 : }</span></span>
         </pre>
               </td>
             </tr>

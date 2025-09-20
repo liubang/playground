@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-08-31 15:26:35</td>
+            <td class="headerValue">2025-09-20 14:36:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">66.7&nbsp;%</td>
@@ -78,24 +78,23 @@
 <span id="L16"><span class="lineNum">      16</span>              : </span>
 <span id="L17"><span class="lineNum">      17</span>              : #include &quot;geo.h&quot;</span>
 <span id="L18"><span class="lineNum">      18</span>              : #include &quot;geohash.h&quot;</span>
-<span id="L19"><span class="lineNum">      19</span>              : </span>
-<span id="L20"><span class="lineNum">      20</span>              : #include &lt;gtest/gtest.h&gt;</span>
-<span id="L21"><span class="lineNum">      21</span>              : </span>
-<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC tlaBgGNC">           3 : TEST(geohash, encode) {</span></span>
-<span id="L23"><span class="lineNum">      23</span>              :     std::map&lt;std::string, pl::GeoHash::Point&gt; cases = {</span>
-<span id="L24"><span class="lineNum">      24</span> <span class="tlaGNC">           2 :         {&quot;wx4ey9n3gk0&quot;, pl::GeoHash::Point{116.31, 40.04}}};</span></span>
-<span id="L25"><span class="lineNum">      25</span>              : </span>
-<span id="L26"><span class="lineNum">      26</span>              :     constexpr pl::GeoHash::Area area = {</span>
-<span id="L27"><span class="lineNum">      27</span>              :         pl::GeoHash::Point{-180, -90},</span>
-<span id="L28"><span class="lineNum">      28</span>              :         pl::GeoHash::Point{180, 90},</span>
-<span id="L29"><span class="lineNum">      29</span>              :     };</span>
-<span id="L30"><span class="lineNum">      30</span>              : </span>
-<span id="L31"><span class="lineNum">      31</span>              :     // for (const auto&amp; [k, v] : cases) {</span>
-<span id="L32"><span class="lineNum">      32</span>              :     //     pl::GeoHash::HashBits hash;</span>
-<span id="L33"><span class="lineNum">      33</span>              :     //     pl::GeoHash::encode(area, v.lng, v.lat, 26, &amp;hash);</span>
-<span id="L34"><span class="lineNum">      34</span>              :     //     EXPECT_EQ(k, pl::Geo::geohash_string(hash));</span>
-<span id="L35"><span class="lineNum">      35</span>              :     // }</span>
-<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">           1 : }</span></span>
+<span id="L19"><span class="lineNum">      19</span>              : #include &lt;gtest/gtest.h&gt;</span>
+<span id="L20"><span class="lineNum">      20</span>              : </span>
+<span id="L21"><span class="lineNum">      21</span> <span class="tlaGNC tlaBgGNC">           3 : TEST(geohash, encode) {</span></span>
+<span id="L22"><span class="lineNum">      22</span>              :     std::map&lt;std::string, pl::GeoHash::Point&gt; cases = {</span>
+<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">           2 :         {&quot;wx4ey9n3gk0&quot;, pl::GeoHash::Point{116.31, 40.04}}};</span></span>
+<span id="L24"><span class="lineNum">      24</span>              : </span>
+<span id="L25"><span class="lineNum">      25</span>              :     constexpr pl::GeoHash::Area area = {</span>
+<span id="L26"><span class="lineNum">      26</span>              :         pl::GeoHash::Point{-180, -90},</span>
+<span id="L27"><span class="lineNum">      27</span>              :         pl::GeoHash::Point{180, 90},</span>
+<span id="L28"><span class="lineNum">      28</span>              :     };</span>
+<span id="L29"><span class="lineNum">      29</span>              : </span>
+<span id="L30"><span class="lineNum">      30</span>              :     // for (const auto&amp; [k, v] : cases) {</span>
+<span id="L31"><span class="lineNum">      31</span>              :     //     pl::GeoHash::HashBits hash;</span>
+<span id="L32"><span class="lineNum">      32</span>              :     //     pl::GeoHash::encode(area, v.lng, v.lat, 26, &amp;hash);</span>
+<span id="L33"><span class="lineNum">      33</span>              :     //     EXPECT_EQ(k, pl::Geo::geohash_string(hash));</span>
+<span id="L34"><span class="lineNum">      34</span>              :     // }</span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">           1 : }</span></span>
         </pre>
               </td>
             </tr>

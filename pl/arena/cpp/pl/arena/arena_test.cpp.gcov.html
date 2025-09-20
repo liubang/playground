@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-08-31 15:26:35</td>
+            <td class="headerValue">2025-09-20 14:36:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">75.0&nbsp;%</td>
@@ -77,36 +77,34 @@
 <span id="L15"><span class="lineNum">      15</span>              : // Authors: liubang (it.liubang@gmail.com)</span>
 <span id="L16"><span class="lineNum">      16</span>              : </span>
 <span id="L17"><span class="lineNum">      17</span>              : #include &quot;cpp/pl/arena/arena.h&quot;</span>
-<span id="L18"><span class="lineNum">      18</span>              : </span>
-<span id="L19"><span class="lineNum">      19</span>              : #include &lt;gtest/gtest.h&gt;</span>
+<span id="L18"><span class="lineNum">      18</span>              : #include &lt;gtest/gtest.h&gt;</span>
+<span id="L19"><span class="lineNum">      19</span>              : #include &lt;utility&gt;</span>
 <span id="L20"><span class="lineNum">      20</span>              : </span>
-<span id="L21"><span class="lineNum">      21</span>              : #include &lt;utility&gt;</span>
-<span id="L22"><span class="lineNum">      22</span>              : </span>
-<span id="L23"><span class="lineNum">      23</span>              : namespace {</span>
-<span id="L24"><span class="lineNum">      24</span>              : struct TestObject {</span>
-<span id="L25"><span class="lineNum">      25</span>              :     int value = 0;</span>
-<span id="L26"><span class="lineNum">      26</span>              :     std::string name;</span>
-<span id="L27"><span class="lineNum">      27</span>              : </span>
-<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC tlaBgGNC">           1 :     TestObject(int v, std::string n) : value(v), name(std::move(n)) {</span></span>
-<span id="L29"><span class="lineNum">      29</span> <span class="tlaGNC">           2 :         std::cout &lt;&lt; &quot;TestObject constructed: &quot; &lt;&lt; value &lt;&lt; &quot;, &quot; &lt;&lt; name &lt;&lt; '\n';</span></span>
-<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">           1 :     }</span></span>
-<span id="L31"><span class="lineNum">      31</span>              : </span>
-<span id="L32"><span class="lineNum">      32</span>              :     ~TestObject() { std::cout &lt;&lt; &quot;TestObject destructed: &quot; &lt;&lt; value &lt;&lt; &quot;, &quot; &lt;&lt; name &lt;&lt; '\n'; }</span>
-<span id="L33"><span class="lineNum">      33</span>              : };</span>
+<span id="L21"><span class="lineNum">      21</span>              : namespace {</span>
+<span id="L22"><span class="lineNum">      22</span>              : struct TestObject {</span>
+<span id="L23"><span class="lineNum">      23</span>              :     int value = 0;</span>
+<span id="L24"><span class="lineNum">      24</span>              :     std::string name;</span>
+<span id="L25"><span class="lineNum">      25</span>              : </span>
+<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC tlaBgGNC">           1 :     TestObject(int v, std::string n) : value(v), name(std::move(n)) {</span></span>
+<span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">           2 :         std::cout &lt;&lt; &quot;TestObject constructed: &quot; &lt;&lt; value &lt;&lt; &quot;, &quot; &lt;&lt; name &lt;&lt; '\n';</span></span>
+<span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">           1 :     }</span></span>
+<span id="L29"><span class="lineNum">      29</span>              : </span>
+<span id="L30"><span class="lineNum">      30</span>              :     ~TestObject() { std::cout &lt;&lt; &quot;TestObject destructed: &quot; &lt;&lt; value &lt;&lt; &quot;, &quot; &lt;&lt; name &lt;&lt; '\n'; }</span>
+<span id="L31"><span class="lineNum">      31</span>              : };</span>
+<span id="L32"><span class="lineNum">      32</span>              : </span>
+<span id="L33"><span class="lineNum">      33</span>              : } // namespace</span>
 <span id="L34"><span class="lineNum">      34</span>              : </span>
-<span id="L35"><span class="lineNum">      35</span>              : } // namespace</span>
-<span id="L36"><span class="lineNum">      36</span>              : </span>
-<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">           3 : TEST(ArenaNew, normal) {</span></span>
-<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">           1 :     pl::Arena arena(1024);</span></span>
-<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">           1 :     void* raw_ptr = arena.allocate(100);</span></span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">           1 :     auto stats = arena.get_stats();</span></span>
-<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">           1 :     ASSERT_EQ(1, stats.block_count);</span></span>
-<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">           1 :     ASSERT_EQ(1024, stats.total_allocated);</span></span>
-<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">           1 :     ASSERT_EQ(112, stats.total_used);</span></span>
-<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">           1 :     auto* obj = arena.allocate_object&lt;TestObject&gt;(42, &quot;Hell world&quot;);</span></span>
-<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">           1 :     stats = arena.get_stats();</span></span>
-<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">           1 :     ASSERT_EQ(112 + sizeof(TestObject), stats.total_used);</span></span>
-<span id="L47"><span class="lineNum">      47</span>              : }</span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">           3 : TEST(ArenaNew, normal) {</span></span>
+<span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">           1 :     pl::Arena arena(1024);</span></span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">           1 :     void* raw_ptr = arena.allocate(100);</span></span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">           1 :     auto stats = arena.get_stats();</span></span>
+<span id="L39"><span class="lineNum">      39</span> <span class="tlaGNC">           1 :     ASSERT_EQ(1, stats.block_count);</span></span>
+<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">           1 :     ASSERT_EQ(1024, stats.total_allocated);</span></span>
+<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">           1 :     ASSERT_EQ(112, stats.total_used);</span></span>
+<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC">           1 :     auto* obj = arena.allocate_object&lt;TestObject&gt;(42, &quot;Hell world&quot;);</span></span>
+<span id="L43"><span class="lineNum">      43</span> <span class="tlaGNC">           1 :     stats = arena.get_stats();</span></span>
+<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">           1 :     ASSERT_EQ(112 + sizeof(TestObject), stats.total_used);</span></span>
+<span id="L45"><span class="lineNum">      45</span>              : }</span>
         </pre>
               </td>
             </tr>
