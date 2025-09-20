@@ -16,7 +16,6 @@
 
 #include "absl/log/check.h"
 #include "absl/log/log.h"
-
 #include <gtest/gtest.h>
 
 TEST(abseil, log) {

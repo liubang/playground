@@ -14,10 +14,9 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
+#include <cmath>
 #include <nanobench.h>
 #include <tbb/parallel_for.h>
-
-#include <cmath>
 #include <vector>
 
 constexpr std::size_t n = 1 << 10;

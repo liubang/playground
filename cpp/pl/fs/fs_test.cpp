@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/fs/posix_fs.h"
-
 #include <cstdio>
 #include <gtest/gtest.h>
 #include <memory>

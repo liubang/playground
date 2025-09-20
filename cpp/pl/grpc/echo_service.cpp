@@ -14,11 +14,9 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "echo_service_impl.h"
-
 #include "absl/flags/parse.h"
 #include "absl/log/initialize.h"
-
+#include "echo_service_impl.h"
 #include <grpcpp/security/server_credentials.h>
 
 void RunServer() {

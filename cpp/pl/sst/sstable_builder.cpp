@@ -15,9 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/sst/sstable_builder.h"
+
 #include "cpp/pl/fs/posix_fs.h"
 #include "cpp/pl/sst/encoding.h"
-
 #include "snappy.h"
 #include <cassert>
 #include <crc32c/crc32c.h>
@@ -118,39 +118,37 @@ Result<Void> SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle
     auto raw = block->finish();
     std::string compressed;
     switch (options_->compression_type) {
-    case CompressionType::SNAPPY:
-    {
-        auto outlen = snappy::Compress(raw.data(), raw.size(), &compressed);
-        compressed.resize(outlen);
-        raw = compressed;
-        break;
-    }
-    case CompressionType::ZSTD:
-    {
-        size_t outlen = ZSTD_compressBound(raw.size());
-        if (ZSTD_isError(outlen) != 0u) {
-            // TODO(liubang): error handler
-            assert(false);
+        case CompressionType::SNAPPY: {
+            auto outlen = snappy::Compress(raw.data(), raw.size(), &compressed);
+            compressed.resize(outlen);
+            raw = compressed;
+            break;
         }
-        compressed.resize(outlen);
-        ZSTD_CCtx* ctx = ZSTD_createCCtx();
-        ZSTD_CCtx_setParameter(ctx, ZSTD_c_compressionLevel, options_->zstd_compress_level);
-        outlen = ZSTD_compress2(ctx, &(compressed)[0], compressed.size(), raw.data(), raw.size());
-        ZSTD_freeCCtx(ctx);
-        if (ZSTD_isError(outlen) != 0u) {
-            // TODO(liubang): error handler
-            assert(false);
+        case CompressionType::ZSTD: {
+            size_t outlen = ZSTD_compressBound(raw.size());
+            if (ZSTD_isError(outlen) != 0u) {
+                // TODO(liubang): error handler
+                assert(false);
+            }
+            compressed.resize(outlen);
+            ZSTD_CCtx* ctx = ZSTD_createCCtx();
+            ZSTD_CCtx_setParameter(ctx, ZSTD_c_compressionLevel, options_->zstd_compress_level);
+            outlen =
+                ZSTD_compress2(ctx, &(compressed)[0], compressed.size(), raw.data(), raw.size());
+            ZSTD_freeCCtx(ctx);
+            if (ZSTD_isError(outlen) != 0u) {
+                // TODO(liubang): error handler
+                assert(false);
+            }
+            compressed.resize(outlen);
+            raw = compressed;
+            break;
         }
-        compressed.resize(outlen);
-        raw = compressed;
-        break;
-    }
-    case CompressionType::ISAL:
-    {
-        // TODO(liubang):
-    }
-    default:
-        break;
+        case CompressionType::ISAL: {
+            // TODO(liubang):
+        }
+        default:
+            break;
     }
     auto result = writeBlockRaw(raw, options_->compression_type, handle);
     block->reset();

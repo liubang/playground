@@ -69,34 +69,33 @@ absl::StatusOr<std::string> StrConv::parse_text(const std::string& lit) {
         }
         char n = lit[i];
         switch (n) {
-        case 'n':
-            s.push_back('\n');
-            break;
-        case 'r':
-            s.push_back('\r');
-            break;
-        case 't':
-            s.push_back('\t');
-            break;
-        case '\\':
-            s.push_back('\\');
-            break;
-        case '"':
-            s.push_back('"');
-            break;
-        case '$':
-            s.push_back('$');
-            break;
-        case 'x':
-        {
-            auto ret = push_hex_byte(lit, i, &s);
-            if (!ret.ok()) {
-                return ret;
+            case 'n':
+                s.push_back('\n');
+                break;
+            case 'r':
+                s.push_back('\r');
+                break;
+            case 't':
+                s.push_back('\t');
+                break;
+            case '\\':
+                s.push_back('\\');
+                break;
+            case '"':
+                s.push_back('"');
+                break;
+            case '$':
+                s.push_back('$');
+                break;
+            case 'x': {
+                auto ret = push_hex_byte(lit, i, &s);
+                if (!ret.ok()) {
+                    return ret;
+                }
+                break;
             }
-            break;
-        }
-        default:
-            return absl::InvalidArgumentError("invalid escape sequence " + std::string(n, 1));
+            default:
+                return absl::InvalidArgumentError("invalid escape sequence " + std::string(n, 1));
         }
     }
     return s;

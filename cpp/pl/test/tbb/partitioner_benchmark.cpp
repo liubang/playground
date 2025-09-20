@@ -14,11 +14,10 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
+#include <cmath>
 #include <nanobench.h>
 #include <tbb/blocked_range2d.h>
 #include <tbb/parallel_for.h>
-
-#include <cmath>
 #include <vector>
 
 constexpr size_t n = 1 << 5;

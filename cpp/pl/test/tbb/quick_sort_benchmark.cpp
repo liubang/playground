@@ -14,12 +14,10 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include <nanobench.h>
-
-#include <algorithm>
-#include <vector>
-
 #include "cpp/pl/test/tbb/quick_sort.h"
+#include <algorithm>
+#include <nanobench.h>
+#include <vector>
 
 constexpr size_t n = 1 << 10;
 

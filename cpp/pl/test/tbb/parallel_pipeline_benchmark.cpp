@@ -14,11 +14,10 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
+#include <cmath>
 #include <nanobench.h>
 #include <tbb/parallel_for_each.h>
 #include <tbb/parallel_pipeline.h>
-
-#include <cmath>
 #include <vector>
 
 struct Data {

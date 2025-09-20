@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/ip/ip.h"
-
 #include <gtest/gtest.h>
 #include <iostream>
 

@@ -14,10 +14,9 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
+#include <algorithm>
 #include <nanobench.h>
 #include <tbb/parallel_sort.h>
-
-#include <algorithm>
 #include <vector>
 
 constexpr size_t n = 1 << 24;

@@ -14,12 +14,11 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
+#include <cmath>
+#include <iostream>
 #include <nanobench.h>
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_scan.h>
-
-#include <cmath>
-#include <iostream>
 #include <vector>
 
 constexpr size_t n = 1 << 26;

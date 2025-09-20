@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/hash/murmurhash2.h"
-
 #include <gtest/gtest.h>
 
 TEST(hash, murmurhash2_test) {

@@ -15,10 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #ifdef __linux__
-#include <ucontext.h>
-
 #include <cstdio>
 #include <cstdlib>
+#include <ucontext.h>
 
 #define handle_error(msg)   \
     do {                    \

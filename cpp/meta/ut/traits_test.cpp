@@ -14,13 +14,12 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/meta/traits.h"
+#include "cpp/meta/ut/traits_test.h"
 
+#include "cpp/meta/traits.h"
 #include <cassert>
 #include <catch2/catch_test_macros.hpp>
 #include <string>
-
-#include "cpp/meta/ut/traits_test.h"
 
 namespace {
 struct Foo {

@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "z3.h"
-
 #include "z3sfc.h"
 #include <cassert>
 #include <ctime>

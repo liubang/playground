@@ -16,13 +16,12 @@
 
 #include <algorithm>
 #include <array>
+#include <catch2/catch_test_macros.hpp>
 #include <iomanip>
 #include <iostream>
 #include <map>
 #include <ranges>
 #include <string>
-
-#include <catch2/catch_test_macros.hpp>
 
 #if (defined(__GNUC__) && __GNUC__ >= 13) || (defined(__clang_major__) && __clang_major__ >= 16)
 #include <format>

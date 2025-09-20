@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/pool/object_pool.h"
-
 #include <gtest/gtest.h>
 
 namespace pl::test {

@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/meta/type_list.h"
-
 #include <catch2/catch_test_macros.hpp>
 #include <tuple>
 #include <type_traits>

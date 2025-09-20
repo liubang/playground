@@ -16,7 +16,6 @@
 
 #include "cpp/pl/random/random.h"
 #include "cpp/pl/skiplist/skiplist.h"
-
 #include <gtest/gtest.h>
 #include <memory>
 #include <string>

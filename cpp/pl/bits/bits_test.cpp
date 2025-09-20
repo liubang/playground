@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/bits/bits.h"
-
 #include <iostream>
 
 int main(int argc, char* argv[]) {

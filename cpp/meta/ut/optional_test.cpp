@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/meta/optional.h"
-
 #include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("meta", "[optional]") {

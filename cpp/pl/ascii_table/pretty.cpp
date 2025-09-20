@@ -15,6 +15,7 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "pretty.h"
+
 #include <iostream>
 #include <sstream>
 

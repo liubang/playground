@@ -51,12 +51,12 @@ std::string Assignment::string() const {
     std::stringstream ss;
     ss << "Assignment: {";
     switch (type) {
-    case Type::VariableAssignment:
-        ss << std::get<std::unique_ptr<VariableAssgn>>(value)->string();
-        break;
-    case Type::MemberAssignment:
-        ss << std::get<std::unique_ptr<MemberAssgn>>(value)->string();
-        break;
+        case Type::VariableAssignment:
+            ss << std::get<std::unique_ptr<VariableAssgn>>(value)->string();
+            break;
+        case Type::MemberAssignment:
+            ss << std::get<std::unique_ptr<MemberAssgn>>(value)->string();
+            break;
     }
     ss << "}";
     return ss.str();
@@ -87,12 +87,12 @@ std::string MemberExpr::string() const {
 std::string FunctionBody::string() const {
     std::stringstream ss;
     switch (type) {
-    case Type::Block:
-        ss << std::get<std::unique_ptr<Block>>(body)->string();
-        break;
-    case Type::Expression:
-        ss << std::get<std::unique_ptr<Expression>>(body)->string();
-        break;
+        case Type::Block:
+            ss << std::get<std::unique_ptr<Block>>(body)->string();
+            break;
+        case Type::Expression:
+            ss << std::get<std::unique_ptr<Expression>>(body)->string();
+            break;
     }
     return ss.str();
 }
@@ -119,10 +119,10 @@ std::string CallExpr::string() const {
 
 std::string PropertyKey::string() const {
     switch (type) {
-    case Type::Identifier:
-        return std::get<std::unique_ptr<Identifier>>(key)->string();
-    case Type::StringLiteral:
-        return std::get<std::unique_ptr<StringLit>>(key)->string();
+        case Type::Identifier:
+            return std::get<std::unique_ptr<Identifier>>(key)->string();
+        case Type::StringLiteral:
+            return std::get<std::unique_ptr<StringLit>>(key)->string();
     }
     __builtin_unreachable();
 }
@@ -190,118 +190,118 @@ std::string UintLit::string() const { return ""; }
 std::string Statement::string() const {
     std::stringstream ss;
     switch (type) {
-    case Type::ExpressionStatement:
-        ss << "ExpressionStatement: ";
-        ss << std::get<std::unique_ptr<ExprStmt>>(stmt)->string();
-        break;
-    case Type::VariableAssignment:
-        ss << "VariableAssignment: ";
-        ss << std::get<std::unique_ptr<VariableAssgn>>(stmt)->string();
-        break;
-    case Type::OptionStatement:
-        ss << "OptionStatement: ";
-        ss << std::get<std::unique_ptr<OptionStmt>>(stmt)->string();
-        break;
-    case Type::ReturnStatement:
-        ss << "ReturnStatement: ";
-        ss << std::get<std::unique_ptr<ReturnStmt>>(stmt)->string();
-        break;
-    case Type::BadStatement:
-        ss << "BadStatement: ";
-        ss << std::get<std::unique_ptr<BadStmt>>(stmt)->string();
-        break;
-    case Type::TestCaseStatement:
-        ss << "TestCaseStatement: ";
-        ss << std::get<std::unique_ptr<TestCaseStmt>>(stmt)->string();
-        break;
-    case Type::BuiltinStatement:
-        ss << "BuiltinStatement: ";
-        ss << std::get<std::unique_ptr<BuiltinStmt>>(stmt)->string();
-        break;
+        case Type::ExpressionStatement:
+            ss << "ExpressionStatement: ";
+            ss << std::get<std::unique_ptr<ExprStmt>>(stmt)->string();
+            break;
+        case Type::VariableAssignment:
+            ss << "VariableAssignment: ";
+            ss << std::get<std::unique_ptr<VariableAssgn>>(stmt)->string();
+            break;
+        case Type::OptionStatement:
+            ss << "OptionStatement: ";
+            ss << std::get<std::unique_ptr<OptionStmt>>(stmt)->string();
+            break;
+        case Type::ReturnStatement:
+            ss << "ReturnStatement: ";
+            ss << std::get<std::unique_ptr<ReturnStmt>>(stmt)->string();
+            break;
+        case Type::BadStatement:
+            ss << "BadStatement: ";
+            ss << std::get<std::unique_ptr<BadStmt>>(stmt)->string();
+            break;
+        case Type::TestCaseStatement:
+            ss << "TestCaseStatement: ";
+            ss << std::get<std::unique_ptr<TestCaseStmt>>(stmt)->string();
+            break;
+        case Type::BuiltinStatement:
+            ss << "BuiltinStatement: ";
+            ss << std::get<std::unique_ptr<BuiltinStmt>>(stmt)->string();
+            break;
     }
     return ss.str();
 }
 std::string Expression::string() const {
     std::stringstream ss;
     switch (type) {
-    case Type::Identifier:
-        ss << std::get<std::unique_ptr<Identifier>>(expr)->string();
-        break;
-    case Type::ArrayExpr:
-        ss << std::get<std::unique_ptr<ArrayExpr>>(expr)->string();
-        break;
-    case Type::DictExpr:
-        ss << std::get<std::unique_ptr<DictExpr>>(expr)->string();
-        break;
-    case Type::FunctionExpr:
-        ss << std::get<std::unique_ptr<FunctionExpr>>(expr)->string();
-        break;
-    case Type::LogicalExpr:
-        ss << std::get<std::unique_ptr<LogicalExpr>>(expr)->string();
-        break;
-    case Type::ObjectExpr:
-        ss << std::get<std::unique_ptr<ObjectExpr>>(expr)->string();
-        break;
-    case Type::MemberExpr:
-        ss << std::get<std::unique_ptr<MemberExpr>>(expr)->string();
-        break;
-    case Type::IndexExpr:
-        ss << std::get<std::unique_ptr<IndexExpr>>(expr)->string();
-        break;
-    case Type::BinaryExpr:
-        ss << std::get<std::unique_ptr<BinaryExpr>>(expr)->string();
-        break;
-    case Type::UnaryExpr:
-        ss << std::get<std::unique_ptr<UnaryExpr>>(expr)->string();
-        break;
-    case Type::PipeExpr:
-        ss << std::get<std::unique_ptr<PipeExpr>>(expr)->string();
-        break;
-    case Type::CallExpr:
-        ss << std::get<std::unique_ptr<CallExpr>>(expr)->string();
-        break;
-    case Type::ConditionalExpr:
-        ss << std::get<std::unique_ptr<ConditionalExpr>>(expr)->string();
-        break;
-    case Type::StringExpr:
-        ss << std::get<std::unique_ptr<StringExpr>>(expr)->string();
-        break;
-    case Type::ParenExpr:
-        ss << std::get<std::unique_ptr<ParenExpr>>(expr)->string();
-        break;
-    case Type::IntegerLit:
-        ss << std::get<std::unique_ptr<IntegerLit>>(expr)->string();
-        break;
-    case Type::FloatLit:
-        ss << std::get<std::unique_ptr<FloatLit>>(expr)->string();
-        break;
-    case Type::StringLit:
-        ss << std::get<std::unique_ptr<StringLit>>(expr)->string();
-        break;
-    case Type::DurationLit:
-        ss << std::get<std::unique_ptr<DurationLit>>(expr)->string();
-        break;
-    case Type::UnsignedIntegerLit:
-        ss << std::get<std::unique_ptr<UintLit>>(expr)->string();
-        break;
-    case Type::BooleanLit:
-        ss << std::get<std::unique_ptr<BooleanLit>>(expr)->string();
-        break;
-    case Type::DateTimeLit:
-        ss << std::get<std::unique_ptr<DateTimeLit>>(expr)->string();
-        break;
-    case Type::RegexpLit:
-        ss << std::get<std::unique_ptr<RegexpLit>>(expr)->string();
-        break;
-    case Type::PipeLit:
-        ss << std::get<std::unique_ptr<PipeLit>>(expr)->string();
-        break;
-    case Type::LabelLit:
-        ss << std::get<std::unique_ptr<LabelLit>>(expr)->string();
-        break;
-    case Type::BadExpr:
-        ss << std::get<std::unique_ptr<BadExpr>>(expr)->string();
-        break;
+        case Type::Identifier:
+            ss << std::get<std::unique_ptr<Identifier>>(expr)->string();
+            break;
+        case Type::ArrayExpr:
+            ss << std::get<std::unique_ptr<ArrayExpr>>(expr)->string();
+            break;
+        case Type::DictExpr:
+            ss << std::get<std::unique_ptr<DictExpr>>(expr)->string();
+            break;
+        case Type::FunctionExpr:
+            ss << std::get<std::unique_ptr<FunctionExpr>>(expr)->string();
+            break;
+        case Type::LogicalExpr:
+            ss << std::get<std::unique_ptr<LogicalExpr>>(expr)->string();
+            break;
+        case Type::ObjectExpr:
+            ss << std::get<std::unique_ptr<ObjectExpr>>(expr)->string();
+            break;
+        case Type::MemberExpr:
+            ss << std::get<std::unique_ptr<MemberExpr>>(expr)->string();
+            break;
+        case Type::IndexExpr:
+            ss << std::get<std::unique_ptr<IndexExpr>>(expr)->string();
+            break;
+        case Type::BinaryExpr:
+            ss << std::get<std::unique_ptr<BinaryExpr>>(expr)->string();
+            break;
+        case Type::UnaryExpr:
+            ss << std::get<std::unique_ptr<UnaryExpr>>(expr)->string();
+            break;
+        case Type::PipeExpr:
+            ss << std::get<std::unique_ptr<PipeExpr>>(expr)->string();
+            break;
+        case Type::CallExpr:
+            ss << std::get<std::unique_ptr<CallExpr>>(expr)->string();
+            break;
+        case Type::ConditionalExpr:
+            ss << std::get<std::unique_ptr<ConditionalExpr>>(expr)->string();
+            break;
+        case Type::StringExpr:
+            ss << std::get<std::unique_ptr<StringExpr>>(expr)->string();
+            break;
+        case Type::ParenExpr:
+            ss << std::get<std::unique_ptr<ParenExpr>>(expr)->string();
+            break;
+        case Type::IntegerLit:
+            ss << std::get<std::unique_ptr<IntegerLit>>(expr)->string();
+            break;
+        case Type::FloatLit:
+            ss << std::get<std::unique_ptr<FloatLit>>(expr)->string();
+            break;
+        case Type::StringLit:
+            ss << std::get<std::unique_ptr<StringLit>>(expr)->string();
+            break;
+        case Type::DurationLit:
+            ss << std::get<std::unique_ptr<DurationLit>>(expr)->string();
+            break;
+        case Type::UnsignedIntegerLit:
+            ss << std::get<std::unique_ptr<UintLit>>(expr)->string();
+            break;
+        case Type::BooleanLit:
+            ss << std::get<std::unique_ptr<BooleanLit>>(expr)->string();
+            break;
+        case Type::DateTimeLit:
+            ss << std::get<std::unique_ptr<DateTimeLit>>(expr)->string();
+            break;
+        case Type::RegexpLit:
+            ss << std::get<std::unique_ptr<RegexpLit>>(expr)->string();
+            break;
+        case Type::PipeLit:
+            ss << std::get<std::unique_ptr<PipeLit>>(expr)->string();
+            break;
+        case Type::LabelLit:
+            ss << std::get<std::unique_ptr<LabelLit>>(expr)->string();
+            break;
+        case Type::BadExpr:
+            ss << std::get<std::unique_ptr<BadExpr>>(expr)->string();
+            break;
     }
     return ss.str();
 }

@@ -14,11 +14,10 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
+#include <cmath>
 #include <nanobench.h>
 #include <tbb/concurrent_vector.h>
 #include <tbb/parallel_for.h>
-
-#include <cmath>
 
 constexpr size_t n = 1 << 10;
 

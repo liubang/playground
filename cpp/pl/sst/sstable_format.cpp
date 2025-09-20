@@ -15,8 +15,8 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/sst/sstable_format.h"
-#include "cpp/pl/sst/encoding.h"
 
+#include "cpp/pl/sst/encoding.h"
 #include "snappy.h"
 #include <cassert>
 #include <crc32c/crc32c.h>
@@ -231,51 +231,48 @@ Result<BlockContents> BlockReader::readBlock(const FileSystemRef& reader,
     BlockContents block_contents;
 
     switch (static_cast<CompressionType>(data[s])) {
-    case CompressionType::SNAPPY:
-    {
-        size_t ulen;
-        if (!snappy::GetUncompressedLength(data, s, &ulen)) {
-            return makeError(StatusCode::kDataCorruption, "can't get snappy uncompressed length");
+        case CompressionType::SNAPPY: {
+            size_t ulen;
+            if (!snappy::GetUncompressedLength(data, s, &ulen)) {
+                return makeError(StatusCode::kDataCorruption,
+                                 "can't get snappy uncompressed length");
+            }
+            auto ubuf = std::make_unique<char[]>(ulen);
+            if (!snappy::RawUncompress(data, s, ubuf.get())) {
+                return makeError(StatusCode::kDataCorruption, "uncompress error");
+            }
+            block_contents.data = std::string_view(ubuf.release(), ulen);
+            block_contents.heap_allocated = true;
+            block_contents.cachable = true;
+            break;
         }
-        auto ubuf = std::make_unique<char[]>(ulen);
-        if (!snappy::RawUncompress(data, s, ubuf.get())) {
-            return makeError(StatusCode::kDataCorruption, "uncompress error");
+        case CompressionType::ZSTD: {
+            size_t ulen = ZSTD_getFrameContentSize(data, s);
+            if (ulen == 0) {
+                return makeError(StatusCode::kDataCorruption, "can't get zstd uncompressed length");
+            }
+            auto ubuf = std::make_unique<char[]>(ulen);
+            ZSTD_DCtx* ctx = ZSTD_createDCtx();
+            size_t outlen = ZSTD_decompressDCtx(ctx, ubuf.get(), ulen, data, s);
+            ZSTD_freeDCtx(ctx);
+            if (ZSTD_isError(outlen) != 0u) {
+                return makeError(StatusCode::kDataCorruption, "uncompress error");
+            }
+            block_contents.data = std::string_view(ubuf.release(), ulen);
+            block_contents.heap_allocated = true;
+            block_contents.cachable = true;
+            break;
         }
-        block_contents.data = std::string_view(ubuf.release(), ulen);
-        block_contents.heap_allocated = true;
-        block_contents.cachable = true;
-        break;
-    }
-    case CompressionType::ZSTD:
-    {
-        size_t ulen = ZSTD_getFrameContentSize(data, s);
-        if (ulen == 0) {
-            return makeError(StatusCode::kDataCorruption, "can't get zstd uncompressed length");
+        case CompressionType::ISAL: {
+            // TODO(liubang):
+            return makeError(StatusCode::kNotImplemented, "ISAL compression not implemented");
         }
-        auto ubuf = std::make_unique<char[]>(ulen);
-        ZSTD_DCtx* ctx = ZSTD_createDCtx();
-        size_t outlen = ZSTD_decompressDCtx(ctx, ubuf.get(), ulen, data, s);
-        ZSTD_freeDCtx(ctx);
-        if (ZSTD_isError(outlen) != 0u) {
-            return makeError(StatusCode::kDataCorruption, "uncompress error");
+        default: {
+            block_contents.data = std::string_view(buf.release(), s);
+            block_contents.heap_allocated = true;
+            block_contents.cachable = true;
+            break;
         }
-        block_contents.data = std::string_view(ubuf.release(), ulen);
-        block_contents.heap_allocated = true;
-        block_contents.cachable = true;
-        break;
-    }
-    case CompressionType::ISAL:
-    {
-        // TODO(liubang):
-        return makeError(StatusCode::kNotImplemented, "ISAL compression not implemented");
-    }
-    default:
-    {
-        block_contents.data = std::string_view(buf.release(), s);
-        block_contents.heap_allocated = true;
-        block_contents.cachable = true;
-        break;
-    }
     }
 
     return block_contents;

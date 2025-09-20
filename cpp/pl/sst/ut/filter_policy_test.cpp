@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/sst/filter_policy.h"
-
 #include <gtest/gtest.h>
 
 namespace pl {

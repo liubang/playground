@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/lang/common.h"
-
 #include <benchmark/benchmark.h>
 #include <vector>
 

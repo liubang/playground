@@ -14,11 +14,10 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
+#include "cpp/pl/debug/measure.h"
 #include <cstdio>
 #include <list>
 #include <vector>
-
-#include "cpp/pl/debug/measure.h"
 
 static char g_buf[65535 * 30];
 
