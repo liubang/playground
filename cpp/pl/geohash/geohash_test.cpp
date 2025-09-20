@@ -17,7 +17,6 @@
 
 #include "geo.h"
 #include "geohash.h"
-
 #include <gtest/gtest.h>
 
 TEST(geohash, encode) {

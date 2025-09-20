@@ -15,12 +15,11 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/06/18 12:59
 
+#include <cmath>
 #include <iostream>
 #include <nanobench.h>
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_reduce.h>
-
-#include <cmath>
 
 constexpr size_t n = 1 << 10;
 

@@ -15,10 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2025/01/05 12:19
 
-#include <cstdio>
-
 #include "cpp/meta/match.h"
 #include <catch2/catch_test_macros.hpp>
+#include <cstdio>
 
 TEST_CASE("meta", "[match]") {
     std::variant<int, std::string> value[] = {10, "hello"};

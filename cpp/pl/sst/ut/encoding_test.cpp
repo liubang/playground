@@ -16,7 +16,6 @@
 // Created: 2023/05/30 11:10
 
 #include "cpp/pl/sst/encoding.h"
-
 #include <gtest/gtest.h>
 #include <string_view>
 

@@ -16,7 +16,6 @@
 // Created: 2024/06/23 18:51
 
 #include "cpp/meta/optional.h"
-
 #include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("meta", "[optional]") {

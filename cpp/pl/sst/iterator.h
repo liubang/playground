@@ -19,7 +19,6 @@
 
 #include "cpp/pl/sst/cell.h"
 #include "cpp/pl/status/status.h"
-
 #include <memory>
 
 namespace pl {

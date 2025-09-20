@@ -16,7 +16,6 @@
 // Created: 2024/06/25 17:55
 
 #include "cpp/pl/log/logger.h"
-
 #include <thread>
 
 int main(int argc, char* argv[]) {

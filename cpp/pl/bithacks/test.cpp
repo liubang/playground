@@ -16,7 +16,6 @@
 // Created: 2023/10/25 20:30
 
 #include "all.h"
-
 #include <gtest/gtest.h>
 
 TEST(bithacks, sign_of_integer) {

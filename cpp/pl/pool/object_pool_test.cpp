@@ -16,7 +16,6 @@
 // Created: 2025/05/28 23:00
 
 #include "cpp/pl/pool/object_pool.h"
-
 #include <gtest/gtest.h>
 
 namespace pl::test {
