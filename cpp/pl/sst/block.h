@@ -20,7 +20,6 @@
 #include "cpp/pl/sst/comparator.h"
 #include "cpp/pl/sst/iterator.h"
 #include "cpp/pl/sst/sstable_format.h"
-
 #include <memory>
 
 namespace pl {

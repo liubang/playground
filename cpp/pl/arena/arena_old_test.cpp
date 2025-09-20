@@ -16,7 +16,6 @@
 // Created: 2025/06/02 00:46
 
 #include "cpp/pl/arena/arena_old.h"
-
 #include <gtest/gtest.h>
 
 TEST(arena, allocate) {

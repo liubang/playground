@@ -18,7 +18,6 @@
 #include "cpp/pl/random/random.h"
 #include "cpp/pl/sst/sstable.h"
 #include "cpp/pl/sst/sstable_builder.h"
-
 #include <cstdio>
 #include <gtest/gtest.h>
 #include <set>

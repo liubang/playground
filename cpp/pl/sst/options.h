@@ -19,7 +19,6 @@
 
 #include "cpp/pl/sst/comparator.h"
 #include "cpp/pl/sst/sstable_format.h"
-
 #include <cstdint>
 #include <filesystem>
 #include <memory>

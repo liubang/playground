@@ -16,9 +16,9 @@
 // Created: 2023/06/01 21:09
 
 #include "cpp/pl/sst/block.h"
+
 #include "cpp/pl/sst/cell.h"
 #include "cpp/pl/sst/encoding.h"
-
 #include <cassert>
 #include <utility>
 

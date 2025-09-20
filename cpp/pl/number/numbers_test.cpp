@@ -16,7 +16,6 @@
 // Created: 2023/05/21 23:50
 
 #include "cpp/pl/number/numbers.h"
-
 #include <gtest/gtest.h>
 
 TEST(tools, ip) {

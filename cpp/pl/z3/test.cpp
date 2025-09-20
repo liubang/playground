@@ -16,7 +16,6 @@
 // Created: 2024/05/14 21:00
 
 #include "z3.h"
-
 #include "z3sfc.h"
 #include <cassert>
 #include <ctime>

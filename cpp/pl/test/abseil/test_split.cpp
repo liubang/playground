@@ -16,7 +16,6 @@
 // Created: 2023/06/13 13:26
 
 #include "absl/strings/str_split.h"
-
 #include <gtest/gtest.h>
 #include <string>
 #include <string_view>

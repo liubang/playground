@@ -16,7 +16,6 @@
 // Created: 2023/05/31 17:28
 
 #include "cpp/pl/sst/comparator.h"
-
 #include <gtest/gtest.h>
 #include <memory>
 

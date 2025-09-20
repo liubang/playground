@@ -33,9 +33,7 @@
 extern "C" {
 #endif
 
-int add(int a, int b) {
-    return a + b;
-}
+int add(int a, int b) { return a + b; }
 
 #ifdef __cplusplus
 }
@@ -102,9 +100,9 @@ public:
         std::string attr2,
         std::string attr3,
         std::string attr4,
-        const std::unordered_map<std::string, std::string> &attr5,
+        const std::unordered_map<std::string, std::string>& attr5,
         uint64_t attr6,
-        const std::shared_ptr<std::string> &attr7)
+        const std::shared_ptr<std::string>& attr7)
         : attr1_(std::move(attr1)),
           attr2_(std::move(attr2)),
           attr3_(std::move(attr3)),
@@ -119,26 +117,26 @@ public:
 
     void test_switch(FOO_ENUM e) {
         switch (e) {
-        case FOO_ENUM::ENUM1: {
-            std::cout << "enum1" << '\n';
-            break;
-        }
-        case FOO_ENUM::ENUM2:
-            break;
-        case FOO_ENUM::ENUM3:
-            break;
-        case FOO_ENUM::ENUM4:
-            break;
-        case FOO_ENUM::ENUM5:
-            break;
-        default:
-            std::cout << "invalid type" << '\n';
+            case FOO_ENUM::ENUM1: {
+                std::cout << "enum1" << '\n';
+                break;
+            }
+            case FOO_ENUM::ENUM2:
+                break;
+            case FOO_ENUM::ENUM3:
+                break;
+            case FOO_ENUM::ENUM4:
+                break;
+            case FOO_ENUM::ENUM5:
+                break;
+            default:
+                std::cout << "invalid type" << '\n';
         }
     }
 
-    void test_pointer(const char *s) { ::printf("s = %s\n", s); }
+    void test_pointer(const char* s) { ::printf("s = %s\n", s); }
 
-    void test_cf(const std::string &s) { std::cout << s << '\n'; }
+    void test_cf(const std::string& s) { std::cout << s << '\n'; }
 
 private:
     std::string attr1_;
@@ -153,20 +151,12 @@ private:
 namespace detail {
 
 constexpr auto kIsLittleEndian = __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__;
-constexpr auto kIsBigEndian    = !kIsLittleEndian;
+constexpr auto kIsBigEndian = !kIsLittleEndian;
 
-static inline uint8_t byteswap_gen(uint8_t v) {
-    return uint8_t(v);
-}
-static inline uint16_t byteswap_gen(uint16_t v) {
-    return __builtin_bswap16(v);
-}
-static inline uint32_t byteswap_gen(uint32_t v) {
-    return __builtin_bswap32(v);
-}
-static inline uint64_t byteswap_gen(uint64_t v) {
-    return __builtin_bswap64(v);
-}
+static inline uint8_t byteswap_gen(uint8_t v) { return uint8_t(v); }
+static inline uint16_t byteswap_gen(uint16_t v) { return __builtin_bswap16(v); }
+static inline uint32_t byteswap_gen(uint32_t v) { return __builtin_bswap32(v); }
+static inline uint64_t byteswap_gen(uint64_t v) { return __builtin_bswap64(v); }
 
 template <std::size_t Size> struct uint_types_by_size;
 
@@ -191,7 +181,7 @@ std::enable_if_t<sizeof(To) == sizeof(From) && std::is_trivially_copyable_v<From
                      std::is_trivially_copyable_v<To>,
                  To>
 // constexpr support needs compiler magic
-bit_cast(const From &src) noexcept {
+bit_cast(const From& src) noexcept {
     static_assert(std::is_trivially_constructible_v<To>,
                   "This implementation additionally requires "
                   "destination type to be trivially constructible");
@@ -208,7 +198,7 @@ template <class T> struct EndianInt {
 
     static T swap(T x) {
         constexpr auto s = sizeof(T);
-        using B          = typename uint_types_by_size<s>::type;
+        using B = typename uint_types_by_size<s>::type;
         return bit_cast<T>(byteswap_gen(bit_cast<B>(x)));
     }
 

@@ -18,7 +18,6 @@
 #pragma once
 
 #include "cpp/pl/bloom/bloom.h"
-
 #include <cstring>
 #include <deque>
 #include <memory>

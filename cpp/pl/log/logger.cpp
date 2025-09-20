@@ -16,8 +16,8 @@
 // Created: 2024/06/24 01:07
 
 #include "cpp/pl/log/logger.h"
-#include "cpp/pl/thread/thread.h"
 
+#include "cpp/pl/thread/thread.h"
 #include <cstdio>
 #include <fmt/chrono.h>
 #include <fmt/format.h>

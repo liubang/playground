@@ -16,7 +16,6 @@
 // Created: 2023/05/21 23:04
 
 #include "cpp/pl/bf/yabf.h"
-
 #include <gtest/gtest.h>
 
 TEST(bf, yabf) {
