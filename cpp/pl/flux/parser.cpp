@@ -90,43 +90,43 @@ std::unique_ptr<Statement> Parser::parse_statement_inner(
     const auto* t = peek();
     std::unique_ptr<Statement> stmt;
     switch (t->tok) {
-    case TokenType::Int:
-    case TokenType::Float:
-    case TokenType::String:
-    case TokenType::Div:
-    case TokenType::Time:
-    case TokenType::Duration:
-    case TokenType::PipeReceive:
-    case TokenType::LParen:
-    case TokenType::LBrack:
-    case TokenType::LBrace:
-    case TokenType::Add:
-    case TokenType::Sub:
-    case TokenType::Not:
-    case TokenType::If:
-    case TokenType::Exists:
-    case TokenType::Quote:
-        stmt = parse_expression_statement();
-        break;
-    case TokenType::Ident:
-        stmt = parse_ident_statement();
-        break;
-    case TokenType::Option:
-        stmt = parse_option_assignment();
-        break;
-    case TokenType::Builtin:
-        stmt = parse_builtin_statement();
-        break;
-    case TokenType::TestCase:
-        stmt = parse_testcase_statement();
-        break;
-    case TokenType::Return:
-        stmt = parse_return_statement();
-        break;
-    default:
-        auto tt = consume();
-        auto bad_stmt = std::make_unique<BadStmt>(t->lit);
-        stmt = std::make_unique<Statement>(Statement::Type::BadStatement, std::move(bad_stmt));
+        case TokenType::Int:
+        case TokenType::Float:
+        case TokenType::String:
+        case TokenType::Div:
+        case TokenType::Time:
+        case TokenType::Duration:
+        case TokenType::PipeReceive:
+        case TokenType::LParen:
+        case TokenType::LBrack:
+        case TokenType::LBrace:
+        case TokenType::Add:
+        case TokenType::Sub:
+        case TokenType::Not:
+        case TokenType::If:
+        case TokenType::Exists:
+        case TokenType::Quote:
+            stmt = parse_expression_statement();
+            break;
+        case TokenType::Ident:
+            stmt = parse_ident_statement();
+            break;
+        case TokenType::Option:
+            stmt = parse_option_assignment();
+            break;
+        case TokenType::Builtin:
+            stmt = parse_builtin_statement();
+            break;
+        case TokenType::TestCase:
+            stmt = parse_testcase_statement();
+            break;
+        case TokenType::Return:
+            stmt = parse_return_statement();
+            break;
+        default:
+            auto tt = consume();
+            auto bad_stmt = std::make_unique<BadStmt>(t->lit);
+            stmt = std::make_unique<Statement>(Statement::Type::BadStatement, std::move(bad_stmt));
     }
     return stmt;
 }
@@ -339,14 +339,14 @@ std::unique_ptr<Expression> Parser::parse_multiplicative_expression_suffix(
 std::optional<Operator> Parser::parse_multiplicative_operator() {
     auto t = peek()->tok;
     switch (t) {
-    case TokenType::Mul:
-        return Operator::MultiplicationOperator;
-    case TokenType::Div:
-        return Operator::DivisionOperator;
-    case TokenType::Mod:
-        return Operator::ModuloOperator;
-    default:
-        return std::nullopt;
+        case TokenType::Mul:
+            return Operator::MultiplicationOperator;
+        case TokenType::Div:
+            return Operator::DivisionOperator;
+        case TokenType::Mod:
+            return Operator::ModuloOperator;
+        default:
+            return std::nullopt;
     }
 }
 
@@ -468,18 +468,18 @@ std::unique_ptr<Expression> Parser::parse_postfix_operator(std::unique_ptr<Expre
                                                            bool* ret) {
     const auto* t = peek();
     switch (t->tok) {
-    case TokenType::Dot:
-        *ret = true;
-        return parse_dot_expression(std::move(expr));
-    case TokenType::LParen:
-        *ret = true;
-        return parse_call_expression(std::move(expr));
-    case TokenType::LBrack:
-        *ret = true;
-        return parse_index_expression(std::move(expr));
-    default:
-        *ret = false;
-        return expr;
+        case TokenType::Dot:
+            *ret = true;
+            return parse_dot_expression(std::move(expr));
+        case TokenType::LParen:
+            *ret = true;
+            return parse_call_expression(std::move(expr));
+        case TokenType::LBrack:
+            *ret = true;
+            return parse_index_expression(std::move(expr));
+        default:
+            *ret = false;
+            return expr;
     }
 }
 
@@ -765,24 +765,24 @@ std::optional<Operator> Parser::parse_comparison_operator() {
     const auto* t = peek();
     FLUX_DEBUG(t->lit);
     switch (t->tok) {
-    case TokenType::Eq:
-        return Operator::EqualOperator;
-    case TokenType::Neq:
-        return Operator::NotEqualOperator;
-    case TokenType::Lte:
-        return Operator::LessThanEqualOperator;
-    case TokenType::Lt:
-        return Operator::LessThanOperator;
-    case TokenType::Gte:
-        return Operator::GreaterThanEqualOperator;
-    case TokenType::Gt:
-        return Operator::GreaterThanOperator;
-    case TokenType::RegexEq:
-        return Operator::RegexpMatchOperator;
-    case TokenType::RegexNeq:
-        return Operator::NotRegexpMatchOperator;
-    default:
-        return std::nullopt;
+        case TokenType::Eq:
+            return Operator::EqualOperator;
+        case TokenType::Neq:
+            return Operator::NotEqualOperator;
+        case TokenType::Lte:
+            return Operator::LessThanEqualOperator;
+        case TokenType::Lt:
+            return Operator::LessThanOperator;
+        case TokenType::Gte:
+            return Operator::GreaterThanEqualOperator;
+        case TokenType::Gt:
+            return Operator::GreaterThanOperator;
+        case TokenType::RegexEq:
+            return Operator::RegexpMatchOperator;
+        case TokenType::RegexNeq:
+            return Operator::NotRegexpMatchOperator;
+        default:
+            return std::nullopt;
     }
 }
 
@@ -1028,50 +1028,47 @@ std::unique_ptr<Expression> Parser::parse_array_items_rest(std::unique_ptr<Token
 
 std::unique_ptr<Expression> Parser::parse_array_or_dict(std::unique_ptr<Token> start) {
     switch (peek()->tok) {
-    // empty dictinary [:]
-    case TokenType::Colon:
-    {
-        consume();
-        auto end = close(TokenType::RBrack);
-        auto lbrack = start->comments;
-        auto rbrack = end->comments;
-        auto dict_expr = std::make_unique<DictExpr>();
-        dict_expr->lbrack = std::move(lbrack);
-        dict_expr->rbrack = std::move(rbrack);
-
-        auto expr = std::make_unique<Expression>();
-        expr->type = Expression::Type::ArrayExpr;
-        expr->expr = std::move(dict_expr);
-        return expr;
-    }
-    // empty array []
-    case TokenType::RBrack:
-    {
-        auto end = close(TokenType::RBrack);
-        auto lbrack = start->comments;
-        auto rbrack = end->comments;
-        auto arr_expr = std::make_unique<ArrayExpr>();
-        arr_expr->lbrack = std::move(lbrack);
-        arr_expr->rbrack = std::move(rbrack);
-
-        auto expr = std::make_unique<Expression>();
-        expr->type = Expression::Type::ArrayExpr;
-        expr->expr = std::move(arr_expr);
-
-        return expr;
-    }
-    default:
-    {
-        auto expr = parse_expression();
-        if (peek()->tok == TokenType::Colon) {
-            // non-empty dictionary
+        // empty dictinary [:]
+        case TokenType::Colon: {
             consume();
-            auto val = parse_expression();
-            return parse_dict_items_rest(std::move(start), std::move(expr), std::move(val));
+            auto end = close(TokenType::RBrack);
+            auto lbrack = start->comments;
+            auto rbrack = end->comments;
+            auto dict_expr = std::make_unique<DictExpr>();
+            dict_expr->lbrack = std::move(lbrack);
+            dict_expr->rbrack = std::move(rbrack);
+
+            auto expr = std::make_unique<Expression>();
+            expr->type = Expression::Type::ArrayExpr;
+            expr->expr = std::move(dict_expr);
+            return expr;
         }
-        // non-empty array
-        return parse_array_items_rest(std::move(start), std::move(expr));
-    }
+        // empty array []
+        case TokenType::RBrack: {
+            auto end = close(TokenType::RBrack);
+            auto lbrack = start->comments;
+            auto rbrack = end->comments;
+            auto arr_expr = std::make_unique<ArrayExpr>();
+            arr_expr->lbrack = std::move(lbrack);
+            arr_expr->rbrack = std::move(rbrack);
+
+            auto expr = std::make_unique<Expression>();
+            expr->type = Expression::Type::ArrayExpr;
+            expr->expr = std::move(arr_expr);
+
+            return expr;
+        }
+        default: {
+            auto expr = parse_expression();
+            if (peek()->tok == TokenType::Colon) {
+                // non-empty dictionary
+                consume();
+                auto val = parse_expression();
+                return parse_dict_items_rest(std::move(start), std::move(expr), std::move(val));
+            }
+            // non-empty array
+            return parse_array_items_rest(std::move(start), std::move(expr));
+        }
     }
 }
 
@@ -1296,43 +1293,40 @@ std::tuple<std::unique_ptr<StringExpr>, TokenError> Parser::parse_string_express
     for (;;) {
         auto t = scanner_->scan_with_expr();
         switch (t->tok) {
-        case TokenType::Text:
-        {
-            auto value = StrConv::parse_text(t->lit);
-            if (!value.ok()) {
-                return {nullptr, TokenError(std::move(t))};
+            case TokenType::Text: {
+                auto value = StrConv::parse_text(t->lit);
+                if (!value.ok()) {
+                    return {nullptr, TokenError(std::move(t))};
+                }
+                auto tp = std::make_unique<TextPart>();
+                tp->value = value.value();
+                auto p =
+                    std::make_unique<StringExprPart>(StringExprPart::Type::Text, std::move(tp));
+                parts.emplace_back(std::move(p));
+                break;
             }
-            auto tp = std::make_unique<TextPart>();
-            tp->value = value.value();
-            auto p = std::make_unique<StringExprPart>(StringExprPart::Type::Text, std::move(tp));
-            parts.emplace_back(std::move(p));
-            break;
-        }
-        case TokenType::StringExpr:
-        {
-            auto expr = parse_expression();
-            auto end = expect(TokenType::RBrace);
-            auto ip = std::make_unique<InterpolatedPart>(std::move(expr));
-            auto p =
-                std::make_unique<StringExprPart>(StringExprPart::Type::Interpolated, std::move(ip));
-            parts.emplace_back(std::move(p));
-            break;
-        }
-        case TokenType::Quote:
-        {
-            auto string_expr = std::make_unique<StringExpr>(std::move(parts));
-            return {std::move(string_expr), TokenError()};
-        }
-        default:
-        {
-            auto loc = source_location(t->start_pos, t->end_pos);
-            std::stringstream ss;
-            ss << "got unexpcted token in string expression " << loc << ": "
-               << token_to_string(t->tok);
-            errs_.emplace_back(ss.str());
-            auto string_expr = std::make_unique<StringExpr>();
-            return {std::move(string_expr), TokenError()};
-        }
+            case TokenType::StringExpr: {
+                auto expr = parse_expression();
+                auto end = expect(TokenType::RBrace);
+                auto ip = std::make_unique<InterpolatedPart>(std::move(expr));
+                auto p = std::make_unique<StringExprPart>(StringExprPart::Type::Interpolated,
+                                                          std::move(ip));
+                parts.emplace_back(std::move(p));
+                break;
+            }
+            case TokenType::Quote: {
+                auto string_expr = std::make_unique<StringExpr>(std::move(parts));
+                return {std::move(string_expr), TokenError()};
+            }
+            default: {
+                auto loc = source_location(t->start_pos, t->end_pos);
+                std::stringstream ss;
+                ss << "got unexpcted token in string expression " << loc << ": "
+                   << token_to_string(t->tok);
+                errs_.emplace_back(ss.str());
+                auto string_expr = std::make_unique<StringExpr>();
+                return {std::move(string_expr), TokenError()};
+            }
         }
     }
 }
@@ -1523,98 +1517,90 @@ std::unique_ptr<Expression> Parser::parse_primary_expression() {
     FLUX_DEBUG(t->lit);
     auto ret = std::make_unique<Expression>();
     switch (t->tok) {
-    case TokenType::Ident:
-    {
-        ret->type = Expression::Type::Identifier;
-        ret->expr = parse_identifier();
-        break;
-    }
-    case TokenType::Int:
-    {
-        ret->type = Expression::Type::IntegerLit;
-        ret->expr = parse_int_literal();
-        break;
-    }
-    case TokenType::Float:
-    {
-        TokenError err;
-        std::unique_ptr<FloatLit> fl;
-        std::tie(fl, err) = parse_float_literal();
-        if (fl) {
-            ret->type = Expression::Type::FloatLit;
-            ret->expr = std::move(fl);
-        } else {
-            return create_bad_expression(std::move(err.token));
+        case TokenType::Ident: {
+            ret->type = Expression::Type::Identifier;
+            ret->expr = parse_identifier();
+            break;
         }
-        break;
-    }
-    case TokenType::String:
-    {
-        ret->type = Expression::Type::StringLit;
-        ret->expr = parse_string_literal();
-        break;
-    }
-    case TokenType::Quote:
-    {
-        std::unique_ptr<StringExpr> str_expr;
-        TokenError err;
-        std::tie(str_expr, err) = parse_string_expression();
-        if (str_expr) {
-            ret->type = Expression::Type::StringExpr;
-            ret->expr = std::move(str_expr);
+        case TokenType::Int: {
+            ret->type = Expression::Type::IntegerLit;
+            ret->expr = parse_int_literal();
+            break;
         }
-        break;
-    }
-    case TokenType::Regex:
-        ret->type = Expression::Type::RegexpLit;
-        ret->expr = parse_regexp_literral();
-        break;
-    case TokenType::Time:
-    {
-        std::unique_ptr<DateTimeLit> lit;
-        TokenError err;
-        std::tie(lit, err) = parse_time_literal();
-        if (!lit) {
-            return create_bad_expression_with_text(
-                std::move(err.token), "invalid data time literal, missing time offset");
+        case TokenType::Float: {
+            TokenError err;
+            std::unique_ptr<FloatLit> fl;
+            std::tie(fl, err) = parse_float_literal();
+            if (fl) {
+                ret->type = Expression::Type::FloatLit;
+                ret->expr = std::move(fl);
+            } else {
+                return create_bad_expression(std::move(err.token));
+            }
+            break;
         }
-        ret->type = Expression::Type::DateTimeLit;
-        ret->expr = std::move(lit);
-        break;
-    }
-    case TokenType::Duration:
-    {
-        std::unique_ptr<DurationLit> lit;
-        TokenError err;
-        std::tie(lit, err) = parse_duration_literal();
-        if (!lit) {
-            return create_bad_expression(std::move(err.token));
+        case TokenType::String: {
+            ret->type = Expression::Type::StringLit;
+            ret->expr = parse_string_literal();
+            break;
         }
-        ret->type = Expression::Type::DurationLit;
-        ret->expr = std::move(lit);
-        break;
-    }
-    case TokenType::PipeReceive:
-        ret->type = Expression::Type::PipeLit;
-        ret->expr = parse_pipe_literal();
-        break;
-    case TokenType::LBrack:
-    {
-        auto start = open(TokenType::LBrack, TokenType::RBrack);
-        return parse_array_or_dict(std::move(start));
-    }
-    case TokenType::LBrace:
-        ret->type = Expression::Type::ObjectExpr;
-        ret->expr = parse_object_literal();
-        break;
-    case TokenType::LParen:
-        return parse_paren_expression();
-    case TokenType::Dot:
-        ret->type = Expression::Type::LabelLit;
-        ret->expr = parse_label_literal();
-        break;
-    default:
-        break;
+        case TokenType::Quote: {
+            std::unique_ptr<StringExpr> str_expr;
+            TokenError err;
+            std::tie(str_expr, err) = parse_string_expression();
+            if (str_expr) {
+                ret->type = Expression::Type::StringExpr;
+                ret->expr = std::move(str_expr);
+            }
+            break;
+        }
+        case TokenType::Regex:
+            ret->type = Expression::Type::RegexpLit;
+            ret->expr = parse_regexp_literral();
+            break;
+        case TokenType::Time: {
+            std::unique_ptr<DateTimeLit> lit;
+            TokenError err;
+            std::tie(lit, err) = parse_time_literal();
+            if (!lit) {
+                return create_bad_expression_with_text(
+                    std::move(err.token), "invalid data time literal, missing time offset");
+            }
+            ret->type = Expression::Type::DateTimeLit;
+            ret->expr = std::move(lit);
+            break;
+        }
+        case TokenType::Duration: {
+            std::unique_ptr<DurationLit> lit;
+            TokenError err;
+            std::tie(lit, err) = parse_duration_literal();
+            if (!lit) {
+                return create_bad_expression(std::move(err.token));
+            }
+            ret->type = Expression::Type::DurationLit;
+            ret->expr = std::move(lit);
+            break;
+        }
+        case TokenType::PipeReceive:
+            ret->type = Expression::Type::PipeLit;
+            ret->expr = parse_pipe_literal();
+            break;
+        case TokenType::LBrack: {
+            auto start = open(TokenType::LBrack, TokenType::RBrack);
+            return parse_array_or_dict(std::move(start));
+        }
+        case TokenType::LBrace:
+            ret->type = Expression::Type::ObjectExpr;
+            ret->expr = parse_object_literal();
+            break;
+        case TokenType::LParen:
+            return parse_paren_expression();
+        case TokenType::Dot:
+            ret->type = Expression::Type::LabelLit;
+            ret->expr = parse_label_literal();
+            break;
+        default:
+            break;
     }
     return ret;
 }
@@ -1764,22 +1750,22 @@ std::unique_ptr<Token> Parser::expect_one_of(const std::set<TokenType>& exp) {
     auto exp_to_string = [&exp]() -> std::string {
         auto len = exp.size();
         switch (len) {
-        case 0:
-            return "";
-        case 1:
-            return token_to_string(*(exp.begin()));
-        default:
-            bool first = true;
-            std::stringstream ss;
-            for (auto tt : exp) {
-                if (!first) {
-                    ss << " or ";
-                } else {
-                    first = false;
+            case 0:
+                return "";
+            case 1:
+                return token_to_string(*(exp.begin()));
+            default:
+                bool first = true;
+                std::stringstream ss;
+                for (auto tt : exp) {
+                    if (!first) {
+                        ss << " or ";
+                    } else {
+                        first = false;
+                    }
+                    ss << token_to_string(tt);
                 }
-                ss << token_to_string(tt);
-            }
-            return ss.str();
+                return ss.str();
         }
     };
 

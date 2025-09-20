@@ -14,10 +14,9 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include <tbb/parallel_invoke.h>
-
 #include <iostream>
 #include <string>
+#include <tbb/parallel_invoke.h>
 
 int main(int argc, char* argv[]) {
     std::string s = "hello world";

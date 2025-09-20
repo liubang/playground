@@ -19,7 +19,6 @@
 #include "cpp/pl/arena/arena.h"
 #include "cpp/pl/sst/comparator.h"
 #include "cpp/pl/sst/encoding.h"
-
 #include "cpp/pl/status/result.h"
 #include <cassert>
 #include <cstdint>

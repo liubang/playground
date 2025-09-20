@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/bf/yabf.h"
-
 #include <gtest/gtest.h>
 
 TEST(bf, yabf) {

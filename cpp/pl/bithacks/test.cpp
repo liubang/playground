@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "all.h"
-
 #include <gtest/gtest.h>
 
 TEST(bithacks, sign_of_integer) {

@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/log/logger.h"
-
 #include <thread>
 
 int main(int argc, char* argv[]) {

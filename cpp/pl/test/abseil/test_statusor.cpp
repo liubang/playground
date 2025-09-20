@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "absl/status/statusor.h"
-
 #include <gtest/gtest.h>
 
 namespace pl {

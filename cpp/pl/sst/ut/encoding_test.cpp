@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/sst/encoding.h"
-
 #include <gtest/gtest.h>
 #include <string_view>
 
