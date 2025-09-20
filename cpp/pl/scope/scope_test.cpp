@@ -14,7 +14,6 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 #include "cpp/pl/scope/scope.h"
-
 #include <gtest/gtest.h>
 
 TEST(tools, scope) {

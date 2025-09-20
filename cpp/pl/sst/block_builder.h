@@ -19,7 +19,6 @@
 #include "cpp/pl/sst/cell.h"
 #include "cpp/pl/sst/comparator.h"
 #include "cpp/pl/sst/options.h"
-
 #include <string>
 #include <vector>
 

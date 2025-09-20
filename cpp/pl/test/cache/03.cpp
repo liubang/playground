@@ -14,10 +14,9 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
+#include <benchmark/benchmark.h>
 #include <cstddef>
 #include <vector>
-
-#include <benchmark/benchmark.h>
 
 constexpr size_t n = 1 << 28;
 std::vector<float> a(n);

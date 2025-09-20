@@ -73,40 +73,40 @@ struct {
         }                                                        \
     }
 
-#define co_resume(co)                                                    \
-    do {                                                                 \
-        switch (co->state) {                                             \
-        case CoroutineState::STOP:                                       \
-            if (!Context.current_co) {                                   \
-                if (setjmp(Context.start_buf) == 0) {                    \
-                    co->state = CoroutineState::RUNNING;                 \
-                    Context.current_co = co;                             \
-                    co->func();                                          \
-                }                                                        \
-            } else {                                                     \
-                if (setjmp(Context.current_co->buf) == 0) {              \
-                    Context.current_co->state = CoroutineState::SUSPEND; \
-                    co->from = Context.current_co;                       \
-                    co->state = CoroutineState::RUNNING;                 \
-                    Context.current_co = co;                             \
-                    co->func();                                          \
-                }                                                        \
-            }                                                            \
-            break;                                                       \
-        case CoroutineState::SUSPEND:                                    \
-            if (!Context.current_co) {                                   \
-                Context.current_co = co;                                 \
-            }                                                            \
-            if (Context.current_co->from) {                              \
-                std::longjmp(Context.current_co->from->buf, __LINE__);   \
-            } else {                                                     \
-                if (setjmp(Context.start_buf) == 0) {                    \
-                    std::longjmp(Context.current_co->buf, __LINE__);     \
-                }                                                        \
-            }                                                            \
-            break;                                                       \
-        default:;                                                        \
-        }                                                                \
+#define co_resume(co)                                                        \
+    do {                                                                     \
+        switch (co->state) {                                                 \
+            case CoroutineState::STOP:                                       \
+                if (!Context.current_co) {                                   \
+                    if (setjmp(Context.start_buf) == 0) {                    \
+                        co->state = CoroutineState::RUNNING;                 \
+                        Context.current_co = co;                             \
+                        co->func();                                          \
+                    }                                                        \
+                } else {                                                     \
+                    if (setjmp(Context.current_co->buf) == 0) {              \
+                        Context.current_co->state = CoroutineState::SUSPEND; \
+                        co->from = Context.current_co;                       \
+                        co->state = CoroutineState::RUNNING;                 \
+                        Context.current_co = co;                             \
+                        co->func();                                          \
+                    }                                                        \
+                }                                                            \
+                break;                                                       \
+            case CoroutineState::SUSPEND:                                    \
+                if (!Context.current_co) {                                   \
+                    Context.current_co = co;                                 \
+                }                                                            \
+                if (Context.current_co->from) {                              \
+                    std::longjmp(Context.current_co->from->buf, __LINE__);   \
+                } else {                                                     \
+                    if (setjmp(Context.start_buf) == 0) {                    \
+                        std::longjmp(Context.current_co->buf, __LINE__);     \
+                    }                                                        \
+                }                                                            \
+                break;                                                       \
+            default:;                                                        \
+        }                                                                    \
     } while (0);
 
 #define co_yield()                                               \

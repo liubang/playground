@@ -14,10 +14,9 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
+#include "scanner.h"
 #include <iostream>
 #include <memory>
-
-#include "scanner.h"
 
 int main(int argc, char* argv[]) {
     std::string flux = R"(

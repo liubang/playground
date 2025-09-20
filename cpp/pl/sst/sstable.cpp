@@ -15,10 +15,10 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/sst/sstable.h"
+
 #include "cpp/pl/fs/posix_fs.h"
 #include "cpp/pl/sst/encoding.h"
 #include "cpp/pl/sst/sstable_iterator.h"
-
 #include <folly/ScopeGuard.h>
 
 namespace pl {
@@ -105,16 +105,16 @@ Result<Void> SSTable::readFilter(const Footer& footer) {
 
     auto num_probes = decodeInt<uint8_t>(block.data.data() + (block.data.size() - 1));
     switch (filter_type) {
-    case FilterPolicyType::STANDARD_BLOOM_FILTER:
-        filter_ = std::make_unique<StandardBloomFilterReader>(block.data.data(), block.data.size(),
-                                                              num_probes);
-        break;
-    case pl::FilterPolicyType::BLOCKED_BLOOM_FILTER:
-        filter_ = std::make_unique<BlockedBloomFilterReader>(block.data.data(), block.data.size(),
-                                                             num_probes);
-        break;
-    default:
-        assert(false);
+        case FilterPolicyType::STANDARD_BLOOM_FILTER:
+            filter_ = std::make_unique<StandardBloomFilterReader>(block.data.data(),
+                                                                  block.data.size(), num_probes);
+            break;
+        case pl::FilterPolicyType::BLOCKED_BLOOM_FILTER:
+            filter_ = std::make_unique<BlockedBloomFilterReader>(block.data.data(),
+                                                                 block.data.size(), num_probes);
+            break;
+        default:
+            assert(false);
     }
 
     RETURN_VOID;

@@ -15,14 +15,12 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/thread/thread_pool.h"
-
 #include <chrono>
 #include <future>
+#include <gtest/gtest.h>
 #include <iostream>
 #include <utility>
 #include <vector>
-
-#include <gtest/gtest.h>
 
 TEST(thread_pool, thread_pool) {
     int n = 1024;

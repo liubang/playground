@@ -15,8 +15,8 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/log/logger.h"
-#include "cpp/pl/thread/thread.h"
 
+#include "cpp/pl/thread/thread.h"
 #include <cstdio>
 #include <fmt/chrono.h>
 #include <fmt/format.h>

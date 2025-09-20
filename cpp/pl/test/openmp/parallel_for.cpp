@@ -14,9 +14,8 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include <nanobench.h>
-
 #include <cmath>
+#include <nanobench.h>
 #include <vector>
 
 static constexpr std::size_t n = 1 << 26;

@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/arena/arena_old.h"
-
 #include <gtest/gtest.h>
 
 TEST(arena, allocate) {

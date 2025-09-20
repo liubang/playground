@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/defer/defer.h"
-
 #include <iostream>
 
 int main(int argc, char* argv[]) {
