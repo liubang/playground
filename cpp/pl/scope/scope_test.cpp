@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/05/21 02:32
 #include "cpp/pl/scope/scope.h"
-
 #include <gtest/gtest.h>
 
 TEST(tools, scope) {

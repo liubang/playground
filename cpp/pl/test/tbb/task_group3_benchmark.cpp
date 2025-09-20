@@ -15,11 +15,10 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/06/18 13:13
 
-#include <nanobench.h>
-#include <tbb/task_group.h>
-
 #include <cmath>
 #include <iostream>
+#include <nanobench.h>
+#include <tbb/task_group.h>
 #include <vector>
 
 constexpr size_t n = 1 << 26;

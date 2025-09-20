@@ -16,7 +16,6 @@
 // Created: 2023/06/04 20:10
 
 #include "cpp/pl/bits/bits.h"
-
 #include <iostream>
 
 int main(int argc, char* argv[]) {

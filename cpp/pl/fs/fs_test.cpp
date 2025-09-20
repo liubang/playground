@@ -16,7 +16,6 @@
 // Created: 2023/05/29 17:22
 
 #include "cpp/pl/fs/posix_fs.h"
-
 #include <cstdio>
 #include <gtest/gtest.h>
 #include <memory>
