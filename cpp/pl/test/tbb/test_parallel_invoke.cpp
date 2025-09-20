@@ -14,10 +14,9 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include <tbb/parallel_invoke.h>
-
 #include <iostream>
 #include <string>
+#include <tbb/parallel_invoke.h>
 
 void download(const std::string& file) {
     for (int i = 0; i < 10; ++i) {

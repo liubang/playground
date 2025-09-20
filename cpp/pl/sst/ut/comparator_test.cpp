@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/sst/comparator.h"
-
 #include <gtest/gtest.h>
 #include <memory>
 

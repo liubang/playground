@@ -15,9 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/sst/block.h"
+
 #include "cpp/pl/sst/cell.h"
 #include "cpp/pl/sst/encoding.h"
-
 #include <cassert>
 #include <utility>
 

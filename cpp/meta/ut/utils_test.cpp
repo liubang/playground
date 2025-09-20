@@ -15,9 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/meta/ut/utils_test.h"
+
 #include "cpp/meta/traits.h"
 #include "cpp/meta/utils.h"
-
 #include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("utils", "[array]") {

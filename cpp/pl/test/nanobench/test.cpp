@@ -1,7 +1,6 @@
 #define ANKERL_NANOBENCH_IMPLEMENT
-#include <nanobench.h>
-
 #include <chrono>
+#include <nanobench.h>
 #include <random>
 #include <thread>
 

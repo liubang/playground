@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "absl/strings/str_split.h"
-
 #include <gtest/gtest.h>
 #include <string>
 #include <string_view>

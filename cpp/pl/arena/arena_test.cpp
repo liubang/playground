@@ -15,9 +15,7 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/arena/arena.h"
-
 #include <gtest/gtest.h>
-
 #include <utility>
 
 namespace {

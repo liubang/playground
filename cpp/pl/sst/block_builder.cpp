@@ -15,8 +15,8 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/sst/block_builder.h"
-#include "cpp/pl/sst/encoding.h"
 
+#include "cpp/pl/sst/encoding.h"
 #include <cassert>
 
 namespace pl {

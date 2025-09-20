@@ -15,8 +15,8 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/llvm/kaleidoscope/ast.h"
-#include "cpp/pl/llvm/kaleidoscope/laxer.h"
 
+#include "cpp/pl/llvm/kaleidoscope/laxer.h"
 #include <map>
 
 namespace pl::llvm {
@@ -108,14 +108,14 @@ std::unique_ptr<ExprAST> parse_identifier_expr() {
 
 std::unique_ptr<ExprAST> parse_primary() {
     switch (curtok()) {
-    case tok_identifier:
-        return parse_identifier_expr();
-    case tok_number:
-        return parse_number_expr();
-    case '(':
-        return parse_paren_expr();
-    default:
-        return log_error("unknown token when expecting an expression");
+        case tok_identifier:
+            return parse_identifier_expr();
+        case tok_number:
+            return parse_number_expr();
+        case '(':
+            return parse_paren_expr();
+        default:
+            return log_error("unknown token when expecting an expression");
     }
 }
 
@@ -228,20 +228,20 @@ void run() {
     for (;;) {
         fprintf(stderr, "ready> ");
         switch (curtok()) {
-        case tok_eof:
-            return;
-        case ';':
-            get_next_token();
-            break;
-        case tok_def:
-            handle_definition();
-            break;
-        case tok_extern:
-            handle_extern();
-            break;
-        default:
-            handle_top_level_expression();
-            break;
+            case tok_eof:
+                return;
+            case ';':
+                get_next_token();
+                break;
+            case tok_def:
+                handle_definition();
+                break;
+            case tok_extern:
+                handle_extern();
+                break;
+            default:
+                handle_top_level_expression();
+                break;
         }
     }
 }
