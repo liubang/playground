@@ -15,11 +15,10 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/06/18 14:35
 
+#include <cmath>
 #include <nanobench.h>
 #include <tbb/concurrent_vector.h>
 #include <tbb/parallel_for.h>
-
-#include <cmath>
 
 constexpr size_t n = 1 << 10;
 

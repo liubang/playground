@@ -1,5 +1,4 @@
 #include "fslock.h"
-
 #include <gtest/gtest.h>
 #include <random>
 #include <thread>

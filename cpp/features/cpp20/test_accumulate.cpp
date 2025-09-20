@@ -16,11 +16,10 @@
 // Created: 2023/06/04 16:53
 
 #include <bitset>
+#include <catch2/catch_test_macros.hpp>
 #include <numeric>
 #include <string>
 #include <vector>
-
-#include <catch2/catch_test_macros.hpp>
 
 // since c++20
 TEST_CASE("modern", "[test_accumulate]") {

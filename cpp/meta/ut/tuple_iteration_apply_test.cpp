@@ -16,7 +16,6 @@
 // Created: 2023/05/21 23:23
 
 #include "cpp/meta/tuple_iteration_apply.h"
-
 #include <catch2/catch_test_macros.hpp>
 #include <tuple>
 

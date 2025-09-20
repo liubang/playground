@@ -16,7 +16,6 @@
 // Created: 2024/12/18 22:09
 
 #include "cpp/pl/bloom/bloom.h"
-
 #include <gtest/gtest.h>
 
 TEST(bloom, blocked_bloom_filter) {}
