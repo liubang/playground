@@ -16,7 +16,6 @@
 // Created: 2024/12/22 14:09
 
 #include "cpp/pl/lang/common.h"
-
 #include <benchmark/benchmark.h>
 #include <vector>
 

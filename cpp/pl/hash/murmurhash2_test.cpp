@@ -16,7 +16,6 @@
 // Created: 2023/05/21 22:42
 
 #include "cpp/pl/hash/murmurhash2.h"
-
 #include <gtest/gtest.h>
 
 TEST(hash, murmurhash2_test) {

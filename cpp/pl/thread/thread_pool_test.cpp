@@ -16,14 +16,12 @@
 // Created: 2023/05/21 23:50
 
 #include "cpp/pl/thread/thread_pool.h"
-
 #include <chrono>
 #include <future>
+#include <gtest/gtest.h>
 #include <iostream>
 #include <utility>
 #include <vector>
-
-#include <gtest/gtest.h>
 
 TEST(thread_pool, thread_pool) {
     int n = 1024;

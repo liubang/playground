@@ -17,7 +17,6 @@
 
 #include "cpp/pl/random/random.h"
 #include "cpp/pl/sst/cell.h"
-
 #include <gtest/gtest.h>
 
 namespace pl {

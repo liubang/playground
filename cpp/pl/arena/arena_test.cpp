@@ -16,9 +16,7 @@
 // Created: 2022/01/05 20:44
 
 #include "cpp/pl/arena/arena.h"
-
 #include <gtest/gtest.h>
-
 #include <utility>
 
 namespace {
