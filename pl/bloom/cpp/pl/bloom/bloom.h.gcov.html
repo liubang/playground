@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-09-20 14:36:58</td>
+            <td class="headerValue">2025-09-27 16:03:31</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">83.3&nbsp;%</td>
@@ -238,12 +238,12 @@
 <span id="L176"><span class="lineNum">     176</span>              : </span>
 <span id="L177"><span class="lineNum">     177</span> <span class="tlaGNC">         999 :     static bool hash_may_match(uint32_t h, uint32_t total_bits, int num_probes, const char* data) {</span></span>
 <span id="L178"><span class="lineNum">     178</span> <span class="tlaGNC">         999 :         const uint32_t delta = (h &gt;&gt; 17) | (h &lt;&lt; 15); // Rotate right 17 bits</span></span>
-<span id="L179"><span class="lineNum">     179</span> <span class="tlaGNC">        3340 :         for (int i = 0; i &lt; num_probes; ++i) {</span></span>
-<span id="L180"><span class="lineNum">     180</span> <span class="tlaGNC">        3006 :             const uint32_t bitpos = h % total_bits;</span></span>
-<span id="L181"><span class="lineNum">     181</span> <span class="tlaGNC">        3006 :             if ((data[bitpos &gt;&gt; 3] &amp; (uint8_t{1} &lt;&lt; (bitpos &amp; 7))) == 0) {</span></span>
+<span id="L179"><span class="lineNum">     179</span> <span class="tlaGNC">        3334 :         for (int i = 0; i &lt; num_probes; ++i) {</span></span>
+<span id="L180"><span class="lineNum">     180</span> <span class="tlaGNC">        2999 :             const uint32_t bitpos = h % total_bits;</span></span>
+<span id="L181"><span class="lineNum">     181</span> <span class="tlaGNC">        2999 :             if ((data[bitpos &gt;&gt; 3] &amp; (uint8_t{1} &lt;&lt; (bitpos &amp; 7))) == 0) {</span></span>
 <span id="L182"><span class="lineNum">     182</span>              :                 return false;</span>
 <span id="L183"><span class="lineNum">     183</span>              :             }</span>
-<span id="L184"><span class="lineNum">     184</span> <span class="tlaGNC">        2341 :             h += delta;</span></span>
+<span id="L184"><span class="lineNum">     184</span> <span class="tlaGNC">        2335 :             h += delta;</span></span>
 <span id="L185"><span class="lineNum">     185</span>              :         }</span>
 <span id="L186"><span class="lineNum">     186</span>              :         return true;</span>
 <span id="L187"><span class="lineNum">     187</span>              :     }</span>
