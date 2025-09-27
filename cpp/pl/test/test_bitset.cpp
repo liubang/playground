@@ -17,6 +17,14 @@ int main(int argc, char* argv[]) {
         std::bitset<64> bs = c;
         std::cout << bs << "\n";
     }
+    std::bitset<64> bs = a;
+    bs.flip();
+    std::cout << bs << "\n";
+
+    std::cout << "=======================\n";
+    std::string s = bs.to_string();
+
+    std::cout << s << std::endl;
 
     return 0;
 }
