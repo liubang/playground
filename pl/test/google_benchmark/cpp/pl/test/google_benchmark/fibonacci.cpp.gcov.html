@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2025-09-27 16:03:31</td>
+            <td class="headerValue">2025-10-01 08:26:12</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -63,13 +63,13 @@
 <span id="L1"><span class="lineNum">       1</span>              : #include &lt;benchmark/benchmark.h&gt;</span>
 <span id="L2"><span class="lineNum">       2</span>              : #include &lt;cstdint&gt;</span>
 <span id="L3"><span class="lineNum">       3</span>              : </span>
-<span id="L4"><span class="lineNum">       4</span> <span class="tlaGNC tlaBgGNC">   350184432 : std::uint64_t Fibonacci(std::uint64_t number) {</span></span>
-<span id="L5"><span class="lineNum">       5</span> <span class="tlaGNC">   700336872 :     return number &lt; 2 ? 1 : Fibonacci(number - 1) + Fibonacci(number - 2);</span></span>
+<span id="L4"><span class="lineNum">       4</span> <span class="tlaGNC tlaBgGNC">   387313264 : std::uint64_t Fibonacci(std::uint64_t number) {</span></span>
+<span id="L5"><span class="lineNum">       5</span> <span class="tlaGNC">   774591144 :     return number &lt; 2 ? 1 : Fibonacci(number - 1) + Fibonacci(number - 2);</span></span>
 <span id="L6"><span class="lineNum">       6</span>              : }</span>
 <span id="L7"><span class="lineNum">       7</span>              : </span>
 <span id="L8"><span class="lineNum">       8</span> <span class="tlaGNC">           6 : static void BM_StringCreation(benchmark::State&amp; state) {</span></span>
 <span id="L9"><span class="lineNum">       9</span>              :     for (auto _ : state) {</span>
-<span id="L10"><span class="lineNum">      10</span> <span class="tlaGNC">       31992 :         Fibonacci(20);</span></span>
+<span id="L10"><span class="lineNum">      10</span> <span class="tlaGNC">       35384 :         Fibonacci(20);</span></span>
 <span id="L11"><span class="lineNum">      11</span>              :     }</span>
 <span id="L12"><span class="lineNum">      12</span> <span class="tlaGNC">           6 : }</span></span>
 <span id="L13"><span class="lineNum">      13</span>              : </span>
