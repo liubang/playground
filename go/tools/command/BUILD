@@ -1,4 +1,4 @@
-# Copyright (c) 2023 The Authors. All rights reserved.
+# Copyright (c) 2025 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,15 +16,9 @@
 
 load("@rules_go//go:def.bzl", "go_binary", "go_library")
 
-go_binary(
-    name = "time",
-    embed = [":time_lib"],
-    visibility = ["//visibility:public"],
-)
-
 go_library(
-    name = "time_lib",
-    srcs = ["main.go"],
-    importpath = "github.com/playground/go/misc/time",
-    visibility = ["//visibility:private"],
+    name = "command_lib",
+    srcs = ["command.go"],
+    importpath = "github.com/playground/go/tools/command",
+    visibility = ["//visibility:public"],
 )

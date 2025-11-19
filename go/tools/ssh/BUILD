@@ -1,4 +1,4 @@
-# Copyright (c) 2024 The Authors. All rights reserved.
+# Copyright (c) 2025 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,14 +17,12 @@
 load("@rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
-    name = "ping_lib",
-    srcs = ["main.go"],
-    importpath = "github.com/playground/go/tools/ping",
-    visibility = ["//visibility:private"],
-)
-
-go_binary(
-    name = "ping",
-    embed = [":ping_lib"],
+    name = "ssh_lib",
+    srcs = ["ssh.go"],
+    importpath = "github.com/playground/go/tools/ssh",
     visibility = ["//visibility:public"],
+    deps = [
+        "//go/tools/command:command_lib",
+        "@com_github_sirupsen_logrus//:logrus",
+    ],
 )
