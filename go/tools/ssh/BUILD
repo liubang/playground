@@ -13,19 +13,17 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/07/16 23:54
+# Created: 2023/06/15 13:32
 
 load("@rules_go//go:def.bzl", "go_binary", "go_library")
 
-go_binary(
-    name = "strings",
-    embed = [":strings_lib"],
-    visibility = ["//visibility:public"],
-)
-
 go_library(
-    name = "strings_lib",
-    srcs = ["main.go"],
-    importpath = "github.com/playground/go/misc/strings",
-    visibility = ["//visibility:private"],
+    name = "ssh_lib",
+    srcs = ["ssh.go"],
+    importpath = "github.com/playground/go/tools/ssh",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//go/tools/command:command_lib",
+        "@com_github_sirupsen_logrus//:logrus",
+    ],
 )
