@@ -27,4 +27,3 @@ go_library(
         "@com_github_sirupsen_logrus//:logrus",
     ],
 )
-
