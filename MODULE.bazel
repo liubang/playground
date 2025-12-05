@@ -37,7 +37,7 @@ git_override(
 )
 
 # apple support
-bazel_dep(name = "apple_support", version = "1.22.1", repo_name = "build_bazel_apple_support")
+bazel_dep(name = "apple_support", version = "1.24.5", repo_name = "build_bazel_apple_support")
 
 # foreign cc
 bazel_dep(name = "rules_cc", version = "0.1.2")
@@ -88,7 +88,7 @@ bazel_dep(name = "sqlite3", version = "3.42.0")
 bazel_dep(name = "nlohmann_json", version = "3.11.2")
 bazel_dep(name = "glog", version = "0.7.1")
 bazel_dep(name = "gflags", version = "2.2.2")
-bazel_dep(name = "asio", version = "1.32.0")
+bazel_dep(name = "asio", version = "1.34.2")
 bazel_dep(name = "isa-l", version = "2.31")
 bazel_dep(name = "xxhash", version = "0.8.3")
 bazel_dep(name = "magic_enum", version = "0.9.6")
