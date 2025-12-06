@@ -111,7 +111,7 @@ trimesh==4.7.1
 triton==3.3.1
 typing-extensions==4.14.1
 typing-inspection==0.4.1
-urllib3==2.5.0
+urllib3==2.6.0
 xxhash==3.5.0
 yarl==1.20.1
 zipp==3.23.0
