@@ -47,7 +47,7 @@ func CommandOutput(ctx context.Context, dir, commandName string, params []string
 			}
 			err := syscall.Kill(-pid, syscall.SIGKILL)
 			if err != nil {
-				return output.String(), errors.New(ctx.Err().Error() + "," + err.Error())
+				return output.String(), errors.New(ctx.Err().Error() + "; " + err.Error())
 			}
 		}
 		return output.String(), ctx.Err()
