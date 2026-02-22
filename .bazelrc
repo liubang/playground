@@ -25,9 +25,12 @@ common --noincompatible_disallow_empty_glob
 common --color=yes
 common --experimental_ui_max_stdouterr_bytes=1073741819
 
-build --jobs=10
+build --jobs=8
 build --cxxopt=-std=c++17
 build --host_cxxopt=-std=c++17
+build --macos_minimum_os=13.3
+
+build:release --compilation_mode=opt
 
 # for llvm
 build:llvm --action_env=CC=/opt/app/llvm/bin/clang
@@ -43,13 +46,13 @@ build:llvm --cxxopt=-Wno-error=unused-but-set-parameter
 # for gcc
 build:gcc --linkopt=-fuse-ld=gold
 
-build:release --compilation_mode=opt
-
 # default linux using gcc
 build:linux --config=gcc
 
 # default macos
-build:macos --action_env=CC=/opt/homebrew/opt/llvm@18/bin/clang
+build:macos --action_env=CC=/opt/homebrew/opt/llvm/bin/clang
+build:macos --cxxopt=-stdlib=libc++
+build:macos --linkopt=-stdlib=libc++
 build:macos --cxxopt=-Wno-error=unused-but-set-variable
 build:macos --cxxopt=-Wno-error=unused-but-set-parameter
 
