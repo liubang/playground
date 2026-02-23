@@ -247,7 +247,7 @@ register_toolchains("@flex//:toolchain")
 # for go
 ###################################################################################################
 bazel_dep(name = "rules_go", version = "0.60.0")
-bazel_dep(name = "gazelle", version = "0.45.0")
+bazel_dep(name = "gazelle", version = "0.47.0")
 
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
 go_sdk.download(version = "1.23.0")
@@ -268,8 +268,8 @@ use_repo(
 ###################################################################################################
 #  python
 ###################################################################################################
-bazel_dep(name = "rules_python", version = "1.5.1")
-bazel_dep(name = "rules_python_gazelle_plugin", version = "1.5.1")
+bazel_dep(name = "rules_python", version = "1.8.4")
+bazel_dep(name = "rules_python_gazelle_plugin", version = "1.8.4")
 
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
 python.toolchain(
