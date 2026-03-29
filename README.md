@@ -1,8 +1,16 @@
-# Playground
+<h1 align="center">Playground</h1>
 
-[![build-cpp](https://img.shields.io/github/actions/workflow/status/liubang/playground/build_cpp.yml?label=build-cpp&style=flat-square&branch=main)](https://github.com/liubang/playground/actions/workflows/build_cpp.yml)
-[![build-go](https://img.shields.io/github/actions/workflow/status/liubang/playground/build_go.yml?label=build-go&style=flat-square&branch=main)](https://github.com/liubang/playground/actions/workflows/build_go.yml)
-[![build-python](https://img.shields.io/github/actions/workflow/status/liubang/playground/build_python.yml?label=build-python&style=flat-square&branch=main)](https://github.com/liubang/playground/actions/workflows/build_python.yml)
+<p align="center">
+  <a href="https://github.com/liubang/playground/actions/workflows/build_cpp.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_cpp.yml?label=build-cpp&style=flat-square&branch=main" alt="build-cpp" />
+  </a>
+  <a href="https://github.com/liubang/playground/actions/workflows/build_go.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_go.yml?label=build-go&style=flat-square&branch=main" alt="build-go" />
+  </a>
+  <a href="https://github.com/liubang/playground/actions/workflows/build_python.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_python.yml?label=build-python&style=flat-square&branch=main" alt="build-python" />
+  </a>
+</p>
 
 Personal multi-language playground for learning, prototyping, and validating small ideas. The repository is intentionally broad: it collects focused experiments, utility implementations, parser demos, build-system exercises, and supporting notes across several ecosystems.
 
