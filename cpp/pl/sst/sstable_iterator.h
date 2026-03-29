@@ -52,6 +52,8 @@ private:
     void initDataBlock();
     void forwardSkipEmptyData();
     void backwardSkipEmptyData();
+    [[nodiscard]] bool shouldStopSkipping() const;
+    void captureDataIterError();
 
 private:
     Status status_{StatusCode::kOK};

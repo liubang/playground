@@ -20,6 +20,14 @@
 
 namespace pl {
 
+namespace {
+
+[[nodiscard]] bool isTerminalStatus(const Status& status) {
+    return status.code() != StatusCode::kOK && status.code() != StatusCode::kKVStoreNotFound;
+}
+
+} // namespace
+
 void SSTableIterator::seek(std::string_view target) {
     index_iter_->seek(target);
     initDataBlock();
@@ -67,10 +75,10 @@ CellRef SSTableIterator::cell() const {
 }
 
 Status SSTableIterator::status() const {
-    if (!index_iter_->status().isOk()) {
+    if (isTerminalStatus(index_iter_->status())) {
         return index_iter_->status();
     }
-    if (data_iter_ != nullptr && !data_iter_->status().isOk()) {
+    if (data_iter_ != nullptr && isTerminalStatus(data_iter_->status())) {
         return data_iter_->status();
     }
     return status_;
@@ -94,6 +102,11 @@ void SSTableIterator::initDataBlock() {
 
 void SSTableIterator::forwardSkipEmptyData() {
     while (data_iter_ == nullptr || !data_iter_->valid()) {
+        captureDataIterError();
+        if (shouldStopSkipping()) {
+            data_iter_ = nullptr;
+            return;
+        }
         if (!index_iter_->valid()) {
             data_iter_ = nullptr;
             return;
@@ -108,6 +121,11 @@ void SSTableIterator::forwardSkipEmptyData() {
 
 void SSTableIterator::backwardSkipEmptyData() {
     while (data_iter_ == nullptr || !data_iter_->valid()) {
+        captureDataIterError();
+        if (shouldStopSkipping()) {
+            data_iter_ = nullptr;
+            return;
+        }
         if (!index_iter_->valid()) {
             data_iter_ = nullptr;
             return;
@@ -117,6 +135,17 @@ void SSTableIterator::backwardSkipEmptyData() {
         if (data_iter_ != nullptr) {
             data_iter_->last();
         }
+    }
+}
+
+bool SSTableIterator::shouldStopSkipping() const {
+    return isTerminalStatus(status_) || isTerminalStatus(index_iter_->status()) ||
+           (data_iter_ != nullptr && isTerminalStatus(data_iter_->status()));
+}
+
+void SSTableIterator::captureDataIterError() {
+    if (data_iter_ != nullptr && isTerminalStatus(data_iter_->status())) {
+        status_ = data_iter_->status();
     }
 }
 

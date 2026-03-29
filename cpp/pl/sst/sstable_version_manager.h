@@ -67,6 +67,8 @@ private:
 
 class SSTableVersionManager {
 public:
+    SSTableVersionManager() : current_(std::make_shared<SSTableVersion>()) {}
+
     void applyVersionEdit(const SSTableVersionEditRef& edit);
 
 public:

@@ -145,7 +145,7 @@ Result<Void> SSTableBuilder::writeBlock(BlockBuilder* block, BlockHandle* handle
             break;
         }
         case CompressionType::ISAL: {
-            // TODO(liubang):
+            return makeError(StatusCode::kNotImplemented, "ISAL compression not implemented");
         }
         default:
             break;

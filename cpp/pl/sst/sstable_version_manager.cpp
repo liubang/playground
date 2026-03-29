@@ -55,6 +55,7 @@ void SSTableVersion::delSSTable(SSTId id) {
 }
 
 void SSTableVersion::copyFrom(const SSTableVersionRef& version) {
+    assert(version != nullptr);
     sst_map_ = version->sst_map_;
     sst_patch_map_ = version->sst_patch_map_;
 }
@@ -64,6 +65,7 @@ void SSTableVersionEdit::addSSTable(const SSTableRef& sstable) { add_sstables_.p
 void SSTableVersionEdit::delSSTable(const SSTId& sstid) { del_sstables_.push_back(sstid); }
 
 void SSTableVersionManager::applyVersionEdit(const SSTableVersionEditRef& edit) {
+    assert(edit != nullptr);
     SSTableVersionRef new_version = std::make_shared<SSTableVersion>();
     new_version->copyFrom(current_);
 
