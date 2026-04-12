@@ -181,7 +181,8 @@ private:
     }
 
     void dump_property(const Property& property, const std::string& prefix, bool is_last) {
-        line(prefix, is_last, "Property key=" + property.key->string());
+        line(prefix, is_last, "Property key=" + property.key->string() +
+                                  location_summary(property.loc));
         if (property.value) {
             dump_expression(*property.value, child_prefix(prefix, is_last), true);
         }
@@ -303,7 +304,10 @@ private:
         line(prefix, is_last, "ArrayExpr");
         auto next = child_prefix(prefix, is_last);
         for (size_t i = 0; i < expr.elements.size(); ++i) {
-            dump_expression(*expr.elements[i]->expression, next, i + 1 == expr.elements.size());
+            line(next, i + 1 == expr.elements.size(),
+                 "ArrayItem" + location_summary(expr.elements[i]->loc));
+            dump_expression(*expr.elements[i]->expression,
+                            child_prefix(next, i + 1 == expr.elements.size()), true);
         }
     }
 
@@ -312,7 +316,7 @@ private:
         auto next = child_prefix(prefix, is_last);
         for (size_t i = 0; i < expr.elements.size(); ++i) {
             const auto& item = expr.elements[i];
-            line(next, i + 1 == expr.elements.size(), "DictItem");
+            line(next, i + 1 == expr.elements.size(), "DictItem" + location_summary(item->loc));
             auto item_prefix = child_prefix(next, i + 1 == expr.elements.size());
             dump_expression(*item->key, item_prefix, false);
             dump_expression(*item->val, item_prefix, true);
@@ -452,6 +456,7 @@ private:
                 label += constraint.kinds[i]->string();
             }
         }
+        label += location_summary(constraint.loc);
         line(prefix, is_last, label);
     }
 
@@ -736,7 +741,7 @@ private:
         });
     }
     void dump_property(const Property& property) {
-        node("Property", "key=" + property.key->string(), [&] {
+        node("Property", "key=" + property.key->string() + location_summary(property.loc), [&] {
             if (property.value) {
                 dump_expression(*property.value);
             }
@@ -843,7 +848,9 @@ private:
             bool first = true;
             for (const auto& item : expr.elements) {
                 element_prefix(first);
-                dump_expression(*item->expression);
+                node("ArrayItem", location_summary(item->loc), [&] {
+                    dump_expression(*item->expression);
+                });
             }
         });
     }
@@ -852,7 +859,7 @@ private:
             bool first = true;
             for (const auto& item : expr.elements) {
                 element_prefix(first);
-                node("DictItem", "", [&] {
+                node("DictItem", location_summary(item->loc), [&] {
                     bool child_first = true;
                     element_prefix(child_first);
                     dump_expression(*item->key);
@@ -1000,6 +1007,7 @@ private:
                 summary += constraint.kinds[i]->string();
             }
         }
+        summary += location_summary(constraint.loc);
         leaf("TypeConstraint", summary);
     }
     void dump_monotype(const MonoType& mono) {
