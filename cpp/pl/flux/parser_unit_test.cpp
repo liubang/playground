@@ -725,6 +725,35 @@ result = if exists config.enabled then "ok" else "missing"
     EXPECT_NE(json.find("\"summary\":\"path=\\\"array\\\" loc=2:1-2:15\""), std::string::npos);
 }
 
+TEST(FluxParserTest, DumpsSourceLocationsForNestedNodes) {
+    const std::string source = R"(
+config = {host: "local"}
+values = [1, 2]
+lookup = ["cpu": 1]
+builtin sum : int where A: Addable
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("nested_loc.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_TRUE(parser.errors().empty()) << ::testing::PrintToString(parser.errors());
+
+    const std::string tree = dump_ast(*file);
+    EXPECT_NE(tree.find("Property key=host loc="), std::string::npos);
+    EXPECT_NE(tree.find("ArrayItem loc="), std::string::npos);
+    EXPECT_NE(tree.find("DictItem loc="), std::string::npos);
+    EXPECT_NE(tree.find("TypeConstraint tvar=A kinds=Addable loc="), std::string::npos);
+
+    const std::string json = dump_ast_json(*file);
+    EXPECT_NE(json.find("\"type\":\"Property\""), std::string::npos);
+    EXPECT_NE(json.find("key=host loc="), std::string::npos);
+    EXPECT_NE(json.find("\"type\":\"ArrayItem\""), std::string::npos);
+    EXPECT_NE(json.find("\"type\":\"DictItem\""), std::string::npos);
+    EXPECT_NE(json.find("\"type\":\"TypeConstraint\""), std::string::npos);
+    EXPECT_NE(json.find("tvar=A, kinds=Addable loc="), std::string::npos);
+}
+
 TEST(FluxParserTest, RecoversFromInvalidObjectProperty) {
     const std::string source = R"(
 config = {host: "local", 1, port: 8080}
@@ -932,6 +961,35 @@ next = 42
     EXPECT_EQ("42", next->init->string());
 }
 
+TEST(FluxParserTest, ReportsMissingCommaInPositionalCallArguments) {
+    const std::string source = R"(
+result = contains(bucket measurement)
+next = 42
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("missing_call_comma.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_EQ(2, file->body.size());
+
+    const auto& result = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(result, nullptr);
+    ASSERT_NE(result->init, nullptr);
+    ASSERT_EQ(Expression::Type::CallExpr, result->init->type);
+
+    const auto& call = std::get<std::unique_ptr<CallExpr>>(result->init->expr);
+    ASSERT_NE(call, nullptr);
+    ASSERT_EQ(1, call->arguments.size());
+    EXPECT_EQ(Expression::Type::BinaryExpr, call->arguments[0]->type);
+
+    const auto& next = std::get<std::unique_ptr<VariableAssgn>>(file->body[1]->stmt);
+    ASSERT_NE(next, nullptr);
+    EXPECT_EQ("next", next->id->name);
+    EXPECT_EQ("42", next->init->string());
+}
+
 TEST(FluxParserTest, RecoversFromInvalidArrayElement) {
     const std::string source = R"(
 values = [1,,3]
@@ -1020,6 +1078,83 @@ next = 42
 
     const auto& next = std::get<std::unique_ptr<VariableAssgn>>(file->body[1]->stmt);
     ASSERT_NE(next, nullptr);
+    EXPECT_EQ("42", next->init->string());
+}
+
+TEST(FluxParserTest, ReportsMissingDictColonWithoutLosingNextStatement) {
+    const std::string source = R"(
+lookup = ["cpu" 1, "mem": 2]
+next = 42
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("missing_dict_colon.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_EQ(2, file->body.size());
+
+    const auto& lookup = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(lookup, nullptr);
+    ASSERT_NE(lookup->init, nullptr);
+    EXPECT_NE(Expression::Type::BadExpr, lookup->init->type);
+
+    const auto& next = std::get<std::unique_ptr<VariableAssgn>>(file->body[1]->stmt);
+    ASSERT_NE(next, nullptr);
+    EXPECT_EQ("next", next->id->name);
+    EXPECT_EQ("42", next->init->string());
+}
+
+TEST(FluxParserTest, ReportsMissingCommaInAttributeParameters) {
+    const std::string source = R"(
+@trace("a" "b")
+result = 42
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("missing_attr_comma.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_EQ(1, file->body.size());
+    ASSERT_EQ(1, file->body[0]->attributes.size());
+
+    const auto& attr = file->body[0]->attributes[0];
+    ASSERT_NE(attr, nullptr);
+    ASSERT_EQ(1, attr->params.size());
+    EXPECT_EQ(Expression::Type::BinaryExpr, attr->params[0]->value->type);
+
+    const auto& result = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(result, nullptr);
+    EXPECT_EQ("result", result->id->name);
+    EXPECT_EQ("42", result->init->string());
+}
+
+TEST(FluxParserTest, ReportsInvalidWhereConstraintAndContinuesToNextStatement) {
+    const std::string source = R"(
+builtin sum : int where A:
+next = 42
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("invalid_where_constraint.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_GE(file->body.size(), 2);
+    ASSERT_EQ(Statement::Type::BuiltinStatement, file->body[0]->type);
+    ASSERT_EQ(Statement::Type::VariableAssignment, file->body[1]->type);
+
+    const auto& builtin = std::get<std::unique_ptr<BuiltinStmt>>(file->body[0]->stmt);
+    ASSERT_NE(builtin, nullptr);
+    ASSERT_NE(builtin->ty, nullptr);
+    ASSERT_EQ(1, builtin->ty->constraints.size());
+    ASSERT_EQ(1, builtin->ty->constraints[0]->kinds.size());
+    EXPECT_EQ("<invalid-kind>", builtin->ty->constraints[0]->kinds[0]->name);
+
+    const auto& next = std::get<std::unique_ptr<VariableAssgn>>(file->body[1]->stmt);
+    ASSERT_NE(next, nullptr);
+    EXPECT_EQ("next", next->id->name);
     EXPECT_EQ("42", next->init->string());
 }
 
