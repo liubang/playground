@@ -254,6 +254,7 @@ struct Identifier {
 };
 
 struct ArrayItem {
+    SourceLocation loc;
     std::unique_ptr<Expression> expression;
     std::vector<std::shared_ptr<Comment>> comma;
     ArrayItem() = default;
@@ -277,6 +278,7 @@ struct ArrayExpr {
 };
 
 struct DictItem {
+    SourceLocation loc;
     std::unique_ptr<Expression> key;
     std::unique_ptr<Expression> val;
     std::vector<std::shared_ptr<Comment>> comma;
@@ -757,6 +759,7 @@ struct Assignment {
 // property
 
 struct Property {
+    SourceLocation loc;
     std::unique_ptr<PropertyKey> key;
     std::vector<std::shared_ptr<Comment>> separator;
     std::unique_ptr<Expression> value;
@@ -889,6 +892,7 @@ struct TypeExpression {
 };
 
 struct TypeConstraint {
+    SourceLocation loc;
     std::unique_ptr<Identifier> tvar;
     std::vector<std::shared_ptr<Identifier>> kinds;
     TypeConstraint() = default;
