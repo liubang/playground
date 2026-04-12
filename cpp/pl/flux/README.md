@@ -5,6 +5,8 @@
 - Tree text: best for manual inspection
 - JSON: best for scripts, regression checks, and snapshots
 
+For a feature-by-feature implementation overview, see [SUPPORT_MATRIX.md](./SUPPORT_MATRIX.md).
+
 ## Build
 
 ```bash

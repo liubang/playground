@@ -338,5 +338,71 @@ TEST(FluxParserTest, DumpsAstAsJsonTree) {
     EXPECT_NE(json.find("\"summary\":\"op=exists\""), std::string::npos);
 }
 
+TEST(FluxParserTest, ParsesDynamicVectorAndStreamTypes) {
+    const std::string source = R"(
+        builtin dyn : dynamic
+        builtin vec : vector[int]
+        builtin streamer : stream[string]
+    )";
+
+    Parser parser(source);
+    auto file = parser.parse_file("types.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_TRUE(parser.errors().empty());
+    ASSERT_EQ(3, file->body.size());
+
+    const auto& dyn = std::get<std::unique_ptr<BuiltinStmt>>(file->body[0]->stmt);
+    const auto& vec = std::get<std::unique_ptr<BuiltinStmt>>(file->body[1]->stmt);
+    const auto& stream = std::get<std::unique_ptr<BuiltinStmt>>(file->body[2]->stmt);
+
+    ASSERT_NE(dyn, nullptr);
+    ASSERT_NE(vec, nullptr);
+    ASSERT_NE(stream, nullptr);
+    EXPECT_EQ(MonoType::Type::Dynamic, dyn->ty->monotype->type);
+    EXPECT_EQ(MonoType::Type::Vector, vec->ty->monotype->type);
+    EXPECT_EQ(MonoType::Type::Stream, stream->ty->monotype->type);
+}
+
+TEST(FluxParserTest, LeavesAttributePathPartial) {
+    const std::string source = R"(
+        @edition("2022.1")
+        package metrics
+    )";
+
+    Parser parser(source);
+    auto file = parser.parse_file("attribute.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_TRUE(parser.errors().empty());
+    ASSERT_NE(file->package, nullptr);
+    EXPECT_EQ("metrics", file->package->name->name);
+    bool saw_bad_stmt = false;
+    for (const auto& stmt : file->body) {
+        if (stmt->type == Statement::Type::BadStatement) {
+            saw_bad_stmt = true;
+        }
+    }
+    EXPECT_TRUE(saw_bad_stmt);
+}
+
+TEST(FluxParserTest, LeavesLabelLiteralPathPartial) {
+    const std::string source = ".field";
+
+    Parser parser(source);
+    auto file = parser.parse_file("label.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_TRUE(parser.errors().empty());
+    ASSERT_EQ(2, file->body.size());
+    bool saw_bad_stmt = false;
+    for (const auto& stmt : file->body) {
+        if (stmt->type == Statement::Type::BadStatement) {
+            saw_bad_stmt = true;
+        }
+    }
+    EXPECT_TRUE(saw_bad_stmt);
+}
+
 } // namespace
 } // namespace pl
