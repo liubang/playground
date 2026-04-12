@@ -294,7 +294,7 @@ private:
             case Expression::Type::BadExpr:
                 line(prefix, is_last,
                      "BadExpr text=\"" + std::get<std::unique_ptr<BadExpr>>(expr.expr)->text +
-                         "\"");
+                         "\"" + location_summary(expr.loc));
                 break;
         }
     }
@@ -398,9 +398,12 @@ private:
                                bool is_last) {
         line(prefix, is_last, "ConditionalExpr");
         auto next = child_prefix(prefix, is_last);
-        dump_expression(*expr.test, next, false);
-        dump_expression(*expr.consequent, next, false);
-        dump_expression(*expr.alternate, next, true);
+        line(next, false, "Test");
+        dump_expression(*expr.test, child_prefix(next, false), true);
+        line(next, false, "Consequent");
+        dump_expression(*expr.consequent, child_prefix(next, false), true);
+        line(next, true, "Alternate");
+        dump_expression(*expr.alternate, child_prefix(next, true), true);
     }
 
     void dump_string_expr(const StringExpr& expr, const std::string& prefix, bool is_last) {
@@ -829,7 +832,9 @@ private:
                      "value=" + std::get<std::unique_ptr<LabelLit>>(expr.expr)->string());
                 break;
             case Expression::Type::BadExpr:
-                leaf("BadExpr", std::get<std::unique_ptr<BadExpr>>(expr.expr)->text);
+                leaf("BadExpr",
+                     std::get<std::unique_ptr<BadExpr>>(expr.expr)->text +
+                         location_summary(expr.loc));
                 break;
         }
     }
@@ -945,11 +950,11 @@ private:
         node("ConditionalExpr", "", [&] {
             bool first = true;
             element_prefix(first);
-            dump_expression(*expr.test);
+            node("Test", "", [&] { dump_expression(*expr.test); });
             element_prefix(first);
-            dump_expression(*expr.consequent);
+            node("Consequent", "", [&] { dump_expression(*expr.consequent); });
             element_prefix(first);
-            dump_expression(*expr.alternate);
+            node("Alternate", "", [&] { dump_expression(*expr.alternate); });
         });
     }
     void dump_string_expr(const StringExpr& expr) {
