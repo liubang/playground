@@ -115,6 +115,7 @@ struct Attribute {
     Attribute() = default;
     Attribute(std::string name, const std::vector<std::shared_ptr<AttributeParam>>& params)
         : name(std::move(name)), params(params) {}
+    [[nodiscard]] std::string string() const;
 };
 
 struct Package {
@@ -128,6 +129,7 @@ struct Package {
 struct File {
     std::string name;
     std::string metadata;
+    SourceLocation loc;
     std::unique_ptr<PackageClause> package;
     std::vector<std::shared_ptr<ImportDeclaration>> imports;
     std::vector<std::shared_ptr<Statement>> body;
@@ -135,6 +137,8 @@ struct File {
 };
 
 struct PackageClause {
+    SourceLocation loc;
+    std::vector<std::shared_ptr<Attribute>> attributes;
     std::unique_ptr<Identifier> name;
     PackageClause() : name(nullptr) {}
     PackageClause(std::unique_ptr<Identifier> name) : name(std::move(name)) {}
@@ -142,6 +146,8 @@ struct PackageClause {
 };
 
 struct ImportDeclaration {
+    SourceLocation loc;
+    std::vector<std::shared_ptr<Attribute>> attributes;
     std::unique_ptr<Identifier> alias;
     std::unique_ptr<StringLit> path;
     ImportDeclaration() : alias(nullptr), path(nullptr) {}
@@ -226,6 +232,8 @@ struct Statement {
         BuiltinStatement
     };
     Type type;
+    SourceLocation loc;
+    std::vector<std::shared_ptr<Attribute>> attributes;
 
     using StmtT = std::variant<std::unique_ptr<ExprStmt>,
                                std::unique_ptr<VariableAssgn>,
@@ -609,6 +617,7 @@ struct Expression {
                                std::unique_ptr<PipeLit>,
                                std::unique_ptr<LabelLit>,
                                std::unique_ptr<BadExpr>>;
+    SourceLocation loc;
     ExprT expr;
     Expression() = default;
     Expression(Type t, ExprT expr) : type(t), expr(std::move(expr)) {}
@@ -779,6 +788,7 @@ struct PropertyKey {
 // function
 
 struct Block {
+    SourceLocation loc;
     std::vector<std::shared_ptr<Comment>> lbrace;
     std::vector<std::shared_ptr<Statement>> body;
     std::vector<std::shared_ptr<Comment>> rbrace;

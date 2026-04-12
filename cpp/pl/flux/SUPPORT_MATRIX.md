@@ -16,7 +16,7 @@ Status meanings:
 | `import "path"` | Supported | Alias-less import works | `import "array"` |
 | `import alias "path"` | Supported | Alias is stored in AST | `import regexp "regexp"` |
 | file body statements | Supported | Mixed statement list works | `a = 1` |
-| attributes / annotations | Partial | Parsing framework exists, but coverage is still limited | `@edition("2022.1")` |
+| attributes / annotations | Partial | Package/import/top-level statement attributes are attached to AST nodes, but broader coverage is still incomplete | `@edition("2022.1")` |
 
 ## Statements
 
@@ -57,9 +57,9 @@ Status meanings:
 | call expression | Supported | Common call syntax works | `range(start: -1h)` |
 | function expression | Supported | Arrow function expressions work | `(r) => r.host == "local"` |
 | pipe expression | Supported | Multi-stage pipe chains work | `from(...) |> range(...)` |
-| label literal | Partial | AST node exists, but real-world coverage is still low | `.field` |
+| label literal | Supported | Top-level label expressions now parse through the normal expression-statement path | `.field` |
 | paren expression | Supported | Simple grouping works | `(1 + 2)` |
-| unsigned integer literal | Partial | AST node exists, but scanner/parser coverage is not fully built out | unsigned forms |
+| unsigned integer literal | Supported | `123u`-style literals are scanned and parsed into `UnsignedIntegerLit` | `42u` |
 
 ## Type Syntax
 
@@ -136,9 +136,9 @@ package metrics
 
 Current expectation:
 
-- attribute scanning/parsing infrastructure exists
-- end-to-end behavior is not fully verified yet
-- should be promoted to `Supported` only after a dedicated unit test covers the AST shape
+- package/import/top-level statement attributes are attached to AST nodes
+- tree dump output includes attached attributes
+- broader node coverage is still incomplete, so this stays `Partial`
 
 ### Label literal
 
@@ -164,9 +164,9 @@ Example:
 
 Current expectation:
 
-- `UintLit` exists in the AST
-- scanner/parser support is not fully wired through
-- should stay `Partial` until literal scanning and AST generation are both verified
+- scanned as a dedicated unsigned integer token
+- parsed into `UnsignedIntegerLit`
+- covered by scanner and parser unit tests
 
 ### Dynamic type
 

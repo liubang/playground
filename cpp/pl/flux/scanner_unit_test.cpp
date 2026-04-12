@@ -23,7 +23,7 @@ TEST(FluxScannerTest, ScansCommentsIdentifiersAndLiterals) {
     const std::string source = R"(
         // lead comment
         builtin foo = "bar"
-        1h 2024-01-02T03:04:05Z
+        42u 1h 2024-01-02T03:04:05Z
     )";
 
     Scanner scanner(source.data(), source.size());
@@ -47,6 +47,11 @@ TEST(FluxScannerTest, ScansCommentsIdentifiersAndLiterals) {
     ASSERT_NE(string, nullptr);
     EXPECT_EQ(TokenType::String, string->tok);
     EXPECT_EQ("\"bar\"", string->lit);
+
+    auto uint = scanner.scan();
+    ASSERT_NE(uint, nullptr);
+    EXPECT_EQ(TokenType::UInt, uint->tok);
+    EXPECT_EQ("42u", uint->lit);
 
     auto duration = scanner.scan();
     ASSERT_NE(duration, nullptr);
