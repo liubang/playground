@@ -25,6 +25,18 @@ namespace pl {
 #define FLUX_DEBUG(msg)
 #endif
 
+namespace {
+
+bool has_invalid_synthetic_binary(const std::unique_ptr<Expression>& expr) {
+    if (!expr || expr->type != Expression::Type::BinaryExpr) {
+        return false;
+    }
+    const auto& binary = std::get<std::unique_ptr<BinaryExpr>>(expr->expr);
+    return binary && binary->op == Operator::InvalidOperator;
+}
+
+} // namespace
+
 std::unique_ptr<Package> Parser::parse_single_package(const std::string& pkgpath,
                                                       const std::string& fname) {
     std::shared_ptr<File> ast_file = parse_file(fname);
@@ -357,7 +369,16 @@ std::unique_ptr<MonoType> Parser::parse_monotype() {
 std::unique_ptr<TypeConstraint> Parser::parse_constraint() {
     std::vector<std::shared_ptr<Identifier>> id;
     auto tvar = parse_identifier();
-    expect(TokenType::Colon);
+    const Position start = last_consumed_loc_.start;
+    auto colon = expect(TokenType::Colon);
+    if (peek()->tok == TokenType::Comma || peek()->tok == TokenType::Eof ||
+        peek()->start_pos.line > colon->start_pos.line) {
+        errs_.emplace_back("missing constraint kind");
+        id.push_back(std::make_shared<Identifier>("<invalid-kind>"));
+        auto constraint = std::make_unique<TypeConstraint>(std::move(tvar), id);
+        constraint->loc = source_location(start, colon->end_pos);
+        return constraint;
+    }
     auto identifier = parse_identifier();
     id.push_back(std::move(identifier));
     while (peek()->tok == TokenType::Add) {
@@ -365,7 +386,9 @@ std::unique_ptr<TypeConstraint> Parser::parse_constraint() {
         identifier = parse_identifier();
         id.push_back(std::move(identifier));
     }
-    return std::make_unique<TypeConstraint>(std::move(tvar), id);
+    auto constraint = std::make_unique<TypeConstraint>(std::move(tvar), id);
+    constraint->loc = source_location(start, last_consumed_loc_.end);
+    return constraint;
 }
 
 std::vector<std::shared_ptr<TypeConstraint>> Parser::parse_constraints() {
@@ -688,6 +711,9 @@ std::vector<std::shared_ptr<Expression>> Parser::parse_call_argument_list() {
         if (!arg) {
             errs_.emplace_back("missing call argument");
         } else {
+            if (has_invalid_synthetic_binary(arg)) {
+                errs_.emplace_back("missing comma in call argument list");
+            }
             args.emplace_back(std::move(arg));
         }
         if (!more()) {
@@ -1198,6 +1224,7 @@ std::unique_ptr<Expression> Parser::parse_dict_items_rest(std::unique_ptr<Token>
         std::shared_ptr<DictItem> item = std::make_shared<DictItem>();
         item->key = std::move(key);
         item->val = std::move(val);
+        item->loc = source_location(item->key->loc.start, item->val->loc.end);
         dict_expr->elements.emplace_back(std::move(item));
     } else {
         auto comma = expect(TokenType::Comma);
@@ -1206,6 +1233,7 @@ std::unique_ptr<Expression> Parser::parse_dict_items_rest(std::unique_ptr<Token>
         item->key = std::move(key);
         item->val = std::move(val);
         item->comma = std::move(comma->comments);
+        item->loc = source_location(item->key->loc.start, item->val->loc.end);
         items.emplace_back(std::move(item));
 
         while (more()) {
@@ -1258,6 +1286,7 @@ std::unique_ptr<Expression> Parser::parse_dict_items_rest(std::unique_ptr<Token>
             std::shared_ptr<DictItem> nitem = std::make_shared<DictItem>();
             nitem->key = std::move(nkey);
             nitem->val = std::move(nval);
+            nitem->loc = source_location(nitem->key->loc.start, nitem->val->loc.end);
             if (peek()->tok == TokenType::Comma) {
                 comma = scan();
                 nitem->comma = std::move(comma->comments);
@@ -1286,6 +1315,7 @@ std::unique_ptr<Expression> Parser::parse_array_items_rest(std::unique_ptr<Token
         arr_expr->lbrack = std::move(start->comments);
         auto arr_item = std::make_shared<ArrayItem>();
         arr_item->expression = std::move(init);
+        arr_item->loc = arr_item->expression->loc;
         arr_expr->rbrack = std::move(end->comments);
         arr_expr->elements.push_back(std::move(arr_item));
     } else {
@@ -1295,6 +1325,7 @@ std::unique_ptr<Expression> Parser::parse_array_items_rest(std::unique_ptr<Token
         auto arr_item = std::make_shared<ArrayItem>();
         arr_item->expression = std::move(init);
         arr_item->comma = std::move(comma->comments);
+        arr_item->loc = arr_item->expression->loc;
         items.emplace_back(std::move(arr_item));
 
         auto last = peek()->start_offset;
@@ -1323,6 +1354,7 @@ std::unique_ptr<Expression> Parser::parse_array_items_rest(std::unique_ptr<Token
             auto narr_item = std::make_shared<ArrayItem>();
             narr_item->expression = std::move(expression);
             narr_item->comma = std::move(ncomma);
+            narr_item->loc = narr_item->expression->loc;
             items.emplace_back(std::move(narr_item));
 
             auto _this = peek()->start_offset;
@@ -1432,6 +1464,7 @@ std::vector<std::shared_ptr<Property>> Parser::parse_property_list_suffix(
 }
 
 std::unique_ptr<Property> Parser::parse_property_suffix(std::unique_ptr<PropertyKey> key) {
+    const Position start = last_consumed_loc_.start;
     const auto* t = peek();
     std::unique_ptr<Token> tt;
     std::unique_ptr<Expression> value;
@@ -1446,6 +1479,13 @@ std::unique_ptr<Property> Parser::parse_property_suffix(std::unique_ptr<Property
     ret->key = std::move(key);
     ret->value = std::move(value);
     ret->separator = std::move(sep);
+    if (ret->value && ret->value->loc.is_valid()) {
+        ret->loc = source_location(start, ret->value->loc.end);
+    } else if (tt) {
+        ret->loc = source_location(start, tt->end_pos);
+    } else {
+        ret->loc = source_location(start, last_consumed_loc_.end);
+    }
     return ret;
 }
 
@@ -1980,6 +2020,8 @@ std::vector<std::shared_ptr<AttributeParam>> Parser::parse_attribute_params() {
             std::stringstream ss;
             ss << "invalid attribute parameter " << loc << ": " << value->string();
             errs_.emplace_back(ss.str());
+        } else if (has_invalid_synthetic_binary(value)) {
+            errs_.emplace_back("missing comma in attribute parameter list");
         }
         std::vector<std::shared_ptr<Comment>> comments;
         if (more()) {
