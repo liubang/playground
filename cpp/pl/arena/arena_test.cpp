@@ -30,16 +30,22 @@ struct TestObject {
     ~TestObject() { std::cout << "TestObject destructed: " << value << ", " << name << '\n'; }
 };
 
+constexpr std::size_t align_up(std::size_t size, std::size_t alignment) {
+    return (size + alignment - 1) & ~(alignment - 1);
+}
+
 } // namespace
 
 TEST(ArenaNew, normal) {
     pl::Arena arena(1024);
     void* raw_ptr = arena.allocate(100);
+    ASSERT_NE(nullptr, raw_ptr);
     auto stats = arena.get_stats();
     ASSERT_EQ(1, stats.block_count);
     ASSERT_EQ(1024, stats.total_allocated);
-    ASSERT_EQ(112, stats.total_used);
+    ASSERT_EQ(align_up(100, alignof(std::max_align_t)), stats.total_used);
     auto* obj = arena.allocate_object<TestObject>(42, "Hell world");
+    ASSERT_NE(nullptr, obj);
     stats = arena.get_stats();
-    ASSERT_EQ(112 + sizeof(TestObject), stats.total_used);
+    ASSERT_EQ(align_up(100, alignof(std::max_align_t)) + sizeof(TestObject), stats.total_used);
 }

@@ -103,19 +103,32 @@ private:
 
 [[nodiscard]] SSTableRef buildAndOpenTable(const std::filesystem::path& root,
                                            CompressionType compression,
-                                           SSTId sst_id) {
+                                           SSTId sst_id,
+                                           const std::vector<CellRef>& cells = {
+                                               makeCell("rk", "value")},
+                                           std::size_t block_size = 4096,
+                                           FilterPolicyType filter_type = FilterPolicyType::NONE,
+                                           PatchId patch_id = 0) {
     auto build_options = std::make_shared<BuildOptions>();
     build_options->data_dir = root;
+    build_options->block_size = block_size;
     build_options->compression_type = compression;
     build_options->sst_type = SSTType::MAJOR;
     build_options->sst_version = SSTVersion::V1;
-    build_options->filter_type = FilterPolicyType::NONE;
+    build_options->filter_type = filter_type;
+    build_options->patch_id = patch_id;
     build_options->sst_id = sst_id;
 
     SSTableBuilder builder(build_options);
     auto open_result = builder.open();
     EXPECT_TRUE(open_result.hasValue()) << open_result.error().describe();
-    EXPECT_TRUE(builder.add(Cell(CellType::CT_PUT, "rk", "cf", "col", "value", 1)).hasValue());
+    for (const auto& cell : cells) {
+        if (cell == nullptr) {
+            ADD_FAILURE() << "test input contains null cell";
+            return {};
+        }
+        EXPECT_TRUE(builder.add(*cell).hasValue());
+    }
 
     auto finish_result = builder.finish();
     EXPECT_TRUE(finish_result.hasValue()) << finish_result.error().describe();
@@ -184,6 +197,30 @@ TEST(SSTableIteratorRegressionTest, BackwardScanStopsOnCorruptedDataBlock) {
     EXPECT_EQ(StatusCode::kDataCorruption, iter.status().code());
 }
 
+TEST(SSTableIteratorRegressionTest, SeekSkipsEmptyDataBlocksAndFindsNextRow) {
+    std::vector<CellRef> index_cells;
+    index_cells.emplace_back(makeCell("a", "good-1"));
+    index_cells.emplace_back(makeCell("b", "empty"));
+    index_cells.emplace_back(makeCell("c", "good-2"));
+
+    SSTableIterator iter(
+        std::make_unique<MockIterator>(index_cells), [](std::string_view handle) -> IteratorPtr {
+            if (handle == "good-1") {
+                return std::make_unique<MockIterator>(std::vector<CellRef>{makeCell("a", "v1")});
+            }
+            if (handle == "good-2") {
+                return std::make_unique<MockIterator>(std::vector<CellRef>{makeCell("c", "v2")});
+            }
+            return std::make_unique<MockIterator>(std::vector<CellRef>{});
+        });
+
+    iter.seek("b");
+
+    ASSERT_TRUE(iter.valid());
+    EXPECT_EQ("c", iter.cell()->rowkey());
+    EXPECT_EQ(StatusCode::kOK, iter.status().code());
+}
+
 TEST(SSTableBuilderRegressionTest, ISALCompressionFailsFastWithoutWritingMislabelledBlocks) {
     const auto root = makeTempDir("pl_sst_isal_regression");
 
@@ -207,6 +244,64 @@ TEST(SSTableBuilderRegressionTest, ISALCompressionFailsFastWithoutWritingMislabe
     std::filesystem::remove_all(root);
 }
 
+TEST(SSTableBuilderRegressionTest, RealTableRoundTripsAcrossBlocksWithCompressionAndFilter) {
+    const auto root = makeTempDir("pl_sst_roundtrip_regression");
+    const std::vector<CellRef> cells = {
+        std::make_shared<Cell>(CellType::CT_PUT, "row-001", "cf", "col-a", "value-a2", 2),
+        std::make_shared<Cell>(CellType::CT_PUT, "row-001", "cf", "col-b", "value-b1", 1),
+        std::make_shared<Cell>(CellType::CT_PUT, "row-002", "cf", "col-a", std::string(48, '2'), 2),
+        std::make_shared<Cell>(CellType::CT_PUT, "row-003", "cf", "col-a", std::string(48, '3'), 3),
+        std::make_shared<Cell>(CellType::CT_PUT, "row-004", "cf", "col-a", std::string(48, '4'), 4),
+    };
+    auto table = buildAndOpenTable(root,
+                                   CompressionType::SNAPPY,
+                                   21,
+                                   cells,
+                                   80,
+                                   FilterPolicyType::STANDARD_BLOOM_FILTER,
+                                   9);
+    ASSERT_NE(table, nullptr);
+
+    EXPECT_EQ(21, table->sstId());
+    EXPECT_EQ(9, table->patchId());
+    ASSERT_NE(table->fileMeta(), nullptr);
+    EXPECT_EQ(5, table->fileMeta()->cellNum());
+    EXPECT_EQ(4, table->fileMeta()->rowNum());
+    EXPECT_EQ("row-001", table->fileMeta()->minKey());
+    EXPECT_LE(0, BytewiseComparator().compare(table->fileMeta()->maxKey(), "row-004"));
+
+    Arena arena;
+    auto get_result = table->get("row-001", &arena);
+    ASSERT_TRUE(get_result.hasValue()) << get_result.error().describe();
+    const auto& row = get_result.value();
+    ASSERT_EQ(2, row.size());
+    EXPECT_EQ("col-a", row[0]->col());
+    EXPECT_EQ("value-a2", row[0]->value());
+    EXPECT_EQ("col-b", row[1]->col());
+    EXPECT_EQ("value-b1", row[1]->value());
+
+    auto miss_result = table->get("row-999", &arena);
+    ASSERT_TRUE(miss_result.hasError());
+    EXPECT_EQ(StatusCode::kKVStoreNotFound, miss_result.error().code());
+
+    auto iter = table->iterator();
+    std::vector<std::string> rowkeys;
+    for (iter->first(); iter->valid(); iter->next()) {
+        rowkeys.emplace_back(iter->cell()->rowkey());
+    }
+    EXPECT_EQ((std::vector<std::string>{"row-001", "row-001", "row-002", "row-003", "row-004"}),
+              rowkeys);
+
+    iter->seek("row-002");
+    ASSERT_TRUE(iter->valid());
+    EXPECT_EQ("row-002", iter->cell()->rowkey());
+    iter->next();
+    ASSERT_TRUE(iter->valid());
+    EXPECT_EQ("row-003", iter->cell()->rowkey());
+
+    std::filesystem::remove_all(root);
+}
+
 TEST(SSTableVersionManagerRegressionTest, FirstEditStartsFromEmptyVersion) {
     const auto root = makeTempDir("pl_sst_version_manager_regression");
     auto table = buildAndOpenTable(root, CompressionType::NONE, 11);
@@ -222,6 +317,41 @@ TEST(SSTableVersionManagerRegressionTest, FirstEditStartsFromEmptyVersion) {
     const auto tables = version_manager.current_->listSSTables();
     ASSERT_EQ(1, tables.size());
     EXPECT_EQ(table->sstId(), tables.front()->sstId());
+
+    std::filesystem::remove_all(root);
+}
+
+TEST(SSTableVersionManagerRegressionTest, AppliesAddAndDeleteEditsInPatchOrder) {
+    const auto root = makeTempDir("pl_sst_version_manager_patch_order");
+    auto old_table = buildAndOpenTable(root, CompressionType::NONE, 31, {}, 4096,
+                                       FilterPolicyType::NONE, 1);
+    auto mid_table = buildAndOpenTable(root, CompressionType::NONE, 32, {}, 4096,
+                                       FilterPolicyType::NONE, 2);
+    auto new_table = buildAndOpenTable(root, CompressionType::NONE, 33, {}, 4096,
+                                       FilterPolicyType::NONE, 3);
+    ASSERT_NE(old_table, nullptr);
+    ASSERT_NE(mid_table, nullptr);
+    ASSERT_NE(new_table, nullptr);
+
+    SSTableVersionManager version_manager;
+
+    auto first_edit = std::make_shared<SSTableVersionEdit>();
+    first_edit->addSSTable(old_table);
+    first_edit->addSSTable(mid_table);
+    version_manager.applyVersionEdit(first_edit);
+
+    auto second_edit = std::make_shared<SSTableVersionEdit>();
+    second_edit->addSSTable(new_table);
+    second_edit->delSSTable(mid_table->sstId());
+    version_manager.applyVersionEdit(second_edit);
+
+    ASSERT_NE(version_manager.current_, nullptr);
+    const auto tables = version_manager.current_->listSSTables();
+    ASSERT_EQ(2, tables.size());
+    EXPECT_EQ(33, tables[0]->sstId());
+    EXPECT_EQ(31, tables[1]->sstId());
+    EXPECT_EQ(3, tables[0]->patchId());
+    EXPECT_EQ(1, tables[1]->patchId());
 
     std::filesystem::remove_all(root);
 }
