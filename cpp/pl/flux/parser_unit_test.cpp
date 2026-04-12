@@ -328,11 +328,11 @@ TEST(FluxParserTest, DumpsAstAsJsonTree) {
 
     const std::string json = dump_ast_json(*file);
     EXPECT_NE(json.find("\"type\":\"File\""), std::string::npos);
-    EXPECT_NE(json.find("\"summary\":\"name=dump.json.flux\""), std::string::npos);
+    EXPECT_NE(json.find("\"summary\":\"name=dump.json.flux loc="), std::string::npos);
     EXPECT_NE(json.find("\"type\":\"PackageClause\""), std::string::npos);
-    EXPECT_NE(json.find("\"summary\":\"name=metrics\""), std::string::npos);
+    EXPECT_NE(json.find("\"summary\":\"name=metrics loc="), std::string::npos);
     EXPECT_NE(json.find("\"type\":\"ImportDeclaration\""), std::string::npos);
-    EXPECT_NE(json.find("\"summary\":\"path=\\\"array\\\"\""), std::string::npos);
+    EXPECT_NE(json.find("\"summary\":\"path=\\\"array\\\" loc="), std::string::npos);
     EXPECT_NE(json.find("\"type\":\"ConditionalExpr\""), std::string::npos);
     EXPECT_NE(json.find("\"type\":\"UnaryExpr\""), std::string::npos);
     EXPECT_NE(json.find("\"summary\":\"op=exists\""), std::string::npos);
@@ -364,7 +364,7 @@ TEST(FluxParserTest, ParsesDynamicVectorAndStreamTypes) {
     EXPECT_EQ(MonoType::Type::Stream, stream->ty->monotype->type);
 }
 
-TEST(FluxParserTest, LeavesAttributePathPartial) {
+TEST(FluxParserTest, ParsesPackageAttributeWithoutBadStatement) {
     const std::string source = R"(
         @edition("2022.1")
         package metrics
@@ -377,16 +377,10 @@ TEST(FluxParserTest, LeavesAttributePathPartial) {
     ASSERT_TRUE(parser.errors().empty());
     ASSERT_NE(file->package, nullptr);
     EXPECT_EQ("metrics", file->package->name->name);
-    bool saw_bad_stmt = false;
-    for (const auto& stmt : file->body) {
-        if (stmt->type == Statement::Type::BadStatement) {
-            saw_bad_stmt = true;
-        }
-    }
-    EXPECT_TRUE(saw_bad_stmt);
+    EXPECT_TRUE(file->body.empty());
 }
 
-TEST(FluxParserTest, LeavesLabelLiteralPathPartial) {
+TEST(FluxParserTest, ParsesLabelLiteral) {
     const std::string source = ".field";
 
     Parser parser(source);
@@ -394,14 +388,114 @@ TEST(FluxParserTest, LeavesLabelLiteralPathPartial) {
 
     ASSERT_NE(file, nullptr);
     ASSERT_TRUE(parser.errors().empty());
-    ASSERT_EQ(2, file->body.size());
-    bool saw_bad_stmt = false;
-    for (const auto& stmt : file->body) {
-        if (stmt->type == Statement::Type::BadStatement) {
-            saw_bad_stmt = true;
-        }
-    }
-    EXPECT_TRUE(saw_bad_stmt);
+    ASSERT_EQ(1, file->body.size());
+    ASSERT_EQ(Statement::Type::ExpressionStatement, file->body[0]->type);
+
+    const auto& expr_stmt = std::get<std::unique_ptr<ExprStmt>>(file->body[0]->stmt);
+    ASSERT_NE(expr_stmt, nullptr);
+    ASSERT_NE(expr_stmt->expression, nullptr);
+    EXPECT_EQ(Expression::Type::LabelLit, expr_stmt->expression->type);
+    EXPECT_EQ(".field", expr_stmt->expression->string());
+}
+
+TEST(FluxParserTest, ParsesUnsignedIntegerLiteral) {
+    const std::string source = "counter = 42u";
+
+    Parser parser(source);
+    auto file = parser.parse_file("uint.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_TRUE(parser.errors().empty());
+    ASSERT_EQ(1, file->body.size());
+    ASSERT_EQ(Statement::Type::VariableAssignment, file->body[0]->type);
+
+    const auto& assignment = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(assignment, nullptr);
+    ASSERT_NE(assignment->init, nullptr);
+    EXPECT_EQ(Expression::Type::UnsignedIntegerLit, assignment->init->type);
+    EXPECT_EQ("42u", assignment->init->string());
+}
+
+TEST(FluxParserTest, AttachesAttributesToAstNodes) {
+    const std::string source = R"(
+        @edition("2022.1")
+        package metrics
+        @feature(flag)
+        import "array"
+        @trace("enabled")
+        result = 42
+    )";
+
+    Parser parser(source);
+    auto file = parser.parse_file("attrs.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_TRUE(parser.errors().empty());
+    ASSERT_NE(file->package, nullptr);
+    ASSERT_EQ(1, file->package->attributes.size());
+    EXPECT_EQ("@edition(2022.1) package metrics", file->package->string());
+
+    ASSERT_EQ(1, file->imports.size());
+    ASSERT_EQ(1, file->imports[0]->attributes.size());
+    EXPECT_EQ("@feature(flag) import array", file->imports[0]->string());
+
+    ASSERT_EQ(1, file->body.size());
+    ASSERT_EQ(1, file->body[0]->attributes.size());
+    EXPECT_EQ("@trace(enabled) VariableAssignment: result = 42", file->body[0]->string());
+
+    const std::string tree = dump_ast(*file);
+    EXPECT_NE(tree.find("PackageClause name=metrics attrs=@edition(2022.1)"), std::string::npos);
+    EXPECT_NE(tree.find("ImportDeclaration path=\"array\" attrs=@feature(flag)"), std::string::npos);
+    EXPECT_NE(tree.find("VariableAssignment id=result attrs=@trace(enabled)"), std::string::npos);
+}
+
+TEST(FluxParserTest, AttachesSourceLocationsToTopLevelNodes) {
+    const std::string source = R"(package metrics
+import "array"
+result = if exists config.enabled then "ok" else "missing"
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("loc.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_TRUE(parser.errors().empty());
+    ASSERT_TRUE(file->loc.is_valid());
+    EXPECT_EQ(1, file->loc.start.line);
+    EXPECT_EQ(1, file->loc.start.column);
+
+    ASSERT_NE(file->package, nullptr);
+    ASSERT_TRUE(file->package->loc.is_valid());
+    EXPECT_EQ(1, file->package->loc.start.line);
+    EXPECT_EQ(1, file->package->loc.start.column);
+
+    ASSERT_EQ(1, file->imports.size());
+    ASSERT_TRUE(file->imports[0]->loc.is_valid());
+    EXPECT_EQ(2, file->imports[0]->loc.start.line);
+    EXPECT_EQ(1, file->imports[0]->loc.start.column);
+
+    ASSERT_EQ(1, file->body.size());
+    ASSERT_TRUE(file->body[0]->loc.is_valid());
+    EXPECT_EQ(3, file->body[0]->loc.start.line);
+    EXPECT_EQ(1, file->body[0]->loc.start.column);
+
+    const auto& assignment = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(assignment, nullptr);
+    ASSERT_NE(assignment->init, nullptr);
+    ASSERT_TRUE(assignment->init->loc.is_valid());
+    EXPECT_EQ(3, assignment->init->loc.start.line);
+    EXPECT_EQ(10, assignment->init->loc.start.column);
+
+    const std::string tree = dump_ast(*file);
+    EXPECT_NE(tree.find("File name=\"loc.flux\" loc=1:1-3:59"), std::string::npos);
+    EXPECT_NE(tree.find("PackageClause name=metrics loc=1:1-1:16"), std::string::npos);
+    EXPECT_NE(tree.find("ImportDeclaration path=\"array\" loc=2:1-2:15"), std::string::npos);
+    EXPECT_NE(tree.find("VariableAssignment id=result loc=3:1-3:59"), std::string::npos);
+
+    const std::string json = dump_ast_json(*file);
+    EXPECT_NE(json.find("\"summary\":\"name=loc.flux loc=1:1-3:59\""), std::string::npos);
+    EXPECT_NE(json.find("\"summary\":\"name=metrics loc=1:1-1:16\""), std::string::npos);
+    EXPECT_NE(json.find("\"summary\":\"path=\\\"array\\\" loc=2:1-2:15\""), std::string::npos);
 }
 
 } // namespace

@@ -139,6 +139,7 @@ private:
     std::unique_ptr<StringLit> new_string_literal(std::unique_ptr<Token> t);
     std::unique_ptr<Identifier> parse_identifier();
     std::unique_ptr<IntegerLit> parse_int_literal();
+    std::unique_ptr<UintLit> parse_uint_literal();
     std::tuple<std::unique_ptr<FloatLit>, TokenError> parse_float_literal();
 
     //// expression
@@ -247,8 +248,10 @@ private:
     }
 
 private:
+    void mark_consumed(const Token& token);
     std::unique_ptr<Scanner> scanner_;
     std::unique_ptr<Token> token_;
+    SourceLocation last_consumed_loc_;
     std::vector<std::string> errs_;
     std::map<TokenType, int32_t> blocks_;
     std::string source_;

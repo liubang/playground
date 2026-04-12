@@ -45,6 +45,7 @@ enum class TokenType {
     // Identifiers and literals
     Ident,
     Int,
+    UInt,
     Float,
     String,
     Regex,
@@ -127,6 +128,8 @@ inline std::string token_to_string(TokenType token) {
         return "Ident";
     case TokenType::Int:
         return "Int";
+    case TokenType::UInt:
+        return "UInt";
     case TokenType::Float:
         return "Float";
     case TokenType::String:

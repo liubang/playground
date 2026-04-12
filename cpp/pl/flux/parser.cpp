@@ -34,13 +34,18 @@ std::unique_ptr<Package> Parser::parse_single_package(const std::string& pkgpath
     return package;
 }
 
+void Parser::mark_consumed(const Token& token) {
+    last_consumed_loc_ = source_location(token.start_pos, token.end_pos);
+}
+
 std::unique_ptr<File> Parser::parse_file(const std::string& fname) {
     fname_ = fname;
+    last_consumed_loc_ = SourceLocation::_default();
     auto inner_attrs = parse_attribute_inner_list();
     auto [pkg, inner_attrs1] = parse_package_clause(inner_attrs);
     auto [imports, inner_attrs2] = parse_import_list(inner_attrs1);
     auto body = parse_statement_list(inner_attrs2);
-    if (!inner_attrs.empty()) {
+    if (inner_attrs2 && !inner_attrs2->empty() && body.empty()) {
         // We have left over attributes from the beginning of the file.
         auto badstmt = std::make_unique<BadStmt>("extra attributes not associated with anything");
         std::shared_ptr<Statement> stmt =
@@ -56,23 +61,38 @@ std::unique_ptr<File> Parser::parse_file(const std::string& fname) {
     ret->body = body;
     ret->imports = imports;
     ret->eof = eof;
+    const Position file_start = ret->package ? ret->package->loc.start
+                              : !ret->imports.empty() ? ret->imports.front()->loc.start
+                              : !ret->body.empty() ? ret->body.front()->loc.start
+                              : peek()->start_pos;
+    const Position file_end = last_consumed_loc_.is_valid() ? last_consumed_loc_.end : peek()->end_pos;
+    ret->loc = source_location(file_start, file_end);
     return ret;
 }
 
 std::vector<std::shared_ptr<Statement>> Parser::parse_statement_list(
     const std::optional<std::vector<std::shared_ptr<Attribute>>>& attributes) {
     std::vector<std::shared_ptr<Statement>> stmts;
+    auto pending_attributes = attributes;
     for (;;) {
         if (!more()) {
             return stmts;
         }
-        stmts.emplace_back(parse_statement(attributes));
+        std::optional<std::vector<std::shared_ptr<Attribute>>> stmt_attributes;
+        if (pending_attributes) {
+            stmt_attributes = pending_attributes;
+            pending_attributes = std::nullopt;
+        } else if (peek()->tok == TokenType::Attribute) {
+            stmt_attributes = parse_attribute_inner_list();
+        }
+        stmts.emplace_back(parse_statement(stmt_attributes));
     }
     return stmts;
 }
 
 std::unique_ptr<Statement> Parser::parse_statement(
     const std::optional<std::vector<std::shared_ptr<Attribute>>>& attributes) {
+    const Position start = peek()->start_pos;
     auto opt = depth_guard<std::unique_ptr<Statement>>([this, &attributes] {
         return parse_statement_inner(attributes);
     });
@@ -80,7 +100,19 @@ std::unique_ptr<Statement> Parser::parse_statement(
         auto t = consume();
         auto bad = std::make_unique<BadStmt>(t->lit);
         auto ret = std::make_unique<Statement>(Statement::Type::BadStatement, std::move(bad));
+        if (last_consumed_loc_.is_valid()) {
+            ret->loc = source_location(start, last_consumed_loc_.end);
+        }
         return ret;
+    }
+    if (attributes) {
+        opt.value()->attributes = *attributes;
+    }
+    if (opt.value()->loc.is_valid()) {
+        return std::move(opt.value());
+    }
+    if (last_consumed_loc_.is_valid()) {
+        opt.value()->loc = source_location(start, last_consumed_loc_.end);
     }
     return std::move(opt.value());
 }
@@ -100,6 +132,7 @@ std::unique_ptr<Statement> Parser::parse_statement_inner(
         case TokenType::LParen:
         case TokenType::LBrack:
         case TokenType::LBrace:
+        case TokenType::Dot:
         case TokenType::Add:
         case TokenType::Sub:
         case TokenType::Not:
@@ -683,7 +716,14 @@ std::unique_ptr<ImportDeclaration> Parser::parse_import_declaration(
     if (peek()->tok == TokenType::Ident) {
         alias = parse_identifier();
     }
-    return std::make_unique<ImportDeclaration>(std::move(alias), parse_string_literal());
+    auto import = std::make_unique<ImportDeclaration>(std::move(alias), parse_string_literal());
+    if (attrs) {
+        import->attributes = *attrs;
+    }
+    if (last_consumed_loc_.is_valid()) {
+        import->loc = source_location(t->start_pos, last_consumed_loc_.end);
+    }
+    return import;
 }
 
 std::tuple<std::unique_ptr<PackageClause>, std::optional<std::vector<std::shared_ptr<Attribute>>>>
@@ -692,7 +732,12 @@ Parser::parse_package_clause(const std::vector<std::shared_ptr<Attribute>>& attr
     if (t->tok == TokenType::Package) {
         auto tt = consume();
         auto ident = parse_identifier();
-        return {std::make_unique<PackageClause>(std::move(ident)), std::nullopt};
+        auto package = std::make_unique<PackageClause>(std::move(ident));
+        package->attributes = attributes;
+        if (last_consumed_loc_.is_valid()) {
+            package->loc = source_location(tt->start_pos, last_consumed_loc_.end);
+        }
+        return {std::move(package), std::nullopt};
     }
     return {nullptr, attributes};
 }
@@ -725,6 +770,31 @@ std::unique_ptr<IntegerLit> Parser::parse_int_literal() {
         ret->value = value;
     } catch (...) {
         errs_.emplace_back("invalid integer literal " + t->lit + ": value out of range");
+        ret->value = 0;
+    }
+
+    return ret;
+}
+
+std::unique_ptr<UintLit> Parser::parse_uint_literal() {
+    auto t = expect(TokenType::UInt);
+    auto ret = std::make_unique<UintLit>();
+    std::string lit = t->lit;
+    if (!lit.empty() && lit.back() == 'u') {
+        lit.pop_back();
+    }
+    if (lit.starts_with('0') && lit.length() > 1) {
+        errs_.emplace_back("invalid unsigned integer literal " + t->lit +
+                           ": nonzero value cannot start with 0");
+        ret->value = 0;
+        return ret;
+    }
+
+    try {
+        ret->value = std::stoull(lit);
+    } catch (...) {
+        errs_.emplace_back("invalid unsigned integer literal " + t->lit +
+                           ": value out of range");
         ret->value = 0;
     }
 
@@ -1374,6 +1444,7 @@ std::unique_ptr<ObjectExpr> Parser::parse_object_literal() {
 }
 
 std::unique_ptr<Expression> Parser::parse_expression() {
+    const Position start = peek_with_regex()->start_pos;
     auto expr = depth_guard<std::unique_ptr<Expression>>([this] {
         return parse_conditional_expression();
     });
@@ -1381,6 +1452,9 @@ std::unique_ptr<Expression> Parser::parse_expression() {
     if (!expr) {
         auto t = consume();
         return create_bad_expression(std::move(t));
+    }
+    if (!expr.value()->loc.is_valid() && last_consumed_loc_.is_valid()) {
+        expr.value()->loc = source_location(start, last_consumed_loc_.end);
     }
     return std::move(expr.value());
 }
@@ -1607,7 +1681,9 @@ std::unique_ptr<Block> Parser::parse_block() {
     auto start = open(TokenType::LBrace, TokenType::RBrace);
     auto stmts = parse_statement_list({});
     auto end = close(TokenType::RBrace);
-    return std::make_unique<Block>(start->comments, stmts, end->comments);
+    auto block = std::make_unique<Block>(start->comments, stmts, end->comments);
+    block->loc = source_location(start->start_pos, end->end_pos);
+    return block;
 }
 
 std::unique_ptr<Expression> Parser::parse_primary_expression() {
@@ -1629,6 +1705,11 @@ std::unique_ptr<Expression> Parser::parse_primary_expression() {
         case TokenType::Int: {
             ret->type = Expression::Type::IntegerLit;
             ret->expr = parse_int_literal();
+            break;
+        }
+        case TokenType::UInt: {
+            ret->type = Expression::Type::UnsignedIntegerLit;
+            ret->expr = parse_uint_literal();
             break;
         }
         case TokenType::Float: {
@@ -1886,9 +1967,13 @@ std::unique_ptr<Token> Parser::expect_one_of(const std::set<TokenType>& exp) {
 
 std::unique_ptr<Token> Parser::scan() {
     if (token_) {
-        return std::move(token_);
+        auto token = std::move(token_);
+        mark_consumed(*token);
+        return token;
     }
-    return scanner_->scan();
+    auto token = scanner_->scan();
+    mark_consumed(*token);
+    return token;
 }
 
 const Token* Parser::peek() {
@@ -1913,7 +1998,9 @@ const Token* Parser::peek_with_regex() {
 
 std::unique_ptr<Token> Parser::consume() {
     if (token_) {
-        return std::move(token_);
+        auto token = std::move(token_);
+        mark_consumed(*token);
+        return token;
     }
     // TODO: handler error
     return nullptr;

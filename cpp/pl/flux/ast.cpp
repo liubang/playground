@@ -16,6 +16,7 @@
 
 #include "ast.h"
 
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
 
@@ -24,6 +25,15 @@ namespace pl {
 namespace {
 
 std::string mono_type_string(const MonoType& mono);
+std::string attributes_prefix(const std::vector<std::shared_ptr<Attribute>>& attributes) {
+    if (attributes.empty()) {
+        return "";
+    }
+    return absl::StrJoin(attributes, " ", [](std::string* out, const auto& attr) {
+               out->append(attr->string());
+           }) +
+           " ";
+}
 
 std::string parameter_type_string(const ParameterType& parameter) {
     switch (parameter.type) {
@@ -105,13 +115,25 @@ std::string mono_type_string(const MonoType& mono) {
 
 } // namespace
 
-std::string PackageClause::string() const { return "package " + name->string(); }
+std::string Attribute::string() const {
+    if (params.empty()) {
+        return "@" + name;
+    }
+    auto values = absl::StrJoin(params, ", ", [](std::string* out, const auto& param) {
+        out->append(param->value->string());
+    });
+    return absl::StrCat("@", name, "(", values, ")");
+}
+
+std::string PackageClause::string() const {
+    return attributes_prefix(attributes) + "package " + name->string();
+}
 
 std::string ImportDeclaration::string() const {
     if (alias) {
-        return "import " + alias->string() + " " + path->string();
+        return attributes_prefix(attributes) + "import " + alias->string() + " " + path->string();
     }
-    return "import " + path->string();
+    return attributes_prefix(attributes) + "import " + path->string();
 }
 
 std::string ArrayItem::string() const { return expression->string(); }
@@ -294,10 +316,11 @@ std::string RegexpLit::string() const { return "/" + value + "/"; }
 std::string PipeLit::string() const { return "<-"; }
 std::string LabelLit::string() const { return "." + value; }
 std::string BadExpr::string() const { return text; }
-std::string UintLit::string() const { return absl::StrFormat("%llu", value); }
+std::string UintLit::string() const { return absl::StrCat(value, "u"); }
 
 std::string Statement::string() const {
     std::stringstream ss;
+    ss << attributes_prefix(attributes);
     switch (type) {
         case Type::ExpressionStatement:
             ss << "ExpressionStatement: ";

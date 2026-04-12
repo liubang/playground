@@ -17,6 +17,7 @@
 #pragma once
 
 #include <map>
+#include <cctype>
 #include <memory>
 #include <vector>
 
@@ -77,6 +78,7 @@ public:
 private:
     std::unique_ptr<Token> scan(int32_t mode);
     std::unique_ptr<Token> get_eof_token();
+    void maybe_promote_unsigned_integer(Token* token);
 
 private:
     const char* data_;

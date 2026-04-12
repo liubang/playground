@@ -20,13 +20,35 @@
 #include <string_view>
 #include <vector>
 
+#include "absl/strings/str_join.h"
+
 namespace pl {
 namespace {
+
+std::string attributes_summary(const std::vector<std::shared_ptr<Attribute>>& attributes) {
+    if (attributes.empty()) {
+        return "";
+    }
+    return " attrs=" +
+           absl::StrJoin(attributes, ", ", [](std::string* out, const auto& attr) {
+               out->append(attr->string());
+           });
+}
+
+std::string location_summary(const SourceLocation& loc) {
+    if (!loc.is_valid()) {
+        return "";
+    }
+    std::ostringstream ss;
+    ss << " loc=" << loc.start.line << ":" << loc.start.column << "-" << loc.end.line << ":"
+       << loc.end.column;
+    return ss.str();
+}
 
 class AstDumper {
 public:
     std::string dump(const File& file) {
-        line("", true, "File name=\"" + file.name + "\"");
+        line("", true, "File name=\"" + file.name + "\"" + location_summary(file.loc));
         std::vector<const ImportDeclaration*> imports;
         imports.reserve(file.imports.size());
         for (const auto& import : file.imports) {
@@ -61,7 +83,9 @@ private:
     void dump_package_clause(const PackageClause& package,
                              const std::string& prefix,
                              bool is_last) {
-        line(prefix, is_last, "PackageClause name=" + package.name->string());
+        line(prefix, is_last,
+             "PackageClause name=" + package.name->string() + attributes_summary(package.attributes) +
+                 location_summary(package.loc));
     }
 
     void dump_import(const ImportDeclaration& import, const std::string& prefix, bool is_last) {
@@ -72,43 +96,47 @@ private:
         if (import.path) {
             label += " path=\"" + import.path->value + "\"";
         }
+        label += attributes_summary(import.attributes);
+        label += location_summary(import.loc);
         line(prefix, is_last, label);
     }
 
     void dump_statement(const Statement& stmt, const std::string& prefix, bool is_last) {
+        const std::string attrs = attributes_summary(stmt.attributes);
+        const std::string loc = location_summary(stmt.loc);
         switch (stmt.type) {
             case Statement::Type::ExpressionStatement: {
                 const auto& expr = std::get<std::unique_ptr<ExprStmt>>(stmt.stmt);
-                line(prefix, is_last, "ExpressionStatement");
+                line(prefix, is_last, "ExpressionStatement" + attrs + loc);
                 dump_expression(*expr->expression, child_prefix(prefix, is_last), true);
                 break;
             }
             case Statement::Type::VariableAssignment: {
                 const auto& assign = std::get<std::unique_ptr<VariableAssgn>>(stmt.stmt);
-                line(prefix, is_last, "VariableAssignment id=" + assign->id->string());
+                line(prefix, is_last, "VariableAssignment id=" + assign->id->string() + attrs + loc);
                 dump_expression(*assign->init, child_prefix(prefix, is_last), true);
                 break;
             }
             case Statement::Type::OptionStatement: {
                 const auto& option = std::get<std::unique_ptr<OptionStmt>>(stmt.stmt);
-                line(prefix, is_last, "OptionStatement");
+                line(prefix, is_last, "OptionStatement" + attrs + loc);
                 dump_assignment(*option->assignment, child_prefix(prefix, is_last), true);
                 break;
             }
             case Statement::Type::ReturnStatement: {
                 const auto& ret = std::get<std::unique_ptr<ReturnStmt>>(stmt.stmt);
-                line(prefix, is_last, "ReturnStatement");
+                line(prefix, is_last, "ReturnStatement" + attrs + loc);
                 dump_expression(*ret->argument, child_prefix(prefix, is_last), true);
                 break;
             }
             case Statement::Type::BadStatement: {
                 const auto& bad = std::get<std::unique_ptr<BadStmt>>(stmt.stmt);
-                line(prefix, is_last, "BadStatement text=\"" + bad->text + "\"");
+                line(prefix, is_last, "BadStatement text=\"" + bad->text + "\"" + attrs + loc);
                 break;
             }
             case Statement::Type::TestCaseStatement: {
                 const auto& testcase = std::get<std::unique_ptr<TestCaseStmt>>(stmt.stmt);
-                std::string label = "TestCaseStatement id=" + testcase->id->string();
+                std::string label = "TestCaseStatement id=" + testcase->id->string() + attrs + loc;
                 if (testcase->extends) {
                     label += " extends=\"" + testcase->extends->value + "\"";
                 }
@@ -118,7 +146,7 @@ private:
             }
             case Statement::Type::BuiltinStatement: {
                 const auto& builtin = std::get<std::unique_ptr<BuiltinStmt>>(stmt.stmt);
-                line(prefix, is_last, "BuiltinStatement id=" + builtin->id->string());
+                line(prefix, is_last, "BuiltinStatement id=" + builtin->id->string() + attrs + loc);
                 dump_type_expression(*builtin->ty, child_prefix(prefix, is_last), true);
                 break;
             }
@@ -145,7 +173,7 @@ private:
     }
 
     void dump_block(const Block& block, const std::string& prefix, bool is_last) {
-        line(prefix, is_last, "Block");
+        line(prefix, is_last, "Block" + location_summary(block.loc));
         auto next = child_prefix(prefix, is_last);
         for (size_t i = 0; i < block.body.size(); ++i) {
             dump_statement(*block.body[i], next, i + 1 == block.body.size());
@@ -560,7 +588,7 @@ public:
     std::string dump(const File& file) {
         begin_object();
         field("type", "File", true);
-        field("summary", "name=" + file.name, true);
+        field("summary", "name=" + file.name + location_summary(file.loc), true);
         key("children");
         begin_array();
         bool first = true;
@@ -614,46 +642,52 @@ private:
     void leaf(std::string_view type, std::string_view summary) { node(type, summary, [] {}); }
 
     void dump_package_clause(const PackageClause& package) {
-        leaf("PackageClause", "name=" + package.name->string());
+        leaf("PackageClause",
+             "name=" + package.name->string() + attributes_summary(package.attributes) +
+                 location_summary(package.loc));
     }
     void dump_import(const ImportDeclaration& import) {
         std::string summary = "path=\"" + import.path->value + "\"";
         if (import.alias) {
             summary = "alias=" + import.alias->string() + ", " + summary;
         }
+        summary += attributes_summary(import.attributes);
+        summary += location_summary(import.loc);
         leaf("ImportDeclaration", summary);
     }
     void dump_statement(const Statement& stmt) {
+        const std::string attrs = attributes_summary(stmt.attributes);
+        const std::string loc = location_summary(stmt.loc);
         switch (stmt.type) {
             case Statement::Type::ExpressionStatement: {
                 const auto& expr = std::get<std::unique_ptr<ExprStmt>>(stmt.stmt);
-                node("ExpressionStatement", "", [&] { dump_expression(*expr->expression); });
+                node("ExpressionStatement", attrs + loc, [&] { dump_expression(*expr->expression); });
                 break;
             }
             case Statement::Type::VariableAssignment: {
                 const auto& assign = std::get<std::unique_ptr<VariableAssgn>>(stmt.stmt);
-                node("VariableAssignment", "id=" + assign->id->string(),
+                node("VariableAssignment", "id=" + assign->id->string() + attrs + loc,
                      [&] { dump_expression(*assign->init); });
                 break;
             }
             case Statement::Type::OptionStatement: {
                 const auto& option = std::get<std::unique_ptr<OptionStmt>>(stmt.stmt);
-                node("OptionStatement", "", [&] { dump_assignment(*option->assignment); });
+                node("OptionStatement", attrs + loc, [&] { dump_assignment(*option->assignment); });
                 break;
             }
             case Statement::Type::ReturnStatement: {
                 const auto& ret = std::get<std::unique_ptr<ReturnStmt>>(stmt.stmt);
-                node("ReturnStatement", "", [&] { dump_expression(*ret->argument); });
+                node("ReturnStatement", attrs + loc, [&] { dump_expression(*ret->argument); });
                 break;
             }
             case Statement::Type::BadStatement: {
                 const auto& bad = std::get<std::unique_ptr<BadStmt>>(stmt.stmt);
-                leaf("BadStatement", bad->text);
+                leaf("BadStatement", bad->text + attrs + loc);
                 break;
             }
             case Statement::Type::TestCaseStatement: {
                 const auto& testcase = std::get<std::unique_ptr<TestCaseStmt>>(stmt.stmt);
-                std::string summary = "id=" + testcase->id->string();
+                std::string summary = "id=" + testcase->id->string() + attrs + loc;
                 if (testcase->extends) {
                     summary += ", extends=\"" + testcase->extends->value + "\"";
                 }
@@ -662,7 +696,7 @@ private:
             }
             case Statement::Type::BuiltinStatement: {
                 const auto& builtin = std::get<std::unique_ptr<BuiltinStmt>>(stmt.stmt);
-                node("BuiltinStatement", "id=" + builtin->id->string(),
+                node("BuiltinStatement", "id=" + builtin->id->string() + attrs + loc,
                      [&] { dump_type_expression(*builtin->ty); });
                 break;
             }
@@ -690,7 +724,7 @@ private:
         }
     }
     void dump_block(const Block& block) {
-        node("Block", "", [&] {
+        node("Block", location_summary(block.loc), [&] {
             bool first = true;
             for (const auto& stmt : block.body) {
                 element_prefix(first);

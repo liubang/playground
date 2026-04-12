@@ -18,6 +18,14 @@
 
 namespace pl {
 
+namespace {
+
+bool is_identifier_continue(unsigned char c) {
+    return std::isalnum(c) != 0 || c == '_';
+}
+
+} // namespace
+
 extern uint32_t real_scan(int32_t mode,
                           const char** p,
                           const char* ps,
@@ -80,6 +88,7 @@ std::unique_ptr<Token> Scanner::scan(int32_t mode) {
         t->end_offset = token_end;
         t->start_pos = Position(token_start_line, token_start_col);
         t->end_pos = Position(token_end_line, token_end_col);
+        maybe_promote_unsigned_integer(t.get());
     }
     positions_[t->start_pos] = t->start_offset;
     positions_[t->end_pos] = t->end_offset;
@@ -97,6 +106,21 @@ std::unique_ptr<Token> Scanner::get_eof_token() {
     token->start_pos = Position(cur_line_, column);
     token->end_pos = Position(cur_line_, column);
     return token;
+}
+
+void Scanner::maybe_promote_unsigned_integer(Token* token) {
+    if (token == nullptr || token->tok != TokenType::Int || p_ >= eof_ || *p_ != 'u') {
+        return;
+    }
+    const char* suffix = p_ + 1;
+    if (suffix < eof_ && is_identifier_continue(static_cast<unsigned char>(*suffix))) {
+        return;
+    }
+    token->tok = TokenType::UInt;
+    token->lit.push_back('u');
+    token->end_offset += 1;
+    token->end_pos.column += 1;
+    p_ = suffix;
 }
 
 } // namespace pl
