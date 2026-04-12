@@ -14,6 +14,7 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
+#include "ast_debug.h"
 #include "parser.h"
 #include <iostream>
 #include <memory>
@@ -42,23 +43,15 @@ int main(int argc, char* argv[]) {
     pl::Parser parser(flux);
     auto file = parser.parse_file("");
 
-    std::cout << "=============================================================\n";
-    std::cout << "fname        : " << file->name << '\n';
-    std::cout << "imports size : " << file->imports.size() << '\n';
-    std::cout << "body size    : " << file->body.size() << '\n';
-    std::cout << "\n";
-
-    std::cout << file->package->string() << "\n";
-    std::cout << "\n";
-
-    for (const auto& i : file->imports) {
-        std::cout << i->string() << '\n';
+    if (!parser.errors().empty()) {
+        std::cout << "parser errors:\n";
+        for (const auto& error : parser.errors()) {
+            std::cout << "  - " << error << '\n';
+        }
+        std::cout << '\n';
     }
-    std::cout << "\n";
 
-    for (const auto& stmt : file->body) {
-        std::cout << stmt->string() << '\n';
-    }
+    std::cout << pl::dump_ast(*file);
 
     return 0;
 }

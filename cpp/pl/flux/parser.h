@@ -47,6 +47,8 @@ public:
     // Parses a file of Flux source code, returning a File
     std::unique_ptr<File> parse_file(const std::string& fname);
 
+    [[nodiscard]] const std::vector<std::string>& errors() const { return errs_; }
+
 private:
     constexpr static char METADATA[] = "parser-type=rust";
     constexpr static uint32_t MAX_DEPTH = 80;

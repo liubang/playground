@@ -152,11 +152,91 @@ std::unique_ptr<Statement> Parser::parse_option_assignment() {
     return std::make_unique<Statement>(Statement::Type::BadStatement, std::move(badstmt));
 }
 
-// TODO
-std::unique_ptr<MonoType> Parser::parse_record_type() { return nullptr; }
+std::unique_ptr<MonoType> Parser::parse_record_type() {
+    open(TokenType::LBrace, TokenType::RBrace);
+
+    std::unique_ptr<Identifier> tvar;
+    std::vector<std::shared_ptr<PropertyType>> properties;
+    if (peek()->tok != TokenType::RBrace) {
+        auto first = parse_identifier();
+        if (peek()->tok == TokenType::Ident && peek()->lit == "with") {
+            tvar = std::move(first);
+            consume();
+        } else {
+            expect(TokenType::Colon);
+            properties.emplace_back(
+                std::make_shared<PropertyType>(std::move(first), parse_monotype()));
+            while (peek()->tok == TokenType::Comma) {
+                consume();
+                auto name = parse_identifier();
+                expect(TokenType::Colon);
+                properties.emplace_back(
+                    std::make_shared<PropertyType>(std::move(name), parse_monotype()));
+            }
+        }
+
+        while (peek()->tok == TokenType::Comma) {
+            consume();
+            auto name = parse_identifier();
+            expect(TokenType::Colon);
+            properties.emplace_back(
+                std::make_shared<PropertyType>(std::move(name), parse_monotype()));
+        }
+    }
+
+    close(TokenType::RBrace);
+    return std::make_unique<MonoType>(MonoType::Type::Record,
+                                      std::make_unique<RecordType>(std::move(tvar), properties));
+}
 
 // "(" [Parameters] ")" "=>" MonoType
-std::unique_ptr<MonoType> Parser::parse_function_type() { return nullptr; }
+std::unique_ptr<MonoType> Parser::parse_function_type() {
+    open(TokenType::LParen, TokenType::RParen);
+    std::vector<std::shared_ptr<ParameterType>> parameters;
+
+    while (peek()->tok != TokenType::RParen && more()) {
+        ParameterType::Type param_type = ParameterType::Type::Required;
+        if (peek()->tok == TokenType::PipeReceive) {
+            consume();
+            auto name = parse_identifier();
+            expect(TokenType::Colon);
+            auto mono = parse_monotype();
+            parameters.emplace_back(std::make_shared<ParameterType>(
+                ParameterType::Type::Pipe,
+                std::make_unique<Pipe>(Pipe{std::move(name), std::move(mono)})));
+        } else {
+            if (peek()->tok == TokenType::QuestionMark) {
+                consume();
+                param_type = ParameterType::Type::Optional;
+            }
+            auto name = parse_identifier();
+            expect(TokenType::Colon);
+            auto mono = parse_monotype();
+            if (param_type == ParameterType::Type::Optional) {
+                parameters.emplace_back(std::make_shared<ParameterType>(
+                    ParameterType::Type::Optional,
+                    std::make_unique<Optional>(
+                        Optional{std::move(name), std::move(mono), nullptr})));
+            } else {
+                auto required = std::make_shared<Required>();
+                required->name = std::move(name);
+                required->monotype = std::move(mono);
+                parameters.emplace_back(std::make_shared<ParameterType>(
+                    ParameterType::Type::Required, std::move(required)));
+            }
+        }
+
+        if (peek()->tok != TokenType::Comma) {
+            break;
+        }
+        consume();
+    }
+
+    close(TokenType::RParen);
+    expect(TokenType::Arrow);
+    return std::make_unique<MonoType>(MonoType::Type::Function,
+                                      std::make_unique<FunctionType>(parameters, parse_monotype()));
+}
 
 std::unique_ptr<MonoType> Parser::parse_dynamic_type() {
     expect(TokenType::Ident);
@@ -177,17 +257,20 @@ std::unique_ptr<MonoType> Parser::parse_monotype() {
     // Tvar | Basic | Array | Dict | Dynamic | Record | Function
     const auto* t = peek();
     if (t->tok == TokenType::LBrack) {
+        open(TokenType::LBrack, TokenType::RBrack);
         auto ty = parse_monotype();
         if (peek()->tok == TokenType::RBrack) {
+            close(TokenType::RBrack);
             return std::make_unique<MonoType>(MonoType::Type::Array,
                                               std::make_unique<ArrayType>(std::move(ty)));
         }
         expect(TokenType::Colon);
         auto val = parse_monotype();
+        close(TokenType::RBrack);
         return std::make_unique<MonoType>(
             MonoType::Type::Dict, std::make_unique<DictType>(std::move(ty), std::move(val)));
     }
-    if (t->tok == TokenType::LBrack) {
+    if (t->tok == TokenType::LBrace) {
         return parse_record_type();
     }
     if (t->tok == TokenType::LParen) {
@@ -209,6 +292,7 @@ std::unique_ptr<MonoType> Parser::parse_monotype() {
             expect(TokenType::Ident);
             open(TokenType::LBrack, TokenType::RBrack);
             auto ty = parse_monotype();
+            close(TokenType::RBrack);
             return std::make_unique<MonoType>(MonoType::Type::Vector,
                                               std::make_unique<VectorType>(std::move(ty)));
         }
@@ -238,6 +322,7 @@ std::unique_ptr<TypeConstraint> Parser::parse_constraint() {
 
 std::vector<std::shared_ptr<TypeConstraint>> Parser::parse_constraints() {
     std::vector<std::shared_ptr<TypeConstraint>> ret;
+    ret.push_back(parse_constraint());
     while (peek()->tok == TokenType::Comma) {
         consume();
         ret.push_back(parse_constraint());
@@ -257,16 +342,28 @@ std::unique_ptr<TypeExpression> Parser::parse_type_expression() {
 }
 
 std::unique_ptr<Statement> Parser::parse_builtin_statement() {
-    auto t = expect(TokenType::Builtin);
+    expect(TokenType::Builtin);
     auto id = parse_identifier();
     auto colon = expect(TokenType::Colon);
     auto type = parse_type_expression();
-    return std::make_unique<Statement>(Statement::Type::BuiltinStatement,
-                                       std::make_unique<BuiltinStmt>());
+    return std::make_unique<Statement>(
+        Statement::Type::BuiltinStatement,
+        std::make_unique<BuiltinStmt>(colon->comments, std::move(id), std::move(type)));
 }
 
-// TODO
-std::unique_ptr<Statement> Parser::parse_testcase_statement() { return nullptr; }
+std::unique_ptr<Statement> Parser::parse_testcase_statement() {
+    expect(TokenType::TestCase);
+    auto id = parse_identifier();
+    std::unique_ptr<StringLit> extends;
+    if (peek()->tok == TokenType::Ident && peek()->lit == "extends") {
+        consume();
+        extends = parse_string_literal();
+    }
+    auto block = parse_block();
+    return std::make_unique<Statement>(
+        Statement::Type::TestCaseStatement,
+        std::make_unique<TestCaseStmt>(std::move(id), std::move(extends), std::move(block)));
+}
 
 std::unique_ptr<Assignment> Parser::parse_option_assignment_suffix(std::unique_ptr<Identifier> id) {
     const auto* t = peek();
@@ -737,6 +834,7 @@ std::unique_ptr<Expression> Parser::parse_additive_expression_suffix(
         auto nret = std::make_unique<Expression>();
         nret->type = Expression::Type::BinaryExpr;
         auto binexpr = std::make_unique<BinaryExpr>();
+        binexpr->op = op.value();
         binexpr->left = std::move(ret);
         binexpr->right = std::move(rhs);
         nret->expr = std::move(binexpr);
@@ -1039,7 +1137,7 @@ std::unique_ptr<Expression> Parser::parse_array_or_dict(std::unique_ptr<Token> s
             dict_expr->rbrack = std::move(rbrack);
 
             auto expr = std::make_unique<Expression>();
-            expr->type = Expression::Type::ArrayExpr;
+            expr->type = Expression::Type::DictExpr;
             expr->expr = std::move(dict_expr);
             return expr;
         }
@@ -1103,11 +1201,11 @@ std::vector<std::shared_ptr<Property>> Parser::parse_property_list_suffix(
         return props;
     }
     const auto* t = peek();
-    if (t->tok == TokenType::Comma) {
+    if (t->tok != TokenType::Comma) {
         errs_.emplace_back("expected comma in property list, got " + token_to_string(t->tok));
     } else {
         auto last = props.size() - 1;
-        auto tt = consume();
+        consume();
         props[last]->comma = t->comments;
     }
     auto list = parse_property_list();
@@ -1518,8 +1616,14 @@ std::unique_ptr<Expression> Parser::parse_primary_expression() {
     auto ret = std::make_unique<Expression>();
     switch (t->tok) {
         case TokenType::Ident: {
-            ret->type = Expression::Type::Identifier;
-            ret->expr = parse_identifier();
+            if (t->lit == "true" || t->lit == "false") {
+                auto lit = expect(TokenType::Ident);
+                ret->type = Expression::Type::BooleanLit;
+                ret->expr = std::make_unique<BooleanLit>(lit->lit == "true");
+            } else {
+                ret->type = Expression::Type::Identifier;
+                ret->expr = parse_identifier();
+            }
             break;
         }
         case TokenType::Int: {

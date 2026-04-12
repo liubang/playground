@@ -106,7 +106,7 @@ absl::StatusOr<std::string> StrConv::parse_string(const std::string& lit) {
     if (lit.length() < 2 || !lit.starts_with('"') || !lit.ends_with('"')) {
         return absl::InvalidArgumentError("invalid string literal");
     }
-    return parse_text(lit.substr(1, lit.length() - 1));
+    return parse_text(lit.substr(1, lit.length() - 2));
 }
 
 absl::StatusOr<std::string> StrConv::parse_regex(const std::string& lit) {

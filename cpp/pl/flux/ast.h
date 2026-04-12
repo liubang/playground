@@ -848,11 +848,27 @@ struct DynamicType {};
 struct FunctionType {
     std::vector<std::shared_ptr<ParameterType>> parameters;
     std::unique_ptr<MonoType> monotype;
+    FunctionType() = default;
+    FunctionType(const std::vector<std::shared_ptr<ParameterType>>& parameters,
+                 std::unique_ptr<MonoType> monotype)
+        : parameters(parameters), monotype(std::move(monotype)) {}
+};
+
+struct PropertyType {
+    std::unique_ptr<Identifier> name;
+    std::unique_ptr<MonoType> monotype;
+    PropertyType() = default;
+    PropertyType(std::unique_ptr<Identifier> name, std::unique_ptr<MonoType> monotype)
+        : name(std::move(name)), monotype(std::move(monotype)) {}
 };
 
 struct RecordType {
     std::unique_ptr<Identifier> tvar;
     std::vector<std::shared_ptr<PropertyType>> properties;
+    RecordType() = default;
+    RecordType(std::unique_ptr<Identifier> tvar,
+               const std::vector<std::shared_ptr<PropertyType>>& properties)
+        : tvar(std::move(tvar)), properties(properties) {}
 };
 
 struct TypeExpression {
