@@ -168,7 +168,7 @@ uint32_t real_scan(
     int32_t& token_end_col)
 {
     int cs = flux_start;
-    switch (cs) {
+    switch (mode) {
     case 0:
         cs = flux_en_main;
         break;
