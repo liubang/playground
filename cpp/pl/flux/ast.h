@@ -17,14 +17,12 @@
 #pragma once
 
 #include "cpp/pl/lang/assume.h"
-
+#include "token.h"
 #include <ctime>
 #include <unordered_map>
 #include <utility>
 #include <variant>
 #include <vector>
-
-#include "token.h"
 
 namespace pl {
 
@@ -674,49 +672,49 @@ static std::unordered_map<std::string, Operator> operator_map = {
 
 inline std::string op_string(Operator op) {
     switch (op) {
-    case Operator::MultiplicationOperator:
-        return "*";
-    case Operator::DivisionOperator:
-        return "/";
-    case Operator::ModuloOperator:
-        return "%";
-    case Operator::PowerOperator:
-        return "^";
-    case Operator::AdditionOperator:
-        return "+";
-    case Operator::SubtractionOperator:
-        return "-";
-    case Operator::LessThanEqualOperator:
-        return "<=";
-    case Operator::LessThanOperator:
-        return "<";
-    case Operator::GreaterThanEqualOperator:
-        return ">=";
-    case Operator::GreaterThanOperator:
-        return ">";
-    case Operator::StartsWithOperator:
-        return "startswith";
-    case Operator::InOperator:
-        return "in";
-    case Operator::NotOperator:
-        return "not";
-    case Operator::ExistsOperator:
-        return "exists";
-    case Operator::NotEmptyOperator:
-        return "not empty";
-    case Operator::EmptyOperator:
-        return "empty";
-    case Operator::EqualOperator:
-        return "==";
-    case Operator::NotEqualOperator:
-        return "!=";
-    case Operator::RegexpMatchOperator:
-        return "=~";
-    case Operator::NotRegexpMatchOperator:
-        return "!~";
-    case Operator::InvalidOperator:
-    default:
-        return "InvalidOperator";
+        case Operator::MultiplicationOperator:
+            return "*";
+        case Operator::DivisionOperator:
+            return "/";
+        case Operator::ModuloOperator:
+            return "%";
+        case Operator::PowerOperator:
+            return "^";
+        case Operator::AdditionOperator:
+            return "+";
+        case Operator::SubtractionOperator:
+            return "-";
+        case Operator::LessThanEqualOperator:
+            return "<=";
+        case Operator::LessThanOperator:
+            return "<";
+        case Operator::GreaterThanEqualOperator:
+            return ">=";
+        case Operator::GreaterThanOperator:
+            return ">";
+        case Operator::StartsWithOperator:
+            return "startswith";
+        case Operator::InOperator:
+            return "in";
+        case Operator::NotOperator:
+            return "not";
+        case Operator::ExistsOperator:
+            return "exists";
+        case Operator::NotEmptyOperator:
+            return "not empty";
+        case Operator::EmptyOperator:
+            return "empty";
+        case Operator::EqualOperator:
+            return "==";
+        case Operator::NotEqualOperator:
+            return "!=";
+        case Operator::RegexpMatchOperator:
+            return "=~";
+        case Operator::NotRegexpMatchOperator:
+            return "!~";
+        case Operator::InvalidOperator:
+        default:
+            return "InvalidOperator";
     }
 }
 
@@ -727,10 +725,10 @@ enum class LogicalOperator {
 
 inline std::string op_string(LogicalOperator op) {
     switch (op) {
-    case LogicalOperator::AndOperator:
-        return " and ";
-    case LogicalOperator::OrOperator:
-        return " or ";
+        case LogicalOperator::AndOperator:
+            return " and ";
+        case LogicalOperator::OrOperator:
+            return " or ";
     }
     pl::assume_unreachable();
 }

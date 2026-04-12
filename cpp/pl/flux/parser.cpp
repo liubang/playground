@@ -315,16 +315,30 @@ std::unique_ptr<MonoType> Parser::parse_monotype() {
     if (t->tok == TokenType::Ident) {
         if (t->lit == "stream") {
             expect(TokenType::Ident);
-            open(TokenType::LBrack, TokenType::RBrack);
-            auto ty = parse_monotype();
+            auto lbrack = open(TokenType::LBrack, TokenType::RBrack);
+            std::unique_ptr<MonoType> ty;
+            if (peek()->tok == TokenType::RBrack ||
+                peek()->start_pos.line > lbrack->start_pos.line) {
+                errs_.emplace_back("missing stream element type");
+                ty = create_placeholder_monotype("<invalid>");
+            } else {
+                ty = parse_monotype();
+            }
             close(TokenType::RBrack);
             return std::make_unique<MonoType>(MonoType::Type::Stream,
                                               std::make_unique<StreamType>(std::move(ty)));
         }
         if (t->lit == "vector") {
             expect(TokenType::Ident);
-            open(TokenType::LBrack, TokenType::RBrack);
-            auto ty = parse_monotype();
+            auto lbrack = open(TokenType::LBrack, TokenType::RBrack);
+            std::unique_ptr<MonoType> ty;
+            if (peek()->tok == TokenType::RBrack ||
+                peek()->start_pos.line > lbrack->start_pos.line) {
+                errs_.emplace_back("missing vector element type");
+                ty = create_placeholder_monotype("<invalid>");
+            } else {
+                ty = parse_monotype();
+            }
             close(TokenType::RBrack);
             return std::make_unique<MonoType>(MonoType::Type::Vector,
                                               std::make_unique<VectorType>(std::move(ty)));
@@ -645,22 +659,51 @@ std::unique_ptr<Expression> Parser::parse_index_expression(std::unique_ptr<Expre
 std::unique_ptr<Expression> Parser::parse_call_expression(std::unique_ptr<Expression> expr) {
     auto lparen = open(TokenType::LParen, TokenType::RParen);
     FLUX_DEBUG(lparen->lit);
-    auto params = parse_property_list();
+    std::vector<std::shared_ptr<Expression>> arguments;
+    if (peek()->tok == TokenType::Ident && peek_next()->tok == TokenType::Colon) {
+        auto params = parse_property_list();
+        if (!params.empty()) {
+            auto obj_expr =
+                std::make_unique<ObjectExpr>(std::vector<std::shared_ptr<Comment>>{}, nullptr,
+                                             params, std::vector<std::shared_ptr<Comment>>{});
+            arguments.emplace_back(
+                std::make_unique<Expression>(Expression::Type::ObjectExpr, std::move(obj_expr)));
+        }
+    } else if (more()) {
+        arguments = parse_call_argument_list();
+    }
     auto end = close(TokenType::RParen);
     FLUX_DEBUG(end->lit);
     auto call =
-        std::make_unique<CallExpr>(std::move(expr), lparen->comments,
-                                   std::vector<std::shared_ptr<Expression>>{}, end->comments);
-    if (!params.empty()) {
-        auto obj_expr =
-            std::make_unique<ObjectExpr>(std::vector<std::shared_ptr<Comment>>{}, nullptr, params,
-                                         std::vector<std::shared_ptr<Comment>>{});
-        auto exp_param =
-            std::make_unique<Expression>(Expression::Type::ObjectExpr, std::move(obj_expr));
-        call->arguments.push_back(std::move(exp_param));
+        std::make_unique<CallExpr>(std::move(expr), lparen->comments, arguments, end->comments);
+    return std::make_unique<Expression>(Expression::Type::CallExpr, std::move(call));
+}
+
+std::vector<std::shared_ptr<Expression>> Parser::parse_call_argument_list() {
+    std::vector<std::shared_ptr<Expression>> args;
+    while (more()) {
+        auto arg = parse_expression_until_boundary(nullptr, {TokenType::Comma, TokenType::RParen},
+                                                   std::nullopt);
+        if (!arg) {
+            errs_.emplace_back("missing call argument");
+        } else {
+            args.emplace_back(std::move(arg));
+        }
+        if (!more()) {
+            break;
+        }
+        if (peek()->tok == TokenType::Comma) {
+            consume();
+            continue;
+        }
+        errs_.emplace_back("expected comma in call argument list, got " +
+                           token_to_string(peek()->tok));
+        synchronize({TokenType::Comma, TokenType::RParen});
+        if (peek()->tok == TokenType::Comma) {
+            consume();
+        }
     }
-    auto ret = std::make_unique<Expression>(Expression::Type::CallExpr, std::move(call));
-    return ret;
+    return args;
 }
 
 std::unique_ptr<Expression> Parser::parse_dot_expression(std::unique_ptr<Expression> expr) {
@@ -808,13 +851,16 @@ std::unique_ptr<Identifier> Parser::parse_identifier() {
 }
 
 std::unique_ptr<Expression> Parser::create_bad_expression_with_text(
-    [[__maybe_unused__]] std::unique_ptr<Token> tok, std::string_view text) {
+    std::unique_ptr<Token> tok, std::string_view text) {
     auto expr = std::make_unique<BadExpr>();
     expr->text = text;
 
     auto ret = std::make_unique<Expression>();
     ret->type = Expression::Type::BadExpr;
     ret->expr = std::move(expr);
+    if (tok) {
+        ret->loc = source_location(tok->start_pos, tok->end_pos);
+    }
 
     return ret;
 }
@@ -822,6 +868,21 @@ std::unique_ptr<Expression> Parser::create_bad_expression_with_text(
 std::unique_ptr<Expression> Parser::create_bad_expression(std::unique_ptr<Token> tok) {
     std::string ss = "invalid token for primary expression: " + token_to_string(tok->tok);
     return create_bad_expression_with_text(std::move(tok), std::move(ss));
+}
+
+std::unique_ptr<MonoType> Parser::create_placeholder_monotype(std::string_view name) {
+    return std::make_unique<MonoType>(
+        MonoType::Type::Basic,
+        std::make_unique<NamedType>(std::make_unique<Identifier>(std::string(name))));
+}
+
+std::unique_ptr<Property> Parser::create_bad_property(std::string_view key,
+                                                      std::unique_ptr<Expression> value) {
+    auto property = std::make_unique<Property>();
+    property->key = std::make_unique<PropertyKey>(PropertyKey::Type::StringLiteral,
+                                                  std::make_unique<StringLit>(std::string(key)));
+    property->value = std::move(value);
+    return property;
 }
 
 std::unique_ptr<StringLit> Parser::new_string_literal(std::unique_ptr<Token> t) {
@@ -1035,12 +1096,39 @@ std::unique_ptr<Expression> Parser::parse_conditional_expression() {
         auto if_tok = scan();
         auto test = parse_expression();
         auto then_tok = expect_or_skip(TokenType::Then);
-        auto cons = then_tok->tok == TokenType::Then
-                        ? parse_expression()
-                        : create_placeholder_expression(then_tok.get());
+        std::unique_ptr<Expression> cons;
+        if (then_tok->tok == TokenType::Then) {
+            cons = parse_expression_until_boundary(nullptr, {TokenType::Else},
+                                                   then_tok->start_pos.line);
+        } else {
+            synchronize({TokenType::Then, TokenType::Else});
+            if (peek()->tok == TokenType::Then) {
+                then_tok = consume();
+                cons = parse_expression_until_boundary(nullptr, {TokenType::Else},
+                                                       then_tok->start_pos.line);
+            } else {
+                cons = create_placeholder_expression(then_tok.get());
+            }
+        }
+        if (!cons) {
+            errs_.emplace_back("missing consequent expression in conditional");
+            cons = create_placeholder_expression(then_tok.get());
+        }
+
         auto else_tok = expect_or_skip(TokenType::Else);
-        auto alt = else_tok->tok == TokenType::Else ? parse_expression()
-                                                    : create_placeholder_expression(else_tok.get());
+        std::unique_ptr<Expression> alt;
+        if (else_tok->tok == TokenType::Else) {
+            alt = parse_expression_until_boundary(nullptr, {}, else_tok->start_pos.line);
+        } else if (peek()->tok == TokenType::Else) {
+            else_tok = consume();
+            alt = parse_expression_until_boundary(nullptr, {}, else_tok->start_pos.line);
+        } else {
+            alt = create_placeholder_expression(else_tok.get());
+        }
+        if (!alt) {
+            errs_.emplace_back("missing alternate expression in conditional");
+            alt = create_placeholder_expression(else_tok.get());
+        }
 
         auto cond_expr = std::make_unique<ConditionalExpr>();
         cond_expr->tk_if = if_tok->comments;
@@ -1121,8 +1209,51 @@ std::unique_ptr<Expression> Parser::parse_dict_items_rest(std::unique_ptr<Token>
 
         while (more()) {
             auto nkey = parse_expression();
-            expect(TokenType::Colon);
+            if (nkey->type == Expression::Type::BadExpr) {
+                auto loc = nkey->loc;
+                std::stringstream ss;
+                ss << "invalid dict key " << loc << ": " << nkey->string();
+                errs_.emplace_back(ss.str());
+                if (peek()->tok == TokenType::Comma) {
+                    consume();
+                    continue;
+                }
+                if (peek()->tok == TokenType::RBrack) {
+                    break;
+                }
+                continue;
+            }
+            if (peek()->tok != TokenType::Colon) {
+                errs_.emplace_back("expected colon in dict item, got " +
+                                   token_to_string(peek()->tok));
+                synchronize({TokenType::Comma, TokenType::RBrack});
+                if (peek()->tok == TokenType::Comma) {
+                    consume();
+                    continue;
+                }
+                break;
+            }
+            consume();
             auto nval = parse_expression();
+            if (nval->type == Expression::Type::BadExpr) {
+                auto loc = nval->loc;
+                std::stringstream ss;
+                ss << "invalid dict value " << loc << ": " << nval->string();
+                errs_.emplace_back(ss.str());
+                if (peek()->tok == TokenType::Comma) {
+                    consume();
+                    continue;
+                }
+                if (peek()->tok == TokenType::RBrack) {
+                    break;
+                }
+                synchronize({TokenType::Comma, TokenType::RBrack});
+                if (peek()->tok == TokenType::Comma) {
+                    consume();
+                    continue;
+                }
+                break;
+            }
             std::shared_ptr<DictItem> nitem = std::make_shared<DictItem>();
             nitem->key = std::move(nkey);
             nitem->val = std::move(nval);
@@ -1169,6 +1300,21 @@ std::unique_ptr<Expression> Parser::parse_array_items_rest(std::unique_ptr<Token
         while (more()) {
             std::vector<std::shared_ptr<Comment>> ncomma;
             auto expression = parse_expression();
+            if (expression->type == Expression::Type::BadExpr) {
+                auto loc = expression->loc;
+                std::stringstream ss;
+                ss << "invalid array element " << loc << ": " << expression->string();
+                errs_.emplace_back(ss.str());
+                if (peek()->tok == TokenType::Comma) {
+                    consume();
+                    last = peek()->start_offset;
+                    continue;
+                }
+                if (peek()->tok == TokenType::RBrack) {
+                    break;
+                }
+                continue;
+            }
             if (peek()->tok == TokenType::Comma) {
                 comma = scan();
                 ncomma = comma->comments;
@@ -1310,21 +1456,26 @@ std::unique_ptr<Expression> Parser::parse_property_value() {
     return res;
 }
 
-std::unique_ptr<Expression> Parser::parse_expression_while_more(
-    std::unique_ptr<Expression> init, const std::set<TokenType>& stop_tokens) {
+std::unique_ptr<Expression> Parser::parse_expression_until_boundary(
+    std::unique_ptr<Expression> init,
+    const std::set<TokenType>& stop_tokens,
+    std::optional<uint32_t> max_line) {
     for (;;) {
         const auto* t = peek();
         FLUX_DEBUG(t->lit);
         if (stop_tokens.contains(t->tok) || !more()) {
             break;
         }
+        if (max_line.has_value() && t->start_pos.line > *max_line) {
+            break;
+        }
         auto e = parse_expression();
         if (e->type == Expression::Type::BadExpr) {
-            auto invalid_t = scan();
-            auto loc = source_location(invalid_t->start_pos, invalid_t->end_pos);
+            auto loc = e->loc;
             std::stringstream ss;
-            ss << "invalid expression " << loc << ":" << invalid_t->lit;
+            ss << "invalid expression " << loc << ": " << e->string();
             errs_.emplace_back(ss.str());
+            synchronize(stop_tokens);
             continue;
         }
         if (init) {
@@ -1343,6 +1494,11 @@ std::unique_ptr<Expression> Parser::parse_expression_while_more(
     return init;
 }
 
+std::unique_ptr<Expression> Parser::parse_expression_while_more(
+    std::unique_ptr<Expression> init, const std::set<TokenType>& stop_tokens) {
+    return parse_expression_until_boundary(std::move(init), stop_tokens, std::nullopt);
+}
+
 std::unique_ptr<Property> Parser::parse_invalid_property() {
     const auto* t = peek();
     std::unique_ptr<Expression> value;
@@ -1352,12 +1508,13 @@ std::unique_ptr<Property> Parser::parse_invalid_property() {
         value = parse_property_value();
     } else if (t->tok == TokenType::Comma) {
         errs_.emplace_back("missing property in property list");
+        consume();
     } else {
         errs_.emplace_back("unexpcted token for property key: " + token_to_string(t->tok) + t->lit);
 
         // We are not really parsing an expression, this is just a way to advance to just before
         // the next comma, colon, end of block, or EOF.
-        parse_expression_while_more(nullptr, {TokenType::Comma, TokenType::Colon});
+        synchronize({TokenType::Comma, TokenType::Colon, TokenType::RBrace});
 
         // If we stopped at a colon, attempt to parse the value
         if (peek()->tok == TokenType::Colon) {
@@ -1365,12 +1522,7 @@ std::unique_ptr<Property> Parser::parse_invalid_property() {
             value = parse_property_value();
         }
     }
-    std::unique_ptr<Property> p;
-    auto k = std::make_unique<PropertyKey>(PropertyKey::Type::StringLiteral,
-                                           std::make_unique<StringLit>("<invali>"));
-    p->value = std::move(value);
-    p->key = std::move(k);
-    return p;
+    return create_bad_property("<invalid>", std::move(value));
 }
 
 std::unique_ptr<Property> Parser::parse_ident_property() {
@@ -1549,10 +1701,23 @@ std::unique_ptr<Expression> Parser::parse_paren_body_expression(std::unique_ptr<
 std::vector<std::shared_ptr<Property>> Parser::parse_parameter_list() {
     std::vector<std::shared_ptr<Property>> params;
     while (more()) {
-        auto p = parse_parameter();
+        std::unique_ptr<Property> p =
+            peek()->tok == TokenType::Ident ? parse_parameter() : parse_invalid_parameter();
+        if (!more()) {
+            params.emplace_back(std::move(p));
+            break;
+        }
         if (peek()->tok == TokenType::Comma) {
             auto t = scan();
             p->comma = t->comments;
+        } else if (peek()->tok != TokenType::RParen) {
+            errs_.emplace_back("expected comma in parameter list, got " +
+                               token_to_string(peek()->tok));
+            synchronize({TokenType::Comma, TokenType::RParen});
+            if (peek()->tok == TokenType::Comma) {
+                auto t = scan();
+                p->comma = t->comments;
+            }
         }
         params.emplace_back(std::move(p));
     }
@@ -1572,6 +1737,12 @@ std::unique_ptr<Property> Parser::parse_parameter() {
     return std::make_unique<Property>(
         std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
         std::vector<std::shared_ptr<Comment>>{}, std::move(value), separator);
+}
+
+std::unique_ptr<Property> Parser::parse_invalid_parameter() {
+    errs_.emplace_back("unexpected token for parameter: " + token_to_string(peek()->tok));
+    synchronize({TokenType::Comma, TokenType::RParen});
+    return create_bad_property("<invalid-param>", nullptr);
 }
 
 std::unique_ptr<Expression> Parser::parse_paren_ident_expression(std::unique_ptr<Token> lparen,
@@ -1785,7 +1956,7 @@ std::unique_ptr<Expression> Parser::parse_primary_expression() {
             ret->expr = parse_label_literal();
             break;
         default:
-            break;
+            return create_bad_expression(consume());
     }
     return ret;
 }
@@ -1793,7 +1964,22 @@ std::unique_ptr<Expression> Parser::parse_primary_expression() {
 std::vector<std::shared_ptr<AttributeParam>> Parser::parse_attribute_params() {
     std::vector<std::shared_ptr<AttributeParam>> params;
     while (more()) {
-        auto value = parse_primary_expression();
+        auto value = parse_expression_until_boundary(nullptr, {TokenType::Comma, TokenType::RParen},
+                                                     std::nullopt);
+        if (!value) {
+            errs_.emplace_back("missing attribute parameter");
+            if (peek()->tok == TokenType::Comma) {
+                consume();
+                continue;
+            }
+            break;
+        }
+        if (value->type == Expression::Type::BadExpr) {
+            auto loc = value->loc;
+            std::stringstream ss;
+            ss << "invalid attribute parameter " << loc << ": " << value->string();
+            errs_.emplace_back(ss.str());
+        }
         std::vector<std::shared_ptr<Comment>> comments;
         if (more()) {
             const auto* t = peek();
@@ -1891,6 +2077,29 @@ bool Parser::more() {
     return blocks_.find(t_tok) == blocks_.end() || blocks_[t_tok] == 0;
 }
 
+bool Parser::is_recovery_boundary(const std::set<TokenType>& stop_tokens) const {
+    if (!token_) {
+        return false;
+    }
+    if (token_->tok == TokenType::Eof) {
+        return true;
+    }
+    if (stop_tokens.contains(token_->tok)) {
+        return true;
+    }
+    auto it = blocks_.find(token_->tok);
+    return it != blocks_.end() && it->second > 0;
+}
+
+void Parser::synchronize(const std::set<TokenType>& stop_tokens) {
+    while (token_ || peek()) {
+        if (is_recovery_boundary(stop_tokens)) {
+            return;
+        }
+        consume();
+    }
+}
+
 std::unique_ptr<Token> Parser::open(TokenType start, TokenType end) {
     auto t = expect(start);
     if (blocks_.find(end) != blocks_.end()) {
@@ -1906,20 +2115,27 @@ std::unique_ptr<Token> Parser::expect_or_skip(TokenType exp) {
     if (t->tok == exp) {
         return t;
     }
+    const TokenType actual_tok = t->tok;
+    const std::string actual_lit = t->lit;
+    const auto actual_comments = t->comments;
+    const auto actual_start_offset = t->start_offset;
+    const auto actual_end_offset = t->end_offset;
+    const auto actual_start_pos = t->start_pos;
+    const auto actual_end_pos = t->end_pos;
     token_ = std::move(t);
     auto ret = std::make_unique<Token>();
-    ret->start_offset = token_->start_offset;
-    ret->end_offset = token_->end_offset;
-    ret->start_pos = token_->start_pos;
-    ret->end_pos = token_->end_pos;
-    if (t->tok == TokenType::Eof) {
+    ret->start_offset = actual_start_offset;
+    ret->end_offset = actual_end_offset;
+    ret->start_pos = actual_start_pos;
+    ret->end_pos = actual_end_pos;
+    if (actual_tok == TokenType::Eof) {
         errs_.emplace_back("expected " + token_to_string(exp) + ", got EOF");
-        ret->tok = token_->tok;
-        ret->comments = token_->comments;
+        ret->tok = actual_tok;
+        ret->comments = actual_comments;
     } else {
         std::stringstream ss;
-        ss << "expected " << token_to_string(exp) << ", got " << token_to_string(t->tok) << "("
-           << t->lit << ") at " << t->start_pos;
+        ss << "expected " << token_to_string(exp) << ", got " << token_to_string(actual_tok)
+           << "(" << actual_lit << ") at " << actual_start_pos;
         errs_.emplace_back(ss.str());
         ret->tok = TokenType::Illegal;
     }
@@ -1968,6 +2184,9 @@ std::unique_ptr<Token> Parser::expect_one_of(const std::set<TokenType>& exp) {
 std::unique_ptr<Token> Parser::scan() {
     if (token_) {
         auto token = std::move(token_);
+        if (next_token_) {
+            token_ = std::move(next_token_);
+        }
         mark_consumed(*token);
         return token;
     }
@@ -1982,6 +2201,16 @@ const Token* Parser::peek() {
     }
     token_ = scanner_->scan();
     return token_.get();
+}
+
+const Token* Parser::peek_next() {
+    if (!token_) {
+        token_ = scanner_->scan();
+    }
+    if (!next_token_) {
+        next_token_ = scanner_->scan();
+    }
+    return next_token_.get();
 }
 
 const Token* Parser::peek_with_regex() {
@@ -1999,6 +2228,9 @@ const Token* Parser::peek_with_regex() {
 std::unique_ptr<Token> Parser::consume() {
     if (token_) {
         auto token = std::move(token_);
+        if (next_token_) {
+            token_ = std::move(next_token_);
+        }
         mark_consumed(*token);
         return token;
     }

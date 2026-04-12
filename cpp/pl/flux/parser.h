@@ -60,6 +60,7 @@ private:
     // peek will read the next token from the Scanner and then buffer it.
     // It will return information about the token.
     const Token* peek();
+    const Token* peek_next();
 
     // peek_with_regex is the same as peek, except that the scan step will allow scanning regexp
     // tokens.
@@ -84,6 +85,12 @@ private:
     // more will check if we should continue reading tokens for the current block. This is true when
     // the next token is not EOF and the next token is also not one that would close a block.
     bool more();
+    bool is_recovery_boundary(const std::set<TokenType>& stop_tokens) const;
+    void synchronize(const std::set<TokenType>& stop_tokens);
+    std::unique_ptr<Expression> parse_expression_until_boundary(
+        std::unique_ptr<Expression> init,
+        const std::set<TokenType>& stop_tokens,
+        std::optional<uint32_t> max_line);
 
     // close will close a block that was opened using open.
     //
@@ -114,7 +121,9 @@ private:
     std::vector<std::shared_ptr<Property>> parse_property_list();
     std::vector<std::shared_ptr<Property>> parse_property_list_suffix(
         std::unique_ptr<PropertyKey> key);
+    std::vector<std::shared_ptr<Expression>> parse_call_argument_list();
     std::unique_ptr<Property> parse_parameter();
+    std::unique_ptr<Property> parse_invalid_parameter();
     std::unique_ptr<Property> parse_string_property();
     std::unique_ptr<Property> parse_ident_property();
     std::unique_ptr<Property> parse_invalid_property();
@@ -185,6 +194,9 @@ private:
     std::unique_ptr<Expression> create_bad_expression(std::unique_ptr<Token> tok);
     std::unique_ptr<Expression> create_bad_expression_with_text(std::unique_ptr<Token> tok,
                                                                 std::string_view text);
+    std::unique_ptr<MonoType> create_placeholder_monotype(std::string_view name);
+    std::unique_ptr<Property> create_bad_property(std::string_view key,
+                                                  std::unique_ptr<Expression> value);
     std::unique_ptr<Expression> parse_conditional_expression();
     std::unique_ptr<Expression> create_placeholder_expression(const Token* tok);
     std::unique_ptr<Expression> parse_logical_and_expression_suffix(
@@ -251,6 +263,7 @@ private:
     void mark_consumed(const Token& token);
     std::unique_ptr<Scanner> scanner_;
     std::unique_ptr<Token> token_;
+    std::unique_ptr<Token> next_token_;
     SourceLocation last_consumed_loc_;
     std::vector<std::string> errs_;
     std::map<TokenType, int32_t> blocks_;
