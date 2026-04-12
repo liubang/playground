@@ -192,6 +192,171 @@ TEST(FluxParserTest, ParsesBooleanRecordUpdateAndIndexExpressions) {
     EXPECT_EQ("[ 1, 2, 3 ][0]", retries_assignment->init->string());
 }
 
+TEST(FluxParserTest, ParsesCallExpressionWithPositionalArguments) {
+    const std::string source = R"(
+        matched = contains("cpu", "cpu-total")
+    )";
+
+    Parser parser(source);
+    auto file = parser.parse_file("call_positional.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_TRUE(parser.errors().empty());
+    ASSERT_EQ(1, file->body.size());
+
+    const auto& assignment = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(assignment, nullptr);
+    ASSERT_NE(assignment->init, nullptr);
+    ASSERT_EQ(Expression::Type::CallExpr, assignment->init->type);
+
+    const auto& call = std::get<std::unique_ptr<CallExpr>>(assignment->init->expr);
+    ASSERT_NE(call, nullptr);
+    ASSERT_EQ(2, call->arguments.size());
+    EXPECT_EQ(Expression::Type::StringLit, call->arguments[0]->type);
+    EXPECT_EQ(Expression::Type::StringLit, call->arguments[1]->type);
+    EXPECT_EQ("cpu", call->arguments[0]->string());
+    EXPECT_EQ("cpu-total", call->arguments[1]->string());
+}
+
+TEST(FluxParserTest, ParsesCallExpressionWithCompositePositionalArguments) {
+    const std::string source = R"(
+        combined = join([1, 2], {name: "cpu"})
+    )";
+
+    Parser parser(source);
+    auto file = parser.parse_file("call_composite.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_TRUE(parser.errors().empty());
+    ASSERT_EQ(1, file->body.size());
+
+    const auto& assignment = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(assignment, nullptr);
+    ASSERT_NE(assignment->init, nullptr);
+    ASSERT_EQ(Expression::Type::CallExpr, assignment->init->type);
+
+    const auto& call = std::get<std::unique_ptr<CallExpr>>(assignment->init->expr);
+    ASSERT_NE(call, nullptr);
+    ASSERT_EQ(2, call->arguments.size());
+    EXPECT_EQ(Expression::Type::ArrayExpr, call->arguments[0]->type);
+    EXPECT_EQ(Expression::Type::ObjectExpr, call->arguments[1]->type);
+}
+
+TEST(FluxParserTest, ParsesCallExpressionWithIdentifierPositionalArguments) {
+    const std::string source = R"(
+result = contains(bucket, measurement)
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("call_ident_args.flux");
+
+    ASSERT_NE(file, nullptr);
+    EXPECT_TRUE(parser.errors().empty()) << ::testing::PrintToString(parser.errors());
+    ASSERT_EQ(1, file->body.size());
+
+    const auto& assignment = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(assignment, nullptr);
+    ASSERT_NE(assignment->init, nullptr);
+    ASSERT_EQ(Expression::Type::CallExpr, assignment->init->type);
+
+    const auto& call = std::get<std::unique_ptr<CallExpr>>(assignment->init->expr);
+    ASSERT_NE(call, nullptr);
+    ASSERT_EQ(2, call->arguments.size());
+    ASSERT_EQ(Expression::Type::Identifier, call->arguments[0]->type);
+    ASSERT_EQ(Expression::Type::Identifier, call->arguments[1]->type);
+    EXPECT_EQ("bucket", call->arguments[0]->string());
+    EXPECT_EQ("measurement", call->arguments[1]->string());
+}
+
+TEST(FluxParserTest, PreservesNamedCallArguments) {
+    const std::string source = R"(
+result = range(start: -1h, stop: now())
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("call_named_args.flux");
+
+    ASSERT_NE(file, nullptr);
+    EXPECT_TRUE(parser.errors().empty()) << ::testing::PrintToString(parser.errors());
+    ASSERT_EQ(1, file->body.size());
+
+    const auto& assignment = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(assignment, nullptr);
+    ASSERT_NE(assignment->init, nullptr);
+    ASSERT_EQ(Expression::Type::CallExpr, assignment->init->type);
+
+    const auto& call = std::get<std::unique_ptr<CallExpr>>(assignment->init->expr);
+    ASSERT_NE(call, nullptr);
+    ASSERT_EQ(1, call->arguments.size());
+    ASSERT_EQ(Expression::Type::ObjectExpr, call->arguments[0]->type);
+
+    const auto& object = std::get<std::unique_ptr<ObjectExpr>>(call->arguments[0]->expr);
+    ASSERT_NE(object, nullptr);
+    ASSERT_EQ(2, object->properties.size());
+    EXPECT_EQ("start", object->properties[0]->key->string());
+    EXPECT_EQ("stop", object->properties[1]->key->string());
+}
+
+TEST(FluxParserTest, ParsesCallExpressionWithMemberAndIndexPositionalArguments) {
+    const std::string source = R"(
+result = contains(bucket.name, values[0])
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("call_member_index_args.flux");
+
+    ASSERT_NE(file, nullptr);
+    EXPECT_TRUE(parser.errors().empty()) << ::testing::PrintToString(parser.errors());
+    ASSERT_EQ(1, file->body.size());
+
+    const auto& assignment = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(assignment, nullptr);
+    ASSERT_NE(assignment->init, nullptr);
+    ASSERT_EQ(Expression::Type::CallExpr, assignment->init->type);
+
+    const auto& call = std::get<std::unique_ptr<CallExpr>>(assignment->init->expr);
+    ASSERT_NE(call, nullptr);
+    ASSERT_EQ(2, call->arguments.size());
+    EXPECT_EQ(Expression::Type::MemberExpr, call->arguments[0]->type);
+    EXPECT_EQ(Expression::Type::IndexExpr, call->arguments[1]->type);
+}
+
+TEST(FluxParserTest, ParsesCompositeLiteralsWithTrailingCommas) {
+    const std::string source = R"(
+values = [1, 2,]
+lookup = ["cpu": 1, "mem": 2,]
+config = {host: "local", port: 8080,}
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("trailing_commas.flux");
+
+    ASSERT_NE(file, nullptr);
+    EXPECT_TRUE(parser.errors().empty()) << ::testing::PrintToString(parser.errors());
+    ASSERT_EQ(3, file->body.size());
+
+    const auto& values = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(values, nullptr);
+    ASSERT_EQ(Expression::Type::ArrayExpr, values->init->type);
+    const auto& array = std::get<std::unique_ptr<ArrayExpr>>(values->init->expr);
+    ASSERT_NE(array, nullptr);
+    EXPECT_EQ(2, array->elements.size());
+
+    const auto& lookup = std::get<std::unique_ptr<VariableAssgn>>(file->body[1]->stmt);
+    ASSERT_NE(lookup, nullptr);
+    ASSERT_EQ(Expression::Type::DictExpr, lookup->init->type);
+    const auto& dict = std::get<std::unique_ptr<DictExpr>>(lookup->init->expr);
+    ASSERT_NE(dict, nullptr);
+    EXPECT_EQ(2, dict->elements.size());
+
+    const auto& config = std::get<std::unique_ptr<VariableAssgn>>(file->body[2]->stmt);
+    ASSERT_NE(config, nullptr);
+    ASSERT_EQ(Expression::Type::ObjectExpr, config->init->type);
+    const auto& object = std::get<std::unique_ptr<ObjectExpr>>(config->init->expr);
+    ASSERT_NE(object, nullptr);
+    EXPECT_EQ(2, object->properties.size());
+}
+
 TEST(FluxParserTest, ParsesComplexFluxProgramIntoExpectedAst) {
     const std::string source = R"(
         package metrics
@@ -362,6 +527,45 @@ TEST(FluxParserTest, ParsesDynamicVectorAndStreamTypes) {
     EXPECT_EQ(MonoType::Type::Dynamic, dyn->ty->monotype->type);
     EXPECT_EQ(MonoType::Type::Vector, vec->ty->monotype->type);
     EXPECT_EQ(MonoType::Type::Stream, stream->ty->monotype->type);
+    EXPECT_EQ("builtin dyn: dynamic", dyn->string());
+    EXPECT_EQ("builtin vec: vector[int]", vec->string());
+    EXPECT_EQ("builtin streamer: stream[string]", stream->string());
+}
+
+TEST(FluxParserTest, ParsesTypeVariablesInFunctionTypes) {
+    const std::string source = R"(
+        builtin identity : (value: A) => A where A: Addable
+    )";
+
+    Parser parser(source);
+    auto file = parser.parse_file("tvar.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_TRUE(parser.errors().empty()) << ::testing::PrintToString(parser.errors());
+    ASSERT_EQ(1, file->body.size());
+
+    const auto& builtin = std::get<std::unique_ptr<BuiltinStmt>>(file->body[0]->stmt);
+    ASSERT_NE(builtin, nullptr);
+    ASSERT_NE(builtin->ty, nullptr);
+    ASSERT_NE(builtin->ty->monotype, nullptr);
+    ASSERT_EQ(MonoType::Type::Function, builtin->ty->monotype->type);
+    ASSERT_EQ(1, builtin->ty->constraints.size());
+    EXPECT_EQ("A", builtin->ty->constraints[0]->tvar->name);
+
+    const auto& function =
+        std::get<std::unique_ptr<FunctionType>>(builtin->ty->monotype->value);
+    ASSERT_NE(function, nullptr);
+    ASSERT_EQ(1, function->parameters.size());
+    ASSERT_EQ(ParameterType::Type::Required, function->parameters[0]->type);
+
+    const auto& required =
+        std::get<std::shared_ptr<Required>>(function->parameters[0]->value);
+    ASSERT_NE(required, nullptr);
+    ASSERT_NE(required->monotype, nullptr);
+    ASSERT_NE(function->monotype, nullptr);
+    EXPECT_EQ(MonoType::Type::Tvar, required->monotype->type);
+    EXPECT_EQ(MonoType::Type::Tvar, function->monotype->type);
+    EXPECT_EQ("builtin identity: (value: A) => A where A: Addable", builtin->string());
 }
 
 TEST(FluxParserTest, ParsesPackageAttributeWithoutBadStatement) {
@@ -449,6 +653,29 @@ TEST(FluxParserTest, AttachesAttributesToAstNodes) {
     EXPECT_NE(tree.find("VariableAssignment id=result attrs=@trace(enabled)"), std::string::npos);
 }
 
+TEST(FluxParserTest, ParsesComplexAttributeParameters) {
+    const std::string source = R"(
+        @trace(contains(bucket.name, values[0]), {enabled: true}, [1, 2])
+        result = 42
+    )";
+
+    Parser parser(source);
+    auto file = parser.parse_file("complex_attrs.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_TRUE(parser.errors().empty()) << ::testing::PrintToString(parser.errors());
+    ASSERT_EQ(1, file->body.size());
+    ASSERT_EQ(1, file->body[0]->attributes.size());
+
+    const auto& attr = file->body[0]->attributes[0];
+    ASSERT_NE(attr, nullptr);
+    ASSERT_EQ("trace", attr->name);
+    ASSERT_EQ(3, attr->params.size());
+    EXPECT_EQ(Expression::Type::CallExpr, attr->params[0]->value->type);
+    EXPECT_EQ(Expression::Type::ObjectExpr, attr->params[1]->value->type);
+    EXPECT_EQ(Expression::Type::ArrayExpr, attr->params[2]->value->type);
+}
+
 TEST(FluxParserTest, AttachesSourceLocationsToTopLevelNodes) {
     const std::string source = R"(package metrics
 import "array"
@@ -496,6 +723,410 @@ result = if exists config.enabled then "ok" else "missing"
     EXPECT_NE(json.find("\"summary\":\"name=loc.flux loc=1:1-3:59\""), std::string::npos);
     EXPECT_NE(json.find("\"summary\":\"name=metrics loc=1:1-1:16\""), std::string::npos);
     EXPECT_NE(json.find("\"summary\":\"path=\\\"array\\\" loc=2:1-2:15\""), std::string::npos);
+}
+
+TEST(FluxParserTest, RecoversFromInvalidObjectProperty) {
+    const std::string source = R"(
+config = {host: "local", 1, port: 8080}
+next = 42
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("invalid_property.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_EQ(2, file->body.size());
+    ASSERT_EQ(Statement::Type::VariableAssignment, file->body[0]->type);
+    ASSERT_EQ(Statement::Type::VariableAssignment, file->body[1]->type);
+
+    const auto& config = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(config, nullptr);
+    ASSERT_NE(config->init, nullptr);
+    ASSERT_EQ(Expression::Type::ObjectExpr, config->init->type);
+
+    const auto& object = std::get<std::unique_ptr<ObjectExpr>>(config->init->expr);
+    ASSERT_NE(object, nullptr);
+    ASSERT_EQ(3, object->properties.size());
+    EXPECT_EQ("host", object->properties[0]->key->string());
+    EXPECT_EQ("<invalid>", object->properties[1]->key->string());
+    EXPECT_EQ("port", object->properties[2]->key->string());
+
+    const auto& next = std::get<std::unique_ptr<VariableAssgn>>(file->body[1]->stmt);
+    ASSERT_NE(next, nullptr);
+    EXPECT_EQ("next", next->id->name);
+    EXPECT_EQ("42", next->init->string());
+}
+
+TEST(FluxParserTest, RecoversFromMissingPropertyValue) {
+    const std::string source = R"(
+config = {host:, port: 8080}
+next = 42
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("missing_property_value.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_EQ(2, file->body.size());
+
+    const auto& config = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(config, nullptr);
+    ASSERT_NE(config->init, nullptr);
+    ASSERT_EQ(Expression::Type::ObjectExpr, config->init->type);
+
+    const auto& object = std::get<std::unique_ptr<ObjectExpr>>(config->init->expr);
+    ASSERT_NE(object, nullptr);
+    ASSERT_EQ(2, object->properties.size());
+    EXPECT_EQ("host", object->properties[0]->key->string());
+    EXPECT_EQ(nullptr, object->properties[0]->value);
+    EXPECT_EQ("port", object->properties[1]->key->string());
+    ASSERT_NE(object->properties[1]->value, nullptr);
+    EXPECT_EQ("8080", object->properties[1]->value->string());
+
+    const auto& next = std::get<std::unique_ptr<VariableAssgn>>(file->body[1]->stmt);
+    ASSERT_NE(next, nullptr);
+    EXPECT_EQ("next", next->id->name);
+    EXPECT_EQ("42", next->init->string());
+}
+
+TEST(FluxParserTest, RecoversFromInvalidAttributeParameterAndContinues) {
+    const std::string source = R"(
+        @trace(, "ok")
+        result = 42
+    )";
+
+    Parser parser(source);
+    auto file = parser.parse_file("invalid_attr_param.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_EQ(1, file->body.size());
+    ASSERT_EQ(1, file->body[0]->attributes.size());
+
+    const auto& attr = file->body[0]->attributes[0];
+    ASSERT_NE(attr, nullptr);
+    ASSERT_EQ(1, attr->params.size());
+    EXPECT_EQ(Expression::Type::StringLit, attr->params[0]->value->type);
+
+    const auto& result = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(result, nullptr);
+    EXPECT_EQ("result", result->id->name);
+    EXPECT_EQ("42", result->init->string());
+}
+
+TEST(FluxParserTest, ReportsInvalidVectorTypeAndContinuesToNextStatement) {
+    const std::string source = R"(
+        builtin vec : vector[
+        next = 42
+    )";
+
+    Parser parser(source);
+    auto file = parser.parse_file("invalid_vector_type.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_GE(file->body.size(), 2);
+    ASSERT_EQ(Statement::Type::BuiltinStatement, file->body[0]->type);
+    ASSERT_EQ(Statement::Type::VariableAssignment, file->body[1]->type);
+
+    const auto& next = std::get<std::unique_ptr<VariableAssgn>>(file->body[1]->stmt);
+    ASSERT_NE(next, nullptr);
+    EXPECT_EQ("next", next->id->name);
+    EXPECT_EQ("42", next->init->string());
+}
+
+TEST(FluxParserTest, RecoversFromMissingThenKeyword) {
+    const std::string source = R"(
+status = if exists ready "ok" else "bad"
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("missing_then.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_EQ(1, file->body.size());
+
+    const auto& status = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(status, nullptr);
+    ASSERT_NE(status->init, nullptr);
+    EXPECT_EQ(Expression::Type::ConditionalExpr, status->init->type);
+
+    const auto& cond = std::get<std::unique_ptr<ConditionalExpr>>(status->init->expr);
+    ASSERT_NE(cond, nullptr);
+    ASSERT_NE(cond->test, nullptr);
+    ASSERT_NE(cond->alternate, nullptr);
+    EXPECT_EQ(Expression::Type::BadExpr, cond->consequent->type);
+    EXPECT_EQ(Expression::Type::StringLit, cond->alternate->type);
+    EXPECT_EQ("bad", std::get<std::unique_ptr<StringLit>>(cond->alternate->expr)->value);
+
+}
+
+TEST(FluxParserTest, RecoversFromInvalidFunctionParameter) {
+    const std::string source = R"(
+fn = (r,, limit=5) => r
+next = 42
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("invalid_param.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_EQ(2, file->body.size());
+
+    const auto& fn = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(fn, nullptr);
+    ASSERT_NE(fn->init, nullptr);
+    ASSERT_EQ(Expression::Type::FunctionExpr, fn->init->type);
+
+    const auto& func = std::get<std::unique_ptr<FunctionExpr>>(fn->init->expr);
+    ASSERT_NE(func, nullptr);
+    ASSERT_EQ(3, func->params.size());
+    EXPECT_EQ("r", func->params[0]->key->string());
+    EXPECT_EQ("<invalid-param>", func->params[1]->key->string());
+    EXPECT_EQ("limit", func->params[2]->key->string());
+    ASSERT_NE(func->body, nullptr);
+
+    const auto& next = std::get<std::unique_ptr<VariableAssgn>>(file->body[1]->stmt);
+    ASSERT_NE(next, nullptr);
+    EXPECT_EQ("next", next->id->name);
+    EXPECT_EQ("42", next->init->string());
+}
+
+TEST(FluxParserTest, RecoversFromInvalidCallArgumentProperty) {
+    const std::string source = R"(
+result = from(bucket: "telegraf",, start: -1h)
+next = 42
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("invalid_call_args.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_EQ(2, file->body.size());
+
+    const auto& result = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(result, nullptr);
+    ASSERT_NE(result->init, nullptr);
+    ASSERT_EQ(Expression::Type::CallExpr, result->init->type);
+
+    const auto& call = std::get<std::unique_ptr<CallExpr>>(result->init->expr);
+    ASSERT_NE(call, nullptr);
+    ASSERT_EQ(1, call->arguments.size());
+    ASSERT_EQ(Expression::Type::ObjectExpr, call->arguments[0]->type);
+
+    const auto& object = std::get<std::unique_ptr<ObjectExpr>>(call->arguments[0]->expr);
+    ASSERT_NE(object, nullptr);
+    ASSERT_EQ(3, object->properties.size());
+    EXPECT_EQ("bucket", object->properties[0]->key->string());
+    EXPECT_EQ("<invalid>", object->properties[1]->key->string());
+    EXPECT_EQ("start", object->properties[2]->key->string());
+
+    const auto& next = std::get<std::unique_ptr<VariableAssgn>>(file->body[1]->stmt);
+    ASSERT_NE(next, nullptr);
+    EXPECT_EQ("next", next->id->name);
+    EXPECT_EQ("42", next->init->string());
+}
+
+TEST(FluxParserTest, RecoversFromInvalidArrayElement) {
+    const std::string source = R"(
+values = [1,,3]
+next = 42
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("invalid_array.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_EQ(2, file->body.size());
+
+    const auto& values = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(values, nullptr);
+    ASSERT_NE(values->init, nullptr);
+    ASSERT_EQ(Expression::Type::ArrayExpr, values->init->type);
+
+    const auto& array = std::get<std::unique_ptr<ArrayExpr>>(values->init->expr);
+    ASSERT_NE(array, nullptr);
+    ASSERT_EQ(2, array->elements.size());
+    EXPECT_EQ("1", array->elements[0]->expression->string());
+    EXPECT_EQ("3", array->elements[1]->expression->string());
+
+    const auto& next = std::get<std::unique_ptr<VariableAssgn>>(file->body[1]->stmt);
+    ASSERT_NE(next, nullptr);
+    EXPECT_EQ("next", next->id->name);
+    EXPECT_EQ("42", next->init->string());
+}
+
+TEST(FluxParserTest, RecoversFromLeadingEmptyObjectProperty) {
+    const std::string source = R"(
+config = {, host: "local", port: 8080}
+next = 42
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("leading_empty_object.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_EQ(2, file->body.size());
+
+    const auto& config = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(config, nullptr);
+    ASSERT_NE(config->init, nullptr);
+    ASSERT_EQ(Expression::Type::ObjectExpr, config->init->type);
+
+    const auto& object = std::get<std::unique_ptr<ObjectExpr>>(config->init->expr);
+    ASSERT_NE(object, nullptr);
+    ASSERT_EQ(3, object->properties.size());
+    EXPECT_EQ("<invalid>", object->properties[0]->key->string());
+    EXPECT_EQ("host", object->properties[1]->key->string());
+    EXPECT_EQ("port", object->properties[2]->key->string());
+
+    const auto& next = std::get<std::unique_ptr<VariableAssgn>>(file->body[1]->stmt);
+    ASSERT_NE(next, nullptr);
+    EXPECT_EQ("42", next->init->string());
+}
+
+TEST(FluxParserTest, RecoversFromInvalidDictElement) {
+    const std::string source = R"(
+lookup = ["cpu": 1,, "mem": 2]
+next = 42
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("invalid_dict.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_EQ(2, file->body.size());
+
+    const auto& lookup = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(lookup, nullptr);
+    ASSERT_NE(lookup->init, nullptr);
+    ASSERT_EQ(Expression::Type::DictExpr, lookup->init->type);
+
+    const auto& dict = std::get<std::unique_ptr<DictExpr>>(lookup->init->expr);
+    ASSERT_NE(dict, nullptr);
+    ASSERT_EQ(2, dict->elements.size());
+    EXPECT_EQ("cpu", dict->elements[0]->key->string());
+    EXPECT_EQ("1", dict->elements[0]->val->string());
+    EXPECT_EQ("mem", dict->elements[1]->key->string());
+    EXPECT_EQ("2", dict->elements[1]->val->string());
+
+    const auto& next = std::get<std::unique_ptr<VariableAssgn>>(file->body[1]->stmt);
+    ASSERT_NE(next, nullptr);
+    EXPECT_EQ("42", next->init->string());
+}
+
+TEST(FluxParserTest, RecoversFromMissingConditionalConsequent) {
+    const std::string source = R"(
+status = if exists ready then else "bad"
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("missing_consequent.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_EQ(1, file->body.size());
+
+    const auto& status = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(status, nullptr);
+    ASSERT_NE(status->init, nullptr);
+    ASSERT_EQ(Expression::Type::ConditionalExpr, status->init->type);
+
+    const auto& cond = std::get<std::unique_ptr<ConditionalExpr>>(status->init->expr);
+    ASSERT_NE(cond, nullptr);
+    ASSERT_NE(cond->consequent, nullptr);
+    ASSERT_NE(cond->alternate, nullptr);
+    EXPECT_EQ(Expression::Type::BadExpr, cond->consequent->type);
+    EXPECT_EQ(Expression::Type::StringLit, cond->alternate->type);
+
+}
+
+TEST(FluxParserTest, RecoversFromMissingConditionalAlternate) {
+    const std::string source = R"(
+status = if exists ready then "ok" else
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("missing_alternate.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_EQ(1, file->body.size());
+
+    const auto& status = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(status, nullptr);
+    ASSERT_NE(status->init, nullptr);
+    ASSERT_EQ(Expression::Type::ConditionalExpr, status->init->type);
+
+    const auto& cond = std::get<std::unique_ptr<ConditionalExpr>>(status->init->expr);
+    ASSERT_NE(cond, nullptr);
+    ASSERT_NE(cond->consequent, nullptr);
+    ASSERT_NE(cond->alternate, nullptr);
+    EXPECT_EQ(Expression::Type::StringLit, cond->consequent->type);
+    EXPECT_EQ(Expression::Type::BadExpr, cond->alternate->type);
+
+}
+
+TEST(FluxParserTest, DumpsBadConditionalBranchesWithLocations) {
+    const std::string source = R"(
+status = if exists ready then else
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("bad_conditional_dump.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+
+    const std::string tree = dump_ast(*file);
+    EXPECT_NE(tree.find("ConditionalExpr"), std::string::npos);
+    EXPECT_NE(tree.find("Consequent"), std::string::npos);
+    EXPECT_NE(tree.find("Alternate"), std::string::npos);
+    EXPECT_NE(tree.find("BadExpr text=\""), std::string::npos);
+    EXPECT_NE(tree.find(" loc="), std::string::npos);
+
+    const std::string json = dump_ast_json(*file);
+    EXPECT_NE(json.find("\"type\":\"Consequent\""), std::string::npos);
+    EXPECT_NE(json.find("\"type\":\"Alternate\""), std::string::npos);
+    EXPECT_NE(json.find("\"type\":\"BadExpr\""), std::string::npos);
+    EXPECT_NE(json.find(" loc="), std::string::npos);
+}
+
+TEST(FluxParserTest, StopsConditionalRecoveryAtNextLineStatementBoundary) {
+    const std::string source = R"(
+status = if exists ready then "ok" else
+next = 42
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("conditional_boundary.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_EQ(2, file->body.size());
+
+    const auto& status = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(status, nullptr);
+    ASSERT_NE(status->init, nullptr);
+    ASSERT_EQ(Expression::Type::ConditionalExpr, status->init->type);
+
+    const auto& cond = std::get<std::unique_ptr<ConditionalExpr>>(status->init->expr);
+    ASSERT_NE(cond, nullptr);
+    ASSERT_NE(cond->alternate, nullptr);
+    EXPECT_EQ(Expression::Type::BadExpr, cond->alternate->type);
+
+    const auto& next = std::get<std::unique_ptr<VariableAssgn>>(file->body[1]->stmt);
+    ASSERT_NE(next, nullptr);
+    EXPECT_EQ("next", next->id->name);
+    EXPECT_EQ("42", next->init->string());
 }
 
 } // namespace

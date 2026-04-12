@@ -16,7 +16,7 @@ Status meanings:
 | `import "path"` | Supported | Alias-less import works | `import "array"` |
 | `import alias "path"` | Supported | Alias is stored in AST | `import regexp "regexp"` |
 | file body statements | Supported | Mixed statement list works | `a = 1` |
-| attributes / annotations | Partial | Package/import/top-level statement attributes are attached to AST nodes, but broader coverage is still incomplete | `@edition("2022.1")` |
+| attributes / annotations | Partial | Package/import/top-level statement attributes are attached to AST nodes, and attribute parameters now accept full expressions; broader node coverage is still incomplete | `@edition("2022.1")` |
 
 ## Statements
 
@@ -66,14 +66,14 @@ Status meanings:
 | Syntax | Status | Notes | Example |
 | --- | --- | --- | --- |
 | basic type | Supported | Named types such as `int`, `string`, `bool` work | `int` |
-| type variable | Partial | `Tvar` structure exists, but broader generic behavior is still limited | `A` |
+| type variable | Supported | Single-token type variables are parsed in type expressions and constraints | `A` |
 | array type | Supported | Works via `[type]` | `[int]` |
 | dict type | Supported | Works via `[key:value]` | `[string:int]` |
 | record type | Supported | Common property form works | `{name: string, value: int}` |
 | record type with `with` source | Supported | Current parser handles this basic pattern | `{A with name: string}` |
 | function type | Supported | Required, optional, and pipe params work in common cases | `(<-tables: [int], ?n: int) => int` |
-| dynamic type | Partial | Placeholder implementation exists | `dynamic`-style path |
-| vector / stream type | Partial | AST branches exist; broader coverage is still incomplete | `vector[int]`, stream forms |
+| dynamic type | Supported | Parsed into `Dynamic` monotype and exposed through AST/debug output | `dynamic` |
+| vector / stream type | Supported | Parsed into dedicated monotypes and covered by parser tests, including malformed recovery | `vector[int]`, `stream[int]` |
 | `where` constraints | Supported | Single and comma-separated basic constraints are parsed | `where A: Addable` |
 
 ## Debugging and Tooling
@@ -86,16 +86,16 @@ Status meanings:
 | parser demo binary | Supported | `parser_test` now uses the tree dump |
 | parser unit tests | Supported | Covers main happy paths and dump output |
 | scanner unit tests | Supported | Covers comments, regex mode, and unread behavior |
-| AST source locations | Missing | Tokens have positions, but AST nodes do not store them yet |
+| AST source locations | Supported | Top-level file/package/import/statement/expression/block nodes store locations and dump them | `loc=1:1-1:10` |
 
 ## Error Handling
 
 | Capability | Status | Notes |
 | --- | --- | --- |
 | parser error collection | Supported | `Parser::errors()` exposes collected parser errors |
-| continue after local parse failures | Partial | Some recovery exists via `BadExpr` / `BadStmt`, but it is not robust |
-| precise syntax diagnostics | Partial | Some messages are useful, but consistency is still limited |
-| source-positioned AST errors | Missing | Requires `SourceLocation` on AST nodes |
+| continue after local parse failures | Partial | Recovery exists for conditionals, call args, arrays, dicts, object properties, attributes, and some type syntax, but it is not yet uniform | invalid input |
+| precise syntax diagnostics | Partial | Many messages are useful and now include more localized context, but consistency is still limited |
+| source-positioned AST errors | Partial | Many bad expressions/statements include locations, but this is not yet universal for all parse errors |
 
 ## Current Strengths
 
@@ -107,18 +107,17 @@ Status meanings:
 
 ## Main Known Gaps
 
-- AST nodes do not carry source locations yet
 - Some syntax families are only partially implemented
-- Error recovery is still weak for malformed programs
+- Error recovery is still uneven for malformed programs
 - A few AST/debug string forms are still simplified rather than canonical Flux formatting
 - There is no semantic analysis or type checking layer yet
 
 ## Recommended Next Steps
 
-1. Add `SourceLocation` to `Statement` and `Expression`
-2. Expand partial syntax areas into tested supported features
-3. Improve malformed-input recovery and diagnostics
-4. Add more negative tests and dump snapshots
+1. Expand remaining partial syntax areas into tested supported features
+2. Improve malformed-input recovery and diagnostics
+3. Add more negative tests and dump snapshots
+4. Extend `SourceLocation` coverage beyond current top-level/core AST nodes
 5. Separate parser completeness from future semantic/type-check phases
 
 ## Partial Feature Examples
@@ -137,6 +136,7 @@ package metrics
 Current expectation:
 
 - package/import/top-level statement attributes are attached to AST nodes
+- attribute parameters can contain full expressions such as calls, objects, and arrays
 - tree dump output includes attached attributes
 - broader node coverage is still incomplete, so this stays `Partial`
 
@@ -178,8 +178,8 @@ builtin x : dynamic
 
 Current expectation:
 
-- parser has a placeholder dynamic type path
-- behavior should be validated with a dedicated builtin/type-expression test
+- parsed into `MonoType::Dynamic`
+- covered by parser tests and AST string/debug output
 
 ### Vector / stream type
 
@@ -192,6 +192,6 @@ builtin y : stream[int]
 
 Current expectation:
 
-- AST branches exist
-- parser behavior has not been fully covered with tests
-- these are good candidates for the next type-system expansion pass
+- parsed into `MonoType::Vector` / `MonoType::Stream`
+- covered by parser tests and AST string/debug output
+- malformed cross-line element types now recover without consuming the next statement
