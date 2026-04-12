@@ -14,7 +14,7 @@
 
 # Authors: liubang (it.liubang@gmail.com)
 
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_binary")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 # load("@rules_ragel//ragel:ragel.bzl", "ragel")
 load(
     "//cpp:copts/configure_copts.bzl",
@@ -60,21 +60,35 @@ cc_binary(
     ],
 )
 
+cc_test(
+    name = "scanner_unit_test",
+    srcs = [
+        "scanner_unit_test.cpp",
+    ],
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":scanner",
+        "@googletest//:gtest_main",
+    ],
+)
+
 cc_library(
     name = "parser",
     srcs = [
         "ast.cpp",
+        "ast_debug.cpp",
         "parser.cpp",
         "strconv.cpp",
     ],
     hdrs = [
         "ast.h",
+        "ast_debug.h",
         "parser.h",
         "strconv.h",
     ],
     copts = ["-std=c++20"] + COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
-    local_defines = ["FLUX_ENABLE_DEBUG"],
     deps = [
         ":scanner",
         "//cpp/pl/lang",
@@ -92,5 +106,30 @@ cc_binary(
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":parser",
+    ],
+)
+
+cc_binary(
+    name = "ast_dump",
+    srcs = [
+        "ast_dump.cpp",
+    ],
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":parser",
+    ],
+)
+
+cc_test(
+    name = "parser_unit_test",
+    srcs = [
+        "parser_unit_test.cpp",
+    ],
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":parser",
+        "@googletest//:gtest_main",
     ],
 )
