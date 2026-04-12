@@ -51,6 +51,30 @@ jobs:
       - name: run build
         run: |
           bazel build -c opt ${{ matrix.compiler.flag }} --disk_cache=bazel-disk //cpp/...
+  test-macos:
+    name: test-macos
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/cache@v4
+        env:
+          cache-name: test-macos-v1
+        with:
+          path: bazel-disk
+          key: test-macos-${{ env.cache-name }}-${{ runner.os }}-${{ github.sha }}
+          restore-keys: test-macos-${{ env.cache-name }}-${{ runner.os }}-
+          save-always: true
+      - uses: bazel-contrib/setup-bazel@0.8.5
+        with:
+          bazelisk-cache: true
+          disk-cache: false
+          repository-cache: false
+      - run: brew install nasm
+      - name: run test
+        run: |
+          bazel test --config=release --disk_cache=bazel-disk //cpp/...
   test:
     strategy:
       matrix:
