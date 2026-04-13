@@ -525,7 +525,8 @@ private:
         auto next = child_prefix(prefix, is_last);
         for (size_t i = 0; i < record.properties.size(); ++i) {
             line(next, i + 1 == record.properties.size(),
-                 "PropertyType name=" + record.properties[i]->name->string());
+                 "PropertyType name=" + record.properties[i]->name->string() +
+                     location_summary(record.properties[i]->loc));
             dump_monotype(*record.properties[i]->monotype,
                           child_prefix(next, i + 1 == record.properties.size()), true);
         }
@@ -539,19 +540,22 @@ private:
             switch (param->type) {
                 case ParameterType::Type::Required: {
                     const auto& required = std::get<std::shared_ptr<Required>>(param->value);
-                    line(next, false, "RequiredParam name=" + required->name->string());
+                    line(next, false, "RequiredParam name=" + required->name->string() +
+                                          location_summary(required->loc));
                     dump_monotype(*required->monotype, child_prefix(next, false), true);
                     break;
                 }
                 case ParameterType::Type::Optional: {
                     const auto& optional = std::get<std::unique_ptr<Optional>>(param->value);
-                    line(next, false, "OptionalParam name=" + optional->name->string());
+                    line(next, false, "OptionalParam name=" + optional->name->string() +
+                                          location_summary(optional->loc));
                     dump_monotype(*optional->monotype, child_prefix(next, false), true);
                     break;
                 }
                 case ParameterType::Type::Pipe: {
                     const auto& pipe = std::get<std::unique_ptr<Pipe>>(param->value);
-                    line(next, false, "PipeParam name=" + pipe->name->string());
+                    line(next, false, "PipeParam name=" + pipe->name->string() +
+                                          location_summary(pipe->loc));
                     dump_monotype(*pipe->monotype, child_prefix(next, false), true);
                     break;
                 }
@@ -1057,7 +1061,8 @@ private:
                     bool first = true;
                     for (const auto& prop : record.properties) {
                         element_prefix(first);
-                        node("PropertyType", "name=" + prop->name->string(),
+                        node("PropertyType",
+                             "name=" + prop->name->string() + location_summary(prop->loc),
                              [&] { dump_monotype(*prop->monotype); });
                     }
                 });
@@ -1073,20 +1078,26 @@ private:
                             case ParameterType::Type::Required: {
                                 const auto& required =
                                     std::get<std::shared_ptr<Required>>(param->value);
-                                node("RequiredParam", "name=" + required->name->string(),
+                                node("RequiredParam",
+                                     "name=" + required->name->string() +
+                                         location_summary(required->loc),
                                      [&] { dump_monotype(*required->monotype); });
                                 break;
                             }
                             case ParameterType::Type::Optional: {
                                 const auto& optional =
                                     std::get<std::unique_ptr<Optional>>(param->value);
-                                node("OptionalParam", "name=" + optional->name->string(),
+                                node("OptionalParam",
+                                     "name=" + optional->name->string() +
+                                         location_summary(optional->loc),
                                      [&] { dump_monotype(*optional->monotype); });
                                 break;
                             }
                             case ParameterType::Type::Pipe: {
                                 const auto& pipe = std::get<std::unique_ptr<Pipe>>(param->value);
-                                node("PipeParam", "name=" + pipe->name->string(),
+                                node("PipeParam",
+                                     "name=" + pipe->name->string() +
+                                         location_summary(pipe->loc),
                                      [&] { dump_monotype(*pipe->monotype); });
                                 break;
                             }
