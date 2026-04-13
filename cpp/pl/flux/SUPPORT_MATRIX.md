@@ -55,7 +55,7 @@ Status meanings:
 | logical expression | Supported | `and` / `or` work on common cases | `a and b` |
 | conditional expression | Supported | `if ... then ... else ...` works | `if exists x then "ok" else "bad"` |
 | call expression | Supported | Common call syntax works | `range(start: -1h)` |
-| function expression | Supported | Arrow function expressions work | `(r) => r.host == "local"` |
+| function expression | Supported | Parenthesized params, shorthand single-param arrows, block bodies, pipe params, and optional/default params are covered by tests | `(r) => r.host == "local"` |
 | pipe expression | Supported | Multi-stage pipe chains work | `from(...) |> range(...)` |
 | label literal | Supported | Top-level label expressions now parse through the normal expression-statement path | `.field` |
 | paren expression | Supported | Simple grouping works | `(1 + 2)` |
@@ -101,24 +101,70 @@ Status meanings:
 
 - Common Flux file structure can already be parsed into AST
 - Pipe-heavy query shapes are working
+- Realistic query fragments with alias imports, `filter`/`map` chains, regex calls, record updates, and conditional expressions are covered by parser tests
+- Function expressions now cover the practical forms needed by most Flux queries: `(r) => expr`, `r => expr`, `r => { ... }`, `(<-tables, ?limit=5, value) => expr`
+- Empty literals and empty record updates are covered, including `[]`, `{}`, `[:]`, and `{base with}`
 - Type parsing is good enough for `builtin` declarations and debugging
 - AST tree and JSON output make parser behavior inspectable
 - There is now enough unit-test coverage to safely extend the parser
 
 ## Main Known Gaps
 
-- Some syntax families are only partially implemented
+- Some syntax families are still only partially implemented or only lightly tested
 - Error recovery is still uneven for malformed programs
 - A few AST/debug string forms are still simplified rather than canonical Flux formatting
 - There is no semantic analysis or type checking layer yet
+- There is no runtime execution model yet: no environments, builtins, value model, stream/table execution, or interpreter loop
 
 ## Recommended Next Steps
 
-1. Expand remaining partial syntax areas into tested supported features
-2. Improve malformed-input recovery and diagnostics
+1. Finish parser completeness for the remaining partial areas and add more realistic end-to-end query fixtures
+2. Improve malformed-input recovery and diagnostics until bad programs still produce usable AST/debug output
 3. Add more negative tests and dump snapshots
 4. Extend `SourceLocation` coverage beyond current top-level/core AST nodes
-5. Separate parser completeness from future semantic/type-check phases
+5. Start the execution architecture in phases: value model, environments/scopes, builtin registry, expression evaluator, then pipe/query execution
+
+## Suggested Next Syntax Additions
+
+These are good parser targets before starting execution work in earnest:
+
+- More real query operators and shapes such as `join`, `union`, `aggregateWindow`, and `reduce`
+- More `option`-driven query programs, especially `option task = {...}` combined with pipelines
+- Broader function-body fixtures that mix block bodies, object returns, nested calls, and conditionals
+- More malformed-input fixtures around complex call/object/type combinations
+
+## Interpreter Roadmap
+
+The long-term goal is a usable Flux interpreter with both parsing and execution. A practical sequence is:
+
+1. Parser-complete baseline
+
+- Keep expanding tested syntax until the common query subset is stable
+- Preserve AST/debug quality so parser failures stay easy to diagnose
+
+2. Semantic/runtime foundation
+
+- Define runtime value types such as null/bool/int/uint/float/string/time/duration/regex/array/object/function
+- Add lexical environments and scope lookup for variables, options, and function parameters
+- Define callable builtins and a registry for standard library entry points
+
+3. Expression interpreter
+
+- Evaluate literals, arrays, objects, dictionaries, arithmetic/logical operators, member/index access, and conditionals
+- Support function values, closures, and function calls
+- Support `option` bindings and `builtin` declarations at runtime
+
+4. Query / pipeline execution
+
+- Model tables/streams and pipe input
+- Execute high-value builtins such as `from`, `range`, `filter`, `map`, and later `group`, `join`, `aggregateWindow`
+- Define enough runtime behavior to run realistic Flux scripts end to end
+
+5. Diagnostics and usability
+
+- Add runtime errors with source locations
+- Add script runner examples and interpreter-focused tests
+- Keep `ast_dump` and parser diagnostics aligned with runtime debugging needs
 
 ## Partial Feature Examples
 
@@ -137,45 +183,3 @@ Current expectation:
 - `LabelLit` exists in the AST
 - real-world coverage is still thin
 - needs a parser test to confirm where it is valid and how it interacts with member access
-
-### Unsigned integer literal
-
-Example:
-
-```flux
-42u
-```
-
-Current expectation:
-
-- scanned as a dedicated unsigned integer token
-- parsed into `UnsignedIntegerLit`
-- covered by scanner and parser unit tests
-
-### Dynamic type
-
-Example:
-
-```flux
-builtin x : dynamic
-```
-
-Current expectation:
-
-- parsed into `MonoType::Dynamic`
-- covered by parser tests and AST string/debug output
-
-### Vector / stream type
-
-Examples:
-
-```flux
-builtin x : vector[int]
-builtin y : stream[int]
-```
-
-Current expectation:
-
-- parsed into `MonoType::Vector` / `MonoType::Stream`
-- covered by parser tests and AST string/debug output
-- malformed cross-line element types now recover without consuming the next statement
