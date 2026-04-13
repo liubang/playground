@@ -584,6 +584,30 @@ TEST(FluxParserTest, ParsesPackageAttributeWithoutBadStatement) {
     EXPECT_TRUE(file->body.empty());
 }
 
+TEST(FluxParserTest, ProducesReadableBadStatementForUnexpectedTopLevelToken) {
+    const std::string source = R"(
+        ?
+        next = 42
+    )";
+
+    Parser parser(source);
+    auto file = parser.parse_file("bad_statement.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_EQ(2, file->body.size());
+    ASSERT_EQ(Statement::Type::BadStatement, file->body[0]->type);
+    ASSERT_EQ(Statement::Type::VariableAssignment, file->body[1]->type);
+
+    const auto& bad = std::get<std::unique_ptr<BadStmt>>(file->body[0]->stmt);
+    ASSERT_NE(bad, nullptr);
+    EXPECT_EQ("unexpected token for statement: QuestionMark", bad->text);
+    EXPECT_NE(parser.errors()[0].find("unexpected token for statement"), std::string::npos);
+
+    const std::string tree = dump_ast(*file);
+    EXPECT_NE(tree.find("BadStatement text=\"unexpected token for statement: QuestionMark\""), std::string::npos);
+}
+
 TEST(FluxParserTest, ParsesLabelLiteral) {
     const std::string source = ".field";
 
@@ -651,6 +675,38 @@ TEST(FluxParserTest, AttachesAttributesToAstNodes) {
     EXPECT_NE(tree.find("PackageClause name=metrics attrs=@edition(2022.1)"), std::string::npos);
     EXPECT_NE(tree.find("ImportDeclaration path=\"array\" attrs=@feature(flag)"), std::string::npos);
     EXPECT_NE(tree.find("VariableAssignment id=result attrs=@trace(enabled)"), std::string::npos);
+}
+
+TEST(FluxParserTest, AttachesAttributesToBlockStatements) {
+    const std::string source = R"(
+        testcase aggregate_window_test {
+            @log("start")
+            value = 1
+            @emit("done")
+            return value
+        }
+    )";
+
+    Parser parser(source);
+    auto file = parser.parse_file("block_attrs.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_TRUE(parser.errors().empty()) << ::testing::PrintToString(parser.errors());
+    ASSERT_EQ(1, file->body.size());
+    ASSERT_EQ(Statement::Type::TestCaseStatement, file->body[0]->type);
+
+    const auto& testcase = std::get<std::unique_ptr<TestCaseStmt>>(file->body[0]->stmt);
+    ASSERT_NE(testcase, nullptr);
+    ASSERT_NE(testcase->block, nullptr);
+    ASSERT_EQ(2, testcase->block->body.size());
+    ASSERT_EQ(1, testcase->block->body[0]->attributes.size());
+    ASSERT_EQ(1, testcase->block->body[1]->attributes.size());
+    EXPECT_EQ("@log(start) VariableAssignment: value = 1", testcase->block->body[0]->string());
+    EXPECT_EQ("@emit(done) ReturnStatement: return value", testcase->block->body[1]->string());
+
+    const std::string tree = dump_ast(*file);
+    EXPECT_NE(tree.find("VariableAssignment id=value attrs=@log(start)"), std::string::npos);
+    EXPECT_NE(tree.find("ReturnStatement attrs=@emit(done)"), std::string::npos);
 }
 
 TEST(FluxParserTest, ParsesComplexAttributeParameters) {
@@ -730,7 +786,7 @@ TEST(FluxParserTest, DumpsSourceLocationsForNestedNodes) {
 config = {host: "local"}
 values = [1, 2]
 lookup = ["cpu": 1]
-builtin sum : int where A: Addable
+builtin mapper : (<-tables: [int], ?limit: int, value: string) => {name: string} where A: Addable
 )";
 
     Parser parser(source);
@@ -743,6 +799,10 @@ builtin sum : int where A: Addable
     EXPECT_NE(tree.find("Property key=host loc="), std::string::npos);
     EXPECT_NE(tree.find("ArrayItem loc="), std::string::npos);
     EXPECT_NE(tree.find("DictItem loc="), std::string::npos);
+    EXPECT_NE(tree.find("PropertyType name=name loc="), std::string::npos);
+    EXPECT_NE(tree.find("PipeParam name=tables loc="), std::string::npos);
+    EXPECT_NE(tree.find("OptionalParam name=limit loc="), std::string::npos);
+    EXPECT_NE(tree.find("RequiredParam name=value loc="), std::string::npos);
     EXPECT_NE(tree.find("TypeConstraint tvar=A kinds=Addable loc="), std::string::npos);
 
     const std::string json = dump_ast_json(*file);
@@ -750,6 +810,11 @@ builtin sum : int where A: Addable
     EXPECT_NE(json.find("key=host loc="), std::string::npos);
     EXPECT_NE(json.find("\"type\":\"ArrayItem\""), std::string::npos);
     EXPECT_NE(json.find("\"type\":\"DictItem\""), std::string::npos);
+    EXPECT_NE(json.find("\"type\":\"PropertyType\""), std::string::npos);
+    EXPECT_NE(json.find("name=name loc="), std::string::npos);
+    EXPECT_NE(json.find("\"type\":\"PipeParam\""), std::string::npos);
+    EXPECT_NE(json.find("\"type\":\"OptionalParam\""), std::string::npos);
+    EXPECT_NE(json.find("\"type\":\"RequiredParam\""), std::string::npos);
     EXPECT_NE(json.find("\"type\":\"TypeConstraint\""), std::string::npos);
     EXPECT_NE(json.find("tvar=A, kinds=Addable loc="), std::string::npos);
 }
@@ -813,6 +878,26 @@ next = 42
     EXPECT_EQ("port", object->properties[1]->key->string());
     ASSERT_NE(object->properties[1]->value, nullptr);
     EXPECT_EQ("8080", object->properties[1]->value->string());
+
+    const auto& next = std::get<std::unique_ptr<VariableAssgn>>(file->body[1]->stmt);
+    ASSERT_NE(next, nullptr);
+    EXPECT_EQ("next", next->id->name);
+    EXPECT_EQ("42", next->init->string());
+}
+
+TEST(FluxParserTest, ReportsReadableErrorForInvalidRecordUpdateSyntax) {
+    const std::string source = R"(
+config = {base invalid enabled: true}
+next = 42
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("invalid_record_update.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_EQ(2, file->body.size());
+    EXPECT_NE(parser.errors()[0].find("expected with in record update"), std::string::npos);
 
     const auto& next = std::get<std::unique_ptr<VariableAssgn>>(file->body[1]->stmt);
     ASSERT_NE(next, nullptr);

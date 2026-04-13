@@ -169,8 +169,10 @@ std::unique_ptr<Statement> Parser::parse_statement_inner(
             stmt = parse_return_statement();
             break;
         default:
+            errs_.emplace_back("unexpected token for statement: " + token_to_string(t->tok));
             auto tt = consume();
-            auto bad_stmt = std::make_unique<BadStmt>(t->lit);
+            auto bad_stmt = std::make_unique<BadStmt>(
+                "unexpected token for statement: " + token_to_string(tt->tok));
             stmt = std::make_unique<Statement>(Statement::Type::BadStatement, std::move(bad_stmt));
     }
     return stmt;
@@ -208,24 +210,30 @@ std::unique_ptr<MonoType> Parser::parse_record_type() {
             tvar = std::move(first);
             consume();
         } else {
+            const Position property_start = last_consumed_loc_.start;
             expect(TokenType::Colon);
-            properties.emplace_back(
-                std::make_shared<PropertyType>(std::move(first), parse_monotype()));
+            auto property = std::make_shared<PropertyType>(std::move(first), parse_monotype());
+            property->loc = source_location(property_start, last_consumed_loc_.end);
+            properties.emplace_back(std::move(property));
             while (peek()->tok == TokenType::Comma) {
                 consume();
                 auto name = parse_identifier();
+                const Position start = last_consumed_loc_.start;
                 expect(TokenType::Colon);
-                properties.emplace_back(
-                    std::make_shared<PropertyType>(std::move(name), parse_monotype()));
+                auto property = std::make_shared<PropertyType>(std::move(name), parse_monotype());
+                property->loc = source_location(start, last_consumed_loc_.end);
+                properties.emplace_back(std::move(property));
             }
         }
 
         while (peek()->tok == TokenType::Comma) {
             consume();
             auto name = parse_identifier();
+            const Position start = last_consumed_loc_.start;
             expect(TokenType::Colon);
-            properties.emplace_back(
-                std::make_shared<PropertyType>(std::move(name), parse_monotype()));
+            auto property = std::make_shared<PropertyType>(std::move(name), parse_monotype());
+            property->loc = source_location(start, last_consumed_loc_.end);
+            properties.emplace_back(std::move(property));
         }
     }
 
@@ -241,14 +249,18 @@ std::unique_ptr<MonoType> Parser::parse_function_type() {
 
     while (peek()->tok != TokenType::RParen && more()) {
         ParameterType::Type param_type = ParameterType::Type::Required;
+        Position start = peek()->start_pos;
         if (peek()->tok == TokenType::PipeReceive) {
             consume();
             auto name = parse_identifier();
             expect(TokenType::Colon);
             auto mono = parse_monotype();
+            auto pipe = std::make_unique<Pipe>();
+            pipe->loc = source_location(start, last_consumed_loc_.end);
+            pipe->name = std::move(name);
+            pipe->monotype = std::move(mono);
             parameters.emplace_back(std::make_shared<ParameterType>(
-                ParameterType::Type::Pipe,
-                std::make_unique<Pipe>(Pipe{std::move(name), std::move(mono)})));
+                ParameterType::Type::Pipe, std::move(pipe)));
         } else {
             if (peek()->tok == TokenType::QuestionMark) {
                 consume();
@@ -258,12 +270,16 @@ std::unique_ptr<MonoType> Parser::parse_function_type() {
             expect(TokenType::Colon);
             auto mono = parse_monotype();
             if (param_type == ParameterType::Type::Optional) {
+                auto optional = std::make_unique<Optional>();
+                optional->loc = source_location(start, last_consumed_loc_.end);
+                optional->name = std::move(name);
+                optional->monotype = std::move(mono);
+                optional->_default = nullptr;
                 parameters.emplace_back(std::make_shared<ParameterType>(
-                    ParameterType::Type::Optional,
-                    std::make_unique<Optional>(
-                        Optional{std::move(name), std::move(mono), nullptr})));
+                    ParameterType::Type::Optional, std::move(optional)));
             } else {
                 auto required = std::make_shared<Required>();
+                required->loc = source_location(start, last_consumed_loc_.end);
                 required->name = std::move(name);
                 required->monotype = std::move(mono);
                 parameters.emplace_back(std::make_shared<ParameterType>(
@@ -1423,7 +1439,7 @@ std::unique_ptr<ObjectExpr> Parser::parse_object_body_suffix(std::unique_ptr<Ide
     std::unique_ptr<ObjectExpr> obj_expr = std::make_unique<ObjectExpr>();
     if (t->tok == TokenType::Ident) {
         if (t->lit != "with") {
-            errs_.emplace_back("");
+            errs_.emplace_back("expected with in record update, got " + token_to_string(t->tok));
         }
         auto tt = consume();
         auto props = parse_property_list();

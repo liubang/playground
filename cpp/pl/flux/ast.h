@@ -866,6 +866,7 @@ struct FunctionType {
 };
 
 struct PropertyType {
+    SourceLocation loc;
     std::unique_ptr<Identifier> name;
     std::unique_ptr<MonoType> monotype;
     PropertyType() = default;
@@ -933,17 +934,20 @@ struct MonoType {
 };
 
 struct Required {
+    SourceLocation loc;
     std::unique_ptr<Identifier> name;
     std::unique_ptr<MonoType> monotype;
 };
 
 struct Optional {
+    SourceLocation loc;
     std::unique_ptr<Identifier> name;
     std::unique_ptr<MonoType> monotype;
     std::unique_ptr<LabelLit> _default;
 };
 
 struct Pipe {
+    SourceLocation loc;
     std::unique_ptr<Identifier> name;
     std::unique_ptr<MonoType> monotype;
 };
