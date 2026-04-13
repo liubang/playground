@@ -16,7 +16,7 @@ Status meanings:
 | `import "path"` | Supported | Alias-less import works | `import "array"` |
 | `import alias "path"` | Supported | Alias is stored in AST | `import regexp "regexp"` |
 | file body statements | Supported | Mixed statement list works | `a = 1` |
-| attributes / annotations | Partial | Package/import/top-level statement attributes are attached to AST nodes, and attribute parameters now accept full expressions; broader node coverage is still incomplete | `@edition("2022.1")` |
+| attributes / annotations | Supported | Package/import/statement attributes are attached to AST nodes, including block statements, and attribute parameters accept full expressions | `@edition("2022.1")` |
 
 ## Statements
 
@@ -123,22 +123,6 @@ Status meanings:
 ## Partial Feature Examples
 
 These examples are useful as the next wave of parser tests because they sit right on the current boundary between working and incomplete behavior.
-
-### Attributes / annotations
-
-Example:
-
-```flux
-@edition("2022.1")
-package metrics
-```
-
-Current expectation:
-
-- package/import/top-level statement attributes are attached to AST nodes
-- attribute parameters can contain full expressions such as calls, objects, and arrays
-- tree dump output includes attached attributes
-- broader node coverage is still incomplete, so this stays `Partial`
 
 ### Label literal
 
