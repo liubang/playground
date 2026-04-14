@@ -94,12 +94,12 @@ Status meanings:
 | --- | --- | --- |
 | runtime value model | Supported | Supports null/bool/int/uint/float/string/duration/time/regex/array/object values plus a lightweight in-memory table value |
 | lexical environments | Supported | Parent scopes, variable bindings, option bindings, and nearest-scope assignment are covered by unit tests |
-| expression evaluator | Supported | Supports literals, identifiers, arrays/objects, record update, member/index access, unary/binary/logical operators, conditionals, string interpolation, regex match, function values, function calls, simple pipe forwarding, and in-memory `from`/`range`/`filter`/`map` query execution |
+| expression evaluator | Supported | Supports literals, identifiers, arrays/objects, record update, member/index access, unary/binary/logical operators, conditionals, string interpolation, regex match, function values, function calls, simple pipe forwarding, and in-memory `from`/`range`/`filter`/`map`/`limit`/`keep`/`drop`/`reduce` query execution |
 | statement execution | Partial | Supports variable assignment, `option` assignment, expression statements, block/return execution, file-level sequential execution, top-level `builtin` declarations, package/import metadata handling, and end-to-end execution of simple in-memory query files; `testcase` execution is still missing |
 | function values / closures | Supported | User-defined function expressions now evaluate to callable runtime values with lexical closure capture |
 | function call execution | Supported | Builtin and user-defined function calls work, including default arguments, named arguments, block-bodied functions, pipe-parameter injection, and internal row-function invocation for in-memory query builtins |
 | pipe execution | Partial | Value forwarding through `|>` works for builtin functions, user-defined `<-pipe` parameters, and lightweight in-memory table pipelines, but broader query/stream semantics are still missing |
-| builtin registry / stdlib execution | Partial | A small callable builtin registry exists today (`len`, `string`, `contains`, `sum`, `mean`, `min`, `max`, `from`, `range`, `filter`, `map`), top-level `builtin` declarations can bind known builtins or placeholder callables, but the Flux standard library is still largely missing |
+| builtin registry / stdlib execution | Partial | A small callable builtin registry exists today (`len`, `string`, `contains`, `sum`, `mean`, `min`, `max`, `from`, `range`, `filter`, `map`, `limit`, `keep`, `drop`, `reduce`), top-level `builtin` declarations can bind known builtins or placeholder callables, but the Flux standard library is still largely missing |
 
 ## Error Handling
 
