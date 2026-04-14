@@ -88,6 +88,19 @@ Status meanings:
 | scanner unit tests | Supported | Covers comments, regex mode, and unread behavior |
 | AST source locations | Supported | Top-level file/package/import/statement/expression/block nodes store locations and dump them | `loc=1:1-1:10` |
 
+## Runtime Foundations
+
+| Capability | Status | Notes |
+| --- | --- | --- |
+| runtime value model | Supported | Supports null/bool/int/uint/float/string/duration/time/regex/array/object values plus a lightweight in-memory table value |
+| lexical environments | Supported | Parent scopes, variable bindings, option bindings, and nearest-scope assignment are covered by unit tests |
+| expression evaluator | Supported | Supports literals, identifiers, arrays/objects, record update, member/index access, unary/binary/logical operators, conditionals, string interpolation, regex match, function values, function calls, simple pipe forwarding, and in-memory `from`/`range`/`filter`/`map` query execution |
+| statement execution | Partial | Supports variable assignment, `option` assignment, expression statements, block/return execution, file-level sequential execution, top-level `builtin` declarations, package/import metadata handling, and end-to-end execution of simple in-memory query files; `testcase` execution is still missing |
+| function values / closures | Supported | User-defined function expressions now evaluate to callable runtime values with lexical closure capture |
+| function call execution | Supported | Builtin and user-defined function calls work, including default arguments, named arguments, block-bodied functions, pipe-parameter injection, and internal row-function invocation for in-memory query builtins |
+| pipe execution | Partial | Value forwarding through `|>` works for builtin functions, user-defined `<-pipe` parameters, and lightweight in-memory table pipelines, but broader query/stream semantics are still missing |
+| builtin registry / stdlib execution | Partial | A small callable builtin registry exists today (`len`, `string`, `contains`, `sum`, `mean`, `min`, `max`, `from`, `range`, `filter`, `map`), top-level `builtin` declarations can bind known builtins or placeholder callables, but the Flux standard library is still largely missing |
+
 ## Error Handling
 
 | Capability | Status | Notes |
@@ -107,6 +120,7 @@ Status meanings:
 - Type parsing is good enough for `builtin` declarations and debugging
 - AST tree and JSON output make parser behavior inspectable
 - There is now enough unit-test coverage to safely extend the parser
+- The runtime has a tested value model, scope chain, expression evaluator, and first-pass statement executor to build on
 
 ## Main Known Gaps
 
@@ -114,7 +128,7 @@ Status meanings:
 - Error recovery is still uneven for malformed programs
 - A few AST/debug string forms are still simplified rather than canonical Flux formatting
 - There is no semantic analysis or type checking layer yet
-- There is no runtime execution model yet: no environments, builtins, value model, stream/table execution, or interpreter loop
+- Runtime execution is only partial: a useful subset of statements and expressions can execute, including simple in-memory query pipelines, but broader builtins and stream semantics are still missing
 
 ## Recommended Next Steps
 
@@ -122,7 +136,7 @@ Status meanings:
 2. Improve malformed-input recovery and diagnostics until bad programs still produce usable AST/debug output
 3. Add more negative tests and dump snapshots
 4. Extend `SourceLocation` coverage beyond current top-level/core AST nodes
-5. Start the execution architecture in phases: value model, environments/scopes, builtin registry, expression evaluator, then pipe/query execution
+5. Continue the execution architecture from the current base: callable functions/builtins, then pipe/query execution
 
 ## Suggested Next Syntax Additions
 
@@ -154,10 +168,18 @@ The long-term goal is a usable Flux interpreter with both parsing and execution.
 - Support function values, closures, and function calls
 - Support `option` bindings and `builtin` declarations at runtime
 
+Current status:
+
+- runtime values: started
+- environments/scopes: started
+- expression evaluation: started
+- statement execution: started
+- function calls and closures: started
+
 4. Query / pipeline execution
 
-- Model tables/streams and pipe input
-- Execute high-value builtins such as `from`, `range`, `filter`, `map`, and later `group`, `join`, `aggregateWindow`
+- Continue growing the current lightweight table model and pipe input support
+- Extend beyond the current `from`, `range`, `filter`, `map` baseline to later `group`, `join`, `aggregateWindow`
 - Define enough runtime behavior to run realistic Flux scripts end to end
 
 5. Diagnostics and usability
