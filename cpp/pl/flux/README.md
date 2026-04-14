@@ -130,7 +130,7 @@ The current unit tests cover these key flows:
 - file-level execution across shared top-level environment state
 - runtime handling for top-level `builtin` declarations
 - package/import metadata handling during file execution
-- in-memory query-style execution for `from |> range |> filter |> map`
+- in-memory query-style execution for `from |> range |> filter |> map`, plus `limit`, `keep`, `drop`, and `reduce`
 - tree dump / JSON dump
 
 ## Runtime Status
@@ -139,7 +139,7 @@ The runtime layer is still early, but it now has several concrete building block
 
 - `runtime_value`: runtime scalar/container values such as null, bool, int, uint, float, string, duration, time, regex, array, object, and a lightweight in-memory table value
 - `runtime_env`: lexical environments with parent scopes, variable bindings, option bindings, and nearest-scope assignment
-- `runtime_builtin`: a small builtin registry with `len`, `string`, `contains`, `sum`, `mean`, `min`, `max`, and first-pass query builtins `from`, `range`, `filter`, and `map`
+- `runtime_builtin`: a small builtin registry with `len`, `string`, `contains`, `sum`, `mean`, `min`, `max`, and first-pass query builtins `from`, `range`, `filter`, `map`, `limit`, `keep`, `drop`, and `reduce`
 - `runtime_eval`: a first expression evaluator for AST expressions, including function values and function calls
 - `runtime_exec`: a first statement executor for assignments, `option`, expression statements, and block/return control flow
 
@@ -159,7 +159,7 @@ Current evaluator support includes:
 - builtin and user-defined function calls
 - value forwarding through `|>` into builtin functions and user-defined pipe parameters
 - small numeric aggregate builtins over arrays
-- lightweight in-memory query pipelines using `from`, `range`, `filter`, and `map`
+- lightweight in-memory query pipelines using `from`, `range`, `filter`, `map`, `limit`, `keep`, `drop`, and `reduce`
 
 Current statement execution support includes:
 

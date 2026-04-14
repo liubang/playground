@@ -231,5 +231,48 @@ TEST(RuntimeExecTest, ExecutesInMemoryQueryPipelineFile) {
     EXPECT_EQ("\"critical\"", env.lookup("result")->as_table().rows[0]->lookup("level")->string());
 }
 
+TEST(RuntimeExecTest, ExecutesReduceKeepDropAndLimitQueryFile) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin limit : (<-tables: stream[A], n: int) => stream[A]
+        builtin keep : (<-tables: stream[A], columns: [string]) => stream[A]
+        builtin reduce : (<-tables: stream[A], identity: B, fn: (r: A, accumulator: B) => B) => stream[B]
+        builtin drop : (<-tables: stream[A], columns: [string]) => stream[A]
+
+        totals = from(
+            bucket: "telegraf",
+            rows: [
+                {_measurement: "cpu", _value: 90.0, host: "a"},
+                {_measurement: "cpu", _value: 60.0, host: "b"},
+                {_measurement: "mem", _value: 10.0, host: "c"},
+            ],
+        )
+            |> limit(n: 2)
+            |> keep(columns: ["_value", "host"])
+            |> reduce(
+                identity: {count: 0, total: 0.0},
+                fn: (r, accumulator) => ({
+                    count: accumulator.count + 1,
+                    total: accumulator.total + r._value,
+                }),
+            )
+            |> drop(columns: ["count"])
+        totals
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_EQ(Value::Type::Table, result_or->last.value.type());
+    ASSERT_TRUE(env.lookup("totals").ok());
+    ASSERT_EQ(1, env.lookup("totals")->as_table().rows.size());
+    ASSERT_NE(nullptr, env.lookup("totals")->as_table().rows[0]);
+    EXPECT_EQ(nullptr, env.lookup("totals")->as_table().rows[0]->lookup("count"));
+    ASSERT_NE(nullptr, env.lookup("totals")->as_table().rows[0]->lookup("total"));
+    EXPECT_EQ("150", env.lookup("totals")->as_table().rows[0]->lookup("total")->string());
+}
+
 } // namespace
 } // namespace pl

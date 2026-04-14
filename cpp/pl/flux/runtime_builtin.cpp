@@ -16,6 +16,8 @@
 
 #include "cpp/pl/flux/runtime_builtin.h"
 
+#include <algorithm>
+
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/runtime_eval.h"
@@ -96,6 +98,20 @@ absl::StatusOr<const TableValue*> require_table_property(const ObjectValue& obje
     return &(*value_or)->as_table();
 }
 
+absl::StatusOr<const ArrayValue*> require_array_property(const ObjectValue& object,
+                                                         const std::string& name,
+                                                         const std::string& property) {
+    auto value_or = require_object_property(object, name, property);
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+    if ((*value_or)->type() != Value::Type::Array) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " `", property, "` must be an array"));
+    }
+    return &(*value_or)->as_array();
+}
+
 std::optional<std::string> optional_literal_property(const ObjectValue& object,
                                                      const std::string& property) {
     const Value* value = object.lookup(property);
@@ -103,6 +119,42 @@ std::optional<std::string> optional_literal_property(const ObjectValue& object,
         return std::nullopt;
     }
     return value->string();
+}
+
+absl::StatusOr<int64_t> integer_property(const ObjectValue& object,
+                                         const std::string& name,
+                                         const std::string& property) {
+    auto value_or = require_object_property(object, name, property);
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+    if ((*value_or)->type() == Value::Type::Int) {
+        return (*value_or)->as_int();
+    }
+    if ((*value_or)->type() == Value::Type::UInt) {
+        return static_cast<int64_t>((*value_or)->as_uint());
+    }
+    return absl::InvalidArgumentError(
+        absl::StrCat(name, " `", property, "` must be an int or uint"));
+}
+
+absl::StatusOr<std::vector<std::string>> string_array_property(const ObjectValue& object,
+                                                               const std::string& name,
+                                                               const std::string& property) {
+    auto array_or = require_array_property(object, name, property);
+    if (!array_or.ok()) {
+        return array_or.status();
+    }
+    std::vector<std::string> values;
+    values.reserve((*array_or)->elements.size());
+    for (const auto& item : (*array_or)->elements) {
+        if (item.type() != Value::Type::String) {
+            return absl::InvalidArgumentError(
+                absl::StrCat(name, " `", property, "` must contain only strings"));
+        }
+        values.push_back(item.as_string());
+    }
+    return values;
 }
 
 std::optional<std::string> row_time_literal(const ObjectValue& row) {
@@ -133,6 +185,20 @@ bool row_matches_time_bounds(const ObjectValue& row,
         return false;
     }
     return true;
+}
+
+std::shared_ptr<ObjectValue> clone_row_with_selected_columns(const ObjectValue& row,
+                                                             const std::vector<std::string>& columns,
+                                                             bool keep_columns) {
+    std::vector<std::pair<std::string, Value>> props;
+    for (const auto& [key, value] : row.properties) {
+        const bool listed =
+            std::find(columns.begin(), columns.end(), key) != columns.end();
+        if ((keep_columns && listed) || (!keep_columns && !listed)) {
+            props.emplace_back(key, value);
+        }
+    }
+    return std::make_shared<ObjectValue>(std::move(props));
 }
 
 absl::StatusOr<NumericSummary> summarize_numeric_array(const ArrayValue& array,
@@ -432,6 +498,145 @@ absl::StatusOr<Value> builtin_map(const std::vector<Value>& args) {
                         (*table_or)->range_start, (*table_or)->range_stop);
 }
 
+absl::StatusOr<Value> builtin_limit(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "limit");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "limit", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto n_or = integer_property(**object_or, "limit", "n");
+    if (!n_or.ok()) {
+        return n_or.status();
+    }
+    if (*n_or < 0) {
+        return absl::InvalidArgumentError("limit `n` must be non-negative");
+    }
+    int64_t offset = 0;
+    if (const Value* offset_value = (*object_or)->lookup("offset"); offset_value != nullptr) {
+        if (offset_value->type() == Value::Type::Int) {
+            offset = offset_value->as_int();
+        } else if (offset_value->type() == Value::Type::UInt) {
+            offset = static_cast<int64_t>(offset_value->as_uint());
+        } else {
+            return absl::InvalidArgumentError("limit `offset` must be an int or uint");
+        }
+        if (offset < 0) {
+            return absl::InvalidArgumentError("limit `offset` must be non-negative");
+        }
+    }
+
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    const size_t begin = static_cast<size_t>(offset);
+    const size_t end = std::min((*table_or)->rows.size(), begin + static_cast<size_t>(*n_or));
+    if (begin < (*table_or)->rows.size()) {
+        rows.reserve(end - begin);
+        for (size_t i = begin; i < end; ++i) {
+            if ((*table_or)->rows[i] != nullptr) {
+                rows.push_back(std::make_shared<ObjectValue>(*(*table_or)->rows[i]));
+            }
+        }
+    }
+    return Value::table((*table_or)->bucket, std::move(rows),
+                        (*table_or)->range_start, (*table_or)->range_stop);
+}
+
+absl::StatusOr<Value> builtin_keep(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "keep");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "keep", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto columns_or = string_array_property(**object_or, "keep", "columns");
+    if (!columns_or.ok()) {
+        return columns_or.status();
+    }
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve((*table_or)->rows.size());
+    for (const auto& row : (*table_or)->rows) {
+        if (row != nullptr) {
+            rows.push_back(clone_row_with_selected_columns(*row, *columns_or, true));
+        }
+    }
+    return Value::table((*table_or)->bucket, std::move(rows),
+                        (*table_or)->range_start, (*table_or)->range_stop);
+}
+
+absl::StatusOr<Value> builtin_drop(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "drop");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "drop", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto columns_or = string_array_property(**object_or, "drop", "columns");
+    if (!columns_or.ok()) {
+        return columns_or.status();
+    }
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve((*table_or)->rows.size());
+    for (const auto& row : (*table_or)->rows) {
+        if (row != nullptr) {
+            rows.push_back(clone_row_with_selected_columns(*row, *columns_or, false));
+        }
+    }
+    return Value::table((*table_or)->bucket, std::move(rows),
+                        (*table_or)->range_start, (*table_or)->range_stop);
+}
+
+absl::StatusOr<Value> builtin_reduce(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "reduce");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "reduce", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto fn_or = require_object_property(**object_or, "reduce", "fn");
+    if (!fn_or.ok()) {
+        return fn_or.status();
+    }
+    auto identity_or = require_object_property(**object_or, "reduce", "identity");
+    if (!identity_or.ok()) {
+        return identity_or.status();
+    }
+    if ((*fn_or)->type() != Value::Type::Function) {
+        return absl::InvalidArgumentError("reduce `fn` must be a function");
+    }
+    if ((*identity_or)->type() != Value::Type::Object) {
+        return absl::InvalidArgumentError("reduce `identity` must be an object");
+    }
+
+    Value accumulator = **identity_or;
+    for (const auto& row : (*table_or)->rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        auto next_or = ExpressionEvaluator::Invoke(**fn_or,
+                                                   {Value::object(row->properties), accumulator});
+        if (!next_or.ok()) {
+            return next_or.status();
+        }
+        if (next_or->type() != Value::Type::Object) {
+            return absl::InvalidArgumentError("reduce `fn` must return an object");
+        }
+        accumulator = *next_or;
+    }
+
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.push_back(std::make_shared<ObjectValue>(accumulator.as_object()));
+    return Value::table((*table_or)->bucket, std::move(rows),
+                        (*table_or)->range_start, (*table_or)->range_stop);
+}
+
 void install_builtin(Environment& env,
                      const std::string& name,
                      FunctionValue::BuiltinCallback fn,
@@ -489,6 +694,22 @@ bool install_known_builtin(Environment& env, const std::string& name) {
         install_builtin(env, "map", builtin_map, "tables");
         return true;
     }
+    if (name == "limit") {
+        install_builtin(env, "limit", builtin_limit, "tables");
+        return true;
+    }
+    if (name == "keep") {
+        install_builtin(env, "keep", builtin_keep, "tables");
+        return true;
+    }
+    if (name == "drop") {
+        install_builtin(env, "drop", builtin_drop, "tables");
+        return true;
+    }
+    if (name == "reduce") {
+        install_builtin(env, "reduce", builtin_reduce, "tables");
+        return true;
+    }
     return false;
 }
 
@@ -506,6 +727,10 @@ void BuiltinRegistry::Install(Environment& env) {
     install_known_builtin(env, "range");
     install_known_builtin(env, "filter");
     install_known_builtin(env, "map");
+    install_known_builtin(env, "limit");
+    install_known_builtin(env, "keep");
+    install_known_builtin(env, "drop");
+    install_known_builtin(env, "reduce");
 }
 
 absl::Status BuiltinRegistry::Ensure(Environment& env, const std::string& name) {

@@ -248,6 +248,41 @@ TEST(RuntimeEvalTest, EvaluatesInMemoryQueryPipelineBuiltins) {
     EXPECT_EQ("\"hot\"", result->as_table().rows[0]->lookup("level")->string());
 }
 
+TEST(RuntimeEvalTest, EvaluatesReduceKeepDropAndLimitBuiltins) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_measurement: "cpu", _value: 95.0, host: "a"},
+                {_measurement: "cpu", _value: 70.0, host: "b"},
+                {_measurement: "mem", _value: 40.0, host: "c"},
+            ],
+        )
+            |> limit(n: 2)
+            |> keep(columns: ["_measurement", "_value"])
+            |> reduce(
+                identity: {count: 0, total: 0.0},
+                fn: (r, accumulator) => ({
+                    count: accumulator.count + 1,
+                    total: accumulator.total + r._value,
+                }),
+            )
+            |> drop(columns: ["count"])
+    )");
+
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(1, result->as_table().rows.size());
+    ASSERT_NE(nullptr, result->as_table().rows[0]);
+    EXPECT_EQ(nullptr, result->as_table().rows[0]->lookup("count"));
+    ASSERT_NE(nullptr, result->as_table().rows[0]->lookup("total"));
+    EXPECT_EQ("165", result->as_table().rows[0]->lookup("total")->string());
+}
+
 TEST(RuntimeEvalTest, EvaluatesPipeIntoUserFunctionPipeParameter) {
     Environment env;
     const auto& expr = ParseAssignmentInit("result = 3 |> ((<-value, ?inc=1) => value + inc)(inc: 2)");
