@@ -764,6 +764,89 @@ TEST(FluxParserTest, ParsesRealisticQueryWithAliasImportAndMixedFunctionBodies) 
     EXPECT_NE(result->init->string().find("ok"), std::string::npos);
 }
 
+TEST(FluxParserTest, ParsesOptionDrivenTaskPipelineProgram) {
+    const std::string source = R"(
+        option task = {name: "cpu-alert", every: 5m, offset: 30s}
+
+        result = from(bucket: "telegraf")
+            |> range(start: -task.every)
+            |> filter(fn: r => r._measurement == "cpu")
+            |> aggregateWindow(every: task.every, fn: mean, createEmpty: false)
+    )";
+
+    Parser parser(source);
+    auto file = parser.parse_file("task_pipeline.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_TRUE(parser.errors().empty()) << ::testing::PrintToString(parser.errors());
+    ASSERT_EQ(2, file->body.size());
+
+    ASSERT_EQ(Statement::Type::OptionStatement, file->body[0]->type);
+    const auto& task_option = std::get<std::unique_ptr<OptionStmt>>(file->body[0]->stmt);
+    ASSERT_NE(task_option, nullptr);
+    ASSERT_NE(task_option->assignment, nullptr);
+    EXPECT_EQ(Assignment::Type::VariableAssignment, task_option->assignment->type);
+
+    const auto& assignment =
+        std::get<std::unique_ptr<VariableAssgn>>(task_option->assignment->value);
+    ASSERT_NE(assignment, nullptr);
+    ASSERT_NE(assignment->init, nullptr);
+    ASSERT_EQ(Expression::Type::ObjectExpr, assignment->init->type);
+
+    const auto& result = std::get<std::unique_ptr<VariableAssgn>>(file->body[1]->stmt);
+    ASSERT_NE(result, nullptr);
+    ASSERT_NE(result->init, nullptr);
+    ASSERT_EQ(Expression::Type::PipeExpr, result->init->type);
+    EXPECT_NE(result->init->string().find("aggregateWindow"), std::string::npos);
+    EXPECT_NE(result->init->string().find("task.every"), std::string::npos);
+}
+
+TEST(FluxParserTest, ParsesMultiStreamJoinUnionAndReducePipeline) {
+    const std::string source = R"(
+        left = from(bucket: "telegraf")
+            |> range(start: -1h)
+            |> filter(fn: r => r._field == "usage_user")
+        right = from(bucket: "telegraf")
+            |> range(start: -1h)
+            |> filter(fn: r => r._field == "usage_system")
+        joined = join(tables: {left: left, right: right}, on: ["_time", "host"])
+        merged = union(tables: [left, right])
+        totals = merged
+            |> reduce(
+                identity: {sum: 0.0, count: 0},
+                fn: (r, acc) => ({sum: acc.sum + r._value, count: acc.count + 1}),
+            )
+    )";
+
+    Parser parser(source);
+    auto file = parser.parse_file("multi_stream.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_TRUE(parser.errors().empty()) << ::testing::PrintToString(parser.errors());
+    ASSERT_EQ(5, file->body.size());
+
+    const auto& joined = std::get<std::unique_ptr<VariableAssgn>>(file->body[2]->stmt);
+    ASSERT_NE(joined, nullptr);
+    ASSERT_NE(joined->init, nullptr);
+    ASSERT_EQ(Expression::Type::CallExpr, joined->init->type);
+    EXPECT_NE(joined->init->string().find("join"), std::string::npos);
+    EXPECT_NE(joined->init->string().find("left"), std::string::npos);
+    EXPECT_NE(joined->init->string().find("right"), std::string::npos);
+
+    const auto& merged = std::get<std::unique_ptr<VariableAssgn>>(file->body[3]->stmt);
+    ASSERT_NE(merged, nullptr);
+    ASSERT_NE(merged->init, nullptr);
+    ASSERT_EQ(Expression::Type::CallExpr, merged->init->type);
+    EXPECT_NE(merged->init->string().find("union"), std::string::npos);
+
+    const auto& totals = std::get<std::unique_ptr<VariableAssgn>>(file->body[4]->stmt);
+    ASSERT_NE(totals, nullptr);
+    ASSERT_NE(totals->init, nullptr);
+    ASSERT_EQ(Expression::Type::PipeExpr, totals->init->type);
+    EXPECT_NE(totals->init->string().find("reduce"), std::string::npos);
+    EXPECT_NE(totals->init->string().find("identity"), std::string::npos);
+}
+
 TEST(FluxParserTest, ParsesPackageAttributeWithoutBadStatement) {
     const std::string source = R"(
         @edition("2022.1")
