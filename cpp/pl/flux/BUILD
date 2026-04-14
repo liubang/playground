@@ -97,6 +97,94 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "runtime_value",
+    srcs = [
+        "runtime_value.cpp",
+    ],
+    hdrs = [
+        "runtime_value.h",
+    ],
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        "@abseil-cpp//absl/status:statusor",
+    ],
+)
+
+cc_library(
+    name = "runtime_env",
+    srcs = [
+        "runtime_env.cpp",
+    ],
+    hdrs = [
+        "runtime_env.h",
+    ],
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":runtime_value",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+    ],
+)
+
+cc_library(
+    name = "runtime_builtin",
+    srcs = [
+        "runtime_builtin.cpp",
+    ],
+    hdrs = [
+        "runtime_builtin.h",
+    ],
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":runtime_eval",
+        ":runtime_env",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+    ],
+)
+
+cc_library(
+    name = "runtime_eval",
+    srcs = [
+        "runtime_eval.cpp",
+    ],
+    hdrs = [
+        "runtime_eval.h",
+    ],
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":parser",
+        ":runtime_env",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "runtime_exec",
+    srcs = [
+        "runtime_exec.cpp",
+    ],
+    hdrs = [
+        "runtime_exec.h",
+    ],
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":runtime_builtin",
+        ":runtime_eval",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+    ],
+)
+
 cc_binary(
     name = "parser_test",
     srcs = [
@@ -130,6 +218,62 @@ cc_test(
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":parser",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "runtime_value_unit_test",
+    srcs = [
+        "runtime_value_unit_test.cpp",
+    ],
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":runtime_value",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "runtime_env_unit_test",
+    srcs = [
+        "runtime_env_unit_test.cpp",
+    ],
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":runtime_env",
+        "@abseil-cpp//absl/status",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "runtime_eval_unit_test",
+    srcs = [
+        "runtime_eval_unit_test.cpp",
+    ],
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":runtime_builtin",
+        ":runtime_eval",
+        "@abseil-cpp//absl/status",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "runtime_exec_unit_test",
+    srcs = [
+        "runtime_exec_unit_test.cpp",
+    ],
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":runtime_exec",
+        "@abseil-cpp//absl/status",
         "@googletest//:gtest_main",
     ],
 )
