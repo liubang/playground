@@ -317,7 +317,10 @@ absl::StatusOr<Value> invoke_function(const FunctionValue& function,
             return invalid_call(whole_expr, "builtin function is missing callback");
         }
         std::vector<Value> args;
-        if (pipe_value.has_value() && call.arguments.empty()) {
+        if (pipe_value.has_value() && call.arguments.empty() &&
+            function.pipe_param_name == "tables") {
+            args.push_back(Value::object({{function.pipe_param_name, *pipe_value}}));
+        } else if (pipe_value.has_value() && call.arguments.empty()) {
             args.push_back(*pipe_value);
         } else if (pipe_value.has_value() && call.arguments.size() == 1 &&
                    is_named_call_argument(*call.arguments[0]) &&

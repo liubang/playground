@@ -274,5 +274,146 @@ TEST(RuntimeExecTest, ExecutesReduceKeepDropAndLimitQueryFile) {
     EXPECT_EQ("150", env.lookup("totals")->as_table().rows[0]->lookup("total")->string());
 }
 
+TEST(RuntimeExecTest, ExecutesSortGroupCountFirstAndLastQueryFile) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
+        builtin sort : (<-tables: stream[A], columns: [string], desc: bool) => stream[A]
+        builtin first : (<-tables: stream[A]) => stream[A]
+        builtin last : (<-tables: stream[A]) => stream[A]
+        builtin count : (<-tables: stream[A], column: string) => stream[A]
+
+        hottest = from(
+            bucket: "telegraf",
+            rows: [
+                {_measurement: "cpu", _value: 70.0, host: "b"},
+                {_measurement: "cpu", _value: 95.0, host: "a"},
+                {_measurement: "mem", _value: 40.0, host: "c"},
+            ],
+        )
+            |> group(columns: ["_measurement"])
+            |> sort(columns: ["_value"], desc: true)
+            |> first()
+        latest = from(bucket: "telegraf", rows: [{_value: 1}, {_value: 2}]) |> last()
+        counted = from(bucket: "telegraf", rows: [{_value: 1}, {_value: 2}, {host: "missing"}])
+            |> count(column: "_value")
+        hottest
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_EQ(Value::Type::Table, result_or->last.value.type());
+    ASSERT_TRUE(env.lookup("hottest").ok());
+    ASSERT_EQ(1, env.lookup("hottest")->as_table().rows.size());
+    EXPECT_EQ("95", env.lookup("hottest")->as_table().rows[0]->lookup("_value")->string());
+    ASSERT_NE(nullptr, env.lookup("hottest")->as_table().rows[0]->lookup("_group"));
+    EXPECT_EQ("{_measurement: \"cpu\"}",
+              env.lookup("hottest")->as_table().rows[0]->lookup("_group")->string());
+    ASSERT_TRUE(env.lookup("latest").ok());
+    EXPECT_EQ("2", env.lookup("latest")->as_table().rows[0]->lookup("_value")->string());
+    ASSERT_TRUE(env.lookup("counted").ok());
+    EXPECT_EQ("2", env.lookup("counted")->as_table().rows[0]->lookup("_value")->string());
+}
+
+TEST(RuntimeExecTest, ExecutesUnionAndJoinQueryFile) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin union : (tables: [stream[A]]) => stream[A]
+        builtin join : (tables: A, on: [string]) => stream[B]
+
+        cpu = from(bucket: "cpu", rows: [
+            {_time: "t1", _value: 90.0, host: "a"},
+            {_time: "t2", _value: 70.0, host: "b"},
+        ])
+        mem = from(bucket: "mem", rows: [
+            {_time: "t1", _value: 40.0},
+            {_time: "t3", _value: 20.0},
+        ])
+        combined = union(tables: [cpu, mem])
+        joined = join(tables: {cpu: cpu, mem: mem}, on: ["_time"])
+        joined
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("combined").ok());
+    EXPECT_EQ(4, env.lookup("combined")->as_table().rows.size());
+    ASSERT_TRUE(env.lookup("joined").ok());
+    ASSERT_EQ(1, env.lookup("joined")->as_table().rows.size());
+    const auto& row = env.lookup("joined")->as_table().rows[0];
+    ASSERT_NE(nullptr, row);
+    EXPECT_EQ("\"t1\"", row->lookup("_time")->string());
+    EXPECT_EQ("90", row->lookup("cpu._value")->string());
+    EXPECT_EQ("40", row->lookup("mem._value")->string());
+    EXPECT_EQ("\"a\"", row->lookup("cpu.host")->string());
+    EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
+}
+
+TEST(RuntimeExecTest, ExecutesAggregateWindowQueryFile) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
+        builtin mean : (values: [float]) => float
+        builtin sum : (values: [float]) => float
+        builtin count : (<-tables: stream[A], column: string) => stream[A]
+        builtin aggregateWindow : (<-tables: stream[A], every: duration, fn: B) => stream[C]
+
+        windowed = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T00:00:10Z", _value: 10.0, host: "a"},
+                {_time: "2024-01-01T00:00:40Z", _value: 30.0, host: "a"},
+                {_time: "2024-01-01T00:00:20Z", _value: 90.0, host: "b"},
+                {_time: "2024-01-01T00:01:05Z", _value: 50.0, host: "a"},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> aggregateWindow(every: 1m, fn: mean)
+        usage = from(bucket: "telegraf", rows: [
+                {_time: "2024-01-01T00:00:10Z", usage: 10.0},
+                {_time: "2024-01-01T00:00:40Z", usage: 30.0},
+                {_time: "2024-01-01T00:01:05Z", usage: 50.0},
+            ])
+            |> aggregateWindow(every: 1m, fn: sum, column: "usage")
+        samples = from(bucket: "telegraf", rows: [
+                {_time: "2024-01-01T00:00:10Z", _value: 10.0},
+                {_time: "2024-01-01T00:00:40Z", _value: 30.0},
+                {_time: "2024-01-01T00:01:05Z", _value: 50.0},
+            ])
+            |> aggregateWindow(every: 1m, fn: count)
+        windowed
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("windowed").ok());
+    ASSERT_EQ(Value::Type::Table, env.lookup("windowed")->type());
+    ASSERT_EQ(3, env.lookup("windowed")->as_table().rows.size());
+    const auto& first = env.lookup("windowed")->as_table().rows[0];
+    ASSERT_NE(nullptr, first);
+    EXPECT_EQ("20", first->lookup("_value")->string());
+    EXPECT_EQ("{host: \"a\"}", first->lookup("_group")->string());
+    EXPECT_EQ("2024-01-01T00:00:00Z", first->lookup("_start")->string());
+    EXPECT_EQ("2024-01-01T00:01:00Z", first->lookup("_stop")->string());
+    ASSERT_TRUE(env.lookup("usage").ok());
+    ASSERT_EQ(2, env.lookup("usage")->as_table().rows.size());
+    EXPECT_EQ("40", env.lookup("usage")->as_table().rows[0]->lookup("usage")->string());
+    EXPECT_EQ("50", env.lookup("usage")->as_table().rows[1]->lookup("usage")->string());
+    ASSERT_TRUE(env.lookup("samples").ok());
+    ASSERT_EQ(2, env.lookup("samples")->as_table().rows.size());
+    EXPECT_EQ("2", env.lookup("samples")->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("1", env.lookup("samples")->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
+}
+
 } // namespace
 } // namespace pl

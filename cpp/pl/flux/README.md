@@ -130,7 +130,7 @@ The current unit tests cover these key flows:
 - file-level execution across shared top-level environment state
 - runtime handling for top-level `builtin` declarations
 - package/import metadata handling during file execution
-- in-memory query-style execution for `from |> range |> filter |> map`, plus `limit`, `keep`, `drop`, and `reduce`
+- in-memory query-style execution for `from |> range |> filter |> map`, plus `limit`, `keep`, `drop`, `reduce`, `sort`, `group`, `count`, `first`, `last`, `union`, a lightweight two-table `join`, and first-pass `aggregateWindow`
 - tree dump / JSON dump
 
 ## Runtime Status
@@ -139,9 +139,11 @@ The runtime layer is still early, but it now has several concrete building block
 
 - `runtime_value`: runtime scalar/container values such as null, bool, int, uint, float, string, duration, time, regex, array, object, and a lightweight in-memory table value
 - `runtime_env`: lexical environments with parent scopes, variable bindings, option bindings, and nearest-scope assignment
-- `runtime_builtin`: a small builtin registry with `len`, `string`, `contains`, `sum`, `mean`, `min`, `max`, and first-pass query builtins `from`, `range`, `filter`, `map`, `limit`, `keep`, `drop`, and `reduce`
+- `runtime_builtin`: a small builtin registry with `len`, `string`, `contains`, `sum`, `mean`, `min`, `max`, and first-pass query builtins `from`, `range`, `filter`, `map`, `limit`, `keep`, `drop`, `reduce`, `sort`, `group`, `count`, `first`, `last`, `union`, `join`, and `aggregateWindow`
 - `runtime_eval`: a first expression evaluator for AST expressions, including function values and function calls
 - `runtime_exec`: a first statement executor for assignments, `option`, expression statements, and block/return control flow
+
+The current `aggregateWindow` implementation is intentionally lightweight: it buckets RFC3339 `_time` values by fixed durations such as `1m`, preserves the current `_group` marker, supports `column`, and can call `mean`, `sum`, `min`, `max`, custom array functions, or the special window form of `count`. Calendar-aware windows, offsets, time zones, and `createEmpty: true` are not implemented yet.
 
 Current evaluator support includes:
 
@@ -159,7 +161,7 @@ Current evaluator support includes:
 - builtin and user-defined function calls
 - value forwarding through `|>` into builtin functions and user-defined pipe parameters
 - small numeric aggregate builtins over arrays
-- lightweight in-memory query pipelines using `from`, `range`, `filter`, `map`, `limit`, `keep`, `drop`, and `reduce`
+- lightweight in-memory query pipelines using `from`, `range`, `filter`, `map`, `limit`, `keep`, `drop`, `reduce`, `sort`, `group`, `count`, `first`, `last`, `union`, `join`, and `aggregateWindow`
 
 Current statement execution support includes:
 
@@ -176,6 +178,7 @@ Current statement execution support includes:
 Not implemented yet in the runtime:
 
 - richer query-oriented pipe semantics beyond the current in-memory table pipeline subset
+- full calendar-aware `aggregateWindow` semantics such as offsets, time zones, and empty window materialization
 - `testcase` execution
 - a broader standard-library builtin catalog
 

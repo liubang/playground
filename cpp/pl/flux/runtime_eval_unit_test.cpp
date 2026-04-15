@@ -283,6 +283,211 @@ TEST(RuntimeEvalTest, EvaluatesReduceKeepDropAndLimitBuiltins) {
     EXPECT_EQ("165", result->as_table().rows[0]->lookup("total")->string());
 }
 
+TEST(RuntimeEvalTest, EvaluatesSortGroupCountFirstAndLastBuiltins) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& sorted_expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_measurement: "cpu", _value: 70.0, host: "b"},
+                {_measurement: "cpu", _value: 95.0, host: "a"},
+                {_measurement: "mem", _value: 40.0, host: "c"},
+            ],
+        )
+            |> group(columns: ["_measurement"])
+            |> sort(columns: ["_value"], desc: true)
+            |> first()
+    )");
+    auto sorted = ExpressionEvaluator::Evaluate(sorted_expr, env);
+    ASSERT_TRUE(sorted.ok()) << sorted.status();
+    ASSERT_EQ(Value::Type::Table, sorted->type());
+    ASSERT_EQ(1, sorted->as_table().rows.size());
+    ASSERT_NE(nullptr, sorted->as_table().rows[0]);
+    EXPECT_EQ("95", sorted->as_table().rows[0]->lookup("_value")->string());
+    ASSERT_NE(nullptr, sorted->as_table().rows[0]->lookup("_group"));
+    EXPECT_EQ("{_measurement: \"cpu\"}", sorted->as_table().rows[0]->lookup("_group")->string());
+
+    const auto& count_expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_measurement: "cpu", _value: 70.0},
+                {_measurement: "cpu"},
+                {_measurement: "mem", _value: 40.0},
+            ],
+        )
+            |> count(column: "_value")
+    )");
+    auto count = ExpressionEvaluator::Evaluate(count_expr, env);
+    ASSERT_TRUE(count.ok()) << count.status();
+    ASSERT_EQ(Value::Type::Table, count->type());
+    ASSERT_EQ(1, count->as_table().rows.size());
+    EXPECT_EQ("2", count->as_table().rows[0]->lookup("_value")->string());
+
+    const auto& last_expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_value: 1},
+                {_value: 2},
+                {_value: 3},
+            ],
+        )
+            |> last()
+    )");
+    auto last = ExpressionEvaluator::Evaluate(last_expr, env);
+    ASSERT_TRUE(last.ok()) << last.status();
+    ASSERT_EQ(1, last->as_table().rows.size());
+    EXPECT_EQ("3", last->as_table().rows[0]->lookup("_value")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesUnionAndJoinBuiltins) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& union_expr = ParseAssignmentInit(R"(
+        result = union(tables: [
+            from(bucket: "cpu", rows: [{_time: "t1", _value: 90.0}]),
+            from(bucket: "mem", rows: [{_time: "t1", _value: 40.0}, {_time: "t2", _value: 50.0}]),
+        ])
+    )");
+    auto union_result = ExpressionEvaluator::Evaluate(union_expr, env);
+    ASSERT_TRUE(union_result.ok()) << union_result.status();
+    ASSERT_EQ(Value::Type::Table, union_result->type());
+    EXPECT_EQ(3, union_result->as_table().rows.size());
+
+    const auto& join_expr = ParseAssignmentInit(R"(
+        result = join(
+            tables: {
+                cpu: from(bucket: "cpu", rows: [
+                    {_time: "t1", _value: 90.0, host: "a"},
+                    {_time: "t2", _value: 70.0, host: "b"},
+                ]),
+                mem: from(bucket: "mem", rows: [
+                    {_time: "t1", _value: 40.0},
+                    {_time: "t3", _value: 20.0},
+                ]),
+            },
+            on: ["_time"],
+        )
+    )");
+    auto join_result = ExpressionEvaluator::Evaluate(join_expr, env);
+    ASSERT_TRUE(join_result.ok()) << join_result.status();
+    ASSERT_EQ(Value::Type::Table, join_result->type());
+    ASSERT_EQ(1, join_result->as_table().rows.size());
+    ASSERT_NE(nullptr, join_result->as_table().rows[0]);
+    EXPECT_EQ("\"t1\"", join_result->as_table().rows[0]->lookup("_time")->string());
+    EXPECT_EQ("90", join_result->as_table().rows[0]->lookup("cpu._value")->string());
+    EXPECT_EQ("40", join_result->as_table().rows[0]->lookup("mem._value")->string());
+    EXPECT_EQ("\"a\"", join_result->as_table().rows[0]->lookup("cpu.host")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesAggregateWindowBuiltin) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T00:00:10Z", _value: 10.0, host: "a"},
+                {_time: "2024-01-01T00:00:40Z", _value: 30.0, host: "a"},
+                {_time: "2024-01-01T00:00:20Z", _value: 90.0, host: "b"},
+                {_time: "2024-01-01T00:01:05Z", _value: 50.0, host: "a"},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> aggregateWindow(every: 1m, fn: mean)
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(3, result->as_table().rows.size());
+    ASSERT_NE(nullptr, result->as_table().rows[0]);
+    EXPECT_EQ("20", result->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("{host: \"a\"}", result->as_table().rows[0]->lookup("_group")->string());
+    EXPECT_EQ("2024-01-01T00:00:00Z", result->as_table().rows[0]->lookup("_start")->string());
+    EXPECT_EQ("2024-01-01T00:01:00Z", result->as_table().rows[0]->lookup("_stop")->string());
+    EXPECT_EQ("2024-01-01T00:01:00Z", result->as_table().rows[0]->lookup("_time")->string());
+    ASSERT_NE(nullptr, result->as_table().rows[1]);
+    EXPECT_EQ("90", result->as_table().rows[1]->lookup("_value")->string());
+    ASSERT_NE(nullptr, result->as_table().rows[2]);
+    EXPECT_EQ("50", result->as_table().rows[2]->lookup("_value")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesAggregateWindowColumnAndAggregateVariants) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& sum_expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T00:00:10Z", usage: 10.0},
+                {_time: "2024-01-01T00:00:40Z", usage: 30.0},
+                {_time: "2024-01-01T00:01:05Z", usage: 50.0},
+            ],
+        )
+            |> aggregateWindow(every: 1m, fn: sum, column: "usage")
+    )");
+    auto sum_result = ExpressionEvaluator::Evaluate(sum_expr, env);
+    ASSERT_TRUE(sum_result.ok()) << sum_result.status();
+    ASSERT_EQ(Value::Type::Table, sum_result->type());
+    ASSERT_EQ(2, sum_result->as_table().rows.size());
+    EXPECT_EQ("40", sum_result->as_table().rows[0]->lookup("usage")->string());
+    EXPECT_EQ("50", sum_result->as_table().rows[1]->lookup("usage")->string());
+
+    const auto& count_expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T00:00:10Z", _value: 10.0},
+                {_time: "2024-01-01T00:00:40Z", _value: 30.0},
+                {_time: "2024-01-01T00:01:05Z", _value: 50.0},
+            ],
+        )
+            |> aggregateWindow(every: 1m, fn: count)
+    )");
+    auto count_result = ExpressionEvaluator::Evaluate(count_expr, env);
+    ASSERT_TRUE(count_result.ok()) << count_result.status();
+    ASSERT_EQ(Value::Type::Table, count_result->type());
+    ASSERT_EQ(2, count_result->as_table().rows.size());
+    EXPECT_EQ("2", count_result->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("1", count_result->as_table().rows[1]->lookup("_value")->string());
+}
+
+TEST(RuntimeEvalTest, ReportsAggregateWindowArgumentErrors) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& invalid_every_expr = ParseAssignmentInit(R"(
+        result = from(bucket: "telegraf", rows: [{_time: "2024-01-01T00:00:10Z", _value: 1.0}])
+            |> aggregateWindow(every: 0m, fn: mean)
+    )");
+    auto invalid_every = ExpressionEvaluator::Evaluate(invalid_every_expr, env);
+    ASSERT_FALSE(invalid_every.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, invalid_every.status().code());
+
+    const auto& missing_fn_expr = ParseAssignmentInit(R"(
+        result = from(bucket: "telegraf", rows: [{_time: "2024-01-01T00:00:10Z", _value: 1.0}])
+            |> aggregateWindow(every: 1m)
+    )");
+    auto missing_fn = ExpressionEvaluator::Evaluate(missing_fn_expr, env);
+    ASSERT_FALSE(missing_fn.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, missing_fn.status().code());
+
+    const auto& create_empty_expr = ParseAssignmentInit(R"(
+        result = from(bucket: "telegraf", rows: [{_time: "2024-01-01T00:00:10Z", _value: 1.0}])
+            |> aggregateWindow(every: 1m, fn: mean, createEmpty: true)
+    )");
+    auto create_empty = ExpressionEvaluator::Evaluate(create_empty_expr, env);
+    ASSERT_FALSE(create_empty.ok());
+    EXPECT_EQ(absl::StatusCode::kUnimplemented, create_empty.status().code());
+}
+
 TEST(RuntimeEvalTest, EvaluatesPipeIntoUserFunctionPipeParameter) {
     Environment env;
     const auto& expr = ParseAssignmentInit("result = 3 |> ((<-value, ?inc=1) => value + inc)(inc: 2)");

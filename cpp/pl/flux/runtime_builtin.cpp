@@ -17,6 +17,8 @@
 #include "cpp/pl/flux/runtime_builtin.h"
 
 #include <algorithm>
+#include <cctype>
+#include <ctime>
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
@@ -67,6 +69,10 @@ absl::StatusOr<const Value*> require_object_property(const ObjectValue& object,
     return value;
 }
 
+absl::StatusOr<const ArrayValue*> require_array_property(const ObjectValue& object,
+                                                         const std::string& name,
+                                                         const std::string& property);
+
 absl::StatusOr<std::vector<std::shared_ptr<ObjectValue>>> require_table_rows(const Value& value,
                                                                              const std::string& name) {
     if (value.type() != Value::Type::Array) {
@@ -96,6 +102,49 @@ absl::StatusOr<const TableValue*> require_table_property(const ObjectValue& obje
             absl::StrCat(name, " `", property, "` must be a table"));
     }
     return &(*value_or)->as_table();
+}
+
+absl::StatusOr<std::vector<const TableValue*>> require_table_array_property(
+    const ObjectValue& object,
+    const std::string& name,
+    const std::string& property) {
+    auto array_or = require_array_property(object, name, property);
+    if (!array_or.ok()) {
+        return array_or.status();
+    }
+    std::vector<const TableValue*> tables;
+    tables.reserve((*array_or)->elements.size());
+    for (const auto& item : (*array_or)->elements) {
+        if (item.type() != Value::Type::Table) {
+            return absl::InvalidArgumentError(
+                absl::StrCat(name, " `", property, "` must contain only tables"));
+        }
+        tables.push_back(&item.as_table());
+    }
+    return tables;
+}
+
+absl::StatusOr<std::vector<std::pair<std::string, const TableValue*>>>
+require_named_table_object_property(const ObjectValue& object,
+                                    const std::string& name,
+                                    const std::string& property) {
+    auto value_or = require_object_property(object, name, property);
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+    if ((*value_or)->type() != Value::Type::Object) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " `", property, "` must be an object of tables"));
+    }
+    std::vector<std::pair<std::string, const TableValue*>> tables;
+    for (const auto& [table_name, value] : (*value_or)->as_object().properties) {
+        if (value.type() != Value::Type::Table) {
+            return absl::InvalidArgumentError(
+                absl::StrCat(name, " `", property, "` must contain only tables"));
+        }
+        tables.emplace_back(table_name, &value.as_table());
+    }
+    return tables;
 }
 
 absl::StatusOr<const ArrayValue*> require_array_property(const ObjectValue& object,
@@ -138,6 +187,36 @@ absl::StatusOr<int64_t> integer_property(const ObjectValue& object,
         absl::StrCat(name, " `", property, "` must be an int or uint"));
 }
 
+absl::StatusOr<bool> optional_bool_property(const ObjectValue& object,
+                                            const std::string& name,
+                                            const std::string& property,
+                                            bool default_value) {
+    const Value* value = object.lookup(property);
+    if (value == nullptr) {
+        return default_value;
+    }
+    if (value->type() != Value::Type::Bool) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " `", property, "` must be a boolean"));
+    }
+    return value->as_bool();
+}
+
+absl::StatusOr<std::string> optional_string_property(const ObjectValue& object,
+                                                     const std::string& name,
+                                                     const std::string& property,
+                                                     std::string default_value) {
+    const Value* value = object.lookup(property);
+    if (value == nullptr) {
+        return default_value;
+    }
+    if (value->type() != Value::Type::String) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " `", property, "` must be a string"));
+    }
+    return value->as_string();
+}
+
 absl::StatusOr<std::vector<std::string>> string_array_property(const ObjectValue& object,
                                                                const std::string& name,
                                                                const std::string& property) {
@@ -155,6 +234,17 @@ absl::StatusOr<std::vector<std::string>> string_array_property(const ObjectValue
         values.push_back(item.as_string());
     }
     return values;
+}
+
+absl::StatusOr<std::vector<std::string>> optional_string_array_property(
+    const ObjectValue& object,
+    const std::string& name,
+    const std::string& property,
+    std::vector<std::string> default_value) {
+    if (object.lookup(property) == nullptr) {
+        return default_value;
+    }
+    return string_array_property(object, name, property);
 }
 
 std::optional<std::string> row_time_literal(const ObjectValue& row) {
@@ -199,6 +289,275 @@ std::shared_ptr<ObjectValue> clone_row_with_selected_columns(const ObjectValue& 
         }
     }
     return std::make_shared<ObjectValue>(std::move(props));
+}
+
+std::shared_ptr<ObjectValue> clone_row(const ObjectValue& row) {
+    return std::make_shared<ObjectValue>(row);
+}
+
+Value object_with_upserted_property(const ObjectValue& object,
+                                    const std::string& key,
+                                    Value value) {
+    auto props = object.properties;
+    for (auto& [name, current] : props) {
+        if (name == key) {
+            current = std::move(value);
+            return Value::object(std::move(props));
+        }
+    }
+    props.emplace_back(key, std::move(value));
+    return Value::object(std::move(props));
+}
+
+std::shared_ptr<ObjectValue> clone_row_with_group(const ObjectValue& row,
+                                                  const std::vector<std::string>& columns) {
+    std::vector<std::pair<std::string, Value>> group_props;
+    for (const auto& column : columns) {
+        const Value* value = row.lookup(column);
+        if (value != nullptr) {
+            group_props.emplace_back(column, *value);
+        }
+    }
+    auto grouped = object_with_upserted_property(row, "_group", Value::object(std::move(group_props)));
+    return std::make_shared<ObjectValue>(grouped.as_object());
+}
+
+double numeric_value(const Value& value) {
+    switch (value.type()) {
+        case Value::Type::Int:
+            return static_cast<double>(value.as_int());
+        case Value::Type::UInt:
+            return static_cast<double>(value.as_uint());
+        case Value::Type::Float:
+            return value.as_float();
+        default:
+            return 0.0;
+    }
+}
+
+bool is_numeric_value(const Value& value) {
+    return value.type() == Value::Type::Int || value.type() == Value::Type::UInt ||
+           value.type() == Value::Type::Float;
+}
+
+int compare_values(const Value* lhs, const Value* rhs) {
+    if (lhs == nullptr && rhs == nullptr) {
+        return 0;
+    }
+    if (lhs == nullptr) {
+        return 1;
+    }
+    if (rhs == nullptr) {
+        return -1;
+    }
+    if (is_numeric_value(*lhs) && is_numeric_value(*rhs)) {
+        const auto left = numeric_value(*lhs);
+        const auto right = numeric_value(*rhs);
+        return left < right ? -1 : left > right ? 1 : 0;
+    }
+    const auto left = lhs->type() == Value::Type::String ? lhs->as_string() : lhs->string();
+    const auto right = rhs->type() == Value::Type::String ? rhs->as_string() : rhs->string();
+    return left < right ? -1 : left > right ? 1 : 0;
+}
+
+bool contains_string(const std::vector<std::string>& values, const std::string& value) {
+    return std::find(values.begin(), values.end(), value) != values.end();
+}
+
+bool rows_match_on_columns(const ObjectValue& lhs,
+                           const ObjectValue& rhs,
+                           const std::vector<std::string>& columns) {
+    for (const auto& column : columns) {
+        const Value* left = lhs.lookup(column);
+        const Value* right = rhs.lookup(column);
+        if (left == nullptr || right == nullptr || *left != *right) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::string joined_property_name(const std::string& table_name, const std::string& column) {
+    return table_name + "." + column;
+}
+
+std::shared_ptr<ObjectValue> join_rows(const std::string& left_name,
+                                       const ObjectValue& left,
+                                       const std::string& right_name,
+                                       const ObjectValue& right,
+                                       const std::vector<std::string>& on_columns) {
+    std::vector<std::pair<std::string, Value>> props;
+    for (const auto& column : on_columns) {
+        const Value* value = left.lookup(column);
+        if (value != nullptr) {
+            props.emplace_back(column, *value);
+        }
+    }
+    for (const auto& [key, value] : left.properties) {
+        if (!contains_string(on_columns, key)) {
+            props.emplace_back(joined_property_name(left_name, key), value);
+        }
+    }
+    for (const auto& [key, value] : right.properties) {
+        if (!contains_string(on_columns, key)) {
+            props.emplace_back(joined_property_name(right_name, key), value);
+        }
+    }
+    return std::make_shared<ObjectValue>(std::move(props));
+}
+
+bool parse_fixed_int(const std::string& text, size_t offset, size_t width, int* out) {
+    if (offset + width > text.size()) {
+        return false;
+    }
+    int value = 0;
+    for (size_t i = 0; i < width; ++i) {
+        const auto ch = text[offset + i];
+        if (!std::isdigit(static_cast<unsigned char>(ch))) {
+            return false;
+        }
+        value = value * 10 + (ch - '0');
+    }
+    *out = value;
+    return true;
+}
+
+int64_t days_from_civil(int year, unsigned month, unsigned day) {
+    year -= month <= 2;
+    const int era = (year >= 0 ? year : year - 399) / 400;
+    const unsigned yoe = static_cast<unsigned>(year - era * 400);
+    const auto shifted_month =
+        static_cast<unsigned>(static_cast<int>(month) + (month > 2 ? -3 : 9));
+    const unsigned doy = (153 * shifted_month + 2) / 5 + day - 1;
+    const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return era * 146097 + static_cast<int>(doe) - 719468;
+}
+
+std::optional<int64_t> parse_rfc3339_seconds(const std::string& literal) {
+    if (literal.size() < 20 || literal[4] != '-' || literal[7] != '-' ||
+        literal[10] != 'T' || literal[13] != ':' || literal[16] != ':') {
+        return std::nullopt;
+    }
+    int year = 0;
+    int month = 0;
+    int day = 0;
+    int hour = 0;
+    int minute = 0;
+    int second = 0;
+    if (!parse_fixed_int(literal, 0, 4, &year) ||
+        !parse_fixed_int(literal, 5, 2, &month) ||
+        !parse_fixed_int(literal, 8, 2, &day) ||
+        !parse_fixed_int(literal, 11, 2, &hour) ||
+        !parse_fixed_int(literal, 14, 2, &minute) ||
+        !parse_fixed_int(literal, 17, 2, &second)) {
+        return std::nullopt;
+    }
+    if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 ||
+        second > 60) {
+        return std::nullopt;
+    }
+    return days_from_civil(year, static_cast<unsigned>(month), static_cast<unsigned>(day)) *
+               24 * 60 * 60 +
+           hour * 60 * 60 + minute * 60 + second;
+}
+
+std::string format_rfc3339_seconds(int64_t seconds) {
+    std::time_t time = static_cast<std::time_t>(seconds);
+    std::tm tm{};
+#if defined(_WIN32)
+    gmtime_s(&tm, &time);
+#else
+    gmtime_r(&time, &tm);
+#endif
+    char buffer[sizeof("1970-01-01T00:00:00Z")];
+    std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", &tm);
+    return buffer;
+}
+
+absl::StatusOr<int64_t> parse_duration_seconds(const Value& value,
+                                               const std::string& name,
+                                               const std::string& property) {
+    std::string literal;
+    if (value.type() == Value::Type::Duration) {
+        literal = value.as_duration().literal;
+    } else if (value.type() == Value::Type::String) {
+        literal = value.as_string();
+    } else {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " `", property, "` must be a duration"));
+    }
+
+    int64_t total = 0;
+    size_t index = 0;
+    while (index < literal.size()) {
+        if (!std::isdigit(static_cast<unsigned char>(literal[index]))) {
+            return absl::InvalidArgumentError(
+                absl::StrCat(name, " `", property, "` must be a positive duration"));
+        }
+        int64_t amount = 0;
+        while (index < literal.size() &&
+               std::isdigit(static_cast<unsigned char>(literal[index]))) {
+            amount = amount * 10 + (literal[index] - '0');
+            ++index;
+        }
+        const size_t unit_begin = index;
+        while (index < literal.size() &&
+               std::isalpha(static_cast<unsigned char>(literal[index]))) {
+            ++index;
+        }
+        const auto unit = literal.substr(unit_begin, index - unit_begin);
+        if (unit == "s") {
+            total += amount;
+        } else if (unit == "m") {
+            total += amount * 60;
+        } else if (unit == "h") {
+            total += amount * 60 * 60;
+        } else if (unit == "d") {
+            total += amount * 24 * 60 * 60;
+        } else if (unit == "w") {
+            total += amount * 7 * 24 * 60 * 60;
+        } else {
+            return absl::InvalidArgumentError(
+                absl::StrCat(name, " `", property, "` supports s, m, h, d, and w units"));
+        }
+    }
+    if (total <= 0) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " `", property, "` must be a positive duration"));
+    }
+    return total;
+}
+
+std::string group_key_for_row(const ObjectValue& row) {
+    const Value* group = row.lookup("_group");
+    return group == nullptr ? "" : group->string();
+}
+
+struct AggregateWindowBucket {
+    std::optional<int64_t> start_seconds;
+    std::string group_key;
+    std::shared_ptr<ObjectValue> first_row;
+    std::vector<Value> values;
+};
+
+AggregateWindowBucket* find_window_bucket(std::vector<AggregateWindowBucket>& buckets,
+                                          const std::optional<int64_t>& start_seconds,
+                                          const std::string& group_key) {
+    for (auto& bucket : buckets) {
+        if (bucket.start_seconds == start_seconds && bucket.group_key == group_key) {
+            return &bucket;
+        }
+    }
+    return nullptr;
+}
+
+absl::StatusOr<Value> invoke_window_aggregate(const FunctionValue& fn,
+                                              const std::vector<Value>& values) {
+    if (fn.kind == FunctionValue::Kind::Builtin && fn.name == "count") {
+        return Value::integer(static_cast<int64_t>(values.size()));
+    }
+    return ExpressionEvaluator::Invoke(Value::function(std::make_shared<FunctionValue>(fn)),
+                                       {Value::array(values)});
 }
 
 absl::StatusOr<NumericSummary> summarize_numeric_array(const ArrayValue& array,
@@ -637,6 +996,319 @@ absl::StatusOr<Value> builtin_reduce(const std::vector<Value>& args) {
                         (*table_or)->range_start, (*table_or)->range_stop);
 }
 
+absl::StatusOr<Value> builtin_sort(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "sort");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "sort", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto columns_or =
+        optional_string_array_property(**object_or, "sort", "columns", {"_value"});
+    if (!columns_or.ok()) {
+        return columns_or.status();
+    }
+    auto desc_or = optional_bool_property(**object_or, "sort", "desc", false);
+    if (!desc_or.ok()) {
+        return desc_or.status();
+    }
+
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve((*table_or)->rows.size());
+    for (const auto& row : (*table_or)->rows) {
+        if (row != nullptr) {
+            rows.push_back(clone_row(*row));
+        }
+    }
+    std::stable_sort(rows.begin(), rows.end(), [&](const auto& lhs, const auto& rhs) {
+        for (const auto& column : *columns_or) {
+            const int cmp = compare_values(lhs->lookup(column), rhs->lookup(column));
+            if (cmp != 0) {
+                return *desc_or ? cmp > 0 : cmp < 0;
+            }
+        }
+        return false;
+    });
+    return Value::table((*table_or)->bucket, std::move(rows),
+                        (*table_or)->range_start, (*table_or)->range_stop);
+}
+
+absl::StatusOr<Value> builtin_group(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "group");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "group", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto columns_or =
+        optional_string_array_property(**object_or, "group", "columns", {});
+    if (!columns_or.ok()) {
+        return columns_or.status();
+    }
+
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve((*table_or)->rows.size());
+    for (const auto& row : (*table_or)->rows) {
+        if (row != nullptr) {
+            rows.push_back(clone_row_with_group(*row, *columns_or));
+        }
+    }
+    return Value::table((*table_or)->bucket, std::move(rows),
+                        (*table_or)->range_start, (*table_or)->range_stop);
+}
+
+absl::StatusOr<Value> builtin_count(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "count");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "count", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    std::string column = "_value";
+    if (const Value* column_value = (*object_or)->lookup("column"); column_value != nullptr) {
+        if (column_value->type() != Value::Type::String) {
+            return absl::InvalidArgumentError("count `column` must be a string");
+        }
+        column = column_value->as_string();
+    }
+
+    int64_t count = 0;
+    for (const auto& row : (*table_or)->rows) {
+        if (row != nullptr && row->lookup(column) != nullptr) {
+            ++count;
+        }
+    }
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.push_back(std::make_shared<ObjectValue>(
+        std::vector<std::pair<std::string, Value>>{{column, Value::integer(count)}}));
+    return Value::table((*table_or)->bucket, std::move(rows),
+                        (*table_or)->range_start, (*table_or)->range_stop);
+}
+
+absl::StatusOr<Value> table_single_row_builtin(const std::vector<Value>& args,
+                                               const std::string& name,
+                                               bool use_last) {
+    auto object_or = require_object_argument(args, name);
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, name, "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    if (!(*table_or)->rows.empty()) {
+        const auto& source = use_last ? (*table_or)->rows.back() : (*table_or)->rows.front();
+        if (source != nullptr) {
+            rows.push_back(clone_row(*source));
+        }
+    }
+    return Value::table((*table_or)->bucket, std::move(rows),
+                        (*table_or)->range_start, (*table_or)->range_stop);
+}
+
+absl::StatusOr<Value> builtin_first(const std::vector<Value>& args) {
+    return table_single_row_builtin(args, "first", false);
+}
+
+absl::StatusOr<Value> builtin_last(const std::vector<Value>& args) {
+    return table_single_row_builtin(args, "last", true);
+}
+
+absl::StatusOr<Value> builtin_union(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "union");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto tables_or = require_table_array_property(**object_or, "union", "tables");
+    if (!tables_or.ok()) {
+        return tables_or.status();
+    }
+
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    std::string bucket = "union";
+    std::optional<std::string> range_start;
+    std::optional<std::string> range_stop;
+    for (const auto* table : *tables_or) {
+        if (table == nullptr) {
+            continue;
+        }
+        if (bucket == "union" && !table->bucket.empty()) {
+            bucket = table->bucket;
+        }
+        if (!range_start.has_value()) {
+            range_start = table->range_start;
+        }
+        if (!range_stop.has_value()) {
+            range_stop = table->range_stop;
+        }
+        rows.reserve(rows.size() + table->rows.size());
+        for (const auto& row : table->rows) {
+            if (row != nullptr) {
+                rows.push_back(clone_row(*row));
+            }
+        }
+    }
+    return Value::table(bucket, std::move(rows), range_start, range_stop);
+}
+
+absl::StatusOr<Value> builtin_join(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "join");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto tables_or = require_named_table_object_property(**object_or, "join", "tables");
+    if (!tables_or.ok()) {
+        return tables_or.status();
+    }
+    if (tables_or->size() != 2) {
+        return absl::InvalidArgumentError("join currently expects exactly two input tables");
+    }
+    auto on_or = string_array_property(**object_or, "join", "on");
+    if (!on_or.ok()) {
+        return on_or.status();
+    }
+
+    const auto& left_name = (*tables_or)[0].first;
+    const auto* left_table = (*tables_or)[0].second;
+    const auto& right_name = (*tables_or)[1].first;
+    const auto* right_table = (*tables_or)[1].second;
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    for (const auto& left_row : left_table->rows) {
+        if (left_row == nullptr) {
+            continue;
+        }
+        for (const auto& right_row : right_table->rows) {
+            if (right_row != nullptr && rows_match_on_columns(*left_row, *right_row, *on_or)) {
+                rows.push_back(join_rows(left_name, *left_row, right_name, *right_row, *on_or));
+            }
+        }
+    }
+    return Value::table(left_table->bucket.empty() ? right_table->bucket : left_table->bucket,
+                        std::move(rows),
+                        left_table->range_start.has_value() ? left_table->range_start
+                                                            : right_table->range_start,
+                        left_table->range_stop.has_value() ? left_table->range_stop
+                                                           : right_table->range_stop);
+}
+
+absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "aggregateWindow");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "aggregateWindow", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto every_value_or = require_object_property(**object_or, "aggregateWindow", "every");
+    if (!every_value_or.ok()) {
+        return every_value_or.status();
+    }
+    auto every_seconds_or = parse_duration_seconds(**every_value_or, "aggregateWindow", "every");
+    if (!every_seconds_or.ok()) {
+        return every_seconds_or.status();
+    }
+    auto fn_or = require_object_property(**object_or, "aggregateWindow", "fn");
+    if (!fn_or.ok()) {
+        return fn_or.status();
+    }
+    if ((*fn_or)->type() != Value::Type::Function) {
+        return absl::InvalidArgumentError("aggregateWindow `fn` must be a function");
+    }
+    auto column_or = optional_string_property(**object_or, "aggregateWindow", "column", "_value");
+    if (!column_or.ok()) {
+        return column_or.status();
+    }
+    auto time_column_or =
+        optional_string_property(**object_or, "aggregateWindow", "timeColumn", "_time");
+    if (!time_column_or.ok()) {
+        return time_column_or.status();
+    }
+    auto create_empty_or =
+        optional_bool_property(**object_or, "aggregateWindow", "createEmpty", false);
+    if (!create_empty_or.ok()) {
+        return create_empty_or.status();
+    }
+    if (*create_empty_or) {
+        return absl::UnimplementedError(
+            "aggregateWindow `createEmpty: true` is not supported yet");
+    }
+
+    std::vector<AggregateWindowBucket> buckets;
+    for (const auto& row : (*table_or)->rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        const Value* aggregate_value = row->lookup(*column_or);
+        if (aggregate_value == nullptr) {
+            continue;
+        }
+
+        std::optional<int64_t> window_start;
+        if (const Value* time_value = row->lookup(*time_column_or); time_value != nullptr) {
+            std::optional<std::string> literal;
+            if (time_value->type() == Value::Type::Time) {
+                literal = time_value->as_time().literal;
+            } else if (time_value->type() == Value::Type::String) {
+                literal = time_value->as_string();
+            }
+            if (literal.has_value()) {
+                if (auto seconds = parse_rfc3339_seconds(*literal); seconds.has_value()) {
+                    window_start = (*seconds / *every_seconds_or) * *every_seconds_or;
+                }
+            }
+        }
+
+        const auto group_key = group_key_for_row(*row);
+        auto* bucket = find_window_bucket(buckets, window_start, group_key);
+        if (bucket == nullptr) {
+            buckets.push_back(AggregateWindowBucket{
+                window_start,
+                group_key,
+                clone_row(*row),
+                {},
+            });
+            bucket = &buckets.back();
+        }
+        bucket->values.push_back(*aggregate_value);
+    }
+
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve(buckets.size());
+    for (const auto& bucket : buckets) {
+        if (bucket.values.empty() || bucket.first_row == nullptr) {
+            continue;
+        }
+        auto aggregate_or = invoke_window_aggregate((*fn_or)->as_function(), bucket.values);
+        if (!aggregate_or.ok()) {
+            return aggregate_or.status();
+        }
+
+        Value row_value =
+            object_with_upserted_property(*bucket.first_row, *column_or, *aggregate_or);
+        if (bucket.start_seconds.has_value()) {
+            const int64_t window_stop = *bucket.start_seconds + *every_seconds_or;
+            row_value = object_with_upserted_property(
+                row_value.as_object(), "_start", Value::time(format_rfc3339_seconds(*bucket.start_seconds)));
+            row_value = object_with_upserted_property(
+                row_value.as_object(), "_stop", Value::time(format_rfc3339_seconds(window_stop)));
+            row_value = object_with_upserted_property(
+                row_value.as_object(), *time_column_or, Value::time(format_rfc3339_seconds(window_stop)));
+        }
+        rows.push_back(std::make_shared<ObjectValue>(row_value.as_object()));
+    }
+    return Value::table((*table_or)->bucket, std::move(rows),
+                        (*table_or)->range_start, (*table_or)->range_stop);
+}
+
 void install_builtin(Environment& env,
                      const std::string& name,
                      FunctionValue::BuiltinCallback fn,
@@ -710,6 +1382,38 @@ bool install_known_builtin(Environment& env, const std::string& name) {
         install_builtin(env, "reduce", builtin_reduce, "tables");
         return true;
     }
+    if (name == "sort") {
+        install_builtin(env, "sort", builtin_sort, "tables");
+        return true;
+    }
+    if (name == "group") {
+        install_builtin(env, "group", builtin_group, "tables");
+        return true;
+    }
+    if (name == "count") {
+        install_builtin(env, "count", builtin_count, "tables");
+        return true;
+    }
+    if (name == "first") {
+        install_builtin(env, "first", builtin_first, "tables");
+        return true;
+    }
+    if (name == "last") {
+        install_builtin(env, "last", builtin_last, "tables");
+        return true;
+    }
+    if (name == "union") {
+        install_builtin(env, "union", builtin_union);
+        return true;
+    }
+    if (name == "join") {
+        install_builtin(env, "join", builtin_join);
+        return true;
+    }
+    if (name == "aggregateWindow") {
+        install_builtin(env, "aggregateWindow", builtin_aggregate_window, "tables");
+        return true;
+    }
     return false;
 }
 
@@ -731,6 +1435,14 @@ void BuiltinRegistry::Install(Environment& env) {
     install_known_builtin(env, "keep");
     install_known_builtin(env, "drop");
     install_known_builtin(env, "reduce");
+    install_known_builtin(env, "sort");
+    install_known_builtin(env, "group");
+    install_known_builtin(env, "count");
+    install_known_builtin(env, "first");
+    install_known_builtin(env, "last");
+    install_known_builtin(env, "union");
+    install_known_builtin(env, "join");
+    install_known_builtin(env, "aggregateWindow");
 }
 
 absl::Status BuiltinRegistry::Ensure(Environment& env, const std::string& name) {
