@@ -20,6 +20,7 @@
 #include <string>
 
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "cpp/pl/flux/runtime_env.h"
 
 namespace pl {
@@ -28,6 +29,7 @@ class BuiltinRegistry {
 public:
     static void Install(Environment& env);
     static absl::Status Ensure(Environment& env, const std::string& name);
+    static absl::StatusOr<Value> ImportPackage(const std::string& path);
 };
 
 } // namespace pl

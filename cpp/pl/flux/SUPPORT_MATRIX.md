@@ -80,9 +80,10 @@ Status meanings:
 
 | Capability | Status | Notes |
 | --- | --- | --- |
-| AST tree dump | Supported | `dump_ast(const File&)` and `ast_dump` default output |
-| AST JSON dump | Supported | `dump_ast_json(const File&)` and `ast_dump --json` |
-| command-line AST dumper | Supported | `bazel build //cpp/pl/flux:ast_dump` |
+| AST tree dump | Supported | `dump_ast(const File&)` and `flux ast` default output |
+| AST JSON dump | Supported | `dump_ast_json(const File&)` and `flux ast --json` |
+| command-line AST dumper | Supported | `bazel build //cpp/pl/flux:flux` provides `flux ast`; the older `ast_dump` binary is still available |
+| command-line runtime runner | Partial | `bazel build //cpp/pl/flux:flux` provides `flux -e`, `flux path/to/query.flux`, and a small shared-environment REPL; it uses the current partial runtime, so unsupported execution features still fail at runtime |
 | parser demo binary | Supported | `parser_test` now uses the tree dump |
 | parser unit tests | Supported | Covers main happy paths and dump output |
 | scanner unit tests | Supported | Covers comments, regex mode, and unread behavior |
@@ -94,12 +95,13 @@ Status meanings:
 | --- | --- | --- |
 | runtime value model | Supported | Supports null/bool/int/uint/float/string/duration/time/regex/array/object values plus a lightweight in-memory table value |
 | lexical environments | Supported | Parent scopes, variable bindings, option bindings, and nearest-scope assignment are covered by unit tests |
-| expression evaluator | Supported | Supports literals, identifiers, arrays/objects, record update, member/index access, unary/binary/logical operators, conditionals, string interpolation, regex match, function values, function calls, simple pipe forwarding, and in-memory `from`/`range`/`filter`/`map`/`limit`/`keep`/`drop`/`reduce`/`sort`/`group`/`count`/`first`/`last`/`union`/`join`/`aggregateWindow` query execution |
+| expression evaluator | Supported | Supports literals, identifiers, arrays/objects, record update, member/index access, unary/binary/logical operators, conditionals, string interpolation, regex match, function values, function calls, simple pipe forwarding, and in-memory `from`/`csv.from`/`range`/`filter`/`map`/`limit`/`keep`/`drop`/`rename`/`duplicate`/`set`/`reduce`/`sort`/`group`/`count`/`first`/`last`/`union`/`join`/`aggregateWindow` query execution |
 | statement execution | Partial | Supports variable assignment, `option` assignment, expression statements, block/return execution, file-level sequential execution, top-level `builtin` declarations, package/import metadata handling, and end-to-end execution of simple in-memory query files; `testcase` execution is still missing |
 | function values / closures | Supported | User-defined function expressions now evaluate to callable runtime values with lexical closure capture |
 | function call execution | Supported | Builtin and user-defined function calls work, including default arguments, named arguments, block-bodied functions, pipe-parameter injection, and internal row-function invocation for in-memory query builtins |
 | pipe execution | Partial | Value forwarding through `|>` works for builtin functions, user-defined `<-pipe` parameters, and lightweight in-memory table pipelines, but broader query/stream semantics are still missing |
-| builtin registry / stdlib execution | Partial | A small callable builtin registry exists today (`len`, `string`, `contains`, `sum`, `mean`, `min`, `max`, `from`, `range`, `filter`, `map`, `limit`, `keep`, `drop`, `reduce`, `sort`, `group`, `count`, `first`, `last`, `union`, `join`, `aggregateWindow`), top-level `builtin` declarations can bind known builtins or placeholder callables, but the Flux standard library is still largely missing |
+| builtin registry / stdlib execution | Partial | A small callable builtin registry exists today (`len`, `string`, `contains`, `sum`, `mean`, `min`, `max`, `from`, `csv.from`, `range`, `filter`, `map`, `limit`, `keep`, `drop`, `rename`, `duplicate`, `set`, `reduce`, `sort`, `group`, `count`, `first`, `last`, `union`, `join`, `aggregateWindow`), top-level `builtin` declarations can bind known builtins or placeholder callables, `import "csv"` binds a package object with `from`, but the Flux standard library is still largely missing |
+| CSV input | Partial | `import "csv"` plus `csv.from(csv: ...)` and `csv.from(file: ...)` work for raw mode and common annotated CSV mode; annotations support `#datatype`, `#group`, optional `#default`, typed scalar conversion, and a lightweight `_group` object, but multi-table stream boundaries and the broader CSV stdlib surface are still incomplete |
 | aggregate windows | Partial | Fixed-duration RFC3339 `_time` windows work with `_group`, `column`, `mean`/`sum`/`min`/`max`, custom array functions, and window `count`; calendar windows, offsets, time zones, and `createEmpty: true` are not implemented yet |
 
 ## Error Handling
@@ -120,8 +122,10 @@ Status meanings:
 - Empty literals and empty record updates are covered, including `[]`, `{}`, `[:]`, and `{base with}`
 - Type parsing is good enough for `builtin` declarations and debugging
 - AST tree and JSON output make parser behavior inspectable
+- A first CLI can execute snippets, files, and interactive REPL input against the current runtime
 - There is now enough unit-test coverage to safely extend the parser
 - The runtime has a tested value model, scope chain, expression evaluator, and first-pass statement executor to build on
+- CSV data can now enter the runtime through the Flux-style `csv.from` package builtin, including raw header-row CSV and common annotated CSV metadata rows
 
 ## Main Known Gaps
 
@@ -130,6 +134,7 @@ Status meanings:
 - A few AST/debug string forms are still simplified rather than canonical Flux formatting
 - There is no semantic analysis or type checking layer yet
 - Runtime execution is only partial: a useful subset of statements and expressions can execute, including simple in-memory query pipelines, but broader builtins and stream semantics are still missing
+- CSV support is still lightweight: raw and common annotated rows work, but full Flux stream/table behavior for multi-table annotated CSV is not implemented yet
 
 ## Recommended Next Steps
 
@@ -187,7 +192,7 @@ Current status:
 
 - Add runtime errors with source locations
 - Add script runner examples and interpreter-focused tests
-- Keep `ast_dump` and parser diagnostics aligned with runtime debugging needs
+- Keep `flux ast` and parser diagnostics aligned with runtime debugging needs
 
 ## Partial Feature Examples
 
