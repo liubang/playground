@@ -185,6 +185,35 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "flux_cli",
+    srcs = [
+        "flux_cli.cpp",
+    ],
+    hdrs = [
+        "flux_cli.h",
+    ],
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":parser",
+        ":runtime_builtin",
+        ":runtime_exec",
+    ],
+)
+
+cc_binary(
+    name = "flux",
+    srcs = [
+        "flux.cpp",
+    ],
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":flux_cli",
+    ],
+)
+
 cc_binary(
     name = "parser_test",
     srcs = [
@@ -274,6 +303,19 @@ cc_test(
     deps = [
         ":runtime_exec",
         "@abseil-cpp//absl/status",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "flux_cli_unit_test",
+    srcs = [
+        "flux_cli_unit_test.cpp",
+    ],
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":flux_cli",
         "@googletest//:gtest_main",
     ],
 )
