@@ -19,6 +19,9 @@
 #include <algorithm>
 #include <cctype>
 #include <ctime>
+#include <exception>
+#include <fstream>
+#include <sstream>
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
@@ -217,6 +220,20 @@ absl::StatusOr<std::string> optional_string_property(const ObjectValue& object,
     return value->as_string();
 }
 
+absl::StatusOr<std::string> string_property(const ObjectValue& object,
+                                            const std::string& name,
+                                            const std::string& property) {
+    auto value_or = require_object_property(object, name, property);
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+    if ((*value_or)->type() != Value::Type::String) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " `", property, "` must be a string"));
+    }
+    return (*value_or)->as_string();
+}
+
 absl::StatusOr<std::vector<std::string>> string_array_property(const ObjectValue& object,
                                                                const std::string& name,
                                                                const std::string& property) {
@@ -245,6 +262,29 @@ absl::StatusOr<std::vector<std::string>> optional_string_array_property(
         return default_value;
     }
     return string_array_property(object, name, property);
+}
+
+absl::StatusOr<std::vector<std::pair<std::string, std::string>>> string_map_property(
+    const ObjectValue& object,
+    const std::string& name,
+    const std::string& property) {
+    auto value_or = require_object_property(object, name, property);
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+    if ((*value_or)->type() != Value::Type::Object) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " `", property, "` must be an object"));
+    }
+    std::vector<std::pair<std::string, std::string>> values;
+    for (const auto& [key, value] : (*value_or)->as_object().properties) {
+        if (value.type() != Value::Type::String) {
+            return absl::InvalidArgumentError(
+                absl::StrCat(name, " `", property, "` values must be strings"));
+        }
+        values.emplace_back(key, value.as_string());
+    }
+    return values;
 }
 
 std::optional<std::string> row_time_literal(const ObjectValue& row) {
@@ -362,6 +402,264 @@ int compare_values(const Value* lhs, const Value* rhs) {
 
 bool contains_string(const std::vector<std::string>& values, const std::string& value) {
     return std::find(values.begin(), values.end(), value) != values.end();
+}
+
+std::optional<std::string> mapped_column_name(
+    const std::vector<std::pair<std::string, std::string>>& mappings,
+    const std::string& key) {
+    for (const auto& [from, to] : mappings) {
+        if (from == key) {
+            return to;
+        }
+    }
+    return std::nullopt;
+}
+
+absl::StatusOr<std::vector<std::string>> parse_csv_record(const std::string& line,
+                                                          const std::string& name) {
+    std::vector<std::string> fields;
+    std::string field;
+    bool quoted = false;
+    for (size_t i = 0; i < line.size(); ++i) {
+        const char ch = line[i];
+        if (quoted) {
+            if (ch == '"') {
+                if (i + 1 < line.size() && line[i + 1] == '"') {
+                    field.push_back('"');
+                    ++i;
+                } else {
+                    quoted = false;
+                }
+            } else {
+                field.push_back(ch);
+            }
+            continue;
+        }
+        if (ch == ',') {
+            fields.push_back(field);
+            field.clear();
+        } else if (ch == '"') {
+            if (!field.empty()) {
+                return absl::InvalidArgumentError(
+                    absl::StrCat(name, " CSV quote must start a field"));
+            }
+            quoted = true;
+        } else {
+            field.push_back(ch);
+        }
+    }
+    if (quoted) {
+        return absl::InvalidArgumentError(absl::StrCat(name, " CSV has an unterminated quote"));
+    }
+    fields.push_back(field);
+    return fields;
+}
+
+absl::StatusOr<Value> parse_raw_csv_table(const std::string& csv, const std::string& name) {
+    std::istringstream input(csv);
+    std::string line;
+    std::vector<std::string> header;
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+
+    while (std::getline(input, line)) {
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        if (line.empty()) {
+            continue;
+        }
+        auto fields_or = parse_csv_record(line, name);
+        if (!fields_or.ok()) {
+            return fields_or.status();
+        }
+        if (header.empty()) {
+            header = std::move(*fields_or);
+            continue;
+        }
+        if (fields_or->size() != header.size()) {
+            return absl::InvalidArgumentError(
+                absl::StrCat(name, " CSV row has ", fields_or->size(), " fields, expected ",
+                             header.size()));
+        }
+        std::vector<std::pair<std::string, Value>> properties;
+        properties.reserve(header.size());
+        for (size_t i = 0; i < header.size(); ++i) {
+            properties.emplace_back(header[i], Value::string((*fields_or)[i]));
+        }
+        rows.push_back(std::make_shared<ObjectValue>(std::move(properties)));
+    }
+    if (header.empty()) {
+        return absl::InvalidArgumentError(absl::StrCat(name, " CSV must include a header row"));
+    }
+    return Value::table("csv", std::move(rows));
+}
+
+bool csv_bool(const std::string& value) {
+    return value == "true" || value == "TRUE" || value == "True";
+}
+
+absl::StatusOr<Value> parse_annotated_csv_value(const std::string& raw,
+                                                const std::string& datatype,
+                                                const std::string& name) {
+    if (raw.empty()) {
+        return Value::null();
+    }
+    try {
+        size_t consumed = 0;
+        if (datatype == "string" || datatype == "base64Binary") {
+            return Value::string(raw);
+        }
+        if (datatype == "long") {
+            auto value = std::stoll(raw, &consumed, 10);
+            if (consumed != raw.size()) {
+                return absl::InvalidArgumentError(
+                    absl::StrCat(name, " invalid long value: ", raw));
+            }
+            return Value::integer(value);
+        }
+        if (datatype == "unsignedLong") {
+            auto value = std::stoull(raw, &consumed, 10);
+            if (consumed != raw.size()) {
+                return absl::InvalidArgumentError(
+                    absl::StrCat(name, " invalid unsignedLong value: ", raw));
+            }
+            return Value::uinteger(value);
+        }
+        if (datatype == "double") {
+            auto value = std::stod(raw, &consumed);
+            if (consumed != raw.size()) {
+                return absl::InvalidArgumentError(
+                    absl::StrCat(name, " invalid double value: ", raw));
+            }
+            return Value::floating(value);
+        }
+        if (datatype == "boolean" || datatype == "bool") {
+            if (csv_bool(raw)) {
+                return Value::boolean(true);
+            }
+            if (raw == "false" || raw == "FALSE" || raw == "False") {
+                return Value::boolean(false);
+            }
+            return absl::InvalidArgumentError(
+                absl::StrCat(name, " invalid boolean value: ", raw));
+        }
+        if (datatype == "dateTime:RFC3339" || datatype == "dateTime:RFC3339Nano") {
+            return Value::time(raw);
+        }
+        if (datatype == "duration") {
+            return Value::duration(raw);
+        }
+    } catch (const std::exception&) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " invalid ", datatype, " value: ", raw));
+    }
+    return Value::string(raw);
+}
+
+absl::StatusOr<Value> parse_annotated_csv_table(const std::string& csv,
+                                                const std::string& name) {
+    std::istringstream input(csv);
+    std::string line;
+    std::vector<std::string> datatypes;
+    std::vector<bool> groups;
+    std::vector<std::string> defaults;
+    std::vector<std::string> header;
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+
+    while (std::getline(input, line)) {
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        if (line.empty()) {
+            continue;
+        }
+        auto fields_or = parse_csv_record(line, name);
+        if (!fields_or.ok()) {
+            return fields_or.status();
+        }
+        auto fields = std::move(*fields_or);
+        if (fields.empty()) {
+            continue;
+        }
+        if (fields[0] == "#datatype") {
+            datatypes = std::move(fields);
+            continue;
+        }
+        if (fields[0] == "#group") {
+            groups.clear();
+            groups.reserve(fields.size());
+            for (const auto& field : fields) {
+                groups.push_back(csv_bool(field));
+            }
+            continue;
+        }
+        if (fields[0] == "#default") {
+            defaults = std::move(fields);
+            continue;
+        }
+        if (header.empty()) {
+            header = std::move(fields);
+            if (datatypes.size() != header.size()) {
+                return absl::InvalidArgumentError(
+                    absl::StrCat(name, " annotated CSV requires #datatype for each column: got ",
+                                 datatypes.size(), ", expected ", header.size()));
+            }
+            if (groups.size() != header.size()) {
+                return absl::InvalidArgumentError(
+                    absl::StrCat(name, " annotated CSV requires #group for each column: got ",
+                                 groups.size(), ", expected ", header.size()));
+            }
+            if (defaults.empty()) {
+                defaults.resize(header.size());
+            }
+            if (defaults.size() != header.size()) {
+                return absl::InvalidArgumentError(
+                    absl::StrCat(name, " annotated CSV #default column count mismatch: got ",
+                                 defaults.size(), ", expected ", header.size()));
+            }
+            continue;
+        }
+        if (fields.size() != header.size()) {
+            return absl::InvalidArgumentError(
+                absl::StrCat(name, " CSV row has ", fields.size(), " fields, expected ",
+                             header.size()));
+        }
+        std::vector<std::pair<std::string, Value>> properties;
+        std::vector<std::pair<std::string, Value>> group_properties;
+        for (size_t i = 0; i < header.size(); ++i) {
+            if (header[i].empty()) {
+                continue;
+            }
+            const std::string& raw = fields[i].empty() ? defaults[i] : fields[i];
+            auto value_or = parse_annotated_csv_value(raw, datatypes[i], name);
+            if (!value_or.ok()) {
+                return value_or.status();
+            }
+            properties.emplace_back(header[i], *value_or);
+            if (groups[i]) {
+                group_properties.emplace_back(header[i], *value_or);
+            }
+        }
+        if (!group_properties.empty()) {
+            properties.emplace_back("_group", Value::object(std::move(group_properties)));
+        }
+        rows.push_back(std::make_shared<ObjectValue>(std::move(properties)));
+    }
+    if (header.empty()) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " annotated CSV must include a header row"));
+    }
+    return Value::table("csv", std::move(rows));
+}
+
+absl::StatusOr<std::string> read_text_file(const std::string& path, const std::string& name) {
+    std::ifstream file(path);
+    if (!file) {
+        return absl::NotFoundError(absl::StrCat(name, " cannot open file: ", path));
+    }
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    return buffer.str();
 }
 
 bool rows_match_on_columns(const ObjectValue& lhs,
@@ -758,6 +1056,46 @@ absl::StatusOr<Value> builtin_from(const std::vector<Value>& args) {
     return Value::table((*bucket_or)->as_string(), std::move(rows));
 }
 
+absl::StatusOr<Value> builtin_csv_from(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "csv.from");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto mode_or = optional_string_property(**object_or, "csv.from", "mode", "annotations");
+    if (!mode_or.ok()) {
+        return mode_or.status();
+    }
+    if (*mode_or != "raw" && *mode_or != "annotations") {
+        return absl::InvalidArgumentError("csv.from `mode` must be \"raw\" or \"annotations\"");
+    }
+
+    const Value* csv_value = (*object_or)->lookup("csv");
+    const Value* file_value = (*object_or)->lookup("file");
+    if ((csv_value == nullptr) == (file_value == nullptr)) {
+        return absl::InvalidArgumentError("csv.from requires exactly one of `csv` or `file`");
+    }
+    if (csv_value != nullptr) {
+        if (csv_value->type() != Value::Type::String) {
+            return absl::InvalidArgumentError("csv.from `csv` must be a string");
+        }
+        if (*mode_or == "raw") {
+            return parse_raw_csv_table(csv_value->as_string(), "csv.from");
+        }
+        return parse_annotated_csv_table(csv_value->as_string(), "csv.from");
+    }
+    if (file_value->type() != Value::Type::String) {
+        return absl::InvalidArgumentError("csv.from `file` must be a string");
+    }
+    auto csv_or = read_text_file(file_value->as_string(), "csv.from");
+    if (!csv_or.ok()) {
+        return csv_or.status();
+    }
+    if (*mode_or == "raw") {
+        return parse_raw_csv_table(*csv_or, "csv.from");
+    }
+    return parse_annotated_csv_table(*csv_or, "csv.from");
+}
+
 absl::StatusOr<Value> builtin_range(const std::vector<Value>& args) {
     auto object_or = require_object_argument(args, "range");
     if (!object_or.ok()) {
@@ -944,6 +1282,107 @@ absl::StatusOr<Value> builtin_drop(const std::vector<Value>& args) {
     for (const auto& row : (*table_or)->rows) {
         if (row != nullptr) {
             rows.push_back(clone_row_with_selected_columns(*row, *columns_or, false));
+        }
+    }
+    return Value::table((*table_or)->bucket, std::move(rows),
+                        (*table_or)->range_start, (*table_or)->range_stop);
+}
+
+absl::StatusOr<Value> builtin_rename(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "rename");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "rename", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto columns_or = string_map_property(**object_or, "rename", "columns");
+    if (!columns_or.ok()) {
+        return columns_or.status();
+    }
+
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve((*table_or)->rows.size());
+    for (const auto& row : (*table_or)->rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        std::vector<std::pair<std::string, Value>> props;
+        props.reserve(row->properties.size());
+        for (const auto& [key, value] : row->properties) {
+            if (auto renamed = mapped_column_name(*columns_or, key); renamed.has_value()) {
+                props.emplace_back(*renamed, value);
+            } else {
+                props.emplace_back(key, value);
+            }
+        }
+        rows.push_back(std::make_shared<ObjectValue>(std::move(props)));
+    }
+    return Value::table((*table_or)->bucket, std::move(rows),
+                        (*table_or)->range_start, (*table_or)->range_stop);
+}
+
+absl::StatusOr<Value> builtin_duplicate(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "duplicate");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "duplicate", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto column_or = string_property(**object_or, "duplicate", "column");
+    if (!column_or.ok()) {
+        return column_or.status();
+    }
+    auto as_or = string_property(**object_or, "duplicate", "as");
+    if (!as_or.ok()) {
+        return as_or.status();
+    }
+
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve((*table_or)->rows.size());
+    for (const auto& row : (*table_or)->rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        const Value* value = row->lookup(*column_or);
+        if (value == nullptr) {
+            rows.push_back(clone_row(*row));
+            continue;
+        }
+        auto duplicated = object_with_upserted_property(*row, *as_or, *value);
+        rows.push_back(std::make_shared<ObjectValue>(duplicated.as_object()));
+    }
+    return Value::table((*table_or)->bucket, std::move(rows),
+                        (*table_or)->range_start, (*table_or)->range_stop);
+}
+
+absl::StatusOr<Value> builtin_set(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "set");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "set", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto key_or = string_property(**object_or, "set", "key");
+    if (!key_or.ok()) {
+        return key_or.status();
+    }
+    auto value_or = require_object_property(**object_or, "set", "value");
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve((*table_or)->rows.size());
+    for (const auto& row : (*table_or)->rows) {
+        if (row != nullptr) {
+            auto updated = object_with_upserted_property(*row, *key_or, **value_or);
+            rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
         }
     }
     return Value::table((*table_or)->bucket, std::move(rows),
@@ -1309,16 +1748,22 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
                         (*table_or)->range_start, (*table_or)->range_stop);
 }
 
-void install_builtin(Environment& env,
-                     const std::string& name,
-                     FunctionValue::BuiltinCallback fn,
-                     std::string pipe_param_name = {}) {
+Value make_builtin_value(const std::string& name,
+                         FunctionValue::BuiltinCallback fn,
+                         std::string pipe_param_name = {}) {
     auto callable = std::make_shared<FunctionValue>();
     callable->kind = FunctionValue::Kind::Builtin;
     callable->name = name;
     callable->pipe_param_name = std::move(pipe_param_name);
     callable->builtin = std::move(fn);
-    env.define(name, Value::function(std::move(callable)));
+    return Value::function(std::move(callable));
+}
+
+void install_builtin(Environment& env,
+                     const std::string& name,
+                     FunctionValue::BuiltinCallback fn,
+                     std::string pipe_param_name = {}) {
+    env.define(name, make_builtin_value(name, std::move(fn), std::move(pipe_param_name)));
 }
 
 bool install_known_builtin(Environment& env, const std::string& name) {
@@ -1378,6 +1823,18 @@ bool install_known_builtin(Environment& env, const std::string& name) {
         install_builtin(env, "drop", builtin_drop, "tables");
         return true;
     }
+    if (name == "rename") {
+        install_builtin(env, "rename", builtin_rename, "tables");
+        return true;
+    }
+    if (name == "duplicate") {
+        install_builtin(env, "duplicate", builtin_duplicate, "tables");
+        return true;
+    }
+    if (name == "set") {
+        install_builtin(env, "set", builtin_set, "tables");
+        return true;
+    }
     if (name == "reduce") {
         install_builtin(env, "reduce", builtin_reduce, "tables");
         return true;
@@ -1434,6 +1891,9 @@ void BuiltinRegistry::Install(Environment& env) {
     install_known_builtin(env, "limit");
     install_known_builtin(env, "keep");
     install_known_builtin(env, "drop");
+    install_known_builtin(env, "rename");
+    install_known_builtin(env, "duplicate");
+    install_known_builtin(env, "set");
     install_known_builtin(env, "reduce");
     install_known_builtin(env, "sort");
     install_known_builtin(env, "group");
@@ -1462,6 +1922,16 @@ absl::Status BuiltinRegistry::Ensure(Environment& env, const std::string& name) 
             absl::StrCat("builtin `", name, "` is declared but not implemented"));
     });
     return absl::OkStatus();
+}
+
+absl::StatusOr<Value> BuiltinRegistry::ImportPackage(const std::string& path) {
+    if (path == "csv") {
+        return Value::object({
+            {"path", Value::string("csv")},
+            {"from", make_builtin_value("csv.from", builtin_csv_from)},
+        });
+    }
+    return Value::object({{"path", Value::string(path)}});
 }
 
 } // namespace pl

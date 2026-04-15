@@ -127,6 +127,33 @@ TEST(RuntimeExecTest, ExecutesRegisteredAggregateBuiltinsAfterDeclaration) {
     EXPECT_EQ("2.5", result_or->value.string());
 }
 
+TEST(RuntimeExecTest, ExecutesCsvFromRawStringImportedPackage) {
+    auto file = ParseFile(R"(
+        import "csv"
+        builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
+        builtin limit : (<-tables: stream[A], n: int) => stream[A]
+
+        data = csv.from(
+            csv: "_time,_measurement,_value\n2024-01-01T00:00:00Z,cpu,95.5\n2024-01-01T00:01:00Z,cpu,80.0\n",
+            mode: "raw",
+        )
+            |> filter(fn: (r) => r._measurement == "cpu")
+            |> limit(n: 1)
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("csv").ok());
+    ASSERT_TRUE(env.lookup("data").ok());
+    ASSERT_EQ(Value::Type::Table, env.lookup("data")->type());
+    ASSERT_EQ(1, env.lookup("data")->as_table().rows.size());
+    ASSERT_NE(nullptr, env.lookup("data")->as_table().rows[0]);
+    EXPECT_EQ("\"95.5\"", env.lookup("data")->as_table().rows[0]->lookup("_value")->string());
+}
+
 TEST(RuntimeExecTest, DeclaresUnknownBuiltinAsPlaceholderFunction) {
     auto file = ParseFile(R"(
         builtin mystery : (a: int) => int
@@ -272,6 +299,45 @@ TEST(RuntimeExecTest, ExecutesReduceKeepDropAndLimitQueryFile) {
     EXPECT_EQ(nullptr, env.lookup("totals")->as_table().rows[0]->lookup("count"));
     ASSERT_NE(nullptr, env.lookup("totals")->as_table().rows[0]->lookup("total"));
     EXPECT_EQ("150", env.lookup("totals")->as_table().rows[0]->lookup("total")->string());
+}
+
+TEST(RuntimeExecTest, ExecutesRenameDuplicateAndSetQueryFile) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin duplicate : (<-tables: stream[A], column: string, as: string) => stream[A]
+        builtin rename : (<-tables: stream[A], columns: A) => stream[B]
+        builtin set : (<-tables: stream[A], key: string, value: string) => stream[A]
+
+        shaped = from(
+            bucket: "telegraf",
+            rows: [
+                {_measurement: "cpu", _value: 95.0, host: "a"},
+                {_measurement: "mem", _value: 40.0, host: "b"},
+            ],
+        )
+            |> duplicate(column: "_value", as: "raw_value")
+            |> rename(columns: {_measurement: "measurement", _value: "usage"})
+            |> set(key: "env", value: "prod")
+        shaped
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("shaped").ok());
+    ASSERT_EQ(Value::Type::Table, env.lookup("shaped")->type());
+    ASSERT_EQ(2, env.lookup("shaped")->as_table().rows.size());
+    const auto& row = env.lookup("shaped")->as_table().rows[0];
+    ASSERT_NE(nullptr, row);
+    EXPECT_EQ(nullptr, row->lookup("_measurement"));
+    EXPECT_EQ(nullptr, row->lookup("_value"));
+    EXPECT_EQ("\"cpu\"", row->lookup("measurement")->string());
+    EXPECT_EQ("95", row->lookup("usage")->string());
+    EXPECT_EQ("95", row->lookup("raw_value")->string());
+    EXPECT_EQ("\"prod\"", row->lookup("env")->string());
+    EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
 }
 
 TEST(RuntimeExecTest, ExecutesSortGroupCountFirstAndLastQueryFile) {

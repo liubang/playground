@@ -100,9 +100,15 @@ std::string import_binding_name(const ImportDeclaration& import) {
     return import.path->value;
 }
 
-Value import_binding_value(const ImportDeclaration& import) {
-    std::vector<std::pair<std::string, Value>> props;
-    props.emplace_back("path", Value::string(import.path->value));
+absl::StatusOr<Value> import_binding_value(const ImportDeclaration& import) {
+    auto value_or = BuiltinRegistry::ImportPackage(import.path->value);
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+    if (import.alias == nullptr) {
+        return *value_or;
+    }
+    auto props = value_or->as_object().properties;
     if (import.alias != nullptr) {
         props.emplace_back("alias", Value::string(import.alias->name));
     }
@@ -191,7 +197,11 @@ absl::StatusOr<FileExecutionResult> StatementExecutor::ExecuteFile(const File& f
     }
     for (const auto& import : file.imports) {
         auto name = import_binding_name(*import);
-        env.define(name, import_binding_value(*import));
+        auto value_or = import_binding_value(*import);
+        if (!value_or.ok()) {
+            return value_or.status();
+        }
+        env.define(name, *value_or);
         result.imports.push_back(name);
     }
     for (const auto& stmt : file.body) {

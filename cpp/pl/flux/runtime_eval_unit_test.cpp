@@ -17,6 +17,8 @@
 #include "cpp/pl/flux/parser.h"
 #include "cpp/pl/flux/runtime_builtin.h"
 #include "cpp/pl/flux/runtime_eval.h"
+#include <cstdio>
+#include <fstream>
 #include <gtest/gtest.h>
 
 namespace pl {
@@ -117,6 +119,120 @@ TEST(RuntimeEvalTest, EvaluatesBuiltinCallsWithNamedArgumentObject) {
 
     ASSERT_TRUE(result.ok()) << result.status();
     EXPECT_EQ(Value::boolean(true), *result);
+}
+
+TEST(RuntimeEvalTest, EvaluatesCsvFromRawStringPackageBuiltin) {
+    Environment env;
+    auto csv_or = BuiltinRegistry::ImportPackage("csv");
+    ASSERT_TRUE(csv_or.ok()) << csv_or.status();
+    env.define("csv", *csv_or);
+    const auto& expr = ParseAssignmentInit(
+        "result = csv.from(csv: \"_time,_measurement,_value\\n"
+        "2024-01-01T00:00:00Z,cpu,95.5\\n"
+        "2024-01-01T00:01:00Z,cpu,80.0\\n\", mode: \"raw\")");
+
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    ASSERT_NE(nullptr, result->as_table().rows[0]);
+    EXPECT_EQ("\"2024-01-01T00:00:00Z\"",
+              result->as_table().rows[0]->lookup("_time")->string());
+    EXPECT_EQ("\"cpu\"", result->as_table().rows[0]->lookup("_measurement")->string());
+    EXPECT_EQ("\"95.5\"", result->as_table().rows[0]->lookup("_value")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesCsvFromRawFilePackageBuiltin) {
+    const std::string path = "/tmp/flux_runtime_csv_from_file_test.csv";
+    {
+        std::ofstream file(path);
+        file << "_time,_measurement,_value\n";
+        file << "2024-01-01T00:00:00Z,cpu,95.5\n";
+    }
+
+    Environment env;
+    auto csv_or = BuiltinRegistry::ImportPackage("csv");
+    ASSERT_TRUE(csv_or.ok()) << csv_or.status();
+    env.define("csv", *csv_or);
+    const auto& expr =
+        ParseAssignmentInit("result = csv.from(file: \"" + path + "\", mode: \"raw\")");
+
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    std::remove(path.c_str());
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(1, result->as_table().rows.size());
+    ASSERT_NE(nullptr, result->as_table().rows[0]);
+    EXPECT_EQ("\"95.5\"", result->as_table().rows[0]->lookup("_value")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesCsvFromAnnotatedStringPackageBuiltin) {
+    Environment env;
+    auto csv_or = BuiltinRegistry::ImportPackage("csv");
+    ASSERT_TRUE(csv_or.ok()) << csv_or.status();
+    env.define("csv", *csv_or);
+    const auto& expr = ParseAssignmentInit(
+        "result = csv.from(csv: \"#datatype,string,long,dateTime:RFC3339,string,double,boolean\\n"
+        "#group,false,false,true,true,false,false\\n"
+        "#default,_result,,,,,\\n"
+        ",result,table,_time,_measurement,_value,active\\n"
+        ",,0,2024-01-01T00:00:00Z,cpu,95.5,true\\n\")");
+
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(1, result->as_table().rows.size());
+    ASSERT_NE(nullptr, result->as_table().rows[0]);
+    const auto& row = result->as_table().rows[0];
+    EXPECT_EQ("\"_result\"", row->lookup("result")->string());
+    EXPECT_EQ("0", row->lookup("table")->string());
+    EXPECT_EQ("2024-01-01T00:00:00Z", row->lookup("_time")->string());
+    EXPECT_EQ("\"cpu\"", row->lookup("_measurement")->string());
+    EXPECT_EQ("95.5", row->lookup("_value")->string());
+    EXPECT_EQ("true", row->lookup("active")->string());
+    ASSERT_NE(nullptr, row->lookup("_group"));
+    ASSERT_EQ(Value::Type::Object, row->lookup("_group")->type());
+    ASSERT_NE(nullptr, row->lookup("_group")->as_object().lookup("_measurement"));
+    EXPECT_EQ("\"cpu\"", row->lookup("_group")->as_object().lookup("_measurement")->string());
+}
+
+TEST(RuntimeEvalTest, ReportsCsvFromArgumentAndAnnotationErrors) {
+    Environment env;
+    auto csv_or = BuiltinRegistry::ImportPackage("csv");
+    ASSERT_TRUE(csv_or.ok()) << csv_or.status();
+    env.define("csv", *csv_or);
+
+    const auto& invalid_mode =
+        ParseAssignmentInit("result = csv.from(csv: \"a\\n1\\n\", mode: \"stream\")");
+    auto invalid_mode_result = ExpressionEvaluator::Evaluate(invalid_mode, env);
+    ASSERT_FALSE(invalid_mode_result.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, invalid_mode_result.status().code());
+
+    const auto& both_sources =
+        ParseAssignmentInit("result = csv.from(csv: \"a\\n1\\n\", file: \"data.csv\")");
+    auto both_sources_result = ExpressionEvaluator::Evaluate(both_sources, env);
+    ASSERT_FALSE(both_sources_result.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, both_sources_result.status().code());
+
+    const auto& missing_group = ParseAssignmentInit(
+        "result = csv.from(csv: \"#datatype,string,long\\n"
+        ",name,value\\n"
+        ",cpu,1\\n\")");
+    auto missing_group_result = ExpressionEvaluator::Evaluate(missing_group, env);
+    ASSERT_FALSE(missing_group_result.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, missing_group_result.status().code());
+
+    const auto& invalid_typed_value = ParseAssignmentInit(
+        "result = csv.from(csv: \"#datatype,string,long\\n"
+        "#group,false,false\\n"
+        ",name,value\\n"
+        ",cpu,not_int\\n\")");
+    auto invalid_typed_value_result = ExpressionEvaluator::Evaluate(invalid_typed_value, env);
+    ASSERT_FALSE(invalid_typed_value_result.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, invalid_typed_value_result.status().code());
 }
 
 TEST(RuntimeEvalTest, EvaluatesAggregateBuiltins) {
@@ -281,6 +397,39 @@ TEST(RuntimeEvalTest, EvaluatesReduceKeepDropAndLimitBuiltins) {
     EXPECT_EQ(nullptr, result->as_table().rows[0]->lookup("count"));
     ASSERT_NE(nullptr, result->as_table().rows[0]->lookup("total"));
     EXPECT_EQ("165", result->as_table().rows[0]->lookup("total")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesRenameDuplicateAndSetBuiltins) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_measurement: "cpu", _value: 95.0, host: "a"},
+                {_measurement: "mem", _value: 40.0, host: "b"},
+            ],
+        )
+            |> duplicate(column: "_value", as: "raw_value")
+            |> rename(columns: {_measurement: "measurement", _value: "usage"})
+            |> set(key: "env", value: "prod")
+    )");
+
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    ASSERT_NE(nullptr, result->as_table().rows[0]);
+    EXPECT_EQ(nullptr, result->as_table().rows[0]->lookup("_measurement"));
+    EXPECT_EQ(nullptr, result->as_table().rows[0]->lookup("_value"));
+    EXPECT_EQ("\"cpu\"", result->as_table().rows[0]->lookup("measurement")->string());
+    EXPECT_EQ("95", result->as_table().rows[0]->lookup("usage")->string());
+    EXPECT_EQ("95", result->as_table().rows[0]->lookup("raw_value")->string());
+    EXPECT_EQ("\"prod\"", result->as_table().rows[0]->lookup("env")->string());
+    ASSERT_NE(nullptr, result->as_table().rows[1]);
+    EXPECT_EQ("\"mem\"", result->as_table().rows[1]->lookup("measurement")->string());
+    EXPECT_EQ("40", result->as_table().rows[1]->lookup("usage")->string());
 }
 
 TEST(RuntimeEvalTest, EvaluatesSortGroupCountFirstAndLastBuiltins) {
