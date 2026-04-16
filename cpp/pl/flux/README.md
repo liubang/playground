@@ -56,6 +56,35 @@ Execute Flux source with the runtime CLI:
 ./bazel-bin/cpp/pl/flux/flux -e 'sum([1, 2, 3])'
 ```
 
+Emit annotated CSV instead of the human-readable terminal formatter:
+
+```bash
+./bazel-bin/cpp/pl/flux/flux --annotated-csv -e 'value = 41
+value + 1'
+```
+
+For query-style scripts, the CLI now renders named result blocks and simple terminal tables:
+
+```text
+Result: data
+Table: bucket=csv, rows=1
++==================================================+
+| _time                  | _measurement | _value |
++==================================================+
+| "2024-01-01T00:00:00Z" | "cpu"        | "95.5" |
++==================================================+
+```
+
+The same result stream can be exported as lightweight annotated CSV:
+
+```text
+#datatype,string,long,string,string,string
+#group,false,false,false,false,false
+#default,data,,,,
+,result,table,_time,_measurement,_value
+,data,0,2024-01-01T00:00:00Z,cpu,95.5
+```
+
 Run a Flux source file:
 
 ```bash
@@ -89,7 +118,19 @@ flux> x + 2
 flux> :quit
 ```
 
-By default, runtime execution installs the current builtin prelude and prints the last evaluated value. Use `--quiet` to suppress value output, or `--no-prelude` to execute only explicitly declared/imported symbols.
+Multi-line input is buffered until the current expression or statement looks complete:
+
+```text
+flux> config = {
+....> host: "local",
+....> port: 8080,
+....> }
+{host: "local", port: 8080}
+flux> config.host
+"local"
+```
+
+By default, runtime execution installs the current builtin prelude. Scalar snippets still print compact values, while query-style scripts now render named result blocks and simple terminal tables. Use `--annotated-csv` to export annotated CSV instead, `--quiet` to suppress value output, or `--no-prelude` to execute only explicitly declared/imported symbols.
 
 Output JSON:
 
@@ -174,6 +215,7 @@ The current unit tests cover these key flows:
 - runtime environment scope chaining and option lookup
 - first-pass expression evaluation for literals, identifiers, arrays/objects, member/index access, unary/binary/logical operators, conditionals, string interpolation, record update, function values, and function calls
 - first-pass statement execution for variable assignment, `option` assignment, expression statements, and block/return behavior
+- `testcase` execution in an isolated child scope, with per-test results exposed through `__flux.testcase.<name>`
 - file-level execution across shared top-level environment state
 - runtime handling for top-level `builtin` declarations
 - package/import metadata handling during file execution
@@ -188,9 +230,14 @@ The runtime layer is still early, but it now has several concrete building block
 - `runtime_value`: runtime scalar/container values such as null, bool, int, uint, float, string, duration, time, regex, array, object, and a lightweight in-memory table value
 - `runtime_env`: lexical environments with parent scopes, variable bindings, option bindings, and nearest-scope assignment
 - `runtime_builtin`: a small builtin registry with `len`, `string`, `contains`, `sum`, `mean`, `min`, `max`, first-pass query builtins `from`, `range`, `filter`, `map`, `limit`, `keep`, `drop`, `rename`, `duplicate`, `set`, `reduce`, `sort`, `group`, `count`, `first`, `last`, `union`, `join`, and `aggregateWindow`, plus an imported `csv.from` package builtin
+- `runtime_builtin`: a small builtin registry with `len`, `string`, `contains`, `sum`, `mean`, `min`, `max`, first-pass query builtins `from`, `range`, `filter`, `map`, `limit`, `keep`, `drop`, `rename`, `duplicate`, `set`, `reduce`, `sort`, `group`, `count`, `first`, `last`, `union`, `join`, `aggregateWindow`, and a first-pass `yield`, plus an imported `csv.from` package builtin
 - `runtime_eval`: a first expression evaluator for AST expressions, including function values and function calls
 - `runtime_exec`: a first statement executor for assignments, `option`, expression statements, and block/return control flow
 - `flux_cli`: a small CLI/REPL wrapper around the parser and runtime executor
+
+File execution keeps an internal ordered list of named results for top-level statements such as assignments, expressions, options, and testcases. The CLI now uses that result list for human-readable blocks and a first-pass `--annotated-csv` export path, which gives us a workable bridge toward more official Flux/Influx result-set formatting.
+
+Result naming can now also come from Flux itself through a first-pass `yield(name: "...")` builtin in query pipelines. The current implementation preserves the input table and attaches the yielded name to downstream CLI/CSV output, but it is still a lightweight compatibility layer rather than a full official Flux result-stream engine.
 
 The current `aggregateWindow` implementation is intentionally lightweight: it buckets RFC3339 `_time` values by fixed durations such as `1m`, preserves the current `_group` marker, supports `column`, and can call `mean`, `sum`, `min`, `max`, custom array functions, or the special window form of `count`. Calendar-aware windows, offsets, time zones, and `createEmpty: true` are not implemented yet.
 
@@ -246,6 +293,8 @@ This is still a lightweight in-memory table representation rather than a full Fl
 Current statement execution support includes:
 
 - variable assignment
+- `testcase` statement execution with isolated local bindings and a structured result object
+- successful testcase results exposed as `__flux.testcase.<name>`
 - `option` variable assignment
 - `option` member assignment such as `option task.offset = 30s`
 - expression statements
@@ -260,7 +309,6 @@ Not implemented yet in the runtime:
 
 - richer query-oriented pipe semantics beyond the current in-memory table pipeline subset
 - full calendar-aware `aggregateWindow` semantics such as offsets, time zones, and empty window materialization
-- `testcase` execution
 - a broader standard-library builtin catalog
 
 ## Notes
