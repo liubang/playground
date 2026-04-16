@@ -30,7 +30,7 @@ std::string read_all(std::istream& input) {
 }
 
 void print_usage(std::ostream& out) {
-    out << "usage: flux [--repl] [--quiet] [--no-prelude] [file.flux]\n"
+    out << "usage: flux [--repl] [--quiet] [--annotated-csv] [--no-prelude] [file.flux]\n"
         << "       flux -e 'source'\n"
         << "       flux ast [--json] [file.flux]\n"
         << "       flux ast -e 'source'\n\n"
@@ -120,6 +120,10 @@ int main(int argc, char* argv[]) {
         }
         if (arg == "--quiet" || arg == "-q") {
             options.quiet = true;
+            continue;
+        }
+        if (arg == "--annotated-csv") {
+            options.annotated_csv = true;
             continue;
         }
         if (arg == "--no-prelude") {

@@ -91,6 +91,36 @@ TEST(RuntimeExecTest, ExecutesBlocksAndStopsAtReturn) {
     EXPECT_FALSE(env.lookup("value").ok());
 }
 
+TEST(RuntimeExecTest, ExecutesTestCaseStatementsInIsolatedScopeAndStoresResult) {
+    auto file = ParseFile(R"(
+        seed = 2
+        testcase math extends "base" {
+            temp = seed + 1
+            return temp * 2
+        }
+    )");
+    ASSERT_NE(file, nullptr);
+    ASSERT_EQ(2, file->body.size());
+
+    Environment env;
+    auto seed_or = StatementExecutor::Execute(*file->body[0], env);
+    ASSERT_TRUE(seed_or.ok()) << seed_or.status();
+
+    auto testcase_or = StatementExecutor::Execute(*file->body[1], env);
+    ASSERT_TRUE(testcase_or.ok()) << testcase_or.status();
+    EXPECT_EQ(ExecutionResult::Type::Normal, testcase_or->type);
+    EXPECT_EQ(
+        "{name: \"math\", success: true, extends: \"base\", value: 6}",
+        testcase_or->value.string());
+    EXPECT_FALSE(env.lookup("temp").ok());
+
+    auto result_or = env.lookup_option("__flux.testcase.math");
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    EXPECT_EQ(
+        "{name: \"math\", success: true, extends: \"base\", value: 6}",
+        result_or->string());
+}
+
 TEST(RuntimeExecTest, ExecutesBuiltinStatementsForRegisteredBuiltins) {
     auto file = ParseFile(R"(
         builtin len : (a: int) => int
@@ -191,6 +221,15 @@ TEST(RuntimeExecTest, ExecutesTopLevelFileStatementsInSharedEnvironment) {
     ASSERT_TRUE(result_or.ok()) << result_or.status();
     EXPECT_EQ(ExecutionResult::Type::Normal, result_or->last.type);
     EXPECT_EQ("5", result_or->last.value.string());
+    ASSERT_EQ(4, result_or->results.size());
+    EXPECT_EQ("option.task", result_or->results[0].name);
+    EXPECT_EQ("{name: \"cpu\"}", result_or->results[0].value.string());
+    EXPECT_EQ("base", result_or->results[1].name);
+    EXPECT_EQ("2", result_or->results[1].value.string());
+    EXPECT_EQ("result", result_or->results[2].name);
+    EXPECT_EQ("5", result_or->results[2].value.string());
+    EXPECT_EQ("_result", result_or->results[3].name);
+    EXPECT_EQ("5", result_or->results[3].value.string());
     EXPECT_EQ("metrics", result_or->package_name);
     ASSERT_EQ(2, result_or->imports.size());
     EXPECT_EQ("array", result_or->imports[0]);
@@ -221,6 +260,54 @@ TEST(RuntimeExecTest, RejectsTopLevelReturnDuringFileExecution) {
 
     ASSERT_FALSE(result.ok());
     EXPECT_EQ(absl::StatusCode::kInvalidArgument, result.status().code());
+}
+
+TEST(RuntimeExecTest, ExecutesTestCasesDuringFileExecutionWithoutLeakingBindings) {
+    auto file = ParseFile(R"(
+        base = 10
+        testcase checks {
+            local = base + 5
+            return local
+        }
+        base
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    EXPECT_EQ("10", result_or->last.value.string());
+    ASSERT_EQ(3, result_or->results.size());
+    EXPECT_EQ("base", result_or->results[0].name);
+    EXPECT_EQ("10", result_or->results[0].value.string());
+    EXPECT_EQ("testcase.checks", result_or->results[1].name);
+    EXPECT_EQ("{name: \"checks\", success: true, value: 15}",
+              result_or->results[1].value.string());
+    EXPECT_EQ("_result", result_or->results[2].name);
+    EXPECT_EQ("10", result_or->results[2].value.string());
+    EXPECT_FALSE(env.lookup("local").ok());
+    auto testcase_or = env.lookup_option("__flux.testcase.checks");
+    ASSERT_TRUE(testcase_or.ok()) << testcase_or.status();
+    EXPECT_EQ("{name: \"checks\", success: true, value: 15}", testcase_or->string());
+}
+
+TEST(RuntimeExecTest, TracksNamedResultsForAssignmentsAndExpressions) {
+    auto file = ParseFile(R"(
+        value = 42
+        value
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_EQ(2, result_or->results.size());
+    EXPECT_EQ("value", result_or->results[0].name);
+    EXPECT_EQ("42", result_or->results[0].value.string());
+    EXPECT_EQ("_result", result_or->results[1].name);
+    EXPECT_EQ("42", result_or->results[1].value.string());
 }
 
 TEST(RuntimeExecTest, ExecutesInMemoryQueryPipelineFile) {
@@ -479,6 +566,32 @@ TEST(RuntimeExecTest, ExecutesAggregateWindowQueryFile) {
     EXPECT_EQ("2", env.lookup("samples")->as_table().rows[0]->lookup("_value")->string());
     EXPECT_EQ("1", env.lookup("samples")->as_table().rows[1]->lookup("_value")->string());
     EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
+}
+
+TEST(RuntimeExecTest, UsesYieldNameForResultCollection) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin yield : (<-tables: stream[A], ?name: string) => stream[A]
+
+        from(
+            bucket: "telegraf",
+            rows: [{_time: "2024-01-01T00:00:00Z", _value: 95.0}],
+        )
+            |> yield(name: "cpu")
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_EQ(3, result_or->results.size());
+    EXPECT_EQ("builtin.from", result_or->results[0].name);
+    EXPECT_EQ("builtin.yield", result_or->results[1].name);
+    EXPECT_EQ("cpu", result_or->results[2].name);
+    ASSERT_EQ(Value::Type::Table, result_or->results[2].value.type());
+    ASSERT_TRUE(result_or->results[2].value.as_table().result_name.has_value());
+    EXPECT_EQ("cpu", *result_or->results[2].value.as_table().result_name);
 }
 
 } // namespace

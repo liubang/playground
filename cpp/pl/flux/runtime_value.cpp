@@ -104,12 +104,14 @@ Value Value::object(std::vector<std::pair<std::string, Value>> properties) {
 Value Value::table(std::string bucket,
                    std::vector<std::shared_ptr<ObjectValue>> rows,
                    std::optional<std::string> range_start,
-                   std::optional<std::string> range_stop) {
+                   std::optional<std::string> range_stop,
+                   std::optional<std::string> result_name) {
     auto table = std::make_shared<TableValue>();
     table->bucket = std::move(bucket);
     table->rows = std::move(rows);
     table->range_start = std::move(range_start);
     table->range_stop = std::move(range_stop);
+    table->result_name = std::move(result_name);
     return Value(Type::Table, std::move(table));
 }
 
@@ -281,7 +283,7 @@ std::string TableValue::string() const {
 
 bool TableValue::operator==(const TableValue& other) const {
     if (bucket != other.bucket || range_start != other.range_start || range_stop != other.range_stop ||
-        rows.size() != other.rows.size()) {
+        result_name != other.result_name || rows.size() != other.rows.size()) {
         return false;
     }
     for (size_t i = 0; i < rows.size(); ++i) {

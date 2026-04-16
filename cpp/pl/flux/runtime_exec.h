@@ -41,10 +41,16 @@ struct ExecutionResult {
     }
 };
 
+struct NamedResult {
+    std::string name;
+    Value value = Value::null();
+};
+
 struct FileExecutionResult {
     ExecutionResult last = ExecutionResult::normal();
     std::string package_name;
     std::vector<std::string> imports;
+    std::vector<NamedResult> results;
 };
 
 class StatementExecutor {

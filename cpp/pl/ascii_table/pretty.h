@@ -18,6 +18,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <iosfwd>
 #include <memory>
 #include <string>
 #include <utility>
@@ -32,7 +33,7 @@ enum class CellType : uint8_t {
 
 struct Cell {
     Cell() = default;
-    Cell(CellType t, std::string val) : t(t), val(std::move(val)) {}
+    Cell(CellType type, std::string value) : t(type), val(std::move(value)) {}
 
     CellType t;
     std::string val;
@@ -62,16 +63,23 @@ public:
 
     Pretty& add_row(const std::vector<std::string>& row);
 
+    Pretty& set_show_sep(bool show_sep) {
+        show_sep_ = show_sep;
+        return *this;
+    }
+
     void render() const;
+    void render(std::ostream& out) const;
+    [[nodiscard]] std::string str() const;
 
 private:
     Pretty& add_cell(CellType t, const std::string& val);
 
-    void print_header(uint32_t len, char sep) const;
+    void print_header(std::ostream& out, uint32_t len, char sep) const;
 
-    void print_header_line(uint32_t len, char sep) const;
+    void print_header_line(std::ostream& out, uint32_t len, char sep) const;
 
-    void print_line(const std::vector<CellPtr>& cells) const;
+    void print_line(std::ostream& out, const std::vector<CellPtr>& cells) const;
 
     [[nodiscard]] std::string pad_right(const std::string& input,
                                         size_t total_length,

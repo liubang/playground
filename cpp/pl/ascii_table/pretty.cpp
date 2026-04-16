@@ -38,7 +38,7 @@ Pretty::Pretty(const std::vector<std::string>& headers) {
     show_sep_ = (isatty(STDOUT_FILENO) != 0);
 #endif
 
-    maxcell_per_line_ = headers.size();
+    maxcell_per_line_ = static_cast<uint32_t>(headers.size());
     cell_max_length_.resize(maxcell_per_line_, 0);
     add_row(headers);
 }
@@ -70,7 +70,7 @@ Pretty& Pretty::add_cell(CellType t, const std::string& val) {
         throw std::out_of_range("Too many cells in this line.");
     }
     if (cell_max_length_[cell_idx_] < val.size()) {
-        cell_max_length_[cell_idx_] = val.size();
+        cell_max_length_[cell_idx_] = static_cast<uint32_t>(val.size());
     }
     cells.push_back(std::make_unique<Cell>(t, val));
     ++cell_idx_;
@@ -78,40 +78,50 @@ Pretty& Pretty::add_cell(CellType t, const std::string& val) {
 }
 
 void Pretty::render() const {
+    render(std::cout);
+}
+
+void Pretty::render(std::ostream& out) const {
     auto len = maxcell_per_line_ * 3 + 1;
     for (const auto& mlen : cell_max_length_) {
         len += mlen;
     }
     if (show_sep_) {
-        print_header(len, '=');
+        print_header(out, len, '=');
     }
     for (size_t i = 1; i < lines_.size(); ++i) {
         if (lines_[i].size() > 0 && lines_[i][0]->t == CellType::CT_SEP) {
             if (show_sep_) {
-                print_header_line(len, lines_[i][0]->val[0]);
+                print_header_line(out, len, lines_[i][0]->val[0]);
             }
         } else {
-            print_line(lines_[i]);
+            print_line(out, lines_[i]);
         }
     }
     if (show_sep_) {
-        print_header_line(len, '=');
+        print_header_line(out, len, '=');
     }
 }
 
-void Pretty::print_header(uint32_t len, char sep) const {
-    print_header_line(len, sep);
-    print_line(lines_[0]);
-    print_header_line(len, sep);
+std::string Pretty::str() const {
+    std::ostringstream out;
+    render(out);
+    return out.str();
 }
 
-void Pretty::print_header_line(uint32_t len, char sep) const {
+void Pretty::print_header(std::ostream& out, uint32_t len, char sep) const {
+    print_header_line(out, len, sep);
+    print_line(out, lines_[0]);
+    print_header_line(out, len, sep);
+}
+
+void Pretty::print_header_line(std::ostream& out, uint32_t len, char sep) const {
     std::ostringstream oss;
     oss << "+" << std::string(len - 2, sep) << "+";
-    std::cout << oss.str() << std::endl;
+    out << oss.str() << '\n';
 }
 
-void Pretty::print_line(const std::vector<CellPtr>& cells) const {
+void Pretty::print_line(std::ostream& out, const std::vector<CellPtr>& cells) const {
     if (cells.empty()) {
         return;
     }
@@ -135,7 +145,7 @@ void Pretty::print_line(const std::vector<CellPtr>& cells) const {
             oss << " ";
         }
     }
-    std::cout << oss.str() << std::endl;
+    out << oss.str() << '\n';
 }
 
 [[nodiscard]] std::string Pretty::pad_right(const std::string& input,

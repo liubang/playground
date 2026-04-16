@@ -16,19 +16,12 @@
 
 #include "cpp/pl/flux/runtime_exec.h"
 
-#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/runtime_builtin.h"
 #include "cpp/pl/flux/runtime_eval.h"
 
 namespace pl {
 namespace {
-
-absl::Status unsupported_statement(const Statement& stmt, const std::string& what) {
-    return absl::UnimplementedError(
-        absl::StrCat("unsupported statement ", what, " at ",
-                     stmt.loc.is_valid() ? stmt.string() : stmt.string()));
-}
 
 absl::StatusOr<std::string> property_name(const PropertyKey& key) {
     switch (key.type) {
@@ -115,6 +108,87 @@ absl::StatusOr<Value> import_binding_value(const ImportDeclaration& import) {
     return Value::object(std::move(props));
 }
 
+Value testcase_result_value(const TestCaseStmt& testcase, const ExecutionResult& result) {
+    std::vector<std::pair<std::string, Value>> properties;
+    properties.emplace_back("name", Value::string(testcase.id->name));
+    properties.emplace_back("success", Value::boolean(true));
+    if (testcase.extends != nullptr) {
+        properties.emplace_back("extends", Value::string(testcase.extends->value));
+    }
+    properties.emplace_back("value", result.value);
+    return Value::object(std::move(properties));
+}
+
+std::string statement_result_name(const Statement& stmt) {
+    switch (stmt.type) {
+        case Statement::Type::ExpressionStatement:
+            return "_result";
+        case Statement::Type::VariableAssignment: {
+            const auto& var = std::get<std::unique_ptr<VariableAssgn>>(stmt.stmt);
+            return var->id->name;
+        }
+        case Statement::Type::OptionStatement: {
+            const auto& option = std::get<std::unique_ptr<OptionStmt>>(stmt.stmt);
+            switch (option->assignment->type) {
+                case Assignment::Type::VariableAssignment: {
+                    const auto& var =
+                        std::get<std::unique_ptr<VariableAssgn>>(option->assignment->value);
+                    return "option." + var->id->name;
+                }
+                case Assignment::Type::MemberAssignment: {
+                    const auto& member =
+                        std::get<std::unique_ptr<MemberAssgn>>(option->assignment->value);
+                    auto path_or = flatten_member_name(*member->member);
+                    if (!path_or.ok()) {
+                        return "option";
+                    }
+                    return "option." + *path_or;
+                }
+            }
+        }
+        case Statement::Type::BuiltinStatement: {
+            const auto& builtin = std::get<std::unique_ptr<BuiltinStmt>>(stmt.stmt);
+            return "builtin." + builtin->id->name;
+        }
+        case Statement::Type::TestCaseStatement: {
+            const auto& testcase = std::get<std::unique_ptr<TestCaseStmt>>(stmt.stmt);
+            return "testcase." + testcase->id->name;
+        }
+        case Statement::Type::ReturnStatement:
+            return "return";
+        case Statement::Type::BadStatement:
+            return "bad";
+    }
+}
+
+std::string resolved_result_name(const Statement& stmt, const Value& value) {
+    if (value.type() == Value::Type::Table && value.as_table().result_name.has_value()) {
+        return *value.as_table().result_name;
+    }
+    return statement_result_name(stmt);
+}
+
+void append_named_result(const Statement& stmt,
+                         const ExecutionResult& exec_result,
+                         FileExecutionResult& file_result) {
+    if (exec_result.type != ExecutionResult::Type::Normal || exec_result.value.is_null()) {
+        return;
+    }
+    file_result.results.push_back(
+        NamedResult{resolved_result_name(stmt, exec_result.value), exec_result.value});
+}
+
+absl::StatusOr<ExecutionResult> execute_testcase_statement(const TestCaseStmt& testcase,
+                                                           Environment& env) {
+    auto result_or = StatementExecutor::ExecuteBlock(*testcase.block, env);
+    if (!result_or.ok()) {
+        return result_or.status();
+    }
+    auto testcase_value = testcase_result_value(testcase, *result_or);
+    env.define_option("__flux.testcase." + testcase.id->name, testcase_value);
+    return ExecutionResult::normal(std::move(testcase_value));
+}
+
 } // namespace
 
 absl::StatusOr<ExecutionResult> StatementExecutor::Execute(const Statement& stmt,
@@ -154,7 +228,8 @@ absl::StatusOr<ExecutionResult> StatementExecutor::Execute(const Statement& stmt
                 absl::StrCat("cannot execute bad statement: ",
                              std::get<std::unique_ptr<BadStmt>>(stmt.stmt)->text));
         case Statement::Type::TestCaseStatement:
-            return unsupported_statement(stmt, stmt.string());
+            return execute_testcase_statement(
+                *std::get<std::unique_ptr<TestCaseStmt>>(stmt.stmt), env);
         case Statement::Type::BuiltinStatement: {
             const auto& builtin = std::get<std::unique_ptr<BuiltinStmt>>(stmt.stmt);
             auto status = BuiltinRegistry::Ensure(env, builtin->id->name);
@@ -210,6 +285,7 @@ absl::StatusOr<FileExecutionResult> StatementExecutor::ExecuteFile(const File& f
             return result_or.status();
         }
         result.last = *result_or;
+        append_named_result(*stmt, result.last, result);
         if (result.last.type == ExecutionResult::Type::Return) {
             return absl::InvalidArgumentError("return statement is not allowed at file scope");
         }

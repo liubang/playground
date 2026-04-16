@@ -25,6 +25,7 @@ namespace pl {
 struct FluxCliOptions {
     bool quiet = false;
     bool install_builtins = true;
+    bool annotated_csv = false;
 };
 
 struct FluxAstOptions {

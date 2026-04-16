@@ -1096,6 +1096,31 @@ absl::StatusOr<Value> builtin_csv_from(const std::vector<Value>& args) {
     return parse_annotated_csv_table(*csv_or, "csv.from");
 }
 
+absl::StatusOr<Value> builtin_yield(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "yield");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "yield", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto name_or = optional_string_property(
+        **object_or,
+        "yield",
+        "name",
+        (*table_or)->result_name.has_value() ? *(*table_or)->result_name : "_result");
+    if (!name_or.ok()) {
+        return name_or.status();
+    }
+    return Value::table(
+        (*table_or)->bucket,
+        (*table_or)->rows,
+        (*table_or)->range_start,
+        (*table_or)->range_stop,
+        *name_or);
+}
+
 absl::StatusOr<Value> builtin_range(const std::vector<Value>& args) {
     auto object_or = require_object_argument(args, "range");
     if (!object_or.ok()) {
@@ -1871,6 +1896,10 @@ bool install_known_builtin(Environment& env, const std::string& name) {
         install_builtin(env, "aggregateWindow", builtin_aggregate_window, "tables");
         return true;
     }
+    if (name == "yield") {
+        install_builtin(env, "yield", builtin_yield, "tables");
+        return true;
+    }
     return false;
 }
 
@@ -1903,6 +1932,7 @@ void BuiltinRegistry::Install(Environment& env) {
     install_known_builtin(env, "union");
     install_known_builtin(env, "join");
     install_known_builtin(env, "aggregateWindow");
+    install_known_builtin(env, "yield");
 }
 
 absl::Status BuiltinRegistry::Ensure(Environment& env, const std::string& name) {

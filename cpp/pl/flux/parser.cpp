@@ -98,11 +98,12 @@ std::unique_ptr<File> Parser::parse_file(const std::string& fname) {
     ret->body = body;
     ret->imports = imports;
     ret->eof = eof;
-    const Position file_start = ret->package ? ret->package->loc.start
-                              : !ret->imports.empty() ? ret->imports.front()->loc.start
-                              : !ret->body.empty() ? ret->body.front()->loc.start
-                              : peek()->start_pos;
-    const Position file_end = last_consumed_loc_.is_valid() ? last_consumed_loc_.end : peek()->end_pos;
+    const Position file_start = ret->package            ? ret->package->loc.start
+                                : !ret->imports.empty() ? ret->imports.front()->loc.start
+                                : !ret->body.empty()    ? ret->body.front()->loc.start
+                                                        : peek()->start_pos;
+    const Position file_end =
+        last_consumed_loc_.is_valid() ? last_consumed_loc_.end : peek()->end_pos;
     ret->loc = source_location(file_start, file_end);
     return ret;
 }
@@ -285,8 +286,8 @@ std::unique_ptr<MonoType> Parser::parse_function_type() {
             pipe->loc = source_location(start, last_consumed_loc_.end);
             pipe->name = std::move(name);
             pipe->monotype = std::move(mono);
-            parameters.emplace_back(std::make_shared<ParameterType>(
-                ParameterType::Type::Pipe, std::move(pipe)));
+            parameters.emplace_back(
+                std::make_shared<ParameterType>(ParameterType::Type::Pipe, std::move(pipe)));
         } else {
             if (peek()->tok == TokenType::QuestionMark) {
                 consume();
@@ -606,8 +607,9 @@ std::unique_ptr<Expression> Parser::parse_pipe_expression_suffix(std::unique_ptr
                 std::make_unique<PipeExpr>(
                     std::move(res), std::move(std::get<std::unique_ptr<CallExpr>>(rhs->expr))));
         } else {
-            errs_.emplace_back(missing_at_message("pipe destination must be a function call",
-                                                  rhs->loc.is_valid() ? rhs->loc.start : t->start_pos));
+            errs_.emplace_back(
+                missing_at_message("pipe destination must be a function call",
+                                   rhs->loc.is_valid() ? rhs->loc.start : t->start_pos));
             auto call =
                 std::make_unique<CallExpr>(std::move(rhs), std::vector<std::shared_ptr<Comment>>{},
                                            std::vector<std::shared_ptr<Expression>>{},
@@ -640,12 +642,13 @@ std::unique_ptr<Expression> Parser::parse_pipe_expression() {
     auto expr = parse_unary_expression();
     if (expr && expr->type == Expression::Type::Identifier && peek()->tok == TokenType::Arrow) {
         auto key = std::get<std::unique_ptr<Identifier>>(expr->expr).release();
-        auto prop = std::shared_ptr<Property>(std::make_unique<Property>(
-            std::make_unique<PropertyKey>(PropertyKey::Type::Identifier,
-                                          std::unique_ptr<Identifier>(key)),
-            std::vector<std::shared_ptr<Comment>>{}, nullptr,
-            std::vector<std::shared_ptr<Comment>>{})
-                                                 .release());
+        auto prop = std::shared_ptr<Property>(
+            std::make_unique<Property>(
+                std::make_unique<PropertyKey>(PropertyKey::Type::Identifier,
+                                              std::unique_ptr<Identifier>(key)),
+                std::vector<std::shared_ptr<Comment>>{}, nullptr,
+                std::vector<std::shared_ptr<Comment>>{})
+                .release());
         std::vector<std::shared_ptr<Property>> params = {prop};
         auto lparen = std::make_unique<Token>();
         auto rparen = std::make_unique<Token>();
@@ -802,8 +805,8 @@ std::vector<std::shared_ptr<Expression>> Parser::parse_call_argument_list() {
             continue;
         }
         std::stringstream ss;
-        ss << "expected comma in call argument list, got " << token_to_string(peek()->tok)
-           << " at " << peek()->start_pos;
+        ss << "expected comma in call argument list, got " << token_to_string(peek()->tok) << " at "
+           << peek()->start_pos;
         errs_.emplace_back(ss.str());
         synchronize({TokenType::Comma, TokenType::RParen});
         if (peek()->tok == TokenType::Comma) {
@@ -911,8 +914,8 @@ std::unique_ptr<IntegerLit> Parser::parse_int_literal() {
     auto ret = std::make_unique<IntegerLit>();
     if (t->lit.starts_with('0') && t->lit.length() > 1) {
         std::stringstream ss;
-        ss << "invalid integer literal " << t->lit
-           << ": nonzero value cannot start with 0 at " << t->start_pos;
+        ss << "invalid integer literal " << t->lit << ": nonzero value cannot start with 0 at "
+           << t->start_pos;
         errs_.emplace_back(ss.str());
         ret->value = 0;
         return ret;
@@ -966,8 +969,8 @@ std::unique_ptr<Identifier> Parser::parse_identifier() {
     return std::make_unique<Identifier>(t->lit);
 }
 
-std::unique_ptr<Expression> Parser::create_bad_expression_with_text(
-    std::unique_ptr<Token> tok, std::string_view text) {
+std::unique_ptr<Expression> Parser::create_bad_expression_with_text(std::unique_ptr<Token> tok,
+                                                                    std::string_view text) {
     auto expr = std::make_unique<BadExpr>();
     expr->text = text;
 
@@ -1229,8 +1232,8 @@ std::unique_ptr<Expression> Parser::parse_conditional_expression() {
             }
         }
         if (!cons) {
-            errs_.emplace_back(
-                missing_at_message("missing consequent expression in conditional", then_tok->start_pos));
+            errs_.emplace_back(missing_at_message("missing consequent expression in conditional",
+                                                  then_tok->start_pos));
             cons = create_placeholder_expression(then_tok.get());
         }
 
@@ -1245,8 +1248,8 @@ std::unique_ptr<Expression> Parser::parse_conditional_expression() {
             alt = create_placeholder_expression(else_tok.get());
         }
         if (!alt) {
-            errs_.emplace_back(
-                missing_at_message("missing alternate expression in conditional", else_tok->start_pos));
+            errs_.emplace_back(missing_at_message("missing alternate expression in conditional",
+                                                  else_tok->start_pos));
             alt = create_placeholder_expression(else_tok.get());
         }
 
@@ -1863,11 +1866,11 @@ std::unique_ptr<Expression> Parser::parse_paren_body_expression(std::unique_ptr<
 std::vector<std::shared_ptr<Property>> Parser::parse_parameter_list() {
     std::vector<std::shared_ptr<Property>> params;
     while (more()) {
-        std::unique_ptr<Property> p = (peek()->tok == TokenType::Ident ||
-                                       peek()->tok == TokenType::PipeReceive ||
-                                       peek()->tok == TokenType::QuestionMark)
-                                          ? parse_parameter()
-                                          : parse_invalid_parameter();
+        std::unique_ptr<Property> p =
+            (peek()->tok == TokenType::Ident || peek()->tok == TokenType::PipeReceive ||
+             peek()->tok == TokenType::QuestionMark)
+                ? parse_parameter()
+                : parse_invalid_parameter();
         if (!more()) {
             params.emplace_back(std::move(p));
             break;
@@ -1877,8 +1880,8 @@ std::vector<std::shared_ptr<Property>> Parser::parse_parameter_list() {
             p->comma = t->comments;
         } else if (peek()->tok != TokenType::RParen) {
             std::stringstream ss;
-            ss << "expected comma in parameter list, got " << token_to_string(peek()->tok)
-               << " at " << peek()->start_pos;
+            ss << "expected comma in parameter list, got " << token_to_string(peek()->tok) << " at "
+               << peek()->start_pos;
             errs_.emplace_back(ss.str());
             synchronize({TokenType::Comma, TokenType::RParen});
             if (peek()->tok == TokenType::Comma) {
@@ -1895,8 +1898,8 @@ std::unique_ptr<Property> Parser::parse_parameter() {
     if (peek()->tok == TokenType::PipeReceive) {
         auto pipe = consume();
         auto key = parse_identifier();
-        auto value = std::make_unique<Expression>(Expression::Type::PipeLit,
-                                                  std::make_unique<PipeLit>());
+        auto value =
+            std::make_unique<Expression>(Expression::Type::PipeLit, std::make_unique<PipeLit>());
         return std::make_unique<Property>(
             std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
             pipe->comments, std::move(value), std::vector<std::shared_ptr<Comment>>{});
@@ -2186,8 +2189,8 @@ std::vector<std::shared_ptr<AttributeParam>> Parser::parse_attribute_params() {
             const auto* t = peek();
             if (t->tok != TokenType::Comma) {
                 std::stringstream ss;
-                ss << "expected comma in attribute parameter list, got "
-                   << token_to_string(t->tok) << " at " << t->start_pos;
+                ss << "expected comma in attribute parameter list, got " << token_to_string(t->tok)
+                   << " at " << t->start_pos;
                 errs_.emplace_back(ss.str());
             } else {
                 auto tt = consume();

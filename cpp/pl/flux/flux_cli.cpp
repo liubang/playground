@@ -17,11 +17,17 @@
 #include "cpp/pl/flux/flux_cli.h"
 
 #include "cpp/pl/flux/ast_debug.h"
+#include "cpp/pl/ascii_table/pretty.h"
 #include "cpp/pl/flux/parser.h"
 #include "cpp/pl/flux/runtime_builtin.h"
 #include "cpp/pl/flux/runtime_exec.h"
+#include <algorithm>
+#include <cctype>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <string_view>
+#include <unordered_set>
 
 namespace pl {
 namespace {
@@ -37,10 +43,385 @@ std::string parser_error_text(const Parser& parser) {
     return out.str();
 }
 
-void append_result_value(const ExecutionResult& result, std::ostringstream& out) {
-    if (!result.value.is_null()) {
-        out << result.value.string() << '\n';
+std::vector<std::string> collect_table_columns(const TableValue& table) {
+    std::vector<std::string> columns;
+    std::unordered_set<std::string> seen;
+    for (const auto& row : table.rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        for (const auto& [name, value] : row->properties) {
+            (void)value;
+            if (seen.insert(name).second) {
+                columns.push_back(name);
+            }
+        }
     }
+    return columns;
+}
+
+std::string csv_escape(const std::string& value) {
+    bool needs_quotes = false;
+    for (char ch : value) {
+        if (ch == '"' || ch == ',' || ch == '\n' || ch == '\r') {
+            needs_quotes = true;
+            break;
+        }
+    }
+    if (!needs_quotes) {
+        return value;
+    }
+    std::string out = "\"";
+    for (char ch : value) {
+        if (ch == '"') {
+            out += "\"\"";
+        } else {
+            out.push_back(ch);
+        }
+    }
+    out.push_back('"');
+    return out;
+}
+
+std::string scalar_cell_text(const Value& value) {
+    switch (value.type()) {
+        case Value::Type::Null:
+            return "";
+        case Value::Type::Bool:
+            return value.as_bool() ? "true" : "false";
+        case Value::Type::Int:
+            return std::to_string(value.as_int());
+        case Value::Type::UInt:
+            return std::to_string(value.as_uint());
+        case Value::Type::Float: {
+            std::ostringstream out;
+            out << std::setprecision(15) << value.as_float();
+            return out.str();
+        }
+        case Value::Type::String:
+            return value.as_string();
+        case Value::Type::Duration:
+            return value.as_duration().literal;
+        case Value::Type::Time:
+            return value.as_time().literal;
+        case Value::Type::Regex:
+            return value.as_regex().literal;
+        case Value::Type::Array:
+        case Value::Type::Object:
+        case Value::Type::Table:
+        case Value::Type::Function:
+            return value.string();
+    }
+}
+
+std::string flux_datatype_name(const Value& value) {
+    switch (value.type()) {
+        case Value::Type::Null:
+            return "string";
+        case Value::Type::Bool:
+            return "boolean";
+        case Value::Type::Int:
+            return "long";
+        case Value::Type::UInt:
+            return "unsignedLong";
+        case Value::Type::Float:
+            return "double";
+        case Value::Type::String:
+            return "string";
+        case Value::Type::Duration:
+            return "duration";
+        case Value::Type::Time:
+            return "dateTime:RFC3339";
+        case Value::Type::Regex:
+            return "string";
+        case Value::Type::Array:
+        case Value::Type::Object:
+        case Value::Type::Table:
+        case Value::Type::Function:
+            return "string";
+    }
+}
+
+std::vector<std::string> result_columns(const NamedResult& result) {
+    if (result.value.type() == Value::Type::Table) {
+        return collect_table_columns(result.value.as_table());
+    }
+    return {"_value"};
+}
+
+std::string column_datatype(const NamedResult& result, const std::string& column) {
+    if (result.value.type() == Value::Type::Table) {
+        const auto& table = result.value.as_table();
+        for (const auto& row : table.rows) {
+            if (row == nullptr) {
+                continue;
+            }
+            if (const Value* value = row->lookup(column); value != nullptr && !value->is_null()) {
+                return flux_datatype_name(*value);
+            }
+        }
+        return "string";
+    }
+    return flux_datatype_name(result.value);
+}
+
+void append_csv_row(const std::vector<std::string>& cells, std::ostringstream& out) {
+    for (size_t i = 0; i < cells.size(); ++i) {
+        if (i > 0) {
+            out << ',';
+        }
+        out << csv_escape(cells[i]);
+    }
+    out << '\n';
+}
+
+void append_annotated_csv_result(const NamedResult& result,
+                                 size_t table_index,
+                                 std::ostringstream& out) {
+    const auto columns = result_columns(result);
+    std::vector<std::string> datatype_row = {"#datatype", "string", "long"};
+    std::vector<std::string> group_row = {"#group", "false", "false"};
+    std::vector<std::string> default_row = {"#default", result.name, ""};
+    std::vector<std::string> header_row = {"", "result", "table"};
+    for (const auto& column : columns) {
+        datatype_row.push_back(column_datatype(result, column));
+        group_row.push_back("false");
+        default_row.push_back("");
+        header_row.push_back(column);
+    }
+
+    append_csv_row(datatype_row, out);
+    append_csv_row(group_row, out);
+    append_csv_row(default_row, out);
+    append_csv_row(header_row, out);
+
+    if (result.value.type() == Value::Type::Table) {
+        const auto& table = result.value.as_table();
+        for (const auto& row : table.rows) {
+            std::vector<std::string> cells = {"", result.name, std::to_string(table_index)};
+            for (const auto& column : columns) {
+                std::string cell;
+                if (row != nullptr) {
+                    if (const Value* value = row->lookup(column); value != nullptr) {
+                        cell = scalar_cell_text(*value);
+                    }
+                }
+                cells.push_back(cell);
+            }
+            append_csv_row(cells, out);
+        }
+        return;
+    }
+
+    std::vector<std::string> cells = {"", result.name, std::to_string(table_index),
+                                      scalar_cell_text(result.value)};
+    append_csv_row(cells, out);
+}
+
+void append_annotated_csv_output(const FileExecutionResult& result, std::ostringstream& out) {
+    if (result.results.empty()) {
+        return;
+    }
+    size_t table_index = 0;
+    bool first = true;
+    for (const auto& named : result.results) {
+        if (named.value.is_null()) {
+            continue;
+        }
+        if (!first) {
+            out << '\n';
+        }
+        append_annotated_csv_result(named, table_index++, out);
+        first = false;
+    }
+}
+
+void append_scalar_result(const NamedResult& result, bool include_header, std::ostringstream& out) {
+    if (result.value.is_null()) {
+        return;
+    }
+    if (include_header) {
+        out << "Result: " << result.name << '\n';
+    }
+    out << result.value.string() << '\n';
+}
+
+void append_table_result(const NamedResult& result, bool include_header, std::ostringstream& out) {
+    const auto& table = result.value.as_table();
+    if (include_header) {
+        out << "Result: " << result.name << '\n';
+    }
+    out << "Table: bucket=" << table.bucket << ", rows=" << table.rows.size();
+    if (table.range_start.has_value()) {
+        out << ", start=" << *table.range_start;
+    }
+    if (table.range_stop.has_value()) {
+        out << ", stop=" << *table.range_stop;
+    }
+    out << '\n';
+
+    const auto columns = collect_table_columns(table);
+    if (columns.empty()) {
+        return;
+    }
+    pretty::Pretty pretty_table(columns);
+    pretty_table.set_show_sep(true);
+    for (const auto& row : table.rows) {
+        std::vector<std::string> cells;
+        cells.reserve(columns.size());
+        for (size_t i = 0; i < columns.size(); ++i) {
+            std::string cell = "null";
+            if (row != nullptr) {
+                if (const Value* value = row->lookup(columns[i]); value != nullptr) {
+                    cell = value->string();
+                }
+            }
+            cells.push_back(std::move(cell));
+        }
+        pretty_table.add_row(cells);
+    }
+    out << pretty_table.str();
+}
+
+void append_named_result(const NamedResult& result, bool include_header, std::ostringstream& out) {
+    if (result.value.is_null()) {
+        return;
+    }
+    if (result.value.type() == Value::Type::Table) {
+        append_table_result(result, include_header, out);
+        return;
+    }
+    append_scalar_result(result, include_header, out);
+}
+
+void append_cli_output(const FileExecutionResult& result, std::ostringstream& out) {
+    if (result.results.empty()) {
+        if (!result.last.value.is_null()) {
+            out << result.last.value.string() << '\n';
+        }
+        return;
+    }
+
+    bool multiple_results = result.results.size() > 1;
+    bool has_table = std::any_of(
+        result.results.begin(), result.results.end(), [](const NamedResult& named_result) {
+            return named_result.value.type() == Value::Type::Table;
+        });
+    bool include_headers = multiple_results || has_table;
+
+    bool first = true;
+    for (const auto& named : result.results) {
+        if (named.value.is_null()) {
+            continue;
+        }
+        if (!first && include_headers) {
+            out << '\n';
+        }
+        append_named_result(named, include_headers, out);
+        first = false;
+    }
+}
+
+std::string_view trim_ascii(std::string_view text) {
+    size_t start = 0;
+    while (start < text.size() &&
+           std::isspace(static_cast<unsigned char>(text[start])) != 0) {
+        ++start;
+    }
+    size_t end = text.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(text[end - 1])) != 0) {
+        --end;
+    }
+    return text.substr(start, end - start);
+}
+
+bool ends_with_token(std::string_view text, std::string_view suffix) {
+    return text.size() >= suffix.size() && text.substr(text.size() - suffix.size()) == suffix;
+}
+
+bool line_requires_more_input(std::string_view line) {
+    const auto trimmed = trim_ascii(line);
+    if (trimmed.empty()) {
+        return false;
+    }
+    constexpr std::string_view kSuffixes[] = {
+        "|>", "=>", "=", ",", ":", "(", "[", "{", "+", "-", "*", "/", "%",
+    };
+    for (const auto suffix : kSuffixes) {
+        if (ends_with_token(trimmed, suffix)) {
+            return true;
+        }
+    }
+    return trimmed == "and" || trimmed == "or";
+}
+
+bool source_requires_more_input(std::string_view source) {
+    int paren_depth = 0;
+    int bracket_depth = 0;
+    int brace_depth = 0;
+    bool in_string = false;
+    bool escaped = false;
+
+    for (char ch : source) {
+        if (in_string) {
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+        if (ch == '"') {
+            in_string = true;
+            continue;
+        }
+        switch (ch) {
+            case '(':
+                ++paren_depth;
+                break;
+            case ')':
+                if (paren_depth > 0) {
+                    --paren_depth;
+                }
+                break;
+            case '[':
+                ++bracket_depth;
+                break;
+            case ']':
+                if (bracket_depth > 0) {
+                    --bracket_depth;
+                }
+                break;
+            case '{':
+                ++brace_depth;
+                break;
+            case '}':
+                if (brace_depth > 0) {
+                    --brace_depth;
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    if (in_string || paren_depth > 0 || bracket_depth > 0 || brace_depth > 0) {
+        return true;
+    }
+
+    size_t line_start = source.find_last_of('\n');
+    if (line_start == std::string_view::npos) {
+        line_start = 0;
+    } else {
+        ++line_start;
+    }
+    return line_requires_more_input(source.substr(line_start));
 }
 
 } // namespace
@@ -73,7 +454,11 @@ FluxCliResult ExecuteFluxSource(const std::string& source,
 
     std::ostringstream out;
     if (!options.quiet) {
-        append_result_value(result_or->last, out);
+        if (options.annotated_csv) {
+            append_annotated_csv_output(*result_or, out);
+        } else {
+            append_cli_output(*result_or, out);
+        }
     }
     return FluxCliResult{0, out.str(), ""};
 }
@@ -105,6 +490,7 @@ int RunFluxRepl(std::istream& input,
                 const FluxCliOptions& options) {
     auto env = MakeFluxCliEnvironment(options);
     std::string line;
+    std::string source;
     int exit_code = 0;
 
     if (interactive) {
@@ -112,18 +498,40 @@ int RunFluxRepl(std::istream& input,
     }
     while (true) {
         if (interactive) {
-            output << "flux> " << std::flush;
+            output << (source.empty() ? "flux> " : "....> ") << std::flush;
         }
         if (!std::getline(input, line)) {
             break;
         }
-        if (line == ":quit" || line == ":exit" || line == ".exit") {
+        if ((line == ":quit" || line == ":exit" || line == ".exit") && source.empty()) {
             break;
         }
-        if (line.empty()) {
+        if (line.empty() && source.empty()) {
             continue;
         }
-        auto result = ExecuteFluxSource(line, "<repl>", env, options);
+        if (!source.empty()) {
+            source += '\n';
+        }
+        source += line;
+        if (source_requires_more_input(source)) {
+            continue;
+        }
+
+        auto result = ExecuteFluxSource(source, "<repl>", env, options);
+        if (!result.output.empty()) {
+            output << result.output;
+        }
+        if (!result.error.empty()) {
+            error << result.error;
+        }
+        if (result.exit_code != 0) {
+            exit_code = result.exit_code;
+        }
+        source.clear();
+    }
+
+    if (!source.empty()) {
+        auto result = ExecuteFluxSource(source, "<repl>", env, options);
         if (!result.output.empty()) {
             output << result.output;
         }
