@@ -196,6 +196,7 @@ cc_library(
     copts = ["-std=c++20"] + COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
+        "//cpp/pl/ascii_table:pretty",
         ":parser",
         ":runtime_builtin",
         ":runtime_exec",
