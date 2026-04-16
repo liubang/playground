@@ -22,7 +22,6 @@ bazel build //cpp/pl/flux:flux
 Optional:
 
 ```bash
-bazel build //cpp/pl/flux:ast_dump
 bazel build //cpp/pl/flux:parser_test
 ```
 
@@ -90,7 +89,7 @@ flux> x + 2
 flux> :quit
 ```
 
-By default, runtime execution installs the current builtin prelude and prints the last evaluated value. Use `--quiet` to suppress value output, or `--no-prelude` to execute only explicitly declared/imported symbols. The older `ast_dump` target still exists, but `flux ast` is the preferred AST debugging entrypoint.
+By default, runtime execution installs the current builtin prelude and prints the last evaluated value. Use `--quiet` to suppress value output, or `--no-prelude` to execute only explicitly declared/imported symbols.
 
 Output JSON:
 
