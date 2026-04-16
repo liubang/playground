@@ -82,7 +82,7 @@ Status meanings:
 | --- | --- | --- |
 | AST tree dump | Supported | `dump_ast(const File&)` and `flux ast` default output |
 | AST JSON dump | Supported | `dump_ast_json(const File&)` and `flux ast --json` |
-| command-line AST dumper | Supported | `bazel build //cpp/pl/flux:flux` provides `flux ast`; the older `ast_dump` binary is still available |
+| command-line AST dumper | Supported | `bazel build //cpp/pl/flux:flux` provides `flux ast` |
 | command-line runtime runner | Partial | `bazel build //cpp/pl/flux:flux` provides `flux -e`, `flux path/to/query.flux`, and a small shared-environment REPL; it uses the current partial runtime, so unsupported execution features still fail at runtime |
 | parser demo binary | Supported | `parser_test` now uses the tree dump |
 | parser unit tests | Supported | Covers main happy paths and dump output |

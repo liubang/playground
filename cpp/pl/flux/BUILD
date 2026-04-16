@@ -226,18 +226,6 @@ cc_binary(
     ],
 )
 
-cc_binary(
-    name = "ast_dump",
-    srcs = [
-        "ast_dump.cpp",
-    ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
-    deps = [
-        ":parser",
-    ],
-)
-
 cc_test(
     name = "parser_unit_test",
     srcs = [
