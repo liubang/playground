@@ -1,0 +1,9 @@
+#datatype,string,long,dateTime:RFC3339,string,string,string,string,double
+#group,false,false,false,true,true,true,true,false
+#default,_result,,,,,,,
+,result,table,_time,_measurement,_field,host,region,_value
+,,0,2024-05-01T10:00:10Z,cpu,usage_user,edge-1,us-east,70.0
+,,0,2024-05-01T10:00:40Z,cpu,usage_user,edge-1,us-east,74.0
+,,0,2024-05-01T10:01:05Z,cpu,usage_user,edge-1,us-east,82.0
+,,0,2024-05-01T10:00:20Z,cpu,usage_user,edge-2,us-west,91.0
+,,0,2024-05-01T10:01:10Z,cpu,usage_user,edge-2,us-west,87.0
