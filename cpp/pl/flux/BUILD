@@ -315,3 +315,15 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+sh_test(
+    name = "flux_cli_smoke_test",
+    srcs = [
+        "flux_cli_smoke_test.sh",
+    ],
+    data = [
+        ":flux",
+    ] + glob([
+        "examples/**/*",
+    ]),
+)
