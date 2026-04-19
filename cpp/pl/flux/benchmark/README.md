@@ -18,7 +18,7 @@ These cases are intentionally chosen to cover:
 - a mostly linear pipeline
 - a full-table reorder
 - a stateful aggregation path
-- the current quadratic nested-loop join implementation
+- the heavier multi-table join path, which is now backed by a hash index
 
 ## Run
 
@@ -70,22 +70,24 @@ The large metric datasets use annotated CSV with the columns:
 
 ## Current Baseline
 
-These baseline results were collected locally on 2026-04-19 against the
-current implementation:
+These baseline results were collected locally on 2026-04-19 after the
+current round of runtime optimizations, including the hash-indexed `join`
+path, indexed `aggregateWindow` bucket lookup, and row-pointer reuse across
+selection/reordering operators:
 
 | Case | Input | Time |
 | --- | --- | ---: |
-| `linear` | 100k rows | 2.0s |
-| `linear` | 500k rows | 9.9s |
-| `linear` | 1M rows | 19.6s |
-| `sort` | 100k rows | 1.6s |
-| `sort` | 500k rows | 8.4s |
-| `sort` | 1M rows | 17.6s |
-| `agg` | 100k rows | 9.0s |
-| `agg` | 500k rows | 39.9s |
-| `agg` | 1M rows | 78.7s |
-| `join` | 2000 x 2000 rows | 0.85s |
-| `join` | 5000 x 5000 rows | 5.0s |
+| `linear` | 100k rows | 0.086s |
+| `linear` | 500k rows | 0.368s |
+| `linear` | 1M rows | 0.770s |
+| `sort` | 100k rows | 0.081s |
+| `sort` | 500k rows | 0.442s |
+| `sort` | 1M rows | 1.082s |
+| `agg` | 100k rows | 0.448s |
+| `agg` | 500k rows | 2.233s |
+| `agg` | 1M rows | 4.465s |
+| `join` | 2000 x 2000 rows | 0.061s |
+| `join` | 5000 x 5000 rows | 0.336s |
 
 ## How To Use It
 

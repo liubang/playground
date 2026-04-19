@@ -18,6 +18,8 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
+#include "absl/time/civil_time.h"
+#include "absl/time/time.h"
 #include "cpp/pl/flux/runtime_eval.h"
 #include <algorithm>
 #include <cctype>
@@ -213,6 +215,24 @@ absl::StatusOr<std::string> optional_string_property(const ObjectValue& object,
         return absl::InvalidArgumentError(absl::StrCat(name, " `", property, "` must be a string"));
     }
     return value->as_string();
+}
+
+absl::StatusOr<size_t> optional_index_property(const ObjectValue& object,
+                                               const std::string& name,
+                                               const std::string& property,
+                                               size_t default_value) {
+    const Value* value = object.lookup(property);
+    if (value == nullptr) {
+        return default_value;
+    }
+    if (value->type() == Value::Type::UInt) {
+        return static_cast<size_t>(value->as_uint());
+    }
+    if (value->type() == Value::Type::Int && value->as_int() >= 0) {
+        return static_cast<size_t>(value->as_int());
+    }
+    return absl::InvalidArgumentError(
+        absl::StrCat(name, " `", property, "` must be a non-negative int or uint"));
 }
 
 absl::StatusOr<std::string> string_property(const ObjectValue& object,
@@ -427,6 +447,12 @@ std::string row_identity_key(const ObjectValue& row, const std::vector<std::stri
         key.push_back('\n');
     }
     return key;
+}
+
+std::string window_bucket_key(const std::optional<int64_t>& start_seconds,
+                              const std::string& group_key) {
+    return absl::StrCat(start_seconds.has_value() ? std::to_string(*start_seconds) : "<none>", "\n",
+                        group_key);
 }
 
 std::string pivot_column_name(const ObjectValue& row, const std::vector<std::string>& columns) {
@@ -689,19 +715,6 @@ absl::StatusOr<std::string> read_text_file(const std::string& path, const std::s
     return buffer.str();
 }
 
-bool rows_match_on_columns(const ObjectValue& lhs,
-                           const ObjectValue& rhs,
-                           const std::vector<std::string>& columns) {
-    for (const auto& column : columns) {
-        const Value* left = lhs.lookup(column);
-        const Value* right = rhs.lookup(column);
-        if (left == nullptr || right == nullptr || *left != *right) {
-            return false;
-        }
-    }
-    return true;
-}
-
 std::string joined_property_name(const std::string& table_name, const std::string& column) {
     return table_name + "." + column;
 }
@@ -759,40 +772,17 @@ int64_t days_from_civil(int year, unsigned month, unsigned day) {
 }
 
 std::optional<int64_t> parse_rfc3339_seconds(const std::string& literal) {
-    if (literal.size() < 20 || literal[4] != '-' || literal[7] != '-' || literal[10] != 'T' ||
-        literal[13] != ':' || literal[16] != ':') {
+    absl::Time timestamp;
+    std::string error;
+    if (!absl::ParseTime(absl::RFC3339_full, literal, &timestamp, &error)) {
         return std::nullopt;
     }
-    int year = 0;
-    int month = 0;
-    int day = 0;
-    int hour = 0;
-    int minute = 0;
-    int second = 0;
-    if (!parse_fixed_int(literal, 0, 4, &year) || !parse_fixed_int(literal, 5, 2, &month) ||
-        !parse_fixed_int(literal, 8, 2, &day) || !parse_fixed_int(literal, 11, 2, &hour) ||
-        !parse_fixed_int(literal, 14, 2, &minute) || !parse_fixed_int(literal, 17, 2, &second)) {
-        return std::nullopt;
-    }
-    if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 60) {
-        return std::nullopt;
-    }
-    return days_from_civil(year, static_cast<unsigned>(month), static_cast<unsigned>(day)) * 24 *
-               60 * 60 +
-           hour * 60 * 60 + minute * 60 + second;
+    return absl::ToUnixSeconds(timestamp);
 }
 
 std::string format_rfc3339_seconds(int64_t seconds) {
-    auto time = static_cast<std::time_t>(seconds);
-    std::tm tm{};
-#if defined(_WIN32)
-    gmtime_s(&tm, &time);
-#else
-    gmtime_r(&time, &tm);
-#endif
-    char buffer[sizeof("1970-01-01T00:00:00Z")];
-    std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", &tm);
-    return buffer;
+    return absl::FormatTime("%Y-%m-%dT%H:%M:%SZ", absl::FromUnixSeconds(seconds),
+                            absl::UTCTimeZone());
 }
 
 struct WindowDuration {
@@ -806,6 +796,25 @@ struct WindowDuration {
     int64_t months = 0;
 };
 
+absl::StatusOr<WindowDuration> parse_window_duration(const Value& value,
+                                                     const std::string& name,
+                                                     const std::string& property,
+                                                     bool allow_negative,
+                                                     bool allow_zero);
+
+struct WindowLocation {
+    enum class Kind {
+        Utc,
+        FixedOffset,
+        NamedZone,
+    };
+
+    Kind kind = Kind::Utc;
+    int64_t fixed_offset_seconds = 0;
+    std::string zone_name = "UTC";
+    absl::TimeZone zone = absl::UTCTimeZone();
+};
+
 int64_t floor_div(int64_t lhs, int64_t rhs);
 
 int64_t utc_seconds_from_civil(int year,
@@ -816,6 +825,36 @@ int64_t utc_seconds_from_civil(int year,
                                unsigned second = 0) {
     return days_from_civil(year, month, day) * 24 * 60 * 60 + static_cast<int64_t>(hour) * 60 * 60 +
            static_cast<int64_t>(minute) * 60 + static_cast<int64_t>(second);
+}
+
+absl::CivilSecond civil_second_from_utc_seconds(int64_t seconds) {
+    return absl::ToCivilSecond(absl::FromUnixSeconds(seconds), absl::UTCTimeZone());
+}
+
+int64_t seconds_from_civil_second(const absl::CivilSecond& civil) {
+    return utc_seconds_from_civil(
+        civil.year(), static_cast<unsigned>(civil.month()), static_cast<unsigned>(civil.day()),
+        static_cast<unsigned>(civil.hour()), static_cast<unsigned>(civil.minute()),
+        static_cast<unsigned>(civil.second()));
+}
+
+absl::CivilSecond civil_second_in_location(int64_t seconds, const WindowLocation& location) {
+    if (location.kind == WindowLocation::Kind::NamedZone) {
+        return absl::ToCivilSecond(absl::FromUnixSeconds(seconds), location.zone);
+    }
+    return civil_second_from_utc_seconds(seconds + location.fixed_offset_seconds);
+}
+
+int64_t seconds_for_civil_in_location(const absl::CivilSecond& civil,
+                                      const WindowLocation& location) {
+    if (location.kind == WindowLocation::Kind::NamedZone) {
+        const auto info = location.zone.At(civil);
+        if (info.kind == absl::TimeZone::TimeInfo::SKIPPED) {
+            return absl::ToUnixSeconds(info.trans);
+        }
+        return absl::ToUnixSeconds(info.pre);
+    }
+    return seconds_from_civil_second(civil) - location.fixed_offset_seconds;
 }
 
 int64_t month_index_for_seconds(int64_t seconds) {
@@ -837,6 +876,64 @@ int64_t seconds_for_month_index(int64_t month_index) {
 
 int64_t advance_calendar_months(int64_t seconds, int64_t months) {
     return seconds_for_month_index(month_index_for_seconds(seconds) + months);
+}
+
+absl::CivilSecond add_months_to_civil_second(const absl::CivilSecond& civil, int64_t months) {
+    const int64_t month_index =
+        static_cast<int64_t>(civil.year()) * 12 + static_cast<int64_t>(civil.month()) - 1 + months;
+    const int64_t year = floor_div(month_index, 12);
+    const int64_t month = month_index - year * 12;
+    return absl::CivilSecond(static_cast<int>(year), static_cast<int>(month + 1), civil.day(),
+                             civil.hour(), civil.minute(), civil.second());
+}
+
+absl::StatusOr<WindowLocation> optional_window_location_property(const ObjectValue& object,
+                                                                 const std::string& name) {
+    const Value* location_value = object.lookup("location");
+    if (location_value == nullptr) {
+        return WindowLocation{};
+    }
+    if (location_value->type() != Value::Type::Object) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " `location` must be an object record"));
+    }
+    const auto& location = location_value->as_object();
+    auto zone_or = optional_string_property(location, name, "zone", "UTC");
+    if (!zone_or.ok()) {
+        return zone_or.status();
+    }
+    int64_t fixed_offset_seconds = 0;
+    if (const Value* offset_value = location.lookup("offset"); offset_value != nullptr) {
+        auto offset_or = parse_window_duration(*offset_value, name, "location.offset", true, true);
+        if (!offset_or.ok()) {
+            return offset_or.status();
+        }
+        if (offset_or->kind != WindowDuration::Kind::FixedSeconds) {
+            return absl::InvalidArgumentError(
+                absl::StrCat(name, " `location.offset` does not support calendar durations"));
+        }
+        fixed_offset_seconds = offset_or->seconds;
+    }
+    if (*zone_or == "UTC") {
+        return WindowLocation{.kind = fixed_offset_seconds == 0 ? WindowLocation::Kind::Utc
+                                                                : WindowLocation::Kind::FixedOffset,
+                              .fixed_offset_seconds = fixed_offset_seconds,
+                              .zone_name = *zone_or,
+                              .zone = absl::UTCTimeZone()};
+    }
+    if (fixed_offset_seconds != 0) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " `location` with a named zone must use offset 0s"));
+    }
+    absl::TimeZone zone;
+    if (!absl::LoadTimeZone(*zone_or, &zone)) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " unknown timezone location: ", *zone_or));
+    }
+    return WindowLocation{.kind = WindowLocation::Kind::NamedZone,
+                          .fixed_offset_seconds = 0,
+                          .zone_name = *zone_or,
+                          .zone = zone};
 }
 
 absl::StatusOr<WindowDuration> parse_window_duration(const Value& value,
@@ -921,11 +1018,8 @@ absl::StatusOr<WindowDuration> parse_window_duration(const Value& value,
                 name, " `", property, "` cannot mix calendar units with fixed-duration units"));
         }
     }
-    if (saw_calendar_unit && sign < 0) {
-        return absl::InvalidArgumentError(
-            absl::StrCat(name, " `", property, "` must be a positive duration"));
-    }
     fixed_total *= sign;
+    calendar_months *= sign;
     if ((!allow_zero && fixed_total == 0 && calendar_months == 0) ||
         (!allow_negative && fixed_total < 0)) {
         return absl::InvalidArgumentError(
@@ -936,7 +1030,7 @@ absl::StatusOr<WindowDuration> parse_window_duration(const Value& value,
             absl::StrCat(name, " `", property, "` must be a positive duration"));
     }
     if (saw_calendar_unit) {
-        if ((!allow_zero && calendar_months == 0) || calendar_months < 0) {
+        if ((!allow_zero && calendar_months == 0) || (!allow_negative && calendar_months < 0)) {
             return absl::InvalidArgumentError(
                 absl::StrCat(name, " `", property, "` must be a positive duration"));
         }
@@ -956,31 +1050,283 @@ int64_t floor_div(int64_t lhs, int64_t rhs) {
     return quotient;
 }
 
-std::optional<int64_t> aggregate_window_start_for_time(int64_t seconds,
-                                                       const WindowDuration& every,
-                                                       int64_t offset_seconds) {
-    if (every.kind == WindowDuration::Kind::FixedSeconds) {
-        return floor_div(seconds - offset_seconds, every.seconds) * every.seconds + offset_seconds;
-    }
-    if (offset_seconds != 0) {
-        return std::nullopt;
-    }
-    const int64_t month_index = month_index_for_seconds(seconds);
-    const int64_t start_index = floor_div(month_index, every.months) * every.months;
-    return seconds_for_month_index(start_index);
+bool window_duration_is_negative(const WindowDuration& duration) {
+    return duration.kind == WindowDuration::Kind::FixedSeconds ? duration.seconds < 0
+                                                               : duration.months < 0;
 }
 
-std::optional<int64_t> aggregate_window_stop_for_start(int64_t start_seconds,
-                                                       const WindowDuration& every) {
-    if (every.kind == WindowDuration::Kind::FixedSeconds) {
-        return start_seconds + every.seconds;
+bool window_duration_is_zero(const WindowDuration& duration) {
+    return duration.kind == WindowDuration::Kind::FixedSeconds ? duration.seconds == 0
+                                                               : duration.months == 0;
+}
+
+WindowDuration negate_window_duration(const WindowDuration& duration) {
+    if (duration.kind == WindowDuration::Kind::FixedSeconds) {
+        return WindowDuration{
+            .kind = WindowDuration::Kind::FixedSeconds, .seconds = -duration.seconds, .months = 0};
     }
-    return advance_calendar_months(start_seconds, every.months);
+    return WindowDuration{
+        .kind = WindowDuration::Kind::CalendarMonths, .seconds = 0, .months = -duration.months};
+}
+
+std::optional<int64_t> add_window_duration_to_time(int64_t seconds,
+                                                   const WindowDuration& duration,
+                                                   const WindowLocation& location) {
+    if (duration.kind == WindowDuration::Kind::FixedSeconds) {
+        if (location.kind == WindowLocation::Kind::Utc ||
+            location.kind == WindowLocation::Kind::FixedOffset) {
+            return seconds + duration.seconds;
+        }
+        const auto local = civil_second_in_location(seconds, location);
+        return seconds_for_civil_in_location(
+            civil_second_from_utc_seconds(seconds_from_civil_second(local) + duration.seconds),
+            location);
+    }
+    const auto local = civil_second_in_location(seconds, location);
+    return seconds_for_civil_in_location(add_months_to_civil_second(local, duration.months),
+                                         location);
+}
+
+std::optional<int64_t> aggregate_window_start_for_time(int64_t seconds,
+                                                       const WindowDuration& every,
+                                                       const WindowDuration& offset,
+                                                       const WindowLocation& location) {
+    if (every.kind == WindowDuration::Kind::FixedSeconds) {
+        if (offset.kind != WindowDuration::Kind::FixedSeconds) {
+            return std::nullopt;
+        }
+        const int64_t offset_seconds = offset.seconds;
+        if (location.kind == WindowLocation::Kind::Utc ||
+            location.kind == WindowLocation::Kind::FixedOffset) {
+            const int64_t anchor = offset_seconds - location.fixed_offset_seconds;
+            return floor_div(seconds - anchor, every.seconds) * every.seconds + anchor;
+        }
+        const auto local = civil_second_in_location(seconds, location);
+        const int64_t local_seconds = seconds_from_civil_second(local);
+        const int64_t start_local_seconds =
+            floor_div(local_seconds - offset_seconds, every.seconds) * every.seconds +
+            offset_seconds;
+        return seconds_for_civil_in_location(civil_second_from_utc_seconds(start_local_seconds),
+                                             location);
+    }
+    if (window_duration_is_zero(offset)) {
+        const auto local = civil_second_in_location(seconds, location);
+        const int64_t month_index =
+            static_cast<int64_t>(local.year()) * 12 + static_cast<int64_t>(local.month()) - 1;
+        const int64_t start_index = floor_div(month_index, every.months) * every.months;
+        const int64_t year = floor_div(start_index, 12);
+        const int64_t month = start_index - year * 12;
+        return seconds_for_civil_in_location(
+            absl::CivilSecond(static_cast<int>(year), static_cast<int>(month + 1), 1, 0, 0, 0),
+            location);
+    }
+    auto anchor_or = add_window_duration_to_time(0, offset, location);
+    if (!anchor_or.has_value()) {
+        return std::nullopt;
+    }
+    const auto local = civil_second_in_location(seconds, location);
+    const auto anchor_local = civil_second_in_location(*anchor_or, location);
+    const int64_t month_index =
+        static_cast<int64_t>(local.year()) * 12 + static_cast<int64_t>(local.month()) - 1;
+    const int64_t anchor_month_index = static_cast<int64_t>(anchor_local.year()) * 12 +
+                                       static_cast<int64_t>(anchor_local.month()) - 1;
+    int64_t step = floor_div(month_index - anchor_month_index, every.months);
+    auto candidate_or =
+        add_window_duration_to_time(*anchor_or,
+                                    WindowDuration{.kind = WindowDuration::Kind::CalendarMonths,
+                                                   .seconds = 0,
+                                                   .months = step * every.months},
+                                    location);
+    if (!candidate_or.has_value()) {
+        return std::nullopt;
+    }
+    while (*candidate_or > seconds) {
+        auto previous_or =
+            add_window_duration_to_time(*candidate_or, negate_window_duration(every), location);
+        if (!previous_or.has_value() || *previous_or >= *candidate_or) {
+            break;
+        }
+        candidate_or = previous_or;
+    }
+    while (true) {
+        auto next_or = add_window_duration_to_time(*candidate_or, every, location);
+        if (!next_or.has_value() || *next_or <= *candidate_or || *next_or > seconds) {
+            break;
+        }
+        candidate_or = next_or;
+    }
+    return candidate_or;
+}
+
+struct WindowBounds {
+    int64_t start_seconds = 0;
+    int64_t stop_seconds = 0;
+    int64_t lower_seconds = 0;
+    int64_t upper_seconds = 0;
+};
+
+std::optional<WindowBounds> aggregate_window_bounds_for_start(int64_t start_seconds,
+                                                              const WindowDuration& period,
+                                                              const WindowLocation& location) {
+    auto stop_or = add_window_duration_to_time(start_seconds, period, location);
+    if (!stop_or.has_value()) {
+        return std::nullopt;
+    }
+    return WindowBounds{.start_seconds = start_seconds,
+                        .stop_seconds = *stop_or,
+                        .lower_seconds = std::min(start_seconds, *stop_or),
+                        .upper_seconds = std::max(start_seconds, *stop_or)};
+}
+
+bool aggregate_window_contains_time(int64_t seconds, const WindowBounds& bounds) {
+    return seconds >= bounds.lower_seconds && seconds < bounds.upper_seconds;
+}
+
+bool aggregate_window_intersects_range(const WindowBounds& bounds,
+                                       int64_t range_start_seconds,
+                                       int64_t range_stop_seconds) {
+    return bounds.upper_seconds > range_start_seconds && bounds.lower_seconds < range_stop_seconds;
+}
+
+bool aggregate_window_is_within_range(const WindowBounds& bounds,
+                                      int64_t range_start_seconds,
+                                      int64_t range_stop_seconds) {
+    return bounds.lower_seconds >= range_start_seconds &&
+           bounds.upper_seconds <= range_stop_seconds;
+}
+
+bool aggregate_window_fn_drops_empty(const FunctionValue& fn) {
+    if (fn.kind != FunctionValue::Kind::Builtin) {
+        return false;
+    }
+    return fn.name == "first" || fn.name == "last";
 }
 
 std::string group_key_for_row(const ObjectValue& row) {
     const Value* group = row.lookup("_group");
     return group == nullptr ? "" : group->string();
+}
+
+std::unordered_set<std::string> aggregate_window_allowed_columns(
+    const ObjectValue& row,
+    const std::string& aggregate_column,
+    const std::string& time_dst_column) {
+    std::unordered_set<std::string> allowed = {"_group", "_start", "_stop", aggregate_column,
+                                               time_dst_column};
+    const Value* group = row.lookup("_group");
+    if (group != nullptr && group->type() == Value::Type::Object) {
+        for (const auto& [name, value] : group->as_object().properties) {
+            (void)value;
+            allowed.insert(name);
+        }
+    }
+    return allowed;
+}
+
+std::shared_ptr<ObjectValue> aggregate_window_base_row(const ObjectValue& row,
+                                                       const std::string& aggregate_column,
+                                                       const std::string& time_dst_column) {
+    std::vector<std::pair<std::string, Value>> properties;
+    const auto allowed = aggregate_window_allowed_columns(row, aggregate_column, time_dst_column);
+    properties.reserve(allowed.size());
+    for (const auto& [name, value] : row.properties) {
+        if (allowed.find(name) == allowed.end()) {
+            continue;
+        }
+        properties.emplace_back(name, value);
+    }
+    return std::make_shared<ObjectValue>(std::move(properties));
+}
+
+std::optional<int64_t> aggregate_window_time_src_seconds(
+    const std::shared_ptr<ObjectValue>& first_row,
+    int64_t window_start,
+    int64_t window_stop,
+    const std::string& time_src_column) {
+    if (time_src_column == "_start") {
+        return window_start;
+    }
+    if (time_src_column == "_stop") {
+        return window_stop;
+    }
+    if (first_row == nullptr) {
+        return std::nullopt;
+    }
+    if (const Value* source = first_row->lookup(time_src_column); source != nullptr) {
+        if (source->type() == Value::Type::Time) {
+            return parse_rfc3339_seconds(source->as_time().literal);
+        }
+        if (source->type() == Value::Type::String) {
+            return parse_rfc3339_seconds(source->as_string());
+        }
+    }
+    return std::nullopt;
+}
+
+std::vector<std::string> visible_columns_in_order(const TableValue& table) {
+    std::vector<std::string> columns;
+    std::unordered_set<std::string> seen;
+    for (const auto& row : table.rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        for (const auto& [name, value] : row->properties) {
+            (void)value;
+            if (name == "_group") {
+                continue;
+            }
+            if (seen.insert(name).second) {
+                columns.push_back(name);
+            }
+        }
+    }
+    return columns;
+}
+
+std::vector<std::string> group_columns_in_order(const TableValue& table) {
+    std::vector<std::string> columns;
+    std::unordered_set<std::string> seen;
+    for (const auto& row : table.rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        const Value* group = row->lookup("_group");
+        if (group == nullptr || group->type() != Value::Type::Object) {
+            continue;
+        }
+        for (const auto& [name, value] : group->as_object().properties) {
+            (void)value;
+            if (seen.insert(name).second) {
+                columns.push_back(name);
+            }
+        }
+    }
+    return columns;
+}
+
+absl::StatusOr<std::vector<std::shared_ptr<ObjectValue>>> filter_rows_by_function(
+    const TableValue& table, const Value& predicate, const std::string& name) {
+    if (predicate.type() != Value::Type::Function) {
+        return absl::InvalidArgumentError(absl::StrCat(name, " `fn` must be a function"));
+    }
+
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    for (const auto& row : table.rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        auto keep_or = ExpressionEvaluator::Invoke(predicate, {Value::object(row->properties)});
+        if (!keep_or.ok()) {
+            return keep_or.status();
+        }
+        if (keep_or->type() != Value::Type::Bool) {
+            return absl::InvalidArgumentError(absl::StrCat(name, " `fn` must return a boolean"));
+        }
+        if (keep_or->as_bool()) {
+            rows.push_back(row);
+        }
+    }
+    return rows;
 }
 
 struct AggregateWindowBucket {
@@ -993,35 +1339,26 @@ struct AggregateWindowBucket {
 struct AggregateWindowGroupSpan {
     std::string group_key;
     std::shared_ptr<ObjectValue> template_row;
-    int64_t min_start_seconds = 0;
-    int64_t max_start_seconds = 0;
+    int64_t min_time_seconds = 0;
+    int64_t max_time_exclusive_seconds = 0;
 };
-
-AggregateWindowBucket* find_window_bucket(std::vector<AggregateWindowBucket>& buckets,
-                                          const std::optional<int64_t>& start_seconds,
-                                          const std::string& group_key) {
-    for (auto& bucket : buckets) {
-        if (bucket.start_seconds == start_seconds && bucket.group_key == group_key) {
-            return &bucket;
-        }
-    }
-    return nullptr;
-}
-
-AggregateWindowGroupSpan* find_window_group_span(std::vector<AggregateWindowGroupSpan>& spans,
-                                                 const std::string& group_key) {
-    for (auto& span : spans) {
-        if (span.group_key == group_key) {
-            return &span;
-        }
-    }
-    return nullptr;
-}
 
 absl::StatusOr<Value> invoke_window_aggregate(const FunctionValue& fn,
                                               const std::vector<Value>& values) {
     if (fn.kind == FunctionValue::Kind::Builtin && fn.name == "count") {
         return Value::integer(static_cast<int64_t>(values.size()));
+    }
+    if (fn.kind == FunctionValue::Kind::Builtin && fn.name == "first") {
+        if (values.empty()) {
+            return Value::null();
+        }
+        return values.front();
+    }
+    if (fn.kind == FunctionValue::Kind::Builtin && fn.name == "last") {
+        if (values.empty()) {
+            return Value::null();
+        }
+        return values.back();
     }
     return ExpressionEvaluator::Invoke(Value::function(std::make_shared<FunctionValue>(fn)),
                                        {Value::array(values)});
@@ -1291,6 +1628,106 @@ absl::StatusOr<Value> builtin_yield(const std::vector<Value>& args) {
                         (*table_or)->range_stop, *name_or);
 }
 
+absl::StatusOr<Value> builtin_columns(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "columns");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "columns", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    for (const auto& column : visible_columns_in_order(**table_or)) {
+        rows.push_back(std::make_shared<ObjectValue>(
+            std::vector<std::pair<std::string, Value>>{{"_value", Value::string(column)}}));
+    }
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
+}
+
+absl::StatusOr<Value> builtin_keys(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "keys");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "keys", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    for (const auto& column : group_columns_in_order(**table_or)) {
+        rows.push_back(std::make_shared<ObjectValue>(
+            std::vector<std::pair<std::string, Value>>{{"_value", Value::string(column)}}));
+    }
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
+}
+
+absl::StatusOr<Value> builtin_find_column(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "findColumn");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "findColumn", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto fn_or = require_object_property(**object_or, "findColumn", "fn");
+    if (!fn_or.ok()) {
+        return fn_or.status();
+    }
+    auto column_or = string_property(**object_or, "findColumn", "column");
+    if (!column_or.ok()) {
+        return column_or.status();
+    }
+
+    auto rows_or = filter_rows_by_function(**table_or, **fn_or, "findColumn");
+    if (!rows_or.ok()) {
+        return rows_or.status();
+    }
+
+    std::vector<Value> values;
+    values.reserve(rows_or->size());
+    for (const auto& row : *rows_or) {
+        const Value* value = row->lookup(*column_or);
+        if (value != nullptr && !value->is_null()) {
+            values.push_back(*value);
+        }
+    }
+    return Value::array(std::move(values));
+}
+
+absl::StatusOr<Value> builtin_find_record(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "findRecord");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "findRecord", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto fn_or = require_object_property(**object_or, "findRecord", "fn");
+    if (!fn_or.ok()) {
+        return fn_or.status();
+    }
+    auto idx_or = optional_index_property(**object_or, "findRecord", "idx", 0);
+    if (!idx_or.ok()) {
+        return idx_or.status();
+    }
+
+    auto rows_or = filter_rows_by_function(**table_or, **fn_or, "findRecord");
+    if (!rows_or.ok()) {
+        return rows_or.status();
+    }
+    if (*idx_or >= rows_or->size()) {
+        return Value::null();
+    }
+    return Value::object((*rows_or)[*idx_or]->properties);
+}
+
 absl::StatusOr<Value> builtin_range(const std::vector<Value>& args) {
     auto object_or = require_object_argument(args, "range");
     if (!object_or.ok()) {
@@ -1311,7 +1748,7 @@ absl::StatusOr<Value> builtin_range(const std::vector<Value>& args) {
     rows.reserve((*table_or)->rows.size());
     for (const auto& row : (*table_or)->rows) {
         if (row != nullptr && row_matches_time_bounds(*row, start, stop)) {
-            rows.push_back(std::make_shared<ObjectValue>(*row));
+            rows.push_back(row);
         }
     }
     return Value::table((*table_or)->bucket, std::move(rows), start, stop);
@@ -1335,6 +1772,7 @@ absl::StatusOr<Value> builtin_filter(const std::vector<Value>& args) {
     }
 
     std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve((*table_or)->rows.size());
     for (const auto& row : (*table_or)->rows) {
         if (row == nullptr) {
             continue;
@@ -1347,7 +1785,7 @@ absl::StatusOr<Value> builtin_filter(const std::vector<Value>& args) {
             return absl::InvalidArgumentError("filter `fn` must return a boolean");
         }
         if (keep_or->as_bool()) {
-            rows.push_back(std::make_shared<ObjectValue>(*row));
+            rows.push_back(row);
         }
     }
     return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
@@ -1427,7 +1865,7 @@ absl::StatusOr<Value> builtin_limit(const std::vector<Value>& args) {
         rows.reserve(end - begin);
         for (size_t i = begin; i < end; ++i) {
             if ((*table_or)->rows[i] != nullptr) {
-                rows.push_back(std::make_shared<ObjectValue>(*(*table_or)->rows[i]));
+                rows.push_back((*table_or)->rows[i]);
             }
         }
     }
@@ -1476,7 +1914,7 @@ absl::StatusOr<Value> builtin_tail(const std::vector<Value>& args) {
         rows.reserve(tail_end - tail_begin);
         for (size_t i = tail_begin; i < tail_end; ++i) {
             if ((*table_or)->rows[i] != nullptr) {
-                rows.push_back(std::make_shared<ObjectValue>(*(*table_or)->rows[i]));
+                rows.push_back((*table_or)->rows[i]);
             }
         }
     }
@@ -1701,7 +2139,7 @@ absl::StatusOr<Value> builtin_sort(const std::vector<Value>& args) {
     rows.reserve((*table_or)->rows.size());
     for (const auto& row : (*table_or)->rows) {
         if (row != nullptr) {
-            rows.push_back(clone_row(*row));
+            rows.push_back(row);
         }
     }
     std::stable_sort(rows.begin(), rows.end(), [&](const auto& lhs, const auto& rhs) {
@@ -1955,6 +2393,14 @@ absl::StatusOr<Value> builtin_difference(const std::vector<Value>& args) {
     if (!column_or.ok()) {
         return column_or.status();
     }
+    auto non_negative_or = optional_bool_property(**object_or, "difference", "nonNegative", false);
+    if (!non_negative_or.ok()) {
+        return non_negative_or.status();
+    }
+    auto keep_first_or = optional_bool_property(**object_or, "difference", "keepFirst", false);
+    if (!keep_first_or.ok()) {
+        return keep_first_or.status();
+    }
 
     std::unordered_map<std::string, Value> previous_by_group;
     std::vector<std::shared_ptr<ObjectValue>> rows;
@@ -1976,16 +2422,20 @@ absl::StatusOr<Value> builtin_difference(const std::vector<Value>& args) {
         const std::string group_key = group_key_for_row(*row);
         if (const auto previous = previous_by_group.find(group_key);
             previous != previous_by_group.end()) {
-            Value difference;
-            if (current->type() == Value::Type::Float ||
-                previous->second.type() == Value::Type::Float) {
-                difference =
-                    Value::floating(numeric_value(*current) - numeric_value(previous->second));
-            } else {
-                difference = Value::integer(static_cast<int64_t>(numeric_value(*current) -
-                                                                 numeric_value(previous->second)));
+            const double delta = numeric_value(*current) - numeric_value(previous->second);
+            Value difference = Value::null();
+            if (!*non_negative_or || delta >= 0.0) {
+                if (current->type() == Value::Type::Float ||
+                    previous->second.type() == Value::Type::Float) {
+                    difference = Value::floating(delta);
+                } else {
+                    difference = Value::integer(static_cast<int64_t>(delta));
+                }
             }
             auto updated = object_with_upserted_property(*row, *column_or, std::move(difference));
+            rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
+        } else if (*keep_first_or) {
+            auto updated = object_with_upserted_property(*row, *column_or, Value::null());
             rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
         }
         previous_by_group[group_key] = *current;
@@ -2011,6 +2461,14 @@ absl::StatusOr<Value> builtin_derivative(const std::vector<Value>& args) {
         optional_string_property(**object_or, "derivative", "timeColumn", "_time");
     if (!time_column_or.ok()) {
         return time_column_or.status();
+    }
+    auto non_negative_or = optional_bool_property(**object_or, "derivative", "nonNegative", false);
+    if (!non_negative_or.ok()) {
+        return non_negative_or.status();
+    }
+    auto initial_zero_or = optional_bool_property(**object_or, "derivative", "initialZero", false);
+    if (!initial_zero_or.ok()) {
+        return initial_zero_or.status();
     }
 
     int64_t unit_seconds = 1;
@@ -2075,11 +2533,17 @@ absl::StatusOr<Value> builtin_derivative(const std::vector<Value>& args) {
                 return absl::InvalidArgumentError(
                     "derivative requires strictly increasing time within each group");
             }
-            auto updated = object_with_upserted_property(
-                *row, *column_or,
-                Value::floating((numeric_value(*current) - numeric_value(previous_value->second)) *
-                                static_cast<double>(unit_seconds) /
-                                static_cast<double>(delta_seconds)));
+            const double raw_delta =
+                numeric_value(*current) - numeric_value(previous_value->second);
+            Value rate = Value::null();
+            if (!*non_negative_or || raw_delta >= 0.0) {
+                rate = Value::floating(raw_delta * static_cast<double>(unit_seconds) /
+                                       static_cast<double>(delta_seconds));
+            } else if (*initial_zero_or) {
+                rate = Value::floating(numeric_value(*current) * static_cast<double>(unit_seconds) /
+                                       static_cast<double>(delta_seconds));
+            }
+            auto updated = object_with_upserted_property(*row, *column_or, std::move(rate));
             rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
         }
         previous_value_by_group[group_key] = *current;
@@ -2116,7 +2580,7 @@ absl::StatusOr<Value> builtin_distinct(const std::vector<Value>& args) {
         if (!seen.insert(key).second) {
             continue;
         }
-        rows.push_back(clone_row(*row));
+        rows.push_back(row);
     }
     return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
                         (*table_or)->range_stop);
@@ -2168,7 +2632,7 @@ absl::StatusOr<Value> table_single_row_builtin(const std::vector<Value>& args,
     if (!(*table_or)->rows.empty()) {
         const auto& source = use_last ? (*table_or)->rows.back() : (*table_or)->rows.front();
         if (source != nullptr) {
-            rows.push_back(clone_row(*source));
+            rows.push_back(source);
         }
     }
     return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
@@ -2213,7 +2677,7 @@ absl::StatusOr<Value> builtin_union(const std::vector<Value>& args) {
         rows.reserve(rows.size() + table->rows.size());
         for (const auto& row : table->rows) {
             if (row != nullptr) {
-                rows.push_back(clone_row(*row));
+                rows.push_back(row);
             }
         }
     }
@@ -2241,15 +2705,28 @@ absl::StatusOr<Value> builtin_join(const std::vector<Value>& args) {
     const auto* left_table = (*tables_or)[0].second;
     const auto& right_name = (*tables_or)[1].first;
     const auto* right_table = (*tables_or)[1].second;
+
+    std::unordered_map<std::string, std::vector<const ObjectValue*>> right_rows_by_key;
+    right_rows_by_key.reserve(right_table->rows.size());
+    for (const auto& right_row : right_table->rows) {
+        if (right_row == nullptr) {
+            continue;
+        }
+        right_rows_by_key[row_identity_key(*right_row, *on_or)].push_back(right_row.get());
+    }
+
     std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve(std::min(left_table->rows.size(), right_table->rows.size()));
     for (const auto& left_row : left_table->rows) {
         if (left_row == nullptr) {
             continue;
         }
-        for (const auto& right_row : right_table->rows) {
-            if (right_row != nullptr && rows_match_on_columns(*left_row, *right_row, *on_or)) {
-                rows.push_back(join_rows(left_name, *left_row, right_name, *right_row, *on_or));
-            }
+        const auto matches = right_rows_by_key.find(row_identity_key(*left_row, *on_or));
+        if (matches == right_rows_by_key.end()) {
+            continue;
+        }
+        for (const auto* right_row : matches->second) {
+            rows.push_back(join_rows(left_name, *left_row, right_name, *right_row, *on_or));
         }
     }
     return Value::table(
@@ -2275,22 +2752,41 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
     if (!every_or.ok()) {
         return every_or.status();
     }
-    int64_t offset_seconds = 0;
+    auto location_or = optional_window_location_property(**object_or, "aggregateWindow");
+    if (!location_or.ok()) {
+        return location_or.status();
+    }
+    WindowDuration offset{
+        .kind = WindowDuration::Kind::FixedSeconds,
+        .seconds = 0,
+        .months = 0,
+    };
     if (const Value* offset_value = (*object_or)->lookup("offset"); offset_value != nullptr) {
         auto offset_or =
             parse_window_duration(*offset_value, "aggregateWindow", "offset", true, true);
         if (!offset_or.ok()) {
             return offset_or.status();
         }
-        if (offset_or->kind != WindowDuration::Kind::FixedSeconds) {
-            return absl::InvalidArgumentError(
-                "aggregateWindow `offset` does not support calendar durations");
-        }
-        offset_seconds = offset_or->seconds;
+        offset = *offset_or;
     }
-    if (every_or->kind == WindowDuration::Kind::CalendarMonths && offset_seconds != 0) {
+    if (every_or->kind == WindowDuration::Kind::FixedSeconds &&
+        offset.kind != WindowDuration::Kind::FixedSeconds) {
         return absl::InvalidArgumentError(
-            "aggregateWindow calendar windows do not support `offset` yet");
+            "aggregateWindow fixed-duration windows do not support calendar `offset`");
+    }
+    WindowDuration period = *every_or;
+    if (const Value* period_value = (*object_or)->lookup("period"); period_value != nullptr) {
+        auto period_or =
+            parse_window_duration(*period_value, "aggregateWindow", "period", true, false);
+        if (!period_or.ok()) {
+            return period_or.status();
+        }
+        period = *period_or;
+    }
+    if (every_or->kind == WindowDuration::Kind::FixedSeconds &&
+        period.kind != WindowDuration::Kind::FixedSeconds) {
+        return absl::InvalidArgumentError(
+            "aggregateWindow fixed-duration windows do not support calendar `period`");
     }
     auto fn_or = require_object_property(**object_or, "aggregateWindow", "fn");
     if (!fn_or.ok()) {
@@ -2308,13 +2804,33 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
     if (!time_column_or.ok()) {
         return time_column_or.status();
     }
+    auto time_src_or = optional_string_property(**object_or, "aggregateWindow", "timeSrc", "_stop");
+    if (!time_src_or.ok()) {
+        return time_src_or.status();
+    }
+    auto time_dst_or = optional_string_property(**object_or, "aggregateWindow", "timeDst", "_time");
+    if (!time_dst_or.ok()) {
+        return time_dst_or.status();
+    }
     auto create_empty_or =
-        optional_bool_property(**object_or, "aggregateWindow", "createEmpty", false);
+        optional_bool_property(**object_or, "aggregateWindow", "createEmpty", true);
     if (!create_empty_or.ok()) {
         return create_empty_or.status();
     }
+    std::optional<int64_t> table_range_start_seconds;
+    std::optional<int64_t> table_range_stop_seconds;
+    if ((*table_or)->range_start.has_value()) {
+        table_range_start_seconds = parse_rfc3339_seconds(*(*table_or)->range_start);
+    }
+    if ((*table_or)->range_stop.has_value()) {
+        table_range_stop_seconds = parse_rfc3339_seconds(*(*table_or)->range_stop);
+    }
     std::vector<AggregateWindowBucket> buckets;
     std::vector<AggregateWindowGroupSpan> group_spans;
+    std::unordered_map<std::string, size_t> bucket_indexes;
+    std::unordered_map<std::string, size_t> group_span_indexes;
+    bucket_indexes.reserve((*table_or)->rows.size());
+    group_span_indexes.reserve((*table_or)->rows.size());
     for (const auto& row : (*table_or)->rows) {
         if (row == nullptr) {
             continue;
@@ -2324,7 +2840,7 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
             continue;
         }
 
-        std::optional<int64_t> window_start;
+        std::optional<int64_t> row_seconds;
         if (const Value* time_value = row->lookup(*time_column_or); time_value != nullptr) {
             std::optional<std::string> literal;
             if (time_value->type() == Value::Type::Time) {
@@ -2334,69 +2850,199 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
             }
             if (literal.has_value()) {
                 if (auto seconds = parse_rfc3339_seconds(*literal); seconds.has_value()) {
-                    window_start =
-                        aggregate_window_start_for_time(*seconds, *every_or, offset_seconds);
+                    row_seconds = *seconds;
                 }
             }
         }
 
         const auto group_key = group_key_for_row(*row);
-        if (*create_empty_or && window_start.has_value()) {
-            auto* span = find_window_group_span(group_spans, group_key);
-            if (span == nullptr) {
-                group_spans.push_back(AggregateWindowGroupSpan{.group_key = group_key,
-                                                               .template_row = clone_row(*row),
-                                                               .min_start_seconds = *window_start,
-                                                               .max_start_seconds = *window_start});
+        if (*create_empty_or && row_seconds.has_value()) {
+            const auto span_it = group_span_indexes.find(group_key);
+            if (span_it == group_span_indexes.end()) {
+                group_span_indexes.emplace(group_key, group_spans.size());
+                const int64_t min_time = table_range_start_seconds.has_value()
+                                             ? *table_range_start_seconds
+                                             : *row_seconds;
+                const int64_t max_time_exclusive = table_range_stop_seconds.has_value()
+                                                       ? *table_range_stop_seconds
+                                                       : *row_seconds + 1;
+                group_spans.push_back(AggregateWindowGroupSpan{
+                    .group_key = group_key,
+                    .template_row = aggregate_window_base_row(*row, *column_or, *time_dst_or),
+                    .min_time_seconds = min_time,
+                    .max_time_exclusive_seconds = max_time_exclusive});
             } else {
-                if (*window_start < span->min_start_seconds) {
-                    span->min_start_seconds = *window_start;
+                auto* span = &group_spans[span_it->second];
+                if (!table_range_start_seconds.has_value() &&
+                    *row_seconds < span->min_time_seconds) {
+                    span->min_time_seconds = *row_seconds;
                 }
-                if (*window_start > span->max_start_seconds) {
-                    span->max_start_seconds = *window_start;
+                if (!table_range_stop_seconds.has_value() &&
+                    *row_seconds + 1 > span->max_time_exclusive_seconds) {
+                    span->max_time_exclusive_seconds = *row_seconds + 1;
                 }
             }
         }
-        auto* bucket = find_window_bucket(buckets, window_start, group_key);
-        if (bucket == nullptr) {
-            buckets.push_back(AggregateWindowBucket{
-                .start_seconds = window_start,
-                .group_key = group_key,
-                .first_row = clone_row(*row),
-                .values = {},
-            });
-            bucket = &buckets.back();
+        if (!row_seconds.has_value()) {
+            const std::string bucket_key = window_bucket_key(std::nullopt, group_key);
+            const auto bucket_it = bucket_indexes.find(bucket_key);
+            if (bucket_it == bucket_indexes.end()) {
+                bucket_indexes.emplace(bucket_key, buckets.size());
+                buckets.push_back(AggregateWindowBucket{
+                    .start_seconds = std::nullopt,
+                    .group_key = group_key,
+                    .first_row = aggregate_window_base_row(*row, *column_or, *time_dst_or),
+                    .values = {},
+                });
+                buckets.back().values.push_back(*aggregate_value);
+            } else {
+                buckets[bucket_it->second].values.push_back(*aggregate_value);
+            }
+            continue;
         }
-        bucket->values.push_back(*aggregate_value);
+        auto primary_start_or =
+            aggregate_window_start_for_time(*row_seconds, *every_or, offset, *location_or);
+        if (!primary_start_or.has_value()) {
+            continue;
+        }
+        std::vector<int64_t> candidate_starts;
+        if (!window_duration_is_negative(period)) {
+            for (std::optional<int64_t> current = primary_start_or; current.has_value();) {
+                auto bounds_or = aggregate_window_bounds_for_start(*current, period, *location_or);
+                if (!bounds_or.has_value()) {
+                    break;
+                }
+                const bool within_table_range =
+                    !table_range_start_seconds.has_value() ||
+                    !table_range_stop_seconds.has_value() ||
+                    aggregate_window_is_within_range(*bounds_or, *table_range_start_seconds,
+                                                     *table_range_stop_seconds);
+                if (within_table_range &&
+                    aggregate_window_contains_time(*row_seconds, *bounds_or)) {
+                    candidate_starts.push_back(*current);
+                }
+                if (bounds_or->upper_seconds <= *row_seconds) {
+                    break;
+                }
+                auto previous_or = add_window_duration_to_time(
+                    *current, negate_window_duration(*every_or), *location_or);
+                if (!previous_or.has_value() || *previous_or >= *current) {
+                    break;
+                }
+                current = previous_or;
+            }
+        } else {
+            auto current = add_window_duration_to_time(*primary_start_or, *every_or, *location_or);
+            while (current.has_value()) {
+                auto bounds_or = aggregate_window_bounds_for_start(*current, period, *location_or);
+                if (!bounds_or.has_value()) {
+                    break;
+                }
+                if (bounds_or->lower_seconds >= *row_seconds + 1) {
+                    break;
+                }
+                const bool within_table_range =
+                    !table_range_start_seconds.has_value() ||
+                    !table_range_stop_seconds.has_value() ||
+                    aggregate_window_is_within_range(*bounds_or, *table_range_start_seconds,
+                                                     *table_range_stop_seconds);
+                if (within_table_range &&
+                    aggregate_window_contains_time(*row_seconds, *bounds_or)) {
+                    candidate_starts.push_back(*current);
+                }
+                auto next_or = add_window_duration_to_time(*current, *every_or, *location_or);
+                if (!next_or.has_value() || *next_or <= *current) {
+                    break;
+                }
+                current = next_or;
+            }
+        }
+        for (const auto candidate_start : candidate_starts) {
+            const std::string bucket_key = window_bucket_key(candidate_start, group_key);
+            const auto bucket_it = bucket_indexes.find(bucket_key);
+            if (bucket_it == bucket_indexes.end()) {
+                bucket_indexes.emplace(bucket_key, buckets.size());
+                buckets.push_back(AggregateWindowBucket{
+                    .start_seconds = candidate_start,
+                    .group_key = group_key,
+                    .first_row = aggregate_window_base_row(*row, *column_or, *time_dst_or),
+                    .values = {},
+                });
+                buckets.back().values.push_back(*aggregate_value);
+                continue;
+            }
+            auto* bucket = &buckets[bucket_it->second];
+            bucket->values.push_back(*aggregate_value);
+        }
     }
 
     if (*create_empty_or) {
         for (const auto& span : group_spans) {
-            if (span.template_row == nullptr) {
+            if (span.template_row == nullptr ||
+                span.max_time_exclusive_seconds <= span.min_time_seconds) {
                 continue;
             }
-            for (int64_t window_start = span.min_start_seconds;
-                 window_start <= span.max_start_seconds;) {
-                if (find_window_bucket(buckets, window_start, span.group_key) != nullptr) {
-                    auto next_window_start =
-                        aggregate_window_stop_for_start(window_start, *every_or);
-                    if (!next_window_start.has_value() || *next_window_start <= window_start) {
+            auto first_window_start_or = aggregate_window_start_for_time(
+                span.min_time_seconds, *every_or, offset, *location_or);
+            if (!first_window_start_or.has_value()) {
+                continue;
+            }
+            if (!window_duration_is_negative(period)) {
+                while (true) {
+                    auto previous_or = add_window_duration_to_time(
+                        *first_window_start_or, negate_window_duration(*every_or), *location_or);
+                    if (!previous_or.has_value() || *previous_or >= *first_window_start_or) {
                         break;
                     }
-                    window_start = *next_window_start;
+                    auto previous_bounds_or =
+                        aggregate_window_bounds_for_start(*previous_or, period, *location_or);
+                    if (!previous_bounds_or.has_value() ||
+                        previous_bounds_or->upper_seconds <= span.min_time_seconds) {
+                        break;
+                    }
+                    first_window_start_or = previous_or;
+                }
+            } else {
+                auto next_or =
+                    add_window_duration_to_time(*first_window_start_or, *every_or, *location_or);
+                if (!next_or.has_value() || *next_or <= *first_window_start_or) {
                     continue;
                 }
-                buckets.push_back(AggregateWindowBucket{
-                    .start_seconds = window_start,
-                    .group_key = span.group_key,
-                    .first_row = clone_row(*span.template_row),
-                    .values = {},
-                });
-                auto next_window_start = aggregate_window_stop_for_start(window_start, *every_or);
-                if (!next_window_start.has_value() || *next_window_start <= window_start) {
+                first_window_start_or = next_or;
+            }
+            for (auto window_start_or = first_window_start_or; window_start_or.has_value();) {
+                auto bounds_or =
+                    aggregate_window_bounds_for_start(*window_start_or, period, *location_or);
+                if (!bounds_or.has_value()) {
                     break;
                 }
-                window_start = *next_window_start;
+                if (bounds_or->lower_seconds >= span.max_time_exclusive_seconds) {
+                    break;
+                }
+                if (aggregate_window_intersects_range(*bounds_or, span.min_time_seconds,
+                                                      span.max_time_exclusive_seconds) &&
+                    (!table_range_start_seconds.has_value() ||
+                     !table_range_stop_seconds.has_value() ||
+                     aggregate_window_is_within_range(*bounds_or, *table_range_start_seconds,
+                                                      *table_range_stop_seconds))) {
+                    const std::string bucket_key =
+                        window_bucket_key(*window_start_or, span.group_key);
+                    if (bucket_indexes.find(bucket_key) == bucket_indexes.end()) {
+                        bucket_indexes.emplace(bucket_key, buckets.size());
+                        buckets.push_back(AggregateWindowBucket{
+                            .start_seconds = *window_start_or,
+                            .group_key = span.group_key,
+                            .first_row = clone_row(*span.template_row),
+                            .values = {},
+                        });
+                    }
+                }
+                auto next_or =
+                    add_window_duration_to_time(*window_start_or, *every_or, *location_or);
+                if (!next_or.has_value() || *next_or <= *window_start_or) {
+                    break;
+                }
+                window_start_or = next_or;
             }
         }
     }
@@ -2422,7 +3068,7 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
         }
         Value aggregate_value = Value::null();
         if (bucket.values.empty()) {
-            if (!*create_empty_or) {
+            if (!*create_empty_or || aggregate_window_fn_drops_empty((*fn_or)->as_function())) {
                 continue;
             }
             aggregate_value = empty_window_aggregate_value((*fn_or)->as_function());
@@ -2437,19 +3083,24 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
         Value row_value =
             object_with_upserted_property(*bucket.first_row, *column_or, aggregate_value);
         if (bucket.start_seconds.has_value()) {
-            auto window_stop_or = aggregate_window_stop_for_start(*bucket.start_seconds, *every_or);
-            if (!window_stop_or.has_value()) {
+            auto bounds_or =
+                aggregate_window_bounds_for_start(*bucket.start_seconds, period, *location_or);
+            if (!bounds_or.has_value()) {
                 return absl::InternalError("aggregateWindow failed to compute window stop");
             }
-            const int64_t window_stop = *window_stop_or;
+            const int64_t window_stop = bounds_or->stop_seconds;
             row_value = object_with_upserted_property(
                 row_value.as_object(), "_start",
                 Value::time(format_rfc3339_seconds(*bucket.start_seconds)));
             row_value = object_with_upserted_property(
                 row_value.as_object(), "_stop", Value::time(format_rfc3339_seconds(window_stop)));
-            row_value =
-                object_with_upserted_property(row_value.as_object(), *time_column_or,
-                                              Value::time(format_rfc3339_seconds(window_stop)));
+            auto time_src_seconds = aggregate_window_time_src_seconds(
+                bucket.first_row, *bucket.start_seconds, window_stop, *time_src_or);
+            if (time_src_seconds.has_value()) {
+                row_value = object_with_upserted_property(
+                    row_value.as_object(), *time_dst_or,
+                    Value::time(format_rfc3339_seconds(*time_src_seconds)));
+            }
         }
         rows.push_back(std::make_shared<ObjectValue>(row_value.as_object()));
     }
@@ -2506,6 +3157,22 @@ bool install_known_builtin(Environment& env, const std::string& name) {
     }
     if (name == "from") {
         install_builtin(env, "from", builtin_from);
+        return true;
+    }
+    if (name == "columns") {
+        install_builtin(env, "columns", builtin_columns, "tables");
+        return true;
+    }
+    if (name == "keys") {
+        install_builtin(env, "keys", builtin_keys, "tables");
+        return true;
+    }
+    if (name == "findColumn") {
+        install_builtin(env, "findColumn", builtin_find_column, "tables");
+        return true;
+    }
+    if (name == "findRecord") {
+        install_builtin(env, "findRecord", builtin_find_record, "tables");
         return true;
     }
     if (name == "range") {
@@ -2626,6 +3293,10 @@ void BuiltinRegistry::Install(Environment& env) {
     install_known_builtin(env, "min");
     install_known_builtin(env, "max");
     install_known_builtin(env, "from");
+    install_known_builtin(env, "columns");
+    install_known_builtin(env, "keys");
+    install_known_builtin(env, "findColumn");
+    install_known_builtin(env, "findRecord");
     install_known_builtin(env, "range");
     install_known_builtin(env, "filter");
     install_known_builtin(env, "map");

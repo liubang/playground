@@ -102,12 +102,12 @@ Status meanings:
 | function values / closures | Supported | User-defined function expressions now evaluate to callable runtime values with lexical closure capture |
 | function call execution | Supported | Builtin and user-defined function calls work, including default arguments, named arguments, block-bodied functions, pipe-parameter injection, and internal row-function invocation for in-memory query builtins |
 | pipe execution | Partial | Value forwarding through `|>` works for builtin functions, user-defined `<-pipe` parameters, and lightweight in-memory table pipelines, but broader query/stream semantics are still missing |
-| builtin registry / stdlib execution | Partial | A small callable builtin registry exists today (`len`, `string`, `contains`, `sum`, `mean`, `min`, `max`, `from`, `csv.from`, `range`, `filter`, `map`, `limit`, `tail`, `keep`, `drop`, `rename`, `duplicate`, `set`, `reduce`, `sort`, `group`, `pivot`, `fill`, `elapsed`, `difference`, `derivative`, `distinct`, `count`, `first`, `last`, `union`, `join`, `aggregateWindow`, `yield`), top-level `builtin` declarations can bind known builtins or placeholder callables, `import "csv"` binds a package object with `from`, and `yield(name: "...")` can now label table results for CLI output, but the Flux standard library is still largely missing |
+| builtin registry / stdlib execution | Partial | A small callable builtin registry exists today (`len`, `string`, `contains`, `sum`, `mean`, `min`, `max`, `from`, `csv.from`, `columns`, `keys`, `findColumn`, `findRecord`, `range`, `filter`, `map`, `limit`, `tail`, `keep`, `drop`, `rename`, `duplicate`, `set`, `reduce`, `sort`, `group`, `pivot`, `fill`, `elapsed`, `difference`, `derivative`, `distinct`, `count`, `first`, `last`, `union`, `join`, `aggregateWindow`, `yield`), top-level `builtin` declarations can bind known builtins or placeholder callables, `import "csv"` binds a package object with `from`, and `yield(name: "...")` can now label table results for CLI output, but the Flux standard library is still largely missing |
 | CSV input | Partial | `import "csv"` plus `csv.from(csv: ...)` and `csv.from(file: ...)` work for raw mode and common annotated CSV mode; annotations support `#datatype`, `#group`, optional `#default`, typed scalar conversion, repeated metadata/header blocks for multi-table CSV payloads, and a lightweight `_group` object, but the broader CSV stdlib surface is still incomplete |
-| aggregate windows | Partial | Fixed-duration RFC3339 `_time` windows work with `_group`, `column`, `offset`, `mean`/`sum`/`min`/`max`, custom array functions, window `count`, and a lightweight `createEmpty: true` mode that fills observed gaps per group; UTC calendar `mo`/`y` windows also work, but time zones and calendar-window offsets are still not implemented |
+| aggregate windows | Partial | Fixed-duration RFC3339 `_time` windows work with `_group`, `column`, `offset`, `period`, `timeSrc`, `timeDst`, `mean`/`sum`/`min`/`max`, custom array functions, window `count`, negative `period`, overlapping windows when `every != period`, and `createEmpty: true` across `range()` bounds; calendar `mo`/`y` windows also work with explicit fixed-offset or named-zone `location` records plus calendar-window `offset`, and selector-style `first`/`last` windows now drop empties like official Flux, but global `option location` and fuller multi-table behavior are still missing |
 | elapsed transforms | Partial | `elapsed(unit:, timeColumn:, columnName:)` now works for fixed-duration units against RFC3339 `_time`-style columns, drops the first row per `_group`, and writes integer elapsed values, but calendar units and broader Flux table semantics are still not implemented |
-| difference transforms | Partial | `difference(column:)` now works for numeric columns, computes row-to-row deltas within each `_group`, and drops the first row per group, but `nonNegative`, `keepFirst`, and broader Flux table semantics are still not implemented |
-| derivative transforms | Partial | `derivative(unit:, column:, timeColumn:)` now works for numeric columns plus RFC3339 `_time`-style columns, computes per-unit floating-point rates within each `_group`, and drops the first row per group, but `nonNegative`, `initialZero`, calendar units, and broader Flux table semantics are still not implemented |
+| difference transforms | Partial | `difference(column:, nonNegative:, keepFirst:)` now works for numeric columns, computes row-to-row deltas within each `_group`, can null out negative deltas when `nonNegative: true`, and can preserve the first row with a null delta via `keepFirst: true`, but broader Flux table semantics are still not implemented |
+| derivative transforms | Partial | `derivative(unit:, column:, timeColumn:, nonNegative:, initialZero:)` now works for numeric columns plus RFC3339 `_time`-style columns, computes per-unit floating-point rates within each `_group`, can null out negative rates with `nonNegative: true`, and can treat resets as zero-based with `initialZero: true`, but calendar units and broader Flux table semantics are still not implemented |
 
 ## Error Handling
 
@@ -122,6 +122,7 @@ Status meanings:
 
 - Common Flux file structure can already be parsed into AST
 - Pipe-heavy query shapes are working
+- Common table-inspection helpers now work for the current table model, including `columns`, `keys`, `findColumn`, and `findRecord`
 - Realistic query fragments with alias imports, `filter`/`map` chains, regex calls, record updates, and conditional expressions are covered by parser tests
 - Function expressions now cover the practical forms needed by most Flux queries: `(r) => expr`, `r => expr`, `r => { ... }`, `(<-tables, ?limit=5, value) => expr`
 - Empty literals and empty record updates are covered, including `[]`, `{}`, `[:]`, and `{base with}`
@@ -192,7 +193,7 @@ Current status:
 4. Query / pipeline execution
 
 - Continue growing the current lightweight table model and pipe input support
-- Extend beyond the current in-memory query builtin baseline to more complete `aggregateWindow` calendar semantics and multi-table behavior
+- Extend beyond the current in-memory query builtin baseline to the remaining `aggregateWindow` gaps such as global `option location` and fuller multi-table behavior
 - Define enough runtime behavior to run realistic Flux scripts end to end
 
 5. Diagnostics and usability

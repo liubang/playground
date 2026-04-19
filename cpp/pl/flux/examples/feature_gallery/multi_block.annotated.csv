@@ -1,0 +1,12 @@
+#datatype,string,long,dateTime:RFC3339,string,string,double
+#group,false,false,false,true,true,false
+#default,ops,,,,,
+,result,table,_time,region,host,_value
+,ops,0,2024-06-01T09:00:00Z,us-east,edge-1,71.0
+,ops,0,2024-06-01T09:01:00Z,us-east,edge-1,88.0
+#datatype,string,long,dateTime:RFC3339,string,string,double
+#group,false,false,false,true,true,false
+#default,ops,,,,,
+,result,table,_time,region,host,_value
+,ops,1,2024-06-01T09:00:00Z,us-west,edge-2,64.0
+,ops,1,2024-06-01T09:01:00Z,us-west,edge-2,61.0

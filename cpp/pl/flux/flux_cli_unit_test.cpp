@@ -248,6 +248,39 @@ TEST(FluxCliTest, ExecutesCheckedInOpsDashboardQueryVariants) {
     }
 }
 
+TEST(FluxCliTest, ExecutesTableHelperQueries) {
+    auto env = MakeFluxCliEnvironment();
+    auto result = ExecuteFluxSource(R"(
+        hosts = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T00:00:00Z", host: "edge-1", region: "us-east", _value: 70},
+                {_time: "2024-01-01T00:01:00Z", host: "edge-2", region: "us-west", _value: 91},
+            ],
+        )
+            |> group(columns: ["host", "region"])
+
+        host_columns = hosts |> columns() |> yield(name: "host_columns")
+        host_keys = hosts |> keys() |> yield(name: "host_keys")
+        west_values = hosts |> findColumn(fn: (r) => r.region == "us-west", column: "_value")
+        west_record = hosts |> findRecord(fn: (r) => r.region == "us-west")
+    )",
+                                    "<test>", env);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: host_columns\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Result: host_keys\n"));
+    EXPECT_NE(std::string::npos, result.output.find("\"_time\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"host\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"region\""));
+    EXPECT_NE(std::string::npos, result.output.find("Result: west_values\n"));
+    EXPECT_NE(std::string::npos, result.output.find("[91]"));
+    EXPECT_NE(std::string::npos, result.output.find("Result: west_record\n"));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-2\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"us-west\""));
+}
+
 TEST(FluxCliTest, RendersMultipleNamedResultsAsSeparateBlocks) {
     auto env = MakeFluxCliEnvironment();
     auto result = ExecuteFluxSource(R"(

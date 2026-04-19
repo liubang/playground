@@ -121,6 +121,88 @@ TEST(RuntimeEvalTest, EvaluatesBuiltinCallsWithNamedArgumentObject) {
     EXPECT_EQ(Value::boolean(true), *result);
 }
 
+TEST(RuntimeEvalTest, EvaluatesTableHelperBuiltins) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T00:00:00Z", host: "edge-1", region: "us-east", _value: 70},
+                {_time: "2024-01-01T00:01:00Z", host: "edge-2", region: "us-west", _value: 91},
+            ],
+        )
+            |> group(columns: ["host", "region"])
+            |> findColumn(fn: (r) => r.region == "us-west", column: "_value")
+    )");
+
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Array, result->type());
+    ASSERT_EQ(1, result->as_array().elements.size());
+    EXPECT_EQ("91", result->as_array().elements[0].string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesColumnsKeysAndFindRecordBuiltins) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& columns_expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T00:00:00Z", host: "edge-1", region: "us-east", _value: 70},
+            ],
+        )
+            |> group(columns: ["host", "region"])
+            |> columns()
+    )");
+    auto columns = ExpressionEvaluator::Evaluate(columns_expr, env);
+    ASSERT_TRUE(columns.ok()) << columns.status();
+    ASSERT_EQ(Value::Type::Table, columns->type());
+    ASSERT_EQ(4, columns->as_table().rows.size());
+    EXPECT_EQ("\"_time\"", columns->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("\"host\"", columns->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ("\"region\"", columns->as_table().rows[2]->lookup("_value")->string());
+    EXPECT_EQ("\"_value\"", columns->as_table().rows[3]->lookup("_value")->string());
+
+    const auto& keys_expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T00:00:00Z", host: "edge-1", region: "us-east", _value: 70},
+            ],
+        )
+            |> group(columns: ["host", "region"])
+            |> keys()
+    )");
+    auto keys = ExpressionEvaluator::Evaluate(keys_expr, env);
+    ASSERT_TRUE(keys.ok()) << keys.status();
+    ASSERT_EQ(Value::Type::Table, keys->type());
+    ASSERT_EQ(2, keys->as_table().rows.size());
+    EXPECT_EQ("\"host\"", keys->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("\"region\"", keys->as_table().rows[1]->lookup("_value")->string());
+
+    const auto& record_expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T00:00:00Z", host: "edge-1", region: "us-east", _value: 70},
+                {_time: "2024-01-01T00:01:00Z", host: "edge-2", region: "us-west", _value: 91},
+            ],
+        )
+            |> findRecord(fn: (r) => true, idx: 1)
+    )");
+    auto record = ExpressionEvaluator::Evaluate(record_expr, env);
+    ASSERT_TRUE(record.ok()) << record.status();
+    ASSERT_EQ(Value::Type::Object, record->type());
+    ASSERT_NE(nullptr, record->as_object().lookup("host"));
+    ASSERT_NE(nullptr, record->as_object().lookup("_value"));
+    EXPECT_EQ("\"edge-2\"", record->as_object().lookup("host")->string());
+    EXPECT_EQ("91", record->as_object().lookup("_value")->string());
+}
+
 TEST(RuntimeEvalTest, EvaluatesCsvFromRawStringPackageBuiltin) {
     Environment env;
     auto csv_or = BuiltinRegistry::ImportPackage("csv");
@@ -756,6 +838,32 @@ TEST(RuntimeEvalTest, EvaluatesDifferenceBuiltin) {
     EXPECT_EQ("-5", result->as_table().rows[1]->lookup("_value")->string());
 }
 
+TEST(RuntimeEvalTest, EvaluatesDifferenceBuiltinWithNonNegativeAndKeepFirst) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
+                {_time: 2024-01-01T00:00:20Z, host: "a", _value: 7.0},
+                {_time: 2024-01-01T00:00:40Z, host: "a", _value: 13.0},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> difference(nonNegative: true, keepFirst: true)
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(3, result->as_table().rows.size());
+    EXPECT_TRUE(result->as_table().rows[0]->lookup("_value")->is_null());
+    EXPECT_TRUE(result->as_table().rows[1]->lookup("_value")->is_null());
+    EXPECT_EQ("6", result->as_table().rows[2]->lookup("_value")->string());
+}
+
 TEST(RuntimeEvalTest, EvaluatesDerivativeBuiltin) {
     Environment env;
     BuiltinRegistry::Install(env);
@@ -784,6 +892,31 @@ TEST(RuntimeEvalTest, EvaluatesDerivativeBuiltin) {
     EXPECT_EQ("2.33333333333333", result->as_table().rows[0]->lookup("_value")->string());
     EXPECT_EQ("\"b\"", result->as_table().rows[1]->lookup("host")->string());
     EXPECT_EQ("-1", result->as_table().rows[1]->lookup("_value")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesDerivativeBuiltinWithNonNegativeAndInitialZero) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
+                {_time: 2024-01-01T00:00:10Z, host: "a", _value: 6.0},
+                {_time: 2024-01-01T00:00:20Z, host: "a", _value: 8.0},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> derivative(unit: 10s, nonNegative: true, initialZero: true)
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    EXPECT_EQ("6", result->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("2", result->as_table().rows[1]->lookup("_value")->string());
 }
 
 TEST(RuntimeEvalTest, EvaluatesAggregateWindowBuiltin) {
@@ -918,6 +1051,225 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowCalendarMonths) {
     EXPECT_EQ("2024-03-01T00:00:00Z", result->as_table().rows[1]->lookup("_stop")->string());
 }
 
+TEST(RuntimeEvalTest, EvaluatesAggregateWindowWithTimezoneLocation) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T07:30:00Z", _value: 10.0},
+                {_time: "2024-01-01T08:30:00Z", _value: 30.0},
+            ],
+        )
+            |> aggregateWindow(
+                every: 1d,
+                fn: sum,
+                location: {zone: "UTC", offset: "-8h"},
+            )
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    EXPECT_EQ("10", result->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("2023-12-31T08:00:00Z", result->as_table().rows[0]->lookup("_start")->string());
+    EXPECT_EQ("2024-01-01T08:00:00Z", result->as_table().rows[0]->lookup("_stop")->string());
+    EXPECT_EQ("30", result->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ("2024-01-01T08:00:00Z", result->as_table().rows[1]->lookup("_start")->string());
+    EXPECT_EQ("2024-01-02T08:00:00Z", result->as_table().rows[1]->lookup("_stop")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesAggregateWindowTimezoneOutputShape) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {
+                    _time: "2024-03-15T12:00:00Z",
+                    _value: 10.0,
+                    host: "edge-1",
+                    region: "us-west",
+                    note: "drop-me",
+                },
+            ],
+        )
+            |> group(columns: ["host"])
+            |> aggregateWindow(
+                every: 1mo,
+                fn: mean,
+                location: {zone: "America/Los_Angeles", offset: 0s},
+                timeSrc: "_start",
+                timeDst: "bucket_time",
+            )
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(1, result->as_table().rows.size());
+    const auto& row = result->as_table().rows[0];
+    ASSERT_NE(nullptr, row);
+    EXPECT_EQ("10", row->lookup("_value")->string());
+    EXPECT_EQ("\"edge-1\"", row->lookup("host")->string());
+    EXPECT_EQ("2024-03-01T08:00:00Z", row->lookup("_start")->string());
+    EXPECT_EQ("2024-04-01T07:00:00Z", row->lookup("_stop")->string());
+    EXPECT_EQ("2024-03-01T08:00:00Z", row->lookup("bucket_time")->string());
+    EXPECT_EQ(nullptr, row->lookup("_time"));
+    EXPECT_EQ(nullptr, row->lookup("region"));
+    EXPECT_EQ(nullptr, row->lookup("note"));
+}
+
+TEST(RuntimeEvalTest, EvaluatesAggregateWindowWithPeriodDifferentFromEvery) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T00:00:00Z", _value: 2.0},
+                {_time: "2024-01-01T00:00:10Z", _value: 4.0},
+                {_time: "2024-01-01T00:00:20Z", _value: 6.0},
+                {_time: "2024-01-01T00:00:30Z", _value: 8.0},
+                {_time: "2024-01-01T00:00:40Z", _value: 10.0},
+                {_time: "2024-01-01T00:00:50Z", _value: 12.0},
+            ],
+        )
+            |> range(start: 2024-01-01T00:00:00Z, stop: 2024-01-01T00:01:00Z)
+            |> aggregateWindow(every: 20s, period: 40s, fn: count, createEmpty: false)
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    EXPECT_EQ("4", result->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("2024-01-01T00:00:00Z", result->as_table().rows[0]->lookup("_start")->string());
+    EXPECT_EQ("2024-01-01T00:00:40Z", result->as_table().rows[0]->lookup("_stop")->string());
+    EXPECT_EQ("4", result->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ("2024-01-01T00:00:20Z", result->as_table().rows[1]->lookup("_start")->string());
+    EXPECT_EQ("2024-01-01T00:01:00Z", result->as_table().rows[1]->lookup("_stop")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesAggregateWindowWithNegativePeriod) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T00:00:00Z", _value: 2.0},
+                {_time: "2024-01-01T00:00:10Z", _value: 4.0},
+                {_time: "2024-01-01T00:00:20Z", _value: 6.0},
+                {_time: "2024-01-01T00:00:30Z", _value: 8.0},
+                {_time: "2024-01-01T00:00:40Z", _value: 10.0},
+                {_time: "2024-01-01T00:00:50Z", _value: 12.0},
+            ],
+        )
+            |> range(start: 2024-01-01T00:00:00Z, stop: 2024-01-01T00:01:00Z)
+            |> aggregateWindow(every: 20s, period: "-40s", fn: count, createEmpty: false)
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    EXPECT_EQ("4", result->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("2024-01-01T00:00:40Z", result->as_table().rows[0]->lookup("_start")->string());
+    EXPECT_EQ("2024-01-01T00:00:00Z", result->as_table().rows[0]->lookup("_stop")->string());
+    EXPECT_EQ("4", result->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ("2024-01-01T00:01:00Z", result->as_table().rows[1]->lookup("_start")->string());
+    EXPECT_EQ("2024-01-01T00:00:20Z", result->as_table().rows[1]->lookup("_stop")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesAggregateWindowCalendarOffset) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-20T00:00:00Z", _value: 10.0},
+                {_time: "2024-02-20T00:00:00Z", _value: 30.0},
+            ],
+        )
+            |> aggregateWindow(every: 1mo, offset: 15d, fn: mean, createEmpty: false)
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    EXPECT_EQ("10", result->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("2024-01-16T00:00:00Z", result->as_table().rows[0]->lookup("_start")->string());
+    EXPECT_EQ("2024-02-16T00:00:00Z", result->as_table().rows[0]->lookup("_stop")->string());
+    EXPECT_EQ("30", result->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ("2024-02-16T00:00:00Z", result->as_table().rows[1]->lookup("_start")->string());
+    EXPECT_EQ("2024-03-16T00:00:00Z", result->as_table().rows[1]->lookup("_stop")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesAggregateWindowCreateEmptyAcrossRange) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T00:00:10Z", _value: 10.0, host: "a"},
+            ],
+        )
+            |> range(start: 2024-01-01T00:00:00Z, stop: 2024-01-01T00:03:00Z)
+            |> group(columns: ["host"])
+            |> aggregateWindow(every: 1m, fn: count)
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(3, result->as_table().rows.size());
+    EXPECT_EQ("1", result->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("0", result->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ("0", result->as_table().rows[2]->lookup("_value")->string());
+    EXPECT_EQ("2024-01-01T00:00:00Z", result->as_table().rows[0]->lookup("_start")->string());
+    EXPECT_EQ("2024-01-01T00:01:00Z", result->as_table().rows[1]->lookup("_start")->string());
+    EXPECT_EQ("2024-01-01T00:02:00Z", result->as_table().rows[2]->lookup("_start")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesAggregateWindowSelectorDropsEmptyWindows) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T00:00:10Z", _value: 10.0},
+                {_time: "2024-01-01T00:02:05Z", _value: 30.0},
+            ],
+        )
+            |> range(start: 2024-01-01T00:00:00Z, stop: 2024-01-01T00:03:00Z)
+            |> aggregateWindow(every: 1m, fn: last, createEmpty: true)
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    EXPECT_EQ("10", result->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("2024-01-01T00:00:00Z", result->as_table().rows[0]->lookup("_start")->string());
+    EXPECT_EQ("30", result->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ("2024-01-01T00:02:00Z", result->as_table().rows[1]->lookup("_start")->string());
+}
+
 TEST(RuntimeEvalTest, ReportsAggregateWindowArgumentErrors) {
     Environment env;
     BuiltinRegistry::Install(env);
@@ -937,14 +1289,6 @@ TEST(RuntimeEvalTest, ReportsAggregateWindowArgumentErrors) {
     auto invalid_offset = ExpressionEvaluator::Evaluate(invalid_offset_expr, env);
     ASSERT_FALSE(invalid_offset.ok());
     EXPECT_EQ(absl::StatusCode::kInvalidArgument, invalid_offset.status().code());
-
-    const auto& calendar_offset_expr = ParseAssignmentInit(R"(
-        result = from(bucket: "telegraf", rows: [{_time: "2024-01-15T00:00:00Z", _value: 1.0}])
-            |> aggregateWindow(every: 1mo, offset: 1d, fn: mean)
-    )");
-    auto calendar_offset = ExpressionEvaluator::Evaluate(calendar_offset_expr, env);
-    ASSERT_FALSE(calendar_offset.ok());
-    EXPECT_EQ(absl::StatusCode::kInvalidArgument, calendar_offset.status().code());
 
     const auto& missing_fn_expr = ParseAssignmentInit(R"(
         result = from(bucket: "telegraf", rows: [{_time: "2024-01-01T00:00:10Z", _value: 1.0}])
@@ -987,6 +1331,14 @@ TEST(RuntimeEvalTest, ReportsAggregateWindowArgumentErrors) {
     EXPECT_EQ("1", create_empty_count->as_table().rows[0]->lookup("_value")->string());
     EXPECT_EQ("0", create_empty_count->as_table().rows[1]->lookup("_value")->string());
     EXPECT_EQ("1", create_empty_count->as_table().rows[2]->lookup("_value")->string());
+
+    const auto& invalid_fixed_period_expr = ParseAssignmentInit(R"(
+        result = from(bucket: "telegraf", rows: [{_time: "2024-01-01T00:00:10Z", _value: 1.0}])
+            |> aggregateWindow(every: 1m, period: 1mo, fn: mean)
+    )");
+    auto invalid_fixed_period = ExpressionEvaluator::Evaluate(invalid_fixed_period_expr, env);
+    ASSERT_FALSE(invalid_fixed_period.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, invalid_fixed_period.status().code());
 }
 
 TEST(RuntimeEvalTest, EvaluatesPipeIntoUserFunctionPipeParameter) {

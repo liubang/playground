@@ -1,0 +1,16 @@
+#datatype,string,long,dateTime:RFC3339,string,string,string,string,string,string,double
+#group,false,false,false,true,true,true,true,true,true,false
+#default,_result,,,,,,,,,
+,result,table,_time,_measurement,_field,host,region,service,status,_value
+,_result,0,2024-06-01T09:00:00Z,cpu,usage_user,edge-1,us-east,api,ok,71.0
+,_result,0,2024-06-01T09:00:30Z,cpu,usage_user,edge-1,us-east,api,ok,76.0
+,_result,0,2024-06-01T09:01:10Z,cpu,usage_user,edge-1,us-east,api,warn,88.0
+,_result,0,2024-06-01T09:00:10Z,cpu,usage_user,edge-2,us-west,worker,ok,64.0
+,_result,0,2024-06-01T09:01:20Z,cpu,usage_user,edge-2,us-west,worker,ok,61.0
+,_result,0,2024-06-01T09:00:20Z,cpu,usage_user,edge-3,eu-central,api,ok,58.0
+,_result,0,2024-06-01T09:00:05Z,mem,used_percent,edge-1,us-east,api,ok,58.0
+,_result,0,2024-06-01T09:00:35Z,mem,used_percent,edge-1,us-east,api,ok,62.0
+,_result,0,2024-06-01T09:01:15Z,mem,used_percent,edge-1,us-east,api,warn,69.0
+,_result,0,2024-06-01T09:00:15Z,mem,used_percent,edge-2,us-west,worker,ok,54.0
+,_result,0,2024-06-01T09:01:25Z,mem,used_percent,edge-2,us-west,worker,ok,57.0
+,_result,0,2024-06-01T09:00:25Z,mem,used_percent,edge-3,eu-central,api,ok,49.0

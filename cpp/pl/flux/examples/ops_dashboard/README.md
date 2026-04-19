@@ -18,6 +18,10 @@ Included scripts:
 - `latest_two_cpu_windows.flux`: `keep + tail(offset) + yield`
 - `host_usage_pivot.flux`: `aggregateWindow + union + pivot + yield`
 - `monthly_cpu_calendar.flux`: `filter + aggregateWindow(1mo) + yield`
+- `monthly_cpu_calendar_offset.flux`: `aggregateWindow(1mo, offset: 15d) + yield`
+- `cpu_period_overlap.flux`: `aggregateWindow(every != period) + yield`
+- `cpu_negative_period.flux`: `aggregateWindow(period: -40s) + yield`
+- `cpu_selector_sparse_windows.flux`: `aggregateWindow(createEmpty) + selector drop-empty + yield`
 - `fleet_usage_union.flux`: `keep + rename + set + union + sort + limit`
 - `edge1_cpu_rollup.flux`: `filter + reduce`
 - `latest_west_cpu.flux`: `filter + sort + last`
@@ -32,6 +36,10 @@ bazel build //cpp/pl/flux:flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/cpu_usage_difference.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/cpu_usage_derivative.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/monthly_cpu_calendar.flux
+./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/monthly_cpu_calendar_offset.flux
+./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/cpu_period_overlap.flux
+./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/cpu_negative_period.flux
+./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/cpu_selector_sparse_windows.flux
 ```
 
 Export the same result as annotated CSV:
@@ -52,6 +60,10 @@ Try another query shape from the same directory:
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/latest_two_cpu_windows.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/host_usage_pivot.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/monthly_cpu_calendar.flux
+./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/monthly_cpu_calendar_offset.flux
+./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/cpu_period_overlap.flux
+./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/cpu_negative_period.flux
+./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/cpu_selector_sparse_windows.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/fleet_usage_union.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/edge1_cpu_rollup.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/latest_west_cpu.flux
@@ -72,6 +84,24 @@ The `monthly_cpu_calendar` result should include two UTC calendar windows for
 - `2024-01-01T00:00:00Z` to `2024-02-01T00:00:00Z` with CPU mean `60`
 - `2024-02-01T00:00:00Z` to `2024-03-01T00:00:00Z` with CPU mean `77`
 
+The `monthly_cpu_calendar_offset` result should shift calendar month windows by
+15 days:
+
+- `2024-01-16T00:00:00Z` to `2024-02-16T00:00:00Z` with CPU mean `10`
+- `2024-02-16T00:00:00Z` to `2024-03-16T00:00:00Z` with CPU mean `30`
+
+The `cpu_period_overlap` result should emit overlapping 40-second windows on a
+20-second cadence:
+
+- `2024-01-01T00:00:00Z` to `2024-01-01T00:00:40Z` with `_value` `4`
+- `2024-01-01T00:00:20Z` to `2024-01-01T00:01:00Z` with `_value` `4`
+
+The `cpu_negative_period` result should emit lookback windows with `_start`
+after `_stop`:
+
+- `2024-01-01T00:00:40Z` to `2024-01-01T00:00:00Z` with `_value` `4`
+- `2024-01-01T00:01:00Z` to `2024-01-01T00:00:20Z` with `_value` `4`
+
 The `cpu_distinct_hosts` result should keep the first CPU sample for each host:
 
 - `edge-1` in `us-east` with `_value` `70`
@@ -83,6 +113,12 @@ carry the previous value across empty windows:
 - `2024-05-01T10:00:30Z` with `_value` `70`
 - `2024-05-01T10:01:00Z` with `_value` `74`
 - `2024-05-01T10:01:30Z` with `_value` `82`
+
+The `cpu_selector_sparse_windows` result should keep only non-empty selector
+windows even when `createEmpty: true`:
+
+- `2024-01-01T00:00:00Z` to `2024-01-01T00:01:00Z` with `_value` `10`
+- `2024-01-01T00:02:00Z` to `2024-01-01T00:03:00Z` with `_value` `30`
 
 The `cpu_elapsed_by_host` result should report per-host sample spacing in
 seconds:

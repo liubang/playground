@@ -698,6 +698,35 @@ TEST(RuntimeExecTest, ExecutesDifferenceQueryFile) {
     EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
 }
 
+TEST(RuntimeExecTest, ExecutesDifferenceQueryFileWithNonNegativeAndKeepFirst) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
+        builtin difference : (<-tables: stream[A], ?column: string, ?nonNegative: bool, ?keepFirst: bool) => stream[A]
+
+        deltas = from(bucket: "cpu", rows: [
+            {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
+            {_time: 2024-01-01T00:00:20Z, host: "a", _value: 7.0},
+            {_time: 2024-01-01T00:00:40Z, host: "a", _value: 13.0},
+        ])
+            |> group(columns: ["host"])
+            |> difference(nonNegative: true, keepFirst: true)
+        deltas
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("deltas").ok());
+    ASSERT_EQ(3, env.lookup("deltas")->as_table().rows.size());
+    EXPECT_TRUE(env.lookup("deltas")->as_table().rows[0]->lookup("_value")->is_null());
+    EXPECT_TRUE(env.lookup("deltas")->as_table().rows[1]->lookup("_value")->is_null());
+    EXPECT_EQ("6", env.lookup("deltas")->as_table().rows[2]->lookup("_value")->string());
+    EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
+}
+
 TEST(RuntimeExecTest, ExecutesDerivativeQueryFile) {
     auto file = ParseFile(R"(
         builtin from : (bucket: string) => stream[A]
@@ -726,6 +755,34 @@ TEST(RuntimeExecTest, ExecutesDerivativeQueryFile) {
     EXPECT_EQ("2.33333333333333", env.lookup("rates")->as_table().rows[0]->lookup("_value")->string());
     EXPECT_EQ("\"b\"", env.lookup("rates")->as_table().rows[1]->lookup("host")->string());
     EXPECT_EQ("-1", env.lookup("rates")->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
+}
+
+TEST(RuntimeExecTest, ExecutesDerivativeQueryFileWithNonNegativeAndInitialZero) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
+        builtin derivative : (<-tables: stream[A], ?unit: duration, ?column: string, ?timeColumn: string, ?nonNegative: bool, ?initialZero: bool) => stream[A]
+
+        rates = from(bucket: "cpu", rows: [
+            {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
+            {_time: 2024-01-01T00:00:10Z, host: "a", _value: 6.0},
+            {_time: 2024-01-01T00:00:20Z, host: "a", _value: 8.0},
+        ])
+            |> group(columns: ["host"])
+            |> derivative(unit: 10s, nonNegative: true, initialZero: true)
+        rates
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("rates").ok());
+    ASSERT_EQ(2, env.lookup("rates")->as_table().rows.size());
+    EXPECT_EQ("6", env.lookup("rates")->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("2", env.lookup("rates")->as_table().rows[1]->lookup("_value")->string());
     EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
 }
 
@@ -904,6 +961,53 @@ TEST(RuntimeExecTest, ExecutesAggregateWindowCalendarMonthQueryFile) {
               env.lookup("monthly")->as_table().rows[1]->lookup("_start")->string());
     EXPECT_EQ("2024-03-01T00:00:00Z",
               env.lookup("monthly")->as_table().rows[1]->lookup("_stop")->string());
+}
+
+TEST(RuntimeExecTest, ExecutesAggregateWindowTimezoneQueryFile) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
+        builtin mean : (values: [float]) => float
+        builtin aggregateWindow : (<-tables: stream[A], every: duration, fn: B) => stream[C]
+
+        monthly = from(
+            bucket: "telegraf",
+            rows: [
+                {
+                    _time: "2024-03-15T12:00:00Z",
+                    _value: 10.0,
+                    host: "edge-1",
+                    region: "us-west",
+                    note: "drop-me",
+                },
+            ],
+        )
+            |> group(columns: ["host"])
+            |> aggregateWindow(
+                every: 1mo,
+                fn: mean,
+                location: {zone: "America/Los_Angeles", offset: 0s},
+                timeSrc: "_start",
+                timeDst: "bucket_time",
+            )
+        monthly
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("monthly").ok());
+    ASSERT_EQ(1, env.lookup("monthly")->as_table().rows.size());
+    const auto& row = env.lookup("monthly")->as_table().rows[0];
+    ASSERT_NE(nullptr, row);
+    EXPECT_EQ("2024-03-01T08:00:00Z", row->lookup("_start")->string());
+    EXPECT_EQ("2024-04-01T07:00:00Z", row->lookup("_stop")->string());
+    EXPECT_EQ("2024-03-01T08:00:00Z", row->lookup("bucket_time")->string());
+    EXPECT_EQ(nullptr, row->lookup("_time"));
+    EXPECT_EQ(nullptr, row->lookup("region"));
+    EXPECT_EQ(nullptr, row->lookup("note"));
 }
 
 TEST(RuntimeExecTest, UsesYieldNameForResultCollection) {
