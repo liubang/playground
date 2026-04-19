@@ -24,6 +24,10 @@ bool is_identifier_continue(unsigned char c) {
     return std::isalnum(c) != 0 || c == '_';
 }
 
+uint32_t column_for(const char* ptr, const char* last_newline) {
+    return static_cast<uint32_t>(ptr - last_newline + 1);
+}
+
 } // namespace
 
 extern uint32_t real_scan(int32_t mode,
@@ -72,12 +76,22 @@ std::unique_ptr<Token> Scanner::scan(int32_t mode) {
     auto err =
         real_scan(mode, &p_, ps_, pe_, eof_, &last_newline_, cur_line_, token_, token_start,
                   token_start_line, token_start_col, token_end, token_end_line, token_end_col);
-    std::unique_ptr<Token> t;
     if (err != 0) {
-        // TODO(liubang):
-        t = get_eof_token();
+        auto token = std::make_unique<Token>();
+        token->tok = TokenType::Illegal;
+        token->lit = std::string(checkpoint_, std::min(checkpoint_ + 1, eof_) - checkpoint_);
+        token->start_offset = static_cast<uint32_t>(checkpoint_ - ps_);
+        token->end_offset = token->start_offset + static_cast<uint32_t>(token->lit.size());
+        token->start_pos = Position(checkpoint_line_, column_for(checkpoint_, checkpoint_last_newline_));
+        token->end_pos =
+            Position(checkpoint_line_, column_for(checkpoint_ + token->lit.size(), checkpoint_last_newline_));
+        p_ = std::min(checkpoint_ + 1, eof_);
+        positions_[token->start_pos] = token->start_offset;
+        positions_[token->end_pos] = token->end_offset;
+        return token;
     }
 
+    std::unique_ptr<Token> t;
     if (token_ == TokenType::Illegal && p_ == eof_) {
         t = get_eof_token();
     } else {

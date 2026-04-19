@@ -15,11 +15,54 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/flux/flux_cli.h"
+#include <cstdlib>
+#include <fstream>
 #include <gtest/gtest.h>
 #include <sstream>
 
 namespace pl {
 namespace {
+
+std::string ReplaceAll(std::string text, const std::string& needle, const std::string& replacement) {
+    size_t pos = 0;
+    while ((pos = text.find(needle, pos)) != std::string::npos) {
+        text.replace(pos, needle.size(), replacement);
+        pos += replacement.size();
+    }
+    return text;
+}
+
+std::string RunfilePath(const std::string& relative_path) {
+    const char* test_srcdir = std::getenv("TEST_SRCDIR");
+    const char* test_workspace = std::getenv("TEST_WORKSPACE");
+    if (test_srcdir == nullptr || test_workspace == nullptr) {
+        return relative_path;
+    }
+    return std::string(test_srcdir) + "/" + test_workspace + "/" + relative_path;
+}
+
+std::string ReadAllText(const std::string& path) {
+    std::ifstream file(path);
+    EXPECT_TRUE(file.is_open()) << "failed to open " << path;
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    return buffer.str();
+}
+
+std::string RewriteExamplePaths(std::string source) {
+    source = ReplaceAll(source,
+                        "cpp/pl/flux/examples/ops_dashboard/cpu_usage.annotated.csv",
+                        RunfilePath("cpp/pl/flux/examples/ops_dashboard/cpu_usage.annotated.csv"));
+    source = ReplaceAll(source,
+                        "cpp/pl/flux/examples/ops_dashboard/mem_usage.annotated.csv",
+                        RunfilePath("cpp/pl/flux/examples/ops_dashboard/mem_usage.annotated.csv"));
+    return source;
+}
+
+FluxCliResult ExecuteExampleScript(const std::string& relative_path, Environment& env) {
+    const std::string path = RunfilePath(relative_path);
+    return ExecuteFluxSource(RewriteExamplePaths(ReadAllText(path)), path, env);
+}
 
 TEST(FluxCliTest, ExecutesSourceWithPreludeBuiltins) {
     auto env = MakeFluxCliEnvironment();
@@ -56,6 +99,59 @@ TEST(FluxCliTest, ExecutesFluxFileSourceWithImportsAndPipelines) {
     EXPECT_NE(std::string::npos, result.output.find("\"95.5\""));
     EXPECT_NE(std::string::npos, result.output.find("+"));
     EXPECT_TRUE(result.error.empty());
+}
+
+TEST(FluxCliTest, ExecutesCheckedInOpsDashboardExample) {
+    auto env = MakeFluxCliEnvironment();
+    auto result = ExecuteExampleScript("cpp/pl/flux/examples/ops_dashboard/query.flux", env);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: host_health\n"));
+    EXPECT_NE(std::string::npos, result.output.find("2024-05-01T10:01:00Z"));
+    EXPECT_NE(std::string::npos, result.output.find("2024-05-01T10:02:00Z"));
+    EXPECT_NE(std::string::npos, result.output.find("72"));
+    EXPECT_NE(std::string::npos, result.output.find("63"));
+    EXPECT_NE(std::string::npos, result.output.find("82"));
+    EXPECT_NE(std::string::npos, result.output.find("68"));
+}
+
+TEST(FluxCliTest, ExecutesCheckedInOpsDashboardQueryVariants) {
+    struct ExampleCase {
+        std::string path;
+        std::vector<std::string> expected_output_fragments;
+    };
+
+    const std::vector<ExampleCase> cases = {
+        {
+            "cpp/pl/flux/examples/ops_dashboard/cpu_top_windows.flux",
+            {"Result: cpu_top_windows\n", "91", "87", "82"},
+        },
+        {
+            "cpp/pl/flux/examples/ops_dashboard/fleet_usage_union.flux",
+            {"Result: fleet_usage\n", "\"cpu\"", "\"mem\"", "\"edge-2\"", "91"},
+        },
+        {
+            "cpp/pl/flux/examples/ops_dashboard/edge1_cpu_rollup.flux",
+            {"Result: edge1_cpu_rollup\n", "samples", "3", "226"},
+        },
+        {
+            "cpp/pl/flux/examples/ops_dashboard/latest_west_cpu.flux",
+            {"Result: latest_west_cpu\n", "\"edge-2\"", "\"us-west\"", "87"},
+        },
+    };
+
+    for (const auto& example : cases) {
+        SCOPED_TRACE(example.path);
+        auto env = MakeFluxCliEnvironment();
+        auto result = ExecuteExampleScript(example.path, env);
+
+        EXPECT_EQ(0, result.exit_code);
+        EXPECT_TRUE(result.error.empty());
+        for (const auto& fragment : example.expected_output_fragments) {
+            EXPECT_NE(std::string::npos, result.output.find(fragment));
+        }
+    }
 }
 
 TEST(FluxCliTest, RendersMultipleNamedResultsAsSeparateBlocks) {
@@ -233,11 +329,27 @@ TEST(FluxCliTest, ReplSupportsMultiLineInputAndContinuationPrompt) {
     int exit_code = RunFluxRepl(input, output, error, true);
 
     EXPECT_EQ(0, exit_code);
-    EXPECT_NE(std::string::npos, output.str().find("Flux REPL. Type :quit or :exit to leave.\n"));
+    EXPECT_NE(std::string::npos, output.str().find("Flux REPL. Type :help for commands.\n"));
     EXPECT_NE(std::string::npos, output.str().find("flux> "));
     EXPECT_NE(std::string::npos, output.str().find("....> "));
     EXPECT_NE(std::string::npos, output.str().find("{host: \"local\", port: 8080}"));
     EXPECT_NE(std::string::npos, output.str().find("\"local\""));
+    EXPECT_TRUE(error.str().empty());
+}
+
+TEST(FluxCliTest, ReplHelpCommandPrintsBuiltInCommands) {
+    std::istringstream input("help\n:help\nquit\n");
+    std::ostringstream output;
+    std::ostringstream error;
+
+    int exit_code = RunFluxRepl(input, output, error, true);
+
+    EXPECT_EQ(0, exit_code);
+    EXPECT_NE(std::string::npos, output.str().find("Flux REPL commands:\n"));
+    EXPECT_NE(std::string::npos, output.str().find("help, :help, .help  Show this help text.\n"));
+    EXPECT_NE(
+        std::string::npos,
+        output.str().find("quit, :quit, .quit, exit, :exit, .exit Leave the REPL.\n"));
     EXPECT_TRUE(error.str().empty());
 }
 
@@ -251,6 +363,17 @@ TEST(FluxCliTest, QuietModeSuppressesValueOutput) {
     EXPECT_EQ(0, result.exit_code);
     EXPECT_TRUE(result.output.empty());
     EXPECT_TRUE(result.error.empty());
+}
+
+TEST(FluxCliTest, TrailingSemicolonReportsParserErrorInsteadOfCrashing) {
+    auto env = MakeFluxCliEnvironment();
+
+    auto result = ExecuteFluxSource("1;", "<test>", env);
+
+    EXPECT_EQ(2, result.exit_code);
+    EXPECT_TRUE(result.output.empty());
+    EXPECT_NE(std::string::npos, result.error.find("parser errors"));
+    EXPECT_NE(std::string::npos, result.error.find("unexpected token for statement"));
 }
 
 } // namespace

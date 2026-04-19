@@ -424,6 +424,21 @@ bool source_requires_more_input(std::string_view source) {
     return line_requires_more_input(source.substr(line_start));
 }
 
+bool is_repl_quit_command(std::string_view line) {
+    return line == "quit" || line == ":quit" || line == ".quit" || line == "exit" ||
+           line == ":exit" || line == ".exit";
+}
+
+bool is_repl_help_command(std::string_view line) {
+    return line == "help" || line == ":help" || line == ".help";
+}
+
+void append_repl_help(std::ostream& output) {
+    output << "Flux REPL commands:\n"
+           << "  help, :help, .help  Show this help text.\n"
+           << "  quit, :quit, .quit, exit, :exit, .exit Leave the REPL.\n";
+}
+
 } // namespace
 
 Environment MakeFluxCliEnvironment(const FluxCliOptions& options) {
@@ -494,7 +509,7 @@ int RunFluxRepl(std::istream& input,
     int exit_code = 0;
 
     if (interactive) {
-        output << "Flux REPL. Type :quit or :exit to leave.\n";
+        output << "Flux REPL. Type :help for commands.\n";
     }
     while (true) {
         if (interactive) {
@@ -503,8 +518,12 @@ int RunFluxRepl(std::istream& input,
         if (!std::getline(input, line)) {
             break;
         }
-        if ((line == ":quit" || line == ":exit" || line == ".exit") && source.empty()) {
+        if (source.empty() && is_repl_quit_command(line)) {
             break;
+        }
+        if (source.empty() && is_repl_help_command(line)) {
+            append_repl_help(output);
+            continue;
         }
         if (line.empty() && source.empty()) {
             continue;

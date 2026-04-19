@@ -301,6 +301,9 @@ cc_test(
     srcs = [
         "flux_cli_unit_test.cpp",
     ],
+    data = glob([
+        "examples/**/*",
+    ]),
     copts = ["-std=c++20"] + COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
