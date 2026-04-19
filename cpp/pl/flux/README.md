@@ -109,7 +109,7 @@ bazel build //cpp/pl/flux:flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/query.flux
 ```
 
-That scenario lives in [examples/ops_dashboard/README.md](./examples/ops_dashboard/README.md) and now includes a small suite of reusable queries covering combinations like `aggregateWindow + join`, calendar `aggregateWindow(1mo)`, `sort + limit`, `union`, `reduce`, and `last`.
+That scenario lives in [examples/ops_dashboard/README.md](./examples/ops_dashboard/README.md) and now includes a small suite of reusable queries covering combinations like `aggregateWindow + join`, `aggregateWindow(createEmpty) + fill`, `group + sort + elapsed`, `group + sort + difference`, `group + sort + derivative`, `aggregateWindow + union + pivot`, calendar `aggregateWindow(1mo)`, `distinct`, `sort + limit`, `tail(offset)`, `union`, `reduce`, and `last`.
 
 Start the REPL:
 
@@ -221,7 +221,7 @@ The current unit tests cover these key flows:
 - array / dict / boolean / float / duration
 - `if exists ... then ... else ...`
 - shorthand and block-bodied arrow functions
-- realistic `filter` / `map` / `aggregateWindow` / `join` / `union` / `reduce` query shapes
+- realistic `filter` / `map` / `aggregateWindow` / `join` / `pivot` / `union` / `reduce` query shapes
 - runtime value creation, deep equality, and object lookup
 - runtime environment scope chaining and option lookup
 - first-pass expression evaluation for literals, identifiers, arrays/objects, member/index access, unary/binary/logical operators, conditionals, string interpolation, record update, function values, and function calls
@@ -231,7 +231,7 @@ The current unit tests cover these key flows:
 - runtime handling for top-level `builtin` declarations
 - package/import metadata handling during file execution
 - command-line execution through `flux`, including `-e`, file mode, and a small REPL
-- in-memory query-style execution for `from |> range |> filter |> map`, plus `limit`, `keep`, `drop`, `rename`, `duplicate`, `set`, `reduce`, `sort`, `group`, `count`, `first`, `last`, `union`, a lightweight two-table `join`, first-pass `aggregateWindow`, and Flux-style CSV input through `csv.from`
+- in-memory query-style execution for `from |> range |> filter |> map`, plus `limit`, `tail`, `keep`, `drop`, `rename`, `duplicate`, `set`, `reduce`, `sort`, `group`, `pivot`, `fill`, `elapsed`, `difference`, `derivative`, `count`, `first`, `last`, `union`, a lightweight two-table `join`, first-pass `aggregateWindow`, and Flux-style CSV input through `csv.from`
 - tree dump / JSON dump
 
 ## Runtime Status
@@ -240,8 +240,8 @@ The runtime layer is still early, but it now has several concrete building block
 
 - `runtime_value`: runtime scalar/container values such as null, bool, int, uint, float, string, duration, time, regex, array, object, and a lightweight in-memory table value
 - `runtime_env`: lexical environments with parent scopes, variable bindings, option bindings, and nearest-scope assignment
-- `runtime_builtin`: a small builtin registry with `len`, `string`, `contains`, `sum`, `mean`, `min`, `max`, first-pass query builtins `from`, `range`, `filter`, `map`, `limit`, `keep`, `drop`, `rename`, `duplicate`, `set`, `reduce`, `sort`, `group`, `count`, `first`, `last`, `union`, `join`, and `aggregateWindow`, plus an imported `csv.from` package builtin
-- `runtime_builtin`: a small builtin registry with `len`, `string`, `contains`, `sum`, `mean`, `min`, `max`, first-pass query builtins `from`, `range`, `filter`, `map`, `limit`, `keep`, `drop`, `rename`, `duplicate`, `set`, `reduce`, `sort`, `group`, `count`, `first`, `last`, `union`, `join`, `aggregateWindow`, and a first-pass `yield`, plus an imported `csv.from` package builtin
+- `runtime_builtin`: a small builtin registry with `len`, `string`, `contains`, `sum`, `mean`, `min`, `max`, first-pass query builtins `from`, `range`, `filter`, `map`, `limit`, `tail`, `keep`, `drop`, `rename`, `duplicate`, `set`, `reduce`, `sort`, `group`, `pivot`, `fill`, `elapsed`, `difference`, `derivative`, `distinct`, `count`, `first`, `last`, `union`, `join`, and `aggregateWindow`, plus an imported `csv.from` package builtin
+- `runtime_builtin`: a small builtin registry with `len`, `string`, `contains`, `sum`, `mean`, `min`, `max`, first-pass query builtins `from`, `range`, `filter`, `map`, `limit`, `tail`, `keep`, `drop`, `rename`, `duplicate`, `set`, `reduce`, `sort`, `group`, `pivot`, `fill`, `elapsed`, `difference`, `derivative`, `distinct`, `count`, `first`, `last`, `union`, `join`, `aggregateWindow`, and a first-pass `yield`, plus an imported `csv.from` package builtin
 - `runtime_eval`: a first expression evaluator for AST expressions, including function values and function calls
 - `runtime_exec`: a first statement executor for assignments, `option`, expression statements, and block/return control flow
 - `flux_cli`: a small CLI/REPL wrapper around the parser and runtime executor
@@ -268,7 +268,7 @@ Current evaluator support includes:
 - builtin and user-defined function calls
 - value forwarding through `|>` into builtin functions and user-defined pipe parameters
 - small numeric aggregate builtins over arrays
-- lightweight in-memory query pipelines using `from`, `range`, `filter`, `map`, `limit`, `keep`, `drop`, `rename`, `duplicate`, `set`, `reduce`, `sort`, `group`, `count`, `first`, `last`, `union`, `join`, and `aggregateWindow`
+- lightweight in-memory query pipelines using `from`, `range`, `filter`, `map`, `limit`, `tail`, `keep`, `drop`, `rename`, `duplicate`, `set`, `reduce`, `sort`, `group`, `pivot`, `fill`, `elapsed`, `difference`, `derivative`, `distinct`, `count`, `first`, `last`, `union`, `join`, and `aggregateWindow`
 
 CSV input is available through the Flux-style `csv` package import. The builtin supports either an inline CSV string through `csv:` or a local file path through `file:`. Its default mode matches Flux's annotated CSV shape (`mode: "annotations"`), while `mode: "raw"` treats the first row as headers and returns every cell as a string:
 
