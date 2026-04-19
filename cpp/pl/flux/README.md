@@ -102,11 +102,22 @@ EOF
 ./bazel-bin/cpp/pl/flux/flux /tmp/query.flux
 ```
 
+Run a larger end-to-end example with checked-in CSV data and a reusable query:
+
+```bash
+bazel build //cpp/pl/flux:flux
+./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/query.flux
+```
+
+That scenario lives in [examples/ops_dashboard/README.md](./examples/ops_dashboard/README.md) and now includes a small suite of reusable queries covering combinations like `aggregateWindow + join`, `sort + limit`, `union`, `reduce`, and `last`.
+
 Start the REPL:
 
 ```bash
 ./bazel-bin/cpp/pl/flux/flux
 ```
+
+Inside the REPL, `help`, `:help`, or `.help` shows the built-in commands.
 
 The REPL keeps one shared environment, so later lines can use earlier bindings:
 
