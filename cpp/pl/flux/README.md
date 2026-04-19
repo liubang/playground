@@ -123,7 +123,7 @@ bazel build //cpp/pl/flux:flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/query.flux
 ```
 
-That scenario lives in [examples/ops_dashboard/README.md](./examples/ops_dashboard/README.md) and now includes a small suite of reusable queries covering combinations like `aggregateWindow + join`, `aggregateWindow(createEmpty) + fill`, `group + sort + elapsed`, `group + sort + difference`, `group + sort + derivative`, `aggregateWindow + union + pivot`, calendar `aggregateWindow(1mo)`, `distinct`, `sort + limit`, `tail(offset)`, `union`, `reduce`, and `last`.
+That scenario lives in [examples/ops_dashboard/README.md](./examples/ops_dashboard/README.md) and now includes a small suite of reusable queries covering combinations like `aggregateWindow + join`, `aggregateWindow(createEmpty) + fill`, `group + sort + elapsed`, `group + sort + difference`, `group + sort + derivative`, `aggregateWindow + union + pivot`, calendar `aggregateWindow(1mo)`, `distinct`, `sort + limit`, `tail(offset)`, `union`, `reduce`, `last`, and multi-result scripts that can be narrowed with `--result`.
 
 Start the REPL:
 
@@ -155,7 +155,14 @@ flux> config.host
 "local"
 ```
 
-By default, runtime execution installs the current builtin prelude. Scalar snippets still print compact values, while query-style scripts now render named result blocks and simple terminal tables. Use `--output-format human|csv|json` to switch result serialization, `--annotated-csv` as a backwards-compatible alias for CSV output, `--quiet` to suppress value output, or `--no-prelude` to execute only explicitly declared/imported symbols.
+By default, runtime execution installs the current builtin prelude. Scalar snippets still print compact values, while query-style scripts now render named result blocks and simple terminal tables. Use `--output-format human|csv|json` to switch result serialization, `--annotated-csv` as a backwards-compatible alias for CSV output, `--result <name>` to emit only one named result from a multi-result script, `--quiet` to suppress value output, or `--no-prelude` to execute only explicitly declared/imported symbols.
+
+When a script emits multiple named results, `--result <name>` narrows output to just that one result across human, CSV, and JSON modes:
+
+```bash
+./bazel-bin/cpp/pl/flux/flux --result latest_east_mem cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux
+./bazel-bin/cpp/pl/flux/flux --output-format json --result latest_west_cpu cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux
+```
 
 Output JSON:
 
