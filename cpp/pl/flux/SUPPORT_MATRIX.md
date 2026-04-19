@@ -85,7 +85,7 @@ Status meanings:
 | command-line AST dumper | Supported | `bazel build //cpp/pl/flux:flux` provides `flux ast` |
 | command-line runtime runner | Partial | `bazel build //cpp/pl/flux:flux` provides `flux -e`, `flux path/to/query.flux`, and a small shared-environment REPL; it uses the current partial runtime, so unsupported execution features still fail at runtime |
 | CLI result presentation | Partial | Scalar snippets still print compact values, and query-style scripts now render internal named results as simple terminal result/table blocks, but the output is not yet fully aligned with official Influx result-set formatting |
-| annotated CSV result output | Partial | The CLI can now emit lightweight annotated CSV for named table and scalar results through `--annotated-csv`; it preserves existing `result`/`table` columns when present and derives `#group` metadata from the runtime `_group` object, but full official result-set fidelity is still incomplete |
+| structured result output | Partial | The CLI supports `--output-format human|csv|json`, with `--annotated-csv` kept as a CSV alias; CSV preserves existing `result`/`table` columns when present and derives `#group` metadata from the runtime `_group` object, while JSON exposes named results and table metadata for scripting, but full official result-set fidelity is still incomplete |
 | parser demo binary | Supported | `parser_test` now uses the tree dump |
 | parser unit tests | Supported | Covers main happy paths and dump output |
 | scanner unit tests | Supported | Covers comments, regex mode, and unread behavior |
@@ -200,7 +200,7 @@ Current status:
 - Add runtime errors with source locations
 - Add script runner examples and interpreter-focused tests
 - Keep `flux ast` and parser diagnostics aligned with runtime debugging needs
-- Add result formatting layers for human-readable terminal tables and optional annotated CSV output, closer to the official Influx query experience
+- Add richer result formatting layers beyond terminal tables, including higher-fidelity CSV/JSON output closer to the official Influx query experience
 
 ## Partial Feature Examples
 

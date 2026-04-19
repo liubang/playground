@@ -24,12 +24,26 @@
 
 namespace {
 
+std::optional<pl::FluxOutputFormat> parse_output_format(std::string_view value) {
+    if (value == "human") {
+        return pl::FluxOutputFormat::Human;
+    }
+    if (value == "csv") {
+        return pl::FluxOutputFormat::Csv;
+    }
+    if (value == "json") {
+        return pl::FluxOutputFormat::Json;
+    }
+    return std::nullopt;
+}
+
 std::string read_all(std::istream& input) {
     return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
 }
 
 void print_usage(std::ostream& out) {
-    out << "usage: flux [--repl] [--quiet] [--annotated-csv] [--no-prelude] [file.flux]\n"
+    out << "usage: flux [--repl] [--quiet] [--output-format human|csv|json] [--no-prelude]"
+           " [file.flux]\n"
         << "       flux -e 'source'\n"
         << "       flux ast [--json] [file.flux]\n"
         << "       flux ast -e 'source'\n\n"
@@ -122,7 +136,30 @@ int main(int argc, char* argv[]) {
             continue;
         }
         if (arg == "--annotated-csv") {
-            options.annotated_csv = true;
+            options.output_format = pl::FluxOutputFormat::Csv;
+            continue;
+        }
+        if (arg == "--output-format" || arg == "--format") {
+            if (i + 1 >= argc) {
+                std::cerr << arg << " requires one of: human, csv, json\n";
+                return 1;
+            }
+            auto output_format = parse_output_format(argv[++i]);
+            if (!output_format.has_value()) {
+                std::cerr << "invalid output format: " << argv[i] << '\n';
+                return 1;
+            }
+            options.output_format = *output_format;
+            continue;
+        }
+        if (arg.rfind("--output-format=", 0) == 0 || arg.rfind("--format=", 0) == 0) {
+            const size_t pos = arg.find('=');
+            auto output_format = parse_output_format(arg.substr(pos + 1));
+            if (!output_format.has_value()) {
+                std::cerr << "invalid output format: " << arg.substr(pos + 1) << '\n';
+                return 1;
+            }
+            options.output_format = *output_format;
             continue;
         }
         if (arg == "--no-prelude") {

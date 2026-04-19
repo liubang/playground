@@ -22,10 +22,16 @@
 
 namespace pl {
 
+enum class FluxOutputFormat {
+    Human,
+    Csv,
+    Json,
+};
+
 struct FluxCliOptions {
     bool quiet = false;
     bool install_builtins = true;
-    bool annotated_csv = false;
+    FluxOutputFormat output_format = FluxOutputFormat::Human;
     bool table_borders = true;
 };
 

@@ -16,11 +16,13 @@
 
 #include "cpp/pl/flux/flux_cli.h"
 
+#include "absl/status/status.h"
 #include "cpp/pl/ascii_table/pretty.h"
 #include "cpp/pl/flux/ast_debug.h"
 #include "cpp/pl/flux/parser.h"
 #include "cpp/pl/flux/runtime_builtin.h"
 #include "cpp/pl/flux/runtime_exec.h"
+#include <simdjson.h>
 #include <algorithm>
 #include <cctype>
 #include <iomanip>
@@ -171,6 +173,124 @@ std::string scalar_cell_text(const Value& value) {
         case Value::Type::Table:
         case Value::Type::Function:
             return value.string();
+    }
+}
+
+using JsonBuilder = simdjson::builder::string_builder;
+
+void append_json_field_name(JsonBuilder& builder, std::string_view name, bool& first_field) {
+    if (!first_field) {
+        builder.append_comma();
+    }
+    builder.escape_and_append_with_quotes(name);
+    builder.append_colon();
+    first_field = false;
+}
+
+void append_json_value(JsonBuilder& builder, const Value& value);
+
+void append_json_object(JsonBuilder& builder, const ObjectValue& object) {
+    builder.start_object();
+    bool first_field = true;
+    for (const auto& [name, value] : object.properties) {
+        append_json_field_name(builder, name, first_field);
+        append_json_value(builder, value);
+    }
+    builder.end_object();
+}
+
+void append_json_table(JsonBuilder& builder, const TableValue& table) {
+    builder.start_object();
+    bool first_field = true;
+
+    append_json_field_name(builder, "type", first_field);
+    builder.append(std::string_view("table"));
+
+    append_json_field_name(builder, "bucket", first_field);
+    builder.append(table.bucket);
+
+    if (table.range_start.has_value()) {
+        append_json_field_name(builder, "rangeStart", first_field);
+        builder.append(*table.range_start);
+    }
+    if (table.range_stop.has_value()) {
+        append_json_field_name(builder, "rangeStop", first_field);
+        builder.append(*table.range_stop);
+    }
+    if (table.result_name.has_value()) {
+        append_json_field_name(builder, "resultName", first_field);
+        builder.append(*table.result_name);
+    }
+
+    append_json_field_name(builder, "rows", first_field);
+    builder.start_array();
+    bool first_row = true;
+    for (const auto& row : table.rows) {
+        if (!first_row) {
+            builder.append_comma();
+        }
+        if (row == nullptr) {
+            builder.append_null();
+        } else {
+            append_json_object(builder, *row);
+        }
+        first_row = false;
+    }
+    builder.end_array();
+    builder.end_object();
+}
+
+void append_json_value(JsonBuilder& builder, const Value& value) {
+    switch (value.type()) {
+        case Value::Type::Null:
+            builder.append_null();
+            return;
+        case Value::Type::Bool:
+            builder.append(value.as_bool());
+            return;
+        case Value::Type::Int:
+            builder.append(value.as_int());
+            return;
+        case Value::Type::UInt:
+            builder.append(value.as_uint());
+            return;
+        case Value::Type::Float:
+            builder.append(value.as_float());
+            return;
+        case Value::Type::String:
+            builder.append(value.as_string());
+            return;
+        case Value::Type::Duration:
+            builder.append(value.as_duration().literal);
+            return;
+        case Value::Type::Time:
+            builder.append(value.as_time().literal);
+            return;
+        case Value::Type::Regex:
+            builder.append(value.as_regex().literal);
+            return;
+        case Value::Type::Array: {
+            builder.start_array();
+            bool first = true;
+            for (const auto& element : value.as_array().elements) {
+                if (!first) {
+                    builder.append_comma();
+                }
+                append_json_value(builder, element);
+                first = false;
+            }
+            builder.end_array();
+            return;
+        }
+        case Value::Type::Object:
+            append_json_object(builder, value.as_object());
+            return;
+        case Value::Type::Table:
+            append_json_table(builder, value.as_table());
+            return;
+        case Value::Type::Function:
+            builder.append(value.string());
+            return;
     }
 }
 
@@ -342,6 +462,64 @@ void append_annotated_csv_output(const FileExecutionResult& result, std::ostring
         append_annotated_csv_result(named, table_index++, out);
         first = false;
     }
+}
+
+absl::StatusOr<std::string> build_json_output(const FileExecutionResult& result) {
+    JsonBuilder builder;
+    builder.start_object();
+    bool first_field = true;
+
+    append_json_field_name(builder, "package", first_field);
+    if (result.package_name.empty()) {
+        builder.append_null();
+    } else {
+        builder.append(result.package_name);
+    }
+
+    append_json_field_name(builder, "imports", first_field);
+    builder.start_array();
+    for (size_t i = 0; i < result.imports.size(); ++i) {
+        if (i > 0) {
+            builder.append_comma();
+        }
+        builder.append(result.imports[i]);
+    }
+    builder.end_array();
+
+    append_json_field_name(builder, "results", first_field);
+    builder.start_array();
+    bool first = true;
+    for (const auto& named : result.results) {
+        if (named.value.is_null()) {
+            continue;
+        }
+        if (!first) {
+            builder.append_comma();
+        }
+        builder.start_object();
+        bool first_result_field = true;
+        append_json_field_name(builder, "name", first_result_field);
+        builder.append(named.name);
+        append_json_field_name(builder, "value", first_result_field);
+        append_json_value(builder, named.value);
+        builder.end_object();
+        first = false;
+    }
+    builder.end_array();
+
+    if (!result.last.value.is_null()) {
+        append_json_field_name(builder, "last", first_field);
+        append_json_value(builder, result.last.value);
+    }
+    builder.end_object();
+
+    std::string_view view;
+    const auto error = builder.view().get(view);
+    if (error != simdjson::SUCCESS) {
+        return absl::InternalError(std::string("failed to serialize JSON output: ") +
+                                   simdjson::error_message(error));
+    }
+    return std::string(view) + "\n";
 }
 
 void append_scalar_result(const NamedResult& result, bool include_header, std::ostringstream& out) {
@@ -585,10 +763,21 @@ FluxCliResult ExecuteFluxSource(const std::string& source,
 
     std::ostringstream out;
     if (!options.quiet) {
-        if (options.annotated_csv) {
-            append_annotated_csv_output(*result_or, out);
-        } else {
-            append_cli_output(*result_or, options, out);
+        switch (options.output_format) {
+            case FluxOutputFormat::Human:
+                append_cli_output(*result_or, options, out);
+                break;
+            case FluxOutputFormat::Csv:
+                append_annotated_csv_output(*result_or, out);
+                break;
+            case FluxOutputFormat::Json:
+                if (auto json_or = build_json_output(*result_or); json_or.ok()) {
+                    out << *json_or;
+                } else {
+                    return FluxCliResult{
+                        .exit_code = 1, .output = "", .error = std::string(json_or.status().message()) + "\n"};
+                }
+                break;
         }
     }
     return FluxCliResult{.exit_code = 0, .output = out.str(), .error = ""};

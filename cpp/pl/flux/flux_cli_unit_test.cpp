@@ -266,7 +266,7 @@ TEST(FluxCliTest, RendersMultipleNamedResultsAsSeparateBlocks) {
 TEST(FluxCliTest, EmitsAnnotatedCsvForTableResults) {
     auto env = MakeFluxCliEnvironment();
     FluxCliOptions options;
-    options.annotated_csv = true;
+    options.output_format = FluxOutputFormat::Csv;
 
     auto result = ExecuteFluxSource(R"(
         import "csv"
@@ -311,7 +311,7 @@ TEST(FluxCliTest, RendersTablesWithoutBordersWhenDisabled) {
 TEST(FluxCliTest, EmitsAnnotatedCsvForScalarResults) {
     auto env = MakeFluxCliEnvironment();
     FluxCliOptions options;
-    options.annotated_csv = true;
+    options.output_format = FluxOutputFormat::Csv;
 
     auto result = ExecuteFluxSource("value = 41\nvalue + 1", "<test>", env, options);
 
@@ -353,7 +353,7 @@ TEST(FluxCliTest, UsesYieldNameInHumanReadableAndAnnotatedCsvOutput) {
 
     env = MakeFluxCliEnvironment();
     FluxCliOptions csv_options;
-    csv_options.annotated_csv = true;
+    csv_options.output_format = FluxOutputFormat::Csv;
     auto csv = ExecuteFluxSource(R"(
         builtin from : (bucket: string) => stream[A]
         builtin yield : (<-tables: stream[A], ?name: string) => stream[A]
@@ -376,7 +376,7 @@ TEST(FluxCliTest, UsesYieldNameInHumanReadableAndAnnotatedCsvOutput) {
 TEST(FluxCliTest, EmitsAnnotatedCsvUsingExistingTableMetadataAndGroupColumns) {
     auto env = MakeFluxCliEnvironment();
     FluxCliOptions options;
-    options.annotated_csv = true;
+    options.output_format = FluxOutputFormat::Csv;
 
     auto result = ExecuteFluxSource(R"(
         import "csv"
@@ -408,6 +408,33 @@ TEST(FluxCliTest, ReportsParserAndRuntimeErrors) {
     EXPECT_EQ(1, runtime_result.exit_code);
     EXPECT_TRUE(runtime_result.output.empty());
     EXPECT_NE(std::string::npos, runtime_result.error.find("missing"));
+}
+
+TEST(FluxCliTest, EmitsJsonForMixedResults) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.output_format = FluxOutputFormat::Json;
+
+    auto result = ExecuteFluxSource(R"(
+        import "csv"
+
+        value = 41
+        data = csv.from(
+            csv: "_time,_measurement,_value\n2024-01-01T00:00:00Z,cpu,95.5\n",
+            mode: "raw",
+        )
+        value + 1
+    )",
+                                    "<test>", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("\"imports\":[\"csv\"]"));
+    EXPECT_NE(std::string::npos, result.output.find("\"name\":\"value\",\"value\":41"));
+    EXPECT_NE(std::string::npos, result.output.find("\"name\":\"data\",\"value\":{\"type\":\"table\""));
+    EXPECT_NE(std::string::npos,
+              result.output.find("\"rows\":[{\"_time\":\"2024-01-01T00:00:00Z\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"last\":42"));
 }
 
 TEST(FluxCliTest, DumpsAstAsTreeAndJson) {

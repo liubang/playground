@@ -59,10 +59,10 @@ Execute Flux source with the runtime CLI:
 ./bazel-bin/cpp/pl/flux/flux -e 'sum([1, 2, 3])'
 ```
 
-Emit annotated CSV instead of the human-readable terminal formatter:
+Choose a structured output format instead of the default human-readable formatter:
 
 ```bash
-./bazel-bin/cpp/pl/flux/flux --annotated-csv -e 'value = 41
+./bazel-bin/cpp/pl/flux/flux --output-format csv -e 'value = 41
 value + 1'
 ```
 
@@ -86,6 +86,17 @@ The same result stream can be exported as lightweight annotated CSV:
 #default,data,,,,
 ,result,table,_time,_measurement,_value
 ,data,0,2024-01-01T00:00:00Z,cpu,95.5
+```
+
+Or as JSON:
+
+```bash
+./bazel-bin/cpp/pl/flux/flux --output-format json -e 'value = 41
+value + 1'
+```
+
+```json
+{"package":null,"imports":[],"results":[{"name":"value","value":41},{"name":"_result","value":42}],"last":42}
 ```
 
 Run a Flux source file:
@@ -144,7 +155,7 @@ flux> config.host
 "local"
 ```
 
-By default, runtime execution installs the current builtin prelude. Scalar snippets still print compact values, while query-style scripts now render named result blocks and simple terminal tables. Use `--annotated-csv` to export annotated CSV instead, `--quiet` to suppress value output, or `--no-prelude` to execute only explicitly declared/imported symbols.
+By default, runtime execution installs the current builtin prelude. Scalar snippets still print compact values, while query-style scripts now render named result blocks and simple terminal tables. Use `--output-format human|csv|json` to switch result serialization, `--annotated-csv` as a backwards-compatible alias for CSV output, `--quiet` to suppress value output, or `--no-prelude` to execute only explicitly declared/imported symbols.
 
 Output JSON:
 
@@ -285,7 +296,7 @@ The runtime layer is still early, but it now has several concrete building block
 - `runtime_exec`: a first statement executor for assignments, `option`, expression statements, and block/return control flow
 - `flux_cli`: a small CLI/REPL wrapper around the parser and runtime executor
 
-File execution keeps an internal ordered list of named results for top-level statements such as assignments, expressions, options, and testcases. The CLI now uses that result list for human-readable blocks and a first-pass `--annotated-csv` export path, which gives us a workable bridge toward more official Flux/Influx result-set formatting.
+File execution keeps an internal ordered list of named results for top-level statements such as assignments, expressions, options, and testcases. The CLI now uses that result list for human-readable blocks plus `csv` and `json` output modes, which gives us a workable bridge toward more official Flux/Influx result-set formatting and easier scripting.
 
 Result naming can now also come from Flux itself through a first-pass `yield(name: "...")` builtin in query pipelines. The current implementation preserves the input table and attaches the yielded name to downstream CLI/CSV output, while annotated CSV output now also preserves existing `result`/`table` columns and derives `#group` flags from runtime `_group` metadata when available. It is still a lightweight compatibility layer rather than a full official Flux result-stream engine.
 
