@@ -56,6 +56,7 @@ Try another query shape from the same directory:
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/edge1_cpu_rollup.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/latest_west_cpu.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux
+./bazel-bin/cpp/pl/flux/flux --list-results cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux
 ./bazel-bin/cpp/pl/flux/flux --result latest_east_mem cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux
 ```
 
