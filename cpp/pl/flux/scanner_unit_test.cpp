@@ -104,5 +104,25 @@ TEST(FluxScannerTest, UnreadRestoresPreviousTokenBoundary) {
     EXPECT_EQ(first->end_offset, second->end_offset);
 }
 
+TEST(FluxScannerTest, ReturnsIllegalTokenForUnexpectedCharacters) {
+    const std::string source = ";";
+    Scanner scanner(source.data(), source.size());
+
+    auto illegal = scanner.scan();
+    ASSERT_NE(illegal, nullptr);
+    EXPECT_EQ(TokenType::Illegal, illegal->tok);
+    EXPECT_EQ(";", illegal->lit);
+    EXPECT_EQ(1u, illegal->start_pos.line);
+    EXPECT_EQ(1u, illegal->start_pos.column);
+    EXPECT_EQ(0u, illegal->start_offset);
+    EXPECT_EQ(1u, illegal->end_offset);
+    EXPECT_EQ(1u, illegal->end_pos.line);
+    EXPECT_EQ(2u, illegal->end_pos.column);
+
+    auto eof = scanner.scan();
+    ASSERT_NE(eof, nullptr);
+    EXPECT_EQ(TokenType::Eof, eof->tok);
+}
+
 } // namespace
 } // namespace pl
