@@ -247,7 +247,7 @@ std::unique_ptr<MonoType> Parser::parse_record_type() {
                 auto name = parse_identifier();
                 const Position start = last_consumed_loc_.start;
                 expect(TokenType::Colon);
-                auto property = std::make_shared<PropertyType>(std::move(name), parse_monotype());
+                property = std::make_shared<PropertyType>(std::move(name), parse_monotype());
                 property->loc = source_location(start, last_consumed_loc_.end);
                 properties.emplace_back(std::move(property));
             }
@@ -641,7 +641,7 @@ std::unique_ptr<Expression> Parser::parse_exponent_expression() {
 std::unique_ptr<Expression> Parser::parse_pipe_expression() {
     auto expr = parse_unary_expression();
     if (expr && expr->type == Expression::Type::Identifier && peek()->tok == TokenType::Arrow) {
-        auto key = std::get<std::unique_ptr<Identifier>>(expr->expr).release();
+        auto *key = std::get<std::unique_ptr<Identifier>>(expr->expr).release();
         auto prop = std::shared_ptr<Property>(
             std::make_unique<Property>(
                 std::make_unique<PropertyKey>(PropertyKey::Type::Identifier,
@@ -2298,7 +2298,7 @@ bool Parser::is_recovery_boundary(const std::set<TokenType>& stop_tokens) const 
 }
 
 void Parser::synchronize(const std::set<TokenType>& stop_tokens) {
-    while (token_ || peek()) {
+    while (token_ || (peek() != nullptr)) {
         if (is_recovery_boundary(stop_tokens)) {
             return;
         }

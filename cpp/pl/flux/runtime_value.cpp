@@ -71,7 +71,7 @@ Value::Value() : type_(Type::Null), storage_(std::monostate{}) {}
 
 Value::Value(Type type, Storage storage) : type_(type), storage_(std::move(storage)) {}
 
-Value Value::null() { return Value(); }
+Value Value::null() { return {}; }
 
 Value Value::boolean(bool value) { return Value(Type::Bool, value); }
 
@@ -282,8 +282,9 @@ std::string TableValue::string() const {
 }
 
 bool TableValue::operator==(const TableValue& other) const {
-    if (bucket != other.bucket || range_start != other.range_start || range_stop != other.range_stop ||
-        result_name != other.result_name || rows.size() != other.rows.size()) {
+    if (bucket != other.bucket || range_start != other.range_start ||
+        range_stop != other.range_stop || result_name != other.result_name ||
+        rows.size() != other.rows.size()) {
         return false;
     }
     for (size_t i = 0; i < rows.size(); ++i) {

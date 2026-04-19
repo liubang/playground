@@ -47,7 +47,8 @@ absl::StatusOr<std::string> flatten_member_name(const MemberExpr& member) {
         if (!inner_name_or.ok()) {
             return inner_name_or.status();
         }
-        suffix = *inner_name_or + "." + suffix;
+        inner_name_or->append(".").append(suffix);
+        suffix = std::move(*inner_name_or);
         cursor = inner->object.get();
     }
 
@@ -174,8 +175,8 @@ void append_named_result(const Statement& stmt,
     if (exec_result.type != ExecutionResult::Type::Normal || exec_result.value.is_null()) {
         return;
     }
-    file_result.results.push_back(
-        NamedResult{resolved_result_name(stmt, exec_result.value), exec_result.value});
+    file_result.results.push_back(NamedResult{.name = resolved_result_name(stmt, exec_result.value),
+                                              .value = exec_result.value});
 }
 
 absl::StatusOr<ExecutionResult> execute_testcase_statement(const TestCaseStmt& testcase,
@@ -228,8 +229,8 @@ absl::StatusOr<ExecutionResult> StatementExecutor::Execute(const Statement& stmt
                 absl::StrCat("cannot execute bad statement: ",
                              std::get<std::unique_ptr<BadStmt>>(stmt.stmt)->text));
         case Statement::Type::TestCaseStatement:
-            return execute_testcase_statement(
-                *std::get<std::unique_ptr<TestCaseStmt>>(stmt.stmt), env);
+            return execute_testcase_statement(*std::get<std::unique_ptr<TestCaseStmt>>(stmt.stmt),
+                                              env);
         case Statement::Type::BuiltinStatement: {
             const auto& builtin = std::get<std::unique_ptr<BuiltinStmt>>(stmt.stmt);
             auto status = BuiltinRegistry::Ensure(env, builtin->id->name);

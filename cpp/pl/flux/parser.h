@@ -85,7 +85,7 @@ private:
     // more will check if we should continue reading tokens for the current block. This is true when
     // the next token is not EOF and the next token is also not one that would close a block.
     bool more();
-    bool is_recovery_boundary(const std::set<TokenType>& stop_tokens) const;
+    [[nodiscard]] bool is_recovery_boundary(const std::set<TokenType>& stop_tokens) const;
     void synchronize(const std::set<TokenType>& stop_tokens);
     std::unique_ptr<Expression> parse_expression_until_boundary(
         std::unique_ptr<Expression> init,

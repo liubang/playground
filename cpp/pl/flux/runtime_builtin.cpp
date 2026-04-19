@@ -16,6 +16,9 @@
 
 #include "cpp/pl/flux/runtime_builtin.h"
 
+#include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
+#include "cpp/pl/flux/runtime_eval.h"
 #include <algorithm>
 #include <cctype>
 #include <ctime>
@@ -24,10 +27,6 @@
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
-
-#include "absl/status/status.h"
-#include "absl/strings/str_cat.h"
-#include "cpp/pl/flux/runtime_eval.h"
 
 namespace pl {
 namespace {
@@ -68,8 +67,7 @@ absl::StatusOr<const Value*> require_object_property(const ObjectValue& object,
                                                      const std::string& property) {
     const Value* value = object.lookup(property);
     if (value == nullptr) {
-        return absl::InvalidArgumentError(
-            absl::StrCat(object_name, " requires `", property, "`"));
+        return absl::InvalidArgumentError(absl::StrCat(object_name, " requires `", property, "`"));
     }
     return value;
 }
@@ -78,8 +76,8 @@ absl::StatusOr<const ArrayValue*> require_array_property(const ObjectValue& obje
                                                          const std::string& name,
                                                          const std::string& property);
 
-absl::StatusOr<std::vector<std::shared_ptr<ObjectValue>>> require_table_rows(const Value& value,
-                                                                             const std::string& name) {
+absl::StatusOr<std::vector<std::shared_ptr<ObjectValue>>> require_table_rows(
+    const Value& value, const std::string& name) {
     if (value.type() != Value::Type::Array) {
         return absl::InvalidArgumentError(absl::StrCat(name, " `rows` must be an array"));
     }
@@ -103,16 +101,13 @@ absl::StatusOr<const TableValue*> require_table_property(const ObjectValue& obje
         return value_or.status();
     }
     if ((*value_or)->type() != Value::Type::Table) {
-        return absl::InvalidArgumentError(
-            absl::StrCat(name, " `", property, "` must be a table"));
+        return absl::InvalidArgumentError(absl::StrCat(name, " `", property, "` must be a table"));
     }
     return &(*value_or)->as_table();
 }
 
 absl::StatusOr<std::vector<const TableValue*>> require_table_array_property(
-    const ObjectValue& object,
-    const std::string& name,
-    const std::string& property) {
+    const ObjectValue& object, const std::string& name, const std::string& property) {
     auto array_or = require_array_property(object, name, property);
     if (!array_or.ok()) {
         return array_or.status();
@@ -160,8 +155,7 @@ absl::StatusOr<const ArrayValue*> require_array_property(const ObjectValue& obje
         return value_or.status();
     }
     if ((*value_or)->type() != Value::Type::Array) {
-        return absl::InvalidArgumentError(
-            absl::StrCat(name, " `", property, "` must be an array"));
+        return absl::InvalidArgumentError(absl::StrCat(name, " `", property, "` must be an array"));
     }
     return &(*value_or)->as_array();
 }
@@ -216,8 +210,7 @@ absl::StatusOr<std::string> optional_string_property(const ObjectValue& object,
         return default_value;
     }
     if (value->type() != Value::Type::String) {
-        return absl::InvalidArgumentError(
-            absl::StrCat(name, " `", property, "` must be a string"));
+        return absl::InvalidArgumentError(absl::StrCat(name, " `", property, "` must be a string"));
     }
     return value->as_string();
 }
@@ -230,8 +223,7 @@ absl::StatusOr<std::string> string_property(const ObjectValue& object,
         return value_or.status();
     }
     if ((*value_or)->type() != Value::Type::String) {
-        return absl::InvalidArgumentError(
-            absl::StrCat(name, " `", property, "` must be a string"));
+        return absl::InvalidArgumentError(absl::StrCat(name, " `", property, "` must be a string"));
     }
     return (*value_or)->as_string();
 }
@@ -267,9 +259,7 @@ absl::StatusOr<std::vector<std::string>> optional_string_array_property(
 }
 
 absl::StatusOr<std::vector<std::pair<std::string, std::string>>> string_map_property(
-    const ObjectValue& object,
-    const std::string& name,
-    const std::string& property) {
+    const ObjectValue& object, const std::string& name, const std::string& property) {
     auto value_or = require_object_property(object, name, property);
     if (!value_or.ok()) {
         return value_or.status();
@@ -319,13 +309,11 @@ bool row_matches_time_bounds(const ObjectValue& row,
     return true;
 }
 
-std::shared_ptr<ObjectValue> clone_row_with_selected_columns(const ObjectValue& row,
-                                                             const std::vector<std::string>& columns,
-                                                             bool keep_columns) {
+std::shared_ptr<ObjectValue> clone_row_with_selected_columns(
+    const ObjectValue& row, const std::vector<std::string>& columns, bool keep_columns) {
     std::vector<std::pair<std::string, Value>> props;
     for (const auto& [key, value] : row.properties) {
-        const bool listed =
-            std::find(columns.begin(), columns.end(), key) != columns.end();
+        const bool listed = std::find(columns.begin(), columns.end(), key) != columns.end();
         if ((keep_columns && listed) || (!keep_columns && !listed)) {
             props.emplace_back(key, value);
         }
@@ -360,7 +348,8 @@ std::shared_ptr<ObjectValue> clone_row_with_group(const ObjectValue& row,
             group_props.emplace_back(column, *value);
         }
     }
-    auto grouped = object_with_upserted_property(row, "_group", Value::object(std::move(group_props)));
+    auto grouped =
+        object_with_upserted_property(row, "_group", Value::object(std::move(group_props)));
     return std::make_shared<ObjectValue>(grouped.as_object());
 }
 
@@ -407,8 +396,7 @@ bool contains_string(const std::vector<std::string>& values, const std::string& 
 }
 
 std::optional<std::string> mapped_column_name(
-    const std::vector<std::pair<std::string, std::string>>& mappings,
-    const std::string& key) {
+    const std::vector<std::pair<std::string, std::string>>& mappings, const std::string& key) {
     for (const auto& [from, to] : mappings) {
         if (from == key) {
             return to;
@@ -518,9 +506,8 @@ absl::StatusOr<Value> parse_raw_csv_table(const std::string& csv, const std::str
             continue;
         }
         if (fields_or->size() != header.size()) {
-            return absl::InvalidArgumentError(
-                absl::StrCat(name, " CSV row has ", fields_or->size(), " fields, expected ",
-                             header.size()));
+            return absl::InvalidArgumentError(absl::StrCat(name, " CSV row has ", fields_or->size(),
+                                                           " fields, expected ", header.size()));
         }
         std::vector<std::pair<std::string, Value>> properties;
         properties.reserve(header.size());
@@ -553,8 +540,7 @@ absl::StatusOr<Value> parse_annotated_csv_value(const std::string& raw,
         if (datatype == "long") {
             auto value = std::stoll(raw, &consumed, 10);
             if (consumed != raw.size()) {
-                return absl::InvalidArgumentError(
-                    absl::StrCat(name, " invalid long value: ", raw));
+                return absl::InvalidArgumentError(absl::StrCat(name, " invalid long value: ", raw));
             }
             return Value::integer(value);
         }
@@ -581,8 +567,7 @@ absl::StatusOr<Value> parse_annotated_csv_value(const std::string& raw,
             if (raw == "false" || raw == "FALSE" || raw == "False") {
                 return Value::boolean(false);
             }
-            return absl::InvalidArgumentError(
-                absl::StrCat(name, " invalid boolean value: ", raw));
+            return absl::InvalidArgumentError(absl::StrCat(name, " invalid boolean value: ", raw));
         }
         if (datatype == "dateTime:RFC3339" || datatype == "dateTime:RFC3339Nano") {
             return Value::time(raw);
@@ -597,8 +582,7 @@ absl::StatusOr<Value> parse_annotated_csv_value(const std::string& raw,
     return Value::string(raw);
 }
 
-absl::StatusOr<Value> parse_annotated_csv_table(const std::string& csv,
-                                                const std::string& name) {
+absl::StatusOr<Value> parse_annotated_csv_table(const std::string& csv, const std::string& name) {
     std::istringstream input(csv);
     std::string line;
     std::vector<std::string> datatypes;
@@ -664,9 +648,8 @@ absl::StatusOr<Value> parse_annotated_csv_table(const std::string& csv,
             continue;
         }
         if (fields.size() != header.size()) {
-            return absl::InvalidArgumentError(
-                absl::StrCat(name, " CSV row has ", fields.size(), " fields, expected ",
-                             header.size()));
+            return absl::InvalidArgumentError(absl::StrCat(name, " CSV row has ", fields.size(),
+                                                           " fields, expected ", header.size()));
         }
         std::vector<std::pair<std::string, Value>> properties;
         std::vector<std::pair<std::string, Value>> group_properties;
@@ -755,7 +738,7 @@ bool parse_fixed_int(const std::string& text, size_t offset, size_t width, int* 
     int value = 0;
     for (size_t i = 0; i < width; ++i) {
         const auto ch = text[offset + i];
-        if (!std::isdigit(static_cast<unsigned char>(ch))) {
+        if (std::isdigit(static_cast<unsigned char>(ch)) == 0) {
             return false;
         }
         value = value * 10 + (ch - '0');
@@ -765,9 +748,9 @@ bool parse_fixed_int(const std::string& text, size_t offset, size_t width, int* 
 }
 
 int64_t days_from_civil(int year, unsigned month, unsigned day) {
-    year -= month <= 2;
+    year -= static_cast<int>(month <= 2);
     const int era = (year >= 0 ? year : year - 399) / 400;
-    const unsigned yoe = static_cast<unsigned>(year - era * 400);
+    const auto yoe = static_cast<unsigned>(year - era * 400);
     const auto shifted_month =
         static_cast<unsigned>(static_cast<int>(month) + (month > 2 ? -3 : 9));
     const unsigned doy = (153 * shifted_month + 2) / 5 + day - 1;
@@ -776,8 +759,8 @@ int64_t days_from_civil(int year, unsigned month, unsigned day) {
 }
 
 std::optional<int64_t> parse_rfc3339_seconds(const std::string& literal) {
-    if (literal.size() < 20 || literal[4] != '-' || literal[7] != '-' ||
-        literal[10] != 'T' || literal[13] != ':' || literal[16] != ':') {
+    if (literal.size() < 20 || literal[4] != '-' || literal[7] != '-' || literal[10] != 'T' ||
+        literal[13] != ':' || literal[16] != ':') {
         return std::nullopt;
     }
     int year = 0;
@@ -786,25 +769,21 @@ std::optional<int64_t> parse_rfc3339_seconds(const std::string& literal) {
     int hour = 0;
     int minute = 0;
     int second = 0;
-    if (!parse_fixed_int(literal, 0, 4, &year) ||
-        !parse_fixed_int(literal, 5, 2, &month) ||
-        !parse_fixed_int(literal, 8, 2, &day) ||
-        !parse_fixed_int(literal, 11, 2, &hour) ||
-        !parse_fixed_int(literal, 14, 2, &minute) ||
-        !parse_fixed_int(literal, 17, 2, &second)) {
+    if (!parse_fixed_int(literal, 0, 4, &year) || !parse_fixed_int(literal, 5, 2, &month) ||
+        !parse_fixed_int(literal, 8, 2, &day) || !parse_fixed_int(literal, 11, 2, &hour) ||
+        !parse_fixed_int(literal, 14, 2, &minute) || !parse_fixed_int(literal, 17, 2, &second)) {
         return std::nullopt;
     }
-    if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 ||
-        second > 60) {
+    if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 60) {
         return std::nullopt;
     }
-    return days_from_civil(year, static_cast<unsigned>(month), static_cast<unsigned>(day)) *
-               24 * 60 * 60 +
+    return days_from_civil(year, static_cast<unsigned>(month), static_cast<unsigned>(day)) * 24 *
+               60 * 60 +
            hour * 60 * 60 + minute * 60 + second;
 }
 
 std::string format_rfc3339_seconds(int64_t seconds) {
-    std::time_t time = static_cast<std::time_t>(seconds);
+    auto time = static_cast<std::time_t>(seconds);
     std::tm tm{};
 #if defined(_WIN32)
     gmtime_s(&tm, &time);
@@ -835,13 +814,12 @@ int64_t utc_seconds_from_civil(int year,
                                unsigned hour = 0,
                                unsigned minute = 0,
                                unsigned second = 0) {
-    return days_from_civil(year, month, day) * 24 * 60 * 60 +
-           static_cast<int64_t>(hour) * 60 * 60 + static_cast<int64_t>(minute) * 60 +
-           static_cast<int64_t>(second);
+    return days_from_civil(year, month, day) * 24 * 60 * 60 + static_cast<int64_t>(hour) * 60 * 60 +
+           static_cast<int64_t>(minute) * 60 + static_cast<int64_t>(second);
 }
 
 int64_t month_index_for_seconds(int64_t seconds) {
-    std::time_t time = static_cast<std::time_t>(seconds);
+    auto time = static_cast<std::time_t>(seconds);
     std::tm tm{};
 #if defined(_WIN32)
     gmtime_s(&tm, &time);
@@ -896,23 +874,20 @@ absl::StatusOr<WindowDuration> parse_window_duration(const Value& value,
     bool saw_fixed_unit = false;
     bool saw_calendar_unit = false;
     while (index < literal.size()) {
-        if (!std::isdigit(static_cast<unsigned char>(literal[index]))) {
+        if (std::isdigit(static_cast<unsigned char>(literal[index])) == 0) {
             return absl::InvalidArgumentError(
-                absl::StrCat(name,
-                             " `",
-                             property,
-                             "` must be ",
+                absl::StrCat(name, " `", property, "` must be ",
                              allow_negative ? "a duration" : "a positive duration"));
         }
         int64_t amount = 0;
         while (index < literal.size() &&
-               std::isdigit(static_cast<unsigned char>(literal[index]))) {
+               (std::isdigit(static_cast<unsigned char>(literal[index])) != 0)) {
             amount = amount * 10 + (literal[index] - '0');
             ++index;
         }
         const size_t unit_begin = index;
         while (index < literal.size() &&
-               std::isalpha(static_cast<unsigned char>(literal[index]))) {
+               (std::isalpha(static_cast<unsigned char>(literal[index])) != 0)) {
             ++index;
         }
         const auto unit = literal.substr(unit_begin, index - unit_begin);
@@ -942,11 +917,8 @@ absl::StatusOr<WindowDuration> parse_window_duration(const Value& value,
                 absl::StrCat(name, " `", property, "` supports s, m, h, d, w, mo, and y units"));
         }
         if (saw_fixed_unit && saw_calendar_unit) {
-            return absl::InvalidArgumentError(
-                absl::StrCat(name,
-                             " `",
-                             property,
-                             "` cannot mix calendar units with fixed-duration units"));
+            return absl::InvalidArgumentError(absl::StrCat(
+                name, " `", property, "` cannot mix calendar units with fixed-duration units"));
         }
     }
     if (saw_calendar_unit && sign < 0) {
@@ -968,9 +940,11 @@ absl::StatusOr<WindowDuration> parse_window_duration(const Value& value,
             return absl::InvalidArgumentError(
                 absl::StrCat(name, " `", property, "` must be a positive duration"));
         }
-        return WindowDuration{WindowDuration::Kind::CalendarMonths, 0, calendar_months};
+        return WindowDuration{
+            .kind = WindowDuration::Kind::CalendarMonths, .seconds = 0, .months = calendar_months};
     }
-    return WindowDuration{WindowDuration::Kind::FixedSeconds, fixed_total, 0};
+    return WindowDuration{
+        .kind = WindowDuration::Kind::FixedSeconds, .seconds = fixed_total, .months = 0};
 }
 
 int64_t floor_div(int64_t lhs, int64_t rhs) {
@@ -1125,9 +1099,9 @@ absl::StatusOr<Value> aggregate_min_max(const std::vector<Value>& args,
         return absl::InvalidArgumentError(absl::StrCat(name, " expects a non-empty array"));
     }
     const Value* best = &elements[0];
-    auto best_number = best->type() == Value::Type::Float    ? best->as_float()
-                       : best->type() == Value::Type::Int    ? static_cast<double>(best->as_int())
-                                                             : static_cast<double>(best->as_uint());
+    auto best_number = best->type() == Value::Type::Float ? best->as_float()
+                       : best->type() == Value::Type::Int ? static_cast<double>(best->as_int())
+                                                          : static_cast<double>(best->as_uint());
     for (size_t i = 1; i < elements.size(); ++i) {
         const auto& item = elements[i];
         if (item.type() != Value::Type::UInt && item.type() != Value::Type::Int &&
@@ -1136,7 +1110,7 @@ absl::StatusOr<Value> aggregate_min_max(const std::vector<Value>& args,
                 absl::StrCat(name, " expects an array of numeric values"));
         }
         auto number = item.type() == Value::Type::Float ? item.as_float()
-                    : item.type() == Value::Type::Int   ? static_cast<double>(item.as_int())
+                      : item.type() == Value::Type::Int ? static_cast<double>(item.as_int())
                                                         : static_cast<double>(item.as_uint());
         if ((choose_min && number < best_number) || (!choose_min && number > best_number)) {
             best = &item;
@@ -1268,7 +1242,7 @@ absl::StatusOr<Value> builtin_csv_from(const std::vector<Value>& args) {
         return mode_or.status();
     }
     if (*mode_or != "raw" && *mode_or != "annotations") {
-        return absl::InvalidArgumentError("csv.from `mode` must be \"raw\" or \"annotations\"");
+        return absl::InvalidArgumentError(R"(csv.from `mode` must be "raw" or "annotations")");
     }
 
     const Value* csv_value = (*object_or)->lookup("csv");
@@ -1308,19 +1282,13 @@ absl::StatusOr<Value> builtin_yield(const std::vector<Value>& args) {
         return table_or.status();
     }
     auto name_or = optional_string_property(
-        **object_or,
-        "yield",
-        "name",
+        **object_or, "yield", "name",
         (*table_or)->result_name.has_value() ? *(*table_or)->result_name : "_result");
     if (!name_or.ok()) {
         return name_or.status();
     }
-    return Value::table(
-        (*table_or)->bucket,
-        (*table_or)->rows,
-        (*table_or)->range_start,
-        (*table_or)->range_stop,
-        *name_or);
+    return Value::table((*table_or)->bucket, (*table_or)->rows, (*table_or)->range_start,
+                        (*table_or)->range_stop, *name_or);
 }
 
 absl::StatusOr<Value> builtin_range(const std::vector<Value>& args) {
@@ -1382,8 +1350,8 @@ absl::StatusOr<Value> builtin_filter(const std::vector<Value>& args) {
             rows.push_back(std::make_shared<ObjectValue>(*row));
         }
     }
-    return Value::table((*table_or)->bucket, std::move(rows),
-                        (*table_or)->range_start, (*table_or)->range_stop);
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
 }
 
 absl::StatusOr<Value> builtin_map(const std::vector<Value>& args) {
@@ -1418,8 +1386,8 @@ absl::StatusOr<Value> builtin_map(const std::vector<Value>& args) {
         }
         rows.push_back(std::make_shared<ObjectValue>(mapped_or->as_object()));
     }
-    return Value::table((*table_or)->bucket, std::move(rows),
-                        (*table_or)->range_start, (*table_or)->range_stop);
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
 }
 
 absl::StatusOr<Value> builtin_limit(const std::vector<Value>& args) {
@@ -1453,7 +1421,7 @@ absl::StatusOr<Value> builtin_limit(const std::vector<Value>& args) {
     }
 
     std::vector<std::shared_ptr<ObjectValue>> rows;
-    const size_t begin = static_cast<size_t>(offset);
+    const auto begin = static_cast<size_t>(offset);
     const size_t end = std::min((*table_or)->rows.size(), begin + static_cast<size_t>(*n_or));
     if (begin < (*table_or)->rows.size()) {
         rows.reserve(end - begin);
@@ -1463,8 +1431,8 @@ absl::StatusOr<Value> builtin_limit(const std::vector<Value>& args) {
             }
         }
     }
-    return Value::table((*table_or)->bucket, std::move(rows),
-                        (*table_or)->range_start, (*table_or)->range_stop);
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
 }
 
 absl::StatusOr<Value> builtin_tail(const std::vector<Value>& args) {
@@ -1498,9 +1466,8 @@ absl::StatusOr<Value> builtin_tail(const std::vector<Value>& args) {
     }
 
     const size_t row_count = (*table_or)->rows.size();
-    const size_t tail_end = offset >= static_cast<int64_t>(row_count)
-                                ? 0
-                                : row_count - static_cast<size_t>(offset);
+    const size_t tail_end =
+        offset >= static_cast<int64_t>(row_count) ? 0 : row_count - static_cast<size_t>(offset);
     const size_t tail_begin =
         static_cast<size_t>(*n_or) >= tail_end ? 0 : tail_end - static_cast<size_t>(*n_or);
 
@@ -1513,8 +1480,8 @@ absl::StatusOr<Value> builtin_tail(const std::vector<Value>& args) {
             }
         }
     }
-    return Value::table((*table_or)->bucket, std::move(rows),
-                        (*table_or)->range_start, (*table_or)->range_stop);
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
 }
 
 absl::StatusOr<Value> builtin_keep(const std::vector<Value>& args) {
@@ -1537,8 +1504,8 @@ absl::StatusOr<Value> builtin_keep(const std::vector<Value>& args) {
             rows.push_back(clone_row_with_selected_columns(*row, *columns_or, true));
         }
     }
-    return Value::table((*table_or)->bucket, std::move(rows),
-                        (*table_or)->range_start, (*table_or)->range_stop);
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
 }
 
 absl::StatusOr<Value> builtin_drop(const std::vector<Value>& args) {
@@ -1561,8 +1528,8 @@ absl::StatusOr<Value> builtin_drop(const std::vector<Value>& args) {
             rows.push_back(clone_row_with_selected_columns(*row, *columns_or, false));
         }
     }
-    return Value::table((*table_or)->bucket, std::move(rows),
-                        (*table_or)->range_start, (*table_or)->range_stop);
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
 }
 
 absl::StatusOr<Value> builtin_rename(const std::vector<Value>& args) {
@@ -1596,8 +1563,8 @@ absl::StatusOr<Value> builtin_rename(const std::vector<Value>& args) {
         }
         rows.push_back(std::make_shared<ObjectValue>(std::move(props)));
     }
-    return Value::table((*table_or)->bucket, std::move(rows),
-                        (*table_or)->range_start, (*table_or)->range_stop);
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
 }
 
 absl::StatusOr<Value> builtin_duplicate(const std::vector<Value>& args) {
@@ -1632,8 +1599,8 @@ absl::StatusOr<Value> builtin_duplicate(const std::vector<Value>& args) {
         auto duplicated = object_with_upserted_property(*row, *as_or, *value);
         rows.push_back(std::make_shared<ObjectValue>(duplicated.as_object()));
     }
-    return Value::table((*table_or)->bucket, std::move(rows),
-                        (*table_or)->range_start, (*table_or)->range_stop);
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
 }
 
 absl::StatusOr<Value> builtin_set(const std::vector<Value>& args) {
@@ -1662,8 +1629,8 @@ absl::StatusOr<Value> builtin_set(const std::vector<Value>& args) {
             rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
         }
     }
-    return Value::table((*table_or)->bucket, std::move(rows),
-                        (*table_or)->range_start, (*table_or)->range_stop);
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
 }
 
 absl::StatusOr<Value> builtin_reduce(const std::vector<Value>& args) {
@@ -1695,8 +1662,8 @@ absl::StatusOr<Value> builtin_reduce(const std::vector<Value>& args) {
         if (row == nullptr) {
             continue;
         }
-        auto next_or = ExpressionEvaluator::Invoke(**fn_or,
-                                                   {Value::object(row->properties), accumulator});
+        auto next_or =
+            ExpressionEvaluator::Invoke(**fn_or, {Value::object(row->properties), accumulator});
         if (!next_or.ok()) {
             return next_or.status();
         }
@@ -1708,8 +1675,8 @@ absl::StatusOr<Value> builtin_reduce(const std::vector<Value>& args) {
 
     std::vector<std::shared_ptr<ObjectValue>> rows;
     rows.push_back(std::make_shared<ObjectValue>(accumulator.as_object()));
-    return Value::table((*table_or)->bucket, std::move(rows),
-                        (*table_or)->range_start, (*table_or)->range_stop);
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
 }
 
 absl::StatusOr<Value> builtin_sort(const std::vector<Value>& args) {
@@ -1721,8 +1688,7 @@ absl::StatusOr<Value> builtin_sort(const std::vector<Value>& args) {
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto columns_or =
-        optional_string_array_property(**object_or, "sort", "columns", {"_value"});
+    auto columns_or = optional_string_array_property(**object_or, "sort", "columns", {"_value"});
     if (!columns_or.ok()) {
         return columns_or.status();
     }
@@ -1747,8 +1713,8 @@ absl::StatusOr<Value> builtin_sort(const std::vector<Value>& args) {
         }
         return false;
     });
-    return Value::table((*table_or)->bucket, std::move(rows),
-                        (*table_or)->range_start, (*table_or)->range_stop);
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
 }
 
 absl::StatusOr<Value> builtin_group(const std::vector<Value>& args) {
@@ -1760,8 +1726,7 @@ absl::StatusOr<Value> builtin_group(const std::vector<Value>& args) {
     if (!table_or.ok()) {
         return table_or.status();
     }
-    auto columns_or =
-        optional_string_array_property(**object_or, "group", "columns", {});
+    auto columns_or = optional_string_array_property(**object_or, "group", "columns", {});
     if (!columns_or.ok()) {
         return columns_or.status();
     }
@@ -1773,8 +1738,8 @@ absl::StatusOr<Value> builtin_group(const std::vector<Value>& args) {
             rows.push_back(clone_row_with_group(*row, *columns_or));
         }
     }
-    return Value::table((*table_or)->bucket, std::move(rows),
-                        (*table_or)->range_start, (*table_or)->range_stop);
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
 }
 
 absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
@@ -1843,8 +1808,8 @@ absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
         auto updated = object_with_upserted_property(*rows[row_index], pivoted_name, *value);
         rows[row_index] = std::make_shared<ObjectValue>(updated.as_object());
     }
-    return Value::table((*table_or)->bucket, std::move(rows),
-                        (*table_or)->range_start, (*table_or)->range_stop);
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
 }
 
 absl::StatusOr<Value> builtin_fill(const std::vector<Value>& args) {
@@ -1860,15 +1825,13 @@ absl::StatusOr<Value> builtin_fill(const std::vector<Value>& args) {
     if (!column_or.ok()) {
         return column_or.status();
     }
-    auto use_previous_or =
-        optional_bool_property(**object_or, "fill", "usePrevious", false);
+    auto use_previous_or = optional_bool_property(**object_or, "fill", "usePrevious", false);
     if (!use_previous_or.ok()) {
         return use_previous_or.status();
     }
     const Value* explicit_value = (*object_or)->lookup("value");
     if (!*use_previous_or && explicit_value == nullptr) {
-        return absl::InvalidArgumentError(
-            "fill requires either `usePrevious: true` or a `value`");
+        return absl::InvalidArgumentError("fill requires either `usePrevious: true` or a `value`");
     }
 
     std::vector<std::shared_ptr<ObjectValue>> rows;
@@ -1903,8 +1866,8 @@ absl::StatusOr<Value> builtin_fill(const std::vector<Value>& args) {
         }
         rows.push_back(next_row);
     }
-    return Value::table((*table_or)->bucket, std::move(rows),
-                        (*table_or)->range_start, (*table_or)->range_stop);
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
 }
 
 absl::StatusOr<Value> builtin_elapsed(const std::vector<Value>& args) {
@@ -1920,8 +1883,7 @@ absl::StatusOr<Value> builtin_elapsed(const std::vector<Value>& args) {
     if (!time_column_or.ok()) {
         return time_column_or.status();
     }
-    auto column_name_or =
-        optional_string_property(**object_or, "elapsed", "columnName", "elapsed");
+    auto column_name_or = optional_string_property(**object_or, "elapsed", "columnName", "elapsed");
     if (!column_name_or.ok()) {
         return column_name_or.status();
     }
@@ -1933,8 +1895,7 @@ absl::StatusOr<Value> builtin_elapsed(const std::vector<Value>& args) {
             return unit_or.status();
         }
         if (unit_or->kind != WindowDuration::Kind::FixedSeconds) {
-            return absl::InvalidArgumentError(
-                "elapsed `unit` does not support calendar durations");
+            return absl::InvalidArgumentError("elapsed `unit` does not support calendar durations");
         }
         unit_seconds = unit_or->seconds;
     }
@@ -1971,13 +1932,14 @@ absl::StatusOr<Value> builtin_elapsed(const std::vector<Value>& args) {
         if (const auto previous = previous_time_by_group.find(group_key);
             previous != previous_time_by_group.end()) {
             auto updated = object_with_upserted_property(
-                *row, *column_name_or, Value::integer((*seconds_or - previous->second) / unit_seconds));
+                *row, *column_name_or,
+                Value::integer((*seconds_or - previous->second) / unit_seconds));
             rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
         }
         previous_time_by_group[group_key] = *seconds_or;
     }
-    return Value::table((*table_or)->bucket, std::move(rows),
-                        (*table_or)->range_start, (*table_or)->range_stop);
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
 }
 
 absl::StatusOr<Value> builtin_difference(const std::vector<Value>& args) {
@@ -2020,16 +1982,16 @@ absl::StatusOr<Value> builtin_difference(const std::vector<Value>& args) {
                 difference =
                     Value::floating(numeric_value(*current) - numeric_value(previous->second));
             } else {
-                difference = Value::integer(
-                    static_cast<int64_t>(numeric_value(*current) - numeric_value(previous->second)));
+                difference = Value::integer(static_cast<int64_t>(numeric_value(*current) -
+                                                                 numeric_value(previous->second)));
             }
             auto updated = object_with_upserted_property(*row, *column_or, std::move(difference));
             rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
         }
         previous_by_group[group_key] = *current;
     }
-    return Value::table((*table_or)->bucket, std::move(rows),
-                        (*table_or)->range_start, (*table_or)->range_stop);
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
 }
 
 absl::StatusOr<Value> builtin_derivative(const std::vector<Value>& args) {
@@ -2114,8 +2076,7 @@ absl::StatusOr<Value> builtin_derivative(const std::vector<Value>& args) {
                     "derivative requires strictly increasing time within each group");
             }
             auto updated = object_with_upserted_property(
-                *row,
-                *column_or,
+                *row, *column_or,
                 Value::floating((numeric_value(*current) - numeric_value(previous_value->second)) *
                                 static_cast<double>(unit_seconds) /
                                 static_cast<double>(delta_seconds)));
@@ -2124,8 +2085,8 @@ absl::StatusOr<Value> builtin_derivative(const std::vector<Value>& args) {
         previous_value_by_group[group_key] = *current;
         previous_time_by_group[group_key] = *seconds_or;
     }
-    return Value::table((*table_or)->bucket, std::move(rows),
-                        (*table_or)->range_start, (*table_or)->range_stop);
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
 }
 
 absl::StatusOr<Value> builtin_distinct(const std::vector<Value>& args) {
@@ -2150,15 +2111,15 @@ absl::StatusOr<Value> builtin_distinct(const std::vector<Value>& args) {
             continue;
         }
         const Value* value = row->lookup(*column_or);
-        const std::string key =
-            absl::StrCat(group_key_for_row(*row), "\n", value == nullptr ? "<missing>" : value->string());
+        const std::string key = absl::StrCat(group_key_for_row(*row), "\n",
+                                             value == nullptr ? "<missing>" : value->string());
         if (!seen.insert(key).second) {
             continue;
         }
         rows.push_back(clone_row(*row));
     }
-    return Value::table((*table_or)->bucket, std::move(rows),
-                        (*table_or)->range_start, (*table_or)->range_stop);
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
 }
 
 absl::StatusOr<Value> builtin_count(const std::vector<Value>& args) {
@@ -2187,8 +2148,8 @@ absl::StatusOr<Value> builtin_count(const std::vector<Value>& args) {
     std::vector<std::shared_ptr<ObjectValue>> rows;
     rows.push_back(std::make_shared<ObjectValue>(
         std::vector<std::pair<std::string, Value>>{{column, Value::integer(count)}}));
-    return Value::table((*table_or)->bucket, std::move(rows),
-                        (*table_or)->range_start, (*table_or)->range_stop);
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
 }
 
 absl::StatusOr<Value> table_single_row_builtin(const std::vector<Value>& args,
@@ -2210,8 +2171,8 @@ absl::StatusOr<Value> table_single_row_builtin(const std::vector<Value>& args,
             rows.push_back(clone_row(*source));
         }
     }
-    return Value::table((*table_or)->bucket, std::move(rows),
-                        (*table_or)->range_start, (*table_or)->range_stop);
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
 }
 
 absl::StatusOr<Value> builtin_first(const std::vector<Value>& args) {
@@ -2291,12 +2252,10 @@ absl::StatusOr<Value> builtin_join(const std::vector<Value>& args) {
             }
         }
     }
-    return Value::table(left_table->bucket.empty() ? right_table->bucket : left_table->bucket,
-                        std::move(rows),
-                        left_table->range_start.has_value() ? left_table->range_start
-                                                            : right_table->range_start,
-                        left_table->range_stop.has_value() ? left_table->range_stop
-                                                           : right_table->range_stop);
+    return Value::table(
+        left_table->bucket.empty() ? right_table->bucket : left_table->bucket, std::move(rows),
+        left_table->range_start.has_value() ? left_table->range_start : right_table->range_start,
+        left_table->range_stop.has_value() ? left_table->range_stop : right_table->range_stop);
 }
 
 absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
@@ -2318,8 +2277,8 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
     }
     int64_t offset_seconds = 0;
     if (const Value* offset_value = (*object_or)->lookup("offset"); offset_value != nullptr) {
-        auto offset_or = parse_window_duration(
-            *offset_value, "aggregateWindow", "offset", true, true);
+        auto offset_or =
+            parse_window_duration(*offset_value, "aggregateWindow", "offset", true, true);
         if (!offset_or.ok()) {
             return offset_or.status();
         }
@@ -2385,8 +2344,10 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
         if (*create_empty_or && window_start.has_value()) {
             auto* span = find_window_group_span(group_spans, group_key);
             if (span == nullptr) {
-                group_spans.push_back(
-                    AggregateWindowGroupSpan{group_key, clone_row(*row), *window_start, *window_start});
+                group_spans.push_back(AggregateWindowGroupSpan{.group_key = group_key,
+                                                               .template_row = clone_row(*row),
+                                                               .min_start_seconds = *window_start,
+                                                               .max_start_seconds = *window_start});
             } else {
                 if (*window_start < span->min_start_seconds) {
                     span->min_start_seconds = *window_start;
@@ -2399,10 +2360,10 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
         auto* bucket = find_window_bucket(buckets, window_start, group_key);
         if (bucket == nullptr) {
             buckets.push_back(AggregateWindowBucket{
-                window_start,
-                group_key,
-                clone_row(*row),
-                {},
+                .start_seconds = window_start,
+                .group_key = group_key,
+                .first_row = clone_row(*row),
+                .values = {},
             });
             bucket = &buckets.back();
         }
@@ -2414,9 +2375,11 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
             if (span.template_row == nullptr) {
                 continue;
             }
-            for (int64_t window_start = span.min_start_seconds; window_start <= span.max_start_seconds;) {
+            for (int64_t window_start = span.min_start_seconds;
+                 window_start <= span.max_start_seconds;) {
                 if (find_window_bucket(buckets, window_start, span.group_key) != nullptr) {
-                    auto next_window_start = aggregate_window_stop_for_start(window_start, *every_or);
+                    auto next_window_start =
+                        aggregate_window_stop_for_start(window_start, *every_or);
                     if (!next_window_start.has_value() || *next_window_start <= window_start) {
                         break;
                     }
@@ -2424,10 +2387,10 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
                     continue;
                 }
                 buckets.push_back(AggregateWindowBucket{
-                    window_start,
-                    span.group_key,
-                    clone_row(*span.template_row),
-                    {},
+                    .start_seconds = window_start,
+                    .group_key = span.group_key,
+                    .first_row = clone_row(*span.template_row),
+                    .values = {},
                 });
                 auto next_window_start = aggregate_window_stop_for_start(window_start, *every_or);
                 if (!next_window_start.has_value() || *next_window_start <= window_start) {
@@ -2480,16 +2443,18 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
             }
             const int64_t window_stop = *window_stop_or;
             row_value = object_with_upserted_property(
-                row_value.as_object(), "_start", Value::time(format_rfc3339_seconds(*bucket.start_seconds)));
+                row_value.as_object(), "_start",
+                Value::time(format_rfc3339_seconds(*bucket.start_seconds)));
             row_value = object_with_upserted_property(
                 row_value.as_object(), "_stop", Value::time(format_rfc3339_seconds(window_stop)));
-            row_value = object_with_upserted_property(
-                row_value.as_object(), *time_column_or, Value::time(format_rfc3339_seconds(window_stop)));
+            row_value =
+                object_with_upserted_property(row_value.as_object(), *time_column_or,
+                                              Value::time(format_rfc3339_seconds(window_stop)));
         }
         rows.push_back(std::make_shared<ObjectValue>(row_value.as_object()));
     }
-    return Value::table((*table_or)->bucket, std::move(rows),
-                        (*table_or)->range_start, (*table_or)->range_stop);
+    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                        (*table_or)->range_stop);
 }
 
 Value make_builtin_value(const std::string& name,

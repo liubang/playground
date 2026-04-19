@@ -19,7 +19,6 @@
 #include "absl/status/statusor.h"
 #include "cpp/pl/flux/ast.h"
 #include "cpp/pl/flux/runtime_env.h"
-#include <memory>
 
 namespace pl {
 
@@ -33,11 +32,11 @@ struct ExecutionResult {
     Value value = Value::null();
 
     static ExecutionResult normal(Value value = Value::null()) {
-        return ExecutionResult{Type::Normal, std::move(value)};
+        return ExecutionResult{.type = Type::Normal, .value = std::move(value)};
     }
 
     static ExecutionResult returned(Value value) {
-        return ExecutionResult{Type::Return, std::move(value)};
+        return ExecutionResult{.type = Type::Return, .value = std::move(value)};
     }
 };
 

@@ -16,8 +16,8 @@
 
 #include "cpp/pl/flux/flux_cli.h"
 
-#include "cpp/pl/flux/ast_debug.h"
 #include "cpp/pl/ascii_table/pretty.h"
+#include "cpp/pl/flux/ast_debug.h"
 #include "cpp/pl/flux/parser.h"
 #include "cpp/pl/flux/runtime_builtin.h"
 #include "cpp/pl/flux/runtime_exec.h"
@@ -250,27 +250,25 @@ void append_annotated_csv_result(const NamedResult& result,
         std::vector<std::string> default_row = {"#default"};
         std::vector<std::string> header_row = {""};
 
-        datatype_row.push_back("string");
-        group_row.push_back("false");
-        default_row.push_back(has_result_column
-                                  ? shared_column_value(table, "result").value_or("")
-                                  : result.name);
-        header_row.push_back("result");
+        datatype_row.emplace_back("string");
+        group_row.emplace_back("false");
+        default_row.push_back(has_result_column ? shared_column_value(table, "result").value_or("")
+                                                : result.name);
+        header_row.emplace_back("result");
 
-        datatype_row.push_back("long");
-        group_row.push_back("false");
-        default_row.push_back(has_table_column
-                                  ? shared_column_value(table, "table").value_or("")
-                                  : "");
-        header_row.push_back("table");
+        datatype_row.emplace_back("long");
+        group_row.emplace_back("false");
+        default_row.push_back(has_table_column ? shared_column_value(table, "table").value_or("")
+                                               : "");
+        header_row.emplace_back("table");
 
         for (const auto& column : columns) {
             if (column == "result" || column == "table") {
                 continue;
             }
             datatype_row.push_back(column_datatype(result, column));
-            group_row.push_back(group_columns.count(column) != 0 ? "true" : "false");
-            default_row.push_back("");
+            group_row.emplace_back(group_columns.count(column) != 0 ? "true" : "false");
+            default_row.emplace_back("");
             header_row.push_back(column);
         }
 
@@ -313,8 +311,8 @@ void append_annotated_csv_result(const NamedResult& result,
     std::vector<std::string> header_row = {"", "result", "table"};
     for (const auto& column : columns) {
         datatype_row.push_back(column_datatype(result, column));
-        group_row.push_back("false");
-        default_row.push_back("");
+        group_row.emplace_back("false");
+        default_row.emplace_back("");
         header_row.push_back(column);
     }
 
@@ -421,10 +419,10 @@ void append_cli_output(const FileExecutionResult& result,
     }
 
     bool multiple_results = result.results.size() > 1;
-    bool has_table = std::any_of(
-        result.results.begin(), result.results.end(), [](const NamedResult& named_result) {
-            return named_result.value.type() == Value::Type::Table;
-        });
+    bool has_table = std::any_of(result.results.begin(), result.results.end(),
+                                 [](const NamedResult& named_result) {
+                                     return named_result.value.type() == Value::Type::Table;
+                                 });
     bool include_headers = multiple_results || has_table;
 
     bool first = true;
@@ -442,8 +440,7 @@ void append_cli_output(const FileExecutionResult& result,
 
 std::string_view trim_ascii(std::string_view text) {
     size_t start = 0;
-    while (start < text.size() &&
-           std::isspace(static_cast<unsigned char>(text[start])) != 0) {
+    while (start < text.size() && std::isspace(static_cast<unsigned char>(text[start])) != 0) {
         ++start;
     }
     size_t end = text.size();
@@ -574,15 +571,16 @@ FluxCliResult ExecuteFluxSource(const std::string& source,
     Parser parser(source);
     auto file = parser.parse_file(name);
     if (!file) {
-        return FluxCliResult{2, "", "failed to parse input\n"};
+        return FluxCliResult{.exit_code = 2, .output = "", .error = "failed to parse input\n"};
     }
     if (!parser.errors().empty()) {
-        return FluxCliResult{2, "", parser_error_text(parser)};
+        return FluxCliResult{.exit_code = 2, .output = "", .error = parser_error_text(parser)};
     }
 
     auto result_or = StatementExecutor::ExecuteFile(*file, env);
     if (!result_or.ok()) {
-        return FluxCliResult{1, "", status_message(result_or.status()) + "\n"};
+        return FluxCliResult{
+            .exit_code = 1, .output = "", .error = status_message(result_or.status()) + "\n"};
     }
 
     std::ostringstream out;
@@ -593,7 +591,7 @@ FluxCliResult ExecuteFluxSource(const std::string& source,
             append_cli_output(*result_or, options, out);
         }
     }
-    return FluxCliResult{0, out.str(), ""};
+    return FluxCliResult{.exit_code = 0, .output = out.str(), .error = ""};
 }
 
 FluxCliResult DumpFluxAstSource(const std::string& source,
@@ -602,7 +600,7 @@ FluxCliResult DumpFluxAstSource(const std::string& source,
     Parser parser(source);
     auto file = parser.parse_file(name);
     if (!file) {
-        return FluxCliResult{2, "", "failed to parse input\n"};
+        return FluxCliResult{.exit_code = 2, .output = "", .error = "failed to parse input\n"};
     }
 
     std::string error;
@@ -613,7 +611,7 @@ FluxCliResult DumpFluxAstSource(const std::string& source,
     }
 
     std::string output = options.json ? dump_ast_json(*file) : dump_ast(*file);
-    return FluxCliResult{exit_code, output, error};
+    return FluxCliResult{.exit_code = exit_code, .output = output, .error = error};
 }
 
 int RunFluxRepl(std::istream& input,

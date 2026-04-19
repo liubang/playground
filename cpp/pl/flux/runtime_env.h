@@ -16,13 +16,12 @@
 
 #pragma once
 
-#include <memory>
-#include <string>
-#include <unordered_map>
-
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "cpp/pl/flux/runtime_value.h"
+#include <memory>
+#include <string>
+#include <unordered_map>
 
 namespace pl {
 
@@ -44,7 +43,7 @@ public:
     [[nodiscard]] std::shared_ptr<Environment> parent() const { return parent_; }
 
 private:
-    const Environment* find_binding_owner(const std::string& name) const;
+    [[nodiscard]] const Environment* find_binding_owner(const std::string& name) const;
     Environment* find_binding_owner(const std::string& name);
 
     std::shared_ptr<Environment> parent_;
@@ -52,4 +51,4 @@ private:
     std::unordered_map<std::string, Value> options_;
 };
 
-}  // namespace pl
+} // namespace pl

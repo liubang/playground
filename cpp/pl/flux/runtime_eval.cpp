@@ -18,7 +18,6 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
-#include <cmath>
 #include <optional>
 #include <regex>
 #include <sstream>
@@ -86,8 +85,8 @@ bool is_named_call_argument(const Expression& expr) {
     return object->with == nullptr;
 }
 
-absl::StatusOr<std::unordered_map<std::string, Value>>
-eval_named_arguments(const Expression& expr, const Environment& env) {
+absl::StatusOr<std::unordered_map<std::string, Value>> eval_named_arguments(
+    const Expression& expr, const Environment& env) {
     std::unordered_map<std::string, Value> named_args;
     const auto& object = std::get<std::unique_ptr<ObjectExpr>>(expr.expr);
     for (const auto& property : object->properties) {
@@ -164,8 +163,7 @@ absl::StatusOr<Value> execute_function_body(const FunctionBody& body, Environmen
                                          std::get<std::unique_ptr<BadStmt>>(stmt->stmt)->text));
                     case Statement::Type::BuiltinStatement:
                     case Statement::Type::TestCaseStatement:
-                        return absl::UnimplementedError(
-                            "unsupported statement in function body");
+                        return absl::UnimplementedError("unsupported statement in function body");
                 }
             }
             return last;
@@ -250,9 +248,8 @@ absl::Status bind_function_arguments(const FunctionValue& function,
 
     if (use_named_args) {
         if (!named_args.empty()) {
-            return invalid_call(whole_expr,
-                                absl::StrCat("unexpected named argument `",
-                                             named_args.begin()->first, "`"));
+            return invalid_call(whole_expr, absl::StrCat("unexpected named argument `",
+                                                         named_args.begin()->first, "`"));
         }
     } else if (positional_index != positional_args.size()) {
         return invalid_call(whole_expr, "too many positional arguments");
@@ -358,8 +355,8 @@ absl::StatusOr<Value> invoke_function(const FunctionValue& function,
     }
 
     Environment function_env(function.closure);
-    auto bind_status = bind_function_arguments(
-        function, *function.user_function, call, whole_expr, env, function_env, pipe_value);
+    auto bind_status = bind_function_arguments(function, *function.user_function, call, whole_expr,
+                                               env, function_env, pipe_value);
     if (!bind_status.ok()) {
         return bind_status;
     }
@@ -395,7 +392,7 @@ absl::StatusOr<Value> eval_call(const CallExpr& call,
     if (!callee_or.ok()) {
         return callee_or.status();
     }
-    auto callee = *callee_or;
+    const auto& callee = *callee_or;
     if (callee.type() != Value::Type::Function) {
         return invalid_call(whole_expr, "callee must evaluate to a function");
     }
@@ -426,7 +423,7 @@ absl::StatusOr<Value> eval_member(const MemberExpr& member,
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto object = *object_or;
+    const auto& object = *object_or;
     if (object.type() != Value::Type::Object) {
         return type_error(whole_expr, "member access requires an object");
     }
@@ -434,7 +431,7 @@ absl::StatusOr<Value> eval_member(const MemberExpr& member,
     if (!name_or.ok()) {
         return name_or.status();
     }
-    auto name = *name_or;
+    const auto& name = *name_or;
     const Value* value = object.as_object().lookup(name);
     if (value == nullptr) {
         return absl::NotFoundError(absl::StrCat("missing object property: ", name));
@@ -449,12 +446,12 @@ absl::StatusOr<Value> eval_index(const IndexExpr& index,
     if (!target_or.ok()) {
         return target_or.status();
     }
-    auto target = *target_or;
+    const auto& target = *target_or;
     auto key_or = eval_impl(*index.index, env);
     if (!key_or.ok()) {
         return key_or.status();
     }
-    auto key = *key_or;
+    const auto& key = *key_or;
 
     if (target.type() == Value::Type::Array) {
         size_t pos = 0;
@@ -501,7 +498,7 @@ absl::StatusOr<Value> eval_string_expr(const StringExpr& expr, const Environment
                 if (!value_or.ok()) {
                     return value_or.status();
                 }
-                auto value = *value_or;
+                const auto& value = *value_or;
                 out += string_payload(value);
                 break;
             }
@@ -519,7 +516,7 @@ absl::StatusOr<Value> eval_object_expr(const ObjectExpr& object,
         if (!base_value_or.ok()) {
             return base_value_or.status();
         }
-        auto base_value = *base_value_or;
+        const auto& base_value = *base_value_or;
         if (base_value.type() != Value::Type::Object) {
             return type_error(whole_expr, "record update source must be an object");
         }
@@ -573,7 +570,7 @@ absl::StatusOr<Value> eval_unary(const UnaryExpr& unary,
     if (!value_or.ok()) {
         return value_or.status();
     }
-    auto value = *value_or;
+    const auto& value = *value_or;
     switch (unary.op) {
         case Operator::NotOperator:
             if (value.type() != Value::Type::Bool) {
@@ -648,12 +645,12 @@ absl::StatusOr<Value> eval_binary(const BinaryExpr& binary,
     if (!left_or.ok()) {
         return left_or.status();
     }
-    auto left = *left_or;
+    const auto& left = *left_or;
     auto right_or = eval_impl(*binary.right, env);
     if (!right_or.ok()) {
         return right_or.status();
     }
-    auto right = *right_or;
+    const auto& right = *right_or;
 
     const bool left_numeric = left.type() == Value::Type::Int || left.type() == Value::Type::UInt ||
                               left.type() == Value::Type::Float;
@@ -713,7 +710,7 @@ absl::StatusOr<Value> eval_logical(const LogicalExpr& logical,
     if (!left_or.ok()) {
         return left_or.status();
     }
-    auto left = *left_or;
+    const auto& left = *left_or;
     if (left.type() != Value::Type::Bool) {
         return type_error(whole_expr, "logical operators require boolean operands");
     }
@@ -727,7 +724,7 @@ absl::StatusOr<Value> eval_logical(const LogicalExpr& logical,
     if (!right_or.ok()) {
         return right_or.status();
     }
-    auto right = *right_or;
+    const auto& right = *right_or;
     if (right.type() != Value::Type::Bool) {
         return type_error(whole_expr, "logical operators require boolean operands");
     }
@@ -774,7 +771,7 @@ absl::StatusOr<Value> eval_impl(const Expression& expr, const Environment& env) 
             if (!test_or.ok()) {
                 return test_or.status();
             }
-            auto test = *test_or;
+            const auto& test = *test_or;
             if (test.type() != Value::Type::Bool) {
                 return type_error(expr, "conditional test must evaluate to bool");
             }

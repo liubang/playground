@@ -22,17 +22,13 @@ Environment::Environment() = default;
 
 Environment::Environment(std::shared_ptr<Environment> parent) : parent_(std::move(parent)) {}
 
-void Environment::define(const std::string& name, const Value& value) {
-    bindings_[name] = value;
-}
+void Environment::define(const std::string& name, const Value& value) { bindings_[name] = value; }
 
 void Environment::define_option(const std::string& name, const Value& value) {
     options_[name] = value;
 }
 
-bool Environment::has_local(const std::string& name) const {
-    return bindings_.contains(name);
-}
+bool Environment::has_local(const std::string& name) const { return bindings_.contains(name); }
 
 bool Environment::has_local_option(const std::string& name) const {
     return options_.contains(name);
@@ -87,4 +83,4 @@ Environment* Environment::find_binding_owner(const std::string& name) {
     return nullptr;
 }
 
-}  // namespace pl
+} // namespace pl
