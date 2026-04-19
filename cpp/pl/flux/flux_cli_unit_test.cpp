@@ -63,9 +63,11 @@ std::string RewriteExamplePaths(std::string source) {
     return source;
 }
 
-FluxCliResult ExecuteExampleScript(const std::string& relative_path, Environment& env) {
+FluxCliResult ExecuteExampleScript(const std::string& relative_path,
+                                   Environment& env,
+                                   const FluxCliOptions& options = {}) {
     const std::string path = RunfilePath(relative_path);
-    return ExecuteFluxSource(RewriteExamplePaths(ReadAllText(path)), path, env);
+    return ExecuteFluxSource(RewriteExamplePaths(ReadAllText(path)), path, env, options);
 }
 
 TEST(FluxCliTest, ExecutesSourceWithPreludeBuiltins) {
@@ -210,6 +212,25 @@ TEST(FluxCliTest, EmitsAnnotatedCsvForTableResults) {
         ",data,0,2024-01-01T00:00:00Z,cpu,95.5\n",
         result.output);
     EXPECT_TRUE(result.error.empty());
+}
+
+TEST(FluxCliTest, RendersTablesWithoutBordersWhenDisabled) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.table_borders = false;
+
+    auto result = ExecuteExampleScript(
+        "cpp/pl/flux/examples/ops_dashboard/monthly_cpu_calendar.flux", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: monthly_cpu_calendar\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Table: bucket=csv, rows=2\n"));
+    EXPECT_NE(std::string::npos, result.output.find("_time"));
+    EXPECT_NE(std::string::npos, result.output.find("2024-01-01T00:00:00Z"));
+    EXPECT_NE(std::string::npos, result.output.find("60"));
+    EXPECT_EQ(std::string::npos, result.output.find('+'));
+    EXPECT_EQ(std::string::npos, result.output.find('|'));
 }
 
 TEST(FluxCliTest, EmitsAnnotatedCsvForScalarResults) {

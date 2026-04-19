@@ -156,6 +156,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (repl || (!file_name.has_value() && !eval_source.has_value())) {
+        options.table_borders = isatty(STDOUT_FILENO) != 0;
         return pl::RunFluxRepl(std::cin, std::cout, std::cerr, isatty(STDIN_FILENO), options);
     }
 
@@ -173,6 +174,7 @@ int main(int argc, char* argv[]) {
         source = read_all(file);
     }
 
+    options.table_borders = isatty(STDOUT_FILENO) != 0;
     auto env = pl::MakeFluxCliEnvironment(options);
     auto result = pl::ExecuteFluxSource(source, name, env, options);
     std::cout << result.output;

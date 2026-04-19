@@ -356,7 +356,10 @@ void append_scalar_result(const NamedResult& result, bool include_header, std::o
     out << result.value.string() << '\n';
 }
 
-void append_table_result(const NamedResult& result, bool include_header, std::ostringstream& out) {
+void append_table_result(const NamedResult& result,
+                         bool include_header,
+                         const FluxCliOptions& options,
+                         std::ostringstream& out) {
     const auto& table = result.value.as_table();
     if (include_header) {
         out << "Result: " << result.name << '\n';
@@ -375,7 +378,7 @@ void append_table_result(const NamedResult& result, bool include_header, std::os
         return;
     }
     pretty::Pretty pretty_table(columns);
-    pretty_table.set_show_sep(true);
+    pretty_table.set_show_sep(options.table_borders);
     for (const auto& row : table.rows) {
         std::vector<std::string> cells;
         cells.reserve(columns.size());
@@ -393,18 +396,23 @@ void append_table_result(const NamedResult& result, bool include_header, std::os
     out << pretty_table.str();
 }
 
-void append_named_result(const NamedResult& result, bool include_header, std::ostringstream& out) {
+void append_named_result(const NamedResult& result,
+                         bool include_header,
+                         const FluxCliOptions& options,
+                         std::ostringstream& out) {
     if (result.value.is_null()) {
         return;
     }
     if (result.value.type() == Value::Type::Table) {
-        append_table_result(result, include_header, out);
+        append_table_result(result, include_header, options, out);
         return;
     }
     append_scalar_result(result, include_header, out);
 }
 
-void append_cli_output(const FileExecutionResult& result, std::ostringstream& out) {
+void append_cli_output(const FileExecutionResult& result,
+                       const FluxCliOptions& options,
+                       std::ostringstream& out) {
     if (result.results.empty()) {
         if (!result.last.value.is_null()) {
             out << result.last.value.string() << '\n';
@@ -427,7 +435,7 @@ void append_cli_output(const FileExecutionResult& result, std::ostringstream& ou
         if (!first && include_headers) {
             out << '\n';
         }
-        append_named_result(named, include_headers, out);
+        append_named_result(named, include_headers, options, out);
         first = false;
     }
 }
@@ -582,7 +590,7 @@ FluxCliResult ExecuteFluxSource(const std::string& source,
         if (options.annotated_csv) {
             append_annotated_csv_output(*result_or, out);
         } else {
-            append_cli_output(*result_or, out);
+            append_cli_output(*result_or, options, out);
         }
     }
     return FluxCliResult{0, out.str(), ""};
