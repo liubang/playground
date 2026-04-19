@@ -22,6 +22,8 @@
 #include <exception>
 #include <fstream>
 #include <sstream>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
@@ -413,6 +415,45 @@ std::optional<std::string> mapped_column_name(
         }
     }
     return std::nullopt;
+}
+
+std::string value_key_fragment(const Value& value) {
+    if (value.type() == Value::Type::String) {
+        return value.as_string();
+    }
+    if (value.type() == Value::Type::Time) {
+        return value.as_time().literal;
+    }
+    return value.string();
+}
+
+std::string row_identity_key(const ObjectValue& row, const std::vector<std::string>& columns) {
+    std::string key;
+    for (const auto& column : columns) {
+        absl::StrAppend(&key, column, "=");
+        if (const Value* value = row.lookup(column); value != nullptr) {
+            absl::StrAppend(&key, value_key_fragment(*value));
+        } else {
+            absl::StrAppend(&key, "<missing>");
+        }
+        key.push_back('\n');
+    }
+    return key;
+}
+
+std::string pivot_column_name(const ObjectValue& row, const std::vector<std::string>& columns) {
+    std::string name;
+    for (const auto& column : columns) {
+        if (!name.empty()) {
+            name.push_back('_');
+        }
+        if (const Value* value = row.lookup(column); value != nullptr) {
+            absl::StrAppend(&name, value_key_fragment(*value));
+        } else {
+            absl::StrAppend(&name, "null");
+        }
+    }
+    return name;
 }
 
 absl::StatusOr<std::vector<std::string>> parse_csv_record(const std::string& line,
@@ -1426,6 +1467,56 @@ absl::StatusOr<Value> builtin_limit(const std::vector<Value>& args) {
                         (*table_or)->range_start, (*table_or)->range_stop);
 }
 
+absl::StatusOr<Value> builtin_tail(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "tail");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "tail", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto n_or = integer_property(**object_or, "tail", "n");
+    if (!n_or.ok()) {
+        return n_or.status();
+    }
+    if (*n_or < 0) {
+        return absl::InvalidArgumentError("tail `n` must be non-negative");
+    }
+    int64_t offset = 0;
+    if (const Value* offset_value = (*object_or)->lookup("offset"); offset_value != nullptr) {
+        if (offset_value->type() == Value::Type::Int) {
+            offset = offset_value->as_int();
+        } else if (offset_value->type() == Value::Type::UInt) {
+            offset = static_cast<int64_t>(offset_value->as_uint());
+        } else {
+            return absl::InvalidArgumentError("tail `offset` must be an int or uint");
+        }
+        if (offset < 0) {
+            return absl::InvalidArgumentError("tail `offset` must be non-negative");
+        }
+    }
+
+    const size_t row_count = (*table_or)->rows.size();
+    const size_t tail_end = offset >= static_cast<int64_t>(row_count)
+                                ? 0
+                                : row_count - static_cast<size_t>(offset);
+    const size_t tail_begin =
+        static_cast<size_t>(*n_or) >= tail_end ? 0 : tail_end - static_cast<size_t>(*n_or);
+
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    if (tail_begin < tail_end) {
+        rows.reserve(tail_end - tail_begin);
+        for (size_t i = tail_begin; i < tail_end; ++i) {
+            if ((*table_or)->rows[i] != nullptr) {
+                rows.push_back(std::make_shared<ObjectValue>(*(*table_or)->rows[i]));
+            }
+        }
+    }
+    return Value::table((*table_or)->bucket, std::move(rows),
+                        (*table_or)->range_start, (*table_or)->range_stop);
+}
+
 absl::StatusOr<Value> builtin_keep(const std::vector<Value>& args) {
     auto object_or = require_object_argument(args, "keep");
     if (!object_or.ok()) {
@@ -1681,6 +1772,390 @@ absl::StatusOr<Value> builtin_group(const std::vector<Value>& args) {
         if (row != nullptr) {
             rows.push_back(clone_row_with_group(*row, *columns_or));
         }
+    }
+    return Value::table((*table_or)->bucket, std::move(rows),
+                        (*table_or)->range_start, (*table_or)->range_stop);
+}
+
+absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "pivot");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "pivot", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto row_key_or = string_array_property(**object_or, "pivot", "rowKey");
+    if (!row_key_or.ok()) {
+        return row_key_or.status();
+    }
+    auto column_key_or = string_array_property(**object_or, "pivot", "columnKey");
+    if (!column_key_or.ok()) {
+        return column_key_or.status();
+    }
+    auto value_column_or = string_property(**object_or, "pivot", "valueColumn");
+    if (!value_column_or.ok()) {
+        return value_column_or.status();
+    }
+    if (column_key_or->empty()) {
+        return absl::InvalidArgumentError("pivot `columnKey` must not be empty");
+    }
+
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    std::unordered_map<std::string, size_t> row_indexes;
+    rows.reserve((*table_or)->rows.size());
+    for (const auto& row : (*table_or)->rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        const std::string identity = row_identity_key(*row, *row_key_or);
+        size_t row_index = 0;
+        if (const auto existing = row_indexes.find(identity); existing != row_indexes.end()) {
+            row_index = existing->second;
+        } else {
+            std::vector<std::pair<std::string, Value>> props;
+            std::unordered_set<std::string> included;
+            for (const auto& column : *row_key_or) {
+                if (const Value* value = row->lookup(column); value != nullptr) {
+                    props.emplace_back(column, *value);
+                    included.insert(column);
+                }
+            }
+            for (const auto& [key, value] : row->properties) {
+                if (key == *value_column_or || contains_string(*column_key_or, key) ||
+                    included.count(key) != 0) {
+                    continue;
+                }
+                props.emplace_back(key, value);
+                included.insert(key);
+            }
+            row_index = rows.size();
+            rows.push_back(std::make_shared<ObjectValue>(std::move(props)));
+            row_indexes.emplace(identity, row_index);
+        }
+
+        const Value* value = row->lookup(*value_column_or);
+        if (value == nullptr) {
+            continue;
+        }
+        const std::string pivoted_name = pivot_column_name(*row, *column_key_or);
+        auto updated = object_with_upserted_property(*rows[row_index], pivoted_name, *value);
+        rows[row_index] = std::make_shared<ObjectValue>(updated.as_object());
+    }
+    return Value::table((*table_or)->bucket, std::move(rows),
+                        (*table_or)->range_start, (*table_or)->range_stop);
+}
+
+absl::StatusOr<Value> builtin_fill(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "fill");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "fill", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto column_or = optional_string_property(**object_or, "fill", "column", "_value");
+    if (!column_or.ok()) {
+        return column_or.status();
+    }
+    auto use_previous_or =
+        optional_bool_property(**object_or, "fill", "usePrevious", false);
+    if (!use_previous_or.ok()) {
+        return use_previous_or.status();
+    }
+    const Value* explicit_value = (*object_or)->lookup("value");
+    if (!*use_previous_or && explicit_value == nullptr) {
+        return absl::InvalidArgumentError(
+            "fill requires either `usePrevious: true` or a `value`");
+    }
+
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve((*table_or)->rows.size());
+    std::unordered_map<std::string, Value> previous_by_group;
+    for (const auto& row : (*table_or)->rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        const Value* current = row->lookup(*column_or);
+        const bool needs_fill = current == nullptr || current->is_null();
+        auto next_row = clone_row(*row);
+        const std::string group_key = group_key_for_row(*row);
+
+        if (needs_fill) {
+            std::optional<Value> replacement;
+            if (*use_previous_or) {
+                if (const auto previous = previous_by_group.find(group_key);
+                    previous != previous_by_group.end()) {
+                    replacement = previous->second;
+                }
+            } else if (explicit_value != nullptr) {
+                replacement = *explicit_value;
+            }
+            if (replacement.has_value()) {
+                auto updated = object_with_upserted_property(*next_row, *column_or, *replacement);
+                next_row = std::make_shared<ObjectValue>(updated.as_object());
+                previous_by_group[group_key] = *replacement;
+            }
+        } else {
+            previous_by_group[group_key] = *current;
+        }
+        rows.push_back(next_row);
+    }
+    return Value::table((*table_or)->bucket, std::move(rows),
+                        (*table_or)->range_start, (*table_or)->range_stop);
+}
+
+absl::StatusOr<Value> builtin_elapsed(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "elapsed");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "elapsed", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto time_column_or = optional_string_property(**object_or, "elapsed", "timeColumn", "_time");
+    if (!time_column_or.ok()) {
+        return time_column_or.status();
+    }
+    auto column_name_or =
+        optional_string_property(**object_or, "elapsed", "columnName", "elapsed");
+    if (!column_name_or.ok()) {
+        return column_name_or.status();
+    }
+
+    int64_t unit_seconds = 1;
+    if (const Value* unit_value = (*object_or)->lookup("unit"); unit_value != nullptr) {
+        auto unit_or = parse_window_duration(*unit_value, "elapsed", "unit");
+        if (!unit_or.ok()) {
+            return unit_or.status();
+        }
+        if (unit_or->kind != WindowDuration::Kind::FixedSeconds) {
+            return absl::InvalidArgumentError(
+                "elapsed `unit` does not support calendar durations");
+        }
+        unit_seconds = unit_or->seconds;
+    }
+
+    std::unordered_map<std::string, int64_t> previous_time_by_group;
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve((*table_or)->rows.size());
+    for (const auto& row : (*table_or)->rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        const Value* time_value = row->lookup(*time_column_or);
+        if (time_value == nullptr) {
+            return absl::InvalidArgumentError(
+                absl::StrCat("elapsed requires `", *time_column_or, "` on every row"));
+        }
+
+        std::string literal;
+        if (time_value->type() == Value::Type::Time) {
+            literal = time_value->as_time().literal;
+        } else if (time_value->type() == Value::Type::String) {
+            literal = time_value->as_string();
+        } else {
+            return absl::InvalidArgumentError(
+                absl::StrCat("elapsed `", *time_column_or, "` must be a time or string"));
+        }
+        auto seconds_or = parse_rfc3339_seconds(literal);
+        if (!seconds_or.has_value()) {
+            return absl::InvalidArgumentError(
+                absl::StrCat("elapsed could not parse RFC3339 time: ", literal));
+        }
+
+        const std::string group_key = group_key_for_row(*row);
+        if (const auto previous = previous_time_by_group.find(group_key);
+            previous != previous_time_by_group.end()) {
+            auto updated = object_with_upserted_property(
+                *row, *column_name_or, Value::integer((*seconds_or - previous->second) / unit_seconds));
+            rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
+        }
+        previous_time_by_group[group_key] = *seconds_or;
+    }
+    return Value::table((*table_or)->bucket, std::move(rows),
+                        (*table_or)->range_start, (*table_or)->range_stop);
+}
+
+absl::StatusOr<Value> builtin_difference(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "difference");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "difference", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto column_or = optional_string_property(**object_or, "difference", "column", "_value");
+    if (!column_or.ok()) {
+        return column_or.status();
+    }
+
+    std::unordered_map<std::string, Value> previous_by_group;
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve((*table_or)->rows.size());
+    for (const auto& row : (*table_or)->rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        const Value* current = row->lookup(*column_or);
+        if (current == nullptr) {
+            return absl::InvalidArgumentError(
+                absl::StrCat("difference requires `", *column_or, "` on every row"));
+        }
+        if (!is_numeric_value(*current)) {
+            return absl::InvalidArgumentError(
+                absl::StrCat("difference `", *column_or, "` must be numeric"));
+        }
+
+        const std::string group_key = group_key_for_row(*row);
+        if (const auto previous = previous_by_group.find(group_key);
+            previous != previous_by_group.end()) {
+            Value difference;
+            if (current->type() == Value::Type::Float ||
+                previous->second.type() == Value::Type::Float) {
+                difference =
+                    Value::floating(numeric_value(*current) - numeric_value(previous->second));
+            } else {
+                difference = Value::integer(
+                    static_cast<int64_t>(numeric_value(*current) - numeric_value(previous->second)));
+            }
+            auto updated = object_with_upserted_property(*row, *column_or, std::move(difference));
+            rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
+        }
+        previous_by_group[group_key] = *current;
+    }
+    return Value::table((*table_or)->bucket, std::move(rows),
+                        (*table_or)->range_start, (*table_or)->range_stop);
+}
+
+absl::StatusOr<Value> builtin_derivative(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "derivative");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "derivative", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto column_or = optional_string_property(**object_or, "derivative", "column", "_value");
+    if (!column_or.ok()) {
+        return column_or.status();
+    }
+    auto time_column_or =
+        optional_string_property(**object_or, "derivative", "timeColumn", "_time");
+    if (!time_column_or.ok()) {
+        return time_column_or.status();
+    }
+
+    int64_t unit_seconds = 1;
+    if (const Value* unit_value = (*object_or)->lookup("unit"); unit_value != nullptr) {
+        auto unit_or = parse_window_duration(*unit_value, "derivative", "unit");
+        if (!unit_or.ok()) {
+            return unit_or.status();
+        }
+        if (unit_or->kind != WindowDuration::Kind::FixedSeconds) {
+            return absl::InvalidArgumentError(
+                "derivative `unit` does not support calendar durations");
+        }
+        unit_seconds = unit_or->seconds;
+    }
+
+    std::unordered_map<std::string, Value> previous_value_by_group;
+    std::unordered_map<std::string, int64_t> previous_time_by_group;
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve((*table_or)->rows.size());
+    for (const auto& row : (*table_or)->rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        const Value* current = row->lookup(*column_or);
+        if (current == nullptr) {
+            return absl::InvalidArgumentError(
+                absl::StrCat("derivative requires `", *column_or, "` on every row"));
+        }
+        if (!is_numeric_value(*current)) {
+            return absl::InvalidArgumentError(
+                absl::StrCat("derivative `", *column_or, "` must be numeric"));
+        }
+
+        const Value* time_value = row->lookup(*time_column_or);
+        if (time_value == nullptr) {
+            return absl::InvalidArgumentError(
+                absl::StrCat("derivative requires `", *time_column_or, "` on every row"));
+        }
+
+        std::string literal;
+        if (time_value->type() == Value::Type::Time) {
+            literal = time_value->as_time().literal;
+        } else if (time_value->type() == Value::Type::String) {
+            literal = time_value->as_string();
+        } else {
+            return absl::InvalidArgumentError(
+                absl::StrCat("derivative `", *time_column_or, "` must be a time or string"));
+        }
+        auto seconds_or = parse_rfc3339_seconds(literal);
+        if (!seconds_or.has_value()) {
+            return absl::InvalidArgumentError(
+                absl::StrCat("derivative could not parse RFC3339 time: ", literal));
+        }
+
+        const std::string group_key = group_key_for_row(*row);
+        auto previous_value = previous_value_by_group.find(group_key);
+        auto previous_time = previous_time_by_group.find(group_key);
+        if (previous_value != previous_value_by_group.end() &&
+            previous_time != previous_time_by_group.end()) {
+            const int64_t delta_seconds = *seconds_or - previous_time->second;
+            if (delta_seconds == 0) {
+                return absl::InvalidArgumentError(
+                    "derivative requires strictly increasing time within each group");
+            }
+            auto updated = object_with_upserted_property(
+                *row,
+                *column_or,
+                Value::floating((numeric_value(*current) - numeric_value(previous_value->second)) *
+                                static_cast<double>(unit_seconds) /
+                                static_cast<double>(delta_seconds)));
+            rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
+        }
+        previous_value_by_group[group_key] = *current;
+        previous_time_by_group[group_key] = *seconds_or;
+    }
+    return Value::table((*table_or)->bucket, std::move(rows),
+                        (*table_or)->range_start, (*table_or)->range_stop);
+}
+
+absl::StatusOr<Value> builtin_distinct(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "distinct");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "distinct", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto column_or = optional_string_property(**object_or, "distinct", "column", "_value");
+    if (!column_or.ok()) {
+        return column_or.status();
+    }
+
+    std::unordered_set<std::string> seen;
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve((*table_or)->rows.size());
+    for (const auto& row : (*table_or)->rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        const Value* value = row->lookup(*column_or);
+        const std::string key =
+            absl::StrCat(group_key_for_row(*row), "\n", value == nullptr ? "<missing>" : value->string());
+        if (!seen.insert(key).second) {
+            continue;
+        }
+        rows.push_back(clone_row(*row));
     }
     return Value::table((*table_or)->bucket, std::move(rows),
                         (*table_or)->range_start, (*table_or)->range_stop);
@@ -2084,6 +2559,10 @@ bool install_known_builtin(Environment& env, const std::string& name) {
         install_builtin(env, "limit", builtin_limit, "tables");
         return true;
     }
+    if (name == "tail") {
+        install_builtin(env, "tail", builtin_tail, "tables");
+        return true;
+    }
     if (name == "keep") {
         install_builtin(env, "keep", builtin_keep, "tables");
         return true;
@@ -2114,6 +2593,30 @@ bool install_known_builtin(Environment& env, const std::string& name) {
     }
     if (name == "group") {
         install_builtin(env, "group", builtin_group, "tables");
+        return true;
+    }
+    if (name == "pivot") {
+        install_builtin(env, "pivot", builtin_pivot, "tables");
+        return true;
+    }
+    if (name == "fill") {
+        install_builtin(env, "fill", builtin_fill, "tables");
+        return true;
+    }
+    if (name == "elapsed") {
+        install_builtin(env, "elapsed", builtin_elapsed, "tables");
+        return true;
+    }
+    if (name == "difference") {
+        install_builtin(env, "difference", builtin_difference, "tables");
+        return true;
+    }
+    if (name == "derivative") {
+        install_builtin(env, "derivative", builtin_derivative, "tables");
+        return true;
+    }
+    if (name == "distinct") {
+        install_builtin(env, "distinct", builtin_distinct, "tables");
         return true;
     }
     if (name == "count") {
@@ -2162,6 +2665,7 @@ void BuiltinRegistry::Install(Environment& env) {
     install_known_builtin(env, "filter");
     install_known_builtin(env, "map");
     install_known_builtin(env, "limit");
+    install_known_builtin(env, "tail");
     install_known_builtin(env, "keep");
     install_known_builtin(env, "drop");
     install_known_builtin(env, "rename");
@@ -2170,6 +2674,12 @@ void BuiltinRegistry::Install(Environment& env) {
     install_known_builtin(env, "reduce");
     install_known_builtin(env, "sort");
     install_known_builtin(env, "group");
+    install_known_builtin(env, "pivot");
+    install_known_builtin(env, "fill");
+    install_known_builtin(env, "elapsed");
+    install_known_builtin(env, "difference");
+    install_known_builtin(env, "derivative");
+    install_known_builtin(env, "distinct");
     install_known_builtin(env, "count");
     install_known_builtin(env, "first");
     install_known_builtin(env, "last");

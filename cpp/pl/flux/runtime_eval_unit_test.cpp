@@ -564,6 +564,228 @@ TEST(RuntimeEvalTest, EvaluatesUnionAndJoinBuiltins) {
     EXPECT_EQ("\"a\"", join_result->as_table().rows[0]->lookup("cpu.host")->string());
 }
 
+TEST(RuntimeEvalTest, EvaluatesDistinctBuiltin) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T00:00:10Z", host: "a", region: "east", _value: 10.0},
+                {_time: "2024-01-01T00:00:40Z", host: "a", region: "east", _value: 20.0},
+                {_time: "2024-01-01T00:01:10Z", host: "b", region: "west", _value: 30.0},
+            ],
+        )
+            |> distinct(column: "host")
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    EXPECT_EQ("\"a\"", result->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("10", result->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("\"b\"", result->as_table().rows[1]->lookup("host")->string());
+    EXPECT_EQ("30", result->as_table().rows[1]->lookup("_value")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesTailBuiltinWithOffset) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T00:00:10Z", host: "a", _value: 10.0},
+                {_time: "2024-01-01T00:00:20Z", host: "b", _value: 20.0},
+                {_time: "2024-01-01T00:00:30Z", host: "c", _value: 30.0},
+                {_time: "2024-01-01T00:00:40Z", host: "d", _value: 40.0},
+            ],
+        )
+            |> tail(n: 2, offset: 1)
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    ASSERT_NE(nullptr, result->as_table().rows[0]);
+    ASSERT_NE(nullptr, result->as_table().rows[1]);
+    EXPECT_EQ("\"b\"", result->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("20", result->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("\"c\"", result->as_table().rows[1]->lookup("host")->string());
+    EXPECT_EQ("30", result->as_table().rows[1]->lookup("_value")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesPivotBuiltin) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: 2024-01-01T00:01:00Z, host: "a", metric: "cpu", usage: 72.0},
+                {_time: 2024-01-01T00:01:00Z, host: "a", metric: "mem", usage: 63.0},
+                {_time: 2024-01-01T00:02:00Z, host: "a", metric: "cpu", usage: 82.0},
+                {_time: 2024-01-01T00:02:00Z, host: "a", metric: "mem", usage: 68.0},
+            ],
+        )
+            |> pivot(rowKey: ["_time", "host"], columnKey: ["metric"], valueColumn: "usage")
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    ASSERT_NE(nullptr, result->as_table().rows[0]);
+    ASSERT_NE(nullptr, result->as_table().rows[1]);
+    EXPECT_EQ("2024-01-01T00:01:00Z", result->as_table().rows[0]->lookup("_time")->string());
+    EXPECT_EQ("\"a\"", result->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("72", result->as_table().rows[0]->lookup("cpu")->string());
+    EXPECT_EQ("63", result->as_table().rows[0]->lookup("mem")->string());
+    EXPECT_EQ("2024-01-01T00:02:00Z", result->as_table().rows[1]->lookup("_time")->string());
+    EXPECT_EQ("82", result->as_table().rows[1]->lookup("cpu")->string());
+    EXPECT_EQ("68", result->as_table().rows[1]->lookup("mem")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesFillBuiltinUsePreviousAndValue) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
+                {_time: 2024-01-01T00:01:00Z, host: "a"},
+                {_time: 2024-01-01T00:02:00Z, host: "a", _value: 30.0},
+                {_time: 2024-01-01T00:03:00Z, host: "b"},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> fill(usePrevious: true)
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(4, result->as_table().rows.size());
+    EXPECT_EQ("10", result->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("10", result->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ("30", result->as_table().rows[2]->lookup("_value")->string());
+    EXPECT_EQ(nullptr, result->as_table().rows[3]->lookup("_value"));
+
+    const auto& value_expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: 2024-01-01T00:00:00Z, host: "a"},
+                {_time: 2024-01-01T00:01:00Z, host: "a", usage: 2.0},
+            ],
+        )
+            |> fill(column: "usage", value: 0.0)
+    )");
+    auto value_result = ExpressionEvaluator::Evaluate(value_expr, env);
+
+    ASSERT_TRUE(value_result.ok()) << value_result.status();
+    ASSERT_EQ(2, value_result->as_table().rows.size());
+    EXPECT_EQ("0", value_result->as_table().rows[0]->lookup("usage")->string());
+    EXPECT_EQ("2", value_result->as_table().rows[1]->lookup("usage")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesElapsedBuiltin) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
+                {_time: 2024-01-01T00:00:10Z, host: "b", _value: 20.0},
+                {_time: 2024-01-01T00:00:30Z, host: "a", _value: 30.0},
+                {_time: 2024-01-01T00:01:00Z, host: "b", _value: 40.0},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> elapsed(unit: 10s)
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    ASSERT_NE(nullptr, result->as_table().rows[0]);
+    ASSERT_NE(nullptr, result->as_table().rows[1]);
+    EXPECT_EQ("\"a\"", result->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("3", result->as_table().rows[0]->lookup("elapsed")->string());
+    EXPECT_EQ("{host: \"a\"}", result->as_table().rows[0]->lookup("_group")->string());
+    EXPECT_EQ("\"b\"", result->as_table().rows[1]->lookup("host")->string());
+    EXPECT_EQ("5", result->as_table().rows[1]->lookup("elapsed")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesDifferenceBuiltin) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
+                {_time: 2024-01-01T00:00:10Z, host: "b", _value: 20.0},
+                {_time: 2024-01-01T00:00:30Z, host: "a", _value: 17.0},
+                {_time: 2024-01-01T00:01:00Z, host: "b", _value: 15.0},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> difference()
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    ASSERT_NE(nullptr, result->as_table().rows[0]);
+    ASSERT_NE(nullptr, result->as_table().rows[1]);
+    EXPECT_EQ("\"a\"", result->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("7", result->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("\"b\"", result->as_table().rows[1]->lookup("host")->string());
+    EXPECT_EQ("-5", result->as_table().rows[1]->lookup("_value")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesDerivativeBuiltin) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
+                {_time: 2024-01-01T00:00:10Z, host: "b", _value: 20.0},
+                {_time: 2024-01-01T00:00:30Z, host: "a", _value: 17.0},
+                {_time: 2024-01-01T00:01:00Z, host: "b", _value: 15.0},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> derivative(unit: 10s)
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    ASSERT_NE(nullptr, result->as_table().rows[0]);
+    ASSERT_NE(nullptr, result->as_table().rows[1]);
+    EXPECT_EQ("\"a\"", result->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("2.33333333333333", result->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("\"b\"", result->as_table().rows[1]->lookup("host")->string());
+    EXPECT_EQ("-1", result->as_table().rows[1]->lookup("_value")->string());
+}
+
 TEST(RuntimeEvalTest, EvaluatesAggregateWindowBuiltin) {
     Environment env;
     BuiltinRegistry::Install(env);

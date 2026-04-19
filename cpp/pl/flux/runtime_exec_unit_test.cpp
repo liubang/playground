@@ -508,6 +508,227 @@ TEST(RuntimeExecTest, ExecutesUnionAndJoinQueryFile) {
     EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
 }
 
+TEST(RuntimeExecTest, ExecutesDistinctQueryFile) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin distinct : (<-tables: stream[A], ?column: string) => stream[A]
+
+        hosts = from(bucket: "cpu", rows: [
+            {_time: "t1", host: "a", region: "east", _value: 90.0},
+            {_time: "t2", host: "a", region: "east", _value: 70.0},
+            {_time: "t3", host: "b", region: "west", _value: 60.0},
+        ])
+            |> distinct(column: "host")
+        hosts
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("hosts").ok());
+    ASSERT_EQ(2, env.lookup("hosts")->as_table().rows.size());
+    EXPECT_EQ("\"a\"", env.lookup("hosts")->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("90", env.lookup("hosts")->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("\"b\"", env.lookup("hosts")->as_table().rows[1]->lookup("host")->string());
+    EXPECT_EQ("60", env.lookup("hosts")->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
+}
+
+TEST(RuntimeExecTest, ExecutesTailQueryFile) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin tail : (<-tables: stream[A], n: int, ?offset: int) => stream[A]
+
+        recent = from(bucket: "cpu", rows: [
+            {_time: "t1", host: "a", _value: 10.0},
+            {_time: "t2", host: "b", _value: 20.0},
+            {_time: "t3", host: "c", _value: 30.0},
+            {_time: "t4", host: "d", _value: 40.0},
+        ])
+            |> tail(n: 2, offset: 1)
+        recent
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("recent").ok());
+    ASSERT_EQ(2, env.lookup("recent")->as_table().rows.size());
+    EXPECT_EQ("\"b\"", env.lookup("recent")->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("20", env.lookup("recent")->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("\"c\"", env.lookup("recent")->as_table().rows[1]->lookup("host")->string());
+    EXPECT_EQ("30", env.lookup("recent")->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
+}
+
+TEST(RuntimeExecTest, ExecutesPivotQueryFile) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin pivot : (<-tables: stream[A], rowKey: [string], columnKey: [string], valueColumn: string) => stream[B]
+
+        wide = from(bucket: "cpu", rows: [
+            {_time: 2024-01-01T00:01:00Z, host: "a", metric: "cpu", usage: 72.0},
+            {_time: 2024-01-01T00:01:00Z, host: "a", metric: "mem", usage: 63.0},
+            {_time: 2024-01-01T00:02:00Z, host: "a", metric: "cpu", usage: 82.0},
+            {_time: 2024-01-01T00:02:00Z, host: "a", metric: "mem", usage: 68.0},
+        ])
+            |> pivot(rowKey: ["_time", "host"], columnKey: ["metric"], valueColumn: "usage")
+        wide
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("wide").ok());
+    ASSERT_EQ(2, env.lookup("wide")->as_table().rows.size());
+    EXPECT_EQ("2024-01-01T00:01:00Z", env.lookup("wide")->as_table().rows[0]->lookup("_time")->string());
+    EXPECT_EQ("72", env.lookup("wide")->as_table().rows[0]->lookup("cpu")->string());
+    EXPECT_EQ("63", env.lookup("wide")->as_table().rows[0]->lookup("mem")->string());
+    EXPECT_EQ("2024-01-01T00:02:00Z", env.lookup("wide")->as_table().rows[1]->lookup("_time")->string());
+    EXPECT_EQ("82", env.lookup("wide")->as_table().rows[1]->lookup("cpu")->string());
+    EXPECT_EQ("68", env.lookup("wide")->as_table().rows[1]->lookup("mem")->string());
+    EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
+}
+
+TEST(RuntimeExecTest, ExecutesFillQueryFile) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
+        builtin fill : (<-tables: stream[A], ?column: string, ?usePrevious: bool, ?value: B) => stream[A]
+
+        carried = from(bucket: "cpu", rows: [
+            {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
+            {_time: 2024-01-01T00:01:00Z, host: "a"},
+            {_time: 2024-01-01T00:02:00Z, host: "a", _value: 30.0},
+            {_time: 2024-01-01T00:03:00Z, host: "b"},
+        ])
+            |> group(columns: ["host"])
+            |> fill(usePrevious: true)
+        defaults = from(bucket: "cpu", rows: [
+            {_time: 2024-01-01T00:00:00Z, host: "a"},
+            {_time: 2024-01-01T00:01:00Z, host: "a", usage: 2.0},
+        ])
+            |> fill(column: "usage", value: 0.0)
+        carried
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("carried").ok());
+    ASSERT_EQ(4, env.lookup("carried")->as_table().rows.size());
+    EXPECT_EQ("10", env.lookup("carried")->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("10", env.lookup("carried")->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ("30", env.lookup("carried")->as_table().rows[2]->lookup("_value")->string());
+    EXPECT_EQ(nullptr, env.lookup("carried")->as_table().rows[3]->lookup("_value"));
+    ASSERT_TRUE(env.lookup("defaults").ok());
+    ASSERT_EQ(2, env.lookup("defaults")->as_table().rows.size());
+    EXPECT_EQ("0", env.lookup("defaults")->as_table().rows[0]->lookup("usage")->string());
+    EXPECT_EQ("2", env.lookup("defaults")->as_table().rows[1]->lookup("usage")->string());
+    EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
+}
+
+TEST(RuntimeExecTest, ExecutesElapsedQueryFile) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
+        builtin elapsed : (<-tables: stream[A], ?unit: duration, ?timeColumn: string, ?columnName: string) => stream[A]
+
+        deltas = from(bucket: "cpu", rows: [
+            {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
+            {_time: 2024-01-01T00:00:10Z, host: "b", _value: 20.0},
+            {_time: 2024-01-01T00:00:30Z, host: "a", _value: 30.0},
+            {_time: 2024-01-01T00:01:00Z, host: "b", _value: 40.0},
+        ])
+            |> group(columns: ["host"])
+            |> elapsed(unit: 10s)
+        deltas
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("deltas").ok());
+    ASSERT_EQ(2, env.lookup("deltas")->as_table().rows.size());
+    EXPECT_EQ("\"a\"", env.lookup("deltas")->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("3", env.lookup("deltas")->as_table().rows[0]->lookup("elapsed")->string());
+    EXPECT_EQ("\"b\"", env.lookup("deltas")->as_table().rows[1]->lookup("host")->string());
+    EXPECT_EQ("5", env.lookup("deltas")->as_table().rows[1]->lookup("elapsed")->string());
+    EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
+}
+
+TEST(RuntimeExecTest, ExecutesDifferenceQueryFile) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
+        builtin difference : (<-tables: stream[A], ?column: string) => stream[A]
+
+        deltas = from(bucket: "cpu", rows: [
+            {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
+            {_time: 2024-01-01T00:00:10Z, host: "b", _value: 20.0},
+            {_time: 2024-01-01T00:00:30Z, host: "a", _value: 17.0},
+            {_time: 2024-01-01T00:01:00Z, host: "b", _value: 15.0},
+        ])
+            |> group(columns: ["host"])
+            |> difference()
+        deltas
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("deltas").ok());
+    ASSERT_EQ(2, env.lookup("deltas")->as_table().rows.size());
+    EXPECT_EQ("\"a\"", env.lookup("deltas")->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("7", env.lookup("deltas")->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("\"b\"", env.lookup("deltas")->as_table().rows[1]->lookup("host")->string());
+    EXPECT_EQ("-5", env.lookup("deltas")->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
+}
+
+TEST(RuntimeExecTest, ExecutesDerivativeQueryFile) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
+        builtin derivative : (<-tables: stream[A], ?unit: duration, ?column: string, ?timeColumn: string) => stream[A]
+
+        rates = from(bucket: "cpu", rows: [
+            {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
+            {_time: 2024-01-01T00:00:10Z, host: "b", _value: 20.0},
+            {_time: 2024-01-01T00:00:30Z, host: "a", _value: 17.0},
+            {_time: 2024-01-01T00:01:00Z, host: "b", _value: 15.0},
+        ])
+            |> group(columns: ["host"])
+            |> derivative(unit: 10s)
+        rates
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("rates").ok());
+    ASSERT_EQ(2, env.lookup("rates")->as_table().rows.size());
+    EXPECT_EQ("\"a\"", env.lookup("rates")->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("2.33333333333333", env.lookup("rates")->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("\"b\"", env.lookup("rates")->as_table().rows[1]->lookup("host")->string());
+    EXPECT_EQ("-1", env.lookup("rates")->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
+}
+
 TEST(RuntimeExecTest, ExecutesAggregateWindowQueryFile) {
     auto file = ParseFile(R"(
         builtin from : (bucket: string) => stream[A]
