@@ -1,0 +1,5 @@
+time,service,severity,message,owner
+2024-06-01T09:00:12Z,api,warn,latency spike,oncall-east
+2024-06-01T09:00:45Z,worker,info,queue drained,oncall-west
+2024-06-01T09:01:10Z,api,crit,error budget exhausted,oncall-east
+2024-06-01T09:02:20Z,scheduler,warn,backfill lag growing,platform
