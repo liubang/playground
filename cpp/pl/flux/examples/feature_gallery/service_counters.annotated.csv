@@ -1,0 +1,12 @@
+#datatype,string,long,dateTime:RFC3339,string,string,string,string,long
+#group,false,false,false,true,true,true,true,false
+#default,_result,,,,,,,
+,result,table,_time,_measurement,_field,host,service,_value
+,_result,0,2024-06-01T09:00:00Z,requests,total,edge-1,api,100
+,_result,0,2024-06-01T09:00:30Z,requests,total,edge-1,api,145
+,_result,0,2024-06-01T09:01:00Z,requests,total,edge-1,api,205
+,_result,0,2024-06-01T09:01:30Z,requests,total,edge-1,api,40
+,_result,0,2024-06-01T09:02:00Z,requests,total,edge-1,api,95
+,_result,0,2024-06-01T09:00:00Z,requests,total,edge-2,worker,80
+,_result,0,2024-06-01T09:01:00Z,requests,total,edge-2,worker,150
+,_result,0,2024-06-01T09:02:00Z,requests,total,edge-2,worker,230
