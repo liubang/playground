@@ -155,11 +155,12 @@ flux> config.host
 "local"
 ```
 
-By default, runtime execution installs the current builtin prelude. Scalar snippets still print compact values, while query-style scripts now render named result blocks and simple terminal tables. Use `--output-format human|csv|json` to switch result serialization, `--annotated-csv` as a backwards-compatible alias for CSV output, `--result <name>` to emit only one named result from a multi-result script, `--quiet` to suppress value output, or `--no-prelude` to execute only explicitly declared/imported symbols.
+By default, runtime execution installs the current builtin prelude. Scalar snippets still print compact values, while query-style scripts now render named result blocks and simple terminal tables. Use `--list-results` to print only the available named results, `--output-format human|csv|json` to switch result serialization, `--annotated-csv` as a backwards-compatible alias for CSV output, `--result <name>` to emit only one named result from a multi-result script, `--quiet` to suppress value output, or `--no-prelude` to execute only explicitly declared/imported symbols.
 
 When a script emits multiple named results, `--result <name>` narrows output to just that one result across human, CSV, and JSON modes:
 
 ```bash
+./bazel-bin/cpp/pl/flux/flux --list-results cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux
 ./bazel-bin/cpp/pl/flux/flux --result latest_east_mem cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux
 ./bazel-bin/cpp/pl/flux/flux --output-format json --result latest_west_cpu cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux
 ```

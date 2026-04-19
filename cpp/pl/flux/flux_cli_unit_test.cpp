@@ -516,6 +516,36 @@ TEST(FluxCliTest, ReportsMissingNamedResultFilter) {
     EXPECT_NE(std::string::npos, result.error.find("available results: value, _result"));
 }
 
+TEST(FluxCliTest, ListsNamedResultsWithoutRenderingValues) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.list_results = true;
+
+    auto result = ExecuteFluxSource(R"(
+        value = 41
+        value + 1
+    )",
+                                    "<test>", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_EQ("value\n_result\n", result.output);
+    EXPECT_TRUE(result.error.empty());
+}
+
+TEST(FluxCliTest, ListsFilteredNamedResults) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.list_results = true;
+    options.result_name = "latest_east_mem";
+
+    auto result = ExecuteExampleScript(
+        "cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_EQ("latest_east_mem\n", result.output);
+    EXPECT_TRUE(result.error.empty());
+}
+
 TEST(FluxCliTest, DumpsAstAsTreeAndJson) {
     auto tree_result = DumpFluxAstSource("value = 1 + 2", "<test>");
     EXPECT_EQ(0, tree_result.exit_code);

@@ -31,6 +31,7 @@ enum class FluxOutputFormat {
 
 struct FluxCliOptions {
     bool quiet = false;
+    bool list_results = false;
     bool install_builtins = true;
     FluxOutputFormat output_format = FluxOutputFormat::Human;
     bool table_borders = true;

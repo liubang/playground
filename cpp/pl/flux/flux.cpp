@@ -42,7 +42,8 @@ std::string read_all(std::istream& input) {
 }
 
 void print_usage(std::ostream& out) {
-    out << "usage: flux [--repl] [--quiet] [--output-format human|csv|json] [--result name]"
+    out << "usage: flux [--repl] [--quiet] [--list-results]"
+           " [--output-format human|csv|json] [--result name]"
            " [--no-prelude]"
            " [file.flux]\n"
         << "       flux -e 'source'\n"
@@ -134,6 +135,10 @@ int main(int argc, char* argv[]) {
         }
         if (arg == "--quiet" || arg == "-q") {
             options.quiet = true;
+            continue;
+        }
+        if (arg == "--list-results") {
+            options.list_results = true;
             continue;
         }
         if (arg == "--annotated-csv") {

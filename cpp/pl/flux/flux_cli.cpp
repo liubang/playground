@@ -555,6 +555,15 @@ absl::StatusOr<FileExecutionResult> filter_result_by_name(const FileExecutionRes
                                absl::StrJoin(available_results, ", "));
 }
 
+void append_result_names_output(const FileExecutionResult& result, std::ostringstream& out) {
+    for (const auto& named : result.results) {
+        if (named.value.is_null()) {
+            continue;
+        }
+        out << named.name << '\n';
+    }
+}
+
 void append_scalar_result(const NamedResult& result, bool include_header, std::ostringstream& out) {
     if (result.value.is_null()) {
         return;
@@ -805,7 +814,9 @@ FluxCliResult ExecuteFluxSource(const std::string& source,
     }
 
     std::ostringstream out;
-    if (!options.quiet) {
+    if (options.list_results) {
+        append_result_names_output(*result_or, out);
+    } else if (!options.quiet) {
         switch (options.output_format) {
             case FluxOutputFormat::Human:
                 append_cli_output(*result_or, options, out);
