@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <compare>
+#include "absl/status/statusor.h"
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -26,8 +26,6 @@
 #include <utility>
 #include <variant>
 #include <vector>
-
-#include "absl/status/statusor.h"
 
 namespace pl {
 
