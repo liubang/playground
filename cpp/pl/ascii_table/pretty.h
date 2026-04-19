@@ -17,7 +17,6 @@
 
 #pragma once
 
-#include <cassert>
 #include <cstdint>
 #include <iosfwd>
 #include <memory>
@@ -46,10 +45,9 @@ class Pretty {
 public:
     explicit Pretty(const std::vector<std::string>& headers);
 
-    // default copy and move
-    Pretty(const Pretty&) = default;
+    Pretty(const Pretty&) = delete;
     Pretty(Pretty&&) = default;
-    Pretty& operator=(const Pretty&) = default;
+    Pretty& operator=(const Pretty&) = delete;
     Pretty& operator=(Pretty&&) = default;
 
     Pretty& next();
