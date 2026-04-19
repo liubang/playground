@@ -19,6 +19,7 @@
 
 #include "cpp/pl/flux/runtime_env.h"
 #include <iosfwd>
+#include <optional>
 #include <string>
 
 namespace pl {
@@ -34,6 +35,7 @@ struct FluxCliOptions {
     bool install_builtins = true;
     FluxOutputFormat output_format = FluxOutputFormat::Human;
     bool table_borders = true;
+    std::optional<std::string> result_name;
 };
 
 struct FluxAstOptions {
