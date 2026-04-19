@@ -25,6 +25,9 @@ Optional:
 bazel build //cpp/pl/flux:parser_test
 ```
 
+Benchmark helpers for repeatable local capacity checks now live in
+[benchmark/README.md](./benchmark/README.md).
+
 ## Usage
 
 Read from stdin:
@@ -300,6 +303,52 @@ data = csv.from(csv: "#datatype,string,long,dateTime:RFC3339,string,double,boole
 ```
 
 This is still a lightweight in-memory table representation rather than a full Flux stream/table engine, so broader multi-table stream semantics and the full standard-library CSV surface are not complete yet.
+
+## Benchmarks
+
+We now keep a checked-in local benchmark workflow under
+[benchmark/README.md](./benchmark/README.md) so we can compare behavior before
+and after runtime optimizations.
+
+Build the binary, generate synthetic annotated CSV data, and run the default
+benchmark matrix:
+
+```bash
+bazel build //cpp/pl/flux:flux
+python3 cpp/pl/flux/benchmark/generate_benchmark_data.py
+python3 cpp/pl/flux/benchmark/run_benchmarks.py
+```
+
+The current baseline, collected locally on 2026-04-19, looks like this:
+
+| Case | Input | Time |
+| --- | --- | ---: |
+| `linear` | 100k rows | 2.0s |
+| `linear` | 500k rows | 9.9s |
+| `linear` | 1M rows | 19.6s |
+| `sort` | 100k rows | 1.6s |
+| `sort` | 500k rows | 8.4s |
+| `sort` | 1M rows | 17.6s |
+| `agg` | 100k rows | 9.0s |
+| `agg` | 500k rows | 39.9s |
+| `agg` | 1M rows | 78.7s |
+| `join` | 2000 x 2000 rows | 0.85s |
+| `join` | 5000 x 5000 rows | 5.0s |
+
+Those numbers line up with the current implementation shape:
+
+- `csv.from` reads the whole file into memory first
+- tables are represented as in-memory row vectors
+- operators such as `filter`, `map`, `sort`, `group`, `pivot`, and `union`
+  frequently clone rows
+- `join` is still a lightweight nested-loop two-table implementation
+
+So for now this runtime is best treated as a local in-memory engine for:
+
+- tens of MB of CSV input
+- simple pipelines up to the low millions of rows
+- medium-complexity pipelines in the low hundreds of thousands of rows
+- small joins, not large-table joins
 
 Current statement execution support includes:
 
