@@ -15,7 +15,7 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2025/05/25 23:16
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
     "COPTS_WITH_ASAN",
@@ -38,5 +38,16 @@ cc_binary(
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":pretty",
+    ],
+)
+
+cc_test(
+    name = "pretty_unit_test",
+    srcs = ["pretty_unit_test.cpp"],
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":pretty",
+        "@googletest//:gtest_main",
     ],
 )
