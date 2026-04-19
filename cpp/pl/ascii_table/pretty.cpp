@@ -18,26 +18,11 @@
 
 #include <iostream>
 #include <sstream>
-
-#ifdef _WIN32
-#include <io.h>    // For _isatty
-#include <stdio.h> // For _fileno
-#else
-#include <unistd.h> // For isatty() and STDOUT_FILENO
-#endif
+#include <stdexcept>
 
 namespace pl::pretty {
 
 Pretty::Pretty(const std::vector<std::string>& headers) {
-    // 检查 stdout 是否连接到一个交互式终端 (TTY)
-#ifdef _WIN32
-    // 在 Windows 上, _isatty 返回非零值表示是 TTY
-    show_sep_ = _isatty(_fileno(stdout));
-#else
-    // 在 POSIX 系统上, isatty 返回 1 表示是 TTY
-    show_sep_ = (isatty(STDOUT_FILENO) != 0);
-#endif
-
     maxcell_per_line_ = static_cast<uint32_t>(headers.size());
     cell_max_length_.resize(maxcell_per_line_, 0);
     add_row(headers);
@@ -51,11 +36,16 @@ Pretty& Pretty::next() {
 }
 
 Pretty& Pretty::add_sep(const std::string& sep) {
-    assert(sep.size() > 0);
+    if (sep.empty()) {
+        throw std::invalid_argument("Separator must not be empty.");
+    }
     return next().add_cell(CellType::CT_SEP, sep);
 }
 
 Pretty& Pretty::add_row(const std::vector<std::string>& vals) {
+    if (vals.size() != maxcell_per_line_) {
+        throw std::out_of_range("Row cell count must match the table header count.");
+    }
     next();
     for (const auto& val : vals) {
         add_cell(CellType::CT_STRING, val);
@@ -77,9 +67,7 @@ Pretty& Pretty::add_cell(CellType t, const std::string& val) {
     return *this;
 }
 
-void Pretty::render() const {
-    render(std::cout);
-}
+void Pretty::render() const { render(std::cout); }
 
 void Pretty::render(std::ostream& out) const {
     auto len = maxcell_per_line_ * 3 + 1;
@@ -88,6 +76,8 @@ void Pretty::render(std::ostream& out) const {
     }
     if (show_sep_) {
         print_header(out, len, '=');
+    } else if (!lines_.empty()) {
+        print_line(out, lines_[0]);
     }
     for (size_t i = 1; i < lines_.size(); ++i) {
         if (lines_[i].size() > 0 && lines_[i][0]->t == CellType::CT_SEP) {
@@ -110,6 +100,9 @@ std::string Pretty::str() const {
 }
 
 void Pretty::print_header(std::ostream& out, uint32_t len, char sep) const {
+    if (lines_.empty()) {
+        return;
+    }
     print_header_line(out, len, sep);
     print_line(out, lines_[0]);
     print_header_line(out, len, sep);
@@ -128,8 +121,6 @@ void Pretty::print_line(std::ostream& out, const std::vector<CellPtr>& cells) co
     std::ostringstream oss;
     if (show_sep_) {
         oss << "| ";
-    } else {
-        oss << " ";
     }
     for (size_t i = 0; i < cells.size(); ++i) {
         const auto& cell = cells[i];
@@ -139,11 +130,14 @@ void Pretty::print_line(std::ostream& out, const std::vector<CellPtr>& cells) co
         } else {
             oss << pad_right(cell->val, max_len);
         }
-        if (show_sep_) {
+        if (show_sep_ && i + 1 < cells.size()) {
             oss << " | ";
-        } else {
+        } else if (!show_sep_ && i + 1 < cells.size()) {
             oss << " ";
         }
+    }
+    if (show_sep_) {
+        oss << " |";
     }
     out << oss.str() << '\n';
 }
