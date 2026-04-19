@@ -80,7 +80,7 @@ bazel test //python/...
 To generate `compile_commands.json` for C/C++ tooling:
 
 ```bash
-bazel run //:refresh_compile_commands
+bazel run @hedron_compile_commands//:refresh_all
 ```
 
 ## Environment Notes
