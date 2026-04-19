@@ -53,6 +53,10 @@ std::string RewriteExamplePaths(std::string source) {
     source = ReplaceAll(source,
                         "cpp/pl/flux/examples/ops_dashboard/cpu_usage.annotated.csv",
                         RunfilePath("cpp/pl/flux/examples/ops_dashboard/cpu_usage.annotated.csv"));
+    source = ReplaceAll(
+        source,
+        "cpp/pl/flux/examples/ops_dashboard/cpu_monthly_usage.annotated.csv",
+        RunfilePath("cpp/pl/flux/examples/ops_dashboard/cpu_monthly_usage.annotated.csv"));
     source = ReplaceAll(source,
                         "cpp/pl/flux/examples/ops_dashboard/mem_usage.annotated.csv",
                         RunfilePath("cpp/pl/flux/examples/ops_dashboard/mem_usage.annotated.csv"));
@@ -126,6 +130,15 @@ TEST(FluxCliTest, ExecutesCheckedInOpsDashboardQueryVariants) {
         {
             "cpp/pl/flux/examples/ops_dashboard/cpu_top_windows.flux",
             {"Result: cpu_top_windows\n", "91", "87", "82"},
+        },
+        {
+            "cpp/pl/flux/examples/ops_dashboard/monthly_cpu_calendar.flux",
+            {"Result: monthly_cpu_calendar\n",
+             "2024-01-01T00:00:00Z",
+             "2024-02-01T00:00:00Z",
+             "2024-03-01T00:00:00Z",
+             "60",
+             "77"},
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/fleet_usage_union.flux",
@@ -262,6 +275,29 @@ TEST(FluxCliTest, UsesYieldNameInHumanReadableAndAnnotatedCsvOutput) {
     EXPECT_NE(std::string::npos, csv.output.find("2024-01-01T00:00:00Z"));
     EXPECT_NE(std::string::npos, csv.output.find(",cpu,"));
     EXPECT_TRUE(csv.error.empty());
+}
+
+TEST(FluxCliTest, EmitsAnnotatedCsvUsingExistingTableMetadataAndGroupColumns) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.annotated_csv = true;
+
+    auto result = ExecuteFluxSource(R"(
+        import "csv"
+
+        data = csv.from(csv: "#datatype,string,long,dateTime:RFC3339,string,double\n#group,false,false,true,true,false\n#default,_result,,,,\n,result,table,_time,_measurement,_value\n,cpu,0,2024-01-01T00:00:00Z,cpu,95.5\n\n#datatype,string,long,dateTime:RFC3339,string,double\n#group,false,false,true,true,false\n#default,_result,,,,\n,result,table,_time,_measurement,_value\n,mem,1,2024-01-01T00:01:00Z,mem,42.0\n")
+    )",
+                                    "query.flux", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos,
+              result.output.find("#group,false,false,true,true,false\n"));
+    EXPECT_NE(std::string::npos,
+              result.output.find(",result,table,_time,_measurement,_value\n"));
+    EXPECT_NE(std::string::npos, result.output.find(",cpu,0,2024-01-01T00:00:00Z,cpu,95.5\n"));
+    EXPECT_NE(std::string::npos, result.output.find(",mem,1,2024-01-01T00:01:00Z,mem,42\n"));
+    EXPECT_EQ(std::string::npos, result.output.find("_group"));
 }
 
 TEST(FluxCliTest, ReportsParserAndRuntimeErrors) {

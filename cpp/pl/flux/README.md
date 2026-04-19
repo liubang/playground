@@ -109,7 +109,7 @@ bazel build //cpp/pl/flux:flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/query.flux
 ```
 
-That scenario lives in [examples/ops_dashboard/README.md](./examples/ops_dashboard/README.md) and now includes a small suite of reusable queries covering combinations like `aggregateWindow + join`, `sort + limit`, `union`, `reduce`, and `last`.
+That scenario lives in [examples/ops_dashboard/README.md](./examples/ops_dashboard/README.md) and now includes a small suite of reusable queries covering combinations like `aggregateWindow + join`, calendar `aggregateWindow(1mo)`, `sort + limit`, `union`, `reduce`, and `last`.
 
 Start the REPL:
 
@@ -248,9 +248,9 @@ The runtime layer is still early, but it now has several concrete building block
 
 File execution keeps an internal ordered list of named results for top-level statements such as assignments, expressions, options, and testcases. The CLI now uses that result list for human-readable blocks and a first-pass `--annotated-csv` export path, which gives us a workable bridge toward more official Flux/Influx result-set formatting.
 
-Result naming can now also come from Flux itself through a first-pass `yield(name: "...")` builtin in query pipelines. The current implementation preserves the input table and attaches the yielded name to downstream CLI/CSV output, but it is still a lightweight compatibility layer rather than a full official Flux result-stream engine.
+Result naming can now also come from Flux itself through a first-pass `yield(name: "...")` builtin in query pipelines. The current implementation preserves the input table and attaches the yielded name to downstream CLI/CSV output, while annotated CSV output now also preserves existing `result`/`table` columns and derives `#group` flags from runtime `_group` metadata when available. It is still a lightweight compatibility layer rather than a full official Flux result-stream engine.
 
-The current `aggregateWindow` implementation is intentionally lightweight: it buckets RFC3339 `_time` values by fixed durations such as `1m`, preserves the current `_group` marker, supports `column`, and can call `mean`, `sum`, `min`, `max`, custom array functions, or the special window form of `count`. Calendar-aware windows, offsets, time zones, and `createEmpty: true` are not implemented yet.
+The current `aggregateWindow` implementation is intentionally lightweight: it buckets RFC3339 `_time` values by fixed durations such as `1m`, supports UTC calendar windows for `mo` and `y`, preserves the current `_group` marker, supports `column`, `offset` for fixed-duration windows, `createEmpty: true`, and can call `mean`, `sum`, `min`, `max`, custom array functions, or the special window form of `count`. Time zones and calendar-window offsets are not implemented yet.
 
 Current evaluator support includes:
 
@@ -291,7 +291,7 @@ import "csv"
 data = csv.from(file: "path/to/data.csv", mode: "raw")
 ```
 
-Annotated CSV supports the common Flux metadata rows `#datatype`, `#group`, and optional `#default`. Typed cells are materialized into runtime values for `string`, `long`, `unsignedLong`, `double`, `boolean`, `dateTime:RFC3339`, `dateTime:RFC3339Nano`, and `duration`; group columns are exposed through a lightweight `_group` object on each row:
+Annotated CSV supports the common Flux metadata rows `#datatype`, `#group`, and optional `#default`. Typed cells are materialized into runtime values for `string`, `long`, `unsignedLong`, `double`, `boolean`, `dateTime:RFC3339`, `dateTime:RFC3339Nano`, and `duration`; group columns are exposed through a lightweight `_group` object on each row, and repeated metadata/header blocks in one payload are accepted:
 
 ```flux
 import "csv"
@@ -299,7 +299,7 @@ import "csv"
 data = csv.from(csv: "#datatype,string,long,dateTime:RFC3339,string,double,boolean\n#group,false,false,true,true,false,false\n#default,_result,,,,,\n,result,table,_time,_measurement,_value,active\n,,0,2024-01-01T00:00:00Z,cpu,95.5,true\n")
 ```
 
-This is still a lightweight in-memory table representation rather than a full Flux stream/table engine, so multi-table annotated CSV boundaries and the full standard-library CSV surface are not complete yet.
+This is still a lightweight in-memory table representation rather than a full Flux stream/table engine, so broader multi-table stream semantics and the full standard-library CSV surface are not complete yet.
 
 Current statement execution support includes:
 
@@ -319,7 +319,7 @@ Current statement execution support includes:
 Not implemented yet in the runtime:
 
 - richer query-oriented pipe semantics beyond the current in-memory table pipeline subset
-- full calendar-aware `aggregateWindow` semantics such as offsets, time zones, and empty window materialization
+- full calendar-aware `aggregateWindow` semantics such as time zones and calendar-window offsets
 - a broader standard-library builtin catalog
 
 ## Notes

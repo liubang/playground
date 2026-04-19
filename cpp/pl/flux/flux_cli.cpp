@@ -60,6 +60,66 @@ std::vector<std::string> collect_table_columns(const TableValue& table) {
     return columns;
 }
 
+bool table_has_column(const TableValue& table, std::string_view name) {
+    for (const auto& row : table.rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        if (row->lookup(std::string(name)) != nullptr) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<std::string> visible_table_columns(const TableValue& table) {
+    auto columns = collect_table_columns(table);
+    columns.erase(std::remove(columns.begin(), columns.end(), "_group"), columns.end());
+    return columns;
+}
+
+std::string scalar_cell_text(const Value& value);
+
+std::unordered_set<std::string> collect_group_columns(const TableValue& table) {
+    std::unordered_set<std::string> group_columns;
+    for (const auto& row : table.rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        const Value* group_value = row->lookup("_group");
+        if (group_value == nullptr || group_value->type() != Value::Type::Object) {
+            continue;
+        }
+        for (const auto& [name, value] : group_value->as_object().properties) {
+            (void)value;
+            group_columns.insert(name);
+        }
+    }
+    return group_columns;
+}
+
+std::optional<std::string> shared_column_value(const TableValue& table, const std::string& column) {
+    std::optional<std::string> shared;
+    for (const auto& row : table.rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        const Value* value = row->lookup(column);
+        if (value == nullptr) {
+            continue;
+        }
+        const std::string current = scalar_cell_text(*value);
+        if (!shared.has_value()) {
+            shared = current;
+            continue;
+        }
+        if (*shared != current) {
+            return std::nullopt;
+        }
+    }
+    return shared;
+}
+
 std::string csv_escape(const std::string& value) {
     bool needs_quotes = false;
     for (char ch : value) {
@@ -144,7 +204,7 @@ std::string flux_datatype_name(const Value& value) {
 
 std::vector<std::string> result_columns(const NamedResult& result) {
     if (result.value.type() == Value::Type::Table) {
-        return collect_table_columns(result.value.as_table());
+        return visible_table_columns(result.value.as_table());
     }
     return {"_value"};
 }
@@ -178,6 +238,74 @@ void append_csv_row(const std::vector<std::string>& cells, std::ostringstream& o
 void append_annotated_csv_result(const NamedResult& result,
                                  size_t table_index,
                                  std::ostringstream& out) {
+    if (result.value.type() == Value::Type::Table) {
+        const auto& table = result.value.as_table();
+        const auto columns = result_columns(result);
+        const bool has_result_column = table_has_column(table, "result");
+        const bool has_table_column = table_has_column(table, "table");
+        const auto group_columns = collect_group_columns(table);
+
+        std::vector<std::string> datatype_row = {"#datatype"};
+        std::vector<std::string> group_row = {"#group"};
+        std::vector<std::string> default_row = {"#default"};
+        std::vector<std::string> header_row = {""};
+
+        datatype_row.push_back("string");
+        group_row.push_back("false");
+        default_row.push_back(has_result_column
+                                  ? shared_column_value(table, "result").value_or("")
+                                  : result.name);
+        header_row.push_back("result");
+
+        datatype_row.push_back("long");
+        group_row.push_back("false");
+        default_row.push_back(has_table_column
+                                  ? shared_column_value(table, "table").value_or("")
+                                  : "");
+        header_row.push_back("table");
+
+        for (const auto& column : columns) {
+            if (column == "result" || column == "table") {
+                continue;
+            }
+            datatype_row.push_back(column_datatype(result, column));
+            group_row.push_back(group_columns.count(column) != 0 ? "true" : "false");
+            default_row.push_back("");
+            header_row.push_back(column);
+        }
+
+        append_csv_row(datatype_row, out);
+        append_csv_row(group_row, out);
+        append_csv_row(default_row, out);
+        append_csv_row(header_row, out);
+
+        for (const auto& row : table.rows) {
+            std::vector<std::string> cells = {
+                "",
+                has_result_column && row != nullptr && row->lookup("result") != nullptr
+                    ? scalar_cell_text(*row->lookup("result"))
+                    : result.name,
+                has_table_column && row != nullptr && row->lookup("table") != nullptr
+                    ? scalar_cell_text(*row->lookup("table"))
+                    : std::to_string(table_index),
+            };
+            for (const auto& column : columns) {
+                if (column == "result" || column == "table") {
+                    continue;
+                }
+                std::string cell;
+                if (row != nullptr) {
+                    if (const Value* value = row->lookup(column); value != nullptr) {
+                        cell = scalar_cell_text(*value);
+                    }
+                }
+                cells.push_back(cell);
+            }
+            append_csv_row(cells, out);
+        }
+        return;
+    }
+
     const auto columns = result_columns(result);
     std::vector<std::string> datatype_row = {"#datatype", "string", "long"};
     std::vector<std::string> group_row = {"#group", "false", "false"};
@@ -194,24 +322,6 @@ void append_annotated_csv_result(const NamedResult& result,
     append_csv_row(group_row, out);
     append_csv_row(default_row, out);
     append_csv_row(header_row, out);
-
-    if (result.value.type() == Value::Type::Table) {
-        const auto& table = result.value.as_table();
-        for (const auto& row : table.rows) {
-            std::vector<std::string> cells = {"", result.name, std::to_string(table_index)};
-            for (const auto& column : columns) {
-                std::string cell;
-                if (row != nullptr) {
-                    if (const Value* value = row->lookup(column); value != nullptr) {
-                        cell = scalar_cell_text(*value);
-                    }
-                }
-                cells.push_back(cell);
-            }
-            append_csv_row(cells, out);
-        }
-        return;
-    }
 
     std::vector<std::string> cells = {"", result.name, std::to_string(table_index),
                                       scalar_cell_text(result.value)};
@@ -260,7 +370,7 @@ void append_table_result(const NamedResult& result, bool include_header, std::os
     }
     out << '\n';
 
-    const auto columns = collect_table_columns(table);
+    const auto columns = visible_table_columns(table);
     if (columns.empty()) {
         return;
     }

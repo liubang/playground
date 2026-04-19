@@ -568,6 +568,123 @@ TEST(RuntimeExecTest, ExecutesAggregateWindowQueryFile) {
     EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
 }
 
+TEST(RuntimeExecTest, ExecutesAggregateWindowCreateEmptyQueryFile) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
+        builtin mean : (values: [float]) => float
+        builtin count : (<-tables: stream[A], column: string) => stream[A]
+        builtin aggregateWindow : (<-tables: stream[A], every: duration, fn: B) => stream[C]
+
+        padded = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T00:00:10Z", _value: 10.0, host: "a"},
+                {_time: "2024-01-01T00:02:05Z", _value: 30.0, host: "a"},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> aggregateWindow(every: 1m, fn: mean, createEmpty: true)
+        counts = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T00:00:10Z", _value: 10.0},
+                {_time: "2024-01-01T00:02:05Z", _value: 30.0},
+            ],
+        )
+            |> aggregateWindow(every: 1m, fn: count, createEmpty: true)
+        padded
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("padded").ok());
+    ASSERT_EQ(3, env.lookup("padded")->as_table().rows.size());
+    EXPECT_EQ("10", env.lookup("padded")->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_TRUE(env.lookup("padded")->as_table().rows[1]->lookup("_value")->is_null());
+    EXPECT_EQ("2024-01-01T00:02:00Z",
+              env.lookup("padded")->as_table().rows[1]->lookup("_time")->string());
+    EXPECT_EQ("30", env.lookup("padded")->as_table().rows[2]->lookup("_value")->string());
+    ASSERT_TRUE(env.lookup("counts").ok());
+    ASSERT_EQ(3, env.lookup("counts")->as_table().rows.size());
+    EXPECT_EQ("1", env.lookup("counts")->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("0", env.lookup("counts")->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ("1", env.lookup("counts")->as_table().rows[2]->lookup("_value")->string());
+}
+
+TEST(RuntimeExecTest, ExecutesAggregateWindowOffsetQueryFile) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin mean : (values: [float]) => float
+        builtin aggregateWindow : (<-tables: stream[A], every: duration, fn: B) => stream[C]
+
+        shifted = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T00:00:10Z", _value: 10.0},
+                {_time: "2024-01-01T00:00:40Z", _value: 30.0},
+                {_time: "2024-01-01T00:01:10Z", _value: 50.0},
+            ],
+        )
+            |> aggregateWindow(every: 1m, offset: 30s, fn: mean)
+        shifted
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("shifted").ok());
+    ASSERT_EQ(2, env.lookup("shifted")->as_table().rows.size());
+    EXPECT_EQ("10", env.lookup("shifted")->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("2023-12-31T23:59:30Z",
+              env.lookup("shifted")->as_table().rows[0]->lookup("_start")->string());
+    EXPECT_EQ("2024-01-01T00:00:30Z",
+              env.lookup("shifted")->as_table().rows[0]->lookup("_stop")->string());
+    EXPECT_EQ("40", env.lookup("shifted")->as_table().rows[1]->lookup("_value")->string());
+}
+
+TEST(RuntimeExecTest, ExecutesAggregateWindowCalendarMonthQueryFile) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin mean : (values: [float]) => float
+        builtin aggregateWindow : (<-tables: stream[A], every: duration, fn: B) => stream[C]
+
+        monthly = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-15T08:00:00Z", _value: 10.0},
+                {_time: "2024-01-20T09:30:00Z", _value: 30.0},
+                {_time: "2024-02-02T00:15:00Z", _value: 50.0},
+            ],
+        )
+            |> aggregateWindow(every: 1mo, fn: mean)
+        monthly
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("monthly").ok());
+    ASSERT_EQ(2, env.lookup("monthly")->as_table().rows.size());
+    EXPECT_EQ("20", env.lookup("monthly")->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("2024-01-01T00:00:00Z",
+              env.lookup("monthly")->as_table().rows[0]->lookup("_start")->string());
+    EXPECT_EQ("2024-02-01T00:00:00Z",
+              env.lookup("monthly")->as_table().rows[0]->lookup("_stop")->string());
+    EXPECT_EQ("50", env.lookup("monthly")->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ("2024-02-01T00:00:00Z",
+              env.lookup("monthly")->as_table().rows[1]->lookup("_start")->string());
+    EXPECT_EQ("2024-03-01T00:00:00Z",
+              env.lookup("monthly")->as_table().rows[1]->lookup("_stop")->string());
+}
+
 TEST(RuntimeExecTest, UsesYieldNameForResultCollection) {
     auto file = ParseFile(R"(
         builtin from : (bucket: string) => stream[A]

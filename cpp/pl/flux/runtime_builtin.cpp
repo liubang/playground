@@ -583,6 +583,9 @@ absl::StatusOr<Value> parse_annotated_csv_table(const std::string& csv,
         }
         if (fields[0] == "#datatype") {
             datatypes = std::move(fields);
+            groups.clear();
+            defaults.clear();
+            header.clear();
             continue;
         }
         if (fields[0] == "#group") {
@@ -772,9 +775,56 @@ std::string format_rfc3339_seconds(int64_t seconds) {
     return buffer;
 }
 
-absl::StatusOr<int64_t> parse_duration_seconds(const Value& value,
-                                               const std::string& name,
-                                               const std::string& property) {
+struct WindowDuration {
+    enum class Kind {
+        FixedSeconds,
+        CalendarMonths,
+    };
+
+    Kind kind = Kind::FixedSeconds;
+    int64_t seconds = 0;
+    int64_t months = 0;
+};
+
+int64_t floor_div(int64_t lhs, int64_t rhs);
+
+int64_t utc_seconds_from_civil(int year,
+                               unsigned month,
+                               unsigned day,
+                               unsigned hour = 0,
+                               unsigned minute = 0,
+                               unsigned second = 0) {
+    return days_from_civil(year, month, day) * 24 * 60 * 60 +
+           static_cast<int64_t>(hour) * 60 * 60 + static_cast<int64_t>(minute) * 60 +
+           static_cast<int64_t>(second);
+}
+
+int64_t month_index_for_seconds(int64_t seconds) {
+    std::time_t time = static_cast<std::time_t>(seconds);
+    std::tm tm{};
+#if defined(_WIN32)
+    gmtime_s(&tm, &time);
+#else
+    gmtime_r(&time, &tm);
+#endif
+    return static_cast<int64_t>(tm.tm_year + 1900) * 12 + tm.tm_mon;
+}
+
+int64_t seconds_for_month_index(int64_t month_index) {
+    int64_t year = floor_div(month_index, 12);
+    int64_t month = month_index - year * 12;
+    return utc_seconds_from_civil(static_cast<int>(year), static_cast<unsigned>(month + 1), 1);
+}
+
+int64_t advance_calendar_months(int64_t seconds, int64_t months) {
+    return seconds_for_month_index(month_index_for_seconds(seconds) + months);
+}
+
+absl::StatusOr<WindowDuration> parse_window_duration(const Value& value,
+                                                     const std::string& name,
+                                                     const std::string& property,
+                                                     bool allow_negative = false,
+                                                     bool allow_zero = false) {
     std::string literal;
     if (value.type() == Value::Type::Duration) {
         literal = value.as_duration().literal;
@@ -785,12 +835,33 @@ absl::StatusOr<int64_t> parse_duration_seconds(const Value& value,
             absl::StrCat(name, " `", property, "` must be a duration"));
     }
 
-    int64_t total = 0;
+    int sign = 1;
     size_t index = 0;
+    if (!literal.empty() && (literal[0] == '+' || literal[0] == '-')) {
+        if (!allow_negative) {
+            return absl::InvalidArgumentError(
+                absl::StrCat(name, " `", property, "` must be a positive duration"));
+        }
+        sign = literal[0] == '-' ? -1 : 1;
+        index = 1;
+    }
+
+    if (index >= literal.size()) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " `", property, "` must be a duration"));
+    }
+    int64_t fixed_total = 0;
+    int64_t calendar_months = 0;
+    bool saw_fixed_unit = false;
+    bool saw_calendar_unit = false;
     while (index < literal.size()) {
         if (!std::isdigit(static_cast<unsigned char>(literal[index]))) {
             return absl::InvalidArgumentError(
-                absl::StrCat(name, " `", property, "` must be a positive duration"));
+                absl::StrCat(name,
+                             " `",
+                             property,
+                             "` must be ",
+                             allow_negative ? "a duration" : "a positive duration"));
         }
         int64_t amount = 0;
         while (index < literal.size() &&
@@ -805,25 +876,91 @@ absl::StatusOr<int64_t> parse_duration_seconds(const Value& value,
         }
         const auto unit = literal.substr(unit_begin, index - unit_begin);
         if (unit == "s") {
-            total += amount;
+            fixed_total += amount;
+            saw_fixed_unit = true;
         } else if (unit == "m") {
-            total += amount * 60;
+            fixed_total += amount * 60;
+            saw_fixed_unit = true;
         } else if (unit == "h") {
-            total += amount * 60 * 60;
+            fixed_total += amount * 60 * 60;
+            saw_fixed_unit = true;
         } else if (unit == "d") {
-            total += amount * 24 * 60 * 60;
+            fixed_total += amount * 24 * 60 * 60;
+            saw_fixed_unit = true;
         } else if (unit == "w") {
-            total += amount * 7 * 24 * 60 * 60;
+            fixed_total += amount * 7 * 24 * 60 * 60;
+            saw_fixed_unit = true;
+        } else if (unit == "mo") {
+            calendar_months += amount;
+            saw_calendar_unit = true;
+        } else if (unit == "y") {
+            calendar_months += amount * 12;
+            saw_calendar_unit = true;
         } else {
             return absl::InvalidArgumentError(
-                absl::StrCat(name, " `", property, "` supports s, m, h, d, and w units"));
+                absl::StrCat(name, " `", property, "` supports s, m, h, d, w, mo, and y units"));
+        }
+        if (saw_fixed_unit && saw_calendar_unit) {
+            return absl::InvalidArgumentError(
+                absl::StrCat(name,
+                             " `",
+                             property,
+                             "` cannot mix calendar units with fixed-duration units"));
         }
     }
-    if (total <= 0) {
+    if (saw_calendar_unit && sign < 0) {
         return absl::InvalidArgumentError(
             absl::StrCat(name, " `", property, "` must be a positive duration"));
     }
-    return total;
+    fixed_total *= sign;
+    if ((!allow_zero && fixed_total == 0 && calendar_months == 0) ||
+        (!allow_negative && fixed_total < 0)) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " `", property, "` must be a positive duration"));
+    }
+    if (!allow_negative && fixed_total <= 0 && calendar_months == 0) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " `", property, "` must be a positive duration"));
+    }
+    if (saw_calendar_unit) {
+        if ((!allow_zero && calendar_months == 0) || calendar_months < 0) {
+            return absl::InvalidArgumentError(
+                absl::StrCat(name, " `", property, "` must be a positive duration"));
+        }
+        return WindowDuration{WindowDuration::Kind::CalendarMonths, 0, calendar_months};
+    }
+    return WindowDuration{WindowDuration::Kind::FixedSeconds, fixed_total, 0};
+}
+
+int64_t floor_div(int64_t lhs, int64_t rhs) {
+    int64_t quotient = lhs / rhs;
+    int64_t remainder = lhs % rhs;
+    if (remainder != 0 && ((remainder > 0) != (rhs > 0))) {
+        --quotient;
+    }
+    return quotient;
+}
+
+std::optional<int64_t> aggregate_window_start_for_time(int64_t seconds,
+                                                       const WindowDuration& every,
+                                                       int64_t offset_seconds) {
+    if (every.kind == WindowDuration::Kind::FixedSeconds) {
+        return floor_div(seconds - offset_seconds, every.seconds) * every.seconds + offset_seconds;
+    }
+    if (offset_seconds != 0) {
+        return std::nullopt;
+    }
+    const int64_t month_index = month_index_for_seconds(seconds);
+    const int64_t start_index = floor_div(month_index, every.months) * every.months;
+    return seconds_for_month_index(start_index);
+}
+
+std::optional<int64_t> aggregate_window_stop_for_start(int64_t start_seconds,
+                                                       const WindowDuration& every) {
+    if (every.kind == WindowDuration::Kind::FixedSeconds) {
+        return start_seconds + every.seconds;
+    }
+    return advance_calendar_months(start_seconds, every.months);
 }
 
 std::string group_key_for_row(const ObjectValue& row) {
@@ -838,12 +975,29 @@ struct AggregateWindowBucket {
     std::vector<Value> values;
 };
 
+struct AggregateWindowGroupSpan {
+    std::string group_key;
+    std::shared_ptr<ObjectValue> template_row;
+    int64_t min_start_seconds = 0;
+    int64_t max_start_seconds = 0;
+};
+
 AggregateWindowBucket* find_window_bucket(std::vector<AggregateWindowBucket>& buckets,
                                           const std::optional<int64_t>& start_seconds,
                                           const std::string& group_key) {
     for (auto& bucket : buckets) {
         if (bucket.start_seconds == start_seconds && bucket.group_key == group_key) {
             return &bucket;
+        }
+    }
+    return nullptr;
+}
+
+AggregateWindowGroupSpan* find_window_group_span(std::vector<AggregateWindowGroupSpan>& spans,
+                                                 const std::string& group_key) {
+    for (auto& span : spans) {
+        if (span.group_key == group_key) {
+            return &span;
         }
     }
     return nullptr;
@@ -856,6 +1010,13 @@ absl::StatusOr<Value> invoke_window_aggregate(const FunctionValue& fn,
     }
     return ExpressionEvaluator::Invoke(Value::function(std::make_shared<FunctionValue>(fn)),
                                        {Value::array(values)});
+}
+
+Value empty_window_aggregate_value(const FunctionValue& fn) {
+    if (fn.kind == FunctionValue::Kind::Builtin && fn.name == "count") {
+        return Value::integer(0);
+    }
+    return Value::null();
 }
 
 absl::StatusOr<NumericSummary> summarize_numeric_array(const ArrayValue& array,
@@ -1676,9 +1837,26 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
     if (!every_value_or.ok()) {
         return every_value_or.status();
     }
-    auto every_seconds_or = parse_duration_seconds(**every_value_or, "aggregateWindow", "every");
-    if (!every_seconds_or.ok()) {
-        return every_seconds_or.status();
+    auto every_or = parse_window_duration(**every_value_or, "aggregateWindow", "every");
+    if (!every_or.ok()) {
+        return every_or.status();
+    }
+    int64_t offset_seconds = 0;
+    if (const Value* offset_value = (*object_or)->lookup("offset"); offset_value != nullptr) {
+        auto offset_or = parse_window_duration(
+            *offset_value, "aggregateWindow", "offset", true, true);
+        if (!offset_or.ok()) {
+            return offset_or.status();
+        }
+        if (offset_or->kind != WindowDuration::Kind::FixedSeconds) {
+            return absl::InvalidArgumentError(
+                "aggregateWindow `offset` does not support calendar durations");
+        }
+        offset_seconds = offset_or->seconds;
+    }
+    if (every_or->kind == WindowDuration::Kind::CalendarMonths && offset_seconds != 0) {
+        return absl::InvalidArgumentError(
+            "aggregateWindow calendar windows do not support `offset` yet");
     }
     auto fn_or = require_object_property(**object_or, "aggregateWindow", "fn");
     if (!fn_or.ok()) {
@@ -1701,12 +1879,8 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
     if (!create_empty_or.ok()) {
         return create_empty_or.status();
     }
-    if (*create_empty_or) {
-        return absl::UnimplementedError(
-            "aggregateWindow `createEmpty: true` is not supported yet");
-    }
-
     std::vector<AggregateWindowBucket> buckets;
+    std::vector<AggregateWindowGroupSpan> group_spans;
     for (const auto& row : (*table_or)->rows) {
         if (row == nullptr) {
             continue;
@@ -1726,12 +1900,27 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
             }
             if (literal.has_value()) {
                 if (auto seconds = parse_rfc3339_seconds(*literal); seconds.has_value()) {
-                    window_start = (*seconds / *every_seconds_or) * *every_seconds_or;
+                    window_start =
+                        aggregate_window_start_for_time(*seconds, *every_or, offset_seconds);
                 }
             }
         }
 
         const auto group_key = group_key_for_row(*row);
+        if (*create_empty_or && window_start.has_value()) {
+            auto* span = find_window_group_span(group_spans, group_key);
+            if (span == nullptr) {
+                group_spans.push_back(
+                    AggregateWindowGroupSpan{group_key, clone_row(*row), *window_start, *window_start});
+            } else {
+                if (*window_start < span->min_start_seconds) {
+                    span->min_start_seconds = *window_start;
+                }
+                if (*window_start > span->max_start_seconds) {
+                    span->max_start_seconds = *window_start;
+                }
+            }
+        }
         auto* bucket = find_window_bucket(buckets, window_start, group_key);
         if (bucket == nullptr) {
             buckets.push_back(AggregateWindowBucket{
@@ -1745,21 +1934,76 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
         bucket->values.push_back(*aggregate_value);
     }
 
+    if (*create_empty_or) {
+        for (const auto& span : group_spans) {
+            if (span.template_row == nullptr) {
+                continue;
+            }
+            for (int64_t window_start = span.min_start_seconds; window_start <= span.max_start_seconds;) {
+                if (find_window_bucket(buckets, window_start, span.group_key) != nullptr) {
+                    auto next_window_start = aggregate_window_stop_for_start(window_start, *every_or);
+                    if (!next_window_start.has_value() || *next_window_start <= window_start) {
+                        break;
+                    }
+                    window_start = *next_window_start;
+                    continue;
+                }
+                buckets.push_back(AggregateWindowBucket{
+                    window_start,
+                    span.group_key,
+                    clone_row(*span.template_row),
+                    {},
+                });
+                auto next_window_start = aggregate_window_stop_for_start(window_start, *every_or);
+                if (!next_window_start.has_value() || *next_window_start <= window_start) {
+                    break;
+                }
+                window_start = *next_window_start;
+            }
+        }
+    }
+
+    std::stable_sort(buckets.begin(), buckets.end(), [](const auto& lhs, const auto& rhs) {
+        if (lhs.start_seconds != rhs.start_seconds) {
+            if (!lhs.start_seconds.has_value()) {
+                return false;
+            }
+            if (!rhs.start_seconds.has_value()) {
+                return true;
+            }
+            return *lhs.start_seconds < *rhs.start_seconds;
+        }
+        return lhs.group_key < rhs.group_key;
+    });
+
     std::vector<std::shared_ptr<ObjectValue>> rows;
     rows.reserve(buckets.size());
     for (const auto& bucket : buckets) {
-        if (bucket.values.empty() || bucket.first_row == nullptr) {
+        if (bucket.first_row == nullptr) {
             continue;
         }
-        auto aggregate_or = invoke_window_aggregate((*fn_or)->as_function(), bucket.values);
-        if (!aggregate_or.ok()) {
-            return aggregate_or.status();
+        Value aggregate_value = Value::null();
+        if (bucket.values.empty()) {
+            if (!*create_empty_or) {
+                continue;
+            }
+            aggregate_value = empty_window_aggregate_value((*fn_or)->as_function());
+        } else {
+            auto aggregate_or = invoke_window_aggregate((*fn_or)->as_function(), bucket.values);
+            if (!aggregate_or.ok()) {
+                return aggregate_or.status();
+            }
+            aggregate_value = *aggregate_or;
         }
 
         Value row_value =
-            object_with_upserted_property(*bucket.first_row, *column_or, *aggregate_or);
+            object_with_upserted_property(*bucket.first_row, *column_or, aggregate_value);
         if (bucket.start_seconds.has_value()) {
-            const int64_t window_stop = *bucket.start_seconds + *every_seconds_or;
+            auto window_stop_or = aggregate_window_stop_for_start(*bucket.start_seconds, *every_or);
+            if (!window_stop_or.has_value()) {
+                return absl::InternalError("aggregateWindow failed to compute window stop");
+            }
+            const int64_t window_stop = *window_stop_or;
             row_value = object_with_upserted_property(
                 row_value.as_object(), "_start", Value::time(format_rfc3339_seconds(*bucket.start_seconds)));
             row_value = object_with_upserted_property(

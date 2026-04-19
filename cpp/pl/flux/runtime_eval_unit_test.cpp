@@ -199,6 +199,37 @@ TEST(RuntimeEvalTest, EvaluatesCsvFromAnnotatedStringPackageBuiltin) {
     EXPECT_EQ("\"cpu\"", row->lookup("_group")->as_object().lookup("_measurement")->string());
 }
 
+TEST(RuntimeEvalTest, EvaluatesCsvFromAnnotatedStringWithMultipleBlocks) {
+    Environment env;
+    auto csv_or = BuiltinRegistry::ImportPackage("csv");
+    ASSERT_TRUE(csv_or.ok()) << csv_or.status();
+    env.define("csv", *csv_or);
+    const auto& expr = ParseAssignmentInit(
+        "result = csv.from(csv: \"#datatype,string,long,dateTime:RFC3339,string,double\\n"
+        "#group,false,false,true,true,false\\n"
+        "#default,_result,,,,\\n"
+        ",result,table,_time,_measurement,_value\\n"
+        ",cpu,0,2024-01-01T00:00:00Z,cpu,95.5\\n"
+        "\\n"
+        "#datatype,string,long,dateTime:RFC3339,string,double\\n"
+        "#group,false,false,true,true,false\\n"
+        "#default,_result,,,,\\n"
+        ",result,table,_time,_measurement,_value\\n"
+        ",mem,1,2024-01-01T00:01:00Z,mem,42.0\\n\")");
+
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    ASSERT_NE(nullptr, result->as_table().rows[0]);
+    ASSERT_NE(nullptr, result->as_table().rows[1]);
+    EXPECT_EQ("\"cpu\"", result->as_table().rows[0]->lookup("result")->string());
+    EXPECT_EQ("0", result->as_table().rows[0]->lookup("table")->string());
+    EXPECT_EQ("\"mem\"", result->as_table().rows[1]->lookup("result")->string());
+    EXPECT_EQ("1", result->as_table().rows[1]->lookup("table")->string());
+}
+
 TEST(RuntimeEvalTest, ReportsCsvFromArgumentAndAnnotationErrors) {
     Environment env;
     auto csv_or = BuiltinRegistry::ImportPackage("csv");
@@ -608,6 +639,63 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowColumnAndAggregateVariants) {
     EXPECT_EQ("1", count_result->as_table().rows[1]->lookup("_value")->string());
 }
 
+TEST(RuntimeEvalTest, EvaluatesAggregateWindowOffset) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T00:00:10Z", _value: 10.0},
+                {_time: "2024-01-01T00:00:40Z", _value: 30.0},
+                {_time: "2024-01-01T00:01:10Z", _value: 50.0},
+            ],
+        )
+            |> aggregateWindow(every: 1m, offset: 30s, fn: mean)
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    EXPECT_EQ("10", result->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("2023-12-31T23:59:30Z", result->as_table().rows[0]->lookup("_start")->string());
+    EXPECT_EQ("2024-01-01T00:00:30Z", result->as_table().rows[0]->lookup("_stop")->string());
+    EXPECT_EQ("2024-01-01T00:00:30Z", result->as_table().rows[0]->lookup("_time")->string());
+    EXPECT_EQ("40", result->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ("2024-01-01T00:00:30Z", result->as_table().rows[1]->lookup("_start")->string());
+    EXPECT_EQ("2024-01-01T00:01:30Z", result->as_table().rows[1]->lookup("_stop")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesAggregateWindowCalendarMonths) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-15T08:00:00Z", _value: 10.0},
+                {_time: "2024-01-20T09:30:00Z", _value: 30.0},
+                {_time: "2024-02-02T00:15:00Z", _value: 50.0},
+            ],
+        )
+            |> aggregateWindow(every: 1mo, fn: mean)
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    EXPECT_EQ("20", result->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("2024-01-01T00:00:00Z", result->as_table().rows[0]->lookup("_start")->string());
+    EXPECT_EQ("2024-02-01T00:00:00Z", result->as_table().rows[0]->lookup("_stop")->string());
+    EXPECT_EQ("50", result->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ("2024-02-01T00:00:00Z", result->as_table().rows[1]->lookup("_start")->string());
+    EXPECT_EQ("2024-03-01T00:00:00Z", result->as_table().rows[1]->lookup("_stop")->string());
+}
+
 TEST(RuntimeEvalTest, ReportsAggregateWindowArgumentErrors) {
     Environment env;
     BuiltinRegistry::Install(env);
@@ -620,6 +708,22 @@ TEST(RuntimeEvalTest, ReportsAggregateWindowArgumentErrors) {
     ASSERT_FALSE(invalid_every.ok());
     EXPECT_EQ(absl::StatusCode::kInvalidArgument, invalid_every.status().code());
 
+    const auto& invalid_offset_expr = ParseAssignmentInit(R"(
+        result = from(bucket: "telegraf", rows: [{_time: "2024-01-01T00:00:10Z", _value: 1.0}])
+            |> aggregateWindow(every: 1m, offset: "bad", fn: mean)
+    )");
+    auto invalid_offset = ExpressionEvaluator::Evaluate(invalid_offset_expr, env);
+    ASSERT_FALSE(invalid_offset.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, invalid_offset.status().code());
+
+    const auto& calendar_offset_expr = ParseAssignmentInit(R"(
+        result = from(bucket: "telegraf", rows: [{_time: "2024-01-15T00:00:00Z", _value: 1.0}])
+            |> aggregateWindow(every: 1mo, offset: 1d, fn: mean)
+    )");
+    auto calendar_offset = ExpressionEvaluator::Evaluate(calendar_offset_expr, env);
+    ASSERT_FALSE(calendar_offset.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, calendar_offset.status().code());
+
     const auto& missing_fn_expr = ParseAssignmentInit(R"(
         result = from(bucket: "telegraf", rows: [{_time: "2024-01-01T00:00:10Z", _value: 1.0}])
             |> aggregateWindow(every: 1m)
@@ -629,12 +733,38 @@ TEST(RuntimeEvalTest, ReportsAggregateWindowArgumentErrors) {
     EXPECT_EQ(absl::StatusCode::kInvalidArgument, missing_fn.status().code());
 
     const auto& create_empty_expr = ParseAssignmentInit(R"(
-        result = from(bucket: "telegraf", rows: [{_time: "2024-01-01T00:00:10Z", _value: 1.0}])
+        result = from(bucket: "telegraf", rows: [
+                {_time: "2024-01-01T00:00:10Z", _value: 10.0, host: "a"},
+                {_time: "2024-01-01T00:02:05Z", _value: 30.0, host: "a"},
+            ])
+            |> group(columns: ["host"])
             |> aggregateWindow(every: 1m, fn: mean, createEmpty: true)
     )");
     auto create_empty = ExpressionEvaluator::Evaluate(create_empty_expr, env);
-    ASSERT_FALSE(create_empty.ok());
-    EXPECT_EQ(absl::StatusCode::kUnimplemented, create_empty.status().code());
+    ASSERT_TRUE(create_empty.ok()) << create_empty.status();
+    ASSERT_EQ(Value::Type::Table, create_empty->type());
+    ASSERT_EQ(3, create_empty->as_table().rows.size());
+    ASSERT_NE(nullptr, create_empty->as_table().rows[0]);
+    EXPECT_EQ("10", create_empty->as_table().rows[0]->lookup("_value")->string());
+    ASSERT_NE(nullptr, create_empty->as_table().rows[1]);
+    EXPECT_TRUE(create_empty->as_table().rows[1]->lookup("_value")->is_null());
+    EXPECT_EQ("2024-01-01T00:02:00Z", create_empty->as_table().rows[1]->lookup("_time")->string());
+    ASSERT_NE(nullptr, create_empty->as_table().rows[2]);
+    EXPECT_EQ("30", create_empty->as_table().rows[2]->lookup("_value")->string());
+
+    const auto& create_empty_count_expr = ParseAssignmentInit(R"(
+        result = from(bucket: "telegraf", rows: [
+                {_time: "2024-01-01T00:00:10Z", _value: 10.0},
+                {_time: "2024-01-01T00:02:05Z", _value: 30.0},
+            ])
+            |> aggregateWindow(every: 1m, fn: count, createEmpty: true)
+    )");
+    auto create_empty_count = ExpressionEvaluator::Evaluate(create_empty_count_expr, env);
+    ASSERT_TRUE(create_empty_count.ok()) << create_empty_count.status();
+    ASSERT_EQ(3, create_empty_count->as_table().rows.size());
+    EXPECT_EQ("1", create_empty_count->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("0", create_empty_count->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ("1", create_empty_count->as_table().rows[2]->lookup("_value")->string());
 }
 
 TEST(RuntimeEvalTest, EvaluatesPipeIntoUserFunctionPipeParameter) {

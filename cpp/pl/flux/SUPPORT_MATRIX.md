@@ -85,7 +85,7 @@ Status meanings:
 | command-line AST dumper | Supported | `bazel build //cpp/pl/flux:flux` provides `flux ast` |
 | command-line runtime runner | Partial | `bazel build //cpp/pl/flux:flux` provides `flux -e`, `flux path/to/query.flux`, and a small shared-environment REPL; it uses the current partial runtime, so unsupported execution features still fail at runtime |
 | CLI result presentation | Partial | Scalar snippets still print compact values, and query-style scripts now render internal named results as simple terminal result/table blocks, but the output is not yet fully aligned with official Influx result-set formatting |
-| annotated CSV result output | Partial | The CLI can now emit lightweight annotated CSV for named table and scalar results through `--annotated-csv`, but the format is not yet fully aligned with official Influx result-set semantics such as `yield`-driven grouping and richer group metadata |
+| annotated CSV result output | Partial | The CLI can now emit lightweight annotated CSV for named table and scalar results through `--annotated-csv`; it preserves existing `result`/`table` columns when present and derives `#group` metadata from the runtime `_group` object, but full official result-set fidelity is still incomplete |
 | parser demo binary | Supported | `parser_test` now uses the tree dump |
 | parser unit tests | Supported | Covers main happy paths and dump output |
 | scanner unit tests | Supported | Covers comments, regex mode, and unread behavior |
@@ -103,8 +103,8 @@ Status meanings:
 | function call execution | Supported | Builtin and user-defined function calls work, including default arguments, named arguments, block-bodied functions, pipe-parameter injection, and internal row-function invocation for in-memory query builtins |
 | pipe execution | Partial | Value forwarding through `|>` works for builtin functions, user-defined `<-pipe` parameters, and lightweight in-memory table pipelines, but broader query/stream semantics are still missing |
 | builtin registry / stdlib execution | Partial | A small callable builtin registry exists today (`len`, `string`, `contains`, `sum`, `mean`, `min`, `max`, `from`, `csv.from`, `range`, `filter`, `map`, `limit`, `keep`, `drop`, `rename`, `duplicate`, `set`, `reduce`, `sort`, `group`, `count`, `first`, `last`, `union`, `join`, `aggregateWindow`, `yield`), top-level `builtin` declarations can bind known builtins or placeholder callables, `import "csv"` binds a package object with `from`, and `yield(name: "...")` can now label table results for CLI output, but the Flux standard library is still largely missing |
-| CSV input | Partial | `import "csv"` plus `csv.from(csv: ...)` and `csv.from(file: ...)` work for raw mode and common annotated CSV mode; annotations support `#datatype`, `#group`, optional `#default`, typed scalar conversion, and a lightweight `_group` object, but multi-table stream boundaries and the broader CSV stdlib surface are still incomplete |
-| aggregate windows | Partial | Fixed-duration RFC3339 `_time` windows work with `_group`, `column`, `mean`/`sum`/`min`/`max`, custom array functions, and window `count`; calendar windows, offsets, time zones, and `createEmpty: true` are not implemented yet |
+| CSV input | Partial | `import "csv"` plus `csv.from(csv: ...)` and `csv.from(file: ...)` work for raw mode and common annotated CSV mode; annotations support `#datatype`, `#group`, optional `#default`, typed scalar conversion, repeated metadata/header blocks for multi-table CSV payloads, and a lightweight `_group` object, but the broader CSV stdlib surface is still incomplete |
+| aggregate windows | Partial | Fixed-duration RFC3339 `_time` windows work with `_group`, `column`, `offset`, `mean`/`sum`/`min`/`max`, custom array functions, window `count`, and a lightweight `createEmpty: true` mode that fills observed gaps per group; UTC calendar `mo`/`y` windows also work, but time zones and calendar-window offsets are still not implemented |
 
 ## Error Handling
 
@@ -136,8 +136,8 @@ Status meanings:
 - A few AST/debug string forms are still simplified rather than canonical Flux formatting
 - There is no semantic analysis or type checking layer yet
 - Runtime execution is only partial: a useful subset of statements and expressions can execute, including simple in-memory query pipelines, but broader builtins and stream semantics are still missing
-- CSV support is still lightweight: raw and common annotated rows work, but full Flux stream/table behavior for multi-table annotated CSV is not implemented yet
-- CLI output is moving toward result-oriented behavior, but it is still only a first-pass formatter: terminal tables and annotated CSV work for the current in-memory runtime subset, while `yield` is only implemented as lightweight result naming and full official result-set fidelity is not implemented yet
+- CSV support is still lightweight: raw and common annotated rows work, including repeated annotated metadata blocks, but the full Flux stream/table engine and broader CSV stdlib surface are not implemented yet
+- CLI output is moving toward result-oriented behavior, and annotated CSV now reuses existing `result`/`table` columns plus derived group metadata when available, but full official result-set fidelity is still not implemented
 
 ## Recommended Next Steps
 
