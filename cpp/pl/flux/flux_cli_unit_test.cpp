@@ -229,6 +229,10 @@ TEST(FluxCliTest, ExecutesCheckedInOpsDashboardQueryVariants) {
             "cpp/pl/flux/examples/ops_dashboard/latest_west_cpu.flux",
             {"Result: latest_west_cpu\n", "\"edge-2\"", "\"us-west\"", "87"},
         },
+        {
+            "cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux",
+            {"Result: latest_west_cpu\n", "Result: latest_east_mem\n", "\"edge-2\"", "\"us-east\"", "87", "68"},
+        },
     };
 
     for (const auto& example : cases) {
@@ -435,6 +439,81 @@ TEST(FluxCliTest, EmitsJsonForMixedResults) {
     EXPECT_NE(std::string::npos,
               result.output.find("\"rows\":[{\"_time\":\"2024-01-01T00:00:00Z\""));
     EXPECT_NE(std::string::npos, result.output.find("\"last\":42"));
+}
+
+TEST(FluxCliTest, FiltersNamedResultsAcrossOutputFormats) {
+    const std::string source = R"(
+        import "csv"
+
+        west_cpu = csv.from(
+            file: "cpp/pl/flux/examples/ops_dashboard/cpu_usage.annotated.csv",
+        )
+            |> filter(fn: (r) => r.region == "us-west")
+            |> sort(columns: ["_time"])
+            |> last()
+            |> yield(name: "latest_west_cpu")
+
+        east_mem = csv.from(
+            file: "cpp/pl/flux/examples/ops_dashboard/mem_usage.annotated.csv",
+        )
+            |> filter(fn: (r) => r.region == "us-east")
+            |> sort(columns: ["_time"])
+            |> last()
+            |> yield(name: "latest_east_mem")
+    )";
+
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions human_options;
+    human_options.result_name = "latest_east_mem";
+    auto human = ExecuteFluxSource(RewriteExamplePaths(source), "<test>", env, human_options);
+
+    EXPECT_EQ(0, human.exit_code);
+    EXPECT_TRUE(human.error.empty());
+    EXPECT_NE(std::string::npos, human.output.find("Result: latest_east_mem\n"));
+    EXPECT_NE(std::string::npos, human.output.find("\"us-east\""));
+    EXPECT_NE(std::string::npos, human.output.find("68"));
+    EXPECT_EQ(std::string::npos, human.output.find("latest_west_cpu"));
+    EXPECT_EQ(std::string::npos, human.output.find("\"us-west\""));
+
+    env = MakeFluxCliEnvironment();
+    FluxCliOptions csv_options;
+    csv_options.output_format = FluxOutputFormat::Csv;
+    csv_options.result_name = "latest_west_cpu";
+    auto csv = ExecuteFluxSource(RewriteExamplePaths(source), "<test>", env, csv_options);
+
+    EXPECT_EQ(0, csv.exit_code);
+    EXPECT_TRUE(csv.error.empty());
+    EXPECT_NE(std::string::npos, csv.output.find(",_result,0,2024-05-01T10:01:10Z"));
+    EXPECT_NE(std::string::npos, csv.output.find(",us-west,"));
+    EXPECT_EQ(std::string::npos, csv.output.find("latest_east_mem"));
+    EXPECT_EQ(std::string::npos, csv.output.find(",us-east,"));
+
+    env = MakeFluxCliEnvironment();
+    FluxCliOptions json_options;
+    json_options.output_format = FluxOutputFormat::Json;
+    json_options.result_name = "latest_east_mem";
+    auto json = ExecuteFluxSource(RewriteExamplePaths(source), "<test>", env, json_options);
+
+    EXPECT_EQ(0, json.exit_code);
+    EXPECT_TRUE(json.error.empty());
+    EXPECT_NE(std::string::npos, json.output.find("\"results\":[{\"name\":\"latest_east_mem\""));
+    EXPECT_NE(std::string::npos, json.output.find("\"last\":{\"type\":\"table\""));
+    EXPECT_NE(std::string::npos, json.output.find("\"region\":\"us-east\""));
+    EXPECT_EQ(std::string::npos, json.output.find("latest_west_cpu"));
+    EXPECT_EQ(std::string::npos, json.output.find("\"region\":\"us-west\""));
+}
+
+TEST(FluxCliTest, ReportsMissingNamedResultFilter) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.result_name = "missing";
+
+    auto result = ExecuteFluxSource("value = 41\nvalue + 1", "<test>", env, options);
+
+    EXPECT_EQ(1, result.exit_code);
+    EXPECT_TRUE(result.output.empty());
+    EXPECT_NE(std::string::npos, result.error.find("result `missing` was not found"));
+    EXPECT_NE(std::string::npos, result.error.find("available results: value, _result"));
 }
 
 TEST(FluxCliTest, DumpsAstAsTreeAndJson) {

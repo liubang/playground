@@ -17,6 +17,8 @@
 #include "cpp/pl/flux/flux_cli.h"
 
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_join.h"
 #include "cpp/pl/ascii_table/pretty.h"
 #include "cpp/pl/flux/ast_debug.h"
 #include "cpp/pl/flux/parser.h"
@@ -522,6 +524,37 @@ absl::StatusOr<std::string> build_json_output(const FileExecutionResult& result)
     return std::string(view) + "\n";
 }
 
+absl::StatusOr<FileExecutionResult> filter_result_by_name(const FileExecutionResult& result,
+                                                          std::string_view result_name) {
+    FileExecutionResult filtered;
+    filtered.package_name = result.package_name;
+    filtered.imports = result.imports;
+
+    std::vector<std::string> available_results;
+    available_results.reserve(result.results.size());
+    for (const auto& named : result.results) {
+        available_results.push_back(named.name);
+        if (named.name != result_name) {
+            continue;
+        }
+        filtered.results.push_back(named);
+        filtered.last = ExecutionResult::normal(named.value);
+    }
+
+    if (!filtered.results.empty()) {
+        return filtered;
+    }
+
+    if (available_results.empty()) {
+        return absl::NotFoundError(std::string("result `") + std::string(result_name) +
+                                   "` was not found; script produced no named results");
+    }
+
+    return absl::NotFoundError(std::string("result `") + std::string(result_name) +
+                               "` was not found; available results: " +
+                               absl::StrJoin(available_results, ", "));
+}
+
 void append_scalar_result(const NamedResult& result, bool include_header, std::ostringstream& out) {
     if (result.value.is_null()) {
         return;
@@ -759,6 +792,16 @@ FluxCliResult ExecuteFluxSource(const std::string& source,
     if (!result_or.ok()) {
         return FluxCliResult{
             .exit_code = 1, .output = "", .error = status_message(result_or.status()) + "\n"};
+    }
+    if (options.result_name.has_value()) {
+        auto filtered_or = filter_result_by_name(*result_or, *options.result_name);
+        if (!filtered_or.ok()) {
+            return FluxCliResult{
+                .exit_code = 1,
+                .output = "",
+                .error = status_message(filtered_or.status()) + "\n"};
+        }
+        result_or = *filtered_or;
     }
 
     std::ostringstream out;

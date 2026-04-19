@@ -42,7 +42,8 @@ std::string read_all(std::istream& input) {
 }
 
 void print_usage(std::ostream& out) {
-    out << "usage: flux [--repl] [--quiet] [--output-format human|csv|json] [--no-prelude]"
+    out << "usage: flux [--repl] [--quiet] [--output-format human|csv|json] [--result name]"
+           " [--no-prelude]"
            " [file.flux]\n"
         << "       flux -e 'source'\n"
         << "       flux ast [--json] [file.flux]\n"
@@ -137,6 +138,22 @@ int main(int argc, char* argv[]) {
         }
         if (arg == "--annotated-csv") {
             options.output_format = pl::FluxOutputFormat::Csv;
+            continue;
+        }
+        if (arg == "--result") {
+            if (i + 1 >= argc) {
+                std::cerr << arg << " requires a result name\n";
+                return 1;
+            }
+            options.result_name = argv[++i];
+            continue;
+        }
+        if (arg.rfind("--result=", 0) == 0) {
+            options.result_name = arg.substr(std::string("--result=").size());
+            if (options.result_name->empty()) {
+                std::cerr << "--result requires a result name\n";
+                return 1;
+            }
             continue;
         }
         if (arg == "--output-format" || arg == "--format") {
