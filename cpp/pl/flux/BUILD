@@ -144,6 +144,9 @@ cc_library(
         ":runtime_env",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/time:time",
+        "@abseil-cpp//absl/time/internal/cctz:civil_time",
+        "@abseil-cpp//absl/time/internal/cctz:time_zone",
     ],
 )
 
