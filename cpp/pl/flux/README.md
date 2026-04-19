@@ -125,6 +125,16 @@ bazel build //cpp/pl/flux:flux
 
 That scenario lives in [examples/ops_dashboard/README.md](./examples/ops_dashboard/README.md) and now includes a small suite of reusable queries covering combinations like `aggregateWindow + join`, `aggregateWindow(createEmpty) + fill`, `group + sort + elapsed`, `group + sort + difference`, `group + sort + derivative`, `aggregateWindow + union + pivot`, calendar `aggregateWindow(1mo)`, `distinct`, `sort + limit`, `tail(offset)`, `union`, `reduce`, `last`, and multi-result scripts that can be narrowed with `--result`.
 
+The current builtin surface also includes lightweight table-inspection helpers such as
+`columns()`, `keys()`, `findColumn(fn:, column:)`, and `findRecord(fn:, idx:)`, which are
+useful for narrowing and inspecting in-memory query results.
+
+`aggregateWindow()` now covers the common fixed-duration and calendar-window parameter
+combinations used by realistic queries: `location`, `timeSrc`, `timeDst`, `period`,
+calendar-window `offset`, negative `period`, overlapping windows when `every != period`,
+and `createEmpty` behavior across `range()` bounds with selector functions dropping empty
+windows.
+
 Start the REPL:
 
 ```bash
@@ -308,7 +318,7 @@ File execution keeps an internal ordered list of named results for top-level sta
 
 Result naming can now also come from Flux itself through a first-pass `yield(name: "...")` builtin in query pipelines. The current implementation preserves the input table and attaches the yielded name to downstream CLI/CSV output, while annotated CSV output now also preserves existing `result`/`table` columns and derives `#group` flags from runtime `_group` metadata when available. It is still a lightweight compatibility layer rather than a full official Flux result-stream engine.
 
-The current `aggregateWindow` implementation is intentionally lightweight: it buckets RFC3339 `_time` values by fixed durations such as `1m`, supports UTC calendar windows for `mo` and `y`, preserves the current `_group` marker, supports `column`, `offset` for fixed-duration windows, `createEmpty: true`, and can call `mean`, `sum`, `min`, `max`, custom array functions, or the special window form of `count`. Time zones and calendar-window offsets are not implemented yet.
+The current `aggregateWindow` implementation is still intentionally lightweight, but it now covers more of the practical Flux surface: it buckets RFC3339 `_time` values by fixed durations such as `1m`, supports fixed-offset and named-zone `location` records for window boundary calculation, supports calendar `mo` and `y` windows with timezone-aware boundaries, preserves `_group`, supports `column`, `offset` for fixed-duration windows, `timeSrc`, `timeDst`, and `createEmpty: true`, and can call `mean`, `sum`, `min`, `max`, custom array functions, or the special window form of `count`. Output rows now also drop non-group-key columns outside the aggregate target and window metadata, which keeps the shape closer to Flux `aggregateWindow()` output. Global `option location`, `period`, and calendar-window `offset` semantics are still not implemented.
 
 Current evaluator support includes:
 
@@ -423,7 +433,7 @@ Current statement execution support includes:
 Not implemented yet in the runtime:
 
 - richer query-oriented pipe semantics beyond the current in-memory table pipeline subset
-- full calendar-aware `aggregateWindow` semantics such as time zones and calendar-window offsets
+- the remaining `aggregateWindow` gaps such as global `option location`, `period`, and calendar-window `offset`
 - a broader standard-library builtin catalog
 
 ## Notes
