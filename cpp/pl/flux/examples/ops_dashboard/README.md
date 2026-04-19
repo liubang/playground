@@ -37,7 +37,7 @@ bazel build //cpp/pl/flux:flux
 Export the same result as annotated CSV:
 
 ```bash
-./bazel-bin/cpp/pl/flux/flux --annotated-csv cpp/pl/flux/examples/ops_dashboard/query.flux
+./bazel-bin/cpp/pl/flux/flux --output-format csv cpp/pl/flux/examples/ops_dashboard/query.flux
 ```
 
 Try another query shape from the same directory:

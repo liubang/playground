@@ -201,6 +201,8 @@ cc_library(
         ":parser",
         ":runtime_builtin",
         ":runtime_exec",
+        "@abseil-cpp//absl/status",
+        "@simdjson//:simdjson",
     ],
 )
 
