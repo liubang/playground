@@ -157,6 +157,42 @@ status = if exists config.enabled then "ok" else "missing"
 EOF
 ```
 
+## Editor Support
+
+This directory now includes a project-local Vim syntax file at
+[`vim/syntax/flux.vim`](./vim/syntax/flux.vim).
+
+The syntax rules are based on the Flux subset currently implemented in
+`cpp/pl/flux`, including:
+
+- `package`, `import`, `option`, `builtin`, `testcase`, `return`
+- `if` / `then` / `else`, `exists`, `and` / `or` / `not`
+- attributes such as `@trace(...)`
+- strings, string interpolation, regex literals, times, durations, unsigned integers
+- type keywords such as `where`, `dynamic`, `vector`, `stream`
+- the current builtin/query surface such as `from`, `range`, `filter`, `map`,
+  `aggregateWindow`, `join`, `pivot`, `yield`, `csv.from`, and related helpers
+
+Install it for Vim:
+
+```bash
+mkdir -p ~/.vim/syntax ~/.vim/ftdetect
+cp cpp/pl/flux/vim/syntax/flux.vim ~/.vim/syntax/flux.vim
+printf 'au BufRead,BufNewFile *.flux setfiletype flux\n' > ~/.vim/ftdetect/flux.vim
+```
+
+Install it for Neovim:
+
+```bash
+mkdir -p ~/.config/nvim/syntax ~/.config/nvim/ftdetect
+cp cpp/pl/flux/vim/syntax/flux.vim ~/.config/nvim/syntax/flux.vim
+printf 'au BufRead,BufNewFile *.flux setfiletype flux\n' > ~/.config/nvim/ftdetect/flux.vim
+```
+
+If you prefer not to copy files, you can also add this repository's
+`cpp/pl/flux/vim` directory to your `runtimepath` and register `*.flux` as the
+`flux` filetype in your editor config.
+
 ## Example
 
 Input:
