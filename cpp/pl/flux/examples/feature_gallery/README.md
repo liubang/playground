@@ -67,10 +67,10 @@ bazel build //cpp/pl/flux:flux
 
 ## 数据文件
 
-- `site_ops.annotated.csv`：三大区域的服务 CPU / 内存样本
-- `service_counters.annotated.csv`：带一次 reset 的单调计数器
-- `alerts.raw.csv`：raw CSV 读取示例
-- `multi_block.annotated.csv`：带重复 annotated metadata/header block 的输入
+- `data/site_ops.annotated.csv`：三大区域的服务 CPU / 内存样本
+- `data/service_counters.annotated.csv`：带一次 reset 的单调计数器
+- `data/alerts.raw.csv`：raw CSV 读取示例
+- `data/multi_block.annotated.csv`：带重复 annotated metadata/header block 的输入
 
 ## 关于 `group`
 
