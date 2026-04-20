@@ -30,6 +30,7 @@ namespace pl {
 
 struct ArrayValue;
 struct ObjectValue;
+struct TableChunk;
 struct TableValue;
 struct FunctionExpr;
 class Environment;
@@ -106,6 +107,11 @@ public:
                        std::optional<std::string> range_start = std::nullopt,
                        std::optional<std::string> range_stop = std::nullopt,
                        std::optional<std::string> result_name = std::nullopt);
+    static Value table_stream(std::string bucket,
+                              std::vector<TableChunk> tables,
+                              std::optional<std::string> range_start = std::nullopt,
+                              std::optional<std::string> range_stop = std::nullopt,
+                              std::optional<std::string> result_name = std::nullopt);
     static Value function(std::shared_ptr<FunctionValue> function);
 
     [[nodiscard]] Type type() const { return type_; }
@@ -159,15 +165,27 @@ struct ObjectValue {
     [[nodiscard]] const Value* lookup(const std::string& key) const;
 };
 
+struct TableChunk {
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+
+    TableChunk() = default;
+    explicit TableChunk(std::vector<std::shared_ptr<ObjectValue>> in_rows)
+        : rows(std::move(in_rows)) {}
+
+    bool operator==(const TableChunk& other) const;
+};
+
 struct TableValue {
     std::string bucket;
     std::vector<std::shared_ptr<ObjectValue>> rows;
+    std::vector<TableChunk> tables;
     std::optional<std::string> range_start;
     std::optional<std::string> range_stop;
     std::optional<std::string> result_name;
 
     [[nodiscard]] std::string string() const;
     bool operator==(const TableValue& other) const;
+    [[nodiscard]] size_t table_count() const;
 };
 
 struct FunctionValue {

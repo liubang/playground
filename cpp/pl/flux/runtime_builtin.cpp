@@ -373,6 +373,63 @@ std::shared_ptr<ObjectValue> clone_row_with_group(const ObjectValue& row,
     return std::make_shared<ObjectValue>(grouped.as_object());
 }
 
+std::vector<std::string> all_visible_columns_in_order(const TableValue& table) {
+    std::vector<std::string> columns;
+    std::unordered_set<std::string> seen;
+    for (const auto& row : table.rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        for (const auto& [name, value] : row->properties) {
+            (void)value;
+            if (name == "_group") {
+                continue;
+            }
+            if (seen.insert(name).second) {
+                columns.push_back(name);
+            }
+        }
+    }
+    return columns;
+}
+
+std::vector<TableChunk> clone_table_chunks(const TableValue& table) { return table.tables; }
+
+Value table_with_chunks_like(const TableValue& table, std::vector<TableChunk> chunks) {
+    return Value::table_stream(table.bucket, std::move(chunks), table.range_start, table.range_stop,
+                               table.result_name);
+}
+
+std::vector<std::pair<std::string, Value>> group_properties_for_row(
+    const ObjectValue& row, const std::vector<std::string>& columns) {
+    std::vector<std::pair<std::string, Value>> group_props;
+    group_props.reserve(columns.size());
+    for (const auto& column : columns) {
+        const Value* value = row.lookup(column);
+        if (value != nullptr) {
+            group_props.emplace_back(column, *value);
+        }
+    }
+    return group_props;
+}
+
+std::shared_ptr<ObjectValue> materialize_group_count_row(const TableChunk& chunk,
+                                                         const std::string& column,
+                                                         int64_t count) {
+    std::vector<std::pair<std::string, Value>> properties;
+    if (!chunk.rows.empty() && chunk.rows[0] != nullptr) {
+        if (const Value* group = chunk.rows[0]->lookup("_group");
+            group != nullptr && group->type() == Value::Type::Object) {
+            for (const auto& [name, value] : group->as_object().properties) {
+                properties.emplace_back(name, value);
+            }
+            properties.emplace_back("_group", *group);
+        }
+    }
+    properties.emplace_back(column, Value::integer(count));
+    return std::make_shared<ObjectValue>(std::move(properties));
+}
+
 double numeric_value(const Value& value) {
     switch (value.type()) {
         case Value::Type::Int:
@@ -2135,24 +2192,22 @@ absl::StatusOr<Value> builtin_sort(const std::vector<Value>& args) {
         return desc_or.status();
     }
 
-    std::vector<std::shared_ptr<ObjectValue>> rows;
-    rows.reserve((*table_or)->rows.size());
-    for (const auto& row : (*table_or)->rows) {
-        if (row != nullptr) {
-            rows.push_back(row);
-        }
-    }
-    std::stable_sort(rows.begin(), rows.end(), [&](const auto& lhs, const auto& rhs) {
-        for (const auto& column : *columns_or) {
-            const int cmp = compare_values(lhs->lookup(column), rhs->lookup(column));
-            if (cmp != 0) {
-                return *desc_or ? cmp > 0 : cmp < 0;
+    auto chunks = clone_table_chunks(**table_or);
+    for (auto& chunk : chunks) {
+        std::stable_sort(chunk.rows.begin(), chunk.rows.end(), [&](const auto& lhs, const auto& rhs) {
+            if (lhs == nullptr || rhs == nullptr) {
+                return lhs != nullptr;
             }
-        }
-        return false;
-    });
-    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
-                        (*table_or)->range_stop);
+            for (const auto& column : *columns_or) {
+                const int cmp = compare_values(lhs->lookup(column), rhs->lookup(column));
+                if (cmp != 0) {
+                    return *desc_or ? cmp > 0 : cmp < 0;
+                }
+            }
+            return false;
+        });
+    }
+    return table_with_chunks_like(**table_or, std::move(chunks));
 }
 
 absl::StatusOr<Value> builtin_group(const std::vector<Value>& args) {
@@ -2168,16 +2223,43 @@ absl::StatusOr<Value> builtin_group(const std::vector<Value>& args) {
     if (!columns_or.ok()) {
         return columns_or.status();
     }
+    auto mode_or = optional_string_property(**object_or, "group", "mode", "by");
+    if (!mode_or.ok()) {
+        return mode_or.status();
+    }
+    if (*mode_or != "by" && *mode_or != "except") {
+        return absl::InvalidArgumentError("group `mode` must be either \"by\" or \"except\"");
+    }
 
-    std::vector<std::shared_ptr<ObjectValue>> rows;
-    rows.reserve((*table_or)->rows.size());
-    for (const auto& row : (*table_or)->rows) {
-        if (row != nullptr) {
-            rows.push_back(clone_row_with_group(*row, *columns_or));
+    std::vector<std::string> group_columns = *columns_or;
+    if (*mode_or == "except") {
+        group_columns.clear();
+        for (const auto& column : all_visible_columns_in_order(**table_or)) {
+            if (!contains_string(*columns_or, column)) {
+                group_columns.push_back(column);
+            }
         }
     }
-    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
-                        (*table_or)->range_stop);
+
+    std::vector<TableChunk> chunks;
+    std::unordered_map<std::string, size_t> chunk_indexes;
+    chunks.reserve((*table_or)->rows.size());
+    for (const auto& row : (*table_or)->rows) {
+        if (row != nullptr) {
+            auto grouped_row = clone_row_with_group(*row, group_columns);
+            const auto group_props = group_properties_for_row(*row, group_columns);
+            const std::string key = Value::object(group_props).string();
+            auto [it, inserted] = chunk_indexes.emplace(key, chunks.size());
+            if (inserted) {
+                chunks.emplace_back();
+            }
+            chunks[it->second].rows.push_back(std::move(grouped_row));
+        }
+    }
+    if (chunks.empty()) {
+        chunks.emplace_back();
+    }
+    return table_with_chunks_like(**table_or, std::move(chunks));
 }
 
 absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
@@ -2567,23 +2649,26 @@ absl::StatusOr<Value> builtin_distinct(const std::vector<Value>& args) {
         return column_or.status();
     }
 
-    std::unordered_set<std::string> seen;
-    std::vector<std::shared_ptr<ObjectValue>> rows;
-    rows.reserve((*table_or)->rows.size());
-    for (const auto& row : (*table_or)->rows) {
-        if (row == nullptr) {
-            continue;
+    std::vector<TableChunk> chunks;
+    chunks.reserve((*table_or)->table_count());
+    for (const auto& chunk : (*table_or)->tables) {
+        std::unordered_set<std::string> seen;
+        TableChunk next;
+        next.rows.reserve(chunk.rows.size());
+        for (const auto& row : chunk.rows) {
+            if (row == nullptr) {
+                continue;
+            }
+            const Value* value = row->lookup(*column_or);
+            const std::string key = value == nullptr ? "<missing>" : value->string();
+            if (!seen.insert(key).second) {
+                continue;
+            }
+            next.rows.push_back(row);
         }
-        const Value* value = row->lookup(*column_or);
-        const std::string key = absl::StrCat(group_key_for_row(*row), "\n",
-                                             value == nullptr ? "<missing>" : value->string());
-        if (!seen.insert(key).second) {
-            continue;
-        }
-        rows.push_back(row);
+        chunks.push_back(std::move(next));
     }
-    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
-                        (*table_or)->range_stop);
+    return table_with_chunks_like(**table_or, std::move(chunks));
 }
 
 absl::StatusOr<Value> builtin_count(const std::vector<Value>& args) {
@@ -2603,17 +2688,20 @@ absl::StatusOr<Value> builtin_count(const std::vector<Value>& args) {
         column = column_value->as_string();
     }
 
-    int64_t count = 0;
-    for (const auto& row : (*table_or)->rows) {
-        if (row != nullptr && row->lookup(column) != nullptr) {
-            ++count;
+    std::vector<TableChunk> chunks;
+    chunks.reserve((*table_or)->table_count());
+    for (const auto& chunk : (*table_or)->tables) {
+        int64_t count = 0;
+        for (const auto& row : chunk.rows) {
+            if (row != nullptr && row->lookup(column) != nullptr) {
+                ++count;
+            }
         }
+        TableChunk next;
+        next.rows.push_back(materialize_group_count_row(chunk, column, count));
+        chunks.push_back(std::move(next));
     }
-    std::vector<std::shared_ptr<ObjectValue>> rows;
-    rows.push_back(std::make_shared<ObjectValue>(
-        std::vector<std::pair<std::string, Value>>{{column, Value::integer(count)}}));
-    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
-                        (*table_or)->range_stop);
+    return table_with_chunks_like(**table_or, std::move(chunks));
 }
 
 absl::StatusOr<Value> table_single_row_builtin(const std::vector<Value>& args,
@@ -2628,15 +2716,19 @@ absl::StatusOr<Value> table_single_row_builtin(const std::vector<Value>& args,
         return table_or.status();
     }
 
-    std::vector<std::shared_ptr<ObjectValue>> rows;
-    if (!(*table_or)->rows.empty()) {
-        const auto& source = use_last ? (*table_or)->rows.back() : (*table_or)->rows.front();
-        if (source != nullptr) {
-            rows.push_back(source);
+    std::vector<TableChunk> chunks;
+    chunks.reserve((*table_or)->table_count());
+    for (const auto& chunk : (*table_or)->tables) {
+        TableChunk next;
+        if (!chunk.rows.empty()) {
+            const auto& source = use_last ? chunk.rows.back() : chunk.rows.front();
+            if (source != nullptr) {
+                next.rows.push_back(source);
+            }
         }
+        chunks.push_back(std::move(next));
     }
-    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
-                        (*table_or)->range_stop);
+    return table_with_chunks_like(**table_or, std::move(chunks));
 }
 
 absl::StatusOr<Value> builtin_first(const std::vector<Value>& args) {
@@ -2657,7 +2749,7 @@ absl::StatusOr<Value> builtin_union(const std::vector<Value>& args) {
         return tables_or.status();
     }
 
-    std::vector<std::shared_ptr<ObjectValue>> rows;
+    std::vector<TableChunk> chunks;
     std::string bucket = "union";
     std::optional<std::string> range_start;
     std::optional<std::string> range_stop;
@@ -2674,14 +2766,13 @@ absl::StatusOr<Value> builtin_union(const std::vector<Value>& args) {
         if (!range_stop.has_value()) {
             range_stop = table->range_stop;
         }
-        rows.reserve(rows.size() + table->rows.size());
-        for (const auto& row : table->rows) {
-            if (row != nullptr) {
-                rows.push_back(row);
-            }
-        }
+        const auto& table_chunks = table->tables;
+        chunks.insert(chunks.end(), table_chunks.begin(), table_chunks.end());
     }
-    return Value::table(bucket, std::move(rows), range_start, range_stop);
+    if (chunks.empty()) {
+        chunks.emplace_back();
+    }
+    return Value::table_stream(bucket, std::move(chunks), range_start, range_stop);
 }
 
 absl::StatusOr<Value> builtin_join(const std::vector<Value>& args) {
@@ -3060,8 +3151,9 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
         return lhs.group_key < rhs.group_key;
     });
 
-    std::vector<std::shared_ptr<ObjectValue>> rows;
-    rows.reserve(buckets.size());
+    std::vector<TableChunk> chunks;
+    std::unordered_map<std::string, size_t> chunk_indexes;
+    chunks.reserve(group_spans.size() + 1);
     for (const auto& bucket : buckets) {
         if (bucket.first_row == nullptr) {
             continue;
@@ -3102,10 +3194,16 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
                     Value::time(format_rfc3339_seconds(*time_src_seconds)));
             }
         }
-        rows.push_back(std::make_shared<ObjectValue>(row_value.as_object()));
+        auto [it, inserted] = chunk_indexes.emplace(bucket.group_key, chunks.size());
+        if (inserted) {
+            chunks.emplace_back();
+        }
+        chunks[it->second].rows.push_back(std::make_shared<ObjectValue>(row_value.as_object()));
     }
-    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
-                        (*table_or)->range_stop);
+    if (chunks.empty()) {
+        chunks.emplace_back();
+    }
+    return table_with_chunks_like(**table_or, std::move(chunks));
 }
 
 Value make_builtin_value(const std::string& name,

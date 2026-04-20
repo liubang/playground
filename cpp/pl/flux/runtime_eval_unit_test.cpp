@@ -565,44 +565,77 @@ TEST(RuntimeEvalTest, EvaluatesSortGroupCountFirstAndLastBuiltins) {
     auto sorted = ExpressionEvaluator::Evaluate(sorted_expr, env);
     ASSERT_TRUE(sorted.ok()) << sorted.status();
     ASSERT_EQ(Value::Type::Table, sorted->type());
-    ASSERT_EQ(1, sorted->as_table().rows.size());
+    ASSERT_EQ(2, sorted->as_table().rows.size());
+    ASSERT_EQ(2, sorted->as_table().table_count());
     ASSERT_NE(nullptr, sorted->as_table().rows[0]);
     EXPECT_EQ("95", sorted->as_table().rows[0]->lookup("_value")->string());
     ASSERT_NE(nullptr, sorted->as_table().rows[0]->lookup("_group"));
     EXPECT_EQ("{_measurement: \"cpu\"}", sorted->as_table().rows[0]->lookup("_group")->string());
+    ASSERT_NE(nullptr, sorted->as_table().rows[1]);
+    EXPECT_EQ("40", sorted->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ("{_measurement: \"mem\"}", sorted->as_table().rows[1]->lookup("_group")->string());
+
+    const auto& except_expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_measurement: "cpu", host: "a", _value: 70.0},
+                {_measurement: "cpu", host: "a", _value: 95.0},
+                {_measurement: "cpu", host: "b", _value: 40.0},
+            ],
+        )
+            |> group(columns: ["_value"], mode: "except")
+            |> count(column: "_value")
+    )");
+    auto except_grouped = ExpressionEvaluator::Evaluate(except_expr, env);
+    ASSERT_TRUE(except_grouped.ok()) << except_grouped.status();
+    ASSERT_EQ(2, except_grouped->as_table().rows.size());
+    ASSERT_EQ(2, except_grouped->as_table().table_count());
+    EXPECT_EQ("\"a\"", except_grouped->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("2", except_grouped->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("\"b\"", except_grouped->as_table().rows[1]->lookup("host")->string());
+    EXPECT_EQ("1", except_grouped->as_table().rows[1]->lookup("_value")->string());
 
     const auto& count_expr = ParseAssignmentInit(R"(
         result = from(
             bucket: "telegraf",
             rows: [
-                {_measurement: "cpu", _value: 70.0},
+                {_measurement: "cpu", host: "a", _value: 70.0},
                 {_measurement: "cpu"},
-                {_measurement: "mem", _value: 40.0},
+                {_measurement: "mem", host: "b", _value: 40.0},
             ],
         )
+            |> group(columns: ["_measurement"])
             |> count(column: "_value")
     )");
     auto count = ExpressionEvaluator::Evaluate(count_expr, env);
     ASSERT_TRUE(count.ok()) << count.status();
     ASSERT_EQ(Value::Type::Table, count->type());
-    ASSERT_EQ(1, count->as_table().rows.size());
-    EXPECT_EQ("2", count->as_table().rows[0]->lookup("_value")->string());
+    ASSERT_EQ(2, count->as_table().rows.size());
+    ASSERT_EQ(2, count->as_table().table_count());
+    EXPECT_EQ("\"cpu\"", count->as_table().rows[0]->lookup("_measurement")->string());
+    EXPECT_EQ("1", count->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("\"mem\"", count->as_table().rows[1]->lookup("_measurement")->string());
+    EXPECT_EQ("1", count->as_table().rows[1]->lookup("_value")->string());
 
     const auto& last_expr = ParseAssignmentInit(R"(
         result = from(
             bucket: "telegraf",
             rows: [
-                {_value: 1},
-                {_value: 2},
-                {_value: 3},
+                {host: "a", _value: 1},
+                {host: "a", _value: 2},
+                {host: "b", _value: 3},
             ],
         )
+            |> group(columns: ["host"])
             |> last()
     )");
     auto last = ExpressionEvaluator::Evaluate(last_expr, env);
     ASSERT_TRUE(last.ok()) << last.status();
-    ASSERT_EQ(1, last->as_table().rows.size());
-    EXPECT_EQ("3", last->as_table().rows[0]->lookup("_value")->string());
+    ASSERT_EQ(2, last->as_table().rows.size());
+    ASSERT_EQ(2, last->as_table().table_count());
+    EXPECT_EQ("2", last->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("3", last->as_table().rows[1]->lookup("_value")->string());
 }
 
 TEST(RuntimeEvalTest, EvaluatesUnionAndJoinBuiltins) {
@@ -941,6 +974,7 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowBuiltin) {
     ASSERT_TRUE(result.ok()) << result.status();
     ASSERT_EQ(Value::Type::Table, result->type());
     ASSERT_EQ(3, result->as_table().rows.size());
+    ASSERT_EQ(2, result->as_table().table_count());
     ASSERT_NE(nullptr, result->as_table().rows[0]);
     EXPECT_EQ("20", result->as_table().rows[0]->lookup("_value")->string());
     EXPECT_EQ("{host: \"a\"}", result->as_table().rows[0]->lookup("_group")->string());
@@ -948,9 +982,9 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowBuiltin) {
     EXPECT_EQ("2024-01-01T00:01:00Z", result->as_table().rows[0]->lookup("_stop")->string());
     EXPECT_EQ("2024-01-01T00:01:00Z", result->as_table().rows[0]->lookup("_time")->string());
     ASSERT_NE(nullptr, result->as_table().rows[1]);
-    EXPECT_EQ("90", result->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ("50", result->as_table().rows[1]->lookup("_value")->string());
     ASSERT_NE(nullptr, result->as_table().rows[2]);
-    EXPECT_EQ("50", result->as_table().rows[2]->lookup("_value")->string());
+    EXPECT_EQ("90", result->as_table().rows[2]->lookup("_value")->string());
 }
 
 TEST(RuntimeEvalTest, EvaluatesAggregateWindowColumnAndAggregateVariants) {

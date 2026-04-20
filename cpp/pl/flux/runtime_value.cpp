@@ -108,7 +108,25 @@ Value Value::table(std::string bucket,
                    std::optional<std::string> result_name) {
     auto table = std::make_shared<TableValue>();
     table->bucket = std::move(bucket);
-    table->rows = std::move(rows);
+    table->rows = rows;
+    table->tables.emplace_back(std::move(rows));
+    table->range_start = std::move(range_start);
+    table->range_stop = std::move(range_stop);
+    table->result_name = std::move(result_name);
+    return Value(Type::Table, std::move(table));
+}
+
+Value Value::table_stream(std::string bucket,
+                          std::vector<TableChunk> tables,
+                          std::optional<std::string> range_start,
+                          std::optional<std::string> range_stop,
+                          std::optional<std::string> result_name) {
+    auto table = std::make_shared<TableValue>();
+    table->bucket = std::move(bucket);
+    table->tables = std::move(tables);
+    for (const auto& chunk : table->tables) {
+        table->rows.insert(table->rows.end(), chunk.rows.begin(), chunk.rows.end());
+    }
     table->range_start = std::move(range_start);
     table->range_stop = std::move(range_stop);
     table->result_name = std::move(result_name);
@@ -268,9 +286,27 @@ const Value* ObjectValue::lookup(const std::string& key) const {
     return nullptr;
 }
 
+bool TableChunk::operator==(const TableChunk& other) const {
+    if (rows.size() != other.rows.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < rows.size(); ++i) {
+        if ((rows[i] == nullptr) != (other.rows[i] == nullptr)) {
+            return false;
+        }
+        if (rows[i] != nullptr && *rows[i] != *other.rows[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 std::string TableValue::string() const {
     std::ostringstream oss;
     oss << "<table bucket=" << quote_string(bucket) << " rows=" << rows.size();
+    if (table_count() > 1) {
+        oss << " tables=" << table_count();
+    }
     if (range_start.has_value()) {
         oss << " start=" << *range_start;
     }
@@ -284,7 +320,7 @@ std::string TableValue::string() const {
 bool TableValue::operator==(const TableValue& other) const {
     if (bucket != other.bucket || range_start != other.range_start ||
         range_stop != other.range_stop || result_name != other.result_name ||
-        rows.size() != other.rows.size()) {
+        rows.size() != other.rows.size() || tables != other.tables) {
         return false;
     }
     for (size_t i = 0; i < rows.size(); ++i) {
@@ -296,6 +332,10 @@ bool TableValue::operator==(const TableValue& other) const {
         }
     }
     return true;
+}
+
+size_t TableValue::table_count() const {
+    return tables.empty() ? 1 : tables.size();
 }
 
 std::string FunctionValue::string() const {
