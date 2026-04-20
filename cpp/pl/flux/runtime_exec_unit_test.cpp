@@ -485,7 +485,7 @@ TEST(RuntimeExecTest, ExecutesUnionAndJoinQueryFile) {
     auto file = ParseFile(R"(
         builtin from : (bucket: string) => stream[A]
         builtin union : (tables: [stream[A]]) => stream[A]
-        builtin join : (tables: A, on: [string]) => stream[B]
+        builtin join : (tables: A, ?method: string, on: [string]) => stream[B]
 
         cpu = from(bucket: "cpu", rows: [
             {_time: "t1", _value: 90.0, host: "a"},
@@ -512,9 +512,55 @@ TEST(RuntimeExecTest, ExecutesUnionAndJoinQueryFile) {
     const auto& row = env.lookup("joined")->as_table().rows[0];
     ASSERT_NE(nullptr, row);
     EXPECT_EQ("\"t1\"", row->lookup("_time")->string());
-    EXPECT_EQ("90", row->lookup("cpu._value")->string());
-    EXPECT_EQ("40", row->lookup("mem._value")->string());
-    EXPECT_EQ("\"a\"", row->lookup("cpu.host")->string());
+    EXPECT_EQ("90", row->lookup("_value_cpu")->string());
+    EXPECT_EQ("40", row->lookup("_value_mem")->string());
+    EXPECT_EQ("\"a\"", row->lookup("host")->string());
+    EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
+}
+
+TEST(RuntimeExecTest, ExecutesJoinQueryFileUsingMatchingGroupInstancesOnly) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin group : (<-tables: stream[A], ?columns: [string], ?mode: string) => stream[A]
+        builtin join : (tables: A, ?method: string, on: [string]) => stream[B]
+
+        cpu = from(bucket: "cpu", rows: [
+            {_time: "t1", host: "a", region: "east", _value: 90.0},
+            {_time: "t2", host: "a", region: "east", _value: 91.0},
+            {_time: "t3", host: "b", region: "west", _value: 70.0},
+            {host: "a", region: "east", _value: 999.0},
+        ])
+            |> group(columns: ["host"])
+        mem = from(bucket: "mem", rows: [
+            {_time: "t1", host: "a", region: "east", _value: 40.0},
+            {_time: "t2", host: "a", region: "east", _value: 41.0},
+            {_time: "t4", host: "c", region: "north", _value: 20.0},
+            {host: "a", region: "east", _value: 111.0},
+        ])
+            |> group(columns: ["host"])
+        joined = join(tables: {cpu: cpu, mem: mem}, method: "inner", on: ["_time"])
+        joined
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("joined").ok());
+    ASSERT_EQ(2, env.lookup("joined")->as_table().rows.size());
+    ASSERT_EQ(1, env.lookup("joined")->as_table().table_count());
+    const auto& row = env.lookup("joined")->as_table().rows[0];
+    ASSERT_NE(nullptr, row);
+    EXPECT_EQ("\"t1\"", row->lookup("_time")->string());
+    EXPECT_EQ("90", row->lookup("_value_cpu")->string());
+    EXPECT_EQ("40", row->lookup("_value_mem")->string());
+    EXPECT_EQ("\"a\"", row->lookup("host_cpu")->string());
+    EXPECT_EQ("\"a\"", row->lookup("host_mem")->string());
+    EXPECT_EQ("\"east\"", row->lookup("region_cpu")->string());
+    EXPECT_EQ("\"east\"", row->lookup("region_mem")->string());
+    ASSERT_NE(nullptr, row->lookup("_group"));
+    EXPECT_EQ("{host_cpu: \"a\", host_mem: \"a\"}", row->lookup("_group")->string());
     EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
 }
 
