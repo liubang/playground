@@ -327,6 +327,20 @@ bazel test //cpp/pl/flux:parser_unit_test --test_output=all
 
 运行时仍然会在每行上保留 `_group` 对象，目的是让 CSV 输出、调试和某些辅助逻辑更容易观察 group key；但真实语义已经由多表结构驱动，而不是依赖 `_group` 这个附加字段本身。
 
+### `join`
+
+当前 `join()` 仍然是 universe 包里的简化版双流 inner join，但它已经补上了和多表模型强相关的关键语义：
+
+- 只支持两个输入流
+- 支持 `method: "inner"`，其他 join method 还未实现
+- 只会比较 group key 实例相同的逻辑表
+- 输出仍然是多逻辑表流，而不是把所有匹配行压平成单表
+- 输出 schema 与 group key 取两侧并集
+- 两侧都存在、且不在 `on` 里的重复列会按官方旧版 `join()` 语义重命名为 `<column>_<table>`
+- `null` 或缺失的 join key 不会被视为相等
+
+这也意味着，当你要 join 两个不同 measurement 或 field 的结果时，通常要先用 `group()` 去掉会阻止匹配的 group key 列，再做 join。例如 CPU 和内存聚合结果经常需要先 regroup 掉 `_measurement`，否则两边逻辑表不会被拿来比较。
+
 ### 结果输出
 
 文件执行会维护一个有序的命名结果列表，来源包括顶层赋值、表达式、`option`、`testcase`，以及查询管道中的 `yield(name: "...")`。

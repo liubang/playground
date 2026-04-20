@@ -7,7 +7,7 @@
 
 ## 包含的脚本
 
-- `query.flux`：`filter + aggregateWindow + join + yield`
+- `query.flux`：`filter + aggregateWindow + group + join + yield`
 - `cpu_top_windows.flux`：`aggregateWindow + sort + limit`
 - `cpu_distinct_hosts.flux`：`keep + distinct + yield`
 - `cpu_gap_fill.flux`：`aggregateWindow(createEmpty) + fill(usePrevious) + yield`
@@ -79,6 +79,8 @@ bazel build //cpp/pl/flux:flux
 
 - `2024-05-01T10:01:00Z`，CPU 均值 `72`，内存均值 `63`
 - `2024-05-01T10:02:00Z`，CPU 均值 `82`，内存均值 `68`
+
+这个结果现在会显式使用 join 后的重命名列，例如 `_value_cpu` 和 `_value_mem`。脚本里也会先 `group(columns: ["host", "region"])`，把 CPU / MEM 两侧原本不同的 `_measurement` group key 去掉之后再 join，这和官方 Flux 的使用方式一致。
 
 `monthly_cpu_calendar` 结果应包含 `us-east` 中 `edge-1` 的两个 UTC 月历窗口：
 

@@ -10,11 +10,14 @@ join(
     tables: {
         cpu: cpu
             |> filter(fn: (r) => r.host == "edge-1")
-            |> aggregateWindow(every: 1m, fn: mean),
+            |> aggregateWindow(every: 1m, fn: mean)
+            |> group(columns: ["host", "region"]),
         mem: mem
             |> filter(fn: (r) => r.host == "edge-1")
-            |> aggregateWindow(every: 1m, fn: mean),
+            |> aggregateWindow(every: 1m, fn: mean)
+            |> group(columns: ["host", "region"]),
     },
+    method: "inner",
     on: ["_time"],
 )
     |> yield(name: "joined_health")
