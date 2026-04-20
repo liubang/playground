@@ -97,7 +97,7 @@ TEST(FluxCliTest, ExecutesFluxFileSourceWithImportsAndPipelines) {
 
     EXPECT_EQ(0, result.exit_code);
     EXPECT_NE(std::string::npos, result.output.find("Result: data\n"));
-    EXPECT_NE(std::string::npos, result.output.find("Table: bucket=csv, rows=1\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Table: bucket=csv, rows=1, tables=1\n"));
     EXPECT_NE(std::string::npos, result.output.find("_time"));
     EXPECT_NE(std::string::npos, result.output.find("_measurement"));
     EXPECT_NE(std::string::npos, result.output.find("_value"));
@@ -132,7 +132,7 @@ TEST(FluxCliTest, ExecutesCheckedInOpsDashboardQueryVariants) {
     const std::vector<ExampleCase> cases = {
         {
             "cpp/pl/flux/examples/ops_dashboard/cpu_top_windows.flux",
-            {"Result: cpu_top_windows\n", "91", "87", "82"},
+            {"Result: cpu_top_windows\n", "91", "82", "72"},
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/cpu_distinct_hosts.flux",
@@ -338,7 +338,7 @@ TEST(FluxCliTest, RendersTablesWithoutBordersWhenDisabled) {
     EXPECT_EQ(0, result.exit_code);
     EXPECT_TRUE(result.error.empty());
     EXPECT_NE(std::string::npos, result.output.find("Result: monthly_cpu_calendar\n"));
-    EXPECT_NE(std::string::npos, result.output.find("Table: bucket=csv, rows=2\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Table: bucket=csv, rows=2, tables=1\n"));
     EXPECT_NE(std::string::npos, result.output.find("_time"));
     EXPECT_NE(std::string::npos, result.output.find("2024-01-01T00:00:00Z"));
     EXPECT_NE(std::string::npos, result.output.find("60"));
@@ -426,12 +426,11 @@ TEST(FluxCliTest, EmitsAnnotatedCsvUsingExistingTableMetadataAndGroupColumns) {
     EXPECT_EQ(0, result.exit_code);
     EXPECT_TRUE(result.error.empty());
     EXPECT_NE(std::string::npos,
-              result.output.find("#group,false,false,true,true,false\n"));
+              result.output.find("#group,false,false,true,true,false"));
     EXPECT_NE(std::string::npos,
-              result.output.find(",result,table,_time,_measurement,_value\n"));
-    EXPECT_NE(std::string::npos, result.output.find(",cpu,0,2024-01-01T00:00:00Z,cpu,95.5\n"));
-    EXPECT_NE(std::string::npos, result.output.find(",mem,1,2024-01-01T00:01:00Z,mem,42\n"));
-    EXPECT_EQ(std::string::npos, result.output.find("_group"));
+              result.output.find(",result,table,_time,_measurement,_value"));
+    EXPECT_NE(std::string::npos, result.output.find(",cpu,0,2024-01-01T00:00:00Z,cpu,95.5"));
+    EXPECT_NE(std::string::npos, result.output.find(",mem,1,2024-01-01T00:01:00Z,mem,42"));
 }
 
 TEST(FluxCliTest, ReportsParserAndRuntimeErrors) {

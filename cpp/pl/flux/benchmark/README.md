@@ -1,41 +1,39 @@
-# Flux Benchmarking
+# Flux 基准测试
 
-This directory keeps the local synthetic benchmarks for the current in-memory
-Flux runtime. The goal is not to produce a perfectly isolated microbenchmark,
-but to give us a repeatable way to compare behavior as we optimize the engine.
+这个目录保存了当前内存内 Flux 运行时的本地合成基准测试。目标不是做完全隔离的微基准，而是给我们一个可重复的比较方法，用来观察引擎优化前后的变化。
 
-## What It Covers
+## 覆盖内容
 
-The benchmark suite currently exercises four representative query shapes:
+当前基准集覆盖四类有代表性的查询形态：
 
-- `linear`: `csv.from |> filter |> map |> limit`
-- `sort`: `csv.from |> sort |> limit`
-- `agg`: `csv.from |> group |> aggregateWindow |> yield`
-- `join`: two-table `join(..., on: ["_time", "host"]) |> limit`
+- `linear`：`csv.from |> filter |> map |> limit`
+- `sort`：`csv.from |> sort |> limit`
+- `agg`：`csv.from |> group |> aggregateWindow |> yield`
+- `join`：双表 `join(..., on: ["_time", "host"]) |> limit`
 
-These cases are intentionally chosen to cover:
+选择这四类 case 的目的分别是覆盖：
 
-- a mostly linear pipeline
-- a full-table reorder
-- a stateful aggregation path
-- the heavier multi-table join path, which is now backed by a hash index
+- 近似线性的轻管道
+- 全表重排
+- 带状态的聚合路径
+- 更重的多表 `join` 路径，目前已经由哈希索引支撑
 
-## Run
+## 运行方式
 
-Build the binary first:
+先构建二进制：
 
 ```bash
 bazel build //cpp/pl/flux:flux
 ```
 
-Generate synthetic annotated CSV inputs and run the default benchmark matrix:
+生成合成 annotated CSV 输入，并执行默认基准矩阵：
 
 ```bash
 python3 cpp/pl/flux/benchmark/generate_benchmark_data.py
 python3 cpp/pl/flux/benchmark/run_benchmarks.py
 ```
 
-The runner prints JSON so it is easy to compare before and after a change:
+runner 会输出 JSON，便于在修改前后直接对比：
 
 ```json
 [
@@ -47,9 +45,9 @@ The runner prints JSON so it is easy to compare before and after a change:
 ]
 ```
 
-## Data Shape
+## 数据形态
 
-The generated benchmark inputs live under `/tmp/flux_bench` by default:
+生成的基准输入默认位于 `/tmp/flux_bench`：
 
 - `metrics_100000.annotated.csv`
 - `metrics_500000.annotated.csv`
@@ -59,7 +57,7 @@ The generated benchmark inputs live under `/tmp/flux_bench` by default:
 - `join_left_5000.annotated.csv`
 - `join_right_5000.annotated.csv`
 
-The large metric datasets use annotated CSV with the columns:
+大规模指标数据集使用 annotated CSV，列包括：
 
 - `result`
 - `table`
@@ -68,14 +66,15 @@ The large metric datasets use annotated CSV with the columns:
 - `region`
 - `_value`
 
-## Current Baseline
+## 当前基线
 
-These baseline results were collected locally on 2026-04-19 after the
-current round of runtime optimizations, including the hash-indexed `join`
-path, indexed `aggregateWindow` bucket lookup, and row-pointer reuse across
-selection/reordering operators:
+下面这组基线是在 2026-04-19 本地采集的，基于最近一轮运行时优化之后的实现，包含：
 
-| Case | Input | Time |
+- 基于哈希索引的 `join`
+- `aggregateWindow` 的索引化 bucket 查找
+- selection / reordering 算子中的行指针复用
+
+| Case | 输入规模 | 时间 |
 | --- | --- | ---: |
 | `linear` | 100k rows | 0.086s |
 | `linear` | 500k rows | 0.368s |
@@ -89,16 +88,14 @@ selection/reordering operators:
 | `join` | 2000 x 2000 rows | 0.061s |
 | `join` | 5000 x 5000 rows | 0.336s |
 
-## How To Use It
+## 如何使用
 
-When we change runtime behavior, the usual workflow should be:
+当我们修改运行时行为时，推荐流程如下：
 
-1. Run the benchmark suite on the current branch.
-2. Save the JSON output from `run_benchmarks.py`.
-3. Make the runtime change.
-4. Run the same benchmark suite again.
-5. Compare latency changes for `linear`, `sort`, `agg`, and `join`.
+1. 在当前分支先跑一遍基准。
+2. 保存 `run_benchmarks.py` 的 JSON 输出。
+3. 修改运行时实现。
+4. 用同样的输入规模再跑一遍。
+5. 对比 `linear`、`sort`、`agg`、`join` 的延迟变化。
 
-If we add new heavy operators such as better `pivot` coverage, hash-based join,
-or streaming readers, we should extend this directory with a new benchmark case
-instead of replacing the existing ones.
+如果后续新增更重的算子，比如更完整的 `pivot`、更强的 join 形态，或者真正的流式 reader，建议在这里新增新的 benchmark case，而不是替换现有 case。
