@@ -51,27 +51,27 @@ std::string ReadAllText(const std::string& path) {
 
 std::string RewriteExamplePaths(std::string source) {
     source = ReplaceAll(source,
-                        "cpp/pl/flux/examples/ops_dashboard/cpu_usage.annotated.csv",
-                        RunfilePath("cpp/pl/flux/examples/ops_dashboard/cpu_usage.annotated.csv"));
+                        "cpp/pl/flux/examples/ops_dashboard/data/cpu_usage.annotated.csv",
+                        RunfilePath("cpp/pl/flux/examples/ops_dashboard/data/cpu_usage.annotated.csv"));
     source = ReplaceAll(
         source,
-        "cpp/pl/flux/examples/ops_dashboard/cpu_monthly_usage.annotated.csv",
-        RunfilePath("cpp/pl/flux/examples/ops_dashboard/cpu_monthly_usage.annotated.csv"));
+        "cpp/pl/flux/examples/ops_dashboard/data/cpu_monthly_usage.annotated.csv",
+        RunfilePath("cpp/pl/flux/examples/ops_dashboard/data/cpu_monthly_usage.annotated.csv"));
     source = ReplaceAll(source,
-                        "cpp/pl/flux/examples/ops_dashboard/mem_usage.annotated.csv",
-                        RunfilePath("cpp/pl/flux/examples/ops_dashboard/mem_usage.annotated.csv"));
+                        "cpp/pl/flux/examples/ops_dashboard/data/mem_usage.annotated.csv",
+                        RunfilePath("cpp/pl/flux/examples/ops_dashboard/data/mem_usage.annotated.csv"));
     source = ReplaceAll(source,
-                        "cpp/pl/flux/examples/feature_gallery/site_ops.annotated.csv",
-                        RunfilePath("cpp/pl/flux/examples/feature_gallery/site_ops.annotated.csv"));
+                        "cpp/pl/flux/examples/feature_gallery/data/site_ops.annotated.csv",
+                        RunfilePath("cpp/pl/flux/examples/feature_gallery/data/site_ops.annotated.csv"));
     source = ReplaceAll(source,
-                        "cpp/pl/flux/examples/feature_gallery/service_counters.annotated.csv",
-                        RunfilePath("cpp/pl/flux/examples/feature_gallery/service_counters.annotated.csv"));
+                        "cpp/pl/flux/examples/feature_gallery/data/service_counters.annotated.csv",
+                        RunfilePath("cpp/pl/flux/examples/feature_gallery/data/service_counters.annotated.csv"));
     source = ReplaceAll(source,
-                        "cpp/pl/flux/examples/feature_gallery/alerts.raw.csv",
-                        RunfilePath("cpp/pl/flux/examples/feature_gallery/alerts.raw.csv"));
+                        "cpp/pl/flux/examples/feature_gallery/data/alerts.raw.csv",
+                        RunfilePath("cpp/pl/flux/examples/feature_gallery/data/alerts.raw.csv"));
     source = ReplaceAll(source,
-                        "cpp/pl/flux/examples/feature_gallery/multi_block.annotated.csv",
-                        RunfilePath("cpp/pl/flux/examples/feature_gallery/multi_block.annotated.csv"));
+                        "cpp/pl/flux/examples/feature_gallery/data/multi_block.annotated.csv",
+                        RunfilePath("cpp/pl/flux/examples/feature_gallery/data/multi_block.annotated.csv"));
     return source;
 }
 
@@ -509,7 +509,7 @@ TEST(FluxCliTest, FiltersNamedResultsAcrossOutputFormats) {
         import "csv"
 
         west_cpu = csv.from(
-            file: "cpp/pl/flux/examples/ops_dashboard/cpu_usage.annotated.csv",
+            file: "cpp/pl/flux/examples/ops_dashboard/data/cpu_usage.annotated.csv",
         )
             |> filter(fn: (r) => r.region == "us-west")
             |> sort(columns: ["_time"])
@@ -517,7 +517,7 @@ TEST(FluxCliTest, FiltersNamedResultsAcrossOutputFormats) {
             |> yield(name: "latest_west_cpu")
 
         east_mem = csv.from(
-            file: "cpp/pl/flux/examples/ops_dashboard/mem_usage.annotated.csv",
+            file: "cpp/pl/flux/examples/ops_dashboard/data/mem_usage.annotated.csv",
         )
             |> filter(fn: (r) => r.region == "us-east")
             |> sort(columns: ["_time"])
