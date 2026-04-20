@@ -431,7 +431,7 @@ TEST(RuntimeExecTest, ExecutesRenameDuplicateAndSetQueryFile) {
 TEST(RuntimeExecTest, ExecutesSortGroupCountFirstAndLastQueryFile) {
     auto file = ParseFile(R"(
         builtin from : (bucket: string) => stream[A]
-        builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
+        builtin group : (<-tables: stream[A], ?columns: [string], ?mode: string) => stream[A]
         builtin sort : (<-tables: stream[A], columns: [string], desc: bool) => stream[A]
         builtin first : (<-tables: stream[A]) => stream[A]
         builtin last : (<-tables: stream[A]) => stream[A]
@@ -449,7 +449,12 @@ TEST(RuntimeExecTest, ExecutesSortGroupCountFirstAndLastQueryFile) {
             |> sort(columns: ["_value"], desc: true)
             |> first()
         latest = from(bucket: "telegraf", rows: [{_value: 1}, {_value: 2}]) |> last()
-        counted = from(bucket: "telegraf", rows: [{_value: 1}, {_value: 2}, {host: "missing"}])
+        counted = from(bucket: "telegraf", rows: [
+            {_measurement: "cpu", host: "a", _value: 1},
+            {_measurement: "cpu", host: "a"},
+            {_measurement: "mem", host: "b", _value: 2},
+        ])
+            |> group(columns: ["_measurement"])
             |> count(column: "_value")
         hottest
     )");
@@ -461,15 +466,19 @@ TEST(RuntimeExecTest, ExecutesSortGroupCountFirstAndLastQueryFile) {
     ASSERT_TRUE(result_or.ok()) << result_or.status();
     ASSERT_EQ(Value::Type::Table, result_or->last.value.type());
     ASSERT_TRUE(env.lookup("hottest").ok());
-    ASSERT_EQ(1, env.lookup("hottest")->as_table().rows.size());
+    ASSERT_EQ(2, env.lookup("hottest")->as_table().rows.size());
+    ASSERT_EQ(2, env.lookup("hottest")->as_table().table_count());
     EXPECT_EQ("95", env.lookup("hottest")->as_table().rows[0]->lookup("_value")->string());
     ASSERT_NE(nullptr, env.lookup("hottest")->as_table().rows[0]->lookup("_group"));
     EXPECT_EQ("{_measurement: \"cpu\"}",
               env.lookup("hottest")->as_table().rows[0]->lookup("_group")->string());
+    EXPECT_EQ("40", env.lookup("hottest")->as_table().rows[1]->lookup("_value")->string());
     ASSERT_TRUE(env.lookup("latest").ok());
     EXPECT_EQ("2", env.lookup("latest")->as_table().rows[0]->lookup("_value")->string());
     ASSERT_TRUE(env.lookup("counted").ok());
-    EXPECT_EQ("2", env.lookup("counted")->as_table().rows[0]->lookup("_value")->string());
+    ASSERT_EQ(2, env.lookup("counted")->as_table().rows.size());
+    EXPECT_EQ("1", env.lookup("counted")->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("1", env.lookup("counted")->as_table().rows[1]->lookup("_value")->string());
 }
 
 TEST(RuntimeExecTest, ExecutesUnionAndJoinQueryFile) {

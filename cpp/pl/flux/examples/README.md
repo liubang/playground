@@ -1,11 +1,8 @@
-# Flux Examples
+# Flux 示例集
 
-This directory now has two example collections:
+这个目录目前包含两组示例：
 
-- [`ops_dashboard`](./ops_dashboard/README.md): realistic dashboard-style queries over
-  checked-in host metrics
-- [`feature_gallery`](./feature_gallery/README.md): focused examples that cover the
-  current supported builtin surface and common feature combinations
+- [`ops_dashboard`](./ops_dashboard/README.md)：基于仓库内置主机指标数据的真实仪表盘风格查询
+- [`feature_gallery`](./feature_gallery/README.md)：覆盖当前 builtin 面和常见能力组合的聚焦示例
 
-If you want broad coverage of what the current runtime can execute, start with
-[`feature_gallery/README.md`](./feature_gallery/README.md).
+如果你想快速了解当前运行时“已经能跑什么”，建议先从 [`feature_gallery/README.md`](./feature_gallery/README.md) 看起。
