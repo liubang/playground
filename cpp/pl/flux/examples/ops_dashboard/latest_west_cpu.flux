@@ -1,6 +1,6 @@
 import "csv"
 
-csv.from(file: "cpp/pl/flux/examples/ops_dashboard/cpu_usage.annotated.csv")
+csv.from(file: "cpp/pl/flux/examples/ops_dashboard/data/cpu_usage.annotated.csv")
     |> filter(fn: (r) => r.region == "us-west")
     |> sort(columns: ["_time"])
     |> last()
