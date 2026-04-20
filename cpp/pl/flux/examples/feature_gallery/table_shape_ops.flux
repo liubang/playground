@@ -1,6 +1,6 @@
 import "csv"
 
-csv.from(file: "cpp/pl/flux/examples/feature_gallery/site_ops.annotated.csv")
+csv.from(file: "cpp/pl/flux/examples/feature_gallery/data/site_ops.annotated.csv")
     |> filter(fn: (r) => r._measurement == "cpu")
     |> duplicate(column: "_value", as: "original")
     |> rename(columns: {_measurement: "measurement", _field: "field"})

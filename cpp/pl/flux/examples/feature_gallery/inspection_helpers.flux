@@ -1,6 +1,6 @@
 import "csv"
 
-ops = csv.from(file: "cpp/pl/flux/examples/feature_gallery/multi_block.annotated.csv")
+ops = csv.from(file: "cpp/pl/flux/examples/feature_gallery/data/multi_block.annotated.csv")
 
 ops
     |> columns()

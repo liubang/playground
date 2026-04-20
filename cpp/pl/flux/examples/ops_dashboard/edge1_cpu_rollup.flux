@@ -1,6 +1,6 @@
 import "csv"
 
-csv.from(file: "cpp/pl/flux/examples/ops_dashboard/cpu_usage.annotated.csv")
+csv.from(file: "cpp/pl/flux/examples/ops_dashboard/data/cpu_usage.annotated.csv")
     |> filter(fn: (r) => r.host == "edge-1" and r.region == "us-east")
     |> reduce(
         identity: {samples: 0, total: 0.0},

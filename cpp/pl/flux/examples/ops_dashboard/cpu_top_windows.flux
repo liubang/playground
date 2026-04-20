@@ -1,6 +1,6 @@
 import "csv"
 
-csv.from(file: "cpp/pl/flux/examples/ops_dashboard/cpu_usage.annotated.csv")
+csv.from(file: "cpp/pl/flux/examples/ops_dashboard/data/cpu_usage.annotated.csv")
     |> aggregateWindow(every: 1m, fn: mean)
     |> sort(columns: ["_value"], desc: true)
     |> limit(n: 3)
