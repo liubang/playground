@@ -103,6 +103,7 @@
 | 函数调用执行 | 支持 | builtin 和用户函数都可调用，支持默认参数、命名参数、块体函数、pipe 参数注入，以及查询 builtin 内部的行函数调用 |
 | pipe 执行 | 部分支持 | `|>` 已支持 builtin、用户定义 `<-pipe` 参数以及内存表管道，但更广泛的 Flux 流式语义仍未完整实现 |
 | builtin 注册表 / stdlib 执行 | 部分支持 | 当前已有一批可调用 builtin：`len`、`string`、`contains`、`sum`、`mean`、`min`、`max`、`from`、`csv.from`、`columns`、`keys`、`findColumn`、`findRecord`、`range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`distinct`、`count`、`first`、`last`、`union`、`join`、`aggregateWindow`、`yield`；顶层 `builtin` 声明可绑定已知 builtin 或占位 callable；`import "csv"` 会绑定一个包含 `from` 的 package 对象；但完整 Flux 标准库仍远未实现 |
+| `join()` 语义 | 部分支持 | 当前 `join()` 支持两个输入流和 `method: "inner"`，只会比较 group key 实例相同的逻辑表，输出保持多表流，重复非 `on` 列会按 `<column>_<table>` 重命名，`null` / 缺失 join key 不匹配；更完整的 `join` 包、outer join、`as`/predicate 形式尚未实现 |
 | CSV 输入 | 部分支持 | `import "csv"`、`csv.from(csv: ...)`、`csv.from(file: ...)` 支持 raw 模式和常见 annotated CSV；支持 `#datatype`、`#group`、可选 `#default`、类型转换，以及同一载荷内重复 metadata/header block，对应多逻辑表输入；更广的 CSV stdlib 能力尚未补齐 |
 | aggregate windows | 部分支持 | RFC3339 `_time` 上的固定时长窗口可用，支持 `column`、`offset`、`period`、`timeSrc`、`timeDst`、`mean` / `sum` / `min` / `max`、自定义数组函数、窗口 `count`、负 `period`、`every != period` 的重叠窗口、`range()` 边界上的 `createEmpty: true`；日历 `mo` / `y` 窗口支持显式固定偏移和命名时区 `location` 记录，并支持日历窗口 `offset`；selector 风格 `first` / `last` 会像官方 Flux 一样丢弃空窗口；窗口输出会重新按 group key 分表；全局 `option location` 仍未实现 |
 | elapsed transforms | 部分支持 | `elapsed(unit:, timeColumn:, columnName:)` 已支持固定时长单位和 RFC3339 `_time` 类列，会按逻辑表逐表丢掉首行并写入整数 elapsed 值；日历单位仍未实现 |
@@ -134,6 +135,7 @@
 - CSV 数据可以通过 Flux 风格的 `csv.from` 进入运行时，包括 raw 头行 CSV、annotated CSV，以及重复 metadata block 的多表输入
 - `group` 已实现真实的按 group key 重分表语义，并支持 `mode: "by"` / `mode: "except"`
 - `count`、`first`、`last`、`distinct`、`sort` 等算子已经按逻辑表逐表工作，不再是旧的“全表 + `_group` 标签”行为
+- `join()` 已经按相同 group key 实例配对逻辑表，不同 measurement / field 的 join 示例也会先显式 regroup 再连接
 
 ## 主要已知缺口
 

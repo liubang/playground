@@ -28,7 +28,7 @@ bazel build //cpp/pl/flux:flux
 - `inspection_helpers.flux`：`columns`、`keys`、`findColumn`、`findRecord`，以及重复 annotated CSV metadata block
 - `table_shape_ops.flux`：`filter`、`duplicate`、`rename`、`set`、`map`、`drop`、`keep`、`sort`、`limit`、`tail`
 - `selection_and_reduce.flux`：`group`、`count`、`first`、`last`、`reduce`
-- `join_union_pivot.flux`：`aggregateWindow + join`、`union`、`pivot`
+- `join_union_pivot.flux`：`aggregateWindow + group + join`、`union`、`pivot`
 - `fill_distinct_windows.flux`：`aggregateWindow(createEmpty)`、`fill`、`distinct`
 - `time_math.flux`：`range`、`elapsed`、`difference`、`derivative`
 - `aggregatewindow_advanced.flux`：更完整的 `aggregateWindow` 参数组合，包括 `column`、固定时长 `offset`、自定义聚合函数、`period`、负 `period`、`timeSrc`、`timeDst`、命名时区 `location`、日历窗口 `offset`、selector 空窗口行为
@@ -81,3 +81,9 @@ bazel build //cpp/pl/flux:flux
 - `mode: "by"` 和 `mode: "except"` 都已支持
 
 因此这个示例更适合拿来检查我们当前的 `group`、selector 和聚合语义是否与官方 Flux 保持一致。
+
+`join_union_pivot.flux` 则对应更新后的 `join` 语义：
+
+- join 只会比较 group key 实例相同的逻辑表
+- 不同 measurement 的聚合结果会先显式 `group(columns: ["host", "region"])` 再 join
+- 重复非 `on` 列会重命名成 `_value_cpu`、`_value_mem`、`region_cpu`、`region_mem` 这类官方风格列名
