@@ -1,12 +1,12 @@
 import "csv"
 
-cpu = csv.from(file: "cpp/pl/flux/examples/ops_dashboard/cpu_usage.annotated.csv")
+cpu = csv.from(file: "cpp/pl/flux/examples/ops_dashboard/data/cpu_usage.annotated.csv")
     |> aggregateWindow(every: 1m, fn: mean)
     |> keep(columns: ["_time", "host", "region", "_value"])
     |> rename(columns: {_value: "usage"})
     |> set(key: "metric", value: "cpu")
 
-mem = csv.from(file: "cpp/pl/flux/examples/ops_dashboard/mem_usage.annotated.csv")
+mem = csv.from(file: "cpp/pl/flux/examples/ops_dashboard/data/mem_usage.annotated.csv")
     |> aggregateWindow(every: 1m, fn: mean)
     |> keep(columns: ["_time", "host", "region", "_value"])
     |> rename(columns: {_value: "usage"})

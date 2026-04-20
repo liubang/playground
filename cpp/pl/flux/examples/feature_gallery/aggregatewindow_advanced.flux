@@ -1,6 +1,6 @@
 import "csv"
 
-cpu = csv.from(file: "cpp/pl/flux/examples/feature_gallery/site_ops.annotated.csv")
+cpu = csv.from(file: "cpp/pl/flux/examples/feature_gallery/data/site_ops.annotated.csv")
     |> filter(fn: (r) => r._measurement == "cpu" and r.host == "edge-1")
 
 cpu
