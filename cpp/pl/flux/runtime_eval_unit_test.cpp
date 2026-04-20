@@ -674,9 +674,56 @@ TEST(RuntimeEvalTest, EvaluatesUnionAndJoinBuiltins) {
     ASSERT_EQ(1, join_result->as_table().rows.size());
     ASSERT_NE(nullptr, join_result->as_table().rows[0]);
     EXPECT_EQ("\"t1\"", join_result->as_table().rows[0]->lookup("_time")->string());
-    EXPECT_EQ("90", join_result->as_table().rows[0]->lookup("cpu._value")->string());
-    EXPECT_EQ("40", join_result->as_table().rows[0]->lookup("mem._value")->string());
-    EXPECT_EQ("\"a\"", join_result->as_table().rows[0]->lookup("cpu.host")->string());
+    EXPECT_EQ("90", join_result->as_table().rows[0]->lookup("_value_cpu")->string());
+    EXPECT_EQ("40", join_result->as_table().rows[0]->lookup("_value_mem")->string());
+    EXPECT_EQ("\"a\"", join_result->as_table().rows[0]->lookup("host")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesJoinAgainstMatchingGroupKeyTablesOnly) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = join(
+            tables: {
+                cpu: from(bucket: "cpu", rows: [
+                    {_time: "t1", host: "a", region: "east", _value: 90.0},
+                    {_time: "t2", host: "a", region: "east", _value: 91.0},
+                    {_time: "t3", host: "b", region: "west", _value: 70.0},
+                    {host: "a", region: "east", _value: 999.0},
+                ])
+                    |> group(columns: ["host"]),
+                mem: from(bucket: "mem", rows: [
+                    {_time: "t1", host: "a", region: "east", _value: 40.0},
+                    {_time: "t2", host: "a", region: "east", _value: 41.0},
+                    {_time: "t4", host: "c", region: "north", _value: 20.0},
+                    {host: "a", region: "east", _value: 111.0},
+                ])
+                    |> group(columns: ["host"]),
+            },
+            method: "inner",
+            on: ["_time"],
+        )
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    ASSERT_EQ(1, result->as_table().table_count());
+    ASSERT_NE(nullptr, result->as_table().rows[0]);
+    ASSERT_NE(nullptr, result->as_table().rows[1]);
+    EXPECT_EQ("\"t1\"", result->as_table().rows[0]->lookup("_time")->string());
+    EXPECT_EQ("\"t2\"", result->as_table().rows[1]->lookup("_time")->string());
+    EXPECT_EQ("90", result->as_table().rows[0]->lookup("_value_cpu")->string());
+    EXPECT_EQ("40", result->as_table().rows[0]->lookup("_value_mem")->string());
+    EXPECT_EQ("\"a\"", result->as_table().rows[0]->lookup("host_cpu")->string());
+    EXPECT_EQ("\"a\"", result->as_table().rows[0]->lookup("host_mem")->string());
+    EXPECT_EQ("\"east\"", result->as_table().rows[0]->lookup("region_cpu")->string());
+    EXPECT_EQ("\"east\"", result->as_table().rows[0]->lookup("region_mem")->string());
+    const Value* group = result->as_table().rows[0]->lookup("_group");
+    ASSERT_NE(nullptr, group);
+    EXPECT_EQ("{host_cpu: \"a\", host_mem: \"a\"}", group->string());
 }
 
 TEST(RuntimeEvalTest, EvaluatesDistinctBuiltin) {

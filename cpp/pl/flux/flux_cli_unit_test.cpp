@@ -60,6 +60,18 @@ std::string RewriteExamplePaths(std::string source) {
     source = ReplaceAll(source,
                         "cpp/pl/flux/examples/ops_dashboard/mem_usage.annotated.csv",
                         RunfilePath("cpp/pl/flux/examples/ops_dashboard/mem_usage.annotated.csv"));
+    source = ReplaceAll(source,
+                        "cpp/pl/flux/examples/feature_gallery/site_ops.annotated.csv",
+                        RunfilePath("cpp/pl/flux/examples/feature_gallery/site_ops.annotated.csv"));
+    source = ReplaceAll(source,
+                        "cpp/pl/flux/examples/feature_gallery/service_counters.annotated.csv",
+                        RunfilePath("cpp/pl/flux/examples/feature_gallery/service_counters.annotated.csv"));
+    source = ReplaceAll(source,
+                        "cpp/pl/flux/examples/feature_gallery/alerts.raw.csv",
+                        RunfilePath("cpp/pl/flux/examples/feature_gallery/alerts.raw.csv"));
+    source = ReplaceAll(source,
+                        "cpp/pl/flux/examples/feature_gallery/multi_block.annotated.csv",
+                        RunfilePath("cpp/pl/flux/examples/feature_gallery/multi_block.annotated.csv"));
     return source;
 }
 
@@ -120,6 +132,25 @@ TEST(FluxCliTest, ExecutesCheckedInOpsDashboardExample) {
     EXPECT_NE(std::string::npos, result.output.find("63"));
     EXPECT_NE(std::string::npos, result.output.find("82"));
     EXPECT_NE(std::string::npos, result.output.find("68"));
+    EXPECT_NE(std::string::npos, result.output.find("_value_cpu"));
+    EXPECT_NE(std::string::npos, result.output.find("_value_mem"));
+}
+
+TEST(FluxCliTest, ExecutesFeatureGalleryJoinExampleWithRenamedColumns) {
+    auto env = MakeFluxCliEnvironment();
+    auto result =
+        ExecuteExampleScript("cpp/pl/flux/examples/feature_gallery/join_union_pivot.flux", env);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: joined_health\n"));
+    EXPECT_NE(std::string::npos, result.output.find("_value_cpu"));
+    EXPECT_NE(std::string::npos, result.output.find("_value_mem"));
+    EXPECT_NE(std::string::npos, result.output.find("region_cpu"));
+    EXPECT_NE(std::string::npos, result.output.find("region_mem"));
+    EXPECT_NE(std::string::npos, result.output.find("2024-06-01T09:01:00Z"));
+    EXPECT_NE(std::string::npos, result.output.find("73.5"));
+    EXPECT_NE(std::string::npos, result.output.find("60"));
 }
 
 TEST(FluxCliTest, ExecutesCheckedInOpsDashboardQueryVariants) {

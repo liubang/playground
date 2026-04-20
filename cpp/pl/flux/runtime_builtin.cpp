@@ -773,30 +773,149 @@ absl::StatusOr<std::string> read_text_file(const std::string& path, const std::s
 }
 
 std::string joined_property_name(const std::string& table_name, const std::string& column) {
-    return table_name + "." + column;
+    return column + "_" + table_name;
+}
+
+std::vector<std::string> visible_columns_in_chunk(const TableChunk& chunk) {
+    std::vector<std::string> columns;
+    std::unordered_set<std::string> seen;
+    for (const auto& row : chunk.rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        for (const auto& [key, value] : row->properties) {
+            (void)value;
+            if (key == "_group") {
+                continue;
+            }
+            if (seen.insert(key).second) {
+                columns.push_back(key);
+            }
+        }
+    }
+    return columns;
+}
+
+std::unordered_set<std::string> overlapping_join_columns(const std::vector<std::string>& left_columns,
+                                                         const std::vector<std::string>& right_columns,
+                                                         const std::vector<std::string>& on_columns) {
+    std::unordered_set<std::string> right_column_set(right_columns.begin(), right_columns.end());
+    std::unordered_set<std::string> overlap;
+    for (const auto& column : left_columns) {
+        if (contains_string(on_columns, column) || right_column_set.count(column) == 0) {
+            continue;
+        }
+        overlap.insert(column);
+    }
+    return overlap;
+}
+
+std::optional<std::string> join_row_key(const ObjectValue& row, const std::vector<std::string>& on_columns) {
+    std::string key;
+    for (const auto& column : on_columns) {
+        const Value* value = row.lookup(column);
+        if (value == nullptr || value->is_null()) {
+            return std::nullopt;
+        }
+        absl::StrAppend(&key, column, "=");
+        absl::StrAppend(&key, value_key_fragment(*value));
+        key.push_back('\n');
+    }
+    return key;
+}
+
+std::string chunk_group_key(const TableChunk& chunk) {
+    for (const auto& row : chunk.rows) {
+        if (row != nullptr) {
+            const Value* group = row->lookup("_group");
+            return group == nullptr ? "" : group->string();
+        }
+    }
+    return "";
+}
+
+std::vector<std::pair<std::string, Value>> join_group_properties(
+    const ObjectValue& left,
+    const ObjectValue& right,
+    const std::string& left_name,
+    const std::string& right_name,
+    const std::vector<std::string>& on_columns,
+    const std::unordered_set<std::string>& overlapping_columns) {
+    std::vector<std::pair<std::string, Value>> props;
+    std::unordered_set<std::string> inserted;
+
+    auto append_group = [&](const ObjectValue& row, const std::string& table_name) {
+        const Value* group = row.lookup("_group");
+        if (group == nullptr || group->type() != Value::Type::Object) {
+            return;
+        }
+        for (const auto& [key, value] : group->as_object().properties) {
+            std::string output_key = key;
+            if (contains_string(on_columns, key)) {
+                if (inserted.insert(key).second) {
+                    props.emplace_back(key, value);
+                }
+                continue;
+            }
+            if (overlapping_columns.count(key) != 0) {
+                output_key = joined_property_name(table_name, key);
+            }
+            if (inserted.insert(output_key).second) {
+                props.emplace_back(output_key, value);
+            }
+        }
+    };
+
+    append_group(left, left_name);
+    append_group(right, right_name);
+    return props;
 }
 
 std::shared_ptr<ObjectValue> join_rows(const std::string& left_name,
                                        const ObjectValue& left,
                                        const std::string& right_name,
                                        const ObjectValue& right,
-                                       const std::vector<std::string>& on_columns) {
+                                       const std::vector<std::string>& on_columns,
+                                       const std::unordered_set<std::string>& overlapping_columns) {
     std::vector<std::pair<std::string, Value>> props;
+    for (const auto& [key, value] :
+         join_group_properties(left, right, left_name, right_name, on_columns, overlapping_columns)) {
+        props.emplace_back(key, value);
+    }
     for (const auto& column : on_columns) {
         const Value* value = left.lookup(column);
         if (value != nullptr) {
-            props.emplace_back(column, *value);
+            const bool already_present = std::any_of(
+                props.begin(), props.end(), [&](const auto& property) { return property.first == column; });
+            if (!already_present) {
+                props.emplace_back(column, *value);
+            }
         }
     }
     for (const auto& [key, value] : left.properties) {
-        if (!contains_string(on_columns, key)) {
+        if (key == "_group" || contains_string(on_columns, key)) {
+            continue;
+        }
+        if (overlapping_columns.count(key) != 0) {
             props.emplace_back(joined_property_name(left_name, key), value);
+        } else {
+            props.emplace_back(key, value);
         }
     }
     for (const auto& [key, value] : right.properties) {
-        if (!contains_string(on_columns, key)) {
-            props.emplace_back(joined_property_name(right_name, key), value);
+        if (key == "_group" || contains_string(on_columns, key)) {
+            continue;
         }
+        if (overlapping_columns.count(key) != 0) {
+            props.emplace_back(joined_property_name(right_name, key), value);
+        } else if (left.lookup(key) == nullptr) {
+            props.emplace_back(key, value);
+        }
+    }
+    auto group_props =
+        join_group_properties(left, right, left_name, right_name, on_columns, overlapping_columns);
+    if (!group_props.empty()) {
+        props.emplace_back("_group", Value::object(std::move(group_props)));
     }
     return std::make_shared<ObjectValue>(std::move(props));
 }
@@ -2791,37 +2910,82 @@ absl::StatusOr<Value> builtin_join(const std::vector<Value>& args) {
     if (!on_or.ok()) {
         return on_or.status();
     }
+    auto method_or = optional_string_property(**object_or, "join", "method", "inner");
+    if (!method_or.ok()) {
+        return method_or.status();
+    }
+    if (*method_or != "inner") {
+        return absl::InvalidArgumentError("join currently supports only `method: \"inner\"`");
+    }
 
     const auto& left_name = (*tables_or)[0].first;
     const auto* left_table = (*tables_or)[0].second;
     const auto& right_name = (*tables_or)[1].first;
     const auto* right_table = (*tables_or)[1].second;
 
-    std::unordered_map<std::string, std::vector<const ObjectValue*>> right_rows_by_key;
-    right_rows_by_key.reserve(right_table->rows.size());
-    for (const auto& right_row : right_table->rows) {
-        if (right_row == nullptr) {
-            continue;
-        }
-        right_rows_by_key[row_identity_key(*right_row, *on_or)].push_back(right_row.get());
+    std::unordered_map<std::string, std::vector<const TableChunk*>> right_chunks_by_group;
+    right_chunks_by_group.reserve(right_table->table_count());
+    for (const auto& right_chunk : right_table->tables) {
+        right_chunks_by_group[chunk_group_key(right_chunk)].push_back(&right_chunk);
     }
 
-    std::vector<std::shared_ptr<ObjectValue>> rows;
-    rows.reserve(std::min(left_table->rows.size(), right_table->rows.size()));
-    for (const auto& left_row : left_table->rows) {
-        if (left_row == nullptr) {
+    std::vector<TableChunk> output_chunks;
+    output_chunks.reserve(std::min(left_table->table_count(), right_table->table_count()));
+    for (const auto& left_chunk : left_table->tables) {
+        const auto matching_chunks = right_chunks_by_group.find(chunk_group_key(left_chunk));
+        if (matching_chunks == right_chunks_by_group.end()) {
             continue;
         }
-        const auto matches = right_rows_by_key.find(row_identity_key(*left_row, *on_or));
-        if (matches == right_rows_by_key.end()) {
-            continue;
-        }
-        for (const auto* right_row : matches->second) {
-            rows.push_back(join_rows(left_name, *left_row, right_name, *right_row, *on_or));
+
+        const auto left_columns = visible_columns_in_chunk(left_chunk);
+        for (const auto* right_chunk : matching_chunks->second) {
+            const auto right_columns = visible_columns_in_chunk(*right_chunk);
+            const auto overlapping_columns =
+                overlapping_join_columns(left_columns, right_columns, *on_or);
+
+            std::unordered_map<std::string, std::vector<const ObjectValue*>> right_rows_by_key;
+            right_rows_by_key.reserve(right_chunk->rows.size());
+            for (const auto& right_row : right_chunk->rows) {
+                if (right_row == nullptr) {
+                    continue;
+                }
+                const auto key = join_row_key(*right_row, *on_or);
+                if (!key.has_value()) {
+                    continue;
+                }
+                right_rows_by_key[*key].push_back(right_row.get());
+            }
+
+            TableChunk output_chunk;
+            output_chunk.rows.reserve(std::min(left_chunk.rows.size(), right_chunk->rows.size()));
+            for (const auto& left_row : left_chunk.rows) {
+                if (left_row == nullptr) {
+                    continue;
+                }
+                const auto key = join_row_key(*left_row, *on_or);
+                if (!key.has_value()) {
+                    continue;
+                }
+                const auto matches = right_rows_by_key.find(*key);
+                if (matches == right_rows_by_key.end()) {
+                    continue;
+                }
+                for (const auto* right_row : matches->second) {
+                    output_chunk.rows.push_back(join_rows(left_name, *left_row, right_name,
+                                                          *right_row, *on_or,
+                                                          overlapping_columns));
+                }
+            }
+
+            if (!output_chunk.rows.empty()) {
+                output_chunks.push_back(std::move(output_chunk));
+            }
         }
     }
-    return Value::table(
-        left_table->bucket.empty() ? right_table->bucket : left_table->bucket, std::move(rows),
+
+    return Value::table_stream(
+        left_table->bucket.empty() ? right_table->bucket : left_table->bucket,
+        std::move(output_chunks),
         left_table->range_start.has_value() ? left_table->range_start : right_table->range_start,
         left_table->range_stop.has_value() ? left_table->range_stop : right_table->range_stop);
 }
