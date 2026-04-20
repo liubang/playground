@@ -18,6 +18,7 @@ bazel build //cpp/pl/flux:flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/fill_distinct_windows.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/time_math.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/aggregatewindow_advanced.flux
+./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/task_driven_rollup.flux
 ```
 
 ## 示例说明
@@ -32,6 +33,7 @@ bazel build //cpp/pl/flux:flux
 - `fill_distinct_windows.flux`：`aggregateWindow(createEmpty)`、`fill`、`distinct`
 - `time_math.flux`：`range`、`elapsed`、`difference`、`derivative`
 - `aggregatewindow_advanced.flux`：更完整的 `aggregateWindow` 参数组合，包括 `column`、固定时长 `offset`、自定义聚合函数、`period`、负 `period`、`timeSrc`、`timeDst`、命名时区 `location`、日历窗口 `offset`、selector 空窗口行为
+- `task_driven_rollup.flux`：`option task = {...}` 驱动的窗口查询，结合 block-body helper、对象返回、嵌套条件和多主机 rollup
 
 ## builtin 覆盖映射
 
@@ -40,7 +42,7 @@ bazel build //cpp/pl/flux:flux
 - `from`：
   `function_pipelines.flux`、`aggregatewindow_advanced.flux`
 - `csv.from`：
-  `csv_raw_alerts.flux`、`inspection_helpers.flux`、`table_shape_ops.flux`、`selection_and_reduce.flux`、`join_union_pivot.flux`、`fill_distinct_windows.flux`、`time_math.flux`
+  `csv_raw_alerts.flux`、`inspection_helpers.flux`、`table_shape_ops.flux`、`selection_and_reduce.flux`、`join_union_pivot.flux`、`fill_distinct_windows.flux`、`time_math.flux`、`task_driven_rollup.flux`
 - `columns`、`keys`、`findColumn`、`findRecord`：
   `inspection_helpers.flux`
 - `range`、`filter`、`map`：
@@ -50,9 +52,11 @@ bazel build //cpp/pl/flux:flux
 - `reduce`、`sort`、`group`、`count`、`first`、`last`：
   `selection_and_reduce.flux`
 - `pivot`、`fill`、`distinct`、`union`、`join`、`aggregateWindow`、`yield`：
-  `join_union_pivot.flux`、`fill_distinct_windows.flux`、`aggregatewindow_advanced.flux`
+  `join_union_pivot.flux`、`fill_distinct_windows.flux`、`aggregatewindow_advanced.flux`、`task_driven_rollup.flux`
 - `elapsed`、`difference`、`derivative`：
   `time_math.flux`
+- `option`、block-body helper、对象返回、嵌套条件：
+  `scalar_basics.flux`、`function_pipelines.flux`、`task_driven_rollup.flux`
 
 ## 这里覆盖的语言 / 运行时特性
 

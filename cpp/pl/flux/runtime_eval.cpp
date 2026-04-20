@@ -62,6 +62,32 @@ absl::StatusOr<std::string> property_name(const PropertyKey& key) {
     }
 }
 
+absl::StatusOr<std::string> flatten_member_name(const MemberExpr& member) {
+    auto property_or = property_name(*member.property);
+    if (!property_or.ok()) {
+        return property_or.status();
+    }
+    std::string suffix = *property_or;
+
+    const Expression* cursor = member.object.get();
+    while (cursor->type == Expression::Type::MemberExpr) {
+        const auto& inner = std::get<std::unique_ptr<MemberExpr>>(cursor->expr);
+        auto inner_name_or = property_name(*inner->property);
+        if (!inner_name_or.ok()) {
+            return inner_name_or.status();
+        }
+        inner_name_or->append(".").append(suffix);
+        suffix = std::move(*inner_name_or);
+        cursor = inner->object.get();
+    }
+
+    if (cursor->type != Expression::Type::Identifier) {
+        return absl::InvalidArgumentError("member access root must be an identifier");
+    }
+    const auto& root = std::get<std::unique_ptr<Identifier>>(cursor->expr);
+    return root->name + "." + suffix;
+}
+
 absl::StatusOr<Value> eval_impl(const Expression& expr, const Environment& env);
 
 absl::Status invalid_call(const Expression& expr, const std::string& detail) {
@@ -420,24 +446,45 @@ absl::StatusOr<Value> eval_pipe(const PipeExpr& pipe,
 absl::StatusOr<Value> eval_member(const MemberExpr& member,
                                   const Environment& env,
                                   const Expression& whole_expr) {
+    auto member_name_or = flatten_member_name(member);
     auto object_or = eval_impl(*member.object, env);
+    if (object_or.ok()) {
+        const auto& object = *object_or;
+        if (object.type() == Value::Type::Object) {
+            auto name_or = property_name(*member.property);
+            if (!name_or.ok()) {
+                return name_or.status();
+            }
+            const Value* value = object.as_object().lookup(*name_or);
+            if (value != nullptr) {
+                return *value;
+            }
+        } else if (!member_name_or.ok()) {
+            return type_error(whole_expr, "member access requires an object");
+        }
+    }
+
+    if (member_name_or.ok()) {
+        auto option_or = env.lookup_option(*member_name_or);
+        if (option_or.ok()) {
+            return *option_or;
+        }
+        if (option_or.status().code() != absl::StatusCode::kNotFound) {
+            return option_or.status();
+        }
+    }
+
     if (!object_or.ok()) {
         return object_or.status();
     }
-    const auto& object = *object_or;
-    if (object.type() != Value::Type::Object) {
+    if (object_or->type() != Value::Type::Object) {
         return type_error(whole_expr, "member access requires an object");
     }
     auto name_or = property_name(*member.property);
     if (!name_or.ok()) {
         return name_or.status();
     }
-    const auto& name = *name_or;
-    const Value* value = object.as_object().lookup(name);
-    if (value == nullptr) {
-        return absl::NotFoundError(absl::StrCat("missing object property: ", name));
-    }
-    return *value;
+    return absl::NotFoundError(absl::StrCat("missing object property: ", *name_or));
 }
 
 absl::StatusOr<Value> eval_index(const IndexExpr& index,
@@ -736,7 +783,17 @@ absl::StatusOr<Value> eval_logical(const LogicalExpr& logical,
 absl::StatusOr<Value> eval_impl(const Expression& expr, const Environment& env) {
     switch (expr.type) {
         case Expression::Type::Identifier:
-            return env.lookup(std::get<std::unique_ptr<Identifier>>(expr.expr)->name);
+            {
+                const auto& name = std::get<std::unique_ptr<Identifier>>(expr.expr)->name;
+                auto value_or = env.lookup(name);
+                if (value_or.ok()) {
+                    return *value_or;
+                }
+                if (value_or.status().code() != absl::StatusCode::kNotFound) {
+                    return value_or.status();
+                }
+                return env.lookup_option(name);
+            }
         case Expression::Type::ArrayExpr: {
             std::vector<Value> elements;
             for (const auto& item : std::get<std::unique_ptr<ArrayExpr>>(expr.expr)->elements) {

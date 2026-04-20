@@ -120,7 +120,7 @@ bazel build //cpp/pl/flux:flux
 
 这个场景见 [examples/ops_dashboard/README.md](./examples/ops_dashboard/README.md)。它覆盖了 `aggregateWindow + join`、`group + sort + elapsed`、`group + sort + difference`、`group + sort + derivative`、`aggregateWindow + union + pivot`、日历窗口、`distinct`、`union`、`reduce`、`last`，以及可通过 `--result` 缩窄的多结果脚本。
 
-如果你想快速扫一遍当前支持的 builtin 组合，建议从 [examples/feature_gallery/README.md](./examples/feature_gallery/README.md) 开始。
+如果你想快速扫一遍当前支持的 builtin 组合，建议从 [examples/feature_gallery/README.md](./examples/feature_gallery/README.md) 开始。其中新增的 `task_driven_rollup.flux` 还专门覆盖了 `option task = {...}` 驱动的窗口查询、block-body helper 和对象返回。
 
 当前还支持一些表检查辅助函数：
 
