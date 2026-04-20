@@ -101,7 +101,7 @@
 | 语句执行 | 支持 | 支持变量赋值、`option` 赋值、表达式语句、block/return、`testcase` 在隔离子作用域中执行、文件级顺序执行、顶层 `builtin` 声明、package/import 元数据处理，以及简单内存查询文件的端到端执行 |
 | 函数值 / 闭包 | 支持 | 用户自定义函数表达式会求值为可调用的运行时值，并捕获词法闭包 |
 | 函数调用执行 | 支持 | builtin 和用户函数都可调用，支持默认参数、命名参数、块体函数、pipe 参数注入，以及查询 builtin 内部的行函数调用 |
-| pipe 执行 | 部分支持 | `|>` 已支持 builtin、用户定义 `<-pipe` 参数以及内存表管道，但更广泛的 Flux 流式语义仍未完整实现 |
+| pipe 执行 | 部分支持 | `|>` 已支持 builtin、用户定义 `<-pipe` 参数以及内存表管道；`option task = {...}` 这类 option 绑定现在也可以直接驱动表达式与管道参数，但更广泛的 Flux 流式语义仍未完整实现 |
 | builtin 注册表 / stdlib 执行 | 部分支持 | 当前已有一批可调用 builtin：`len`、`string`、`contains`、`sum`、`mean`、`min`、`max`、`from`、`csv.from`、`columns`、`keys`、`findColumn`、`findRecord`、`range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`distinct`、`count`、`first`、`last`、`union`、`join`、`aggregateWindow`、`yield`；顶层 `builtin` 声明可绑定已知 builtin 或占位 callable；`import "csv"` 会绑定一个包含 `from` 的 package 对象；但完整 Flux 标准库仍远未实现 |
 | `join()` 语义 | 部分支持 | 当前 `join()` 支持两个输入流和 `method: "inner"`，只会比较 group key 实例相同的逻辑表，输出保持多表流，重复非 `on` 列会按 `<column>_<table>` 重命名，`null` / 缺失 join key 不匹配；更完整的 `join` 包、outer join、`as`/predicate 形式尚未实现 |
 | CSV 输入 | 部分支持 | `import "csv"`、`csv.from(csv: ...)`、`csv.from(file: ...)` 支持 raw 模式和常见 annotated CSV；支持 `#datatype`、`#group`、可选 `#default`、类型转换，以及同一载荷内重复 metadata/header block，对应多逻辑表输入；更广的 CSV stdlib 能力尚未补齐 |
@@ -115,7 +115,7 @@
 | 能力 | 状态 | 说明 |
 | --- | --- | --- |
 | 解析错误收集 | 支持 | `Parser::errors()` 可暴露收集到的解析错误 |
-| 局部失败后继续解析 | 部分支持 | 在条件表达式、调用参数、数组、字典、对象属性、属性注解和部分类型语法上已有恢复，但还不统一 | 非法输入 |
+| 局部失败后继续解析 | 部分支持 | 在条件表达式、调用参数、数组、字典、对象属性、属性注解，以及 vector/stream/record type 的一部分 malformed 输入上已有恢复，但还不统一 | 非法输入 |
 | 精确语法诊断 | 部分支持 | 很多错误信息已经有用并带有局部上下文，但一致性仍有限 |
 | 带源码位置的 AST 错误 | 部分支持 | 很多坏表达式/坏语句都会携带位置，但还未覆盖全部解析错误 |
 
@@ -159,9 +159,8 @@
 ## 建议优先补的语法
 
 - 围绕多表流、日历窗口和更丰富聚合的更多真实查询形态
-- 更多 `option` 驱动的查询程序，特别是 `option task = {...}` 与管道结合的形态
-- 更复杂的函数体 fixture，包括 block body、对象返回、嵌套调用和条件组合
-- 更多围绕复杂调用 / 对象 / 类型组合的 malformed 输入 fixture
+- 更多围绕多表流、日历窗口和更丰富聚合的真实查询 fixture
+- 更多围绕复杂调用 / 对象组合的 malformed 输入 fixture
 
 ## 解释器路线图
 

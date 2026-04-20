@@ -231,36 +231,65 @@ std::unique_ptr<MonoType> Parser::parse_record_type() {
 
     std::unique_ptr<Identifier> tvar;
     std::vector<std::shared_ptr<PropertyType>> properties;
+    auto parse_record_property =
+        [&](std::unique_ptr<Identifier> name,
+            const Position& start) -> std::shared_ptr<PropertyType> {
+        auto colon = expect(TokenType::Colon);
+        std::unique_ptr<MonoType> monotype;
+        Position end = colon->end_pos;
+        if (peek()->tok == TokenType::Comma || peek()->tok == TokenType::RBrace ||
+            peek()->tok == TokenType::Eof) {
+            std::stringstream ss;
+            ss << "missing record property type at " << peek()->start_pos;
+            errs_.emplace_back(ss.str());
+            monotype = create_placeholder_monotype("<invalid>");
+        } else {
+            monotype = parse_monotype();
+            end = last_consumed_loc_.end;
+        }
+        auto property = std::make_shared<PropertyType>(std::move(name), std::move(monotype));
+        property->loc = source_location(start, end);
+        return property;
+    };
+
+    auto parse_record_properties = [&](bool expect_separator) {
+        while (peek()->tok != TokenType::RBrace && more()) {
+            if (expect_separator) {
+                if (peek()->tok == TokenType::Comma) {
+                    consume();
+                    if (peek()->tok == TokenType::RBrace) {
+                        break;
+                    }
+                } else {
+                    std::stringstream ss;
+                    ss << "expected comma in record type property list, got "
+                       << token_to_string(peek()->tok) << " at " << peek()->start_pos;
+                    errs_.emplace_back(ss.str());
+                }
+            } else if (peek()->tok == TokenType::Comma) {
+                consume();
+                if (peek()->tok == TokenType::RBrace) {
+                    break;
+                }
+            }
+
+            auto name = parse_identifier();
+            const Position start = last_consumed_loc_.start;
+            properties.emplace_back(parse_record_property(std::move(name), start));
+            expect_separator = true;
+        }
+    };
+
     if (peek()->tok != TokenType::RBrace) {
         auto first = parse_identifier();
         if (peek()->tok == TokenType::Ident && peek()->lit == "with") {
             tvar = std::move(first);
             consume();
+            parse_record_properties(false);
         } else {
             const Position property_start = last_consumed_loc_.start;
-            expect(TokenType::Colon);
-            auto property = std::make_shared<PropertyType>(std::move(first), parse_monotype());
-            property->loc = source_location(property_start, last_consumed_loc_.end);
-            properties.emplace_back(std::move(property));
-            while (peek()->tok == TokenType::Comma) {
-                consume();
-                auto name = parse_identifier();
-                const Position start = last_consumed_loc_.start;
-                expect(TokenType::Colon);
-                property = std::make_shared<PropertyType>(std::move(name), parse_monotype());
-                property->loc = source_location(start, last_consumed_loc_.end);
-                properties.emplace_back(std::move(property));
-            }
-        }
-
-        while (peek()->tok == TokenType::Comma) {
-            consume();
-            auto name = parse_identifier();
-            const Position start = last_consumed_loc_.start;
-            expect(TokenType::Colon);
-            auto property = std::make_shared<PropertyType>(std::move(name), parse_monotype());
-            property->loc = source_location(start, last_consumed_loc_.end);
-            properties.emplace_back(std::move(property));
+            properties.emplace_back(parse_record_property(std::move(first), property_start));
+            parse_record_properties(true);
         }
     }
 

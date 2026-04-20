@@ -248,6 +248,49 @@ TEST(RuntimeExecTest, ExecutesTopLevelFileStatementsInSharedEnvironment) {
     EXPECT_EQ("{path: \"regexp\", alias: \"regexp\"}", env.lookup("regexp")->string());
 }
 
+TEST(RuntimeExecTest, ResolvesOptionValuesInsideExpressionsAndBlockFunctions) {
+    auto file = ParseFile(R"(
+        option task = {name: "cpu-alert", every: 5m}
+        option task.offset = 30s
+        option task.owner = "ops"
+
+        decorate = (r) => {
+            level = if r._value >= 80.0 then "critical" else if r._value >= 70.0 then "warm" else "steady"
+            return {
+                task: task.name,
+                owner: task.owner,
+                every: task.every,
+                offset: task.offset,
+                host: r.host,
+                level: level,
+            }
+        }
+
+        result = decorate(r: {host: "edge-1", _value: 82.0})
+        result
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_EQ(Value::Type::Object, result_or->last.value.type());
+    ASSERT_TRUE(env.lookup("result").ok());
+    ASSERT_EQ(Value::Type::Object, env.lookup("result")->type());
+    const auto& result = env.lookup("result")->as_object();
+    ASSERT_NE(nullptr, result.lookup("task"));
+    ASSERT_NE(nullptr, result.lookup("owner"));
+    ASSERT_NE(nullptr, result.lookup("every"));
+    ASSERT_NE(nullptr, result.lookup("offset"));
+    ASSERT_NE(nullptr, result.lookup("level"));
+    EXPECT_EQ("\"cpu-alert\"", result.lookup("task")->string());
+    EXPECT_EQ("\"ops\"", result.lookup("owner")->string());
+    EXPECT_EQ("5m", result.lookup("every")->string());
+    EXPECT_EQ("30s", result.lookup("offset")->string());
+    EXPECT_EQ("\"critical\"", result.lookup("level")->string());
+}
+
 TEST(RuntimeExecTest, RejectsTopLevelReturnDuringFileExecution) {
     auto file = ParseFile(R"(
         value = 1

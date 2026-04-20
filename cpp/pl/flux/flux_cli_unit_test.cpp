@@ -153,6 +153,24 @@ TEST(FluxCliTest, ExecutesFeatureGalleryJoinExampleWithRenamedColumns) {
     EXPECT_NE(std::string::npos, result.output.find("60"));
 }
 
+TEST(FluxCliTest, ExecutesTaskDrivenFeatureGalleryExample) {
+    auto env = MakeFluxCliEnvironment();
+    auto result =
+        ExecuteExampleScript("cpp/pl/flux/examples/feature_gallery/task_driven_rollup.flux", env);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: task_driven_rollup\n"));
+    EXPECT_NE(std::string::npos, result.output.find("\"task-driven-rollup\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"ops\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-1\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-2\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-3\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"critical\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"warm\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"steady\""));
+}
+
 TEST(FluxCliTest, ExecutesCheckedInOpsDashboardQueryVariants) {
     struct ExampleCase {
         std::string path;
