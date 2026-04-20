@@ -1,222 +1,223 @@
-# Flux Parser Support Matrix
+# Flux 解析器支持矩阵
 
-This document describes the current implementation status of `cpp/pl/flux`.
+本文档描述 `cpp/pl/flux` 当前的实现状态。
 
-Status meanings:
+状态说明：
 
-- `Supported`: implemented and covered by current tests or debug tooling
-- `Partial`: some common cases work, but the implementation is incomplete or fragile
-- `Missing`: not implemented yet, or not reliable enough to claim support
+- `支持`：已经实现，并且有现有测试或调试工具覆盖
+- `部分支持`：常见路径可用，但实现还不完整，或边界情况仍然脆弱
+- `缺失`：尚未实现，或还不够稳定，不能宣称已支持
 
-## File-Level Syntax
+## 文件级语法
 
-| Syntax | Status | Notes | Example |
+| 语法 | 状态 | 说明 | 示例 |
 | --- | --- | --- | --- |
-| `package` clause | Supported | Parsed into `PackageClause` | `package metrics` |
-| `import "path"` | Supported | Alias-less import works | `import "array"` |
-| `import alias "path"` | Supported | Alias is stored in AST | `import regexp "regexp"` |
-| file body statements | Supported | Mixed statement list works | `a = 1` |
-| attributes / annotations | Supported | Package/import/statement attributes are attached to AST nodes, including block statements, and attribute parameters accept full expressions | `@edition("2022.1")` |
+| `package` 子句 | 支持 | 解析为 `PackageClause` | `package metrics` |
+| `import "path"` | 支持 | 无别名导入可用 | `import "array"` |
+| `import alias "path"` | 支持 | 别名会保存在 AST 中 | `import regexp "regexp"` |
+| 文件体语句列表 | 支持 | 支持混合语句列表 | `a = 1` |
+| attributes / annotations | 支持 | package/import/statement 上的属性都会挂到 AST，block statement 也支持，属性参数支持完整表达式 | `@edition("2022.1")` |
 
-## Statements
+## 语句
 
-| Syntax | Status | Notes | Example |
+| 语法 | 状态 | 说明 | 示例 |
 | --- | --- | --- | --- |
-| expression statement | Supported | Parsed from top-level expressions | `from(bucket: "x")` |
-| variable assignment | Supported | Main assignment path works | `status = "ok"` |
-| `option name = expr` | Supported | Parsed as `OptionStatement` with variable assignment | `option task = {name: "cpu"}` |
-| `option a.b = expr` | Supported | Member assignment path works | `option task.offset = 5m` |
-| `return expr` | Supported | Works inside blocks | `return 1 + 2` |
-| `builtin name : type` | Supported | Includes function and record type cases | `builtin sum : (a: int) => int` |
-| `testcase` statement | Supported | Basic `extends` and block parsing work | `testcase t extends "base" { return 1 }` |
-| invalid / bad statement recovery | Partial | `BadStmt` exists, but recovery is still coarse | invalid input |
+| 表达式语句 | 支持 | 可从顶层表达式解析 | `from(bucket: "x")` |
+| 变量赋值 | 支持 | 主赋值路径可用 | `status = "ok"` |
+| `option name = expr` | 支持 | 解析为带变量赋值的 `OptionStatement` | `option task = {name: "cpu"}` |
+| `option a.b = expr` | 支持 | 成员赋值路径可用 | `option task.offset = 5m` |
+| `return expr` | 支持 | 可在 block 中使用 | `return 1 + 2` |
+| `builtin name : type` | 支持 | 支持函数类型和 record 类型 | `builtin sum : (a: int) => int` |
+| `testcase` 语句 | 支持 | 基础 `extends` 与 block 解析可用 | `testcase t extends "base" { return 1 }` |
+| 非法语句恢复 | 部分支持 | 存在 `BadStmt`，但恢复粒度仍较粗 | 非法输入 |
 
-## Expressions
+## 表达式
 
-| Syntax | Status | Notes | Example |
+| 语法 | 状态 | 说明 | 示例 |
 | --- | --- | --- | --- |
-| identifier | Supported | `true` and `false` are special-cased into booleans | `value` |
-| integer literal | Supported | Basic integer parsing works | `123` |
-| float literal | Supported | Common decimal form works | `0.5` |
-| string literal | Supported | Plain string parsing works | `"cpu"` |
-| string interpolation | Supported | `${expr}` works inside quote-based string expressions | `"host ${user}"` |
-| duration literal | Supported | Common units parse | `1h`, `5m` |
-| datetime literal | Supported | RFC3339-like path works for current implementation | `2024-01-02T03:04:05Z` |
-| regex literal | Supported | Regex scanning depends on expression context and is now working | `/cpu.*/` |
-| boolean literal | Supported | `true` / `false` are mapped to `BooleanLit` | `true` |
-| array literal | Supported | Common array forms work | `["cpu", "mem"]` |
-| dictionary literal | Supported | Key/value dictionary parsing works | `["cpu": 1, "mem": 2]` |
-| object literal | Supported | Standard object properties work | `{name: "cpu"}` |
-| record update | Supported | `with` source is supported | `{base with enabled: true}` |
-| member access | Supported | Parsed as `MemberExpr` | `config.enabled` |
-| index access | Supported | Numeric index works; string index on objects is normalized into member-style access | `arr[0]`, `obj["enabled"]` |
-| unary expression | Supported | Includes `exists`, unary `-`, `not` path | `exists config.enabled` |
-| binary expression | Supported | Common arithmetic and comparison operators work | `a + b`, `x =~ /cpu.*/` |
-| logical expression | Supported | `and` / `or` work on common cases | `a and b` |
-| conditional expression | Supported | `if ... then ... else ...` works | `if exists x then "ok" else "bad"` |
-| call expression | Supported | Common call syntax works | `range(start: -1h)` |
-| function expression | Supported | Parenthesized params, shorthand single-param arrows, block bodies, pipe params, and optional/default params are covered by tests | `(r) => r.host == "local"` |
-| pipe expression | Supported | Multi-stage pipe chains work | `from(...) |> range(...)` |
-| label literal | Supported | Top-level label expressions now parse through the normal expression-statement path | `.field` |
-| paren expression | Supported | Simple grouping works | `(1 + 2)` |
-| unsigned integer literal | Supported | `123u`-style literals are scanned and parsed into `UnsignedIntegerLit` | `42u` |
+| 标识符 | 支持 | `true` / `false` 会特判为布尔字面量 | `value` |
+| 整数字面量 | 支持 | 基本整数解析可用 | `123` |
+| 浮点字面量 | 支持 | 常见十进制形式可用 | `0.5` |
+| 字符串字面量 | 支持 | 基础字符串解析可用 | `"cpu"` |
+| 字符串插值 | 支持 | 支持 `${expr}` | `"host ${user}"` |
+| duration 字面量 | 支持 | 常见单位可解析 | `1h`, `5m` |
+| datetime 字面量 | 支持 | 当前实现支持 RFC3339 风格 | `2024-01-02T03:04:05Z` |
+| 正则字面量 | 支持 | 已支持依赖表达式上下文的正则扫描 | `/cpu.*/` |
+| 布尔字面量 | 支持 | `true` / `false` 映射为 `BooleanLit` | `true` |
+| 数组字面量 | 支持 | 常见数组形式可用 | `["cpu", "mem"]` |
+| 字典字面量 | 支持 | key/value 形式可用 | `["cpu": 1, "mem": 2]` |
+| 对象字面量 | 支持 | 标准对象属性可用 | `{name: "cpu"}` |
+| record update | 支持 | 支持 `with` 来源 | `{base with enabled: true}` |
+| 成员访问 | 支持 | 解析为 `MemberExpr` | `config.enabled` |
+| 索引访问 | 支持 | 数字索引可用；对象上的字符串索引会规范化为成员式访问 | `arr[0]`, `obj["enabled"]` |
+| 一元表达式 | 支持 | 包含 `exists`、一元 `-`、`not` | `exists config.enabled` |
+| 二元表达式 | 支持 | 常见算术和比较运算可用 | `a + b`, `x =~ /cpu.*/` |
+| 逻辑表达式 | 支持 | `and` / `or` 在常见场景下可用 | `a and b` |
+| 条件表达式 | 支持 | `if ... then ... else ...` 可用 | `if exists x then "ok" else "bad"` |
+| 调用表达式 | 支持 | 常见调用语法可用 | `range(start: -1h)` |
+| 函数表达式 | 支持 | 带括号参数、单参简写箭头、块体、pipe 参数、可选参数/默认参数都已有测试覆盖 | `(r) => r.host == "local"` |
+| pipe 表达式 | 支持 | 多段管道链可用 | `from(...) |> range(...)` |
+| label 字面量 | 支持 | 顶层 label 表达式已能走正常表达式语句路径 | `.field` |
+| 括号表达式 | 支持 | 基础分组可用 | `(1 + 2)` |
+| 无符号整数字面量 | 支持 | `123u` 风格字面量可扫描并解析为 `UnsignedIntegerLit` | `42u` |
 
-## Type Syntax
+## 类型语法
 
-| Syntax | Status | Notes | Example |
+| 语法 | 状态 | 说明 | 示例 |
 | --- | --- | --- | --- |
-| basic type | Supported | Named types such as `int`, `string`, `bool` work | `int` |
-| type variable | Supported | Single-token type variables are parsed in type expressions and constraints | `A` |
-| array type | Supported | Works via `[type]` | `[int]` |
-| dict type | Supported | Works via `[key:value]` | `[string:int]` |
-| record type | Supported | Common property form works | `{name: string, value: int}` |
-| record type with `with` source | Supported | Current parser handles this basic pattern | `{A with name: string}` |
-| function type | Supported | Required, optional, and pipe params work in common cases | `(<-tables: [int], ?n: int) => int` |
-| dynamic type | Supported | Parsed into `Dynamic` monotype and exposed through AST/debug output | `dynamic` |
-| vector / stream type | Supported | Parsed into dedicated monotypes and covered by parser tests, including malformed recovery | `vector[int]`, `stream[int]` |
-| `where` constraints | Supported | Single and comma-separated basic constraints are parsed | `where A: Addable` |
+| 基础类型 | 支持 | `int`、`string`、`bool` 等命名类型可用 | `int` |
+| 类型变量 | 支持 | 单 token 类型变量可在类型表达式与约束中解析 | `A` |
+| 数组类型 | 支持 | 支持 `[type]` | `[int]` |
+| 字典类型 | 支持 | 支持 `[key:value]` | `[string:int]` |
+| record 类型 | 支持 | 常见属性形式可用 | `{name: string, value: int}` |
+| 带 `with` 来源的 record 类型 | 支持 | 当前解析器支持这一基本形态 | `{A with name: string}` |
+| 函数类型 | 支持 | 必填、可选、pipe 参数在常见场景下可用 | `(<-tables: [int], ?n: int) => int` |
+| dynamic 类型 | 支持 | 可解析为 `Dynamic` monotype，并在 AST/调试输出中可见 | `dynamic` |
+| vector / stream 类型 | 支持 | 解析为专门的 monotype，且包含 malformed 恢复测试 | `vector[int]`, `stream[int]` |
+| `where` 约束 | 支持 | 单条和逗号分隔的基础约束都可解析 | `where A: Addable` |
 
-## Debugging and Tooling
+## 调试与工具
 
-| Capability | Status | Notes |
+| 能力 | 状态 | 说明 |
 | --- | --- | --- |
-| AST tree dump | Supported | `dump_ast(const File&)` and `flux ast` default output |
-| AST JSON dump | Supported | `dump_ast_json(const File&)` and `flux ast --json` |
-| command-line AST dumper | Supported | `bazel build //cpp/pl/flux:flux` provides `flux ast` |
-| command-line runtime runner | Partial | `bazel build //cpp/pl/flux:flux` provides `flux -e`, `flux path/to/query.flux`, and a small shared-environment REPL; it uses the current partial runtime, so unsupported execution features still fail at runtime |
-| CLI result presentation | Partial | Scalar snippets still print compact values, and query-style scripts now render internal named results as simple terminal result/table blocks, but the output is not yet fully aligned with official Influx result-set formatting |
-| structured result output | Partial | The CLI supports `--list-results`, `--output-format human|csv|json`, and `--result <name>` for discovering and narrowing multi-result scripts, with `--annotated-csv` kept as a CSV alias; CSV preserves existing `result`/`table` columns when present and derives `#group` metadata from the runtime `_group` object, while JSON exposes named results and table metadata for scripting, but full official result-set fidelity is still incomplete |
-| parser demo binary | Supported | `parser_test` now uses the tree dump |
-| parser unit tests | Supported | Covers main happy paths and dump output |
-| scanner unit tests | Supported | Covers comments, regex mode, and unread behavior |
-| AST source locations | Supported | Top-level file/package/import/statement/expression/block nodes store locations and dump them | `loc=1:1-1:10` |
+| AST 树形 dump | 支持 | `dump_ast(const File&)` 和 `flux ast` 默认输出 |
+| AST JSON dump | 支持 | `dump_ast_json(const File&)` 和 `flux ast --json` |
+| 命令行 AST dump 工具 | 支持 | `bazel build //cpp/pl/flux:flux` 后可用 `flux ast` |
+| 命令行运行时执行 | 部分支持 | `flux -e`、`flux path/to/query.flux` 和共享环境 REPL 可用；未实现的执行特性仍会在运行时报错 |
+| CLI 结果展示 | 部分支持 | 标量表达式仍输出紧凑值；查询脚本会输出命名结果块和逻辑表，已能显示多表信息，但与官方 Influx 结果集格式仍未完全对齐 |
+| 结构化结果输出 | 部分支持 | CLI 支持 `--list-results`、`--output-format human|csv|json`、`--result <name>`；CSV 会按逻辑表输出注解块并复用 `result` / `table` 列，JSON 会暴露结果名和逻辑表元数据，但官方结果流保真度仍未完全补齐 |
+| 解析器演示二进制 | 支持 | `parser_test` 已使用树形 dump |
+| 解析器单测 | 支持 | 覆盖主路径与 dump 输出 |
+| scanner 单测 | 支持 | 覆盖注释、正则模式和 unread 行为 |
+| AST 源码位置 | 支持 | 顶层 file/package/import/statement/expression/block 节点都保存位置并可 dump | `loc=1:1-1:10` |
 
-## Runtime Foundations
+## 运行时基础
 
-| Capability | Status | Notes |
+| 能力 | 状态 | 说明 |
 | --- | --- | --- |
-| runtime value model | Supported | Supports null/bool/int/uint/float/string/duration/time/regex/array/object values plus a lightweight in-memory table value |
-| lexical environments | Supported | Parent scopes, variable bindings, option bindings, and nearest-scope assignment are covered by unit tests |
-| expression evaluator | Supported | Supports literals, identifiers, arrays/objects, record update, member/index access, unary/binary/logical operators, conditionals, string interpolation, regex match, function values, function calls, simple pipe forwarding, and in-memory `from`/`csv.from`/`range`/`filter`/`map`/`limit`/`tail`/`keep`/`drop`/`rename`/`duplicate`/`set`/`reduce`/`sort`/`group`/`pivot`/`fill`/`elapsed`/`difference`/`derivative`/`distinct`/`count`/`first`/`last`/`union`/`join`/`aggregateWindow` query execution |
-| statement execution | Supported | Supports variable assignment, `option` assignment, expression statements, block/return execution, `testcase` execution in isolated child scopes, file-level sequential execution, top-level `builtin` declarations, package/import metadata handling, and end-to-end execution of simple in-memory query files |
-| function values / closures | Supported | User-defined function expressions now evaluate to callable runtime values with lexical closure capture |
-| function call execution | Supported | Builtin and user-defined function calls work, including default arguments, named arguments, block-bodied functions, pipe-parameter injection, and internal row-function invocation for in-memory query builtins |
-| pipe execution | Partial | Value forwarding through `|>` works for builtin functions, user-defined `<-pipe` parameters, and lightweight in-memory table pipelines, but broader query/stream semantics are still missing |
-| builtin registry / stdlib execution | Partial | A small callable builtin registry exists today (`len`, `string`, `contains`, `sum`, `mean`, `min`, `max`, `from`, `csv.from`, `columns`, `keys`, `findColumn`, `findRecord`, `range`, `filter`, `map`, `limit`, `tail`, `keep`, `drop`, `rename`, `duplicate`, `set`, `reduce`, `sort`, `group`, `pivot`, `fill`, `elapsed`, `difference`, `derivative`, `distinct`, `count`, `first`, `last`, `union`, `join`, `aggregateWindow`, `yield`), top-level `builtin` declarations can bind known builtins or placeholder callables, `import "csv"` binds a package object with `from`, and `yield(name: "...")` can now label table results for CLI output, but the Flux standard library is still largely missing |
-| CSV input | Partial | `import "csv"` plus `csv.from(csv: ...)` and `csv.from(file: ...)` work for raw mode and common annotated CSV mode; annotations support `#datatype`, `#group`, optional `#default`, typed scalar conversion, repeated metadata/header blocks for multi-table CSV payloads, and a lightweight `_group` object, but the broader CSV stdlib surface is still incomplete |
-| aggregate windows | Partial | Fixed-duration RFC3339 `_time` windows work with `_group`, `column`, `offset`, `period`, `timeSrc`, `timeDst`, `mean`/`sum`/`min`/`max`, custom array functions, window `count`, negative `period`, overlapping windows when `every != period`, and `createEmpty: true` across `range()` bounds; calendar `mo`/`y` windows also work with explicit fixed-offset or named-zone `location` records plus calendar-window `offset`, and selector-style `first`/`last` windows now drop empties like official Flux, but global `option location` and fuller multi-table behavior are still missing |
-| elapsed transforms | Partial | `elapsed(unit:, timeColumn:, columnName:)` now works for fixed-duration units against RFC3339 `_time`-style columns, drops the first row per `_group`, and writes integer elapsed values, but calendar units and broader Flux table semantics are still not implemented |
-| difference transforms | Partial | `difference(column:, nonNegative:, keepFirst:)` now works for numeric columns, computes row-to-row deltas within each `_group`, can null out negative deltas when `nonNegative: true`, and can preserve the first row with a null delta via `keepFirst: true`, but broader Flux table semantics are still not implemented |
-| derivative transforms | Partial | `derivative(unit:, column:, timeColumn:, nonNegative:, initialZero:)` now works for numeric columns plus RFC3339 `_time`-style columns, computes per-unit floating-point rates within each `_group`, can null out negative rates with `nonNegative: true`, and can treat resets as zero-based with `initialZero: true`, but calendar units and broader Flux table semantics are still not implemented |
+| 运行时值模型 | 支持 | 支持 null/bool/int/uint/float/string/duration/time/regex/array/object，以及内存内表值；表值现已支持一个 `TableValue` 承载多张逻辑表 |
+| 词法环境 | 支持 | 父作用域、变量绑定、option 绑定和最近作用域赋值都有单测覆盖 |
+| 表达式求值器 | 支持 | 支持字面量、标识符、数组/对象、record update、成员/索引访问、一元/二元/逻辑运算、条件表达式、字符串插值、正则匹配、函数值、函数调用，以及内存内 `from` / `csv.from` / `range` / `filter` / `map` / `limit` / `tail` / `keep` / `drop` / `rename` / `duplicate` / `set` / `reduce` / `sort` / `group` / `pivot` / `fill` / `elapsed` / `difference` / `derivative` / `distinct` / `count` / `first` / `last` / `union` / `join` / `aggregateWindow` 查询执行 |
+| 语句执行 | 支持 | 支持变量赋值、`option` 赋值、表达式语句、block/return、`testcase` 在隔离子作用域中执行、文件级顺序执行、顶层 `builtin` 声明、package/import 元数据处理，以及简单内存查询文件的端到端执行 |
+| 函数值 / 闭包 | 支持 | 用户自定义函数表达式会求值为可调用的运行时值，并捕获词法闭包 |
+| 函数调用执行 | 支持 | builtin 和用户函数都可调用，支持默认参数、命名参数、块体函数、pipe 参数注入，以及查询 builtin 内部的行函数调用 |
+| pipe 执行 | 部分支持 | `|>` 已支持 builtin、用户定义 `<-pipe` 参数以及内存表管道，但更广泛的 Flux 流式语义仍未完整实现 |
+| builtin 注册表 / stdlib 执行 | 部分支持 | 当前已有一批可调用 builtin：`len`、`string`、`contains`、`sum`、`mean`、`min`、`max`、`from`、`csv.from`、`columns`、`keys`、`findColumn`、`findRecord`、`range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`distinct`、`count`、`first`、`last`、`union`、`join`、`aggregateWindow`、`yield`；顶层 `builtin` 声明可绑定已知 builtin 或占位 callable；`import "csv"` 会绑定一个包含 `from` 的 package 对象；但完整 Flux 标准库仍远未实现 |
+| CSV 输入 | 部分支持 | `import "csv"`、`csv.from(csv: ...)`、`csv.from(file: ...)` 支持 raw 模式和常见 annotated CSV；支持 `#datatype`、`#group`、可选 `#default`、类型转换，以及同一载荷内重复 metadata/header block，对应多逻辑表输入；更广的 CSV stdlib 能力尚未补齐 |
+| aggregate windows | 部分支持 | RFC3339 `_time` 上的固定时长窗口可用，支持 `column`、`offset`、`period`、`timeSrc`、`timeDst`、`mean` / `sum` / `min` / `max`、自定义数组函数、窗口 `count`、负 `period`、`every != period` 的重叠窗口、`range()` 边界上的 `createEmpty: true`；日历 `mo` / `y` 窗口支持显式固定偏移和命名时区 `location` 记录，并支持日历窗口 `offset`；selector 风格 `first` / `last` 会像官方 Flux 一样丢弃空窗口；窗口输出会重新按 group key 分表；全局 `option location` 仍未实现 |
+| elapsed transforms | 部分支持 | `elapsed(unit:, timeColumn:, columnName:)` 已支持固定时长单位和 RFC3339 `_time` 类列，会按逻辑表逐表丢掉首行并写入整数 elapsed 值；日历单位仍未实现 |
+| difference transforms | 部分支持 | `difference(column:, nonNegative:, keepFirst:)` 已支持数值列，会在每张逻辑表内按行计算 delta，`nonNegative: true` 可将负增量置空，`keepFirst: true` 可保留首行并给出空 delta；更广泛 Flux 语义尚未补齐 |
+| derivative transforms | 部分支持 | `derivative(unit:, column:, timeColumn:, nonNegative:, initialZero:)` 已支持数值列与 RFC3339 `_time` 类列，会在每张逻辑表内计算按单位归一化的浮点速率，支持 `nonNegative` 和 `initialZero`；日历单位与更多 Flux 语义仍未实现 |
 
-## Error Handling
+## 错误处理
 
-| Capability | Status | Notes |
+| 能力 | 状态 | 说明 |
 | --- | --- | --- |
-| parser error collection | Supported | `Parser::errors()` exposes collected parser errors |
-| continue after local parse failures | Partial | Recovery exists for conditionals, call args, arrays, dicts, object properties, attributes, and some type syntax, but it is not yet uniform | invalid input |
-| precise syntax diagnostics | Partial | Many messages are useful and now include more localized context, but consistency is still limited |
-| source-positioned AST errors | Partial | Many bad expressions/statements include locations, but this is not yet universal for all parse errors |
+| 解析错误收集 | 支持 | `Parser::errors()` 可暴露收集到的解析错误 |
+| 局部失败后继续解析 | 部分支持 | 在条件表达式、调用参数、数组、字典、对象属性、属性注解和部分类型语法上已有恢复，但还不统一 | 非法输入 |
+| 精确语法诊断 | 部分支持 | 很多错误信息已经有用并带有局部上下文，但一致性仍有限 |
+| 带源码位置的 AST 错误 | 部分支持 | 很多坏表达式/坏语句都会携带位置，但还未覆盖全部解析错误 |
 
-## Current Strengths
+## 当前优势
 
-- Common Flux file structure can already be parsed into AST
-- Pipe-heavy query shapes are working
-- Common table-inspection helpers now work for the current table model, including `columns`, `keys`, `findColumn`, and `findRecord`
-- Realistic query fragments with alias imports, `filter`/`map` chains, regex calls, record updates, and conditional expressions are covered by parser tests
-- Function expressions now cover the practical forms needed by most Flux queries: `(r) => expr`, `r => expr`, `r => { ... }`, `(<-tables, ?limit=5, value) => expr`
-- Empty literals and empty record updates are covered, including `[]`, `{}`, `[:]`, and `{base with}`
-- Type parsing is good enough for `builtin` declarations and debugging
-- AST tree and JSON output make parser behavior inspectable
-- A first CLI can execute snippets, files, and interactive REPL input against the current runtime
-- There is now enough unit-test coverage to safely extend the parser
-- The runtime has a tested value model, scope chain, expression evaluator, and first-pass statement executor to build on
-- CSV data can now enter the runtime through the Flux-style `csv.from` package builtin, including raw header-row CSV and common annotated CSV metadata rows
+- 常见 Flux 文件结构已经可以稳定解析为 AST
+- 重管道查询形态已经能跑通
+- 常见表检查辅助函数已经可用，包括 `columns`、`keys`、`findColumn`、`findRecord`
+- 带 alias import、`filter` / `map` 链、正则调用、record update、条件表达式的真实查询片段已有解析测试覆盖
+- 函数表达式已经覆盖大多数常见 Flux 查询形态：`(r) => expr`、`r => expr`、`r => { ... }`、`(<-tables, ?limit=5, value) => expr`
+- 空字面量与空 record update 已覆盖，包括 `[]`、`{}`、`[:]`、`{base with}`
+- 类型解析已经足以支撑 `builtin` 声明与 AST 调试
+- AST 树形与 JSON 输出便于观察解析器行为
+- CLI 已可执行代码片段、文件和交互式 REPL 输入
+- 当前单测覆盖已经足够让解析器和运行时继续安全扩展
+- 运行时具备可测试的值模型、作用域链、表达式求值器和首版语句执行器
+- CSV 数据可以通过 Flux 风格的 `csv.from` 进入运行时，包括 raw 头行 CSV、annotated CSV，以及重复 metadata block 的多表输入
+- `group` 已实现真实的按 group key 重分表语义，并支持 `mode: "by"` / `mode: "except"`
+- `count`、`first`、`last`、`distinct`、`sort` 等算子已经按逻辑表逐表工作，不再是旧的“全表 + `_group` 标签”行为
 
-## Main Known Gaps
+## 主要已知缺口
 
-- Some syntax families are still only partially implemented or only lightly tested
-- Error recovery is still uneven for malformed programs
-- A few AST/debug string forms are still simplified rather than canonical Flux formatting
-- There is no semantic analysis or type checking layer yet
-- Runtime execution is only partial: a useful subset of statements and expressions can execute, including simple in-memory query pipelines, but broader builtins and stream semantics are still missing
-- CSV support is still lightweight: raw and common annotated rows work, including repeated annotated metadata blocks, but the full Flux stream/table engine and broader CSV stdlib surface are not implemented yet
-- CLI output is moving toward result-oriented behavior, and annotated CSV now reuses existing `result`/`table` columns plus derived group metadata when available, but full official result-set fidelity is still not implemented
+- 某些语法族仍然只是部分实现，或者测试覆盖较薄
+- 非法程序的错误恢复仍不均衡
+- 少数 AST/debug 字符串形式仍然是简化版，不是标准 Flux 格式
+- 还没有语义分析或类型检查层
+- 运行时执行仍是“可用子集”，虽然已经能跑常见内存查询管道，但更广的 builtin 和流式语义仍缺失
+- CSV 支持虽然已经覆盖常见 annotated/raw 路径和多 block 输入，但完整 CSV 标准库接口仍未实现
+- CLI 输出已经具备结果导向和多表感知能力，但距离官方 Influx 结果集格式仍有差距
 
-## Recommended Next Steps
+## 推荐下一步
 
-1. Finish parser completeness for the remaining partial areas and add more realistic end-to-end query fixtures
-2. Improve malformed-input recovery and diagnostics until bad programs still produce usable AST/debug output
-3. Add more negative tests and dump snapshots
-4. Extend `SourceLocation` coverage beyond current top-level/core AST nodes
-5. Continue the execution architecture from the current base: callable functions/builtins, then pipe/query execution
-6. Introduce a Flux result-set output layer so CLI execution can render named result tables and optionally emit annotated CSV
+1. 继续补齐剩余的部分语法实现，并增加更真实的端到端查询 fixture
+2. 继续改善 malformed 输入恢复与诊断，让坏程序也能产出尽量可用的 AST/debug 输出
+3. 增加更多负例测试和 dump 快照
+4. 把 `SourceLocation` 覆盖范围扩展到更多 AST 节点
+5. 在现有执行架构上继续扩展 builtin、流语义和查询执行
+6. 继续提升结果输出层，使 CLI 的 human / CSV / JSON 更接近官方 Flux / Influx 查询体验
 
-## Suggested Next Syntax Additions
+## 建议优先补的语法
 
-These are good parser targets before starting execution work in earnest:
+- 围绕多表流、日历窗口和更丰富聚合的更多真实查询形态
+- 更多 `option` 驱动的查询程序，特别是 `option task = {...}` 与管道结合的形态
+- 更复杂的函数体 fixture，包括 block body、对象返回、嵌套调用和条件组合
+- 更多围绕复杂调用 / 对象 / 类型组合的 malformed 输入 fixture
 
-- More real query operators and shapes around multi-table streams, calendar windows, and richer aggregates
-- More `option`-driven query programs, especially `option task = {...}` combined with pipelines
-- Broader function-body fixtures that mix block bodies, object returns, nested calls, and conditionals
-- More malformed-input fixtures around complex call/object/type combinations
+## 解释器路线图
 
-## Interpreter Roadmap
+长期目标仍然是一个同时具备解析与执行能力的可用 Flux 解释器。一个实际可行的顺序如下：
 
-The long-term goal is a usable Flux interpreter with both parsing and execution. A practical sequence is:
+### 1. 解析器基线补齐
 
-1. Parser-complete baseline
+- 持续扩大已测试语法范围，直到常见查询子集稳定
+- 保持 AST/debug 质量，让解析失败依旧容易诊断
 
-- Keep expanding tested syntax until the common query subset is stable
-- Preserve AST/debug quality so parser failures stay easy to diagnose
+### 2. 语义 / 运行时基础
 
-2. Semantic/runtime foundation
+- 定义运行时值类型，如 null / bool / int / uint / float / string / time / duration / regex / array / object / function
+- 增加词法环境与变量、option、函数参数的作用域查找
+- 定义可调用 builtin 以及标准库入口注册表
 
-- Define runtime value types such as null/bool/int/uint/float/string/time/duration/regex/array/object/function
-- Add lexical environments and scope lookup for variables, options, and function parameters
-- Define callable builtins and a registry for standard library entry points
+### 3. 表达式解释执行
 
-3. Expression interpreter
+- 求值字面量、数组、对象、字典、算术/逻辑运算、成员/索引访问和条件表达式
+- 支持函数值、闭包与函数调用
+- 支持运行时的 `option` 绑定与 `builtin` 声明
 
-- Evaluate literals, arrays, objects, dictionaries, arithmetic/logical operators, member/index access, and conditionals
-- Support function values, closures, and function calls
-- Support `option` bindings and `builtin` declarations at runtime
+当前状态：
 
-Current status:
+- 运行时值：已启动且可用
+- 环境 / 作用域：已启动且可用
+- 表达式求值：已启动且可用
+- 语句执行：已启动且可用
+- 函数调用与闭包：已启动且可用
 
-- runtime values: started
-- environments/scopes: started
-- expression evaluation: started
-- statement execution: started
-- function calls and closures: started
+### 4. 查询 / 管道执行
 
-4. Query / pipeline execution
+- 继续扩展当前内存表模型与 pipe 输入支持
+- 在现有多表流基础上继续补齐剩余查询 builtin
+- 补齐 `aggregateWindow` 的剩余缺口，例如全局 `option location`
+- 定义足够多的运行时行为，支持真实 Flux 脚本端到端运行
 
-- Continue growing the current lightweight table model and pipe input support
-- Extend beyond the current in-memory query builtin baseline to the remaining `aggregateWindow` gaps such as global `option location` and fuller multi-table behavior
-- Define enough runtime behavior to run realistic Flux scripts end to end
+### 5. 诊断与可用性
 
-5. Diagnostics and usability
+- 增加带源码位置的运行时错误
+- 增加脚本执行示例和解释器导向测试
+- 让 `flux ast` 与运行时调试信息保持一致
+- 持续提升终端 / CSV / JSON 结果格式
 
-- Add runtime errors with source locations
-- Add script runner examples and interpreter-focused tests
-- Keep `flux ast` and parser diagnostics aligned with runtime debugging needs
-- Add richer result formatting layers beyond terminal tables, including higher-fidelity CSV/JSON output closer to the official Influx query experience
+## 部分特性示例
 
-## Partial Feature Examples
-
-These examples are useful as the next wave of parser tests because they sit right on the current boundary between working and incomplete behavior.
+这些例子很适合作为下一波解析测试，因为它们正好位于“当前可用边界”的附近。
 
 ### Label literal
 
-Example:
+示例：
 
 ```flux
 .field
 ```
 
-Current expectation:
+当前预期：
 
-- `LabelLit` exists in the AST
-- real-world coverage is still thin
-- needs a parser test to confirm where it is valid and how it interacts with member access
+- AST 中已有 `LabelLit`
+- 真实世界覆盖还比较薄
+- 仍需要更多解析测试来确认它的合法位置以及与成员访问的交互

@@ -1,10 +1,10 @@
-# Feature Gallery
+# 功能示例集
 
-This gallery is a coverage-oriented set of runnable Flux examples for the
-current `cpp/pl/flux` runtime. The examples use a small but realistic service
-operations dataset plus a few targeted inline tables.
+这是一组偏覆盖率导向的可运行 Flux 示例，用来展示 `cpp/pl/flux` 当前运行时已经支持的能力。示例使用了一份小而真实的服务运维数据集，以及少量内联表。
 
-Run from the repository root:
+## 运行方式
+
+在仓库根目录执行：
 
 ```bash
 bazel build //cpp/pl/flux:flux
@@ -20,61 +20,64 @@ bazel build //cpp/pl/flux:flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/aggregatewindow_advanced.flux
 ```
 
-Included examples:
+## 示例说明
 
-- `scalar_basics.flux`: scalar builtins, arrays/objects, member/index access,
-  `exists`, conditionals, and string interpolation
-- `function_pipelines.flux`: `option`, user-defined functions, default params,
-  pipe params, regex filters, `map`, and `set`
-- `csv_raw_alerts.flux`: `import "csv"` with `csv.from(..., mode: "raw")`
-- `inspection_helpers.flux`: `columns`, `keys`, `findColumn`, `findRecord`, and
-  repeated annotated CSV metadata blocks
-- `table_shape_ops.flux`: `filter`, `duplicate`, `rename`, `set`, `map`, `drop`,
-  `keep`, `sort`, `limit`, and `tail`
-- `selection_and_reduce.flux`: `group`, `count`, `first`, `last`, and `reduce`
-- `join_union_pivot.flux`: `aggregateWindow + join`, `union`, and `pivot`
-- `fill_distinct_windows.flux`: `aggregateWindow(createEmpty)`, `fill`, and
-  `distinct`
-- `time_math.flux`: `range`, `elapsed`, `difference`, and `derivative`
-- `aggregatewindow_advanced.flux`: the richer `aggregateWindow` parameter
-  combinations: `column`, fixed `offset`, custom aggregate functions, `period`,
-  negative `period`, `timeSrc`, `timeDst`, named-zone `location`, calendar
-  `offset`, and selector empty-window behavior
+- `scalar_basics.flux`：标量 builtin、数组/对象、成员/索引访问、`exists`、条件表达式、字符串插值
+- `function_pipelines.flux`：`option`、用户函数、默认参数、pipe 参数、正则过滤、`map`、`set`
+- `csv_raw_alerts.flux`：`import "csv"` 与 `csv.from(..., mode: "raw")`
+- `inspection_helpers.flux`：`columns`、`keys`、`findColumn`、`findRecord`，以及重复 annotated CSV metadata block
+- `table_shape_ops.flux`：`filter`、`duplicate`、`rename`、`set`、`map`、`drop`、`keep`、`sort`、`limit`、`tail`
+- `selection_and_reduce.flux`：`group`、`count`、`first`、`last`、`reduce`
+- `join_union_pivot.flux`：`aggregateWindow + join`、`union`、`pivot`
+- `fill_distinct_windows.flux`：`aggregateWindow(createEmpty)`、`fill`、`distinct`
+- `time_math.flux`：`range`、`elapsed`、`difference`、`derivative`
+- `aggregatewindow_advanced.flux`：更完整的 `aggregateWindow` 参数组合，包括 `column`、固定时长 `offset`、自定义聚合函数、`period`、负 `period`、`timeSrc`、`timeDst`、命名时区 `location`、日历窗口 `offset`、selector 空窗口行为
 
-Coverage map for the current builtin surface:
+## builtin 覆盖映射
 
-- `len`, `string`, `contains`, `sum`, `mean`, `min`, `max`:
+- `len`、`string`、`contains`、`sum`、`mean`、`min`、`max`：
   `scalar_basics.flux`
-- `from`: `function_pipelines.flux`, `aggregatewindow_advanced.flux`
-- `csv.from`: `csv_raw_alerts.flux`, `inspection_helpers.flux`,
-  `table_shape_ops.flux`, `selection_and_reduce.flux`, `join_union_pivot.flux`,
-  `fill_distinct_windows.flux`, `time_math.flux`
-- `columns`, `keys`, `findColumn`, `findRecord`: `inspection_helpers.flux`
-- `range`, `filter`, `map`: `function_pipelines.flux`, `csv_raw_alerts.flux`,
-  `table_shape_ops.flux`, `time_math.flux`
-- `limit`, `tail`, `keep`, `drop`, `rename`, `duplicate`, `set`:
+- `from`：
+  `function_pipelines.flux`、`aggregatewindow_advanced.flux`
+- `csv.from`：
+  `csv_raw_alerts.flux`、`inspection_helpers.flux`、`table_shape_ops.flux`、`selection_and_reduce.flux`、`join_union_pivot.flux`、`fill_distinct_windows.flux`、`time_math.flux`
+- `columns`、`keys`、`findColumn`、`findRecord`：
+  `inspection_helpers.flux`
+- `range`、`filter`、`map`：
+  `function_pipelines.flux`、`csv_raw_alerts.flux`、`table_shape_ops.flux`、`time_math.flux`
+- `limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`：
   `table_shape_ops.flux`
-- `reduce`, `sort`, `group`, `count`, `first`, `last`:
+- `reduce`、`sort`、`group`、`count`、`first`、`last`：
   `selection_and_reduce.flux`
-- `pivot`, `fill`, `distinct`, `union`, `join`, `aggregateWindow`, `yield`:
-  `join_union_pivot.flux`, `fill_distinct_windows.flux`,
-  `aggregatewindow_advanced.flux`
-- `elapsed`, `difference`, `derivative`: `time_math.flux`
+- `pivot`、`fill`、`distinct`、`union`、`join`、`aggregateWindow`、`yield`：
+  `join_union_pivot.flux`、`fill_distinct_windows.flux`、`aggregatewindow_advanced.flux`
+- `elapsed`、`difference`、`derivative`：
+  `time_math.flux`
 
-Language/runtime features covered here:
+## 这里覆盖的语言 / 运行时特性
 
-- `option` assignment
-- user-defined functions and closures
-- default arguments
-- pipe parameters
-- object updates with `with`
+- `option` 赋值
+- 用户自定义函数与闭包
+- 默认参数
+- pipe 参数
+- 使用 `with` 的对象更新
 - `if ... then ... else ...`
 - `exists`
-- regex match and string interpolation
+- 正则匹配与字符串插值
 
-Data files:
+## 数据文件
 
-- `site_ops.annotated.csv`: service CPU and memory samples for three regions
-- `service_counters.annotated.csv`: monotonic counters with a reset
-- `alerts.raw.csv`: raw CSV ingestion example
-- `multi_block.annotated.csv`: repeated annotated metadata/header blocks
+- `site_ops.annotated.csv`：三大区域的服务 CPU / 内存样本
+- `service_counters.annotated.csv`：带一次 reset 的单调计数器
+- `alerts.raw.csv`：raw CSV 读取示例
+- `multi_block.annotated.csv`：带重复 annotated metadata/header block 的输入
+
+## 关于 `group`
+
+`selection_and_reduce.flux` 现在展示的是更新后的官方风格 `group` 语义：
+
+- `group()` 会真正把输入重新划分为多张逻辑表
+- `count()`、`first()`、`last()` 会按每张逻辑表分别计算
+- `mode: "by"` 和 `mode: "except"` 都已支持
+
+因此这个示例更适合拿来检查我们当前的 `group`、selector 和聚合语义是否与官方 Flux 保持一致。
