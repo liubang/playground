@@ -1,9 +1,9 @@
 import "csv"
 
-cpu = csv.from(file: "cpp/pl/flux/examples/feature_gallery/site_ops.annotated.csv")
+cpu = csv.from(file: "cpp/pl/flux/examples/feature_gallery/data/site_ops.annotated.csv")
     |> filter(fn: (r) => r._measurement == "cpu")
 
-mem = csv.from(file: "cpp/pl/flux/examples/feature_gallery/site_ops.annotated.csv")
+mem = csv.from(file: "cpp/pl/flux/examples/feature_gallery/data/site_ops.annotated.csv")
     |> filter(fn: (r) => r._measurement == "mem")
 
 join(

@@ -1,7 +1,7 @@
 import "csv"
 
 cpu_usage_difference = csv.from(
-    file: "cpp/pl/flux/examples/ops_dashboard/cpu_usage.annotated.csv",
+    file: "cpp/pl/flux/examples/ops_dashboard/data/cpu_usage.annotated.csv",
 )
     |> group(columns: ["host", "region"])
     |> sort(columns: ["host", "_time"])
