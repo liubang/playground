@@ -1270,6 +1270,107 @@ TEST(FluxParserTest, ReportsInvalidVectorTypeAndContinuesToNextStatement) {
     EXPECT_TRUE(ErrorContains(parser.errors(), "missing vector element type at"));
 }
 
+TEST(FluxParserTest, RecoversFromMissingRecordPropertyTypeAndContinuesToNextStatement) {
+    const std::string source = R"(
+builtin reducer : (acc: {total: int, meta: {region: string, zone: }}) => int
+next = 42
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("invalid_record_type.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_GE(file->body.size(), 2);
+    ASSERT_EQ(Statement::Type::BuiltinStatement, file->body[0]->type);
+    ASSERT_EQ(Statement::Type::VariableAssignment, file->body[1]->type);
+
+    const auto& builtin = std::get<std::unique_ptr<BuiltinStmt>>(file->body[0]->stmt);
+    ASSERT_NE(builtin, nullptr);
+    ASSERT_NE(builtin->ty, nullptr);
+    ASSERT_NE(builtin->ty->monotype, nullptr);
+    ASSERT_EQ(MonoType::Type::Function, builtin->ty->monotype->type);
+
+    const auto& function =
+        std::get<std::unique_ptr<FunctionType>>(builtin->ty->monotype->value);
+    ASSERT_NE(function, nullptr);
+    ASSERT_EQ(1, function->parameters.size());
+
+    const auto& required =
+        std::get<std::shared_ptr<Required>>(function->parameters[0]->value);
+    ASSERT_NE(required, nullptr);
+    ASSERT_NE(required->monotype, nullptr);
+    ASSERT_EQ(MonoType::Type::Record, required->monotype->type);
+
+    const auto& outer_record =
+        std::get<std::unique_ptr<RecordType>>(required->monotype->value);
+    ASSERT_NE(outer_record, nullptr);
+    ASSERT_EQ(2, outer_record->properties.size());
+    ASSERT_NE(outer_record->properties[1]->monotype, nullptr);
+    ASSERT_EQ(MonoType::Type::Record, outer_record->properties[1]->monotype->type);
+
+    const auto& nested_record =
+        std::get<std::unique_ptr<RecordType>>(outer_record->properties[1]->monotype->value);
+    ASSERT_NE(nested_record, nullptr);
+    ASSERT_EQ(2, nested_record->properties.size());
+    ASSERT_NE(nested_record->properties[1]->monotype, nullptr);
+    ASSERT_EQ(MonoType::Type::Basic, nested_record->properties[1]->monotype->type);
+    const auto& missing_type =
+        std::get<std::unique_ptr<NamedType>>(nested_record->properties[1]->monotype->value);
+    ASSERT_NE(missing_type, nullptr);
+    EXPECT_EQ("<invalid>", missing_type->name->name);
+
+    const auto& next = std::get<std::unique_ptr<VariableAssgn>>(file->body[1]->stmt);
+    ASSERT_NE(next, nullptr);
+    EXPECT_EQ("next", next->id->name);
+    EXPECT_EQ("42", next->init->string());
+    EXPECT_TRUE(ErrorContains(parser.errors(), "missing record property type at"));
+}
+
+TEST(FluxParserTest, RecoversFromMissingCommaInRecordTypePropertyList) {
+    const std::string source = R"(
+builtin reducer : (acc: {total: int meta: string, count: int}) => int
+next = 42
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("record_type_missing_comma.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_GE(file->body.size(), 2);
+    ASSERT_EQ(Statement::Type::BuiltinStatement, file->body[0]->type);
+    ASSERT_EQ(Statement::Type::VariableAssignment, file->body[1]->type);
+
+    const auto& builtin = std::get<std::unique_ptr<BuiltinStmt>>(file->body[0]->stmt);
+    ASSERT_NE(builtin, nullptr);
+    ASSERT_NE(builtin->ty, nullptr);
+    ASSERT_NE(builtin->ty->monotype, nullptr);
+    ASSERT_EQ(MonoType::Type::Function, builtin->ty->monotype->type);
+
+    const auto& function =
+        std::get<std::unique_ptr<FunctionType>>(builtin->ty->monotype->value);
+    ASSERT_NE(function, nullptr);
+    const auto& required =
+        std::get<std::shared_ptr<Required>>(function->parameters[0]->value);
+    ASSERT_NE(required, nullptr);
+    ASSERT_NE(required->monotype, nullptr);
+    ASSERT_EQ(MonoType::Type::Record, required->monotype->type);
+
+    const auto& record = std::get<std::unique_ptr<RecordType>>(required->monotype->value);
+    ASSERT_NE(record, nullptr);
+    ASSERT_EQ(3, record->properties.size());
+    EXPECT_EQ("total", record->properties[0]->name->name);
+    EXPECT_EQ("meta", record->properties[1]->name->name);
+    EXPECT_EQ("count", record->properties[2]->name->name);
+
+    const auto& next = std::get<std::unique_ptr<VariableAssgn>>(file->body[1]->stmt);
+    ASSERT_NE(next, nullptr);
+    EXPECT_EQ("next", next->id->name);
+    EXPECT_EQ("42", next->init->string());
+    EXPECT_TRUE(ErrorContains(parser.errors(), "expected comma in record type property list, got"));
+}
+
 TEST(FluxParserTest, RecoversFromMissingThenKeyword) {
     const std::string source = R"(
 status = if exists ready "ok" else "bad"
