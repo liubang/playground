@@ -1063,17 +1063,14 @@ absl::CivilSecond add_months_to_civil_second(const absl::CivilSecond& civil, int
                              civil.hour(), civil.minute(), civil.second());
 }
 
-absl::StatusOr<WindowLocation> optional_window_location_property(const ObjectValue& object,
-                                                                 const std::string& name) {
-    const Value* location_value = object.lookup("location");
-    if (location_value == nullptr) {
-        return WindowLocation{};
-    }
-    if (location_value->type() != Value::Type::Object) {
+absl::StatusOr<WindowLocation> parse_window_location_value(const Value& value,
+                                                           const std::string& name,
+                                                           const std::string& property) {
+    if (value.type() != Value::Type::Object) {
         return absl::InvalidArgumentError(
-            absl::StrCat(name, " `location` must be an object record"));
+            absl::StrCat(name, " `", property, "` must be an object record"));
     }
-    const auto& location = location_value->as_object();
+    const auto& location = value.as_object();
     auto zone_or = optional_string_property(location, name, "zone", "UTC");
     if (!zone_or.ok()) {
         return zone_or.status();
@@ -1099,7 +1096,7 @@ absl::StatusOr<WindowLocation> optional_window_location_property(const ObjectVal
     }
     if (fixed_offset_seconds != 0) {
         return absl::InvalidArgumentError(
-            absl::StrCat(name, " `location` with a named zone must use offset 0s"));
+            absl::StrCat(name, " `", property, "` with a named zone must use offset 0s"));
     }
     absl::TimeZone zone;
     if (!absl::LoadTimeZone(*zone_or, &zone)) {
@@ -1110,6 +1107,15 @@ absl::StatusOr<WindowLocation> optional_window_location_property(const ObjectVal
                           .fixed_offset_seconds = 0,
                           .zone_name = *zone_or,
                           .zone = zone};
+}
+
+absl::StatusOr<WindowLocation> optional_window_location_property(const ObjectValue& object,
+                                                                 const std::string& name) {
+    const Value* location_value = object.lookup("location");
+    if (location_value == nullptr) {
+        return WindowLocation{};
+    }
+    return parse_window_location_value(*location_value, name, "location");
 }
 
 absl::StatusOr<WindowDuration> parse_window_duration(const Value& value,
@@ -1743,6 +1749,26 @@ absl::StatusOr<Value> builtin_from(const std::vector<Value>& args) {
         rows = std::move(*rows_or);
     }
     return Value::table((*bucket_or)->as_string(), std::move(rows));
+}
+
+absl::StatusOr<Value> builtin_array_from(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "array.from");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto rows_or = require_object_property(**object_or, "array.from", "rows");
+    if (!rows_or.ok()) {
+        return rows_or.status();
+    }
+    auto parsed_rows_or = require_table_rows(**rows_or, "array.from");
+    if (!parsed_rows_or.ok()) {
+        return parsed_rows_or.status();
+    }
+    auto bucket_or = optional_string_property(**object_or, "array.from", "bucket", "array");
+    if (!bucket_or.ok()) {
+        return bucket_or.status();
+    }
+    return Value::table(*bucket_or, std::move(*parsed_rows_or));
 }
 
 absl::StatusOr<Value> builtin_csv_from(const std::vector<Value>& args) {
@@ -2990,7 +3016,8 @@ absl::StatusOr<Value> builtin_join(const std::vector<Value>& args) {
         left_table->range_stop.has_value() ? left_table->range_stop : right_table->range_stop);
 }
 
-absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
+absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args,
+                                               const Value* default_location = nullptr) {
     auto object_or = require_object_argument(args, "aggregateWindow");
     if (!object_or.ok()) {
         return object_or.status();
@@ -3010,6 +3037,14 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args) {
     auto location_or = optional_window_location_property(**object_or, "aggregateWindow");
     if (!location_or.ok()) {
         return location_or.status();
+    }
+    if ((*object_or)->lookup("location") == nullptr && default_location != nullptr) {
+        auto fallback_or =
+            parse_window_location_value(*default_location, "aggregateWindow", "option location");
+        if (!fallback_or.ok()) {
+            return fallback_or.status();
+        }
+        location_or = *fallback_or;
     }
     WindowDuration offset{
         .kind = WindowDuration::Kind::FixedSeconds,
@@ -3534,7 +3569,19 @@ bool install_known_builtin(Environment& env, const std::string& name) {
         return true;
     }
     if (name == "aggregateWindow") {
-        install_builtin(env, "aggregateWindow", builtin_aggregate_window, "tables");
+        install_builtin(
+            env, "aggregateWindow",
+            [&env](const std::vector<Value>& args) -> absl::StatusOr<Value> {
+                auto option_or = env.lookup_option("location");
+                if (option_or.ok()) {
+                    return builtin_aggregate_window(args, &*option_or);
+                }
+                if (option_or.status().code() != absl::StatusCode::kNotFound) {
+                    return option_or.status();
+                }
+                return builtin_aggregate_window(args);
+            },
+            "tables");
         return true;
     }
     if (name == "yield") {
@@ -3607,6 +3654,12 @@ absl::Status BuiltinRegistry::Ensure(Environment& env, const std::string& name) 
 }
 
 absl::StatusOr<Value> BuiltinRegistry::ImportPackage(const std::string& path) {
+    if (path == "array") {
+        return Value::object({
+            {"path", Value::string("array")},
+            {"from", make_builtin_value("array.from", builtin_array_from)},
+        });
+    }
     if (path == "csv") {
         return Value::object({
             {"path", Value::string("csv")},

@@ -243,9 +243,37 @@ TEST(RuntimeExecTest, ExecutesTopLevelFileStatementsInSharedEnvironment) {
     ASSERT_TRUE(env.lookup_option("__flux.package").ok());
     EXPECT_EQ("\"metrics\"", env.lookup_option("__flux.package")->string());
     ASSERT_TRUE(env.lookup("array").ok());
-    EXPECT_EQ("{path: \"array\"}", env.lookup("array")->string());
+    EXPECT_EQ("{path: \"array\", from: <builtin array.from>}", env.lookup("array")->string());
     ASSERT_TRUE(env.lookup("regexp").ok());
     EXPECT_EQ("{path: \"regexp\", alias: \"regexp\"}", env.lookup("regexp")->string());
+}
+
+TEST(RuntimeExecTest, ExecutesArrayFromImportedPackage) {
+    auto file = ParseFile(R"(
+        import "array"
+
+        data = array.from(
+            rows: [
+                {_time: "2024-01-01T00:00:00Z", host: "edge-1", _value: 70},
+                {_time: "2024-01-01T00:01:00Z", host: "edge-2", _value: 91},
+            ],
+        )
+        data
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("data").ok());
+    ASSERT_EQ(Value::Type::Table, env.lookup("data")->type());
+    EXPECT_EQ("array", env.lookup("data")->as_table().bucket);
+    ASSERT_EQ(2, env.lookup("data")->as_table().rows.size());
+    ASSERT_NE(nullptr, env.lookup("data")->as_table().rows[1]);
+    EXPECT_EQ("\"edge-2\"", env.lookup("data")->as_table().rows[1]->lookup("host")->string());
+    EXPECT_EQ("91", env.lookup("data")->as_table().rows[1]->lookup("_value")->string());
+    ASSERT_EQ(Value::Type::Table, result_or->last.value.type());
 }
 
 TEST(RuntimeExecTest, ResolvesOptionValuesInsideExpressionsAndBlockFunctions) {
@@ -289,6 +317,44 @@ TEST(RuntimeExecTest, ResolvesOptionValuesInsideExpressionsAndBlockFunctions) {
     EXPECT_EQ("5m", result.lookup("every")->string());
     EXPECT_EQ("30s", result.lookup("offset")->string());
     EXPECT_EQ("\"critical\"", result.lookup("level")->string());
+}
+
+TEST(RuntimeExecTest, AppliesGlobalOptionLocationDuringFileExecution) {
+    auto file = ParseFile(R"(
+        option location = {zone: "UTC", offset: "-8h"}
+        builtin from : (bucket: string) => stream[A]
+        builtin aggregateWindow : (<-tables: stream[A], every: duration, fn: (values: [B]) => C) => stream[A]
+        builtin sum : (values: [int]) => float
+
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T07:30:00Z", _value: 10.0},
+                {_time: "2024-01-01T08:30:00Z", _value: 30.0},
+            ],
+        )
+            |> aggregateWindow(every: 1d, fn: sum)
+        result
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("result").ok());
+    ASSERT_EQ(Value::Type::Table, env.lookup("result")->type());
+    ASSERT_EQ(2, env.lookup("result")->as_table().rows.size());
+    EXPECT_EQ("10", env.lookup("result")->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("2023-12-31T08:00:00Z",
+              env.lookup("result")->as_table().rows[0]->lookup("_start")->string());
+    EXPECT_EQ("2024-01-01T08:00:00Z",
+              env.lookup("result")->as_table().rows[0]->lookup("_stop")->string());
+    EXPECT_EQ("30", env.lookup("result")->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ("2024-01-01T08:00:00Z",
+              env.lookup("result")->as_table().rows[1]->lookup("_start")->string());
+    EXPECT_EQ("2024-01-02T08:00:00Z",
+              env.lookup("result")->as_table().rows[1]->lookup("_stop")->string());
 }
 
 TEST(RuntimeExecTest, RejectsTopLevelReturnDuringFileExecution) {
