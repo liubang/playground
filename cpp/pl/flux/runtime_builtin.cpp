@@ -163,6 +163,20 @@ absl::StatusOr<const ArrayValue*> require_array_property(const ObjectValue& obje
     return &(*value_or)->as_array();
 }
 
+absl::StatusOr<const FunctionValue*> require_function_property(const ObjectValue& object,
+                                                              const std::string& name,
+                                                              const std::string& property) {
+    auto value_or = require_object_property(object, name, property);
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+    if ((*value_or)->type() != Value::Type::Function) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " `", property, "` must be a function"));
+    }
+    return &(*value_or)->as_function();
+}
+
 std::optional<std::string> optional_literal_property(const ObjectValue& object,
                                                      const std::string& property) {
     const Value* value = object.lookup(property);
@@ -1770,6 +1784,86 @@ absl::StatusOr<Value> builtin_array_from(const std::vector<Value>& args) {
         return bucket_or.status();
     }
     return Value::table(*bucket_or, std::move(*parsed_rows_or));
+}
+
+absl::StatusOr<Value> builtin_array_concat(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "array.concat");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto arr_or = require_array_property(**object_or, "array.concat", "arr");
+    if (!arr_or.ok()) {
+        return arr_or.status();
+    }
+    auto v_or = require_array_property(**object_or, "array.concat", "v");
+    if (!v_or.ok()) {
+        return v_or.status();
+    }
+
+    std::vector<Value> elements;
+    elements.reserve((*arr_or)->elements.size() + (*v_or)->elements.size());
+    elements.insert(elements.end(), (*arr_or)->elements.begin(), (*arr_or)->elements.end());
+    elements.insert(elements.end(), (*v_or)->elements.begin(), (*v_or)->elements.end());
+    return Value::array(std::move(elements));
+}
+
+absl::StatusOr<Value> builtin_array_filter(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "array.filter");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto arr_or = require_array_property(**object_or, "array.filter", "arr");
+    if (!arr_or.ok()) {
+        return arr_or.status();
+    }
+    auto fn_or = require_function_property(**object_or, "array.filter", "fn");
+    if (!fn_or.ok()) {
+        return fn_or.status();
+    }
+
+    std::vector<Value> filtered;
+    filtered.reserve((*arr_or)->elements.size());
+    for (const auto& element : (*arr_or)->elements) {
+        auto keep_or = ExpressionEvaluator::Invoke(Value::function(std::make_shared<FunctionValue>(**fn_or)),
+                                                   {element});
+        if (!keep_or.ok()) {
+            return keep_or.status();
+        }
+        if (keep_or->type() != Value::Type::Bool) {
+            return absl::InvalidArgumentError("array.filter `fn` must return a boolean");
+        }
+        if (keep_or->as_bool()) {
+            filtered.push_back(element);
+        }
+    }
+    return Value::array(std::move(filtered));
+}
+
+absl::StatusOr<Value> builtin_array_map(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "array.map");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto arr_or = require_array_property(**object_or, "array.map", "arr");
+    if (!arr_or.ok()) {
+        return arr_or.status();
+    }
+    auto fn_or = require_function_property(**object_or, "array.map", "fn");
+    if (!fn_or.ok()) {
+        return fn_or.status();
+    }
+
+    std::vector<Value> mapped;
+    mapped.reserve((*arr_or)->elements.size());
+    for (const auto& element : (*arr_or)->elements) {
+        auto mapped_or = ExpressionEvaluator::Invoke(
+            Value::function(std::make_shared<FunctionValue>(**fn_or)), {element});
+        if (!mapped_or.ok()) {
+            return mapped_or.status();
+        }
+        mapped.push_back(*mapped_or);
+    }
+    return Value::array(std::move(mapped));
 }
 
 absl::StatusOr<Value> builtin_csv_from(const std::vector<Value>& args) {
@@ -3659,6 +3753,9 @@ absl::StatusOr<Value> BuiltinRegistry::ImportPackage(const std::string& path) {
         return Value::object({
             {"path", Value::string("array")},
             {"from", make_builtin_value("array.from", builtin_array_from)},
+            {"concat", make_builtin_value("array.concat", builtin_array_concat, "arr")},
+            {"filter", make_builtin_value("array.filter", builtin_array_filter, "arr")},
+            {"map", make_builtin_value("array.map", builtin_array_map, "arr")},
         });
     }
     if (path == "csv") {
