@@ -226,6 +226,31 @@ TEST(RuntimeEvalTest, EvaluatesCsvFromRawStringPackageBuiltin) {
     EXPECT_EQ("\"95.5\"", result->as_table().rows[0]->lookup("_value")->string());
 }
 
+TEST(RuntimeEvalTest, EvaluatesArrayFromPackageBuiltin) {
+    Environment env;
+    auto array_or = BuiltinRegistry::ImportPackage("array");
+    ASSERT_TRUE(array_or.ok()) << array_or.status();
+    env.define("array", *array_or);
+    const auto& expr = ParseAssignmentInit(R"(
+        result = array.from(
+            rows: [
+                {_time: "2024-01-01T00:00:00Z", host: "edge-1", _value: 70},
+                {_time: "2024-01-01T00:01:00Z", host: "edge-2", _value: 91},
+            ],
+        )
+    )");
+
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    EXPECT_EQ("array", result->as_table().bucket);
+    ASSERT_EQ(2, result->as_table().rows.size());
+    ASSERT_NE(nullptr, result->as_table().rows[0]);
+    EXPECT_EQ("\"edge-1\"", result->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("70", result->as_table().rows[0]->lookup("_value")->string());
+}
+
 TEST(RuntimeEvalTest, EvaluatesCsvFromRawFilePackageBuiltin) {
     const std::string path = "/tmp/flux_runtime_csv_from_file_test.csv";
     {
@@ -1162,6 +1187,71 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowWithTimezoneLocation) {
     EXPECT_EQ("30", result->as_table().rows[1]->lookup("_value")->string());
     EXPECT_EQ("2024-01-01T08:00:00Z", result->as_table().rows[1]->lookup("_start")->string());
     EXPECT_EQ("2024-01-02T08:00:00Z", result->as_table().rows[1]->lookup("_stop")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesAggregateWindowWithGlobalOptionLocation) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+    env.define_option("location",
+                      Value::object({
+                          {"zone", Value::string("UTC")},
+                          {"offset", Value::duration("-8h")},
+                      }));
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T07:30:00Z", _value: 10.0},
+                {_time: "2024-01-01T08:30:00Z", _value: 30.0},
+            ],
+        )
+            |> aggregateWindow(every: 1d, fn: sum)
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    EXPECT_EQ("10", result->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("2023-12-31T08:00:00Z", result->as_table().rows[0]->lookup("_start")->string());
+    EXPECT_EQ("2024-01-01T08:00:00Z", result->as_table().rows[0]->lookup("_stop")->string());
+    EXPECT_EQ("30", result->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ("2024-01-01T08:00:00Z", result->as_table().rows[1]->lookup("_start")->string());
+    EXPECT_EQ("2024-01-02T08:00:00Z", result->as_table().rows[1]->lookup("_stop")->string());
+}
+
+TEST(RuntimeEvalTest, AggregateWindowExplicitLocationOverridesGlobalOptionLocation) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+    env.define_option("location",
+                      Value::object({
+                          {"zone", Value::string("UTC")},
+                          {"offset", Value::duration("-8h")},
+                      }));
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T07:30:00Z", _value: 10.0},
+                {_time: "2024-01-01T08:30:00Z", _value: 30.0},
+            ],
+        )
+            |> aggregateWindow(
+                every: 1d,
+                fn: sum,
+                location: {zone: "UTC", offset: 0s},
+            )
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(1, result->as_table().rows.size());
+    EXPECT_EQ("40", result->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("2024-01-01T00:00:00Z", result->as_table().rows[0]->lookup("_start")->string());
+    EXPECT_EQ("2024-01-02T00:00:00Z", result->as_table().rows[0]->lookup("_stop")->string());
 }
 
 TEST(RuntimeEvalTest, EvaluatesAggregateWindowTimezoneOutputShape) {

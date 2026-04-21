@@ -309,7 +309,7 @@ bazel test //cpp/pl/flux:parser_unit_test --test_output=all
 
 - `runtime_value`：运行时值类型，支持 null、bool、int、uint、float、string、duration、time、regex、array、object，以及内存内表值
 - `runtime_env`：词法环境，支持父作用域、变量绑定、option 绑定和最近作用域赋值
-- `runtime_builtin`：内置函数注册表，目前包含 `len`、`string`、`contains`、`sum`、`mean`、`min`、`max`，以及查询相关 builtin：`from`、`range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`distinct`、`count`、`first`、`last`、`union`、`join`、`aggregateWindow`、`yield`，另外通过 `import "csv"` 暴露 `csv.from`
+- `runtime_builtin`：内置函数注册表，目前包含 `len`、`string`、`contains`、`sum`、`mean`、`min`、`max`，以及查询相关 builtin：`from`、`range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`distinct`、`count`、`first`、`last`、`union`、`join`、`aggregateWindow`、`yield`，另外通过 `import "array"` / `import "csv"` 暴露 `array.from` / `csv.from`
 - `runtime_eval`：表达式求值器，支持函数值与函数调用
 - `runtime_exec`：语句执行器，支持赋值、`option`、表达式语句、block/return 控制流
 - `flux_cli`：围绕解析器与运行时的 CLI/REPL 包装层
@@ -383,7 +383,6 @@ CLI 基于这份结果列表提供三种输出模式：
 
 尚未完成的点主要包括：
 
-- 全局 `option location`
 - 更完整的标准库窗口语义细节
 
 ### 表达式求值支持
