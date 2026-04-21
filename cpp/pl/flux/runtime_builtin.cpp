@@ -544,7 +544,29 @@ std::string pivot_column_name(const ObjectValue& row, const std::vector<std::str
 
 absl::StatusOr<std::vector<std::string>> parse_csv_record(const std::string& line,
                                                           const std::string& name) {
+    if (line.find('"') == std::string::npos) {
+        size_t field_count = 1;
+        for (char ch : line) {
+            if (ch == ',') {
+                ++field_count;
+            }
+        }
+        std::vector<std::string> fields;
+        fields.reserve(field_count);
+        size_t start = 0;
+        while (true) {
+            const size_t comma = line.find(',', start);
+            if (comma == std::string::npos) {
+                fields.emplace_back(line.substr(start));
+                return fields;
+            }
+            fields.emplace_back(line.substr(start, comma - start));
+            start = comma + 1;
+        }
+    }
+
     std::vector<std::string> fields;
+    fields.reserve(8);
     std::string field;
     bool quoted = false;
     for (size_t i = 0; i < line.size(); ++i) {
@@ -1508,11 +1530,12 @@ absl::StatusOr<std::vector<std::shared_ptr<ObjectValue>>> filter_rows_by_functio
     }
 
     std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve(table.rows.size());
     for (const auto& row : table.rows) {
         if (row == nullptr) {
             continue;
         }
-        auto keep_or = ExpressionEvaluator::Invoke(predicate, {Value::object(row->properties)});
+        auto keep_or = ExpressionEvaluator::Invoke(predicate, {Value::object(row)});
         if (!keep_or.ok()) {
             return keep_or.status();
         }
@@ -1821,11 +1844,11 @@ absl::StatusOr<Value> builtin_array_filter(const std::vector<Value>& args) {
         return fn_or.status();
     }
 
+    const Value fn = Value::function(std::make_shared<FunctionValue>(**fn_or));
     std::vector<Value> filtered;
     filtered.reserve((*arr_or)->elements.size());
     for (const auto& element : (*arr_or)->elements) {
-        auto keep_or = ExpressionEvaluator::Invoke(Value::function(std::make_shared<FunctionValue>(**fn_or)),
-                                                   {element});
+        auto keep_or = ExpressionEvaluator::Invoke(fn, {element});
         if (!keep_or.ok()) {
             return keep_or.status();
         }
@@ -1853,17 +1876,129 @@ absl::StatusOr<Value> builtin_array_map(const std::vector<Value>& args) {
         return fn_or.status();
     }
 
+    const Value fn = Value::function(std::make_shared<FunctionValue>(**fn_or));
     std::vector<Value> mapped;
     mapped.reserve((*arr_or)->elements.size());
     for (const auto& element : (*arr_or)->elements) {
-        auto mapped_or = ExpressionEvaluator::Invoke(
-            Value::function(std::make_shared<FunctionValue>(**fn_or)), {element});
+        auto mapped_or = ExpressionEvaluator::Invoke(fn, {element});
         if (!mapped_or.ok()) {
             return mapped_or.status();
         }
         mapped.push_back(*mapped_or);
     }
     return Value::array(std::move(mapped));
+}
+
+absl::StatusOr<Value> builtin_array_contains(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "array.contains");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto arr_or = require_array_property(**object_or, "array.contains", "arr");
+    if (!arr_or.ok()) {
+        return arr_or.status();
+    }
+    auto value_or = require_object_property(**object_or, "array.contains", "value");
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+
+    for (const auto& element : (*arr_or)->elements) {
+        if (element == **value_or) {
+            return Value::boolean(true);
+        }
+    }
+    return Value::boolean(false);
+}
+
+absl::StatusOr<Value> builtin_array_reduce(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "array.reduce");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto arr_or = require_array_property(**object_or, "array.reduce", "arr");
+    if (!arr_or.ok()) {
+        return arr_or.status();
+    }
+    auto fn_or = require_function_property(**object_or, "array.reduce", "fn");
+    if (!fn_or.ok()) {
+        return fn_or.status();
+    }
+    auto identity_or = require_object_property(**object_or, "array.reduce", "identity");
+    if (!identity_or.ok()) {
+        return identity_or.status();
+    }
+
+    const Value fn = Value::function(std::make_shared<FunctionValue>(**fn_or));
+    Value accumulator = **identity_or;
+    for (const auto& element : (*arr_or)->elements) {
+        auto next_or = ExpressionEvaluator::Invoke(fn, {element, accumulator});
+        if (!next_or.ok()) {
+            return next_or.status();
+        }
+        accumulator = *next_or;
+    }
+    return accumulator;
+}
+
+absl::StatusOr<Value> builtin_array_any(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "array.any");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto arr_or = require_array_property(**object_or, "array.any", "arr");
+    if (!arr_or.ok()) {
+        return arr_or.status();
+    }
+    auto fn_or = require_function_property(**object_or, "array.any", "fn");
+    if (!fn_or.ok()) {
+        return fn_or.status();
+    }
+
+    const Value fn = Value::function(std::make_shared<FunctionValue>(**fn_or));
+    for (const auto& element : (*arr_or)->elements) {
+        auto matched_or = ExpressionEvaluator::Invoke(fn, {element});
+        if (!matched_or.ok()) {
+            return matched_or.status();
+        }
+        if (matched_or->type() != Value::Type::Bool) {
+            return absl::InvalidArgumentError("array.any `fn` must return a boolean");
+        }
+        if (matched_or->as_bool()) {
+            return Value::boolean(true);
+        }
+    }
+    return Value::boolean(false);
+}
+
+absl::StatusOr<Value> builtin_array_all(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "array.all");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto arr_or = require_array_property(**object_or, "array.all", "arr");
+    if (!arr_or.ok()) {
+        return arr_or.status();
+    }
+    auto fn_or = require_function_property(**object_or, "array.all", "fn");
+    if (!fn_or.ok()) {
+        return fn_or.status();
+    }
+
+    const Value fn = Value::function(std::make_shared<FunctionValue>(**fn_or));
+    for (const auto& element : (*arr_or)->elements) {
+        auto matched_or = ExpressionEvaluator::Invoke(fn, {element});
+        if (!matched_or.ok()) {
+            return matched_or.status();
+        }
+        if (matched_or->type() != Value::Type::Bool) {
+            return absl::InvalidArgumentError("array.all `fn` must return a boolean");
+        }
+        if (!matched_or->as_bool()) {
+            return Value::boolean(false);
+        }
+    }
+    return Value::boolean(true);
 }
 
 absl::StatusOr<Value> builtin_csv_from(const std::vector<Value>& args) {
@@ -2074,7 +2209,7 @@ absl::StatusOr<Value> builtin_filter(const std::vector<Value>& args) {
         if (row == nullptr) {
             continue;
         }
-        auto keep_or = ExpressionEvaluator::Invoke(**fn_or, {Value::object(row->properties)});
+        auto keep_or = ExpressionEvaluator::Invoke(**fn_or, {Value::object(row)});
         if (!keep_or.ok()) {
             return keep_or.status();
         }
@@ -2112,7 +2247,7 @@ absl::StatusOr<Value> builtin_map(const std::vector<Value>& args) {
         if (row == nullptr) {
             continue;
         }
-        auto mapped_or = ExpressionEvaluator::Invoke(**fn_or, {Value::object(row->properties)});
+        auto mapped_or = ExpressionEvaluator::Invoke(**fn_or, {Value::object(row)});
         if (!mapped_or.ok()) {
             return mapped_or.status();
         }
@@ -2397,8 +2532,7 @@ absl::StatusOr<Value> builtin_reduce(const std::vector<Value>& args) {
         if (row == nullptr) {
             continue;
         }
-        auto next_or =
-            ExpressionEvaluator::Invoke(**fn_or, {Value::object(row->properties), accumulator});
+        auto next_or = ExpressionEvaluator::Invoke(**fn_or, {Value::object(row), accumulator});
         if (!next_or.ok()) {
             return next_or.status();
         }
@@ -3756,6 +3890,10 @@ absl::StatusOr<Value> BuiltinRegistry::ImportPackage(const std::string& path) {
             {"concat", make_builtin_value("array.concat", builtin_array_concat, "arr")},
             {"filter", make_builtin_value("array.filter", builtin_array_filter, "arr")},
             {"map", make_builtin_value("array.map", builtin_array_map, "arr")},
+            {"contains", make_builtin_value("array.contains", builtin_array_contains, "arr")},
+            {"reduce", make_builtin_value("array.reduce", builtin_array_reduce, "arr")},
+            {"any", make_builtin_value("array.any", builtin_array_any, "arr")},
+            {"all", make_builtin_value("array.all", builtin_array_all, "arr")},
         });
     }
     if (path == "csv") {
