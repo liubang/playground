@@ -154,6 +154,26 @@ TEST(FluxCliTest, ExecutesFeatureGalleryJoinExampleWithRenamedColumns) {
     EXPECT_NE(std::string::npos, result.output.find("60"));
 }
 
+TEST(FluxCliTest, ExecutesFeatureGalleryArrayWatchlistExample) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.result_name = "array_watchlist_join";
+    auto result = ExecuteExampleScript(
+        "cpp/pl/flux/examples/feature_gallery/array_watchlist_join.flux", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: array_watchlist_join\n"));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-1\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-3\""));
+    EXPECT_EQ(std::string::npos, result.output.find("\"edge-2\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"primary\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"canary\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"ops\""));
+    EXPECT_NE(std::string::npos, result.output.find("73.5"));
+    EXPECT_NE(std::string::npos, result.output.find("58"));
+}
+
 TEST(FluxCliTest, ExecutesTaskDrivenFeatureGalleryExample) {
     auto env = MakeFluxCliEnvironment();
     auto result =
