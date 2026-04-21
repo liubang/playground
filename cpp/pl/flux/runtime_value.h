@@ -103,6 +103,7 @@ public:
     static Value regex(std::string literal);
     static Value array(std::vector<Value> elements);
     static Value object(std::vector<std::pair<std::string, Value>> properties);
+    static Value object(std::shared_ptr<ObjectValue> object);
     static Value table(std::string bucket,
                        std::vector<std::shared_ptr<ObjectValue>> rows,
                        std::optional<std::string> range_start = std::nullopt,

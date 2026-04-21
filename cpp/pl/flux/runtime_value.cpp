@@ -102,6 +102,10 @@ Value Value::object(std::vector<std::pair<std::string, Value>> properties) {
     return Value(Type::Object, std::make_shared<ObjectValue>(std::move(properties)));
 }
 
+Value Value::object(std::shared_ptr<ObjectValue> object) {
+    return Value(Type::Object, std::move(object));
+}
+
 Value Value::table(std::string bucket,
                    std::vector<std::shared_ptr<ObjectValue>> rows,
                    std::optional<std::string> range_start,

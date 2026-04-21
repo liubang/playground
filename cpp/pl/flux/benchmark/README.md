@@ -4,11 +4,12 @@
 
 ## 覆盖内容
 
-当前基准集覆盖四类有代表性的查询形态：
+当前基准集覆盖五类有代表性的查询形态：
 
 - `linear`：`csv.from |> filter |> map |> limit`
 - `sort`：`csv.from |> sort |> limit`
 - `agg`：`csv.from |> group |> aggregateWindow |> yield`
+- `array`：`findColumn + array.map/filter/contains/reduce/any/all`
 - `join`：双表 `join(..., on: ["_time", "host"]) |> limit`
 
 选择这四类 case 的目的分别是覆盖：
@@ -16,6 +17,7 @@
 - 近似线性的轻管道
 - 全表重排
 - 带状态的聚合路径
+- 数组 package 的真实 helper 组合路径
 - 更重的多表 `join` 路径，目前已经由哈希索引支撑
 
 ## 运行方式
@@ -68,25 +70,29 @@ runner 会输出 JSON，便于在修改前后直接对比：
 
 ## 当前基线
 
-下面这组基线是在 2026-04-19 本地采集的，基于最近一轮运行时优化之后的实现，包含：
+下面这组基线会随着运行时实现变化持续更新。当前这版是在 2026-04-22 本地采集的，包含：
 
 - 基于哈希索引的 `join`
 - `aggregateWindow` 的索引化 bucket 查找
 - selection / reordering 算子中的行指针复用
+- `array.contains` / `array.reduce` / `array.any` / `array.all` 所在的数组 helper 路径
 
 | Case | 输入规模 | 时间 |
 | --- | --- | ---: |
-| `linear` | 100k rows | 0.086s |
-| `linear` | 500k rows | 0.368s |
-| `linear` | 1M rows | 0.770s |
-| `sort` | 100k rows | 0.081s |
-| `sort` | 500k rows | 0.442s |
-| `sort` | 1M rows | 1.082s |
-| `agg` | 100k rows | 0.448s |
-| `agg` | 500k rows | 2.233s |
-| `agg` | 1M rows | 4.465s |
-| `join` | 2000 x 2000 rows | 0.061s |
-| `join` | 5000 x 5000 rows | 0.336s |
+| `linear` | 100k rows | 2.696s |
+| `linear` | 500k rows | 9.915s |
+| `linear` | 1M rows | 19.797s |
+| `sort` | 100k rows | 1.397s |
+| `sort` | 500k rows | 7.649s |
+| `sort` | 1M rows | 16.420s |
+| `agg` | 100k rows | 2.945s |
+| `agg` | 500k rows | 13.095s |
+| `agg` | 1M rows | 25.746s |
+| `array` | 100k rows | 2.436s |
+| `array` | 500k rows | 12.240s |
+| `array` | 1M rows | 24.424s |
+| `join` | 2000 x 2000 rows | 0.081s |
+| `join` | 5000 x 5000 rows | 0.171s |
 
 ## 如何使用
 
@@ -96,6 +102,6 @@ runner 会输出 JSON，便于在修改前后直接对比：
 2. 保存 `run_benchmarks.py` 的 JSON 输出。
 3. 修改运行时实现。
 4. 用同样的输入规模再跑一遍。
-5. 对比 `linear`、`sort`、`agg`、`join` 的延迟变化。
+5. 对比 `linear`、`sort`、`agg`、`array`、`join` 的延迟变化。
 
 如果后续新增更重的算子，比如更完整的 `pivot`、更强的 join 形态，或者真正的流式 reader，建议在这里新增新的 benchmark case，而不是替换现有 case。

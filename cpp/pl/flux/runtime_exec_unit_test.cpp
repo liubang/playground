@@ -246,7 +246,9 @@ TEST(RuntimeExecTest, ExecutesTopLevelFileStatementsInSharedEnvironment) {
     ASSERT_TRUE(env.lookup("array").ok());
     EXPECT_EQ(
         "{path: \"array\", from: <builtin array.from>, concat: <builtin array.concat>, "
-        "filter: <builtin array.filter>, map: <builtin array.map>}",
+        "filter: <builtin array.filter>, map: <builtin array.map>, "
+        "contains: <builtin array.contains>, reduce: <builtin array.reduce>, "
+        "any: <builtin array.any>, all: <builtin array.all>}",
         env.lookup("array")->string());
     ASSERT_TRUE(env.lookup("regexp").ok());
     EXPECT_EQ("{path: \"regexp\", alias: \"regexp\"}", env.lookup("regexp")->string());
@@ -307,6 +309,70 @@ TEST(RuntimeExecTest, ExecutesArrayPackageHelpers) {
     EXPECT_EQ("\"edge-5\"", env.lookup("data")->as_table().rows[2]->lookup("host")->string());
     EXPECT_EQ("50", env.lookup("data")->as_table().rows[2]->lookup("_value")->string());
     ASSERT_EQ(Value::Type::Table, result_or->last.value.type());
+}
+
+TEST(RuntimeExecTest, ExecutesArrayContainsAndReduceHelpers) {
+    auto file = ParseFile(R"(
+        import "array"
+
+        watchlist = [
+            {host: "edge-1", owner: "ops"},
+            {host: "edge-3", owner: "canary"},
+        ]
+        hosts = watchlist |> array.map(fn: (r) => r.host)
+        hasCanary = hosts |> array.contains(value: "edge-3")
+        summary = hosts
+            |> array.reduce(
+                identity: {count: 0, last: ""},
+                fn: (host, accumulator) => ({
+                    count: accumulator.count + 1,
+                    last: host,
+                }),
+            )
+        {hasCanary: hasCanary, summary: summary}
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("hasCanary").ok());
+    ASSERT_EQ(Value::Type::Bool, env.lookup("hasCanary")->type());
+    EXPECT_TRUE(env.lookup("hasCanary")->as_bool());
+    ASSERT_TRUE(env.lookup("summary").ok());
+    ASSERT_EQ(Value::Type::Object, env.lookup("summary")->type());
+    EXPECT_EQ("2", env.lookup("summary")->as_object().lookup("count")->string());
+    EXPECT_EQ("\"edge-3\"", env.lookup("summary")->as_object().lookup("last")->string());
+    ASSERT_EQ(Value::Type::Object, result_or->last.value.type());
+    EXPECT_EQ(
+        "{hasCanary: true, summary: {count: 2, last: \"edge-3\"}}",
+        result_or->last.value.string());
+}
+
+TEST(RuntimeExecTest, ExecutesArrayAnyAndAllHelpers) {
+    auto file = ParseFile(R"(
+        import "array"
+
+        loads = [71.0, 88.0, 64.0]
+        hasCritical = loads |> array.any(fn: (x) => x >= 85.0)
+        allHealthy = loads |> array.all(fn: (x) => x >= 60.0)
+        {hasCritical: hasCritical, allHealthy: allHealthy}
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("hasCritical").ok());
+    ASSERT_EQ(Value::Type::Bool, env.lookup("hasCritical")->type());
+    EXPECT_TRUE(env.lookup("hasCritical")->as_bool());
+    ASSERT_TRUE(env.lookup("allHealthy").ok());
+    ASSERT_EQ(Value::Type::Bool, env.lookup("allHealthy")->type());
+    EXPECT_TRUE(env.lookup("allHealthy")->as_bool());
+    ASSERT_EQ(Value::Type::Object, result_or->last.value.type());
+    EXPECT_EQ("{hasCritical: true, allHealthy: true}", result_or->last.value.string());
 }
 
 TEST(RuntimeExecTest, ResolvesOptionValuesInsideExpressionsAndBlockFunctions) {

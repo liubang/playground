@@ -53,6 +53,38 @@ csv.from(file: DATA)
   |> yield(name: "agg")
 """
 
+ARRAY_TEMPLATE = """import "array"
+import "csv"
+
+eastHosts = findColumn(
+    tables: csv.from(file: DATA),
+    fn: (r) => r.region == "us-east",
+    column: "host",
+)
+
+taggedHosts = eastHosts
+  |> array.map(fn: (host) => ({host: host, cohort: "east"}))
+  |> array.filter(fn: (r) => r.host != "")
+
+hostNames = taggedHosts |> array.map(fn: (r) => r.host)
+summary = hostNames
+  |> array.reduce(
+    identity: {count: 0, last: ""},
+    fn: (host, accumulator) => ({
+      count: accumulator.count + 1,
+      last: host,
+    }),
+  )
+
+{
+  containsEdge7: hostNames |> array.contains(value: "edge-7"),
+  anyEdge7: hostNames |> array.any(fn: (host) => host == "edge-7"),
+  allNamed: hostNames |> array.all(fn: (host) => host != ""),
+  count: summary.count,
+  last: summary.last,
+}
+"""
+
 JOIN_TEMPLATE = """import "csv"
 
 join(
@@ -138,10 +170,15 @@ def main() -> None:
             work_dir / f"agg_{rows}.flux",
             AGG_TEMPLATE.replace("DATA", f'"{data}"'),
         )
+        array_query = write_query(
+            work_dir / f"array_{rows}.flux",
+            ARRAY_TEMPLATE.replace("DATA", f'"{data}"'),
+        )
 
         results.append(run_case(f"linear:{rows}", linear_query, flux_bin, args.timeout))
         results.append(run_case(f"sort:{rows}", sort_query, flux_bin, args.timeout))
         results.append(run_case(f"agg:{rows}", agg_query, flux_bin, args.timeout))
+        results.append(run_case(f"array:{rows}", array_query, flux_bin, args.timeout))
 
     for rows in (2_000, 5_000):
         left = data_dir / f"join_left_{rows}.annotated.csv"
