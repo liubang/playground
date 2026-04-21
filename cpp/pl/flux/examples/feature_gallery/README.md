@@ -10,6 +10,7 @@
 bazel build //cpp/pl/flux:flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/scalar_basics.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/function_pipelines.flux
+./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/array_watchlist_join.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/csv_raw_alerts.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/inspection_helpers.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/table_shape_ops.flux
@@ -25,6 +26,7 @@ bazel build //cpp/pl/flux:flux
 
 - `scalar_basics.flux`：标量 builtin、数组/对象、成员/索引访问、`exists`、条件表达式、字符串插值
 - `function_pipelines.flux`：`option`、用户函数、默认参数、pipe 参数、正则过滤、`map`、`set`
+- `array_watchlist_join.flux`：`array.concat`、`array.filter`、`array.map`、`array.from`，以及数组配置驱动的 `join`
 - `csv_raw_alerts.flux`：`import "csv"` 与 `csv.from(..., mode: "raw")`
 - `inspection_helpers.flux`：`columns`、`keys`、`findColumn`、`findRecord`，以及重复 annotated CSV metadata block
 - `table_shape_ops.flux`：`filter`、`duplicate`、`rename`、`set`、`map`、`drop`、`keep`、`sort`、`limit`、`tail`
@@ -41,8 +43,10 @@ bazel build //cpp/pl/flux:flux
   `scalar_basics.flux`
 - `from`：
   `function_pipelines.flux`、`aggregatewindow_advanced.flux`
+- `array.from`、`array.concat`、`array.filter`、`array.map`：
+  `array_watchlist_join.flux`
 - `csv.from`：
-  `csv_raw_alerts.flux`、`inspection_helpers.flux`、`table_shape_ops.flux`、`selection_and_reduce.flux`、`join_union_pivot.flux`、`fill_distinct_windows.flux`、`time_math.flux`、`task_driven_rollup.flux`
+  `array_watchlist_join.flux`、`csv_raw_alerts.flux`、`inspection_helpers.flux`、`table_shape_ops.flux`、`selection_and_reduce.flux`、`join_union_pivot.flux`、`fill_distinct_windows.flux`、`time_math.flux`、`task_driven_rollup.flux`
 - `columns`、`keys`、`findColumn`、`findRecord`：
   `inspection_helpers.flux`
 - `range`、`filter`、`map`：
@@ -52,7 +56,7 @@ bazel build //cpp/pl/flux:flux
 - `reduce`、`sort`、`group`、`count`、`first`、`last`：
   `selection_and_reduce.flux`
 - `pivot`、`fill`、`distinct`、`union`、`join`、`aggregateWindow`、`yield`：
-  `join_union_pivot.flux`、`fill_distinct_windows.flux`、`aggregatewindow_advanced.flux`、`task_driven_rollup.flux`
+  `array_watchlist_join.flux`、`join_union_pivot.flux`、`fill_distinct_windows.flux`、`aggregatewindow_advanced.flux`、`task_driven_rollup.flux`
 - `elapsed`、`difference`、`derivative`：
   `time_math.flux`
 - `option`、block-body helper、对象返回、嵌套条件：
