@@ -300,7 +300,7 @@ bazel test //cpp/pl/flux:parser_unit_test --test_output=all
 - 顶层 `builtin` 声明
 - 包与导入元数据处理
 - 通过 `flux` 进行命令行执行、文件执行和 REPL 交互
-- `from |> range |> filter |> map` 以及 `limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`count`、`first`、`last`、`union`、轻量 `join`、首版 `aggregateWindow`、Flux 风格 `csv.from`
+- `from |> range |> filter |> map` 以及 `limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`count`、`first`、`last`、`union`、轻量 `join`、首版 `aggregateWindow`、Flux 风格 `csv.from`，以及 `array.concat` / `array.filter` / `array.map`
 - 树形 dump / JSON dump
 
 ## 运行时状态
@@ -309,7 +309,7 @@ bazel test //cpp/pl/flux:parser_unit_test --test_output=all
 
 - `runtime_value`：运行时值类型，支持 null、bool、int、uint、float、string、duration、time、regex、array、object，以及内存内表值
 - `runtime_env`：词法环境，支持父作用域、变量绑定、option 绑定和最近作用域赋值
-- `runtime_builtin`：内置函数注册表，目前包含 `len`、`string`、`contains`、`sum`、`mean`、`min`、`max`，以及查询相关 builtin：`from`、`range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`distinct`、`count`、`first`、`last`、`union`、`join`、`aggregateWindow`、`yield`，另外通过 `import "array"` / `import "csv"` 暴露 `array.from` / `csv.from`
+- `runtime_builtin`：内置函数注册表，目前包含 `len`、`string`、`contains`、`sum`、`mean`、`min`、`max`，以及查询相关 builtin：`from`、`range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`distinct`、`count`、`first`、`last`、`union`、`join`、`aggregateWindow`、`yield`，另外通过 `import "array"` / `import "csv"` 暴露 `array.from` / `array.concat` / `array.filter` / `array.map` / `csv.from`
 - `runtime_eval`：表达式求值器，支持函数值与函数调用
 - `runtime_exec`：语句执行器，支持赋值、`option`、表达式语句、block/return 控制流
 - `flux_cli`：围绕解析器与运行时的 CLI/REPL 包装层
@@ -463,6 +463,27 @@ data = csv.from(csv: "#datatype,string,long,dateTime:RFC3339,string,double,boole
 ```
 
 这里依然是“内存内 Flux 子集实现”，不是完整的官方流式执行引擎，所以更广泛的 CSV 标准库接口还没有全部补齐。
+
+### `array` package
+
+通过 `import "array"`，现在除了 `array.from` 之外，也支持几类常用数组 helper：
+
+- `array.concat(arr:, v:)`，或 `[1, 2] |> array.concat(v: [3])`
+- `array.filter(arr:, fn:)`，返回满足谓词的新数组
+- `array.map(arr:, fn:)`，逐元素映射出新数组
+
+示例：
+
+```flux
+import "array"
+
+rows = [1, 2, 3]
+    |> array.concat(v: [4])
+    |> array.filter(fn: (x) => x >= 2)
+    |> array.map(fn: (x) => ({host: "edge-${x}", _value: x * 10}))
+
+data = array.from(rows: rows)
+```
 
 ## 基准测试
 

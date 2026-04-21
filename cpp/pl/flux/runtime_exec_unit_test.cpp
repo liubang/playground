@@ -244,7 +244,10 @@ TEST(RuntimeExecTest, ExecutesTopLevelFileStatementsInSharedEnvironment) {
     ASSERT_TRUE(env.lookup_option("__flux.package").ok());
     EXPECT_EQ("\"metrics\"", env.lookup_option("__flux.package")->string());
     ASSERT_TRUE(env.lookup("array").ok());
-    EXPECT_EQ("{path: \"array\", from: <builtin array.from>}", env.lookup("array")->string());
+    EXPECT_EQ(
+        "{path: \"array\", from: <builtin array.from>, concat: <builtin array.concat>, "
+        "filter: <builtin array.filter>, map: <builtin array.map>}",
+        env.lookup("array")->string());
     ASSERT_TRUE(env.lookup("regexp").ok());
     EXPECT_EQ("{path: \"regexp\", alias: \"regexp\"}", env.lookup("regexp")->string());
 }
@@ -274,6 +277,35 @@ TEST(RuntimeExecTest, ExecutesArrayFromImportedPackage) {
     ASSERT_NE(nullptr, env.lookup("data")->as_table().rows[1]);
     EXPECT_EQ("\"edge-2\"", env.lookup("data")->as_table().rows[1]->lookup("host")->string());
     EXPECT_EQ("91", env.lookup("data")->as_table().rows[1]->lookup("_value")->string());
+    ASSERT_EQ(Value::Type::Table, result_or->last.value.type());
+}
+
+TEST(RuntimeExecTest, ExecutesArrayPackageHelpers) {
+    auto file = ParseFile(R"(
+        import "array"
+
+        rows = [1, 2, 3]
+            |> array.concat(v: [4, 5])
+            |> array.filter(fn: (x) => x >= 3)
+            |> array.map(fn: (x) => ({host: "edge-${x}", _value: x * 10}))
+        data = array.from(rows: rows)
+        data
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("rows").ok());
+    ASSERT_EQ(Value::Type::Array, env.lookup("rows")->type());
+    ASSERT_EQ(3, env.lookup("rows")->as_array().elements.size());
+    EXPECT_EQ("{host: \"edge-3\", _value: 30}", env.lookup("rows")->as_array().elements[0].string());
+    ASSERT_TRUE(env.lookup("data").ok());
+    ASSERT_EQ(Value::Type::Table, env.lookup("data")->type());
+    ASSERT_EQ(3, env.lookup("data")->as_table().rows.size());
+    EXPECT_EQ("\"edge-5\"", env.lookup("data")->as_table().rows[2]->lookup("host")->string());
+    EXPECT_EQ("50", env.lookup("data")->as_table().rows[2]->lookup("_value")->string());
     ASSERT_EQ(Value::Type::Table, result_or->last.value.type());
 }
 
