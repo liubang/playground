@@ -251,6 +251,57 @@ TEST(RuntimeEvalTest, EvaluatesArrayFromPackageBuiltin) {
     EXPECT_EQ("70", result->as_table().rows[0]->lookup("_value")->string());
 }
 
+TEST(RuntimeEvalTest, EvaluatesArrayPackageHelpers) {
+    Environment env;
+    auto array_or = BuiltinRegistry::ImportPackage("array");
+    ASSERT_TRUE(array_or.ok()) << array_or.status();
+    env.define("array", *array_or);
+
+    const auto& concat_expr = ParseAssignmentInit(R"(
+        result = array.concat(arr: [1, 2], v: [3, 4])
+    )");
+    auto concat = ExpressionEvaluator::Evaluate(concat_expr, env);
+    ASSERT_TRUE(concat.ok()) << concat.status();
+    EXPECT_EQ("[1, 2, 3, 4]", concat->string());
+
+    const auto& filter_expr = ParseAssignmentInit(R"(
+        result = array.filter(arr: [1, 2, 3, 4], fn: (x) => x > 2)
+    )");
+    auto filter = ExpressionEvaluator::Evaluate(filter_expr, env);
+    ASSERT_TRUE(filter.ok()) << filter.status();
+    EXPECT_EQ("[3, 4]", filter->string());
+
+    const auto& map_expr = ParseAssignmentInit(R"(
+        result = array.map(arr: [1, 2, 3], fn: (x) => ({_value: x * 10, label: "v${x}"}))
+    )");
+    auto map = ExpressionEvaluator::Evaluate(map_expr, env);
+    ASSERT_TRUE(map.ok()) << map.status();
+    EXPECT_EQ(
+        "[{_value: 10, label: \"v1\"}, {_value: 20, label: \"v2\"}, {_value: 30, label: \"v3\"}]",
+        map->string());
+}
+
+TEST(RuntimeEvalTest, ReportsArrayPackageHelperErrors) {
+    Environment env;
+    auto array_or = BuiltinRegistry::ImportPackage("array");
+    ASSERT_TRUE(array_or.ok()) << array_or.status();
+    env.define("array", *array_or);
+
+    const auto& missing_array_expr = ParseAssignmentInit(R"(
+        result = array.concat(arr: [1], v: 2)
+    )");
+    auto missing_array = ExpressionEvaluator::Evaluate(missing_array_expr, env);
+    ASSERT_FALSE(missing_array.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, missing_array.status().code());
+
+    const auto& invalid_filter_expr = ParseAssignmentInit(R"(
+        result = array.filter(arr: [1, 2], fn: (x) => x + 1)
+    )");
+    auto invalid_filter = ExpressionEvaluator::Evaluate(invalid_filter_expr, env);
+    ASSERT_FALSE(invalid_filter.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, invalid_filter.status().code());
+}
+
 TEST(RuntimeEvalTest, EvaluatesCsvFromRawFilePackageBuiltin) {
     const std::string path = "/tmp/flux_runtime_csv_from_file_test.csv";
     {
