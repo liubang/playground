@@ -35,6 +35,22 @@ csv.from(file: DATA)
   |> yield(name: "agg")
 """
 
+GROUP_TEMPLATE = """import "csv"
+
+csv.from(file: DATA)
+  |> group(columns: ["host", "region"])
+  |> count()
+  |> yield(name: "grouped")
+"""
+
+PIVOT_TEMPLATE = """import "csv"
+
+csv.from(file: DATA)
+  |> pivot(rowKey: ["host", "region", "_time"], columnKey: ["_field"], valueColumn: "_value")
+  |> limit(n: 1000)
+  |> yield(name: "pivoted")
+"""
+
 ARRAY_TEMPLATE = """import "array"
 import "csv"
 
@@ -152,15 +168,26 @@ def main() -> None:
             work_dir / f"agg_{rows}.flux",
             AGG_TEMPLATE.replace("DATA", f'"{data}"'),
         )
+        group_query = write_query(
+            work_dir / f"group_{rows}.flux",
+            GROUP_TEMPLATE.replace("DATA", f'"{data}"'),
+        )
         array_query = write_query(
             work_dir / f"array_{rows}.flux",
             ARRAY_TEMPLATE.replace("DATA", f'"{data}"'),
+        )
+        pivot_data = data_dir / f"pivot_{rows}.annotated.csv"
+        pivot_query = write_query(
+            work_dir / f"pivot_{rows}.flux",
+            PIVOT_TEMPLATE.replace("DATA", f'"{pivot_data}"'),
         )
 
         results.append(run_case(f"linear:{rows}", linear_query, flux_bin, args.timeout))
         results.append(run_case(f"sort:{rows}", sort_query, flux_bin, args.timeout))
         results.append(run_case(f"agg:{rows}", agg_query, flux_bin, args.timeout))
+        results.append(run_case(f"group:{rows}", group_query, flux_bin, args.timeout))
         results.append(run_case(f"array:{rows}", array_query, flux_bin, args.timeout))
+        results.append(run_case(f"pivot:{rows}", pivot_query, flux_bin, args.timeout))
 
     for rows in (2_000, 5_000):
         left = data_dir / f"join_left_{rows}.annotated.csv"
