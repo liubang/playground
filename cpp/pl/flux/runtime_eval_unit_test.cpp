@@ -839,6 +839,64 @@ TEST(RuntimeEvalTest, CountPreservesKeptEmptyLogicalTablesAsZeroRows) {
     EXPECT_EQ("1", result->as_table().rows[2]->lookup("_value")->string());
 }
 
+TEST(RuntimeEvalTest, FirstAndLastDropKeptEmptyLogicalTablesAndSkipNullValues) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& first_expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {host: "edge-1", sample: "ignored"},
+                {host: "edge-1", _value: 95.0, sample: "first"},
+                {host: "edge-2", _value: 60.0, sample: "drop-me"},
+                {host: "edge-3", sample: "ignored-too"},
+                {host: "edge-3", _value: 85.0, sample: "picked"},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> filter(fn: (r) => not exists r._value or r._value >= 80.0, onEmpty: "keep")
+            |> first()
+    )");
+    auto first = ExpressionEvaluator::Evaluate(first_expr, env);
+
+    ASSERT_TRUE(first.ok()) << first.status();
+    ASSERT_EQ(Value::Type::Table, first->type());
+    ASSERT_EQ(2, first->as_table().rows.size());
+    ASSERT_EQ(2, first->as_table().table_count());
+    EXPECT_EQ("\"edge-1\"", first->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("\"first\"", first->as_table().rows[0]->lookup("sample")->string());
+    EXPECT_EQ("\"edge-3\"", first->as_table().rows[1]->lookup("host")->string());
+    EXPECT_EQ("\"picked\"", first->as_table().rows[1]->lookup("sample")->string());
+
+    const auto& last_expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {host: "edge-1", _value: 90.0, sample: "keep"},
+                {host: "edge-1", sample: "ignored-last-null"},
+                {host: "edge-2", _value: 60.0, sample: "drop-me"},
+                {host: "edge-3", _value: 81.0, sample: "older"},
+                {host: "edge-3", _value: 82.0, sample: "picked"},
+                {host: "edge-3", sample: "ignored-tail-null"},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> filter(fn: (r) => not exists r._value or r._value >= 80.0, onEmpty: "keep")
+            |> last()
+    )");
+    auto last = ExpressionEvaluator::Evaluate(last_expr, env);
+
+    ASSERT_TRUE(last.ok()) << last.status();
+    ASSERT_EQ(Value::Type::Table, last->type());
+    ASSERT_EQ(2, last->as_table().rows.size());
+    ASSERT_EQ(2, last->as_table().table_count());
+    EXPECT_EQ("\"edge-1\"", last->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("\"keep\"", last->as_table().rows[0]->lookup("sample")->string());
+    EXPECT_EQ("\"edge-3\"", last->as_table().rows[1]->lookup("host")->string());
+    EXPECT_EQ("\"picked\"", last->as_table().rows[1]->lookup("sample")->string());
+}
+
 TEST(RuntimeEvalTest, EvaluatesUnionAndJoinBuiltins) {
     Environment env;
     BuiltinRegistry::Install(env);
@@ -1103,6 +1161,39 @@ TEST(RuntimeEvalTest, EvaluatesPivotBuiltin) {
     EXPECT_EQ("2024-01-01T00:02:00Z", result->as_table().rows[1]->lookup("_time")->string());
     EXPECT_EQ("82", result->as_table().rows[1]->lookup("cpu")->string());
     EXPECT_EQ("68", result->as_table().rows[1]->lookup("mem")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesPivotPerLogicalTableWithoutCrossChunkMerge) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: 2024-01-01T00:01:00Z, host: "a", metric: "cpu", usage: 72.0},
+                {_time: 2024-01-01T00:01:00Z, host: "a", metric: "mem", usage: 63.0},
+                {_time: 2024-01-01T00:01:00Z, host: "b", metric: "cpu", usage: 82.0},
+                {_time: 2024-01-01T00:01:00Z, host: "b", metric: "mem", usage: 68.0},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> pivot(rowKey: ["_time"], columnKey: ["metric"], valueColumn: "usage")
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().table_count());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    ASSERT_EQ(1, result->as_table().tables[0].rows.size());
+    ASSERT_EQ(1, result->as_table().tables[1].rows.size());
+    EXPECT_EQ("\"a\"", result->as_table().tables[0].rows[0]->lookup("host")->string());
+    EXPECT_EQ("72", result->as_table().tables[0].rows[0]->lookup("cpu")->string());
+    EXPECT_EQ("63", result->as_table().tables[0].rows[0]->lookup("mem")->string());
+    EXPECT_EQ("\"b\"", result->as_table().tables[1].rows[0]->lookup("host")->string());
+    EXPECT_EQ("82", result->as_table().tables[1].rows[0]->lookup("cpu")->string());
+    EXPECT_EQ("68", result->as_table().tables[1].rows[0]->lookup("mem")->string());
 }
 
 TEST(RuntimeEvalTest, EvaluatesFillBuiltinUsePreviousAndValue) {
