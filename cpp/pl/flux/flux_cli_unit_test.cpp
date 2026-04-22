@@ -16,10 +16,13 @@
 // Created: 2026/04/15 23:39
 
 #include "cpp/pl/flux/flux_cli.h"
+#include <algorithm>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
 #include <sstream>
+#include <vector>
 
 namespace pl {
 namespace {
@@ -81,6 +84,19 @@ FluxCliResult ExecuteExampleScript(const std::string& relative_path,
                                    const FluxCliOptions& options = {}) {
     const std::string path = RunfilePath(relative_path);
     return ExecuteFluxSource(RewriteExamplePaths(ReadAllText(path)), path, env, options);
+}
+
+std::vector<std::string> AllExampleScripts() {
+    std::vector<std::string> paths;
+    const std::filesystem::path root = RunfilePath("cpp/pl/flux/examples");
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(root)) {
+        if (!entry.is_regular_file() || entry.path().extension() != ".flux") {
+            continue;
+        }
+        paths.push_back(std::filesystem::relative(entry.path(), root.parent_path()).string());
+    }
+    std::sort(paths.begin(), paths.end());
+    return paths;
 }
 
 TEST(FluxCliTest, ExecutesSourceWithPreludeBuiltins) {
@@ -315,6 +331,16 @@ TEST(FluxCliTest, ExecutesCheckedInOpsDashboardQueryVariants) {
         for (const auto& fragment : example.expected_output_fragments) {
             EXPECT_NE(std::string::npos, result.output.find(fragment));
         }
+    }
+}
+
+TEST(FluxCliTest, ExecutesAllCheckedInExamplesWithoutRuntimeErrors) {
+    for (const auto& path : AllExampleScripts()) {
+        SCOPED_TRACE(path);
+        auto env = MakeFluxCliEnvironment();
+        auto result = ExecuteExampleScript(path, env);
+        EXPECT_EQ(0, result.exit_code);
+        EXPECT_TRUE(result.error.empty());
     }
 }
 
