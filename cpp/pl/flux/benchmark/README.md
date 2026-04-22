@@ -146,8 +146,8 @@ python3 cpp/pl/flux/benchmark/run_benchmarks.py \
 
 | Case | 输入规模 | 中位数 |
 | --- | --- | ---: |
-| `pivot` | 100k rows | 1.688s |
-| `pivot_wide` | 100k rows | 2.118s |
+| `pivot` | 100k rows | 0.125s |
+| `pivot_wide` | 100k rows | 0.167s |
 | `join` | 2000 x 2000 rows | 0.010s |
 | `join_grouped` | 2000 x 2000 rows | 0.013s |
 
