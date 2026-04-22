@@ -52,6 +52,13 @@ csv.from(file: DATA)
   |> yield(name: "pivoted")
 """
 
+PIVOT_WIDE_TEMPLATE = """import "csv"
+
+csv.from(file: DATA)
+  |> pivot(rowKey: ["host", "region", "_time"], columnKey: ["_field"], valueColumn: "_value")
+  |> yield(name: "pivoted_wide")
+"""
+
 ARRAY_TEMPLATE = """import "array"
 import "csv"
 
@@ -95,6 +102,19 @@ join(
 )
     |> limit(n: 1000)
     |> yield(name: "joined")
+"""
+
+JOIN_GROUPED_TEMPLATE = """import "csv"
+
+join(
+    tables: {
+        l: csv.from(file: LEFT) |> group(columns: ["host"]),
+        r: csv.from(file: RIGHT) |> group(columns: ["host"]),
+    },
+    on: ["_time"],
+)
+    |> limit(n: 1000)
+    |> yield(name: "joined_grouped")
 """
 
 
@@ -179,6 +199,24 @@ def run_case(
     }
 
 
+def parse_case_filter(raw: str | None) -> set[str] | None:
+    if raw is None:
+        return None
+    names = {part.strip() for part in raw.split(",") if part.strip()}
+    return names or None
+
+
+def selected(case_filter: set[str] | None, name: str) -> bool:
+    return case_filter is None or name in case_filter
+
+
+def parse_int_list(raw: str | None, default_values: tuple[int, ...]) -> tuple[int, ...]:
+    if raw is None:
+        return default_values
+    values = tuple(int(part.strip().replace("_", "")) for part in raw.split(",") if part.strip())
+    return values or default_values
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run local Flux runtime benchmarks.")
     parser.add_argument(
@@ -209,16 +247,31 @@ def main() -> None:
         default=5,
         help="Number of timed runs per case used for summary statistics.",
     )
+    parser.add_argument(
+        "--cases",
+        help="Comma-separated case names to run (for example: pivot,pivot_wide,join_grouped).",
+    )
+    parser.add_argument(
+        "--metric-rows",
+        help="Comma-separated metric row counts. Defaults to 100000,500000,1000000.",
+    )
+    parser.add_argument(
+        "--join-rows",
+        help="Comma-separated join row counts. Defaults to 2000,5000.",
+    )
     args = parser.parse_args()
 
     flux_bin = Path(args.flux_bin)
     data_dir = Path(args.data_dir)
     work_dir = data_dir
     work_dir.mkdir(parents=True, exist_ok=True)
+    case_filter = parse_case_filter(args.cases)
+    metric_rows = parse_int_list(args.metric_rows, (100_000, 500_000, 1_000_000))
+    join_rows = parse_int_list(args.join_rows, (2_000, 5_000))
 
     results = []
 
-    for rows in (100_000, 500_000, 1_000_000):
+    for rows in metric_rows:
         data = data_dir / f"metrics_{rows}.annotated.csv"
         linear_query = write_query(
             work_dir / f"linear_{rows}.flux",
@@ -245,85 +298,63 @@ def main() -> None:
             work_dir / f"pivot_{rows}.flux",
             PIVOT_TEMPLATE.replace("DATA", f'"{pivot_data}"'),
         )
-
-        results.append(
-            run_case(
-                f"linear:{rows}",
-                linear_query,
-                flux_bin,
-                args.timeout,
-                args.warmup_runs,
-                args.repeat_runs,
-            )
-        )
-        results.append(
-            run_case(
-                f"sort:{rows}",
-                sort_query,
-                flux_bin,
-                args.timeout,
-                args.warmup_runs,
-                args.repeat_runs,
-            )
-        )
-        results.append(
-            run_case(
-                f"agg:{rows}",
-                agg_query,
-                flux_bin,
-                args.timeout,
-                args.warmup_runs,
-                args.repeat_runs,
-            )
-        )
-        results.append(
-            run_case(
-                f"group:{rows}",
-                group_query,
-                flux_bin,
-                args.timeout,
-                args.warmup_runs,
-                args.repeat_runs,
-            )
-        )
-        results.append(
-            run_case(
-                f"array:{rows}",
-                array_query,
-                flux_bin,
-                args.timeout,
-                args.warmup_runs,
-                args.repeat_runs,
-            )
-        )
-        results.append(
-            run_case(
-                f"pivot:{rows}",
-                pivot_query,
-                flux_bin,
-                args.timeout,
-                args.warmup_runs,
-                args.repeat_runs,
-            )
+        pivot_wide_data = data_dir / f"pivot_wide_{rows}.annotated.csv"
+        pivot_wide_query = write_query(
+            work_dir / f"pivot_wide_{rows}.flux",
+            PIVOT_WIDE_TEMPLATE.replace("DATA", f'"{pivot_wide_data}"'),
         )
 
-    for rows in (2_000, 5_000):
+        metric_cases = (
+            ("linear", linear_query),
+            ("sort", sort_query),
+            ("agg", agg_query),
+            ("group", group_query),
+            ("array", array_query),
+            ("pivot", pivot_query),
+            ("pivot_wide", pivot_wide_query),
+        )
+        for case_name, query_path in metric_cases:
+            if not selected(case_filter, case_name):
+                continue
+            results.append(
+                run_case(
+                    f"{case_name}:{rows}",
+                    query_path,
+                    flux_bin,
+                    args.timeout,
+                    args.warmup_runs,
+                    args.repeat_runs,
+                )
+            )
+
+    for rows in join_rows:
         left = data_dir / f"join_left_{rows}.annotated.csv"
         right = data_dir / f"join_right_{rows}.annotated.csv"
         join_query = write_query(
             work_dir / f"join_{rows}.flux",
             JOIN_TEMPLATE.replace("LEFT", f'"{left}"').replace("RIGHT", f'"{right}"'),
         )
-        results.append(
-            run_case(
-                f"join:{rows}x{rows}",
-                join_query,
-                flux_bin,
-                args.timeout,
-                args.warmup_runs,
-                args.repeat_runs,
-            )
+        join_grouped_query = write_query(
+            work_dir / f"join_grouped_{rows}.flux",
+            JOIN_GROUPED_TEMPLATE.replace("LEFT", f'"{left}"').replace("RIGHT", f'"{right}"'),
         )
+        join_cases = (
+            ("join", join_query),
+            ("join_grouped", join_grouped_query),
+        )
+        for case_name, query_path in join_cases:
+            if not selected(case_filter, case_name):
+                continue
+            results.append(
+                run_case(
+                    f"{case_name}:{rows}x{rows}",
+                    query_path,
+                    flux_bin,
+                    args.timeout,
+                    args.warmup_runs,
+                    args.repeat_runs,
+                )
+            )
 
     print(json.dumps(results, indent=2))
 

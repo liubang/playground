@@ -392,15 +392,28 @@ std::pair<std::shared_ptr<ObjectValue>, std::string> clone_row_with_group_and_ke
     const ObjectValue& row, const std::vector<std::string>& columns) {
     std::vector<std::pair<std::string, Value>> group_props;
     group_props.reserve(columns.size());
+    std::string key;
+    key.reserve(columns.size() * 16);
     for (const auto& column : columns) {
         const Value* value = row.lookup(column);
         if (value != nullptr) {
             group_props.emplace_back(column, *value);
+            absl::StrAppend(&key, column, "=");
+            if (value->type() == Value::Type::String) {
+                absl::StrAppend(&key, value->as_string());
+            } else if (value->type() == Value::Type::Time) {
+                absl::StrAppend(&key, value->as_time().literal);
+            } else {
+                absl::StrAppend(&key, value->string());
+            }
+        } else {
+            absl::StrAppend(&key, column, "=<missing>");
         }
+        key.push_back('\n');
     }
     Value group_value = Value::object(std::move(group_props));
     auto grouped = object_with_upserted_property(row, "_group", group_value);
-    return {std::make_shared<ObjectValue>(grouped.as_object()), group_value.string()};
+    return {std::make_shared<ObjectValue>(grouped.as_object()), std::move(key)};
 }
 
 std::vector<std::string> all_visible_columns_in_order(const TableValue& table) {
@@ -544,10 +557,6 @@ int compare_values(const Value* lhs, const Value* rhs) {
     return left < right ? -1 : left > right ? 1 : 0;
 }
 
-bool contains_string(const std::vector<std::string>& values, const std::string& value) {
-    return std::find(values.begin(), values.end(), value) != values.end();
-}
-
 std::optional<std::string> mapped_column_name(
     const std::vector<std::pair<std::string, std::string>>& mappings, const std::string& key) {
     for (const auto& [from, to] : mappings) {
@@ -558,14 +567,16 @@ std::optional<std::string> mapped_column_name(
     return std::nullopt;
 }
 
-std::string value_key_fragment(const Value& value) {
+void append_value_key_fragment(std::string* out, const Value& value) {
     if (value.type() == Value::Type::String) {
-        return value.as_string();
+        absl::StrAppend(out, value.as_string());
+        return;
     }
     if (value.type() == Value::Type::Time) {
-        return value.as_time().literal;
+        absl::StrAppend(out, value.as_time().literal);
+        return;
     }
-    return value.string();
+    absl::StrAppend(out, value.string());
 }
 
 std::string row_identity_key(const ObjectValue& row, const std::vector<std::string>& columns) {
@@ -574,7 +585,7 @@ std::string row_identity_key(const ObjectValue& row, const std::vector<std::stri
     for (const auto& column : columns) {
         absl::StrAppend(&key, column, "=");
         if (const Value* value = row.lookup(column); value != nullptr) {
-            absl::StrAppend(&key, value_key_fragment(*value));
+            append_value_key_fragment(&key, *value);
         } else {
             absl::StrAppend(&key, "<missing>");
         }
@@ -591,7 +602,7 @@ std::string pivot_column_name(const ObjectValue& row, const std::vector<std::str
             name.push_back('_');
         }
         if (const Value* value = row.lookup(column); value != nullptr) {
-            absl::StrAppend(&name, value_key_fragment(*value));
+            append_value_key_fragment(&name, *value);
         } else {
             absl::StrAppend(&name, "null");
         }
@@ -915,18 +926,22 @@ std::optional<std::string> join_row_key(const ObjectValue& row,
             return std::nullopt;
         }
         absl::StrAppend(&key, column, "=");
-        absl::StrAppend(&key, value_key_fragment(*value));
+        append_value_key_fragment(&key, *value);
         key.push_back('\n');
     }
     return key;
 }
 
 std::string chunk_group_key(const TableChunk& chunk) {
+    if (chunk.group_key != nullptr) {
+        return chunk.group_key->string();
+    }
     for (const auto& row : chunk.rows) {
-        if (row != nullptr) {
-            const Value* group = row->lookup("_group");
-            return group == nullptr ? "" : group->string();
+        if (row == nullptr) {
+            continue;
         }
+        const Value* group = row->lookup("_group");
+        return group == nullptr ? "" : group->string();
     }
     return "";
 }
@@ -967,6 +982,12 @@ std::vector<std::pair<std::string, Value>> join_group_properties(
     append_group(right, right_name);
     return props;
 }
+
+struct JoinChunkIndex {
+    const TableChunk* chunk = nullptr;
+    std::vector<std::string> columns;
+    std::unordered_map<std::string, std::vector<const ObjectValue*>> rows_by_key;
+};
 
 std::shared_ptr<ObjectValue> join_rows(const std::string& left_name,
                                        const ObjectValue& left,
@@ -2645,8 +2666,9 @@ absl::StatusOr<Value> builtin_group(const std::vector<Value>& args) {
     std::vector<std::string> group_columns = *columns_or;
     if (*mode_or == "except") {
         group_columns.clear();
+        const std::unordered_set<std::string> excluded(columns_or->begin(), columns_or->end());
         for (const auto& column : all_visible_columns_in_order(**table_or)) {
-            if (!contains_string(*columns_or, column)) {
+            if (excluded.count(column) == 0) {
                 group_columns.push_back(column);
             }
         }
@@ -2699,46 +2721,52 @@ absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
     const std::unordered_set<std::string> column_key_set(column_key_or->begin(),
                                                          column_key_or->end());
 
-    std::vector<std::shared_ptr<ObjectValue>> rows;
-    std::unordered_map<std::string, size_t> row_indexes;
-    rows.reserve((*table_or)->rows.size());
-    for (const auto& row : (*table_or)->rows) {
-        if (row == nullptr) {
-            continue;
-        }
-        const std::string identity = row_identity_key(*row, *row_key_or);
-        size_t row_index = 0;
-        if (const auto existing = row_indexes.find(identity); existing != row_indexes.end()) {
-            row_index = existing->second;
-        } else {
-            std::vector<std::pair<std::string, Value>> props;
-            props.reserve(row->properties.size());
-            for (const auto& column : *row_key_or) {
-                if (const Value* value = row->lookup(column); value != nullptr) {
-                    props.emplace_back(column, *value);
-                }
+    std::vector<TableChunk> chunks;
+    chunks.reserve((*table_or)->table_count());
+    for (const auto& chunk : (*table_or)->tables) {
+        TableChunk next;
+        next.group_key = chunk.group_key;
+        std::unordered_map<std::string, size_t> row_indexes;
+        row_indexes.reserve(chunk.rows.size());
+        next.rows.reserve(chunk.rows.size());
+        for (const auto& row : chunk.rows) {
+            if (row == nullptr) {
+                continue;
             }
-            for (const auto& [key, value] : row->properties) {
-                if (key == *value_column_or || column_key_set.count(key) != 0 ||
-                    row_key_set.count(key) != 0) {
-                    continue;
+            const std::string identity = row_identity_key(*row, *row_key_or);
+            size_t row_index = 0;
+            if (const auto existing = row_indexes.find(identity); existing != row_indexes.end()) {
+                row_index = existing->second;
+            } else {
+                std::vector<std::pair<std::string, Value>> props;
+                props.reserve(row->properties.size());
+                for (const auto& column : *row_key_or) {
+                    if (const Value* value = row->lookup(column); value != nullptr) {
+                        props.emplace_back(column, *value);
+                    }
                 }
-                props.emplace_back(key, value);
+                for (const auto& [key, value] : row->properties) {
+                    if (key == *value_column_or || column_key_set.count(key) != 0 ||
+                        row_key_set.count(key) != 0) {
+                        continue;
+                    }
+                    props.emplace_back(key, value);
+                }
+                row_index = next.rows.size();
+                next.rows.push_back(std::make_shared<ObjectValue>(std::move(props)));
+                row_indexes.emplace(identity, row_index);
             }
-            row_index = rows.size();
-            rows.push_back(std::make_shared<ObjectValue>(std::move(props)));
-            row_indexes.emplace(identity, row_index);
-        }
 
-        const Value* value = row->lookup(*value_column_or);
-        if (value == nullptr) {
-            continue;
+            const Value* value = row->lookup(*value_column_or);
+            if (value == nullptr) {
+                continue;
+            }
+            const std::string pivoted_name = pivot_column_name(*row, *column_key_or);
+            upsert_property_in_place(*next.rows[row_index], pivoted_name, *value);
         }
-        const std::string pivoted_name = pivot_column_name(*row, *column_key_or);
-        upsert_property_in_place(*rows[row_index], pivoted_name, *value);
+        chunks.push_back(std::move(next));
     }
-    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
-                        (*table_or)->range_stop);
+    return table_with_chunks_like(**table_or, std::move(chunks));
 }
 
 absl::StatusOr<Value> builtin_fill(const std::vector<Value>& args) {
@@ -3124,18 +3152,41 @@ absl::StatusOr<Value> table_single_row_builtin(const std::vector<Value>& args,
     if (!table_or.ok()) {
         return table_or.status();
     }
+    auto column_or = optional_string_property(**object_or, name, "column", "_value");
+    if (!column_or.ok()) {
+        return column_or.status();
+    }
 
     std::vector<TableChunk> chunks;
     chunks.reserve((*table_or)->table_count());
     for (const auto& chunk : (*table_or)->tables) {
         TableChunk next;
-        if (!chunk.rows.empty()) {
-            const auto& source = use_last ? chunk.rows.back() : chunk.rows.front();
-            if (source != nullptr) {
-                next.rows.push_back(source);
+        if (use_last) {
+            for (auto it = chunk.rows.rbegin(); it != chunk.rows.rend(); ++it) {
+                if (*it == nullptr) {
+                    continue;
+                }
+                const Value* value = (*it)->lookup(*column_or);
+                if (value != nullptr && !value->is_null()) {
+                    next.rows.push_back(*it);
+                    break;
+                }
+            }
+        } else {
+            for (const auto& row : chunk.rows) {
+                if (row == nullptr) {
+                    continue;
+                }
+                const Value* value = row->lookup(*column_or);
+                if (value != nullptr && !value->is_null()) {
+                    next.rows.push_back(row);
+                    break;
+                }
             }
         }
-        chunks.push_back(std::move(next));
+        if (!next.rows.empty()) {
+            chunks.push_back(std::move(next));
+        }
     }
     return table_with_chunks_like(**table_or, std::move(chunks));
 }
@@ -3214,10 +3265,24 @@ absl::StatusOr<Value> builtin_join(const std::vector<Value>& args) {
     const auto& right_name = (*tables_or)[1].first;
     const auto* right_table = (*tables_or)[1].second;
 
-    std::unordered_map<std::string, std::vector<const TableChunk*>> right_chunks_by_group;
+    std::unordered_map<std::string, std::vector<JoinChunkIndex>> right_chunks_by_group;
     right_chunks_by_group.reserve(right_table->table_count());
     for (const auto& right_chunk : right_table->tables) {
-        right_chunks_by_group[chunk_group_key(right_chunk)].push_back(&right_chunk);
+        JoinChunkIndex index;
+        index.chunk = &right_chunk;
+        index.columns = visible_columns_in_chunk(right_chunk);
+        index.rows_by_key.reserve(right_chunk.rows.size());
+        for (const auto& right_row : right_chunk.rows) {
+            if (right_row == nullptr) {
+                continue;
+            }
+            const auto key = join_row_key(*right_row, *on_or);
+            if (!key.has_value()) {
+                continue;
+            }
+            index.rows_by_key[*key].push_back(right_row.get());
+        }
+        right_chunks_by_group[chunk_group_key(right_chunk)].push_back(std::move(index));
     }
 
     std::vector<TableChunk> output_chunks;
@@ -3230,26 +3295,13 @@ absl::StatusOr<Value> builtin_join(const std::vector<Value>& args) {
         }
 
         const auto left_columns = visible_columns_in_chunk(left_chunk);
-        for (const auto* right_chunk : matching_chunks->second) {
-            const auto right_columns = visible_columns_in_chunk(*right_chunk);
+        for (const auto& right_index : matching_chunks->second) {
             const auto overlapping_columns =
-                overlapping_join_columns(left_columns, right_columns, on_column_set);
-
-            std::unordered_map<std::string, std::vector<const ObjectValue*>> right_rows_by_key;
-            right_rows_by_key.reserve(right_chunk->rows.size());
-            for (const auto& right_row : right_chunk->rows) {
-                if (right_row == nullptr) {
-                    continue;
-                }
-                const auto key = join_row_key(*right_row, *on_or);
-                if (!key.has_value()) {
-                    continue;
-                }
-                right_rows_by_key[*key].push_back(right_row.get());
-            }
+                overlapping_join_columns(left_columns, right_index.columns, on_column_set);
 
             TableChunk output_chunk;
-            output_chunk.rows.reserve(std::min(left_chunk.rows.size(), right_chunk->rows.size()));
+            output_chunk.rows.reserve(
+                std::min(left_chunk.rows.size(), right_index.chunk->rows.size()));
             for (const auto& left_row : left_chunk.rows) {
                 if (left_row == nullptr) {
                     continue;
@@ -3258,8 +3310,8 @@ absl::StatusOr<Value> builtin_join(const std::vector<Value>& args) {
                 if (!key.has_value()) {
                     continue;
                 }
-                const auto matches = right_rows_by_key.find(*key);
-                if (matches == right_rows_by_key.end()) {
+                const auto matches = right_index.rows_by_key.find(*key);
+                if (matches == right_index.rows_by_key.end()) {
                     continue;
                 }
                 for (const auto* right_row : matches->second) {

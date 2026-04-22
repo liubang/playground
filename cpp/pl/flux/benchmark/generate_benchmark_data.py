@@ -8,6 +8,7 @@ METRIC_ROW_COUNTS = (100_000, 500_000, 1_000_000)
 JOIN_ROW_COUNTS = (2_000, 5_000)
 REGIONS = ("us-east", "us-west", "eu-central", "ap-south")
 PIVOT_FIELDS = ("cpu", "mem", "disk", "net")
+WIDE_PIVOT_FIELDS = tuple(f"metric_{index:02d}" for index in range(16))
 
 
 def metric_timestamp(index: int) -> str:
@@ -47,7 +48,7 @@ def write_join_file(path: Path, rows: int, divisor: float) -> None:
             )
 
 
-def write_pivot_file(path: Path, rows: int) -> None:
+def write_pivot_file(path: Path, rows: int, fields: tuple[str, ...]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         handle.write("#datatype,string,long,dateTime:RFC3339,string,string,string,double\n")
         handle.write("#group,false,false,false,false,false,false,false\n")
@@ -56,7 +57,7 @@ def write_pivot_file(path: Path, rows: int) -> None:
         for index in range(rows):
             handle.write(
                 f",,0,{metric_timestamp(index)},{host_name(index)},{REGIONS[index % len(REGIONS)]},"
-                f"{PIVOT_FIELDS[index % len(PIVOT_FIELDS)]},{(index % 1000) / 10.0:.1f}\n"
+                f"{fields[index % len(fields)]},{(index % 1000) / 10.0:.1f}\n"
             )
 
 
@@ -65,7 +66,8 @@ def main() -> None:
 
     for rows in METRIC_ROW_COUNTS:
         write_metric_file(OUTPUT_DIR / f"metrics_{rows}.annotated.csv", rows)
-        write_pivot_file(OUTPUT_DIR / f"pivot_{rows}.annotated.csv", rows)
+        write_pivot_file(OUTPUT_DIR / f"pivot_{rows}.annotated.csv", rows, PIVOT_FIELDS)
+        write_pivot_file(OUTPUT_DIR / f"pivot_wide_{rows}.annotated.csv", rows, WIDE_PIVOT_FIELDS)
 
     for rows in JOIN_ROW_COUNTS:
         write_join_file(OUTPUT_DIR / f"join_left_{rows}.annotated.csv", rows, 10.0)
