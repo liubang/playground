@@ -20,6 +20,7 @@
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
+#include <unordered_set>
 
 namespace pl {
 
@@ -58,6 +59,47 @@ std::string quote_string(const std::string& value) {
     }
     out.push_back('"');
     return out;
+}
+
+std::shared_ptr<ObjectValue> derive_chunk_group_key(
+    const std::vector<std::shared_ptr<ObjectValue>>& rows) {
+    for (const auto& row : rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        const Value* group_value = row->lookup("_group");
+        if (group_value == nullptr || group_value->type() != Value::Type::Object) {
+            return nullptr;
+        }
+        return std::make_shared<ObjectValue>(group_value->as_object());
+    }
+    return nullptr;
+}
+
+std::vector<std::string> derive_chunk_columns(const std::vector<std::shared_ptr<ObjectValue>>& rows) {
+    std::vector<std::string> columns;
+    std::unordered_set<std::string> seen;
+    for (const auto& row : rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        for (const auto& [name, value] : row->properties) {
+            (void)value;
+            if (seen.insert(name).second) {
+                columns.push_back(name);
+            }
+        }
+    }
+    return columns;
+}
+
+void ensure_chunk_metadata(TableChunk& chunk) {
+    if (chunk.group_key == nullptr) {
+        chunk.group_key = derive_chunk_group_key(chunk.rows);
+    }
+    if (chunk.columns.empty()) {
+        chunk.columns = derive_chunk_columns(chunk.rows);
+    }
 }
 
 } // namespace
@@ -115,6 +157,7 @@ Value Value::table(std::string bucket,
     table->bucket = std::move(bucket);
     table->rows = rows;
     table->tables.emplace_back(std::move(rows));
+    ensure_chunk_metadata(table->tables.back());
     table->range_start = std::move(range_start);
     table->range_stop = std::move(range_stop);
     table->result_name = std::move(result_name);
@@ -129,7 +172,8 @@ Value Value::table_stream(std::string bucket,
     auto table = std::make_shared<TableValue>();
     table->bucket = std::move(bucket);
     table->tables = std::move(tables);
-    for (const auto& chunk : table->tables) {
+    for (auto& chunk : table->tables) {
+        ensure_chunk_metadata(chunk);
         table->rows.insert(table->rows.end(), chunk.rows.begin(), chunk.rows.end());
     }
     table->range_start = std::move(range_start);
@@ -292,7 +336,13 @@ const Value* ObjectValue::lookup(const std::string& key) const {
 }
 
 bool TableChunk::operator==(const TableChunk& other) const {
-    if (rows.size() != other.rows.size()) {
+    if (rows.size() != other.rows.size() || columns != other.columns) {
+        return false;
+    }
+    if ((group_key == nullptr) != (other.group_key == nullptr)) {
+        return false;
+    }
+    if (group_key != nullptr && *group_key != *other.group_key) {
         return false;
     }
     for (size_t i = 0; i < rows.size(); ++i) {
@@ -340,7 +390,7 @@ bool TableValue::operator==(const TableValue& other) const {
 }
 
 size_t TableValue::table_count() const {
-    return tables.empty() ? 1 : tables.size();
+    return tables.size();
 }
 
 std::string FunctionValue::string() const {
