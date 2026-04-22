@@ -632,7 +632,17 @@ absl::StatusOr<Value> eval_unary(const UnaryExpr& unary,
             if (value.type() == Value::Type::Float) {
                 return Value::floating(-value.as_float());
             }
-            return type_error(whole_expr, "unary `-` requires int or float");
+            if (value.type() == Value::Type::Duration) {
+                const auto& literal = value.as_duration().literal;
+                if (!literal.empty() && literal[0] == '-') {
+                    return Value::duration(literal.substr(1));
+                }
+                if (!literal.empty() && literal[0] == '+') {
+                    return Value::duration("-" + literal.substr(1));
+                }
+                return Value::duration("-" + literal);
+            }
+            return type_error(whole_expr, "unary `-` requires int, float, or duration");
         default:
             return unsupported(whole_expr, "unary operator");
     }
