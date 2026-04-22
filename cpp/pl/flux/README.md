@@ -178,10 +178,9 @@ flux> config.host
 
 - `--list-results`：只列出当前脚本可用的结果名
 - `--output-format human|csv|json`：切换输出格式
-- `--annotated-csv`：兼容别名，等同于 CSV 输出
 - `--result <name>`：多结果脚本中只输出某一个结果
 - `--quiet`：抑制值输出
-- `--no-prelude`：仅执行显式声明或导入的符号
+- `--no-prelude`：关闭默认 builtin/prelude 注入，只执行显式声明或导入的符号
 
 当脚本通过 `yield(name: "...")` 或顶层赋值产生多个结果时，`--result <name>` 会在 human、CSV、JSON 三种模式下都只保留对应结果：
 

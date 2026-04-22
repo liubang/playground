@@ -183,6 +183,17 @@ std::string csv_escape(const std::string& value) {
     return out;
 }
 
+std::string format_chunk_group_key(const TableChunk& chunk) {
+    if (chunk.group_key == nullptr) {
+        return "";
+    }
+    return chunk.group_key->string();
+}
+
+std::string join_columns_for_display(const std::vector<std::string>& columns) {
+    return absl::StrJoin(columns, ", ");
+}
+
 std::string scalar_cell_text(const Value& value) {
     switch (value.type()) {
         case Value::Type::Null:
@@ -689,6 +700,21 @@ void append_table_result(const NamedResult& result,
         }
         if (table.table_count() > 1) {
             out << "Logical table " << chunk_index << '\n';
+        }
+        if (chunk.rows.empty()) {
+            out << "(empty logical table";
+            const std::string group_key = format_chunk_group_key(chunk);
+            if (!group_key.empty()) {
+                out << ", group=" << group_key;
+            }
+            if (!columns.empty()) {
+                out << ", columns=[" << join_columns_for_display(columns) << "]";
+            }
+            out << ")\n";
+            if (chunk_index + 1 < table.tables.size()) {
+                out << '\n';
+            }
+            continue;
         }
         pretty::Pretty pretty_table(columns);
         pretty_table.set_show_sep(options.table_borders);
