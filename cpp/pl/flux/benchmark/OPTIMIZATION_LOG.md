@@ -64,6 +64,34 @@
 
 这类改动收益不一定像 `aggregateWindow()` 那样显著，但风险很低，适合持续累积。
 
+## 2026-04-22 第二轮：`pivot/group/join` 收口
+
+后面又补了一轮更贴着热点本身的优化，这轮重点不是继续扩能力，而是把已经暴露出来的三条热路径做得更扎实一些。
+
+### 1. `pivot()` 按 logical table 局部建索引
+
+之前的 `pivot()` 虽然已经做过一些减法，但 row identity 仍然是全表级别维护的。这会带来两个问题：
+
+- 如果多个 logical table 里恰好有相同的 `rowKey`，实现上会发生跨 chunk 合并风险。
+- 全表级 `row_indexes` 会随着输入规模持续膨胀，尤其在 `group() |> pivot(...)` 这类多表路径上不必要地放大字符串 key 的驻留时间。
+
+后来改成了“每个 chunk 单独 pivot、单独建 identity map”。这样一来：
+
+- 语义上更贴近 Flux 的逐 logical table 处理模型。
+- 性能上也减少了 row identity map 的生命周期和峰值尺寸。
+
+同时补了单测，专门锁住“两个不同 host 的 grouped table 即使 `rowKey` 一样，也不能被 pivot 合并”的回归。
+
+### 2. `group()` / `join()` 的 key 构造继续减法
+
+这轮又补了几处很具体的减法：
+
+- `group(mode: "except")` 不再对每个可见列线性 `contains`，而是先建 `excluded` 集合。
+- `_group` key、row identity key、join key 不再先构造一份临时字符串再 append，而是直接往目标 buffer 里写。
+- `join()` 的右侧 chunk 会先做一次 key 索引，避免同一个 right chunk 每和一个 left chunk 配对时都重扫一遍。
+
+这些改动都不花哨，但对 `group/pivot/join` 这种“很多开销都死在字符串和重复扫描上”的路径很值。
+
 ## benchmark 侧的变化
 
 为了让优化过程更可见，这轮也扩展了 benchmark 本身。
@@ -80,6 +108,17 @@
 - `pivot_1000000.annotated.csv`
 
 这样后续再优化 `group()` 或 `pivot()`，就不用只看 `agg` 这种混合路径。
+
+再往后又补了更聚焦的热点 case：
+
+- `pivot_wide`：更宽 `_field` 基数下的 pivot
+- `join_grouped`：两侧先按 `host` 分表后再 join
+
+以及一组更适合本地迭代时快速 smoke 的 runner 参数：
+
+- `--cases`
+- `--metric-rows`
+- `--join-rows`
 
 ## examples 校验
 
