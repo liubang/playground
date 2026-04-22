@@ -515,18 +515,29 @@ python3 cpp/pl/flux/benchmark/generate_benchmark_data.py
 python3 cpp/pl/flux/benchmark/run_benchmarks.py
 ```
 
+如果只想盯 `pivot/join` 这类热点，也可以直接筛 case：
+
+```bash
+python3 cpp/pl/flux/benchmark/run_benchmarks.py \
+  --warmup-runs 0 \
+  --repeat-runs 2 \
+  --cases pivot,pivot_wide,join,join_grouped
+```
+
 截至 2026-04-22 的一组本地基线在 [benchmark/README.md](./benchmark/README.md) 中维护。当前实现形态大体可以概括为：
 
 - `csv.from` 先把整份输入读入内存
 - 表以逻辑多表流 + 行向量形式保存在内存里
 - `filter`、`map`、`sort`、`group`、`pivot`、`union` 之类算子仍会进行一定程度的数据复制或重排
 - `join` 已从早期的轻量路径演进到更适合当前规模的哈希索引实现
+- `pivot` 现在按 logical table 局部建索引，避免跨 chunk 合并和全表 identity map 膨胀
 
 和官方 Flux 对齐的几条关键表语义也已经固定下来：
 
 - `filter()` 默认按 `onEmpty: "drop"` 处理，过滤后变空的逻辑表会直接从 table stream 里移除
 - 显式写 `onEmpty: "keep"` 时，空逻辑表会被保留，并继续带着 group key / 列元数据流向后续算子
 - `count()` 对保留下来的空逻辑表会输出一行 `_value = 0` 的结果
+- `first()` 和 `last()` 会像官方 Flux 一样跳过空逻辑表，并在指定列里选择第一个/最后一个非 `null` 记录
 
 因此它现在更适合：
 
