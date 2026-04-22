@@ -8,7 +8,7 @@
 - 一组面向查询场景的内存内 builtins，可运行常见的 Flux 管道
 
 如果你想看逐项能力清单，请直接查看 [SUPPORT_MATRIX.md](./SUPPORT_MATRIX.md)。
-后续迭代默认遵循 [CLAUDE.md](/Volumes/workspace/liubang/playground/cpp/pl/flux/CLAUDE.md) 中定义的流程、测试、benchmark、examples 校验和文档同步规则。
+后续迭代默认遵循 [CLAUDE.md](./CLAUDE.md) 中定义的流程、测试、benchmark、examples 校验和文档同步规则。
 
 ## 构建
 

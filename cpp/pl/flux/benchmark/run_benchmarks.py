@@ -20,6 +20,7 @@
 
 import argparse
 import json
+import statistics
 import subprocess
 import time
 from pathlib import Path
@@ -120,8 +121,8 @@ def write_query(path: Path, text: str) -> Path:
     return path
 
 
-def run_case(case: str, query_path: Path, flux_bin: Path, timeout_seconds: int) -> dict:
-    started = time.time()
+def run_once(query_path: Path, flux_bin: Path, timeout_seconds: int) -> dict:
+    started = time.perf_counter()
     try:
         proc = subprocess.run(
             [str(flux_bin), str(query_path)],
@@ -132,16 +133,67 @@ def run_case(case: str, query_path: Path, flux_bin: Path, timeout_seconds: int) 
         )
     except subprocess.TimeoutExpired:
         return {
-            "case": case,
             "timeout_s": timeout_seconds,
         }
 
     return {
-        "case": case,
         "rc": proc.returncode,
-        "seconds": round(time.time() - started, 3),
+        "seconds": round(time.perf_counter() - started, 6),
         "stdout_lines": len(proc.stdout.splitlines()),
         "stderr_last": proc.stderr.splitlines()[-1] if proc.stderr.splitlines() else "",
+    }
+
+
+def summarize_samples(samples: list[float]) -> dict:
+    return {
+        "min_s": round(min(samples), 6),
+        "median_s": round(statistics.median(samples), 6),
+        "mean_s": round(statistics.fmean(samples), 6),
+        "max_s": round(max(samples), 6),
+    }
+
+
+def run_case(
+    case: str,
+    query_path: Path,
+    flux_bin: Path,
+    timeout_seconds: int,
+    warmup_runs: int,
+    repeat_runs: int,
+) -> dict:
+    for _ in range(warmup_runs):
+        warmup = run_once(query_path, flux_bin, timeout_seconds)
+        if warmup.get("rc", 0) != 0 or "timeout_s" in warmup:
+            return {
+                "case": case,
+                "warmup_runs": warmup_runs,
+                "repeat_runs": repeat_runs,
+                **warmup,
+            }
+
+    runs = []
+    samples = []
+    for _ in range(repeat_runs):
+        result = run_once(query_path, flux_bin, timeout_seconds)
+        if result.get("rc", 0) != 0 or "timeout_s" in result:
+            return {
+                "case": case,
+                "warmup_runs": warmup_runs,
+                "repeat_runs": repeat_runs,
+                **result,
+            }
+        runs.append(result)
+        samples.append(result["seconds"])
+
+    return {
+        "case": case,
+        "warmup_runs": warmup_runs,
+        "repeat_runs": repeat_runs,
+        "samples_s": samples,
+        **summarize_samples(samples),
+        "stdout_lines": runs[-1]["stdout_lines"],
+        "stderr_last": runs[-1]["stderr_last"],
+        "rc": runs[-1]["rc"],
     }
 
 
@@ -162,6 +214,18 @@ def main() -> None:
         type=int,
         default=180,
         help="Per-case timeout in seconds.",
+    )
+    parser.add_argument(
+        "--warmup-runs",
+        type=int,
+        default=1,
+        help="Number of untimed warmup runs per case before sampling.",
+    )
+    parser.add_argument(
+        "--repeat-runs",
+        type=int,
+        default=5,
+        help="Number of timed runs per case used for summary statistics.",
     )
     args = parser.parse_args()
 
@@ -200,12 +264,66 @@ def main() -> None:
             PIVOT_TEMPLATE.replace("DATA", f'"{pivot_data}"'),
         )
 
-        results.append(run_case(f"linear:{rows}", linear_query, flux_bin, args.timeout))
-        results.append(run_case(f"sort:{rows}", sort_query, flux_bin, args.timeout))
-        results.append(run_case(f"agg:{rows}", agg_query, flux_bin, args.timeout))
-        results.append(run_case(f"group:{rows}", group_query, flux_bin, args.timeout))
-        results.append(run_case(f"array:{rows}", array_query, flux_bin, args.timeout))
-        results.append(run_case(f"pivot:{rows}", pivot_query, flux_bin, args.timeout))
+        results.append(
+            run_case(
+                f"linear:{rows}",
+                linear_query,
+                flux_bin,
+                args.timeout,
+                args.warmup_runs,
+                args.repeat_runs,
+            )
+        )
+        results.append(
+            run_case(
+                f"sort:{rows}",
+                sort_query,
+                flux_bin,
+                args.timeout,
+                args.warmup_runs,
+                args.repeat_runs,
+            )
+        )
+        results.append(
+            run_case(
+                f"agg:{rows}",
+                agg_query,
+                flux_bin,
+                args.timeout,
+                args.warmup_runs,
+                args.repeat_runs,
+            )
+        )
+        results.append(
+            run_case(
+                f"group:{rows}",
+                group_query,
+                flux_bin,
+                args.timeout,
+                args.warmup_runs,
+                args.repeat_runs,
+            )
+        )
+        results.append(
+            run_case(
+                f"array:{rows}",
+                array_query,
+                flux_bin,
+                args.timeout,
+                args.warmup_runs,
+                args.repeat_runs,
+            )
+        )
+        results.append(
+            run_case(
+                f"pivot:{rows}",
+                pivot_query,
+                flux_bin,
+                args.timeout,
+                args.warmup_runs,
+                args.repeat_runs,
+            )
+        )
 
     for rows in (2_000, 5_000):
         left = data_dir / f"join_left_{rows}.annotated.csv"
@@ -214,7 +332,16 @@ def main() -> None:
             work_dir / f"join_{rows}.flux",
             JOIN_TEMPLATE.replace("LEFT", f'"{left}"').replace("RIGHT", f'"{right}"'),
         )
-        results.append(run_case(f"join:{rows}x{rows}", join_query, flux_bin, args.timeout))
+        results.append(
+            run_case(
+                f"join:{rows}x{rows}",
+                join_query,
+                flux_bin,
+                args.timeout,
+                args.warmup_runs,
+                args.repeat_runs,
+            )
+        )
 
     print(json.dumps(results, indent=2))
 

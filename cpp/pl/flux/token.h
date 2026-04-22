@@ -95,120 +95,120 @@ enum class TokenType {
 
 inline std::string token_to_string(TokenType token) {
     switch (token) {
-    case TokenType::Illegal:
-        return "Illegal";
-    case TokenType::Eof:
-        return "Eof";
-    case TokenType::Comment:
-        return "Comment";
-    case TokenType::And:
-        return "And";
-    case TokenType::Or:
-        return "Or";
-    case TokenType::Not:
-        return "Not";
-    case TokenType::Import:
-        return "Import";
-    case TokenType::Package:
-        return "Package";
-    case TokenType::Return:
-        return "Return";
-    case TokenType::Option:
-        return "Option";
-    case TokenType::Builtin:
-        return "Builtin";
-    case TokenType::TestCase:
-        return "TestCase";
-    case TokenType::If:
-        return "If";
-    case TokenType::Then:
-        return "Then";
-    case TokenType::Else:
-        return "Else";
-    case TokenType::Ident:
-        return "Ident";
-    case TokenType::Int:
-        return "Int";
-    case TokenType::UInt:
-        return "UInt";
-    case TokenType::Float:
-        return "Float";
-    case TokenType::String:
-        return "String";
-    case TokenType::Regex:
-        return "Regex";
-    case TokenType::Time:
-        return "Time";
-    case TokenType::Duration:
-        return "Duration";
-    case TokenType::Add:
-        return "Add";
-    case TokenType::Sub:
-        return "Sub";
-    case TokenType::Mul:
-        return "Mul";
-    case TokenType::Div:
-        return "Div";
-    case TokenType::Mod:
-        return "Mod";
-    case TokenType::Pow:
-        return "Pow";
-    case TokenType::Eq:
-        return "Eq";
-    case TokenType::Lt:
-        return "Lt";
-    case TokenType::Gt:
-        return "Gt";
-    case TokenType::Lte:
-        return "Lte";
-    case TokenType::Gte:
-        return "Gte";
-    case TokenType::Neq:
-        return "Neq";
-    case TokenType::RegexEq:
-        return "RegexEq";
-    case TokenType::RegexNeq:
-        return "RegexNeq";
-    case TokenType::Assign:
-        return "Assign";
-    case TokenType::Arrow:
-        return "Arrow";
-    case TokenType::LParen:
-        return "LParen";
-    case TokenType::RParen:
-        return "RParen";
-    case TokenType::LBrack:
-        return "LBrack";
-    case TokenType::RBrack:
-        return "RBrack";
-    case TokenType::LBrace:
-        return "LBrack";
-    case TokenType::RBrace:
-        return "RBrace";
-    case TokenType::Comma:
-        return "Comma";
-    case TokenType::Dot:
-        return "Dot";
-    case TokenType::Colon:
-        return "Colon";
-    case TokenType::PipeForward:
-        return "PipeForward";
-    case TokenType::PipeReceive:
-        return "PipeReceive";
-    case TokenType::Exists:
-        return "Exists";
-    case TokenType::Quote:
-        return "Quote";
-    case TokenType::StringExpr:
-        return "StringExpr";
-    case TokenType::Text:
-        return "Text";
-    case TokenType::QuestionMark:
-        return "QuestionMark";
-    case TokenType::Attribute:
-        return "Attribute";
-    default:
-        return "Illegal";
+        case TokenType::Illegal:
+            return "Illegal";
+        case TokenType::Eof:
+            return "Eof";
+        case TokenType::Comment:
+            return "Comment";
+        case TokenType::And:
+            return "And";
+        case TokenType::Or:
+            return "Or";
+        case TokenType::Not:
+            return "Not";
+        case TokenType::Import:
+            return "Import";
+        case TokenType::Package:
+            return "Package";
+        case TokenType::Return:
+            return "Return";
+        case TokenType::Option:
+            return "Option";
+        case TokenType::Builtin:
+            return "Builtin";
+        case TokenType::TestCase:
+            return "TestCase";
+        case TokenType::If:
+            return "If";
+        case TokenType::Then:
+            return "Then";
+        case TokenType::Else:
+            return "Else";
+        case TokenType::Ident:
+            return "Ident";
+        case TokenType::Int:
+            return "Int";
+        case TokenType::UInt:
+            return "UInt";
+        case TokenType::Float:
+            return "Float";
+        case TokenType::String:
+            return "String";
+        case TokenType::Regex:
+            return "Regex";
+        case TokenType::Time:
+            return "Time";
+        case TokenType::Duration:
+            return "Duration";
+        case TokenType::Add:
+            return "Add";
+        case TokenType::Sub:
+            return "Sub";
+        case TokenType::Mul:
+            return "Mul";
+        case TokenType::Div:
+            return "Div";
+        case TokenType::Mod:
+            return "Mod";
+        case TokenType::Pow:
+            return "Pow";
+        case TokenType::Eq:
+            return "Eq";
+        case TokenType::Lt:
+            return "Lt";
+        case TokenType::Gt:
+            return "Gt";
+        case TokenType::Lte:
+            return "Lte";
+        case TokenType::Gte:
+            return "Gte";
+        case TokenType::Neq:
+            return "Neq";
+        case TokenType::RegexEq:
+            return "RegexEq";
+        case TokenType::RegexNeq:
+            return "RegexNeq";
+        case TokenType::Assign:
+            return "Assign";
+        case TokenType::Arrow:
+            return "Arrow";
+        case TokenType::LParen:
+            return "LParen";
+        case TokenType::RParen:
+            return "RParen";
+        case TokenType::LBrack:
+            return "LBrack";
+        case TokenType::RBrack:
+            return "RBrack";
+        case TokenType::LBrace:
+            return "LBrack";
+        case TokenType::RBrace:
+            return "RBrace";
+        case TokenType::Comma:
+            return "Comma";
+        case TokenType::Dot:
+            return "Dot";
+        case TokenType::Colon:
+            return "Colon";
+        case TokenType::PipeForward:
+            return "PipeForward";
+        case TokenType::PipeReceive:
+            return "PipeReceive";
+        case TokenType::Exists:
+            return "Exists";
+        case TokenType::Quote:
+            return "Quote";
+        case TokenType::StringExpr:
+            return "StringExpr";
+        case TokenType::Text:
+            return "Text";
+        case TokenType::QuestionMark:
+            return "QuestionMark";
+        case TokenType::Attribute:
+            return "Attribute";
+        default:
+            return "Illegal";
     }
 }
 
@@ -217,12 +217,12 @@ struct Position {
     uint32_t column;
 
     Position() = default;
-    Position(uint32_t line, uint32_t column) : line(line), column(column) {}
-    bool is_valid() const { return line > 0 && column > 0; }
+    Position(uint32_t line_in, uint32_t column_in) : line(line_in), column(column_in) {}
+    [[nodiscard]] bool is_valid() const { return line > 0 && column > 0; }
     bool operator<(const Position& other) const {
         return line < other.line || (line == other.line && column < other.column);
     }
-    static Position invalid() { return Position(0, 0); }
+    static Position invalid() { return {0, 0}; }
 };
 
 inline std::ostream& operator<<(std::ostream& os, const Position& pos) {
@@ -237,13 +237,13 @@ struct SourceLocation {
     std::string source;
 
     SourceLocation() = default;
-    SourceLocation(const Position& start, const Position& end)
-        : file(""), start(start), end(end), source("") {}
-    SourceLocation(std::string file,
-                   const Position& start,
-                   const Position& end,
-                   const std::string& source)
-        : file(std::move(file)), start(start), end(end), source(source) {}
+    SourceLocation(const Position& start_in, const Position& end_in)
+        : start(start_in), end(end_in) {}
+    SourceLocation(std::string file_in,
+                   const Position& start_in,
+                   const Position& end_in,
+                   std::string source_in)
+        : file(std::move(file_in)), start(start_in), end(end_in), source(std::move(source_in)) {}
 
     [[nodiscard]] bool is_valid() const { return start.is_valid() && end.is_valid(); }
     static SourceLocation _default() { return {}; }
@@ -257,7 +257,7 @@ inline std::ostream& operator<<(std::ostream& os, const SourceLocation& loc) {
 struct Comment {
     std::string text;
     Comment() = default;
-    Comment(std::string text) : text(std::move(text)) {}
+    Comment(std::string text_in) : text(std::move(text_in)) {}
 };
 
 struct Token {

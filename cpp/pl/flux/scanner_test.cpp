@@ -19,7 +19,7 @@
 #include <iostream>
 #include <memory>
 
-int main(int argc, char* argv[]) {
+int main(int /*argc*/, char* /*argv*/[]) {
     std::string flux = R"(
     import "array"
     import "math"
