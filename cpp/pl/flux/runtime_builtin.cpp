@@ -430,8 +430,16 @@ Value table_with_chunks_like(const TableValue& table, std::vector<TableChunk> ch
                                table.result_name);
 }
 
+enum class EmptyChunkPolicy {
+    Keep,
+    Drop,
+};
+
 template <typename RowFn>
-absl::StatusOr<Value> transform_rows_preserving_chunks(const TableValue& table, RowFn&& row_fn) {
+absl::StatusOr<Value> transform_rows_preserving_chunks(const TableValue& table,
+                                                       RowFn&& row_fn,
+                                                       EmptyChunkPolicy empty_policy =
+                                                           EmptyChunkPolicy::Keep) {
     std::vector<TableChunk> chunks;
     chunks.reserve(table.table_count());
     for (const auto& chunk : table.tables) {
@@ -449,7 +457,13 @@ absl::StatusOr<Value> transform_rows_preserving_chunks(const TableValue& table, 
                 next.rows.push_back(*next_row_or);
             }
         }
-        chunks.push_back(std::move(next));
+        if (next.rows.empty()) {
+            next.group_key = chunk.group_key;
+            next.columns = chunk.columns;
+        }
+        if (empty_policy == EmptyChunkPolicy::Keep || !next.rows.empty()) {
+            chunks.push_back(std::move(next));
+        }
     }
     return table_with_chunks_like(table, std::move(chunks));
 }
@@ -469,6 +483,10 @@ Value slice_table_like(const TableValue& table,
                 }
             }
         }
+        if (next.rows.empty()) {
+            next.group_key = chunk.group_key;
+            next.columns = chunk.columns;
+        }
         chunks.push_back(std::move(next));
     }
     return table_with_chunks_like(table, std::move(chunks));
@@ -478,14 +496,11 @@ std::shared_ptr<ObjectValue> materialize_group_count_row(const TableChunk& chunk
                                                          const std::string& column,
                                                          int64_t count) {
     std::vector<std::pair<std::string, Value>> properties;
-    if (!chunk.rows.empty() && chunk.rows[0] != nullptr) {
-        if (const Value* group = chunk.rows[0]->lookup("_group");
-            group != nullptr && group->type() == Value::Type::Object) {
-            for (const auto& [name, value] : group->as_object().properties) {
-                properties.emplace_back(name, value);
-            }
-            properties.emplace_back("_group", *group);
+    if (chunk.group_key != nullptr) {
+        for (const auto& [name, value] : chunk.group_key->properties) {
+            properties.emplace_back(name, value);
         }
+        properties.emplace_back("_group", Value::object(std::make_shared<ObjectValue>(*chunk.group_key)));
     }
     properties.emplace_back(column, Value::integer(count));
     return std::make_shared<ObjectValue>(std::move(properties));
@@ -2248,6 +2263,18 @@ absl::StatusOr<Value> builtin_filter(const std::vector<Value>& args) {
     if ((*fn_or)->type() != Value::Type::Function) {
         return absl::InvalidArgumentError("filter `fn` must be a function");
     }
+    auto on_empty_or = optional_string_property(**object_or, "filter", "onEmpty", "drop");
+    if (!on_empty_or.ok()) {
+        return on_empty_or.status();
+    }
+    EmptyChunkPolicy empty_policy;
+    if (*on_empty_or == "drop") {
+        empty_policy = EmptyChunkPolicy::Drop;
+    } else if (*on_empty_or == "keep") {
+        empty_policy = EmptyChunkPolicy::Keep;
+    } else {
+        return absl::InvalidArgumentError("filter `onEmpty` must be \"drop\" or \"keep\"");
+    }
 
     return transform_rows_preserving_chunks(
         **table_or, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
@@ -2262,7 +2289,8 @@ absl::StatusOr<Value> builtin_filter(const std::vector<Value>& args) {
                 return std::shared_ptr<ObjectValue>{};
             }
             return clone_row(row);
-        });
+        },
+        empty_policy);
 }
 
 absl::StatusOr<Value> builtin_map(const std::vector<Value>& args) {
