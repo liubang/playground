@@ -145,3 +145,10 @@ union(
 enrichedHealth
     |> filter(fn: (r) => r.cohort == "canary" or r.pressure == "hot")
     |> yield(name: "watchlist_focus")
+
+enrichedHealth
+    |> filter(
+        fn: (r) => r.cohort == "canary" or r.pressure == "hot",
+        onEmpty: "keep",
+    )
+    |> yield(name: "watchlist_focus_keep")
