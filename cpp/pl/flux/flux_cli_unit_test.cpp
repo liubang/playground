@@ -109,6 +109,18 @@ TEST(FluxCliTest, ExecutesSourceWithPreludeBuiltins) {
     EXPECT_TRUE(result.error.empty());
 }
 
+TEST(FluxCliTest, DisablesPreludeBuiltinsWhenRequested) {
+    FluxCliOptions options;
+    options.install_builtins = false;
+    auto env = MakeFluxCliEnvironment(options);
+
+    auto result = ExecuteFluxSource("sum([1, 2, 3])", "<test>", env, options);
+
+    EXPECT_EQ(1, result.exit_code);
+    EXPECT_TRUE(result.output.empty());
+    EXPECT_NE(std::string::npos, result.error.find("sum"));
+}
+
 TEST(FluxCliTest, ExecutesFluxFileSourceWithImportsAndPipelines) {
     auto env = MakeFluxCliEnvironment();
     auto result = ExecuteFluxSource(R"(
@@ -207,6 +219,24 @@ TEST(FluxCliTest, KeepsWatchlistFocusExampleAlignedWithOfficialFilterSemantics) 
     EXPECT_EQ(std::string::npos, result.output.find("Logical table 2\n"));
 }
 
+TEST(FluxCliTest, DemonstratesFilterOnEmptyKeepInFeatureGalleryExample) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.result_name = "watchlist_focus_keep";
+
+    auto result = ExecuteExampleScript(
+        "cpp/pl/flux/examples/feature_gallery/nested_multi_table_health.flux", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: watchlist_focus_keep\n"));
+    EXPECT_NE(std::string::npos, result.output.find("rows=2, tables=3"));
+    EXPECT_NE(std::string::npos, result.output.find("Logical table 0\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Logical table 1\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Logical table 2\n"));
+    EXPECT_NE(std::string::npos, result.output.find("(empty logical table, group={host: \"edge-2\"}"));
+}
+
 TEST(FluxCliTest, RendersKeptEmptyLogicalTablesWhenRequested) {
     auto env = MakeFluxCliEnvironment();
 
@@ -230,6 +260,7 @@ TEST(FluxCliTest, RendersKeptEmptyLogicalTablesWhenRequested) {
     EXPECT_NE(std::string::npos, result.output.find("Logical table 0\n"));
     EXPECT_NE(std::string::npos, result.output.find("Logical table 1\n"));
     EXPECT_NE(std::string::npos, result.output.find("Logical table 2\n"));
+    EXPECT_NE(std::string::npos, result.output.find("(empty logical table, group={host: \"edge-2\"}, columns=[host, _value]"));
 }
 
 TEST(FluxCliTest, EmitsEmptyLogicalTableMetadataInJsonOutput) {

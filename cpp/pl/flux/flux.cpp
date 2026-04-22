@@ -142,10 +142,6 @@ int main(int argc, char* argv[]) {
             options.list_results = true;
             continue;
         }
-        if (arg == "--annotated-csv") {
-            options.output_format = pl::FluxOutputFormat::Csv;
-            continue;
-        }
         if (arg == "--result") {
             if (i + 1 >= argc) {
                 std::cerr << arg << " requires a result name\n";

@@ -37,7 +37,7 @@ bazel build //cpp/pl/flux:flux
 - `time_math.flux`：`range`、`elapsed`、`difference`、`derivative`
 - `aggregatewindow_advanced.flux`：更完整的 `aggregateWindow` 参数组合，包括 `column`、固定时长 `offset`、自定义聚合函数、`period`、负 `period`、`timeSrc`、`timeDst`、命名时区 `location`、日历窗口 `offset`、selector 空窗口行为
 - `task_driven_rollup.flux`：`option task = {...}` 驱动的窗口查询，结合 block-body helper、对象返回、嵌套条件和多主机 rollup
-- `nested_multi_table_health.flux`：当前实现边界附近的复杂样例，组合 `findColumn -> array.*` 的嵌套派生、helper 函数、双流 `join`、二次 `join`、`union`、`pivot` 和多结果 `yield`
+- `nested_multi_table_health.flux`：当前实现边界附近的复杂样例，组合 `findColumn -> array.*` 的嵌套派生、helper 函数、双流 `join`、二次 `join`、`union`、`pivot`、多结果 `yield`，以及 `filter(onEmpty: "keep")`
 
 ## builtin 覆盖映射
 
@@ -90,6 +90,7 @@ bazel build //cpp/pl/flux:flux
 - `count()`、`first()`、`last()` 会按每张逻辑表分别计算
 - `mode: "by"` 和 `mode: "except"` 都已支持
 - `filter()` 默认遵循官方 `onEmpty: "drop"` 语义；像 `nested_multi_table_health.flux` 里的 `watchlist_focus` 这类结果，过滤空表后会直接收缩逻辑表数量
+- 同一个 example 里的 `watchlist_focus_keep` 会显式演示 `onEmpty: "keep"`，保留中间变空的逻辑表
 
 因此这个示例更适合拿来检查我们当前的 `group`、selector 和聚合语义是否与官方 Flux 保持一致。
 
