@@ -111,8 +111,8 @@ struct Attribute {
     std::string name;
     std::vector<std::shared_ptr<AttributeParam>> params;
     Attribute() = default;
-    Attribute(std::string name, const std::vector<std::shared_ptr<AttributeParam>>& params)
-        : name(std::move(name)), params(params) {}
+    Attribute(std::string name_in, const std::vector<std::shared_ptr<AttributeParam>>& params_in)
+        : name(std::move(name_in)), params(params_in) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -139,7 +139,7 @@ struct PackageClause {
     std::vector<std::shared_ptr<Attribute>> attributes;
     std::unique_ptr<Identifier> name;
     PackageClause() : name(nullptr) {}
-    PackageClause(std::unique_ptr<Identifier> name) : name(std::move(name)) {}
+    PackageClause(std::unique_ptr<Identifier> name_in) : name(std::move(name_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -149,8 +149,8 @@ struct ImportDeclaration {
     std::unique_ptr<Identifier> alias;
     std::unique_ptr<StringLit> path;
     ImportDeclaration() : alias(nullptr), path(nullptr) {}
-    ImportDeclaration(std::unique_ptr<Identifier> alias, std::unique_ptr<StringLit> path)
-        : alias(std::move(alias)), path(std::move(path)) {}
+    ImportDeclaration(std::unique_ptr<Identifier> alias_in, std::unique_ptr<StringLit> path_in)
+        : alias(std::move(alias_in)), path(std::move(path_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -170,28 +170,28 @@ struct VariableAssgn {
     std::unique_ptr<Identifier> id;
     std::unique_ptr<Expression> init;
     VariableAssgn() = default;
-    VariableAssgn(std::unique_ptr<Identifier> id, std::unique_ptr<Expression> init)
-        : id(std::move(id)), init(std::move(init)) {}
+    VariableAssgn(std::unique_ptr<Identifier> id_in, std::unique_ptr<Expression> init_in)
+        : id(std::move(id_in)), init(std::move(init_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
 struct OptionStmt {
     std::unique_ptr<Assignment> assignment;
     OptionStmt() = default;
-    OptionStmt(std::unique_ptr<Assignment> assignment) : assignment(std::move(assignment)) {}
+    OptionStmt(std::unique_ptr<Assignment> assignment_in) : assignment(std::move(assignment_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
 struct ReturnStmt {
     std::unique_ptr<Expression> argument;
     ReturnStmt() = default;
-    ReturnStmt(std::unique_ptr<Expression> argument) : argument(std::move(argument)) {}
+    ReturnStmt(std::unique_ptr<Expression> argument_in) : argument(std::move(argument_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
 struct BadStmt {
     std::string text;
-    BadStmt(std::string text) : text(std::move(text)) {}
+    BadStmt(std::string text_in) : text(std::move(text_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -200,10 +200,10 @@ struct TestCaseStmt {
     std::unique_ptr<StringLit> extends;
     std::unique_ptr<Block> block;
     TestCaseStmt() = default;
-    TestCaseStmt(std::unique_ptr<Identifier> id,
-                 std::unique_ptr<StringLit> extends,
-                 std::unique_ptr<Block> block)
-        : id(std::move(id)), extends(std::move(extends)), block(std::move(block)) {}
+    TestCaseStmt(std::unique_ptr<Identifier> id_in,
+                 std::unique_ptr<StringLit> extends_in,
+                 std::unique_ptr<Block> block_in)
+        : id(std::move(id_in)), extends(std::move(extends_in)), block(std::move(block_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -212,10 +212,10 @@ struct BuiltinStmt {
     std::unique_ptr<Identifier> id;
     std::unique_ptr<TypeExpression> ty;
     BuiltinStmt() = default;
-    BuiltinStmt(const std::vector<std::shared_ptr<Comment>>& colon,
-                std::unique_ptr<Identifier> id,
-                std::unique_ptr<TypeExpression> ty)
-        : colon(colon), id(std::move(id)), ty(std::move(ty)) {}
+    BuiltinStmt(const std::vector<std::shared_ptr<Comment>>& colon_in,
+                std::unique_ptr<Identifier> id_in,
+                std::unique_ptr<TypeExpression> ty_in)
+        : colon(colon_in), id(std::move(id_in)), ty(std::move(ty_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -241,7 +241,7 @@ struct Statement {
                                std::unique_ptr<TestCaseStmt>,
                                std::unique_ptr<BuiltinStmt>>;
     StmtT stmt;
-    Statement(Type type, StmtT stmt) : type(type), stmt(std::move(stmt)) {}
+    Statement(Type type_in, StmtT stmt_in) : type(type_in), stmt(std::move(stmt_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -250,7 +250,7 @@ struct Statement {
 struct Identifier {
     std::string name;
     Identifier() = default;
-    Identifier(std::string name) : name(std::move(name)) {}
+    Identifier(std::string name_in) : name(std::move(name_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -259,9 +259,9 @@ struct ArrayItem {
     std::unique_ptr<Expression> expression;
     std::vector<std::shared_ptr<Comment>> comma;
     ArrayItem() = default;
-    ArrayItem(std::unique_ptr<Expression> expression,
-              const std::vector<std::shared_ptr<Comment>>& comma)
-        : expression(std::move(expression)), comma(comma) {}
+    ArrayItem(std::unique_ptr<Expression> expression_in,
+              const std::vector<std::shared_ptr<Comment>>& comma_in)
+        : expression(std::move(expression_in)), comma(comma_in) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -270,10 +270,10 @@ struct ArrayExpr {
     std::vector<std::shared_ptr<ArrayItem>> elements;
     std::vector<std::shared_ptr<Comment>> rbrack;
     ArrayExpr() = default;
-    ArrayExpr(const std::vector<std::shared_ptr<Comment>>& lbrack,
-              const std::vector<std::shared_ptr<ArrayItem>>& elements,
-              const std::vector<std::shared_ptr<Comment>>& rbrack)
-        : lbrack(lbrack), elements(elements), rbrack(rbrack) {}
+    ArrayExpr(const std::vector<std::shared_ptr<Comment>>& lbrack_in,
+              const std::vector<std::shared_ptr<ArrayItem>>& elements_in,
+              const std::vector<std::shared_ptr<Comment>>& rbrack_in)
+        : lbrack(lbrack_in), elements(elements_in), rbrack(rbrack_in) {}
 
     [[nodiscard]] std::string string() const;
 };
@@ -284,10 +284,10 @@ struct DictItem {
     std::unique_ptr<Expression> val;
     std::vector<std::shared_ptr<Comment>> comma;
     DictItem() = default;
-    DictItem(std::unique_ptr<Expression> key,
-             std::unique_ptr<Expression> val,
-             const std::vector<std::shared_ptr<Comment>>& comma)
-        : key(std::move(key)), val(std::move(val)), comma(comma) {}
+    DictItem(std::unique_ptr<Expression> key_in,
+             std::unique_ptr<Expression> val_in,
+             const std::vector<std::shared_ptr<Comment>>& comma_in)
+        : key(std::move(key_in)), val(std::move(val_in)), comma(comma_in) {}
 };
 
 struct DictExpr {
@@ -295,10 +295,10 @@ struct DictExpr {
     std::vector<std::shared_ptr<DictItem>> elements;
     std::vector<std::shared_ptr<Comment>> rbrack;
     DictExpr() = default;
-    DictExpr(const std::vector<std::shared_ptr<Comment>>& lbrack,
-             const std::vector<std::shared_ptr<DictItem>>& elements,
-             const std::vector<std::shared_ptr<Comment>>& rbrack)
-        : lbrack(lbrack), elements(elements), rbrack(rbrack) {}
+    DictExpr(const std::vector<std::shared_ptr<Comment>>& lbrack_in,
+             const std::vector<std::shared_ptr<DictItem>>& elements_in,
+             const std::vector<std::shared_ptr<Comment>>& rbrack_in)
+        : lbrack(lbrack_in), elements(elements_in), rbrack(rbrack_in) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -310,12 +310,16 @@ struct FunctionExpr {
     std::unique_ptr<FunctionBody> body;
 
     FunctionExpr() = default;
-    FunctionExpr(const std::vector<std::shared_ptr<Comment>>& lparen,
-                 const std::vector<std::shared_ptr<Property>>& params,
-                 const std::vector<std::shared_ptr<Comment>>& rparen,
-                 const std::vector<std::shared_ptr<Comment>>& arrow,
-                 std::unique_ptr<FunctionBody> body)
-        : lparen(lparen), params(params), rparen(rparen), arrow(arrow), body(std::move(body)) {}
+    FunctionExpr(const std::vector<std::shared_ptr<Comment>>& lparen_in,
+                 const std::vector<std::shared_ptr<Property>>& params_in,
+                 const std::vector<std::shared_ptr<Comment>>& rparen_in,
+                 const std::vector<std::shared_ptr<Comment>>& arrow_in,
+                 std::unique_ptr<FunctionBody> body_in)
+        : lparen(lparen_in),
+          params(params_in),
+          rparen(rparen_in),
+          arrow(arrow_in),
+          body(std::move(body_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -324,10 +328,10 @@ struct LogicalExpr {
     std::unique_ptr<Expression> left;
     std::unique_ptr<Expression> right;
     LogicalExpr() = default;
-    LogicalExpr(LogicalOperator op,
-                std::unique_ptr<Expression> left,
-                std::unique_ptr<Expression> right)
-        : op(op), left(std::move(left)), right(std::move(right)) {}
+    LogicalExpr(LogicalOperator op_in,
+                std::unique_ptr<Expression> left_in,
+                std::unique_ptr<Expression> right_in)
+        : op(op_in), left(std::move(left_in)), right(std::move(right_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -343,11 +347,14 @@ struct ObjectExpr {
     std::vector<std::shared_ptr<Property>> properties;
     std::vector<std::shared_ptr<Comment>> rbrace;
     ObjectExpr() = default;
-    ObjectExpr(const std::vector<std::shared_ptr<Comment>>& lbrace,
-               std::unique_ptr<WithSource> with,
-               const std::vector<std::shared_ptr<Property>>& properties,
-               const std::vector<std::shared_ptr<Comment>>& rbrace)
-        : lbrace(lbrace), with(std::move(with)), properties(properties), rbrace(rbrace) {}
+    ObjectExpr(const std::vector<std::shared_ptr<Comment>>& lbrace_in,
+               std::unique_ptr<WithSource> with_in,
+               const std::vector<std::shared_ptr<Property>>& properties_in,
+               const std::vector<std::shared_ptr<Comment>>& rbrace_in)
+        : lbrace(lbrace_in),
+          with(std::move(with_in)),
+          properties(properties_in),
+          rbrace(rbrace_in) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -357,11 +364,14 @@ struct MemberExpr {
     std::unique_ptr<PropertyKey> property;
     std::vector<std::shared_ptr<Comment>> rbrack;
     MemberExpr() = default;
-    MemberExpr(std::unique_ptr<Expression> expr,
-               const std::vector<std::shared_ptr<Comment>>& lbrack,
-               std::unique_ptr<PropertyKey> property,
-               const std::vector<std::shared_ptr<Comment>>& rbrack)
-        : object(std::move(expr)), lbrack(lbrack), property(std::move(property)), rbrack(rbrack) {}
+    MemberExpr(std::unique_ptr<Expression> expr_in,
+               const std::vector<std::shared_ptr<Comment>>& lbrack_in,
+               std::unique_ptr<PropertyKey> property_in,
+               const std::vector<std::shared_ptr<Comment>>& rbrack_in)
+        : object(std::move(expr_in)),
+          lbrack(lbrack_in),
+          property(std::move(property_in)),
+          rbrack(rbrack_in) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -372,11 +382,14 @@ struct IndexExpr {
     std::vector<std::shared_ptr<Comment>> rbrack;
 
     IndexExpr() = default;
-    IndexExpr(std::unique_ptr<Expression> array,
-              const std::vector<std::shared_ptr<Comment>>& lbrack,
-              std::unique_ptr<Expression> index,
-              const std::vector<std::shared_ptr<Comment>>& rbrack)
-        : array(std::move(array)), lbrack(lbrack), index(std::move(index)), rbrack(rbrack) {}
+    IndexExpr(std::unique_ptr<Expression> array_in,
+              const std::vector<std::shared_ptr<Comment>>& lbrack_in,
+              std::unique_ptr<Expression> index_in,
+              const std::vector<std::shared_ptr<Comment>>& rbrack_in)
+        : array(std::move(array_in)),
+          lbrack(lbrack_in),
+          index(std::move(index_in)),
+          rbrack(rbrack_in) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -385,8 +398,10 @@ struct BinaryExpr {
     std::unique_ptr<Expression> left;
     std::unique_ptr<Expression> right;
     BinaryExpr() = default;
-    BinaryExpr(Operator op, std::unique_ptr<Expression> left, std::unique_ptr<Expression> right)
-        : op(op), left(std::move(left)), right(std::move(right)) {}
+    BinaryExpr(Operator op_in,
+               std::unique_ptr<Expression> left_in,
+               std::unique_ptr<Expression> right_in)
+        : op(op_in), left(std::move(left_in)), right(std::move(right_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -394,8 +409,8 @@ struct UnaryExpr {
     Operator op;
     std::unique_ptr<Expression> argument;
     UnaryExpr() = default;
-    UnaryExpr(Operator op, std::unique_ptr<Expression> argument)
-        : op(op), argument(std::move(argument)) {}
+    UnaryExpr(Operator op_in, std::unique_ptr<Expression> argument_in)
+        : op(op_in), argument(std::move(argument_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -403,8 +418,8 @@ struct PipeExpr {
     std::unique_ptr<Expression> argument;
     std::unique_ptr<CallExpr> call;
     PipeExpr() = default;
-    PipeExpr(std::unique_ptr<Expression> argument, std::unique_ptr<CallExpr> call)
-        : argument(std::move(argument)), call(std::move(call)) {}
+    PipeExpr(std::unique_ptr<Expression> argument_in, std::unique_ptr<CallExpr> call_in)
+        : argument(std::move(argument_in)), call(std::move(call_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -414,11 +429,14 @@ struct CallExpr {
     std::vector<std::shared_ptr<Expression>> arguments;
     std::vector<std::shared_ptr<Comment>> rparen;
     CallExpr() = default;
-    CallExpr(std::unique_ptr<Expression> callee,
-             const std::vector<std::shared_ptr<Comment>>& lparen,
-             const std::vector<std::shared_ptr<Expression>>& arguments,
-             const std::vector<std::shared_ptr<Comment>>& rparen)
-        : callee(std::move(callee)), lparen(lparen), arguments(arguments), rparen(rparen) {}
+    CallExpr(std::unique_ptr<Expression> callee_in,
+             const std::vector<std::shared_ptr<Comment>>& lparen_in,
+             const std::vector<std::shared_ptr<Expression>>& arguments_in,
+             const std::vector<std::shared_ptr<Comment>>& rparen_in)
+        : callee(std::move(callee_in)),
+          lparen(lparen_in),
+          arguments(arguments_in),
+          rparen(rparen_in) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -435,7 +453,8 @@ struct ConditionalExpr {
 struct StringExpr {
     std::vector<std::shared_ptr<StringExprPart>> parts;
     StringExpr() = default;
-    StringExpr(std::vector<std::shared_ptr<StringExprPart>> parts) : parts(std::move(parts)) {}
+    StringExpr(std::vector<std::shared_ptr<StringExprPart>> parts_in)
+        : parts(std::move(parts_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -449,7 +468,7 @@ struct StringExprPart {
     Type type;
     StringExprT part;
     StringExprPart() = default;
-    StringExprPart(Type type, StringExprT part) : type(type), part(std::move(part)) {}
+    StringExprPart(Type type_in, StringExprT part_in) : type(type_in), part(std::move(part_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -461,7 +480,8 @@ struct TextPart {
 struct InterpolatedPart {
     std::unique_ptr<Expression> expression;
     InterpolatedPart() = default;
-    InterpolatedPart(std::unique_ptr<Expression> expression) : expression(std::move(expression)) {}
+    InterpolatedPart(std::unique_ptr<Expression> expression_in)
+        : expression(std::move(expression_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -470,73 +490,74 @@ struct ParenExpr {
     std::unique_ptr<Expression> expression;
     std::vector<std::shared_ptr<Comment>> rparen;
     ParenExpr() = default;
-    ParenExpr(const std::vector<std::shared_ptr<Comment>>& lparen,
-              std::unique_ptr<Expression> expr,
-              const std::vector<std::shared_ptr<Comment>>& rparen)
-        : lparen(lparen), expression(std::move(expr)), rparen(rparen) {}
+    ParenExpr(const std::vector<std::shared_ptr<Comment>>& lparen_in,
+              std::unique_ptr<Expression> expr_in,
+              const std::vector<std::shared_ptr<Comment>>& rparen_in)
+        : lparen(lparen_in), expression(std::move(expr_in)), rparen(rparen_in) {}
     [[nodiscard]] std::string string() const;
 };
 
 struct IntegerLit {
     int64_t value;
     IntegerLit() = default;
-    IntegerLit(int64_t value) : value(value) {}
+    IntegerLit(int64_t value_in) : value(value_in) {}
     [[nodiscard]] std::string string() const;
 };
 
 struct FloatLit {
     double value;
     FloatLit() = default;
-    FloatLit(double value) : value(value) {}
+    FloatLit(double value_in) : value(value_in) {}
     [[nodiscard]] std::string string() const;
 };
 
 struct StringLit {
     std::string value;
     StringLit() = default;
-    StringLit(std::string value) : value(std::move(value)) {}
+    StringLit(std::string value_in) : value(std::move(value_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
 struct Duration {
     int64_t magnitude;
     std::string unit;
-    Duration(int64_t magnitude, std::string unit) : magnitude(magnitude), unit(std::move(unit)) {}
+    Duration(int64_t magnitude_in, std::string unit_in)
+        : magnitude(magnitude_in), unit(std::move(unit_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
 struct DurationLit {
     std::vector<std::shared_ptr<Duration>> values;
     DurationLit() = default;
-    DurationLit(const std::vector<std::shared_ptr<Duration>>& values) : values(values) {}
+    DurationLit(const std::vector<std::shared_ptr<Duration>>& values_in) : values(values_in) {}
     [[nodiscard]] std::string string() const;
 };
 
 struct UintLit {
     uint64_t value;
     UintLit() : value(0) {}
-    UintLit(uint64_t value) : value(value) {}
+    UintLit(uint64_t value_in) : value(value_in) {}
     [[nodiscard]] std::string string() const;
 };
 
 struct BooleanLit {
     bool value;
     BooleanLit() : value(false) {}
-    BooleanLit(bool value) : value(value) {}
+    BooleanLit(bool value_in) : value(value_in) {}
     [[nodiscard]] std::string string() const;
 };
 
 struct DateTimeLit {
     std::tm value;
     DateTimeLit() = default;
-    DateTimeLit(const std::tm& value) : value(value) {}
+    DateTimeLit(const std::tm& value_in) : value(value_in) {}
     [[nodiscard]] std::string string() const;
 };
 
 struct RegexpLit {
     std::string value;
     RegexpLit() = default;
-    RegexpLit(std::string value) : value(std::move(value)) {}
+    RegexpLit(std::string value_in) : value(std::move(value_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -547,7 +568,7 @@ struct PipeLit {
 struct LabelLit {
     std::string value;
     LabelLit() = default;
-    LabelLit(std::string value) : value(std::move(value)) {}
+    LabelLit(std::string value_in) : value(std::move(value_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -555,8 +576,8 @@ struct BadExpr {
     std::string text;
     std::unique_ptr<Expression> expression;
     BadExpr() = default;
-    BadExpr(std::string text, std::unique_ptr<Expression> expression)
-        : text(std::move(text)), expression(std::move(expression)) {}
+    BadExpr(std::string text_in, std::unique_ptr<Expression> expression_in)
+        : text(std::move(text_in)), expression(std::move(expression_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -620,7 +641,7 @@ struct Expression {
     SourceLocation loc;
     ExprT expr;
     Expression() = default;
-    Expression(Type t, ExprT expr) : type(t), expr(std::move(expr)) {}
+    Expression(Type type_in, ExprT expr_in) : type(type_in), expr(std::move(expr_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -741,8 +762,8 @@ struct MemberAssgn {
     std::unique_ptr<MemberExpr> member;
     std::unique_ptr<Expression> init;
     MemberAssgn() = default;
-    MemberAssgn(std::unique_ptr<MemberExpr> member, std::unique_ptr<Expression> init)
-        : member(std::move(member)), init(std::move(init)) {}
+    MemberAssgn(std::unique_ptr<MemberExpr> member_in, std::unique_ptr<Expression> init_in)
+        : member(std::move(member_in)), init(std::move(init_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -753,7 +774,8 @@ struct Assignment {
     AssiT value;
 
     Assignment() = default;
-    Assignment(Assignment::Type type, AssiT value) : type(type), value(std::move(value)) {}
+    Assignment(Assignment::Type type_in, AssiT value_in)
+        : type(type_in), value(std::move(value_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -766,11 +788,14 @@ struct Property {
     std::unique_ptr<Expression> value;
     std::vector<std::shared_ptr<Comment>> comma;
     Property() = default;
-    Property(std::unique_ptr<PropertyKey> key,
-             const std::vector<std::shared_ptr<Comment>>& separator,
-             std::unique_ptr<Expression> value,
-             const std::vector<std::shared_ptr<Comment>>& comma)
-        : key(std::move(key)), separator(separator), value(std::move(value)), comma(comma) {}
+    Property(std::unique_ptr<PropertyKey> key_in,
+             const std::vector<std::shared_ptr<Comment>>& separator_in,
+             std::unique_ptr<Expression> value_in,
+             const std::vector<std::shared_ptr<Comment>>& comma_in)
+        : key(std::move(key_in)),
+          separator(separator_in),
+          value(std::move(value_in)),
+          comma(comma_in) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -782,7 +807,8 @@ struct PropertyKey {
     PropKeyT key;
 
     PropertyKey() = default;
-    PropertyKey(PropertyKey::Type type, PropKeyT key) : type(type), key(std::move(key)) {}
+    PropertyKey(PropertyKey::Type type_in, PropKeyT key_in)
+        : type(type_in), key(std::move(key_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -799,10 +825,10 @@ struct Block {
     Block(Block&&) = default;
     Block& operator=(const Block&) = default;
     Block& operator=(Block&&) = default;
-    Block(const std::vector<std::shared_ptr<Comment>>& lbrace,
-          const std::vector<std::shared_ptr<Statement>>& body,
-          const std::vector<std::shared_ptr<Comment>>& rbrace)
-        : lbrace(lbrace), body(body), rbrace(rbrace) {}
+    Block(const std::vector<std::shared_ptr<Comment>>& lbrace_in,
+          const std::vector<std::shared_ptr<Statement>>& body_in,
+          const std::vector<std::shared_ptr<Comment>>& rbrace_in)
+        : lbrace(lbrace_in), body(body_in), rbrace(rbrace_in) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -811,7 +837,7 @@ struct FunctionBody {
     using FuncT = std::variant<std::unique_ptr<Block>, std::unique_ptr<Expression>>;
     Type type;
     FuncT body;
-    FunctionBody(Type t, FuncT body) : type(t), body(std::move(body)) {}
+    FunctionBody(Type type_in, FuncT body_in) : type(type_in), body(std::move(body_in)) {}
     [[nodiscard]] std::string string() const;
 };
 
@@ -820,39 +846,39 @@ struct FunctionBody {
 struct TvarType {
     std::unique_ptr<Identifier> name;
     TvarType() = default;
-    TvarType(std::unique_ptr<Identifier> name) : name(std::move(name)) {}
+    TvarType(std::unique_ptr<Identifier> name_in) : name(std::move(name_in)) {}
 };
 
 struct NamedType {
     std::unique_ptr<Identifier> name;
     NamedType() = default;
-    NamedType(std::unique_ptr<Identifier> name) : name(std::move(name)) {}
+    NamedType(std::unique_ptr<Identifier> name_in) : name(std::move(name_in)) {}
 };
 
 struct ArrayType {
     std::unique_ptr<MonoType> element;
     ArrayType() = default;
-    ArrayType(std::unique_ptr<MonoType> element) : element(std::move(element)) {}
+    ArrayType(std::unique_ptr<MonoType> element_in) : element(std::move(element_in)) {}
 };
 
 struct StreamType {
     std::unique_ptr<MonoType> element;
     StreamType() = default;
-    StreamType(std::unique_ptr<MonoType> element) : element(std::move(element)) {}
+    StreamType(std::unique_ptr<MonoType> element_in) : element(std::move(element_in)) {}
 };
 
 struct VectorType {
     std::unique_ptr<MonoType> element;
     VectorType() = default;
-    VectorType(std::unique_ptr<MonoType> element) : element(std::move(element)) {}
+    VectorType(std::unique_ptr<MonoType> element_in) : element(std::move(element_in)) {}
 };
 
 struct DictType {
     std::unique_ptr<MonoType> key;
     std::unique_ptr<MonoType> val;
     DictType() = default;
-    DictType(std::unique_ptr<MonoType> key, std::unique_ptr<MonoType> val)
-        : key(std::move(key)), val(std::move(val)) {}
+    DictType(std::unique_ptr<MonoType> key_in, std::unique_ptr<MonoType> val_in)
+        : key(std::move(key_in)), val(std::move(val_in)) {}
 };
 
 struct DynamicType {};
@@ -861,9 +887,9 @@ struct FunctionType {
     std::vector<std::shared_ptr<ParameterType>> parameters;
     std::unique_ptr<MonoType> monotype;
     FunctionType() = default;
-    FunctionType(const std::vector<std::shared_ptr<ParameterType>>& parameters,
-                 std::unique_ptr<MonoType> monotype)
-        : parameters(parameters), monotype(std::move(monotype)) {}
+    FunctionType(const std::vector<std::shared_ptr<ParameterType>>& parameters_in,
+                 std::unique_ptr<MonoType> monotype_in)
+        : parameters(parameters_in), monotype(std::move(monotype_in)) {}
 };
 
 struct PropertyType {
@@ -871,26 +897,26 @@ struct PropertyType {
     std::unique_ptr<Identifier> name;
     std::unique_ptr<MonoType> monotype;
     PropertyType() = default;
-    PropertyType(std::unique_ptr<Identifier> name, std::unique_ptr<MonoType> monotype)
-        : name(std::move(name)), monotype(std::move(monotype)) {}
+    PropertyType(std::unique_ptr<Identifier> name_in, std::unique_ptr<MonoType> monotype_in)
+        : name(std::move(name_in)), monotype(std::move(monotype_in)) {}
 };
 
 struct RecordType {
     std::unique_ptr<Identifier> tvar;
     std::vector<std::shared_ptr<PropertyType>> properties;
     RecordType() = default;
-    RecordType(std::unique_ptr<Identifier> tvar,
-               const std::vector<std::shared_ptr<PropertyType>>& properties)
-        : tvar(std::move(tvar)), properties(properties) {}
+    RecordType(std::unique_ptr<Identifier> tvar_in,
+               const std::vector<std::shared_ptr<PropertyType>>& properties_in)
+        : tvar(std::move(tvar_in)), properties(properties_in) {}
 };
 
 struct TypeExpression {
     std::unique_ptr<MonoType> monotype;
     std::vector<std::shared_ptr<TypeConstraint>> constraints;
     TypeExpression() = default;
-    TypeExpression(std::unique_ptr<MonoType> monotype,
-                   const std::vector<std::shared_ptr<TypeConstraint>>& constraints)
-        : monotype(std::move(monotype)), constraints(constraints) {}
+    TypeExpression(std::unique_ptr<MonoType> monotype_in,
+                   const std::vector<std::shared_ptr<TypeConstraint>>& constraints_in)
+        : monotype(std::move(monotype_in)), constraints(constraints_in) {}
 };
 
 struct TypeConstraint {
@@ -898,9 +924,9 @@ struct TypeConstraint {
     std::unique_ptr<Identifier> tvar;
     std::vector<std::shared_ptr<Identifier>> kinds;
     TypeConstraint() = default;
-    TypeConstraint(std::unique_ptr<Identifier> tvar,
-                   const std::vector<std::shared_ptr<Identifier>>& kinds)
-        : tvar(std::move(tvar)), kinds(kinds) {}
+    TypeConstraint(std::unique_ptr<Identifier> tvar_in,
+                   const std::vector<std::shared_ptr<Identifier>>& kinds_in)
+        : tvar(std::move(tvar_in)), kinds(kinds_in) {}
 };
 
 struct MonoType {
@@ -931,7 +957,7 @@ struct MonoType {
     MonoT value;
 
     MonoType() = default;
-    MonoType(MonoType::Type type, MonoT value) : type(type), value(std::move(value)) {}
+    MonoType(MonoType::Type type_in, MonoT value_in) : type(type_in), value(std::move(value_in)) {}
 };
 
 struct Required {
@@ -967,7 +993,8 @@ struct ParameterType {
     ParamT value;
 
     ParameterType() = default;
-    ParameterType(ParameterType::Type type, ParamT value) : type(type), value(std::move(value)) {}
+    ParameterType(ParameterType::Type type_in, ParamT value_in)
+        : type(type_in), value(std::move(value_in)) {}
 };
 
 } // namespace pl
