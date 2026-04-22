@@ -169,6 +169,8 @@ struct ObjectValue {
 
 struct TableChunk {
     std::vector<std::shared_ptr<ObjectValue>> rows;
+    std::shared_ptr<ObjectValue> group_key;
+    std::vector<std::string> columns;
 
     TableChunk() = default;
     explicit TableChunk(std::vector<std::shared_ptr<ObjectValue>> in_rows)

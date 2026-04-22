@@ -66,6 +66,9 @@ std::vector<std::string> collect_table_columns(const TableValue& table) {
 }
 
 std::vector<std::string> collect_chunk_columns(const TableChunk& chunk) {
+    if (!chunk.columns.empty()) {
+        return chunk.columns;
+    }
     std::vector<std::string> columns;
     std::unordered_set<std::string> seen;
     for (const auto& row : chunk.rows) {
@@ -82,18 +85,6 @@ std::vector<std::string> collect_chunk_columns(const TableChunk& chunk) {
     return columns;
 }
 
-bool table_has_column(const TableValue& table, std::string_view name) {
-    for (const auto& row : table.rows) {
-        if (row == nullptr) {
-            continue;
-        }
-        if (row->lookup(std::string(name)) != nullptr) {
-            return true;
-        }
-    }
-    return false;
-}
-
 std::vector<std::string> visible_table_columns(const TableValue& table) {
     auto columns = collect_table_columns(table);
     columns.erase(std::remove(columns.begin(), columns.end(), "_group"), columns.end());
@@ -102,26 +93,15 @@ std::vector<std::string> visible_table_columns(const TableValue& table) {
 
 std::string scalar_cell_text(const Value& value);
 
-std::unordered_set<std::string> collect_group_columns(const TableValue& table) {
+std::unordered_set<std::string> collect_group_columns(const TableChunk& chunk) {
     std::unordered_set<std::string> group_columns;
-    for (const auto& row : table.rows) {
-        if (row == nullptr) {
-            continue;
-        }
-        const Value* group_value = row->lookup("_group");
-        if (group_value == nullptr || group_value->type() != Value::Type::Object) {
-            continue;
-        }
-        for (const auto& [name, value] : group_value->as_object().properties) {
+    if (chunk.group_key != nullptr) {
+        for (const auto& [name, value] : chunk.group_key->properties) {
             (void)value;
             group_columns.insert(name);
         }
+        return group_columns;
     }
-    return group_columns;
-}
-
-std::unordered_set<std::string> collect_group_columns(const TableChunk& chunk) {
-    std::unordered_set<std::string> group_columns;
     for (const auto& row : chunk.rows) {
         if (row == nullptr) {
             continue;
@@ -139,6 +119,9 @@ std::unordered_set<std::string> collect_group_columns(const TableChunk& chunk) {
 }
 
 bool chunk_has_column(const TableChunk& chunk, std::string_view name) {
+    if (std::find(chunk.columns.begin(), chunk.columns.end(), std::string(name)) != chunk.columns.end()) {
+        return true;
+    }
     for (const auto& row : chunk.rows) {
         if (row == nullptr) {
             continue;
@@ -151,30 +134,13 @@ bool chunk_has_column(const TableChunk& chunk, std::string_view name) {
 }
 
 std::optional<std::string> shared_column_value(const TableChunk& chunk, const std::string& column) {
-    std::optional<std::string> shared;
-    for (const auto& row : chunk.rows) {
-        if (row == nullptr) {
-            continue;
-        }
-        const Value* value = row->lookup(column);
-        if (value == nullptr) {
-            continue;
-        }
-        const std::string current = scalar_cell_text(*value);
-        if (!shared.has_value()) {
-            shared = current;
-            continue;
-        }
-        if (*shared != current) {
-            return std::nullopt;
+    if (chunk.rows.empty() && chunk.group_key != nullptr) {
+        if (const Value* value = chunk.group_key->lookup(column); value != nullptr) {
+            return scalar_cell_text(*value);
         }
     }
-    return shared;
-}
-
-std::optional<std::string> shared_column_value(const TableValue& table, const std::string& column) {
     std::optional<std::string> shared;
-    for (const auto& row : table.rows) {
+    for (const auto& row : chunk.rows) {
         if (row == nullptr) {
             continue;
         }
@@ -319,6 +285,19 @@ void append_json_table(JsonBuilder& builder, const TableValue& table) {
         }
         builder.start_object();
         bool first_chunk_field = true;
+        append_json_field_name(builder, "columns", first_chunk_field);
+        builder.start_array();
+        for (size_t column_index = 0; column_index < chunk.columns.size(); ++column_index) {
+            if (column_index > 0) {
+                builder.append_comma();
+            }
+            builder.append(chunk.columns[column_index]);
+        }
+        builder.end_array();
+        if (chunk.group_key != nullptr) {
+            append_json_field_name(builder, "groupKey", first_chunk_field);
+            append_json_object(builder, *chunk.group_key);
+        }
         append_json_field_name(builder, "rows", first_chunk_field);
         builder.start_array();
         bool first_chunk_row = true;

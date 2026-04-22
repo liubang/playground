@@ -84,8 +84,8 @@
 | AST JSON dump | 支持 | `dump_ast_json(const File&)` 和 `flux ast --json` |
 | 命令行 AST dump 工具 | 支持 | `bazel build //cpp/pl/flux:flux` 后可用 `flux ast` |
 | 命令行运行时执行 | 部分支持 | `flux -e`、`flux path/to/query.flux` 和共享环境 REPL 可用；未实现的执行特性仍会在运行时报错 |
-| CLI 结果展示 | 部分支持 | 标量表达式仍输出紧凑值；查询脚本会输出命名结果块和逻辑表，已能显示多表信息，但与官方 Influx 结果集格式仍未完全对齐 |
-| 结构化结果输出 | 部分支持 | CLI 支持 `--list-results`、`--output-format human|csv|json`、`--result <name>`；CSV 会按逻辑表输出注解块并复用 `result` / `table` 列，JSON 会暴露结果名和逻辑表元数据，但官方结果流保真度仍未完全补齐 |
+| CLI 结果展示 | 部分支持 | 标量表达式仍输出紧凑值；查询脚本会输出命名结果块和逻辑表，已能显示多表信息和显式保留的空逻辑表，但与官方 Influx 结果集格式仍未完全对齐 |
+| 结构化结果输出 | 部分支持 | CLI 支持 `--list-results`、`--output-format human|csv|json`、`--result <name>`；CSV 会按逻辑表输出注解块并复用 `result` / `table` 列，JSON 会暴露结果名、逻辑表列信息和 group key 元数据，但官方结果流保真度仍未完全补齐 |
 | 解析器演示二进制 | 支持 | `parser_test` 已使用树形 dump |
 | 解析器单测 | 支持 | 覆盖主路径与 dump 输出 |
 | scanner 单测 | 支持 | 覆盖注释、正则模式和 unread 行为 |

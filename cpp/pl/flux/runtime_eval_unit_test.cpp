@@ -752,6 +752,93 @@ TEST(RuntimeEvalTest, EvaluatesSortGroupCountFirstAndLastBuiltins) {
     EXPECT_EQ("3", last->as_table().rows[1]->lookup("_value")->string());
 }
 
+TEST(RuntimeEvalTest, FilterDropsEmptyLogicalTablesByDefault) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {host: "edge-1", _value: 95.0},
+                {host: "edge-2", _value: 60.0},
+                {host: "edge-3", _value: 85.0},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> filter(fn: (r) => r._value >= 80.0)
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    ASSERT_EQ(2, result->as_table().table_count());
+    EXPECT_EQ("\"edge-1\"", result->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("\"edge-3\"", result->as_table().rows[1]->lookup("host")->string());
+}
+
+TEST(RuntimeEvalTest, FilterCanKeepEmptyLogicalTablesExplicitly) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {host: "edge-1", _value: 95.0},
+                {host: "edge-2", _value: 60.0},
+                {host: "edge-3", _value: 85.0},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> filter(fn: (r) => r._value >= 80.0, onEmpty: "keep")
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    ASSERT_EQ(3, result->as_table().table_count());
+    ASSERT_EQ(3, result->as_table().tables.size());
+    EXPECT_TRUE(result->as_table().tables[1].rows.empty());
+    ASSERT_NE(nullptr, result->as_table().tables[1].group_key);
+    EXPECT_EQ("\"edge-2\"",
+              result->as_table().tables[1].group_key->lookup("host")->string());
+}
+
+TEST(RuntimeEvalTest, CountPreservesKeptEmptyLogicalTablesAsZeroRows) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {host: "edge-1", _value: 95.0},
+                {host: "edge-2", _value: 60.0},
+                {host: "edge-3", _value: 85.0},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> filter(fn: (r) => r._value >= 80.0, onEmpty: "keep")
+            |> count(column: "_value")
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(3, result->as_table().rows.size());
+    ASSERT_EQ(3, result->as_table().table_count());
+    EXPECT_EQ("\"edge-1\"", result->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("1", result->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("\"edge-2\"", result->as_table().rows[1]->lookup("host")->string());
+    EXPECT_EQ("0", result->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ("{host: \"edge-2\"}", result->as_table().rows[1]->lookup("_group")->string());
+    EXPECT_EQ("\"edge-3\"", result->as_table().rows[2]->lookup("host")->string());
+    EXPECT_EQ("1", result->as_table().rows[2]->lookup("_value")->string());
+}
+
 TEST(RuntimeEvalTest, EvaluatesUnionAndJoinBuiltins) {
     Environment env;
     BuiltinRegistry::Install(env);
