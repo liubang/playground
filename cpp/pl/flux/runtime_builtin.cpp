@@ -364,16 +364,6 @@ std::shared_ptr<ObjectValue> clone_row(const ObjectValue& row) {
     return std::make_shared<ObjectValue>(row);
 }
 
-void upsert_property_in_place(ObjectValue& object, const std::string& key, Value value) {
-    for (auto& [name, current] : object.properties) {
-        if (name == key) {
-            current = std::move(value);
-            return;
-        }
-    }
-    object.properties.emplace_back(key, std::move(value));
-}
-
 Value object_with_upserted_property(const ObjectValue& object,
                                     const std::string& key,
                                     Value value) {
@@ -988,6 +978,23 @@ struct JoinChunkIndex {
     std::vector<std::string> columns;
     std::unordered_map<std::string, std::vector<const ObjectValue*>> rows_by_key;
 };
+
+struct PivotOutputRow {
+    std::shared_ptr<ObjectValue> row;
+    std::unordered_map<std::string, size_t> property_indexes;
+};
+
+void upsert_property_with_index(PivotOutputRow& output_row,
+                                const std::string& key,
+                                Value value) {
+    const auto existing = output_row.property_indexes.find(key);
+    if (existing != output_row.property_indexes.end()) {
+        output_row.row->properties[existing->second].second = std::move(value);
+        return;
+    }
+    output_row.property_indexes.emplace(key, output_row.row->properties.size());
+    output_row.row->properties.emplace_back(key, std::move(value));
+}
 
 std::shared_ptr<ObjectValue> join_rows(const std::string& left_name,
                                        const ObjectValue& left,
@@ -2727,7 +2734,11 @@ absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
         TableChunk next;
         next.group_key = chunk.group_key;
         std::unordered_map<std::string, size_t> row_indexes;
+        std::unordered_map<std::string, std::string> pivot_name_cache;
+        std::vector<PivotOutputRow> output_rows;
         row_indexes.reserve(chunk.rows.size());
+        pivot_name_cache.reserve(chunk.rows.size());
+        output_rows.reserve(chunk.rows.size());
         next.rows.reserve(chunk.rows.size());
         for (const auto& row : chunk.rows) {
             if (row == nullptr) {
@@ -2739,10 +2750,13 @@ absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
                 row_index = existing->second;
             } else {
                 std::vector<std::pair<std::string, Value>> props;
-                props.reserve(row->properties.size());
+                props.reserve(row->properties.size() + std::max<size_t>(1, pivot_name_cache.size()));
+                PivotOutputRow output_state;
+                output_state.property_indexes.reserve(props.capacity());
                 for (const auto& column : *row_key_or) {
                     if (const Value* value = row->lookup(column); value != nullptr) {
                         props.emplace_back(column, *value);
+                        output_state.property_indexes.emplace(column, props.size() - 1);
                     }
                 }
                 for (const auto& [key, value] : row->properties) {
@@ -2751,9 +2765,13 @@ absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
                         continue;
                     }
                     props.emplace_back(key, value);
+                    output_state.property_indexes.emplace(key, props.size() - 1);
                 }
-                row_index = next.rows.size();
-                next.rows.push_back(std::make_shared<ObjectValue>(std::move(props)));
+                auto output_row = std::make_shared<ObjectValue>(std::move(props));
+                output_state.row = output_row;
+                row_index = output_rows.size();
+                next.rows.push_back(output_row);
+                output_rows.push_back(std::move(output_state));
                 row_indexes.emplace(identity, row_index);
             }
 
@@ -2761,8 +2779,12 @@ absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
             if (value == nullptr) {
                 continue;
             }
-            const std::string pivoted_name = pivot_column_name(*row, *column_key_or);
-            upsert_property_in_place(*next.rows[row_index], pivoted_name, *value);
+            const std::string pivot_name_key = row_identity_key(*row, *column_key_or);
+            auto [pivot_name_it, inserted] = pivot_name_cache.try_emplace(pivot_name_key);
+            if (inserted) {
+                pivot_name_it->second = pivot_column_name(*row, *column_key_or);
+            }
+            upsert_property_with_index(output_rows[row_index], pivot_name_it->second, *value);
         }
         chunks.push_back(std::move(next));
     }
