@@ -8,6 +8,7 @@
 - 一组面向查询场景的内存内 builtins，可运行常见的 Flux 管道
 
 如果你想看逐项能力清单，请直接查看 [SUPPORT_MATRIX.md](./SUPPORT_MATRIX.md)。
+后续迭代默认遵循 [CLAUDE.md](/Volumes/workspace/liubang/playground/cpp/pl/flux/CLAUDE.md) 中定义的流程、测试、benchmark、examples 校验和文档同步规则。
 
 ## 构建
 
@@ -300,6 +301,7 @@ bazel test //cpp/pl/flux:parser_unit_test --test_output=all
 - 顶层 `builtin` 声明
 - 包与导入元数据处理
 - 通过 `flux` 进行命令行执行、文件执行和 REPL 交互
+- CLI 单测会执行所有已检入的 `.flux` examples，确保 sample 和当前实现不会悄悄漂移
 - `from |> range |> filter |> map` 以及 `limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`count`、`first`、`last`、`union`、轻量 `join`、首版 `aggregateWindow`、Flux 风格 `csv.from`，以及 `array.concat` / `array.filter` / `array.map` / `array.contains` / `array.reduce` / `array.any` / `array.all`
 - 树形 dump / JSON dump
 
@@ -323,7 +325,7 @@ bazel test //cpp/pl/flux:parser_unit_test --test_output=all
 - 会根据 group key 重新分表，而不是只打标签
 - 支持 `mode: "by"` 与 `mode: "except"`
 - `columns: []` 可以把数据 ungroup 成单个逻辑表
-- 下游 `sort`、`distinct`、`count`、`first`、`last` 等算子都会按逻辑表逐表执行
+- 下游 `sort`、`distinct`、`count`、`first`、`last`，以及 `filter` / `map` / `limit` / `tail` / `keep` / `drop` / `rename` / `duplicate` / `set` / `reduce` 等算子都会按逻辑表逐表执行
 
 运行时仍然会在每行上保留 `_group` 对象，目的是让 CSV 输出、调试和某些辅助逻辑更容易观察 group key；但真实语义已经由多表结构驱动，而不是依赖 `_group` 这个附加字段本身。
 
@@ -379,7 +381,7 @@ CLI 基于这份结果列表提供三种输出模式：
 - 窗口版 `count`
 - selector 风格 `first` / `last` 的空窗口丢弃行为
 
-窗口输出现在会重新按 group key 划分为多张逻辑表，这样后续再接 `first` / `last` / `count` / `sort` 等操作时，行为会更接近官方 Flux。
+窗口输出现在会同时保留逻辑表边界和 group key，不会再把不同逻辑表里同名的 group 悄悄合并；这样后续再接 `first` / `last` / `count` / `sort` 等操作时，行为会更接近官方 Flux。
 
 尚未完成的点主要包括：
 
@@ -394,7 +396,7 @@ CLI 基于这份结果列表提供三种输出模式：
 - 数组与对象
 - `{base with ...}` 形式的基础 record update
 - 成员与索引访问
-- 一元 `not`、一元 `-`、`exists`
+- 一元 `not`、一元 `-`、`exists`，其中一元 `-` 也支持 duration 字面量，例如 `range(start: -1h)`
 - 算术 / 比较 / 逻辑表达式
 - 条件表达式
 - 字符串插值

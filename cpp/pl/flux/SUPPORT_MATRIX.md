@@ -105,7 +105,7 @@
 | builtin 注册表 / stdlib 执行 | 部分支持 | 当前已有一批可调用 builtin：`len`、`string`、`contains`、`sum`、`mean`、`min`、`max`、`from`、`array.from`、`array.concat`、`array.filter`、`array.map`、`array.contains`、`array.reduce`、`array.any`、`array.all`、`csv.from`、`columns`、`keys`、`findColumn`、`findRecord`、`range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`distinct`、`count`、`first`、`last`、`union`、`join`、`aggregateWindow`、`yield`；顶层 `builtin` 声明可绑定已知 builtin 或占位 callable；`import "array"` / `import "csv"` 会分别绑定包含这些入口的 package 对象；但完整 Flux 标准库仍远未实现 |
 | `join()` 语义 | 部分支持 | 当前 `join()` 支持两个输入流和 `method: "inner"`，只会比较 group key 实例相同的逻辑表，输出保持多表流，重复非 `on` 列会按 `<column>_<table>` 重命名，`null` / 缺失 join key 不匹配；更完整的 `join` 包、outer join、`as`/predicate 形式尚未实现 |
 | CSV 输入 | 部分支持 | `import "csv"`、`csv.from(csv: ...)`、`csv.from(file: ...)` 支持 raw 模式和常见 annotated CSV；支持 `#datatype`、`#group`、可选 `#default`、类型转换，以及同一载荷内重复 metadata/header block，对应多逻辑表输入；更广的 CSV stdlib 能力尚未补齐 |
-| aggregate windows | 部分支持 | RFC3339 `_time` 上的固定时长窗口可用，支持 `column`、`offset`、`period`、`timeSrc`、`timeDst`、`mean` / `sum` / `min` / `max`、自定义数组函数、窗口 `count`、负 `period`、`every != period` 的重叠窗口、`range()` 边界上的 `createEmpty: true`；日历 `mo` / `y` 窗口支持显式固定偏移和命名时区 `location` 记录，并支持日历窗口 `offset`；selector 风格 `first` / `last` 会像官方 Flux 一样丢弃空窗口；窗口输出会重新按 group key 分表；未显式传参时也会回退到全局 `option location` |
+| aggregate windows | 部分支持 | RFC3339 `_time` 上的固定时长窗口可用，支持 `column`、`offset`、`period`、`timeSrc`、`timeDst`、`mean` / `sum` / `min` / `max`、自定义数组函数、窗口 `count`、负 `period`、`every != period` 的重叠窗口、`range()` 边界上的 `createEmpty: true`；日历 `mo` / `y` 窗口支持显式固定偏移和命名时区 `location` 记录，并支持日历窗口 `offset`；selector 风格 `first` / `last` 会像官方 Flux 一样丢弃空窗口；窗口输出现在会按逻辑表与 group key 一起保真，避免把不同逻辑表里同名 group 意外合并；未显式传参时也会回退到全局 `option location` |
 | elapsed transforms | 部分支持 | `elapsed(unit:, timeColumn:, columnName:)` 已支持固定时长单位和 RFC3339 `_time` 类列，会按逻辑表逐表丢掉首行并写入整数 elapsed 值；日历单位仍未实现 |
 | difference transforms | 部分支持 | `difference(column:, nonNegative:, keepFirst:)` 已支持数值列，会在每张逻辑表内按行计算 delta，`nonNegative: true` 可将负增量置空，`keepFirst: true` 可保留首行并给出空 delta；更广泛 Flux 语义尚未补齐 |
 | derivative transforms | 部分支持 | `derivative(unit:, column:, timeColumn:, nonNegative:, initialZero:)` 已支持数值列与 RFC3339 `_time` 类列，会在每张逻辑表内计算按单位归一化的浮点速率，支持 `nonNegative` 和 `initialZero`；日历单位与更多 Flux 语义仍未实现 |
@@ -134,7 +134,7 @@
 - 运行时具备可测试的值模型、作用域链、表达式求值器和首版语句执行器
 - CSV 数据可以通过 Flux 风格的 `csv.from` 进入运行时，包括 raw 头行 CSV、annotated CSV，以及重复 metadata block 的多表输入
 - `group` 已实现真实的按 group key 重分表语义，并支持 `mode: "by"` / `mode: "except"`
-- `count`、`first`、`last`、`distinct`、`sort` 等算子已经按逻辑表逐表工作，不再是旧的“全表 + `_group` 标签”行为
+- `count`、`first`、`last`、`distinct`、`sort`，以及 `filter` / `map` / `limit` / `tail` / `keep` / `drop` / `rename` / `duplicate` / `set` / `reduce` 等算子已经按逻辑表逐表工作，不再是旧的“全表 + `_group` 标签”行为
 - `join()` 已经按相同 group key 实例配对逻辑表，不同 measurement / field 的 join 示例也会先显式 regroup 再连接
 
 ## 主要已知缺口

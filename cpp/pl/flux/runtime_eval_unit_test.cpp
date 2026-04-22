@@ -99,6 +99,17 @@ TEST(RuntimeEvalTest, ReportsMissingCallBindings) {
     EXPECT_EQ(absl::StatusCode::kNotFound, result.status().code());
 }
 
+TEST(RuntimeEvalTest, EvaluatesUnaryMinusForDurationLiterals) {
+    Environment env;
+    const auto& expr = ParseAssignmentInit("result = -1h");
+
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_EQ(Value::Type::Duration, result->type());
+    EXPECT_EQ("-1h", result->string());
+}
+
 TEST(RuntimeEvalTest, EvaluatesBuiltinCalls) {
     Environment env;
     BuiltinRegistry::Install(env);
@@ -554,6 +565,32 @@ TEST(RuntimeEvalTest, EvaluatesInMemoryQueryPipelineBuiltins) {
     EXPECT_EQ("\"hot\"", result->as_table().rows[0]->lookup("level")->string());
 }
 
+TEST(RuntimeEvalTest, EvaluatesRangeUsingStopExclusiveAndRfc3339Instants) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2023-12-31T23:00:30-01:00", _value: 1.0, host: "inside"},
+                {_time: "2024-01-01T00:00:00Z", _value: 2.0, host: "start"},
+                {_time: "2024-01-01T00:01:00Z", _value: 3.0, host: "stop"},
+            ],
+        )
+            |> range(start: 2024-01-01T00:00:00Z, stop: 2024-01-01T00:01:00Z)
+    )");
+
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    EXPECT_EQ("\"inside\"", result->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("\"start\"", result->as_table().rows[1]->lookup("host")->string());
+    EXPECT_EQ("2024-01-01T00:00:00Z", *result->as_table().range_start);
+    EXPECT_EQ("2024-01-01T00:01:00Z", *result->as_table().range_stop);
+}
+
 TEST(RuntimeEvalTest, EvaluatesReduceKeepDropAndLimitBuiltins) {
     Environment env;
     BuiltinRegistry::Install(env);
@@ -856,6 +893,97 @@ TEST(RuntimeEvalTest, EvaluatesTailBuiltinWithOffset) {
     EXPECT_EQ("20", result->as_table().rows[0]->lookup("_value")->string());
     EXPECT_EQ("\"c\"", result->as_table().rows[1]->lookup("host")->string());
     EXPECT_EQ("30", result->as_table().rows[1]->lookup("_value")->string());
+}
+
+TEST(RuntimeEvalTest, PreservesLogicalTablesAcrossRowTransformBuiltins) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& limit_expr = ParseAssignmentInit(R"(
+        result = union(
+            tables: [
+                from(bucket: "telegraf", rows: [{host: "a", _value: 1.0}, {host: "a", _value: 2.0}])
+                    |> group(columns: ["host"]),
+                from(bucket: "telegraf", rows: [{host: "b", _value: 3.0}, {host: "b", _value: 4.0}])
+                    |> group(columns: ["host"]),
+            ],
+        )
+            |> limit(n: 1)
+    )");
+    auto limit_result = ExpressionEvaluator::Evaluate(limit_expr, env);
+    ASSERT_TRUE(limit_result.ok()) << limit_result.status();
+    ASSERT_EQ(2, limit_result->as_table().table_count());
+    ASSERT_EQ(2, limit_result->as_table().rows.size());
+    EXPECT_EQ("\"a\"", limit_result->as_table().tables[0].rows[0]->lookup("host")->string());
+    EXPECT_EQ("\"b\"", limit_result->as_table().tables[1].rows[0]->lookup("host")->string());
+
+    const auto& map_expr = ParseAssignmentInit(R"(
+        result = union(
+            tables: [
+                from(bucket: "telegraf", rows: [{host: "a", _value: 1.0}, {host: "a", _value: 2.0}])
+                    |> group(columns: ["host"]),
+                from(bucket: "telegraf", rows: [{host: "b", _value: 3.0}, {host: "b", _value: 4.0}])
+                    |> group(columns: ["host"]),
+            ],
+        )
+            |> map(fn: (r) => ({r with seen: true}))
+    )");
+    auto map_result = ExpressionEvaluator::Evaluate(map_expr, env);
+    ASSERT_TRUE(map_result.ok()) << map_result.status();
+    ASSERT_EQ(2, map_result->as_table().table_count());
+    EXPECT_EQ(2, map_result->as_table().tables[0].rows.size());
+    EXPECT_EQ(2, map_result->as_table().tables[1].rows.size());
+    EXPECT_EQ("true", map_result->as_table().tables[0].rows[0]->lookup("seen")->string());
+
+    const auto& keep_expr = ParseAssignmentInit(R"(
+        result = union(
+            tables: [
+                from(bucket: "telegraf", rows: [{host: "a", _value: 1.0}, {host: "a", _value: 2.0}])
+                    |> group(columns: ["host"]),
+                from(bucket: "telegraf", rows: [{host: "b", _value: 3.0}, {host: "b", _value: 4.0}])
+                    |> group(columns: ["host"]),
+            ],
+        )
+            |> keep(columns: ["host", "_value"])
+    )");
+    auto keep_result = ExpressionEvaluator::Evaluate(keep_expr, env);
+    ASSERT_TRUE(keep_result.ok()) << keep_result.status();
+    ASSERT_EQ(2, keep_result->as_table().table_count());
+    EXPECT_EQ(2, keep_result->as_table().tables[0].rows.size());
+    EXPECT_EQ(2, keep_result->as_table().tables[1].rows.size());
+}
+
+TEST(RuntimeEvalTest, EvaluatesReducePerLogicalTable) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = union(
+            tables: [
+                from(bucket: "telegraf", rows: [{host: "a", _value: 1.0}, {host: "a", _value: 2.0}])
+                    |> group(columns: ["host"]),
+                from(bucket: "telegraf", rows: [{host: "b", _value: 3.0}, {host: "b", _value: 4.0}])
+                    |> group(columns: ["host"]),
+            ],
+        )
+            |> reduce(
+                identity: {count: 0, total: 0.0},
+                fn: (r, accumulator) => ({
+                    count: accumulator.count + 1,
+                    total: accumulator.total + r._value,
+                }),
+            )
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().table_count());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    EXPECT_EQ("2", result->as_table().tables[0].rows[0]->lookup("count")->string());
+    EXPECT_EQ("3", result->as_table().tables[0].rows[0]->lookup("total")->string());
+    EXPECT_EQ("2", result->as_table().tables[1].rows[0]->lookup("count")->string());
+    EXPECT_EQ("7", result->as_table().tables[1].rows[0]->lookup("total")->string());
 }
 
 TEST(RuntimeEvalTest, EvaluatesPivotBuiltin) {
@@ -1378,6 +1506,45 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowWithPeriodDifferentFromEvery) {
     EXPECT_EQ("4", result->as_table().rows[1]->lookup("_value")->string());
     EXPECT_EQ("2024-01-01T00:00:20Z", result->as_table().rows[1]->lookup("_start")->string());
     EXPECT_EQ("2024-01-01T00:01:00Z", result->as_table().rows[1]->lookup("_stop")->string());
+}
+
+TEST(RuntimeEvalTest, AggregateWindowPreservesDistinctChunksWithSameGroupKey) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = union(
+            tables: [
+                from(
+                    bucket: "telegraf",
+                    rows: [
+                        {_time: "2024-01-01T00:00:10Z", host: "a", _value: 10.0},
+                        {_time: "2024-01-01T00:00:20Z", host: "a", _value: 30.0},
+                    ],
+                ) |> group(columns: ["host"]),
+                from(
+                    bucket: "telegraf",
+                    rows: [
+                        {_time: "2024-01-01T00:00:10Z", host: "a", _value: 100.0},
+                        {_time: "2024-01-01T00:00:20Z", host: "a", _value: 300.0},
+                    ],
+                ) |> group(columns: ["host"]),
+            ],
+        )
+            |> aggregateWindow(every: 1m, fn: mean)
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(2, result->as_table().table_count());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    ASSERT_EQ(1, result->as_table().tables[0].rows.size());
+    ASSERT_EQ(1, result->as_table().tables[1].rows.size());
+    EXPECT_EQ("20", result->as_table().tables[0].rows[0]->lookup("_value")->string());
+    EXPECT_EQ("200", result->as_table().tables[1].rows[0]->lookup("_value")->string());
+    EXPECT_EQ("{host: \"a\"}", result->as_table().tables[0].rows[0]->lookup("_group")->string());
+    EXPECT_EQ("{host: \"a\"}", result->as_table().tables[1].rows[0]->lookup("_group")->string());
 }
 
 TEST(RuntimeEvalTest, EvaluatesAggregateWindowWithNegativePeriod) {
