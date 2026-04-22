@@ -600,6 +600,106 @@ std::string pivot_column_name(const ObjectValue& row, const std::vector<std::str
     return name;
 }
 
+void append_internal_key_fragment(std::string* out, const Value* value) {
+    if (value == nullptr) {
+        out->push_back('!');
+        return;
+    }
+    switch (value->type()) {
+        case Value::Type::Null:
+            out->push_back('N');
+            return;
+        case Value::Type::Bool:
+            out->push_back('B');
+            out->push_back(value->as_bool() ? '1' : '0');
+            return;
+        case Value::Type::Int:
+            out->push_back('I');
+            absl::StrAppend(out, value->as_int());
+            out->push_back(';');
+            return;
+        case Value::Type::UInt:
+            out->push_back('U');
+            absl::StrAppend(out, value->as_uint());
+            out->push_back(';');
+            return;
+        case Value::Type::Float:
+            out->push_back('F');
+            absl::StrAppend(out, value->as_float());
+            out->push_back(';');
+            return;
+        case Value::Type::String: {
+            out->push_back('S');
+            const auto& payload = value->as_string();
+            absl::StrAppend(out, payload.size());
+            out->push_back(':');
+            out->append(payload);
+            return;
+        }
+        case Value::Type::Time: {
+            out->push_back('T');
+            const auto& payload = value->as_time().literal;
+            absl::StrAppend(out, payload.size());
+            out->push_back(':');
+            out->append(payload);
+            return;
+        }
+        case Value::Type::Duration: {
+            out->push_back('D');
+            const auto& payload = value->as_duration().literal;
+            absl::StrAppend(out, payload.size());
+            out->push_back(':');
+            out->append(payload);
+            return;
+        }
+        case Value::Type::Regex: {
+            out->push_back('R');
+            const auto& payload = value->as_regex().literal;
+            absl::StrAppend(out, payload.size());
+            out->push_back(':');
+            out->append(payload);
+            return;
+        }
+        case Value::Type::Array:
+        case Value::Type::Object:
+        case Value::Type::Table:
+        case Value::Type::Function: {
+            out->push_back('X');
+            const std::string payload = value->string();
+            absl::StrAppend(out, payload.size());
+            out->push_back(':');
+            out->append(payload);
+            return;
+        }
+    }
+}
+
+struct PivotColumnIdentity {
+    std::string cache_key;
+    std::string name;
+};
+
+PivotColumnIdentity pivot_column_identity(const ObjectValue& row,
+                                         const std::vector<std::string>& columns) {
+    PivotColumnIdentity identity;
+    identity.cache_key.reserve(columns.size() * 12);
+    identity.name.reserve(columns.size() * 12);
+    for (const auto& column : columns) {
+        const Value* value = row.lookup(column);
+        append_internal_key_fragment(&identity.cache_key, value);
+        identity.cache_key.push_back('\n');
+        if (!identity.name.empty()) {
+            identity.name.push_back('_');
+        }
+        if (value != nullptr) {
+            append_value_key_fragment(&identity.name, *value);
+        } else {
+            absl::StrAppend(&identity.name, "null");
+        }
+    }
+    return identity;
+}
+
 absl::StatusOr<std::vector<std::string>> parse_csv_record(const std::string& line,
                                                           const std::string& name) {
     if (line.find('"') == std::string::npos) {
@@ -2779,10 +2879,11 @@ absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
             if (value == nullptr) {
                 continue;
             }
-            const std::string pivot_name_key = row_identity_key(*row, *column_key_or);
-            auto [pivot_name_it, inserted] = pivot_name_cache.try_emplace(pivot_name_key);
+            PivotColumnIdentity column_identity = pivot_column_identity(*row, *column_key_or);
+            auto [pivot_name_it, inserted] =
+                pivot_name_cache.try_emplace(column_identity.cache_key);
             if (inserted) {
-                pivot_name_it->second = pivot_column_name(*row, *column_key_or);
+                pivot_name_it->second = std::move(column_identity.name);
             }
             upsert_property_with_index(output_rows[row_index], pivot_name_it->second, *value);
         }
