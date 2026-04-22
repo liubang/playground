@@ -80,12 +80,16 @@ std::unique_ptr<Token> Scanner::scan(int32_t mode) {
     if (err != 0) {
         auto token = std::make_unique<Token>();
         token->tok = TokenType::Illegal;
-        token->lit = std::string(checkpoint_, std::min(checkpoint_ + 1, eof_) - checkpoint_);
+        token->lit = std::string(
+            checkpoint_, static_cast<std::size_t>(std::min(checkpoint_ + 1, eof_) - checkpoint_));
         token->start_offset = static_cast<uint32_t>(checkpoint_ - ps_);
         token->end_offset = token->start_offset + static_cast<uint32_t>(token->lit.size());
-        token->start_pos = Position(checkpoint_line_, column_for(checkpoint_, checkpoint_last_newline_));
+        token->start_pos = Position(static_cast<uint32_t>(checkpoint_line_),
+                                    column_for(checkpoint_, checkpoint_last_newline_));
         token->end_pos =
-            Position(checkpoint_line_, column_for(checkpoint_ + token->lit.size(), checkpoint_last_newline_));
+            Position(static_cast<uint32_t>(checkpoint_line_),
+                     column_for(checkpoint_ + static_cast<std::ptrdiff_t>(token->lit.size()),
+                                checkpoint_last_newline_));
         p_ = std::min(checkpoint_ + 1, eof_);
         positions_[token->start_pos] = token->start_offset;
         positions_[token->end_pos] = token->end_offset;
@@ -98,11 +102,14 @@ std::unique_ptr<Token> Scanner::scan(int32_t mode) {
     } else {
         t = std::make_unique<Token>();
         t->tok = token_;
-        t->lit = std::string(data_ + token_start, token_end - token_start);
-        t->start_offset = token_start;
-        t->end_offset = token_end;
-        t->start_pos = Position(token_start_line, token_start_col);
-        t->end_pos = Position(token_end_line, token_end_col);
+        t->lit = std::string(data_ + token_start,
+                             static_cast<std::size_t>(token_end - token_start));
+        t->start_offset = static_cast<uint32_t>(token_start);
+        t->end_offset = static_cast<uint32_t>(token_end);
+        t->start_pos =
+            Position(static_cast<uint32_t>(token_start_line), static_cast<uint32_t>(token_start_col));
+        t->end_pos =
+            Position(static_cast<uint32_t>(token_end_line), static_cast<uint32_t>(token_end_col));
         maybe_promote_unsigned_integer(t.get());
     }
     positions_[t->start_pos] = t->start_offset;
@@ -112,14 +119,14 @@ std::unique_ptr<Token> Scanner::scan(int32_t mode) {
 }
 
 std::unique_ptr<Token> Scanner::get_eof_token() {
-    uint32_t column = eof_ - last_newline_ + 1;
+    const uint32_t column = static_cast<uint32_t>(eof_ - last_newline_ + 1);
     auto token = std::make_unique<Token>();
     token->tok = TokenType::Eof;
     token->lit = "";
-    token->start_offset = data_len_;
-    token->end_offset = data_len_;
-    token->start_pos = Position(cur_line_, column);
-    token->end_pos = Position(cur_line_, column);
+    token->start_offset = static_cast<uint32_t>(data_len_);
+    token->end_offset = static_cast<uint32_t>(data_len_);
+    token->start_pos = Position(static_cast<uint32_t>(cur_line_), column);
+    token->end_pos = Position(static_cast<uint32_t>(cur_line_), column);
     return token;
 }
 

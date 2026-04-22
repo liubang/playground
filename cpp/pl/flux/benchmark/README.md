@@ -41,16 +41,26 @@ python3 cpp/pl/flux/benchmark/generate_benchmark_data.py
 python3 cpp/pl/flux/benchmark/run_benchmarks.py
 ```
 
-runner 会输出 JSON，便于在修改前后直接对比：
+runner 会输出 JSON，默认按“`1` 次 warmup + `5` 次采样”执行每个 case，并给出样本和聚合统计，便于在修改前后直接对比：
 
 ```json
 [
   {
     "case": "linear:100000",
     "rc": 0,
-    "seconds": 2.003
+    "warmup_runs": 1,
+    "repeat_runs": 5,
+    "samples_s": [0.08, 0.081, 0.079, 0.08, 0.081],
+    "median_s": 0.08,
+    "mean_s": 0.0802
   }
 ]
+```
+
+如果你只想快速本地 smoke 一轮，也可以显式调小：
+
+```bash
+python3 cpp/pl/flux/benchmark/run_benchmarks.py --warmup-runs 0 --repeat-runs 3
 ```
 
 ## 数据形态
@@ -88,7 +98,7 @@ runner 会输出 JSON，便于在修改前后直接对比：
 - selection / reordering 算子中的行指针复用
 - `array.contains` / `array.reduce` / `array.any` / `array.all` 所在的数组 helper 路径
 
-注意：这套 runner 更适合做“本地同机前后对比”，并不追求冷启动隔离；如果你连续运行多轮，结果会明显受热缓存影响。
+注意：这套 runner 更适合做“本地同机前后对比”，并不追求冷启动隔离；如果你连续运行多轮，结果仍会受热缓存影响，但现在默认会用多次采样的 `median` / `mean` 帮助降低单次抖动带来的误判。
 
 | Case | 输入规模 | 时间 |
 | --- | --- | ---: |
@@ -121,6 +131,7 @@ runner 会输出 JSON，便于在修改前后直接对比：
 2. 保存 `run_benchmarks.py` 的 JSON 输出。
 3. 修改运行时实现。
 4. 用同样的输入规模再跑一遍。
-5. 对比 `linear`、`sort`、`agg`、`group`、`array`、`pivot`、`join` 的延迟变化。
+5. 优先对比 `median_s`，再参考 `mean_s` 和 `samples_s` 的离散程度。
+6. 只有当同口径重复采样后仍然稳定改善，才把结果写进文档或优化记录。
 
 如果后续新增更重的算子、更多 join 形态，或者真正的流式 reader，建议在这里新增新的 benchmark case，而不是替换现有 case。
