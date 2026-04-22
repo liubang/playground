@@ -523,6 +523,12 @@ python3 cpp/pl/flux/benchmark/run_benchmarks.py
 - `filter`、`map`、`sort`、`group`、`pivot`、`union` 之类算子仍会进行一定程度的数据复制或重排
 - `join` 已从早期的轻量路径演进到更适合当前规模的哈希索引实现
 
+和官方 Flux 对齐的几条关键表语义也已经固定下来：
+
+- `filter()` 默认按 `onEmpty: "drop"` 处理，过滤后变空的逻辑表会直接从 table stream 里移除
+- 显式写 `onEmpty: "keep"` 时，空逻辑表会被保留，并继续带着 group key / 列元数据流向后续算子
+- `count()` 对保留下来的空逻辑表会输出一行 `_value = 0` 的结果
+
 因此它现在更适合：
 
 - 本地 CSV 数据探索

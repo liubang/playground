@@ -89,6 +89,7 @@ bazel build //cpp/pl/flux:flux
 - `group()` 会真正把输入重新划分为多张逻辑表
 - `count()`、`first()`、`last()` 会按每张逻辑表分别计算
 - `mode: "by"` 和 `mode: "except"` 都已支持
+- `filter()` 默认遵循官方 `onEmpty: "drop"` 语义；像 `nested_multi_table_health.flux` 里的 `watchlist_focus` 这类结果，过滤空表后会直接收缩逻辑表数量
 
 因此这个示例更适合拿来检查我们当前的 `group`、selector 和聚合语义是否与官方 Flux 保持一致。
 

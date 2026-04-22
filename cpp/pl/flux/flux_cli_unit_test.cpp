@@ -190,6 +190,75 @@ TEST(FluxCliTest, ExecutesFeatureGalleryArrayWatchlistExample) {
     EXPECT_NE(std::string::npos, result.output.find("58"));
 }
 
+TEST(FluxCliTest, KeepsWatchlistFocusExampleAlignedWithOfficialFilterSemantics) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.result_name = "watchlist_focus";
+
+    auto result = ExecuteExampleScript(
+        "cpp/pl/flux/examples/feature_gallery/nested_multi_table_health.flux", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: watchlist_focus\n"));
+    EXPECT_NE(std::string::npos, result.output.find("rows=2, tables=2"));
+    EXPECT_NE(std::string::npos, result.output.find("Logical table 0\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Logical table 1\n"));
+    EXPECT_EQ(std::string::npos, result.output.find("Logical table 2\n"));
+}
+
+TEST(FluxCliTest, RendersKeptEmptyLogicalTablesWhenRequested) {
+    auto env = MakeFluxCliEnvironment();
+
+    auto result = ExecuteFluxSource(R"(
+        kept = from(
+            bucket: "telegraf",
+            rows: [
+                {host: "edge-1", _value: 95.0},
+                {host: "edge-2", _value: 60.0},
+                {host: "edge-3", _value: 85.0},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> filter(fn: (r) => r._value >= 80.0, onEmpty: "keep")
+    )",
+                                    "<test>", env);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Table: bucket=telegraf, rows=2, tables=3"));
+    EXPECT_NE(std::string::npos, result.output.find("Logical table 0\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Logical table 1\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Logical table 2\n"));
+}
+
+TEST(FluxCliTest, EmitsEmptyLogicalTableMetadataInJsonOutput) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.output_format = FluxOutputFormat::Json;
+
+    auto result = ExecuteFluxSource(R"(
+        kept = from(
+            bucket: "telegraf",
+            rows: [
+                {host: "edge-1", _value: 95.0},
+                {host: "edge-2", _value: 60.0},
+                {host: "edge-3", _value: 85.0},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> filter(fn: (r) => r._value >= 80.0, onEmpty: "keep")
+    )",
+                                    "<test>", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("\"tables\":["));
+    EXPECT_NE(std::string::npos, result.output.find("\"groupKey\":{\"host\":\"edge-2\"}"));
+    EXPECT_NE(std::string::npos, result.output.find("\"columns\":[\"host\",\"_value\",\"_group\"]"));
+    EXPECT_NE(std::string::npos, result.output.find("\"rows\":[]"));
+}
+
 TEST(FluxCliTest, ExecutesTaskDrivenFeatureGalleryExample) {
     auto env = MakeFluxCliEnvironment();
     auto result =
