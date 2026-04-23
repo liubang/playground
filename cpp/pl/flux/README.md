@@ -123,6 +123,8 @@ bazel build //cpp/pl/flux:flux
 
 如果你想快速扫一遍当前支持的 builtin 组合，建议从 [examples/feature_gallery/README.md](./examples/feature_gallery/README.md) 开始。其中新增的 `task_driven_rollup.flux` 还专门覆盖了 `option task = {...}` 驱动的窗口查询、block-body helper 和对象返回。
 
+最近一轮新增的 `window_join_rankings.flux` 还把 `window(createEmpty)`、outer `join`、`spread`、`quantile`、`median`、`top`、`bottom` 串成了一个可直接运行的 smoke example。
+
 当前还支持一些表检查辅助函数：
 
 - `columns()`
@@ -141,6 +143,17 @@ bazel build //cpp/pl/flux:flux
 - 日历窗口的 `offset`
 - `every != period` 的重叠窗口
 - `createEmpty`
+
+这一轮还补了另一批常用表级 builtin：
+
+- `window()`
+- `spread()`
+- `quantile(q:)`
+- `median()`
+- `top(n:)`
+- `bottom(n:)`
+
+以及 `join(method: "left"|"right"|"full")`。
 
 ## REPL
 
