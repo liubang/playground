@@ -826,7 +826,7 @@ TEST(RuntimeExecTest, ExecutesRankingAndQuantileQueryFile) {
         builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], ?columns: [string], ?mode: string) => stream[A]
         builtin spread : (<-tables: stream[A], ?column: string) => stream[A]
-        builtin quantile : (<-tables: stream[A], q: float, ?column: string) => stream[A]
+        builtin quantile : (<-tables: stream[A], q: B, ?column: string) => stream[A]
         builtin median : (<-tables: stream[A], ?column: string) => stream[A]
         builtin top : (<-tables: stream[A], n: int, ?columns: [string]) => stream[A]
         builtin bottom : (<-tables: stream[A], n: int, ?columns: [string]) => stream[A]
@@ -844,6 +844,12 @@ TEST(RuntimeExecTest, ExecutesRankingAndQuantileQueryFile) {
             {_time: "t3", _value: 30.0},
             {_time: "t4", _value: 40.0},
         ]) |> quantile(q: 0.25)
+        multiQ = from(bucket: "cpu", rows: [
+            {_time: "t1", _value: 10.0},
+            {_time: "t2", _value: 20.0},
+            {_time: "t3", _value: 30.0},
+            {_time: "t4", _value: 40.0},
+        ]) |> quantile(q: [0.5, 0.75, 0.99, 0.999])
         med = from(bucket: "cpu", rows: [
             {_time: "t1", _value: 10.0},
             {_time: "t2", _value: 20.0},
@@ -873,6 +879,13 @@ TEST(RuntimeExecTest, ExecutesRankingAndQuantileQueryFile) {
     EXPECT_EQ("15", env.lookup("spreaded")->as_table().rows[0]->lookup("_value")->string());
     ASSERT_TRUE(env.lookup("q").ok());
     EXPECT_EQ("17.5", env.lookup("q")->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("0.25", env.lookup("q")->as_table().rows[0]->lookup("quantile")->string());
+    ASSERT_TRUE(env.lookup("multiQ").ok());
+    ASSERT_EQ(4, env.lookup("multiQ")->as_table().rows.size());
+    EXPECT_EQ("25", env.lookup("multiQ")->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("0.5", env.lookup("multiQ")->as_table().rows[0]->lookup("quantile")->string());
+    EXPECT_EQ("39.97", env.lookup("multiQ")->as_table().rows[3]->lookup("_value")->string());
+    EXPECT_EQ("0.999", env.lookup("multiQ")->as_table().rows[3]->lookup("quantile")->string());
     ASSERT_TRUE(env.lookup("med").ok());
     EXPECT_EQ("25", env.lookup("med")->as_table().rows[0]->lookup("_value")->string());
     ASSERT_TRUE(env.lookup("highest").ok());

@@ -284,6 +284,52 @@ absl::StatusOr<double> number_property(const ObjectValue& object,
     }
 }
 
+absl::StatusOr<std::vector<double>> quantile_values_property(const ObjectValue& object,
+                                                             const std::string& name,
+                                                             const std::string& property) {
+    auto value_or = require_object_property(object, name, property);
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+    std::vector<double> quantiles;
+    const Value& value = **value_or;
+    auto append_quantile = [&](const Value& item) -> absl::Status {
+        switch (item.type()) {
+            case Value::Type::Float:
+                quantiles.push_back(item.as_float());
+                return absl::OkStatus();
+            case Value::Type::Int:
+                quantiles.push_back(static_cast<double>(item.as_int()));
+                return absl::OkStatus();
+            case Value::Type::UInt:
+                quantiles.push_back(static_cast<double>(item.as_uint()));
+                return absl::OkStatus();
+            default:
+                return absl::InvalidArgumentError(
+                    absl::StrCat(name, " `", property, "` must be a number or array of numbers"));
+        }
+    };
+    if (value.type() == Value::Type::Array) {
+        quantiles.reserve(value.as_array().elements.size());
+        for (const auto& item : value.as_array().elements) {
+            auto status = append_quantile(item);
+            if (!status.ok()) {
+                return status;
+            }
+        }
+    } else {
+        auto status = append_quantile(value);
+        if (!status.ok()) {
+            return status;
+        }
+    }
+    if (quantiles.empty()) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " `", property, "` must not be empty"));
+    }
+    return quantiles;
+}
+
 absl::StatusOr<std::vector<std::string>> string_array_property(const ObjectValue& object,
                                                                const std::string& name,
                                                                const std::string& property) {
@@ -3522,9 +3568,9 @@ absl::StatusOr<Value> builtin_quantile(const std::vector<Value>& args) {
     if (!column_or.ok()) {
         return column_or.status();
     }
-    auto q_or = number_property(**object_or, "quantile", "q");
-    if (!q_or.ok()) {
-        return q_or.status();
+    auto quantiles_or = quantile_values_property(**object_or, "quantile", "q");
+    if (!quantiles_or.ok()) {
+        return quantiles_or.status();
     }
 
     std::vector<TableChunk> chunks;
@@ -3538,13 +3584,19 @@ absl::StatusOr<Value> builtin_quantile(const std::vector<Value>& args) {
             continue;
         }
         std::sort(values_or->begin(), values_or->end());
-        auto quantile_or = quantile_for_sorted_values(*values_or, *q_or);
-        if (!quantile_or.ok()) {
-            return quantile_or.status();
-        }
         TableChunk next;
-        next.rows.push_back(materialize_group_value_row(
-            chunk, *column_or, Value::floating(*quantile_or)));
+        next.rows.reserve(quantiles_or->size());
+        for (double q : *quantiles_or) {
+            auto quantile_or = quantile_for_sorted_values(*values_or, q);
+            if (!quantile_or.ok()) {
+                return quantile_or.status();
+            }
+            auto row =
+                materialize_group_value_row(chunk, *column_or, Value::floating(*quantile_or));
+            Value updated =
+                object_with_upserted_property(*row, "quantile", Value::floating(q));
+            next.rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
+        }
         chunks.push_back(std::move(next));
     }
     return table_with_chunks_like(**table_or, std::move(chunks));
