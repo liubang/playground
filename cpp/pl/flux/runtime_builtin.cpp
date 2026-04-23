@@ -24,6 +24,7 @@
 #include "cpp/pl/flux/runtime_eval.h"
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <ctime>
 #include <exception>
 #include <fstream>
@@ -263,6 +264,26 @@ absl::StatusOr<std::string> string_property(const ObjectValue& object,
     return (*value_or)->as_string();
 }
 
+absl::StatusOr<double> number_property(const ObjectValue& object,
+                                       const std::string& name,
+                                       const std::string& property) {
+    auto value_or = require_object_property(object, name, property);
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+    switch ((*value_or)->type()) {
+        case Value::Type::Float:
+            return (*value_or)->as_float();
+        case Value::Type::Int:
+            return static_cast<double>((*value_or)->as_int());
+        case Value::Type::UInt:
+            return static_cast<double>((*value_or)->as_uint());
+        default:
+            return absl::InvalidArgumentError(
+                absl::StrCat(name, " `", property, "` must be numeric"));
+    }
+}
+
 absl::StatusOr<std::vector<std::string>> string_array_property(const ObjectValue& object,
                                                                const std::string& name,
                                                                const std::string& property) {
@@ -326,6 +347,7 @@ std::optional<std::string> row_time_literal(const ObjectValue& row) {
 }
 
 std::optional<int64_t> parse_rfc3339_seconds(const std::string& literal);
+std::string format_rfc3339_seconds(int64_t seconds);
 
 bool row_matches_time_bounds(const ObjectValue& row,
                              const std::optional<std::string>& start,
@@ -506,6 +528,21 @@ std::shared_ptr<ObjectValue> materialize_group_count_row(const TableChunk& chunk
                                 Value::object(std::make_shared<ObjectValue>(*chunk.group_key)));
     }
     properties.emplace_back(column, Value::integer(count));
+    return std::make_shared<ObjectValue>(std::move(properties));
+}
+
+std::shared_ptr<ObjectValue> materialize_group_value_row(const TableChunk& chunk,
+                                                         const std::string& column,
+                                                         Value value) {
+    std::vector<std::pair<std::string, Value>> properties;
+    if (chunk.group_key != nullptr) {
+        for (const auto& [name, group_value] : chunk.group_key->properties) {
+            properties.emplace_back(name, group_value);
+        }
+        properties.emplace_back("_group",
+                                Value::object(std::make_shared<ObjectValue>(*chunk.group_key)));
+    }
+    properties.emplace_back(column, std::move(value));
     return std::make_shared<ObjectValue>(std::move(properties));
 }
 
@@ -1055,9 +1092,25 @@ std::string chunk_group_key(const TableChunk& chunk) {
     return "";
 }
 
+std::shared_ptr<ObjectValue> chunk_group_object(const TableChunk& chunk) {
+    if (chunk.group_key != nullptr) {
+        return std::make_shared<ObjectValue>(*chunk.group_key);
+    }
+    for (const auto& row : chunk.rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        const Value* group = row->lookup("_group");
+        if (group != nullptr && group->type() == Value::Type::Object) {
+            return std::make_shared<ObjectValue>(group->as_object());
+        }
+    }
+    return std::make_shared<ObjectValue>(std::vector<std::pair<std::string, Value>>{});
+}
+
 std::vector<std::pair<std::string, Value>> join_group_properties(
-    const ObjectValue& left,
-    const ObjectValue& right,
+    const ObjectValue* left,
+    const ObjectValue* right,
     const std::string& left_name,
     const std::string& right_name,
     const std::unordered_set<std::string>& on_columns,
@@ -1065,8 +1118,11 @@ std::vector<std::pair<std::string, Value>> join_group_properties(
     std::vector<std::pair<std::string, Value>> props;
     std::unordered_set<std::string> inserted;
 
-    auto append_group = [&](const ObjectValue& row, const std::string& table_name) {
-        const Value* group = row.lookup("_group");
+    auto append_group = [&](const ObjectValue* row, const std::string& table_name) {
+        if (row == nullptr) {
+            return;
+        }
+        const Value* group = row->lookup("_group");
         if (group == nullptr || group->type() != Value::Type::Object) {
             return;
         }
@@ -1114,21 +1170,26 @@ void upsert_property_with_index(PivotOutputRow& output_row, const std::string& k
 }
 
 std::shared_ptr<ObjectValue> join_rows(const std::string& left_name,
-                                       const ObjectValue& left,
+                                       const ObjectValue* left,
+                                       const std::vector<std::string>& left_columns,
                                        const std::string& right_name,
-                                       const ObjectValue& right,
+                                       const ObjectValue* right,
+                                       const std::vector<std::string>& right_columns,
                                        const std::vector<std::string>& on_columns,
                                        const std::unordered_set<std::string>& on_column_set,
                                        const std::unordered_set<std::string>& overlapping_columns) {
     std::vector<std::pair<std::string, Value>> props;
     auto group_props = join_group_properties(left, right, left_name, right_name, on_column_set,
                                              overlapping_columns);
-    props.reserve(left.properties.size() + right.properties.size() + group_props.size() + 1);
+    props.reserve(left_columns.size() + right_columns.size() + group_props.size() + 1);
     for (const auto& [key, value] : group_props) {
         props.emplace_back(key, value);
     }
     for (const auto& column : on_columns) {
-        const Value* value = left.lookup(column);
+        const Value* value = left != nullptr ? left->lookup(column) : nullptr;
+        if (value == nullptr && right != nullptr) {
+            value = right->lookup(column);
+        }
         if (value != nullptr) {
             const bool already_present =
                 std::any_of(props.begin(), props.end(), [&](const auto& property) {
@@ -1139,30 +1200,102 @@ std::shared_ptr<ObjectValue> join_rows(const std::string& left_name,
             }
         }
     }
-    for (const auto& [key, value] : left.properties) {
-        if (key == "_group" || on_column_set.count(key) != 0) {
-            continue;
+
+    auto append_side = [&](const std::string& table_name,
+                           const ObjectValue* row,
+                           const std::vector<std::string>& columns) {
+        for (const auto& column : columns) {
+            if (column == "_group" || on_column_set.count(column) != 0) {
+                continue;
+            }
+            const std::string output_key = overlapping_columns.count(column) != 0
+                                               ? joined_property_name(table_name, column)
+                                               : column;
+            const bool already_present =
+                std::any_of(props.begin(), props.end(),
+                            [&](const auto& property) { return property.first == output_key; });
+            if (already_present) {
+                continue;
+            }
+            const Value* value = row != nullptr ? row->lookup(column) : nullptr;
+            props.emplace_back(output_key, value != nullptr ? *value : Value::null());
         }
-        if (overlapping_columns.count(key) != 0) {
-            props.emplace_back(joined_property_name(left_name, key), value);
-        } else {
-            props.emplace_back(key, value);
-        }
-    }
-    for (const auto& [key, value] : right.properties) {
-        if (key == "_group" || on_column_set.count(key) != 0) {
-            continue;
-        }
-        if (overlapping_columns.count(key) != 0) {
-            props.emplace_back(joined_property_name(right_name, key), value);
-        } else if (left.lookup(key) == nullptr) {
-            props.emplace_back(key, value);
-        }
-    }
+    };
+
+    append_side(left_name, left, left_columns);
+    append_side(right_name, right, right_columns);
     if (!group_props.empty()) {
         props.emplace_back("_group", Value::object(std::move(group_props)));
     }
     return std::make_shared<ObjectValue>(std::move(props));
+}
+
+absl::StatusOr<double> quantile_for_sorted_values(const std::vector<double>& values, double q) {
+    if (values.empty()) {
+        return absl::InvalidArgumentError("quantile expects at least one numeric value");
+    }
+    if (q < 0.0 || q > 1.0) {
+        return absl::InvalidArgumentError("quantile `q` must be between 0.0 and 1.0");
+    }
+    if (values.size() == 1) {
+        return values.front();
+    }
+    const double position = q * static_cast<double>(values.size() - 1);
+    const size_t lower_index = static_cast<size_t>(std::floor(position));
+    const size_t upper_index = static_cast<size_t>(std::ceil(position));
+    const double lower = values[lower_index];
+    const double upper = values[upper_index];
+    const double weight = position - static_cast<double>(lower_index);
+    return lower + (upper - lower) * weight;
+}
+
+absl::StatusOr<std::vector<double>> numeric_values_for_chunk(const TableChunk& chunk,
+                                                             const std::string& name,
+                                                             const std::string& column) {
+    std::vector<double> values;
+    values.reserve(chunk.rows.size());
+    for (const auto& row : chunk.rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        const Value* value = row->lookup(column);
+        if (value == nullptr || value->is_null()) {
+            continue;
+        }
+        if (!is_numeric_value(*value)) {
+            return absl::InvalidArgumentError(
+                absl::StrCat(name, " `", column, "` must be numeric"));
+        }
+        values.push_back(numeric_value(*value));
+    }
+    return values;
+}
+
+std::shared_ptr<ObjectValue> window_group_object(const TableChunk& chunk,
+                                                 const std::string& start_column,
+                                                 int64_t start_seconds,
+                                                 const std::string& stop_column,
+                                                 int64_t stop_seconds) {
+    auto group = chunk_group_object(chunk);
+    Value updated = object_with_upserted_property(*group, start_column,
+                                                  Value::time(format_rfc3339_seconds(start_seconds)));
+    updated = object_with_upserted_property(updated.as_object(), stop_column,
+                                           Value::time(format_rfc3339_seconds(stop_seconds)));
+    return std::make_shared<ObjectValue>(updated.as_object());
+}
+
+std::shared_ptr<ObjectValue> row_with_window_bounds(const ObjectValue& row,
+                                                    const std::string& start_column,
+                                                    int64_t start_seconds,
+                                                    const std::string& stop_column,
+                                                    int64_t stop_seconds,
+                                                    const std::shared_ptr<ObjectValue>& group) {
+    Value updated = object_with_upserted_property(
+        row, start_column, Value::time(format_rfc3339_seconds(start_seconds)));
+    updated = object_with_upserted_property(
+        updated.as_object(), stop_column, Value::time(format_rfc3339_seconds(stop_seconds)));
+    updated = object_with_upserted_property(updated.as_object(), "_group", Value::object(group));
+    return std::make_shared<ObjectValue>(updated.as_object());
 }
 
 bool parse_fixed_int(const std::string& text, size_t offset, size_t width, int* out) {
@@ -3343,6 +3476,146 @@ absl::StatusOr<Value> builtin_count(const std::vector<Value>& args) {
     return table_with_chunks_like(**table_or, std::move(chunks));
 }
 
+absl::StatusOr<Value> builtin_spread(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "spread");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "spread", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto column_or = optional_string_property(**object_or, "spread", "column", "_value");
+    if (!column_or.ok()) {
+        return column_or.status();
+    }
+
+    std::vector<TableChunk> chunks;
+    chunks.reserve((*table_or)->table_count());
+    for (const auto& chunk : (*table_or)->tables) {
+        auto values_or = numeric_values_for_chunk(chunk, "spread", *column_or);
+        if (!values_or.ok()) {
+            return values_or.status();
+        }
+        if (values_or->empty()) {
+            continue;
+        }
+        const auto [min_it, max_it] = std::minmax_element(values_or->begin(), values_or->end());
+        TableChunk next;
+        next.rows.push_back(materialize_group_value_row(
+            chunk, *column_or, Value::floating(*max_it - *min_it)));
+        chunks.push_back(std::move(next));
+    }
+    return table_with_chunks_like(**table_or, std::move(chunks));
+}
+
+absl::StatusOr<Value> builtin_quantile(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "quantile");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "quantile", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto column_or = optional_string_property(**object_or, "quantile", "column", "_value");
+    if (!column_or.ok()) {
+        return column_or.status();
+    }
+    auto q_or = number_property(**object_or, "quantile", "q");
+    if (!q_or.ok()) {
+        return q_or.status();
+    }
+
+    std::vector<TableChunk> chunks;
+    chunks.reserve((*table_or)->table_count());
+    for (const auto& chunk : (*table_or)->tables) {
+        auto values_or = numeric_values_for_chunk(chunk, "quantile", *column_or);
+        if (!values_or.ok()) {
+            return values_or.status();
+        }
+        if (values_or->empty()) {
+            continue;
+        }
+        std::sort(values_or->begin(), values_or->end());
+        auto quantile_or = quantile_for_sorted_values(*values_or, *q_or);
+        if (!quantile_or.ok()) {
+            return quantile_or.status();
+        }
+        TableChunk next;
+        next.rows.push_back(materialize_group_value_row(
+            chunk, *column_or, Value::floating(*quantile_or)));
+        chunks.push_back(std::move(next));
+    }
+    return table_with_chunks_like(**table_or, std::move(chunks));
+}
+
+absl::StatusOr<Value> builtin_median(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "median");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    std::vector<std::pair<std::string, Value>> properties = (*object_or)->properties;
+    const Value* q = (*object_or)->lookup("q");
+    if (q == nullptr) {
+        properties.emplace_back("q", Value::floating(0.5));
+    }
+    return builtin_quantile({Value::object(std::move(properties))});
+}
+
+absl::StatusOr<Value> table_order_builtin(const std::vector<Value>& args,
+                                          const std::string& name,
+                                          bool descending) {
+    auto object_or = require_object_argument(args, name);
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, name, "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto columns_or = optional_string_array_property(**object_or, name, "columns", {"_value"});
+    if (!columns_or.ok()) {
+        return columns_or.status();
+    }
+    auto n_or = integer_property(**object_or, name, "n");
+    if (!n_or.ok()) {
+        return n_or.status();
+    }
+    if (*n_or < 0) {
+        return absl::InvalidArgumentError(absl::StrCat(name, " `n` must be non-negative"));
+    }
+
+    auto chunks = clone_table_chunks(**table_or);
+    for (auto& chunk : chunks) {
+        std::stable_sort(chunk.rows.begin(), chunk.rows.end(),
+                         [&](const auto& lhs, const auto& rhs) {
+                             if (lhs == nullptr || rhs == nullptr) {
+                                 return lhs != nullptr;
+                             }
+                             for (const auto& column : *columns_or) {
+                                 const int cmp = compare_values(lhs->lookup(column), rhs->lookup(column));
+                                 if (cmp != 0) {
+                                     return descending ? cmp > 0 : cmp < 0;
+                                 }
+                             }
+                             return false;
+                         });
+        if (chunk.rows.size() > static_cast<size_t>(*n_or)) {
+            chunk.rows.resize(static_cast<size_t>(*n_or));
+        }
+    }
+    return table_with_chunks_like(**table_or, std::move(chunks));
+}
+
+absl::StatusOr<Value> builtin_top(const std::vector<Value>& args) {
+    return table_order_builtin(args, "top", true);
+}
+
+absl::StatusOr<Value> builtin_bottom(const std::vector<Value>& args) {
+    return table_order_builtin(args, "bottom", false);
+}
+
 absl::StatusOr<Value> table_single_row_builtin(const std::vector<Value>& args,
                                                const std::string& name,
                                                bool use_last) {
@@ -3437,6 +3710,285 @@ absl::StatusOr<Value> builtin_union(const std::vector<Value>& args) {
     return Value::table_stream(bucket, std::move(chunks), range_start, range_stop);
 }
 
+absl::StatusOr<Value> builtin_window(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "window");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "window", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    auto every_or = require_object_property(**object_or, "window", "every");
+    if (!every_or.ok()) {
+        return every_or.status();
+    }
+    auto parsed_every_or = parse_window_duration(**every_or, "window", "every");
+    if (!parsed_every_or.ok()) {
+        return parsed_every_or.status();
+    }
+    WindowDuration period = *parsed_every_or;
+    if (const Value* period_value = (*object_or)->lookup("period"); period_value != nullptr) {
+        auto parsed_period_or =
+            parse_window_duration(*period_value, "window", "period", true, false);
+        if (!parsed_period_or.ok()) {
+            return parsed_period_or.status();
+        }
+        period = *parsed_period_or;
+    }
+    WindowDuration offset{.kind = WindowDuration::Kind::FixedSeconds, .seconds = 0, .months = 0};
+    if (const Value* offset_value = (*object_or)->lookup("offset"); offset_value != nullptr) {
+        auto parsed_offset_or =
+            parse_window_duration(*offset_value, "window", "offset", true, true);
+        if (!parsed_offset_or.ok()) {
+            return parsed_offset_or.status();
+        }
+        offset = *parsed_offset_or;
+    }
+    auto create_empty_or = optional_bool_property(**object_or, "window", "createEmpty", false);
+    if (!create_empty_or.ok()) {
+        return create_empty_or.status();
+    }
+    auto time_column_or = optional_string_property(**object_or, "window", "timeColumn", "_time");
+    if (!time_column_or.ok()) {
+        return time_column_or.status();
+    }
+    auto start_column_or = optional_string_property(**object_or, "window", "startColumn", "_start");
+    if (!start_column_or.ok()) {
+        return start_column_or.status();
+    }
+    auto stop_column_or = optional_string_property(**object_or, "window", "stopColumn", "_stop");
+    if (!stop_column_or.ok()) {
+        return stop_column_or.status();
+    }
+    auto location_or = optional_window_location_property(**object_or, "window");
+    if (!location_or.ok()) {
+        return location_or.status();
+    }
+    const bool simple_tumbling_windows = period.kind == parsed_every_or->kind &&
+                                         !window_duration_is_negative(period) &&
+                                         ((period.kind == WindowDuration::Kind::FixedSeconds &&
+                                           period.seconds == parsed_every_or->seconds) ||
+                                          (period.kind == WindowDuration::Kind::CalendarMonths &&
+                                           period.months == parsed_every_or->months));
+
+    const auto table_range_start_seconds =
+        (*table_or)->range_start.has_value() ? parse_rfc3339_seconds(*(*table_or)->range_start)
+                                             : std::nullopt;
+    const auto table_range_stop_seconds =
+        (*table_or)->range_stop.has_value() ? parse_rfc3339_seconds(*(*table_or)->range_stop)
+                                            : std::nullopt;
+
+    std::vector<TableChunk> chunks;
+    for (const auto& chunk : (*table_or)->tables) {
+        std::unordered_map<int64_t, size_t> chunk_indexes;
+        std::vector<TableChunk> chunk_windows;
+        std::optional<int64_t> min_time_seconds;
+        std::optional<int64_t> max_time_exclusive_seconds;
+
+        for (const auto& row : chunk.rows) {
+            if (row == nullptr) {
+                continue;
+            }
+            const Value* time_value = row->lookup(*time_column_or);
+            if (time_value == nullptr) {
+                return absl::InvalidArgumentError(
+                    absl::StrCat("window requires `", *time_column_or, "` on every row"));
+            }
+            std::string literal;
+            if (time_value->type() == Value::Type::Time) {
+                literal = time_value->as_time().literal;
+            } else if (time_value->type() == Value::Type::String) {
+                literal = time_value->as_string();
+            } else {
+                return absl::InvalidArgumentError(
+                    absl::StrCat("window `", *time_column_or, "` must be a time or string"));
+            }
+            auto row_seconds = parse_rfc3339_seconds(literal);
+            if (!row_seconds.has_value()) {
+                return absl::InvalidArgumentError(
+                    absl::StrCat("window could not parse RFC3339 time: ", literal));
+            }
+
+            if (!min_time_seconds.has_value() || *row_seconds < *min_time_seconds) {
+                min_time_seconds = *row_seconds;
+            }
+            if (!max_time_exclusive_seconds.has_value() || *row_seconds + 1 > *max_time_exclusive_seconds) {
+                max_time_exclusive_seconds = *row_seconds + 1;
+            }
+
+            auto primary_start_or =
+                aggregate_window_start_for_time(*row_seconds, *parsed_every_or, offset, *location_or);
+            if (!primary_start_or.has_value()) {
+                continue;
+            }
+
+            std::vector<int64_t> candidate_starts;
+            if (simple_tumbling_windows) {
+                candidate_starts.push_back(*primary_start_or);
+            } else if (!window_duration_is_negative(period)) {
+                for (std::optional<int64_t> current = primary_start_or; current.has_value();) {
+                    auto bounds_or =
+                        aggregate_window_bounds_for_start(*current, period, *location_or);
+                    if (!bounds_or.has_value()) {
+                        break;
+                    }
+                    if (aggregate_window_contains_time(*row_seconds, *bounds_or)) {
+                        candidate_starts.push_back(*current);
+                    }
+                    if (bounds_or->upper_seconds <= *row_seconds) {
+                        break;
+                    }
+                    auto previous_or = add_window_duration_to_time(
+                        *current, negate_window_duration(*parsed_every_or), *location_or);
+                    if (!previous_or.has_value() || *previous_or >= *current) {
+                        break;
+                    }
+                    current = previous_or;
+                }
+            } else {
+                auto current =
+                    add_window_duration_to_time(*primary_start_or, *parsed_every_or, *location_or);
+                while (current.has_value()) {
+                    auto bounds_or =
+                        aggregate_window_bounds_for_start(*current, period, *location_or);
+                    if (!bounds_or.has_value()) {
+                        break;
+                    }
+                    if (bounds_or->lower_seconds >= *row_seconds + 1) {
+                        break;
+                    }
+                    if (aggregate_window_contains_time(*row_seconds, *bounds_or)) {
+                        candidate_starts.push_back(*current);
+                    }
+                    auto next_or = add_window_duration_to_time(*current, *parsed_every_or, *location_or);
+                    if (!next_or.has_value() || *next_or <= *current) {
+                        break;
+                    }
+                    current = next_or;
+                }
+            }
+
+            for (const auto candidate_start : candidate_starts) {
+                auto bounds_or =
+                    aggregate_window_bounds_for_start(candidate_start, period, *location_or);
+                if (!bounds_or.has_value()) {
+                    continue;
+                }
+                const bool within_table_range =
+                    !table_range_start_seconds.has_value() ||
+                    !table_range_stop_seconds.has_value() ||
+                    aggregate_window_is_within_range(*bounds_or, *table_range_start_seconds,
+                                                     *table_range_stop_seconds);
+                if (!within_table_range) {
+                    continue;
+                }
+                auto [chunk_it, inserted] =
+                    chunk_indexes.emplace(candidate_start, chunk_windows.size());
+                if (inserted) {
+                    TableChunk next;
+                    next.group_key = window_group_object(
+                        chunk, *start_column_or, bounds_or->start_seconds, *stop_column_or,
+                        bounds_or->stop_seconds);
+                    chunk_windows.push_back(std::move(next));
+                }
+                chunk_windows[chunk_it->second].rows.push_back(row_with_window_bounds(
+                    *row, *start_column_or, bounds_or->start_seconds, *stop_column_or,
+                    bounds_or->stop_seconds, chunk_windows[chunk_it->second].group_key));
+            }
+        }
+
+        if (*create_empty_or && min_time_seconds.has_value() && max_time_exclusive_seconds.has_value()) {
+            auto first_window_start_or = aggregate_window_start_for_time(
+                *min_time_seconds, *parsed_every_or, offset, *location_or);
+            if (first_window_start_or.has_value()) {
+                if (!window_duration_is_negative(period)) {
+                    while (true) {
+                        auto previous_or = add_window_duration_to_time(
+                            *first_window_start_or, negate_window_duration(*parsed_every_or),
+                            *location_or);
+                        if (!previous_or.has_value() || *previous_or >= *first_window_start_or) {
+                            break;
+                        }
+                        auto previous_bounds_or =
+                            aggregate_window_bounds_for_start(*previous_or, period, *location_or);
+                        if (!previous_bounds_or.has_value() ||
+                            previous_bounds_or->upper_seconds <= *min_time_seconds) {
+                            break;
+                        }
+                        first_window_start_or = previous_or;
+                    }
+                } else {
+                    auto next_or = add_window_duration_to_time(*first_window_start_or,
+                                                               *parsed_every_or, *location_or);
+                    if (next_or.has_value() && *next_or > *first_window_start_or) {
+                        first_window_start_or = next_or;
+                    } else {
+                        first_window_start_or = std::nullopt;
+                    }
+                }
+            }
+
+            for (auto window_start_or = first_window_start_or; window_start_or.has_value();) {
+                auto bounds_or =
+                    aggregate_window_bounds_for_start(*window_start_or, period, *location_or);
+                if (!bounds_or.has_value()) {
+                    break;
+                }
+                if (bounds_or->lower_seconds >= *max_time_exclusive_seconds) {
+                    break;
+                }
+                const bool within_span = aggregate_window_intersects_range(
+                    *bounds_or, *min_time_seconds, *max_time_exclusive_seconds);
+                const bool within_table_range =
+                    !table_range_start_seconds.has_value() ||
+                    !table_range_stop_seconds.has_value() ||
+                    aggregate_window_is_within_range(*bounds_or, *table_range_start_seconds,
+                                                     *table_range_stop_seconds);
+                if (within_span && within_table_range) {
+                    auto [chunk_it, inserted] =
+                        chunk_indexes.emplace(*window_start_or, chunk_windows.size());
+                    if (inserted) {
+                        TableChunk next;
+                        next.group_key = window_group_object(
+                            chunk, *start_column_or, bounds_or->start_seconds, *stop_column_or,
+                            bounds_or->stop_seconds);
+                        next.columns = visible_columns_in_chunk(chunk);
+                        if (std::find(next.columns.begin(), next.columns.end(), *start_column_or) ==
+                            next.columns.end()) {
+                            next.columns.push_back(*start_column_or);
+                        }
+                        if (std::find(next.columns.begin(), next.columns.end(), *stop_column_or) ==
+                            next.columns.end()) {
+                            next.columns.push_back(*stop_column_or);
+                        }
+                        chunk_windows.push_back(std::move(next));
+                    }
+                }
+                auto next_or =
+                    add_window_duration_to_time(*window_start_or, *parsed_every_or, *location_or);
+                if (!next_or.has_value() || *next_or <= *window_start_or) {
+                    break;
+                }
+                window_start_or = next_or;
+            }
+        }
+
+        std::stable_sort(chunk_windows.begin(), chunk_windows.end(),
+                         [&](const auto& lhs, const auto& rhs) {
+                             const Value* lhs_start =
+                                 lhs.group_key != nullptr ? lhs.group_key->lookup(*start_column_or) : nullptr;
+                             const Value* rhs_start =
+                                 rhs.group_key != nullptr ? rhs.group_key->lookup(*start_column_or) : nullptr;
+                             return compare_values(lhs_start, rhs_start) < 0;
+                         });
+        chunks.insert(chunks.end(), chunk_windows.begin(), chunk_windows.end());
+    }
+
+    return Value::table_stream((*table_or)->bucket, std::move(chunks), (*table_or)->range_start,
+                               (*table_or)->range_stop, (*table_or)->result_name);
+}
+
 absl::StatusOr<Value> builtin_join(const std::vector<Value>& args) {
     auto object_or = require_object_argument(args, "join");
     if (!object_or.ok()) {
@@ -3458,14 +4010,20 @@ absl::StatusOr<Value> builtin_join(const std::vector<Value>& args) {
     if (!method_or.ok()) {
         return method_or.status();
     }
-    if (*method_or != "inner") {
-        return absl::InvalidArgumentError("join currently supports only `method: \"inner\"`");
+    if (*method_or != "inner" && *method_or != "left" && *method_or != "right" &&
+        *method_or != "full") {
+        return absl::InvalidArgumentError(
+            "join `method` must be one of \"inner\", \"left\", \"right\", or \"full\"");
     }
 
     const auto& left_name = (*tables_or)[0].first;
     const auto* left_table = (*tables_or)[0].second;
     const auto& right_name = (*tables_or)[1].first;
     const auto* right_table = (*tables_or)[1].second;
+    const auto left_columns = all_visible_columns_in_order(*left_table);
+    const auto right_columns = all_visible_columns_in_order(*right_table);
+    const auto overlapping_columns =
+        overlapping_join_columns(left_columns, right_columns, on_column_set);
 
     std::unordered_map<std::string, std::vector<JoinChunkIndex>> right_chunks_by_group;
     right_chunks_by_group.reserve(right_table->table_count());
@@ -3487,45 +4045,91 @@ absl::StatusOr<Value> builtin_join(const std::vector<Value>& args) {
         right_chunks_by_group[chunk_group_key(right_chunk)].push_back(std::move(index));
     }
 
+    std::unordered_set<std::string> processed_groups;
     std::vector<TableChunk> output_chunks;
-    output_chunks.reserve(std::min(left_table->table_count(), right_table->table_count()));
-    for (const auto& left_chunk : left_table->tables) {
-        const std::string left_group_key = chunk_group_key(left_chunk);
-        const auto matching_chunks = right_chunks_by_group.find(left_group_key);
-        if (matching_chunks == right_chunks_by_group.end()) {
-            continue;
-        }
 
-        const auto left_columns = visible_columns_in_chunk(left_chunk);
-        for (const auto& right_index : matching_chunks->second) {
-            const auto overlapping_columns =
-                overlapping_join_columns(left_columns, right_index.columns, on_column_set);
-
-            TableChunk output_chunk;
-            output_chunk.rows.reserve(
-                std::min(left_chunk.rows.size(), right_index.chunk->rows.size()));
-            for (const auto& left_row : left_chunk.rows) {
+    auto emit_group = [&](const std::string& group_key,
+                          const std::vector<const TableChunk*>& left_chunks,
+                          std::vector<JoinChunkIndex>* right_indexes) {
+        TableChunk output_chunk;
+        std::unordered_set<const ObjectValue*> matched_right_rows;
+        for (const auto* left_chunk : left_chunks) {
+            for (const auto& left_row : left_chunk->rows) {
                 if (left_row == nullptr) {
                     continue;
                 }
+                bool matched = false;
                 const auto key = join_row_key(*left_row, *on_or);
-                if (!key.has_value()) {
-                    continue;
+                if (key.has_value()) {
+                    for (const auto& right_index : *right_indexes) {
+                        const auto matches = right_index.rows_by_key.find(*key);
+                        if (matches == right_index.rows_by_key.end()) {
+                            continue;
+                        }
+                        matched = true;
+                        for (const auto* right_row : matches->second) {
+                            matched_right_rows.insert(right_row);
+                            output_chunk.rows.push_back(join_rows(
+                                left_name, left_row.get(), left_columns, right_name, right_row,
+                                right_columns, *on_or, on_column_set, overlapping_columns));
+                        }
+                    }
                 }
-                const auto matches = right_index.rows_by_key.find(*key);
-                if (matches == right_index.rows_by_key.end()) {
-                    continue;
-                }
-                for (const auto* right_row : matches->second) {
-                    output_chunk.rows.push_back(join_rows(left_name, *left_row, right_name,
-                                                          *right_row, *on_or, on_column_set,
-                                                          overlapping_columns));
+                if (!matched && (*method_or == "left" || *method_or == "full")) {
+                    output_chunk.rows.push_back(join_rows(
+                        left_name, left_row.get(), left_columns, right_name, nullptr, right_columns,
+                        *on_or, on_column_set, overlapping_columns));
                 }
             }
+        }
 
-            if (!output_chunk.rows.empty()) {
-                output_chunks.push_back(std::move(output_chunk));
+        if (*method_or == "right" || *method_or == "full") {
+            for (const auto& right_index : *right_indexes) {
+                for (const auto& right_row : right_index.chunk->rows) {
+                    if (right_row == nullptr) {
+                        continue;
+                    }
+                    if (matched_right_rows.count(right_row.get()) != 0) {
+                        continue;
+                    }
+                    output_chunk.rows.push_back(join_rows(
+                        left_name, nullptr, left_columns, right_name, right_row.get(),
+                        right_columns, *on_or, on_column_set, overlapping_columns));
+                }
             }
+        }
+
+        if (!output_chunk.rows.empty()) {
+            output_chunks.push_back(std::move(output_chunk));
+        }
+    };
+
+    std::unordered_map<std::string, std::vector<const TableChunk*>> left_chunks_by_group;
+    left_chunks_by_group.reserve(left_table->table_count());
+    for (const auto& left_chunk : left_table->tables) {
+        left_chunks_by_group[chunk_group_key(left_chunk)].push_back(&left_chunk);
+    }
+
+    for (const auto& [group_key, left_chunks] : left_chunks_by_group) {
+        processed_groups.insert(group_key);
+        auto right_it = right_chunks_by_group.find(group_key);
+        if (right_it == right_chunks_by_group.end()) {
+            if (*method_or == "left" || *method_or == "full") {
+                std::vector<JoinChunkIndex> empty_right;
+                emit_group(group_key, left_chunks, &empty_right);
+            }
+            continue;
+        }
+        emit_group(group_key, left_chunks, &right_it->second);
+    }
+
+    if (*method_or == "right" || *method_or == "full") {
+        for (auto& [group_key, right_indexes] : right_chunks_by_group) {
+            if (processed_groups.count(group_key) != 0) {
+                continue;
+            }
+            std::vector<const TableChunk*> empty_left;
+            emit_group(group_key, empty_left, &right_indexes);
         }
     }
 
@@ -4118,6 +4722,18 @@ bool install_known_builtin(Environment& env, const std::string& name) {
         install_builtin(env, "count", builtin_count, "tables");
         return true;
     }
+    if (name == "spread") {
+        install_builtin(env, "spread", builtin_spread, "tables");
+        return true;
+    }
+    if (name == "quantile") {
+        install_builtin(env, "quantile", builtin_quantile, "tables");
+        return true;
+    }
+    if (name == "median") {
+        install_builtin(env, "median", builtin_median, "tables");
+        return true;
+    }
     if (name == "first") {
         install_builtin(env, "first", builtin_first, "tables");
         return true;
@@ -4126,8 +4742,26 @@ bool install_known_builtin(Environment& env, const std::string& name) {
         install_builtin(env, "last", builtin_last, "tables");
         return true;
     }
+    if (name == "top") {
+        install_builtin(env, "top", builtin_top, "tables");
+        return true;
+    }
+    if (name == "bottom") {
+        install_builtin(env, "bottom", builtin_bottom, "tables");
+        return true;
+    }
     if (name == "union") {
         install_builtin(env, "union", builtin_union);
+        return true;
+    }
+    if (name == "window") {
+        install_builtin(
+            env, "window",
+            [&env](const std::vector<Value>& args) -> absl::StatusOr<Value> {
+                (void)env;
+                return builtin_window(args);
+            },
+            "tables");
         return true;
     }
     if (name == "join") {
@@ -4192,9 +4826,15 @@ void BuiltinRegistry::Install(Environment& env) {
     install_known_builtin(env, "derivative");
     install_known_builtin(env, "distinct");
     install_known_builtin(env, "count");
+    install_known_builtin(env, "spread");
+    install_known_builtin(env, "quantile");
+    install_known_builtin(env, "median");
     install_known_builtin(env, "first");
     install_known_builtin(env, "last");
+    install_known_builtin(env, "top");
+    install_known_builtin(env, "bottom");
     install_known_builtin(env, "union");
+    install_known_builtin(env, "window");
     install_known_builtin(env, "join");
     install_known_builtin(env, "aggregateWindow");
     install_known_builtin(env, "yield");
