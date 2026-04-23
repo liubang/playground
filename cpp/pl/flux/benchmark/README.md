@@ -11,6 +11,8 @@
 - `linear`：`csv.from |> filter |> map |> limit`
 - `sort`：`csv.from |> sort |> limit`
 - `agg`：`csv.from |> group |> aggregateWindow |> yield`
+- `agg_create_empty`：`aggregateWindow(createEmpty: true)`，专门观察空窗口扩张成本
+- `agg_calendar`：`aggregateWindow(every: 1mo)`，专门观察 calendar window 路径
 - `group`：`csv.from |> group |> count |> yield`
 - `array`：`findColumn + array.map/filter/contains/reduce/any/all`
 - `pivot`：`csv.from |> pivot |> limit`
@@ -23,6 +25,8 @@
 - 近似线性的轻管道
 - 全表重排
 - 带状态的聚合路径
+- 带空窗口扩张的聚合路径
+- calendar month 窗口路径
 - 纯 group 重分表路径
 - 数组 package 的真实 helper 组合路径
 - 宽表整形路径
@@ -72,7 +76,7 @@ python3 cpp/pl/flux/benchmark/run_benchmarks.py --warmup-runs 0 --repeat-runs 3
 python3 cpp/pl/flux/benchmark/run_benchmarks.py \
   --warmup-runs 0 \
   --repeat-runs 2 \
-  --cases pivot,pivot_wide,join,join_grouped \
+  --cases agg,agg_create_empty,agg_calendar,pivot,pivot_wide,join,join_grouped \
   --metric-rows 100000 \
   --join-rows 2000
 ```
@@ -110,6 +114,8 @@ python3 cpp/pl/flux/benchmark/run_benchmarks.py \
 
 - 基于哈希索引的 `join`
 - `aggregateWindow` 的按逻辑表/按 group 聚合路径，以及 tumbling window 快路径
+- `aggregateWindow(createEmpty: true)` 的空窗口扩张路径
+- `aggregateWindow(every: 1mo)` 的 calendar window 路径
 - `group()` 的单次扫描分组 key / `_group` 构造路径
 - `pivot()` / `join()` 中几处字符串 key 构造与集合判断的减法
 - `pivot()` 按 logical table 局部建索引，避免跨 chunk 合并和全表 row identity map 膨胀
