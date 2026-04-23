@@ -15,24 +15,22 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/11/05 01:10
 
+#include "absl/status/statusor.h"
+#include "absl/status/status.h"
+#include "ast.h"
 #include <string>
 #include <vector>
-
-#include "ast.h"
-
-#include "absl/status/statusor.h"
 
 namespace pl {
 
 constexpr unsigned char DURATION_UNIT_US[] = "µ";
+constexpr char DURATION_UNIT_US_ASCII[] = "us";
 
 class StrConv {
 public:
     static bool to_byte(unsigned char c, uint8_t* b);
 
-    static absl::StatusOr<std::string> push_hex_byte(const std::string& lit,
-                                                     size_t& start,
-                                                     std::string* s);
+    static absl::Status push_hex_byte(const std::string& lit, size_t& start, std::string* s);
 
     static absl::StatusOr<std::string> parse_text(const std::string& lit);
 
