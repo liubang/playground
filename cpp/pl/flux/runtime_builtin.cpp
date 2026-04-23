@@ -164,8 +164,8 @@ absl::StatusOr<const ArrayValue*> require_array_property(const ObjectValue& obje
 }
 
 absl::StatusOr<const FunctionValue*> require_function_property(const ObjectValue& object,
-                                                              const std::string& name,
-                                                              const std::string& property) {
+                                                               const std::string& name,
+                                                               const std::string& property) {
     auto value_or = require_object_property(object, name, property);
     if (!value_or.ok()) {
         return value_or.status();
@@ -340,8 +340,7 @@ bool row_matches_time_bounds(const ObjectValue& row,
     const auto row_seconds = parse_rfc3339_seconds(*row_time);
     const auto start_seconds = start.has_value() ? parse_rfc3339_seconds(*start) : std::nullopt;
     const auto stop_seconds = stop.has_value() ? parse_rfc3339_seconds(*stop) : std::nullopt;
-    if (row_seconds.has_value() &&
-        (!start.has_value() || start_seconds.has_value()) &&
+    if (row_seconds.has_value() && (!start.has_value() || start_seconds.has_value()) &&
         (!stop.has_value() || stop_seconds.has_value())) {
         if (start_seconds.has_value() && *row_seconds < *start_seconds) {
             return false;
@@ -439,10 +438,10 @@ enum class EmptyChunkPolicy {
 };
 
 template <typename RowFn>
-absl::StatusOr<Value> transform_rows_preserving_chunks(const TableValue& table,
-                                                       RowFn&& row_fn,
-                                                       EmptyChunkPolicy empty_policy =
-                                                           EmptyChunkPolicy::Keep) {
+absl::StatusOr<Value> transform_rows_preserving_chunks(
+    const TableValue& table,
+    RowFn&& row_fn,
+    EmptyChunkPolicy empty_policy = EmptyChunkPolicy::Keep) {
     std::vector<TableChunk> chunks;
     chunks.reserve(table.table_count());
     for (const auto& chunk : table.tables) {
@@ -503,7 +502,8 @@ std::shared_ptr<ObjectValue> materialize_group_count_row(const TableChunk& chunk
         for (const auto& [name, value] : chunk.group_key->properties) {
             properties.emplace_back(name, value);
         }
-        properties.emplace_back("_group", Value::object(std::make_shared<ObjectValue>(*chunk.group_key)));
+        properties.emplace_back("_group",
+                                Value::object(std::make_shared<ObjectValue>(*chunk.group_key)));
     }
     properties.emplace_back(column, Value::integer(count));
     return std::make_shared<ObjectValue>(std::move(properties));
@@ -567,37 +567,6 @@ void append_value_key_fragment(std::string* out, const Value& value) {
         return;
     }
     absl::StrAppend(out, value.string());
-}
-
-std::string row_identity_key(const ObjectValue& row, const std::vector<std::string>& columns) {
-    std::string key;
-    key.reserve(columns.size() * 16);
-    for (const auto& column : columns) {
-        absl::StrAppend(&key, column, "=");
-        if (const Value* value = row.lookup(column); value != nullptr) {
-            append_value_key_fragment(&key, *value);
-        } else {
-            absl::StrAppend(&key, "<missing>");
-        }
-        key.push_back('\n');
-    }
-    return key;
-}
-
-std::string pivot_column_name(const ObjectValue& row, const std::vector<std::string>& columns) {
-    std::string name;
-    name.reserve(columns.size() * 12);
-    for (const auto& column : columns) {
-        if (!name.empty()) {
-            name.push_back('_');
-        }
-        if (const Value* value = row.lookup(column); value != nullptr) {
-            append_value_key_fragment(&name, *value);
-        } else {
-            absl::StrAppend(&name, "null");
-        }
-    }
-    return name;
 }
 
 void append_internal_key_fragment(std::string* out, const Value* value) {
@@ -679,13 +648,34 @@ struct PivotColumnIdentity {
     std::string name;
 };
 
-PivotColumnIdentity pivot_column_identity(const ObjectValue& row,
-                                         const std::vector<std::string>& columns) {
+struct PivotRowProjection {
+    std::vector<const Value*> row_key_values;
+    std::vector<const Value*> column_key_values;
+    std::vector<std::pair<std::string, Value>> passthrough_props;
+    const Value* value = nullptr;
+};
+
+std::string row_identity_key_from_values(const std::vector<std::string>& columns,
+                                         const std::vector<const Value*>& values) {
+    std::string key;
+    key.reserve(columns.size() * 16);
+    for (size_t i = 0; i < columns.size(); ++i) {
+        absl::StrAppend(&key, columns[i], "=");
+        if (values[i] != nullptr) {
+            append_value_key_fragment(&key, *values[i]);
+        } else {
+            absl::StrAppend(&key, "<missing>");
+        }
+        key.push_back('\n');
+    }
+    return key;
+}
+
+PivotColumnIdentity pivot_column_identity_from_values(const std::vector<const Value*>& values) {
     PivotColumnIdentity identity;
-    identity.cache_key.reserve(columns.size() * 12);
-    identity.name.reserve(columns.size() * 12);
-    for (const auto& column : columns) {
-        const Value* value = row.lookup(column);
+    identity.cache_key.reserve(values.size() * 12);
+    identity.name.reserve(values.size() * 12);
+    for (const Value* value : values) {
         append_internal_key_fragment(&identity.cache_key, value);
         identity.cache_key.push_back('\n');
         if (!identity.name.empty()) {
@@ -698,6 +688,34 @@ PivotColumnIdentity pivot_column_identity(const ObjectValue& row,
         }
     }
     return identity;
+}
+
+PivotRowProjection project_pivot_row(
+    const ObjectValue& row,
+    const std::unordered_map<std::string, size_t>& row_key_indexes,
+    const std::unordered_map<std::string, size_t>& column_key_indexes,
+    const std::string& value_column) {
+    PivotRowProjection projection;
+    projection.row_key_values.resize(row_key_indexes.size(), nullptr);
+    projection.column_key_values.resize(column_key_indexes.size(), nullptr);
+    projection.passthrough_props.reserve(row.properties.size());
+    for (const auto& [key, value] : row.properties) {
+        if (const auto row_key = row_key_indexes.find(key); row_key != row_key_indexes.end()) {
+            projection.row_key_values[row_key->second] = &value;
+            continue;
+        }
+        if (const auto column_key = column_key_indexes.find(key);
+            column_key != column_key_indexes.end()) {
+            projection.column_key_values[column_key->second] = &value;
+            continue;
+        }
+        if (key == value_column) {
+            projection.value = &value;
+            continue;
+        }
+        projection.passthrough_props.emplace_back(key, value);
+    }
+    return projection;
 }
 
 absl::StatusOr<std::vector<std::string>> parse_csv_record(const std::string& line,
@@ -991,9 +1009,10 @@ std::vector<std::string> visible_columns_in_chunk(const TableChunk& chunk) {
     return columns;
 }
 
-std::unordered_set<std::string> overlapping_join_columns(const std::vector<std::string>& left_columns,
-                                                         const std::vector<std::string>& right_columns,
-                                                         const std::unordered_set<std::string>& on_columns) {
+std::unordered_set<std::string> overlapping_join_columns(
+    const std::vector<std::string>& left_columns,
+    const std::vector<std::string>& right_columns,
+    const std::unordered_set<std::string>& on_columns) {
     std::unordered_set<std::string> right_column_set(right_columns.begin(), right_columns.end());
     std::unordered_set<std::string> overlap;
     overlap.reserve(left_columns.size());
@@ -1084,9 +1103,7 @@ struct PivotOutputRow {
     std::unordered_map<std::string, size_t> property_indexes;
 };
 
-void upsert_property_with_index(PivotOutputRow& output_row,
-                                const std::string& key,
-                                Value value) {
+void upsert_property_with_index(PivotOutputRow& output_row, const std::string& key, Value value) {
     const auto existing = output_row.property_indexes.find(key);
     if (existing != output_row.property_indexes.end()) {
         output_row.row->properties[existing->second].second = std::move(value);
@@ -1113,8 +1130,10 @@ std::shared_ptr<ObjectValue> join_rows(const std::string& left_name,
     for (const auto& column : on_columns) {
         const Value* value = left.lookup(column);
         if (value != nullptr) {
-            const bool already_present = std::any_of(
-                props.begin(), props.end(), [&](const auto& property) { return property.first == column; });
+            const bool already_present =
+                std::any_of(props.begin(), props.end(), [&](const auto& property) {
+                    return property.first == column;
+                });
             if (!already_present) {
                 props.emplace_back(column, *value);
             }
@@ -1773,6 +1792,56 @@ Value empty_window_aggregate_value(const FunctionValue& fn) {
     return Value::null();
 }
 
+std::shared_ptr<ObjectValue> aggregate_window_output_row(
+    const std::shared_ptr<ObjectValue>& base_row,
+    const std::string& aggregate_column,
+    Value aggregate_value,
+    const std::optional<int64_t>& window_start,
+    const std::optional<int64_t>& window_stop,
+    const std::string& time_dst_column,
+    const std::optional<int64_t>& time_src_seconds) {
+    std::vector<std::pair<std::string, Value>> props = base_row->properties;
+    props.reserve(base_row->properties.size() + 3);
+
+    std::optional<size_t> aggregate_index;
+    std::optional<size_t> start_index;
+    std::optional<size_t> stop_index;
+    std::optional<size_t> time_index;
+    for (size_t i = 0; i < props.size(); ++i) {
+        const std::string& key = props[i].first;
+        if (key == aggregate_column) {
+            aggregate_index = i;
+        } else if (key == "_start") {
+            start_index = i;
+        } else if (key == "_stop") {
+            stop_index = i;
+        } else if (key == time_dst_column) {
+            time_index = i;
+        }
+    }
+
+    const auto upsert = [&](const std::string& key, std::optional<size_t>* index, Value value) {
+        if (index->has_value()) {
+            props[**index].second = std::move(value);
+        } else {
+            *index = props.size();
+            props.emplace_back(key, std::move(value));
+        }
+    };
+
+    upsert(aggregate_column, &aggregate_index, std::move(aggregate_value));
+    if (window_start.has_value()) {
+        upsert("_start", &start_index, Value::time(format_rfc3339_seconds(*window_start)));
+    }
+    if (window_stop.has_value()) {
+        upsert("_stop", &stop_index, Value::time(format_rfc3339_seconds(*window_stop)));
+    }
+    if (time_src_seconds.has_value()) {
+        upsert(time_dst_column, &time_index, Value::time(format_rfc3339_seconds(*time_src_seconds)));
+    }
+    return std::make_shared<ObjectValue>(std::move(props));
+}
+
 absl::StatusOr<NumericSummary> summarize_numeric_array(const ArrayValue& array,
                                                        const std::string& name) {
     NumericSummary summary;
@@ -2405,7 +2474,8 @@ absl::StatusOr<Value> builtin_filter(const std::vector<Value>& args) {
     }
 
     return transform_rows_preserving_chunks(
-        **table_or, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
+        **table_or,
+        [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
             auto keep_or = ExpressionEvaluator::Invoke(**fn_or, {Value::object(clone_row(row))});
             if (!keep_or.ok()) {
                 return keep_or.status();
@@ -2519,9 +2589,8 @@ absl::StatusOr<Value> builtin_tail(const std::vector<Value>& args) {
     }
 
     return slice_table_like(**table_or, [&](size_t row_count) {
-        const size_t tail_end = offset >= static_cast<int64_t>(row_count)
-                                    ? 0
-                                    : row_count - static_cast<size_t>(offset);
+        const size_t tail_end =
+            offset >= static_cast<int64_t>(row_count) ? 0 : row_count - static_cast<size_t>(offset);
         const size_t tail_begin =
             static_cast<size_t>(*n_or) >= tail_end ? 0 : tail_end - static_cast<size_t>(*n_or);
         return std::pair<size_t, size_t>{tail_begin, tail_end};
@@ -2733,18 +2802,19 @@ absl::StatusOr<Value> builtin_sort(const std::vector<Value>& args) {
 
     auto chunks = clone_table_chunks(**table_or);
     for (auto& chunk : chunks) {
-        std::stable_sort(chunk.rows.begin(), chunk.rows.end(), [&](const auto& lhs, const auto& rhs) {
-            if (lhs == nullptr || rhs == nullptr) {
-                return lhs != nullptr;
-            }
-            for (const auto& column : *columns_or) {
-                const int cmp = compare_values(lhs->lookup(column), rhs->lookup(column));
-                if (cmp != 0) {
-                    return *desc_or ? cmp > 0 : cmp < 0;
+        std::stable_sort(
+            chunk.rows.begin(), chunk.rows.end(), [&](const auto& lhs, const auto& rhs) {
+                if (lhs == nullptr || rhs == nullptr) {
+                    return lhs != nullptr;
                 }
-            }
-            return false;
-        });
+                for (const auto& column : *columns_or) {
+                    const int cmp = compare_values(lhs->lookup(column), rhs->lookup(column));
+                    if (cmp != 0) {
+                        return *desc_or ? cmp > 0 : cmp < 0;
+                    }
+                }
+                return false;
+            });
     }
     return table_with_chunks_like(**table_or, std::move(chunks));
 }
@@ -2824,9 +2894,16 @@ absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
     if (column_key_or->empty()) {
         return absl::InvalidArgumentError("pivot `columnKey` must not be empty");
     }
-    const std::unordered_set<std::string> row_key_set(row_key_or->begin(), row_key_or->end());
-    const std::unordered_set<std::string> column_key_set(column_key_or->begin(),
-                                                         column_key_or->end());
+    std::unordered_map<std::string, size_t> row_key_indexes;
+    row_key_indexes.reserve(row_key_or->size());
+    for (size_t i = 0; i < row_key_or->size(); ++i) {
+        row_key_indexes.emplace((*row_key_or)[i], i);
+    }
+    std::unordered_map<std::string, size_t> column_key_indexes;
+    column_key_indexes.reserve(column_key_or->size());
+    for (size_t i = 0; i < column_key_or->size(); ++i) {
+        column_key_indexes.emplace((*column_key_or)[i], i);
+    }
 
     std::vector<TableChunk> chunks;
     chunks.reserve((*table_or)->table_count());
@@ -2844,26 +2921,27 @@ absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
             if (row == nullptr) {
                 continue;
             }
-            const std::string identity = row_identity_key(*row, *row_key_or);
+            PivotRowProjection projection =
+                project_pivot_row(*row, row_key_indexes, column_key_indexes, *value_column_or);
+            const std::string identity =
+                row_identity_key_from_values(*row_key_or, projection.row_key_values);
             size_t row_index = 0;
             if (const auto existing = row_indexes.find(identity); existing != row_indexes.end()) {
                 row_index = existing->second;
             } else {
                 std::vector<std::pair<std::string, Value>> props;
-                props.reserve(row->properties.size() + std::max<size_t>(1, pivot_name_cache.size()));
+                props.reserve(projection.row_key_values.size() +
+                              projection.passthrough_props.size() +
+                              std::max<size_t>(1, pivot_name_cache.size()));
                 PivotOutputRow output_state;
                 output_state.property_indexes.reserve(props.capacity());
-                for (const auto& column : *row_key_or) {
-                    if (const Value* value = row->lookup(column); value != nullptr) {
-                        props.emplace_back(column, *value);
-                        output_state.property_indexes.emplace(column, props.size() - 1);
+                for (size_t i = 0; i < row_key_or->size(); ++i) {
+                    if (const Value* value = projection.row_key_values[i]; value != nullptr) {
+                        props.emplace_back((*row_key_or)[i], *value);
+                        output_state.property_indexes.emplace((*row_key_or)[i], props.size() - 1);
                     }
                 }
-                for (const auto& [key, value] : row->properties) {
-                    if (key == *value_column_or || column_key_set.count(key) != 0 ||
-                        row_key_set.count(key) != 0) {
-                        continue;
-                    }
+                for (const auto& [key, value] : projection.passthrough_props) {
                     props.emplace_back(key, value);
                     output_state.property_indexes.emplace(key, props.size() - 1);
                 }
@@ -2875,11 +2953,12 @@ absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
                 row_indexes.emplace(identity, row_index);
             }
 
-            const Value* value = row->lookup(*value_column_or);
+            const Value* value = projection.value;
             if (value == nullptr) {
                 continue;
             }
-            PivotColumnIdentity column_identity = pivot_column_identity(*row, *column_key_or);
+            PivotColumnIdentity column_identity =
+                pivot_column_identity_from_values(projection.column_key_values);
             auto [pivot_name_it, inserted] =
                 pivot_name_cache.try_emplace(column_identity.cache_key);
             if (inserted) {
@@ -3681,8 +3760,7 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args,
                         group.buckets.push_back(AggregateWindowBucket{
                             .start_seconds = *primary_start_or,
                             .group_key = group_key,
-                            .first_row =
-                                aggregate_window_base_row(*row, *column_or, *time_dst_or),
+                            .first_row = aggregate_window_base_row(*row, *column_or, *time_dst_or),
                             .values = {},
                         });
                     }
@@ -3779,15 +3857,14 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args,
                             auto previous_bounds_or = aggregate_window_bounds_for_start(
                                 *previous_or, period, *location_or);
                             if (!previous_bounds_or.has_value() ||
-                                previous_bounds_or->upper_seconds <=
-                                    group.span.min_time_seconds) {
+                                previous_bounds_or->upper_seconds <= group.span.min_time_seconds) {
                                 break;
                             }
                             first_window_start_or = previous_or;
                         }
                     } else {
-                        auto next_or = add_window_duration_to_time(
-                            *first_window_start_or, *every_or, *location_or);
+                        auto next_or = add_window_duration_to_time(*first_window_start_or,
+                                                                   *every_or, *location_or);
                         if (next_or.has_value() && *next_or > *first_window_start_or) {
                             first_window_start_or = next_or;
                         } else {
@@ -3831,19 +3908,19 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args,
                 }
             }
 
-            std::stable_sort(group.buckets.begin(), group.buckets.end(), [](const auto& lhs,
-                                                                            const auto& rhs) {
-                if (lhs.start_seconds == rhs.start_seconds) {
-                    return false;
-                }
-                if (!lhs.start_seconds.has_value()) {
-                    return false;
-                }
-                if (!rhs.start_seconds.has_value()) {
-                    return true;
-                }
-                return *lhs.start_seconds < *rhs.start_seconds;
-            });
+            std::stable_sort(group.buckets.begin(), group.buckets.end(),
+                             [](const auto& lhs, const auto& rhs) {
+                                 if (lhs.start_seconds == rhs.start_seconds) {
+                                     return false;
+                                 }
+                                 if (!lhs.start_seconds.has_value()) {
+                                     return false;
+                                 }
+                                 if (!rhs.start_seconds.has_value()) {
+                                     return true;
+                                 }
+                                 return *lhs.start_seconds < *rhs.start_seconds;
+                             });
 
             TableChunk output_chunk;
             output_chunk.rows.reserve(group.buckets.size());
@@ -3867,30 +3944,23 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args,
                     aggregate_value = *aggregate_or;
                 }
 
-                Value row_value =
-                    object_with_upserted_property(*bucket.first_row, *column_or, aggregate_value);
+                std::optional<int64_t> window_start_seconds;
+                std::optional<int64_t> window_stop_seconds;
+                std::optional<int64_t> time_src_seconds;
                 if (bucket.start_seconds.has_value()) {
-                    auto bounds_or = aggregate_window_bounds_for_start(
-                        *bucket.start_seconds, period, *location_or);
+                    auto bounds_or = aggregate_window_bounds_for_start(*bucket.start_seconds,
+                                                                       period, *location_or);
                     if (!bounds_or.has_value()) {
                         return absl::InternalError("aggregateWindow failed to compute window stop");
                     }
-                    const int64_t window_stop = bounds_or->stop_seconds;
-                    row_value = object_with_upserted_property(
-                        row_value.as_object(), "_start",
-                        Value::time(format_rfc3339_seconds(*bucket.start_seconds)));
-                    row_value = object_with_upserted_property(
-                        row_value.as_object(), "_stop",
-                        Value::time(format_rfc3339_seconds(window_stop)));
-                    auto time_src_seconds = aggregate_window_time_src_seconds(
-                        bucket.first_row, *bucket.start_seconds, window_stop, *time_src_or);
-                    if (time_src_seconds.has_value()) {
-                        row_value = object_with_upserted_property(
-                            row_value.as_object(), *time_dst_or,
-                            Value::time(format_rfc3339_seconds(*time_src_seconds)));
-                    }
+                    window_start_seconds = *bucket.start_seconds;
+                    window_stop_seconds = bounds_or->stop_seconds;
+                    time_src_seconds = aggregate_window_time_src_seconds(
+                        bucket.first_row, *bucket.start_seconds, *window_stop_seconds, *time_src_or);
                 }
-                output_chunk.rows.push_back(std::make_shared<ObjectValue>(row_value.as_object()));
+                output_chunk.rows.push_back(aggregate_window_output_row(
+                    bucket.first_row, *column_or, std::move(aggregate_value), window_start_seconds,
+                    window_stop_seconds, *time_dst_or, time_src_seconds));
             }
             chunks.push_back(std::move(output_chunk));
         }

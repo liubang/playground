@@ -249,6 +249,19 @@ cc_test(
 )
 
 cc_test(
+    name = "strconv_unit_test",
+    srcs = [
+        "strconv_unit_test.cpp",
+    ],
+    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":parser",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "runtime_value_unit_test",
     srcs = [
         "runtime_value_unit_test.cpp",
