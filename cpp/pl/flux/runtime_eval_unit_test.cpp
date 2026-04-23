@@ -2011,6 +2011,28 @@ TEST(RuntimeEvalTest, EvaluatesSpreadQuantileMedianTopAndBottom) {
     ASSERT_TRUE(quantile.ok()) << quantile.status();
     ASSERT_EQ(1, quantile->as_table().rows.size());
     EXPECT_EQ("17.5", quantile->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("0.25", quantile->as_table().rows[0]->lookup("quantile")->string());
+
+    const auto& multi_quantile_expr = ParseAssignmentInit(R"(
+        result = from(bucket: "cpu", rows: [
+                {_time: "t1", host: "a", _value: 10.0},
+                {_time: "t2", host: "a", _value: 20.0},
+                {_time: "t3", host: "a", _value: 30.0},
+                {_time: "t4", host: "a", _value: 40.0},
+            ])
+            |> quantile(q: [0.5, 0.75, 0.99, 0.999])
+    )");
+    auto multi_quantile = ExpressionEvaluator::Evaluate(multi_quantile_expr, env);
+    ASSERT_TRUE(multi_quantile.ok()) << multi_quantile.status();
+    ASSERT_EQ(4, multi_quantile->as_table().rows.size());
+    EXPECT_EQ("25", multi_quantile->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("0.5", multi_quantile->as_table().rows[0]->lookup("quantile")->string());
+    EXPECT_EQ("32.5", multi_quantile->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ("0.75", multi_quantile->as_table().rows[1]->lookup("quantile")->string());
+    EXPECT_EQ("39.7", multi_quantile->as_table().rows[2]->lookup("_value")->string());
+    EXPECT_EQ("0.99", multi_quantile->as_table().rows[2]->lookup("quantile")->string());
+    EXPECT_EQ("39.97", multi_quantile->as_table().rows[3]->lookup("_value")->string());
+    EXPECT_EQ("0.999", multi_quantile->as_table().rows[3]->lookup("quantile")->string());
 
     const auto& median_expr = ParseAssignmentInit(R"(
         result = from(bucket: "cpu", rows: [

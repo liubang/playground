@@ -39,7 +39,7 @@ bazel build //cpp/pl/flux:flux
 - `aggregatewindow_advanced.flux`：更完整的 `aggregateWindow` 参数组合，包括 `column`、固定时长 `offset`、自定义聚合函数、`period`、负 `period`、`timeSrc`、`timeDst`、命名时区 `location`、日历窗口 `offset`、selector 空窗口行为
 - `task_driven_rollup.flux`：`option task = {...}` 驱动的窗口查询，结合 block-body helper、对象返回、嵌套条件和多主机 rollup
 - `nested_multi_table_health.flux`：当前实现边界附近的复杂样例，组合 `findColumn -> array.*` 的嵌套派生、helper 函数、双流 `join`、二次 `join`、`union`、`pivot`、多结果 `yield`，以及 `filter(onEmpty: "keep")`
-- `window_join_rankings.flux`：`window(createEmpty)`、`join(method: "left"|"full")`、`spread`、`quantile`、`median`、`top`、`bottom`
+- `window_join_rankings.flux`：`window(createEmpty)`、`join(method: "left"|"full")`、`spread`、`quantile`（单值和多值）、`median`、`top`、`bottom`
 
 ## builtin 覆盖映射
 
@@ -57,7 +57,7 @@ bazel build //cpp/pl/flux:flux
   `function_pipelines.flux`、`csv_raw_alerts.flux`、`table_shape_ops.flux`、`time_math.flux`
 - `limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`：
   `table_shape_ops.flux`
-- `reduce`、`sort`、`group`、`count`、`spread`、`quantile`、`median`、`first`、`last`、`top`、`bottom`：
+- `reduce`、`sort`、`group`、`count`、`spread`、`quantile`（支持 `q: 0.75` 和 `q: [0.5, 0.75, 0.99, 0.999]`）、`median`、`first`、`last`、`top`、`bottom`：
   `selection_and_reduce.flux`
 - `window`、`pivot`、`fill`、`distinct`、`union`、`join`、`aggregateWindow`、`yield`：
   `array_watchlist_join.flux`、`join_union_pivot.flux`、`fill_distinct_windows.flux`、`aggregatewindow_advanced.flux`、`task_driven_rollup.flux`、`nested_multi_table_health.flux`、`window_join_rankings.flux`
