@@ -47,6 +47,10 @@ percentile_75 = cpu
     |> quantile(q: 0.75)
     |> yield(name: "percentile_75")
 
+common_percentiles = cpu
+    |> quantile(q: [0.5, 0.75, 0.99, 0.999])
+    |> yield(name: "common_percentiles")
+
 median_usage = cpu
     |> median()
     |> yield(name: "median_usage")
