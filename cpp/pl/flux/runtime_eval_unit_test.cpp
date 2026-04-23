@@ -1909,6 +1909,152 @@ TEST(RuntimeEvalTest, ReportsAggregateWindowArgumentErrors) {
     EXPECT_EQ(absl::StatusCode::kInvalidArgument, invalid_fixed_period.status().code());
 }
 
+TEST(RuntimeEvalTest, EvaluatesWindowBuiltinWithCreateEmpty) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = from(bucket: "telegraf", rows: [
+                {_time: "2024-01-01T00:00:10Z", _value: 10.0, host: "a"},
+                {_time: "2024-01-01T00:02:05Z", _value: 30.0, host: "a"},
+            ])
+            |> range(start: 2024-01-01T00:00:00Z, stop: 2024-01-01T00:03:00Z)
+            |> group(columns: ["host"])
+            |> window(every: 1m, createEmpty: true)
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(3, result->as_table().table_count());
+    ASSERT_EQ(2, result->as_table().rows.size());
+    ASSERT_NE(nullptr, result->as_table().rows[0]);
+    EXPECT_EQ("2024-01-01T00:00:00Z", result->as_table().rows[0]->lookup("_start")->string());
+    EXPECT_EQ("2024-01-01T00:01:00Z", result->as_table().rows[0]->lookup("_stop")->string());
+    ASSERT_EQ(0, result->as_table().tables[1].rows.size());
+    ASSERT_NE(nullptr, result->as_table().tables[1].group_key);
+    EXPECT_EQ("2024-01-01T00:01:00Z",
+              result->as_table().tables[1].group_key->lookup("_start")->string());
+    ASSERT_NE(nullptr, result->as_table().rows[1]);
+    EXPECT_EQ("2024-01-01T00:02:00Z", result->as_table().rows[1]->lookup("_start")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesOuterJoinMethods) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = join(
+            tables: {
+                cpu: from(bucket: "cpu", rows: [
+                    {_time: "t1", host: "a", _value: 90.0},
+                    {_time: "t2", host: "a", _value: 91.0},
+                ]),
+                mem: from(bucket: "mem", rows: [
+                    {_time: "t2", host: "a", _value: 40.0},
+                    {_time: "t3", host: "a", _value: 20.0},
+                ]),
+            },
+            method: "full",
+            on: ["_time"],
+        )
+    )");
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(Value::Type::Table, result->type());
+    ASSERT_EQ(3, result->as_table().rows.size());
+    ASSERT_NE(nullptr, result->as_table().rows[0]);
+    EXPECT_EQ("\"t1\"", result->as_table().rows[0]->lookup("_time")->string());
+    EXPECT_EQ("90", result->as_table().rows[0]->lookup("_value_cpu")->string());
+    EXPECT_TRUE(result->as_table().rows[0]->lookup("_value_mem")->is_null());
+    ASSERT_NE(nullptr, result->as_table().rows[1]);
+    EXPECT_EQ("\"t2\"", result->as_table().rows[1]->lookup("_time")->string());
+    EXPECT_EQ("91", result->as_table().rows[1]->lookup("_value_cpu")->string());
+    EXPECT_EQ("40", result->as_table().rows[1]->lookup("_value_mem")->string());
+    ASSERT_NE(nullptr, result->as_table().rows[2]);
+    EXPECT_EQ("\"t3\"", result->as_table().rows[2]->lookup("_time")->string());
+    EXPECT_TRUE(result->as_table().rows[2]->lookup("_value_cpu")->is_null());
+    EXPECT_EQ("20", result->as_table().rows[2]->lookup("_value_mem")->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesSpreadQuantileMedianTopAndBottom) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    const auto& spread_expr = ParseAssignmentInit(R"(
+        result = from(bucket: "cpu", rows: [
+                {_time: "t1", host: "a", _value: 10.0},
+                {_time: "t2", host: "a", _value: 25.0},
+                {_time: "t3", host: "b", _value: 40.0},
+                {_time: "t4", host: "b", _value: 50.0},
+            ])
+            |> group(columns: ["host"])
+            |> spread()
+    )");
+    auto spread = ExpressionEvaluator::Evaluate(spread_expr, env);
+    ASSERT_TRUE(spread.ok()) << spread.status();
+    ASSERT_EQ(2, spread->as_table().rows.size());
+    EXPECT_EQ("15", spread->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("10", spread->as_table().rows[1]->lookup("_value")->string());
+
+    const auto& quantile_expr = ParseAssignmentInit(R"(
+        result = from(bucket: "cpu", rows: [
+                {_time: "t1", host: "a", _value: 10.0},
+                {_time: "t2", host: "a", _value: 20.0},
+                {_time: "t3", host: "a", _value: 30.0},
+                {_time: "t4", host: "a", _value: 40.0},
+            ])
+            |> quantile(q: 0.25)
+    )");
+    auto quantile = ExpressionEvaluator::Evaluate(quantile_expr, env);
+    ASSERT_TRUE(quantile.ok()) << quantile.status();
+    ASSERT_EQ(1, quantile->as_table().rows.size());
+    EXPECT_EQ("17.5", quantile->as_table().rows[0]->lookup("_value")->string());
+
+    const auto& median_expr = ParseAssignmentInit(R"(
+        result = from(bucket: "cpu", rows: [
+                {_time: "t1", host: "a", _value: 10.0},
+                {_time: "t2", host: "a", _value: 20.0},
+                {_time: "t3", host: "a", _value: 30.0},
+                {_time: "t4", host: "a", _value: 40.0},
+            ])
+            |> median()
+    )");
+    auto median = ExpressionEvaluator::Evaluate(median_expr, env);
+    ASSERT_TRUE(median.ok()) << median.status();
+    ASSERT_EQ(1, median->as_table().rows.size());
+    EXPECT_EQ("25", median->as_table().rows[0]->lookup("_value")->string());
+
+    const auto& top_expr = ParseAssignmentInit(R"(
+        result = from(bucket: "cpu", rows: [
+                {_time: "t1", host: "a", _value: 10.0},
+                {_time: "t2", host: "a", _value: 20.0},
+                {_time: "t3", host: "a", _value: 30.0},
+            ])
+            |> top(n: 2)
+    )");
+    auto top = ExpressionEvaluator::Evaluate(top_expr, env);
+    ASSERT_TRUE(top.ok()) << top.status();
+    ASSERT_EQ(2, top->as_table().rows.size());
+    EXPECT_EQ("30", top->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("20", top->as_table().rows[1]->lookup("_value")->string());
+
+    const auto& bottom_expr = ParseAssignmentInit(R"(
+        result = from(bucket: "cpu", rows: [
+                {_time: "t1", host: "a", _value: 10.0},
+                {_time: "t2", host: "a", _value: 20.0},
+                {_time: "t3", host: "a", _value: 30.0},
+            ])
+            |> bottom(n: 2)
+    )");
+    auto bottom = ExpressionEvaluator::Evaluate(bottom_expr, env);
+    ASSERT_TRUE(bottom.ok()) << bottom.status();
+    ASSERT_EQ(2, bottom->as_table().rows.size());
+    EXPECT_EQ("10", bottom->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("20", bottom->as_table().rows[1]->lookup("_value")->string());
+}
+
 TEST(RuntimeEvalTest, EvaluatesPipeIntoUserFunctionPipeParameter) {
     Environment env;
     const auto& expr = ParseAssignmentInit("result = 3 |> ((<-value, ?inc=1) => value + inc)(inc: 2)");

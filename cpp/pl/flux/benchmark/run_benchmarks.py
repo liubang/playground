@@ -62,6 +62,16 @@ csv.from(file: DATA)
   |> yield(name: "grouped")
 """
 
+WINDOW_TEMPLATE = """import "csv"
+
+csv.from(file: DATA)
+  |> range(start: 2024-01-01T00:00:00Z, stop: 2024-01-02T00:00:00Z)
+  |> group(columns: ["host"])
+  |> window(every: 1h, createEmpty: true)
+  |> count()
+  |> yield(name: "windowed")
+"""
+
 PIVOT_TEMPLATE = """import "csv"
 
 csv.from(file: DATA)
@@ -133,6 +143,29 @@ join(
 )
     |> limit(n: 1000)
     |> yield(name: "joined_grouped")
+"""
+
+JOIN_FULL_TEMPLATE = """import "csv"
+
+join(
+    tables: {
+        l: csv.from(file: LEFT),
+        r: csv.from(file: RIGHT),
+    },
+    method: "full",
+    on: ["_time", "host"],
+)
+    |> limit(n: 1000)
+    |> yield(name: "joined_full")
+"""
+
+RANKING_TEMPLATE = """import "csv"
+
+source = csv.from(file: DATA)
+  |> group(columns: [])
+
+source |> top(n: 5) |> yield(name: "highest")
+source |> bottom(n: 5) |> yield(name: "lowest")
 """
 
 
@@ -315,9 +348,17 @@ def main() -> None:
             work_dir / f"group_{rows}.flux",
             GROUP_TEMPLATE.replace("DATA", f'"{data}"'),
         )
+        window_query = write_query(
+            work_dir / f"window_{rows}.flux",
+            WINDOW_TEMPLATE.replace("DATA", f'"{data}"'),
+        )
         array_query = write_query(
             work_dir / f"array_{rows}.flux",
             ARRAY_TEMPLATE.replace("DATA", f'"{data}"'),
+        )
+        ranking_query = write_query(
+            work_dir / f"ranking_{rows}.flux",
+            RANKING_TEMPLATE.replace("DATA", f'"{data}"'),
         )
         pivot_data = data_dir / f"pivot_{rows}.annotated.csv"
         pivot_query = write_query(
@@ -337,7 +378,9 @@ def main() -> None:
             ("agg_create_empty", agg_create_empty_query),
             ("agg_calendar", agg_calendar_query),
             ("group", group_query),
+            ("window", window_query),
             ("array", array_query),
+            ("ranking", ranking_query),
             ("pivot", pivot_query),
             ("pivot_wide", pivot_wide_query),
         )
@@ -366,9 +409,14 @@ def main() -> None:
             work_dir / f"join_grouped_{rows}.flux",
             JOIN_GROUPED_TEMPLATE.replace("LEFT", f'"{left}"').replace("RIGHT", f'"{right}"'),
         )
+        join_full_query = write_query(
+            work_dir / f"join_full_{rows}.flux",
+            JOIN_FULL_TEMPLATE.replace("LEFT", f'"{left}"').replace("RIGHT", f'"{right}"'),
+        )
         join_cases = (
             ("join", join_query),
             ("join_grouped", join_grouped_query),
+            ("join_full", join_full_query),
         )
         for case_name, query_path in join_cases:
             if not selected(case_filter, case_name):

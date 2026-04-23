@@ -14,11 +14,14 @@
 - `agg_create_empty`：`aggregateWindow(createEmpty: true)`，专门观察空窗口扩张成本
 - `agg_calendar`：`aggregateWindow(every: 1mo)`，专门观察 calendar window 路径
 - `group`：`csv.from |> group |> count |> yield`
+- `window`：`csv.from |> range |> group |> window(createEmpty) |> count`
 - `array`：`findColumn + array.map/filter/contains/reduce/any/all`
+- `ranking`：`csv.from |> top / bottom`
 - `pivot`：`csv.from |> pivot |> limit`
 - `pivot_wide`：更宽的 `_field` 基数下直接 `pivot`
 - `join`：双表 `join(..., on: ["_time", "host"]) |> limit`
 - `join_grouped`：两侧先 `group(columns: ["host"])` 再 `join(..., on: ["_time"])`
+- `join_full`：双表 `join(method: "full") |> limit`
 
 这些 case 组合起来主要覆盖：
 
@@ -28,9 +31,12 @@
 - 带空窗口扩张的聚合路径
 - calendar month 窗口路径
 - 纯 group 重分表路径
+- 显式窗口拆表与空窗口保留路径
 - 数组 package 的真实 helper 组合路径
+- 排名 selector 路径
 - 宽表整形路径
 - 更重的多表 `join` 路径，目前已经由哈希索引支撑
+- outer join 路径
 - `pivot` / `join` 在多 logical table 语义下的热点路径
 
 ## 运行方式
@@ -76,7 +82,7 @@ python3 cpp/pl/flux/benchmark/run_benchmarks.py --warmup-runs 0 --repeat-runs 3
 python3 cpp/pl/flux/benchmark/run_benchmarks.py \
   --warmup-runs 0 \
   --repeat-runs 2 \
-  --cases agg,agg_create_empty,agg_calendar,pivot,pivot_wide,join,join_grouped \
+  --cases agg,agg_create_empty,agg_calendar,window,ranking,pivot,pivot_wide,join,join_grouped,join_full \
   --metric-rows 100000 \
   --join-rows 2000
 ```

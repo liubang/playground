@@ -771,6 +771,117 @@ TEST(RuntimeExecTest, ExecutesJoinQueryFileUsingMatchingGroupInstancesOnly) {
     EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
 }
 
+TEST(RuntimeExecTest, ExecutesWindowAndOuterJoinQueryFile) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin range : (<-tables: stream[A], start: time, ?stop: time) => stream[A]
+        builtin group : (<-tables: stream[A], ?columns: [string], ?mode: string) => stream[A]
+        builtin window : (<-tables: stream[A], every: duration, ?createEmpty: bool) => stream[A]
+        builtin join : (tables: A, ?method: string, on: [string]) => stream[B]
+
+        cpu = from(bucket: "cpu", rows: [
+            {_time: 2024-01-01T00:00:10Z, host: "a", _value: 90.0},
+            {_time: 2024-01-01T00:02:05Z, host: "a", _value: 91.0},
+        ])
+            |> range(start: 2024-01-01T00:00:00Z, stop: 2024-01-01T00:03:00Z)
+            |> group(columns: ["host"])
+            |> window(every: 1m, createEmpty: true)
+
+        mem = from(bucket: "mem", rows: [
+            {_time: "t2", host: "a", _value: 40.0},
+            {_time: "t3", host: "a", _value: 20.0},
+        ])
+        joined = join(
+            tables: {
+                cpu: from(bucket: "cpu", rows: [
+                    {_time: "t1", host: "a", _value: 90.0},
+                    {_time: "t2", host: "a", _value: 91.0},
+                ]),
+                mem: mem,
+            },
+            method: "full",
+            on: ["_time"],
+        )
+        joined
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("cpu").ok());
+    ASSERT_EQ(3, env.lookup("cpu")->as_table().table_count());
+    ASSERT_TRUE(env.lookup("joined").ok());
+    ASSERT_EQ(3, env.lookup("joined")->as_table().rows.size());
+    EXPECT_EQ("\"t1\"", env.lookup("joined")->as_table().rows[0]->lookup("_time")->string());
+    EXPECT_TRUE(env.lookup("joined")->as_table().rows[0]->lookup("_value_mem")->is_null());
+    EXPECT_EQ("\"t3\"", env.lookup("joined")->as_table().rows[2]->lookup("_time")->string());
+    EXPECT_TRUE(env.lookup("joined")->as_table().rows[2]->lookup("_value_cpu")->is_null());
+    EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
+}
+
+TEST(RuntimeExecTest, ExecutesRankingAndQuantileQueryFile) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        builtin group : (<-tables: stream[A], ?columns: [string], ?mode: string) => stream[A]
+        builtin spread : (<-tables: stream[A], ?column: string) => stream[A]
+        builtin quantile : (<-tables: stream[A], q: float, ?column: string) => stream[A]
+        builtin median : (<-tables: stream[A], ?column: string) => stream[A]
+        builtin top : (<-tables: stream[A], n: int, ?columns: [string]) => stream[A]
+        builtin bottom : (<-tables: stream[A], n: int, ?columns: [string]) => stream[A]
+
+        byHost = from(bucket: "cpu", rows: [
+            {_time: "t1", host: "a", _value: 10.0},
+            {_time: "t2", host: "a", _value: 25.0},
+            {_time: "t3", host: "b", _value: 40.0},
+            {_time: "t4", host: "b", _value: 50.0},
+        ]) |> group(columns: ["host"])
+        spreaded = byHost |> spread()
+        q = from(bucket: "cpu", rows: [
+            {_time: "t1", _value: 10.0},
+            {_time: "t2", _value: 20.0},
+            {_time: "t3", _value: 30.0},
+            {_time: "t4", _value: 40.0},
+        ]) |> quantile(q: 0.25)
+        med = from(bucket: "cpu", rows: [
+            {_time: "t1", _value: 10.0},
+            {_time: "t2", _value: 20.0},
+            {_time: "t3", _value: 30.0},
+            {_time: "t4", _value: 40.0},
+        ]) |> median()
+        highest = from(bucket: "cpu", rows: [
+            {_time: "t1", _value: 10.0},
+            {_time: "t2", _value: 20.0},
+            {_time: "t3", _value: 30.0},
+        ]) |> top(n: 2)
+        lowest = from(bucket: "cpu", rows: [
+            {_time: "t1", _value: 10.0},
+            {_time: "t2", _value: 20.0},
+            {_time: "t3", _value: 30.0},
+        ]) |> bottom(n: 2)
+        lowest
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("spreaded").ok());
+    ASSERT_EQ(2, env.lookup("spreaded")->as_table().rows.size());
+    EXPECT_EQ("15", env.lookup("spreaded")->as_table().rows[0]->lookup("_value")->string());
+    ASSERT_TRUE(env.lookup("q").ok());
+    EXPECT_EQ("17.5", env.lookup("q")->as_table().rows[0]->lookup("_value")->string());
+    ASSERT_TRUE(env.lookup("med").ok());
+    EXPECT_EQ("25", env.lookup("med")->as_table().rows[0]->lookup("_value")->string());
+    ASSERT_TRUE(env.lookup("highest").ok());
+    EXPECT_EQ("30", env.lookup("highest")->as_table().rows[0]->lookup("_value")->string());
+    ASSERT_TRUE(env.lookup("lowest").ok());
+    EXPECT_EQ("10", env.lookup("lowest")->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
+}
+
 TEST(RuntimeExecTest, ExecutesDistinctQueryFile) {
     auto file = ParseFile(R"(
         builtin from : (bucket: string) => stream[A]
