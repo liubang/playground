@@ -128,6 +128,8 @@
 
 - `pivot_wide`：更宽 `_field` 基数下的 pivot
 - `join_grouped`：两侧先按 `host` 分表后再 join
+- `agg_create_empty`：专门看空窗口扩张成本
+- `agg_calendar`：专门看 calendar month 窗口路径
 
 以及一组更适合本地迭代时快速 smoke 的 runner 参数：
 
