@@ -148,7 +148,7 @@ bazel build //cpp/pl/flux:flux
 
 - `window()`
 - `spread()`
-- `quantile(q:)`
+- `quantile(q:)`，其中 `q` 现在支持单个数值或数值数组
 - `median()`
 - `top(n:)`
 - `bottom(n:)`
