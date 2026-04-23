@@ -54,6 +54,24 @@ csv.from(file: DATA)
   |> yield(name: "agg")
 """
 
+AGG_CREATE_EMPTY_TEMPLATE = """import "csv"
+
+csv.from(file: DATA)
+  |> group(columns: ["host"])
+  |> range(start: 2024-01-01T00:00:00Z, stop: 2024-01-03T00:00:00Z)
+  |> aggregateWindow(every: 1h, fn: mean, createEmpty: true)
+  |> yield(name: "agg_create_empty")
+"""
+
+AGG_CALENDAR_TEMPLATE = """import "csv"
+
+csv.from(file: DATA)
+  |> group(columns: ["host"])
+  |> range(start: 2024-01-01T00:00:00Z, stop: 2024-02-01T00:00:00Z)
+  |> aggregateWindow(every: 1mo, fn: mean, createEmpty: false)
+  |> yield(name: "agg_calendar")
+"""
+
 GROUP_TEMPLATE = """import "csv"
 
 csv.from(file: DATA)
@@ -303,6 +321,14 @@ def main() -> None:
             work_dir / f"agg_{rows}.flux",
             AGG_TEMPLATE.replace("DATA", f'"{data}"'),
         )
+        agg_create_empty_query = write_query(
+            work_dir / f"agg_create_empty_{rows}.flux",
+            AGG_CREATE_EMPTY_TEMPLATE.replace("DATA", f'"{data}"'),
+        )
+        agg_calendar_query = write_query(
+            work_dir / f"agg_calendar_{rows}.flux",
+            AGG_CALENDAR_TEMPLATE.replace("DATA", f'"{data}"'),
+        )
         group_query = write_query(
             work_dir / f"group_{rows}.flux",
             GROUP_TEMPLATE.replace("DATA", f'"{data}"'),
@@ -326,6 +352,8 @@ def main() -> None:
             ("linear", linear_query),
             ("sort", sort_query),
             ("agg", agg_query),
+            ("agg_create_empty", agg_create_empty_query),
+            ("agg_calendar", agg_calendar_query),
             ("group", group_query),
             ("array", array_query),
             ("pivot", pivot_query),
