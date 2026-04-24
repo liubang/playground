@@ -9,6 +9,8 @@
 ```bash
 bazel build //cpp/pl/flux:flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/scalar_basics.flux
+./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/stdlib_packages.flux
+./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/date_calendar.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/function_pipelines.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/array_watchlist_join.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/csv_raw_alerts.flux
@@ -27,6 +29,8 @@ bazel build //cpp/pl/flux:flux
 ## 示例说明
 
 - `scalar_basics.flux`：标量 builtin、数组/对象、成员/索引访问、`exists`、条件表达式、字符串插值
+- `stdlib_packages.flux`：`regexp`、`strings`、`math` 标准库 package 组合，用真实服务数据派生告警标签、host/region 分类和 CPU 评分
+- `date_calendar.flux`：`date` package 从 `_time` 派生 year/month/monthDay/weekDay/hour/minute/second，并按 weekday/service 汇总
 - `function_pipelines.flux`：`option`、用户函数、默认参数、pipe 参数、正则过滤、`map`、`set`
 - `array_watchlist_join.flux`：`array.concat`、`array.filter`、`array.map`、`array.contains`、`array.reduce`、`array.any`、`array.all`、`array.from`，以及数组配置驱动的 `join`
 - `csv_raw_alerts.flux`：`import "csv"` 与 `csv.from(..., mode: "raw")`
@@ -50,7 +54,11 @@ bazel build //cpp/pl/flux:flux
 - `array.from`、`array.concat`、`array.filter`、`array.map`、`array.contains`、`array.reduce`、`array.any`、`array.all`：
   `array_watchlist_join.flux`
 - `csv.from`：
-  `array_watchlist_join.flux`、`csv_raw_alerts.flux`、`inspection_helpers.flux`、`table_shape_ops.flux`、`selection_and_reduce.flux`、`join_union_pivot.flux`、`fill_distinct_windows.flux`、`time_math.flux`、`task_driven_rollup.flux`、`nested_multi_table_health.flux`
+  `stdlib_packages.flux`、`date_calendar.flux`、`array_watchlist_join.flux`、`csv_raw_alerts.flux`、`inspection_helpers.flux`、`table_shape_ops.flux`、`selection_and_reduce.flux`、`join_union_pivot.flux`、`fill_distinct_windows.flux`、`time_math.flux`、`task_driven_rollup.flux`、`nested_multi_table_health.flux`
+- `date.year`、`date.month`、`date.monthDay`、`date.weekDay`、`date.hour`、`date.minute`、`date.second`：
+  `date_calendar.flux`
+- `regexp.compile`、`regexp.matchRegexpString`、`regexp.quoteMeta`、`strings.containsStr`、`strings.hasPrefix`、`strings.replaceAll`、`strings.toUpper`、`strings.trimSpace`、`math.abs`、`math.ceil`、`math.round`、`math.sqrt`、`math.pow`：
+  `stdlib_packages.flux`
 - `columns`、`keys`、`findColumn`、`findRecord`：
   `inspection_helpers.flux`、`nested_multi_table_health.flux`
 - `range`、`filter`、`map`：

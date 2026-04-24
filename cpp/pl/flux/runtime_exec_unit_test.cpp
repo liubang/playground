@@ -110,16 +110,13 @@ TEST(RuntimeExecTest, ExecutesTestCaseStatementsInIsolatedScopeAndStoresResult) 
     auto testcase_or = StatementExecutor::Execute(*file->body[1], env);
     ASSERT_TRUE(testcase_or.ok()) << testcase_or.status();
     EXPECT_EQ(ExecutionResult::Type::Normal, testcase_or->type);
-    EXPECT_EQ(
-        "{name: \"math\", success: true, extends: \"base\", value: 6}",
-        testcase_or->value.string());
+    EXPECT_EQ("{name: \"math\", success: true, extends: \"base\", value: 6}",
+              testcase_or->value.string());
     EXPECT_FALSE(env.lookup("temp").ok());
 
     auto result_or = env.lookup_option("__flux.testcase.math");
     ASSERT_TRUE(result_or.ok()) << result_or.status();
-    EXPECT_EQ(
-        "{name: \"math\", success: true, extends: \"base\", value: 6}",
-        result_or->string());
+    EXPECT_EQ("{name: \"math\", success: true, extends: \"base\", value: 6}", result_or->string());
 }
 
 TEST(RuntimeExecTest, ExecutesBuiltinStatementsForRegisteredBuiltins) {
@@ -244,14 +241,68 @@ TEST(RuntimeExecTest, ExecutesTopLevelFileStatementsInSharedEnvironment) {
     ASSERT_TRUE(env.lookup_option("__flux.package").ok());
     EXPECT_EQ("\"metrics\"", env.lookup_option("__flux.package")->string());
     ASSERT_TRUE(env.lookup("array").ok());
-    EXPECT_EQ(
-        "{path: \"array\", from: <builtin array.from>, concat: <builtin array.concat>, "
-        "filter: <builtin array.filter>, map: <builtin array.map>, "
-        "contains: <builtin array.contains>, reduce: <builtin array.reduce>, "
-        "any: <builtin array.any>, all: <builtin array.all>}",
-        env.lookup("array")->string());
+    EXPECT_EQ("{path: \"array\", from: <builtin array.from>, concat: <builtin array.concat>, "
+              "filter: <builtin array.filter>, map: <builtin array.map>, "
+              "contains: <builtin array.contains>, reduce: <builtin array.reduce>, "
+              "any: <builtin array.any>, all: <builtin array.all>}",
+              env.lookup("array")->string());
     ASSERT_TRUE(env.lookup("regexp").ok());
-    EXPECT_EQ("{path: \"regexp\", alias: \"regexp\"}", env.lookup("regexp")->string());
+    EXPECT_EQ("{path: \"regexp\", compile: <builtin regexp.compile>, "
+              "matchRegexpString: <builtin regexp.matchRegexpString>, "
+              "quoteMeta: <builtin regexp.quoteMeta>, alias: \"regexp\"}",
+              env.lookup("regexp")->string());
+}
+
+TEST(RuntimeExecTest, ExecutesScalarStdlibPackageHelpers) {
+    auto file = ParseFile(R"(
+        import "date"
+        import "math"
+        import "regexp"
+        import "strings"
+
+        service = " api-01 "
+            |> strings.trimSpace()
+            |> strings.toUpper()
+        matched = regexp.matchRegexpString(r: regexp.compile(v: "API-[0-9]+"), v: service)
+        node = strings.replaceAll(v: service, t: "API", u: "SVC")
+        score = math.pow(x: 2.0, y: 4.0) + math.abs(x: -3)
+        hour = date.hour(t: 2024-06-01T09:01:10Z)
+        weekday = "2024-06-01T09:01:10Z" |> date.weekDay()
+        {service: service, node: node, matched: matched, score: score, hour: hour, weekday: weekday}
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("service").ok());
+    EXPECT_EQ("\"API-01\"", env.lookup("service")->string());
+    ASSERT_TRUE(env.lookup("matched").ok());
+    EXPECT_EQ("true", env.lookup("matched")->string());
+    ASSERT_TRUE(env.lookup("score").ok());
+    EXPECT_EQ("19", env.lookup("score")->string());
+    EXPECT_EQ("{service: \"API-01\", node: \"SVC-01\", matched: true, score: 19, hour: 9, "
+              "weekday: 6}",
+              result_or->last.value.string());
+}
+
+TEST(RuntimeExecTest, ImportsUnknownPackageAsMetadataOnlyObject) {
+    auto file = ParseFile(R"(
+        import custom "experimental/unknown"
+        custom
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("custom").ok());
+    EXPECT_EQ("{path: \"experimental/unknown\", alias: \"custom\"}",
+              env.lookup("custom")->string());
+    EXPECT_EQ("{path: \"experimental/unknown\", alias: \"custom\"}",
+              result_or->last.value.string());
 }
 
 TEST(RuntimeExecTest, ExecutesArrayFromImportedPackage) {
@@ -302,7 +353,8 @@ TEST(RuntimeExecTest, ExecutesArrayPackageHelpers) {
     ASSERT_TRUE(env.lookup("rows").ok());
     ASSERT_EQ(Value::Type::Array, env.lookup("rows")->type());
     ASSERT_EQ(3, env.lookup("rows")->as_array().elements.size());
-    EXPECT_EQ("{host: \"edge-3\", _value: 30}", env.lookup("rows")->as_array().elements[0].string());
+    EXPECT_EQ("{host: \"edge-3\", _value: 30}",
+              env.lookup("rows")->as_array().elements[0].string());
     ASSERT_TRUE(env.lookup("data").ok());
     ASSERT_EQ(Value::Type::Table, env.lookup("data")->type());
     ASSERT_EQ(3, env.lookup("data")->as_table().rows.size());
@@ -345,9 +397,8 @@ TEST(RuntimeExecTest, ExecutesArrayContainsAndReduceHelpers) {
     EXPECT_EQ("2", env.lookup("summary")->as_object().lookup("count")->string());
     EXPECT_EQ("\"edge-3\"", env.lookup("summary")->as_object().lookup("last")->string());
     ASSERT_EQ(Value::Type::Object, result_or->last.value.type());
-    EXPECT_EQ(
-        "{hasCanary: true, summary: {count: 2, last: \"edge-3\"}}",
-        result_or->last.value.string());
+    EXPECT_EQ("{hasCanary: true, summary: {count: 2, last: \"edge-3\"}}",
+              result_or->last.value.string());
 }
 
 TEST(RuntimeExecTest, ExecutesArrayAnyAndAllHelpers) {
@@ -490,8 +541,7 @@ TEST(RuntimeExecTest, ExecutesTestCasesDuringFileExecutionWithoutLeakingBindings
     EXPECT_EQ("base", result_or->results[0].name);
     EXPECT_EQ("10", result_or->results[0].value.string());
     EXPECT_EQ("testcase.checks", result_or->results[1].name);
-    EXPECT_EQ("{name: \"checks\", success: true, value: 15}",
-              result_or->results[1].value.string());
+    EXPECT_EQ("{name: \"checks\", success: true, value: 15}", result_or->results[1].value.string());
     EXPECT_EQ("_result", result_or->results[2].name);
     EXPECT_EQ("10", result_or->results[2].value.string());
     EXPECT_FALSE(env.lookup("local").ok());
@@ -974,10 +1024,12 @@ TEST(RuntimeExecTest, ExecutesPivotQueryFile) {
     ASSERT_TRUE(result_or.ok()) << result_or.status();
     ASSERT_TRUE(env.lookup("wide").ok());
     ASSERT_EQ(2, env.lookup("wide")->as_table().rows.size());
-    EXPECT_EQ("2024-01-01T00:01:00Z", env.lookup("wide")->as_table().rows[0]->lookup("_time")->string());
+    EXPECT_EQ("2024-01-01T00:01:00Z",
+              env.lookup("wide")->as_table().rows[0]->lookup("_time")->string());
     EXPECT_EQ("72", env.lookup("wide")->as_table().rows[0]->lookup("cpu")->string());
     EXPECT_EQ("63", env.lookup("wide")->as_table().rows[0]->lookup("mem")->string());
-    EXPECT_EQ("2024-01-01T00:02:00Z", env.lookup("wide")->as_table().rows[1]->lookup("_time")->string());
+    EXPECT_EQ("2024-01-01T00:02:00Z",
+              env.lookup("wide")->as_table().rows[1]->lookup("_time")->string());
     EXPECT_EQ("82", env.lookup("wide")->as_table().rows[1]->lookup("cpu")->string());
     EXPECT_EQ("68", env.lookup("wide")->as_table().rows[1]->lookup("mem")->string());
     EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
@@ -1139,7 +1191,8 @@ TEST(RuntimeExecTest, ExecutesDerivativeQueryFile) {
     ASSERT_TRUE(env.lookup("rates").ok());
     ASSERT_EQ(2, env.lookup("rates")->as_table().rows.size());
     EXPECT_EQ("\"a\"", env.lookup("rates")->as_table().rows[0]->lookup("host")->string());
-    EXPECT_EQ("2.33333333333333", env.lookup("rates")->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("2.33333333333333",
+              env.lookup("rates")->as_table().rows[0]->lookup("_value")->string());
     EXPECT_EQ("\"b\"", env.lookup("rates")->as_table().rows[1]->lookup("host")->string());
     EXPECT_EQ("-1", env.lookup("rates")->as_table().rows[1]->lookup("_value")->string());
     EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
