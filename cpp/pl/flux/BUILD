@@ -133,9 +133,12 @@ cc_library(
     name = "runtime_builtin",
     srcs = [
         "runtime_builtin.cpp",
+        "runtime_builtin_package.cpp",
+        "runtime_builtin_scalar.cpp",
     ],
     hdrs = [
         "runtime_builtin.h",
+        "runtime_builtin_package.h",
     ],
     copts = ["-std=c++20"] + COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,

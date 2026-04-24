@@ -132,6 +132,18 @@ bazel build //cpp/pl/flux:flux
 - `findColumn(fn:, column:)`
 - `findRecord(fn:, idx:)`
 
+标准库 package 入口也开始从查询包扩到标量工具包。当前可执行的 package 包括：
+
+- `array`: `from`、`concat`、`filter`、`map`、`contains`、`reduce`、`any`、`all`
+- `csv`: `from`
+- `date`: `year`、`month`、`monthDay`、`weekDay`、`hour`、`minute`、`second`
+- `regexp`: `compile`、`matchRegexpString`、`quoteMeta`
+- `strings`: `containsStr`、`hasPrefix`、`hasSuffix`、`replaceAll`、`toUpper`、`toLower`、`trimSpace`
+- `math`: `pi`、`abs`、`ceil`、`floor`、`round`、`sqrt`、`pow`
+
+未知 package 会保留为 metadata-only object，例如 `import x "experimental/foo"` 会绑定
+`{path: "experimental/foo", alias: "x"}`，方便脚本继续暴露导入元数据；调用其中不存在的属性仍会按普通对象访问报错。
+
 `aggregateWindow()` 目前已经覆盖比较实用的一批参数组合，包括：
 
 - 固定时长窗口与日历窗口
