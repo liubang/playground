@@ -220,10 +220,9 @@ TEST(RuntimeEvalTest, EvaluatesCsvFromRawStringPackageBuiltin) {
     auto csv_or = BuiltinRegistry::ImportPackage("csv");
     ASSERT_TRUE(csv_or.ok()) << csv_or.status();
     env.define("csv", *csv_or);
-    const auto& expr = ParseAssignmentInit(
-        "result = csv.from(csv: \"_time,_measurement,_value\\n"
-        "2024-01-01T00:00:00Z,cpu,95.5\\n"
-        "2024-01-01T00:01:00Z,cpu,80.0\\n\", mode: \"raw\")");
+    const auto& expr = ParseAssignmentInit("result = csv.from(csv: \"_time,_measurement,_value\\n"
+                                           "2024-01-01T00:00:00Z,cpu,95.5\\n"
+                                           "2024-01-01T00:01:00Z,cpu,80.0\\n\", mode: \"raw\")");
 
     auto result = ExpressionEvaluator::Evaluate(expr, env);
 
@@ -231,8 +230,7 @@ TEST(RuntimeEvalTest, EvaluatesCsvFromRawStringPackageBuiltin) {
     ASSERT_EQ(Value::Type::Table, result->type());
     ASSERT_EQ(2, result->as_table().rows.size());
     ASSERT_NE(nullptr, result->as_table().rows[0]);
-    EXPECT_EQ("\"2024-01-01T00:00:00Z\"",
-              result->as_table().rows[0]->lookup("_time")->string());
+    EXPECT_EQ("\"2024-01-01T00:00:00Z\"", result->as_table().rows[0]->lookup("_time")->string());
     EXPECT_EQ("\"cpu\"", result->as_table().rows[0]->lookup("_measurement")->string());
     EXPECT_EQ("\"95.5\"", result->as_table().rows[0]->lookup("_value")->string());
 }
@@ -290,6 +288,55 @@ TEST(RuntimeEvalTest, EvaluatesArrayPackageHelpers) {
     EXPECT_EQ(
         "[{_value: 10, label: \"v1\"}, {_value: 20, label: \"v2\"}, {_value: 30, label: \"v3\"}]",
         map->string());
+}
+
+TEST(RuntimeEvalTest, EvaluatesScalarStdlibPackages) {
+    Environment env;
+    auto date_or = BuiltinRegistry::ImportPackage("date");
+    ASSERT_TRUE(date_or.ok()) << date_or.status();
+    env.define("date", *date_or);
+    auto regexp_or = BuiltinRegistry::ImportPackage("regexp");
+    ASSERT_TRUE(regexp_or.ok()) << regexp_or.status();
+    env.define("regexp", *regexp_or);
+    auto strings_or = BuiltinRegistry::ImportPackage("strings");
+    ASSERT_TRUE(strings_or.ok()) << strings_or.status();
+    env.define("strings", *strings_or);
+    auto math_or = BuiltinRegistry::ImportPackage("math");
+    ASSERT_TRUE(math_or.ok()) << math_or.status();
+    env.define("math", *math_or);
+
+    const auto& expr = ParseAssignmentInit(R"(
+        result = {
+            matched: regexp.matchRegexpString(r: /cpu-.*/, v: "cpu-total"),
+            compiled: regexp.matchRegexpString(r: regexp.compile(v: "mem|cpu"), v: "mem"),
+            quoted: regexp.quoteMeta(v: "cpu.*"),
+            upper: " edge-1 " |> strings.trimSpace() |> strings.toUpper(),
+            hasEdge: strings.hasPrefix(v: "edge-1", prefix: "edge"),
+            contains: "cpu-total" |> strings.containsStr(substr: "total"),
+            replaced: strings.replaceAll(v: "edge-1", t: "edge", u: "node"),
+            rounded: math.round(x: 3.6),
+            rooted: 9.0 |> math.sqrt(),
+            powered: math.pow(x: 2.0, y: 3.0),
+            hour: date.hour(t: 2024-06-01T09:01:10Z),
+            weekday: "2024-06-01T09:01:10Z" |> date.weekDay(),
+        }
+    )");
+
+    auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_EQ(
+        "{matched: true, compiled: true, quoted: \"cpu\\\\.\\\\*\", upper: \"EDGE-1\", "
+        "hasEdge: true, contains: true, replaced: \"node-1\", rounded: 4, rooted: 3, powered: 8, "
+        "hour: 9, weekday: 6}",
+        result->string());
+}
+
+TEST(RuntimeEvalTest, ImportsUnknownPackageAsMetadataOnlyObject) {
+    auto package_or = BuiltinRegistry::ImportPackage("experimental/unknown");
+
+    ASSERT_TRUE(package_or.ok()) << package_or.status();
+    EXPECT_EQ("{path: \"experimental/unknown\"}", package_or->string());
 }
 
 TEST(RuntimeEvalTest, ReportsArrayPackageHelperErrors) {
@@ -418,19 +465,19 @@ TEST(RuntimeEvalTest, ReportsCsvFromArgumentAndAnnotationErrors) {
     ASSERT_FALSE(both_sources_result.ok());
     EXPECT_EQ(absl::StatusCode::kInvalidArgument, both_sources_result.status().code());
 
-    const auto& missing_group = ParseAssignmentInit(
-        "result = csv.from(csv: \"#datatype,string,long\\n"
-        ",name,value\\n"
-        ",cpu,1\\n\")");
+    const auto& missing_group =
+        ParseAssignmentInit("result = csv.from(csv: \"#datatype,string,long\\n"
+                            ",name,value\\n"
+                            ",cpu,1\\n\")");
     auto missing_group_result = ExpressionEvaluator::Evaluate(missing_group, env);
     ASSERT_FALSE(missing_group_result.ok());
     EXPECT_EQ(absl::StatusCode::kInvalidArgument, missing_group_result.status().code());
 
-    const auto& invalid_typed_value = ParseAssignmentInit(
-        "result = csv.from(csv: \"#datatype,string,long\\n"
-        "#group,false,false\\n"
-        ",name,value\\n"
-        ",cpu,not_int\\n\")");
+    const auto& invalid_typed_value =
+        ParseAssignmentInit("result = csv.from(csv: \"#datatype,string,long\\n"
+                            "#group,false,false\\n"
+                            ",name,value\\n"
+                            ",cpu,not_int\\n\")");
     auto invalid_typed_value_result = ExpressionEvaluator::Evaluate(invalid_typed_value, env);
     ASSERT_FALSE(invalid_typed_value_result.ok());
     EXPECT_EQ(absl::StatusCode::kInvalidArgument, invalid_typed_value_result.status().code());
@@ -803,8 +850,7 @@ TEST(RuntimeEvalTest, FilterCanKeepEmptyLogicalTablesExplicitly) {
     ASSERT_EQ(3, result->as_table().tables.size());
     EXPECT_TRUE(result->as_table().tables[1].rows.empty());
     ASSERT_NE(nullptr, result->as_table().tables[1].group_key);
-    EXPECT_EQ("\"edge-2\"",
-              result->as_table().tables[1].group_key->lookup("host")->string());
+    EXPECT_EQ("\"edge-2\"", result->as_table().tables[1].group_key->lookup("host")->string());
 }
 
 TEST(RuntimeEvalTest, CountPreservesKeptEmptyLogicalTablesAsZeroRows) {
@@ -1549,11 +1595,10 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowWithTimezoneLocation) {
 TEST(RuntimeEvalTest, EvaluatesAggregateWindowWithGlobalOptionLocation) {
     Environment env;
     BuiltinRegistry::Install(env);
-    env.define_option("location",
-                      Value::object({
-                          {"zone", Value::string("UTC")},
-                          {"offset", Value::duration("-8h")},
-                      }));
+    env.define_option("location", Value::object({
+                                      {"zone", Value::string("UTC")},
+                                      {"offset", Value::duration("-8h")},
+                                  }));
 
     const auto& expr = ParseAssignmentInit(R"(
         result = from(
@@ -1581,11 +1626,10 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowWithGlobalOptionLocation) {
 TEST(RuntimeEvalTest, AggregateWindowExplicitLocationOverridesGlobalOptionLocation) {
     Environment env;
     BuiltinRegistry::Install(env);
-    env.define_option("location",
-                      Value::object({
-                          {"zone", Value::string("UTC")},
-                          {"offset", Value::duration("-8h")},
-                      }));
+    env.define_option("location", Value::object({
+                                      {"zone", Value::string("UTC")},
+                                      {"offset", Value::duration("-8h")},
+                                  }));
 
     const auto& expr = ParseAssignmentInit(R"(
         result = from(
@@ -2079,7 +2123,8 @@ TEST(RuntimeEvalTest, EvaluatesSpreadQuantileMedianTopAndBottom) {
 
 TEST(RuntimeEvalTest, EvaluatesPipeIntoUserFunctionPipeParameter) {
     Environment env;
-    const auto& expr = ParseAssignmentInit("result = 3 |> ((<-value, ?inc=1) => value + inc)(inc: 2)");
+    const auto& expr =
+        ParseAssignmentInit("result = 3 |> ((<-value, ?inc=1) => value + inc)(inc: 2)");
 
     auto result = ExpressionEvaluator::Evaluate(expr, env);
 

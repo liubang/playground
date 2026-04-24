@@ -27,7 +27,9 @@
 namespace pl {
 namespace {
 
-std::string ReplaceAll(std::string text, const std::string& needle, const std::string& replacement) {
+std::string ReplaceAll(std::string text,
+                       const std::string& needle,
+                       const std::string& replacement) {
     size_t pos = 0;
     while ((pos = text.find(needle, pos)) != std::string::npos) {
         text.replace(pos, needle.size(), replacement);
@@ -54,28 +56,26 @@ std::string ReadAllText(const std::string& path) {
 }
 
 std::string RewriteExamplePaths(std::string source) {
-    source = ReplaceAll(source,
-                        "cpp/pl/flux/examples/ops_dashboard/data/cpu_usage.annotated.csv",
-                        RunfilePath("cpp/pl/flux/examples/ops_dashboard/data/cpu_usage.annotated.csv"));
+    source =
+        ReplaceAll(source, "cpp/pl/flux/examples/ops_dashboard/data/cpu_usage.annotated.csv",
+                   RunfilePath("cpp/pl/flux/examples/ops_dashboard/data/cpu_usage.annotated.csv"));
     source = ReplaceAll(
-        source,
-        "cpp/pl/flux/examples/ops_dashboard/data/cpu_monthly_usage.annotated.csv",
+        source, "cpp/pl/flux/examples/ops_dashboard/data/cpu_monthly_usage.annotated.csv",
         RunfilePath("cpp/pl/flux/examples/ops_dashboard/data/cpu_monthly_usage.annotated.csv"));
-    source = ReplaceAll(source,
-                        "cpp/pl/flux/examples/ops_dashboard/data/mem_usage.annotated.csv",
-                        RunfilePath("cpp/pl/flux/examples/ops_dashboard/data/mem_usage.annotated.csv"));
-    source = ReplaceAll(source,
-                        "cpp/pl/flux/examples/feature_gallery/data/site_ops.annotated.csv",
-                        RunfilePath("cpp/pl/flux/examples/feature_gallery/data/site_ops.annotated.csv"));
-    source = ReplaceAll(source,
-                        "cpp/pl/flux/examples/feature_gallery/data/service_counters.annotated.csv",
-                        RunfilePath("cpp/pl/flux/examples/feature_gallery/data/service_counters.annotated.csv"));
-    source = ReplaceAll(source,
-                        "cpp/pl/flux/examples/feature_gallery/data/alerts.raw.csv",
+    source =
+        ReplaceAll(source, "cpp/pl/flux/examples/ops_dashboard/data/mem_usage.annotated.csv",
+                   RunfilePath("cpp/pl/flux/examples/ops_dashboard/data/mem_usage.annotated.csv"));
+    source =
+        ReplaceAll(source, "cpp/pl/flux/examples/feature_gallery/data/site_ops.annotated.csv",
+                   RunfilePath("cpp/pl/flux/examples/feature_gallery/data/site_ops.annotated.csv"));
+    source = ReplaceAll(
+        source, "cpp/pl/flux/examples/feature_gallery/data/service_counters.annotated.csv",
+        RunfilePath("cpp/pl/flux/examples/feature_gallery/data/service_counters.annotated.csv"));
+    source = ReplaceAll(source, "cpp/pl/flux/examples/feature_gallery/data/alerts.raw.csv",
                         RunfilePath("cpp/pl/flux/examples/feature_gallery/data/alerts.raw.csv"));
-    source = ReplaceAll(source,
-                        "cpp/pl/flux/examples/feature_gallery/data/multi_block.annotated.csv",
-                        RunfilePath("cpp/pl/flux/examples/feature_gallery/data/multi_block.annotated.csv"));
+    source = ReplaceAll(
+        source, "cpp/pl/flux/examples/feature_gallery/data/multi_block.annotated.csv",
+        RunfilePath("cpp/pl/flux/examples/feature_gallery/data/multi_block.annotated.csv"));
     return source;
 }
 
@@ -234,7 +234,8 @@ TEST(FluxCliTest, DemonstratesFilterOnEmptyKeepInFeatureGalleryExample) {
     EXPECT_NE(std::string::npos, result.output.find("Logical table 0\n"));
     EXPECT_NE(std::string::npos, result.output.find("Logical table 1\n"));
     EXPECT_NE(std::string::npos, result.output.find("Logical table 2\n"));
-    EXPECT_NE(std::string::npos, result.output.find("(empty logical table, group={host: \"edge-2\"}"));
+    EXPECT_NE(std::string::npos,
+              result.output.find("(empty logical table, group={host: \"edge-2\"}"));
 }
 
 TEST(FluxCliTest, RendersKeptEmptyLogicalTablesWhenRequested) {
@@ -260,7 +261,9 @@ TEST(FluxCliTest, RendersKeptEmptyLogicalTablesWhenRequested) {
     EXPECT_NE(std::string::npos, result.output.find("Logical table 0\n"));
     EXPECT_NE(std::string::npos, result.output.find("Logical table 1\n"));
     EXPECT_NE(std::string::npos, result.output.find("Logical table 2\n"));
-    EXPECT_NE(std::string::npos, result.output.find("(empty logical table, group={host: \"edge-2\"}, columns=[host, _value]"));
+    EXPECT_NE(std::string::npos,
+              result.output.find(
+                  "(empty logical table, group={host: \"edge-2\"}, columns=[host, _value]"));
 }
 
 TEST(FluxCliTest, EmitsEmptyLogicalTableMetadataInJsonOutput) {
@@ -286,7 +289,8 @@ TEST(FluxCliTest, EmitsEmptyLogicalTableMetadataInJsonOutput) {
     EXPECT_TRUE(result.error.empty());
     EXPECT_NE(std::string::npos, result.output.find("\"tables\":["));
     EXPECT_NE(std::string::npos, result.output.find("\"groupKey\":{\"host\":\"edge-2\"}"));
-    EXPECT_NE(std::string::npos, result.output.find("\"columns\":[\"host\",\"_value\",\"_group\"]"));
+    EXPECT_NE(std::string::npos,
+              result.output.find("\"columns\":[\"host\",\"_value\",\"_group\"]"));
     EXPECT_NE(std::string::npos, result.output.find("\"rows\":[]"));
 }
 
@@ -308,6 +312,41 @@ TEST(FluxCliTest, ExecutesTaskDrivenFeatureGalleryExample) {
     EXPECT_NE(std::string::npos, result.output.find("\"steady\""));
 }
 
+TEST(FluxCliTest, ExecutesStdlibPackagesFeatureGalleryExample) {
+    auto env = MakeFluxCliEnvironment();
+    auto result =
+        ExecuteExampleScript("cpp/pl/flux/examples/feature_gallery/stdlib_packages.flux", env);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: stdlib_service_health\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Result: stdlib_alert_candidates\n"));
+    EXPECT_NE(std::string::npos, result.output.find("\"API\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"WORKER\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"node-1\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"API-edge-1\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"critical\""));
+    EXPECT_NE(std::string::npos, result.output.find("88"));
+    EXPECT_NE(std::string::npos, result.output.find("8"));
+}
+
+TEST(FluxCliTest, ExecutesDateCalendarFeatureGalleryExample) {
+    auto env = MakeFluxCliEnvironment();
+    auto result =
+        ExecuteExampleScript("cpp/pl/flux/examples/feature_gallery/date_calendar.flux", env);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: date_calendar_shape\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Result: date_weekday_service_counts\n"));
+    EXPECT_NE(std::string::npos, result.output.find("2024-06-01T09:01:10Z"));
+    EXPECT_NE(std::string::npos, result.output.find("\"api\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"worker\""));
+    EXPECT_NE(std::string::npos, result.output.find("2024"));
+    EXPECT_NE(std::string::npos, result.output.find("6"));
+    EXPECT_NE(std::string::npos, result.output.find("9"));
+}
+
 TEST(FluxCliTest, ExecutesCheckedInOpsDashboardQueryVariants) {
     struct ExampleCase {
         std::string path;
@@ -321,87 +360,44 @@ TEST(FluxCliTest, ExecutesCheckedInOpsDashboardQueryVariants) {
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/cpu_distinct_hosts.flux",
-            {"Result: cpu_distinct_hosts\n", "\"edge-1\"", "\"edge-2\"", "\"us-east\"", "\"us-west\"", "70", "91"},
+            {"Result: cpu_distinct_hosts\n", "\"edge-1\"", "\"edge-2\"", "\"us-east\"",
+             "\"us-west\"", "70", "91"},
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/cpu_gap_fill.flux",
-            {"Result: cpu_gap_fill\n",
-             "2024-05-01T10:00:30Z",
-             "2024-05-01T10:01:00Z",
-             "2024-05-01T10:01:30Z",
-             "\"edge-1\"",
-             "70",
-             "74",
-             "82"},
+            {"Result: cpu_gap_fill\n", "2024-05-01T10:00:30Z", "2024-05-01T10:01:00Z",
+             "2024-05-01T10:01:30Z", "\"edge-1\"", "70", "74", "82"},
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/cpu_elapsed_by_host.flux",
-            {"Result: cpu_elapsed_by_host\n",
-             "2024-05-01T10:00:40Z",
-             "2024-05-01T10:01:05Z",
-             "2024-05-01T10:01:10Z",
-             "\"edge-1\"",
-             "\"edge-2\"",
-             "30",
-             "25",
-             "50"},
+            {"Result: cpu_elapsed_by_host\n", "2024-05-01T10:00:40Z", "2024-05-01T10:01:05Z",
+             "2024-05-01T10:01:10Z", "\"edge-1\"", "\"edge-2\"", "30", "25", "50"},
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/cpu_usage_difference.flux",
-            {"Result: cpu_usage_difference\n",
-             "2024-05-01T10:00:40Z",
-             "2024-05-01T10:01:05Z",
-             "2024-05-01T10:01:10Z",
-             "\"edge-1\"",
-             "\"edge-2\"",
-             "4",
-             "8",
-             "-4"},
+            {"Result: cpu_usage_difference\n", "2024-05-01T10:00:40Z", "2024-05-01T10:01:05Z",
+             "2024-05-01T10:01:10Z", "\"edge-1\"", "\"edge-2\"", "4", "8", "-4"},
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/cpu_usage_derivative.flux",
-            {"Result: cpu_usage_derivative\n",
-             "2024-05-01T10:00:40Z",
-             "2024-05-01T10:01:05Z",
-             "2024-05-01T10:01:10Z",
-             "\"edge-1\"",
-             "\"edge-2\"",
-             "0.133333333333333",
-             "0.32",
+            {"Result: cpu_usage_derivative\n", "2024-05-01T10:00:40Z", "2024-05-01T10:01:05Z",
+             "2024-05-01T10:01:10Z", "\"edge-1\"", "\"edge-2\"", "0.133333333333333", "0.32",
              "-0.08"},
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/latest_two_cpu_windows.flux",
-            {"Result: latest_two_cpu_windows\n",
-             "2024-05-01T10:01:05Z",
-             "2024-05-01T10:00:20Z",
-             "\"edge-1\"",
-             "\"edge-2\"",
-             "82",
-             "91"},
+            {"Result: latest_two_cpu_windows\n", "2024-05-01T10:01:05Z", "2024-05-01T10:00:20Z",
+             "\"edge-1\"", "\"edge-2\"", "82", "91"},
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/host_usage_pivot.flux",
-            {"Result: host_usage_pivot\n",
-             "2024-05-01T10:01:00Z",
-             "2024-05-01T10:02:00Z",
-             "\"edge-1\"",
-             "\"edge-2\"",
-             "cpu",
-             "mem",
-             "72",
-             "63",
-             "91",
-             "75"},
+            {"Result: host_usage_pivot\n", "2024-05-01T10:01:00Z", "2024-05-01T10:02:00Z",
+             "\"edge-1\"", "\"edge-2\"", "cpu", "mem", "72", "63", "91", "75"},
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/monthly_cpu_calendar.flux",
-            {"Result: monthly_cpu_calendar\n",
-             "2024-01-01T00:00:00Z",
-             "2024-02-01T00:00:00Z",
-             "2024-03-01T00:00:00Z",
-             "60",
-             "77"},
+            {"Result: monthly_cpu_calendar\n", "2024-01-01T00:00:00Z", "2024-02-01T00:00:00Z",
+             "2024-03-01T00:00:00Z", "60", "77"},
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/fleet_usage_union.flux",
@@ -417,7 +413,8 @@ TEST(FluxCliTest, ExecutesCheckedInOpsDashboardQueryVariants) {
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux",
-            {"Result: latest_west_cpu\n", "Result: latest_east_mem\n", "\"edge-2\"", "\"us-east\"", "87", "68"},
+            {"Result: latest_west_cpu\n", "Result: latest_east_mem\n", "\"edge-2\"", "\"us-east\"",
+             "87", "68"},
         },
     };
 
@@ -486,13 +483,12 @@ TEST(FluxCliTest, RendersMultipleNamedResultsAsSeparateBlocks) {
                                     "<test>", env);
 
     EXPECT_EQ(0, result.exit_code);
-    EXPECT_EQ(
-        "Result: value\n"
-        "41\n"
-        "\n"
-        "Result: _result\n"
-        "42\n",
-        result.output);
+    EXPECT_EQ("Result: value\n"
+              "41\n"
+              "\n"
+              "Result: _result\n"
+              "42\n",
+              result.output);
     EXPECT_TRUE(result.error.empty());
 }
 
@@ -512,13 +508,12 @@ TEST(FluxCliTest, EmitsAnnotatedCsvForTableResults) {
                                     "query.flux", env, options);
 
     EXPECT_EQ(0, result.exit_code);
-    EXPECT_EQ(
-        "#datatype,string,long,string,string,string\n"
-        "#group,false,false,false,false,false\n"
-        "#default,data,,,,\n"
-        ",result,table,_time,_measurement,_value\n"
-        ",data,0,2024-01-01T00:00:00Z,cpu,95.5\n",
-        result.output);
+    EXPECT_EQ("#datatype,string,long,string,string,string\n"
+              "#group,false,false,false,false,false\n"
+              "#default,data,,,,\n"
+              ",result,table,_time,_measurement,_value\n"
+              ",data,0,2024-01-01T00:00:00Z,cpu,95.5\n",
+              result.output);
     EXPECT_TRUE(result.error.empty());
 }
 
@@ -549,19 +544,18 @@ TEST(FluxCliTest, EmitsAnnotatedCsvForScalarResults) {
     auto result = ExecuteFluxSource("value = 41\nvalue + 1", "<test>", env, options);
 
     EXPECT_EQ(0, result.exit_code);
-    EXPECT_EQ(
-        "#datatype,string,long,long\n"
-        "#group,false,false,false\n"
-        "#default,value,,\n"
-        ",result,table,_value\n"
-        ",value,0,41\n"
-        "\n"
-        "#datatype,string,long,long\n"
-        "#group,false,false,false\n"
-        "#default,_result,,\n"
-        ",result,table,_value\n"
-        ",_result,1,42\n",
-        result.output);
+    EXPECT_EQ("#datatype,string,long,long\n"
+              "#group,false,false,false\n"
+              "#default,value,,\n"
+              ",result,table,_value\n"
+              ",value,0,41\n"
+              "\n"
+              "#datatype,string,long,long\n"
+              "#group,false,false,false\n"
+              "#default,_result,,\n"
+              ",result,table,_value\n"
+              ",_result,1,42\n",
+              result.output);
     EXPECT_TRUE(result.error.empty());
 }
 
@@ -620,10 +614,8 @@ TEST(FluxCliTest, EmitsAnnotatedCsvUsingExistingTableMetadataAndGroupColumns) {
 
     EXPECT_EQ(0, result.exit_code);
     EXPECT_TRUE(result.error.empty());
-    EXPECT_NE(std::string::npos,
-              result.output.find("#group,false,false,true,true,false"));
-    EXPECT_NE(std::string::npos,
-              result.output.find(",result,table,_time,_measurement,_value"));
+    EXPECT_NE(std::string::npos, result.output.find("#group,false,false,true,true,false"));
+    EXPECT_NE(std::string::npos, result.output.find(",result,table,_time,_measurement,_value"));
     EXPECT_NE(std::string::npos, result.output.find(",cpu,0,2024-01-01T00:00:00Z,cpu,95.5"));
     EXPECT_NE(std::string::npos, result.output.find(",mem,1,2024-01-01T00:01:00Z,mem,42"));
 }
@@ -663,7 +655,8 @@ TEST(FluxCliTest, EmitsJsonForMixedResults) {
     EXPECT_TRUE(result.error.empty());
     EXPECT_NE(std::string::npos, result.output.find("\"imports\":[\"csv\"]"));
     EXPECT_NE(std::string::npos, result.output.find("\"name\":\"value\",\"value\":41"));
-    EXPECT_NE(std::string::npos, result.output.find("\"name\":\"data\",\"value\":{\"type\":\"table\""));
+    EXPECT_NE(std::string::npos,
+              result.output.find("\"name\":\"data\",\"value\":{\"type\":\"table\""));
     EXPECT_NE(std::string::npos,
               result.output.find("\"rows\":[{\"_time\":\"2024-01-01T00:00:00Z\""));
     EXPECT_NE(std::string::npos, result.output.find("\"last\":42"));
@@ -766,8 +759,8 @@ TEST(FluxCliTest, ListsFilteredNamedResults) {
     options.list_results = true;
     options.result_name = "latest_east_mem";
 
-    auto result = ExecuteExampleScript(
-        "cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux", env, options);
+    auto result = ExecuteExampleScript("cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux",
+                                       env, options);
 
     EXPECT_EQ(0, result.exit_code);
     EXPECT_EQ("latest_east_mem\n", result.output);
@@ -812,13 +805,12 @@ TEST(FluxCliTest, ReplPreservesEnvironmentBetweenInputs) {
 }
 
 TEST(FluxCliTest, ReplSupportsMultiLineInputAndContinuationPrompt) {
-    std::istringstream input(
-        "config = {\n"
-        "host: \"local\",\n"
-        "port: 8080,\n"
-        "}\n"
-        "config.host\n"
-        ":quit\n");
+    std::istringstream input("config = {\n"
+                             "host: \"local\",\n"
+                             "port: 8080,\n"
+                             "}\n"
+                             "config.host\n"
+                             ":quit\n");
     std::ostringstream output;
     std::ostringstream error;
 
@@ -843,9 +835,8 @@ TEST(FluxCliTest, ReplHelpCommandPrintsBuiltInCommands) {
     EXPECT_EQ(0, exit_code);
     EXPECT_NE(std::string::npos, output.str().find("Flux REPL commands:\n"));
     EXPECT_NE(std::string::npos, output.str().find("help, :help, .help  Show this help text.\n"));
-    EXPECT_NE(
-        std::string::npos,
-        output.str().find("quit, :quit, .quit, exit, :exit, .exit Leave the REPL.\n"));
+    EXPECT_NE(std::string::npos,
+              output.str().find("quit, :quit, .quit, exit, :exit, .exit Leave the REPL.\n"));
     EXPECT_TRUE(error.str().empty());
 }
 
