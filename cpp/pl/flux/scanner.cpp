@@ -125,6 +125,10 @@ std::unique_ptr<Token> Scanner::get_eof_token() {
     token->end_offset = static_cast<uint32_t>(data_len_);
     token->start_pos = Position(static_cast<uint32_t>(cur_line_), column);
     token->end_pos = Position(static_cast<uint32_t>(cur_line_), column);
+    // Register the EOF positions so that source_location() can compute a valid source snippet when
+    // the EOF token's position is used as a range boundary.
+    positions_[token->start_pos] = token->start_offset;
+    positions_[token->end_pos] = token->end_offset;
     return token;
 }
 
