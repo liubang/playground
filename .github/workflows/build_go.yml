@@ -14,24 +14,19 @@ jobs:
   build-go:
     name: go playground
     runs-on: ubuntu-24.04
+
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/cache@v4
-        env:
-          cache-name: bazel-go
-        with:
-          path: ~/.cache/bazelisk
-          key: ${{ env.cache-name }}-${{ runner.os }}
-          restore-keys: |
-            ${{ env.cache-name }}-${{ runner.os }}
-      - uses: bazel-contrib/setup-bazel@0.8.5
+
+      - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
-          disk-cache: false
           repository-cache: true
+          disk-cache: true
+
       - name: build and test
         run: |
           bazel build //go/...
-          bazel test  //go/...
+          bazel test //go/...
