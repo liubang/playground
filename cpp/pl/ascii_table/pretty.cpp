@@ -17,6 +17,7 @@
 
 #include "pretty.h"
 
+#include <cassert>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -55,6 +56,7 @@ Pretty& Pretty::add_row(const std::vector<std::string>& vals) {
 }
 
 Pretty& Pretty::add_cell(CellType t, const std::string& val) {
+    assert(!lines_.empty());
     auto lines = lines_.size();
     auto& cells = lines_[lines - 1];
     if (cell_idx_ >= maxcell_per_line_) {
@@ -63,7 +65,7 @@ Pretty& Pretty::add_cell(CellType t, const std::string& val) {
     if (cell_max_length_[cell_idx_] < val.size()) {
         cell_max_length_[cell_idx_] = static_cast<uint32_t>(val.size());
     }
-    cells.push_back(std::make_unique<Cell>(t, val));
+    cells.emplace_back(t, val);
     ++cell_idx_;
     return *this;
 }
@@ -81,9 +83,9 @@ void Pretty::render(std::ostream& out) const {
         print_line(out, lines_[0]);
     }
     for (size_t i = 1; i < lines_.size(); ++i) {
-        if (lines_[i].size() > 0 && lines_[i][0]->t == CellType::CT_SEP) {
+        if (lines_[i].size() > 0 && lines_[i][0].t == CellType::CT_SEP) {
             if (show_sep_) {
-                print_header_line(out, len, lines_[i][0]->val[0]);
+                print_header_line(out, len, lines_[i][0].val[0]);
             }
         } else {
             print_line(out, lines_[i]);
@@ -115,7 +117,7 @@ void Pretty::print_header_line(std::ostream& out, uint32_t len, char sep) const 
     out << oss.str() << '\n';
 }
 
-void Pretty::print_line(std::ostream& out, const std::vector<CellPtr>& cells) const {
+void Pretty::print_line(std::ostream& out, const Row& cells) const {
     if (cells.empty()) {
         return;
     }
@@ -126,10 +128,10 @@ void Pretty::print_line(std::ostream& out, const std::vector<CellPtr>& cells) co
     for (size_t i = 0; i < cells.size(); ++i) {
         const auto& cell = cells[i];
         auto max_len = cell_max_length_[i];
-        if (!cell) {
+        if (!cell.valid()) {
             oss << pad_right("", max_len);
         } else {
-            oss << pad_right(cell->val, max_len);
+            oss << pad_right(cell.val, max_len);
         }
         if (show_sep_ && i + 1 < cells.size()) {
             oss << " | ";
