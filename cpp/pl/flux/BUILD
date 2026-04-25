@@ -15,6 +15,7 @@
 # Authors: liubang (it.liubang@gmail.com)
 
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 # load("@rules_ragel//ragel:ragel.bzl", "ragel")
 load(

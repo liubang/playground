@@ -19,7 +19,6 @@
 
 #include <cstdint>
 #include <iosfwd>
-#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -27,19 +26,22 @@
 namespace pl::pretty {
 
 enum class CellType : uint8_t {
-    CT_STRING = 0,
-    CT_SEP = 1,
+    CT_NONE = 0,
+    CT_STRING = 1,
+    CT_SEP = 2,
 };
 
 struct Cell {
     Cell() = default;
     Cell(CellType type, std::string value) : t(type), val(std::move(value)) {}
 
-    CellType t;
+    [[nodiscard]] bool valid() const { return t != CellType::CT_NONE; }
+
+    CellType t{CellType::CT_NONE};
     std::string val;
 };
-using CellPtr = std::unique_ptr<Cell>;
-using Row = std::vector<CellPtr>;
+
+using Row = std::vector<Cell>;
 
 class Pretty {
 public:
@@ -78,7 +80,7 @@ private:
 
     void print_header_line(std::ostream& out, uint32_t len, char sep) const;
 
-    void print_line(std::ostream& out, const std::vector<CellPtr>& cells) const;
+    void print_line(std::ostream& out, const Row& cells) const;
 
     [[nodiscard]] std::string pad_right(const std::string& input,
                                         size_t total_length,
