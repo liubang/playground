@@ -13,7 +13,6 @@
 // limitations under the License.
 
 #include "cpp/pl/flux/scanner.h"
-
 #include <gtest/gtest.h>
 
 namespace pl {

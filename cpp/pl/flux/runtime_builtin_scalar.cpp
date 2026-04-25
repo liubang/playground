@@ -1332,8 +1332,7 @@ Value make_types_package() {
         {"isInt", make_builtin_value(
                       "types.isInt",
                       [](const std::vector<Value>& args) {
-                          return builtin_types_is_value_type(args, "types.isInt",
-                                                             Value::Type::Int);
+                          return builtin_types_is_value_type(args, "types.isInt", Value::Type::Int);
                       },
                       "v")},
         {"isNumeric", make_builtin_value("types.isNumeric", builtin_types_is_numeric, "v")},

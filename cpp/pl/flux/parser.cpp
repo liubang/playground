@@ -232,9 +232,8 @@ std::unique_ptr<MonoType> Parser::parse_record_type() {
 
     std::unique_ptr<Identifier> tvar;
     std::vector<std::shared_ptr<PropertyType>> properties;
-    auto parse_record_property =
-        [&](std::unique_ptr<Identifier> name,
-            const Position& start) -> std::shared_ptr<PropertyType> {
+    auto parse_record_property = [&](std::unique_ptr<Identifier> name,
+                                     const Position& start) -> std::shared_ptr<PropertyType> {
         auto colon = expect(TokenType::Colon);
         std::unique_ptr<MonoType> monotype;
         Position end = colon->end_pos;
@@ -671,7 +670,7 @@ std::unique_ptr<Expression> Parser::parse_exponent_expression() {
 std::unique_ptr<Expression> Parser::parse_pipe_expression() {
     auto expr = parse_unary_expression();
     if (expr && expr->type == Expression::Type::Identifier && peek()->tok == TokenType::Arrow) {
-        auto *key = std::get<std::unique_ptr<Identifier>>(expr->expr).release();
+        auto* key = std::get<std::unique_ptr<Identifier>>(expr->expr).release();
         auto prop = std::shared_ptr<Property>(
             std::make_unique<Property>(
                 std::make_unique<PropertyKey>(PropertyKey::Type::Identifier,

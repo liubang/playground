@@ -842,18 +842,17 @@ absl::StatusOr<Value> eval_logical(const LogicalExpr& logical,
 
 absl::StatusOr<Value> eval_impl(const Expression& expr, const Environment& env) {
     switch (expr.type) {
-        case Expression::Type::Identifier:
-            {
-                const auto& name = std::get<std::unique_ptr<Identifier>>(expr.expr)->name;
-                auto value_or = env.lookup(name);
-                if (value_or.ok()) {
-                    return *value_or;
-                }
-                if (value_or.status().code() != absl::StatusCode::kNotFound) {
-                    return value_or.status();
-                }
-                return env.lookup_option(name);
+        case Expression::Type::Identifier: {
+            const auto& name = std::get<std::unique_ptr<Identifier>>(expr.expr)->name;
+            auto value_or = env.lookup(name);
+            if (value_or.ok()) {
+                return *value_or;
             }
+            if (value_or.status().code() != absl::StatusCode::kNotFound) {
+                return value_or.status();
+            }
+            return env.lookup_option(name);
+        }
         case Expression::Type::ArrayExpr: {
             std::vector<Value> elements;
             for (const auto& item : std::get<std::unique_ptr<ArrayExpr>>(expr.expr)->elements) {

@@ -32,7 +32,7 @@ cc_library(
         "logger.h",
         "logstream.h",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     visibility = ["//visibility:public"],
     deps = [
@@ -44,7 +44,7 @@ cc_library(
 cc_test(
     name = "logger_test",
     srcs = ["logger_test.cpp"],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":logger",

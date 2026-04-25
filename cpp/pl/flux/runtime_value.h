@@ -34,8 +34,9 @@ struct ObjectValue;
 struct TableChunk;
 struct TableValue;
 struct FunctionExpr;
-class Environment;
 struct FunctionValue;
+
+class Environment;
 
 struct DurationValue {
     std::string literal;
