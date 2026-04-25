@@ -32,5 +32,6 @@ Value MakeUnknownPackage(const std::string& path);
 
 void RegisterScalarStdlibPackages();
 void RegisterTableStdlibPackages();
+void RegisterJoinStdlibPackage();
 
 } // namespace pl::flux_builtin

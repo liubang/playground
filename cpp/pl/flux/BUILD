@@ -165,6 +165,7 @@ cc_library(
         "@abseil-cpp//absl/time:time",
         "@abseil-cpp//absl/time/internal/cctz:civil_time",
         "@abseil-cpp//absl/time/internal/cctz:time_zone",
+        "@simdjson//:simdjson",
     ],
 )
 
