@@ -21,6 +21,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/runtime_builtin_package.h"
+#include "cpp/pl/flux/runtime_builtin_table_helpers.h"
 #include "cpp/pl/flux/runtime_eval.h"
 #include <algorithm>
 #include <memory>
@@ -33,84 +34,6 @@
 
 namespace pl {
 namespace {
-
-Value make_builtin_value(const std::string& name,
-                         FunctionValue::BuiltinCallback fn,
-                         std::string pipe_param_name = {}) {
-    auto callable = std::make_shared<FunctionValue>();
-    callable->kind = FunctionValue::Kind::Builtin;
-    callable->name = name;
-    callable->pipe_param_name = std::move(pipe_param_name);
-    callable->builtin = std::move(fn);
-    return Value::function(std::move(callable));
-}
-
-void install_builtin(Environment& env,
-                     const std::string& name,
-                     FunctionValue::BuiltinCallback fn,
-                     std::string pipe_param_name = {}) {
-    env.define(name, make_builtin_value(name, std::move(fn), std::move(pipe_param_name)));
-}
-
-absl::StatusOr<const ObjectValue*> require_object_argument(const std::vector<Value>& args,
-                                                           const std::string& name) {
-    if (args.size() != 1 || args[0].type() != Value::Type::Object) {
-        return absl::InvalidArgumentError(
-            absl::StrCat(name, " expects exactly one object argument"));
-    }
-    return &args[0].as_object();
-}
-
-absl::StatusOr<const Value*> require_object_property(const ObjectValue& object,
-                                                     const std::string& object_name,
-                                                     const std::string& property) {
-    const Value* value = object.lookup(property);
-    if (value == nullptr) {
-        return absl::InvalidArgumentError(absl::StrCat(object_name, " requires `", property, "`"));
-    }
-    return value;
-}
-
-absl::StatusOr<const TableValue*> require_table_property(const ObjectValue& object,
-                                                         const std::string& name,
-                                                         const std::string& property) {
-    auto value_or = require_object_property(object, name, property);
-    if (!value_or.ok()) {
-        return value_or.status();
-    }
-    if ((*value_or)->type() != Value::Type::Table) {
-        return absl::InvalidArgumentError(absl::StrCat(name, " `", property, "` must be a table"));
-    }
-    return &(*value_or)->as_table();
-}
-
-absl::StatusOr<std::vector<std::string>> string_array_value(const Value& value,
-                                                            const std::string& name,
-                                                            const std::string& property) {
-    if (value.type() != Value::Type::Array) {
-        return absl::InvalidArgumentError(absl::StrCat(name, " `", property, "` must be an array"));
-    }
-    std::vector<std::string> values;
-    values.reserve(value.as_array().elements.size());
-    for (const auto& item : value.as_array().elements) {
-        if (item.type() != Value::Type::String) {
-            return absl::InvalidArgumentError(
-                absl::StrCat(name, " `", property, "` must contain only strings"));
-        }
-        values.push_back(item.as_string());
-    }
-    return values;
-}
-
-absl::StatusOr<std::vector<std::string>> string_array_property(const ObjectValue& object,
-                                                               const std::string& name,
-                                                               const std::string& property) {
-    auto value_or = require_object_property(object, name, property);
-    if (!value_or.ok()) {
-        return value_or.status();
-    }
-    return string_array_value(**value_or, name, property);
-}
 
 absl::StatusOr<std::vector<std::pair<std::string, const TableValue*>>>
 require_named_table_object_property(const ObjectValue& object,
@@ -135,60 +58,8 @@ require_named_table_object_property(const ObjectValue& object,
     return tables;
 }
 
-std::vector<std::string> all_visible_columns_in_order(const TableValue& table) {
-    std::vector<std::string> columns;
-    std::unordered_set<std::string> seen;
-    for (const auto& row : table.rows) {
-        if (row == nullptr) {
-            continue;
-        }
-        for (const auto& [name, value] : row->properties) {
-            (void)value;
-            if (name == "_group") {
-                continue;
-            }
-            if (seen.insert(name).second) {
-                columns.push_back(name);
-            }
-        }
-    }
-    return columns;
-}
-
-std::vector<std::string> visible_columns_in_chunk(const TableChunk& chunk) {
-    std::vector<std::string> columns;
-    std::unordered_set<std::string> seen;
-    for (const auto& row : chunk.rows) {
-        if (row == nullptr) {
-            continue;
-        }
-        for (const auto& [key, value] : row->properties) {
-            (void)value;
-            if (key == "_group") {
-                continue;
-            }
-            if (seen.insert(key).second) {
-                columns.push_back(key);
-            }
-        }
-    }
-    return columns;
-}
-
 std::string joined_property_name(const std::string& table_name, const std::string& column) {
     return column + "_" + table_name;
-}
-
-void append_value_key_fragment(std::string* out, const Value& value) {
-    if (value.type() == Value::Type::String) {
-        absl::StrAppend(out, value.as_string());
-        return;
-    }
-    if (value.type() == Value::Type::Time) {
-        absl::StrAppend(out, value.as_time().literal);
-        return;
-    }
-    absl::StrAppend(out, value.string());
 }
 
 std::unordered_set<std::string> overlapping_join_columns(

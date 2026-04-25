@@ -102,8 +102,8 @@
 | 函数值 / 闭包 | 支持 | 用户自定义函数表达式会求值为可调用的运行时值，并捕获词法闭包 |
 | 函数调用执行 | 支持 | builtin 和用户函数都可调用，支持默认参数、命名参数、块体函数、pipe 参数注入，以及查询 builtin 内部的行函数调用 |
 | pipe 执行 | 部分支持 | `|>` 已支持 builtin、用户定义 `<-pipe` 参数以及内存表管道；`option task = {...}` 这类 option 绑定现在也可以直接驱动表达式与管道参数，但更广泛的 Flux 流式语义仍未完整实现 |
-| builtin 注册表 / stdlib 执行 | 部分支持 | 默认加载的 universe 风格顶层 builtin 包括 `len`、`string`、`contains`、`sum`、`mean`、`min`、`max`、`from`、`columns`、`keys`、`findColumn`、`findRecord`、`range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`window`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`distinct`、`count`、`spread`、`quantile`、`median`、`first`、`last`、`top`、`bottom`、`union`、顶层 `join()`、`aggregateWindow`、`yield`；显式 package 包含 `array.from`、`array.concat`、`array.filter`、`array.map`、`array.contains`、`array.reduce`、`array.any`、`array.all`、`csv.from`、`date.*`、`regexp.*`、`strings.*`、`math.*`、`join.inner`、`join.left`、`join.right`、`join.full`；其中 `quantile(q:)` 现在支持单个数值或数值数组，并会在输出行上附带 `quantile` 列；顶层 `builtin` 声明可绑定已知 builtin 或占位 callable；未知 package 会绑定为 metadata-only object；但完整 Flux 标准库仍远未实现 |
-| stdlib package conformance 示例 | 支持 | `examples/stdlib_conformance` 为 `array`、`csv`、`date`、`join`、`math`、`regexp`、`strings` 和默认 universe builtin 提供固定输入/输出 `.flux` 样例；`//cpp/pl/flux:stdlib_conformance_test` 会用 JSON 快照校验这些契约 |
+| builtin 注册表 / stdlib 执行 | 部分支持 | 默认加载的 universe 风格顶层 builtin 包括 `len`、`string`、`contains`、`sum`、`mean`、`min`、`max`、`from`、`columns`、`keys`、`findColumn`、`findRecord`、`range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`window`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`distinct`、`count`、`spread`、`quantile`、`median`、`first`、`last`、`top`、`bottom`、`union`、顶层 `join()`、`aggregateWindow`、`yield`；显式 package 包含 `array.from`、`array.concat`、`array.filter`、`array.map`、`array.contains`、`array.reduce`、`array.any`、`array.all`、`csv.from`、`date.*`、`dict.fromList`、`dict.get`、`dict.insert`、`dict.remove`、`regexp.*`、`strings.*`、`math.*`、`json.encode`、`runtime.version`、`system.time`、`types.isBool`、`types.isDuration`、`types.isFloat`、`types.isInt`、`types.isNumeric`、`types.isRegexp`、`types.isString`、`types.isTime`、`types.isType`、`types.isUInt`、`join.inner`、`join.left`、`join.right`、`join.full`；其中 `dict` 当前以对象承载可执行子集，`json.encode` 当前以 string 承载官方 bytes 返回语义，`quantile(q:)` 现在支持单个数值或数值数组，并会在输出行上附带 `quantile` 列；顶层 `builtin` 声明可绑定已知 builtin 或占位 callable；未知 package 会绑定为 metadata-only object；但完整 Flux 标准库仍远未实现 |
+| stdlib package conformance 示例 | 支持 | `examples/stdlib_conformance` 为 `array`、`csv`、`date`、`dict`、`join`、`json`、`math`、`regexp`、`runtime`、`strings`、`system`、`types` 和默认 universe builtin 提供固定输入/输出 `.flux` 样例；`//cpp/pl/flux:stdlib_conformance_test` 会用 JSON 快照校验这些契约，`system.time` 使用 RFC3339 形状匹配 |
 | `join()` / `join` package 语义 | 部分支持 | 默认加载的 universe 顶层 `join()` 支持旧版 `join(tables:, on:)` 形态、两个输入流和 `method: "inner"|"left"|"right"|"full"`，只会比较 group key 实例相同的逻辑表，输出保持多表流，重复非 `on` 列会按 `<column>_<table>` 重命名，`null` / 缺失 join key 不匹配；显式 `import "join"` 绑定的是 package 对象，提供 `join.inner` / `join.left` / `join.right` / `join.full`，支持官方风格 predicate `on` 和 `as` 输出函数，也兼容 `on: ["col"]` 的列数组形式；更完整的官方 join 包边界仍需继续补齐 |
 | `window()` 语义 | 部分支持 | `window()` 已支持固定时长窗口、日历窗口、`period`、`offset`、`location`、`startColumn`、`stopColumn`、`timeColumn`、`createEmpty`，并会把输入拆成真正的多逻辑表输出；更广的官方 Flux 细节和与更多下游 builtin 的组合行为仍需要继续补齐 |
 | CSV 输入 | 部分支持 | `import "csv"`、`csv.from(csv: ...)`、`csv.from(file: ...)` 支持 raw 模式和常见 annotated CSV；支持 `#datatype`、`#group`、可选 `#default`、类型转换，以及同一载荷内重复 metadata/header block，对应多逻辑表输入；更广的 CSV stdlib 能力尚未补齐 |
@@ -146,7 +146,7 @@
 - 少数 AST/debug 字符串形式仍然是简化版，不是标准 Flux 格式
 - 还没有语义分析或类型检查层
 - 运行时执行仍是“可用子集”，虽然已经能跑常见内存查询管道，但更广的 builtin 和流式语义仍缺失
-- `array.from` / `array.concat` / `array.filter` / `array.map` / `array.contains` / `array.reduce` / `array.any` / `array.all` / `csv.from` / `date.*` / `regexp.*` / `strings.*` / `math.*` / `join.*` 这类 package 入口已可用，但完整标准库接口仍远未实现
+- `array.from` / `array.concat` / `array.filter` / `array.map` / `array.contains` / `array.reduce` / `array.any` / `array.all` / `csv.from` / `date.*` / `dict.*` / `regexp.*` / `strings.*` / `math.*` / `json.encode` / `runtime.version` / `system.time` / `types.*` / `join.*` 这类 package 入口已可用，但完整标准库接口仍远未实现
 - CLI 输出已经具备结果导向和多表感知能力，但距离官方 Influx 结果集格式仍有差距
 
 ## 推荐下一步
@@ -170,12 +170,17 @@
 - 已有：`regexp`，包含 `regexp.compile`、`regexp.findString`、`regexp.matchRegexpString`、`regexp.quoteMeta`
 - 已有：`strings`，包含 `strings.containsStr`、`strings.hasPrefix`、`strings.hasSuffix`、`strings.joinStr`、`strings.replaceAll`、`strings.split`、`strings.toUpper`、`strings.toLower`、`strings.trimSpace`
 - 已有：`math`，包含 `math.abs`、`math.ceil`、`math.floor`、`math.round`、`math.sqrt`、`math.pow`
+- 已有：`dict`，包含 `dict.fromList`、`dict.get`、`dict.insert`、`dict.remove`；当前运行时以对象承载可执行子集
+- 已有：`json`，包含 `json.encode`；当前运行时以 string 承载官方 bytes 返回语义
+- 已有：`runtime`，包含 `runtime.version`
+- 已有：`system`，包含 `system.time`
+- 已有：`types`，包含 `types.isBool`、`types.isDuration`、`types.isFloat`、`types.isInt`、`types.isNumeric`、`types.isRegexp`、`types.isString`、`types.isTime`、`types.isType`、`types.isUInt`
 - 已有：`join`，包含 `join.inner`、`join.left`、`join.right`、`join.full`，支持 predicate `on` 与 `as` 输出函数；后续继续补齐更完整的官方 join 包边界
-- 后续补：`dict`、`types`、`timezone`，优先选择实现小、测试边界清楚、对现有 examples 有帮助的函数
+- 后续补：`timezone`，优先选择实现小、测试边界清楚、对现有 examples 有帮助的函数
 - 后续评估：`influxdata/influxdb/schema`，用于承接官方 schema 探索类能力；不要先做顶层 `schema`
-- 后续评估：`json`、`generate`、`sampledata`、`interpolate`，作为纯内存运行时可实现的扩展包
+- 后续评估：`generate`、`sampledata`、`interpolate`，作为纯内存运行时可实现的扩展包
 - 暂缓：`http`、`sql`、`kafka`、`socket`、`slack`、`pagerduty`、`pushbullet` 等外部 IO / 集成包，除非后续运行时明确引入外部副作用模型
-- 暂缓：`planner`、`profiler`、`runtime`、`system`、`testing`、`internal/*` 等引擎、系统和测试辅助包，等解释器边界更稳定后再评估
+- 暂缓：`planner`、`profiler`、`testing`、`internal/*` 等引擎和测试辅助包，等解释器边界更稳定后再评估
 
 ### universe 拆分路线
 

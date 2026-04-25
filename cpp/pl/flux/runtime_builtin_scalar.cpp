@@ -30,6 +30,7 @@
 #include <memory>
 #include <optional>
 #include <regex>
+#include <simdjson.h>
 #include <string>
 #include <vector>
 
@@ -141,6 +142,71 @@ absl::StatusOr<double> number_argument(const std::vector<Value>& args, const std
         default:
             return absl::InvalidArgumentError(absl::StrCat(name, " expects a numeric argument"));
     }
+}
+
+std::string value_type_name(const Value& value) {
+    switch (value.type()) {
+        case Value::Type::Null:
+            return "null";
+        case Value::Type::Bool:
+            return "bool";
+        case Value::Type::Int:
+            return "int";
+        case Value::Type::UInt:
+            return "uint";
+        case Value::Type::Float:
+            return "float";
+        case Value::Type::String:
+            return "string";
+        case Value::Type::Duration:
+            return "duration";
+        case Value::Type::Time:
+            return "time";
+        case Value::Type::Regex:
+            return "regexp";
+        case Value::Type::Array:
+            return "array";
+        case Value::Type::Object:
+            return "object";
+        case Value::Type::Table:
+            return "table";
+        case Value::Type::Function:
+            return "function";
+    }
+}
+
+absl::StatusOr<std::string> dict_key_string(const Value& value, const std::string& name) {
+    switch (value.type()) {
+        case Value::Type::Bool:
+        case Value::Type::Int:
+        case Value::Type::UInt:
+        case Value::Type::Float:
+        case Value::Type::Duration:
+        case Value::Type::Time:
+        case Value::Type::Regex:
+            return value.string();
+        case Value::Type::String:
+            return value.as_string();
+        case Value::Type::Null:
+        case Value::Type::Array:
+        case Value::Type::Object:
+        case Value::Type::Table:
+        case Value::Type::Function:
+            return absl::InvalidArgumentError(
+                absl::StrCat(name, " `key` must be a comparable scalar"));
+    }
+}
+
+absl::StatusOr<const ObjectValue*> dict_property(const ObjectValue& object,
+                                                 const std::string& name) {
+    auto value_or = require_object_property(object, name, "dict");
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+    if ((*value_or)->type() != Value::Type::Object) {
+        return absl::InvalidArgumentError(absl::StrCat(name, " `dict` must be a dictionary"));
+    }
+    return &(*value_or)->as_object();
 }
 
 std::optional<int64_t> parse_rfc3339_seconds(const std::string& literal) {
@@ -774,6 +840,308 @@ absl::StatusOr<Value> builtin_math_pow(const std::vector<Value>& args) {
     return Value::floating(std::pow(*x_or, *y_or));
 }
 
+absl::StatusOr<Value> builtin_dict_from_list(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "dict.fromList");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto pairs_or = require_object_property(**object_or, "dict.fromList", "pairs");
+    if (!pairs_or.ok()) {
+        return pairs_or.status();
+    }
+    if ((*pairs_or)->type() != Value::Type::Array) {
+        return absl::InvalidArgumentError("dict.fromList `pairs` must be an array");
+    }
+
+    std::vector<std::pair<std::string, Value>> props;
+    for (const auto& pair : (*pairs_or)->as_array().elements) {
+        if (pair.type() != Value::Type::Object) {
+            return absl::InvalidArgumentError("dict.fromList `pairs` must contain records");
+        }
+        auto key_or = require_object_property(pair.as_object(), "dict.fromList", "key");
+        if (!key_or.ok()) {
+            return key_or.status();
+        }
+        auto value_or = require_object_property(pair.as_object(), "dict.fromList", "value");
+        if (!value_or.ok()) {
+            return value_or.status();
+        }
+        auto name_or = dict_key_string(**key_or, "dict.fromList");
+        if (!name_or.ok()) {
+            return name_or.status();
+        }
+
+        bool replaced = false;
+        for (auto& [key, current] : props) {
+            if (key == *name_or) {
+                current = **value_or;
+                replaced = true;
+                break;
+            }
+        }
+        if (!replaced) {
+            props.emplace_back(*name_or, **value_or);
+        }
+    }
+    return Value::object(std::move(props));
+}
+
+absl::StatusOr<Value> builtin_dict_get(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "dict.get");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto dict_or = dict_property(**object_or, "dict.get");
+    if (!dict_or.ok()) {
+        return dict_or.status();
+    }
+    auto key_or = require_object_property(**object_or, "dict.get", "key");
+    if (!key_or.ok()) {
+        return key_or.status();
+    }
+    auto default_or = require_object_property(**object_or, "dict.get", "default");
+    if (!default_or.ok()) {
+        return default_or.status();
+    }
+    auto name_or = dict_key_string(**key_or, "dict.get");
+    if (!name_or.ok()) {
+        return name_or.status();
+    }
+    const Value* found = (*dict_or)->lookup(*name_or);
+    return found == nullptr ? **default_or : *found;
+}
+
+absl::StatusOr<Value> builtin_dict_insert(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "dict.insert");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto dict_or = dict_property(**object_or, "dict.insert");
+    if (!dict_or.ok()) {
+        return dict_or.status();
+    }
+    auto key_or = require_object_property(**object_or, "dict.insert", "key");
+    if (!key_or.ok()) {
+        return key_or.status();
+    }
+    auto value_or = require_object_property(**object_or, "dict.insert", "value");
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+    auto name_or = dict_key_string(**key_or, "dict.insert");
+    if (!name_or.ok()) {
+        return name_or.status();
+    }
+
+    std::vector<std::pair<std::string, Value>> props = (*dict_or)->properties;
+    bool replaced = false;
+    for (auto& [key, current] : props) {
+        if (key == *name_or) {
+            current = **value_or;
+            replaced = true;
+            break;
+        }
+    }
+    if (!replaced) {
+        props.emplace_back(*name_or, **value_or);
+    }
+    return Value::object(std::move(props));
+}
+
+absl::StatusOr<Value> builtin_dict_remove(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "dict.remove");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto dict_or = dict_property(**object_or, "dict.remove");
+    if (!dict_or.ok()) {
+        return dict_or.status();
+    }
+    auto key_or = require_object_property(**object_or, "dict.remove", "key");
+    if (!key_or.ok()) {
+        return key_or.status();
+    }
+    auto name_or = dict_key_string(**key_or, "dict.remove");
+    if (!name_or.ok()) {
+        return name_or.status();
+    }
+
+    std::vector<std::pair<std::string, Value>> props;
+    props.reserve((*dict_or)->properties.size());
+    for (const auto& [key, value] : (*dict_or)->properties) {
+        if (key != *name_or) {
+            props.emplace_back(key, value);
+        }
+    }
+    return Value::object(std::move(props));
+}
+
+absl::StatusOr<Value> builtin_types_is_numeric(const std::vector<Value>& args) {
+    if (args.size() != 1) {
+        return absl::InvalidArgumentError("types.isNumeric expects exactly one argument");
+    }
+    const Value* value = &args[0];
+    if (args[0].type() == Value::Type::Object) {
+        auto value_or = require_object_property(args[0].as_object(), "types.isNumeric", "v");
+        if (!value_or.ok()) {
+            return value_or.status();
+        }
+        value = *value_or;
+    }
+    return Value::boolean(value->type() == Value::Type::Int || value->type() == Value::Type::UInt ||
+                          value->type() == Value::Type::Float);
+}
+
+absl::StatusOr<Value> builtin_types_is_type(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "types.isType");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto value_or = require_object_property(**object_or, "types.isType", "v");
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+    auto type_or = string_property(**object_or, "types.isType", "type");
+    if (!type_or.ok()) {
+        return type_or.status();
+    }
+    if (*type_or == "bytes") {
+        return Value::boolean(false);
+    }
+    return Value::boolean(value_type_name(**value_or) == *type_or);
+}
+
+absl::StatusOr<Value> builtin_types_is_value_type(const std::vector<Value>& args,
+                                                  const std::string& name,
+                                                  Value::Type type) {
+    if (args.size() != 1) {
+        return absl::InvalidArgumentError(absl::StrCat(name, " expects exactly one argument"));
+    }
+    const Value* value = &args[0];
+    if (args[0].type() == Value::Type::Object) {
+        auto value_or = require_object_property(args[0].as_object(), name, "v");
+        if (!value_or.ok()) {
+            return value_or.status();
+        }
+        value = *value_or;
+    }
+    return Value::boolean(value->type() == type);
+}
+
+using JsonBuilder = simdjson::builder::string_builder;
+
+void append_json_field_name(JsonBuilder& builder, std::string_view name, bool& first_field) {
+    if (!first_field) {
+        builder.append_comma();
+    }
+    builder.escape_and_append_with_quotes(name);
+    builder.append_colon();
+    first_field = false;
+}
+
+absl::Status append_json_value(JsonBuilder& builder, const Value& value) {
+    switch (value.type()) {
+        case Value::Type::Null:
+            builder.append_null();
+            return absl::OkStatus();
+        case Value::Type::Bool:
+            builder.append(value.as_bool());
+            return absl::OkStatus();
+        case Value::Type::Int:
+            builder.append(value.as_int());
+            return absl::OkStatus();
+        case Value::Type::UInt:
+            builder.append(value.as_uint());
+            return absl::OkStatus();
+        case Value::Type::Float:
+            builder.append(value.as_float());
+            return absl::OkStatus();
+        case Value::Type::String:
+            builder.append(value.as_string());
+            return absl::OkStatus();
+        case Value::Type::Time:
+            builder.append(value.as_time().literal);
+            return absl::OkStatus();
+        case Value::Type::Duration:
+            builder.append(value.as_duration().literal);
+            return absl::OkStatus();
+        case Value::Type::Regex:
+            builder.append(value.as_regex().literal);
+            return absl::OkStatus();
+        case Value::Type::Array: {
+            builder.start_array();
+            bool first = true;
+            for (const auto& element : value.as_array().elements) {
+                if (!first) {
+                    builder.append_comma();
+                }
+                first = false;
+                auto status = append_json_value(builder, element);
+                if (!status.ok()) {
+                    return status;
+                }
+            }
+            builder.end_array();
+            return absl::OkStatus();
+        }
+        case Value::Type::Object: {
+            builder.start_object();
+            bool first = true;
+            for (const auto& [key, property] : value.as_object().properties) {
+                append_json_field_name(builder, key, first);
+                auto status = append_json_value(builder, property);
+                if (!status.ok()) {
+                    return status;
+                }
+            }
+            builder.end_object();
+            return absl::OkStatus();
+        }
+        case Value::Type::Table:
+            return absl::InvalidArgumentError("json.encode does not support table values");
+        case Value::Type::Function:
+            return absl::InvalidArgumentError("json.encode does not support function values");
+    }
+}
+
+absl::StatusOr<Value> builtin_json_encode(const std::vector<Value>& args) {
+    if (args.size() != 1) {
+        return absl::InvalidArgumentError("json.encode expects exactly one argument");
+    }
+    const Value* value = &args[0];
+    if (args[0].type() == Value::Type::Object) {
+        if (const Value* property = args[0].as_object().lookup("v"); property != nullptr) {
+            value = property;
+        }
+    }
+    JsonBuilder builder;
+    auto status = append_json_value(builder, *value);
+    if (!status.ok()) {
+        return status;
+    }
+    std::string_view encoded;
+    const auto error = builder.view().get(encoded);
+    if (error != simdjson::SUCCESS) {
+        return absl::InternalError(std::string("failed to serialize json.encode value: ") +
+                                   simdjson::error_message(error));
+    }
+    return Value::string(std::string(encoded));
+}
+
+absl::StatusOr<Value> builtin_runtime_version(const std::vector<Value>& args) {
+    if (!args.empty()) {
+        return absl::InvalidArgumentError("runtime.version expects no arguments");
+    }
+    return Value::string("playground-flux");
+}
+
+absl::StatusOr<Value> builtin_system_time(const std::vector<Value>& args) {
+    if (!args.empty()) {
+        return absl::InvalidArgumentError("system.time expects no arguments");
+    }
+    return Value::time(absl::FormatTime("%Y-%m-%dT%H:%M:%SZ", absl::Now(), absl::UTCTimeZone()));
+}
+
 Value make_regexp_package() {
     return Value::object({
         {"path", Value::string("regexp")},
@@ -906,13 +1274,113 @@ Value make_date_package() {
     });
 }
 
+Value make_dict_package() {
+    return Value::object({
+        {"path", Value::string("dict")},
+        {"fromList", make_builtin_value("dict.fromList", builtin_dict_from_list)},
+        {"get", make_builtin_value("dict.get", builtin_dict_get)},
+        {"insert", make_builtin_value("dict.insert", builtin_dict_insert)},
+        {"remove", make_builtin_value("dict.remove", builtin_dict_remove)},
+    });
+}
+
+Value make_json_package() {
+    return Value::object({
+        {"path", Value::string("json")},
+        {"encode", make_builtin_value("json.encode", builtin_json_encode, "v")},
+    });
+}
+
+Value make_runtime_package() {
+    return Value::object({
+        {"path", Value::string("runtime")},
+        {"version", make_builtin_value("runtime.version", builtin_runtime_version)},
+    });
+}
+
+Value make_system_package() {
+    return Value::object({
+        {"path", Value::string("system")},
+        {"time", make_builtin_value("system.time", builtin_system_time)},
+    });
+}
+
+Value make_types_package() {
+    return Value::object({
+        {"path", Value::string("types")},
+        {"isBool", make_builtin_value(
+                       "types.isBool",
+                       [](const std::vector<Value>& args) {
+                           return builtin_types_is_value_type(args, "types.isBool",
+                                                              Value::Type::Bool);
+                       },
+                       "v")},
+        {"isDuration", make_builtin_value(
+                           "types.isDuration",
+                           [](const std::vector<Value>& args) {
+                               return builtin_types_is_value_type(args, "types.isDuration",
+                                                                  Value::Type::Duration);
+                           },
+                           "v")},
+        {"isFloat", make_builtin_value(
+                        "types.isFloat",
+                        [](const std::vector<Value>& args) {
+                            return builtin_types_is_value_type(args, "types.isFloat",
+                                                               Value::Type::Float);
+                        },
+                        "v")},
+        {"isInt", make_builtin_value(
+                      "types.isInt",
+                      [](const std::vector<Value>& args) {
+                          return builtin_types_is_value_type(args, "types.isInt",
+                                                             Value::Type::Int);
+                      },
+                      "v")},
+        {"isNumeric", make_builtin_value("types.isNumeric", builtin_types_is_numeric, "v")},
+        {"isRegexp", make_builtin_value(
+                         "types.isRegexp",
+                         [](const std::vector<Value>& args) {
+                             return builtin_types_is_value_type(args, "types.isRegexp",
+                                                                Value::Type::Regex);
+                         },
+                         "v")},
+        {"isString", make_builtin_value(
+                         "types.isString",
+                         [](const std::vector<Value>& args) {
+                             return builtin_types_is_value_type(args, "types.isString",
+                                                                Value::Type::String);
+                         },
+                         "v")},
+        {"isTime", make_builtin_value(
+                       "types.isTime",
+                       [](const std::vector<Value>& args) {
+                           return builtin_types_is_value_type(args, "types.isTime",
+                                                              Value::Type::Time);
+                       },
+                       "v")},
+        {"isType", make_builtin_value("types.isType", builtin_types_is_type, "v")},
+        {"isUInt", make_builtin_value(
+                       "types.isUInt",
+                       [](const std::vector<Value>& args) {
+                           return builtin_types_is_value_type(args, "types.isUInt",
+                                                              Value::Type::UInt);
+                       },
+                       "v")},
+    });
+}
+
 } // namespace
 
 void RegisterScalarStdlibPackages() {
     RegisterPackage("date", make_date_package);
+    RegisterPackage("dict", make_dict_package);
     RegisterPackage("regexp", make_regexp_package);
     RegisterPackage("strings", make_strings_package);
     RegisterPackage("math", make_math_package);
+    RegisterPackage("json", make_json_package);
+    RegisterPackage("runtime", make_runtime_package);
+    RegisterPackage("system", make_system_package);
+    RegisterPackage("types", make_types_package);
 }
 
 } // namespace pl::flux_builtin
