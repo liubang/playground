@@ -76,6 +76,52 @@ std::shared_ptr<ObjectValue> materialize_group_value_row(const TableChunk& chunk
     return std::make_shared<ObjectValue>(std::move(properties));
 }
 
+absl::StatusOr<std::vector<double>> quantile_values_property(const ObjectValue& object,
+                                                             const std::string& name,
+                                                             const std::string& property) {
+    auto value_or = require_object_property(object, name, property);
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+    std::vector<double> quantiles;
+    const Value& value = **value_or;
+    auto append_quantile = [&](const Value& item) -> absl::Status {
+        switch (item.type()) {
+            case Value::Type::Float:
+                quantiles.push_back(item.as_float());
+                return absl::OkStatus();
+            case Value::Type::Int:
+                quantiles.push_back(static_cast<double>(item.as_int()));
+                return absl::OkStatus();
+            case Value::Type::UInt:
+                quantiles.push_back(static_cast<double>(item.as_uint()));
+                return absl::OkStatus();
+            default:
+                return absl::InvalidArgumentError(
+                    absl::StrCat(name, " `", property, "` must be a number or array of numbers"));
+        }
+    };
+    if (value.type() == Value::Type::Array) {
+        quantiles.reserve(value.as_array().elements.size());
+        for (const auto& item : value.as_array().elements) {
+            auto status = append_quantile(item);
+            if (!status.ok()) {
+                return status;
+            }
+        }
+    } else {
+        auto status = append_quantile(value);
+        if (!status.ok()) {
+            return status;
+        }
+    }
+    if (quantiles.empty()) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " `", property, "` must not be empty"));
+    }
+    return quantiles;
+}
+
 absl::StatusOr<double> quantile_for_sorted_values(const std::vector<double>& values, double q) {
     if (values.empty()) {
         return absl::InvalidArgumentError("quantile expects at least one numeric value");
@@ -202,8 +248,6 @@ absl::StatusOr<Value> aggregate_min_max(const std::vector<Value>& args,
     }
     return *best;
 }
-
-
 
 } // namespace
 

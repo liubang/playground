@@ -53,6 +53,26 @@ std::string string_payload(const Value& value) {
     return value.string();
 }
 
+absl::StatusOr<std::string> dict_key_string(const Value& value) {
+    switch (value.type()) {
+        case Value::Type::Bool:
+        case Value::Type::Int:
+        case Value::Type::UInt:
+        case Value::Type::Float:
+        case Value::Type::String:
+        case Value::Type::Duration:
+        case Value::Type::Time:
+        case Value::Type::Regex:
+            return string_payload(value);
+        case Value::Type::Null:
+        case Value::Type::Array:
+        case Value::Type::Object:
+        case Value::Type::Table:
+        case Value::Type::Function:
+            return absl::InvalidArgumentError("dictionary key must be a comparable scalar");
+    }
+}
+
 absl::StatusOr<std::string> property_name(const PropertyKey& key) {
     switch (key.type) {
         case PropertyKey::Type::Identifier:
@@ -600,6 +620,36 @@ absl::StatusOr<Value> eval_object_expr(const ObjectExpr& object,
     return Value::object(std::move(props));
 }
 
+absl::StatusOr<Value> eval_dict_expr(const DictExpr& dict, const Environment& env) {
+    std::vector<std::pair<std::string, Value>> props;
+    for (const auto& item : dict.elements) {
+        auto key_or = eval_impl(*item->key, env);
+        if (!key_or.ok()) {
+            return key_or.status();
+        }
+        auto name_or = dict_key_string(*key_or);
+        if (!name_or.ok()) {
+            return name_or.status();
+        }
+        auto value_or = eval_impl(*item->val, env);
+        if (!value_or.ok()) {
+            return value_or.status();
+        }
+        bool replaced = false;
+        for (auto& [key, current] : props) {
+            if (key == *name_or) {
+                current = *value_or;
+                replaced = true;
+                break;
+            }
+        }
+        if (!replaced) {
+            props.emplace_back(*name_or, *value_or);
+        }
+    }
+    return Value::object(std::move(props));
+}
+
 absl::StatusOr<Value> eval_unary(const UnaryExpr& unary,
                                  const Environment& env,
                                  const Expression& whole_expr) {
@@ -867,6 +917,7 @@ absl::StatusOr<Value> eval_impl(const Expression& expr, const Environment& env) 
         case Expression::Type::RegexpLit:
             return Value::regex(std::get<std::unique_ptr<RegexpLit>>(expr.expr)->string());
         case Expression::Type::DictExpr:
+            return eval_dict_expr(*std::get<std::unique_ptr<DictExpr>>(expr.expr), env);
         case Expression::Type::PipeLit:
         case Expression::Type::LabelLit:
         case Expression::Type::BadExpr:

@@ -126,6 +126,13 @@ struct AggregateWindowBucket {
     std::vector<Value> values;
 };
 
+bool aggregate_window_fn_drops_empty(const FunctionValue& fn) {
+    if (fn.kind != FunctionValue::Kind::Builtin) {
+        return false;
+    }
+    return fn.name == "first" || fn.name == "last";
+}
+
 absl::StatusOr<Value> invoke_window_aggregate(const FunctionValue& fn,
                                               const std::vector<Value>& values) {
     if (fn.kind == FunctionValue::Kind::Builtin && fn.name == "count") {
