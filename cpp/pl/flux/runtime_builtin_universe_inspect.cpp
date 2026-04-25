@@ -17,7 +17,7 @@
 
 #include "cpp/pl/flux/runtime_builtin_universe.h"
 
-#include "cpp/pl/flux/runtime_builtin_universe_internal.h"
+#include "cpp/pl/flux/runtime_builtin_table_helpers.h"
 
 namespace pl {
 namespace {

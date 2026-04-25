@@ -1,0 +1,27 @@
+import "array"
+import "join"
+
+left = array.from(rows: [
+    {host: "edge-1", cpu: 80.0},
+    {host: "edge-2", cpu: 60.0},
+])
+
+right = array.from(rows: [
+    {host: "edge-1", mem: 70.0},
+    {host: "edge-3", mem: 50.0},
+])
+
+row = join.left(
+    left: left,
+    right: right,
+    on: (l, r) => l.host == r.host,
+    as: (l, r) => ({host: l.host, cpu: l.cpu, mem: r.mem}),
+)
+    |> findRecord(fn: (r) => r.host == "edge-1", idx: 0)
+
+{
+    host: row.host,
+    cpu: row.cpu,
+    mem: row.mem,
+}
+
