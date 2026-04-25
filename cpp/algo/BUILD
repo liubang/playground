@@ -26,7 +26,7 @@ cc_binary(
     name = "print_heart",
     srcs = ["print_heart.cpp"],
     copts = [
-        "-std=c++20",
+         
     ] + COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     visibility = ["//visibility:public"],

@@ -27,7 +27,7 @@ cc_library(
     name = "geohash",
     srcs = ["geohash.cpp"],
     hdrs = ["geohash.h"],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     visibility = ["//visibility:public"],
 )
@@ -36,7 +36,7 @@ cc_library(
     name = "geo",
     srcs = ["geo.cpp"],
     hdrs = ["geo.h"],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     visibility = ["//visibility:public"],
     deps = [":geohash"],
@@ -48,7 +48,7 @@ cc_test(
         "geohash_test.cpp",
     ],
     copts = [
-        "-std=c++20",
+         
     ] + TEST_COPTS,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [

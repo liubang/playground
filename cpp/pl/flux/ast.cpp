@@ -30,9 +30,10 @@ std::string attributes_prefix(const std::vector<std::shared_ptr<Attribute>>& att
     if (attributes.empty()) {
         return "";
     }
-    return absl::StrJoin(attributes, " ", [](std::string* out, const auto& attr) {
-               out->append(attr->string());
-           }) +
+    return absl::StrJoin(attributes, " ",
+                         [](std::string* out, const auto& attr) {
+                             out->append(attr->string());
+                         }) +
            " ";
 }
 
@@ -64,17 +65,17 @@ std::string mono_type_string(const MonoType& mono) {
         case MonoType::Type::Basic:
             return std::get<std::unique_ptr<NamedType>>(mono.value)->name->string();
         case MonoType::Type::Array:
-            return absl::StrFormat("[%s]",
-                                   mono_type_string(*std::get<std::unique_ptr<ArrayType>>(mono.value)
-                                                         ->element));
+            return absl::StrFormat(
+                "[%s]",
+                mono_type_string(*std::get<std::unique_ptr<ArrayType>>(mono.value)->element));
         case MonoType::Type::Stream:
-            return absl::StrFormat("stream[%s]",
-                                   mono_type_string(*std::get<std::unique_ptr<StreamType>>(mono.value)
-                                                         ->element));
+            return absl::StrFormat(
+                "stream[%s]",
+                mono_type_string(*std::get<std::unique_ptr<StreamType>>(mono.value)->element));
         case MonoType::Type::Vector:
-            return absl::StrFormat("vector[%s]",
-                                   mono_type_string(*std::get<std::unique_ptr<VectorType>>(mono.value)
-                                                         ->element));
+            return absl::StrFormat(
+                "vector[%s]",
+                mono_type_string(*std::get<std::unique_ptr<VectorType>>(mono.value)->element));
         case MonoType::Type::Dict: {
             const auto& dict = std::get<std::unique_ptr<DictType>>(mono.value);
             return absl::StrFormat("[%s:%s]", mono_type_string(*dict->key),
@@ -86,9 +87,8 @@ std::string mono_type_string(const MonoType& mono) {
             const auto& record = std::get<std::unique_ptr<RecordType>>(mono.value);
             std::vector<std::string> props;
             for (const auto& property : record->properties) {
-                props.emplace_back(
-                    absl::StrFormat("%s: %s", property->name->string(),
-                                    mono_type_string(*property->monotype)));
+                props.emplace_back(absl::StrFormat("%s: %s", property->name->string(),
+                                                   mono_type_string(*property->monotype)));
             }
             if (record->tvar) {
                 if (props.empty()) {
@@ -290,9 +290,11 @@ std::string ConditionalExpr::string() const {
                            alternate->string());
 }
 std::string StringExpr::string() const {
-    return "\"" + absl::StrJoin(parts, "", [](std::string* out, const auto& p) {
-               out->append(p->string());
-           }) +
+    return "\"" +
+           absl::StrJoin(parts, "",
+                         [](std::string* out, const auto& p) {
+                             out->append(p->string());
+                         }) +
            "\"";
 }
 std::string StringExprPart::string() const {
@@ -463,13 +465,15 @@ std::string TestCaseStmt::string() const {
 std::string BuiltinStmt::string() const {
     std::string type_expr = mono_type_string(*ty->monotype);
     if (!ty->constraints.empty()) {
-        auto constraints = absl::StrJoin(ty->constraints, ", ", [](std::string* out, const auto& c) {
-            out->append(c->tvar->string());
-            out->append(": ");
-            out->append(absl::StrJoin(c->kinds, " + ", [](std::string* kind_out, const auto& kind) {
-                kind_out->append(kind->string());
-            }));
-        });
+        auto constraints =
+            absl::StrJoin(ty->constraints, ", ", [](std::string* out, const auto& c) {
+                out->append(c->tvar->string());
+                out->append(": ");
+                out->append(
+                    absl::StrJoin(c->kinds, " + ", [](std::string* kind_out, const auto& kind) {
+                        kind_out->append(kind->string());
+                    }));
+            });
         type_expr += " where " + constraints;
     }
     return absl::StrFormat("builtin %s: %s", id->string(), type_expr);

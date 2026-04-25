@@ -21,9 +21,7 @@ namespace pl {
 
 namespace {
 
-bool is_identifier_continue(unsigned char c) {
-    return std::isalnum(c) != 0 || c == '_';
-}
+bool is_identifier_continue(unsigned char c) { return std::isalnum(c) != 0 || c == '_'; }
 
 uint32_t column_for(const char* ptr, const char* last_newline) {
     return static_cast<uint32_t>(ptr - last_newline + 1);
@@ -102,12 +100,12 @@ std::unique_ptr<Token> Scanner::scan(int32_t mode) {
     } else {
         t = std::make_unique<Token>();
         t->tok = token_;
-        t->lit = std::string(data_ + token_start,
-                             static_cast<std::size_t>(token_end - token_start));
+        t->lit =
+            std::string(data_ + token_start, static_cast<std::size_t>(token_end - token_start));
         t->start_offset = static_cast<uint32_t>(token_start);
         t->end_offset = static_cast<uint32_t>(token_end);
-        t->start_pos =
-            Position(static_cast<uint32_t>(token_start_line), static_cast<uint32_t>(token_start_col));
+        t->start_pos = Position(static_cast<uint32_t>(token_start_line),
+                                static_cast<uint32_t>(token_start_col));
         t->end_pos =
             Position(static_cast<uint32_t>(token_end_line), static_cast<uint32_t>(token_end_col));
         maybe_promote_unsigned_integer(t.get());
@@ -119,7 +117,7 @@ std::unique_ptr<Token> Scanner::scan(int32_t mode) {
 }
 
 std::unique_ptr<Token> Scanner::get_eof_token() {
-    const uint32_t column = static_cast<uint32_t>(eof_ - last_newline_ + 1);
+    const auto column = static_cast<uint32_t>(eof_ - last_newline_ + 1);
     auto token = std::make_unique<Token>();
     token->tok = TokenType::Eof;
     token->lit = "";

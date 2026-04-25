@@ -15,10 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/25 10:40
 
-#include "cpp/pl/flux/runtime_builtin_universe.h"
-
 #include "cpp/pl/flux/runtime_builtin_table_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_time_helpers.h"
+#include "cpp/pl/flux/runtime_builtin_universe.h"
 
 namespace pl {
 namespace {
@@ -45,7 +44,6 @@ absl::StatusOr<Value> builtin_from(const std::vector<Value>& args) {
     }
     return Value::table((*bucket_or)->as_string(), std::move(rows));
 }
-
 
 absl::StatusOr<Value> builtin_range(const std::vector<Value>& args) {
     auto object_or = require_object_argument(args, "range");
@@ -617,7 +615,6 @@ absl::StatusOr<Value> builtin_fill(const std::vector<Value>& args) {
                         (*table_or)->range_stop);
 }
 
-
 absl::StatusOr<Value> builtin_union(const std::vector<Value>& args) {
     auto object_or = require_object_argument(args, "union");
     if (!object_or.ok()) {
@@ -654,9 +651,7 @@ absl::StatusOr<Value> builtin_union(const std::vector<Value>& args) {
     return Value::table_stream(bucket, std::move(chunks), range_start, range_stop);
 }
 
-
 } // namespace
-
 
 void InstallUniverseTransformBuiltins(Environment& env) {
     install_builtin(env, "from", builtin_from);
@@ -678,22 +673,70 @@ void InstallUniverseTransformBuiltins(Environment& env) {
 }
 
 bool InstallKnownUniverseTransformBuiltin(Environment& env, const std::string& name) {
-    if (name == "from") { install_builtin(env, "from", builtin_from); return true; }
-    if (name == "range") { install_builtin(env, "range", builtin_range, "tables"); return true; }
-    if (name == "filter") { install_builtin(env, "filter", builtin_filter, "tables"); return true; }
-    if (name == "map") { install_builtin(env, "map", builtin_map, "tables"); return true; }
-    if (name == "limit") { install_builtin(env, "limit", builtin_limit, "tables"); return true; }
-    if (name == "tail") { install_builtin(env, "tail", builtin_tail, "tables"); return true; }
-    if (name == "keep") { install_builtin(env, "keep", builtin_keep, "tables"); return true; }
-    if (name == "drop") { install_builtin(env, "drop", builtin_drop, "tables"); return true; }
-    if (name == "rename") { install_builtin(env, "rename", builtin_rename, "tables"); return true; }
-    if (name == "duplicate") { install_builtin(env, "duplicate", builtin_duplicate, "tables"); return true; }
-    if (name == "set") { install_builtin(env, "set", builtin_set, "tables"); return true; }
-    if (name == "sort") { install_builtin(env, "sort", builtin_sort, "tables"); return true; }
-    if (name == "group") { install_builtin(env, "group", builtin_group, "tables"); return true; }
-    if (name == "pivot") { install_builtin(env, "pivot", builtin_pivot, "tables"); return true; }
-    if (name == "fill") { install_builtin(env, "fill", builtin_fill, "tables"); return true; }
-    if (name == "union") { install_builtin(env, "union", builtin_union); return true; }
+    if (name == "from") {
+        install_builtin(env, "from", builtin_from);
+        return true;
+    }
+    if (name == "range") {
+        install_builtin(env, "range", builtin_range, "tables");
+        return true;
+    }
+    if (name == "filter") {
+        install_builtin(env, "filter", builtin_filter, "tables");
+        return true;
+    }
+    if (name == "map") {
+        install_builtin(env, "map", builtin_map, "tables");
+        return true;
+    }
+    if (name == "limit") {
+        install_builtin(env, "limit", builtin_limit, "tables");
+        return true;
+    }
+    if (name == "tail") {
+        install_builtin(env, "tail", builtin_tail, "tables");
+        return true;
+    }
+    if (name == "keep") {
+        install_builtin(env, "keep", builtin_keep, "tables");
+        return true;
+    }
+    if (name == "drop") {
+        install_builtin(env, "drop", builtin_drop, "tables");
+        return true;
+    }
+    if (name == "rename") {
+        install_builtin(env, "rename", builtin_rename, "tables");
+        return true;
+    }
+    if (name == "duplicate") {
+        install_builtin(env, "duplicate", builtin_duplicate, "tables");
+        return true;
+    }
+    if (name == "set") {
+        install_builtin(env, "set", builtin_set, "tables");
+        return true;
+    }
+    if (name == "sort") {
+        install_builtin(env, "sort", builtin_sort, "tables");
+        return true;
+    }
+    if (name == "group") {
+        install_builtin(env, "group", builtin_group, "tables");
+        return true;
+    }
+    if (name == "pivot") {
+        install_builtin(env, "pivot", builtin_pivot, "tables");
+        return true;
+    }
+    if (name == "fill") {
+        install_builtin(env, "fill", builtin_fill, "tables");
+        return true;
+    }
+    if (name == "union") {
+        install_builtin(env, "union", builtin_union);
+        return true;
+    }
     return false;
 }
 

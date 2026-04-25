@@ -13,7 +13,6 @@
 // limitations under the License.
 
 #include "cpp/pl/flux/strconv.h"
-
 #include <gtest/gtest.h>
 
 namespace pl {
@@ -30,16 +29,14 @@ TEST(StrConvTest, ParseTextRejectsIncompleteHexEscape) {
     auto parsed = StrConv::parse_text(R"(\x4)");
 
     ASSERT_FALSE(parsed.ok());
-    EXPECT_NE(parsed.status().message().find("\\x followed by 1 char"),
-              std::string::npos);
+    EXPECT_NE(parsed.status().message().find("\\x followed by 1 char"), std::string::npos);
 }
 
 TEST(StrConvTest, ParseStringRequiresQuotes) {
     auto parsed = StrConv::parse_string("unquoted");
 
     ASSERT_FALSE(parsed.ok());
-    EXPECT_NE(parsed.status().message().find("invalid string literal"),
-              std::string::npos);
+    EXPECT_NE(parsed.status().message().find("invalid string literal"), std::string::npos);
 }
 
 TEST(StrConvTest, ParseRegexUnescapesSlashAndHex) {
@@ -79,9 +76,8 @@ TEST(StrConvTest, ParseUnitRejectsDanglingMicrosecondPrefix) {
     auto unit = StrConv::parse_unit("µ", index);
 
     ASSERT_FALSE(unit.ok());
-    EXPECT_NE(unit.status().message().find("unterminated microsecond unit"),
-              std::string::npos);
+    EXPECT_NE(unit.status().message().find("unterminated microsecond unit"), std::string::npos);
 }
 
-}  // namespace
-}  // namespace pl
+} // namespace
+} // namespace pl

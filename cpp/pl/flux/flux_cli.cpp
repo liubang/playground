@@ -25,11 +25,11 @@
 #include "cpp/pl/flux/parser.h"
 #include "cpp/pl/flux/runtime_builtin.h"
 #include "cpp/pl/flux/runtime_exec.h"
-#include <simdjson.h>
 #include <algorithm>
 #include <cctype>
 #include <iomanip>
 #include <iostream>
+#include <simdjson.h>
 #include <sstream>
 #include <string_view>
 #include <unordered_set>
@@ -119,7 +119,8 @@ std::unordered_set<std::string> collect_group_columns(const TableChunk& chunk) {
 }
 
 bool chunk_has_column(const TableChunk& chunk, std::string_view name) {
-    if (std::find(chunk.columns.begin(), chunk.columns.end(), std::string(name)) != chunk.columns.end()) {
+    if (std::find(chunk.columns.begin(), chunk.columns.end(), std::string(name)) !=
+        chunk.columns.end()) {
         return true;
     }
     for (const auto& row : chunk.rows) {
@@ -464,14 +465,15 @@ size_t append_annotated_csv_result(const NamedResult& result,
 
             datatype_row.emplace_back("string");
             group_row.emplace_back("false");
-            default_row.push_back(has_result_column ? shared_column_value(chunk, "result").value_or("")
-                                                    : result.name);
+            default_row.push_back(has_result_column
+                                      ? shared_column_value(chunk, "result").value_or("")
+                                      : result.name);
             header_row.emplace_back("result");
 
             datatype_row.emplace_back("long");
             group_row.emplace_back("false");
-            default_row.push_back(has_table_column ? shared_column_value(chunk, "table").value_or("")
-                                                   : "");
+            default_row.push_back(
+                has_table_column ? shared_column_value(chunk, "table").value_or("") : "");
             header_row.emplace_back("table");
 
             for (const auto& column : columns) {
@@ -643,9 +645,9 @@ absl::StatusOr<FileExecutionResult> filter_result_by_name(const FileExecutionRes
                                    "` was not found; script produced no named results");
     }
 
-    return absl::NotFoundError(std::string("result `") + std::string(result_name) +
-                               "` was not found; available results: " +
-                               absl::StrJoin(available_results, ", "));
+    return absl::NotFoundError(
+        std::string("result `") + std::string(result_name) +
+        "` was not found; available results: " + absl::StrJoin(available_results, ", "));
 }
 
 void append_result_names_output(const FileExecutionResult& result, std::ostringstream& out) {
@@ -931,9 +933,7 @@ FluxCliResult ExecuteFluxSource(const std::string& source,
         auto filtered_or = filter_result_by_name(*result_or, *options.result_name);
         if (!filtered_or.ok()) {
             return FluxCliResult{
-                .exit_code = 1,
-                .output = "",
-                .error = status_message(filtered_or.status()) + "\n"};
+                .exit_code = 1, .output = "", .error = status_message(filtered_or.status()) + "\n"};
         }
         result_or = *filtered_or;
     }
@@ -953,8 +953,9 @@ FluxCliResult ExecuteFluxSource(const std::string& source,
                 if (auto json_or = build_json_output(*result_or); json_or.ok()) {
                     out << *json_or;
                 } else {
-                    return FluxCliResult{
-                        .exit_code = 1, .output = "", .error = std::string(json_or.status().message()) + "\n"};
+                    return FluxCliResult{.exit_code = 1,
+                                         .output = "",
+                                         .error = std::string(json_or.status().message()) + "\n"};
                 }
                 break;
         }

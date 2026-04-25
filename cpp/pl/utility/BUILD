@@ -36,7 +36,7 @@ cc_test(
     srcs = [
         "construct_log_test.cpp",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":utility",

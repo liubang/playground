@@ -15,9 +15,8 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/25 10:40
 
-#include "cpp/pl/flux/runtime_builtin_universe.h"
-
 #include "cpp/pl/flux/runtime_builtin_table_helpers.h"
+#include "cpp/pl/flux/runtime_builtin_universe.h"
 
 namespace pl {
 namespace {
@@ -141,9 +140,7 @@ absl::StatusOr<Value> builtin_find_record(const std::vector<Value>& args) {
     return Value::object((*rows_or)[*idx_or]->properties);
 }
 
-
 } // namespace
-
 
 void InstallUniverseInspectBuiltins(Environment& env) {
     install_builtin(env, "columns", builtin_columns, "tables");
@@ -154,11 +151,26 @@ void InstallUniverseInspectBuiltins(Environment& env) {
 }
 
 bool InstallKnownUniverseInspectBuiltin(Environment& env, const std::string& name) {
-    if (name == "columns") { install_builtin(env, "columns", builtin_columns, "tables"); return true; }
-    if (name == "keys") { install_builtin(env, "keys", builtin_keys, "tables"); return true; }
-    if (name == "findColumn") { install_builtin(env, "findColumn", builtin_find_column, "tables"); return true; }
-    if (name == "findRecord") { install_builtin(env, "findRecord", builtin_find_record, "tables"); return true; }
-    if (name == "yield") { install_builtin(env, "yield", builtin_yield, "tables"); return true; }
+    if (name == "columns") {
+        install_builtin(env, "columns", builtin_columns, "tables");
+        return true;
+    }
+    if (name == "keys") {
+        install_builtin(env, "keys", builtin_keys, "tables");
+        return true;
+    }
+    if (name == "findColumn") {
+        install_builtin(env, "findColumn", builtin_find_column, "tables");
+        return true;
+    }
+    if (name == "findRecord") {
+        install_builtin(env, "findRecord", builtin_find_record, "tables");
+        return true;
+    }
+    if (name == "yield") {
+        install_builtin(env, "yield", builtin_yield, "tables");
+        return true;
+    }
     return false;
 }
 
