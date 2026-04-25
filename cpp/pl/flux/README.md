@@ -1,203 +1,72 @@
-# Flux 解析器与运行时基础
+# Flux C++ Playground
 
-`cpp/pl/flux` 目前提供了一个可执行、可调试、可逐步扩展的 Flux 子集实现，主要包括：
+`cpp/pl/flux` 是一个用 C++20 写的 Flux 解析器、执行器和标准库实验场。它的目标不是立刻完整复刻 InfluxData 官方 Flux，而是提供一个可运行、可调试、可回归测试的 Flux 子集，用来逐步验证语法、运行时值模型、表流管道和内置包设计。
 
-- AST 调试入口，可将 Flux 程序输出为树形文本或 JSON
-- 一套覆盖常见语法形态的解析器测试
-- 运行时基础设施：值模型、环境与作用域、表达式求值、语句执行
-- 一组面向查询场景的内存内 builtins，可运行常见的 Flux 管道
+当前能力包括：
 
-如果你想看逐项能力清单，请直接查看 [SUPPORT_MATRIX.md](./SUPPORT_MATRIX.md)。
-后续迭代默认遵循 [CLAUDE.md](./CLAUDE.md) 中定义的流程、测试、benchmark、examples 校验和文档同步规则。
+- Flux scanner、parser、AST 调试输出
+- 表达式求值、作用域、函数、管道、顶层执行环境
+- 人类可读、annotated CSV、JSON 三种 CLI 输出
+- REPL、内联源码、文件执行、结果筛选
+- 一批默认加载的 universe builtin
+- `array`、`csv`、`date`、`dict`、`join`、`json`、`math`、`regexp`、`runtime`、`strings`、`system`、`types` 等内置包
+- `stdlib_conformance` 快照样例，约束每个已实现 builtin 的主要行为
 
-## 构建
+更细的语法和运行时支持矩阵见 [SUPPORT_MATRIX.md](./SUPPORT_MATRIX.md)。
+
+## 编译依赖
+
+项目通过 Bazel/Bzlmod 构建。Flux 子项目本身主要依赖：
+
+- Bazel，建议使用仓库当前 Bzlmod 配置可解析的版本
+- 支持 C++20 的编译器
+- Abseil，用于 status、string、time 等基础库
+- simdjson，用于 CLI/JSON 相关处理，也建议后续 JSON package 继续复用它，避免手写 JSON 编码/解析逻辑
+- GoogleTest，用于单元测试
+
+依赖版本在仓库根目录 [MODULE.bazel](../../../MODULE.bazel) 中声明，正常情况下不需要手动安装三方 C++ 库。
+
+## 快速上手
+
+构建 CLI：
 
 ```bash
 bazel build //cpp/pl/flux:flux
 ```
 
-可选：
-
-```bash
-bazel build //cpp/pl/flux:parser_test
-```
-
-本地可重复基准测试说明见 [benchmark/README.md](./benchmark/README.md)。
-
-## 使用方式
-
-从标准输入读取并输出 AST：
-
-```bash
-./bazel-bin/cpp/pl/flux/flux ast <<'EOF'
-package metrics
-import "array"
-config = {base with enabled: true, tags: ["cpu", "mem"]}
-status = if exists config.enabled then "ok" else "missing"
-EOF
-```
-
-从文件读取：
-
-```bash
-./bazel-bin/cpp/pl/flux/flux ast path/to/query.flux
-```
-
-直接解析内联源码：
-
-```bash
-./bazel-bin/cpp/pl/flux/flux ast -e 'value = 1 + 2'
-```
-
-执行 Flux 源码：
+执行一段 Flux：
 
 ```bash
 ./bazel-bin/cpp/pl/flux/flux -e 'sum([1, 2, 3])'
 ```
 
-切换结构化输出格式：
-
-```bash
-./bazel-bin/cpp/pl/flux/flux --output-format csv -e 'value = 41
-value + 1'
-```
-
-对查询型脚本，CLI 会输出带结果名的结果块和逻辑表：
-
-```text
-Result: data
-Table: bucket=csv, rows=1, tables=1
-+==================================================+
-| _time                  | _measurement | _value |
-+==================================================+
-| "2024-01-01T00:00:00Z" | "cpu"        | "95.5" |
-+==================================================+
-```
-
-同一结果也可以导出为注解 CSV：
-
-```text
-#datatype,string,long,string,string,string
-#group,false,false,false,false,false
-#default,data,,,,
-,result,table,_time,_measurement,_value
-,data,0,2024-01-01T00:00:00Z,cpu,95.5
-```
-
-或者输出为 JSON：
+输出 JSON：
 
 ```bash
 ./bazel-bin/cpp/pl/flux/flux --output-format json -e 'value = 41
 value + 1'
 ```
 
-```json
-{"package":null,"imports":[],"results":[{"name":"value","value":41},{"name":"_result","value":42}],"last":42}
-```
-
-执行一个查询文件：
+输出 AST：
 
 ```bash
-cat > /tmp/query.flux <<'EOF'
-import "csv"
-
-data = csv.from(
-    csv: "_time,_measurement,_value\n2024-01-01T00:00:00Z,cpu,95.5\n",
-    mode: "raw",
-)
-    |> filter(fn: (r) => r._measurement == "cpu")
-    |> limit(n: 1)
-EOF
-
-./bazel-bin/cpp/pl/flux/flux /tmp/query.flux
+./bazel-bin/cpp/pl/flux/flux ast -e 'data |> filter(fn: (r) => r._value > 10)'
 ```
 
-执行仓库内置的端到端示例：
+执行文件：
 
 ```bash
-bazel build //cpp/pl/flux:flux
-./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/query.flux
+./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/scalar_basics.flux
 ```
 
-这个场景见 [examples/ops_dashboard/README.md](./examples/ops_dashboard/README.md)。它覆盖了 `aggregateWindow + join`、`group + sort + elapsed`、`group + sort + difference`、`group + sort + derivative`、`aggregateWindow + union + pivot`、日历窗口、`distinct`、`union`、`reduce`、`last`，以及可通过 `--result` 缩窄的多结果脚本。
+只输出某个结果：
 
-如果你想快速扫一遍当前支持的 builtin 组合，建议从 [examples/feature_gallery/README.md](./examples/feature_gallery/README.md) 开始。其中新增的 `task_driven_rollup.flux` 还专门覆盖了 `option task = {...}` 驱动的窗口查询、block-body helper 和对象返回。
-
-最近一轮新增的 `window_join_rankings.flux` 还把 `window(createEmpty)`、outer `join`、`spread`、`quantile`、`median`、`top`、`bottom` 串成了一个可直接运行的 smoke example。
-
-另有一组更小的 package 契约样例见 [examples/stdlib_conformance](./examples/stdlib_conformance/README.md)，并由
-`//cpp/pl/flux:stdlib_conformance_test` 校验固定 JSON 输出。它们覆盖当前可执行的 `array`、`csv`、`date`、`dict`、`join`、`json`、`math`、`regexp`、`runtime`、`strings`、`system`、`types` 和默认加载的 universe builtin，用来给后续 package 拆分和 runtime 重构提供回归信心。
-
-当前还支持一些表检查辅助函数：
-
-- `columns()`
-- `keys()`
-- `findColumn(fn:, column:)`
-- `findRecord(fn:, idx:)`
-
-标准库 package 入口也开始从查询包扩到标量工具包。当前可执行的 package 包括：
-
-- `array`: `from`、`concat`、`filter`、`map`、`contains`、`reduce`、`any`、`all`
-- `csv`: `from`
-- `date`: `add`、`sub`、`truncate`、`year`、`month`、`monthDay`、`weekDay`、`hour`、`minute`、`second`
-- `regexp`: `compile`、`findString`、`matchRegexpString`、`quoteMeta`
-- `strings`: `containsStr`、`hasPrefix`、`hasSuffix`、`joinStr`、`replaceAll`、`split`、`toUpper`、`toLower`、`trimSpace`
-- `math`: `pi`、`abs`、`ceil`、`floor`、`round`、`sqrt`、`pow`
-- `join`: `inner`、`left`、`right`、`full`
-- `dict`: `fromList`、`get`、`insert`、`remove`；当前运行时还没有独立 dict 值类型，因此以对象承载可执行子集
-- `json`: `encode`；当前运行时还没有 bytes 值类型，因此先以 string 承载编码后的 JSON
-- `runtime`: `version`
-- `system`: `time`
-- `types`: `isBool`、`isDuration`、`isFloat`、`isInt`、`isNumeric`、`isRegexp`、`isString`、`isTime`、`isType`、`isUInt`
-
-未知 package 会保留为 metadata-only object，例如 `import x "experimental/foo"` 会绑定
-`{path: "experimental/foo", alias: "x"}`，方便脚本继续暴露导入元数据；调用其中不存在的属性仍会按普通对象访问报错。
-
-## builtin 模块职责
-
-默认加载的 universe builtin 和显式 import 的 stdlib package 现在按用户可见边界与实现复杂度拆开：
-
-- `runtime_builtin_universe_core.cpp`：基础默认函数，如 `len`、`string`、`contains`
-- `runtime_builtin_universe_transform.cpp`：表流形状与行变换，如 `from`、`range`、`filter`、`map`、`keep`、`drop`、`rename`、`duplicate`、`set`、`sort`、`limit`、`tail`、`group`、`pivot`、`fill`、`union`
-- `runtime_builtin_universe_aggregate.cpp`：聚合、selector 与排名，如 `sum`、`mean`、`min`、`max`、`count`、`spread`、`quantile`、`median`、`first`、`last`、`top`、`bottom`、`reduce`、`distinct`
-- `runtime_builtin_universe_window.cpp`：时间窗口与序列差分，如 `window`、`aggregateWindow`、`elapsed`、`difference`、`derivative`
-- `runtime_builtin_universe_join.cpp`：默认加载的顶层 `join()`，并作为 `join` package 的底层连接实现
-- `runtime_builtin_universe_inspect.cpp`：结果输出与检查辅助，如 `yield`、`columns`、`keys`、`findColumn`、`findRecord`
-- `runtime_builtin_table.cpp`：显式 `array` 与 `csv` package 的表构造和 CSV 输入能力
-- `runtime_builtin_package.cpp` / `runtime_builtin_scalar.cpp`：package 注册与纯标量 package，例如 `date`、`dict`、`regexp`、`strings`、`math`、`json`、`runtime`、`system`、`types`，以及 `join` package facade
-
-共享 internal helper 也按更窄职责拆分：
-
-- `runtime_builtin_table_helpers.h`：通用参数校验、表/行/chunk 变换、列投影、排序比较、pivot 辅助和 builtin 安装工具
-- `runtime_builtin_time_helpers.h`：RFC3339 解析/格式化、duration/window duration 解析、timezone/location 和窗口边界时间运算
-- `runtime_builtin_window_helpers.h`：`window` / `aggregateWindow` 专用的窗口 row/group materialization、空窗口聚合、输出行生成
-- `runtime_builtin_aggregate_helpers.h`：数值聚合摘要、min/max、quantile、按 group materialize 聚合输出行
-- `runtime_builtin_universe_internal.h`：兼容聚合头；新代码优先 include 上面更窄的 helper
-
-`aggregateWindow()` 目前已经覆盖比较实用的一批参数组合，包括：
-
-- 固定时长窗口与日历窗口
-- `location`
-- `timeSrc`
-- `timeDst`
-- `period`
-- 固定时长窗口的 `offset`
-- 日历窗口的 `offset`
-- `every != period` 的重叠窗口
-- `createEmpty`
-
-这一轮还补了另一批常用表级 builtin：
-
-- `window()`
-- `spread()`
-- `quantile(q:)`，其中 `q` 现在支持单个数值或数值数组
-- `median()`
-- `top(n:)`
-- `bottom(n:)`
-
-以及 `join(method: "left"|"right"|"full")`。
-
-## REPL
+```bash
+./bazel-bin/cpp/pl/flux/flux \
+  --output-format json \
+  --result _result \
+  cpp/pl/flux/examples/stdlib_conformance/types.flux
+```
 
 启动 REPL：
 
@@ -205,9 +74,7 @@ bazel build //cpp/pl/flux:flux
 ./bazel-bin/cpp/pl/flux/flux
 ```
 
-在 REPL 中，`help`、`:help`、`.help` 都可以查看内置命令。
-
-REPL 共享同一个运行时环境，因此后续输入可以直接使用前面的绑定：
+REPL 会复用同一个运行时环境：
 
 ```text
 flux> x = 40
@@ -217,394 +84,318 @@ flux> x + 2
 flux> :quit
 ```
 
-多行输入会缓冲到表达式或语句看起来完整为止：
+常用 CLI 参数：
 
-```text
-flux> config = {
-....> host: "local",
-....> port: 8080,
-....> }
-{host: "local", port: 8080}
-flux> config.host
-"local"
-```
+| 参数 | 说明 |
+| --- | --- |
+| `ast` | 只解析并输出 AST |
+| `-e <source>` | 执行内联源码 |
+| `--output-format human|csv|json` | 切换输出格式 |
+| `--result <name>` | 只输出指定结果 |
+| `--list-results` | 列出脚本可输出的结果名 |
+| `--quiet` | 执行但不打印结果 |
+| `--no-prelude` | 不注入默认 builtin/prelude |
 
-默认情况下，运行时会安装当前 builtin prelude。标量表达式仍然会直接输出紧凑值；查询型脚本则会输出带结果名的结果块。常用参数如下：
+## 示例与测试
 
-- `--list-results`：只列出当前脚本可用的结果名
-- `--output-format human|csv|json`：切换输出格式
-- `--result <name>`：多结果脚本中只输出某一个结果
-- `--quiet`：抑制值输出
-- `--no-prelude`：关闭默认 builtin/prelude 注入，只执行显式声明或导入的符号
-
-当脚本通过 `yield(name: "...")` 或顶层赋值产生多个结果时，`--result <name>` 会在 human、CSV、JSON 三种模式下都只保留对应结果：
+快速看一组完整能力展示：
 
 ```bash
-./bazel-bin/cpp/pl/flux/flux --list-results cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux
-./bazel-bin/cpp/pl/flux/flux --result latest_east_mem cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux
-./bazel-bin/cpp/pl/flux/flux --output-format json --result latest_west_cpu cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux
+./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/stdlib_packages.flux
+./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/ops_dashboard/query.flux
 ```
 
-## 编辑器支持
+标准库契约样例在 [examples/stdlib_conformance](./examples/stdlib_conformance/README.md)。这里的规则是“不重不漏”：每个已实现 builtin 必须有一个主覆盖点，同一个 builtin 只在一个样例里作为主覆盖点。测试脚本会检查目录里的 `.flux` 文件和快照清单一致。
 
-目录中自带一个项目级 Vim 语法文件：
-
-[`vim/syntax/flux.vim`](./vim/syntax/flux.vim)
-
-该语法规则基于 `cpp/pl/flux` 当前已实现的 Flux 子集，包括：
-
-- `package`、`import`、`option`、`builtin`、`testcase`、`return`
-- `if` / `then` / `else`、`exists`、`and` / `or` / `not`
-- 属性与注解，例如 `@trace(...)`
-- 字符串、字符串插值、正则、时间、duration、无符号整数
-- 类型关键字，例如 `where`、`dynamic`、`vector`、`stream`
-- 当前查询/builtin 面，包括 `from`、`range`、`filter`、`map`、`aggregateWindow`、`join`、`pivot`、`yield`、`csv.from`
-
-安装到 Vim：
+运行 conformance：
 
 ```bash
-mkdir -p ~/.vim/syntax ~/.vim/ftdetect
-cp cpp/pl/flux/vim/syntax/flux.vim ~/.vim/syntax/flux.vim
-printf 'au BufRead,BufNewFile *.flux setfiletype flux\n' > ~/.vim/ftdetect/flux.vim
+bazel test //cpp/pl/flux:stdlib_conformance_test --test_output=errors
 ```
 
-安装到 Neovim：
+运行核心单元测试：
 
 ```bash
-mkdir -p ~/.config/nvim/syntax ~/.config/nvim/ftdetect
-cp cpp/pl/flux/vim/syntax/flux.vim ~/.config/nvim/syntax/flux.vim
-printf 'au BufRead,BufNewFile *.flux setfiletype flux\n' > ~/.config/nvim/ftdetect/flux.vim
+bazel test \
+  //cpp/pl/flux:scanner_unit_test \
+  //cpp/pl/flux:parser_unit_test \
+  //cpp/pl/flux:runtime_eval_unit_test \
+  //cpp/pl/flux:runtime_exec_unit_test \
+  //cpp/pl/flux:flux_cli_unit_test \
+  --test_output=errors
 ```
 
-如果你不想复制文件，也可以把仓库中的 `cpp/pl/flux/vim` 加入 `runtimepath`，再在编辑器配置里把 `*.flux` 注册为 `flux` 文件类型。
+Benchmark 说明见 [benchmark/README.md](./benchmark/README.md)。
 
-## AST 输出示例
+## 运行时模型
 
-输入：
+运行时值模型覆盖 Flux 当前可执行子集需要的核心类型：
 
-```flux
-package metrics
-import "array"
-config = {base with enabled: true, tags: ["cpu", "mem"]}
-status = if exists config.enabled then "ok" else "missing"
-```
+- `null`
+- `bool`
+- `int`
+- `uint`
+- `float`
+- `string`
+- `time`
+- `duration`
+- `regexp`
+- `array`
+- `object`
+- `function`
+- `table`
 
-树形输出：
+表值是内存内逻辑表流，包含 bucket、rows、tables、group key 和 result name 等信息。当前实现优先保证示例和测试中的确定行为，不追求完全模拟官方 Flux query planner。
 
-```text
-File name="<stdin>"
-PackageClause name=metrics
-ImportDeclaration path="array"
-VariableAssignment id=config
-|  `- ObjectExpr with=base
-|     |- Property key=enabled
-|     |  `- BooleanLit value=true
-|     `- Property key=tags
-|        `- ArrayExpr
-|           |- StringLit value="cpu"
-|           `- StringLit value="mem"
-VariableAssignment id=status
-   `- ConditionalExpr
-      |- UnaryExpr op=exists
-      |  `- MemberExpr property=enabled
-      |     `- Identifier name=config
-      |- StringLit value="ok"
-      `- StringLit value="missing"
-```
+默认 prelude 会安装 universe builtin；显式 `import` 会从本地 package registry 中加载内置包。未知 package 会被保留为 metadata object，例如 `import x "experimental/foo"` 会绑定 `{path: "experimental/foo", alias: "x"}`，方便调试导入信息。
 
-JSON 输出：
+## Universe Builtins
 
-```json
-{"type":"File","summary":"name=<stdin>","children":[{"type":"PackageClause","summary":"name=metrics","children":[]},{"type":"ImportDeclaration","summary":"path=\"array\"","children":[]},{"type":"VariableAssignment","summary":"id=config","children":[{"type":"ObjectExpr","summary":"with=base","children":[{"type":"Property","summary":"key=enabled","children":[{"type":"BooleanLit","summary":"value=true","children":[]}]},{"type":"Property","summary":"key=tags","children":[{"type":"ArrayExpr","summary":"","children":[{"type":"StringLit","summary":"value=\"cpu\"","children":[]},{"type":"StringLit","summary":"value=\"mem\"","children":[]}]}]}]}]},{"type":"VariableAssignment","summary":"id=status","children":[{"type":"ConditionalExpr","summary":"","children":[{"type":"UnaryExpr","summary":"op=exists","children":[{"type":"MemberExpr","summary":"property=enabled","children":[{"type":"Identifier","summary":"name=config","children":[]}]}]},{"type":"StringLit","summary":"value=\"ok\"","children":[]},{"type":"StringLit","summary":"value=\"missing\"","children":[]}]}]}]}
-```
+Universe builtin 默认注入，无需 `import`。
 
-## 测试
+### 基础函数
 
-直接运行回归测试：
+| 函数 | 说明 |
+| --- | --- |
+| `len(v)` | 返回 string、array、object 的长度 |
+| `string(v)` | 将值转成 Flux 风格字符串 |
+| `contains(set:, value:)` | 判断数组中是否存在值 |
 
-```bash
-bazel test //cpp/pl/flux:parser_unit_test
-bazel test //cpp/pl/flux:scanner_unit_test
-```
+### 数据源与表变换
 
-查看完整解析器测试输出：
+| 函数 | 说明 |
+| --- | --- |
+| `from(bucket:, rows:)` | 从内存 rows 构造表流 |
+| `range(start:, stop:)` | 按 `_time` 过滤时间范围 |
+| `filter(fn:, onEmpty:)` | 按谓词过滤行，`onEmpty: "keep"` 可保留空表形状 |
+| `map(fn:)` | 对每行做对象映射 |
+| `limit(n:, offset:)` | 取前 `n` 行 |
+| `tail(n:, offset:)` | 取后 `n` 行 |
+| `keep(columns:)` | 只保留指定列 |
+| `drop(columns:)` | 删除指定列 |
+| `rename(columns:)` | 重命名列 |
+| `duplicate(column:, as:)` | 复制列 |
+| `set(key:, value:)` | 给每行写入固定列值 |
+| `sort(columns:, desc:)` | 按列排序 |
+| `group(columns:)` | 生成逻辑分组 |
+| `pivot(rowKey:, columnKey:, valueColumn:)` | 透视行列 |
+| `fill(column:, value:, usePrevious:)` | 填充空值 |
+| `union(tables:)` | 合并多个表流 |
 
-```bash
-bazel test //cpp/pl/flux:parser_unit_test --test_output=all
-```
+### 聚合、选择器与排名
 
-当前单元测试覆盖的关键路径包括：
+| 函数 | 说明 |
+| --- | --- |
+| `sum(arr)` | 数组求和 |
+| `mean(arr)` | 数组均值 |
+| `min(arr)` | 数组最小值 |
+| `max(arr)` | 数组最大值 |
+| `count(column:)` | 按表或分组计数 |
+| `spread(column:)` | 计算最大值与最小值差 |
+| `quantile(q:, column:)` | 计算分位数，`q` 支持单值或数组 |
+| `median(column:)` | 中位数，等价于 `q = 0.5` 的常用路径 |
+| `first()` | 每个表/分组第一行 |
+| `last()` | 每个表/分组最后一行 |
+| `top(n:, columns:)` | 取最大 `n` 行 |
+| `bottom(n:, columns:)` | 取最小 `n` 行 |
+| `reduce(identity:, fn:)` | 按行折叠成对象 |
+| `distinct(column:)` | 取列去重结果 |
 
-- `package` / `import`
-- `builtin` + function type + `where`
-- `testcase ... extends ...`
-- `option task = {...}` 程序形态
-- 字符串插值
-- 正则匹配
-- record update `{base with ...}`
-- 数组 / 字典 / 布尔 / 浮点 / duration
-- `if exists ... then ... else ...`
-- 简写箭头函数和块体箭头函数
-- `filter` / `map` / `aggregateWindow` / `join` / `pivot` / `union` / `reduce` 等真实查询形态
-- 运行时值创建、深比较与对象读取
-- 运行时环境的作用域链与 option 查询
-- 表达式求值：字面量、标识符、数组/对象、成员/索引访问、一元/二元/逻辑运算、条件表达式、字符串插值、record update、函数值、函数调用
-- 语句执行：变量赋值、`option` 赋值、表达式语句、block/return
-- `testcase` 在隔离子作用域中的执行，以及 `__flux.testcase.<name>` 结果暴露
-- 文件级顺序执行
-- 顶层 `builtin` 声明
-- 包与导入元数据处理
-- 通过 `flux` 进行命令行执行、文件执行和 REPL 交互
-- CLI 单测会执行所有已检入的 `.flux` examples，确保 sample 和当前实现不会悄悄漂移
-- `from |> range |> filter |> map` 以及 `limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`count`、`first`、`last`、`union`、轻量 `join`、首版 `aggregateWindow`、Flux 风格 `csv.from`，以及 `array.concat` / `array.filter` / `array.map` / `array.contains` / `array.reduce` / `array.any` / `array.all`
-- 树形 dump / JSON dump
+### 窗口与序列函数
 
-## 运行时状态
+| 函数 | 说明 |
+| --- | --- |
+| `window(every:, period:, offset:, createEmpty:)` | 按时间窗口重组表流 |
+| `aggregateWindow(every:, fn:, period:, offset:, location:, timeSrc:, timeDst:, createEmpty:)` | 窗口聚合，支持固定时长和部分日历窗口 |
+| `elapsed(unit:)` | 计算相邻行时间差 |
+| `difference(columns:, nonNegative:, keepFirst:)` | 计算相邻行数值差 |
+| `derivative(unit:, nonNegative:, initialZero:)` | 计算变化率 |
 
-运行时仍处于持续扩展阶段，但已经有一批稳定的基础积木：
+### Join、检查与输出
 
-- `runtime_value`：运行时值类型，支持 null、bool、int、uint、float、string、duration、time、regex、array、object，以及内存内表值
-- `runtime_env`：词法环境，支持父作用域、变量绑定、option 绑定和最近作用域赋值
-- `runtime_builtin`：内置函数注册表，默认加载一批 universe 风格的顶层 builtin，包括 `len`、`string`、`contains`、`sum`、`mean`、`min`、`max`，以及查询相关 builtin：`from`、`range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`distinct`、`count`、`first`、`last`、`union`、顶层 `join()`、`aggregateWindow`、`yield`；实现已按 `core` / `transform` / `aggregate` / `window` / `join` / `inspect` 拆到 `runtime_builtin_universe_*.cpp`；显式 `import "array"` / `import "csv"` / `import "date"` / `import "dict"` / `import "regexp"` / `import "strings"` / `import "math"` / `import "join"` / `import "json"` / `import "runtime"` / `import "system"` / `import "types"` 会额外绑定对应 package 对象
-- `runtime_eval`：表达式求值器，支持函数值与函数调用
-- `runtime_exec`：语句执行器，支持赋值、`option`、表达式语句、block/return 控制流
-- `flux_cli`：围绕解析器与运行时的 CLI/REPL 包装层
+| 函数 | 说明 |
+| --- | --- |
+| `join(tables:, on:, method:)` | 顶层 join，支持 `inner`、`left`、`right`、`full` |
+| `columns()` | 返回表列名 |
+| `keys()` | 返回 group key 列名 |
+| `findColumn(fn:, column:)` | 找到匹配行并返回某列数组 |
+| `findRecord(fn:, idx:)` | 找到匹配行并返回指定位置的 record |
+| `yield(name:)` | 设置结果名并输出表流 |
 
-### 多表流与 `group` 语义
+## 内置包
 
-当前实现已经不再是“单张表 + 每行 `_group` 标签”的旧模型。`TableValue` 现在可以承载一个逻辑上的多表流，既保留扁平 `rows` 视图，也维护真正的逻辑表分片。
+### `array`
 
-`group()` 的行为现在更接近官方 Flux：
+| 函数 | 说明 |
+| --- | --- |
+| `array.from(rows:, bucket:)` | 从对象数组构造表 |
+| `array.concat(arr:, v:)` | 拼接数组 |
+| `array.filter(arr:, fn:)` | 过滤数组元素 |
+| `array.map(arr:, fn:)` | 映射数组元素 |
+| `array.contains(arr:, value:)` | 判断数组是否包含值 |
+| `array.reduce(arr:, identity:, fn:)` | 折叠数组 |
+| `array.any(arr:, fn:)` | 任一元素满足谓词 |
+| `array.all(arr:, fn:)` | 全部元素满足谓词 |
 
-- 会根据 group key 重新分表，而不是只打标签
-- 支持 `mode: "by"` 与 `mode: "except"`
-- `columns: []` 可以把数据 ungroup 成单个逻辑表
-- 下游 `sort`、`distinct`、`count`、`first`、`last`，以及 `filter` / `map` / `limit` / `tail` / `keep` / `drop` / `rename` / `duplicate` / `set` / `reduce` 等算子都会按逻辑表逐表执行
+### `csv`
 
-运行时仍然会在每行上保留 `_group` 对象，目的是让 CSV 输出、调试和某些辅助逻辑更容易观察 group key；但真实语义已经由多表结构驱动，而不是依赖 `_group` 这个附加字段本身。
+| 函数 | 说明 |
+| --- | --- |
+| `csv.from(csv:, file:, mode:)` | 从 raw CSV 或 annotated CSV 字符串/文件构造表 |
+
+`mode: "raw"` 解析普通表头 CSV；annotated CSV 支持 `#datatype`、`#group`、`#default` 和 result/table 列的常见形态。
+
+### `date`
+
+| 函数 | 说明 |
+| --- | --- |
+| `date.add(d:, to:)` | 时间加 duration |
+| `date.sub(d:, from:)` | 时间减 duration |
+| `date.truncate(t:, unit:)` | 截断到指定单位 |
+| `date.year(t:)` | 年 |
+| `date.month(t:)` | 月 |
+| `date.monthDay(t:)` | 月内日期 |
+| `date.weekDay(t:)` | 星期 |
+| `date.hour(t:)` | 小时 |
+| `date.minute(t:)` | 分钟 |
+| `date.second(t:)` | 秒 |
+
+### `dict`
+
+| 函数 | 说明 |
+| --- | --- |
+| `dict.fromList(pairs:)` | 从 `{key, value}` 数组构造字典 |
+| `dict.get(dict:, key:, default:)` | 读取 key，缺失时返回默认值 |
+| `dict.insert(dict:, key:, value:)` | 返回插入/覆盖后的字典 |
+| `dict.remove(dict:, key:)` | 返回删除 key 后的字典 |
+
+当前还没有独立 dict runtime type，字典由 object 承载；非 string key 会按运行时字符串化结果保存。
 
 ### `join`
 
-当前有两个 join 入口：默认加载的 universe 顶层 `join()`，以及显式 `import "join"` 后得到的 `join` package。二者共存：前者兼容旧版 `join(tables:, on:)` 形态，后者面向官方 package API。
+| 函数 | 说明 |
+| --- | --- |
+| `join.inner(left:, right:, on:)` | 内连接 |
+| `join.left(left:, right:, on:, as:)` | 左连接，可用 predicate/as lambda |
+| `join.right(left:, right:, on:)` | 右连接 |
+| `join.full(left:, right:, on:)` | 全连接 |
 
-顶层 `join()` 仍然是 universe 包里的简化版双流 join，但它已经补上了和多表模型强相关的关键语义：
+`join` package 是顶层 `join()` 的 facade，覆盖常用内存表连接路径。
 
-- 只支持两个输入流
-- 支持 `method: "inner"`、`"left"`、`"right"`、`"full"`
-- 只会比较 group key 实例相同的逻辑表
-- 输出仍然是多逻辑表流，而不是把所有匹配行压平成单表
-- 输出 schema 与 group key 取两侧并集
-- 两侧都存在、且不在 `on` 里的重复列会按官方旧版 `join()` 语义重命名为 `<column>_<table>`
-- `null` 或缺失的 join key 不会被视为相等
-- `import "join"` 绑定的是 package 对象，提供 `join.inner` / `join.left` / `join.right` / `join.full`，支持官方风格的 predicate `on` 和 `as` 输出函数；为了兼容当前示例，也保留 `on: ["col"]` 的列数组形式
+### `json`
 
-这也意味着，当你要 join 两个不同 measurement 或 field 的结果时，通常要先用 `group()` 去掉会阻止匹配的 group key 列，再做 join。例如 CPU 和内存聚合结果经常需要先 regroup 掉 `_measurement`，否则两边逻辑表不会被拿来比较。
+| 函数 | 说明 |
+| --- | --- |
+| `json.encode(v:)` | 编码 Flux 值为 JSON 字符串 |
 
-### 结果输出
+当前运行时没有 bytes 类型，所以 `json.encode` 先返回 string。后续如果增加 `json.decode` 或 bytes 值，应该直接复用 simdjson，而不是继续扩展手写 JSON 逻辑。
 
-文件执行会维护一个有序的命名结果列表，来源包括顶层赋值、表达式、`option`、`testcase`，以及查询管道中的 `yield(name: "...")`。
+### `math`
 
-CLI 基于这份结果列表提供三种输出模式：
+| 函数 | 说明 |
+| --- | --- |
+| `math.pi` | 圆周率常量 |
+| `math.abs(x:)` | 绝对值 |
+| `math.ceil(x:)` | 向上取整 |
+| `math.floor(x:)` | 向下取整 |
+| `math.round(x:)` | 四舍五入 |
+| `math.sqrt(x:)` | 平方根 |
+| `math.pow(x:, y:)` | 幂 |
 
-- `human`：人类可读的结果块与逻辑表
-- `csv`：Flux 风格注解 CSV
-- `json`：结构化结果对象
+### `regexp`
 
-与之前相比，当前输出层已经能够更好地保留多表信息：
+| 函数 | 说明 |
+| --- | --- |
+| `regexp.compile(v:)` | 编译正则字符串 |
+| `regexp.findString(r:, v:)` | 返回第一个匹配字符串 |
+| `regexp.matchRegexpString(r:, v:)` | 判断是否匹配 |
+| `regexp.quoteMeta(v:)` | 转义正则元字符 |
 
-- human 输出会显示 `tables=<n>`，多逻辑表时逐表展开
-- CSV 会为每个逻辑表输出一段独立的注解块，并尽量复用现有 `result` / `table` 列
-- JSON 会暴露结果名、表元数据，以及逻辑表列表，方便脚本消费
+### `runtime`
 
-这仍然不是完整的官方 Influx 结果流实现，但已经从“轻量兼容层”推进到“真实多表 + 多格式输出”的阶段。
+| 函数 | 说明 |
+| --- | --- |
+| `runtime.version()` | 返回当前 playground runtime 版本字符串 |
 
-### `aggregateWindow`
+### `strings`
 
-当前 `aggregateWindow` 仍是内存内实现，但已经覆盖一批非常实用的语义：
+| 函数 | 说明 |
+| --- | --- |
+| `strings.containsStr(v:, substr:)` | 是否包含子串 |
+| `strings.hasPrefix(v:, prefix:)` | 是否有前缀 |
+| `strings.hasSuffix(v:, suffix:)` | 是否有后缀 |
+| `strings.joinStr(arr:, v:)` | 用分隔符拼接字符串数组 |
+| `strings.replaceAll(v:, t:, u:)` | 替换全部子串 |
+| `strings.split(v:, t:)` | 分割字符串 |
+| `strings.toUpper(v:)` | 转大写 |
+| `strings.toLower(v:)` | 转小写 |
+| `strings.trimSpace(v:)` | 去掉首尾空白 |
 
-- 基于 RFC3339 `_time` 的固定时长窗口，例如 `1m`
-- 带时区感知边界的 `mo` / `y` 日历窗口
-- `location`
-- `column`
-- 固定时长窗口的 `offset`
-- `timeSrc`
-- `timeDst`
-- `period`
-- 负 `period`
-- `every != period` 时的重叠窗口
-- `createEmpty: true`
-- 聚合函数 `mean` / `sum` / `min` / `max`
-- 自定义数组函数
-- 窗口版 `count`
-- selector 风格 `first` / `last` 的空窗口丢弃行为
+### `system`
 
-窗口输出现在会同时保留逻辑表边界和 group key，不会再把不同逻辑表里同名的 group 悄悄合并；这样后续再接 `first` / `last` / `count` / `sort` 等操作时，行为会更接近官方 Flux。
+| 函数 | 说明 |
+| --- | --- |
+| `system.time()` | 返回当前 UTC 时间 |
 
-尚未完成的点主要包括：
+`system.time()` 是唯一一个 conformance 中用正则匹配的包函数，因为输出随执行时间变化。
 
-- 更完整的标准库窗口语义细节
+### `types`
 
-### 表达式求值支持
+| 函数 | 说明 |
+| --- | --- |
+| `types.isNumeric(v:)` | 是否为 int、uint 或 float |
+| `types.isType(v:, type:)` | 按类型名判断 |
+| `types.isString(v:)` | 是否为 string |
+| `types.isDuration(v:)` | 是否为 duration |
+| `types.isBool(v:)` | 是否为 bool |
+| `types.isInt(v:)` | 是否为 int |
+| `types.isUInt(v:)` | 是否为 uint |
+| `types.isFloat(v:)` | 是否为 float |
+| `types.isTime(v:)` | 是否为 time |
+| `types.isRegexp(v:)` | 是否为 regexp |
 
-当前表达式求值器支持：
+这里没有严格照搬官方 `types` 包的最小 API，而是按当前 runtime 值模型扩展了一批直接可用的 `isXxx` helper，方便样例和后续包实现做类型分派。
 
-- 字面量
-- 标识符
-- 数组与对象
-- `{base with ...}` 形式的基础 record update
-- 成员与索引访问
-- 一元 `not`、一元 `-`、`exists`，其中一元 `-` 也支持 duration 字面量，例如 `range(start: -1h)`
-- 算术 / 比较 / 逻辑表达式
-- 条件表达式
-- 字符串插值
-- 正则匹配
-- 带词法闭包捕获的用户自定义函数
-- builtin 与用户函数调用
-- 通过 `|>` 把值转发到 builtin 和用户定义 `<-pipe` 参数
-- 基于数组的小型数值聚合
-- 以内存表为基础的查询管道执行
+## 代码结构
 
-### CSV 输入
+| 文件/模块 | 职责 |
+| --- | --- |
+| `scanner.*`、`token.h` | 词法扫描 |
+| `parser.*`、`ast.*`、`ast_debug.*` | 语法解析、AST 与调试输出 |
+| `runtime_value.*` | 运行时值模型 |
+| `runtime_env.*` | 环境与作用域 |
+| `runtime_eval.*` | 表达式求值 |
+| `runtime_exec.*` | 文件级语句执行 |
+| `runtime_builtin_universe_*.cpp` | 默认 universe builtin |
+| `runtime_builtin_table.cpp` | `array`、`csv` 包 |
+| `runtime_builtin_scalar.cpp` | 标量类 stdlib 包 |
+| `runtime_builtin_package.*` | 包注册与导入 |
+| `flux_cli.*`、`flux.cpp` | CLI、REPL、输出格式 |
 
-通过 `import "csv"` 可以使用 Flux 风格的 `csv.from`。
+内部 helper 按职责拆分：
 
-它支持：
+- `runtime_builtin_table_helpers.h`
+- `runtime_builtin_time_helpers.h`
+- `runtime_builtin_window_helpers.h`
+- `runtime_builtin_aggregate_helpers.h`
+- `runtime_builtin_universe_internal.h`
 
-- `csv:` 直接传入内联 CSV 文本
-- `file:` 从本地文件读取
-- `mode: "annotations"`，默认模式
-- `mode: "raw"`，将首行视为表头并把单元格读为字符串
+## 已知限制
 
-示例：
+- 这是内存内执行器，没有连接真实 InfluxDB storage。
+- 类型系统仍是运行时动态检查，尚未实现 Flux 完整静态类型推导。
+- table/group/window 行为覆盖常用路径，但不保证与官方 planner 完全一致。
+- `dict` 暂由 object 承载。
+- `json.encode` 暂返回 string，尚无 bytes 类型。
+- `csv.from` 覆盖 raw/annotated 常见形态，不是完整 CSV 方言实现。
+- package 覆盖以当前 `stdlib_conformance` 为准，新增函数需要同步样例和快照。
 
-```flux
-import "csv"
-builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
+## 贡献时的收尾清单
 
-data = csv.from(
-    csv: "_time,_measurement,_value\n2024-01-01T00:00:00Z,cpu,95.5\n",
-    mode: "raw",
-)
-    |> filter(fn: (r) => r._measurement == "cpu")
-```
+新增或修改 builtin 时，请至少同步：
 
-从文件读取：
-
-```flux
-import "csv"
-
-data = csv.from(file: "path/to/data.csv", mode: "raw")
-```
-
-注解 CSV 支持常见的元数据行：
-
-- `#datatype`
-- `#group`
-- `#default`
-
-并能把以下类型解析为运行时值：
-
-- `string`
-- `long`
-- `unsignedLong`
-- `double`
-- `boolean`
-- `dateTime:RFC3339`
-- `dateTime:RFC3339Nano`
-- `duration`
-
-重复出现的 metadata/header block 也可以被同一个输入载荷接收，因此单个 CSV 文件可以表示多个逻辑表。
-
-```flux
-import "csv"
-
-data = csv.from(csv: "#datatype,string,long,dateTime:RFC3339,string,double,boolean\n#group,false,false,true,true,false,false\n#default,_result,,,,,\n,result,table,_time,_measurement,_value,active\n,,0,2024-01-01T00:00:00Z,cpu,95.5,true\n")
-```
-
-这里依然是“内存内 Flux 子集实现”，不是完整的官方流式执行引擎，所以更广泛的 CSV 标准库接口还没有全部补齐。
-
-### `array` package
-
-通过 `import "array"`，现在除了 `array.from` 之外，也支持几类常用数组 helper：
-
-- `array.concat(arr:, v:)`，或 `[1, 2] |> array.concat(v: [3])`
-- `array.filter(arr:, fn:)`，返回满足谓词的新数组
-- `array.map(arr:, fn:)`，逐元素映射出新数组
-- `array.contains(arr:, value:)`，判断数组中是否存在某个值
-- `array.reduce(arr:, identity:, fn:)`，按元素折叠出一个标量或对象值；当前 `fn` 以 `(element, accumulator)` 顺序接参
-- `array.any(arr:, fn:)`，判断是否存在任一元素满足谓词
-- `array.all(arr:, fn:)`，判断是否所有元素都满足谓词
-
-示例：
-
-```flux
-import "array"
-
-rows = [1, 2, 3]
-    |> array.concat(v: [4])
-    |> array.filter(fn: (x) => x >= 2)
-    |> array.map(fn: (x) => ({host: "edge-${x}", _value: x * 10}))
-
-hosts = rows |> array.map(fn: (r) => r.host)
-hasEdge4 = hosts |> array.contains(value: "edge-4")
-summary = hosts
-    |> array.reduce(
-        identity: {count: 0, last: ""},
-        fn: (host, accumulator) => ({
-            count: accumulator.count + 1,
-            last: host,
-        }),
-    )
-hasHotRow = rows |> array.any(fn: (r) => r._value >= 40)
-allNamed = rows |> array.all(fn: (r) => exists r.host)
-
-data = array.from(rows: rows)
-```
-
-## 基准测试
-
-项目内置了本地基准测试流程，说明见 [benchmark/README.md](./benchmark/README.md)。
-
-典型流程如下：
-
-```bash
-bazel build //cpp/pl/flux:flux
-python3 cpp/pl/flux/benchmark/generate_benchmark_data.py
-python3 cpp/pl/flux/benchmark/run_benchmarks.py
-```
-
-如果只想盯 `pivot/join` 这类热点，也可以直接筛 case：
-
-```bash
-python3 cpp/pl/flux/benchmark/run_benchmarks.py \
-  --warmup-runs 0 \
-  --repeat-runs 2 \
-  --cases pivot,pivot_wide,join,join_grouped
-```
-
-截至 2026-04-22 的一组本地基线在 [benchmark/README.md](./benchmark/README.md) 中维护。当前实现形态大体可以概括为：
-
-- `csv.from` 先把整份输入读入内存
-- 表以逻辑多表流 + 行向量形式保存在内存里
-- `filter`、`map`、`sort`、`group`、`pivot`、`union` 之类算子仍会进行一定程度的数据复制或重排
-- `join` 已从早期的轻量路径演进到更适合当前规模的哈希索引实现
-- `pivot` 现在按 logical table 局部建索引，避免跨 chunk 合并和全表 identity map 膨胀
-
-和官方 Flux 对齐的几条关键表语义也已经固定下来：
-
-- `filter()` 默认按 `onEmpty: "drop"` 处理，过滤后变空的逻辑表会直接从 table stream 里移除
-- 显式写 `onEmpty: "keep"` 时，空逻辑表会被保留，并继续带着 group key / 列元数据流向后续算子
-- `count()` 对保留下来的空逻辑表会输出一行 `_value = 0` 的结果
-- `first()` 和 `last()` 会像官方 Flux 一样跳过空逻辑表，并在指定列里选择第一个/最后一个非 `null` 记录
-
-因此它现在更适合：
-
-- 本地 CSV 数据探索
-- 中小规模回归测试
-- 查询语义实验与功能补齐
-
-## 说明
-
-- `flux ast` 会先输出解析错误，再输出当前 AST，并返回非零退出码。
-- AST 调试输出已经覆盖大量顶层与嵌套节点的位置，包括语句、表达式、block、property、数组项、字典项、类型约束、函数参数与类型参数。
-- 源码位置信息还没有覆盖全部 AST 节点，因此少数调试摘要仍然没有位置数据。
+1. 实现代码与必要单元测试。
+2. [examples/stdlib_conformance](./examples/stdlib_conformance/README.md) 的样例和覆盖表。
+3. `//cpp/pl/flux:stdlib_conformance_test` 快照。
+4. 本 README 的函数清单。
+5. [SUPPORT_MATRIX.md](./SUPPORT_MATRIX.md) 中对应能力状态。
