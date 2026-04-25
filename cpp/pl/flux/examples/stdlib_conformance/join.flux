@@ -19,9 +19,25 @@ row = join.left(
 )
     |> findRecord(fn: (r) => r.host == "edge-1", idx: 0)
 
+inner_count = join.inner(left: left, right: right, on: ["host"])
+    |> count(column: "host")
+    |> findRecord(fn: (r) => exists r.host, idx: 0)
+left_count = join.left(left: left, right: right, on: ["host"])
+    |> count(column: "host")
+    |> findRecord(fn: (r) => exists r.host, idx: 0)
+right_count = join.right(left: left, right: right, on: ["host"])
+    |> count(column: "host")
+    |> findRecord(fn: (r) => exists r.host, idx: 0)
+full_count = join.full(left: left, right: right, on: ["host"])
+    |> count(column: "host")
+    |> findRecord(fn: (r) => exists r.host, idx: 0)
+
 {
     host: row.host,
     cpu: row.cpu,
     mem: row.mem,
+    inner: inner_count.host,
+    left: left_count.host,
+    right: right_count.host,
+    full: full_count.host,
 }
-
