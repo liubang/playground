@@ -53,6 +53,8 @@ absl::StatusOr<Value> builtin_mean(const std::vector<Value>& args) {
             return Value::floating(static_cast<double>(summary_or->int_sum) / count);
         case NumericKind::Float:
             return Value::floating(summary_or->float_sum / count);
+        default:
+            __builtin_unreachable();
     }
 }
 

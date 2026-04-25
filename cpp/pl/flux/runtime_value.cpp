@@ -260,6 +260,8 @@ std::string Value::string() const {
             return as_table().string();
         case Type::Function:
             return as_function().string();
+        default:
+            __builtin_unreachable();
     }
 }
 
@@ -294,6 +296,8 @@ bool operator==(const Value& lhs, const Value& rhs) {
             return lhs.as_table() == rhs.as_table();
         case Value::Type::Function:
             return &lhs.as_function() == &rhs.as_function();
+        default:
+            __builtin_unreachable();
     }
 }
 
