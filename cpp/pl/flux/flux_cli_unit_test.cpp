@@ -44,7 +44,18 @@ std::string RunfilePath(const std::string& relative_path) {
     if (test_srcdir == nullptr || test_workspace == nullptr) {
         return relative_path;
     }
-    return std::string(test_srcdir) + "/" + test_workspace + "/" + relative_path;
+    std::filesystem::path p = std::filesystem::path(test_srcdir) / test_workspace / relative_path;
+    // Resolve symlinks and ".." components so that the resulting path stays within the OS PATH_MAX
+    // limit. Bazel sandbox runfiles trees are often reached via many levels of "../../.."
+    // indirection.
+    std::error_code ec;
+    auto canonical = std::filesystem::canonical(p, ec);
+    if (!ec) {
+        return canonical.string();
+    }
+    // Fail back to the unresolved path when canonical() fails (e.g. when the file does not exist
+    // yet).
+    return p.string();
 }
 
 std::string ReadAllText(const std::string& path) {
@@ -88,12 +99,16 @@ FluxCliResult ExecuteExampleScript(const std::string& relative_path,
 
 std::vector<std::string> AllExampleScripts() {
     std::vector<std::string> paths;
+    // RunfilePath already returns a canonical absolute path. We compute paths
+    // relative to the workspace root. (i.e. the _main runfiles directory) so
+    // that they can be passed back to RunfilePath() by callers.
     const std::filesystem::path root = RunfilePath("cpp/pl/flux/examples");
+    const std::filesystem::path workspace_root = RunfilePath("");
     for (const auto& entry : std::filesystem::recursive_directory_iterator(root)) {
         if (!entry.is_regular_file() || entry.path().extension() != ".flux") {
             continue;
         }
-        paths.push_back(std::filesystem::relative(entry.path(), root.parent_path()).string());
+        paths.push_back(std::filesystem::relative(entry.path(), workspace_root).string());
     }
     std::sort(paths.begin(), paths.end());
     return paths;
