@@ -15,42 +15,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        compiler:
-          [
-            { name: gcc, flag: --action_env=CC=gcc-14 --linkopt=-fuse-ld=gold },
-            {
-              name: clang,
-              flag: --action_env=CC=clang-18 --cxxopt=-stdlib=libstdc++ --cxxopt=-Wno-error=unused-but-set-variable --cxxopt=-Wno-error=unused-but-set-parameter --linkopt=-stdlib=libstdc++,
-            },
-          ]
-    name: build
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - uses: actions/cache@v4
-        env:
-          cache-name: build-v1
-        with:
-          path: bazel-disk
-          key: build-${{ matrix.compiler.name }}-${{ env.cache-name }}-${{ runner.os }}-${{github.sha}}
-          restore-keys: build-${{ matrix.compiler.name }}-${{ env.cache-name }}-${{ runner.os }}-
-          save-always: true
-      - uses: bazel-contrib/setup-bazel@0.19.0
-        with:
-          bazelisk-cache: true
-          disk-cache: false
-          repository-cache: false
-      - run: sudo apt update
-      - run: sudo apt install nasm
-      - run: sudo apt install libomp-dev
-      - name: run build
-        run: |
-          bazel build -c opt ${{ matrix.compiler.flag }} --disk_cache=bazel-disk //cpp/...
   test-macos:
     name: test-macos
     runs-on: macos-26
@@ -58,23 +22,17 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/cache@v4
-        env:
-          cache-name: test-macos-v1
-        with:
-          path: bazel-disk
-          key: test-macos-${{ env.cache-name }}-${{ runner.os }}-${{ github.sha }}
-          restore-keys: test-macos-${{ env.cache-name }}-${{ runner.os }}-
-          save-always: true
       - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
-          disk-cache: false
-          repository-cache: false
-      - run: brew install nasm
+          repository-cache: true
+          disk-cache: test-macos-${{ github.workflow }}-${{ runner.os }}
+      - run: |
+          brew install nasm
+          brew install libomp
       - name: run test
         run: |
-          bazel test --config=release --disk_cache=bazel-disk //cpp/...
+          bazel test --config=release --disk_cache=test-macos-${{ github.workflow }}-${{ runner.os }} //cpp/...
   test:
     strategy:
       matrix:
@@ -88,57 +46,41 @@ jobs:
           ]
     name: test
     runs-on: ubuntu-24.04
-    needs: [build]
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/cache@v4
-        env:
-          cache-name: test-v1
-        with:
-          path: bazel-disk
-          key: test-${{ matrix.compiler.name }}-${{ env.cache-name }}-${{ runner.os }}-${{github.sha}}
-          restore-keys: test-${{ matrix.compiler.name }}-${{ env.cache-name }}-${{ runner.os }}-
-          save-always: true
       - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
-          disk-cache: false
-          repository-cache: false
-      - run: sudo apt update
-      - run: sudo apt install nasm
-      - run: sudo apt install libomp-dev
+          repository-cache: true
+          disk-cache: test-${{ github.workflow }}-${{ runner.os }}-${{ matrix.compiler.name }}
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm libomp-dev lcov
       - name: run test
         run: |
-          bazel test --config=release ${{ matrix.compiler.flag }} --disk_cache=bazel-disk //cpp/...
+          bazel test --config=release ${{ matrix.compiler.flag }} --disk_cache=test-${{ github.workflow }}-${{ runner.os }}-${{ matrix.compiler.name }} //cpp/...
+
   coverage:
     name: coverage
     runs-on: ubuntu-24.04
-    needs: [build]
+    needs: [test]
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/cache@v4
-        env:
-          cache-name: coverage-v1
-        with:
-          path: bazel-disk
-          key: ${{ github.workflow }}-${{ env.cache-name }}-${{ runner.os }}-${{github.sha}}
-          restore-keys: ${{ github.workflow }}-${{ env.cache-name }}-${{ runner.os }}-
-          save-always: true
       - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
-          disk-cache: false
           repository-cache: true
-      - run: sudo apt install lcov
-      - run: sudo apt install nasm
-      - run: sudo apt install libomp-dev
+          disk-cache: coverage-${{ github.workflow }}-${{ runner.os }}
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm libomp-dev lcov
       - name: run coverage
         run: |
-          bazel coverage --action_env=CC=gcc-14 --disk_cache=bazel-disk --verbose_failures --combined_report=lcov --instrument_test_targets cpp/...
+          bazel coverage --action_env=CC=gcc-14 --disk_cache=coverage-${{ github.workflow }}-${{ runner.os }} --verbose_failures --combined_report=lcov --instrument_test_targets //cpp/...
           ls -lh ./bazel-out/_coverage/_coverage_report.dat
           genhtml --ignore-errors negative --output coverage ./bazel-out/_coverage/_coverage_report.dat
           cp -r ./registry ./coverage/
