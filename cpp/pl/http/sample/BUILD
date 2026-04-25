@@ -27,7 +27,7 @@ cc_binary(
     srcs = [
         "http_server.cpp",
     ],
-    copts = COPTS_WITH_ASAN + ["-std=c++20"],
+    copts = COPTS_WITH_ASAN  ,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "//cpp/pl/http:server",

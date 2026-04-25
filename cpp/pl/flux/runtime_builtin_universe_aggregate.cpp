@@ -15,9 +15,8 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/25 10:40
 
-#include "cpp/pl/flux/runtime_builtin_universe.h"
-
 #include "cpp/pl/flux/runtime_builtin_aggregate_helpers.h"
+#include "cpp/pl/flux/runtime_builtin_universe.h"
 
 namespace pl {
 namespace {
@@ -64,7 +63,6 @@ absl::StatusOr<Value> builtin_min(const std::vector<Value>& args) {
 absl::StatusOr<Value> builtin_max(const std::vector<Value>& args) {
     return aggregate_min_max(args, "max", false);
 }
-
 
 absl::StatusOr<Value> builtin_reduce(const std::vector<Value>& args) {
     auto object_or = require_object_argument(args, "reduce");
@@ -113,7 +111,6 @@ absl::StatusOr<Value> builtin_reduce(const std::vector<Value>& args) {
     }
     return table_with_chunks_like(**table_or, std::move(chunks));
 }
-
 
 absl::StatusOr<Value> builtin_distinct(const std::vector<Value>& args) {
     auto object_or = require_object_argument(args, "distinct");
@@ -387,9 +384,7 @@ absl::StatusOr<Value> builtin_last(const std::vector<Value>& args) {
     return table_single_row_builtin(args, "last", true);
 }
 
-
 } // namespace
-
 
 void InstallUniverseAggregateBuiltins(Environment& env) {
     install_builtin(env, "sum", builtin_sum, "values");
@@ -409,20 +404,62 @@ void InstallUniverseAggregateBuiltins(Environment& env) {
 }
 
 bool InstallKnownUniverseAggregateBuiltin(Environment& env, const std::string& name) {
-    if (name == "sum") { install_builtin(env, "sum", builtin_sum, "values"); return true; }
-    if (name == "mean") { install_builtin(env, "mean", builtin_mean, "values"); return true; }
-    if (name == "min") { install_builtin(env, "min", builtin_min, "values"); return true; }
-    if (name == "max") { install_builtin(env, "max", builtin_max, "values"); return true; }
-    if (name == "reduce") { install_builtin(env, "reduce", builtin_reduce, "tables"); return true; }
-    if (name == "distinct") { install_builtin(env, "distinct", builtin_distinct, "tables"); return true; }
-    if (name == "count") { install_builtin(env, "count", builtin_count, "tables"); return true; }
-    if (name == "spread") { install_builtin(env, "spread", builtin_spread, "tables"); return true; }
-    if (name == "quantile") { install_builtin(env, "quantile", builtin_quantile, "tables"); return true; }
-    if (name == "median") { install_builtin(env, "median", builtin_median, "tables"); return true; }
-    if (name == "first") { install_builtin(env, "first", builtin_first, "tables"); return true; }
-    if (name == "last") { install_builtin(env, "last", builtin_last, "tables"); return true; }
-    if (name == "top") { install_builtin(env, "top", builtin_top, "tables"); return true; }
-    if (name == "bottom") { install_builtin(env, "bottom", builtin_bottom, "tables"); return true; }
+    if (name == "sum") {
+        install_builtin(env, "sum", builtin_sum, "values");
+        return true;
+    }
+    if (name == "mean") {
+        install_builtin(env, "mean", builtin_mean, "values");
+        return true;
+    }
+    if (name == "min") {
+        install_builtin(env, "min", builtin_min, "values");
+        return true;
+    }
+    if (name == "max") {
+        install_builtin(env, "max", builtin_max, "values");
+        return true;
+    }
+    if (name == "reduce") {
+        install_builtin(env, "reduce", builtin_reduce, "tables");
+        return true;
+    }
+    if (name == "distinct") {
+        install_builtin(env, "distinct", builtin_distinct, "tables");
+        return true;
+    }
+    if (name == "count") {
+        install_builtin(env, "count", builtin_count, "tables");
+        return true;
+    }
+    if (name == "spread") {
+        install_builtin(env, "spread", builtin_spread, "tables");
+        return true;
+    }
+    if (name == "quantile") {
+        install_builtin(env, "quantile", builtin_quantile, "tables");
+        return true;
+    }
+    if (name == "median") {
+        install_builtin(env, "median", builtin_median, "tables");
+        return true;
+    }
+    if (name == "first") {
+        install_builtin(env, "first", builtin_first, "tables");
+        return true;
+    }
+    if (name == "last") {
+        install_builtin(env, "last", builtin_last, "tables");
+        return true;
+    }
+    if (name == "top") {
+        install_builtin(env, "top", builtin_top, "tables");
+        return true;
+    }
+    if (name == "bottom") {
+        install_builtin(env, "bottom", builtin_bottom, "tables");
+        return true;
+    }
     return false;
 }
 

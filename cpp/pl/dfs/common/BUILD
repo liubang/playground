@@ -28,6 +28,6 @@ cc_library(
     name = "common",
     srcs = glob(["*.cpp"]),
     hdrs = glob(["*.h"]),
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
 )

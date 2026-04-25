@@ -17,9 +17,7 @@
 
 #pragma once
 
-#include "cpp/pl/flux/runtime_builtin_aggregate_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_time_helpers.h"
-#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
@@ -211,7 +209,6 @@ std::shared_ptr<ObjectValue> aggregate_window_output_row(
     }
     return std::make_shared<ObjectValue>(std::move(props));
 }
-
 
 } // namespace
 

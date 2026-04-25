@@ -15,13 +15,12 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/25 10:40
 
-#include "cpp/pl/flux/runtime_builtin_universe.h"
-
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/runtime_builtin_package.h"
 #include "cpp/pl/flux/runtime_builtin_table_helpers.h"
+#include "cpp/pl/flux/runtime_builtin_universe.h"
 #include "cpp/pl/flux/runtime_eval.h"
 #include <algorithm>
 #include <memory>
@@ -224,11 +223,12 @@ std::shared_ptr<ObjectValue> null_row_for_columns(const std::vector<std::string>
     return std::make_shared<ObjectValue>(std::move(props));
 }
 
-absl::StatusOr<std::shared_ptr<ObjectValue>> join_as_row(const FunctionValue* as_fn,
-                                                         const ObjectValue* left,
-                                                         const std::vector<std::string>& left_columns,
-                                                         const ObjectValue* right,
-                                                         const std::vector<std::string>& right_columns) {
+absl::StatusOr<std::shared_ptr<ObjectValue>> join_as_row(
+    const FunctionValue* as_fn,
+    const ObjectValue* left,
+    const std::vector<std::string>& left_columns,
+    const ObjectValue* right,
+    const std::vector<std::string>& right_columns) {
     if (as_fn == nullptr) {
         return absl::InvalidArgumentError("join package requires `as` when using predicate `on`");
     }
@@ -250,10 +250,10 @@ absl::StatusOr<std::shared_ptr<ObjectValue>> join_as_row(const FunctionValue* as
 absl::StatusOr<bool> join_predicate_matches(const FunctionValue& on_fn,
                                             const ObjectValue& left,
                                             const ObjectValue& right) {
-    auto keep_or = ExpressionEvaluator::Invoke(
-        Value::function(std::make_shared<FunctionValue>(on_fn)),
-        {Value::object(std::make_shared<ObjectValue>(left)),
-         Value::object(std::make_shared<ObjectValue>(right))});
+    auto keep_or =
+        ExpressionEvaluator::Invoke(Value::function(std::make_shared<FunctionValue>(on_fn)),
+                                    {Value::object(std::make_shared<ObjectValue>(left)),
+                                     Value::object(std::make_shared<ObjectValue>(right))});
     if (!keep_or.ok()) {
         return keep_or.status();
     }
@@ -336,16 +336,16 @@ absl::StatusOr<Value> join_with_column_keys(const TableValue& left_table,
                 }
                 if (!matched && (method == "left" || method == "full")) {
                     if (as_fn != nullptr) {
-                        auto row_or =
-                            join_as_row(as_fn, left_row.get(), left_columns, nullptr, right_columns);
+                        auto row_or = join_as_row(as_fn, left_row.get(), left_columns, nullptr,
+                                                  right_columns);
                         if (!row_or.ok()) {
                             return row_or.status();
                         }
                         output_chunk.rows.push_back(*row_or);
                     } else {
-                        output_chunk.rows.push_back(
-                            join_rows(left_name, left_row.get(), left_columns, right_name, nullptr,
-                                      right_columns, on_columns, on_column_set, overlapping_columns));
+                        output_chunk.rows.push_back(join_rows(
+                            left_name, left_row.get(), left_columns, right_name, nullptr,
+                            right_columns, on_columns, on_column_set, overlapping_columns));
                     }
                 }
             }
@@ -358,16 +358,16 @@ absl::StatusOr<Value> join_with_column_keys(const TableValue& left_table,
                         continue;
                     }
                     if (as_fn != nullptr) {
-                        auto row_or =
-                            join_as_row(as_fn, nullptr, left_columns, right_row.get(), right_columns);
+                        auto row_or = join_as_row(as_fn, nullptr, left_columns, right_row.get(),
+                                                  right_columns);
                         if (!row_or.ok()) {
                             return row_or.status();
                         }
                         output_chunk.rows.push_back(*row_or);
                     } else {
-                        output_chunk.rows.push_back(
-                            join_rows(left_name, nullptr, left_columns, right_name, right_row.get(),
-                                      right_columns, on_columns, on_column_set, overlapping_columns));
+                        output_chunk.rows.push_back(join_rows(
+                            left_name, nullptr, left_columns, right_name, right_row.get(),
+                            right_columns, on_columns, on_column_set, overlapping_columns));
                     }
                 }
             }
@@ -465,9 +465,8 @@ absl::StatusOr<Value> join_with_predicate(const TableValue& left_table,
                         }
                         matched = true;
                         matched_right_rows.insert(right_row.get());
-                        auto row_or =
-                            join_as_row(&as_fn, left_row.get(), left_columns, right_row.get(),
-                                        right_columns);
+                        auto row_or = join_as_row(&as_fn, left_row.get(), left_columns,
+                                                  right_row.get(), right_columns);
                         if (!row_or.ok()) {
                             return row_or.status();
                         }
@@ -475,8 +474,8 @@ absl::StatusOr<Value> join_with_predicate(const TableValue& left_table,
                     }
                 }
                 if (!matched && (method == "left" || method == "full")) {
-                    auto row_or = join_as_row(&as_fn, left_row.get(), left_columns, nullptr,
-                                              right_columns);
+                    auto row_or =
+                        join_as_row(&as_fn, left_row.get(), left_columns, nullptr, right_columns);
                     if (!row_or.ok()) {
                         return row_or.status();
                     }
@@ -626,26 +625,22 @@ absl::StatusOr<Value> builtin_join_package_method(const std::vector<Value>& args
 Value make_join_package() {
     return Value::object({
         {"path", Value::string("join")},
-        {"inner", make_builtin_value(
-                      "join.inner",
-                      [](const std::vector<Value>& args) {
-                          return builtin_join_package_method(args, "inner");
-                      })},
-        {"left", make_builtin_value(
-                     "join.left",
-                     [](const std::vector<Value>& args) {
-                         return builtin_join_package_method(args, "left");
-                     })},
-        {"right", make_builtin_value(
-                      "join.right",
-                      [](const std::vector<Value>& args) {
-                          return builtin_join_package_method(args, "right");
-                      })},
-        {"full", make_builtin_value(
-                     "join.full",
-                     [](const std::vector<Value>& args) {
-                         return builtin_join_package_method(args, "full");
-                     })},
+        {"inner", make_builtin_value("join.inner",
+                                     [](const std::vector<Value>& args) {
+                                         return builtin_join_package_method(args, "inner");
+                                     })},
+        {"left", make_builtin_value("join.left",
+                                    [](const std::vector<Value>& args) {
+                                        return builtin_join_package_method(args, "left");
+                                    })},
+        {"right", make_builtin_value("join.right",
+                                     [](const std::vector<Value>& args) {
+                                         return builtin_join_package_method(args, "right");
+                                     })},
+        {"full", make_builtin_value("join.full",
+                                    [](const std::vector<Value>& args) {
+                                        return builtin_join_package_method(args, "full");
+                                    })},
     });
 }
 
@@ -659,9 +654,7 @@ bool InstallKnownUniverseJoinBuiltin(Environment& env, const std::string& name) 
     return false;
 }
 
-void InstallUniverseJoinBuiltins(Environment& env) {
-    InstallKnownUniverseJoinBuiltin(env, "join");
-}
+void InstallUniverseJoinBuiltins(Environment& env) { InstallKnownUniverseJoinBuiltin(env, "join"); }
 
 namespace flux_builtin {
 
