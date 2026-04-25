@@ -219,62 +219,15 @@ absl::StatusOr<std::string> string_property(const ObjectValue& object,
     return (*value_or)->as_string();
 }
 
-absl::StatusOr<std::vector<double>> quantile_values_property(const ObjectValue& object,
-                                                             const std::string& name,
-                                                             const std::string& property) {
-    auto value_or = require_object_property(object, name, property);
-    if (!value_or.ok()) {
-        return value_or.status();
-    }
-    std::vector<double> quantiles;
-    const Value& value = **value_or;
-    auto append_quantile = [&](const Value& item) -> absl::Status {
-        switch (item.type()) {
-            case Value::Type::Float:
-                quantiles.push_back(item.as_float());
-                return absl::OkStatus();
-            case Value::Type::Int:
-                quantiles.push_back(static_cast<double>(item.as_int()));
-                return absl::OkStatus();
-            case Value::Type::UInt:
-                quantiles.push_back(static_cast<double>(item.as_uint()));
-                return absl::OkStatus();
-            default:
-                return absl::InvalidArgumentError(
-                    absl::StrCat(name, " `", property, "` must be a number or array of numbers"));
-        }
-    };
-    if (value.type() == Value::Type::Array) {
-        quantiles.reserve(value.as_array().elements.size());
-        for (const auto& item : value.as_array().elements) {
-            auto status = append_quantile(item);
-            if (!status.ok()) {
-                return status;
-            }
-        }
-    } else {
-        auto status = append_quantile(value);
-        if (!status.ok()) {
-            return status;
-        }
-    }
-    if (quantiles.empty()) {
-        return absl::InvalidArgumentError(
-            absl::StrCat(name, " `", property, "` must not be empty"));
-    }
-    return quantiles;
-}
-
-absl::StatusOr<std::vector<std::string>> string_array_property(const ObjectValue& object,
-                                                               const std::string& name,
-                                                               const std::string& property) {
-    auto array_or = require_array_property(object, name, property);
-    if (!array_or.ok()) {
-        return array_or.status();
+absl::StatusOr<std::vector<std::string>> string_array_value(const Value& value,
+                                                            const std::string& name,
+                                                            const std::string& property) {
+    if (value.type() != Value::Type::Array) {
+        return absl::InvalidArgumentError(absl::StrCat(name, " `", property, "` must be an array"));
     }
     std::vector<std::string> values;
-    values.reserve((*array_or)->elements.size());
-    for (const auto& item : (*array_or)->elements) {
+    values.reserve(value.as_array().elements.size());
+    for (const auto& item : value.as_array().elements) {
         if (item.type() != Value::Type::String) {
             return absl::InvalidArgumentError(
                 absl::StrCat(name, " `", property, "` must contain only strings"));
@@ -282,6 +235,16 @@ absl::StatusOr<std::vector<std::string>> string_array_property(const ObjectValue
         values.push_back(item.as_string());
     }
     return values;
+}
+
+absl::StatusOr<std::vector<std::string>> string_array_property(const ObjectValue& object,
+                                                               const std::string& name,
+                                                               const std::string& property) {
+    auto value_or = require_object_property(object, name, property);
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+    return string_array_value(**value_or, name, property);
 }
 
 absl::StatusOr<std::vector<std::string>> optional_string_array_property(
@@ -800,7 +763,6 @@ void install_builtin(Environment& env,
                      std::string pipe_param_name = {}) {
     env.define(name, make_builtin_value(name, std::move(fn), std::move(pipe_param_name)));
 }
-
 
 } // namespace
 

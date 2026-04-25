@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include "cpp/pl/flux/runtime_builtin_table_helpers.h"
 #include "absl/time/civil_time.h"
 #include "absl/time/time.h"
+#include "cpp/pl/flux/runtime_builtin_table_helpers.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
@@ -538,14 +538,6 @@ bool aggregate_window_is_within_range(const WindowBounds& bounds,
     return bounds.lower_seconds >= range_start_seconds &&
            bounds.upper_seconds <= range_stop_seconds;
 }
-
-bool aggregate_window_fn_drops_empty(const FunctionValue& fn) {
-    if (fn.kind != FunctionValue::Kind::Builtin) {
-        return false;
-    }
-    return fn.name == "first" || fn.name == "last";
-}
-
 
 } // namespace
 

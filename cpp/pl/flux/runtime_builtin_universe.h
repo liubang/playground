@@ -41,9 +41,3 @@ void InstallUniverseInspectBuiltins(Environment& env);
 bool InstallKnownUniverseInspectBuiltin(Environment& env, const std::string& name);
 
 } // namespace pl
-
-namespace pl::flux_builtin {
-
-void RegisterJoinStdlibPackage();
-
-} // namespace pl::flux_builtin
