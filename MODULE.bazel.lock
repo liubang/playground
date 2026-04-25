@@ -588,6 +588,8 @@
     "https://bcr.bazel.build/modules/snappy/1.2.1/MODULE.bazel": "ccfc05c2f321f33fa4190a57280f3b0b428982f7c66618f2acadf162fa0bbb95",
     "https://bcr.bazel.build/modules/snappy/1.2.2/MODULE.bazel": "f8d3ddaad8d45d504dd537b2a3205ebcb1c4f3ae88d81b225681e4b88faead7c",
     "https://bcr.bazel.build/modules/snappy/1.2.2/source.json": "790f71ab14c7cb97f39a9678e5bbbc5164822ea0115bbfa606d80b884b0da38c",
+    "https://bcr.bazel.build/modules/spdlog/1.17.0/MODULE.bazel": "5d03b65eb8549f48dc888495c397b4053c8be095ea2e9c776d3c7aaaff3cd0d5",
+    "https://bcr.bazel.build/modules/spdlog/1.17.0/source.json": "62ba6fc81ead9d2bd05578c92643fa9abfa230c4ac238dbf10e75e3e1aaea4ee",
     "https://bcr.bazel.build/modules/sqlite3/3.42.0/MODULE.bazel": "32c2c1bbd3c055e03a5dfb961304c8224397858d9ee7bc8d52cfaa8604c2c65e",
     "https://bcr.bazel.build/modules/sqlite3/3.42.0/source.json": "5e1e893f001f9717ce427a853b27e1ddfa2de2e33fa8dead6a800342bc0914d8",
     "https://bcr.bazel.build/modules/stardoc/0.5.0/MODULE.bazel": "f9f1f46ba8d9c3362648eea571c6f9100680efc44913618811b58cc9c02cd678",
