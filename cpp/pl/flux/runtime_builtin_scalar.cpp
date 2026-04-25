@@ -21,6 +21,7 @@
 #include "absl/time/civil_time.h"
 #include "absl/time/time.h"
 #include "cpp/pl/flux/runtime_builtin_package.h"
+#include "cpp/pl/flux/strconv.h"
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -34,6 +35,11 @@
 
 namespace pl::flux_builtin {
 namespace {
+
+struct ParsedDuration {
+    int64_t seconds = 0;
+    int64_t months = 0;
+};
 
 Value make_builtin_value(const std::string& name,
                          FunctionValue::BuiltinCallback fn,
@@ -146,6 +152,11 @@ std::optional<int64_t> parse_rfc3339_seconds(const std::string& literal) {
     return absl::ToUnixSeconds(timestamp);
 }
 
+std::string format_rfc3339_seconds(int64_t seconds) {
+    return absl::FormatTime("%Y-%m-%dT%H:%M:%SZ", absl::FromUnixSeconds(seconds),
+                            absl::UTCTimeZone());
+}
+
 int64_t days_from_civil(int year, unsigned month, unsigned day) {
     year -= static_cast<int>(month <= 2);
     const int era = (year >= 0 ? year : year - 399) / 400;
@@ -157,11 +168,230 @@ int64_t days_from_civil(int year, unsigned month, unsigned day) {
     return era * 146097 + static_cast<int>(doe) - 719468;
 }
 
+int64_t utc_seconds_from_civil(int year,
+                               unsigned month,
+                               unsigned day,
+                               unsigned hour = 0,
+                               unsigned minute = 0,
+                               unsigned second = 0) {
+    return days_from_civil(year, month, day) * 24 * 60 * 60 + static_cast<int64_t>(hour) * 60 * 60 +
+           static_cast<int64_t>(minute) * 60 + static_cast<int64_t>(second);
+}
+
 int64_t weekday_sunday_zero(const absl::CivilSecond& civil) {
     const int64_t days =
         days_from_civil(static_cast<int>(civil.year()), static_cast<unsigned>(civil.month()),
                         static_cast<unsigned>(civil.day()));
     return ((days + 4) % 7 + 7) % 7;
+}
+
+absl::StatusOr<std::string> duration_literal_property(const ObjectValue& object,
+                                                      const std::string& name,
+                                                      const std::string& property) {
+    auto value_or = require_object_property(object, name, property);
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+    if ((*value_or)->type() != Value::Type::Duration) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " `", property, "` must be a duration"));
+    }
+    return (*value_or)->as_duration().literal;
+}
+
+absl::StatusOr<std::string> time_literal_property(const ObjectValue& object,
+                                                  const std::string& name,
+                                                  const std::string& property) {
+    auto value_or = require_object_property(object, name, property);
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+    if ((*value_or)->type() == Value::Type::Time) {
+        return (*value_or)->as_time().literal;
+    }
+    if ((*value_or)->type() == Value::Type::String) {
+        return (*value_or)->as_string();
+    }
+    return absl::InvalidArgumentError(
+        absl::StrCat(name, " `", property, "` must be a time or string"));
+}
+
+absl::StatusOr<ParsedDuration> parse_duration_literal(const std::string& literal,
+                                                      const std::string& name,
+                                                      const std::string& property,
+                                                      bool allow_negative = true) {
+    int64_t sign = 1;
+    std::string normalized = literal;
+    if (!normalized.empty() && normalized.front() == '-') {
+        sign = -1;
+        normalized.erase(normalized.begin());
+    }
+    if (normalized.empty()) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " `", property, "` must be a duration"));
+    }
+    if (sign < 0 && !allow_negative) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " `", property, "` must be a positive duration"));
+    }
+    auto parts_or = StrConv::parse_duration(normalized);
+    if (!parts_or.ok()) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " failed to parse `", property, "` duration"));
+    }
+
+    ParsedDuration parsed;
+    for (const auto& part : *parts_or) {
+        const int64_t magnitude = sign * part->magnitude;
+        if (part->unit == "ns" || part->unit == "us" || part->unit == "ms") {
+            continue;
+        }
+        if (part->unit == "s") {
+            parsed.seconds += magnitude;
+        } else if (part->unit == "m") {
+            parsed.seconds += magnitude * 60;
+        } else if (part->unit == "h") {
+            parsed.seconds += magnitude * 60 * 60;
+        } else if (part->unit == "d") {
+            parsed.seconds += magnitude * 24 * 60 * 60;
+        } else if (part->unit == "w") {
+            parsed.seconds += magnitude * 7 * 24 * 60 * 60;
+        } else if (part->unit == "mo") {
+            parsed.months += magnitude;
+        } else if (part->unit == "y") {
+            parsed.months += magnitude * 12;
+        } else {
+            return absl::InvalidArgumentError(
+                absl::StrCat(name, " unsupported `", property, "` duration unit: ", part->unit));
+        }
+    }
+    return parsed;
+}
+
+absl::CivilSecond add_months_to_civil_second(const absl::CivilSecond& civil, int64_t months) {
+    int64_t year = civil.year();
+    int64_t month0 = static_cast<int64_t>(civil.month()) - 1 + months;
+    year += month0 / 12;
+    month0 %= 12;
+    if (month0 < 0) {
+        month0 += 12;
+        --year;
+    }
+    const auto month = static_cast<unsigned>(month0 + 1);
+    static constexpr unsigned days_by_month[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    unsigned max_day = days_by_month[month - 1];
+    const bool leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+    if (month == 2 && leap) {
+        max_day = 29;
+    }
+    const auto day = std::min(static_cast<unsigned>(civil.day()), max_day);
+    return absl::CivilSecond(year, month, day, civil.hour(), civil.minute(), civil.second());
+}
+
+int64_t seconds_from_civil_second(const absl::CivilSecond& civil) {
+    return utc_seconds_from_civil(
+        static_cast<int>(civil.year()), static_cast<unsigned>(civil.month()),
+        static_cast<unsigned>(civil.day()), static_cast<unsigned>(civil.hour()),
+        static_cast<unsigned>(civil.minute()), static_cast<unsigned>(civil.second()));
+}
+
+absl::StatusOr<Value> date_shift(const ObjectValue& object,
+                                 const std::string& name,
+                                 const std::string& time_property,
+                                 int64_t direction) {
+    auto duration_or = duration_literal_property(object, name, "d");
+    if (!duration_or.ok()) {
+        return duration_or.status();
+    }
+    auto time_or = time_literal_property(object, name, time_property);
+    if (!time_or.ok()) {
+        return time_or.status();
+    }
+    auto seconds_or = parse_rfc3339_seconds(*time_or);
+    if (!seconds_or.has_value()) {
+        return absl::InvalidArgumentError(absl::StrCat(name, " failed to parse RFC3339 time"));
+    }
+    auto duration = parse_duration_literal(*duration_or, name, "d");
+    if (!duration.ok()) {
+        return duration.status();
+    }
+
+    int64_t shifted = *seconds_or;
+    if (duration->months != 0) {
+        auto civil = absl::ToCivilSecond(absl::FromUnixSeconds(shifted), absl::UTCTimeZone());
+        civil = add_months_to_civil_second(civil, direction * duration->months);
+        shifted = seconds_from_civil_second(civil);
+    }
+    shifted += direction * duration->seconds;
+    return Value::time(format_rfc3339_seconds(shifted));
+}
+
+int64_t floor_div(int64_t lhs, int64_t rhs) {
+    int64_t quotient = lhs / rhs;
+    const int64_t remainder = lhs % rhs;
+    if (remainder != 0 && ((remainder < 0) != (rhs < 0))) {
+        --quotient;
+    }
+    return quotient;
+}
+
+absl::StatusOr<Value> builtin_date_add(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "date.add");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    return date_shift(**object_or, "date.add", "to", 1);
+}
+
+absl::StatusOr<Value> builtin_date_sub(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "date.sub");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    return date_shift(**object_or, "date.sub", "from", -1);
+}
+
+absl::StatusOr<Value> builtin_date_truncate(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "date.truncate");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto time_or = time_literal_property(**object_or, "date.truncate", "t");
+    if (!time_or.ok()) {
+        return time_or.status();
+    }
+    auto seconds_or = parse_rfc3339_seconds(*time_or);
+    if (!seconds_or.has_value()) {
+        return absl::InvalidArgumentError("date.truncate failed to parse RFC3339 time");
+    }
+    auto unit_or = duration_literal_property(**object_or, "date.truncate", "unit");
+    if (!unit_or.ok()) {
+        return unit_or.status();
+    }
+    auto duration_or = parse_duration_literal(*unit_or, "date.truncate", "unit", false);
+    if (!duration_or.ok()) {
+        return duration_or.status();
+    }
+    if (duration_or->months != 0 && duration_or->seconds != 0) {
+        return absl::InvalidArgumentError(
+            "date.truncate `unit` cannot mix calendar and fixed units");
+    }
+    if (duration_or->months == 0 && duration_or->seconds <= 0) {
+        return absl::InvalidArgumentError("date.truncate `unit` must be a positive duration");
+    }
+
+    int64_t truncated = *seconds_or;
+    if (duration_or->months != 0) {
+        if (duration_or->months != 1 && duration_or->months != 12) {
+            return absl::InvalidArgumentError("date.truncate supports calendar units 1mo or 1y");
+        }
+        auto civil = absl::ToCivilSecond(absl::FromUnixSeconds(*seconds_or), absl::UTCTimeZone());
+        const unsigned month = duration_or->months == 12 ? 1 : static_cast<unsigned>(civil.month());
+        truncated = utc_seconds_from_civil(static_cast<int>(civil.year()), month, 1);
+    } else {
+        truncated = floor_div(*seconds_or, duration_or->seconds) * duration_or->seconds;
+    }
+    return Value::time(format_rfc3339_seconds(truncated));
 }
 
 absl::StatusOr<absl::CivilSecond> date_time_argument(const std::vector<Value>& args,
@@ -283,6 +513,42 @@ absl::StatusOr<Value> builtin_regexp_quote_meta(const std::vector<Value>& args) 
     return Value::string(std::move(quoted));
 }
 
+absl::StatusOr<Value> builtin_regexp_find_string(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "regexp.findString");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto regexp_or = require_object_property(**object_or, "regexp.findString", "r");
+    if (!regexp_or.ok()) {
+        return regexp_or.status();
+    }
+    auto value_or = string_property(**object_or, "regexp.findString", "v");
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+    std::string pattern;
+    if ((*regexp_or)->type() == Value::Type::Regex) {
+        pattern = (*regexp_or)->as_regex().literal;
+    } else if ((*regexp_or)->type() == Value::Type::String) {
+        pattern = (*regexp_or)->as_string();
+    } else {
+        return absl::InvalidArgumentError("regexp.findString `r` must be a regex or string");
+    }
+    if (pattern.size() >= 2 && pattern.front() == '/' && pattern.back() == '/') {
+        pattern = pattern.substr(1, pattern.size() - 2);
+    }
+    try {
+        std::smatch match;
+        if (std::regex_search(*value_or, match, std::regex(pattern))) {
+            return Value::string(match.str());
+        }
+        return Value::string("");
+    } catch (const std::regex_error& err) {
+        return absl::InvalidArgumentError(
+            absl::StrCat("regexp.findString invalid regex: ", err.what()));
+    }
+}
+
 absl::StatusOr<Value> builtin_strings_contains_str(const std::vector<Value>& args) {
     auto object_or = require_object_argument(args, "strings.containsStr");
     if (!object_or.ok()) {
@@ -385,6 +651,72 @@ absl::StatusOr<Value> builtin_strings_to_lower(const std::vector<Value>& args) {
     return Value::string(std::move(out));
 }
 
+absl::StatusOr<Value> builtin_strings_split(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "strings.split");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto value_or = string_property(**object_or, "strings.split", "v");
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+    auto sep_or = string_property(**object_or, "strings.split", "t");
+    if (!sep_or.ok()) {
+        return sep_or.status();
+    }
+    std::vector<Value> parts;
+    if (sep_or->empty()) {
+        parts.reserve(value_or->size());
+        for (char ch : *value_or) {
+            parts.push_back(Value::string(std::string(1, ch)));
+        }
+        return Value::array(std::move(parts));
+    }
+
+    size_t start = 0;
+    while (true) {
+        const size_t pos = value_or->find(*sep_or, start);
+        if (pos == std::string::npos) {
+            parts.push_back(Value::string(value_or->substr(start)));
+            break;
+        }
+        parts.push_back(Value::string(value_or->substr(start, pos - start)));
+        start = pos + sep_or->size();
+    }
+    return Value::array(std::move(parts));
+}
+
+absl::StatusOr<Value> builtin_strings_join_str(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "strings.joinStr");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto arr_or = require_object_property(**object_or, "strings.joinStr", "arr");
+    if (!arr_or.ok()) {
+        return arr_or.status();
+    }
+    if ((*arr_or)->type() != Value::Type::Array) {
+        return absl::InvalidArgumentError("strings.joinStr `arr` must be an array");
+    }
+    auto sep_or = string_property(**object_or, "strings.joinStr", "v");
+    if (!sep_or.ok()) {
+        return sep_or.status();
+    }
+    std::string joined;
+    bool first = true;
+    for (const auto& item : (*arr_or)->as_array().elements) {
+        if (item.type() != Value::Type::String) {
+            return absl::InvalidArgumentError("strings.joinStr `arr` must contain only strings");
+        }
+        if (!first) {
+            joined += *sep_or;
+        }
+        first = false;
+        joined += item.as_string();
+    }
+    return Value::string(std::move(joined));
+}
+
 absl::StatusOr<Value> builtin_strings_trim_space(const std::vector<Value>& args) {
     auto value_or = optional_string_value(args, "strings.trimSpace");
     if (!value_or.ok()) {
@@ -446,6 +778,7 @@ Value make_regexp_package() {
     return Value::object({
         {"path", Value::string("regexp")},
         {"compile", make_builtin_value("regexp.compile", builtin_regexp_compile)},
+        {"findString", make_builtin_value("regexp.findString", builtin_regexp_find_string, "v")},
         {"matchRegexpString",
          make_builtin_value("regexp.matchRegexpString", builtin_regexp_match_regexp_string, "v")},
         {"quoteMeta", make_builtin_value("regexp.quoteMeta", builtin_regexp_quote_meta)},
@@ -459,7 +792,9 @@ Value make_strings_package() {
          make_builtin_value("strings.containsStr", builtin_strings_contains_str, "v")},
         {"hasPrefix", make_builtin_value("strings.hasPrefix", builtin_strings_has_prefix, "v")},
         {"hasSuffix", make_builtin_value("strings.hasSuffix", builtin_strings_has_suffix, "v")},
+        {"joinStr", make_builtin_value("strings.joinStr", builtin_strings_join_str, "arr")},
         {"replaceAll", make_builtin_value("strings.replaceAll", builtin_strings_replace_all, "v")},
+        {"split", make_builtin_value("strings.split", builtin_strings_split, "v")},
         {"toUpper", make_builtin_value("strings.toUpper", builtin_strings_to_upper, "v")},
         {"toLower", make_builtin_value("strings.toLower", builtin_strings_to_lower, "v")},
         {"trimSpace", make_builtin_value("strings.trimSpace", builtin_strings_trim_space, "v")},
@@ -502,6 +837,9 @@ Value make_math_package() {
 Value make_date_package() {
     return Value::object({
         {"path", Value::string("date")},
+        {"add", make_builtin_value("date.add", builtin_date_add, "to")},
+        {"sub", make_builtin_value("date.sub", builtin_date_sub, "from")},
+        {"truncate", make_builtin_value("date.truncate", builtin_date_truncate, "t")},
         {"hour", make_builtin_value(
                      "date.hour",
                      [](const std::vector<Value>& args) {

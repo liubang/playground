@@ -135,6 +135,7 @@ cc_library(
         "runtime_builtin.cpp",
         "runtime_builtin_package.cpp",
         "runtime_builtin_scalar.cpp",
+        "runtime_builtin_table.cpp",
     ],
     hdrs = [
         "runtime_builtin.h",
@@ -143,6 +144,7 @@ cc_library(
     copts = ["-std=c++20"] + COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
+        ":parser",
         ":runtime_eval",
         ":runtime_env",
         "@abseil-cpp//absl/status",
