@@ -18,6 +18,7 @@ bazel build //cpp/pl/flux:flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/table_shape_ops.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/selection_and_reduce.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/join_union_pivot.flux
+./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/join_package.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/fill_distinct_windows.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/time_math.flux
 ./bazel-bin/cpp/pl/flux/flux cpp/pl/flux/examples/feature_gallery/aggregatewindow_advanced.flux
@@ -38,6 +39,7 @@ bazel build //cpp/pl/flux:flux
 - `table_shape_ops.flux`：`filter`、`duplicate`、`rename`、`set`、`map`、`drop`、`keep`、`sort`、`limit`、`tail`
 - `selection_and_reduce.flux`：`group`、`count`、`first`、`last`、`reduce`
 - `join_union_pivot.flux`：`aggregateWindow + group + join`、`union`、`pivot`
+- `join_package.flux`：`import "join"` 与 `join.inner` / `join.left` / `join.right` / `join.full`，覆盖 predicate `on` 与 `as` 输出函数
 - `fill_distinct_windows.flux`：`aggregateWindow(createEmpty)`、`fill`、`distinct`
 - `time_math.flux`：`range`、`elapsed`、`difference`、`derivative`
 - `aggregatewindow_advanced.flux`：更完整的 `aggregateWindow` 参数组合，包括 `column`、固定时长 `offset`、自定义聚合函数、`period`、负 `period`、`timeSrc`、`timeDst`、命名时区 `location`、日历窗口 `offset`、selector 空窗口行为
@@ -69,6 +71,8 @@ bazel build //cpp/pl/flux:flux
   `selection_and_reduce.flux`
 - `window`、`pivot`、`fill`、`distinct`、`union`、`join`、`aggregateWindow`、`yield`：
   `array_watchlist_join.flux`、`join_union_pivot.flux`、`fill_distinct_windows.flux`、`aggregatewindow_advanced.flux`、`task_driven_rollup.flux`、`nested_multi_table_health.flux`、`window_join_rankings.flux`
+- `join.inner`、`join.left`、`join.right`、`join.full`：
+  `join_package.flux`
 - `elapsed`、`difference`、`derivative`：
   `time_math.flux`
 - `option`、block-body helper、对象返回、嵌套条件：

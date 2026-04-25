@@ -352,6 +352,24 @@ TEST(FluxCliTest, ExecutesDateCalendarFeatureGalleryExample) {
     EXPECT_NE(std::string::npos, result.output.find("9"));
 }
 
+TEST(FluxCliTest, ExecutesJoinPackageFeatureGalleryExample) {
+    auto env = MakeFluxCliEnvironment();
+    auto result =
+        ExecuteExampleScript("cpp/pl/flux/examples/feature_gallery/join_package.flux", env);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: join_package_inner\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Result: join_package_left\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Result: join_package_right\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Result: join_package_full\n"));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-1\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-3\""));
+    EXPECT_NE(std::string::npos, result.output.find("88"));
+    EXPECT_NE(std::string::npos, result.output.find("144"));
+    EXPECT_NE(std::string::npos, result.output.find("null"));
+}
+
 TEST(FluxCliTest, ExecutesCheckedInOpsDashboardQueryVariants) {
     struct ExampleCase {
         std::string path;

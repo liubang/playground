@@ -1245,6 +1245,85 @@ TEST(RuntimeExecTest, ExecutesDerivativeQueryFileWithNonNegativeAndInitialZero) 
     EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
 }
 
+TEST(RuntimeExecTest, ExecutesJoinStdlibPackageHelpers) {
+    auto file = ParseFile(R"(
+        import "join"
+        builtin from : (bucket: string) => stream[A]
+        builtin group : (<-tables: stream[A], ?columns: [string], ?mode: string) => stream[A]
+
+        cpu = from(bucket: "cpu", rows: [
+            {_time: "t1", host: "a", _value: 90.0},
+            {_time: "t2", host: "a", _value: 91.0},
+        ])
+            |> group(columns: ["host"])
+        mem = from(bucket: "mem", rows: [
+            {_time: "t1", host: "a", _value: 40.0},
+            {_time: "t3", host: "a", _value: 20.0},
+        ])
+            |> group(columns: ["host"])
+
+        inner = join.inner(
+            left: cpu,
+            right: mem,
+            on: (l, r) => l._time == r._time and l.host == r.host,
+            as: (l, r) => ({_time: l._time, host: l.host, cpu: l._value, mem: r._value}),
+        )
+        left = join.left(
+            left: cpu,
+            right: mem,
+            on: (l, r) => l._time == r._time and l.host == r.host,
+            as: (l, r) => ({_time: l._time, host: l.host, cpu: l._value, mem: r._value}),
+        )
+        right = join.right(
+            left: cpu,
+            right: mem,
+            on: (l, r) => l._time == r._time and l.host == r.host,
+            as: (l, r) => ({_time: r._time, host: r.host, cpu: l._value, mem: r._value}),
+        )
+        full = join.full(
+            left: cpu,
+            right: mem,
+            on: (l, r) => l._time == r._time and l.host == r.host,
+            as: (l, r) => ({
+                left_time: l._time,
+                right_time: r._time,
+                left_host: l.host,
+                right_host: r.host,
+                cpu: l._value,
+                mem: r._value,
+            }),
+        )
+        full
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("join").ok());
+    EXPECT_EQ("{path: \"join\", inner: <builtin join.inner>, left: <builtin join.left>, "
+              "right: <builtin join.right>, full: <builtin join.full>}",
+              env.lookup("join")->string());
+    ASSERT_TRUE(env.lookup("inner").ok());
+    ASSERT_EQ(1, env.lookup("inner")->as_table().rows.size());
+    EXPECT_EQ("90", env.lookup("inner")->as_table().rows[0]->lookup("cpu")->string());
+    EXPECT_EQ("40", env.lookup("inner")->as_table().rows[0]->lookup("mem")->string());
+    ASSERT_TRUE(env.lookup("left").ok());
+    ASSERT_EQ(2, env.lookup("left")->as_table().rows.size());
+    EXPECT_EQ("91", env.lookup("left")->as_table().rows[1]->lookup("cpu")->string());
+    EXPECT_TRUE(env.lookup("left")->as_table().rows[1]->lookup("mem")->is_null());
+    ASSERT_TRUE(env.lookup("right").ok());
+    ASSERT_EQ(2, env.lookup("right")->as_table().rows.size());
+    EXPECT_TRUE(env.lookup("right")->as_table().rows[1]->lookup("cpu")->is_null());
+    EXPECT_EQ("20", env.lookup("right")->as_table().rows[1]->lookup("mem")->string());
+    ASSERT_TRUE(env.lookup("full").ok());
+    ASSERT_EQ(3, env.lookup("full")->as_table().rows.size());
+    EXPECT_TRUE(env.lookup("full")->as_table().rows[1]->lookup("mem")->is_null());
+    EXPECT_TRUE(env.lookup("full")->as_table().rows[2]->lookup("cpu")->is_null());
+    EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
+}
+
 TEST(RuntimeExecTest, ExecutesAggregateWindowQueryFile) {
     auto file = ParseFile(R"(
         builtin from : (bucket: string) => stream[A]

@@ -102,8 +102,8 @@
 | 函数值 / 闭包 | 支持 | 用户自定义函数表达式会求值为可调用的运行时值，并捕获词法闭包 |
 | 函数调用执行 | 支持 | builtin 和用户函数都可调用，支持默认参数、命名参数、块体函数、pipe 参数注入，以及查询 builtin 内部的行函数调用 |
 | pipe 执行 | 部分支持 | `|>` 已支持 builtin、用户定义 `<-pipe` 参数以及内存表管道；`option task = {...}` 这类 option 绑定现在也可以直接驱动表达式与管道参数，但更广泛的 Flux 流式语义仍未完整实现 |
-| builtin 注册表 / stdlib 执行 | 部分支持 | 当前已有一批可调用 builtin：`len`、`string`、`contains`、`sum`、`mean`、`min`、`max`、`from`、`array.from`、`array.concat`、`array.filter`、`array.map`、`array.contains`、`array.reduce`、`array.any`、`array.all`、`csv.from`、`date.add`、`date.sub`、`date.truncate`、`date.year`、`date.month`、`date.monthDay`、`date.weekDay`、`date.hour`、`date.minute`、`date.second`、`regexp.compile`、`regexp.findString`、`regexp.matchRegexpString`、`regexp.quoteMeta`、`strings.containsStr`、`strings.hasPrefix`、`strings.hasSuffix`、`strings.joinStr`、`strings.replaceAll`、`strings.split`、`strings.toUpper`、`strings.toLower`、`strings.trimSpace`、`math.abs`、`math.ceil`、`math.floor`、`math.round`、`math.sqrt`、`math.pow`、`columns`、`keys`、`findColumn`、`findRecord`、`range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`window`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`distinct`、`count`、`spread`、`quantile`、`median`、`first`、`last`、`top`、`bottom`、`union`、`join`、`aggregateWindow`、`yield`；其中 `quantile(q:)` 现在支持单个数值或数值数组，并会在输出行上附带 `quantile` 列；顶层 `builtin` 声明可绑定已知 builtin 或占位 callable；`import "array"` / `import "csv"` / `import "date"` / `import "regexp"` / `import "strings"` / `import "math"` 会分别绑定包含这些入口的 package 对象；未知 package 会绑定为 metadata-only object；但完整 Flux 标准库仍远未实现 |
-| `join()` 语义 | 部分支持 | 当前 `join()` 支持两个输入流和 `method: "inner"|"left"|"right"|"full"`，只会比较 group key 实例相同的逻辑表，输出保持多表流，重复非 `on` 列会按 `<column>_<table>` 重命名，`null` / 缺失 join key 不匹配；更完整的 `join` 包、`as`/predicate 形式仍未实现 |
+| builtin 注册表 / stdlib 执行 | 部分支持 | 默认加载的 universe 风格顶层 builtin 包括 `len`、`string`、`contains`、`sum`、`mean`、`min`、`max`、`from`、`columns`、`keys`、`findColumn`、`findRecord`、`range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`window`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`distinct`、`count`、`spread`、`quantile`、`median`、`first`、`last`、`top`、`bottom`、`union`、顶层 `join()`、`aggregateWindow`、`yield`；显式 package 包含 `array.from`、`array.concat`、`array.filter`、`array.map`、`array.contains`、`array.reduce`、`array.any`、`array.all`、`csv.from`、`date.*`、`regexp.*`、`strings.*`、`math.*`、`join.inner`、`join.left`、`join.right`、`join.full`；其中 `quantile(q:)` 现在支持单个数值或数值数组，并会在输出行上附带 `quantile` 列；顶层 `builtin` 声明可绑定已知 builtin 或占位 callable；未知 package 会绑定为 metadata-only object；但完整 Flux 标准库仍远未实现 |
+| `join()` / `join` package 语义 | 部分支持 | 默认加载的 universe 顶层 `join()` 支持旧版 `join(tables:, on:)` 形态、两个输入流和 `method: "inner"|"left"|"right"|"full"`，只会比较 group key 实例相同的逻辑表，输出保持多表流，重复非 `on` 列会按 `<column>_<table>` 重命名，`null` / 缺失 join key 不匹配；显式 `import "join"` 绑定的是 package 对象，提供 `join.inner` / `join.left` / `join.right` / `join.full`，支持官方风格 predicate `on` 和 `as` 输出函数，也兼容 `on: ["col"]` 的列数组形式；更完整的官方 join 包边界仍需继续补齐 |
 | `window()` 语义 | 部分支持 | `window()` 已支持固定时长窗口、日历窗口、`period`、`offset`、`location`、`startColumn`、`stopColumn`、`timeColumn`、`createEmpty`，并会把输入拆成真正的多逻辑表输出；更广的官方 Flux 细节和与更多下游 builtin 的组合行为仍需要继续补齐 |
 | CSV 输入 | 部分支持 | `import "csv"`、`csv.from(csv: ...)`、`csv.from(file: ...)` 支持 raw 模式和常见 annotated CSV；支持 `#datatype`、`#group`、可选 `#default`、类型转换，以及同一载荷内重复 metadata/header block，对应多逻辑表输入；更广的 CSV stdlib 能力尚未补齐 |
 | aggregate windows | 部分支持 | RFC3339 `_time` 上的固定时长窗口可用，支持 `column`、`offset`、`period`、`timeSrc`、`timeDst`、`mean` / `sum` / `min` / `max`、自定义数组函数、窗口 `count`、负 `period`、`every != period` 的重叠窗口、`range()` 边界上的 `createEmpty: true`；日历 `mo` / `y` 窗口支持显式固定偏移和命名时区 `location` 记录，并支持日历窗口 `offset`；selector 风格 `first` / `last` 会像官方 Flux 一样丢弃空窗口；窗口输出现在会按逻辑表与 group key 一起保真，避免把不同逻辑表里同名 group 意外合并；未显式传参时也会回退到全局 `option location` |
@@ -145,7 +145,7 @@
 - 少数 AST/debug 字符串形式仍然是简化版，不是标准 Flux 格式
 - 还没有语义分析或类型检查层
 - 运行时执行仍是“可用子集”，虽然已经能跑常见内存查询管道，但更广的 builtin 和流式语义仍缺失
-- `array.from` / `array.concat` / `array.filter` / `array.map` / `array.contains` / `array.reduce` / `array.any` / `array.all` / `csv.from` / `date.*` / `regexp.*` / `strings.*` / `math.*` 这类 package 入口已可用，但完整标准库接口仍远未实现
+- `array.from` / `array.concat` / `array.filter` / `array.map` / `array.contains` / `array.reduce` / `array.any` / `array.all` / `csv.from` / `date.*` / `regexp.*` / `strings.*` / `math.*` / `join.*` 这类 package 入口已可用，但完整标准库接口仍远未实现
 - CLI 输出已经具备结果导向和多表感知能力，但距离官方 Influx 结果集格式仍有差距
 
 ## 推荐下一步
@@ -156,6 +156,38 @@
 4. 把 `SourceLocation` 覆盖范围扩展到更多 AST 节点
 5. 在现有执行架构上继续扩展 builtin、流语义和查询执行
 6. 继续提升结果输出层，使 CLI 的 human / CSV / JSON 更接近官方 Flux / Influx 查询体验
+
+## builtin / stdlib 拆分 TODO
+
+当前目标是按官方 Flux 标准库边界重整 builtin：默认加载的查询函数归入 `universe` 心智模型，显式 `import "..."` 的能力按官方 package 路线扩展。C++ 文件可以继续按实现复杂度拆分，但用户可见的命名空间优先跟官方保持一致。拆分原则是先做机械迁移、保持行为不变；迁移稳定后，再在对应模块里补新的 package API。
+
+### 官方 package 对齐
+
+- 已有：`array`，包含 `array.from`、`array.concat`、`array.filter`、`array.map`、`array.contains`、`array.reduce`、`array.any`、`array.all`
+- 已有：`csv`，包含 `csv.from`
+- 已有：`date`，包含 `date.add`、`date.sub`、`date.truncate`、`date.year`、`date.month`、`date.monthDay`、`date.weekDay`、`date.hour`、`date.minute`、`date.second`
+- 已有：`regexp`，包含 `regexp.compile`、`regexp.findString`、`regexp.matchRegexpString`、`regexp.quoteMeta`
+- 已有：`strings`，包含 `strings.containsStr`、`strings.hasPrefix`、`strings.hasSuffix`、`strings.joinStr`、`strings.replaceAll`、`strings.split`、`strings.toUpper`、`strings.toLower`、`strings.trimSpace`
+- 已有：`math`，包含 `math.abs`、`math.ceil`、`math.floor`、`math.round`、`math.sqrt`、`math.pow`
+- 已有：`join`，包含 `join.inner`、`join.left`、`join.right`、`join.full`，支持 predicate `on` 与 `as` 输出函数；后续继续补齐更完整的官方 join 包边界
+- 后续补：`dict`、`types`、`timezone`，优先选择实现小、测试边界清楚、对现有 examples 有帮助的函数
+- 后续评估：`influxdata/influxdb/schema`，用于承接官方 schema 探索类能力；不要先做顶层 `schema`
+- 后续评估：`json`、`generate`、`sampledata`、`interpolate`，作为纯内存运行时可实现的扩展包
+- 暂缓：`http`、`sql`、`kafka`、`socket`、`slack`、`pagerduty`、`pushbullet` 等外部 IO / 集成包，除非后续运行时明确引入外部副作用模型
+- 暂缓：`planner`、`profiler`、`runtime`、`system`、`testing`、`internal/*` 等引擎、系统和测试辅助包，等解释器边界更稳定后再评估
+
+### universe 拆分路线
+
+官方 `universe` package 默认加载，不需要 `import`。当前顶层 builtin 应继续按这个模型暴露，短期不要求用户写 `import "universe"`。
+
+- 已拆：`runtime_builtin_universe_core.cpp`，承载 `len`、`string`、`contains` 等基础默认 builtin
+- 已拆：`runtime_builtin_universe_transform.cpp`，承载 `from`、`range`、`filter`、`map`、`keep`、`drop`、`rename`、`duplicate`、`set`、`sort`、`limit`、`tail`、`group`、`pivot`、`fill`、`union`
+- 已拆：`runtime_builtin_universe_aggregate.cpp`，承载 `sum`、`mean`、`min`、`max`、`count`、`spread`、`quantile`、`median`、`first`、`last`、`top`、`bottom`、`reduce`、`distinct`
+- 已拆：`runtime_builtin_universe_window.cpp`，承载 `window`、`aggregateWindow`、`elapsed`、`difference`、`derivative`
+- 已拆：`runtime_builtin_universe_join.cpp`，承载当前顶层 `join()`，并复用为 `join` package 的底层实现
+- 已拆：`runtime_builtin_universe_inspect.cpp`，承载 `yield`、`columns`、`keys`、`findColumn`、`findRecord` 等结果输出和检查 helper
+
+剩余建议：继续把 `runtime_builtin_universe_internal.h` 里的共享 helper 按稳定边界下沉到更窄的 internal 模块，避免长期把所有 universe helper 都暴露给每个拆分文件。
 
 ## 建议优先补的语法
 
