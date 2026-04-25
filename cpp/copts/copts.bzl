@@ -18,6 +18,10 @@ ASAN_FLAGS = [
     "-fsanitize=address",
 ]
 
+ASAN_LINKOPTS = [
+    "-fsanitize=address",
+]
+
 GCC_FLAGS = [
     "-Wall",
     "-Wextra",

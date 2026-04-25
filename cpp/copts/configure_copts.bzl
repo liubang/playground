@@ -17,6 +17,7 @@
 load(
     "//cpp:copts/copts.bzl",
     "ASAN_FLAGS",
+    "ASAN_LINKOPTS",
     "GCC_FLAGS",
     "GCC_TEST_FLAGS",
     "LLVM_FLAGS",
@@ -32,16 +33,15 @@ COPTS = select({
 LINKOPTS = []
 
 COPTS_WITH_ASAN = select({
-    "//cpp:clang_compiler": LLVM_FLAGS,
+    "//cpp:clang_compiler": LLVM_FLAGS + ASAN_FLAGS,
     "//cpp:gcc_compiler": GCC_FLAGS + ASAN_FLAGS,
     "//conditions:default": GCC_FLAGS + ASAN_FLAGS,
 })
 
 LINKOPTS_WITH_ASAN = select({
-    "//cpp:clang_compiler": LINKOPTS,
-    "//conditions:default": LINKOPTS + [
-        "-fsanitize=address",
-    ],
+    "//cpp:clang_compiler": LINKOPTS + ASAN_LINKOPTS,
+    "//cpp:gcc_compiler": LINKOPTS + ASAN_LINKOPTS,
+    "//conditions:default": LINKOPTS + ASAN_LINKOPTS,
 })
 
 TEST_COPTS = select({
