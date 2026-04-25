@@ -355,15 +355,16 @@ bazel test //cpp/pl/flux:parser_unit_test --test_output=all
 
 ### `join`
 
-当前 `join()` 仍然是 universe 包里的简化版双流 inner join，但它已经补上了和多表模型强相关的关键语义：
+当前 `join()` 仍然是 universe 包里的简化版双流 join，但它已经补上了和多表模型强相关的关键语义：
 
 - 只支持两个输入流
-- 支持 `method: "inner"`，其他 join method 还未实现
+- 支持 `method: "inner"`、`"left"`、`"right"`、`"full"`
 - 只会比较 group key 实例相同的逻辑表
 - 输出仍然是多逻辑表流，而不是把所有匹配行压平成单表
 - 输出 schema 与 group key 取两侧并集
 - 两侧都存在、且不在 `on` 里的重复列会按官方旧版 `join()` 语义重命名为 `<column>_<table>`
 - `null` 或缺失的 join key 不会被视为相等
+- 更完整的 `join` package、`as` 函数和 predicate 形式仍未实现
 
 这也意味着，当你要 join 两个不同 measurement 或 field 的结果时，通常要先用 `group()` 去掉会阻止匹配的 group key 列，再做 join。例如 CPU 和内存聚合结果经常需要先 regroup 掉 `_measurement`，否则两边逻辑表不会被拿来比较。
 
