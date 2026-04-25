@@ -323,7 +323,9 @@ TEST(FluxCliTest, ExecutesStdlibPackagesFeatureGalleryExample) {
     EXPECT_NE(std::string::npos, result.output.find("Result: stdlib_alert_candidates\n"));
     EXPECT_NE(std::string::npos, result.output.find("\"API\""));
     EXPECT_NE(std::string::npos, result.output.find("\"WORKER\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"us-east/api/edge-1\""));
     EXPECT_NE(std::string::npos, result.output.find("\"node-1\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"1\""));
     EXPECT_NE(std::string::npos, result.output.find("\"API-edge-1\""));
     EXPECT_NE(std::string::npos, result.output.find("\"critical\""));
     EXPECT_NE(std::string::npos, result.output.find("88"));
@@ -340,6 +342,9 @@ TEST(FluxCliTest, ExecutesDateCalendarFeatureGalleryExample) {
     EXPECT_NE(std::string::npos, result.output.find("Result: date_calendar_shape\n"));
     EXPECT_NE(std::string::npos, result.output.find("Result: date_weekday_service_counts\n"));
     EXPECT_NE(std::string::npos, result.output.find("2024-06-01T09:01:10Z"));
+    EXPECT_NE(std::string::npos, result.output.find("2024-06-01T09:00:00Z"));
+    EXPECT_NE(std::string::npos, result.output.find("2024-06-01T09:31:10Z"));
+    EXPECT_NE(std::string::npos, result.output.find("2024-06-01T08:46:10Z"));
     EXPECT_NE(std::string::npos, result.output.find("\"api\""));
     EXPECT_NE(std::string::npos, result.output.find("\"worker\""));
     EXPECT_NE(std::string::npos, result.output.find("2024"));
