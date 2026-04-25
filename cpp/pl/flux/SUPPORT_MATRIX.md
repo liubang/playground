@@ -103,6 +103,7 @@
 | 函数调用执行 | 支持 | builtin 和用户函数都可调用，支持默认参数、命名参数、块体函数、pipe 参数注入，以及查询 builtin 内部的行函数调用 |
 | pipe 执行 | 部分支持 | `|>` 已支持 builtin、用户定义 `<-pipe` 参数以及内存表管道；`option task = {...}` 这类 option 绑定现在也可以直接驱动表达式与管道参数，但更广泛的 Flux 流式语义仍未完整实现 |
 | builtin 注册表 / stdlib 执行 | 部分支持 | 默认加载的 universe 风格顶层 builtin 包括 `len`、`string`、`contains`、`sum`、`mean`、`min`、`max`、`from`、`columns`、`keys`、`findColumn`、`findRecord`、`range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`window`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`distinct`、`count`、`spread`、`quantile`、`median`、`first`、`last`、`top`、`bottom`、`union`、顶层 `join()`、`aggregateWindow`、`yield`；显式 package 包含 `array.from`、`array.concat`、`array.filter`、`array.map`、`array.contains`、`array.reduce`、`array.any`、`array.all`、`csv.from`、`date.*`、`regexp.*`、`strings.*`、`math.*`、`join.inner`、`join.left`、`join.right`、`join.full`；其中 `quantile(q:)` 现在支持单个数值或数值数组，并会在输出行上附带 `quantile` 列；顶层 `builtin` 声明可绑定已知 builtin 或占位 callable；未知 package 会绑定为 metadata-only object；但完整 Flux 标准库仍远未实现 |
+| stdlib package conformance 示例 | 支持 | `examples/stdlib_conformance` 为 `array`、`csv`、`date`、`join`、`math`、`regexp`、`strings` 和默认 universe builtin 提供固定输入/输出 `.flux` 样例；`//cpp/pl/flux:stdlib_conformance_test` 会用 JSON 快照校验这些契约 |
 | `join()` / `join` package 语义 | 部分支持 | 默认加载的 universe 顶层 `join()` 支持旧版 `join(tables:, on:)` 形态、两个输入流和 `method: "inner"|"left"|"right"|"full"`，只会比较 group key 实例相同的逻辑表，输出保持多表流，重复非 `on` 列会按 `<column>_<table>` 重命名，`null` / 缺失 join key 不匹配；显式 `import "join"` 绑定的是 package 对象，提供 `join.inner` / `join.left` / `join.right` / `join.full`，支持官方风格 predicate `on` 和 `as` 输出函数，也兼容 `on: ["col"]` 的列数组形式；更完整的官方 join 包边界仍需继续补齐 |
 | `window()` 语义 | 部分支持 | `window()` 已支持固定时长窗口、日历窗口、`period`、`offset`、`location`、`startColumn`、`stopColumn`、`timeColumn`、`createEmpty`，并会把输入拆成真正的多逻辑表输出；更广的官方 Flux 细节和与更多下游 builtin 的组合行为仍需要继续补齐 |
 | CSV 输入 | 部分支持 | `import "csv"`、`csv.from(csv: ...)`、`csv.from(file: ...)` 支持 raw 模式和常见 annotated CSV；支持 `#datatype`、`#group`、可选 `#default`、类型转换，以及同一载荷内重复 metadata/header block，对应多逻辑表输入；更广的 CSV stdlib 能力尚未补齐 |
@@ -187,7 +188,11 @@
 - 已拆：`runtime_builtin_universe_join.cpp`，承载当前顶层 `join()`，并复用为 `join` package 的底层实现
 - 已拆：`runtime_builtin_universe_inspect.cpp`，承载 `yield`、`columns`、`keys`、`findColumn`、`findRecord` 等结果输出和检查 helper
 
-剩余建议：继续把 `runtime_builtin_universe_internal.h` 里的共享 helper 按稳定边界下沉到更窄的 internal 模块，避免长期把所有 universe helper 都暴露给每个拆分文件。
+- 已拆：`runtime_builtin_table_helpers.h`，承载通用参数校验、表/行/chunk 变换、列投影、排序比较、pivot 辅助和 builtin 安装工具
+- 已拆：`runtime_builtin_time_helpers.h`，承载 RFC3339 解析/格式化、duration/window duration 解析、timezone/location 和窗口边界时间运算
+- 已拆：`runtime_builtin_window_helpers.h`，承载 `window` / `aggregateWindow` 专用的窗口 row/group materialization、空窗口聚合和输出行生成
+- 已拆：`runtime_builtin_aggregate_helpers.h`，承载数值聚合摘要、min/max、quantile 和按 group materialize 聚合输出行
+- 保留：`runtime_builtin_universe_internal.h` 作为兼容聚合头；新 universe 实现文件应优先 include 更窄的 helper，避免重新扩大共享面
 
 ## 建议优先补的语法
 
