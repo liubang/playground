@@ -28,7 +28,7 @@ cc_binary(
         "echo_service_impl.cpp",
         "echo_service_impl.h",
     ],
-    copts = COPTS + ["-std=c++20"],
+    copts = COPTS  ,
     linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/grpc/proto:grpc_echo_pb",
@@ -44,7 +44,7 @@ cc_binary(
         "echo_client.cpp",
         "echo_client.h",
     ],
-    copts = COPTS + ["-std=c++20"],
+    copts = COPTS  ,
     linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/grpc/proto:grpc_echo_pb",

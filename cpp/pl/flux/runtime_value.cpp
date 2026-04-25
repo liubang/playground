@@ -76,7 +76,8 @@ std::shared_ptr<ObjectValue> derive_chunk_group_key(
     return nullptr;
 }
 
-std::vector<std::string> derive_chunk_columns(const std::vector<std::shared_ptr<ObjectValue>>& rows) {
+std::vector<std::string> derive_chunk_columns(
+    const std::vector<std::shared_ptr<ObjectValue>>& rows) {
     std::vector<std::string> columns;
     std::unordered_set<std::string> seen;
     for (const auto& row : rows) {
@@ -389,9 +390,7 @@ bool TableValue::operator==(const TableValue& other) const {
     return true;
 }
 
-size_t TableValue::table_count() const {
-    return tables.size();
-}
+size_t TableValue::table_count() const { return tables.size(); }
 
 std::string FunctionValue::string() const {
     return kind == Kind::Builtin ? "<builtin " + name + ">" : "<function " + name + ">";

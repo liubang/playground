@@ -33,7 +33,7 @@ cc_library(
 cc_test(
     name = "demangle_test",
     srcs = ["demangle_test.cpp"],
-    copts = ["-std=c++20"] + TEST_COPTS,
+    copts =   TEST_COPTS,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":debug",

@@ -27,7 +27,7 @@ load(
             "%s" % f,
         ],
         copts = [
-            "-std=c++20",
+             
         ] + TEST_COPTS,
         linkopts = LINKOPTS_WITH_ASAN + ["-pthread"],
         deps = [

@@ -33,7 +33,7 @@ cc_library(
         "http.h",
         "tcp.h",
     ],
-    copts = COPTS_WITH_ASAN + ["-std=c++20"],
+    copts = COPTS_WITH_ASAN  ,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "//cpp/pl/log:logger",

@@ -25,7 +25,7 @@ cc_test(
     name = "yabf_test",
     srcs = ["yabf_test.cpp"],
     copts = [
-        "-std=c++20",
+         
     ] + TEST_COPTS,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [

@@ -24,6 +24,6 @@ load(
 cc_binary(
     name = "demo",
     srcs = ["demo.cpp"],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
 )

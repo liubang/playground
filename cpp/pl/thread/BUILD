@@ -32,7 +32,7 @@ cc_library(
     name = "thread",
     srcs = ["thread.cpp"],
     hdrs = ["thread.h"],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN + ["-pthread"],
     visibility = ["//visibility:public"],
 )
@@ -40,7 +40,7 @@ cc_library(
 cc_test(
     name = "thread_pool_test",
     srcs = ["thread_pool_test.cpp"],
-    copts = ["-std=c++17"] + TEST_COPTS,
+    copts = TEST_COPTS,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":thread_pool",

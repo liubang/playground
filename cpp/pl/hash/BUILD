@@ -25,7 +25,7 @@ load(
 cc_library(
     name = "hash",
     hdrs = glob(["*.h"]),
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     visibility = ["//visibility:public"],
 )
@@ -36,7 +36,7 @@ cc_library(
 #         "murmurhash2_test.cpp",
 #     ],
 #     copts = [
-#         "-std=c++20",
+#          
 #     ] + TEST_COPTS,
 #     linkopts = LINKOPTS_WITH_ASAN,
 #     deps = [

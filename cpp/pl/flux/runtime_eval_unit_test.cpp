@@ -39,7 +39,7 @@ const Expression& ParseAssignmentInit(const std::string& source) {
 TEST(RuntimeEvalTest, EvaluatesLiteralsArithmeticAndConditionalExpressions) {
     Environment env;
     const auto& expr =
-        ParseAssignmentInit("result = if 1 + 2 * 3 > 5 and not false then \"hot\" else \"ok\"");
+        ParseAssignmentInit(R"(result = if 1 + 2 * 3 > 5 and not false then "hot" else "ok")");
 
     auto result = ExpressionEvaluator::Evaluate(expr, env);
 
@@ -67,7 +67,7 @@ TEST(RuntimeEvalTest, EvaluatesStringInterpolationAndRegexMatches) {
     Environment env;
     env.define("host", Value::string("local"));
     const auto& expr = ParseAssignmentInit(
-        "result = if \"cpu-total\" =~ /cpu.*/ then \"host ${host}\" else \"miss\"");
+        R"(result = if "cpu-total" =~ /cpu.*/ then "host ${host}" else "miss")");
 
     auto result = ExpressionEvaluator::Evaluate(expr, env);
 
@@ -125,7 +125,7 @@ TEST(RuntimeEvalTest, EvaluatesBuiltinCallsWithNamedArgumentObject) {
     Environment env;
     BuiltinRegistry::Install(env);
     const auto& expr =
-        ParseAssignmentInit("result = contains(set: [\"cpu\", \"mem\"], value: \"cpu\")");
+        ParseAssignmentInit(R"(result = contains(set: ["cpu", "mem"], value: "cpu"))");
 
     auto result = ExpressionEvaluator::Evaluate(expr, env);
 
@@ -379,7 +379,7 @@ TEST(RuntimeEvalTest, EvaluatesCsvFromRawFilePackageBuiltin) {
     ASSERT_TRUE(csv_or.ok()) << csv_or.status();
     env.define("csv", *csv_or);
     const auto& expr =
-        ParseAssignmentInit("result = csv.from(file: \"" + path + "\", mode: \"raw\")");
+        ParseAssignmentInit("result = csv.from(file: \"" + path + R"(", mode: "raw"))");
 
     auto result = ExpressionEvaluator::Evaluate(expr, env);
 
@@ -460,13 +460,13 @@ TEST(RuntimeEvalTest, ReportsCsvFromArgumentAndAnnotationErrors) {
     env.define("csv", *csv_or);
 
     const auto& invalid_mode =
-        ParseAssignmentInit("result = csv.from(csv: \"a\\n1\\n\", mode: \"stream\")");
+        ParseAssignmentInit(R"(result = csv.from(csv: "a\n1\n", mode: "stream"))");
     auto invalid_mode_result = ExpressionEvaluator::Evaluate(invalid_mode, env);
     ASSERT_FALSE(invalid_mode_result.ok());
     EXPECT_EQ(absl::StatusCode::kInvalidArgument, invalid_mode_result.status().code());
 
     const auto& both_sources =
-        ParseAssignmentInit("result = csv.from(csv: \"a\\n1\\n\", file: \"data.csv\")");
+        ParseAssignmentInit(R"(result = csv.from(csv: "a\n1\n", file: "data.csv"))");
     auto both_sources_result = ExpressionEvaluator::Evaluate(both_sources, env);
     ASSERT_FALSE(both_sources_result.ok());
     EXPECT_EQ(absl::StatusCode::kInvalidArgument, both_sources_result.status().code());
@@ -570,8 +570,7 @@ TEST(RuntimeEvalTest, EvaluatesPipeIntoBuiltinWithoutExplicitArguments) {
 TEST(RuntimeEvalTest, EvaluatesPipeIntoBuiltinNamedPipeParameter) {
     Environment env;
     BuiltinRegistry::Install(env);
-    const auto& expr =
-        ParseAssignmentInit("result = [\"cpu\", \"mem\"] |> contains(value: \"cpu\")");
+    const auto& expr = ParseAssignmentInit(R"(result = ["cpu", "mem"] |> contains(value: "cpu"))");
 
     auto result = ExpressionEvaluator::Evaluate(expr, env);
 

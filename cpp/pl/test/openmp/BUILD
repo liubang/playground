@@ -32,7 +32,7 @@ load(
             "%s" % f,
         ],
         copts = [
-            "-std=c++20",
+             
         ] + TEST_COPTS + select({
             "//:linux_x86_64": ["-fopenmp"],
             "//conditions:default": [],

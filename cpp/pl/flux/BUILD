@@ -15,6 +15,7 @@
 # Authors: liubang (it.liubang@gmail.com)
 
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+
 # load("@rules_ragel//ragel:ragel.bzl", "ragel")
 load(
     "//cpp:copts/configure_copts.bzl",
@@ -44,7 +45,7 @@ cc_library(
         "scanner.h",
         "token.h",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
 )
 
@@ -53,7 +54,7 @@ cc_binary(
     srcs = [
         "scanner_test.cpp",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":scanner",
@@ -65,7 +66,7 @@ cc_test(
     srcs = [
         "scanner_unit_test.cpp",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":scanner",
@@ -87,7 +88,7 @@ cc_library(
         "parser.h",
         "strconv.h",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":scanner",
@@ -105,7 +106,7 @@ cc_library(
     hdrs = [
         "runtime_value.h",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "@abseil-cpp//absl/status:statusor",
@@ -120,7 +121,7 @@ cc_library(
     hdrs = [
         "runtime_env.h",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":runtime_value",
@@ -150,21 +151,20 @@ cc_library(
         "runtime_builtin_table_helpers.h",
         "runtime_builtin_time_helpers.h",
         "runtime_builtin_universe.h",
-        "runtime_builtin_universe_internal.h",
         "runtime_builtin_window_helpers.h",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":parser",
-        ":runtime_eval",
         ":runtime_env",
+        ":runtime_eval",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/time:time",
         "@abseil-cpp//absl/time/internal/cctz:civil_time",
         "@abseil-cpp//absl/time/internal/cctz:time_zone",
-        "@simdjson//:simdjson",
+        "@simdjson",
     ],
 )
 
@@ -176,7 +176,7 @@ cc_library(
     hdrs = [
         "runtime_eval.h",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":parser",
@@ -195,7 +195,7 @@ cc_library(
     hdrs = [
         "runtime_exec.h",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":runtime_builtin",
@@ -214,17 +214,17 @@ cc_library(
     hdrs = [
         "flux_cli.h",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
-        "//cpp/pl/ascii_table:pretty",
         ":parser",
         ":runtime_builtin",
         ":runtime_exec",
+        "//cpp/pl/ascii_table:pretty",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
-        "@simdjson//:simdjson",
+        "@simdjson",
     ],
 )
 
@@ -233,7 +233,7 @@ cc_binary(
     srcs = [
         "flux.cpp",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":flux_cli",
@@ -245,7 +245,7 @@ cc_binary(
     srcs = [
         "parser_test.cpp",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":parser",
@@ -257,7 +257,7 @@ cc_test(
     srcs = [
         "parser_unit_test.cpp",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":parser",
@@ -270,7 +270,7 @@ cc_test(
     srcs = [
         "strconv_unit_test.cpp",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":parser",
@@ -283,7 +283,7 @@ cc_test(
     srcs = [
         "runtime_value_unit_test.cpp",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":runtime_value",
@@ -296,7 +296,7 @@ cc_test(
     srcs = [
         "runtime_env_unit_test.cpp",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":runtime_env",
@@ -310,7 +310,7 @@ cc_test(
     srcs = [
         "runtime_eval_unit_test.cpp",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":runtime_builtin",
@@ -325,7 +325,7 @@ cc_test(
     srcs = [
         "runtime_exec_unit_test.cpp",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":runtime_exec",
@@ -339,10 +339,10 @@ cc_test(
     srcs = [
         "flux_cli_unit_test.cpp",
     ],
+    copts = COPTS_WITH_ASAN,
     data = glob([
         "examples/**/*",
     ]),
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":flux_cli",

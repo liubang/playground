@@ -16,7 +16,6 @@
 // Created: 2026/04/25 10:40
 
 #include "cpp/pl/flux/runtime_builtin_universe.h"
-
 #include "cpp/pl/flux/runtime_builtin_window_helpers.h"
 
 namespace pl {
@@ -266,7 +265,6 @@ absl::StatusOr<Value> builtin_derivative(const std::vector<Value>& args) {
     return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
                         (*table_or)->range_stop);
 }
-
 
 absl::StatusOr<Value> builtin_window(const std::vector<Value>& args) {
     auto object_or = require_object_argument(args, "window");
@@ -986,9 +984,7 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args,
     return table_with_chunks_like(**table_or, std::move(chunks));
 }
 
-
 } // namespace
-
 
 void InstallUniverseWindowBuiltins(Environment& env) {
     install_builtin(env, "elapsed", builtin_elapsed, "tables");
@@ -1011,10 +1007,22 @@ void InstallUniverseWindowBuiltins(Environment& env) {
 }
 
 bool InstallKnownUniverseWindowBuiltin(Environment& env, const std::string& name) {
-    if (name == "elapsed") { install_builtin(env, "elapsed", builtin_elapsed, "tables"); return true; }
-    if (name == "difference") { install_builtin(env, "difference", builtin_difference, "tables"); return true; }
-    if (name == "derivative") { install_builtin(env, "derivative", builtin_derivative, "tables"); return true; }
-    if (name == "window") { install_builtin(env, "window", builtin_window, "tables"); return true; }
+    if (name == "elapsed") {
+        install_builtin(env, "elapsed", builtin_elapsed, "tables");
+        return true;
+    }
+    if (name == "difference") {
+        install_builtin(env, "difference", builtin_difference, "tables");
+        return true;
+    }
+    if (name == "derivative") {
+        install_builtin(env, "derivative", builtin_derivative, "tables");
+        return true;
+    }
+    if (name == "window") {
+        install_builtin(env, "window", builtin_window, "tables");
+        return true;
+    }
     if (name == "aggregateWindow") {
         install_builtin(
             env, "aggregateWindow",

@@ -25,7 +25,7 @@ cc_library(
     name = "pretty",
     srcs = ["pretty.cpp"],
     hdrs = ["pretty.h"],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     visibility = ["//visibility:public"],
 )
@@ -33,7 +33,7 @@ cc_library(
 cc_binary(
     name = "pretty_test",
     srcs = ["pretty_test.cpp"],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":pretty",
@@ -43,7 +43,7 @@ cc_binary(
 cc_test(
     name = "pretty_unit_test",
     srcs = ["pretty_unit_test.cpp"],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":pretty",

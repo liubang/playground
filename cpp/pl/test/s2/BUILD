@@ -14,6 +14,7 @@
 
 # Authors: liubang (it.liubang@gmail.com)
 
+load("@rules_cc//cc:defs.bzl", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
     "COPTS_WITH_ASAN",
@@ -23,7 +24,7 @@ load(
 cc_test(
     name = "test",
     srcs = ["test.cpp"],
-    copts = ["-std=c++17"] + COPTS_WITH_ASAN,
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "@s2geometry//:s2",

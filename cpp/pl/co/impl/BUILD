@@ -25,7 +25,7 @@ load(
 cc_binary(
     name = "setjmp_impl",
     srcs = ["setjmp_impl.cpp"],
-    copts = ["-std=c++20"] + COPTS,
+    copts =   COPTS,
     deps = [
         "//cpp/pl/lang",
     ],
@@ -34,6 +34,6 @@ cc_binary(
 cc_binary(
     name = "context_impl",
     srcs = ["context_impl.cpp"],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
 )

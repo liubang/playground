@@ -25,7 +25,7 @@ load(
 cc_library(
     name = "bithacks",
     hdrs = ["all.h"],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     visibility = ["//visibility:public"],
 )
@@ -37,7 +37,7 @@ cc_test(
         "test.cpp",
     ],
     copts = [
-        "-std=c++20",
+         
     ] + TEST_COPTS,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [

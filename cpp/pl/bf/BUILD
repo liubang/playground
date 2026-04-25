@@ -18,15 +18,11 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_binary")
 cc_library(
     name = "yabf",
     hdrs = ["yabf.h"],
-    copts = ["-std=c++20"],
     visibility = ["//visibility:public"],
 )
 
 cc_binary(
     name = "bf",
     srcs = ["bf.cpp"],
-    copts = [
-        "-std=c++20",
-    ],
     visibility = ["//visibility:public"],
 )

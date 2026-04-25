@@ -26,7 +26,7 @@ cc_test(
     srcs = [
         "demo1.cpp",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "@blaze-math//:blaze",

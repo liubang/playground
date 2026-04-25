@@ -14,6 +14,7 @@
 
 # Authors: liubang (it.liubang@gmail.com)
 
+load("@rules_cc//cc:defs.bzl", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
     "LINKOPTS_WITH_ASAN",
@@ -23,7 +24,7 @@ load(
 cc_test(
     name = "map_benchmark",
     srcs = ["map_benchmark.cpp"],
-    copts = TEST_COPTS + ["-std=c++17"],
+    copts = TEST_COPTS,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "@google_benchmark//:benchmark_main",

@@ -27,6 +27,6 @@ cc_library(
     name = "helper",
     srcs = ["helper.cpp"],
     hdrs = glob(["*.h"]),
-    copts = ["-std=c++20"] + COPTS,
+    copts =   COPTS,
     linkopts = LINKOPTS,
 )

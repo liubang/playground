@@ -32,7 +32,7 @@ cc_library(
         "arena_old.h",
     ],
     copts = [
-        "-std=c++20",
+         
     ] + COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     visibility = ["//visibility:public"],
@@ -47,7 +47,7 @@ cc_test(
         "arena_test.cpp",
     ],
     copts = [
-        "-std=c++20",
+         
     ] + TEST_COPTS,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
@@ -62,7 +62,7 @@ cc_test(
         "arena_old_test.cpp",
     ],
     copts = [
-        "-std=c++20",
+         
     ] + TEST_COPTS,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [

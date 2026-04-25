@@ -27,7 +27,7 @@ load(
         srcs = [
             "%s" % f,
         ],
-        copts = ["-std=c++20"] + TEST_COPTS,
+        copts =   TEST_COPTS,
         linkopts = LINKOPTS_WITH_ASAN + ["-pthread"],
         deps = [
             "//cpp/pl/log:logger",

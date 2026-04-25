@@ -23,7 +23,7 @@ load(
 cc_test(
     name = "test_fibonacci",
     srcs = ["fibonacci.cpp"],
-    copts = ["-std=c++20"] + TEST_COPTS,
+    copts =   TEST_COPTS,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "@catch2//:catch2_main",

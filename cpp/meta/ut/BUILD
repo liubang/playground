@@ -26,7 +26,7 @@ cc_test(
     srcs = [
         "expression_test.cpp",
     ],
-    copts = ["-std=c++20"] + TEST_COPTS,
+    copts =   TEST_COPTS,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "//cpp/meta",
@@ -40,7 +40,7 @@ cc_test(
         "traits_test.cpp",
         "traits_test.h",
     ],
-    copts = ["-std=c++20"] + TEST_COPTS,
+    copts =   TEST_COPTS,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "//cpp/meta",
@@ -54,7 +54,7 @@ cc_test(
         "utils_test.cpp",
         "utils_test.h",
     ],
-    copts = ["-std=c++20"] + TEST_COPTS,
+    copts =   TEST_COPTS,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "//cpp/meta",
@@ -65,7 +65,7 @@ cc_test(
 cc_test(
     name = "tuple_iteration_apply_test",
     srcs = ["tuple_iteration_apply_test.cpp"],
-    copts = ["-std=c++20"] + TEST_COPTS,
+    copts =   TEST_COPTS,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "//cpp/meta",
@@ -76,7 +76,7 @@ cc_test(
 # cc_test(
 #     name = "tuple_iteration_basics_test",
 #     srcs = ["tuple_iteration_basics_test.cpp"],
-#     copts = ["-std=c++20"] + TEST_COPTS,
+#     copts =   TEST_COPTS,
 #     linkopts = LINKOPTS_WITH_ASAN,
 #     deps = [
 #         "//cpp/meta",
@@ -87,7 +87,7 @@ cc_test(
 cc_test(
     name = "type_list_test",
     srcs = ["type_list_test.cpp"],
-    copts = ["-std=c++20"] + TEST_COPTS,
+    copts =   TEST_COPTS,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "//cpp/meta",
@@ -98,7 +98,7 @@ cc_test(
 cc_test(
     name = "function_test",
     srcs = ["function_test.cpp"],
-    copts = ["-std=c++20"] + TEST_COPTS,
+    copts =   TEST_COPTS,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "//cpp/meta",
@@ -109,7 +109,7 @@ cc_test(
 cc_test(
     name = "unique_ptr_test",
     srcs = ["unique_ptr_test.cpp"],
-    copts = ["-std=c++20"] + TEST_COPTS,
+    copts =   TEST_COPTS,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "//cpp/meta",
@@ -120,7 +120,7 @@ cc_test(
 cc_test(
     name = "optional_test",
     srcs = ["optional_test.cpp"],
-    copts = ["-std=c++20"] + TEST_COPTS,
+    copts =   TEST_COPTS,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "//cpp/meta",
@@ -131,7 +131,7 @@ cc_test(
 cc_test(
     name = "match_test",
     srcs = ["match_test.cpp"],
-    copts = ["-std=c++20"] + TEST_COPTS,
+    copts =   TEST_COPTS,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "//cpp/meta",

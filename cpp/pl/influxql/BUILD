@@ -46,7 +46,7 @@ cc_library(
         "scanner.h",
         "token.h",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
 )
 
@@ -55,7 +55,7 @@ cc_binary(
     srcs = [
         "scanner_test.cpp",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":scanner",

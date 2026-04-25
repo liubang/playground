@@ -54,14 +54,14 @@ absl::Status StrConv::push_hex_byte(const std::string& lit, size_t& start, std::
         return absl::InvalidArgumentError("\\x followed by 1 char, must be 2");
     }
 
-    const unsigned char ch1 = static_cast<unsigned char>(lit[++start]);
-    const unsigned char ch2 = static_cast<unsigned char>(lit[++start]);
+    const auto ch1 = static_cast<unsigned char>(lit[++start]);
+    const auto ch2 = static_cast<unsigned char>(lit[++start]);
     uint8_t b1 = 0;
     uint8_t b2 = 0;
     if (!to_byte(ch1, &b1) || !to_byte(ch2, &b2)) {
         return absl::InvalidArgumentError("invalid byte value");
     }
-    const uint8_t byte = static_cast<uint8_t>((b1 << 4) | b2);
+    const auto byte = static_cast<uint8_t>((b1 << 4) | b2);
     s->push_back(static_cast<char>(byte));
     return absl::OkStatus();
 }
@@ -203,7 +203,7 @@ absl::StatusOr<int64_t> StrConv::parse_magnitude(const std::string& str, size_t&
 
     int64_t value = 0;
     while (i < length) {
-        const unsigned char digit = static_cast<unsigned char>(str[i]);
+        const auto digit = static_cast<unsigned char>(str[i]);
         if (std::isdigit(digit) == 0) {
             break;
         }
@@ -218,7 +218,7 @@ absl::StatusOr<std::string> StrConv::parse_unit(const std::string& chars, size_t
     std::string unit;
     unit.reserve(2);
     while (i < length) {
-        const unsigned char c = static_cast<unsigned char>(chars[i]);
+        const auto c = static_cast<unsigned char>(chars[i]);
         if (std::isalpha(c) == 0 && c != DURATION_UNIT_US[0]) {
             break;
         }

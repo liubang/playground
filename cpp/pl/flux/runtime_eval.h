@@ -27,7 +27,8 @@ namespace pl {
 class ExpressionEvaluator {
 public:
     static absl::StatusOr<Value> Evaluate(const Expression& expr, const Environment& env);
-    static absl::StatusOr<Value> Invoke(const Value& callee, const std::vector<Value>& positional_args);
+    static absl::StatusOr<Value> Invoke(const Value& callee,
+                                        const std::vector<Value>& positional_args);
 };
 
 } // namespace pl

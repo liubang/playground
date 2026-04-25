@@ -17,12 +17,11 @@
 
 #pragma once
 
-#include <map>
+#include "token.h"
 #include <cctype>
+#include <map>
 #include <memory>
 #include <vector>
-
-#include "token.h"
 
 namespace pl {
 class Scanner {
