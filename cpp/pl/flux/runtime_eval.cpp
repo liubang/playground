@@ -844,8 +844,11 @@ absl::StatusOr<Value> eval_logical(const LogicalExpr& logical,
     if (right.type() != Value::Type::Bool) {
         return type_error(whole_expr, "logical operators require boolean operands");
     }
-    return Value::boolean(logical.op == LogicalOperator::AndOperator ? right.as_bool()
-                                                                     : right.as_bool());
+    // Reaching here means:
+    //   - AndOperator: left is true, the result is right
+    //   - OrOperator: left is false, the result is right
+    // In both cases the result is determined solely by the right operand.
+    return Value::boolean(right.as_bool());
 }
 
 absl::StatusOr<Value> eval_impl(const Expression& expr, const Environment& env) {
