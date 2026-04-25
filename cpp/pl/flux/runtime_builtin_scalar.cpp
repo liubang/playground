@@ -172,6 +172,8 @@ std::string value_type_name(const Value& value) {
             return "table";
         case Value::Type::Function:
             return "function";
+        default:
+            __builtin_unreachable();
     }
 }
 
@@ -194,6 +196,8 @@ absl::StatusOr<std::string> dict_key_string(const Value& value, const std::strin
         case Value::Type::Function:
             return absl::InvalidArgumentError(
                 absl::StrCat(name, " `key` must be a comparable scalar"));
+        default:
+            __builtin_unreachable();
     }
 }
 
@@ -1101,6 +1105,8 @@ absl::Status append_json_value(JsonBuilder& builder, const Value& value) {
             return absl::InvalidArgumentError("json.encode does not support table values");
         case Value::Type::Function:
             return absl::InvalidArgumentError("json.encode does not support function values");
+        default:
+            __builtin_unreachable();
     }
 }
 

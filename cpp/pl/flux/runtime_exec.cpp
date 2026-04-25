@@ -30,6 +30,8 @@ absl::StatusOr<std::string> property_name(const PropertyKey& key) {
             return std::get<std::unique_ptr<Identifier>>(key.key)->name;
         case PropertyKey::Type::StringLiteral:
             return std::get<std::unique_ptr<StringLit>>(key.key)->value;
+        default:
+            __builtin_unreachable();
     }
 }
 
@@ -85,6 +87,8 @@ absl::StatusOr<ExecutionResult> execute_option_assignment(const Assignment& assi
             env.define_option(*path_or, *value_or);
             return ExecutionResult::normal(*value_or);
         }
+        default:
+            __builtin_unreachable();
     }
 }
 
@@ -146,6 +150,8 @@ std::string statement_result_name(const Statement& stmt) {
                     }
                     return "option." + *path_or;
                 }
+                default:
+                    __builtin_unreachable();
             }
         }
         case Statement::Type::BuiltinStatement: {
@@ -160,6 +166,8 @@ std::string statement_result_name(const Statement& stmt) {
             return "return";
         case Statement::Type::BadStatement:
             return "bad";
+        default:
+            __builtin_unreachable();
     }
 }
 
@@ -244,6 +252,8 @@ absl::StatusOr<ExecutionResult> StatementExecutor::Execute(const Statement& stmt
             }
             return ExecutionResult::normal(*value_or);
         }
+        default:
+            __builtin_unreachable();
     }
 }
 

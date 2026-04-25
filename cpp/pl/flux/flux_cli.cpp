@@ -223,6 +223,8 @@ std::string scalar_cell_text(const Value& value) {
         case Value::Type::Table:
         case Value::Type::Function:
             return value.string();
+        default:
+            __builtin_unreachable();
     }
 }
 
@@ -411,6 +413,8 @@ std::string flux_datatype_name(const Value& value) {
         case Value::Type::Table:
         case Value::Type::Function:
             return "string";
+        default:
+            __builtin_unreachable();
     }
 }
 
