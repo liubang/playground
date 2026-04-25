@@ -140,6 +140,7 @@ bazel build //cpp/pl/flux:flux
 - `regexp`: `compile`、`findString`、`matchRegexpString`、`quoteMeta`
 - `strings`: `containsStr`、`hasPrefix`、`hasSuffix`、`joinStr`、`replaceAll`、`split`、`toUpper`、`toLower`、`trimSpace`
 - `math`: `pi`、`abs`、`ceil`、`floor`、`round`、`sqrt`、`pow`
+- `join`: `inner`、`left`、`right`、`full`
 
 未知 package 会保留为 metadata-only object，例如 `import x "experimental/foo"` 会绑定
 `{path: "experimental/foo", alias: "x"}`，方便脚本继续暴露导入元数据；调用其中不存在的属性仍会按普通对象访问报错。
@@ -335,7 +336,7 @@ bazel test //cpp/pl/flux:parser_unit_test --test_output=all
 
 - `runtime_value`：运行时值类型，支持 null、bool、int、uint、float、string、duration、time、regex、array、object，以及内存内表值
 - `runtime_env`：词法环境，支持父作用域、变量绑定、option 绑定和最近作用域赋值
-- `runtime_builtin`：内置函数注册表，目前包含 `len`、`string`、`contains`、`sum`、`mean`、`min`、`max`，以及查询相关 builtin：`from`、`range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`distinct`、`count`、`first`、`last`、`union`、`join`、`aggregateWindow`、`yield`，另外通过 `import "array"` / `import "csv"` 暴露 `array.from` / `array.concat` / `array.filter` / `array.map` / `array.contains` / `array.reduce` / `array.any` / `array.all` / `csv.from`
+- `runtime_builtin`：内置函数注册表，默认加载一批 universe 风格的顶层 builtin，包括 `len`、`string`、`contains`、`sum`、`mean`、`min`、`max`，以及查询相关 builtin：`from`、`range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`distinct`、`count`、`first`、`last`、`union`、顶层 `join()`、`aggregateWindow`、`yield`；实现已按 `core` / `transform` / `aggregate` / `window` / `join` / `inspect` 拆到 `runtime_builtin_universe_*.cpp`；显式 `import "array"` / `import "csv"` / `import "date"` / `import "regexp"` / `import "strings"` / `import "math"` / `import "join"` 会额外绑定对应 package 对象
 - `runtime_eval`：表达式求值器，支持函数值与函数调用
 - `runtime_exec`：语句执行器，支持赋值、`option`、表达式语句、block/return 控制流
 - `flux_cli`：围绕解析器与运行时的 CLI/REPL 包装层
@@ -355,7 +356,9 @@ bazel test //cpp/pl/flux:parser_unit_test --test_output=all
 
 ### `join`
 
-当前 `join()` 仍然是 universe 包里的简化版双流 join，但它已经补上了和多表模型强相关的关键语义：
+当前有两个 join 入口：默认加载的 universe 顶层 `join()`，以及显式 `import "join"` 后得到的 `join` package。二者共存：前者兼容旧版 `join(tables:, on:)` 形态，后者面向官方 package API。
+
+顶层 `join()` 仍然是 universe 包里的简化版双流 join，但它已经补上了和多表模型强相关的关键语义：
 
 - 只支持两个输入流
 - 支持 `method: "inner"`、`"left"`、`"right"`、`"full"`
@@ -364,7 +367,7 @@ bazel test //cpp/pl/flux:parser_unit_test --test_output=all
 - 输出 schema 与 group key 取两侧并集
 - 两侧都存在、且不在 `on` 里的重复列会按官方旧版 `join()` 语义重命名为 `<column>_<table>`
 - `null` 或缺失的 join key 不会被视为相等
-- 更完整的 `join` package、`as` 函数和 predicate 形式仍未实现
+- `import "join"` 绑定的是 package 对象，提供 `join.inner` / `join.left` / `join.right` / `join.full`，支持官方风格的 predicate `on` 和 `as` 输出函数；为了兼容当前示例，也保留 `on: ["col"]` 的列数组形式
 
 这也意味着，当你要 join 两个不同 measurement 或 field 的结果时，通常要先用 `group()` 去掉会阻止匹配的 group key 列，再做 join。例如 CPU 和内存聚合结果经常需要先 regroup 掉 `_measurement`，否则两边逻辑表不会被拿来比较。
 

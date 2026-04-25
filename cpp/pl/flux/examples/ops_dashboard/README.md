@@ -80,7 +80,7 @@ bazel build //cpp/pl/flux:flux
 - `2024-05-01T10:01:00Z`，CPU 均值 `72`，内存均值 `63`
 - `2024-05-01T10:02:00Z`，CPU 均值 `82`，内存均值 `68`
 
-这个结果现在会显式使用 join 后的重命名列，例如 `_value_cpu` 和 `_value_mem`。脚本里也会先 `group(columns: ["host", "region"])`，把 CPU / MEM 两侧原本不同的 `_measurement` group key 去掉之后再 join，这和官方 Flux 的使用方式一致。
+这个结果现在会显式使用 universe 顶层 `join()` 后的重命名列，例如 `_value_cpu` 和 `_value_mem`。脚本里也会先 `group(columns: ["host", "region"])`，把 CPU / MEM 两侧原本不同的 `_measurement` group key 去掉之后再 join，这和官方 Flux 的使用方式一致。显式 `import "join"` 的 package API 示例在 `feature_gallery/join_package.flux` 里。
 
 `monthly_cpu_calendar` 结果应包含 `us-east` 中 `edge-1` 的两个 UTC 月历窗口：
 
