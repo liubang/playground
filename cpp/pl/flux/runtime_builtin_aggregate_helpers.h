@@ -213,6 +213,8 @@ Value numeric_sum_value(const NumericSummary& summary) {
             return Value::integer(summary.int_sum);
         case NumericKind::Float:
             return Value::floating(summary.float_sum);
+        default:
+            __builtin_unreachable();
     }
 }
 

@@ -70,6 +70,8 @@ absl::StatusOr<std::string> dict_key_string(const Value& value) {
         case Value::Type::Table:
         case Value::Type::Function:
             return absl::InvalidArgumentError("dictionary key must be a comparable scalar");
+        default:
+            __builtin_unreachable();
     }
 }
 
@@ -79,6 +81,8 @@ absl::StatusOr<std::string> property_name(const PropertyKey& key) {
             return std::get<std::unique_ptr<Identifier>>(key.key)->name;
         case PropertyKey::Type::StringLiteral:
             return std::get<std::unique_ptr<StringLit>>(key.key)->value;
+        default:
+            __builtin_unreachable();
     }
 }
 
@@ -211,10 +215,14 @@ absl::StatusOr<Value> execute_function_body(const FunctionBody& body, Environmen
                     case Statement::Type::BuiltinStatement:
                     case Statement::Type::TestCaseStatement:
                         return absl::UnimplementedError("unsupported statement in function body");
+                    default:
+                        __builtin_unreachable();
                 }
             }
             return last;
         }
+        default:
+            __builtin_unreachable();
     }
 }
 
@@ -921,6 +929,8 @@ absl::StatusOr<Value> eval_impl(const Expression& expr, const Environment& env) 
         case Expression::Type::LabelLit:
         case Expression::Type::BadExpr:
             return unsupported(expr, "kind");
+        default:
+            __builtin_unreachable();
     }
 }
 
