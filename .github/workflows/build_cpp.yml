@@ -28,6 +28,7 @@ jobs:
           repository-cache: true
           disk-cache: test-macos-${{ github.workflow }}-${{ runner.os }}
       - run: |
+          brew install llvm
           brew install nasm
           brew install libomp
       - name: run test
@@ -65,7 +66,7 @@ jobs:
   coverage:
     name: coverage
     runs-on: ubuntu-24.04
-    needs: [test]
+    needs: [test-macos, test]
     steps:
       - uses: actions/checkout@v5
         with:
