@@ -213,8 +213,8 @@ inline std::string token_to_string(TokenType token) {
 }
 
 struct Position {
-    uint32_t line;
-    uint32_t column;
+    uint32_t line{0};
+    uint32_t column{0};
 
     Position() = default;
     Position(uint32_t line_in, uint32_t column_in) : line(line_in), column(column_in) {}

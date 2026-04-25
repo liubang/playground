@@ -522,6 +522,9 @@ std::unique_ptr<Assignment> Parser::parse_option_assignment_suffix(std::unique_p
             std::make_unique<VariableAssgn>(std::move(id), std::move(init)));
     }
     if (t->tok == TokenType::Dot) {
+        // Consume the '.' token before using its comments. t points into token_ which is moved away
+        // by consume(), wo we must read comments from the returned owned token, not through the
+        // dangling t pointer.
         auto tt = consume();
         auto prop = parse_identifier();
         auto assign = expect(TokenType::Assign);
@@ -531,7 +534,7 @@ std::unique_ptr<Assignment> Parser::parse_option_assignment_suffix(std::unique_p
             std::make_unique<MemberAssgn>(
                 std::make_unique<MemberExpr>(
                     std::make_unique<Expression>(Expression::Type::Identifier, std::move(id)),
-                    t->comments,
+                    tt->comments,
                     std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(prop)),
                     std::vector<std::shared_ptr<Comment>>{}),
                 std::move(init)));
@@ -1553,11 +1556,13 @@ std::unique_ptr<ObjectExpr> Parser::parse_object_body_suffix(std::unique_ptr<Ide
         if (t->lit != "with") {
             errs_.emplace_back(expected_token_message("with", *t));
         }
+        // consume() moves token_ away, making t a dangling pointer; read comments from the returned
+        // owned token instead.
         auto tt = consume();
         auto props = parse_property_list();
         auto with_source = std::make_unique<WithSource>();
         with_source->source = std::move(id);
-        with_source->with = t->comments;
+        with_source->with = tt->comments;
         obj_expr->with = std::move(with_source);
         obj_expr->properties = std::move(props);
     } else {
@@ -1584,8 +1589,10 @@ std::vector<std::shared_ptr<Property>> Parser::parse_property_list_suffix(
         errs_.emplace_back(ss.str());
     } else {
         auto last = props.size() - 1;
-        consume();
-        props[last]->comma = t->comments;
+        // consume() transfers ownership of token_ (which t points into), so we must keep the
+        // returned token alive while we read its comments field.
+        auto comma_tok = consume();
+        props[last]->comma = comma_tok->comments;
     }
     auto list = parse_property_list();
     props.insert(props.end(), std::make_move_iterator(list.begin()),
@@ -1876,13 +1883,18 @@ std::unique_ptr<Expression> Parser::parse_paren_body_expression(std::unique_ptr<
         auto ident = parse_identifier();
         return parse_paren_ident_expression(std::move(lparen), std::move(ident));
     }
+    // Save position info before parse_expression_while_more() may advance the scanner and
+    // invalidate the t pointer (t == token_.get(), and any scan call can move/reset token_)
+    const Position saved_start_pos = t->start_pos;
+    const Position saved_end_pos = t->end_pos;
+    const std::string saved_lit = t->lit;
     auto expr = parse_expression_while_more(nullptr, {});
     if (!expr) {
         expr = std::make_unique<Expression>();
         expr->type = Expression::Type::BadExpr;
         auto bad_expr = std::make_unique<BadExpr>();
-        SourceLocation sl(t->start_pos, t->end_pos);
-        bad_expr->text = t->lit;
+        SourceLocation sl(saved_start_pos, saved_end_pos);
+        bad_expr->text = saved_lit;
         expr->expr = std::move(bad_expr);
     }
     auto rparen = close(TokenType::RParen);
@@ -1974,6 +1986,8 @@ std::unique_ptr<Expression> Parser::parse_paren_ident_expression(std::unique_ptr
                                                                  std::unique_ptr<Identifier> key) {
     const auto* t = peek();
     if (t->tok == TokenType::RParen) {
+        // close() calls consume() which moves token_ away, making t dangling. Capture the RParen
+        // comments from the returned token (tt)
         auto tt = close(TokenType::RParen);
         const auto* next = peek();
         if (next->tok == TokenType::Arrow) {
@@ -1989,14 +2003,15 @@ std::unique_ptr<Expression> Parser::parse_paren_ident_expression(std::unique_ptr
             std::make_unique<ParenExpr>(
                 lparen->comments,
                 std::make_unique<Expression>(Expression::Type::Identifier, std::move(key)),
-                t->comments));
+                tt->comments));
     }
     if (t->tok == TokenType::Assign) {
+        // consume() moves token_ away, making t dangling; use tt->comments.
         auto tt = consume();
         auto value = parse_expression();
         auto prop = std::make_shared<Property>(
             std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
-            t->comments, std::move(value), std::vector<std::shared_ptr<Comment>>{});
+            tt->comments, std::move(value), std::vector<std::shared_ptr<Comment>>{});
         std::vector<std::shared_ptr<Property>> params = {prop};
         if (peek()->tok == TokenType::Comma) {
             auto comma = scan();
@@ -2008,10 +2023,11 @@ std::unique_ptr<Expression> Parser::parse_paren_ident_expression(std::unique_ptr
         return parse_function_expression(std::move(lparen), std::move(rparen), params);
     }
     if (t->tok == TokenType::Comma) {
+        // consume() moves token_ away, making t dangling; use tt->comments.
         auto tt = consume();
         auto prop = std::make_shared<Property>(
             std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
-            std::vector<std::shared_ptr<Comment>>{}, nullptr, t->comments);
+            std::vector<std::shared_ptr<Comment>>{}, nullptr, tt->comments);
         std::vector<std::shared_ptr<Property>> params = {prop};
         auto others = parse_parameter_list();
         params.insert(params.end(), others.begin(), others.end());
@@ -2276,7 +2292,12 @@ SourceLocation Parser::source_location(const Position& start, const Position& en
     ret.end = end;
     auto s = scanner_->offset(start);
     auto e = scanner_->offset(end);
-    ret.source = std::string(source_.data() + s, (e - s));
+    // UINT32_MAX is the sentinel value returned by Scanner::offset() when a position has not been
+    // registered. Using it as an index or length would cause a heap-buffer-overflow, so we only
+    // materialise the source snippet when both offsets are valid and the range is well-formed.
+    if (s != UINT32_MAX && e != UINT32_MAX && e >= s) {
+        ret.source = std::string(source_.data() + s, e - s);
+    }
     return ret;
 }
 
