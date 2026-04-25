@@ -31,5 +31,6 @@ std::optional<Value> ImportRegisteredPackage(const std::string& path);
 Value MakeUnknownPackage(const std::string& path);
 
 void RegisterScalarStdlibPackages();
+void RegisterTableStdlibPackages();
 
 } // namespace pl::flux_builtin

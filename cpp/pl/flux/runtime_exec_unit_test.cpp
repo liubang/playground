@@ -248,6 +248,7 @@ TEST(RuntimeExecTest, ExecutesTopLevelFileStatementsInSharedEnvironment) {
               env.lookup("array")->string());
     ASSERT_TRUE(env.lookup("regexp").ok());
     EXPECT_EQ("{path: \"regexp\", compile: <builtin regexp.compile>, "
+              "findString: <builtin regexp.findString>, "
               "matchRegexpString: <builtin regexp.matchRegexpString>, "
               "quoteMeta: <builtin regexp.quoteMeta>, alias: \"regexp\"}",
               env.lookup("regexp")->string());
@@ -264,11 +265,28 @@ TEST(RuntimeExecTest, ExecutesScalarStdlibPackageHelpers) {
             |> strings.trimSpace()
             |> strings.toUpper()
         matched = regexp.matchRegexpString(r: regexp.compile(v: "API-[0-9]+"), v: service)
+        team = strings.joinStr(arr: strings.split(v: "payments.api.edge", t: "."), v: "/")
+        host = regexp.findString(r: /edge-[0-9]+/, v: "host=edge-7")
         node = strings.replaceAll(v: service, t: "API", u: "SVC")
         score = math.pow(x: 2.0, y: 4.0) + math.abs(x: -3)
-        hour = date.hour(t: 2024-06-01T09:01:10Z)
+        start = date.truncate(t: 2024-06-01T09:37:10Z, unit: 1h)
+        due = start |> date.add(d: 30m)
+        opened = date.sub(d: 15m, from: due)
+        hour = date.hour(t: due)
         weekday = "2024-06-01T09:01:10Z" |> date.weekDay()
-        {service: service, node: node, matched: matched, score: score, hour: hour, weekday: weekday}
+        {
+            service: service,
+            team: team,
+            host: host,
+            node: node,
+            matched: matched,
+            score: score,
+            start: start,
+            due: due,
+            opened: opened,
+            hour: hour,
+            weekday: weekday,
+        }
     )");
     ASSERT_NE(file, nullptr);
 
@@ -282,8 +300,9 @@ TEST(RuntimeExecTest, ExecutesScalarStdlibPackageHelpers) {
     EXPECT_EQ("true", env.lookup("matched")->string());
     ASSERT_TRUE(env.lookup("score").ok());
     EXPECT_EQ("19", env.lookup("score")->string());
-    EXPECT_EQ("{service: \"API-01\", node: \"SVC-01\", matched: true, score: 19, hour: 9, "
-              "weekday: 6}",
+    EXPECT_EQ("{service: \"API-01\", team: \"payments/api/edge\", host: \"edge-7\", node: "
+              "\"SVC-01\", matched: true, score: 19, start: 2024-06-01T09:00:00Z, due: "
+              "2024-06-01T09:30:00Z, opened: 2024-06-01T09:15:00Z, hour: 9, weekday: 6}",
               result_or->last.value.string());
 }
 

@@ -12,6 +12,9 @@ cpu = csv.from(file: "cpp/pl/flux/examples/feature_gallery/data/site_ops.annotat
         hour: date.hour(t: r._time),
         minute: date.minute(t: r._time),
         second: date.second(t: r._time),
+        hour_start: date.truncate(t: r._time, unit: 1h),
+        review_by: date.add(d: 30m, to: r._time),
+        lookback_start: date.sub(d: 15m, from: r._time),
     }))
 
 cpu
@@ -28,6 +31,9 @@ cpu
             "hour",
             "minute",
             "second",
+            "hour_start",
+            "review_by",
+            "lookback_start",
         ],
     )
     |> sort(columns: ["host", "_time"])

@@ -309,16 +309,21 @@ TEST(RuntimeEvalTest, EvaluatesScalarStdlibPackages) {
         result = {
             matched: regexp.matchRegexpString(r: /cpu-.*/, v: "cpu-total"),
             compiled: regexp.matchRegexpString(r: regexp.compile(v: "mem|cpu"), v: "mem"),
+            found: regexp.findString(r: /edge-[0-9]+/, v: "host=edge-12 region=us"),
             quoted: regexp.quoteMeta(v: "cpu.*"),
             upper: " edge-1 " |> strings.trimSpace() |> strings.toUpper(),
             hasEdge: strings.hasPrefix(v: "edge-1", prefix: "edge"),
             contains: "cpu-total" |> strings.containsStr(substr: "total"),
             replaced: strings.replaceAll(v: "edge-1", t: "edge", u: "node"),
+            split_joined: "api.edge.1" |> strings.split(t: ".") |> strings.joinStr(v: "/"),
             rounded: math.round(x: 3.6),
             rooted: 9.0 |> math.sqrt(),
             powered: math.pow(x: 2.0, y: 3.0),
             hour: date.hour(t: 2024-06-01T09:01:10Z),
             weekday: "2024-06-01T09:01:10Z" |> date.weekDay(),
+            added: date.add(d: 2h, to: 2024-06-01T09:01:10Z),
+            subbed: date.sub(d: 10m, from: 2024-06-01T09:01:10Z),
+            truncated: date.truncate(t: 2024-06-01T09:37:10Z, unit: 1h),
         }
     )");
 
@@ -326,9 +331,10 @@ TEST(RuntimeEvalTest, EvaluatesScalarStdlibPackages) {
 
     ASSERT_TRUE(result.ok()) << result.status();
     EXPECT_EQ(
-        "{matched: true, compiled: true, quoted: \"cpu\\\\.\\\\*\", upper: \"EDGE-1\", "
-        "hasEdge: true, contains: true, replaced: \"node-1\", rounded: 4, rooted: 3, powered: 8, "
-        "hour: 9, weekday: 6}",
+        "{matched: true, compiled: true, found: \"edge-12\", quoted: \"cpu\\\\.\\\\*\", upper: "
+        "\"EDGE-1\", hasEdge: true, contains: true, replaced: \"node-1\", split_joined: "
+        "\"api/edge/1\", rounded: 4, rooted: 3, powered: 8, hour: 9, weekday: 6, added: "
+        "2024-06-01T11:01:10Z, subbed: 2024-06-01T08:51:10Z, truncated: 2024-06-01T09:00:00Z}",
         result->string());
 }
 

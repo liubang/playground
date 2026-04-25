@@ -136,9 +136,9 @@ bazel build //cpp/pl/flux:flux
 
 - `array`: `from`、`concat`、`filter`、`map`、`contains`、`reduce`、`any`、`all`
 - `csv`: `from`
-- `date`: `year`、`month`、`monthDay`、`weekDay`、`hour`、`minute`、`second`
-- `regexp`: `compile`、`matchRegexpString`、`quoteMeta`
-- `strings`: `containsStr`、`hasPrefix`、`hasSuffix`、`replaceAll`、`toUpper`、`toLower`、`trimSpace`
+- `date`: `add`、`sub`、`truncate`、`year`、`month`、`monthDay`、`weekDay`、`hour`、`minute`、`second`
+- `regexp`: `compile`、`findString`、`matchRegexpString`、`quoteMeta`
+- `strings`: `containsStr`、`hasPrefix`、`hasSuffix`、`joinStr`、`replaceAll`、`split`、`toUpper`、`toLower`、`trimSpace`
 - `math`: `pi`、`abs`、`ceil`、`floor`、`round`、`sqrt`、`pow`
 
 未知 package 会保留为 metadata-only object，例如 `import x "experimental/foo"` 会绑定
