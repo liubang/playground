@@ -10,13 +10,16 @@ option alerting = {
 }
 
 serviceLabel = (r) => strings.toUpper(v: strings.trimSpace(v: r.service))
+servicePath = (r) => strings.joinStr(arr: strings.split(v: r.region + "." + r.service + "." + r.host, t: "."), v: "/")
 
 csv.from(file: "cpp/pl/flux/examples/feature_gallery/data/site_ops.annotated.csv")
     |> filter(fn: (r) => r._measurement == "cpu")
     |> map(fn: (r) => ({
         r with
         service_label: serviceLabel(r: r),
+        service_path: servicePath(r: r),
         node_alias: strings.replaceAll(v: r.host, t: "edge", u: "node"),
+        host_id: regexp.findString(r: /[0-9]+/, v: r.host),
         local_region: strings.hasPrefix(v: r.region, prefix: "us-"),
         watched_host: regexp.matchRegexpString(r: alerting.hostPattern, v: r.host),
         rounded_cpu: math.round(x: r._value),
@@ -30,7 +33,9 @@ csv.from(file: "cpp/pl/flux/examples/feature_gallery/data/site_ops.annotated.csv
             "host",
             "region",
             "service_label",
+            "service_path",
             "node_alias",
+            "host_id",
             "_value",
             "rounded_cpu",
             "cpu_gap",

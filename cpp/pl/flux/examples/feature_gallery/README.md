@@ -55,9 +55,9 @@ bazel build //cpp/pl/flux:flux
   `array_watchlist_join.flux`
 - `csv.from`：
   `stdlib_packages.flux`、`date_calendar.flux`、`array_watchlist_join.flux`、`csv_raw_alerts.flux`、`inspection_helpers.flux`、`table_shape_ops.flux`、`selection_and_reduce.flux`、`join_union_pivot.flux`、`fill_distinct_windows.flux`、`time_math.flux`、`task_driven_rollup.flux`、`nested_multi_table_health.flux`
-- `date.year`、`date.month`、`date.monthDay`、`date.weekDay`、`date.hour`、`date.minute`、`date.second`：
+- `date.add`、`date.sub`、`date.truncate`、`date.year`、`date.month`、`date.monthDay`、`date.weekDay`、`date.hour`、`date.minute`、`date.second`：
   `date_calendar.flux`
-- `regexp.compile`、`regexp.matchRegexpString`、`regexp.quoteMeta`、`strings.containsStr`、`strings.hasPrefix`、`strings.replaceAll`、`strings.toUpper`、`strings.trimSpace`、`math.abs`、`math.ceil`、`math.round`、`math.sqrt`、`math.pow`：
+- `regexp.compile`、`regexp.findString`、`regexp.matchRegexpString`、`regexp.quoteMeta`、`strings.containsStr`、`strings.hasPrefix`、`strings.joinStr`、`strings.replaceAll`、`strings.split`、`strings.toUpper`、`strings.trimSpace`、`math.abs`、`math.ceil`、`math.round`、`math.sqrt`、`math.pow`：
   `stdlib_packages.flux`
 - `columns`、`keys`、`findColumn`、`findRecord`：
   `inspection_helpers.flux`、`nested_multi_table_health.flux`
