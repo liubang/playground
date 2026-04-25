@@ -41,7 +41,7 @@ cc_binary(
     srcs = [
         "test.cpp",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":z3",

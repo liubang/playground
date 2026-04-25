@@ -121,7 +121,7 @@ _abseil_deps = [
             "%s" % f,
         ],
         copts = [
-            "-std=c++20",
+             
         ] + TEST_COPTS,
         linkopts = LINKOPTS_WITH_ASAN,
         deps = _abseil_deps + [

@@ -31,7 +31,7 @@ cc_library(
         "ast.h",
         "laxer.h",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     visibility = ["//visibility:public"],
 )
@@ -39,7 +39,7 @@ cc_library(
 cc_binary(
     name = "kaleidoscope",
     srcs = ["main.cpp"],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     visibility = ["//visibility:public"],
     deps = [

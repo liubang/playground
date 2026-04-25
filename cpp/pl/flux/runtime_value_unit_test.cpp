@@ -117,8 +117,9 @@ TEST(RuntimeValueTest, CreatesTableValuesWithMetadata) {
     ASSERT_EQ(1, table.as_table().rows.size());
     ASSERT_NE(nullptr, table.as_table().rows[0]);
     EXPECT_EQ("\"cpu\"", table.as_table().rows[0]->lookup("_measurement")->string());
-    EXPECT_EQ("<table bucket=\"telegraf\" rows=1 start=2024-01-01T00:00:00Z stop=2024-01-02T00:00:00Z>",
-              table.string());
+    EXPECT_EQ(
+        "<table bucket=\"telegraf\" rows=1 start=2024-01-01T00:00:00Z stop=2024-01-02T00:00:00Z>",
+        table.string());
 }
 
 } // namespace

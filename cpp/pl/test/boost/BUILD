@@ -26,7 +26,7 @@ cc_test(
     srcs = [
         "time.cpp",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "@boost.date_time",
@@ -36,7 +36,7 @@ cc_test(
 cc_test(
     name = "test_named_parameters",
     srcs = ["test_named_parameters.cpp"],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "@boost.mpl",
@@ -48,7 +48,7 @@ cc_test(
 cc_test(
     name = "test_scope_exit",
     srcs = ["test_scope_exit.cpp"],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "@boost.scope",

@@ -28,7 +28,7 @@ cc_library(
     hdrs = [
         "object_pool.h",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     visibility = ["//visibility:public"],
 )
@@ -37,7 +37,7 @@ cc_test(
     name = "object_pool_test",
     srcs = ["object_pool_test.cpp"],
     copts = [
-        "-std=c++20",
+         
     ] + TEST_COPTS,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [

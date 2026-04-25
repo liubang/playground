@@ -32,7 +32,7 @@ cc_library(
         "fs.h",
         "posix_fs.h",
     ],
-    copts = ["-std=c++20"] + COPTS_WITH_ASAN,
+    copts =   COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     visibility = ["//visibility:public"],
     deps = [
@@ -54,7 +54,7 @@ cc_test(
         "fs_test.cpp",
     ],
     copts = [
-        "-std=c++20",
+         
     ] + TEST_COPTS,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
@@ -69,7 +69,7 @@ cc_test(
         "fslock_test.cpp",
     ],
     copts = [
-        "-std=c++20",
+         
     ] + TEST_COPTS,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [

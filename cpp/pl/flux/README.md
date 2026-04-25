@@ -86,15 +86,15 @@ flux> :quit
 
 常用 CLI 参数：
 
-| 参数 | 说明 |
-| --- | --- |
-| `ast` | 只解析并输出 AST |
-| `-e <source>` | 执行内联源码 |
-| `--output-format human|csv|json` | 切换输出格式 |
-| `--result <name>` | 只输出指定结果 |
-| `--list-results` | 列出脚本可输出的结果名 |
-| `--quiet` | 执行但不打印结果 |
-| `--no-prelude` | 不注入默认 builtin/prelude |
+| 参数                   | 说明                       |
+| ---------------------- | -------------------------- | ----- | ------------ |
+| `ast`                  | 只解析并输出 AST           |
+| `-e <source>`          | 执行内联源码               |
+| `--output-format human | csv                        | json` | 切换输出格式 |
+| `--result <name>`      | 只输出指定结果             |
+| `--list-results`       | 列出脚本可输出的结果名     |
+| `--quiet`              | 执行但不打印结果           |
+| `--no-prelude`         | 不注入默认 builtin/prelude |
 
 ## 示例与测试
 
@@ -155,222 +155,222 @@ Universe builtin 默认注入，无需 `import`。
 
 ### 基础函数
 
-| 函数 | 说明 |
-| --- | --- |
-| `len(v)` | 返回 string、array、object 的长度 |
-| `string(v)` | 将值转成 Flux 风格字符串 |
-| `contains(set:, value:)` | 判断数组中是否存在值 |
+| 函数                     | 说明                              |
+| ------------------------ | --------------------------------- |
+| `len(v)`                 | 返回 string、array、object 的长度 |
+| `string(v)`              | 将值转成 Flux 风格字符串          |
+| `contains(set:, value:)` | 判断数组中是否存在值              |
 
 ### 数据源与表变换
 
-| 函数 | 说明 |
-| --- | --- |
-| `from(bucket:, rows:)` | 从内存 rows 构造表流 |
-| `range(start:, stop:)` | 按 `_time` 过滤时间范围 |
-| `filter(fn:, onEmpty:)` | 按谓词过滤行，`onEmpty: "keep"` 可保留空表形状 |
-| `map(fn:)` | 对每行做对象映射 |
-| `limit(n:, offset:)` | 取前 `n` 行 |
-| `tail(n:, offset:)` | 取后 `n` 行 |
-| `keep(columns:)` | 只保留指定列 |
-| `drop(columns:)` | 删除指定列 |
-| `rename(columns:)` | 重命名列 |
-| `duplicate(column:, as:)` | 复制列 |
-| `set(key:, value:)` | 给每行写入固定列值 |
-| `sort(columns:, desc:)` | 按列排序 |
-| `group(columns:)` | 生成逻辑分组 |
-| `pivot(rowKey:, columnKey:, valueColumn:)` | 透视行列 |
-| `fill(column:, value:, usePrevious:)` | 填充空值 |
-| `union(tables:)` | 合并多个表流 |
+| 函数                                       | 说明                                           |
+| ------------------------------------------ | ---------------------------------------------- |
+| `from(bucket:, rows:)`                     | 从内存 rows 构造表流                           |
+| `range(start:, stop:)`                     | 按 `_time` 过滤时间范围                        |
+| `filter(fn:, onEmpty:)`                    | 按谓词过滤行，`onEmpty: "keep"` 可保留空表形状 |
+| `map(fn:)`                                 | 对每行做对象映射                               |
+| `limit(n:, offset:)`                       | 取前 `n` 行                                    |
+| `tail(n:, offset:)`                        | 取后 `n` 行                                    |
+| `keep(columns:)`                           | 只保留指定列                                   |
+| `drop(columns:)`                           | 删除指定列                                     |
+| `rename(columns:)`                         | 重命名列                                       |
+| `duplicate(column:, as:)`                  | 复制列                                         |
+| `set(key:, value:)`                        | 给每行写入固定列值                             |
+| `sort(columns:, desc:)`                    | 按列排序                                       |
+| `group(columns:)`                          | 生成逻辑分组                                   |
+| `pivot(rowKey:, columnKey:, valueColumn:)` | 透视行列                                       |
+| `fill(column:, value:, usePrevious:)`      | 填充空值                                       |
+| `union(tables:)`                           | 合并多个表流                                   |
 
 ### 聚合、选择器与排名
 
-| 函数 | 说明 |
-| --- | --- |
-| `sum(arr)` | 数组求和 |
-| `mean(arr)` | 数组均值 |
-| `min(arr)` | 数组最小值 |
-| `max(arr)` | 数组最大值 |
-| `count(column:)` | 按表或分组计数 |
-| `spread(column:)` | 计算最大值与最小值差 |
-| `quantile(q:, column:)` | 计算分位数，`q` 支持单值或数组 |
-| `median(column:)` | 中位数，等价于 `q = 0.5` 的常用路径 |
-| `first()` | 每个表/分组第一行 |
-| `last()` | 每个表/分组最后一行 |
-| `top(n:, columns:)` | 取最大 `n` 行 |
-| `bottom(n:, columns:)` | 取最小 `n` 行 |
-| `reduce(identity:, fn:)` | 按行折叠成对象 |
-| `distinct(column:)` | 取列去重结果 |
+| 函数                     | 说明                                |
+| ------------------------ | ----------------------------------- |
+| `sum(arr)`               | 数组求和                            |
+| `mean(arr)`              | 数组均值                            |
+| `min(arr)`               | 数组最小值                          |
+| `max(arr)`               | 数组最大值                          |
+| `count(column:)`         | 按表或分组计数                      |
+| `spread(column:)`        | 计算最大值与最小值差                |
+| `quantile(q:, column:)`  | 计算分位数，`q` 支持单值或数组      |
+| `median(column:)`        | 中位数，等价于 `q = 0.5` 的常用路径 |
+| `first()`                | 每个表/分组第一行                   |
+| `last()`                 | 每个表/分组最后一行                 |
+| `top(n:, columns:)`      | 取最大 `n` 行                       |
+| `bottom(n:, columns:)`   | 取最小 `n` 行                       |
+| `reduce(identity:, fn:)` | 按行折叠成对象                      |
+| `distinct(column:)`      | 取列去重结果                        |
 
 ### 窗口与序列函数
 
-| 函数 | 说明 |
-| --- | --- |
-| `window(every:, period:, offset:, createEmpty:)` | 按时间窗口重组表流 |
+| 函数                                                                                          | 说明                                 |
+| --------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `window(every:, period:, offset:, createEmpty:)`                                              | 按时间窗口重组表流                   |
 | `aggregateWindow(every:, fn:, period:, offset:, location:, timeSrc:, timeDst:, createEmpty:)` | 窗口聚合，支持固定时长和部分日历窗口 |
-| `elapsed(unit:)` | 计算相邻行时间差 |
-| `difference(columns:, nonNegative:, keepFirst:)` | 计算相邻行数值差 |
-| `derivative(unit:, nonNegative:, initialZero:)` | 计算变化率 |
+| `elapsed(unit:)`                                                                              | 计算相邻行时间差                     |
+| `difference(columns:, nonNegative:, keepFirst:)`                                              | 计算相邻行数值差                     |
+| `derivative(unit:, nonNegative:, initialZero:)`                                               | 计算变化率                           |
 
 ### Join、检查与输出
 
-| 函数 | 说明 |
-| --- | --- |
+| 函数                          | 说明                                             |
+| ----------------------------- | ------------------------------------------------ |
 | `join(tables:, on:, method:)` | 顶层 join，支持 `inner`、`left`、`right`、`full` |
-| `columns()` | 返回表列名 |
-| `keys()` | 返回 group key 列名 |
-| `findColumn(fn:, column:)` | 找到匹配行并返回某列数组 |
-| `findRecord(fn:, idx:)` | 找到匹配行并返回指定位置的 record |
-| `yield(name:)` | 设置结果名并输出表流 |
+| `columns()`                   | 返回表列名                                       |
+| `keys()`                      | 返回 group key 列名                              |
+| `findColumn(fn:, column:)`    | 找到匹配行并返回某列数组                         |
+| `findRecord(fn:, idx:)`       | 找到匹配行并返回指定位置的 record                |
+| `yield(name:)`                | 设置结果名并输出表流                             |
 
 ## 内置包
 
 ### `array`
 
-| 函数 | 说明 |
-| --- | --- |
-| `array.from(rows:, bucket:)` | 从对象数组构造表 |
-| `array.concat(arr:, v:)` | 拼接数组 |
-| `array.filter(arr:, fn:)` | 过滤数组元素 |
-| `array.map(arr:, fn:)` | 映射数组元素 |
-| `array.contains(arr:, value:)` | 判断数组是否包含值 |
-| `array.reduce(arr:, identity:, fn:)` | 折叠数组 |
-| `array.any(arr:, fn:)` | 任一元素满足谓词 |
-| `array.all(arr:, fn:)` | 全部元素满足谓词 |
+| 函数                                 | 说明               |
+| ------------------------------------ | ------------------ |
+| `array.from(rows:, bucket:)`         | 从对象数组构造表   |
+| `array.concat(arr:, v:)`             | 拼接数组           |
+| `array.filter(arr:, fn:)`            | 过滤数组元素       |
+| `array.map(arr:, fn:)`               | 映射数组元素       |
+| `array.contains(arr:, value:)`       | 判断数组是否包含值 |
+| `array.reduce(arr:, identity:, fn:)` | 折叠数组           |
+| `array.any(arr:, fn:)`               | 任一元素满足谓词   |
+| `array.all(arr:, fn:)`               | 全部元素满足谓词   |
 
 ### `csv`
 
-| 函数 | 说明 |
-| --- | --- |
+| 函数                           | 说明                                          |
+| ------------------------------ | --------------------------------------------- |
 | `csv.from(csv:, file:, mode:)` | 从 raw CSV 或 annotated CSV 字符串/文件构造表 |
 
 `mode: "raw"` 解析普通表头 CSV；annotated CSV 支持 `#datatype`、`#group`、`#default` 和 result/table 列的常见形态。
 
 ### `date`
 
-| 函数 | 说明 |
-| --- | --- |
-| `date.add(d:, to:)` | 时间加 duration |
-| `date.sub(d:, from:)` | 时间减 duration |
-| `date.truncate(t:, unit:)` | 截断到指定单位 |
-| `date.year(t:)` | 年 |
-| `date.month(t:)` | 月 |
-| `date.monthDay(t:)` | 月内日期 |
-| `date.weekDay(t:)` | 星期 |
-| `date.hour(t:)` | 小时 |
-| `date.minute(t:)` | 分钟 |
-| `date.second(t:)` | 秒 |
+| 函数                       | 说明            |
+| -------------------------- | --------------- |
+| `date.add(d:, to:)`        | 时间加 duration |
+| `date.sub(d:, from:)`      | 时间减 duration |
+| `date.truncate(t:, unit:)` | 截断到指定单位  |
+| `date.year(t:)`            | 年              |
+| `date.month(t:)`           | 月              |
+| `date.monthDay(t:)`        | 月内日期        |
+| `date.weekDay(t:)`         | 星期            |
+| `date.hour(t:)`            | 小时            |
+| `date.minute(t:)`          | 分钟            |
+| `date.second(t:)`          | 秒              |
 
 ### `dict`
 
-| 函数 | 说明 |
-| --- | --- |
-| `dict.fromList(pairs:)` | 从 `{key, value}` 数组构造字典 |
-| `dict.get(dict:, key:, default:)` | 读取 key，缺失时返回默认值 |
-| `dict.insert(dict:, key:, value:)` | 返回插入/覆盖后的字典 |
-| `dict.remove(dict:, key:)` | 返回删除 key 后的字典 |
+| 函数                               | 说明                           |
+| ---------------------------------- | ------------------------------ |
+| `dict.fromList(pairs:)`            | 从 `{key, value}` 数组构造字典 |
+| `dict.get(dict:, key:, default:)`  | 读取 key，缺失时返回默认值     |
+| `dict.insert(dict:, key:, value:)` | 返回插入/覆盖后的字典          |
+| `dict.remove(dict:, key:)`         | 返回删除 key 后的字典          |
 
 当前还没有独立 dict runtime type，字典由 object 承载；非 string key 会按运行时字符串化结果保存。
 
 ### `join`
 
-| 函数 | 说明 |
-| --- | --- |
-| `join.inner(left:, right:, on:)` | 内连接 |
+| 函数                                 | 说明                             |
+| ------------------------------------ | -------------------------------- |
+| `join.inner(left:, right:, on:)`     | 内连接                           |
 | `join.left(left:, right:, on:, as:)` | 左连接，可用 predicate/as lambda |
-| `join.right(left:, right:, on:)` | 右连接 |
-| `join.full(left:, right:, on:)` | 全连接 |
+| `join.right(left:, right:, on:)`     | 右连接                           |
+| `join.full(left:, right:, on:)`      | 全连接                           |
 
 `join` package 是顶层 `join()` 的 facade，覆盖常用内存表连接路径。
 
 ### `json`
 
-| 函数 | 说明 |
-| --- | --- |
+| 函数              | 说明                       |
+| ----------------- | -------------------------- |
 | `json.encode(v:)` | 编码 Flux 值为 JSON 字符串 |
 
 当前运行时没有 bytes 类型，所以 `json.encode` 先返回 string。后续如果增加 `json.decode` 或 bytes 值，应该直接复用 simdjson，而不是继续扩展手写 JSON 逻辑。
 
 ### `math`
 
-| 函数 | 说明 |
-| --- | --- |
-| `math.pi` | 圆周率常量 |
-| `math.abs(x:)` | 绝对值 |
-| `math.ceil(x:)` | 向上取整 |
-| `math.floor(x:)` | 向下取整 |
-| `math.round(x:)` | 四舍五入 |
-| `math.sqrt(x:)` | 平方根 |
-| `math.pow(x:, y:)` | 幂 |
+| 函数               | 说明       |
+| ------------------ | ---------- |
+| `math.pi`          | 圆周率常量 |
+| `math.abs(x:)`     | 绝对值     |
+| `math.ceil(x:)`    | 向上取整   |
+| `math.floor(x:)`   | 向下取整   |
+| `math.round(x:)`   | 四舍五入   |
+| `math.sqrt(x:)`    | 平方根     |
+| `math.pow(x:, y:)` | 幂         |
 
 ### `regexp`
 
-| 函数 | 说明 |
-| --- | --- |
-| `regexp.compile(v:)` | 编译正则字符串 |
-| `regexp.findString(r:, v:)` | 返回第一个匹配字符串 |
-| `regexp.matchRegexpString(r:, v:)` | 判断是否匹配 |
-| `regexp.quoteMeta(v:)` | 转义正则元字符 |
+| 函数                               | 说明                 |
+| ---------------------------------- | -------------------- |
+| `regexp.compile(v:)`               | 编译正则字符串       |
+| `regexp.findString(r:, v:)`        | 返回第一个匹配字符串 |
+| `regexp.matchRegexpString(r:, v:)` | 判断是否匹配         |
+| `regexp.quoteMeta(v:)`             | 转义正则元字符       |
 
 ### `runtime`
 
-| 函数 | 说明 |
-| --- | --- |
+| 函数                | 说明                                   |
+| ------------------- | -------------------------------------- |
 | `runtime.version()` | 返回当前 playground runtime 版本字符串 |
 
 ### `strings`
 
-| 函数 | 说明 |
-| --- | --- |
-| `strings.containsStr(v:, substr:)` | 是否包含子串 |
-| `strings.hasPrefix(v:, prefix:)` | 是否有前缀 |
-| `strings.hasSuffix(v:, suffix:)` | 是否有后缀 |
-| `strings.joinStr(arr:, v:)` | 用分隔符拼接字符串数组 |
-| `strings.replaceAll(v:, t:, u:)` | 替换全部子串 |
-| `strings.split(v:, t:)` | 分割字符串 |
-| `strings.toUpper(v:)` | 转大写 |
-| `strings.toLower(v:)` | 转小写 |
-| `strings.trimSpace(v:)` | 去掉首尾空白 |
+| 函数                               | 说明                   |
+| ---------------------------------- | ---------------------- |
+| `strings.containsStr(v:, substr:)` | 是否包含子串           |
+| `strings.hasPrefix(v:, prefix:)`   | 是否有前缀             |
+| `strings.hasSuffix(v:, suffix:)`   | 是否有后缀             |
+| `strings.joinStr(arr:, v:)`        | 用分隔符拼接字符串数组 |
+| `strings.replaceAll(v:, t:, u:)`   | 替换全部子串           |
+| `strings.split(v:, t:)`            | 分割字符串             |
+| `strings.toUpper(v:)`              | 转大写                 |
+| `strings.toLower(v:)`              | 转小写                 |
+| `strings.trimSpace(v:)`            | 去掉首尾空白           |
 
 ### `system`
 
-| 函数 | 说明 |
-| --- | --- |
+| 函数            | 说明              |
+| --------------- | ----------------- |
 | `system.time()` | 返回当前 UTC 时间 |
 
 `system.time()` 是唯一一个 conformance 中用正则匹配的包函数，因为输出随执行时间变化。
 
 ### `types`
 
-| 函数 | 说明 |
-| --- | --- |
-| `types.isNumeric(v:)` | 是否为 int、uint 或 float |
-| `types.isType(v:, type:)` | 按类型名判断 |
-| `types.isString(v:)` | 是否为 string |
-| `types.isDuration(v:)` | 是否为 duration |
-| `types.isBool(v:)` | 是否为 bool |
-| `types.isInt(v:)` | 是否为 int |
-| `types.isUInt(v:)` | 是否为 uint |
-| `types.isFloat(v:)` | 是否为 float |
-| `types.isTime(v:)` | 是否为 time |
-| `types.isRegexp(v:)` | 是否为 regexp |
+| 函数                      | 说明                      |
+| ------------------------- | ------------------------- |
+| `types.isNumeric(v:)`     | 是否为 int、uint 或 float |
+| `types.isType(v:, type:)` | 按类型名判断              |
+| `types.isString(v:)`      | 是否为 string             |
+| `types.isDuration(v:)`    | 是否为 duration           |
+| `types.isBool(v:)`        | 是否为 bool               |
+| `types.isInt(v:)`         | 是否为 int                |
+| `types.isUInt(v:)`        | 是否为 uint               |
+| `types.isFloat(v:)`       | 是否为 float              |
+| `types.isTime(v:)`        | 是否为 time               |
+| `types.isRegexp(v:)`      | 是否为 regexp             |
 
 这里没有严格照搬官方 `types` 包的最小 API，而是按当前 runtime 值模型扩展了一批直接可用的 `isXxx` helper，方便样例和后续包实现做类型分派。
 
 ## 代码结构
 
-| 文件/模块 | 职责 |
-| --- | --- |
-| `scanner.*`、`token.h` | 词法扫描 |
+| 文件/模块                          | 职责                     |
+| ---------------------------------- | ------------------------ |
+| `scanner.*`、`token.h`             | 词法扫描                 |
 | `parser.*`、`ast.*`、`ast_debug.*` | 语法解析、AST 与调试输出 |
-| `runtime_value.*` | 运行时值模型 |
-| `runtime_env.*` | 环境与作用域 |
-| `runtime_eval.*` | 表达式求值 |
-| `runtime_exec.*` | 文件级语句执行 |
-| `runtime_builtin_universe_*.cpp` | 默认 universe builtin |
-| `runtime_builtin_table.cpp` | `array`、`csv` 包 |
-| `runtime_builtin_scalar.cpp` | 标量类 stdlib 包 |
-| `runtime_builtin_package.*` | 包注册与导入 |
-| `flux_cli.*`、`flux.cpp` | CLI、REPL、输出格式 |
+| `runtime_value.*`                  | 运行时值模型             |
+| `runtime_env.*`                    | 环境与作用域             |
+| `runtime_eval.*`                   | 表达式求值               |
+| `runtime_exec.*`                   | 文件级语句执行           |
+| `runtime_builtin_universe_*.cpp`   | 默认 universe builtin    |
+| `runtime_builtin_table.cpp`        | `array`、`csv` 包        |
+| `runtime_builtin_scalar.cpp`       | 标量类 stdlib 包         |
+| `runtime_builtin_package.*`        | 包注册与导入             |
+| `flux_cli.*`、`flux.cpp`           | CLI、REPL、输出格式      |
 
 内部 helper 按职责拆分：
 
@@ -378,7 +378,6 @@ Universe builtin 默认注入，无需 `import`。
 - `runtime_builtin_time_helpers.h`
 - `runtime_builtin_window_helpers.h`
 - `runtime_builtin_aggregate_helpers.h`
-- `runtime_builtin_universe_internal.h`
 
 ## 已知限制
 

@@ -28,7 +28,7 @@ load(
             "%s" % f,
         ],
         copts = [
-            "-std=c++20",
+             
             "-ffast-math",
         ] + TEST_COPTS + select({
             "//:linux_x86_64": [

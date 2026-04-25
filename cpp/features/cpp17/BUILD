@@ -28,9 +28,7 @@ load(
         srcs = [
             "%s" % f,
         ],
-        copts = [
-            "-std=c++17",
-        ] + TEST_COPTS,
+        copts = TEST_COPTS,
         linkopts = LINKOPTS_WITH_ASAN,
         deps = [
             "//cpp/pl/debug",

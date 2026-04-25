@@ -14,7 +14,6 @@
 
 #include "cpp/pl/flux/ast_debug.h"
 #include "cpp/pl/flux/parser.h"
-
 #include <algorithm>
 #include <gtest/gtest.h>
 
@@ -56,7 +55,7 @@ TEST(FluxParserTest, ParsesPackageImportsAndPipeExpression) {
     ASSERT_NE(stmt, nullptr);
     EXPECT_EQ(Expression::Type::PipeExpr, stmt->expression->type);
     EXPECT_NE(stmt->expression->string().find("|>"), std::string::npos);
-  }
+}
 
 TEST(FluxParserTest, ParsesBuiltinFunctionTypeWithConstraints) {
     const std::string source = R"(
@@ -80,9 +79,8 @@ TEST(FluxParserTest, ParsesBuiltinFunctionTypeWithConstraints) {
     EXPECT_EQ(MonoType::Type::Function, builtin->ty->monotype->type);
     ASSERT_EQ(1, builtin->ty->constraints.size());
     EXPECT_EQ("A", builtin->ty->constraints[0]->tvar->name);
-    EXPECT_EQ("builtin sum: (<-tables: [int], ?n: int) => int where A: Addable",
-              builtin->string());
-  }
+    EXPECT_EQ("builtin sum: (<-tables: [int], ?n: int) => int where A: Addable", builtin->string());
+}
 
 TEST(FluxParserTest, ParsesTestCaseWithExtendsAndReturnBlock) {
     const std::string source = R"(
@@ -108,7 +106,7 @@ TEST(FluxParserTest, ParsesTestCaseWithExtendsAndReturnBlock) {
     ASSERT_NE(testcase->block, nullptr);
     ASSERT_EQ(1, testcase->block->body.size());
     EXPECT_EQ(Statement::Type::ReturnStatement, testcase->block->body[0]->type);
-  }
+}
 
 TEST(FluxParserTest, ParsesRecordTypeAndConditionalExpression) {
     const std::string source = R"(
@@ -137,7 +135,7 @@ TEST(FluxParserTest, ParsesRecordTypeAndConditionalExpression) {
     EXPECT_EQ(Expression::Type::ConditionalExpr, assignment->init->type);
     EXPECT_NE(assignment->init->string().find("if"), std::string::npos);
     EXPECT_NE(assignment->init->string().find("exists"), std::string::npos);
-  }
+}
 
 TEST(FluxParserTest, ParsesStringInterpolationAndRegexMatch) {
     const std::string source = R"(
@@ -164,7 +162,7 @@ TEST(FluxParserTest, ParsesStringInterpolationAndRegexMatch) {
     EXPECT_EQ(Expression::Type::BinaryExpr, regex_assignment->init->type);
     EXPECT_NE(regex_assignment->init->string().find("=~"), std::string::npos);
     EXPECT_NE(regex_assignment->init->string().find("/cpu.*/"), std::string::npos);
-  }
+}
 
 TEST(FluxParserTest, ParsesBooleanRecordUpdateAndIndexExpressions) {
     const std::string source = R"(
@@ -403,7 +401,8 @@ TEST(FluxParserTest, ParsesComplexFluxProgramIntoExpectedAst) {
     ASSERT_NE(builtin->ty, nullptr);
     ASSERT_NE(builtin->ty->monotype, nullptr);
     EXPECT_EQ(MonoType::Type::Function, builtin->ty->monotype->type);
-    EXPECT_EQ("builtin mapper: (<-tables: [int], fn: {name: string, active: bool}) => {name: string, active: bool} where A: Record",
+    EXPECT_EQ("builtin mapper: (<-tables: [int], fn: {name: string, active: bool}) => {name: "
+              "string, active: bool} where A: Record",
               builtin->string());
 
     ASSERT_EQ(Statement::Type::OptionStatement, file->body[1]->type);
@@ -559,14 +558,12 @@ TEST(FluxParserTest, ParsesTypeVariablesInFunctionTypes) {
     ASSERT_EQ(1, builtin->ty->constraints.size());
     EXPECT_EQ("A", builtin->ty->constraints[0]->tvar->name);
 
-    const auto& function =
-        std::get<std::unique_ptr<FunctionType>>(builtin->ty->monotype->value);
+    const auto& function = std::get<std::unique_ptr<FunctionType>>(builtin->ty->monotype->value);
     ASSERT_NE(function, nullptr);
     ASSERT_EQ(1, function->parameters.size());
     ASSERT_EQ(ParameterType::Type::Required, function->parameters[0]->type);
 
-    const auto& required =
-        std::get<std::shared_ptr<Required>>(function->parameters[0]->value);
+    const auto& required = std::get<std::shared_ptr<Required>>(function->parameters[0]->value);
     ASSERT_NE(required, nullptr);
     ASSERT_NE(required->monotype, nullptr);
     ASSERT_NE(function->monotype, nullptr);
@@ -880,7 +877,8 @@ TEST(FluxParserTest, ProducesReadableBadStatementForUnexpectedTopLevelToken) {
 
     const auto& bad = std::get<std::unique_ptr<BadStmt>>(file->body[0]->stmt);
     ASSERT_NE(bad, nullptr);
-    EXPECT_NE(bad->text.find("unexpected token for statement: QuestionMark at "), std::string::npos);
+    EXPECT_NE(bad->text.find("unexpected token for statement: QuestionMark at "),
+              std::string::npos);
     EXPECT_TRUE(ErrorContains(parser.errors(), "unexpected token for statement: QuestionMark at "));
 
     const std::string tree = dump_ast(*file);
@@ -932,8 +930,8 @@ TEST(FluxParserTest, ReportsReadableIntegerLiteralErrorWithLocation) {
 
     ASSERT_NE(file, nullptr);
     ASSERT_FALSE(parser.errors().empty());
-    EXPECT_TRUE(
-        ErrorContains(parser.errors(), "invalid integer literal 01: nonzero value cannot start with 0 at"));
+    EXPECT_TRUE(ErrorContains(parser.errors(),
+                              "invalid integer literal 01: nonzero value cannot start with 0 at"));
 }
 
 TEST(FluxParserTest, ReportsReadableUnsignedIntegerLiteralErrorWithLocation) {
@@ -945,7 +943,8 @@ TEST(FluxParserTest, ReportsReadableUnsignedIntegerLiteralErrorWithLocation) {
     ASSERT_NE(file, nullptr);
     ASSERT_FALSE(parser.errors().empty());
     EXPECT_TRUE(ErrorContains(
-        parser.errors(), "invalid unsigned integer literal 01u: nonzero value cannot start with 0 at"));
+        parser.errors(),
+        "invalid unsigned integer literal 01u: nonzero value cannot start with 0 at"));
 }
 
 TEST(FluxParserTest, AttachesAttributesToAstNodes) {
@@ -977,7 +976,8 @@ TEST(FluxParserTest, AttachesAttributesToAstNodes) {
 
     const std::string tree = dump_ast(*file);
     EXPECT_NE(tree.find("PackageClause name=metrics attrs=@edition(2022.1)"), std::string::npos);
-    EXPECT_NE(tree.find("ImportDeclaration path=\"array\" attrs=@feature(flag)"), std::string::npos);
+    EXPECT_NE(tree.find("ImportDeclaration path=\"array\" attrs=@feature(flag)"),
+              std::string::npos);
     EXPECT_NE(tree.find("VariableAssignment id=result attrs=@trace(enabled)"), std::string::npos);
 }
 
@@ -1291,19 +1291,16 @@ next = 42
     ASSERT_NE(builtin->ty->monotype, nullptr);
     ASSERT_EQ(MonoType::Type::Function, builtin->ty->monotype->type);
 
-    const auto& function =
-        std::get<std::unique_ptr<FunctionType>>(builtin->ty->monotype->value);
+    const auto& function = std::get<std::unique_ptr<FunctionType>>(builtin->ty->monotype->value);
     ASSERT_NE(function, nullptr);
     ASSERT_EQ(1, function->parameters.size());
 
-    const auto& required =
-        std::get<std::shared_ptr<Required>>(function->parameters[0]->value);
+    const auto& required = std::get<std::shared_ptr<Required>>(function->parameters[0]->value);
     ASSERT_NE(required, nullptr);
     ASSERT_NE(required->monotype, nullptr);
     ASSERT_EQ(MonoType::Type::Record, required->monotype->type);
 
-    const auto& outer_record =
-        std::get<std::unique_ptr<RecordType>>(required->monotype->value);
+    const auto& outer_record = std::get<std::unique_ptr<RecordType>>(required->monotype->value);
     ASSERT_NE(outer_record, nullptr);
     ASSERT_EQ(2, outer_record->properties.size());
     ASSERT_NE(outer_record->properties[1]->monotype, nullptr);
@@ -1348,11 +1345,9 @@ next = 42
     ASSERT_NE(builtin->ty->monotype, nullptr);
     ASSERT_EQ(MonoType::Type::Function, builtin->ty->monotype->type);
 
-    const auto& function =
-        std::get<std::unique_ptr<FunctionType>>(builtin->ty->monotype->value);
+    const auto& function = std::get<std::unique_ptr<FunctionType>>(builtin->ty->monotype->value);
     ASSERT_NE(function, nullptr);
-    const auto& required =
-        std::get<std::shared_ptr<Required>>(function->parameters[0]->value);
+    const auto& required = std::get<std::shared_ptr<Required>>(function->parameters[0]->value);
     ASSERT_NE(required, nullptr);
     ASSERT_NE(required->monotype, nullptr);
     ASSERT_EQ(MonoType::Type::Record, required->monotype->type);
@@ -1395,7 +1390,6 @@ status = if exists ready "ok" else "bad"
     EXPECT_EQ(Expression::Type::BadExpr, cond->consequent->type);
     EXPECT_EQ(Expression::Type::StringLit, cond->alternate->type);
     EXPECT_EQ("bad", std::get<std::unique_ptr<StringLit>>(cond->alternate->expr)->value);
-
 }
 
 TEST(FluxParserTest, RecoversFromInvalidFunctionParameter) {
