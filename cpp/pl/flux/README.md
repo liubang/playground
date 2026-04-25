@@ -126,7 +126,7 @@ bazel build //cpp/pl/flux:flux
 最近一轮新增的 `window_join_rankings.flux` 还把 `window(createEmpty)`、outer `join`、`spread`、`quantile`、`median`、`top`、`bottom` 串成了一个可直接运行的 smoke example。
 
 另有一组更小的 package 契约样例见 [examples/stdlib_conformance](./examples/stdlib_conformance/README.md)，并由
-`//cpp/pl/flux:stdlib_conformance_test` 校验固定 JSON 输出。它们覆盖当前可执行的 `array`、`csv`、`date`、`join`、`math`、`regexp`、`strings` 和默认加载的 universe builtin，用来给后续 package 拆分和 runtime 重构提供回归信心。
+`//cpp/pl/flux:stdlib_conformance_test` 校验固定 JSON 输出。它们覆盖当前可执行的 `array`、`csv`、`date`、`dict`、`join`、`json`、`math`、`regexp`、`runtime`、`strings`、`system`、`types` 和默认加载的 universe builtin，用来给后续 package 拆分和 runtime 重构提供回归信心。
 
 当前还支持一些表检查辅助函数：
 
@@ -144,6 +144,11 @@ bazel build //cpp/pl/flux:flux
 - `strings`: `containsStr`、`hasPrefix`、`hasSuffix`、`joinStr`、`replaceAll`、`split`、`toUpper`、`toLower`、`trimSpace`
 - `math`: `pi`、`abs`、`ceil`、`floor`、`round`、`sqrt`、`pow`
 - `join`: `inner`、`left`、`right`、`full`
+- `dict`: `fromList`、`get`、`insert`、`remove`；当前运行时还没有独立 dict 值类型，因此以对象承载可执行子集
+- `json`: `encode`；当前运行时还没有 bytes 值类型，因此先以 string 承载编码后的 JSON
+- `runtime`: `version`
+- `system`: `time`
+- `types`: `isBool`、`isDuration`、`isFloat`、`isInt`、`isNumeric`、`isRegexp`、`isString`、`isTime`、`isType`、`isUInt`
 
 未知 package 会保留为 metadata-only object，例如 `import x "experimental/foo"` 会绑定
 `{path: "experimental/foo", alias: "x"}`，方便脚本继续暴露导入元数据；调用其中不存在的属性仍会按普通对象访问报错。
@@ -159,7 +164,7 @@ bazel build //cpp/pl/flux:flux
 - `runtime_builtin_universe_join.cpp`：默认加载的顶层 `join()`，并作为 `join` package 的底层连接实现
 - `runtime_builtin_universe_inspect.cpp`：结果输出与检查辅助，如 `yield`、`columns`、`keys`、`findColumn`、`findRecord`
 - `runtime_builtin_table.cpp`：显式 `array` 与 `csv` package 的表构造和 CSV 输入能力
-- `runtime_builtin_package.cpp` / `runtime_builtin_scalar.cpp`：package 注册与纯标量 package，例如 `date`、`regexp`、`strings`、`math`，以及 `join` package facade
+- `runtime_builtin_package.cpp` / `runtime_builtin_scalar.cpp`：package 注册与纯标量 package，例如 `date`、`dict`、`regexp`、`strings`、`math`、`json`、`runtime`、`system`、`types`，以及 `join` package facade
 
 共享 internal helper 也按更窄职责拆分：
 
@@ -360,7 +365,7 @@ bazel test //cpp/pl/flux:parser_unit_test --test_output=all
 
 - `runtime_value`：运行时值类型，支持 null、bool、int、uint、float、string、duration、time、regex、array、object，以及内存内表值
 - `runtime_env`：词法环境，支持父作用域、变量绑定、option 绑定和最近作用域赋值
-- `runtime_builtin`：内置函数注册表，默认加载一批 universe 风格的顶层 builtin，包括 `len`、`string`、`contains`、`sum`、`mean`、`min`、`max`，以及查询相关 builtin：`from`、`range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`distinct`、`count`、`first`、`last`、`union`、顶层 `join()`、`aggregateWindow`、`yield`；实现已按 `core` / `transform` / `aggregate` / `window` / `join` / `inspect` 拆到 `runtime_builtin_universe_*.cpp`；显式 `import "array"` / `import "csv"` / `import "date"` / `import "regexp"` / `import "strings"` / `import "math"` / `import "join"` 会额外绑定对应 package 对象
+- `runtime_builtin`：内置函数注册表，默认加载一批 universe 风格的顶层 builtin，包括 `len`、`string`、`contains`、`sum`、`mean`、`min`、`max`，以及查询相关 builtin：`from`、`range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`reduce`、`sort`、`group`、`pivot`、`fill`、`elapsed`、`difference`、`derivative`、`distinct`、`count`、`first`、`last`、`union`、顶层 `join()`、`aggregateWindow`、`yield`；实现已按 `core` / `transform` / `aggregate` / `window` / `join` / `inspect` 拆到 `runtime_builtin_universe_*.cpp`；显式 `import "array"` / `import "csv"` / `import "date"` / `import "dict"` / `import "regexp"` / `import "strings"` / `import "math"` / `import "join"` / `import "json"` / `import "runtime"` / `import "system"` / `import "types"` 会额外绑定对应 package 对象
 - `runtime_eval`：表达式求值器，支持函数值与函数调用
 - `runtime_exec`：语句执行器，支持赋值、`option`、表达式语句、block/return 控制流
 - `flux_cli`：围绕解析器与运行时的 CLI/REPL 包装层
