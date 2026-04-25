@@ -29,7 +29,7 @@ jobs:
     name: build
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: actions/cache@v4
@@ -40,7 +40,7 @@ jobs:
           key: build-${{ matrix.compiler.name }}-${{ env.cache-name }}-${{ runner.os }}-${{github.sha}}
           restore-keys: build-${{ matrix.compiler.name }}-${{ env.cache-name }}-${{ runner.os }}-
           save-always: true
-      - uses: bazel-contrib/setup-bazel@0.8.5
+      - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
           disk-cache: false
@@ -55,7 +55,7 @@ jobs:
     name: test-macos
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: actions/cache@v4
@@ -66,7 +66,7 @@ jobs:
           key: test-macos-${{ env.cache-name }}-${{ runner.os }}-${{ github.sha }}
           restore-keys: test-macos-${{ env.cache-name }}-${{ runner.os }}-
           save-always: true
-      - uses: bazel-contrib/setup-bazel@0.8.5
+      - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
           disk-cache: false
@@ -90,7 +90,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [build]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: actions/cache@v4
@@ -101,7 +101,7 @@ jobs:
           key: test-${{ matrix.compiler.name }}-${{ env.cache-name }}-${{ runner.os }}-${{github.sha}}
           restore-keys: test-${{ matrix.compiler.name }}-${{ env.cache-name }}-${{ runner.os }}-
           save-always: true
-      - uses: bazel-contrib/setup-bazel@0.8.5
+      - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
           disk-cache: false
@@ -117,7 +117,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [build]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: actions/cache@v4
@@ -128,7 +128,7 @@ jobs:
           key: ${{ github.workflow }}-${{ env.cache-name }}-${{ runner.os }}-${{github.sha}}
           restore-keys: ${{ github.workflow }}-${{ env.cache-name }}-${{ runner.os }}-
           save-always: true
-      - uses: bazel-contrib/setup-bazel@0.8.5
+      - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
           disk-cache: false
