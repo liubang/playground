@@ -145,9 +145,13 @@ cc_library(
     ],
     hdrs = [
         "runtime_builtin.h",
+        "runtime_builtin_aggregate_helpers.h",
         "runtime_builtin_package.h",
+        "runtime_builtin_table_helpers.h",
+        "runtime_builtin_time_helpers.h",
         "runtime_builtin_universe.h",
         "runtime_builtin_universe_internal.h",
+        "runtime_builtin_window_helpers.h",
     ],
     copts = ["-std=c++20"] + COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
@@ -354,5 +358,17 @@ sh_test(
         ":flux",
     ] + glob([
         "examples/**/*",
+    ]),
+)
+
+sh_test(
+    name = "stdlib_conformance_test",
+    srcs = [
+        "stdlib_conformance_test.sh",
+    ],
+    data = [
+        ":flux",
+    ] + glob([
+        "examples/stdlib_conformance/**/*",
     ]),
 )

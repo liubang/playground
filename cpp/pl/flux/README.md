@@ -125,6 +125,9 @@ bazel build //cpp/pl/flux:flux
 
 最近一轮新增的 `window_join_rankings.flux` 还把 `window(createEmpty)`、outer `join`、`spread`、`quantile`、`median`、`top`、`bottom` 串成了一个可直接运行的 smoke example。
 
+另有一组更小的 package 契约样例见 [examples/stdlib_conformance](./examples/stdlib_conformance/README.md)，并由
+`//cpp/pl/flux:stdlib_conformance_test` 校验固定 JSON 输出。它们覆盖当前可执行的 `array`、`csv`、`date`、`join`、`math`、`regexp`、`strings` 和默认加载的 universe builtin，用来给后续 package 拆分和 runtime 重构提供回归信心。
+
 当前还支持一些表检查辅助函数：
 
 - `columns()`
@@ -144,6 +147,27 @@ bazel build //cpp/pl/flux:flux
 
 未知 package 会保留为 metadata-only object，例如 `import x "experimental/foo"` 会绑定
 `{path: "experimental/foo", alias: "x"}`，方便脚本继续暴露导入元数据；调用其中不存在的属性仍会按普通对象访问报错。
+
+## builtin 模块职责
+
+默认加载的 universe builtin 和显式 import 的 stdlib package 现在按用户可见边界与实现复杂度拆开：
+
+- `runtime_builtin_universe_core.cpp`：基础默认函数，如 `len`、`string`、`contains`
+- `runtime_builtin_universe_transform.cpp`：表流形状与行变换，如 `from`、`range`、`filter`、`map`、`keep`、`drop`、`rename`、`duplicate`、`set`、`sort`、`limit`、`tail`、`group`、`pivot`、`fill`、`union`
+- `runtime_builtin_universe_aggregate.cpp`：聚合、selector 与排名，如 `sum`、`mean`、`min`、`max`、`count`、`spread`、`quantile`、`median`、`first`、`last`、`top`、`bottom`、`reduce`、`distinct`
+- `runtime_builtin_universe_window.cpp`：时间窗口与序列差分，如 `window`、`aggregateWindow`、`elapsed`、`difference`、`derivative`
+- `runtime_builtin_universe_join.cpp`：默认加载的顶层 `join()`，并作为 `join` package 的底层连接实现
+- `runtime_builtin_universe_inspect.cpp`：结果输出与检查辅助，如 `yield`、`columns`、`keys`、`findColumn`、`findRecord`
+- `runtime_builtin_table.cpp`：显式 `array` 与 `csv` package 的表构造和 CSV 输入能力
+- `runtime_builtin_package.cpp` / `runtime_builtin_scalar.cpp`：package 注册与纯标量 package，例如 `date`、`regexp`、`strings`、`math`，以及 `join` package facade
+
+共享 internal helper 也按更窄职责拆分：
+
+- `runtime_builtin_table_helpers.h`：通用参数校验、表/行/chunk 变换、列投影、排序比较、pivot 辅助和 builtin 安装工具
+- `runtime_builtin_time_helpers.h`：RFC3339 解析/格式化、duration/window duration 解析、timezone/location 和窗口边界时间运算
+- `runtime_builtin_window_helpers.h`：`window` / `aggregateWindow` 专用的窗口 row/group materialization、空窗口聚合、输出行生成
+- `runtime_builtin_aggregate_helpers.h`：数值聚合摘要、min/max、quantile、按 group materialize 聚合输出行
+- `runtime_builtin_universe_internal.h`：兼容聚合头；新代码优先 include 上面更窄的 helper
 
 `aggregateWindow()` 目前已经覆盖比较实用的一批参数组合，包括：
 
