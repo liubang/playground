@@ -22,13 +22,11 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - name: Init Bazel disk cache
-        run: mkdir -p "${{ runner.temp }}/bazel-disk-cache/test-macos-${{ github.workflow }}-${{ runner.os }}"
       - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
           repository-cache: true
-          disk-cache: ${{ runner.temp }}/bazel-disk-cache/test-macos-${{ github.workflow }}-${{ runner.os }}
+          disk-cache: ${{ github.workflow }}-${{ runner.os }}
       - name: Cache Homebrew packages
         uses: actions/cache@v4
         with:
@@ -37,9 +35,9 @@ jobs:
             /usr/local/Cellar/llvm
             /usr/local/Cellar/nasm
             /usr/local/Cellar/libomp
-          key: ${{ runner.os }}-brew-llvm-nasm-libomp-${{ hashFiles('.github/workflows/build_cpp.yaml') }}
+          key: ${{ runner.os }}-brew-llvm-nasm-libomp-${{ hashFiles('.github/workflows/build_cpp.yml') }}
           restore-keys: |
-            ${{ runner.os }}-brew-llvm-nasm-libomp
+            ${{ runner.os }}-brew-llvm-nasm-libomp-
       - run: |
           brew install llvm
           brew install nasm
@@ -48,7 +46,6 @@ jobs:
         run: |
           bazel test \
             --config=release \
-            --disk_cache="${{ runner.temp }}/bazel-disk-cache/test-macos-${{ github.workflow }}-${{ runner.os }}" \
             //cpp/...
   test-linux:
     strategy:
@@ -67,13 +64,11 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - name: Init Bazel disk cache
-        run: mkdir -p "${{ runner.temp }}/bazel-disk-cache/test-linux-${{ github.workflow }}-${{ runner.os }}-${{ matrix.compiler.name }}"
       - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
           repository-cache: true
-          disk-cache: ${{ runner.temp }}/bazel-disk-cache/test-linux-${{ github.workflow }}-${{ runner.os }}-${{ matrix.compiler.name }}
+          disk-cache: ${{ github.workflow }}-${{ runner.os }}-${{ matrix.compiler.name }}
       - run: |
           sudo apt-get update
           sudo apt-get install -y nasm libomp-dev lcov
@@ -82,7 +77,6 @@ jobs:
           bazel test \
             --config=release \
             ${{ matrix.compiler.flag }} \
-            --disk_cache="${{ runner.temp }}/bazel-disk-cache/test-linux-${{ github.workflow }}-${{ runner.os }}-${{ matrix.compiler.name }}" \
             //cpp/...
   coverage:
     name: coverage
@@ -92,13 +86,11 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - name: Init Bazel disk cache
-        run: mkdir -p "${{ runner.temp }}/bazel-disk-cache/coverage-${{ github.workflow }}-${{ runner.os }}"
       - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
           repository-cache: true
-          disk-cache: ${{ runner.temp }}/bazel-disk-cache/coverage-${{ github.workflow }}-${{ runner.os }}
+          disk-cache: ${{ github.workflow }}-${{ runner.os }}-"gcc"
       - run: |
           sudo apt-get update
           sudo apt-get install -y nasm libomp-dev lcov
@@ -107,7 +99,6 @@ jobs:
           bazel coverage \
             --config=release \
             --action_env=CC=gcc-14 \
-            --disk_cache="${{ runner.temp }}/bazel-disk-cache/coverage-${{ github.workflow }}-${{ runner.os }}" \
             --verbose_failures \
             --combined_report=lcov \
             --instrument_test_targets \
