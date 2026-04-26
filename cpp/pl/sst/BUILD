@@ -27,7 +27,7 @@ cc_library(
     name = "sstable",
     srcs = glob(["*.cpp"]),
     hdrs = glob(["*.h"]),
-    copts =   COPTS_WITH_ASAN,
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         "//cpp/pl/arena",

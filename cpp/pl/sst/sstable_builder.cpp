@@ -254,6 +254,10 @@ Result<Void> SSTableBuilder::finish() {
         auto result = writeBlockRaw(filter_builder_->finish(&filter_buf), CompressionType::NONE,
                                     &filter_block_handle);
         RETURN_AND_LOG_ON_ERROR(result);
+    } else {
+        // Write empty filter block to make filter_block_handle valid.
+        auto result = writeBlockRaw("", CompressionType::NONE, &filter_block_handle);
+        RETURN_AND_LOG_ON_ERROR(result);
     }
 
     // 写入index block
