@@ -18,7 +18,6 @@
 #pragma once
 
 #include "cpp/pl/sst/sstable.h"
-
 #include <map>
 #include <memory>
 
