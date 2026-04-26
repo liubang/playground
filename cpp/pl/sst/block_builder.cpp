@@ -38,12 +38,13 @@ void BlockBuilder::add(const Cell& cell) {
     uint32_t shared = 0;
     if (counter_ < block_restart_interval_) {
         // 计算当前rowkey和前一个rowkey的最大公共前缀
-        const uint32_t min_length = std::min(last_key_pice.size(), rowkey.size());
+        const uint32_t min_length =
+            static_cast<uint32_t>(std::min(last_key_pice.size(), rowkey.size()));
         while (shared < min_length && (last_key_pice[shared] == rowkey[shared])) {
             shared++;
         }
     } else {
-        restarts_.push_back(buffer_.size());
+        restarts_.push_back(static_cast<uint32_t>(buffer_.size()));
         counter_ = 0;
     }
 
@@ -58,7 +59,7 @@ void BlockBuilder::add(const Cell& cell) {
 
     // NOTE(liubang): 这里计算公共前缀的时候，只考虑了rowkey，但是计算non shared的时候，需要将整个
     // cellkey都考虑进去，后面写入non shared key的时候，是整个cellkey去掉rowkey shared的部分后的内容
-    const uint32_t non_shared = cellkey.size() - shared;
+    const auto non_shared = static_cast<uint32_t>(cellkey.size() - shared);
     encodeInt<uint32_t>(&buffer_, shared);
     encodeInt<uint32_t>(&buffer_, non_shared);
     encodeInt<uint32_t>(&buffer_, static_cast<uint32_t>(rowkey.size()));
@@ -72,7 +73,7 @@ void BlockBuilder::add(const Cell& cell) {
 
     last_key_.resize(shared);
     last_key_.append(cellkey.data() + shared, non_shared);
-    last_rowkey_len_ = rowkey.size();
+    last_rowkey_len_ = static_cast<uint32_t>(rowkey.size());
     assert(std::string_view(last_key_).compare(cellkey) == 0);
     counter_++;
 }
