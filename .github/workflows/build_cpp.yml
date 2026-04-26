@@ -32,9 +32,9 @@ jobs:
         with:
           path: |
             ~/Library/Caches/Homebrew
-            /usr/local/Cellar/llvm
-            /usr/local/Cellar/nasm
-            /usr/local/Cellar/libomp
+            /opt/homebrew/Cellar/llvm
+            /opt/homebrew/Cellar/nasm
+            /opt/homebrew/Cellar/libomp
           key: ${{ runner.os }}-brew-llvm-nasm-libomp-${{ hashFiles('.github/workflows/build_cpp.yml') }}
           restore-keys: |
             ${{ runner.os }}-brew-llvm-nasm-libomp-
