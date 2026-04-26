@@ -90,7 +90,7 @@ jobs:
         with:
           bazelisk-cache: true
           repository-cache: true
-          disk-cache: ${{ github.workflow }}-${{ runner.os }}-gcc
+          disk-cache: ${{ github.workflow }}-${{ runner.os }}-gcc-coverage
       - run: |
           sudo apt-get update
           sudo apt-get install -y nasm libomp-dev lcov
