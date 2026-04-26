@@ -20,7 +20,6 @@
 #include "cpp/pl/fs/fs.h"
 #include "cpp/pl/lang/assume.h"
 #include "cpp/pl/status/result.h"
-
 #include <cstdint>
 #include <sstream>
 #include <string>
@@ -119,9 +118,9 @@ using SSTId = uint64_t;
  */
 class BlockHandle {
 public:
-    static constexpr uint64_t INVALID_VALUE = ~static_cast<uint64_t>(0);
+    static constexpr uint64_t INVALID_VALUE = UINT64_MAX;
 
-    BlockHandle() : offset_(INVALID_VALUE), size_(INVALID_VALUE) {}
+    BlockHandle() {}
 
     [[nodiscard]] uint64_t offset() const { return offset_; }
 
@@ -142,8 +141,8 @@ public:
     [[nodiscard]] Result<Void> decodeFrom(std::string_view input);
 
 private:
-    uint64_t offset_;
-    uint64_t size_;
+    uint64_t offset_{INVALID_VALUE};
+    uint64_t size_{INVALID_VALUE};
 };
 
 /**

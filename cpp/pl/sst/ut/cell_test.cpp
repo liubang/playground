@@ -34,7 +34,7 @@ TEST_F(CellTest, cell) {
         uint64_t ts = std::chrono::duration_cast<std::chrono::milliseconds>(
                           std::chrono::system_clock::now().time_since_epoch())
                           .count();
-        CellType ct = (CellType)(i % 4);
+        auto ct = (CellType)(i % 4);
         Cell cell(ct, rowkey, cf, col, val, ts);
         std::string encoded_cell_key = cell.cellKey().encode();
 

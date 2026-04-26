@@ -105,8 +105,8 @@ private:
 [[nodiscard]] SSTableRef buildAndOpenTable(const std::filesystem::path& root,
                                            CompressionType compression,
                                            SSTId sst_id,
-                                           const std::vector<CellRef>& cells = {
-                                               makeCell("rk", "value")},
+                                           const std::vector<CellRef>& cells = {makeCell("rk",
+                                                                                         "value")},
                                            std::size_t block_size = 4096,
                                            FilterPolicyType filter_type = FilterPolicyType::NONE,
                                            PatchId patch_id = 0) {
@@ -247,20 +247,18 @@ TEST(SSTableBuilderRegressionTest, ISALCompressionFailsFastWithoutWritingMislabe
 
 TEST(SSTableBuilderRegressionTest, RealTableRoundTripsAcrossBlocksWithCompressionAndFilter) {
     const auto root = makeTempDir("pl_sst_roundtrip_regression");
+    std::string v1(48, '2');
+    std::string v2(48, '3');
+    std::string v3(48, '4');
     const std::vector<CellRef> cells = {
         std::make_shared<Cell>(CellType::CT_PUT, "row-001", "cf", "col-a", "value-a2", 2),
         std::make_shared<Cell>(CellType::CT_PUT, "row-001", "cf", "col-b", "value-b1", 1),
-        std::make_shared<Cell>(CellType::CT_PUT, "row-002", "cf", "col-a", std::string(48, '2'), 2),
-        std::make_shared<Cell>(CellType::CT_PUT, "row-003", "cf", "col-a", std::string(48, '3'), 3),
-        std::make_shared<Cell>(CellType::CT_PUT, "row-004", "cf", "col-a", std::string(48, '4'), 4),
+        std::make_shared<Cell>(CellType::CT_PUT, "row-002", "cf", "col-a", v1, 2),
+        std::make_shared<Cell>(CellType::CT_PUT, "row-003", "cf", "col-a", v2, 3),
+        std::make_shared<Cell>(CellType::CT_PUT, "row-004", "cf", "col-a", v3, 4),
     };
-    auto table = buildAndOpenTable(root,
-                                   CompressionType::SNAPPY,
-                                   21,
-                                   cells,
-                                   80,
-                                   FilterPolicyType::STANDARD_BLOOM_FILTER,
-                                   9);
+    auto table = buildAndOpenTable(root, CompressionType::SNAPPY, 21, cells, 80,
+                                   FilterPolicyType::STANDARD_BLOOM_FILTER, 9);
     ASSERT_NE(table, nullptr);
 
     EXPECT_EQ(21, table->sstId());
@@ -324,12 +322,12 @@ TEST(SSTableVersionManagerRegressionTest, FirstEditStartsFromEmptyVersion) {
 
 TEST(SSTableVersionManagerRegressionTest, AppliesAddAndDeleteEditsInPatchOrder) {
     const auto root = makeTempDir("pl_sst_version_manager_patch_order");
-    auto old_table = buildAndOpenTable(root, CompressionType::NONE, 31, {}, 4096,
-                                       FilterPolicyType::NONE, 1);
-    auto mid_table = buildAndOpenTable(root, CompressionType::NONE, 32, {}, 4096,
-                                       FilterPolicyType::NONE, 2);
-    auto new_table = buildAndOpenTable(root, CompressionType::NONE, 33, {}, 4096,
-                                       FilterPolicyType::NONE, 3);
+    auto old_table =
+        buildAndOpenTable(root, CompressionType::NONE, 31, {}, 4096, FilterPolicyType::NONE, 1);
+    auto mid_table =
+        buildAndOpenTable(root, CompressionType::NONE, 32, {}, 4096, FilterPolicyType::NONE, 2);
+    auto new_table =
+        buildAndOpenTable(root, CompressionType::NONE, 33, {}, 4096, FilterPolicyType::NONE, 3);
     ASSERT_NE(old_table, nullptr);
     ASSERT_NE(mid_table, nullptr);
     ASSERT_NE(new_table, nullptr);
