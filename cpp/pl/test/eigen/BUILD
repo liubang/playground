@@ -1,4 +1,4 @@
-# Copyright (c) 2025 The Authors. All rights reserved.
+# Copyright (c) 2026 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2025/08/10 21:28
+# Created: 2026/05/03 12:05
 
 load("@rules_cc//cc:defs.bzl", "cc_test")
 load(
@@ -23,13 +23,13 @@ load(
 )
 
 cc_test(
-    name = "demo1",
+    name = "demo",
     srcs = [
-        "demo1.cpp",
+        "demo.cpp",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
-        "@blaze-math//:blaze",
+        "@eigen",
     ],
 )
