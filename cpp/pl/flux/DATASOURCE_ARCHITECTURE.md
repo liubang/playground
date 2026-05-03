@@ -1,0 +1,612 @@
+# Flux Data Source Architecture Plan
+
+本文档记录 `cpp/pl/flux` 后续扩展多数据源能力的设计方向。目标是先支持
+SQLite/MySQL 这类外部表数据源，再逐步演进到带查询计划、算子下推和内存回退的执行架构。
+
+当前 `flux` 运行时是 eager interpreter：`csv.from`、`array.from`、`from` 直接构造
+`TableValue`，后续 `range`、`filter`、`map`、`group`、`aggregateWindow` 等 builtin
+立即遍历内存表并返回新的 `TableValue`。这个模型适合 examples、单机测试和小数据集，
+但接入数据库后会自然遇到大表全量拉取、无法利用索引、无法复用数据库聚合能力等问题。
+
+设计原则是渐进式演进：先把数据源接进来，再抽象 connector，再引入 logical plan 和
+pushdown。现有内存执行器不应被推倒重写，而应成为所有无法下推算子的可靠 fallback。
+
+## Long-Term Shape
+
+这个架构的长期目标可以定义为：
+
+```text
+Flux-native single-node federated query engine
+```
+
+也就是：以 Flux 为统一查询接口的单机联邦查询引擎。
+
+它会借鉴 Presto/Trino 的核心查询引擎思想：
+
+- 统一语言入口。
+- connector abstraction。
+- logical plan。
+- rule-based optimizer。
+- connector capability。
+- operator pushdown。
+- physical operators。
+- local fallback execution。
+
+但它不是完整 Presto，也不以分布式执行为目标。暂不考虑：
+
+- coordinator / worker 架构。
+- split scheduling。
+- distributed exchange。
+- shuffle。
+- cross-node fault tolerance。
+- 分布式 resource group / cluster management。
+
+与 Presto 的另一个重要区别是，对外接口不是 SQL federation，而是 Flux federation。
+SQL 数据源可以通过 SQL dialect 下推执行，CSV、内存表、后续 Parquet/HTTP 等数据源则
+通过各自 connector 的 native scan 能力进入同一个 Flux logical plan。查询语义以 Flux
+的 table stream、group key、pipe、time range、window 等模型为中心，而不是把所有东西
+先压成 SQL relational model。
+
+因此后续设计可以放心采用 Presto-like 的 connector / planner / pushdown 分层，但不要把
+coordinator、worker、exchange、cost-based distributed optimization 这类分布式系统复杂度
+带进第一阶段架构。
+
+## Goals
+
+- 支持多类数据源：内存 rows、CSV、SQLite、MySQL，后续可扩 PostgreSQL、HTTP、Parquet 等。
+- 保留当前 Flux 子集的用户可观察行为，特别是多逻辑表流、group key、时间范围和输出格式语义。
+- 为数据源下推建立清晰边界，让 `range/filter/keep/limit/sort` 等简单算子能靠近数据执行。
+- 对不能安全下推的 Flux 语义，自动 materialize 到 `TableValue` 后复用现有内存 builtin。
+- 让第一阶段实现足够小，不为尚未出现的分布式执行、复杂 cost model、join reorder 过早付费。
+
+## Non-Goals
+
+- 第一阶段不实现 Presto/Trino 级别的完整分布式查询引擎。
+- 第一阶段不要求 Flux 任意函数表达式都能翻译成 SQL。
+- 第一阶段不做跨数据源 join 下推、复杂窗口下推或 cost-based optimizer。
+- 第一阶段不改变 parser 语法，只新增 package/builtin 和运行时执行结构。
+
+## Current Architecture
+
+当前主要数据流如下：
+
+```text
+Flux source
+  -> parser AST
+  -> ExpressionEvaluator / StatementExecutor
+  -> builtin function callback
+  -> TableValue rows/tables
+  -> next builtin callback
+  -> output formatter
+```
+
+表数据入口：
+
+- `from(bucket:, rows:)`：从内存 rows 构造表。
+- `array.from(rows:, bucket:)`：从对象数组构造表。
+- `csv.from(csv:, file:, mode:)`：解析 raw/annotated CSV 并构造表。
+
+表变换入口：
+
+- `range/filter/map/keep/drop/rename/limit/tail/sort/group/...` 都接收 `tables`
+  pipe 参数。
+- 大多数逐行变换使用 `transform_rows_preserving_chunks` 遍历 `TableValue.tables`。
+- `TableValue.rows` 是 flatten 后的便捷视图，`TableValue.tables` 承载逻辑表流语义。
+
+这个结构的优点是简单、可调试、测试覆盖集中。缺点是数据源一旦变大，查询只能先落到内存。
+
+## Target Architecture
+
+目标结构分为五层：
+
+```text
+Flux AST
+  -> Runtime / builtin binding
+  -> LogicalPlan
+  -> Optimizer / Pushdown
+  -> Physical execution
+       - Connector scan
+       - In-memory operators
+       - Output materialization
+```
+
+核心思想：
+
+- 数据源 builtin 不立即全量读取，而是尽量返回一个可延迟执行的表计划。
+- 表变换 builtin 优先把自己追加为 logical operator。
+- 当遇到必须求值的边界时，再将 plan 编译成 physical execution。
+- connector 能处理的前缀下推给数据源；不能处理的后缀在内存执行。
+
+必须求值的边界包括：
+
+- CLI/JSON/CSV/human 输出。
+- `yield` 输出结果收集。
+- 需要真实行数据的 inspect 函数。
+- 不支持延迟执行的旧 builtin。
+- 跨源 join、复杂 map、复杂 filter 等第一阶段无法下推的操作。
+
+## Proposed Packages
+
+短期先新增 `sql` package，避免为每个数据库先设计一套 Flux 语法：
+
+```flux
+import "sql"
+
+sql.from(
+    driver: "sqlite",
+    dsn: "cpp/pl/flux/examples/data/demo.db",
+    query: "select _time, host, region, usage as _value from cpu"
+)
+|> range(start: 2024-01-01T00:00:00Z)
+|> filter(fn: (r) => r.host == "edge-1")
+|> keep(columns: ["_time", "host", "_value"])
+```
+
+MySQL 示例：
+
+```flux
+import "sql"
+
+sql.from(
+    driver: "mysql",
+    dsn: "user:password@tcp(127.0.0.1:3306)/metrics",
+    query: "select ts as _time, host, value as _value from cpu"
+)
+|> range(start: 2024-01-01T00:00:00Z, stop: 2024-01-02T00:00:00Z)
+```
+
+更靠后的专用包可以是：
+
+```flux
+import "sqlite"
+import "mysql"
+
+sqlite.from(path: "metrics.db", table: "cpu")
+mysql.from(dsn: "...", table: "cpu")
+```
+
+但第一版优先用 `sql.from` 收敛接口。
+
+## Data Model Changes
+
+当前 `Value::Type::Table` 只代表已物化的 `TableValue`。后续有两种可选改法：
+
+### Option A: Extend TableValue
+
+在 `TableValue` 内增加可选 plan/source 字段：
+
+```cpp
+struct TableValue {
+    std::string bucket;
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    std::vector<TableChunk> tables;
+
+    std::shared_ptr<LogicalPlan> plan;
+    bool materialized = true;
+};
+```
+
+优点：
+
+- 对现有 `Value::Type::Table` 和 builtin 签名侵入较小。
+- 旧 builtin 可以在入口处调用 `Materialize(table)`。
+
+缺点：
+
+- `TableValue` 会同时承载逻辑计划和物化数据，职责会变重。
+
+### Option B: Add TableStreamValue
+
+新增独立运行时类型：
+
+```cpp
+enum class Type {
+    ...
+    Table,
+    TableStream,
+};
+```
+
+优点：
+
+- 延迟计划和物化表边界更干净。
+
+缺点：
+
+- 会影响大量 `require_table_property`、输出格式和测试，初期改动偏大。
+
+建议采用 Option A：先在 `TableValue` 内加入延迟计划能力，等 plan 架构稳定后再考虑是否拆成独立类型。
+
+## Connector Interface
+
+建议新增目录：
+
+```text
+cpp/pl/flux/connector/
+```
+
+核心接口草案：
+
+```cpp
+struct ColumnSchema {
+    std::string name;
+    Value::Type type;
+    bool nullable = true;
+};
+
+struct TableSchema {
+    std::vector<ColumnSchema> columns;
+};
+
+struct SourceCapabilities {
+    bool projection = false;
+    bool filter = false;
+    bool time_range = false;
+    bool limit = false;
+    bool sort = false;
+    bool aggregate = false;
+};
+
+struct ScanRequest {
+    std::vector<std::string> columns;
+    std::optional<TimeRange> time_range;
+    std::vector<Predicate> predicates;
+    std::vector<OrderBy> order_by;
+    std::optional<int64_t> limit;
+    std::optional<int64_t> offset;
+};
+
+class TableSource {
+public:
+    virtual ~TableSource() = default;
+    virtual absl::StatusOr<TableSchema> Schema() const = 0;
+    virtual SourceCapabilities Capabilities() const = 0;
+    virtual absl::StatusOr<Value> Scan(const ScanRequest& request) = 0;
+};
+```
+
+第一批实现：
+
+- `ArraySource`：包装当前 `array.from` rows。
+- `CsvSource`：包装当前 CSV 解析结果。初期仍可物化，后续可做流式解析。
+- `SQLiteSource`：基于 SQLite C API，将 `ScanRequest` 翻译为 SQL。
+- `MySQLSource`：可以先预留接口，真正依赖和构建方式后续单独评估。
+
+注意：仓库根目录已有 `sqlite3` bazel dependency，可优先用 SQLite 做第一条外部数据源闭环。
+
+## Logical Plan
+
+建议新增：
+
+```text
+cpp/pl/flux/plan/
+```
+
+Logical node 草案：
+
+```cpp
+enum class PlanNodeKind {
+    SourceScan,
+    Range,
+    Filter,
+    Project,
+    Rename,
+    Map,
+    Limit,
+    Sort,
+    Group,
+    Aggregate,
+    Window,
+    Join,
+    Union,
+    Yield,
+    Materialize,
+};
+
+struct PlanNode {
+    PlanNodeKind kind;
+    std::vector<std::shared_ptr<PlanNode>> inputs;
+};
+```
+
+需要重点保留的信息：
+
+- 源数据标识：driver、dsn、query/table、bucket。
+- schema 和列类型。
+- Flux 原始表达式，用于 fallback。
+- 可翻译 predicate，用于 pushdown。
+- group key / logical table boundary。
+- range_start、range_stop、result_name。
+
+第一版 logical plan 只覆盖线性管道：
+
+```text
+SourceScan -> Range -> Filter -> Project -> Sort -> Limit -> Materialize
+```
+
+`join/union/window/aggregateWindow/pivot` 初期可以作为 materialization barrier。
+
+## Predicate Representation
+
+下推必须非常保守。建议先支持简单谓词：
+
+```cpp
+enum class PredicateOp {
+    Eq,
+    NotEq,
+    Lt,
+    Lte,
+    Gt,
+    Gte,
+    RegexMatch,
+    And,
+    Or,
+};
+
+struct Predicate {
+    PredicateOp op;
+    std::string column;
+    Value literal;
+    std::vector<Predicate> children;
+};
+```
+
+可下推表达式示例：
+
+```flux
+filter(fn: (r) => r.host == "edge-1")
+filter(fn: (r) => r._value >= 80.0)
+filter(fn: (r) => r.host == "edge-1" and r.region == "west")
+```
+
+不可下推表达式示例：
+
+```flux
+filter(fn: (r) => contains(set: hosts, value: r.host))
+filter(fn: (r) => myPredicate(r))
+filter(fn: (r) => r.host =~ /edge-.*/)
+map(fn: (r) => ({r with score: r._value * 100.0}))
+```
+
+不可下推不代表失败，只代表先执行可下推前缀，再 materialize，之后回到现有内存 builtin。
+
+## Pushdown Rules
+
+第一批可下推：
+
+- `range(start:, stop:)` 到 `_time` 条件。
+- `filter(fn:)` 的简单列/字面量比较。
+- `keep(columns:)` 到 projection。
+- `drop(columns:)` 可转换成 projection，但需要 schema。
+- `limit(n:, offset:)`。
+- `sort(columns:, desc:)`。
+
+第二批再考虑：
+
+- `count/min/max/sum/mean` 简单聚合。
+- `group(columns:)` + 简单 aggregate。
+- 部分 `distinct(column:)`。
+
+暂不下推：
+
+- `map`。
+- `reduce`。
+- `pivot`。
+- `join`。
+- `window/aggregateWindow`。
+- `fill/elapsed/difference/derivative`。
+- 涉及用户函数、闭包、动态列名、复杂对象返回的表达式。
+
+## SQLite SQL Builder
+
+SQLite connector 可以把 `ScanRequest` 翻译成：
+
+```sql
+SELECT col1, col2, col3
+FROM (<base query>) AS flux_source
+WHERE _time >= ? AND _time < ? AND host = ?
+ORDER BY _time ASC
+LIMIT ? OFFSET ?
+```
+
+要求：
+
+- 参数必须使用 bind，不拼接用户字面量。
+- 列名必须来自 schema 或经过严格 identifier quote。
+- `query` 模式下统一包成 subquery，便于追加条件。
+- `table` 模式下只允许安全标识符或 quote identifier。
+- `_time` 类型第一版可以支持 RFC3339 string；后续再补 epoch/int/time affinity 映射。
+
+## Execution Strategy
+
+计划执行分为三步：
+
+1. 分析 plan 前缀，找出 connector 能下推的连续算子。
+2. 构造 `ScanRequest`，让 connector 扫描并返回 `TableValue`。
+3. 对剩余 plan 节点调用现有内存 builtin 或对应 physical operator。
+
+示例：
+
+```text
+sql.from
+  |> range
+  |> filter(simple)
+  |> keep
+  |> map(complex)
+  |> limit
+```
+
+执行拆分：
+
+```text
+SQLiteSource.Scan(range + filter + projection)
+  -> materialized TableValue
+  -> in-memory map
+  -> in-memory limit
+```
+
+`limit` 在 `map` 之后不能越过 `map` 随便下推，因为 `map` 可能改变行数或语义。后续 optimizer 可以在证明安全时再做规则。
+
+## Migration Plan
+
+### Phase 0: Document and Guardrails
+
+- 新增本文档，明确多数据源演进方向。
+- 暂不改运行时行为。
+- 后续每个阶段都同步 README、SUPPORT_MATRIX 和测试。
+
+### Phase 1: Minimal sql.from
+
+目标：SQLite 查询能进入 Flux 内存表。
+
+工作项：
+
+- 新增 `sql` package 和 `sql.from(driver:, dsn:, query:)`。
+- 先支持 `driver: "sqlite"`。
+- 使用 SQLite C API 执行 query。
+- 将 SQLite row 转成 `ObjectValue` / `TableValue`。
+- 类型映射覆盖 null/int/float/text/blob-as-string。
+- 增加 runtime eval/exec 单测。
+- 增加一个 SQLite 示例或测试 fixture。
+
+验收：
+
+```flux
+import "sql"
+
+sql.from(driver: "sqlite", dsn: "...", query: "select ...")
+|> filter(fn: (r) => r.host == "edge-1")
+|> limit(n: 10)
+```
+
+能通过现有内存算子继续执行。
+
+### Phase 2: TableSource Abstraction
+
+目标：统一 CSV/array/SQL 数据源入口。
+
+工作项：
+
+- 新增 connector 接口。
+- 将 `sql.from` 改为 `SQLiteSource.Scan({})`。
+- 让 `array.from` 和 `csv.from` 至少在内部可适配同一抽象。
+- 保持 `Value::table` 对外行为不变。
+
+验收：
+
+- 现有 examples 和 conformance 不变。
+- 新增 connector 层单测。
+
+### Phase 3: Logical Plan Skeleton
+
+目标：表 pipeline 可以延迟表达一小段 plan。
+
+工作项：
+
+- 新增 plan node 类型。
+- `sql.from` 返回带 `SourceScan` plan 的 `TableValue`。
+- `range/filter/keep/limit/sort` 在输入带 plan 时追加节点。
+- 输出或旧 builtin 入口调用 `Materialize`。
+
+验收：
+
+- 对无 SQL 数据源，现有行为保持一致。
+- SQL pipeline 在 materialize 前能打印/debug 出 plan。
+
+### Phase 4: Conservative Pushdown
+
+目标：SQLite 能下推简单 range/filter/projection/limit/sort。
+
+工作项：
+
+- 实现 Flux filter 简单表达式提取。
+- 实现 `ScanRequest`。
+- 实现 SQLite SQL builder。
+- 增加 explain/debug 输出，方便确认哪些算子被下推。
+- 增加“不下推但结果正确”的 fallback 测试。
+
+验收：
+
+- 简单查询生成带 WHERE/LIMIT 的 SQL。
+- 复杂 filter 自动 fallback，结果不变。
+- 不允许因为下推改变 stop-exclusive range 语义。
+
+### Phase 5: MySQL Connector
+
+目标：复用 connector/plan/pushdown 架构接入 MySQL。
+
+工作项：
+
+- 选择 C/C++ MySQL client 依赖和 Bazel 集成方式。
+- 实现 MySQLSource。
+- 复用大部分 SQL builder，抽出 dialect 差异。
+- 增加 integration 测试策略。若 CI 无 MySQL 服务，则保留可选测试或 mock connector。
+
+验收：
+
+- MySQL 查询可以物化到 Flux 表。
+- 简单 projection/filter/range 能按 capability 下推。
+
+### Phase 6: Aggregation Pushdown
+
+目标：对简单聚合启用数据库侧执行。
+
+可选范围：
+
+- `group(columns:) |> count()`
+- `group(columns:) |> min/max/sum/mean(column:)`
+- `distinct(column:)`
+
+要求：
+
+- 必须先补充逻辑表语义测试。
+- SQL 聚合结果要与现有 Flux 输出 shape 对齐。
+- 不确定的语义宁可 fallback。
+
+## Test Plan
+
+测试分层：
+
+- `runtime_eval_unit_test.cpp`：表达式和 package 调用。
+- `runtime_exec_unit_test.cpp`：Flux 文件执行、pipeline 行为。
+- 新增 connector 单测：SQLite query、类型映射、错误处理、SQL builder。
+- `flux_cli_unit_test.cpp`：CLI 输出和 examples 兼容。
+
+关键测试场景：
+
+- SQLite 基础查询返回 int/float/string/null。
+- `sql.from |> filter |> limit` 走内存 fallback。
+- `sql.from |> range |> filter(simple) |> keep |> limit` 下推。
+- 复杂 filter 不下推但结果正确。
+- SQL 错误能返回可诊断的 `absl::Status`。
+- 空结果、空表、null 值、缺失列。
+- `_time` stop-exclusive。
+
+## Documentation Plan
+
+每阶段同步：
+
+- `README.md`：用户入口和示例。
+- `SUPPORT_MATRIX.md`：真实支持状态。
+- 本文档：阶段状态、设计调整和新增风险。
+- 如有 benchmark，再同步 `benchmark/README.md` 和 `benchmark/OPTIMIZATION_LOG.md`。
+
+## Open Questions
+
+- `sql.from` 是否只支持 `query`，还是第一版同时支持 `table`？
+- DSN 是否允许从环境变量读取，避免示例里出现敏感信息？
+- `_time` 在 SQL 中第一版约定为 RFC3339 text，还是支持更多数据库原生时间类型？
+- `TableValue` 内嵌 plan 是否会让值模型过重，未来是否需要拆出 `TableStreamValue`？
+- MySQL integration test 在当前 Bazel/CI 环境中如何稳定运行？
+- 是否需要 `explain()` builtin 或 CLI 参数来显示 logical/physical plan？
+
+## Recommended Next Step
+
+下一轮实现建议从 Phase 1 开始：
+
+1. 新增 `sql` package registry 入口。
+2. 接入 SQLite C API。
+3. 实现 `sql.from(driver: "sqlite", dsn:, query:)` 到内存 `TableValue`。
+4. 补最小单测和 README/SUPPORT_MATRIX。
+
+这样可以尽快验证“外部数据源进入 Flux”的闭环，同时不急着改变现有执行器主干。
