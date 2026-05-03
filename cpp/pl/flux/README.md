@@ -14,6 +14,9 @@
 
 更细的语法和运行时支持矩阵见 [SUPPORT_MATRIX.md](./SUPPORT_MATRIX.md)。
 
+多数据源、SQL connector、查询计划和算子下推的后续设计见
+[DATASOURCE_ARCHITECTURE.md](./DATASOURCE_ARCHITECTURE.md)。
+
 ## 编译依赖
 
 项目通过 Bazel/Bzlmod 构建。Flux 子项目本身主要依赖：
