@@ -18,6 +18,7 @@
 #include "cpp/pl/flux/runtime_exec.h"
 
 #include "absl/strings/str_cat.h"
+#include "cpp/pl/flux/compat.h"
 #include "cpp/pl/flux/runtime_builtin.h"
 #include "cpp/pl/flux/runtime_eval.h"
 
@@ -31,7 +32,7 @@ absl::StatusOr<std::string> property_name(const PropertyKey& key) {
         case PropertyKey::Type::StringLiteral:
             return std::get<std::unique_ptr<StringLit>>(key.key)->value;
         default:
-            __builtin_unreachable();
+            PL_FLUX_UNREACHABLE();
     }
 }
 
@@ -88,7 +89,7 @@ absl::StatusOr<ExecutionResult> execute_option_assignment(const Assignment& assi
             return ExecutionResult::normal(*value_or);
         }
         default:
-            __builtin_unreachable();
+            PL_FLUX_UNREACHABLE();
     }
 }
 
@@ -96,7 +97,9 @@ std::string import_binding_name(const ImportDeclaration& import) {
     if (import.alias != nullptr) {
         return import.alias->name;
     }
-    return import.path->value;
+    const auto& path = import.path->value;
+    const auto slash = path.rfind('/');
+    return slash == std::string::npos ? path : path.substr(slash + 1);
 }
 
 absl::StatusOr<Value> import_binding_value(const ImportDeclaration& import) {
@@ -108,9 +111,7 @@ absl::StatusOr<Value> import_binding_value(const ImportDeclaration& import) {
         return *value_or;
     }
     auto props = value_or->as_object().properties;
-    if (import.alias != nullptr) {
-        props.emplace_back("alias", Value::string(import.alias->name));
-    }
+    props.emplace_back("alias", Value::string(import.alias->name));
     return Value::object(std::move(props));
 }
 
@@ -151,7 +152,7 @@ std::string statement_result_name(const Statement& stmt) {
                     return "option." + *path_or;
                 }
                 default:
-                    __builtin_unreachable();
+                    PL_FLUX_UNREACHABLE();
             }
         }
         case Statement::Type::BuiltinStatement: {
@@ -167,7 +168,7 @@ std::string statement_result_name(const Statement& stmt) {
         case Statement::Type::BadStatement:
             return "bad";
         default:
-            __builtin_unreachable();
+            PL_FLUX_UNREACHABLE();
     }
 }
 
@@ -253,7 +254,7 @@ absl::StatusOr<ExecutionResult> StatementExecutor::Execute(const Statement& stmt
             return ExecutionResult::normal(*value_or);
         }
         default:
-            __builtin_unreachable();
+            PL_FLUX_UNREACHABLE();
     }
 }
 

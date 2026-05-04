@@ -20,6 +20,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
+#include "cpp/pl/flux/compat.h"
 
 namespace pl {
 
@@ -231,7 +232,7 @@ std::string PropertyKey::string() const {
         case Type::StringLiteral:
             return std::get<std::unique_ptr<StringLit>>(key)->string();
     }
-    __builtin_unreachable();
+    PL_FLUX_UNREACHABLE();
 }
 std::string Block::string() const {
     return absl::StrFormat("{%s}", absl::StrJoin(body, "; ", [](std::string* out, const auto& b) {

@@ -17,10 +17,12 @@
 
 #pragma once
 
+#include "cpp/pl/flux/compat.h"
 #include "cpp/pl/flux/runtime_builtin_table_helpers.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -45,6 +47,30 @@ struct NumericSummary {
     int64_t int_sum = 0;
     uint64_t uint_sum = 0;
 };
+
+absl::Status checked_add_uint(uint64_t* target, uint64_t value, const std::string& name) {
+    if (*target > std::numeric_limits<uint64_t>::max() - value) {
+        return absl::InvalidArgumentError(absl::StrCat(name, " uint sum overflows uint64"));
+    }
+    *target += value;
+    return absl::OkStatus();
+}
+
+absl::Status checked_add_int(int64_t* target, int64_t value, const std::string& name) {
+    if ((value > 0 && *target > std::numeric_limits<int64_t>::max() - value) ||
+        (value < 0 && *target < std::numeric_limits<int64_t>::min() - value)) {
+        return absl::InvalidArgumentError(absl::StrCat(name, " int sum overflows int64"));
+    }
+    *target += value;
+    return absl::OkStatus();
+}
+
+absl::StatusOr<int64_t> checked_uint_to_int(uint64_t value, const std::string& name) {
+    if (value > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+        return absl::InvalidArgumentError(absl::StrCat(name, " uint value overflows int64"));
+    }
+    return static_cast<int64_t>(value);
+}
 
 std::shared_ptr<ObjectValue> materialize_group_count_row(const TableChunk& chunk,
                                                          const std::string& column,
@@ -172,9 +198,19 @@ absl::StatusOr<NumericSummary> summarize_numeric_array(const ArrayValue& array,
                 if (summary.kind == NumericKind::Float) {
                     summary.float_sum += static_cast<double>(item.as_uint());
                 } else if (summary.kind == NumericKind::Int) {
-                    summary.int_sum += static_cast<int64_t>(item.as_uint());
+                    auto int_value_or = checked_uint_to_int(item.as_uint(), name);
+                    if (!int_value_or.ok()) {
+                        return int_value_or.status();
+                    }
+                    auto status = checked_add_int(&summary.int_sum, *int_value_or, name);
+                    if (!status.ok()) {
+                        return status;
+                    }
                 } else {
-                    summary.uint_sum += item.as_uint();
+                    auto status = checked_add_uint(&summary.uint_sum, item.as_uint(), name);
+                    if (!status.ok()) {
+                        return status;
+                    }
                 }
                 break;
             case Value::Type::Int:
@@ -183,9 +219,16 @@ absl::StatusOr<NumericSummary> summarize_numeric_array(const ArrayValue& array,
                 } else {
                     if (summary.kind == NumericKind::UInt) {
                         summary.kind = NumericKind::Int;
-                        summary.int_sum = static_cast<int64_t>(summary.uint_sum);
+                        auto int_sum_or = checked_uint_to_int(summary.uint_sum, name);
+                        if (!int_sum_or.ok()) {
+                            return int_sum_or.status();
+                        }
+                        summary.int_sum = *int_sum_or;
                     }
-                    summary.int_sum += item.as_int();
+                    auto status = checked_add_int(&summary.int_sum, item.as_int(), name);
+                    if (!status.ok()) {
+                        return status;
+                    }
                 }
                 break;
             case Value::Type::Float:
@@ -214,7 +257,7 @@ Value numeric_sum_value(const NumericSummary& summary) {
         case NumericKind::Float:
             return Value::floating(summary.float_sum);
         default:
-            __builtin_unreachable();
+            PL_FLUX_UNREACHABLE();
     }
 }
 
