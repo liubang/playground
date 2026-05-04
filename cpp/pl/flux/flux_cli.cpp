@@ -22,6 +22,7 @@
 #include "absl/strings/str_join.h"
 #include "cpp/pl/ascii_table/pretty.h"
 #include "cpp/pl/flux/ast_debug.h"
+#include "cpp/pl/flux/compat.h"
 #include "cpp/pl/flux/parser.h"
 #include "cpp/pl/flux/runtime_builtin.h"
 #include "cpp/pl/flux/runtime_exec.h"
@@ -224,7 +225,7 @@ std::string scalar_cell_text(const Value& value) {
         case Value::Type::Function:
             return value.string();
         default:
-            __builtin_unreachable();
+            PL_FLUX_UNREACHABLE();
     }
 }
 
@@ -414,7 +415,7 @@ std::string flux_datatype_name(const Value& value) {
         case Value::Type::Function:
             return "string";
         default:
-            __builtin_unreachable();
+            PL_FLUX_UNREACHABLE();
     }
 }
 

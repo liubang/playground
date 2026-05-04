@@ -21,6 +21,7 @@
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/runtime_builtin_package.h"
 #include "cpp/pl/flux/runtime_builtin_universe.h"
+#include <mutex>
 
 namespace pl {
 namespace {
@@ -73,9 +74,12 @@ absl::Status BuiltinRegistry::Ensure(Environment& env, const std::string& name) 
 }
 
 absl::StatusOr<Value> BuiltinRegistry::ImportPackage(const std::string& path) {
-    flux_builtin::RegisterTableStdlibPackages();
-    flux_builtin::RegisterScalarStdlibPackages();
-    flux_builtin::RegisterJoinStdlibPackage();
+    static std::once_flag register_once;
+    std::call_once(register_once, [] {
+        flux_builtin::RegisterTableStdlibPackages();
+        flux_builtin::RegisterScalarStdlibPackages();
+        flux_builtin::RegisterJoinStdlibPackage();
+    });
 
     auto package = flux_builtin::ImportRegisteredPackage(path);
     if (package.has_value()) {
