@@ -20,6 +20,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/time/civil_time.h"
 #include "absl/time/time.h"
+#include "cpp/pl/flux/compat.h"
 #include "cpp/pl/flux/runtime_builtin_package.h"
 #include "cpp/pl/flux/strconv.h"
 #include <algorithm>
@@ -173,7 +174,7 @@ std::string value_type_name(const Value& value) {
         case Value::Type::Function:
             return "function";
         default:
-            __builtin_unreachable();
+            PL_FLUX_UNREACHABLE();
     }
 }
 
@@ -197,7 +198,7 @@ absl::StatusOr<std::string> dict_key_string(const Value& value, const std::strin
             return absl::InvalidArgumentError(
                 absl::StrCat(name, " `key` must be a comparable scalar"));
         default:
-            __builtin_unreachable();
+            PL_FLUX_UNREACHABLE();
     }
 }
 
@@ -1106,7 +1107,7 @@ absl::Status append_json_value(JsonBuilder& builder, const Value& value) {
         case Value::Type::Function:
             return absl::InvalidArgumentError("json.encode does not support function values");
         default:
-            __builtin_unreachable();
+            PL_FLUX_UNREACHABLE();
     }
 }
 

@@ -438,12 +438,12 @@ absl::StatusOr<Value> join_with_predicate(const TableValue& left_table,
         right_chunks_by_group[chunk_group_key(right_chunk)].push_back(&right_chunk);
     }
 
-    std::unordered_set<const ObjectValue*> matched_right_rows;
     std::unordered_set<std::string> processed_groups;
     std::vector<TableChunk> output_chunks;
 
     auto emit_group = [&](const std::vector<const TableChunk*>& left_chunks,
                           const std::vector<const TableChunk*>& right_chunks) -> absl::Status {
+        std::unordered_set<const ObjectValue*> matched_right_rows;
         TableChunk output_chunk;
         for (const auto* left_chunk : left_chunks) {
             for (const auto& left_row : left_chunk->rows) {

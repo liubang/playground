@@ -18,6 +18,7 @@
 #include "cpp/pl/flux/runtime_builtin_table_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_time_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_universe.h"
+#include <limits>
 
 namespace pl {
 namespace {
@@ -176,6 +177,10 @@ absl::StatusOr<Value> builtin_limit(const std::vector<Value>& args) {
         if (offset_value->type() == Value::Type::Int) {
             offset = offset_value->as_int();
         } else if (offset_value->type() == Value::Type::UInt) {
+            if (offset_value->as_uint() >
+                static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+                return absl::InvalidArgumentError("limit `offset` overflows int64");
+            }
             offset = static_cast<int64_t>(offset_value->as_uint());
         } else {
             return absl::InvalidArgumentError("limit `offset` must be an int or uint");
@@ -213,6 +218,10 @@ absl::StatusOr<Value> builtin_tail(const std::vector<Value>& args) {
         if (offset_value->type() == Value::Type::Int) {
             offset = offset_value->as_int();
         } else if (offset_value->type() == Value::Type::UInt) {
+            if (offset_value->as_uint() >
+                static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+                return absl::InvalidArgumentError("tail `offset` overflows int64");
+            }
             offset = static_cast<int64_t>(offset_value->as_uint());
         } else {
             return absl::InvalidArgumentError("tail `offset` must be an int or uint");

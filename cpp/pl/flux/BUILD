@@ -86,6 +86,7 @@ cc_library(
     hdrs = [
         "ast.h",
         "ast_debug.h",
+        "compat.h",
         "parser.h",
         "strconv.h",
     ],
@@ -105,6 +106,7 @@ cc_library(
         "runtime_value.cpp",
     ],
     hdrs = [
+        "compat.h",
         "runtime_value.h",
     ],
     copts = COPTS_WITH_ASAN,
@@ -146,6 +148,7 @@ cc_library(
         "runtime_builtin_universe_window.cpp",
     ],
     hdrs = [
+        "compat.h",
         "runtime_builtin.h",
         "runtime_builtin_aggregate_helpers.h",
         "runtime_builtin_package.h",
@@ -175,6 +178,7 @@ cc_library(
         "runtime_eval.cpp",
     ],
     hdrs = [
+        "compat.h",
         "runtime_eval.h",
     ],
     copts = COPTS_WITH_ASAN,
@@ -194,6 +198,7 @@ cc_library(
         "runtime_exec.cpp",
     ],
     hdrs = [
+        "compat.h",
         "runtime_exec.h",
     ],
     copts = COPTS_WITH_ASAN,
@@ -213,6 +218,7 @@ cc_library(
         "flux_cli.cpp",
     ],
     hdrs = [
+        "compat.h",
         "flux_cli.h",
     ],
     copts = COPTS_WITH_ASAN,
