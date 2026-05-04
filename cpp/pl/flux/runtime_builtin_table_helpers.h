@@ -23,6 +23,7 @@
 #include "cpp/pl/flux/runtime_eval.h"
 #include <algorithm>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -153,7 +154,12 @@ absl::StatusOr<int64_t> integer_property(const ObjectValue& object,
         return (*value_or)->as_int();
     }
     if ((*value_or)->type() == Value::Type::UInt) {
-        return static_cast<int64_t>((*value_or)->as_uint());
+        const uint64_t value = (*value_or)->as_uint();
+        if (value > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+            return absl::InvalidArgumentError(
+                absl::StrCat(name, " `", property, "` overflows int64"));
+        }
+        return static_cast<int64_t>(value);
     }
     return absl::InvalidArgumentError(
         absl::StrCat(name, " `", property, "` must be an int or uint"));

@@ -512,6 +512,18 @@ TEST(RuntimeEvalTest, EvaluatesAggregateBuiltins) {
     auto max = ExpressionEvaluator::Evaluate(max_expr, env);
     ASSERT_TRUE(max.ok()) << max.status();
     EXPECT_EQ(Value::floating(4.5), *max);
+
+    const auto& uint_overflow_expr = ParseAssignmentInit(
+        "result = sum([18446744073709551615u, 1u])");
+    auto uint_overflow = ExpressionEvaluator::Evaluate(uint_overflow_expr, env);
+    ASSERT_FALSE(uint_overflow.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, uint_overflow.status().code());
+
+    const auto& mixed_overflow_expr = ParseAssignmentInit(
+        "result = sum([9223372036854775808u, -1])");
+    auto mixed_overflow = ExpressionEvaluator::Evaluate(mixed_overflow_expr, env);
+    ASSERT_FALSE(mixed_overflow.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, mixed_overflow.status().code());
 }
 
 TEST(RuntimeEvalTest, EvaluatesUserFunctionCallsWithClosureCapture) {
@@ -1320,6 +1332,17 @@ TEST(RuntimeEvalTest, EvaluatesElapsedBuiltin) {
     EXPECT_EQ("{host: \"a\"}", result->as_table().rows[0]->lookup("_group")->string());
     EXPECT_EQ("\"b\"", result->as_table().rows[1]->lookup("host")->string());
     EXPECT_EQ("5", result->as_table().rows[1]->lookup("elapsed")->string());
+
+    const auto& zero_unit_expr = ParseAssignmentInit(R"(
+        result = from(bucket: "telegraf", rows: [
+                {_time: 2024-01-01T00:00:00Z, _value: 1.0},
+                {_time: 2024-01-01T00:00:10Z, _value: 2.0},
+            ])
+            |> elapsed(unit: 0s)
+    )");
+    auto zero_unit = ExpressionEvaluator::Evaluate(zero_unit_expr, env);
+    ASSERT_FALSE(zero_unit.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, zero_unit.status().code());
 }
 
 TEST(RuntimeEvalTest, EvaluatesDifferenceBuiltin) {
@@ -1406,6 +1429,17 @@ TEST(RuntimeEvalTest, EvaluatesDerivativeBuiltin) {
     EXPECT_EQ("2.33333333333333", result->as_table().rows[0]->lookup("_value")->string());
     EXPECT_EQ("\"b\"", result->as_table().rows[1]->lookup("host")->string());
     EXPECT_EQ("-1", result->as_table().rows[1]->lookup("_value")->string());
+
+    const auto& zero_unit_expr = ParseAssignmentInit(R"(
+        result = from(bucket: "telegraf", rows: [
+                {_time: 2024-01-01T00:00:00Z, _value: 1.0},
+                {_time: 2024-01-01T00:00:10Z, _value: 2.0},
+            ])
+            |> derivative(unit: 0s)
+    )");
+    auto zero_unit = ExpressionEvaluator::Evaluate(zero_unit_expr, env);
+    ASSERT_FALSE(zero_unit.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, zero_unit.status().code());
 }
 
 TEST(RuntimeEvalTest, EvaluatesDerivativeBuiltinWithNonNegativeAndInitialZero) {
@@ -1466,6 +1500,26 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowBuiltin) {
     EXPECT_EQ("50", result->as_table().rows[1]->lookup("_value")->string());
     ASSERT_NE(nullptr, result->as_table().rows[2]);
     EXPECT_EQ("90", result->as_table().rows[2]->lookup("_value")->string());
+
+    const auto& overflow_duration_expr = ParseAssignmentInit(R"(
+        result = from(bucket: "telegraf", rows: [
+                {_time: 2024-01-01T00:00:00Z, _value: 1.0},
+            ])
+            |> aggregateWindow(every: "99999999999999999999d", fn: mean)
+    )");
+    auto overflow_duration = ExpressionEvaluator::Evaluate(overflow_duration_expr, env);
+    ASSERT_FALSE(overflow_duration.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, overflow_duration.status().code());
+
+    const auto& uint_limit_expr = ParseAssignmentInit(R"(
+        result = from(bucket: "telegraf", rows: [
+                {_time: 2024-01-01T00:00:00Z, _value: 1.0},
+            ])
+            |> limit(n: 9223372036854775808u)
+    )");
+    auto uint_limit = ExpressionEvaluator::Evaluate(uint_limit_expr, env);
+    ASSERT_FALSE(uint_limit.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, uint_limit.status().code());
 }
 
 TEST(RuntimeEvalTest, EvaluatesAggregateWindowColumnAndAggregateVariants) {

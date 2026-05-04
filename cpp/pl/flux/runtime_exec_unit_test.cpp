@@ -324,6 +324,22 @@ TEST(RuntimeExecTest, ImportsUnknownPackageAsMetadataOnlyObject) {
               result_or->last.value.string());
 }
 
+TEST(RuntimeExecTest, ImportsUnaliasedMultiSegmentPackageByLastPathSegment) {
+    auto file = ParseFile(R"(
+        import "experimental/unknown"
+        unknown.path
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("unknown").ok());
+    ASSERT_FALSE(env.lookup("experimental/unknown").ok());
+    EXPECT_EQ("\"experimental/unknown\"", result_or->last.value.string());
+}
+
 TEST(RuntimeExecTest, ExecutesArrayFromImportedPackage) {
     auto file = ParseFile(R"(
         import "array"

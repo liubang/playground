@@ -16,6 +16,7 @@
 // Created: 2026/04/25 10:40
 
 #include "cpp/pl/flux/runtime_builtin_aggregate_helpers.h"
+#include "cpp/pl/flux/compat.h"
 #include "cpp/pl/flux/runtime_builtin_universe.h"
 
 namespace pl {
@@ -54,7 +55,7 @@ absl::StatusOr<Value> builtin_mean(const std::vector<Value>& args) {
         case NumericKind::Float:
             return Value::floating(summary_or->float_sum / count);
         default:
-            __builtin_unreachable();
+            PL_FLUX_UNREACHABLE();
     }
 }
 
