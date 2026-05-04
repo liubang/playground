@@ -19,6 +19,7 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
+#include "cpp/pl/flux/compat.h"
 #include <optional>
 #include <regex>
 #include <sstream>
@@ -71,7 +72,7 @@ absl::StatusOr<std::string> dict_key_string(const Value& value) {
         case Value::Type::Function:
             return absl::InvalidArgumentError("dictionary key must be a comparable scalar");
         default:
-            __builtin_unreachable();
+            PL_FLUX_UNREACHABLE();
     }
 }
 
@@ -82,7 +83,7 @@ absl::StatusOr<std::string> property_name(const PropertyKey& key) {
         case PropertyKey::Type::StringLiteral:
             return std::get<std::unique_ptr<StringLit>>(key.key)->value;
         default:
-            __builtin_unreachable();
+            PL_FLUX_UNREACHABLE();
     }
 }
 
@@ -216,13 +217,13 @@ absl::StatusOr<Value> execute_function_body(const FunctionBody& body, Environmen
                     case Statement::Type::TestCaseStatement:
                         return absl::UnimplementedError("unsupported statement in function body");
                     default:
-                        __builtin_unreachable();
+                        PL_FLUX_UNREACHABLE();
                 }
             }
             return last;
         }
         default:
-            __builtin_unreachable();
+            PL_FLUX_UNREACHABLE();
     }
 }
 
@@ -933,7 +934,7 @@ absl::StatusOr<Value> eval_impl(const Expression& expr, const Environment& env) 
         case Expression::Type::BadExpr:
             return unsupported(expr, "kind");
         default:
-            __builtin_unreachable();
+            PL_FLUX_UNREACHABLE();
     }
 }
 

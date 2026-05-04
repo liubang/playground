@@ -17,6 +17,7 @@
 
 #include "cpp/pl/flux/runtime_value.h"
 
+#include "cpp/pl/flux/compat.h"
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
@@ -261,7 +262,7 @@ std::string Value::string() const {
         case Type::Function:
             return as_function().string();
         default:
-            __builtin_unreachable();
+            PL_FLUX_UNREACHABLE();
     }
 }
 
@@ -297,7 +298,7 @@ bool operator==(const Value& lhs, const Value& rhs) {
         case Value::Type::Function:
             return &lhs.as_function() == &rhs.as_function();
         default:
-            __builtin_unreachable();
+            PL_FLUX_UNREACHABLE();
     }
 }
 

@@ -24,6 +24,7 @@
 #include <cctype>
 #include <cstdint>
 #include <ctime>
+#include <limits>
 #include <optional>
 #include <string>
 
@@ -99,14 +100,13 @@ bool parse_fixed_int(const std::string& text, size_t offset, size_t width, int* 
 }
 
 int64_t days_from_civil(int year, unsigned month, unsigned day) {
-    year -= static_cast<int>(month <= 2);
-    const int era = (year >= 0 ? year : year - 399) / 400;
-    const auto yoe = static_cast<unsigned>(year - era * 400);
-    const auto shifted_month =
-        static_cast<unsigned>(static_cast<int>(month) + (month > 2 ? -3 : 9));
-    const unsigned doy = (153 * shifted_month + 2) / 5 + day - 1;
-    const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    return era * 146097 + static_cast<int>(doe) - 719468;
+    int64_t adjusted_year = static_cast<int64_t>(year) - static_cast<int64_t>(month <= 2);
+    const int64_t era = (adjusted_year >= 0 ? adjusted_year : adjusted_year - 399) / 400;
+    const int64_t yoe = adjusted_year - era * 400;
+    const int64_t shifted_month = static_cast<int64_t>(month) + (month > 2 ? -3 : 9);
+    const int64_t doy = (153 * shifted_month + 2) / 5 + static_cast<int64_t>(day) - 1;
+    const int64_t doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return era * 146097 + doe - 719468;
 }
 
 std::optional<int64_t> parse_rfc3339_seconds(const std::string& literal) {
@@ -314,6 +314,23 @@ absl::StatusOr<WindowDuration> parse_window_duration(const Value& value,
     int64_t calendar_months = 0;
     bool saw_fixed_unit = false;
     bool saw_calendar_unit = false;
+    const auto overflow_error = [&]() {
+        return absl::InvalidArgumentError(
+            absl::StrCat(name, " `", property, "` duration is too large"));
+    };
+    const auto checked_add = [&](int64_t* target, int64_t addend) -> absl::Status {
+        if (addend > 0 && *target > std::numeric_limits<int64_t>::max() - addend) {
+            return overflow_error();
+        }
+        *target += addend;
+        return absl::OkStatus();
+    };
+    const auto checked_mul = [&](int64_t amount, int64_t factor) -> absl::StatusOr<int64_t> {
+        if (amount > std::numeric_limits<int64_t>::max() / factor) {
+            return overflow_error();
+        }
+        return amount * factor;
+    };
     while (index < literal.size()) {
         if (std::isdigit(static_cast<unsigned char>(literal[index])) == 0) {
             return absl::InvalidArgumentError(
@@ -323,7 +340,11 @@ absl::StatusOr<WindowDuration> parse_window_duration(const Value& value,
         int64_t amount = 0;
         while (index < literal.size() &&
                (std::isdigit(static_cast<unsigned char>(literal[index])) != 0)) {
-            amount = amount * 10 + (literal[index] - '0');
+            const int64_t digit = literal[index] - '0';
+            if (amount > (std::numeric_limits<int64_t>::max() - digit) / 10) {
+                return overflow_error();
+            }
+            amount = amount * 10 + digit;
             ++index;
         }
         const size_t unit_begin = index;
@@ -333,25 +354,66 @@ absl::StatusOr<WindowDuration> parse_window_duration(const Value& value,
         }
         const auto unit = literal.substr(unit_begin, index - unit_begin);
         if (unit == "s") {
-            fixed_total += amount;
+            auto status = checked_add(&fixed_total, amount);
+            if (!status.ok()) {
+                return status;
+            }
             saw_fixed_unit = true;
         } else if (unit == "m") {
-            fixed_total += amount * 60;
+            auto seconds_or = checked_mul(amount, 60);
+            if (!seconds_or.ok()) {
+                return seconds_or.status();
+            }
+            auto status = checked_add(&fixed_total, *seconds_or);
+            if (!status.ok()) {
+                return status;
+            }
             saw_fixed_unit = true;
         } else if (unit == "h") {
-            fixed_total += amount * 60 * 60;
+            auto seconds_or = checked_mul(amount, 60 * 60);
+            if (!seconds_or.ok()) {
+                return seconds_or.status();
+            }
+            auto status = checked_add(&fixed_total, *seconds_or);
+            if (!status.ok()) {
+                return status;
+            }
             saw_fixed_unit = true;
         } else if (unit == "d") {
-            fixed_total += amount * 24 * 60 * 60;
+            auto seconds_or = checked_mul(amount, 24 * 60 * 60);
+            if (!seconds_or.ok()) {
+                return seconds_or.status();
+            }
+            auto status = checked_add(&fixed_total, *seconds_or);
+            if (!status.ok()) {
+                return status;
+            }
             saw_fixed_unit = true;
         } else if (unit == "w") {
-            fixed_total += amount * 7 * 24 * 60 * 60;
+            auto seconds_or = checked_mul(amount, 7 * 24 * 60 * 60);
+            if (!seconds_or.ok()) {
+                return seconds_or.status();
+            }
+            auto status = checked_add(&fixed_total, *seconds_or);
+            if (!status.ok()) {
+                return status;
+            }
             saw_fixed_unit = true;
         } else if (unit == "mo") {
-            calendar_months += amount;
+            auto status = checked_add(&calendar_months, amount);
+            if (!status.ok()) {
+                return status;
+            }
             saw_calendar_unit = true;
         } else if (unit == "y") {
-            calendar_months += amount * 12;
+            auto months_or = checked_mul(amount, 12);
+            if (!months_or.ok()) {
+                return months_or.status();
+            }
+            auto status = checked_add(&calendar_months, *months_or);
+            if (!status.ok()) {
+                return status;
+            }
             saw_calendar_unit = true;
         } else {
             return absl::InvalidArgumentError(
@@ -362,8 +424,10 @@ absl::StatusOr<WindowDuration> parse_window_duration(const Value& value,
                 name, " `", property, "` cannot mix calendar units with fixed-duration units"));
         }
     }
-    fixed_total *= sign;
-    calendar_months *= sign;
+    if (sign < 0) {
+        fixed_total = -fixed_total;
+        calendar_months = -calendar_months;
+    }
     if ((!allow_zero && fixed_total == 0 && calendar_months == 0) ||
         (!allow_negative && fixed_total < 0)) {
         return absl::InvalidArgumentError(
