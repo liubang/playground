@@ -88,7 +88,7 @@ bazel_dep(name = "liburing", version = "2.14")
 bazel_dep(name = "crc32c", version = "1.1.0")
 bazel_dep(name = "snappy", version = "1.2.1")
 bazel_dep(name = "lemon", version = "3.42.0")
-bazel_dep(name = "sqlite3", version = "3.42.0")
+bazel_dep(name = "sqlite3", version = "3.51.2.bcr.1")
 bazel_dep(name = "simdjson", version = "4.6.0")
 bazel_dep(name = "spdlog", version = "1.17.0")
 bazel_dep(name = "gflags", version = "2.2.2")
@@ -240,6 +240,8 @@ single_version_override(
     module_name = "boost.iostreams",
     version = "1.90.0.bcr.2",
 )
+
+bazel_dep(name = "boost.mysql", version = "1.90.0.bcr.1")
 
 # for test
 bazel_dep(name = "catch2", version = "3.13.0", dev_dependency = True)
