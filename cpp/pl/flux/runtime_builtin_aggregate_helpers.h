@@ -26,7 +26,7 @@
 #include <string>
 #include <vector>
 
-namespace pl {
+namespace pl::flux {
 
 #if defined(__clang__)
 #pragma clang diagnostic push
@@ -300,4 +300,4 @@ absl::StatusOr<Value> aggregate_min_max(const std::vector<Value>& args,
 #pragma clang diagnostic pop
 #endif
 
-} // namespace pl
+} // namespace pl::flux

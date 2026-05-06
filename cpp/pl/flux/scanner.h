@@ -23,7 +23,7 @@
 #include <memory>
 #include <vector>
 
-namespace pl {
+namespace pl::flux {
 class Scanner {
 
 public:
@@ -96,4 +96,4 @@ private:
     std::map<Position, uint32_t> positions_;
     std::vector<std::shared_ptr<Comment>> comments_;
 };
-} // namespace pl
+} // namespace pl::flux

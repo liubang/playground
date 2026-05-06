@@ -22,7 +22,7 @@
 #include <optional>
 #include <string>
 
-namespace pl {
+namespace pl::flux {
 
 enum class FluxOutputFormat {
     Human,
@@ -63,4 +63,4 @@ int RunFluxRepl(std::istream& input,
                 bool interactive,
                 const FluxCliOptions& options = {});
 
-} // namespace pl
+} // namespace pl::flux

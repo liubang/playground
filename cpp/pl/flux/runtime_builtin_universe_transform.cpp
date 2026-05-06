@@ -20,7 +20,7 @@
 #include "cpp/pl/flux/runtime_builtin_universe.h"
 #include <limits>
 
-namespace pl {
+namespace pl::flux {
 namespace {
 
 absl::StatusOr<Value> builtin_from(const std::vector<Value>& args) {
@@ -749,4 +749,4 @@ bool InstallKnownUniverseTransformBuiltin(Environment& env, const std::string& n
     return false;
 }
 
-} // namespace pl
+} // namespace pl::flux

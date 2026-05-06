@@ -17,9 +17,9 @@
 #include "ast.h"
 #include <string>
 
-namespace pl {
+namespace pl::flux {
 
 std::string dump_ast(const File& file);
 std::string dump_ast_json(const File& file);
 
-} // namespace pl
+} // namespace pl::flux

@@ -18,7 +18,7 @@
 #include "cpp/pl/flux/runtime_builtin_table_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_universe.h"
 
-namespace pl {
+namespace pl::flux {
 namespace {
 
 absl::StatusOr<Value> builtin_yield(const std::vector<Value>& args) {
@@ -174,4 +174,4 @@ bool InstallKnownUniverseInspectBuiltin(Environment& env, const std::string& nam
     return false;
 }
 
-} // namespace pl
+} // namespace pl::flux

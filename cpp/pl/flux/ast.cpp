@@ -22,7 +22,7 @@
 #include "absl/strings/str_join.h"
 #include "cpp/pl/flux/compat.h"
 
-namespace pl {
+namespace pl::flux {
 
 namespace {
 
@@ -480,4 +480,4 @@ std::string BuiltinStmt::string() const {
     return absl::StrFormat("builtin %s: %s", id->string(), type_expr);
 }
 
-} // namespace pl
+} // namespace pl::flux

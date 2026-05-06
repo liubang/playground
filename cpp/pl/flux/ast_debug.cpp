@@ -21,7 +21,7 @@
 #include <string_view>
 #include <vector>
 
-namespace pl {
+namespace pl::flux {
 namespace {
 
 std::string attributes_summary(const std::vector<std::shared_ptr<Attribute>>& attributes) {
@@ -1150,4 +1150,4 @@ std::string dump_ast(const File& file) { return AstDumper().dump(file); }
 
 std::string dump_ast_json(const File& file) { return AstJsonDumper().dump(file); }
 
-} // namespace pl
+} // namespace pl::flux

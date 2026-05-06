@@ -18,7 +18,7 @@
 #include "cpp/pl/flux/runtime_builtin_universe.h"
 #include "cpp/pl/flux/runtime_builtin_window_helpers.h"
 
-namespace pl {
+namespace pl::flux {
 namespace {
 
 absl::StatusOr<Value> builtin_elapsed(const std::vector<Value>& args) {
@@ -1042,4 +1042,4 @@ bool InstallKnownUniverseWindowBuiltin(Environment& env, const std::string& name
     return false;
 }
 
-} // namespace pl
+} // namespace pl::flux

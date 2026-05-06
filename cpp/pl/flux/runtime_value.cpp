@@ -23,7 +23,7 @@
 #include <stdexcept>
 #include <unordered_set>
 
-namespace pl {
+namespace pl::flux {
 
 namespace {
 
@@ -401,4 +401,4 @@ std::string FunctionValue::string() const {
     return kind == Kind::Builtin ? "<builtin " + name + ">" : "<function " + name + ">";
 }
 
-} // namespace pl
+} // namespace pl::flux

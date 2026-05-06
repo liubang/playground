@@ -23,7 +23,7 @@
 #include <utility>
 #include <vector>
 
-namespace pl {
+namespace pl::flux {
 enum class TokenType {
     Illegal,
     Eof,
@@ -277,4 +277,4 @@ inline std::ostream& operator<<(std::ostream& os, const Token& token) {
     return os;
 }
 
-} // namespace pl
+} // namespace pl::flux

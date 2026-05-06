@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-namespace pl {
+namespace pl::flux {
 
 constexpr unsigned char DURATION_UNIT_US[] = "µ";
 constexpr char DURATION_UNIT_US_ASCII[] = "us";
@@ -49,4 +49,4 @@ public:
     static absl::StatusOr<std::string> parse_unit(const std::string& chars, size_t& i);
 };
 
-} // namespace pl
+} // namespace pl::flux

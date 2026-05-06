@@ -23,7 +23,7 @@
 #include "cpp/pl/flux/runtime_builtin_universe.h"
 #include <mutex>
 
-namespace pl {
+namespace pl::flux {
 namespace {
 
 Value make_unimplemented_builtin_value(const std::string& name) {
@@ -76,17 +76,17 @@ absl::Status BuiltinRegistry::Ensure(Environment& env, const std::string& name) 
 absl::StatusOr<Value> BuiltinRegistry::ImportPackage(const std::string& path) {
     static std::once_flag register_once;
     std::call_once(register_once, [] {
-        flux_builtin::RegisterTableStdlibPackages();
-        flux_builtin::RegisterScalarStdlibPackages();
-        flux_builtin::RegisterJoinStdlibPackage();
-        flux_builtin::RegisterSqlStdlibPackage();
+        builtin::RegisterTableStdlibPackages();
+        builtin::RegisterScalarStdlibPackages();
+        builtin::RegisterJoinStdlibPackage();
+        builtin::RegisterSqlStdlibPackage();
     });
 
-    auto package = flux_builtin::ImportRegisteredPackage(path);
+    auto package = builtin::ImportRegisteredPackage(path);
     if (package.has_value()) {
         return *package;
     }
-    return flux_builtin::MakeUnknownPackage(path);
+    return builtin::MakeUnknownPackage(path);
 }
 
-} // namespace pl
+} // namespace pl::flux
