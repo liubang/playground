@@ -20,6 +20,7 @@
 
 namespace pl::flux {
 namespace {
+using namespace detail;
 
 absl::StatusOr<Value> builtin_elapsed(const std::vector<Value>& args) {
     auto object_or = require_object_argument(args, "elapsed");

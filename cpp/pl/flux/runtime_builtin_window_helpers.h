@@ -32,13 +32,13 @@ namespace pl::flux {
 #pragma clang diagnostic ignored "-Wunused-function"
 #endif
 
-namespace {
+namespace detail {
 
-std::shared_ptr<ObjectValue> window_group_object(const TableChunk& chunk,
-                                                 const std::string& start_column,
-                                                 int64_t start_seconds,
-                                                 const std::string& stop_column,
-                                                 int64_t stop_seconds) {
+inline std::shared_ptr<ObjectValue> window_group_object(const TableChunk& chunk,
+                                                        const std::string& start_column,
+                                                        int64_t start_seconds,
+                                                        const std::string& stop_column,
+                                                        int64_t stop_seconds) {
     auto group = chunk_group_object(chunk);
     Value updated = object_with_upserted_property(
         *group, start_column, Value::time(format_rfc3339_seconds(start_seconds)));
@@ -47,12 +47,13 @@ std::shared_ptr<ObjectValue> window_group_object(const TableChunk& chunk,
     return std::make_shared<ObjectValue>(updated.as_object());
 }
 
-std::shared_ptr<ObjectValue> row_with_window_bounds(const ObjectValue& row,
-                                                    const std::string& start_column,
-                                                    int64_t start_seconds,
-                                                    const std::string& stop_column,
-                                                    int64_t stop_seconds,
-                                                    const std::shared_ptr<ObjectValue>& group) {
+inline std::shared_ptr<ObjectValue> row_with_window_bounds(
+    const ObjectValue& row,
+    const std::string& start_column,
+    int64_t start_seconds,
+    const std::string& stop_column,
+    int64_t stop_seconds,
+    const std::shared_ptr<ObjectValue>& group) {
     Value updated = object_with_upserted_property(
         row, start_column, Value::time(format_rfc3339_seconds(start_seconds)));
     updated = object_with_upserted_property(updated.as_object(), stop_column,
@@ -61,7 +62,7 @@ std::shared_ptr<ObjectValue> row_with_window_bounds(const ObjectValue& row,
     return std::make_shared<ObjectValue>(updated.as_object());
 }
 
-std::unordered_set<std::string> aggregate_window_allowed_columns(
+inline std::unordered_set<std::string> aggregate_window_allowed_columns(
     const ObjectValue& row,
     const std::string& aggregate_column,
     const std::string& time_dst_column) {
@@ -77,9 +78,9 @@ std::unordered_set<std::string> aggregate_window_allowed_columns(
     return allowed;
 }
 
-std::shared_ptr<ObjectValue> aggregate_window_base_row(const ObjectValue& row,
-                                                       const std::string& aggregate_column,
-                                                       const std::string& time_dst_column) {
+inline std::shared_ptr<ObjectValue> aggregate_window_base_row(const ObjectValue& row,
+                                                              const std::string& aggregate_column,
+                                                              const std::string& time_dst_column) {
     std::vector<std::pair<std::string, Value>> properties;
     const auto allowed = aggregate_window_allowed_columns(row, aggregate_column, time_dst_column);
     properties.reserve(allowed.size());
@@ -92,7 +93,7 @@ std::shared_ptr<ObjectValue> aggregate_window_base_row(const ObjectValue& row,
     return std::make_shared<ObjectValue>(std::move(properties));
 }
 
-std::optional<int64_t> aggregate_window_time_src_seconds(
+inline std::optional<int64_t> aggregate_window_time_src_seconds(
     const std::shared_ptr<ObjectValue>& first_row,
     int64_t window_start,
     int64_t window_stop,
@@ -124,15 +125,15 @@ struct AggregateWindowBucket {
     std::vector<Value> values;
 };
 
-bool aggregate_window_fn_drops_empty(const FunctionValue& fn) {
+inline bool aggregate_window_fn_drops_empty(const FunctionValue& fn) {
     if (fn.kind != FunctionValue::Kind::Builtin) {
         return false;
     }
     return fn.name == "first" || fn.name == "last";
 }
 
-absl::StatusOr<Value> invoke_window_aggregate(const FunctionValue& fn,
-                                              const std::vector<Value>& values) {
+inline absl::StatusOr<Value> invoke_window_aggregate(const FunctionValue& fn,
+                                                     const std::vector<Value>& values) {
     if (fn.kind == FunctionValue::Kind::Builtin && fn.name == "count") {
         return Value::integer(static_cast<int64_t>(values.size()));
     }
@@ -152,14 +153,14 @@ absl::StatusOr<Value> invoke_window_aggregate(const FunctionValue& fn,
                                        {Value::array(values)});
 }
 
-Value empty_window_aggregate_value(const FunctionValue& fn) {
+inline Value empty_window_aggregate_value(const FunctionValue& fn) {
     if (fn.kind == FunctionValue::Kind::Builtin && fn.name == "count") {
         return Value::integer(0);
     }
     return Value::null();
 }
 
-std::shared_ptr<ObjectValue> aggregate_window_output_row(
+inline std::shared_ptr<ObjectValue> aggregate_window_output_row(
     const std::shared_ptr<ObjectValue>& base_row,
     const std::string& aggregate_column,
     Value aggregate_value,
@@ -210,7 +211,7 @@ std::shared_ptr<ObjectValue> aggregate_window_output_row(
     return std::make_shared<ObjectValue>(std::move(props));
 }
 
-} // namespace
+} // namespace detail
 
 #if defined(__clang__)
 #pragma clang diagnostic pop

@@ -2485,4 +2485,4 @@ std::unique_ptr<Token> Parser::consume() {
     return nullptr;
 }
 
-}; // namespace pl::flux
+} // namespace pl::flux
