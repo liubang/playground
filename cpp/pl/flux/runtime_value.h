@@ -18,6 +18,7 @@
 #pragma once
 
 #include "absl/status/statusor.h"
+#include "cpp/pl/flux/plan/plan_node.h"
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -131,6 +132,7 @@ public:
     [[nodiscard]] const ArrayValue& as_array() const;
     [[nodiscard]] const ObjectValue& as_object() const;
     [[nodiscard]] const TableValue& as_table() const;
+    [[nodiscard]] TableValue& as_table_mut();
     [[nodiscard]] const FunctionValue& as_function() const;
 
     [[nodiscard]] std::string string() const;
@@ -187,6 +189,7 @@ struct TableValue {
     std::optional<std::string> range_start;
     std::optional<std::string> range_stop;
     std::optional<std::string> result_name;
+    std::shared_ptr<plan::PlanNode> plan;
 
     [[nodiscard]] std::string string() const;
     bool operator==(const TableValue& other) const;

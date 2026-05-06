@@ -87,6 +87,10 @@ std::string RewriteExamplePaths(std::string source) {
     source = ReplaceAll(
         source, "cpp/pl/flux/examples/feature_gallery/data/multi_block.annotated.csv",
         RunfilePath("cpp/pl/flux/examples/feature_gallery/data/multi_block.annotated.csv"));
+    source = ReplaceAll(source, "cpp/pl/flux/examples/cross_source/metrics.db",
+                        RunfilePath("cpp/pl/flux/examples/cross_source/metrics.db"));
+    source = ReplaceAll(source, "cpp/pl/flux/examples/cross_source/owners.csv",
+                        RunfilePath("cpp/pl/flux/examples/cross_source/owners.csv"));
     return source;
 }
 
@@ -215,6 +219,26 @@ TEST(FluxCliTest, ExecutesFeatureGalleryArrayWatchlistExample) {
     EXPECT_NE(std::string::npos, result.output.find("\"ops\""));
     EXPECT_NE(std::string::npos, result.output.find("73.5"));
     EXPECT_NE(std::string::npos, result.output.find("58"));
+}
+
+TEST(FluxCliTest, ExecutesCrossSourceSqliteCsvJoinExample) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.result_name = "sqlite_csv_join";
+    auto result = ExecuteExampleScript("cpp/pl/flux/examples/cross_source/sqlite_csv_join.flux",
+                                       env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: sqlite_csv_join\n"));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-1\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-2\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"search\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"ads\""));
+    EXPECT_NE(std::string::npos, result.output.find("93.25"));
+    EXPECT_NE(std::string::npos, result.output.find("88"));
+    EXPECT_EQ(std::string::npos, result.output.find("\"edge-3\""));
+    EXPECT_EQ(std::string::npos, result.output.find("\"edge-4\""));
 }
 
 TEST(FluxCliTest, KeepsWatchlistFocusExampleAlignedWithOfficialFilterSemantics) {

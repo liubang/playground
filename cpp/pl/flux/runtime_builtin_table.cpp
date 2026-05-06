@@ -18,6 +18,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "cpp/pl/flux/connector/memory_source.h"
 #include "cpp/pl/flux/runtime_builtin_package.h"
 #include "cpp/pl/flux/runtime_eval.h"
 #include <exception>
@@ -215,7 +216,8 @@ absl::StatusOr<Value> parse_raw_csv_table(const std::string& csv, const std::str
     if (header.empty()) {
         return absl::InvalidArgumentError(absl::StrCat(name, " CSV must include a header row"));
     }
-    return Value::table("csv", std::move(rows));
+    connector::CsvSource source(std::move(rows));
+    return source.Scan({});
 }
 
 bool csv_bool(const std::string& value) {
@@ -372,7 +374,8 @@ absl::StatusOr<Value> parse_annotated_csv_table(const std::string& csv, const st
         return absl::InvalidArgumentError(
             absl::StrCat(name, " annotated CSV must include a header row"));
     }
-    return Value::table("csv", std::move(rows));
+    connector::CsvSource source(std::move(rows));
+    return source.Scan({});
 }
 
 absl::StatusOr<std::string> read_text_file(const std::string& path, const std::string& name) {
@@ -402,7 +405,8 @@ absl::StatusOr<Value> builtin_array_from(const std::vector<Value>& args) {
     if (!bucket_or.ok()) {
         return bucket_or.status();
     }
-    return Value::table(*bucket_or, std::move(*parsed_rows_or));
+    connector::ArraySource source(*bucket_or, std::move(*parsed_rows_or));
+    return source.Scan({});
 }
 
 absl::StatusOr<Value> builtin_array_concat(const std::vector<Value>& args) {

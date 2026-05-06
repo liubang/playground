@@ -33,5 +33,5 @@
 | `universe_transform.flux` | `from`、`range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`sort`、`group`、`pivot`、`fill`、`union`                                           |
 | `universe_aggregate.flux` | `sum`、`mean`、`min`、`max`、`reduce`、`distinct`、`count`、`spread`、`quantile`、`median`、`first`、`last`、`top`、`bottom`                                                         |
 | `universe_window.flux`    | `elapsed`、`difference`、`derivative`、`window`、`aggregateWindow`                                                                                                                   |
-| `universe_inspect.flux`   | `columns`、`keys`、`findColumn`、`findRecord`、`yield`                                                                                                                               |
+| `universe_inspect.flux`   | `columns`、`keys`、`findColumn`、`findRecord`、`explain`、`yield`                                                                                                                    |
 | `universe_join.flux`      | 顶层 `join()`                                                                                                                                                                        |
