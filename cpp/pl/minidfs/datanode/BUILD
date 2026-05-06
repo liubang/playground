@@ -25,7 +25,7 @@ cc_library(
         "block.h",
     ],
     deps = [
-        "//cpp/pl/dfs/common",
+        "//cpp/pl/minidfs/common",
         "//cpp/pl/status",
     ],
 )
