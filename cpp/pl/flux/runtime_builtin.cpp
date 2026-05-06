@@ -79,6 +79,7 @@ absl::StatusOr<Value> BuiltinRegistry::ImportPackage(const std::string& path) {
         flux_builtin::RegisterTableStdlibPackages();
         flux_builtin::RegisterScalarStdlibPackages();
         flux_builtin::RegisterJoinStdlibPackage();
+        flux_builtin::RegisterSqlStdlibPackage();
     });
 
     auto package = flux_builtin::ImportRegisteredPackage(path);

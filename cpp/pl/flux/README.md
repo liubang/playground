@@ -9,7 +9,7 @@
 - 人类可读、annotated CSV、JSON 三种 CLI 输出
 - REPL、内联源码、文件执行、结果筛选
 - 一批默认加载的 universe builtin
-- `array`、`csv`、`date`、`dict`、`join`、`json`、`math`、`regexp`、`runtime`、`strings`、`system`、`types` 等内置包
+- `array`、`csv`、`date`、`dict`、`join`、`json`、`math`、`regexp`、`runtime`、`sql`、`strings`、`system`、`types` 等内置包
 - `stdlib_conformance` 快照样例，约束每个已实现 builtin 的主要行为
 
 更细的语法和运行时支持矩阵见 [SUPPORT_MATRIX.md](./SUPPORT_MATRIX.md)。
@@ -89,15 +89,15 @@ flux> :quit
 
 常用 CLI 参数：
 
-| 参数                   | 说明                       |
+| 参数                   | 说明                       |       |              |
 | ---------------------- | -------------------------- | ----- | ------------ |
-| `ast`                  | 只解析并输出 AST           |
-| `-e <source>`          | 执行内联源码               |
+| `ast`                  | 只解析并输出 AST           |       |              |
+| `-e <source>`          | 执行内联源码               |       |              |
 | `--output-format human | csv                        | json` | 切换输出格式 |
-| `--result <name>`      | 只输出指定结果             |
-| `--list-results`       | 列出脚本可输出的结果名     |
-| `--quiet`              | 执行但不打印结果           |
-| `--no-prelude`         | 不注入默认 builtin/prelude |
+| `--result <name>`      | 只输出指定结果             |       |              |
+| `--list-results`       | 列出脚本可输出的结果名     |       |              |
+| `--quiet`              | 执行但不打印结果           |       |              |
+| `--no-prelude`         | 不注入默认 builtin/prelude |       |              |
 
 ## 示例与测试
 
@@ -248,6 +248,14 @@ Universe builtin 默认注入，无需 `import`。
 
 `mode: "raw"` 解析普通表头 CSV；annotated CSV 支持 `#datatype`、`#group`、`#default` 和 result/table 列的常见形态。
 
+### `sql`
+
+| 函数                              | 说明                      |
+| --------------------------------- | ------------------------- |
+| `sql.from(driver:, dsn:, query:)` | 从 SQL 查询物化为内存表流 |
+
+第一版只支持 `driver: "sqlite"`，通过 SQLite C API 执行 `query`，并将 `null`、integer、float、text、blob-as-string 映射到 Flux 运行时值。后续 connector、planner 和下推路线见 [DATASOURCE_ARCHITECTURE.md](./DATASOURCE_ARCHITECTURE.md)。
+
 ### `date`
 
 | 函数                       | 说明            |
@@ -361,19 +369,20 @@ Universe builtin 默认注入，无需 `import`。
 
 ## 代码结构
 
-| 文件/模块                          | 职责                     |
-| ---------------------------------- | ------------------------ |
-| `scanner.*`、`token.h`             | 词法扫描                 |
-| `parser.*`、`ast.*`、`ast_debug.*` | 语法解析、AST 与调试输出 |
-| `runtime_value.*`                  | 运行时值模型             |
-| `runtime_env.*`                    | 环境与作用域             |
-| `runtime_eval.*`                   | 表达式求值               |
-| `runtime_exec.*`                   | 文件级语句执行           |
-| `runtime_builtin_universe_*.cpp`   | 默认 universe builtin    |
-| `runtime_builtin_table.cpp`        | `array`、`csv` 包        |
-| `runtime_builtin_scalar.cpp`       | 标量类 stdlib 包         |
-| `runtime_builtin_package.*`        | 包注册与导入             |
-| `flux_cli.*`、`flux.cpp`           | CLI、REPL、输出格式      |
+| 文件/模块                          | 职责                       |
+| ---------------------------------- | -------------------------- |
+| `scanner.*`、`token.h`             | 词法扫描                   |
+| `parser.*`、`ast.*`、`ast_debug.*` | 语法解析、AST 与调试输出   |
+| `runtime_value.*`                  | 运行时值模型               |
+| `runtime_env.*`                    | 环境与作用域               |
+| `runtime_eval.*`                   | 表达式求值                 |
+| `runtime_exec.*`                   | 文件级语句执行             |
+| `runtime_builtin_universe_*.cpp`   | 默认 universe builtin      |
+| `runtime_builtin_table.cpp`        | `array`、`csv` 包          |
+| `runtime_builtin_sql.cpp`          | `sql` 包和 SQLite 查询入口 |
+| `runtime_builtin_scalar.cpp`       | 标量类 stdlib 包           |
+| `runtime_builtin_package.*`        | 包注册与导入               |
+| `flux_cli.*`、`flux.cpp`           | CLI、REPL、输出格式        |
 
 内部 helper 按职责拆分：
 
@@ -390,6 +399,7 @@ Universe builtin 默认注入，无需 `import`。
 - `dict` 暂由 object 承载。
 - `json.encode` 暂返回 string，尚无 bytes 类型。
 - `csv.from` 覆盖 raw/annotated 常见形态，不是完整 CSV 方言实现。
+- `sql.from` 当前只支持 SQLite `query` 模式，会立即物化到内存表；暂未实现 connector 抽象、逻辑计划和下推。
 - package 覆盖以当前 `stdlib_conformance` 为准，新增函数需要同步样例和快照。
 
 ## 贡献时的收尾清单
