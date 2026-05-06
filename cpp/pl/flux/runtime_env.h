@@ -24,7 +24,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace pl {
+namespace pl::flux {
 
 class Environment {
 public:
@@ -52,4 +52,4 @@ private:
     std::unordered_map<std::string, Value> options_;
 };
 
-} // namespace pl
+} // namespace pl::flux

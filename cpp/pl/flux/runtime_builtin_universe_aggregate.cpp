@@ -19,7 +19,7 @@
 #include "cpp/pl/flux/compat.h"
 #include "cpp/pl/flux/runtime_builtin_universe.h"
 
-namespace pl {
+namespace pl::flux {
 namespace {
 
 absl::StatusOr<Value> builtin_sum(const std::vector<Value>& args) {
@@ -466,4 +466,4 @@ bool InstallKnownUniverseAggregateBuiltin(Environment& env, const std::string& n
     return false;
 }
 
-} // namespace pl
+} // namespace pl::flux

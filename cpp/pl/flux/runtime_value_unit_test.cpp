@@ -18,7 +18,7 @@
 #include "cpp/pl/flux/runtime_value.h"
 #include <gtest/gtest.h>
 
-namespace pl {
+namespace pl::flux {
 namespace {
 
 TEST(RuntimeValueTest, CreatesScalarValues) {
@@ -123,4 +123,4 @@ TEST(RuntimeValueTest, CreatesTableValuesWithMetadata) {
 }
 
 } // namespace
-} // namespace pl
+} // namespace pl::flux

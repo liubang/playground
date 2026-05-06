@@ -17,7 +17,7 @@
 
 #include "cpp/pl/flux/runtime_env.h"
 
-namespace pl {
+namespace pl::flux {
 
 Environment::Environment() = default;
 
@@ -84,4 +84,4 @@ Environment* Environment::find_binding_owner(const std::string& name) {
     return nullptr;
 }
 
-} // namespace pl
+} // namespace pl::flux

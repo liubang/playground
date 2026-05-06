@@ -27,7 +27,7 @@
 #include <string>
 #include <vector>
 
-namespace pl::flux_builtin {
+namespace pl::flux::builtin {
 namespace {
 
 Value make_builtin_value(const std::string& name,
@@ -665,4 +665,4 @@ void RegisterTableStdlibPackages() {
     RegisterPackage("csv", make_csv_package);
 }
 
-} // namespace pl::flux_builtin
+} // namespace pl::flux::builtin

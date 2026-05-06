@@ -17,7 +17,7 @@
 
 #include "parser.h"
 
-namespace pl {
+namespace pl::flux {
 
 #if defined(FLUX_ENABLE_DEBUG)
 #define FLUX_DEBUG(msg) std::cout << __FUNCTION__ << ":" << __LINE__ << " ==> " << (msg) << '\n'
@@ -2485,4 +2485,4 @@ std::unique_ptr<Token> Parser::consume() {
     return nullptr;
 }
 
-}; // namespace pl
+}; // namespace pl::flux

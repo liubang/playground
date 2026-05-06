@@ -17,7 +17,7 @@
 #include <algorithm>
 #include <gtest/gtest.h>
 
-namespace pl {
+namespace pl::flux {
 namespace {
 
 bool ErrorContains(const std::vector<std::string>& errors, const std::string& needle) {
@@ -1846,4 +1846,4 @@ next = 42
 }
 
 } // namespace
-} // namespace pl
+} // namespace pl::flux
