@@ -13,7 +13,6 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2025/07/01 00:45
 
 #pragma once
 
