@@ -25,7 +25,7 @@
 #include <utility>
 #include <vector>
 
-namespace pl::flux_builtin {
+namespace pl::flux::builtin {
 namespace {
 
 struct SqliteDbDeleter {
@@ -189,4 +189,4 @@ Value make_sql_package() {
 
 void RegisterSqlStdlibPackage() { RegisterPackage("sql", make_sql_package); }
 
-} // namespace pl::flux_builtin
+} // namespace pl::flux::builtin

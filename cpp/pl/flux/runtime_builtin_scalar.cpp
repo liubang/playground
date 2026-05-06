@@ -35,7 +35,7 @@
 #include <string>
 #include <vector>
 
-namespace pl::flux_builtin {
+namespace pl::flux::builtin {
 namespace {
 
 struct ParsedDuration {
@@ -1389,4 +1389,4 @@ void RegisterScalarStdlibPackages() {
     RegisterPackage("types", make_types_package);
 }
 
-} // namespace pl::flux_builtin
+} // namespace pl::flux::builtin

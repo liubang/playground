@@ -35,7 +35,7 @@
 #include <string_view>
 #include <unordered_set>
 
-namespace pl {
+namespace pl::flux {
 namespace {
 
 std::string status_message(const absl::Status& status) { return std::string(status.message()); }
@@ -1054,4 +1054,4 @@ int RunFluxRepl(std::istream& input,
     return exit_code;
 }
 
-} // namespace pl
+} // namespace pl::flux

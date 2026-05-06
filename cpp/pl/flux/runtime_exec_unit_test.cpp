@@ -19,7 +19,7 @@
 #include "cpp/pl/flux/runtime_exec.h"
 #include <gtest/gtest.h>
 
-namespace pl {
+namespace pl::flux {
 namespace {
 
 std::unique_ptr<File> ParseFile(const std::string& source) {
@@ -1636,4 +1636,4 @@ TEST(RuntimeExecTest, UsesYieldNameForResultCollection) {
 }
 
 } // namespace
-} // namespace pl
+} // namespace pl::flux

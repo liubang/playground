@@ -24,7 +24,7 @@
 #include <utility>
 #include <vector>
 
-namespace pl {
+namespace pl::flux {
 namespace {
 
 Value make_builtin_value(const std::string& name,
@@ -115,4 +115,4 @@ void InstallUniverseCoreBuiltins(Environment& env) {
     InstallKnownUniverseCoreBuiltin(env, "contains");
 }
 
-} // namespace pl
+} // namespace pl::flux

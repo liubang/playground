@@ -4,7 +4,7 @@
 
 
 
-namespace pl {
+namespace pl::flux {
 	
 
 	static const char _flux_actions[] = {

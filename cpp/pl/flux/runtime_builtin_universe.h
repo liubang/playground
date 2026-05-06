@@ -20,7 +20,7 @@
 #include "cpp/pl/flux/runtime_env.h"
 #include <string>
 
-namespace pl {
+namespace pl::flux {
 
 void InstallUniverseCoreBuiltins(Environment& env);
 bool InstallKnownUniverseCoreBuiltin(Environment& env, const std::string& name);
@@ -40,4 +40,4 @@ bool InstallKnownUniverseJoinBuiltin(Environment& env, const std::string& name);
 void InstallUniverseInspectBuiltins(Environment& env);
 bool InstallKnownUniverseInspectBuiltin(Environment& env, const std::string& name);
 
-} // namespace pl
+} // namespace pl::flux

@@ -28,7 +28,7 @@
 #include <optional>
 #include <string>
 
-namespace pl {
+namespace pl::flux {
 
 #if defined(__clang__)
 #pragma clang diagnostic push
@@ -609,4 +609,4 @@ bool aggregate_window_is_within_range(const WindowBounds& bounds,
 #pragma clang diagnostic pop
 #endif
 
-} // namespace pl
+} // namespace pl::flux
