@@ -457,6 +457,10 @@ SQLiteSource.Scan(range + filter + projection)
 
 ### Phase 1: Minimal sql.from
 
+状态：已完成第一版 SQLite query 物化闭环。当前 `sql.from(driver: "sqlite", dsn:, query:)`
+会通过 SQLite C API 执行查询并返回内存 `TableValue`，后续 `filter/limit/...` 仍走现有
+内存 builtin fallback。暂未支持 `table` 模式、connector 抽象、logical plan 或 pushdown。
+
 目标：SQLite 查询能进入 Flux 内存表。
 
 工作项：

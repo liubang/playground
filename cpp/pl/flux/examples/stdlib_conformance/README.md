@@ -25,6 +25,7 @@
 | `math.flux`               | `math.pi`、`math.abs`、`math.ceil`、`math.floor`、`math.round`、`math.sqrt`、`math.pow`                                                                                              |
 | `regexp.flux`             | `regexp.compile`、`regexp.findString`、`regexp.matchRegexpString`、`regexp.quoteMeta`                                                                                                |
 | `runtime.flux`            | `runtime.version`                                                                                                                                                                    |
+| `sql.flux`                | `sql.from`（第一版 SQLite 查询物化到内存表）                                                                                                                                         |
 | `strings.flux`            | `strings.containsStr`、`strings.hasPrefix`、`strings.hasSuffix`、`strings.joinStr`、`strings.replaceAll`、`strings.split`、`strings.toUpper`、`strings.toLower`、`strings.trimSpace` |
 | `system.flux`             | `system.time`                                                                                                                                                                        |
 | `types.flux`              | `types.isBool`、`types.isDuration`、`types.isFloat`、`types.isInt`、`types.isNumeric`、`types.isRegexp`、`types.isString`、`types.isTime`、`types.isType`、`types.isUInt`            |

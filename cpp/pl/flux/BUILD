@@ -139,6 +139,7 @@ cc_library(
         "runtime_builtin.cpp",
         "runtime_builtin_package.cpp",
         "runtime_builtin_scalar.cpp",
+        "runtime_builtin_sql.cpp",
         "runtime_builtin_table.cpp",
         "runtime_builtin_universe_aggregate.cpp",
         "runtime_builtin_universe_core.cpp",
@@ -168,6 +169,7 @@ cc_library(
         "@abseil-cpp//absl/time:time",
         "@abseil-cpp//absl/time/internal/cctz:civil_time",
         "@abseil-cpp//absl/time/internal/cctz:time_zone",
+        "@sqlite3",
         "@simdjson",
     ],
 )
