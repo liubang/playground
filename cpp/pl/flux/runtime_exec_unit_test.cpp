@@ -182,6 +182,51 @@ TEST(RuntimeExecTest, ExecutesCsvFromRawStringImportedPackage) {
     EXPECT_EQ("\"95.5\"", env.lookup("data")->as_table().rows[0]->lookup("_value")->string());
 }
 
+TEST(RuntimeExecTest, ExecutesSqlFromSqliteQueryThroughMemoryPipeline) {
+    auto file = ParseFile(R"(
+        import "sql"
+        builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
+        builtin limit : (<-tables: stream[A], n: int) => stream[A]
+
+        data = sql.from(
+            driver: "sqlite",
+            dsn: ":memory:",
+            query: "select '2024-01-01T00:00:00Z' as _time, 'edge-1' as host, 91.5 as _value, null as note union all select '2024-01-01T00:01:00Z', 'edge-2', 42.0, 'ok'",
+        )
+            |> filter(fn: (r) => r.host == "edge-1")
+            |> limit(n: 1)
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("sql").ok());
+    ASSERT_TRUE(env.lookup("data").ok());
+    ASSERT_EQ(Value::Type::Table, env.lookup("data")->type());
+    ASSERT_EQ(1, env.lookup("data")->as_table().rows.size());
+    ASSERT_NE(nullptr, env.lookup("data")->as_table().rows[0]);
+    EXPECT_EQ("\"edge-1\"", env.lookup("data")->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("91.5", env.lookup("data")->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("null", env.lookup("data")->as_table().rows[0]->lookup("note")->string());
+}
+
+TEST(RuntimeExecTest, SqlFromRejectsUnsupportedDriver) {
+    auto file = ParseFile(R"(
+        import "sql"
+        data = sql.from(driver: "mysql", dsn: ":memory:", query: "select 1")
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_FALSE(result_or.ok());
+    EXPECT_EQ(absl::StatusCode::kUnimplemented, result_or.status().code());
+    EXPECT_NE(std::string::npos, result_or.status().message().find("unsupported driver"));
+}
+
 TEST(RuntimeExecTest, DeclaresUnknownBuiltinAsPlaceholderFunction) {
     auto file = ParseFile(R"(
         builtin mystery : (a: int) => int
