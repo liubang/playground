@@ -16,8 +16,8 @@
 
 #pragma once
 
-#include "cpp/pl/dfs/common/common.h"
-#include "cpp/pl/dfs/common/compression.h"
+#include "cpp/pl/minidfs/common/common.h"
+#include "cpp/pl/minidfs/common/compression.h"
 #include "cpp/pl/status/result.h"
 
 #include <cstdint>
