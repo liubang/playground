@@ -25,7 +25,7 @@
 #include <utility>
 #include <vector>
 
-namespace pl {
+namespace pl::flux {
 
 #if defined(__clang__)
 #pragma clang diagnostic push
@@ -216,4 +216,4 @@ std::shared_ptr<ObjectValue> aggregate_window_output_row(
 #pragma clang diagnostic pop
 #endif
 
-} // namespace pl
+} // namespace pl::flux

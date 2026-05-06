@@ -25,7 +25,7 @@
 #include <variant>
 #include <vector>
 
-namespace pl {
+namespace pl::flux {
 
 struct Comment;
 struct Attribute;
@@ -997,4 +997,4 @@ struct ParameterType {
         : type(type_in), value(std::move(value_in)) {}
 };
 
-} // namespace pl
+} // namespace pl::flux

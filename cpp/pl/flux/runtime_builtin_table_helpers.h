@@ -32,7 +32,7 @@
 #include <utility>
 #include <vector>
 
-namespace pl {
+namespace pl::flux {
 
 #if defined(__clang__)
 #pragma clang diagnostic push
@@ -776,4 +776,4 @@ void install_builtin(Environment& env,
 #pragma clang diagnostic pop
 #endif
 
-} // namespace pl
+} // namespace pl::flux

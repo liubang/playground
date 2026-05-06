@@ -22,7 +22,7 @@
 #include <optional>
 #include <string>
 
-namespace pl::flux_builtin {
+namespace pl::flux::builtin {
 
 using PackageBuilder = std::function<Value()>;
 
@@ -35,4 +35,4 @@ void RegisterTableStdlibPackages();
 void RegisterJoinStdlibPackage();
 void RegisterSqlStdlibPackage();
 
-} // namespace pl::flux_builtin
+} // namespace pl::flux::builtin

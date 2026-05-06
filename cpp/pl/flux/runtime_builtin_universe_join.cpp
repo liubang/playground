@@ -31,7 +31,7 @@
 #include <utility>
 #include <vector>
 
-namespace pl {
+namespace pl::flux {
 namespace {
 
 absl::StatusOr<std::vector<std::pair<std::string, const TableValue*>>>
@@ -656,10 +656,10 @@ bool InstallKnownUniverseJoinBuiltin(Environment& env, const std::string& name) 
 
 void InstallUniverseJoinBuiltins(Environment& env) { InstallKnownUniverseJoinBuiltin(env, "join"); }
 
-namespace flux_builtin {
+namespace builtin {
 
 void RegisterJoinStdlibPackage() { RegisterPackage("join", make_join_package); }
 
-} // namespace flux_builtin
+} // namespace builtin
 
-} // namespace pl
+} // namespace pl::flux

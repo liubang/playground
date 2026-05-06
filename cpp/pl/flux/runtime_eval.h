@@ -22,7 +22,7 @@
 #include "cpp/pl/flux/runtime_env.h"
 #include <vector>
 
-namespace pl {
+namespace pl::flux {
 
 class ExpressionEvaluator {
 public:
@@ -31,4 +31,4 @@ public:
                                         const std::vector<Value>& positional_args);
 };
 
-} // namespace pl
+} // namespace pl::flux

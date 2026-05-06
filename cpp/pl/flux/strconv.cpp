@@ -21,7 +21,7 @@
 #include <iomanip>
 #include <sstream>
 
-namespace pl {
+namespace pl::flux {
 
 namespace {
 
@@ -244,4 +244,4 @@ absl::StatusOr<std::string> StrConv::parse_unit(const std::string& chars, size_t
     return unit;
 }
 
-} // namespace pl
+} // namespace pl::flux

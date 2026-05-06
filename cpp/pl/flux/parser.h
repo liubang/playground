@@ -27,7 +27,7 @@
 #include <set>
 #include <utility>
 
-namespace pl {
+namespace pl::flux {
 
 struct TokenError {
     TokenError() = default;
@@ -272,4 +272,4 @@ private:
     uint32_t depth_{0};
 };
 
-} // namespace pl
+} // namespace pl::flux
