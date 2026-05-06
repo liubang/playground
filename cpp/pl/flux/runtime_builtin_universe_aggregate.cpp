@@ -113,7 +113,8 @@ absl::StatusOr<Value> builtin_reduce(const std::vector<Value>& args) {
         next.rows.push_back(std::make_shared<ObjectValue>(accumulator.as_object()));
         chunks.push_back(std::move(next));
     }
-    return table_with_chunks_like(**table_or, std::move(chunks));
+    auto result = table_with_chunks_like(**table_or, std::move(chunks));
+    return with_materialization_barrier(std::move(result), **table_or, "reduce");
 }
 
 absl::StatusOr<Value> builtin_distinct(const std::vector<Value>& args) {
@@ -149,7 +150,8 @@ absl::StatusOr<Value> builtin_distinct(const std::vector<Value>& args) {
         }
         chunks.push_back(std::move(next));
     }
-    return table_with_chunks_like(**table_or, std::move(chunks));
+    auto result = table_with_chunks_like(**table_or, std::move(chunks));
+    return with_materialization_barrier(std::move(result), **table_or, "distinct");
 }
 
 absl::StatusOr<Value> builtin_count(const std::vector<Value>& args) {
@@ -182,7 +184,8 @@ absl::StatusOr<Value> builtin_count(const std::vector<Value>& args) {
         next.rows.push_back(materialize_group_count_row(chunk, column, count));
         chunks.push_back(std::move(next));
     }
-    return table_with_chunks_like(**table_or, std::move(chunks));
+    auto result = table_with_chunks_like(**table_or, std::move(chunks));
+    return with_materialization_barrier(std::move(result), **table_or, "count");
 }
 
 absl::StatusOr<Value> builtin_spread(const std::vector<Value>& args) {
@@ -215,7 +218,8 @@ absl::StatusOr<Value> builtin_spread(const std::vector<Value>& args) {
             materialize_group_value_row(chunk, *column_or, Value::floating(*max_it - *min_it)));
         chunks.push_back(std::move(next));
     }
-    return table_with_chunks_like(**table_or, std::move(chunks));
+    auto result = table_with_chunks_like(**table_or, std::move(chunks));
+    return with_materialization_barrier(std::move(result), **table_or, "spread");
 }
 
 absl::StatusOr<Value> builtin_quantile(const std::vector<Value>& args) {
@@ -261,7 +265,8 @@ absl::StatusOr<Value> builtin_quantile(const std::vector<Value>& args) {
         }
         chunks.push_back(std::move(next));
     }
-    return table_with_chunks_like(**table_or, std::move(chunks));
+    auto result = table_with_chunks_like(**table_or, std::move(chunks));
+    return with_materialization_barrier(std::move(result), **table_or, "quantile");
 }
 
 absl::StatusOr<Value> builtin_median(const std::vector<Value>& args) {
@@ -274,7 +279,16 @@ absl::StatusOr<Value> builtin_median(const std::vector<Value>& args) {
     if (q == nullptr) {
         properties.emplace_back("q", Value::floating(0.5));
     }
-    return builtin_quantile({Value::object(std::move(properties))});
+    auto result_or = builtin_quantile({Value::object(std::move(properties))});
+    if (!result_or.ok()) {
+        return result_or.status();
+    }
+    if (const Value* table_value = (*object_or)->lookup("tables");
+        table_value != nullptr && table_value->type() == Value::Type::Table) {
+        return with_materialization_barrier(std::move(*result_or), table_value->as_table(),
+                                            "median");
+    }
+    return result_or;
 }
 
 absl::StatusOr<Value> table_order_builtin(const std::vector<Value>& args,
@@ -319,7 +333,8 @@ absl::StatusOr<Value> table_order_builtin(const std::vector<Value>& args,
             chunk.rows.resize(static_cast<size_t>(*n_or));
         }
     }
-    return table_with_chunks_like(**table_or, std::move(chunks));
+    auto result = table_with_chunks_like(**table_or, std::move(chunks));
+    return with_materialization_barrier(std::move(result), **table_or, name);
 }
 
 absl::StatusOr<Value> builtin_top(const std::vector<Value>& args) {
@@ -377,7 +392,8 @@ absl::StatusOr<Value> table_single_row_builtin(const std::vector<Value>& args,
             chunks.push_back(std::move(next));
         }
     }
-    return table_with_chunks_like(**table_or, std::move(chunks));
+    auto result = table_with_chunks_like(**table_or, std::move(chunks));
+    return with_materialization_barrier(std::move(result), **table_or, name);
 }
 
 absl::StatusOr<Value> builtin_first(const std::vector<Value>& args) {

@@ -1,0 +1,4 @@
+host,owner,tier
+edge-1,search,prod
+edge-2,ads,prod
+edge-4,infra,canary

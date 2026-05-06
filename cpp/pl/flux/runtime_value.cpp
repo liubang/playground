@@ -226,6 +226,10 @@ const TableValue& Value::as_table() const {
     return *checked_get<std::shared_ptr<TableValue>>(storage_, type_, Type::Table);
 }
 
+TableValue& Value::as_table_mut() {
+    return *checked_get<std::shared_ptr<TableValue>>(storage_, type_, Type::Table);
+}
+
 const FunctionValue& Value::as_function() const {
     return *checked_get<std::shared_ptr<FunctionValue>>(storage_, type_, Type::Function);
 }
