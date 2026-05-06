@@ -24,7 +24,7 @@
 #include <sstream>
 #include <vector>
 
-namespace pl {
+namespace pl::flux {
 namespace {
 
 std::string ReplaceAll(std::string text,
@@ -902,4 +902,4 @@ TEST(FluxCliTest, TrailingSemicolonReportsParserErrorInsteadOfCrashing) {
 }
 
 } // namespace
-} // namespace pl
+} // namespace pl::flux

@@ -27,7 +27,7 @@
 #include <variant>
 #include <vector>
 
-namespace pl {
+namespace pl::flux {
 
 struct ArrayValue;
 struct ObjectValue;
@@ -210,4 +210,4 @@ struct FunctionValue {
     [[nodiscard]] std::string string() const;
 };
 
-} // namespace pl
+} // namespace pl::flux

@@ -25,7 +25,7 @@
 #include <sstream>
 #include <unordered_map>
 
-namespace pl {
+namespace pl::flux {
 namespace {
 
 std::string expr_tag(const Expression& expr) {
@@ -953,4 +953,4 @@ absl::StatusOr<Value> ExpressionEvaluator::Invoke(const Value& callee,
     return invoke_prepared_function(callee.as_function(), positional_args);
 }
 
-} // namespace pl
+} // namespace pl::flux

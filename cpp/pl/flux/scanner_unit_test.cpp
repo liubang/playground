@@ -15,7 +15,7 @@
 #include "cpp/pl/flux/scanner.h"
 #include <gtest/gtest.h>
 
-namespace pl {
+namespace pl::flux {
 namespace {
 
 TEST(FluxScannerTest, ScansCommentsIdentifiersAndLiterals) {
@@ -124,4 +124,4 @@ TEST(FluxScannerTest, ReturnsIllegalTokenForUnexpectedCharacters) {
 }
 
 } // namespace
-} // namespace pl
+} // namespace pl::flux

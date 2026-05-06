@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
     //     |> range(start:-1h)
     // )";
 
-    pl::Parser parser(flux);
+    pl::flux::Parser parser(flux);
     auto file = parser.parse_file("");
 
     if (!parser.errors().empty()) {
@@ -52,7 +52,7 @@ int main(int argc, char* argv[]) {
         std::cout << '\n';
     }
 
-    std::cout << pl::dump_ast(*file);
+    std::cout << pl::flux::dump_ast(*file);
 
     return 0;
 }

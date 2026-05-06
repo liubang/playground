@@ -22,7 +22,7 @@
 #include <fstream>
 #include <gtest/gtest.h>
 
-namespace pl {
+namespace pl::flux {
 namespace {
 
 const Expression& ParseAssignmentInit(const std::string& source) {
@@ -2202,4 +2202,4 @@ TEST(RuntimeEvalTest, ReportsMissingBindings) {
 }
 
 } // namespace
-} // namespace pl
+} // namespace pl::flux

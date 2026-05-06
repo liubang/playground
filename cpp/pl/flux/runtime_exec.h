@@ -21,7 +21,7 @@
 #include "cpp/pl/flux/ast.h"
 #include "cpp/pl/flux/runtime_env.h"
 
-namespace pl {
+namespace pl::flux {
 
 struct ExecutionResult {
     enum class Type {
@@ -60,4 +60,4 @@ public:
     static absl::StatusOr<FileExecutionResult> ExecuteFile(const File& file, Environment& env);
 };
 
-} // namespace pl
+} // namespace pl::flux

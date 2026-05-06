@@ -22,7 +22,7 @@
 #include "cpp/pl/flux/runtime_builtin.h"
 #include "cpp/pl/flux/runtime_eval.h"
 
-namespace pl {
+namespace pl::flux {
 namespace {
 
 absl::StatusOr<std::string> property_name(const PropertyKey& key) {
@@ -306,4 +306,4 @@ absl::StatusOr<FileExecutionResult> StatementExecutor::ExecuteFile(const File& f
     return result;
 }
 
-} // namespace pl
+} // namespace pl::flux

@@ -18,7 +18,7 @@
 #include "cpp/pl/flux/runtime_env.h"
 #include <gtest/gtest.h>
 
-namespace pl {
+namespace pl::flux {
 namespace {
 
 TEST(RuntimeEnvTest, DefinesAndLooksUpLocalBindings) {
@@ -93,4 +93,4 @@ TEST(RuntimeEnvTest, ReportsMissingBindings) {
 }
 
 } // namespace
-} // namespace pl
+} // namespace pl::flux

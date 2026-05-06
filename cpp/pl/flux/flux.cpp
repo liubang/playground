@@ -25,15 +25,15 @@
 
 namespace {
 
-std::optional<pl::FluxOutputFormat> parse_output_format(std::string_view value) {
+std::optional<pl::flux::FluxOutputFormat> parse_output_format(std::string_view value) {
     if (value == "human") {
-        return pl::FluxOutputFormat::Human;
+        return pl::flux::FluxOutputFormat::Human;
     }
     if (value == "csv") {
-        return pl::FluxOutputFormat::Csv;
+        return pl::flux::FluxOutputFormat::Csv;
     }
     if (value == "json") {
-        return pl::FluxOutputFormat::Json;
+        return pl::flux::FluxOutputFormat::Json;
     }
     return std::nullopt;
 }
@@ -54,7 +54,7 @@ void print_usage(std::ostream& out) {
 }
 
 int run_ast_command(int argc, char* argv[]) {
-    pl::FluxAstOptions options;
+    pl::flux::FluxAstOptions options;
     std::optional<std::string> eval_source;
     std::optional<std::string> file_name;
 
@@ -106,7 +106,7 @@ int run_ast_command(int argc, char* argv[]) {
         source = read_all(std::cin);
     }
 
-    auto result = pl::DumpFluxAstSource(source, name, options);
+    auto result = pl::flux::DumpFluxAstSource(source, name, options);
     std::cout << result.output;
     std::cerr << result.error;
     return result.exit_code;
@@ -119,7 +119,7 @@ int main(int argc, char* argv[]) {
         return run_ast_command(argc, argv);
     }
 
-    pl::FluxCliOptions options;
+    pl::flux::FluxCliOptions options;
     bool repl = false;
     std::optional<std::string> eval_source;
     std::optional<std::string> file_name;
@@ -212,7 +212,7 @@ int main(int argc, char* argv[]) {
 
     if (repl || (!file_name.has_value() && !eval_source.has_value())) {
         options.table_borders = isatty(STDOUT_FILENO) != 0;
-        return pl::RunFluxRepl(std::cin, std::cout, std::cerr, isatty(STDIN_FILENO) != 0, options);
+        return pl::flux::RunFluxRepl(std::cin, std::cout, std::cerr, isatty(STDIN_FILENO) != 0, options);
     }
 
     std::string source;
@@ -230,8 +230,8 @@ int main(int argc, char* argv[]) {
     }
 
     options.table_borders = isatty(STDOUT_FILENO) != 0;
-    auto env = pl::MakeFluxCliEnvironment(options);
-    auto result = pl::ExecuteFluxSource(source, name, env, options);
+    auto env = pl::flux::MakeFluxCliEnvironment(options);
+    auto result = pl::flux::ExecuteFluxSource(source, name, env, options);
     std::cout << result.output;
     std::cerr << result.error;
     return result.exit_code;
