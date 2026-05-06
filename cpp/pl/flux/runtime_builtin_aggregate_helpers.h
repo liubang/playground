@@ -33,7 +33,7 @@ namespace pl::flux {
 #pragma clang diagnostic ignored "-Wunused-function"
 #endif
 
-namespace {
+namespace detail {
 
 enum class NumericKind {
     UInt,
@@ -48,7 +48,7 @@ struct NumericSummary {
     uint64_t uint_sum = 0;
 };
 
-absl::Status checked_add_uint(uint64_t* target, uint64_t value, const std::string& name) {
+inline absl::Status checked_add_uint(uint64_t* target, uint64_t value, const std::string& name) {
     if (*target > std::numeric_limits<uint64_t>::max() - value) {
         return absl::InvalidArgumentError(absl::StrCat(name, " uint sum overflows uint64"));
     }
@@ -56,7 +56,7 @@ absl::Status checked_add_uint(uint64_t* target, uint64_t value, const std::strin
     return absl::OkStatus();
 }
 
-absl::Status checked_add_int(int64_t* target, int64_t value, const std::string& name) {
+inline absl::Status checked_add_int(int64_t* target, int64_t value, const std::string& name) {
     if ((value > 0 && *target > std::numeric_limits<int64_t>::max() - value) ||
         (value < 0 && *target < std::numeric_limits<int64_t>::min() - value)) {
         return absl::InvalidArgumentError(absl::StrCat(name, " int sum overflows int64"));
@@ -65,16 +65,16 @@ absl::Status checked_add_int(int64_t* target, int64_t value, const std::string& 
     return absl::OkStatus();
 }
 
-absl::StatusOr<int64_t> checked_uint_to_int(uint64_t value, const std::string& name) {
+inline absl::StatusOr<int64_t> checked_uint_to_int(uint64_t value, const std::string& name) {
     if (value > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
         return absl::InvalidArgumentError(absl::StrCat(name, " uint value overflows int64"));
     }
     return static_cast<int64_t>(value);
 }
 
-std::shared_ptr<ObjectValue> materialize_group_count_row(const TableChunk& chunk,
-                                                         const std::string& column,
-                                                         int64_t count) {
+inline std::shared_ptr<ObjectValue> materialize_group_count_row(const TableChunk& chunk,
+                                                                const std::string& column,
+                                                                int64_t count) {
     std::vector<std::pair<std::string, Value>> properties;
     if (chunk.group_key != nullptr) {
         for (const auto& [name, value] : chunk.group_key->properties) {
@@ -87,9 +87,9 @@ std::shared_ptr<ObjectValue> materialize_group_count_row(const TableChunk& chunk
     return std::make_shared<ObjectValue>(std::move(properties));
 }
 
-std::shared_ptr<ObjectValue> materialize_group_value_row(const TableChunk& chunk,
-                                                         const std::string& column,
-                                                         Value value) {
+inline std::shared_ptr<ObjectValue> materialize_group_value_row(const TableChunk& chunk,
+                                                                const std::string& column,
+                                                                Value value) {
     std::vector<std::pair<std::string, Value>> properties;
     if (chunk.group_key != nullptr) {
         for (const auto& [name, group_value] : chunk.group_key->properties) {
@@ -102,9 +102,9 @@ std::shared_ptr<ObjectValue> materialize_group_value_row(const TableChunk& chunk
     return std::make_shared<ObjectValue>(std::move(properties));
 }
 
-absl::StatusOr<std::vector<double>> quantile_values_property(const ObjectValue& object,
-                                                             const std::string& name,
-                                                             const std::string& property) {
+inline absl::StatusOr<std::vector<double>> quantile_values_property(const ObjectValue& object,
+                                                                    const std::string& name,
+                                                                    const std::string& property) {
     auto value_or = require_object_property(object, name, property);
     if (!value_or.ok()) {
         return value_or.status();
@@ -148,7 +148,8 @@ absl::StatusOr<std::vector<double>> quantile_values_property(const ObjectValue& 
     return quantiles;
 }
 
-absl::StatusOr<double> quantile_for_sorted_values(const std::vector<double>& values, double q) {
+inline absl::StatusOr<double> quantile_for_sorted_values(const std::vector<double>& values,
+                                                         double q) {
     if (values.empty()) {
         return absl::InvalidArgumentError("quantile expects at least one numeric value");
     }
@@ -167,9 +168,9 @@ absl::StatusOr<double> quantile_for_sorted_values(const std::vector<double>& val
     return lower + (upper - lower) * weight;
 }
 
-absl::StatusOr<std::vector<double>> numeric_values_for_chunk(const TableChunk& chunk,
-                                                             const std::string& name,
-                                                             const std::string& column) {
+inline absl::StatusOr<std::vector<double>> numeric_values_for_chunk(const TableChunk& chunk,
+                                                                    const std::string& name,
+                                                                    const std::string& column) {
     std::vector<double> values;
     values.reserve(chunk.rows.size());
     for (const auto& row : chunk.rows) {
@@ -189,8 +190,8 @@ absl::StatusOr<std::vector<double>> numeric_values_for_chunk(const TableChunk& c
     return values;
 }
 
-absl::StatusOr<NumericSummary> summarize_numeric_array(const ArrayValue& array,
-                                                       const std::string& name) {
+inline absl::StatusOr<NumericSummary> summarize_numeric_array(const ArrayValue& array,
+                                                              const std::string& name) {
     NumericSummary summary;
     for (const auto& item : array.elements) {
         switch (item.type()) {
@@ -248,7 +249,7 @@ absl::StatusOr<NumericSummary> summarize_numeric_array(const ArrayValue& array,
     return summary;
 }
 
-Value numeric_sum_value(const NumericSummary& summary) {
+inline Value numeric_sum_value(const NumericSummary& summary) {
     switch (summary.kind) {
         case NumericKind::UInt:
             return Value::uinteger(summary.uint_sum);
@@ -261,9 +262,9 @@ Value numeric_sum_value(const NumericSummary& summary) {
     }
 }
 
-absl::StatusOr<Value> aggregate_min_max(const std::vector<Value>& args,
-                                        const std::string& name,
-                                        bool choose_min) {
+inline absl::StatusOr<Value> aggregate_min_max(const std::vector<Value>& args,
+                                               const std::string& name,
+                                               bool choose_min) {
     auto array_or = require_array_argument(args, name);
     if (!array_or.ok()) {
         return array_or.status();
@@ -294,7 +295,7 @@ absl::StatusOr<Value> aggregate_min_max(const std::vector<Value>& args,
     return *best;
 }
 
-} // namespace
+} // namespace detail
 
 #if defined(__clang__)
 #pragma clang diagnostic pop

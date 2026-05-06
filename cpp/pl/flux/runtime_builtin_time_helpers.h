@@ -35,9 +35,9 @@ namespace pl::flux {
 #pragma clang diagnostic ignored "-Wunused-function"
 #endif
 
-namespace {
+namespace detail {
 
-std::optional<std::string> row_time_literal(const ObjectValue& row) {
+inline std::optional<std::string> row_time_literal(const ObjectValue& row) {
     const Value* time = row.lookup("_time");
     if (time == nullptr) {
         return std::nullopt;
@@ -48,12 +48,12 @@ std::optional<std::string> row_time_literal(const ObjectValue& row) {
     return std::nullopt;
 }
 
-std::optional<int64_t> parse_rfc3339_seconds(const std::string& literal);
-std::string format_rfc3339_seconds(int64_t seconds);
+inline std::optional<int64_t> parse_rfc3339_seconds(const std::string& literal);
+inline std::string format_rfc3339_seconds(int64_t seconds);
 
-bool row_matches_time_bounds(const ObjectValue& row,
-                             const std::optional<std::string>& start,
-                             const std::optional<std::string>& stop) {
+inline bool row_matches_time_bounds(const ObjectValue& row,
+                                    const std::optional<std::string>& start,
+                                    const std::optional<std::string>& stop) {
     if (!start.has_value() && !stop.has_value()) {
         return true;
     }
@@ -83,7 +83,7 @@ bool row_matches_time_bounds(const ObjectValue& row,
     return true;
 }
 
-bool parse_fixed_int(const std::string& text, size_t offset, size_t width, int* out) {
+inline bool parse_fixed_int(const std::string& text, size_t offset, size_t width, int* out) {
     if (offset + width > text.size()) {
         return false;
     }
@@ -99,7 +99,7 @@ bool parse_fixed_int(const std::string& text, size_t offset, size_t width, int* 
     return true;
 }
 
-int64_t days_from_civil(int year, unsigned month, unsigned day) {
+inline int64_t days_from_civil(int year, unsigned month, unsigned day) {
     int64_t adjusted_year = static_cast<int64_t>(year) - static_cast<int64_t>(month <= 2);
     const int64_t era = (adjusted_year >= 0 ? adjusted_year : adjusted_year - 399) / 400;
     const int64_t yoe = adjusted_year - era * 400;
@@ -109,7 +109,7 @@ int64_t days_from_civil(int year, unsigned month, unsigned day) {
     return era * 146097 + doe - 719468;
 }
 
-std::optional<int64_t> parse_rfc3339_seconds(const std::string& literal) {
+inline std::optional<int64_t> parse_rfc3339_seconds(const std::string& literal) {
     absl::Time timestamp;
     std::string error;
     if (!absl::ParseTime(absl::RFC3339_full, literal, &timestamp, &error)) {
@@ -118,7 +118,7 @@ std::optional<int64_t> parse_rfc3339_seconds(const std::string& literal) {
     return absl::ToUnixSeconds(timestamp);
 }
 
-std::string format_rfc3339_seconds(int64_t seconds) {
+inline std::string format_rfc3339_seconds(int64_t seconds) {
     return absl::FormatTime("%Y-%m-%dT%H:%M:%SZ", absl::FromUnixSeconds(seconds),
                             absl::UTCTimeZone());
 }
@@ -134,11 +134,11 @@ struct WindowDuration {
     int64_t months = 0;
 };
 
-absl::StatusOr<WindowDuration> parse_window_duration(const Value& value,
-                                                     const std::string& name,
-                                                     const std::string& property,
-                                                     bool allow_negative,
-                                                     bool allow_zero);
+inline absl::StatusOr<WindowDuration> parse_window_duration(const Value& value,
+                                                            const std::string& name,
+                                                            const std::string& property,
+                                                            bool allow_negative,
+                                                            bool allow_zero);
 
 struct WindowLocation {
     enum class Kind {
@@ -153,38 +153,38 @@ struct WindowLocation {
     absl::TimeZone zone = absl::UTCTimeZone();
 };
 
-int64_t floor_div(int64_t lhs, int64_t rhs);
+inline int64_t floor_div(int64_t lhs, int64_t rhs);
 
-int64_t utc_seconds_from_civil(int year,
-                               unsigned month,
-                               unsigned day,
-                               unsigned hour = 0,
-                               unsigned minute = 0,
-                               unsigned second = 0) {
+inline int64_t utc_seconds_from_civil(int year,
+                                      unsigned month,
+                                      unsigned day,
+                                      unsigned hour = 0,
+                                      unsigned minute = 0,
+                                      unsigned second = 0) {
     return days_from_civil(year, month, day) * 24 * 60 * 60 + static_cast<int64_t>(hour) * 60 * 60 +
            static_cast<int64_t>(minute) * 60 + static_cast<int64_t>(second);
 }
 
-absl::CivilSecond civil_second_from_utc_seconds(int64_t seconds) {
+inline absl::CivilSecond civil_second_from_utc_seconds(int64_t seconds) {
     return absl::ToCivilSecond(absl::FromUnixSeconds(seconds), absl::UTCTimeZone());
 }
 
-int64_t seconds_from_civil_second(const absl::CivilSecond& civil) {
+inline int64_t seconds_from_civil_second(const absl::CivilSecond& civil) {
     return utc_seconds_from_civil(
         static_cast<int>(civil.year()), static_cast<unsigned>(civil.month()),
         static_cast<unsigned>(civil.day()), static_cast<unsigned>(civil.hour()),
         static_cast<unsigned>(civil.minute()), static_cast<unsigned>(civil.second()));
 }
 
-absl::CivilSecond civil_second_in_location(int64_t seconds, const WindowLocation& location) {
+inline absl::CivilSecond civil_second_in_location(int64_t seconds, const WindowLocation& location) {
     if (location.kind == WindowLocation::Kind::NamedZone) {
         return absl::ToCivilSecond(absl::FromUnixSeconds(seconds), location.zone);
     }
     return civil_second_from_utc_seconds(seconds + location.fixed_offset_seconds);
 }
 
-int64_t seconds_for_civil_in_location(const absl::CivilSecond& civil,
-                                      const WindowLocation& location) {
+inline int64_t seconds_for_civil_in_location(const absl::CivilSecond& civil,
+                                             const WindowLocation& location) {
     if (location.kind == WindowLocation::Kind::NamedZone) {
         const auto info = location.zone.At(civil);
         if (info.kind == absl::TimeZone::TimeInfo::SKIPPED) {
@@ -195,7 +195,7 @@ int64_t seconds_for_civil_in_location(const absl::CivilSecond& civil,
     return seconds_from_civil_second(civil) - location.fixed_offset_seconds;
 }
 
-int64_t month_index_for_seconds(int64_t seconds) {
+inline int64_t month_index_for_seconds(int64_t seconds) {
     auto time = static_cast<std::time_t>(seconds);
     std::tm tm{};
 #if defined(_WIN32)
@@ -206,17 +206,18 @@ int64_t month_index_for_seconds(int64_t seconds) {
     return static_cast<int64_t>(tm.tm_year + 1900) * 12 + tm.tm_mon;
 }
 
-int64_t seconds_for_month_index(int64_t month_index) {
+inline int64_t seconds_for_month_index(int64_t month_index) {
     int64_t year = floor_div(month_index, 12);
     int64_t month = month_index - year * 12;
     return utc_seconds_from_civil(static_cast<int>(year), static_cast<unsigned>(month + 1), 1);
 }
 
-int64_t advance_calendar_months(int64_t seconds, int64_t months) {
+inline int64_t advance_calendar_months(int64_t seconds, int64_t months) {
     return seconds_for_month_index(month_index_for_seconds(seconds) + months);
 }
 
-absl::CivilSecond add_months_to_civil_second(const absl::CivilSecond& civil, int64_t months) {
+inline absl::CivilSecond add_months_to_civil_second(const absl::CivilSecond& civil,
+                                                    int64_t months) {
     const int64_t month_index =
         static_cast<int64_t>(civil.year()) * 12 + static_cast<int64_t>(civil.month()) - 1 + months;
     const int64_t year = floor_div(month_index, 12);
@@ -225,9 +226,9 @@ absl::CivilSecond add_months_to_civil_second(const absl::CivilSecond& civil, int
                              civil.hour(), civil.minute(), civil.second());
 }
 
-absl::StatusOr<WindowLocation> parse_window_location_value(const Value& value,
-                                                           const std::string& name,
-                                                           const std::string& property) {
+inline absl::StatusOr<WindowLocation> parse_window_location_value(const Value& value,
+                                                                  const std::string& name,
+                                                                  const std::string& property) {
     if (value.type() != Value::Type::Object) {
         return absl::InvalidArgumentError(
             absl::StrCat(name, " `", property, "` must be an object record"));
@@ -271,8 +272,8 @@ absl::StatusOr<WindowLocation> parse_window_location_value(const Value& value,
                           .zone = zone};
 }
 
-absl::StatusOr<WindowLocation> optional_window_location_property(const ObjectValue& object,
-                                                                 const std::string& name) {
+inline absl::StatusOr<WindowLocation> optional_window_location_property(const ObjectValue& object,
+                                                                        const std::string& name) {
     const Value* location_value = object.lookup("location");
     if (location_value == nullptr) {
         return WindowLocation{};
@@ -280,11 +281,11 @@ absl::StatusOr<WindowLocation> optional_window_location_property(const ObjectVal
     return parse_window_location_value(*location_value, name, "location");
 }
 
-absl::StatusOr<WindowDuration> parse_window_duration(const Value& value,
-                                                     const std::string& name,
-                                                     const std::string& property,
-                                                     bool allow_negative = false,
-                                                     bool allow_zero = false) {
+inline absl::StatusOr<WindowDuration> parse_window_duration(const Value& value,
+                                                            const std::string& name,
+                                                            const std::string& property,
+                                                            bool allow_negative = false,
+                                                            bool allow_zero = false) {
     std::string literal;
     if (value.type() == Value::Type::Duration) {
         literal = value.as_duration().literal;
@@ -449,7 +450,7 @@ absl::StatusOr<WindowDuration> parse_window_duration(const Value& value,
         .kind = WindowDuration::Kind::FixedSeconds, .seconds = fixed_total, .months = 0};
 }
 
-int64_t floor_div(int64_t lhs, int64_t rhs) {
+inline int64_t floor_div(int64_t lhs, int64_t rhs) {
     int64_t quotient = lhs / rhs;
     int64_t remainder = lhs % rhs;
     if (remainder != 0 && ((remainder > 0) != (rhs > 0))) {
@@ -458,17 +459,17 @@ int64_t floor_div(int64_t lhs, int64_t rhs) {
     return quotient;
 }
 
-bool window_duration_is_negative(const WindowDuration& duration) {
+inline bool window_duration_is_negative(const WindowDuration& duration) {
     return duration.kind == WindowDuration::Kind::FixedSeconds ? duration.seconds < 0
                                                                : duration.months < 0;
 }
 
-bool window_duration_is_zero(const WindowDuration& duration) {
+inline bool window_duration_is_zero(const WindowDuration& duration) {
     return duration.kind == WindowDuration::Kind::FixedSeconds ? duration.seconds == 0
                                                                : duration.months == 0;
 }
 
-WindowDuration negate_window_duration(const WindowDuration& duration) {
+inline WindowDuration negate_window_duration(const WindowDuration& duration) {
     if (duration.kind == WindowDuration::Kind::FixedSeconds) {
         return WindowDuration{
             .kind = WindowDuration::Kind::FixedSeconds, .seconds = -duration.seconds, .months = 0};
@@ -477,9 +478,9 @@ WindowDuration negate_window_duration(const WindowDuration& duration) {
         .kind = WindowDuration::Kind::CalendarMonths, .seconds = 0, .months = -duration.months};
 }
 
-std::optional<int64_t> add_window_duration_to_time(int64_t seconds,
-                                                   const WindowDuration& duration,
-                                                   const WindowLocation& location) {
+inline std::optional<int64_t> add_window_duration_to_time(int64_t seconds,
+                                                          const WindowDuration& duration,
+                                                          const WindowLocation& location) {
     if (duration.kind == WindowDuration::Kind::FixedSeconds) {
         if (location.kind == WindowLocation::Kind::Utc ||
             location.kind == WindowLocation::Kind::FixedOffset) {
@@ -495,10 +496,10 @@ std::optional<int64_t> add_window_duration_to_time(int64_t seconds,
                                          location);
 }
 
-std::optional<int64_t> aggregate_window_start_for_time(int64_t seconds,
-                                                       const WindowDuration& every,
-                                                       const WindowDuration& offset,
-                                                       const WindowLocation& location) {
+inline std::optional<int64_t> aggregate_window_start_for_time(int64_t seconds,
+                                                              const WindowDuration& every,
+                                                              const WindowDuration& offset,
+                                                              const WindowLocation& location) {
     if (every.kind == WindowDuration::Kind::FixedSeconds) {
         if (offset.kind != WindowDuration::Kind::FixedSeconds) {
             return std::nullopt;
@@ -573,9 +574,8 @@ struct WindowBounds {
     int64_t upper_seconds = 0;
 };
 
-std::optional<WindowBounds> aggregate_window_bounds_for_start(int64_t start_seconds,
-                                                              const WindowDuration& period,
-                                                              const WindowLocation& location) {
+inline std::optional<WindowBounds> aggregate_window_bounds_for_start(
+    int64_t start_seconds, const WindowDuration& period, const WindowLocation& location) {
     auto stop_or = add_window_duration_to_time(start_seconds, period, location);
     if (!stop_or.has_value()) {
         return std::nullopt;
@@ -586,24 +586,24 @@ std::optional<WindowBounds> aggregate_window_bounds_for_start(int64_t start_seco
                         .upper_seconds = std::max(start_seconds, *stop_or)};
 }
 
-bool aggregate_window_contains_time(int64_t seconds, const WindowBounds& bounds) {
+inline bool aggregate_window_contains_time(int64_t seconds, const WindowBounds& bounds) {
     return seconds >= bounds.lower_seconds && seconds < bounds.upper_seconds;
 }
 
-bool aggregate_window_intersects_range(const WindowBounds& bounds,
-                                       int64_t range_start_seconds,
-                                       int64_t range_stop_seconds) {
+inline bool aggregate_window_intersects_range(const WindowBounds& bounds,
+                                              int64_t range_start_seconds,
+                                              int64_t range_stop_seconds) {
     return bounds.upper_seconds > range_start_seconds && bounds.lower_seconds < range_stop_seconds;
 }
 
-bool aggregate_window_is_within_range(const WindowBounds& bounds,
-                                      int64_t range_start_seconds,
-                                      int64_t range_stop_seconds) {
+inline bool aggregate_window_is_within_range(const WindowBounds& bounds,
+                                             int64_t range_start_seconds,
+                                             int64_t range_stop_seconds) {
     return bounds.lower_seconds >= range_start_seconds &&
            bounds.upper_seconds <= range_stop_seconds;
 }
 
-} // namespace
+} // namespace detail
 
 #if defined(__clang__)
 #pragma clang diagnostic pop
