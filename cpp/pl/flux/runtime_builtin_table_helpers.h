@@ -39,10 +39,10 @@ namespace pl::flux {
 #pragma clang diagnostic ignored "-Wunused-function"
 #endif
 
-namespace {
+namespace detail {
 
-absl::StatusOr<const ArrayValue*> require_array_argument(const std::vector<Value>& args,
-                                                         const std::string& name) {
+inline absl::StatusOr<const ArrayValue*> require_array_argument(const std::vector<Value>& args,
+                                                                const std::string& name) {
     if (args.size() != 1 || args[0].type() != Value::Type::Array) {
         return absl::InvalidArgumentError(
             absl::StrCat(name, " expects exactly one array argument"));
@@ -50,8 +50,8 @@ absl::StatusOr<const ArrayValue*> require_array_argument(const std::vector<Value
     return &args[0].as_array();
 }
 
-absl::StatusOr<const ObjectValue*> require_object_argument(const std::vector<Value>& args,
-                                                           const std::string& name) {
+inline absl::StatusOr<const ObjectValue*> require_object_argument(const std::vector<Value>& args,
+                                                                  const std::string& name) {
     if (args.size() != 1 || args[0].type() != Value::Type::Object) {
         return absl::InvalidArgumentError(
             absl::StrCat(name, " expects exactly one object argument"));
@@ -59,9 +59,9 @@ absl::StatusOr<const ObjectValue*> require_object_argument(const std::vector<Val
     return &args[0].as_object();
 }
 
-absl::StatusOr<const Value*> require_object_property(const ObjectValue& object,
-                                                     const std::string& object_name,
-                                                     const std::string& property) {
+inline absl::StatusOr<const Value*> require_object_property(const ObjectValue& object,
+                                                            const std::string& object_name,
+                                                            const std::string& property) {
     const Value* value = object.lookup(property);
     if (value == nullptr) {
         return absl::InvalidArgumentError(absl::StrCat(object_name, " requires `", property, "`"));
@@ -69,11 +69,11 @@ absl::StatusOr<const Value*> require_object_property(const ObjectValue& object,
     return value;
 }
 
-absl::StatusOr<const ArrayValue*> require_array_property(const ObjectValue& object,
-                                                         const std::string& name,
-                                                         const std::string& property);
+inline absl::StatusOr<const ArrayValue*> require_array_property(const ObjectValue& object,
+                                                                const std::string& name,
+                                                                const std::string& property);
 
-absl::StatusOr<std::vector<std::shared_ptr<ObjectValue>>> require_table_rows(
+inline absl::StatusOr<std::vector<std::shared_ptr<ObjectValue>>> require_table_rows(
     const Value& value, const std::string& name) {
     if (value.type() != Value::Type::Array) {
         return absl::InvalidArgumentError(absl::StrCat(name, " `rows` must be an array"));
@@ -90,9 +90,9 @@ absl::StatusOr<std::vector<std::shared_ptr<ObjectValue>>> require_table_rows(
     return rows;
 }
 
-absl::StatusOr<const TableValue*> require_table_property(const ObjectValue& object,
-                                                         const std::string& name,
-                                                         const std::string& property) {
+inline absl::StatusOr<const TableValue*> require_table_property(const ObjectValue& object,
+                                                                const std::string& name,
+                                                                const std::string& property) {
     auto value_or = require_object_property(object, name, property);
     if (!value_or.ok()) {
         return value_or.status();
@@ -103,7 +103,7 @@ absl::StatusOr<const TableValue*> require_table_property(const ObjectValue& obje
     return &(*value_or)->as_table();
 }
 
-absl::StatusOr<std::vector<const TableValue*>> require_table_array_property(
+inline absl::StatusOr<std::vector<const TableValue*>> require_table_array_property(
     const ObjectValue& object, const std::string& name, const std::string& property) {
     auto array_or = require_array_property(object, name, property);
     if (!array_or.ok()) {
@@ -121,9 +121,9 @@ absl::StatusOr<std::vector<const TableValue*>> require_table_array_property(
     return tables;
 }
 
-absl::StatusOr<const ArrayValue*> require_array_property(const ObjectValue& object,
-                                                         const std::string& name,
-                                                         const std::string& property) {
+inline absl::StatusOr<const ArrayValue*> require_array_property(const ObjectValue& object,
+                                                                const std::string& name,
+                                                                const std::string& property) {
     auto value_or = require_object_property(object, name, property);
     if (!value_or.ok()) {
         return value_or.status();
@@ -134,8 +134,8 @@ absl::StatusOr<const ArrayValue*> require_array_property(const ObjectValue& obje
     return &(*value_or)->as_array();
 }
 
-std::optional<std::string> optional_literal_property(const ObjectValue& object,
-                                                     const std::string& property) {
+inline std::optional<std::string> optional_literal_property(const ObjectValue& object,
+                                                            const std::string& property) {
     const Value* value = object.lookup(property);
     if (value == nullptr) {
         return std::nullopt;
@@ -143,9 +143,9 @@ std::optional<std::string> optional_literal_property(const ObjectValue& object,
     return value->string();
 }
 
-absl::StatusOr<int64_t> integer_property(const ObjectValue& object,
-                                         const std::string& name,
-                                         const std::string& property) {
+inline absl::StatusOr<int64_t> integer_property(const ObjectValue& object,
+                                                const std::string& name,
+                                                const std::string& property) {
     auto value_or = require_object_property(object, name, property);
     if (!value_or.ok()) {
         return value_or.status();
@@ -165,10 +165,10 @@ absl::StatusOr<int64_t> integer_property(const ObjectValue& object,
         absl::StrCat(name, " `", property, "` must be an int or uint"));
 }
 
-absl::StatusOr<bool> optional_bool_property(const ObjectValue& object,
-                                            const std::string& name,
-                                            const std::string& property,
-                                            bool default_value) {
+inline absl::StatusOr<bool> optional_bool_property(const ObjectValue& object,
+                                                   const std::string& name,
+                                                   const std::string& property,
+                                                   bool default_value) {
     const Value* value = object.lookup(property);
     if (value == nullptr) {
         return default_value;
@@ -180,10 +180,10 @@ absl::StatusOr<bool> optional_bool_property(const ObjectValue& object,
     return value->as_bool();
 }
 
-absl::StatusOr<std::string> optional_string_property(const ObjectValue& object,
-                                                     const std::string& name,
-                                                     const std::string& property,
-                                                     std::string default_value) {
+inline absl::StatusOr<std::string> optional_string_property(const ObjectValue& object,
+                                                            const std::string& name,
+                                                            const std::string& property,
+                                                            std::string default_value) {
     const Value* value = object.lookup(property);
     if (value == nullptr) {
         return default_value;
@@ -194,10 +194,10 @@ absl::StatusOr<std::string> optional_string_property(const ObjectValue& object,
     return value->as_string();
 }
 
-absl::StatusOr<size_t> optional_index_property(const ObjectValue& object,
-                                               const std::string& name,
-                                               const std::string& property,
-                                               size_t default_value) {
+inline absl::StatusOr<size_t> optional_index_property(const ObjectValue& object,
+                                                      const std::string& name,
+                                                      const std::string& property,
+                                                      size_t default_value) {
     const Value* value = object.lookup(property);
     if (value == nullptr) {
         return default_value;
@@ -212,9 +212,9 @@ absl::StatusOr<size_t> optional_index_property(const ObjectValue& object,
         absl::StrCat(name, " `", property, "` must be a non-negative int or uint"));
 }
 
-absl::StatusOr<std::string> string_property(const ObjectValue& object,
-                                            const std::string& name,
-                                            const std::string& property) {
+inline absl::StatusOr<std::string> string_property(const ObjectValue& object,
+                                                   const std::string& name,
+                                                   const std::string& property) {
     auto value_or = require_object_property(object, name, property);
     if (!value_or.ok()) {
         return value_or.status();
@@ -225,9 +225,9 @@ absl::StatusOr<std::string> string_property(const ObjectValue& object,
     return (*value_or)->as_string();
 }
 
-absl::StatusOr<std::vector<std::string>> string_array_value(const Value& value,
-                                                            const std::string& name,
-                                                            const std::string& property) {
+inline absl::StatusOr<std::vector<std::string>> string_array_value(const Value& value,
+                                                                   const std::string& name,
+                                                                   const std::string& property) {
     if (value.type() != Value::Type::Array) {
         return absl::InvalidArgumentError(absl::StrCat(name, " `", property, "` must be an array"));
     }
@@ -243,9 +243,9 @@ absl::StatusOr<std::vector<std::string>> string_array_value(const Value& value,
     return values;
 }
 
-absl::StatusOr<std::vector<std::string>> string_array_property(const ObjectValue& object,
-                                                               const std::string& name,
-                                                               const std::string& property) {
+inline absl::StatusOr<std::vector<std::string>> string_array_property(const ObjectValue& object,
+                                                                      const std::string& name,
+                                                                      const std::string& property) {
     auto value_or = require_object_property(object, name, property);
     if (!value_or.ok()) {
         return value_or.status();
@@ -253,7 +253,7 @@ absl::StatusOr<std::vector<std::string>> string_array_property(const ObjectValue
     return string_array_value(**value_or, name, property);
 }
 
-absl::StatusOr<std::vector<std::string>> optional_string_array_property(
+inline absl::StatusOr<std::vector<std::string>> optional_string_array_property(
     const ObjectValue& object,
     const std::string& name,
     const std::string& property,
@@ -264,7 +264,7 @@ absl::StatusOr<std::vector<std::string>> optional_string_array_property(
     return string_array_property(object, name, property);
 }
 
-absl::StatusOr<std::vector<std::pair<std::string, std::string>>> string_map_property(
+inline absl::StatusOr<std::vector<std::pair<std::string, std::string>>> string_map_property(
     const ObjectValue& object, const std::string& name, const std::string& property) {
     auto value_or = require_object_property(object, name, property);
     if (!value_or.ok()) {
@@ -285,13 +285,13 @@ absl::StatusOr<std::vector<std::pair<std::string, std::string>>> string_map_prop
     return values;
 }
 
-std::shared_ptr<ObjectValue> clone_row(const ObjectValue& row) {
+inline std::shared_ptr<ObjectValue> clone_row(const ObjectValue& row) {
     return std::make_shared<ObjectValue>(row);
 }
 
-Value object_with_upserted_property(const ObjectValue& object,
-                                    const std::string& key,
-                                    Value value) {
+inline Value object_with_upserted_property(const ObjectValue& object,
+                                           const std::string& key,
+                                           Value value) {
     auto props = object.properties;
     for (auto& [name, current] : props) {
         if (name == key) {
@@ -303,7 +303,7 @@ Value object_with_upserted_property(const ObjectValue& object,
     return Value::object(std::move(props));
 }
 
-std::pair<std::shared_ptr<ObjectValue>, std::string> clone_row_with_group_and_key(
+inline std::pair<std::shared_ptr<ObjectValue>, std::string> clone_row_with_group_and_key(
     const ObjectValue& row, const std::vector<std::string>& columns) {
     std::vector<std::pair<std::string, Value>> group_props;
     group_props.reserve(columns.size());
@@ -331,7 +331,7 @@ std::pair<std::shared_ptr<ObjectValue>, std::string> clone_row_with_group_and_ke
     return {std::make_shared<ObjectValue>(grouped.as_object()), std::move(key)};
 }
 
-std::vector<std::string> all_visible_columns_in_order(const TableValue& table) {
+inline std::vector<std::string> all_visible_columns_in_order(const TableValue& table) {
     std::vector<std::string> columns;
     std::unordered_set<std::string> seen;
     for (const auto& row : table.rows) {
@@ -351,9 +351,9 @@ std::vector<std::string> all_visible_columns_in_order(const TableValue& table) {
     return columns;
 }
 
-std::vector<TableChunk> clone_table_chunks(const TableValue& table) { return table.tables; }
+inline std::vector<TableChunk> clone_table_chunks(const TableValue& table) { return table.tables; }
 
-Value table_with_chunks_like(const TableValue& table, std::vector<TableChunk> chunks) {
+inline Value table_with_chunks_like(const TableValue& table, std::vector<TableChunk> chunks) {
     return Value::table_stream(table.bucket, std::move(chunks), table.range_start, table.range_stop,
                                table.result_name);
 }
@@ -364,7 +364,7 @@ enum class EmptyChunkPolicy {
 };
 
 template <typename RowFn>
-absl::StatusOr<Value> transform_rows_preserving_chunks(
+inline absl::StatusOr<Value> transform_rows_preserving_chunks(
     const TableValue& table,
     RowFn&& row_fn,
     EmptyChunkPolicy empty_policy = EmptyChunkPolicy::Keep) {
@@ -396,8 +396,8 @@ absl::StatusOr<Value> transform_rows_preserving_chunks(
     return table_with_chunks_like(table, std::move(chunks));
 }
 
-Value slice_table_like(const TableValue& table,
-                       std::function<std::pair<size_t, size_t>(size_t)> bounds_fn) {
+inline Value slice_table_like(const TableValue& table,
+                              std::function<std::pair<size_t, size_t>(size_t)> bounds_fn) {
     std::vector<TableChunk> chunks;
     chunks.reserve(table.table_count());
     for (const auto& chunk : table.tables) {
@@ -420,7 +420,7 @@ Value slice_table_like(const TableValue& table,
     return table_with_chunks_like(table, std::move(chunks));
 }
 
-void append_value_key_fragment(std::string* out, const Value& value) {
+inline void append_value_key_fragment(std::string* out, const Value& value) {
     if (value.type() == Value::Type::String) {
         absl::StrAppend(out, value.as_string());
         return;
@@ -432,7 +432,7 @@ void append_value_key_fragment(std::string* out, const Value& value) {
     absl::StrAppend(out, value.string());
 }
 
-void append_internal_key_fragment(std::string* out, const Value* value) {
+inline void append_internal_key_fragment(std::string* out, const Value* value) {
     if (value == nullptr) {
         out->push_back('!');
         return;
@@ -518,8 +518,8 @@ struct PivotRowProjection {
     const Value* value = nullptr;
 };
 
-std::string row_identity_key_from_values(const std::vector<std::string>& columns,
-                                         const std::vector<const Value*>& values) {
+inline std::string row_identity_key_from_values(const std::vector<std::string>& columns,
+                                                const std::vector<const Value*>& values) {
     std::string key;
     key.reserve(columns.size() * 16);
     for (size_t i = 0; i < columns.size(); ++i) {
@@ -534,7 +534,8 @@ std::string row_identity_key_from_values(const std::vector<std::string>& columns
     return key;
 }
 
-PivotColumnIdentity pivot_column_identity_from_values(const std::vector<const Value*>& values) {
+inline PivotColumnIdentity pivot_column_identity_from_values(
+    const std::vector<const Value*>& values) {
     PivotColumnIdentity identity;
     identity.cache_key.reserve(values.size() * 12);
     identity.name.reserve(values.size() * 12);
@@ -553,7 +554,7 @@ PivotColumnIdentity pivot_column_identity_from_values(const std::vector<const Va
     return identity;
 }
 
-PivotRowProjection project_pivot_row(
+inline PivotRowProjection project_pivot_row(
     const ObjectValue& row,
     const std::unordered_map<std::string, size_t>& row_key_indexes,
     const std::unordered_map<std::string, size_t>& column_key_indexes,
@@ -581,7 +582,7 @@ PivotRowProjection project_pivot_row(
     return projection;
 }
 
-std::vector<std::string> visible_columns_in_chunk(const TableChunk& chunk) {
+inline std::vector<std::string> visible_columns_in_chunk(const TableChunk& chunk) {
     std::vector<std::string> columns;
     std::unordered_set<std::string> seen;
     for (const auto& row : chunk.rows) {
@@ -601,7 +602,7 @@ std::vector<std::string> visible_columns_in_chunk(const TableChunk& chunk) {
     return columns;
 }
 
-std::shared_ptr<ObjectValue> chunk_group_object(const TableChunk& chunk) {
+inline std::shared_ptr<ObjectValue> chunk_group_object(const TableChunk& chunk) {
     if (chunk.group_key != nullptr) {
         return std::make_shared<ObjectValue>(*chunk.group_key);
     }
@@ -622,7 +623,9 @@ struct PivotOutputRow {
     std::unordered_map<std::string, size_t> property_indexes;
 };
 
-void upsert_property_with_index(PivotOutputRow& output_row, const std::string& key, Value value) {
+inline void upsert_property_with_index(PivotOutputRow& output_row,
+                                       const std::string& key,
+                                       Value value) {
     const auto existing = output_row.property_indexes.find(key);
     if (existing != output_row.property_indexes.end()) {
         output_row.row->properties[existing->second].second = std::move(value);
@@ -632,7 +635,7 @@ void upsert_property_with_index(PivotOutputRow& output_row, const std::string& k
     output_row.row->properties.emplace_back(key, std::move(value));
 }
 
-double numeric_value(const Value& value) {
+inline double numeric_value(const Value& value) {
     switch (value.type()) {
         case Value::Type::Int:
             return static_cast<double>(value.as_int());
@@ -645,12 +648,12 @@ double numeric_value(const Value& value) {
     }
 }
 
-bool is_numeric_value(const Value& value) {
+inline bool is_numeric_value(const Value& value) {
     return value.type() == Value::Type::Int || value.type() == Value::Type::UInt ||
            value.type() == Value::Type::Float;
 }
 
-int compare_values(const Value* lhs, const Value* rhs) {
+inline int compare_values(const Value* lhs, const Value* rhs) {
     if (lhs == nullptr && rhs == nullptr) {
         return 0;
     }
@@ -670,7 +673,7 @@ int compare_values(const Value* lhs, const Value* rhs) {
     return left < right ? -1 : left > right ? 1 : 0;
 }
 
-std::optional<std::string> mapped_column_name(
+inline std::optional<std::string> mapped_column_name(
     const std::vector<std::pair<std::string, std::string>>& mappings, const std::string& key) {
     for (const auto& [from, to] : mappings) {
         if (from == key) {
@@ -680,12 +683,12 @@ std::optional<std::string> mapped_column_name(
     return std::nullopt;
 }
 
-std::string group_key_for_row(const ObjectValue& row) {
+inline std::string group_key_for_row(const ObjectValue& row) {
     const Value* group = row.lookup("_group");
     return group == nullptr ? "" : group->string();
 }
 
-std::vector<std::string> visible_columns_in_order(const TableValue& table) {
+inline std::vector<std::string> visible_columns_in_order(const TableValue& table) {
     std::vector<std::string> columns;
     std::unordered_set<std::string> seen;
     for (const auto& row : table.rows) {
@@ -705,7 +708,7 @@ std::vector<std::string> visible_columns_in_order(const TableValue& table) {
     return columns;
 }
 
-std::vector<std::string> group_columns_in_order(const TableValue& table) {
+inline std::vector<std::string> group_columns_in_order(const TableValue& table) {
     std::vector<std::string> columns;
     std::unordered_set<std::string> seen;
     for (const auto& row : table.rows) {
@@ -726,7 +729,7 @@ std::vector<std::string> group_columns_in_order(const TableValue& table) {
     return columns;
 }
 
-absl::StatusOr<std::vector<std::shared_ptr<ObjectValue>>> filter_rows_by_function(
+inline absl::StatusOr<std::vector<std::shared_ptr<ObjectValue>>> filter_rows_by_function(
     const TableValue& table, const Value& predicate, const std::string& name) {
     if (predicate.type() != Value::Type::Function) {
         return absl::InvalidArgumentError(absl::StrCat(name, " `fn` must be a function"));
@@ -752,9 +755,9 @@ absl::StatusOr<std::vector<std::shared_ptr<ObjectValue>>> filter_rows_by_functio
     return rows;
 }
 
-Value make_builtin_value(const std::string& name,
-                         FunctionValue::BuiltinCallback fn,
-                         std::string pipe_param_name = {}) {
+inline Value make_builtin_value(const std::string& name,
+                                FunctionValue::BuiltinCallback fn,
+                                std::string pipe_param_name = {}) {
     auto callable = std::make_shared<FunctionValue>();
     callable->kind = FunctionValue::Kind::Builtin;
     callable->name = name;
@@ -763,14 +766,14 @@ Value make_builtin_value(const std::string& name,
     return Value::function(std::move(callable));
 }
 
-void install_builtin(Environment& env,
-                     const std::string& name,
-                     FunctionValue::BuiltinCallback fn,
-                     std::string pipe_param_name = {}) {
+inline void install_builtin(Environment& env,
+                            const std::string& name,
+                            FunctionValue::BuiltinCallback fn,
+                            std::string pipe_param_name = {}) {
     env.define(name, make_builtin_value(name, std::move(fn), std::move(pipe_param_name)));
 }
 
-} // namespace
+} // namespace detail
 
 #if defined(__clang__)
 #pragma clang diagnostic pop

@@ -33,6 +33,7 @@
 
 namespace pl::flux {
 namespace {
+using namespace detail;
 
 absl::StatusOr<std::vector<std::pair<std::string, const TableValue*>>>
 require_named_table_object_property(const ObjectValue& object,
