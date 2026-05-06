@@ -101,6 +101,15 @@ cc_library(
 )
 
 cc_library(
+    name = "plan",
+    hdrs = [
+        "plan/plan_node.h",
+    ],
+    copts = COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+)
+
+cc_library(
     name = "runtime_value",
     srcs = [
         "runtime_value.cpp",
@@ -112,6 +121,7 @@ cc_library(
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
+        ":plan",
         "@abseil-cpp//absl/status:statusor",
     ],
 )
@@ -130,6 +140,55 @@ cc_library(
         ":runtime_value",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
+    ],
+)
+
+cc_library(
+    name = "connector",
+    srcs = [
+        "connector/memory_source.cpp",
+        "connector/sqlite_source.cpp",
+    ],
+    hdrs = [
+        "connector/memory_source.h",
+        "connector/sqlite_source.h",
+        "connector/table_source.h",
+    ],
+    copts = COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":runtime_value",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings:strings",
+        "@sqlite3",
+    ],
+)
+
+cc_test(
+    name = "connector_memory_source_unit_test",
+    srcs = [
+        "connector/memory_source_unit_test.cpp",
+    ],
+    copts = COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":connector",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "connector_sqlite_source_unit_test",
+    srcs = [
+        "connector/sqlite_source_unit_test.cpp",
+    ],
+    copts = COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":connector",
+        "@abseil-cpp//absl/status",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -161,6 +220,7 @@ cc_library(
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
+        ":connector",
         ":parser",
         ":runtime_env",
         ":runtime_eval",
@@ -169,7 +229,6 @@ cc_library(
         "@abseil-cpp//absl/time:time",
         "@abseil-cpp//absl/time/internal/cctz:civil_time",
         "@abseil-cpp//absl/time/internal/cctz:time_zone",
-        "@sqlite3",
         "@simdjson",
     ],
 )

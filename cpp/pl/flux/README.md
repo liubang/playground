@@ -223,6 +223,7 @@ Universe builtin 默认注入，无需 `import`。
 | `keys()`                      | 返回 group key 列名                              |
 | `findColumn(fn:, column:)`    | 找到匹配行并返回某列数组                         |
 | `findRecord(fn:, idx:)`       | 找到匹配行并返回指定位置的 record                |
+| `explain()`                   | 返回已记录的 logical plan 文本                   |
 | `yield(name:)`                | 设置结果名并输出表流                             |
 
 ## 内置包
@@ -254,7 +255,7 @@ Universe builtin 默认注入，无需 `import`。
 | --------------------------------- | ------------------------- |
 | `sql.from(driver:, dsn:, query:)` | 从 SQL 查询物化为内存表流 |
 
-第一版只支持 `driver: "sqlite"`，通过 SQLite C API 执行 `query`，并将 `null`、integer、float、text、blob-as-string 映射到 Flux 运行时值。后续 connector、planner 和下推路线见 [DATASOURCE_ARCHITECTURE.md](./DATASOURCE_ARCHITECTURE.md)。
+第一版只支持 `driver: "sqlite"`，通过 SQLite C API 执行 `query`，并将 `null`、integer、float、text、blob-as-string 映射到 Flux 运行时值。connector 层已有保守 `ScanRequest` 下推能力；runtime pipeline 已能下推 SQLite 源之上的 `range/keep/sort/limit` 线性前缀，其他算子会回退到内存执行。后续 planner 和下推路线见 [DATASOURCE_ARCHITECTURE.md](./DATASOURCE_ARCHITECTURE.md)。
 
 ### `date`
 
@@ -399,7 +400,7 @@ Universe builtin 默认注入，无需 `import`。
 - `dict` 暂由 object 承载。
 - `json.encode` 暂返回 string，尚无 bytes 类型。
 - `csv.from` 覆盖 raw/annotated 常见形态，不是完整 CSV 方言实现。
-- `sql.from` 当前只支持 SQLite `query` 模式，会立即物化到内存表；暂未实现 connector 抽象、逻辑计划和下推。
+- `sql.from` 当前只支持 SQLite `query` 模式；connector 抽象、logical plan skeleton、materialization barrier 和 SQLite `range/keep/sort/limit` 前缀下推已启动，复杂 `filter(fn:)`、跨源 join 下推和更多 SQL 方言仍未实现。
 - package 覆盖以当前 `stdlib_conformance` 为准，新增函数需要同步样例和快照。
 
 ## 贡献时的收尾清单

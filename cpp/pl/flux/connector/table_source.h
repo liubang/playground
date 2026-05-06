@@ -1,0 +1,91 @@
+// Copyright (c) 2026 The Authors. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Authors: liubang (it.liubang@gmail.com)
+// Created: 2026/05/07 00:35
+
+#pragma once
+
+#include "absl/status/statusor.h"
+#include "cpp/pl/flux/runtime_value.h"
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace pl::flux::connector {
+
+struct ColumnSchema {
+    std::string name;
+    Value::Type type = Value::Type::Null;
+    bool nullable = true;
+};
+
+struct TableSchema {
+    std::vector<ColumnSchema> columns;
+};
+
+struct SourceCapabilities {
+    bool projection = false;
+    bool filter = false;
+    bool time_range = false;
+    bool limit = false;
+    bool sort = false;
+    bool aggregate = false;
+};
+
+struct TimeRange {
+    std::optional<std::string> start;
+    std::optional<std::string> stop;
+};
+
+enum class PredicateOp {
+    Eq,
+    NotEq,
+    Lt,
+    Lte,
+    Gt,
+    Gte,
+};
+
+struct Predicate {
+    PredicateOp op = PredicateOp::Eq;
+    std::string column;
+    Value literal;
+};
+
+struct OrderBy {
+    std::string column;
+    bool desc = false;
+};
+
+struct ScanRequest {
+    std::vector<std::string> columns;
+    std::optional<TimeRange> time_range;
+    std::vector<Predicate> predicates;
+    std::vector<OrderBy> order_by;
+    std::optional<int64_t> limit;
+    std::optional<int64_t> offset;
+};
+
+class TableSource {
+public:
+    virtual ~TableSource() = default;
+
+    virtual absl::StatusOr<TableSchema> Schema() const = 0;
+    virtual SourceCapabilities Capabilities() const = 0;
+    virtual absl::StatusOr<Value> Scan(const ScanRequest& request) = 0;
+};
+
+} // namespace pl::flux::connector

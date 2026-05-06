@@ -487,6 +487,11 @@ sql.from(driver: "sqlite", dsn: "...", query: "select ...")
 
 ### Phase 2: TableSource Abstraction
 
+状态：已启动第一块。当前已新增 `connector/TableSource` 接口、`SQLiteSource`、
+`ArraySource` 和 `CsvSource`，并将 `sql.from`、`array.from`、`csv.from` 改为通过
+对应 source 的 `Scan({})` 物化，外部行为保持不变。真实 capability、`ScanRequest`
+pushdown 仍未实现。
+
 目标：统一 CSV/array/SQL 数据源入口。
 
 工作项：
@@ -503,6 +508,13 @@ sql.from(driver: "sqlite", dsn: "...", query: "select ...")
 
 ### Phase 3: Logical Plan Skeleton
 
+状态：已启动。当前已新增 `plan/PlanNode` skeleton，`TableValue` 可携带可选 `plan`，
+`sql.from` 的物化结果会附带 `SourceScan` 节点；当输入 table 已有 plan 时，
+`range/filter/keep/limit/sort` 会在保持 eager 内存执行结果不变的同时追加
+`Range/Filter/Project/Limit/Sort` 节点；`explain()` 可输出已记录的 logical plan 文本。
+遇到第一阶段暂不支持延迟的 table builtin 时，会在 plan 中插入带原因和 builtin 名称的
+`Materialize` barrier，明确截断后续下推边界；真正的延迟执行仍未实现。
+
 目标：表 pipeline 可以延迟表达一小段 plan。
 
 工作项：
@@ -518,6 +530,12 @@ sql.from(driver: "sqlite", dsn: "...", query: "select ...")
 - SQL pipeline 在 materialize 前能打印/debug 出 plan。
 
 ### Phase 4: Conservative Pushdown
+
+状态：已启动。`ScanRequest` 已有简单谓词表示，`SQLiteSource` 会把 projection、
+`_time` range、简单 AND 谓词、sort、limit/offset 翻译为包裹 base query 的 SQLite
+SQL，并用 bind 参数执行；runtime pipeline 已能把 SQLite `SourceScan` 之上的
+`range/keep/sort/limit` 线性前缀编译成 pushed-down `ScanRequest`，遇到不可完整翻译的
+plan 会保守回退到已物化的内存结果。`filter(fn:)` 的简单表达式提取仍未实现。
 
 目标：SQLite 能下推简单 range/filter/projection/limit/sort。
 

@@ -90,8 +90,9 @@ absl::StatusOr<Value> builtin_elapsed(const std::vector<Value>& args) {
         }
         previous_time_by_group[group_key] = *seconds_or;
     }
-    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
-                        (*table_or)->range_stop);
+    auto result = Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                               (*table_or)->range_stop);
+    return with_materialization_barrier(std::move(result), **table_or, "elapsed");
 }
 
 absl::StatusOr<Value> builtin_difference(const std::vector<Value>& args) {
@@ -154,8 +155,9 @@ absl::StatusOr<Value> builtin_difference(const std::vector<Value>& args) {
         }
         previous_by_group[group_key] = *current;
     }
-    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
-                        (*table_or)->range_stop);
+    auto result = Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                               (*table_or)->range_stop);
+    return with_materialization_barrier(std::move(result), **table_or, "difference");
 }
 
 absl::StatusOr<Value> builtin_derivative(const std::vector<Value>& args) {
@@ -263,8 +265,9 @@ absl::StatusOr<Value> builtin_derivative(const std::vector<Value>& args) {
         previous_value_by_group[group_key] = *current;
         previous_time_by_group[group_key] = *seconds_or;
     }
-    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
-                        (*table_or)->range_stop);
+    auto result = Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                               (*table_or)->range_stop);
+    return with_materialization_barrier(std::move(result), **table_or, "derivative");
 }
 
 absl::StatusOr<Value> builtin_window(const std::vector<Value>& args) {
@@ -545,8 +548,10 @@ absl::StatusOr<Value> builtin_window(const std::vector<Value>& args) {
         chunks.insert(chunks.end(), chunk_windows.begin(), chunk_windows.end());
     }
 
-    return Value::table_stream((*table_or)->bucket, std::move(chunks), (*table_or)->range_start,
-                               (*table_or)->range_stop, (*table_or)->result_name);
+    auto result =
+        Value::table_stream((*table_or)->bucket, std::move(chunks), (*table_or)->range_start,
+                            (*table_or)->range_stop, (*table_or)->result_name);
+    return with_materialization_barrier(std::move(result), **table_or, "window");
 }
 
 absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args,
@@ -982,7 +987,8 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args,
     if (chunks.empty()) {
         chunks.emplace_back();
     }
-    return table_with_chunks_like(**table_or, std::move(chunks));
+    auto result = table_with_chunks_like(**table_or, std::move(chunks));
+    return with_materialization_barrier(std::move(result), **table_or, "aggregateWindow");
 }
 
 } // namespace
