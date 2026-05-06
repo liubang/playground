@@ -212,6 +212,158 @@ TEST(RuntimeExecTest, ExecutesSqlFromSqliteQueryThroughMemoryPipeline) {
     EXPECT_EQ("null", env.lookup("data")->as_table().rows[0]->lookup("note")->string());
 }
 
+TEST(RuntimeExecTest, SqlFromAttachesSourceScanPlan) {
+    auto file = ParseFile(R"(
+        import "sql"
+
+        data = sql.from(
+            driver: "sqlite",
+            dsn: ":memory:",
+            query: "select 1 as value",
+        )
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto data_or = env.lookup("data");
+    ASSERT_TRUE(data_or.ok()) << data_or.status();
+    ASSERT_EQ(Value::Type::Table, data_or->type());
+    ASSERT_NE(nullptr, data_or->as_table().plan);
+    EXPECT_EQ(plan::PlanNodeKind::SourceScan, data_or->as_table().plan->kind);
+    EXPECT_EQ("sql", data_or->as_table().plan->source_scan.source);
+    EXPECT_EQ("sqlite", data_or->as_table().plan->source_scan.driver);
+    EXPECT_EQ("select 1 as value", data_or->as_table().plan->source_scan.query);
+}
+
+TEST(RuntimeExecTest, SqlPipelineAppendsLogicalPlanNodesWhileExecutingEagerly) {
+    auto file = ParseFile(R"(
+        import "sql"
+        builtin range : (<-tables: stream[A], start: time, stop: time) => stream[A]
+        builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
+        builtin keep : (<-tables: stream[A], columns: [string]) => stream[A]
+        builtin sort : (<-tables: stream[A], columns: [string], desc: bool) => stream[A]
+        builtin limit : (<-tables: stream[A], n: int) => stream[A]
+
+        data = sql.from(
+            driver: "sqlite",
+            dsn: ":memory:",
+            query: "select '2024-01-01T00:00:00Z' as _time, 'edge-2' as host, 20.0 as _value union all select '2024-01-01T00:01:00Z', 'edge-1', 91.5 union all select '2024-01-01T00:02:00Z', 'edge-1', 42.0",
+        )
+            |> range(start: 2024-01-01T00:00:30Z, stop: 2024-01-01T00:03:00Z)
+            |> filter(fn: (r) => r.host == "edge-1")
+            |> keep(columns: ["_time", "host", "_value"])
+            |> sort(columns: ["_value"], desc: true)
+            |> limit(n: 1)
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto data_or = env.lookup("data");
+    ASSERT_TRUE(data_or.ok()) << data_or.status();
+    ASSERT_EQ(Value::Type::Table, data_or->type());
+    ASSERT_EQ(1, data_or->as_table().rows.size());
+    EXPECT_EQ("91.5", data_or->as_table().rows[0]->lookup("_value")->string());
+
+    auto node = data_or->as_table().plan;
+    ASSERT_NE(nullptr, node);
+    EXPECT_EQ(plan::PlanNodeKind::Limit, node->kind);
+    ASSERT_EQ(1, node->inputs.size());
+    node = node->inputs[0];
+    ASSERT_NE(nullptr, node);
+    EXPECT_EQ(plan::PlanNodeKind::Sort, node->kind);
+    ASSERT_EQ(1, node->inputs.size());
+    node = node->inputs[0];
+    ASSERT_NE(nullptr, node);
+    EXPECT_EQ(plan::PlanNodeKind::Project, node->kind);
+    ASSERT_EQ(1, node->inputs.size());
+    node = node->inputs[0];
+    ASSERT_NE(nullptr, node);
+    EXPECT_EQ(plan::PlanNodeKind::Filter, node->kind);
+    ASSERT_EQ(1, node->inputs.size());
+    node = node->inputs[0];
+    ASSERT_NE(nullptr, node);
+    EXPECT_EQ(plan::PlanNodeKind::Range, node->kind);
+    ASSERT_EQ(1, node->inputs.size());
+    node = node->inputs[0];
+    ASSERT_NE(nullptr, node);
+    EXPECT_EQ(plan::PlanNodeKind::SourceScan, node->kind);
+    EXPECT_EQ("sqlite", node->source_scan.driver);
+}
+
+TEST(RuntimeExecTest, ExplainFormatsLogicalPlan) {
+    auto file = ParseFile(R"(
+        import "sql"
+        builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
+        builtin limit : (<-tables: stream[A], n: int) => stream[A]
+        builtin explain : (<-tables: stream[A]) => string
+
+        data = sql.from(
+            driver: "sqlite",
+            dsn: ":memory:",
+            query: "select 'edge-1' as host, 91.5 as _value",
+        )
+            |> filter(fn: (r) => r.host == "edge-1")
+            |> limit(n: 1)
+
+        plan = data |> explain()
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto plan_or = env.lookup("plan");
+    ASSERT_TRUE(plan_or.ok()) << plan_or.status();
+    ASSERT_EQ(Value::Type::String, plan_or->type());
+    EXPECT_EQ(
+        "Limit\n"
+        "  Filter\n"
+        "    SourceScan(source=\"sql\", driver=\"sqlite\", query=\"select 'edge-1' as host, 91.5 "
+        "as _value\")\n",
+        plan_or->as_string());
+}
+
+TEST(RuntimeExecTest, UnsupportedLazyBuiltinAddsMaterializationBarrier) {
+    auto file = ParseFile(R"(
+        import "sql"
+        builtin map : (<-tables: stream[A], fn: (r: A) => B) => stream[B]
+        builtin limit : (<-tables: stream[A], n: int) => stream[A]
+        builtin explain : (<-tables: stream[A]) => string
+
+        data = sql.from(
+            driver: "sqlite",
+            dsn: ":memory:",
+            query: "select 'edge-1' as host, 91.5 as _value",
+        )
+            |> map(fn: (r) => ({host: r.host, score: r._value * 100.0}))
+            |> limit(n: 1)
+
+        plan = data |> explain()
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto plan_or = env.lookup("plan");
+    ASSERT_TRUE(plan_or.ok()) << plan_or.status();
+    ASSERT_EQ(Value::Type::String, plan_or->type());
+    EXPECT_EQ(
+        "Limit\n"
+        "  Materialize(reason=\"unsupported lazy builtin\", builtin=\"map\")\n"
+        "    SourceScan(source=\"sql\", driver=\"sqlite\", query=\"select 'edge-1' as host, 91.5 "
+        "as _value\")\n",
+        plan_or->as_string());
+}
+
 TEST(RuntimeExecTest, SqlFromRejectsUnsupportedDriver) {
     auto file = ParseFile(R"(
         import "sql"

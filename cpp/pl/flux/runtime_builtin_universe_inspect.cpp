@@ -17,6 +17,7 @@
 
 #include "cpp/pl/flux/runtime_builtin_table_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_universe.h"
+#include "cpp/pl/flux/plan/plan_node.h"
 
 namespace pl::flux {
 namespace {
@@ -141,6 +142,18 @@ absl::StatusOr<Value> builtin_find_record(const std::vector<Value>& args) {
     return Value::object((*rows_or)[*idx_or]->properties);
 }
 
+absl::StatusOr<Value> builtin_explain(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "explain");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto table_or = require_table_property(**object_or, "explain", "tables");
+    if (!table_or.ok()) {
+        return table_or.status();
+    }
+    return Value::string(plan::FormatPlan((*table_or)->plan));
+}
+
 } // namespace
 
 void InstallUniverseInspectBuiltins(Environment& env) {
@@ -148,6 +161,7 @@ void InstallUniverseInspectBuiltins(Environment& env) {
     install_builtin(env, "keys", builtin_keys, "tables");
     install_builtin(env, "findColumn", builtin_find_column, "tables");
     install_builtin(env, "findRecord", builtin_find_record, "tables");
+    install_builtin(env, "explain", builtin_explain, "tables");
     install_builtin(env, "yield", builtin_yield, "tables");
 }
 
@@ -166,6 +180,10 @@ bool InstallKnownUniverseInspectBuiltin(Environment& env, const std::string& nam
     }
     if (name == "findRecord") {
         install_builtin(env, "findRecord", builtin_find_record, "tables");
+        return true;
+    }
+    if (name == "explain") {
+        install_builtin(env, "explain", builtin_explain, "tables");
         return true;
     }
     if (name == "yield") {

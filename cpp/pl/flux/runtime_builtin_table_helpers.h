@@ -121,6 +121,33 @@ inline absl::StatusOr<std::vector<const TableValue*>> require_table_array_proper
     return tables;
 }
 
+inline Value with_materialization_barrier(Value value,
+                                          const TableValue& input,
+                                          const std::string& builtin) {
+    if (input.plan != nullptr) {
+        value.as_table_mut().plan =
+            plan::MakeMaterializeBarrier(input.plan, "unsupported lazy builtin", builtin);
+    }
+    return value;
+}
+
+inline Value with_materialization_barrier(Value value,
+                                          const std::vector<const TableValue*>& inputs,
+                                          const std::string& builtin) {
+    std::vector<std::shared_ptr<plan::PlanNode>> input_plans;
+    input_plans.reserve(inputs.size());
+    for (const auto* input : inputs) {
+        if (input != nullptr && input->plan != nullptr) {
+            input_plans.push_back(input->plan);
+        }
+    }
+    if (!input_plans.empty()) {
+        value.as_table_mut().plan = plan::MakeMaterializeBarrier(
+            std::move(input_plans), "unsupported lazy builtin", builtin);
+    }
+    return value;
+}
+
 inline absl::StatusOr<const ArrayValue*> require_array_property(const ObjectValue& object,
                                                                 const std::string& name,
                                                                 const std::string& property) {

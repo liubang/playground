@@ -12,6 +12,7 @@ key_names = data |> keys() |> findColumn(fn: (r) => true, column: "_value")
 values = data |> findColumn(fn: (r) => r.region == "west", column: "_value")
 record = data |> findRecord(fn: (r) => r.host == "edge-2", idx: 0)
 named = data |> yield(name: "inspect_result")
+plan = data |> explain()
 
 {
     columns: column_names,
@@ -19,4 +20,5 @@ named = data |> yield(name: "inspect_result")
     values: values,
     record_host: record.host,
     named_string: string(named),
+    plan: plan,
 }

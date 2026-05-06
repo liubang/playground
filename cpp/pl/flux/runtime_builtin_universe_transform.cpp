@@ -15,6 +15,7 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/25 10:40
 
+#include "cpp/pl/flux/connector/sqlite_source.h"
 #include "cpp/pl/flux/runtime_builtin_table_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_time_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_universe.h"
@@ -23,6 +24,145 @@
 namespace pl::flux {
 namespace {
 using namespace detail;
+
+struct PushdownPlan {
+    const plan::SourceScanSpec* source = nullptr;
+    connector::ScanRequest request;
+};
+
+absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::PlanNode>& node) {
+    if (node == nullptr) {
+        return absl::InvalidArgumentError("missing plan");
+    }
+    if (node->kind == plan::PlanNodeKind::SourceScan) {
+        if (node->source_scan.source != "sql" || node->source_scan.driver != "sqlite") {
+            return absl::InvalidArgumentError("unsupported pushdown source");
+        }
+        PushdownPlan plan;
+        plan.source = &node->source_scan;
+        return plan;
+    }
+    if (node->inputs.size() != 1) {
+        return absl::InvalidArgumentError("non-linear plan is not pushable");
+    }
+    auto plan_or = build_pushdown_plan(node->inputs[0]);
+    if (!plan_or.ok()) {
+        return plan_or.status();
+    }
+    switch (node->kind) {
+        case plan::PlanNodeKind::Range:
+            plan_or->request.time_range = connector::TimeRange{
+                .start = node->range.start,
+                .stop = node->range.stop,
+            };
+            return plan_or;
+        case plan::PlanNodeKind::Project:
+            plan_or->request.columns = node->project.columns;
+            return plan_or;
+        case plan::PlanNodeKind::Limit:
+            plan_or->request.limit = node->limit.n;
+            if (node->limit.offset != 0) {
+                plan_or->request.offset = node->limit.offset;
+            }
+            return plan_or;
+        case plan::PlanNodeKind::Sort:
+            plan_or->request.order_by.clear();
+            plan_or->request.order_by.reserve(node->sort.keys.size());
+            for (const auto& key : node->sort.keys) {
+                plan_or->request.order_by.push_back({
+                    .column = key.column,
+                    .desc = key.desc,
+                });
+            }
+            return plan_or;
+        default:
+            return absl::InvalidArgumentError("plan node is not pushable");
+    }
+}
+
+Value maybe_pushdown_sqlite_plan(Value value) {
+    auto& table = value.as_table_mut();
+    if (table.plan == nullptr) {
+        return value;
+    }
+    auto pushdown_or = build_pushdown_plan(table.plan);
+    if (!pushdown_or.ok()) {
+        return value;
+    }
+    connector::SQLiteSource source(pushdown_or->source->dsn, pushdown_or->source->query);
+    auto pushed_or = source.Scan(pushdown_or->request);
+    if (!pushed_or.ok()) {
+        return value;
+    }
+    pushed_or->as_table_mut().plan = table.plan;
+    pushed_or->as_table_mut().range_start = table.range_start;
+    pushed_or->as_table_mut().range_stop = table.range_stop;
+    pushed_or->as_table_mut().result_name = table.result_name;
+    return *pushed_or;
+}
+
+Value with_appended_plan(Value value, const TableValue& input, plan::PlanNodeKind kind) {
+    if (input.plan != nullptr) {
+        value.as_table_mut().plan = plan::MakeUnaryNode(kind, input.plan);
+    }
+    return value;
+}
+
+Value with_range_plan(Value value,
+                      const TableValue& input,
+                      std::string start,
+                      std::optional<std::string> stop) {
+    if (input.plan != nullptr) {
+        value.as_table_mut().plan = plan::MakeRange(input.plan, std::move(start), std::move(stop));
+        return maybe_pushdown_sqlite_plan(std::move(value));
+    }
+    return value;
+}
+
+Value with_project_plan(Value value, const TableValue& input, std::vector<std::string> columns) {
+    if (input.plan != nullptr) {
+        value.as_table_mut().plan = plan::MakeProject(input.plan, std::move(columns));
+        return maybe_pushdown_sqlite_plan(std::move(value));
+    }
+    return value;
+}
+
+Value with_limit_plan(Value value, const TableValue& input, int64_t n, int64_t offset) {
+    if (input.plan != nullptr) {
+        value.as_table_mut().plan = plan::MakeLimit(input.plan, n, offset);
+        return maybe_pushdown_sqlite_plan(std::move(value));
+    }
+    return value;
+}
+
+Value with_sort_plan(Value value,
+                     const TableValue& input,
+                     const std::vector<std::string>& columns,
+                     bool desc) {
+    if (input.plan != nullptr) {
+        std::vector<plan::SortKey> keys;
+        keys.reserve(columns.size());
+        for (const auto& column : columns) {
+            keys.push_back({
+                .column = column,
+                .desc = desc,
+            });
+        }
+        value.as_table_mut().plan = plan::MakeSort(input.plan, std::move(keys));
+        return maybe_pushdown_sqlite_plan(std::move(value));
+    }
+    return value;
+}
+
+Value with_materialization_barrier(Value value,
+                                   const TableValue& input,
+                                   const std::string& builtin) {
+    if (input.plan != nullptr) {
+        value.as_table_mut().plan =
+            plan::MakeMaterializeBarrier(input.plan, "unsupported lazy builtin", builtin);
+    }
+    return value;
+}
 
 absl::StatusOr<Value> builtin_from(const std::vector<Value>& args) {
     auto object_or = require_object_argument(args, "from");
@@ -76,8 +216,9 @@ absl::StatusOr<Value> builtin_range(const std::vector<Value>& args) {
     auto table = ranged_or->as_table();
     table.range_start = start;
     table.range_stop = stop;
-    return Value::table_stream(table.bucket, std::move(table.tables), table.range_start,
-                               table.range_stop, table.result_name);
+    auto result = Value::table_stream(table.bucket, std::move(table.tables), table.range_start,
+                                      table.range_stop, table.result_name);
+    return with_range_plan(std::move(result), **table_or, start, stop);
 }
 
 absl::StatusOr<Value> builtin_filter(const std::vector<Value>& args) {
@@ -109,7 +250,7 @@ absl::StatusOr<Value> builtin_filter(const std::vector<Value>& args) {
         return absl::InvalidArgumentError("filter `onEmpty` must be \"drop\" or \"keep\"");
     }
 
-    return transform_rows_preserving_chunks(
+    auto result_or = transform_rows_preserving_chunks(
         **table_or,
         [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
             auto keep_or = ExpressionEvaluator::Invoke(**fn_or, {Value::object(clone_row(row))});
@@ -125,6 +266,10 @@ absl::StatusOr<Value> builtin_filter(const std::vector<Value>& args) {
             return clone_row(row);
         },
         empty_policy);
+    if (!result_or.ok()) {
+        return result_or.status();
+    }
+    return with_appended_plan(std::move(*result_or), **table_or, plan::PlanNodeKind::Filter);
 }
 
 absl::StatusOr<Value> builtin_map(const std::vector<Value>& args) {
@@ -144,7 +289,7 @@ absl::StatusOr<Value> builtin_map(const std::vector<Value>& args) {
         return absl::InvalidArgumentError("map `fn` must be a function");
     }
 
-    return transform_rows_preserving_chunks(
+    auto result_or = transform_rows_preserving_chunks(
         **table_or, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
             auto mapped_or = ExpressionEvaluator::Invoke(**fn_or, {Value::object(clone_row(row))});
             if (!mapped_or.ok()) {
@@ -155,6 +300,10 @@ absl::StatusOr<Value> builtin_map(const std::vector<Value>& args) {
             }
             return std::make_shared<ObjectValue>(mapped_or->as_object());
         });
+    if (!result_or.ok()) {
+        return result_or.status();
+    }
+    return with_materialization_barrier(std::move(*result_or), **table_or, "map");
 }
 
 absl::StatusOr<Value> builtin_limit(const std::vector<Value>& args) {
@@ -192,10 +341,11 @@ absl::StatusOr<Value> builtin_limit(const std::vector<Value>& args) {
     }
 
     const size_t begin = static_cast<size_t>(offset);
-    return slice_table_like(**table_or, [&](size_t size) {
+    auto result = slice_table_like(**table_or, [&](size_t size) {
         const size_t end = std::min(size, begin + static_cast<size_t>(*n_or));
         return std::pair<size_t, size_t>{begin, end};
     });
+    return with_limit_plan(std::move(result), **table_or, *n_or, offset);
 }
 
 absl::StatusOr<Value> builtin_tail(const std::vector<Value>& args) {
@@ -232,13 +382,14 @@ absl::StatusOr<Value> builtin_tail(const std::vector<Value>& args) {
         }
     }
 
-    return slice_table_like(**table_or, [&](size_t row_count) {
+    auto result = slice_table_like(**table_or, [&](size_t row_count) {
         const size_t tail_end =
             offset >= static_cast<int64_t>(row_count) ? 0 : row_count - static_cast<size_t>(offset);
         const size_t tail_begin =
             static_cast<size_t>(*n_or) >= tail_end ? 0 : tail_end - static_cast<size_t>(*n_or);
         return std::pair<size_t, size_t>{tail_begin, tail_end};
     });
+    return with_materialization_barrier(std::move(result), **table_or, "tail");
 }
 
 absl::StatusOr<Value> builtin_keep(const std::vector<Value>& args) {
@@ -255,7 +406,7 @@ absl::StatusOr<Value> builtin_keep(const std::vector<Value>& args) {
         return columns_or.status();
     }
     const std::unordered_set<std::string> selected(columns_or->begin(), columns_or->end());
-    return transform_rows_preserving_chunks(
+    auto result_or = transform_rows_preserving_chunks(
         **table_or, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
             std::vector<std::pair<std::string, Value>> props;
             props.reserve(row.properties.size());
@@ -266,6 +417,10 @@ absl::StatusOr<Value> builtin_keep(const std::vector<Value>& args) {
             }
             return std::make_shared<ObjectValue>(std::move(props));
         });
+    if (!result_or.ok()) {
+        return result_or.status();
+    }
+    return with_project_plan(std::move(*result_or), **table_or, *columns_or);
 }
 
 absl::StatusOr<Value> builtin_drop(const std::vector<Value>& args) {
@@ -282,7 +437,7 @@ absl::StatusOr<Value> builtin_drop(const std::vector<Value>& args) {
         return columns_or.status();
     }
     const std::unordered_set<std::string> dropped(columns_or->begin(), columns_or->end());
-    return transform_rows_preserving_chunks(
+    auto result_or = transform_rows_preserving_chunks(
         **table_or, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
             std::vector<std::pair<std::string, Value>> props;
             props.reserve(row.properties.size());
@@ -293,6 +448,10 @@ absl::StatusOr<Value> builtin_drop(const std::vector<Value>& args) {
             }
             return std::make_shared<ObjectValue>(std::move(props));
         });
+    if (!result_or.ok()) {
+        return result_or.status();
+    }
+    return with_materialization_barrier(std::move(*result_or), **table_or, "drop");
 }
 
 absl::StatusOr<Value> builtin_rename(const std::vector<Value>& args) {
@@ -309,7 +468,7 @@ absl::StatusOr<Value> builtin_rename(const std::vector<Value>& args) {
         return columns_or.status();
     }
 
-    return transform_rows_preserving_chunks(
+    auto result_or = transform_rows_preserving_chunks(
         **table_or, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
             std::vector<std::pair<std::string, Value>> props;
             props.reserve(row.properties.size());
@@ -322,6 +481,10 @@ absl::StatusOr<Value> builtin_rename(const std::vector<Value>& args) {
             }
             return std::make_shared<ObjectValue>(std::move(props));
         });
+    if (!result_or.ok()) {
+        return result_or.status();
+    }
+    return with_materialization_barrier(std::move(*result_or), **table_or, "rename");
 }
 
 absl::StatusOr<Value> builtin_duplicate(const std::vector<Value>& args) {
@@ -342,7 +505,7 @@ absl::StatusOr<Value> builtin_duplicate(const std::vector<Value>& args) {
         return as_or.status();
     }
 
-    return transform_rows_preserving_chunks(
+    auto result_or = transform_rows_preserving_chunks(
         **table_or, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
             const Value* value = row.lookup(*column_or);
             if (value == nullptr) {
@@ -351,6 +514,10 @@ absl::StatusOr<Value> builtin_duplicate(const std::vector<Value>& args) {
             auto duplicated = object_with_upserted_property(row, *as_or, *value);
             return std::make_shared<ObjectValue>(duplicated.as_object());
         });
+    if (!result_or.ok()) {
+        return result_or.status();
+    }
+    return with_materialization_barrier(std::move(*result_or), **table_or, "duplicate");
 }
 
 absl::StatusOr<Value> builtin_set(const std::vector<Value>& args) {
@@ -371,11 +538,15 @@ absl::StatusOr<Value> builtin_set(const std::vector<Value>& args) {
         return value_or.status();
     }
 
-    return transform_rows_preserving_chunks(
+    auto result_or = transform_rows_preserving_chunks(
         **table_or, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
             auto updated = object_with_upserted_property(row, *key_or, **value_or);
             return std::make_shared<ObjectValue>(updated.as_object());
         });
+    if (!result_or.ok()) {
+        return result_or.status();
+    }
+    return with_materialization_barrier(std::move(*result_or), **table_or, "set");
 }
 
 absl::StatusOr<Value> builtin_sort(const std::vector<Value>& args) {
@@ -412,7 +583,8 @@ absl::StatusOr<Value> builtin_sort(const std::vector<Value>& args) {
                 return false;
             });
     }
-    return table_with_chunks_like(**table_or, std::move(chunks));
+    auto result = table_with_chunks_like(**table_or, std::move(chunks));
+    return with_sort_plan(std::move(result), **table_or, *columns_or, *desc_or);
 }
 
 absl::StatusOr<Value> builtin_group(const std::vector<Value>& args) {
@@ -463,7 +635,8 @@ absl::StatusOr<Value> builtin_group(const std::vector<Value>& args) {
     if (chunks.empty()) {
         chunks.emplace_back();
     }
-    return table_with_chunks_like(**table_or, std::move(chunks));
+    auto result = table_with_chunks_like(**table_or, std::move(chunks));
+    return with_materialization_barrier(std::move(result), **table_or, "group");
 }
 
 absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
@@ -564,7 +737,8 @@ absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
         }
         chunks.push_back(std::move(next));
     }
-    return table_with_chunks_like(**table_or, std::move(chunks));
+    auto result = table_with_chunks_like(**table_or, std::move(chunks));
+    return with_materialization_barrier(std::move(result), **table_or, "pivot");
 }
 
 absl::StatusOr<Value> builtin_fill(const std::vector<Value>& args) {
@@ -621,8 +795,9 @@ absl::StatusOr<Value> builtin_fill(const std::vector<Value>& args) {
         }
         rows.push_back(next_row);
     }
-    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
-                        (*table_or)->range_stop);
+    auto result = Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
+                               (*table_or)->range_stop);
+    return with_materialization_barrier(std::move(result), **table_or, "fill");
 }
 
 absl::StatusOr<Value> builtin_union(const std::vector<Value>& args) {
@@ -658,7 +833,8 @@ absl::StatusOr<Value> builtin_union(const std::vector<Value>& args) {
     if (chunks.empty()) {
         chunks.emplace_back();
     }
-    return Value::table_stream(bucket, std::move(chunks), range_start, range_stop);
+    auto result = Value::table_stream(bucket, std::move(chunks), range_start, range_stop);
+    return detail::with_materialization_barrier(std::move(result), *tables_or, "union");
 }
 
 } // namespace

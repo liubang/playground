@@ -571,9 +571,14 @@ absl::StatusOr<Value> builtin_join(const std::vector<Value>& args) {
             "join `method` must be one of \"inner\", \"left\", \"right\", or \"full\"");
     }
 
-    return join_with_column_keys(*(*tables_or)[0].second, *(*tables_or)[1].second,
-                                 (*tables_or)[0].first, (*tables_or)[1].first, *on_or, method,
-                                 nullptr);
+    auto result_or = join_with_column_keys(*(*tables_or)[0].second, *(*tables_or)[1].second,
+                                           (*tables_or)[0].first, (*tables_or)[1].first, *on_or,
+                                           method, nullptr);
+    if (!result_or.ok()) {
+        return result_or.status();
+    }
+    std::vector<const TableValue*> inputs{(*tables_or)[0].second, (*tables_or)[1].second};
+    return with_materialization_barrier(std::move(*result_or), inputs, "join");
 }
 
 absl::StatusOr<Value> builtin_join_package_method(const std::vector<Value>& args,
@@ -610,15 +615,26 @@ absl::StatusOr<Value> builtin_join_package_method(const std::vector<Value>& args
         if (!on_or.ok()) {
             return on_or.status();
         }
-        return join_with_column_keys(**left_or, **right_or, "left", "right", *on_or, method, as_fn);
+        auto result_or =
+            join_with_column_keys(**left_or, **right_or, "left", "right", *on_or, method, as_fn);
+        if (!result_or.ok()) {
+            return result_or.status();
+        }
+        std::vector<const TableValue*> inputs{*left_or, *right_or};
+        return with_materialization_barrier(std::move(*result_or), inputs, name);
     }
     if ((*on_value_or)->type() == Value::Type::Function) {
         if (as_fn == nullptr) {
             return absl::InvalidArgumentError(
                 absl::StrCat(name, " requires `as` when `on` is a predicate function"));
         }
-        return join_with_predicate(**left_or, **right_or, (*on_value_or)->as_function(), *as_fn,
-                                   method);
+        auto result_or = join_with_predicate(**left_or, **right_or, (*on_value_or)->as_function(),
+                                             *as_fn, method);
+        if (!result_or.ok()) {
+            return result_or.status();
+        }
+        std::vector<const TableValue*> inputs{*left_or, *right_or};
+        return with_materialization_barrier(std::move(*result_or), inputs, name);
     }
     return absl::InvalidArgumentError(absl::StrCat(name, " `on` must be an array or function"));
 }
