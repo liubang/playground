@@ -15,12 +15,13 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/25 10:40
 
-#include "cpp/pl/flux/runtime_builtin_aggregate_helpers.h"
 #include "cpp/pl/flux/compat.h"
+#include "cpp/pl/flux/runtime_builtin_aggregate_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_universe.h"
 
 namespace pl::flux {
 namespace {
+using namespace detail;
 
 absl::StatusOr<Value> builtin_sum(const std::vector<Value>& args) {
     auto array_or = require_array_argument(args, "sum");

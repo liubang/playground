@@ -22,6 +22,7 @@
 
 namespace pl::flux {
 namespace {
+using namespace detail;
 
 absl::StatusOr<Value> builtin_from(const std::vector<Value>& args) {
     auto object_or = require_object_argument(args, "from");
