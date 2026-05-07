@@ -1,0 +1,248 @@
+diff --git a/BUILD b/BUILD
+index 34dcf5a..3fc4114 100644
+--- a/BUILD
++++ b/BUILD
+@@ -1,60 +1,59 @@
++load("@protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
++load("@protobuf//bazel:proto_library.bzl", "proto_library")
++load("@rules_cc//cc:defs.bzl", "cc_library")
++
+ licenses(["notice"])
+ 
+ exports_files(["LICENSE"])
+ 
+-load(":bazel/braft.bzl", "braft_proto_library")
++proto_library(
++    name = "braft_proto",
++    srcs = glob(["src/braft/*.proto"]),
++    strip_import_prefix = "src",
++    visibility = ["//visibility:public"],
++)
++
++cc_proto_library(
++    name = "braft_cc_proto",
++    deps = [":braft_proto"],
++    visibility = ["//visibility:public"],
++)
+ 
+ cc_library(
+     name = "braft",
+-    srcs = glob([
+-        "src/braft/*.cpp",
+-    ]),
+-    hdrs = glob([
+-        "src/braft/*.h",
+-    ]),
+-    includes = [
+-        "src",
+-    ],
+-    defines = [],
++    srcs = glob(
++        ["src/braft/*.cpp"],
++        exclude = ["src/braft/*_test.cpp"],
++    ),
++    hdrs = glob(["src/braft/*.h"]),
++    includes = ["src"],
+     copts = [
+         "-DGFLAGS=gflags",
+-        "-DOS_LINUX",
+-        "-DSNAPPY",
+-        "-DHAVE_SSE42",
+         "-DNDEBUG",
+         "-D__STDC_FORMAT_MACROS",
+         "-fno-omit-frame-pointer",
+-        "-momit-leaf-frame-pointer",
+-        "-msse4.2",
+-        "-pthread",
+-        "-Wsign-compare",
+         "-Wno-unused-parameter",
+         "-Wno-unused-variable",
+-        "-Woverloaded-virtual",
+-        "-Wnon-virtual-dtor",
++        "-Wno-overloaded-virtual",
+         "-Wno-missing-field-initializers",
+-        "-std=c++11",
++        "-Wno-sign-compare",
+         "-DGFLAGS_NS=google",
+-    ],
+-    linkopts = [
+-        "-lm",
+-        "-lpthread",
+-    ],
++    ] + select({
++        "@platforms//os:linux": ["-DOS_LINUX"],
++        "@platforms//os:macos": ["-DOS_MACOSX"],
++        "//conditions:default": [],
++    }),
++    linkopts = select({
++        "@platforms//os:linux": ["-lm", "-lpthread"],
++        "@platforms//os:macos": ["-lm", "-lpthread"],
++        "//conditions:default": [],
++    }),
+     deps = [
+-        "@com_github_brpc_brpc//:brpc",
++        ":braft_cc_proto",
++        "@brpc//:brpc",
+         "@com_github_gflags_gflags//:gflags",
+         "@com_github_google_glog//:glog",
+-        "@com_google_protobuf//:protobuf",        
+-        ":cc_braft_internal_proto",
++        "@protobuf//:protobuf",
+     ],
+     visibility = ["//visibility:public"],
+ )
+-
+-braft_proto_library(
+-    name = "cc_braft_internal_proto",
+-    srcs = glob([
+-        "src/braft/*.proto",
+-    ]),
+-    include = "src",
+-    visibility = ["//visibility:public"],
+-)
+diff --git a/MODULE.bazel b/MODULE.bazel
+new file mode 100644
+index 0000000..1789f2a
+--- /dev/null
++++ b/MODULE.bazel
+@@ -0,0 +1,18 @@
++module(
++  name = "braft",
++  version = "1.1.2",
++  compatibility_level = 1,
++)
++
++bazel_dep(name = 'abseil-cpp', version = '20250127.1', repo_name = 'com_google_absl')
++bazel_dep(name = 'bazel_skylib', version = '1.9.0')
++bazel_dep(name = 'boringssl', version = '0.20241024.0')
++bazel_dep(name = 'brpc', version = '1.16.0')
++bazel_dep(name = 'protobuf', version = '31.1')
++bazel_dep(name = 'gflags', version = '2.2.2', repo_name = 'com_github_gflags_gflags')
++bazel_dep(name = 'glog', version = '0.5.0', repo_name = 'com_github_google_glog')
++bazel_dep(name = 'leveldb', version = '1.23', repo_name = 'com_github_google_leveldb')
++bazel_dep(name = 'platforms', version = '1.0.0')
++bazel_dep(name = 'rules_cc', version = '0.2.18')
++bazel_dep(name = 'rules_proto', version = '7.0.2')
++bazel_dep(name = 'zlib', version = '1.3.1.bcr.8', repo_name = 'com_github_madler_zlib')
+diff --git a/WORKSPACE b/WORKSPACE
+index f59103a..ac55d58 100644
+--- a/WORKSPACE
++++ b/WORKSPACE
+@@ -1,68 +1 @@
+-workspace(name = "com_github_brpc_braft")
+-
+-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+-
+-http_archive(
+-    name = "com_google_googletest",
+-    strip_prefix = "googletest-0fe96607d85cf3a25ac40da369db62bbee2939a5",
+-    url = "https://github.com/google/googletest/archive/0fe96607d85cf3a25ac40da369db62bbee2939a5.tar.gz",
+-)
+-
+-bind(
+-    name = "gtest",
+-    actual = "@com_google_googletest//:gtest",
+-)
+-
+-http_archive(
+-    name = "com_google_protobuf",
+-    strip_prefix = "protobuf-3.6.1.3",
+-    sha256 = "9510dd2afc29e7245e9e884336f848c8a6600a14ae726adb6befdb4f786f0be2",
+-    type = "zip",
+-    url = "https://github.com/protocolbuffers/protobuf/archive/v3.6.1.3.zip",
+-)
+-
+-http_archive(
+-    name = "com_github_gflags_gflags",
+-    strip_prefix = "gflags-46f73f88b18aee341538c0dfc22b1710a6abedef",
+-    url = "https://github.com/gflags/gflags/archive/46f73f88b18aee341538c0dfc22b1710a6abedef.tar.gz",
+-)
+-
+-bind(
+-    name = "gflags",
+-    actual = "@com_github_gflags_gflags//:gflags",
+-)
+-
+-http_archive(
+-    name = "com_github_google_glog",
+-    build_file = "//:glog.BUILD",
+-    strip_prefix = "glog-a6a166db069520dbbd653c97c2e5b12e08a8bb26",
+-    url = "https://github.com/google/glog/archive/a6a166db069520dbbd653c97c2e5b12e08a8bb26.tar.gz"
+-)
+-
+-bind(
+-    name = "glog",
+-    actual = "@com_github_google_glog//:glog",
+-)
+-
+-http_archive(
+-    name = "com_github_google_leveldb",
+-    build_file = "//:leveldb.BUILD",
+-    strip_prefix = "leveldb-a53934a3ae1244679f812d998a4f16f2c7f309a6",
+-    url = "https://github.com/google/leveldb/archive/a53934a3ae1244679f812d998a4f16f2c7f309a6.tar.gz"
+-)
+-
+-http_archive(
+-    name = "com_github_brpc_brpc",
+-    strip_prefix = "incubator-brpc-2b748f82c3447196c8ce372733e5af8f8d76cef5",
+-    url = "https://github.com/apache/incubator-brpc/archive/2b748f82c3447196c8ce372733e5af8f8d76cef5.tar.gz",
+-)
+-
+-bind(
+-    name = "brpc",
+-    actual = "@com_github_brpc_brpc//:brpc",
+-)
+-
+-bind(
+-    name = "butil",
+-    actual = "@com_github_brpc_brpc//:butil",
+-)
++# Workspace file intentionally left minimal for bzlmod compatibility
+diff --git a/src/braft/replicator.cpp b/src/braft/replicator.cpp
+index 0000001..0000002 100644
+--- a/src/braft/replicator.cpp
++++ b/src/braft/replicator.cpp
+@@ -415,8 +415,8 @@
+             r->_notify_on_caught_up(EPERM, true);
+             butil::Status status;
+             status.set_error(EHIGHERTERMRESPONSE, "Leader receives higher term "
+-                    "%s from peer:%s", response->GetTypeName().c_str(), r->_options.peer_id.to_string().c_str());
++                    "%s from peer:%s", std::string(response->GetTypeName()).c_str(), r->_options.peer_id.to_string().c_str());
+             r->_destroy();
+             node_impl->increase_term_to(response->term(), status);
+             node_impl->Release();
+             return;
+diff --git a/src/braft/util.cpp b/src/braft/util.cpp
+index 0000003..0000004 100644
+--- a/src/braft/util.cpp
++++ b/src/braft/util.cpp
+@@ -48,7 +48,7 @@ typedef PercentileSamples<1022> CombinedPercentileSamples;
+ 
+ static int64_t get_window_recorder_qps(void* arg) {
+-    detail::Sample<Stat> s;
++    Sample<Stat> s;
+     static_cast<RecorderWindow*>(arg)->get_span(1, &s);
+     // Use floating point to avoid overflow.
+     if (s.time_us <= 0) {
+         return 0;
+diff --git a/bazel/braft.bzl b/bazel/braft.bzl
+index f82e74d..c1cf9c1 100644
+--- a/bazel/braft.bzl
++++ b/bazel/braft.bzl
+@@ -1,15 +1 @@
+-load("@com_google_protobuf//:protobuf.bzl", "cc_proto_library")
+-
+-def braft_proto_library(name, srcs, deps=[], include=None, visibility=None, testonly=0):
+-    native.filegroup(name=name + "_proto_srcs",
+-                     srcs=srcs,
+-                     visibility=visibility,)
+-    cc_proto_library(name=name,
+-                     srcs=srcs,
+-                     deps=deps,
+-                     cc_libs=["@com_google_protobuf//:protobuf"],
+-                     include=include,
+-                     protoc="@com_google_protobuf//:protoc",
+-                     default_runtime="@com_google_protobuf//:protobuf",
+-                     testonly=testonly,
+-                     visibility=visibility,)
++# Deprecated: proto compilation is now handled directly in BUILD via proto_library + cc_proto_library
