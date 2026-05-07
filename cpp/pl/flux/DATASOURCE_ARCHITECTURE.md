@@ -245,13 +245,18 @@ struct SourceCapabilities {
     bool limit = false;
     bool sort = false;
     bool aggregate = false;
+    bool distinct = false;
 };
 
 struct ScanRequest {
     std::vector<std::string> columns;
+    std::vector<ProjectionColumn> projection_columns;
     std::optional<TimeRange> time_range;
     std::vector<Predicate> predicates;
     std::vector<OrderBy> order_by;
+    std::vector<std::string> group_by;
+    std::optional<AggregateRequest> aggregate;
+    std::optional<std::string> distinct;
     std::optional<int64_t> limit;
     std::optional<int64_t> offset;
 };
@@ -511,7 +516,8 @@ pushdown 仍未实现。
 状态：已启动。当前已新增 `plan/PlanNode` skeleton，`TableValue` 可携带可选 `plan`，
 `sql.from` 的物化结果会附带 `SourceScan` 节点；当输入 table 已有 plan 时，
 `range/filter/keep/limit/sort` 会在保持 eager 内存执行结果不变的同时追加
-`Range/Filter/Project/Limit/Sort` 节点；`explain()` 可输出已记录的 logical plan 文本。
+`Range/Filter/Project/Limit/Sort` 节点；`explain()` 可输出已记录的 logical plan 文本，
+并标注每个节点当前会走 `sqlite pushdown`、`sqlite scan`、`barrier` 还是 `memory`。
 遇到第一阶段暂不支持延迟的 table builtin 时，会在 plan 中插入带原因和 builtin 名称的
 `Materialize` barrier，明确截断后续下推边界；真正的延迟执行仍未实现。
 
@@ -534,8 +540,21 @@ pushdown 仍未实现。
 状态：已启动。`ScanRequest` 已有简单谓词表示，`SQLiteSource` 会把 projection、
 `_time` range、简单 AND 谓词、sort、limit/offset 翻译为包裹 base query 的 SQLite
 SQL，并用 bind 参数执行；runtime pipeline 已能把 SQLite `SourceScan` 之上的
-`range/keep/sort/limit` 线性前缀编译成 pushed-down `ScanRequest`，遇到不可完整翻译的
-plan 会保守回退到已物化的内存结果。`filter(fn:)` 的简单表达式提取仍未实现。
+`range/filter(simple)/keep/drop/rename/sort/limit` 线性前缀，以及
+`distinct(column:)` 和 `group(columns:) |> count/sum/mean/min/max(column:)` 编译成 pushed-down `ScanRequest`，
+遇到不可完整翻译的 plan 会保守回退到已物化的内存结果。当前 `filter(fn:)` 只提取
+单参数行函数表达式中的 `r.col == literal`、`r.col != literal`、`< <= > >=` 和 `and`
+组合；连续简单 `filter()` 会沿 plan 递归累积到同一个 `ScanRequest.predicates`。
+`drop(columns:)` 会基于当前可见 schema 反算为 projection，并阻止后续下推 predicate
+引用已不可见列。简单 `rename(columns:)` 会下推为 SQL projection alias；planner 会维护
+当前 Flux 可见列到 SQLite 源列的映射，让 rename 后的 filter/sort/projection 继续安全下推。
+若 rename 产生重复可见列名，则保守插入 materialization barrier。
+`distinct(column:)` 会通过当前列映射下推到 SQLite 源列，并保留后续 projection/sort/limit
+继续下推的能力。
+`group(columns:)` 只有和上述简单 aggregate 组合时才会触发 SQLite `GROUP BY` 下推；
+单独 `group()` 仍保持 eager 内存结果。
+`or`、函数调用、正则、`in`、跨列比较、块体函数和 `onEmpty: "keep"` 都不会下推。
+`explain()` 会把已下推节点标为 `[sqlite pushdown]`，把截断点标为 `[barrier: ...]`。
 
 目标：SQLite 能下推简单 range/filter/projection/limit/sort。
 
