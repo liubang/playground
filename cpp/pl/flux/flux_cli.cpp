@@ -93,6 +93,7 @@ std::vector<std::string> visible_table_columns(const TableValue& table) {
 }
 
 std::string scalar_cell_text(const Value& value);
+void append_human_value(const Value& value, size_t indent, std::ostringstream& out);
 
 std::unordered_set<std::string> collect_group_columns(const TableChunk& chunk) {
     std::unordered_set<std::string> group_columns;
@@ -227,6 +228,77 @@ std::string scalar_cell_text(const Value& value) {
         default:
             PL_FLUX_UNREACHABLE();
     }
+}
+
+bool contains_newline(std::string_view text) { return text.find('\n') != std::string_view::npos; }
+
+bool prefers_multiline_human_value(const Value& value) {
+    if (value.type() == Value::Type::String) {
+        return contains_newline(value.as_string());
+    }
+    if (value.type() == Value::Type::Object) {
+        for (const auto& [name, property] : value.as_object().properties) {
+            (void)name;
+            if (prefers_multiline_human_value(property)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void append_indent(size_t indent, std::ostringstream& out) {
+    for (size_t i = 0; i < indent; ++i) {
+        out << ' ';
+    }
+}
+
+void append_multiline_text_block(std::string_view text, size_t indent, std::ostringstream& out) {
+    size_t line_start = 0;
+    while (line_start < text.size()) {
+        const size_t line_end = text.find('\n', line_start);
+        append_indent(indent, out);
+        if (line_end == std::string_view::npos) {
+            out << text.substr(line_start) << '\n';
+            return;
+        }
+        out << text.substr(line_start, line_end - line_start) << '\n';
+        line_start = line_end + 1;
+    }
+}
+
+void append_human_object(const ObjectValue& object, size_t indent, std::ostringstream& out) {
+    if (object.properties.empty()) {
+        out << "{}";
+        return;
+    }
+    out << "{\n";
+    for (const auto& [name, value] : object.properties) {
+        append_indent(indent + 2, out);
+        out << name << ": ";
+        if (value.type() == Value::Type::String && contains_newline(value.as_string())) {
+            out << "|\n";
+            append_multiline_text_block(value.as_string(), indent + 4, out);
+        } else {
+            append_human_value(value, indent + 2, out);
+            out << '\n';
+        }
+    }
+    append_indent(indent, out);
+    out << "}";
+}
+
+void append_human_value(const Value& value, size_t indent, std::ostringstream& out) {
+    if (value.type() == Value::Type::String && contains_newline(value.as_string())) {
+        out << "|\n";
+        append_multiline_text_block(value.as_string(), indent + 2, out);
+        return;
+    }
+    if (value.type() == Value::Type::Object && prefers_multiline_human_value(value)) {
+        append_human_object(value.as_object(), indent, out);
+        return;
+    }
+    out << value.string();
 }
 
 using JsonBuilder = simdjson::builder::string_builder;
@@ -671,7 +743,8 @@ void append_scalar_result(const NamedResult& result, bool include_header, std::o
     if (include_header) {
         out << "Result: " << result.name << '\n';
     }
-    out << result.value.string() << '\n';
+    append_human_value(result.value, 0, out);
+    out << '\n';
 }
 
 void append_table_result(const NamedResult& result,
@@ -765,7 +838,8 @@ void append_cli_output(const FileExecutionResult& result,
                        std::ostringstream& out) {
     if (result.results.empty()) {
         if (!result.last.value.is_null()) {
-            out << result.last.value.string() << '\n';
+            append_human_value(result.last.value, 0, out);
+            out << '\n';
         }
         return;
     }

@@ -241,6 +241,22 @@ TEST(FluxCliTest, ExecutesCrossSourceSqliteCsvJoinExample) {
     EXPECT_EQ(std::string::npos, result.output.find("\"edge-4\""));
 }
 
+TEST(FluxCliTest, RendersExplainPlanInsideObjectAsMultilineText) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.result_name = "_result";
+    auto result = ExecuteExampleScript(
+        "cpp/pl/flux/examples/cross_source/sqlite_pushdown_explain.flux", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("values: [93.25]"));
+    EXPECT_NE(std::string::npos, result.output.find("plan: |\n"));
+    EXPECT_NE(std::string::npos, result.output.find("    Limit [sqlite pushdown]\n"));
+    EXPECT_NE(std::string::npos, result.output.find("      Sort [sqlite pushdown]\n"));
+    EXPECT_EQ(std::string::npos, result.output.find("\\n"));
+}
+
 TEST(FluxCliTest, KeepsWatchlistFocusExampleAlignedWithOfficialFilterSemantics) {
     auto env = MakeFluxCliEnvironment();
     FluxCliOptions options;

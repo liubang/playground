@@ -18,12 +18,89 @@
 #include "cpp/pl/flux/compat.h"
 #include "cpp/pl/flux/runtime_builtin_aggregate_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_universe.h"
+#include <optional>
 
 namespace pl::flux {
 namespace {
 using namespace detail;
 
+std::optional<const TableValue*> piped_table_argument(const std::vector<Value>& args,
+                                                      const std::string& property) {
+    if (args.empty()) {
+        return std::nullopt;
+    }
+    if (args[0].type() == Value::Type::Table) {
+        return &args[0].as_table();
+    }
+    if (args[0].type() == Value::Type::Object) {
+        const Value* value = args[0].as_object().lookup(property);
+        if (value != nullptr && value->type() == Value::Type::Table) {
+            return &value->as_table();
+        }
+    }
+    return std::nullopt;
+}
+
+std::string aggregate_column_argument(const std::vector<Value>& args, const std::string& property) {
+    if (!args.empty() && args[0].type() == Value::Type::Object) {
+        const Value* value = args[0].as_object().lookup(property);
+        if (value != nullptr && value->type() == Value::Type::String) {
+            return value->as_string();
+        }
+    }
+    return "_value";
+}
+
+absl::StatusOr<Value> table_numeric_aggregate(const TableValue& table,
+                                              const std::string& name,
+                                              const std::string& column,
+                                              plan::AggregateFunction fn) {
+    std::vector<TableChunk> chunks;
+    chunks.reserve(table.table_count());
+    for (const auto& chunk : table.tables) {
+        auto values_or = numeric_values_for_chunk(chunk, name, column);
+        if (!values_or.ok()) {
+            return values_or.status();
+        }
+        if (values_or->empty()) {
+            continue;
+        }
+        double value = 0.0;
+        switch (fn) {
+            case plan::AggregateFunction::Sum:
+                for (double item : *values_or) {
+                    value += item;
+                }
+                break;
+            case plan::AggregateFunction::Mean:
+                for (double item : *values_or) {
+                    value += item;
+                }
+                value /= static_cast<double>(values_or->size());
+                break;
+            case plan::AggregateFunction::Min:
+                value = *std::min_element(values_or->begin(), values_or->end());
+                break;
+            case plan::AggregateFunction::Max:
+                value = *std::max_element(values_or->begin(), values_or->end());
+                break;
+            case plan::AggregateFunction::Count:
+                value = static_cast<double>(values_or->size());
+                break;
+        }
+        TableChunk next;
+        next.rows.push_back(materialize_group_value_row(chunk, column, Value::floating(value)));
+        chunks.push_back(std::move(next));
+    }
+    auto result = table_with_chunks_like(table, std::move(chunks));
+    return with_aggregate_plan(std::move(result), table, fn, column);
+}
+
 absl::StatusOr<Value> builtin_sum(const std::vector<Value>& args) {
+    if (auto table = piped_table_argument(args, "values"); table.has_value()) {
+        const std::string column = aggregate_column_argument(args, "column");
+        return table_numeric_aggregate(**table, "sum", column, plan::AggregateFunction::Sum);
+    }
     auto array_or = require_array_argument(args, "sum");
     if (!array_or.ok()) {
         return array_or.status();
@@ -36,6 +113,10 @@ absl::StatusOr<Value> builtin_sum(const std::vector<Value>& args) {
 }
 
 absl::StatusOr<Value> builtin_mean(const std::vector<Value>& args) {
+    if (auto table = piped_table_argument(args, "values"); table.has_value()) {
+        const std::string column = aggregate_column_argument(args, "column");
+        return table_numeric_aggregate(**table, "mean", column, plan::AggregateFunction::Mean);
+    }
     auto array_or = require_array_argument(args, "mean");
     if (!array_or.ok()) {
         return array_or.status();
@@ -61,10 +142,18 @@ absl::StatusOr<Value> builtin_mean(const std::vector<Value>& args) {
 }
 
 absl::StatusOr<Value> builtin_min(const std::vector<Value>& args) {
+    if (auto table = piped_table_argument(args, "values"); table.has_value()) {
+        const std::string column = aggregate_column_argument(args, "column");
+        return table_numeric_aggregate(**table, "min", column, plan::AggregateFunction::Min);
+    }
     return aggregate_min_max(args, "min", true);
 }
 
 absl::StatusOr<Value> builtin_max(const std::vector<Value>& args) {
+    if (auto table = piped_table_argument(args, "values"); table.has_value()) {
+        const std::string column = aggregate_column_argument(args, "column");
+        return table_numeric_aggregate(**table, "max", column, plan::AggregateFunction::Max);
+    }
     return aggregate_min_max(args, "max", false);
 }
 
@@ -151,7 +240,7 @@ absl::StatusOr<Value> builtin_distinct(const std::vector<Value>& args) {
         chunks.push_back(std::move(next));
     }
     auto result = table_with_chunks_like(**table_or, std::move(chunks));
-    return with_materialization_barrier(std::move(result), **table_or, "distinct");
+    return with_distinct_plan(std::move(result), **table_or, *column_or);
 }
 
 absl::StatusOr<Value> builtin_count(const std::vector<Value>& args) {
@@ -185,7 +274,8 @@ absl::StatusOr<Value> builtin_count(const std::vector<Value>& args) {
         chunks.push_back(std::move(next));
     }
     auto result = table_with_chunks_like(**table_or, std::move(chunks));
-    return with_materialization_barrier(std::move(result), **table_or, "count");
+    return with_aggregate_plan(std::move(result), **table_or, plan::AggregateFunction::Count,
+                               column);
 }
 
 absl::StatusOr<Value> builtin_spread(const std::vector<Value>& args) {
