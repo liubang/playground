@@ -148,6 +148,13 @@ inline Value with_materialization_barrier(Value value,
     return value;
 }
 
+Value maybe_pushdown_sqlite_plan(Value value);
+Value with_aggregate_plan(Value value,
+                          const TableValue& input,
+                          plan::AggregateFunction fn,
+                          std::string column);
+Value with_distinct_plan(Value value, const TableValue& input, std::string column);
+
 inline absl::StatusOr<const ArrayValue*> require_array_property(const ObjectValue& object,
                                                                 const std::string& name,
                                                                 const std::string& property) {
