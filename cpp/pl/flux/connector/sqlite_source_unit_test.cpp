@@ -84,6 +84,58 @@ TEST(SQLiteSourceTest, PushesDownProjectionTimeRangePredicateSortAndLimit) {
     EXPECT_EQ(nullptr, table.rows[0]->lookup("_time"));
 }
 
+TEST(SQLiteSourceTest, PushesDownProjectionAliases) {
+    SQLiteSource source(":memory:", "select 'edge-1' as host, 91.5 as _value");
+    ScanRequest request;
+    request.projection_columns.push_back({
+        .column = "host",
+        .alias = "host",
+    });
+    request.projection_columns.push_back({
+        .column = "_value",
+        .alias = "usage",
+    });
+
+    auto value_or = source.Scan(request);
+
+    ASSERT_TRUE(value_or.ok()) << value_or.status();
+    ASSERT_EQ(Value::Type::Table, value_or->type());
+    const auto& table = value_or->as_table();
+    ASSERT_EQ(1, table.rows.size());
+    ASSERT_NE(nullptr, table.rows[0]);
+    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
+    EXPECT_EQ("91.5", table.rows[0]->lookup("usage")->string());
+    EXPECT_EQ(nullptr, table.rows[0]->lookup("_value"));
+}
+
+TEST(SQLiteSourceTest, PushesDownDistinctColumn) {
+    SQLiteSource source(":memory:", "select 'edge-2' as host, 20.0 as _value union all "
+                                    "select 'edge-1', 91.5 union all "
+                                    "select 'edge-1', 42.0");
+    ScanRequest request;
+    request.projection_columns.push_back({
+        .column = "host",
+        .alias = "service",
+    });
+    request.distinct = "host";
+    request.order_by.push_back({
+        .column = "host",
+        .desc = false,
+    });
+
+    auto value_or = source.Scan(request);
+
+    ASSERT_TRUE(value_or.ok()) << value_or.status();
+    ASSERT_EQ(Value::Type::Table, value_or->type());
+    const auto& table = value_or->as_table();
+    ASSERT_EQ(2, table.rows.size());
+    ASSERT_NE(nullptr, table.rows[0]);
+    ASSERT_NE(nullptr, table.rows[1]);
+    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("service")->string());
+    EXPECT_EQ("\"edge-2\"", table.rows[1]->lookup("service")->string());
+    EXPECT_EQ(nullptr, table.rows[0]->lookup("host"));
+}
+
 TEST(SQLiteSourceTest, RejectsUnknownPushdownColumn) {
     SQLiteSource source(":memory:", "select 1 as count");
     ScanRequest request;

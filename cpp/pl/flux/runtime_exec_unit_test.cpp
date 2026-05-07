@@ -253,7 +253,7 @@ TEST(RuntimeExecTest, SqlPipelineAppendsLogicalPlanNodesWhileExecutingEagerly) {
             query: "select '2024-01-01T00:00:00Z' as _time, 'edge-2' as host, 20.0 as _value union all select '2024-01-01T00:01:00Z', 'edge-1', 91.5 union all select '2024-01-01T00:02:00Z', 'edge-1', 42.0",
         )
             |> range(start: 2024-01-01T00:00:30Z, stop: 2024-01-01T00:03:00Z)
-            |> filter(fn: (r) => r.host == "edge-1")
+            |> filter(fn: (r) => r.host == "edge-1" and r._value > 80.0)
             |> keep(columns: ["_time", "host", "_value"])
             |> sort(columns: ["_value"], desc: true)
             |> limit(n: 1)
@@ -285,6 +285,13 @@ TEST(RuntimeExecTest, SqlPipelineAppendsLogicalPlanNodesWhileExecutingEagerly) {
     node = node->inputs[0];
     ASSERT_NE(nullptr, node);
     EXPECT_EQ(plan::PlanNodeKind::Filter, node->kind);
+    ASSERT_EQ(2, node->filter.predicates.size());
+    EXPECT_EQ("host", node->filter.predicates[0].column);
+    EXPECT_EQ(plan::PredicateOp::Eq, node->filter.predicates[0].op);
+    EXPECT_EQ("edge-1", node->filter.predicates[0].literal.string_value);
+    EXPECT_EQ("_value", node->filter.predicates[1].column);
+    EXPECT_EQ(plan::PredicateOp::Gt, node->filter.predicates[1].op);
+    EXPECT_EQ(80.0, node->filter.predicates[1].literal.float_value);
     ASSERT_EQ(1, node->inputs.size());
     node = node->inputs[0];
     ASSERT_NE(nullptr, node);
@@ -323,10 +330,365 @@ TEST(RuntimeExecTest, ExplainFormatsLogicalPlan) {
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
     ASSERT_EQ(Value::Type::String, plan_or->type());
     EXPECT_EQ(
-        "Limit\n"
-        "  Filter\n"
-        "    SourceScan(source=\"sql\", driver=\"sqlite\", query=\"select 'edge-1' as host, 91.5 "
-        "as _value\")\n",
+        "Limit [sqlite pushdown]\n"
+        "  Filter [sqlite pushdown: host == \"edge-1\"]\n"
+        "    SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", query=\"select 'edge-1' "
+        "as host, 91.5 as _value\")\n",
+        plan_or->as_string());
+}
+
+TEST(RuntimeExecTest, ContinuousSqlFiltersAccumulatePushdownPredicates) {
+    auto file = ParseFile(R"(
+        import "sql"
+        builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
+        builtin limit : (<-tables: stream[A], n: int) => stream[A]
+        builtin explain : (<-tables: stream[A]) => string
+
+        data = sql.from(
+            driver: "sqlite",
+            dsn: ":memory:",
+            query: "select 'edge-1' as host, 91.5 as _value union all select 'edge-1', 42.0 union all select 'edge-2', 99.0",
+        )
+            |> filter(fn: (r) => r.host == "edge-1")
+            |> filter(fn: (r) => r._value > 80.0)
+            |> limit(n: 10)
+
+        plan = data |> explain()
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto data_or = env.lookup("data");
+    ASSERT_TRUE(data_or.ok()) << data_or.status();
+    ASSERT_EQ(Value::Type::Table, data_or->type());
+    ASSERT_EQ(1, data_or->as_table().rows.size());
+    EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("91.5", data_or->as_table().rows[0]->lookup("_value")->string());
+
+    const auto plan_or = env.lookup("plan");
+    ASSERT_TRUE(plan_or.ok()) << plan_or.status();
+    ASSERT_EQ(Value::Type::String, plan_or->type());
+    EXPECT_EQ("Limit [sqlite pushdown]\n"
+              "  Filter [sqlite pushdown: _value > 80]\n"
+              "    Filter [sqlite pushdown: host == \"edge-1\"]\n"
+              "      SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", query=\"select "
+              "'edge-1' as host, 91.5 as _value union all select 'edge-1', 42.0 union all select "
+              "'edge-2', 99.0\")\n",
+              plan_or->as_string());
+}
+
+TEST(RuntimeExecTest, SqlDropColumnsPushesDownAsProjection) {
+    auto file = ParseFile(R"(
+        import "sql"
+        builtin drop : (<-tables: stream[A], columns: [string]) => stream[B]
+        builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
+        builtin limit : (<-tables: stream[A], n: int) => stream[A]
+        builtin explain : (<-tables: stream[A]) => string
+
+        data = sql.from(
+            driver: "sqlite",
+            dsn: ":memory:",
+            query: "select 'edge-1' as host, 91.5 as _value, 'debug' as note union all select 'edge-2', 42.0, 'ok'",
+        )
+            |> drop(columns: ["note"])
+            |> filter(fn: (r) => r.host == "edge-1")
+            |> limit(n: 10)
+
+        plan = data |> explain()
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto data_or = env.lookup("data");
+    ASSERT_TRUE(data_or.ok()) << data_or.status();
+    ASSERT_EQ(Value::Type::Table, data_or->type());
+    ASSERT_EQ(1, data_or->as_table().rows.size());
+    EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("91.5", data_or->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ(nullptr, data_or->as_table().rows[0]->lookup("note"));
+
+    const auto plan_or = env.lookup("plan");
+    ASSERT_TRUE(plan_or.ok()) << plan_or.status();
+    ASSERT_EQ(Value::Type::String, plan_or->type());
+    EXPECT_EQ("Limit [sqlite pushdown]\n"
+              "  Filter [sqlite pushdown: host == \"edge-1\"]\n"
+              "    Project [sqlite pushdown]\n"
+              "      SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", query=\"select "
+              "'edge-1' as host, 91.5 as _value, 'debug' as note union all select 'edge-2', 42.0, "
+              "'ok'\")\n",
+              plan_or->as_string());
+}
+
+TEST(RuntimeExecTest, SqlFilterAfterDropPreservesMissingColumnError) {
+    auto file = ParseFile(R"(
+        import "sql"
+        builtin drop : (<-tables: stream[A], columns: [string]) => stream[B]
+        builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
+
+        data = sql.from(
+            driver: "sqlite",
+            dsn: ":memory:",
+            query: "select 'edge-1' as host, 'secret' as note",
+        )
+            |> drop(columns: ["note"])
+            |> filter(fn: (r) => r.note == "secret")
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_FALSE(result_or.ok());
+    EXPECT_EQ(absl::StatusCode::kNotFound, result_or.status().code());
+    EXPECT_NE(std::string::npos,
+              result_or.status().message().find("missing object property: note"));
+}
+
+TEST(RuntimeExecTest, SqlRenamePushesDownProjectionAliasAndColumnMapping) {
+    auto file = ParseFile(R"(
+        import "sql"
+        builtin rename : (<-tables: stream[A], columns: A) => stream[B]
+        builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
+        builtin keep : (<-tables: stream[A], columns: [string]) => stream[A]
+        builtin sort : (<-tables: stream[A], columns: [string], desc: bool) => stream[A]
+        builtin limit : (<-tables: stream[A], n: int) => stream[A]
+        builtin explain : (<-tables: stream[A]) => string
+
+        data = sql.from(
+            driver: "sqlite",
+            dsn: ":memory:",
+            query: "select 'edge-1' as host, 91.5 as _value union all select 'edge-2', 42.0 union all select 'edge-3', 99.0",
+        )
+            |> rename(columns: {_value: "usage"})
+            |> filter(fn: (r) => r.usage > 80.0)
+            |> keep(columns: ["host", "usage"])
+            |> sort(columns: ["usage"], desc: true)
+            |> limit(n: 1)
+
+        plan = data |> explain()
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto data_or = env.lookup("data");
+    ASSERT_TRUE(data_or.ok()) << data_or.status();
+    ASSERT_EQ(Value::Type::Table, data_or->type());
+    ASSERT_EQ(1, data_or->as_table().rows.size());
+    EXPECT_EQ("\"edge-3\"", data_or->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("99", data_or->as_table().rows[0]->lookup("usage")->string());
+    EXPECT_EQ(nullptr, data_or->as_table().rows[0]->lookup("_value"));
+
+    const auto plan_or = env.lookup("plan");
+    ASSERT_TRUE(plan_or.ok()) << plan_or.status();
+    ASSERT_EQ(Value::Type::String, plan_or->type());
+    EXPECT_EQ("Limit [sqlite pushdown]\n"
+              "  Sort [sqlite pushdown]\n"
+              "    Project [sqlite pushdown]\n"
+              "      Filter [sqlite pushdown: usage > 80]\n"
+              "        Rename [sqlite pushdown]\n"
+              "          SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", "
+              "query=\"select 'edge-1' as host, 91.5 as _value union all select 'edge-2', 42.0 "
+              "union all select 'edge-3', 99.0\")\n",
+              plan_or->as_string());
+}
+
+TEST(RuntimeExecTest, SqlFilterAfterRenamePreservesMissingOldColumnError) {
+    auto file = ParseFile(R"(
+        import "sql"
+        builtin rename : (<-tables: stream[A], columns: A) => stream[B]
+        builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
+
+        data = sql.from(
+            driver: "sqlite",
+            dsn: ":memory:",
+            query: "select 'edge-1' as host, 91.5 as _value",
+        )
+            |> rename(columns: {_value: "usage"})
+            |> filter(fn: (r) => r._value > 80.0)
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_FALSE(result_or.ok());
+    EXPECT_EQ(absl::StatusCode::kNotFound, result_or.status().code());
+    EXPECT_NE(std::string::npos,
+              result_or.status().message().find("missing object property: _value"));
+}
+
+TEST(RuntimeExecTest, SqlGroupCountPushesDownAggregate) {
+    auto file = ParseFile(R"(
+        import "sql"
+        builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
+        builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
+        builtin count : (<-tables: stream[A], ?column: string) => stream[A]
+        builtin explain : (<-tables: stream[A]) => string
+
+        data = sql.from(
+            driver: "sqlite",
+            dsn: ":memory:",
+            query: "select 'east' as region, 'edge-1' as host, 91.5 as usage union all select 'east', 'edge-1', 42.0 union all select 'east', 'edge-2', 99.0 union all select 'west', 'edge-3', 10.0",
+        )
+            |> filter(fn: (r) => r.region == "east")
+            |> group(columns: ["host"])
+            |> count(column: "usage")
+
+        plan = data |> explain()
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto data_or = env.lookup("data");
+    ASSERT_TRUE(data_or.ok()) << data_or.status();
+    ASSERT_EQ(Value::Type::Table, data_or->type());
+    ASSERT_EQ(2, data_or->as_table().rows.size());
+    EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("2", data_or->as_table().rows[0]->lookup("usage")->string());
+    EXPECT_NE(nullptr, data_or->as_table().rows[0]->lookup("_group"));
+    EXPECT_EQ("\"edge-2\"", data_or->as_table().rows[1]->lookup("host")->string());
+    EXPECT_EQ("1", data_or->as_table().rows[1]->lookup("usage")->string());
+
+    const auto plan_or = env.lookup("plan");
+    ASSERT_TRUE(plan_or.ok()) << plan_or.status();
+    ASSERT_EQ(Value::Type::String, plan_or->type());
+    EXPECT_EQ("Aggregate [sqlite pushdown]\n"
+              "  Group [sqlite pushdown]\n"
+              "    Filter [sqlite pushdown: region == \"east\"]\n"
+              "      SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", query=\"select "
+              "'east' as region, 'edge-1' as host, 91.5 as usage union all select 'east', "
+              "'edge-1', 42.0 union all select 'east', 'edge-2', 99.0 union all select 'west', "
+              "'edge-3', 10.0\")\n",
+              plan_or->as_string());
+}
+
+TEST(RuntimeExecTest, SqlGroupMeanAfterRenamePushesDownAggregateMapping) {
+    auto file = ParseFile(R"(
+        import "sql"
+        builtin rename : (<-tables: stream[A], columns: A) => stream[B]
+        builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
+        builtin mean : (<-tables: stream[A], ?column: string) => stream[A]
+
+        data = sql.from(
+            driver: "sqlite",
+            dsn: ":memory:",
+            query: "select 'edge-1' as host, 90.0 as _value union all select 'edge-1', 70.0 union all select 'edge-2', 30.0",
+        )
+            |> rename(columns: {_value: "usage"})
+            |> group(columns: ["host"])
+            |> mean(column: "usage")
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto data_or = env.lookup("data");
+    ASSERT_TRUE(data_or.ok()) << data_or.status();
+    ASSERT_EQ(Value::Type::Table, data_or->type());
+    ASSERT_EQ(2, data_or->as_table().rows.size());
+    EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("80", data_or->as_table().rows[0]->lookup("usage")->string());
+    EXPECT_EQ("\"edge-2\"", data_or->as_table().rows[1]->lookup("host")->string());
+    EXPECT_EQ("30", data_or->as_table().rows[1]->lookup("usage")->string());
+}
+
+TEST(RuntimeExecTest, SqlDistinctAfterRenamePushesDownColumnMapping) {
+    auto file = ParseFile(R"(
+        import "sql"
+        builtin rename : (<-tables: stream[A], columns: A) => stream[B]
+        builtin distinct : (<-tables: stream[A], ?column: string) => stream[A]
+        builtin keep : (<-tables: stream[A], columns: [string]) => stream[A]
+        builtin sort : (<-tables: stream[A], columns: [string], desc: bool) => stream[A]
+        builtin explain : (<-tables: stream[A]) => string
+
+        data = sql.from(
+            driver: "sqlite",
+            dsn: ":memory:",
+            query: "select 'edge-2' as host, 20.0 as _value union all select 'edge-1', 91.5 union all select 'edge-1', 42.0",
+        )
+            |> rename(columns: {host: "service", _value: "usage"})
+            |> distinct(column: "service")
+            |> keep(columns: ["service"])
+            |> sort(columns: ["service"], desc: false)
+
+        plan = data |> explain()
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto data_or = env.lookup("data");
+    ASSERT_TRUE(data_or.ok()) << data_or.status();
+    ASSERT_EQ(Value::Type::Table, data_or->type());
+    ASSERT_EQ(2, data_or->as_table().rows.size());
+    EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[0]->lookup("service")->string());
+    EXPECT_EQ(nullptr, data_or->as_table().rows[0]->lookup("host"));
+    EXPECT_EQ("\"edge-2\"", data_or->as_table().rows[1]->lookup("service")->string());
+
+    const auto plan_or = env.lookup("plan");
+    ASSERT_TRUE(plan_or.ok()) << plan_or.status();
+    ASSERT_EQ(Value::Type::String, plan_or->type());
+    EXPECT_EQ("Sort [sqlite pushdown]\n"
+              "  Project [sqlite pushdown]\n"
+              "    Distinct [sqlite pushdown]\n"
+              "      Rename [sqlite pushdown]\n"
+              "        SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", query=\"select "
+              "'edge-2' as host, 20.0 as _value union all select 'edge-1', 91.5 union all "
+              "select 'edge-1', 42.0\")\n",
+              plan_or->as_string());
+}
+
+TEST(RuntimeExecTest, ComplexSqlFilterFallsBackToMaterializedExecution) {
+    auto file = ParseFile(R"(
+        import "sql"
+        builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
+        builtin explain : (<-tables: stream[A]) => string
+
+        data = sql.from(
+            driver: "sqlite",
+            dsn: ":memory:",
+            query: "select 'edge-1' as host, 91.5 as _value union all select 'edge-2', 42.0",
+        )
+            |> filter(fn: (r) => r.host == "edge-1" or r._value > 80.0)
+
+        plan = data |> explain()
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto data_or = env.lookup("data");
+    ASSERT_TRUE(data_or.ok()) << data_or.status();
+    ASSERT_EQ(Value::Type::Table, data_or->type());
+    ASSERT_EQ(1, data_or->as_table().rows.size());
+    EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[0]->lookup("host")->string());
+
+    const auto plan_or = env.lookup("plan");
+    ASSERT_TRUE(plan_or.ok()) << plan_or.status();
+    ASSERT_EQ(Value::Type::String, plan_or->type());
+    EXPECT_EQ(
+        "Materialize [barrier: unsupported lazy builtin](reason=\"unsupported lazy builtin\", "
+        "builtin=\"filter\")\n"
+        "  SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", query=\"select 'edge-1' as "
+        "host, 91.5 as _value union all select 'edge-2', 42.0\")\n",
         plan_or->as_string());
 }
 
@@ -357,10 +719,11 @@ TEST(RuntimeExecTest, UnsupportedLazyBuiltinAddsMaterializationBarrier) {
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
     ASSERT_EQ(Value::Type::String, plan_or->type());
     EXPECT_EQ(
-        "Limit\n"
-        "  Materialize(reason=\"unsupported lazy builtin\", builtin=\"map\")\n"
-        "    SourceScan(source=\"sql\", driver=\"sqlite\", query=\"select 'edge-1' as host, 91.5 "
-        "as _value\")\n",
+        "Limit [memory]\n"
+        "  Materialize [barrier: unsupported lazy builtin](reason=\"unsupported lazy builtin\", "
+        "builtin=\"map\")\n"
+        "    SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", query=\"select 'edge-1' "
+        "as host, 91.5 as _value\")\n",
         plan_or->as_string());
 }
 

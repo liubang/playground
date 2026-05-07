@@ -105,6 +105,22 @@ std::string predicate_op_sql(PredicateOp op) {
     return "=";
 }
 
+std::string aggregate_fn_sql(AggregateFunction fn) {
+    switch (fn) {
+        case AggregateFunction::Count:
+            return "COUNT";
+        case AggregateFunction::Sum:
+            return "SUM";
+        case AggregateFunction::Mean:
+            return "AVG";
+        case AggregateFunction::Min:
+            return "MIN";
+        case AggregateFunction::Max:
+            return "MAX";
+    }
+    return "COUNT";
+}
+
 struct SqliteParam {
     Value value;
 };
@@ -186,8 +202,55 @@ absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
         schema_columns.insert(column.name);
     }
 
+    if (request.distinct.has_value()) {
+        auto status = validate_column(schema_columns, *request.distinct, "distinct");
+        if (!status.ok()) {
+            return status;
+        }
+    }
+
     std::string sql = "SELECT ";
-    if (request.columns.empty()) {
+    if (request.aggregate.has_value()) {
+        for (size_t i = 0; i < request.group_by.size(); ++i) {
+            auto status = validate_column(schema_columns, request.group_by[i], "group");
+            if (!status.ok()) {
+                return status;
+            }
+            if (i != 0) {
+                sql += ", ";
+            }
+            sql += quote_identifier(request.group_by[i]);
+        }
+        if (!request.group_by.empty()) {
+            sql += ", ";
+        }
+        auto status = validate_column(schema_columns, request.aggregate->column, "aggregate");
+        if (!status.ok()) {
+            return status;
+        }
+        sql += aggregate_fn_sql(request.aggregate->fn);
+        sql += "(";
+        sql += quote_identifier(request.aggregate->column);
+        sql += ") AS ";
+        sql += quote_identifier(request.aggregate->alias.empty() ? request.aggregate->column
+                                                                 : request.aggregate->alias);
+    } else if (!request.projection_columns.empty()) {
+        for (size_t i = 0; i < request.projection_columns.size(); ++i) {
+            const auto& projection = request.projection_columns[i];
+            auto status = validate_column(schema_columns, projection.column, "projection");
+            if (!status.ok()) {
+                return status;
+            }
+            if (i != 0) {
+                sql += ", ";
+            }
+            sql += quote_identifier(projection.column);
+            if (!projection.alias.empty() && projection.alias != projection.column) {
+                sql += " AS ";
+                sql += quote_identifier(projection.alias);
+            }
+        }
+    } else if (request.columns.empty()) {
         sql += "*";
     } else {
         for (size_t i = 0; i < request.columns.size(); ++i) {
@@ -238,6 +301,19 @@ absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
             }
             sql += where_clauses[i];
         }
+    }
+
+    if (request.aggregate.has_value() && !request.group_by.empty()) {
+        sql += " GROUP BY ";
+        for (size_t i = 0; i < request.group_by.size(); ++i) {
+            if (i != 0) {
+                sql += ", ";
+            }
+            sql += quote_identifier(request.group_by[i]);
+        }
+    } else if (request.distinct.has_value()) {
+        sql += " GROUP BY ";
+        sql += quote_identifier(*request.distinct);
     }
 
     if (!request.order_by.empty()) {
@@ -333,7 +409,8 @@ SourceCapabilities SQLiteSource::Capabilities() const {
         .time_range = true,
         .limit = true,
         .sort = true,
-        .aggregate = false,
+        .aggregate = true,
+        .distinct = true,
     };
 }
 
@@ -406,6 +483,28 @@ absl::StatusOr<Value> SQLiteSource::Scan(const ScanRequest& request) {
                                     value_from_sqlite_column(stmt, i));
         }
         rows.push_back(std::make_shared<ObjectValue>(std::move(properties)));
+    }
+
+    if (request.aggregate.has_value()) {
+        std::vector<TableChunk> chunks;
+        chunks.reserve(rows.size());
+        for (auto& row : rows) {
+            std::vector<std::pair<std::string, Value>> group_props;
+            group_props.reserve(request.group_by.size());
+            for (const auto& column : request.group_by) {
+                const Value* value = row == nullptr ? nullptr : row->lookup(column);
+                if (value != nullptr) {
+                    group_props.emplace_back(column, *value);
+                }
+            }
+            std::vector<std::pair<std::string, Value>> props = row->properties;
+            props.emplace_back("_group", Value::object(std::move(group_props)));
+            row = std::make_shared<ObjectValue>(std::move(props));
+            TableChunk chunk;
+            chunk.rows.push_back(row);
+            chunks.push_back(std::move(chunk));
+        }
+        return Value::table_stream("sql", std::move(chunks));
     }
 
     return Value::table("sql", std::move(rows));

@@ -41,9 +41,11 @@ TableSchema schema_from_rows(const std::vector<std::shared_ptr<ObjectValue>>& ro
 }
 
 bool has_scan_pushdown(const ScanRequest& request) {
-    return !request.columns.empty() || request.time_range.has_value() ||
-           !request.predicates.empty() || !request.order_by.empty() || request.limit.has_value() ||
-           request.offset.has_value();
+    return !request.columns.empty() || !request.projection_columns.empty() ||
+           request.time_range.has_value() || !request.predicates.empty() ||
+           !request.order_by.empty() || !request.group_by.empty() ||
+           request.aggregate.has_value() || request.distinct.has_value() ||
+           request.limit.has_value() || request.offset.has_value();
 }
 
 } // namespace
