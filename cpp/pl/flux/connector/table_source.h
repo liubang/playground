@@ -43,6 +43,7 @@ struct SourceCapabilities {
     bool limit = false;
     bool sort = false;
     bool aggregate = false;
+    bool distinct = false;
 };
 
 struct TimeRange {
@@ -70,11 +71,34 @@ struct OrderBy {
     bool desc = false;
 };
 
+struct ProjectionColumn {
+    std::string column;
+    std::string alias;
+};
+
+enum class AggregateFunction {
+    Count,
+    Sum,
+    Mean,
+    Min,
+    Max,
+};
+
+struct AggregateRequest {
+    AggregateFunction fn = AggregateFunction::Count;
+    std::string column;
+    std::string alias;
+};
+
 struct ScanRequest {
     std::vector<std::string> columns;
+    std::vector<ProjectionColumn> projection_columns;
     std::optional<TimeRange> time_range;
     std::vector<Predicate> predicates;
     std::vector<OrderBy> order_by;
+    std::vector<std::string> group_by;
+    std::optional<AggregateRequest> aggregate;
+    std::optional<std::string> distinct;
     std::optional<int64_t> limit;
     std::optional<int64_t> offset;
 };

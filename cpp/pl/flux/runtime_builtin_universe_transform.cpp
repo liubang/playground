@@ -15,11 +15,16 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/25 10:40
 
+#include "absl/strings/str_cat.h"
+#include "cpp/pl/flux/ast.h"
 #include "cpp/pl/flux/connector/sqlite_source.h"
 #include "cpp/pl/flux/runtime_builtin_table_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_time_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_universe.h"
+#include <algorithm>
 #include <limits>
+#include <optional>
+#include <unordered_set>
 
 namespace pl::flux {
 namespace {
@@ -28,7 +33,349 @@ using namespace detail;
 struct PushdownPlan {
     const plan::SourceScanSpec* source = nullptr;
     connector::ScanRequest request;
+    std::vector<std::string> visible_columns;
+    std::vector<std::string> source_columns;
 };
+
+absl::StatusOr<std::string> predicate_property_name(const PropertyKey& key) {
+    switch (key.type) {
+        case PropertyKey::Type::Identifier:
+            return std::get<std::unique_ptr<Identifier>>(key.key)->name;
+        case PropertyKey::Type::StringLiteral:
+            return std::get<std::unique_ptr<StringLit>>(key.key)->value;
+    }
+    return absl::InvalidArgumentError("unsupported predicate property key");
+}
+
+absl::StatusOr<std::string> predicate_parameter_name(const Property& param) {
+    return predicate_property_name(*param.key);
+}
+
+std::optional<std::string> row_member_column(const Expression& expr,
+                                             const std::string& row_param_name) {
+    if (expr.type != Expression::Type::MemberExpr) {
+        return std::nullopt;
+    }
+    const auto& member = std::get<std::unique_ptr<MemberExpr>>(expr.expr);
+    if (member->object->type != Expression::Type::Identifier) {
+        return std::nullopt;
+    }
+    const auto& root = std::get<std::unique_ptr<Identifier>>(member->object->expr);
+    if (root->name != row_param_name) {
+        return std::nullopt;
+    }
+    auto column_or = predicate_property_name(*member->property);
+    if (!column_or.ok()) {
+        return std::nullopt;
+    }
+    return *column_or;
+}
+
+std::optional<plan::PredicateLiteral> predicate_literal(const Expression& expr) {
+    switch (expr.type) {
+        case Expression::Type::BooleanLit:
+            return plan::PredicateLiteral{
+                .kind = plan::PredicateLiteralKind::Bool,
+                .bool_value = std::get<std::unique_ptr<BooleanLit>>(expr.expr)->value,
+            };
+        case Expression::Type::IntegerLit:
+            return plan::PredicateLiteral{
+                .kind = plan::PredicateLiteralKind::Int,
+                .int_value = std::get<std::unique_ptr<IntegerLit>>(expr.expr)->value,
+            };
+        case Expression::Type::UnsignedIntegerLit:
+            return plan::PredicateLiteral{
+                .kind = plan::PredicateLiteralKind::UInt,
+                .uint_value = std::get<std::unique_ptr<UintLit>>(expr.expr)->value,
+            };
+        case Expression::Type::FloatLit:
+            return plan::PredicateLiteral{
+                .kind = plan::PredicateLiteralKind::Float,
+                .float_value = std::get<std::unique_ptr<FloatLit>>(expr.expr)->value,
+            };
+        case Expression::Type::StringLit:
+            return plan::PredicateLiteral{
+                .kind = plan::PredicateLiteralKind::String,
+                .string_value = std::get<std::unique_ptr<StringLit>>(expr.expr)->value,
+            };
+        case Expression::Type::DateTimeLit:
+            return plan::PredicateLiteral{
+                .kind = plan::PredicateLiteralKind::Time,
+                .string_value = std::get<std::unique_ptr<DateTimeLit>>(expr.expr)->string(),
+            };
+        default:
+            return std::nullopt;
+    }
+}
+
+std::optional<plan::PredicateOp> predicate_op(Operator op) {
+    switch (op) {
+        case Operator::EqualOperator:
+            return plan::PredicateOp::Eq;
+        case Operator::NotEqualOperator:
+            return plan::PredicateOp::NotEq;
+        case Operator::LessThanOperator:
+            return plan::PredicateOp::Lt;
+        case Operator::LessThanEqualOperator:
+            return plan::PredicateOp::Lte;
+        case Operator::GreaterThanOperator:
+            return plan::PredicateOp::Gt;
+        case Operator::GreaterThanEqualOperator:
+            return plan::PredicateOp::Gte;
+        default:
+            return std::nullopt;
+    }
+}
+
+plan::PredicateOp reverse_predicate_op(plan::PredicateOp op) {
+    switch (op) {
+        case plan::PredicateOp::Eq:
+            return plan::PredicateOp::Eq;
+        case plan::PredicateOp::NotEq:
+            return plan::PredicateOp::NotEq;
+        case plan::PredicateOp::Lt:
+            return plan::PredicateOp::Gt;
+        case plan::PredicateOp::Lte:
+            return plan::PredicateOp::Gte;
+        case plan::PredicateOp::Gt:
+            return plan::PredicateOp::Lt;
+        case plan::PredicateOp::Gte:
+            return plan::PredicateOp::Lte;
+    }
+    return plan::PredicateOp::Eq;
+}
+
+std::optional<plan::PredicateSpec> extract_binary_predicate(const BinaryExpr& binary,
+                                                            const std::string& row_param_name) {
+    auto op = predicate_op(binary.op);
+    if (!op.has_value()) {
+        return std::nullopt;
+    }
+
+    if (auto column = row_member_column(*binary.left, row_param_name); column.has_value()) {
+        auto literal = predicate_literal(*binary.right);
+        if (!literal.has_value()) {
+            return std::nullopt;
+        }
+        return plan::PredicateSpec{
+            .op = *op,
+            .column = *column,
+            .literal = *literal,
+        };
+    }
+    if (auto column = row_member_column(*binary.right, row_param_name); column.has_value()) {
+        auto literal = predicate_literal(*binary.left);
+        if (!literal.has_value()) {
+            return std::nullopt;
+        }
+        return plan::PredicateSpec{
+            .op = reverse_predicate_op(*op),
+            .column = *column,
+            .literal = *literal,
+        };
+    }
+    return std::nullopt;
+}
+
+bool extract_predicates_from_expr(const Expression& expr,
+                                  const std::string& row_param_name,
+                                  std::vector<plan::PredicateSpec>* predicates) {
+    if (expr.type == Expression::Type::LogicalExpr) {
+        const auto& logical = std::get<std::unique_ptr<LogicalExpr>>(expr.expr);
+        if (logical->op != LogicalOperator::AndOperator) {
+            return false;
+        }
+        return extract_predicates_from_expr(*logical->left, row_param_name, predicates) &&
+               extract_predicates_from_expr(*logical->right, row_param_name, predicates);
+    }
+    if (expr.type != Expression::Type::BinaryExpr) {
+        return false;
+    }
+    const auto& binary = std::get<std::unique_ptr<BinaryExpr>>(expr.expr);
+    auto predicate = extract_binary_predicate(*binary, row_param_name);
+    if (!predicate.has_value()) {
+        return false;
+    }
+    predicates->push_back(std::move(*predicate));
+    return true;
+}
+
+std::optional<std::vector<plan::PredicateSpec>> extract_filter_predicates(const FunctionValue& fn) {
+    if (fn.kind != FunctionValue::Kind::User || fn.user_function == nullptr ||
+        fn.user_function->params.size() != 1 || fn.user_function->body == nullptr ||
+        fn.user_function->body->type != FunctionBody::Type::Expression) {
+        return std::nullopt;
+    }
+    auto row_param_or = predicate_parameter_name(*fn.user_function->params[0]);
+    if (!row_param_or.ok()) {
+        return std::nullopt;
+    }
+    const auto& body = *std::get<std::unique_ptr<Expression>>(fn.user_function->body->body);
+    std::vector<plan::PredicateSpec> predicates;
+    if (!extract_predicates_from_expr(body, *row_param_or, &predicates) || predicates.empty()) {
+        return std::nullopt;
+    }
+    return predicates;
+}
+
+connector::PredicateOp to_connector_predicate_op(plan::PredicateOp op) {
+    switch (op) {
+        case plan::PredicateOp::Eq:
+            return connector::PredicateOp::Eq;
+        case plan::PredicateOp::NotEq:
+            return connector::PredicateOp::NotEq;
+        case plan::PredicateOp::Lt:
+            return connector::PredicateOp::Lt;
+        case plan::PredicateOp::Lte:
+            return connector::PredicateOp::Lte;
+        case plan::PredicateOp::Gt:
+            return connector::PredicateOp::Gt;
+        case plan::PredicateOp::Gte:
+            return connector::PredicateOp::Gte;
+    }
+    return connector::PredicateOp::Eq;
+}
+
+connector::AggregateFunction to_connector_aggregate_fn(plan::AggregateFunction fn) {
+    switch (fn) {
+        case plan::AggregateFunction::Count:
+            return connector::AggregateFunction::Count;
+        case plan::AggregateFunction::Sum:
+            return connector::AggregateFunction::Sum;
+        case plan::AggregateFunction::Mean:
+            return connector::AggregateFunction::Mean;
+        case plan::AggregateFunction::Min:
+            return connector::AggregateFunction::Min;
+        case plan::AggregateFunction::Max:
+            return connector::AggregateFunction::Max;
+    }
+    return connector::AggregateFunction::Count;
+}
+
+Value to_connector_literal(const plan::PredicateLiteral& literal) {
+    switch (literal.kind) {
+        case plan::PredicateLiteralKind::Bool:
+            return Value::boolean(literal.bool_value);
+        case plan::PredicateLiteralKind::Int:
+            return Value::integer(literal.int_value);
+        case plan::PredicateLiteralKind::UInt:
+            return Value::uinteger(literal.uint_value);
+        case plan::PredicateLiteralKind::Float:
+            return Value::floating(literal.float_value);
+        case plan::PredicateLiteralKind::String:
+            return Value::string(literal.string_value);
+        case plan::PredicateLiteralKind::Time:
+            return Value::time(literal.string_value);
+    }
+    return Value::null();
+}
+
+absl::StatusOr<size_t> visible_column_index(const std::vector<std::string>& visible_columns,
+                                            const std::string& column,
+                                            const std::string& context) {
+    auto it = std::find(visible_columns.begin(), visible_columns.end(), column);
+    if (it == visible_columns.end()) {
+        return absl::InvalidArgumentError(
+            absl::StrCat("pushdown ", context, " references unavailable column: ", column));
+    }
+    return static_cast<size_t>(it - visible_columns.begin());
+}
+
+absl::StatusOr<std::string> source_column_for_visible(
+    const std::vector<std::string>& visible_columns,
+    const std::vector<std::string>& source_columns,
+    const std::string& column,
+    const std::string& context) {
+    auto index_or = visible_column_index(visible_columns, column, context);
+    if (!index_or.ok()) {
+        return index_or.status();
+    }
+    if (*index_or >= source_columns.size()) {
+        return absl::InvalidArgumentError("pushdown column mapping is inconsistent");
+    }
+    return source_columns[*index_or];
+}
+
+bool has_duplicate_columns(const std::vector<std::string>& columns) {
+    std::unordered_set<std::string> seen;
+    seen.reserve(columns.size());
+    for (const auto& column : columns) {
+        if (!seen.insert(column).second) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void set_projection_columns(connector::ScanRequest* request,
+                            const std::vector<std::string>& source_columns,
+                            const std::vector<std::string>& visible_columns) {
+    request->columns.clear();
+    request->projection_columns.clear();
+    request->projection_columns.reserve(visible_columns.size());
+    for (size_t i = 0; i < visible_columns.size(); ++i) {
+        request->projection_columns.push_back({
+            .column = source_columns[i],
+            .alias = visible_columns[i],
+        });
+    }
+}
+
+absl::StatusOr<std::vector<std::string>> sqlite_source_columns(const plan::SourceScanSpec& source) {
+    if (source.source != "sql" || source.driver != "sqlite") {
+        return absl::InvalidArgumentError("unsupported pushdown source");
+    }
+    connector::SQLiteSource sqlite_source(source.dsn, source.query);
+    auto schema_or = sqlite_source.Schema();
+    if (!schema_or.ok()) {
+        return schema_or.status();
+    }
+    std::vector<std::string> columns;
+    columns.reserve(schema_or->columns.size());
+    for (const auto& column : schema_or->columns) {
+        columns.push_back(column.name);
+    }
+    return columns;
+}
+
+absl::StatusOr<std::vector<std::string>> visible_columns_for_plan(
+    const std::shared_ptr<plan::PlanNode>& node) {
+    if (node == nullptr) {
+        return absl::InvalidArgumentError("missing plan");
+    }
+    if (node->kind == plan::PlanNodeKind::SourceScan) {
+        return sqlite_source_columns(node->source_scan);
+    }
+    if (node->inputs.size() != 1) {
+        return absl::InvalidArgumentError("non-linear plan has no stable visible columns");
+    }
+    auto columns_or = visible_columns_for_plan(node->inputs[0]);
+    if (!columns_or.ok()) {
+        return columns_or.status();
+    }
+    if (node->kind == plan::PlanNodeKind::Project) {
+        return node->project.columns;
+    }
+    if (node->kind == plan::PlanNodeKind::Rename) {
+        for (auto& column : *columns_or) {
+            if (auto renamed = mapped_column_name(node->rename.columns, column);
+                renamed.has_value()) {
+                column = *renamed;
+            }
+        }
+        if (has_duplicate_columns(*columns_or)) {
+            return absl::InvalidArgumentError("rename produces duplicate columns");
+        }
+        return columns_or;
+    }
+    if (node->kind == plan::PlanNodeKind::Range || node->kind == plan::PlanNodeKind::Filter ||
+        node->kind == plan::PlanNodeKind::Limit || node->kind == plan::PlanNodeKind::Sort ||
+        node->kind == plan::PlanNodeKind::Group || node->kind == plan::PlanNodeKind::Aggregate ||
+        node->kind == plan::PlanNodeKind::Distinct) {
+        return columns_or;
+    }
+    return absl::InvalidArgumentError("plan node has no stable visible columns");
+}
 
 absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::PlanNode>& node) {
     if (node == nullptr) {
@@ -40,6 +387,12 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
         }
         PushdownPlan plan;
         plan.source = &node->source_scan;
+        auto columns_or = sqlite_source_columns(node->source_scan);
+        if (!columns_or.ok()) {
+            return columns_or.status();
+        }
+        plan.visible_columns = std::move(*columns_or);
+        plan.source_columns = plan.visible_columns;
         return plan;
     }
     if (node->inputs.size() != 1) {
@@ -50,15 +403,111 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
         return plan_or.status();
     }
     switch (node->kind) {
-        case plan::PlanNodeKind::Range:
+        case plan::PlanNodeKind::Range: {
+            auto source_column_or = source_column_for_visible(
+                plan_or->visible_columns, plan_or->source_columns, "_time", "range");
+            if (!source_column_or.ok()) {
+                return source_column_or.status();
+            }
+            if (*source_column_or != "_time") {
+                return absl::InvalidArgumentError(
+                    "range pushdown requires visible _time to map to source _time");
+            }
             plan_or->request.time_range = connector::TimeRange{
                 .start = node->range.start,
                 .stop = node->range.stop,
             };
             return plan_or;
-        case plan::PlanNodeKind::Project:
-            plan_or->request.columns = node->project.columns;
+        }
+        case plan::PlanNodeKind::Filter:
+            if (node->filter.predicates.empty()) {
+                return absl::InvalidArgumentError("filter has no pushable predicates");
+            }
+            for (const auto& predicate : node->filter.predicates) {
+                auto source_column_or = source_column_for_visible(
+                    plan_or->visible_columns, plan_or->source_columns, predicate.column, "filter");
+                if (!source_column_or.ok()) {
+                    return source_column_or.status();
+                }
+                plan_or->request.predicates.push_back({
+                    .op = to_connector_predicate_op(predicate.op),
+                    .column = *source_column_or,
+                    .literal = to_connector_literal(predicate.literal),
+                });
+            }
             return plan_or;
+        case plan::PlanNodeKind::Project: {
+            std::vector<std::string> projected_source_columns;
+            projected_source_columns.reserve(node->project.columns.size());
+            for (const auto& column : node->project.columns) {
+                auto source_column_or = source_column_for_visible(
+                    plan_or->visible_columns, plan_or->source_columns, column, "project");
+                if (!source_column_or.ok()) {
+                    return source_column_or.status();
+                }
+                projected_source_columns.push_back(*source_column_or);
+            }
+            set_projection_columns(&plan_or->request, projected_source_columns,
+                                   node->project.columns);
+            plan_or->visible_columns = node->project.columns;
+            plan_or->source_columns = std::move(projected_source_columns);
+            return plan_or;
+        }
+        case plan::PlanNodeKind::Rename:
+            for (auto& column : plan_or->visible_columns) {
+                if (auto renamed = mapped_column_name(node->rename.columns, column);
+                    renamed.has_value()) {
+                    column = *renamed;
+                }
+            }
+            if (has_duplicate_columns(plan_or->visible_columns)) {
+                return absl::InvalidArgumentError("rename produces duplicate columns");
+            }
+            set_projection_columns(&plan_or->request, plan_or->source_columns,
+                                   plan_or->visible_columns);
+            return plan_or;
+        case plan::PlanNodeKind::Group:
+            plan_or->request.group_by.clear();
+            plan_or->request.group_by.reserve(node->group.columns.size());
+            for (const auto& column : node->group.columns) {
+                auto source_column_or = source_column_for_visible(
+                    plan_or->visible_columns, plan_or->source_columns, column, "group");
+                if (!source_column_or.ok()) {
+                    return source_column_or.status();
+                }
+                plan_or->request.group_by.push_back(*source_column_or);
+            }
+            return plan_or;
+        case plan::PlanNodeKind::Aggregate: {
+            if (plan_or->request.distinct.has_value()) {
+                return absl::InvalidArgumentError("aggregate after distinct is not pushable");
+            }
+            auto source_column_or =
+                source_column_for_visible(plan_or->visible_columns, plan_or->source_columns,
+                                          node->aggregate.column, "aggregate");
+            if (!source_column_or.ok()) {
+                return source_column_or.status();
+            }
+            plan_or->request.aggregate = connector::AggregateRequest{
+                .fn = to_connector_aggregate_fn(node->aggregate.fn),
+                .column = *source_column_or,
+                .alias = node->aggregate.column,
+            };
+            plan_or->request.order_by.clear();
+            plan_or->request.limit.reset();
+            plan_or->request.offset.reset();
+            return plan_or;
+        }
+        case plan::PlanNodeKind::Distinct: {
+            auto source_column_or =
+                source_column_for_visible(plan_or->visible_columns, plan_or->source_columns,
+                                          node->distinct.column, "distinct");
+            if (!source_column_or.ok()) {
+                return source_column_or.status();
+            }
+            plan_or->request.distinct = *source_column_or;
+            return plan_or;
+        }
         case plan::PlanNodeKind::Limit:
             plan_or->request.limit = node->limit.n;
             if (node->limit.offset != 0) {
@@ -69,8 +518,13 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
             plan_or->request.order_by.clear();
             plan_or->request.order_by.reserve(node->sort.keys.size());
             for (const auto& key : node->sort.keys) {
+                auto source_column_or = source_column_for_visible(
+                    plan_or->visible_columns, plan_or->source_columns, key.column, "sort");
+                if (!source_column_or.ok()) {
+                    return source_column_or.status();
+                }
                 plan_or->request.order_by.push_back({
-                    .column = key.column,
+                    .column = *source_column_or,
                     .desc = key.desc,
                 });
             }
@@ -80,6 +534,10 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
     }
 }
 
+} // namespace
+
+namespace detail {
+
 Value maybe_pushdown_sqlite_plan(Value value) {
     auto& table = value.as_table_mut();
     if (table.plan == nullptr) {
@@ -87,6 +545,9 @@ Value maybe_pushdown_sqlite_plan(Value value) {
     }
     auto pushdown_or = build_pushdown_plan(table.plan);
     if (!pushdown_or.ok()) {
+        return value;
+    }
+    if (!pushdown_or->request.group_by.empty() && !pushdown_or->request.aggregate.has_value()) {
         return value;
     }
     connector::SQLiteSource source(pushdown_or->source->dsn, pushdown_or->source->query);
@@ -101,9 +562,39 @@ Value maybe_pushdown_sqlite_plan(Value value) {
     return *pushed_or;
 }
 
-Value with_appended_plan(Value value, const TableValue& input, plan::PlanNodeKind kind) {
+Value with_aggregate_plan(Value value,
+                          const TableValue& input,
+                          plan::AggregateFunction fn,
+                          std::string column) {
     if (input.plan != nullptr) {
-        value.as_table_mut().plan = plan::MakeUnaryNode(kind, input.plan);
+        value.as_table_mut().plan = plan::MakeAggregate(input.plan, fn, std::move(column));
+        return maybe_pushdown_sqlite_plan(std::move(value));
+    }
+    return value;
+}
+
+Value with_distinct_plan(Value value, const TableValue& input, std::string column) {
+    if (input.plan != nullptr) {
+        value.as_table_mut().plan = plan::MakeDistinct(input.plan, std::move(column));
+        return maybe_pushdown_sqlite_plan(std::move(value));
+    }
+    return value;
+}
+
+} // namespace detail
+
+namespace {
+
+Value with_filter_plan(Value value,
+                       const TableValue& input,
+                       std::optional<std::vector<plan::PredicateSpec>> predicates) {
+    if (input.plan != nullptr) {
+        if (predicates.has_value()) {
+            value.as_table_mut().plan = plan::MakeFilter(input.plan, std::move(*predicates));
+            return maybe_pushdown_sqlite_plan(std::move(value));
+        }
+        value.as_table_mut().plan =
+            plan::MakeMaterializeBarrier(input.plan, "unsupported lazy builtin", "filter");
     }
     return value;
 }
@@ -125,6 +616,47 @@ Value with_project_plan(Value value, const TableValue& input, std::vector<std::s
         return maybe_pushdown_sqlite_plan(std::move(value));
     }
     return value;
+}
+
+Value with_drop_plan(Value value,
+                     const TableValue& input,
+                     const std::vector<std::string>& dropped) {
+    if (input.plan == nullptr) {
+        return value;
+    }
+    auto columns_or = visible_columns_for_plan(input.plan);
+    if (!columns_or.ok()) {
+        value.as_table_mut().plan =
+            plan::MakeMaterializeBarrier(input.plan, "unsupported lazy builtin", "drop");
+        return value;
+    }
+    const std::unordered_set<std::string> dropped_set(dropped.begin(), dropped.end());
+    std::vector<std::string> projected_columns;
+    projected_columns.reserve(columns_or->size());
+    for (const auto& column : *columns_or) {
+        if (dropped_set.count(column) == 0) {
+            projected_columns.push_back(column);
+        }
+    }
+    value.as_table_mut().plan = plan::MakeProject(input.plan, std::move(projected_columns));
+    return maybe_pushdown_sqlite_plan(std::move(value));
+}
+
+Value with_rename_plan(Value value,
+                       const TableValue& input,
+                       std::vector<std::pair<std::string, std::string>> columns) {
+    if (input.plan == nullptr) {
+        return value;
+    }
+    auto node = plan::MakeRename(input.plan, std::move(columns));
+    auto visible_columns_or = visible_columns_for_plan(node);
+    if (!visible_columns_or.ok()) {
+        value.as_table_mut().plan =
+            plan::MakeMaterializeBarrier(input.plan, "unsupported lazy builtin", "rename");
+        return value;
+    }
+    value.as_table_mut().plan = std::move(node);
+    return maybe_pushdown_sqlite_plan(std::move(value));
 }
 
 Value with_limit_plan(Value value, const TableValue& input, int64_t n, int64_t offset) {
@@ -149,6 +681,14 @@ Value with_sort_plan(Value value,
             });
         }
         value.as_table_mut().plan = plan::MakeSort(input.plan, std::move(keys));
+        return maybe_pushdown_sqlite_plan(std::move(value));
+    }
+    return value;
+}
+
+Value with_group_plan(Value value, const TableValue& input, std::vector<std::string> columns) {
+    if (input.plan != nullptr) {
+        value.as_table_mut().plan = plan::MakeGroup(input.plan, std::move(columns));
         return maybe_pushdown_sqlite_plan(std::move(value));
     }
     return value;
@@ -269,7 +809,11 @@ absl::StatusOr<Value> builtin_filter(const std::vector<Value>& args) {
     if (!result_or.ok()) {
         return result_or.status();
     }
-    return with_appended_plan(std::move(*result_or), **table_or, plan::PlanNodeKind::Filter);
+    std::optional<std::vector<plan::PredicateSpec>> predicates;
+    if (empty_policy == EmptyChunkPolicy::Drop) {
+        predicates = extract_filter_predicates((*fn_or)->as_function());
+    }
+    return with_filter_plan(std::move(*result_or), **table_or, std::move(predicates));
 }
 
 absl::StatusOr<Value> builtin_map(const std::vector<Value>& args) {
@@ -451,7 +995,7 @@ absl::StatusOr<Value> builtin_drop(const std::vector<Value>& args) {
     if (!result_or.ok()) {
         return result_or.status();
     }
-    return with_materialization_barrier(std::move(*result_or), **table_or, "drop");
+    return with_drop_plan(std::move(*result_or), **table_or, *columns_or);
 }
 
 absl::StatusOr<Value> builtin_rename(const std::vector<Value>& args) {
@@ -484,7 +1028,7 @@ absl::StatusOr<Value> builtin_rename(const std::vector<Value>& args) {
     if (!result_or.ok()) {
         return result_or.status();
     }
-    return with_materialization_barrier(std::move(*result_or), **table_or, "rename");
+    return with_rename_plan(std::move(*result_or), **table_or, *columns_or);
 }
 
 absl::StatusOr<Value> builtin_duplicate(const std::vector<Value>& args) {
@@ -636,7 +1180,7 @@ absl::StatusOr<Value> builtin_group(const std::vector<Value>& args) {
         chunks.emplace_back();
     }
     auto result = table_with_chunks_like(**table_or, std::move(chunks));
-    return with_materialization_barrier(std::move(result), **table_or, "group");
+    return with_group_plan(std::move(result), **table_or, std::move(group_columns));
 }
 
 absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
