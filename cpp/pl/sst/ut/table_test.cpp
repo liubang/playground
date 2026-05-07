@@ -289,14 +289,15 @@ TEST_F(SSTableTest, range_scan) {
     for (int i = 0; i < TestConfig::RANGE_SCAN_TEST_COUNT; ++i) {
         auto cell_iter = cells.begin();
 
-        int advance_count = random_gen.random_int(0, TestConfig::ROW_NUM) * 2 * TestConfig::COL_NUM;
-        std::advance(cell_iter, std::min(advance_count, static_cast<int>(cells.size()) - 1));
+        int advance_count =
+            random_gen.random_int(0, TestConfig::ROW_NUM - 1) * 2 * TestConfig::COL_NUM;
+        std::advance(cell_iter, advance_count);
 
         std::string_view search_key = cell_iter->rowkey;
         XLOGF(INFO, "scan rowkey >= {}", search_key);
         table_iter->seek(search_key);
         while (table_iter->valid()) {
-            EXPECT_TRUE(cell_iter != cells.end());
+            ASSERT_TRUE(cell_iter != cells.end());
             auto actual_cell = table_iter->cell();
             verify_cell_content(*cell_iter, actual_cell);
             table_iter->next();
@@ -317,15 +318,16 @@ TEST_F(SSTableTest, query) {
     Arena buf;
     for (int i = 0; i < TestConfig::QUERY_TEST_COUNT; ++i) {
         auto cell_iter = cells.begin();
-        int advance_count = random_gen.random_int(0, TestConfig::ROW_NUM) * 2 * TestConfig::COL_NUM;
-        std::advance(cell_iter, std::min(advance_count, static_cast<int>(cells.size()) - 1));
+        int advance_count =
+            random_gen.random_int(0, TestConfig::ROW_NUM - 1) * 2 * TestConfig::COL_NUM;
+        std::advance(cell_iter, advance_count);
 
         std::string search_key = cell_iter->rowkey;
         XLOGF(INFO, "search_key: {}", search_key);
         auto query_result = table->get(search_key, &buf);
         EXPECT_TRUE(query_result.hasValue());
         const CellVecRef& row_cells = query_result.value();
-        EXPECT_EQ(16, row_cells.size());
+        EXPECT_EQ(2 * TestConfig::COL_NUM, row_cells.size());
 
         for (const auto& actual_cell : row_cells) {
             verify_cell_content(*cell_iter, actual_cell);
