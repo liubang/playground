@@ -50,7 +50,7 @@ struct SourceScanSpec {
     std::string source;
     std::string driver;
     std::string dsn;
-    std::string query;
+    std::string table;
 };
 
 struct RangeSpec {
@@ -200,13 +200,13 @@ inline std::string PlanNodeKindName(PlanNodeKind kind) {
 inline std::shared_ptr<PlanNode> MakeSourceScan(std::string source,
                                                 std::string driver,
                                                 std::string dsn,
-                                                std::string query) {
+                                                std::string table) {
     auto node = std::make_shared<PlanNode>();
     node->kind = PlanNodeKind::SourceScan;
     node->source_scan.source = std::move(source);
     node->source_scan.driver = std::move(driver);
     node->source_scan.dsn = std::move(dsn);
-    node->source_scan.query = std::move(query);
+    node->source_scan.table = std::move(table);
     return node;
 }
 
@@ -439,7 +439,7 @@ inline void FormatPlanNode(const PlanNode& node, size_t depth, std::ostringstrea
     FormatPushdownState(node, out);
     if (node.kind == PlanNodeKind::SourceScan) {
         *out << "(source=\"" << node.source_scan.source << "\", driver=\""
-             << node.source_scan.driver << "\", query=\"" << node.source_scan.query << "\")";
+             << node.source_scan.driver << "\", table=\"" << node.source_scan.table << "\")";
     } else if (node.kind == PlanNodeKind::Materialize &&
                (!node.materialize.reason.empty() || !node.materialize.builtin.empty())) {
         *out << "(";

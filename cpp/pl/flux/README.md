@@ -253,9 +253,9 @@ Universe builtin 默认注入，无需 `import`。
 
 | 函数                              | 说明                      |
 | --------------------------------- | ------------------------- |
-| `sql.from(driver:, dsn:, query:)` | 从 SQL 查询物化为内存表流 |
+| `sql.from(driver:, dsn:, table:)` | 从 SQL 表扫描物化为 Flux 表流 |
 
-第一版只支持 `driver: "sqlite"`，通过 SQLite C API 执行 `query`，并将 `null`、integer、float、text、blob-as-string 映射到 Flux 运行时值。connector 层已有保守 `ScanRequest` 下推能力；runtime pipeline 已能下推 SQLite 源之上的 `range/filter(simple)/keep/drop/rename/sort/limit/distinct` 线性前缀，以及 `group(columns:) |> count/sum/mean/min/max(column:)`，连续简单 `filter()` 会累积到同一个 `ScanRequest.predicates`，`drop(columns:)` 会基于当前可见 schema 反算为 projection，简单 `rename(columns:)` 会下推为 SQL projection alias，并让后续 predicate/sort/projection/distinct/aggregate 使用重命名后的列语义，复杂 `filter(fn:)` 和其他算子会回退到内存执行。`explain()` 会标注 `[sqlite pushdown]`、`[sqlite scan]`、`[barrier: ...]` 和 `[memory]`，并在可完整编译时追加 `SQLitePushdown(request: ...)` 摘要，展示 projection、predicates、distinct、group_by、aggregate、order_by 和 limit/offset，方便确认当前 pipeline 的真实下推边界。后续 planner 和下推路线见 [DATASOURCE_ARCHITECTURE.md](./DATASOURCE_ARCHITECTURE.md)。
+第一版只支持 `driver: "sqlite"`，通过 SQLite C API 扫描 `table`，并将 `null`、integer、float、text、blob-as-string 映射到 Flux 运行时值。`query:` raw SQL 入口不对用户开放，SQL 只作为 connector 内部 physical plan。connector 层已有保守 `ScanRequest` 下推能力；runtime pipeline 已能下推 SQLite 源之上的 `range/filter(simple)/keep/drop/rename/sort/limit/distinct` 线性前缀，以及 `group(columns:) |> count/sum/mean/min/max(column:)`，连续简单 `filter()` 会累积到同一个 `ScanRequest.predicates`，`drop(columns:)` 会基于当前可见 schema 反算为 projection，简单 `rename(columns:)` 会下推为 SQL projection alias，并让后续 predicate/sort/projection/distinct/aggregate 使用重命名后的列语义，复杂 `filter(fn:)` 和其他算子会回退到内存执行。`explain()` 会标注 `[sqlite pushdown]`、`[sqlite scan]`、`[barrier: ...]` 和 `[memory]`，并在可完整编译时追加 `SQLitePushdown(request: ...)` 摘要，展示 projection、predicates、distinct、group_by、aggregate、order_by 和 limit/offset，方便确认当前 pipeline 的真实下推边界。后续 planner 和下推路线见 [DATASOURCE_ARCHITECTURE.md](./DATASOURCE_ARCHITECTURE.md)。
 
 ### `date`
 
@@ -400,7 +400,7 @@ Universe builtin 默认注入，无需 `import`。
 - `dict` 暂由 object 承载。
 - `json.encode` 暂返回 string，尚无 bytes 类型。
 - `csv.from` 覆盖 raw/annotated 常见形态，不是完整 CSV 方言实现。
-- `sql.from` 当前只支持 SQLite `query` 模式；connector 抽象、logical plan skeleton、materialization barrier 和 SQLite `range/filter(simple)/keep/sort/limit` 前缀下推已启动，复杂 `filter(fn:)`、跨源 join 下推和更多 SQL 方言仍未实现。
+- `sql.from` 当前只支持 SQLite `table` 模式；connector 抽象、logical plan skeleton、materialization barrier 和 SQLite `range/filter(simple)/keep/sort/limit` 前缀下推已启动，复杂 `filter(fn:)`、跨源 join 下推和更多 SQL 方言仍未实现。
 - package 覆盖以当前 `stdlib_conformance` 为准，新增函数需要同步样例和快照。
 
 ## 贡献时的收尾清单
