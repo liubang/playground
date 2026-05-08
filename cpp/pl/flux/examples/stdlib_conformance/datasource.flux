@@ -1,6 +1,6 @@
-import "sql"
+import "datasource"
 
-row = sql.from(
+row = datasource.from(
     driver: "sqlite",
     dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
     table: "cpu",

@@ -1,7 +1,7 @@
 import "csv"
-import "sql"
+import "datasource"
 
-cpu = sql.from(
+cpu = datasource.from(
     driver: "sqlite",
     dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
     table: "cpu",

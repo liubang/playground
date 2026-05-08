@@ -9,12 +9,12 @@
 - 人类可读、annotated CSV、JSON 三种 CLI 输出
 - REPL、内联源码、文件执行、结果筛选
 - 一批默认加载的 universe builtin
-- `array`、`csv`、`date`、`dict`、`join`、`json`、`math`、`regexp`、`runtime`、`sql`、`strings`、`system`、`types` 等内置包
+- `array`、`csv`、`date`、`dict`、`join`、`json`、`math`、`regexp`、`runtime`、`datasource`、`strings`、`system`、`types` 等内置包
 - `stdlib_conformance` 快照样例，约束每个已实现 builtin 的主要行为
 
 更细的语法和运行时支持矩阵见 [SUPPORT_MATRIX.md](./SUPPORT_MATRIX.md)。
 
-多数据源、SQL connector、查询计划和算子下推的后续设计见
+多数据源、connector、查询计划和算子下推的后续设计见
 [DATASOURCE_ARCHITECTURE.md](./DATASOURCE_ARCHITECTURE.md)。
 
 ## 编译依赖
@@ -249,13 +249,13 @@ Universe builtin 默认注入，无需 `import`。
 
 `mode: "raw"` 解析普通表头 CSV；annotated CSV 支持 `#datatype`、`#group`、`#default` 和 result/table 列的常见形态。
 
-### `sql`
+### `datasource`
 
 | 函数                              | 说明                      |
 | --------------------------------- | ------------------------- |
-| `sql.from(driver:, dsn:, table:)` | 从 SQL 表扫描物化为 Flux 表流 |
+| `datasource.from(driver:, dsn:, table:)` | 从外部表扫描物化为 Flux 表流 |
 
-第一版只支持 `driver: "sqlite"`，通过 SQLite C API 扫描 `table`，并将 `null`、integer、float、text、blob-as-string 映射到 Flux 运行时值。`query:` raw SQL 入口不对用户开放，SQL 只作为 connector 内部 physical plan。connector 层已有保守 `ScanRequest` 下推能力；runtime pipeline 已能下推 SQLite 源之上的 `range/filter(simple)/keep/drop/rename/sort/limit/distinct` 线性前缀，以及 `group(columns:) |> count/sum/mean/min/max(column:)`，连续简单 `filter()` 会累积到同一个 `ScanRequest.predicates`，`drop(columns:)` 会基于当前可见 schema 反算为 projection，简单 `rename(columns:)` 会下推为 SQL projection alias，并让后续 predicate/sort/projection/distinct/aggregate 使用重命名后的列语义，复杂 `filter(fn:)` 和其他算子会回退到内存执行。`explain()` 会标注 `[sqlite pushdown]`、`[sqlite scan]`、`[barrier: ...]` 和 `[memory]`，并在可完整编译时追加 `SQLitePushdown(request: ...)` 摘要，展示 projection、predicates、distinct、group_by、aggregate、order_by 和 limit/offset，方便确认当前 pipeline 的真实下推边界。后续 planner 和下推路线见 [DATASOURCE_ARCHITECTURE.md](./DATASOURCE_ARCHITECTURE.md)。
+第一版只支持 `driver: "sqlite"`，通过 SQLite C API 扫描 `table`，并将 `null`、integer、float、text、blob-as-string 映射到 Flux 运行时值。用户入口不提供 `query` 模式，SQL 只作为 connector 内部 physical plan。connector 层已有保守 `ScanRequest` 下推能力；runtime pipeline 已能下推 SQLite 源之上的 `range/filter(simple)/keep/drop/rename/sort/limit/distinct` 线性前缀，以及 `group(columns:) |> count/sum/mean/min/max(column:)`，连续简单 `filter()` 会累积到同一个 `ScanRequest.predicates`，`drop(columns:)` 会基于当前可见 schema 反算为 projection，简单 `rename(columns:)` 会下推为 SQLite projection alias，并让后续 predicate/sort/projection/distinct/aggregate 使用重命名后的列语义，复杂 `filter(fn:)` 和其他算子会回退到内存执行。`explain()` 会标注 `[sqlite pushdown]`、`[sqlite scan]`、`[barrier: ...]` 和 `[memory]`，并在可完整编译时追加 `SQLitePushdown(request: ...)` 摘要，展示 projection、predicates、distinct、group_by、aggregate、order_by 和 limit/offset，方便确认当前 pipeline 的真实下推边界。后续 planner 和下推路线见 [DATASOURCE_ARCHITECTURE.md](./DATASOURCE_ARCHITECTURE.md)。
 
 ### `date`
 
@@ -380,7 +380,7 @@ Universe builtin 默认注入，无需 `import`。
 | `runtime_exec.*`                   | 文件级语句执行             |
 | `runtime_builtin_universe_*.cpp`   | 默认 universe builtin      |
 | `runtime_builtin_table.cpp`        | `array`、`csv` 包          |
-| `runtime_builtin_sql.cpp`          | `sql` 包和 SQLite 查询入口 |
+| `runtime_builtin_datasource.cpp`   | `datasource` 包和 SQLite table scan 入口 |
 | `runtime_builtin_scalar.cpp`       | 标量类 stdlib 包           |
 | `runtime_builtin_package.*`        | 包注册与导入               |
 | `flux_cli.*`、`flux.cpp`           | CLI、REPL、输出格式        |
@@ -400,7 +400,7 @@ Universe builtin 默认注入，无需 `import`。
 - `dict` 暂由 object 承载。
 - `json.encode` 暂返回 string，尚无 bytes 类型。
 - `csv.from` 覆盖 raw/annotated 常见形态，不是完整 CSV 方言实现。
-- `sql.from` 当前只支持 SQLite `table` 模式；connector 抽象、logical plan skeleton、materialization barrier 和 SQLite `range/filter(simple)/keep/sort/limit` 前缀下推已启动，复杂 `filter(fn:)`、跨源 join 下推和更多 SQL 方言仍未实现。
+- `datasource.from` 当前只支持 SQLite `table` 模式；connector 抽象、logical plan skeleton、materialization barrier 和 SQLite `range/filter(simple)/keep/sort/limit` 前缀下推已启动，复杂 `filter(fn:)`、跨源 join 下推和更多 SQL 方言仍未实现。
 - package 覆盖以当前 `stdlib_conformance` 为准，新增函数需要同步样例和快照。
 
 ## 贡献时的收尾清单
