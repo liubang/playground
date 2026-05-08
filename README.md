@@ -12,98 +12,129 @@
   </a>
 </p>
 
-Personal multi-language playground for learning, prototyping, and validating small ideas. The repository is intentionally broad: it collects focused experiments, utility implementations, parser demos, build-system exercises, and supporting notes across several ecosystems.
+个人多语言实验项目，用于学习、原型验证和小型方案探索。涵盖 C++、Go、Python、PHP、TLA+、LaTeX 等多个技术方向。
 
-## Overview
-
-This is not a single product or framework. It is a working lab used to explore:
-
-- C++ language features, data structures, systems utilities, parsers, networking, storage, and benchmarking
-- Go tooling and cgo interoperability
-- Python experiments around protobuf, pybind, crawling, and Manim animations
-- PHP router basics
-- TLA+ specifications and LaTeX/TikZ notes
-- Bazel module and registry-related experiments
-
-Most code is organized as self-contained examples. Some parts are polished utilities, while others are lightweight testbeds kept for reference.
-
-## Repository Layout
+## 目录结构
 
 ```text
 .
-├── cpp/        C++ experiments, utilities, tests, and notes
-├── go/         Go examples, small tools, and cgo demos
-├── python/     Python samples, Bazel targets, and uv-managed projects
-├── php/        Minimal PHP router implementation
-├── proto/      Shared protobuf definitions
-├── tla/        TLA+ specifications and generated PDFs
-├── latex/      LaTeX/TikZ examples
-├── registry/   Bazel registry and patch experiments
-├── bazel/      Bazel helpers and local patches
-└── bash/       Small shell scripts
+├── cpp/        C++ 实验、工具库、测试与笔记
+├── go/         Go 示例、小工具与 cgo 示范
+├── python/     Python 示例、Bazel targets 与 uv 管理的项目
+├── php/        简易 PHP 路由实现
+├── proto/      共享 protobuf 定义
+├── tla/        TLA+ 规约与生成产物
+├── latex/      LaTeX/TikZ 示例
+├── registry/   Bazel registry 与 patch 实验
+├── bazel/      Bazel 辅助工具与本地 patch
+└── bash/       Shell 脚本
 ```
 
-### Notable Areas
+## 环境依赖
 
-- `cpp/meta`: template metaprogramming utilities with unit tests
-- `cpp/features`: targeted C++17 and C++20 feature experiments
-- `cpp/pl`: a larger collection of systems-oriented building blocks, including status handling, storage structures, parsers, HTTP/grpc demos, coroutine experiments, Unicode utilities, logging, threading, and more
-- `go/cgo`: cgo interop examples with tests
-- `go/tools`: small CLI-oriented utilities
-- `python/test_pb`: protobuf-related Python examples
-- `python/test_pybind`: Python bindings backed by C++
-- `python/test_crawler`: crawler experiments
-- `python/manim/manimations`: Manim animation demos
+### 基础要求
 
-## Build and Test
+| 依赖 | 最低版本 | 说明 |
+|------|---------|------|
+| Bazel | 8.6.0 | 通过 `.bazelversion` 锁定，建议使用 [Bazelisk](https://github.com/bazelbuild/bazelisk) 管理 |
+| C++ 标准 | C++20 | 编译标准由 `.bazelrc` 中 `--cxxopt=-std=c++20` 指定 |
+| Clang | ≥ 18 | macOS 推荐 Homebrew LLVM；Linux 可用系统 Clang 或 GCC |
+| GCC | ≥ 13 | Linux 默认编译器（需支持 C++20） |
+| Go | ≥ 1.21 | 由 Bazel rules_go 管理，本地开发需 Go 环境 |
+| Python | ≥ 3.11 | 非 Bazel 工作流使用 [uv](https://github.com/astral-sh/uv) 管理 |
 
-The repository is primarily driven by Bazel with Bzlmod.
+### macOS 环境安装
 
 ```bash
+# Bazelisk
+brew install bazelisk
+
+# LLVM 工具链（clang、clangd、lld 等）
+brew install llvm
+
+# Go
+brew install go
+
+# Python (uv)
+brew install uv
+```
+
+安装 LLVM 后，确认 `/opt/homebrew/opt/llvm/bin/clang++` 可用。项目 `.bazelrc` 中 `build:macos` 配置已引用此路径。
+
+### Linux 环境安装（Debian/Ubuntu）
+
+```bash
+# Bazelisk
+wget -qO /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64
+chmod +x /usr/local/bin/bazel
+
+# GCC（默认编译器）
+sudo apt install gcc-13 g++-13
+
+# 或使用 LLVM（可选，对应 .bazelrc 中 build:llvm 配置）
+# 安装后需将 clang/clang++/lld 放置于 /opt/app/llvm/bin/
+wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh && sudo ./llvm.sh 18
+
+# Go
+sudo apt install golang-go
+
+# Python (uv)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+## 构建与测试
+
+```bash
+# 全量构建与测试
 bazel build //...
 bazel test //...
-```
 
-Common scoped commands:
-
-```bash
+# 按语言构建
 bazel build //cpp/...
-bazel test //cpp/...
-
 bazel build //go/...
-bazel test //go/...
-
 bazel build //python/...
-bazel test //python/...
-```
 
-To generate `compile_commands.json` for C/C++ tooling:
-
-```bash
+# 生成 compile_commands.json（供 clangd 使用）
 bazel run @hedron_compile_commands//:refresh_all
 ```
 
-## Environment Notes
-
-- Bazel is the default entry point for most code in this repository
-- `python/` also includes a `uv`-managed environment for non-Bazel workflows
-- `go/` uses Go modules in addition to Bazel rules
-- CI currently validates the C++, Go, and Python areas through GitHub Actions
-
-Example Manim commands:
+macOS 下默认使用 Homebrew LLVM 工具链；Linux 下默认使用 GCC，如需切换至 LLVM：
 
 ```bash
-cd python/manim/manimations
-uv run manim -pqh hello.py HelloWorld
-uv run manim -pqh lsm.py LevelDBWriteAndCompaction
+bazel build //cpp/... --config=llvm
 ```
 
-## Conventions
+## clangd 配置
 
-- Code is grouped by topic rather than by release readiness
-- Examples may favor clarity and experimentation over API stability
-- Some directories contain design notes, generated artifacts, or partial implementations kept for study
+项目使用 [Hedron Compile Commands Extractor](https://github.com/hedronvision/bazel-compile-commands-extractor) 生成 `compile_commands.json`，配合项目根目录的 `.clangd` 文件为 clangd 提供正确的编译参数。
 
-## License
+### macOS 额外配置
 
-This repository is licensed under the Apache License 2.0. See [LICENSE](./LICENSE).
+macOS 上若使用 Mason（Neovim）或独立安装的 clangd，其内置的 `resource-dir` 和 libc++ 头文件可能与 Homebrew LLVM 版本不匹配，导致模板实例化错误（如 `no type named 'difference_type' in 'std::allocator_traits'`）。
+
+解决方法：创建 clangd 用户级配置文件 `~/Library/Preferences/clangd/config.yaml`：
+
+```yaml
+CompileFlags:
+  Compiler: /opt/homebrew/opt/llvm/bin/clang++
+  Add:
+    - -resource-dir=/opt/homebrew/opt/llvm/lib/clang/22
+```
+
+该配置使 clangd 通过 Homebrew 的 clang++ 驱动推导 libc++ 头文件路径，并使用与之匹配的 `resource-dir`，确保标准库头文件版本一致。
+
+> 注意：若 Neovim 的 clangd 启动参数中包含 `--query-driver`，该参数会与上述 `Compiler` 指令冲突，导致多版本头文件混用。macOS 上应移除 `--query-driver`。
+
+### Linux 配置
+
+Linux 上 clangd 通常与系统标准库版本一致，一般无需额外的用户级配置。若使用独立安装的 clangd 且版本与系统 libstdc++ 不匹配，可创建 `~/.config/clangd/config.yaml` 并参照上述 macOS 配置格式指定正确的 `Compiler` 和 `resource-dir` 路径。
+
+## 其他说明
+
+- `python/manim/manimations` 目录下的 Manim 动画通过 uv 运行：`cd python/manim/manimations && uv run manim -pqh hello.py HelloWorld`
+- CI 通过 GitHub Actions 验证 C++、Go、Python 三个方向的构建
+- 代码按主题组织，侧重实验性和可读性
+
+## 许可证
+
+Apache License 2.0，详见 [LICENSE](./LICENSE)。
