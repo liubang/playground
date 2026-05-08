@@ -1,8 +1,7 @@
-import "datasource"
+import "sqlite"
 
-data = datasource.from(
-    driver: "sqlite",
-    dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+data = sqlite.from(
+    path: "cpp/pl/flux/examples/cross_source/metrics.db",
     table: "cpu",
 )
     |> range(start: 2024-07-01T10:00:00Z, stop: 2024-07-01T10:04:00Z)
@@ -14,9 +13,8 @@ data = datasource.from(
     |> sort(columns: ["value"], desc: true)
     |> limit(n: 10)
 
-services = datasource.from(
-    driver: "sqlite",
-    dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+services = sqlite.from(
+    path: "cpp/pl/flux/examples/cross_source/metrics.db",
     table: "cpu",
 )
     |> rename(columns: {host: "service"})

@@ -182,15 +182,14 @@ TEST(RuntimeExecTest, ExecutesCsvFromRawStringImportedPackage) {
     EXPECT_EQ("\"95.5\"", env.lookup("data")->as_table().rows[0]->lookup("_value")->string());
 }
 
-TEST(RuntimeExecTest, ExecutesDatasourceFromSqliteTableThroughMemoryPipeline) {
+TEST(RuntimeExecTest, ExecutesSqliteFromSqliteTableThroughMemoryPipeline) {
     auto file = ParseFile(R"(
-        import "datasource"
+        import "sqlite"
         builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
         builtin limit : (<-tables: stream[A], n: int) => stream[A]
 
-        data = datasource.from(
-            driver: "sqlite",
-            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+        data = sqlite.from(
+    path: "cpp/pl/flux/examples/cross_source/metrics.db",
             table: "cpu",
         )
             |> filter(fn: (r) => r.host == "edge-1")
@@ -202,7 +201,7 @@ TEST(RuntimeExecTest, ExecutesDatasourceFromSqliteTableThroughMemoryPipeline) {
     auto result_or = StatementExecutor::ExecuteFile(*file, env);
 
     ASSERT_TRUE(result_or.ok()) << result_or.status();
-    ASSERT_TRUE(env.lookup("datasource").ok());
+    ASSERT_TRUE(env.lookup("sqlite").ok());
     ASSERT_TRUE(env.lookup("data").ok());
     ASSERT_EQ(Value::Type::Table, env.lookup("data")->type());
     ASSERT_EQ(1, env.lookup("data")->as_table().rows.size());
@@ -212,13 +211,12 @@ TEST(RuntimeExecTest, ExecutesDatasourceFromSqliteTableThroughMemoryPipeline) {
     EXPECT_EQ("\"west\"", env.lookup("data")->as_table().rows[0]->lookup("region")->string());
 }
 
-TEST(RuntimeExecTest, DatasourceFromAttachesSourceScanPlan) {
+TEST(RuntimeExecTest, SqliteFromAttachesSourceScanPlan) {
     auto file = ParseFile(R"(
-        import "datasource"
+        import "sqlite"
 
-        data = datasource.from(
-            driver: "sqlite",
-            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+        data = sqlite.from(
+    path: "cpp/pl/flux/examples/cross_source/metrics.db",
             table: "cpu",
         )
     )");
@@ -233,23 +231,22 @@ TEST(RuntimeExecTest, DatasourceFromAttachesSourceScanPlan) {
     ASSERT_EQ(Value::Type::Table, data_or->type());
     ASSERT_NE(nullptr, data_or->as_table().plan);
     EXPECT_EQ(plan::PlanNodeKind::SourceScan, data_or->as_table().plan->kind);
-    EXPECT_EQ("datasource", data_or->as_table().plan->source_scan.source);
+    EXPECT_EQ("sqlite", data_or->as_table().plan->source_scan.source);
     EXPECT_EQ("sqlite", data_or->as_table().plan->source_scan.driver);
     EXPECT_EQ("cpu", data_or->as_table().plan->source_scan.table);
 }
 
-TEST(RuntimeExecTest, DatasourcePipelineAppendsLogicalPlanNodesWhileExecutingEagerly) {
+TEST(RuntimeExecTest, SqlitePipelineAppendsLogicalPlanNodesWhileExecutingEagerly) {
     auto file = ParseFile(R"(
-        import "datasource"
+        import "sqlite"
         builtin range : (<-tables: stream[A], start: time, stop: time) => stream[A]
         builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
         builtin keep : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin sort : (<-tables: stream[A], columns: [string], desc: bool) => stream[A]
         builtin limit : (<-tables: stream[A], n: int) => stream[A]
 
-        data = datasource.from(
-            driver: "sqlite",
-            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+        data = sqlite.from(
+    path: "cpp/pl/flux/examples/cross_source/metrics.db",
             table: "cpu",
         )
             |> range(start: 2024-07-01T10:00:30Z, stop: 2024-07-01T10:04:00Z)
@@ -305,14 +302,13 @@ TEST(RuntimeExecTest, DatasourcePipelineAppendsLogicalPlanNodesWhileExecutingEag
 
 TEST(RuntimeExecTest, ExplainFormatsLogicalPlan) {
     auto file = ParseFile(R"(
-        import "datasource"
+        import "sqlite"
         builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
         builtin limit : (<-tables: stream[A], n: int) => stream[A]
         builtin explain : (<-tables: stream[A]) => string
 
-        data = datasource.from(
-            driver: "sqlite",
-            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+        data = sqlite.from(
+    path: "cpp/pl/flux/examples/cross_source/metrics.db",
             table: "cpu",
         )
             |> filter(fn: (r) => r.host == "edge-1")
@@ -329,24 +325,22 @@ TEST(RuntimeExecTest, ExplainFormatsLogicalPlan) {
     const auto plan_or = env.lookup("plan");
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
     ASSERT_EQ(Value::Type::String, plan_or->type());
-    EXPECT_EQ(
-        "Limit [sqlite pushdown]\n"
-        "  Filter [sqlite pushdown: host == \"edge-1\"]\n"
-        "    SourceScan [sqlite scan](source=\"datasource\", driver=\"sqlite\", table=\"cpu\")\n"
-        "SQLitePushdown(request: projection=[*], predicates=[host == \"edge-1\"], limit=1)\n",
-        plan_or->as_string());
+    EXPECT_EQ("Limit [sqlite pushdown]\n"
+              "  Filter [sqlite pushdown: host == \"edge-1\"]\n"
+              "    SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
+              "SQLitePushdown(request: projection=[*], predicates=[host == \"edge-1\"], limit=1)\n",
+              plan_or->as_string());
 }
 
-TEST(RuntimeExecTest, ContinuousDatasourceFiltersAccumulatePushdownPredicates) {
+TEST(RuntimeExecTest, ContinuousSqliteFiltersAccumulatePushdownPredicates) {
     auto file = ParseFile(R"(
-        import "datasource"
+        import "sqlite"
         builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
         builtin limit : (<-tables: stream[A], n: int) => stream[A]
         builtin explain : (<-tables: stream[A]) => string
 
-        data = datasource.from(
-            driver: "sqlite",
-            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+        data = sqlite.from(
+    path: "cpp/pl/flux/examples/cross_source/metrics.db",
             table: "cpu",
         )
             |> filter(fn: (r) => r.host == "edge-1")
@@ -375,23 +369,22 @@ TEST(RuntimeExecTest, ContinuousDatasourceFiltersAccumulatePushdownPredicates) {
         "Limit [sqlite pushdown]\n"
         "  Filter [sqlite pushdown: usage > 80]\n"
         "    Filter [sqlite pushdown: host == \"edge-1\"]\n"
-        "      SourceScan [sqlite scan](source=\"datasource\", driver=\"sqlite\", table=\"cpu\")\n"
+        "      SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
         "SQLitePushdown(request: projection=[*], predicates=[host == \"edge-1\", usage > "
         "80], limit=10)\n",
         plan_or->as_string());
 }
 
-TEST(RuntimeExecTest, DatasourceDropColumnsPushesDownAsProjection) {
+TEST(RuntimeExecTest, SqliteDropColumnsPushesDownAsProjection) {
     auto file = ParseFile(R"(
-        import "datasource"
+        import "sqlite"
         builtin drop : (<-tables: stream[A], columns: [string]) => stream[B]
         builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
         builtin limit : (<-tables: stream[A], n: int) => stream[A]
         builtin explain : (<-tables: stream[A]) => string
 
-        data = datasource.from(
-            driver: "sqlite",
-            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+        data = sqlite.from(
+    path: "cpp/pl/flux/examples/cross_source/metrics.db",
             table: "cpu",
         )
             |> drop(columns: ["region"])
@@ -424,21 +417,20 @@ TEST(RuntimeExecTest, DatasourceDropColumnsPushesDownAsProjection) {
         "Limit [sqlite pushdown]\n"
         "  Filter [sqlite pushdown: host == \"edge-1\"]\n"
         "    Project [sqlite pushdown]\n"
-        "      SourceScan [sqlite scan](source=\"datasource\", driver=\"sqlite\", table=\"cpu\")\n"
+        "      SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
         "SQLitePushdown(request: projection=[_time, host, usage], predicates=[host == "
         "\"edge-1\"], limit=10)\n",
         plan_or->as_string());
 }
 
-TEST(RuntimeExecTest, DatasourceFilterAfterDropPreservesMissingColumnError) {
+TEST(RuntimeExecTest, SqliteFilterAfterDropPreservesMissingColumnError) {
     auto file = ParseFile(R"(
-        import "datasource"
+        import "sqlite"
         builtin drop : (<-tables: stream[A], columns: [string]) => stream[B]
         builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
 
-        data = datasource.from(
-            driver: "sqlite",
-            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+        data = sqlite.from(
+    path: "cpp/pl/flux/examples/cross_source/metrics.db",
             table: "cpu",
         )
             |> drop(columns: ["region"])
@@ -455,9 +447,9 @@ TEST(RuntimeExecTest, DatasourceFilterAfterDropPreservesMissingColumnError) {
               result_or.status().message().find("missing object property: region"));
 }
 
-TEST(RuntimeExecTest, DatasourceRenamePushesDownProjectionAliasAndColumnMapping) {
+TEST(RuntimeExecTest, SqliteRenamePushesDownProjectionAliasAndColumnMapping) {
     auto file = ParseFile(R"(
-        import "datasource"
+        import "sqlite"
         builtin rename : (<-tables: stream[A], columns: A) => stream[B]
         builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
         builtin keep : (<-tables: stream[A], columns: [string]) => stream[A]
@@ -465,9 +457,8 @@ TEST(RuntimeExecTest, DatasourceRenamePushesDownProjectionAliasAndColumnMapping)
         builtin limit : (<-tables: stream[A], n: int) => stream[A]
         builtin explain : (<-tables: stream[A]) => string
 
-        data = datasource.from(
-            driver: "sqlite",
-            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+        data = sqlite.from(
+    path: "cpp/pl/flux/examples/cross_source/metrics.db",
             table: "cpu",
         )
             |> rename(columns: {usage: "value"})
@@ -500,22 +491,21 @@ TEST(RuntimeExecTest, DatasourceRenamePushesDownProjectionAliasAndColumnMapping)
               "    Project [sqlite pushdown]\n"
               "      Filter [sqlite pushdown: value > 80]\n"
               "        Rename [sqlite pushdown]\n"
-              "          SourceScan [sqlite scan](source=\"datasource\", driver=\"sqlite\", "
+              "          SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", "
               "table=\"cpu\")\n"
               "SQLitePushdown(request: projection=[host, usage AS value], predicates=[usage > "
               "80], order_by=[usage DESC], limit=1)\n",
               plan_or->as_string());
 }
 
-TEST(RuntimeExecTest, DatasourceFilterAfterRenamePreservesMissingOldColumnError) {
+TEST(RuntimeExecTest, SqliteFilterAfterRenamePreservesMissingOldColumnError) {
     auto file = ParseFile(R"(
-        import "datasource"
+        import "sqlite"
         builtin rename : (<-tables: stream[A], columns: A) => stream[B]
         builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
 
-        data = datasource.from(
-            driver: "sqlite",
-            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+        data = sqlite.from(
+    path: "cpp/pl/flux/examples/cross_source/metrics.db",
             table: "cpu",
         )
             |> rename(columns: {usage: "value"})
@@ -532,17 +522,16 @@ TEST(RuntimeExecTest, DatasourceFilterAfterRenamePreservesMissingOldColumnError)
               result_or.status().message().find("missing object property: usage"));
 }
 
-TEST(RuntimeExecTest, DatasourceGroupCountPushesDownAggregate) {
+TEST(RuntimeExecTest, SqliteGroupCountPushesDownAggregate) {
     auto file = ParseFile(R"(
-        import "datasource"
+        import "sqlite"
         builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
         builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin count : (<-tables: stream[A], ?column: string) => stream[A]
         builtin explain : (<-tables: stream[A]) => string
 
-        data = datasource.from(
-            driver: "sqlite",
-            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+        data = sqlite.from(
+    path: "cpp/pl/flux/examples/cross_source/metrics.db",
             table: "cpu",
         )
             |> filter(fn: (r) => r.region == "west")
@@ -574,22 +563,21 @@ TEST(RuntimeExecTest, DatasourceGroupCountPushesDownAggregate) {
         "Aggregate [sqlite pushdown]\n"
         "  Group [sqlite pushdown]\n"
         "    Filter [sqlite pushdown: region == \"west\"]\n"
-        "      SourceScan [sqlite scan](source=\"datasource\", driver=\"sqlite\", table=\"cpu\")\n"
+        "      SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
         "SQLitePushdown(request: projection=[*], predicates=[region == \"west\"], "
         "group_by=[host], aggregate=COUNT(usage))\n",
         plan_or->as_string());
 }
 
-TEST(RuntimeExecTest, DatasourceGroupMeanAfterRenamePushesDownAggregateMapping) {
+TEST(RuntimeExecTest, SqliteGroupMeanAfterRenamePushesDownAggregateMapping) {
     auto file = ParseFile(R"(
-        import "datasource"
+        import "sqlite"
         builtin rename : (<-tables: stream[A], columns: A) => stream[B]
         builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin mean : (<-tables: stream[A], ?column: string) => stream[A]
 
-        data = datasource.from(
-            driver: "sqlite",
-            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+        data = sqlite.from(
+    path: "cpp/pl/flux/examples/cross_source/metrics.db",
             table: "cpu",
         )
             |> rename(columns: {usage: "value"})
@@ -614,18 +602,17 @@ TEST(RuntimeExecTest, DatasourceGroupMeanAfterRenamePushesDownAggregateMapping) 
     EXPECT_EQ("64.25", data_or->as_table().rows[2]->lookup("value")->string());
 }
 
-TEST(RuntimeExecTest, DatasourceDistinctAfterRenamePushesDownColumnMapping) {
+TEST(RuntimeExecTest, SqliteDistinctAfterRenamePushesDownColumnMapping) {
     auto file = ParseFile(R"(
-        import "datasource"
+        import "sqlite"
         builtin rename : (<-tables: stream[A], columns: A) => stream[B]
         builtin distinct : (<-tables: stream[A], ?column: string) => stream[A]
         builtin keep : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin sort : (<-tables: stream[A], columns: [string], desc: bool) => stream[A]
         builtin explain : (<-tables: stream[A]) => string
 
-        data = datasource.from(
-            driver: "sqlite",
-            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+        data = sqlite.from(
+    path: "cpp/pl/flux/examples/cross_source/metrics.db",
             table: "cpu",
         )
             |> rename(columns: {host: "service", usage: "value"})
@@ -657,22 +644,21 @@ TEST(RuntimeExecTest, DatasourceDistinctAfterRenamePushesDownColumnMapping) {
               "  Project [sqlite pushdown]\n"
               "    Distinct [sqlite pushdown]\n"
               "      Rename [sqlite pushdown]\n"
-              "        SourceScan [sqlite scan](source=\"datasource\", driver=\"sqlite\", "
+              "        SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", "
               "table=\"cpu\")\n"
               "SQLitePushdown(request: projection=[host AS service], distinct=host, "
               "order_by=[host ASC])\n",
               plan_or->as_string());
 }
 
-TEST(RuntimeExecTest, ComplexDatasourceFilterFallsBackToMaterializedExecution) {
+TEST(RuntimeExecTest, ComplexSqliteFilterFallsBackToMaterializedExecution) {
     auto file = ParseFile(R"(
-        import "datasource"
+        import "sqlite"
         builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
         builtin explain : (<-tables: stream[A]) => string
 
-        data = datasource.from(
-            driver: "sqlite",
-            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+        data = sqlite.from(
+    path: "cpp/pl/flux/examples/cross_source/metrics.db",
             table: "cpu",
         )
             |> filter(fn: (r) => r.host == "edge-1" or r.usage > 80.0)
@@ -697,20 +683,19 @@ TEST(RuntimeExecTest, ComplexDatasourceFilterFallsBackToMaterializedExecution) {
     EXPECT_EQ(
         "Materialize [barrier: unsupported lazy builtin](reason=\"unsupported lazy builtin\", "
         "builtin=\"filter\")\n"
-        "  SourceScan [sqlite scan](source=\"datasource\", driver=\"sqlite\", table=\"cpu\")\n",
+        "  SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n",
         plan_or->as_string());
 }
 
 TEST(RuntimeExecTest, UnsupportedLazyBuiltinAddsMaterializationBarrier) {
     auto file = ParseFile(R"(
-        import "datasource"
+        import "sqlite"
         builtin map : (<-tables: stream[A], fn: (r: A) => B) => stream[B]
         builtin limit : (<-tables: stream[A], n: int) => stream[A]
         builtin explain : (<-tables: stream[A]) => string
 
-        data = datasource.from(
-            driver: "sqlite",
-            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+        data = sqlite.from(
+    path: "cpp/pl/flux/examples/cross_source/metrics.db",
             table: "cpu",
         )
             |> map(fn: (r) => ({host: r.host, score: r.usage * 100.0}))
@@ -731,29 +716,14 @@ TEST(RuntimeExecTest, UnsupportedLazyBuiltinAddsMaterializationBarrier) {
         "Limit [memory]\n"
         "  Materialize [barrier: unsupported lazy builtin](reason=\"unsupported lazy builtin\", "
         "builtin=\"map\")\n"
-        "    SourceScan [sqlite scan](source=\"datasource\", driver=\"sqlite\", table=\"cpu\")\n",
+        "    SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n",
         plan_or->as_string());
 }
 
-TEST(RuntimeExecTest, DatasourceFromRejectsUnsupportedDriver) {
+TEST(RuntimeExecTest, SqliteFromRejectsQueryArgument) {
     auto file = ParseFile(R"(
-        import "datasource"
-        data = datasource.from(driver: "mysql", dsn: ":memory:", table: "cpu")
-    )");
-    ASSERT_NE(file, nullptr);
-
-    Environment env;
-    auto result_or = StatementExecutor::ExecuteFile(*file, env);
-
-    ASSERT_FALSE(result_or.ok());
-    EXPECT_EQ(absl::StatusCode::kUnimplemented, result_or.status().code());
-    EXPECT_NE(std::string::npos, result_or.status().message().find("unsupported driver"));
-}
-
-TEST(RuntimeExecTest, DatasourceFromRejectsQueryArgument) {
-    auto file = ParseFile(R"(
-        import "datasource"
-        data = datasource.from(driver: "sqlite", dsn: ":memory:", query: "select 1")
+        import "sqlite"
+        data = sqlite.from(path: ":memory:", query: "select 1")
     )");
     ASSERT_NE(file, nullptr);
 

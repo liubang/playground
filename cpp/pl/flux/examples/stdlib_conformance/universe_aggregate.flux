@@ -1,4 +1,6 @@
-data = from(
+import "array"
+
+data = array.from(
     bucket: "aggregate",
     rows: [
         {_time: 2024-01-01T00:00:00Z, host: "edge-1", _value: 10.0},
