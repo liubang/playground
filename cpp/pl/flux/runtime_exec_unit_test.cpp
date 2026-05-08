@@ -333,7 +333,8 @@ TEST(RuntimeExecTest, ExplainFormatsLogicalPlan) {
         "Limit [sqlite pushdown]\n"
         "  Filter [sqlite pushdown: host == \"edge-1\"]\n"
         "    SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", query=\"select 'edge-1' "
-        "as host, 91.5 as _value\")\n",
+        "as host, 91.5 as _value\")\n"
+        "SQLitePushdown(request: projection=[*], predicates=[host == \"edge-1\"], limit=1)\n",
         plan_or->as_string());
 }
 
@@ -376,7 +377,9 @@ TEST(RuntimeExecTest, ContinuousSqlFiltersAccumulatePushdownPredicates) {
               "    Filter [sqlite pushdown: host == \"edge-1\"]\n"
               "      SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", query=\"select "
               "'edge-1' as host, 91.5 as _value union all select 'edge-1', 42.0 union all select "
-              "'edge-2', 99.0\")\n",
+              "'edge-2', 99.0\")\n"
+              "SQLitePushdown(request: projection=[*], predicates=[host == \"edge-1\", _value > "
+              "80], limit=10)\n",
               plan_or->as_string());
 }
 
@@ -421,7 +424,9 @@ TEST(RuntimeExecTest, SqlDropColumnsPushesDownAsProjection) {
               "    Project [sqlite pushdown]\n"
               "      SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", query=\"select "
               "'edge-1' as host, 91.5 as _value, 'debug' as note union all select 'edge-2', 42.0, "
-              "'ok'\")\n",
+              "'ok'\")\n"
+              "SQLitePushdown(request: projection=[host, _value], predicates=[host == "
+              "\"edge-1\"], limit=10)\n",
               plan_or->as_string());
 }
 
@@ -497,7 +502,9 @@ TEST(RuntimeExecTest, SqlRenamePushesDownProjectionAliasAndColumnMapping) {
               "        Rename [sqlite pushdown]\n"
               "          SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", "
               "query=\"select 'edge-1' as host, 91.5 as _value union all select 'edge-2', 42.0 "
-              "union all select 'edge-3', 99.0\")\n",
+              "union all select 'edge-3', 99.0\")\n"
+              "SQLitePushdown(request: projection=[host, _value AS usage], predicates=[_value > "
+              "80], order_by=[_value DESC], limit=1)\n",
               plan_or->as_string());
 }
 
@@ -570,7 +577,9 @@ TEST(RuntimeExecTest, SqlGroupCountPushesDownAggregate) {
               "      SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", query=\"select "
               "'east' as region, 'edge-1' as host, 91.5 as usage union all select 'east', "
               "'edge-1', 42.0 union all select 'east', 'edge-2', 99.0 union all select 'west', "
-              "'edge-3', 10.0\")\n",
+              "'edge-3', 10.0\")\n"
+              "SQLitePushdown(request: projection=[*], predicates=[region == \"east\"], "
+              "group_by=[host], aggregate=COUNT(usage))\n",
               plan_or->as_string());
 }
 
@@ -650,7 +659,9 @@ TEST(RuntimeExecTest, SqlDistinctAfterRenamePushesDownColumnMapping) {
               "      Rename [sqlite pushdown]\n"
               "        SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", query=\"select "
               "'edge-2' as host, 20.0 as _value union all select 'edge-1', 91.5 union all "
-              "select 'edge-1', 42.0\")\n",
+              "select 'edge-1', 42.0\")\n"
+              "SQLitePushdown(request: projection=[host AS service], distinct=host, "
+              "order_by=[host ASC])\n",
               plan_or->as_string());
 }
 
