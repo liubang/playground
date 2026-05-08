@@ -554,7 +554,10 @@ SQL，并用 bind 参数执行；runtime pipeline 已能把 SQLite `SourceScan` 
 `group(columns:)` 只有和上述简单 aggregate 组合时才会触发 SQLite `GROUP BY` 下推；
 单独 `group()` 仍保持 eager 内存结果。
 `or`、函数调用、正则、`in`、跨列比较、块体函数和 `onEmpty: "keep"` 都不会下推。
-`explain()` 会把已下推节点标为 `[sqlite pushdown]`，把截断点标为 `[barrier: ...]`。
+`explain()` 会把已下推节点标为 `[sqlite pushdown]`，把截断点标为 `[barrier: ...]`；
+当 plan 可完整编译为 SQLite `ScanRequest` 时，还会追加 `SQLitePushdown(request: ...)`
+摘要，列出 projection/alias、time range、predicate 累积、distinct、group_by、
+aggregate、order_by、limit/offset 等真实下推字段。
 
 目标：SQLite 能下推简单 range/filter/projection/limit/sort。
 
