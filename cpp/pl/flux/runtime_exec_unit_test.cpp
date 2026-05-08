@@ -182,7 +182,7 @@ TEST(RuntimeExecTest, ExecutesCsvFromRawStringImportedPackage) {
     EXPECT_EQ("\"95.5\"", env.lookup("data")->as_table().rows[0]->lookup("_value")->string());
 }
 
-TEST(RuntimeExecTest, ExecutesSqlFromSqliteQueryThroughMemoryPipeline) {
+TEST(RuntimeExecTest, ExecutesSqlFromSqliteTableThroughMemoryPipeline) {
     auto file = ParseFile(R"(
         import "sql"
         builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
@@ -190,8 +190,8 @@ TEST(RuntimeExecTest, ExecutesSqlFromSqliteQueryThroughMemoryPipeline) {
 
         data = sql.from(
             driver: "sqlite",
-            dsn: ":memory:",
-            query: "select '2024-01-01T00:00:00Z' as _time, 'edge-1' as host, 91.5 as _value, null as note union all select '2024-01-01T00:01:00Z', 'edge-2', 42.0, 'ok'",
+            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
         )
             |> filter(fn: (r) => r.host == "edge-1")
             |> limit(n: 1)
@@ -208,8 +208,8 @@ TEST(RuntimeExecTest, ExecutesSqlFromSqliteQueryThroughMemoryPipeline) {
     ASSERT_EQ(1, env.lookup("data")->as_table().rows.size());
     ASSERT_NE(nullptr, env.lookup("data")->as_table().rows[0]);
     EXPECT_EQ("\"edge-1\"", env.lookup("data")->as_table().rows[0]->lookup("host")->string());
-    EXPECT_EQ("91.5", env.lookup("data")->as_table().rows[0]->lookup("_value")->string());
-    EXPECT_EQ("null", env.lookup("data")->as_table().rows[0]->lookup("note")->string());
+    EXPECT_EQ("71.5", env.lookup("data")->as_table().rows[0]->lookup("usage")->string());
+    EXPECT_EQ("\"west\"", env.lookup("data")->as_table().rows[0]->lookup("region")->string());
 }
 
 TEST(RuntimeExecTest, SqlFromAttachesSourceScanPlan) {
@@ -218,8 +218,8 @@ TEST(RuntimeExecTest, SqlFromAttachesSourceScanPlan) {
 
         data = sql.from(
             driver: "sqlite",
-            dsn: ":memory:",
-            query: "select 1 as value",
+            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
         )
     )");
     ASSERT_NE(file, nullptr);
@@ -235,7 +235,7 @@ TEST(RuntimeExecTest, SqlFromAttachesSourceScanPlan) {
     EXPECT_EQ(plan::PlanNodeKind::SourceScan, data_or->as_table().plan->kind);
     EXPECT_EQ("sql", data_or->as_table().plan->source_scan.source);
     EXPECT_EQ("sqlite", data_or->as_table().plan->source_scan.driver);
-    EXPECT_EQ("select 1 as value", data_or->as_table().plan->source_scan.query);
+    EXPECT_EQ("cpu", data_or->as_table().plan->source_scan.table);
 }
 
 TEST(RuntimeExecTest, SqlPipelineAppendsLogicalPlanNodesWhileExecutingEagerly) {
@@ -249,13 +249,13 @@ TEST(RuntimeExecTest, SqlPipelineAppendsLogicalPlanNodesWhileExecutingEagerly) {
 
         data = sql.from(
             driver: "sqlite",
-            dsn: ":memory:",
-            query: "select '2024-01-01T00:00:00Z' as _time, 'edge-2' as host, 20.0 as _value union all select '2024-01-01T00:01:00Z', 'edge-1', 91.5 union all select '2024-01-01T00:02:00Z', 'edge-1', 42.0",
+            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
         )
-            |> range(start: 2024-01-01T00:00:30Z, stop: 2024-01-01T00:03:00Z)
-            |> filter(fn: (r) => r.host == "edge-1" and r._value > 80.0)
-            |> keep(columns: ["_time", "host", "_value"])
-            |> sort(columns: ["_value"], desc: true)
+            |> range(start: 2024-07-01T10:00:30Z, stop: 2024-07-01T10:04:00Z)
+            |> filter(fn: (r) => r.host == "edge-1" and r.usage > 80.0)
+            |> keep(columns: ["_time", "host", "usage"])
+            |> sort(columns: ["usage"], desc: true)
             |> limit(n: 1)
     )");
     ASSERT_NE(file, nullptr);
@@ -268,7 +268,7 @@ TEST(RuntimeExecTest, SqlPipelineAppendsLogicalPlanNodesWhileExecutingEagerly) {
     ASSERT_TRUE(data_or.ok()) << data_or.status();
     ASSERT_EQ(Value::Type::Table, data_or->type());
     ASSERT_EQ(1, data_or->as_table().rows.size());
-    EXPECT_EQ("91.5", data_or->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("93.25", data_or->as_table().rows[0]->lookup("usage")->string());
 
     auto node = data_or->as_table().plan;
     ASSERT_NE(nullptr, node);
@@ -289,7 +289,7 @@ TEST(RuntimeExecTest, SqlPipelineAppendsLogicalPlanNodesWhileExecutingEagerly) {
     EXPECT_EQ("host", node->filter.predicates[0].column);
     EXPECT_EQ(plan::PredicateOp::Eq, node->filter.predicates[0].op);
     EXPECT_EQ("edge-1", node->filter.predicates[0].literal.string_value);
-    EXPECT_EQ("_value", node->filter.predicates[1].column);
+    EXPECT_EQ("usage", node->filter.predicates[1].column);
     EXPECT_EQ(plan::PredicateOp::Gt, node->filter.predicates[1].op);
     EXPECT_EQ(80.0, node->filter.predicates[1].literal.float_value);
     ASSERT_EQ(1, node->inputs.size());
@@ -312,8 +312,8 @@ TEST(RuntimeExecTest, ExplainFormatsLogicalPlan) {
 
         data = sql.from(
             driver: "sqlite",
-            dsn: ":memory:",
-            query: "select 'edge-1' as host, 91.5 as _value",
+            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
         )
             |> filter(fn: (r) => r.host == "edge-1")
             |> limit(n: 1)
@@ -329,13 +329,11 @@ TEST(RuntimeExecTest, ExplainFormatsLogicalPlan) {
     const auto plan_or = env.lookup("plan");
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
     ASSERT_EQ(Value::Type::String, plan_or->type());
-    EXPECT_EQ(
-        "Limit [sqlite pushdown]\n"
-        "  Filter [sqlite pushdown: host == \"edge-1\"]\n"
-        "    SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", query=\"select 'edge-1' "
-        "as host, 91.5 as _value\")\n"
-        "SQLitePushdown(request: projection=[*], predicates=[host == \"edge-1\"], limit=1)\n",
-        plan_or->as_string());
+    EXPECT_EQ("Limit [sqlite pushdown]\n"
+              "  Filter [sqlite pushdown: host == \"edge-1\"]\n"
+              "    SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", table=\"cpu\")\n"
+              "SQLitePushdown(request: projection=[*], predicates=[host == \"edge-1\"], limit=1)\n",
+              plan_or->as_string());
 }
 
 TEST(RuntimeExecTest, ContinuousSqlFiltersAccumulatePushdownPredicates) {
@@ -347,11 +345,11 @@ TEST(RuntimeExecTest, ContinuousSqlFiltersAccumulatePushdownPredicates) {
 
         data = sql.from(
             driver: "sqlite",
-            dsn: ":memory:",
-            query: "select 'edge-1' as host, 91.5 as _value union all select 'edge-1', 42.0 union all select 'edge-2', 99.0",
+            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
         )
             |> filter(fn: (r) => r.host == "edge-1")
-            |> filter(fn: (r) => r._value > 80.0)
+            |> filter(fn: (r) => r.usage > 80.0)
             |> limit(n: 10)
 
         plan = data |> explain()
@@ -367,18 +365,16 @@ TEST(RuntimeExecTest, ContinuousSqlFiltersAccumulatePushdownPredicates) {
     ASSERT_EQ(Value::Type::Table, data_or->type());
     ASSERT_EQ(1, data_or->as_table().rows.size());
     EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[0]->lookup("host")->string());
-    EXPECT_EQ("91.5", data_or->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ("93.25", data_or->as_table().rows[0]->lookup("usage")->string());
 
     const auto plan_or = env.lookup("plan");
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
     ASSERT_EQ(Value::Type::String, plan_or->type());
     EXPECT_EQ("Limit [sqlite pushdown]\n"
-              "  Filter [sqlite pushdown: _value > 80]\n"
+              "  Filter [sqlite pushdown: usage > 80]\n"
               "    Filter [sqlite pushdown: host == \"edge-1\"]\n"
-              "      SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", query=\"select "
-              "'edge-1' as host, 91.5 as _value union all select 'edge-1', 42.0 union all select "
-              "'edge-2', 99.0\")\n"
-              "SQLitePushdown(request: projection=[*], predicates=[host == \"edge-1\", _value > "
+              "      SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", table=\"cpu\")\n"
+              "SQLitePushdown(request: projection=[*], predicates=[host == \"edge-1\", usage > "
               "80], limit=10)\n",
               plan_or->as_string());
 }
@@ -393,10 +389,10 @@ TEST(RuntimeExecTest, SqlDropColumnsPushesDownAsProjection) {
 
         data = sql.from(
             driver: "sqlite",
-            dsn: ":memory:",
-            query: "select 'edge-1' as host, 91.5 as _value, 'debug' as note union all select 'edge-2', 42.0, 'ok'",
+            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
         )
-            |> drop(columns: ["note"])
+            |> drop(columns: ["region"])
             |> filter(fn: (r) => r.host == "edge-1")
             |> limit(n: 10)
 
@@ -411,10 +407,13 @@ TEST(RuntimeExecTest, SqlDropColumnsPushesDownAsProjection) {
     const auto data_or = env.lookup("data");
     ASSERT_TRUE(data_or.ok()) << data_or.status();
     ASSERT_EQ(Value::Type::Table, data_or->type());
-    ASSERT_EQ(1, data_or->as_table().rows.size());
+    ASSERT_EQ(2, data_or->as_table().rows.size());
     EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[0]->lookup("host")->string());
-    EXPECT_EQ("91.5", data_or->as_table().rows[0]->lookup("_value")->string());
-    EXPECT_EQ(nullptr, data_or->as_table().rows[0]->lookup("note"));
+    EXPECT_EQ("71.5", data_or->as_table().rows[0]->lookup("usage")->string());
+    EXPECT_EQ(nullptr, data_or->as_table().rows[0]->lookup("region"));
+    EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[1]->lookup("host")->string());
+    EXPECT_EQ("93.25", data_or->as_table().rows[1]->lookup("usage")->string());
+    EXPECT_EQ(nullptr, data_or->as_table().rows[1]->lookup("region"));
 
     const auto plan_or = env.lookup("plan");
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
@@ -422,10 +421,8 @@ TEST(RuntimeExecTest, SqlDropColumnsPushesDownAsProjection) {
     EXPECT_EQ("Limit [sqlite pushdown]\n"
               "  Filter [sqlite pushdown: host == \"edge-1\"]\n"
               "    Project [sqlite pushdown]\n"
-              "      SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", query=\"select "
-              "'edge-1' as host, 91.5 as _value, 'debug' as note union all select 'edge-2', 42.0, "
-              "'ok'\")\n"
-              "SQLitePushdown(request: projection=[host, _value], predicates=[host == "
+              "      SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", table=\"cpu\")\n"
+              "SQLitePushdown(request: projection=[_time, host, usage], predicates=[host == "
               "\"edge-1\"], limit=10)\n",
               plan_or->as_string());
 }
@@ -438,11 +435,11 @@ TEST(RuntimeExecTest, SqlFilterAfterDropPreservesMissingColumnError) {
 
         data = sql.from(
             driver: "sqlite",
-            dsn: ":memory:",
-            query: "select 'edge-1' as host, 'secret' as note",
+            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
         )
-            |> drop(columns: ["note"])
-            |> filter(fn: (r) => r.note == "secret")
+            |> drop(columns: ["region"])
+            |> filter(fn: (r) => r.region == "west")
     )");
     ASSERT_NE(file, nullptr);
 
@@ -452,7 +449,7 @@ TEST(RuntimeExecTest, SqlFilterAfterDropPreservesMissingColumnError) {
     ASSERT_FALSE(result_or.ok());
     EXPECT_EQ(absl::StatusCode::kNotFound, result_or.status().code());
     EXPECT_NE(std::string::npos,
-              result_or.status().message().find("missing object property: note"));
+              result_or.status().message().find("missing object property: region"));
 }
 
 TEST(RuntimeExecTest, SqlRenamePushesDownProjectionAliasAndColumnMapping) {
@@ -467,13 +464,13 @@ TEST(RuntimeExecTest, SqlRenamePushesDownProjectionAliasAndColumnMapping) {
 
         data = sql.from(
             driver: "sqlite",
-            dsn: ":memory:",
-            query: "select 'edge-1' as host, 91.5 as _value union all select 'edge-2', 42.0 union all select 'edge-3', 99.0",
+            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
         )
-            |> rename(columns: {_value: "usage"})
-            |> filter(fn: (r) => r.usage > 80.0)
-            |> keep(columns: ["host", "usage"])
-            |> sort(columns: ["usage"], desc: true)
+            |> rename(columns: {usage: "value"})
+            |> filter(fn: (r) => r.value > 80.0)
+            |> keep(columns: ["host", "value"])
+            |> sort(columns: ["value"], desc: true)
             |> limit(n: 1)
 
         plan = data |> explain()
@@ -488,9 +485,9 @@ TEST(RuntimeExecTest, SqlRenamePushesDownProjectionAliasAndColumnMapping) {
     ASSERT_TRUE(data_or.ok()) << data_or.status();
     ASSERT_EQ(Value::Type::Table, data_or->type());
     ASSERT_EQ(1, data_or->as_table().rows.size());
-    EXPECT_EQ("\"edge-3\"", data_or->as_table().rows[0]->lookup("host")->string());
-    EXPECT_EQ("99", data_or->as_table().rows[0]->lookup("usage")->string());
-    EXPECT_EQ(nullptr, data_or->as_table().rows[0]->lookup("_value"));
+    EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("93.25", data_or->as_table().rows[0]->lookup("value")->string());
+    EXPECT_EQ(nullptr, data_or->as_table().rows[0]->lookup("usage"));
 
     const auto plan_or = env.lookup("plan");
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
@@ -498,13 +495,12 @@ TEST(RuntimeExecTest, SqlRenamePushesDownProjectionAliasAndColumnMapping) {
     EXPECT_EQ("Limit [sqlite pushdown]\n"
               "  Sort [sqlite pushdown]\n"
               "    Project [sqlite pushdown]\n"
-              "      Filter [sqlite pushdown: usage > 80]\n"
+              "      Filter [sqlite pushdown: value > 80]\n"
               "        Rename [sqlite pushdown]\n"
               "          SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", "
-              "query=\"select 'edge-1' as host, 91.5 as _value union all select 'edge-2', 42.0 "
-              "union all select 'edge-3', 99.0\")\n"
-              "SQLitePushdown(request: projection=[host, _value AS usage], predicates=[_value > "
-              "80], order_by=[_value DESC], limit=1)\n",
+              "table=\"cpu\")\n"
+              "SQLitePushdown(request: projection=[host, usage AS value], predicates=[usage > "
+              "80], order_by=[usage DESC], limit=1)\n",
               plan_or->as_string());
 }
 
@@ -516,11 +512,11 @@ TEST(RuntimeExecTest, SqlFilterAfterRenamePreservesMissingOldColumnError) {
 
         data = sql.from(
             driver: "sqlite",
-            dsn: ":memory:",
-            query: "select 'edge-1' as host, 91.5 as _value",
+            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
         )
-            |> rename(columns: {_value: "usage"})
-            |> filter(fn: (r) => r._value > 80.0)
+            |> rename(columns: {usage: "value"})
+            |> filter(fn: (r) => r.usage > 80.0)
     )");
     ASSERT_NE(file, nullptr);
 
@@ -530,7 +526,7 @@ TEST(RuntimeExecTest, SqlFilterAfterRenamePreservesMissingOldColumnError) {
     ASSERT_FALSE(result_or.ok());
     EXPECT_EQ(absl::StatusCode::kNotFound, result_or.status().code());
     EXPECT_NE(std::string::npos,
-              result_or.status().message().find("missing object property: _value"));
+              result_or.status().message().find("missing object property: usage"));
 }
 
 TEST(RuntimeExecTest, SqlGroupCountPushesDownAggregate) {
@@ -543,10 +539,10 @@ TEST(RuntimeExecTest, SqlGroupCountPushesDownAggregate) {
 
         data = sql.from(
             driver: "sqlite",
-            dsn: ":memory:",
-            query: "select 'east' as region, 'edge-1' as host, 91.5 as usage union all select 'east', 'edge-1', 42.0 union all select 'east', 'edge-2', 99.0 union all select 'west', 'edge-3', 10.0",
+            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
         )
-            |> filter(fn: (r) => r.region == "east")
+            |> filter(fn: (r) => r.region == "west")
             |> group(columns: ["host"])
             |> count(column: "usage")
 
@@ -573,12 +569,9 @@ TEST(RuntimeExecTest, SqlGroupCountPushesDownAggregate) {
     ASSERT_EQ(Value::Type::String, plan_or->type());
     EXPECT_EQ("Aggregate [sqlite pushdown]\n"
               "  Group [sqlite pushdown]\n"
-              "    Filter [sqlite pushdown: region == \"east\"]\n"
-              "      SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", query=\"select "
-              "'east' as region, 'edge-1' as host, 91.5 as usage union all select 'east', "
-              "'edge-1', 42.0 union all select 'east', 'edge-2', 99.0 union all select 'west', "
-              "'edge-3', 10.0\")\n"
-              "SQLitePushdown(request: projection=[*], predicates=[region == \"east\"], "
+              "    Filter [sqlite pushdown: region == \"west\"]\n"
+              "      SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", table=\"cpu\")\n"
+              "SQLitePushdown(request: projection=[*], predicates=[region == \"west\"], "
               "group_by=[host], aggregate=COUNT(usage))\n",
               plan_or->as_string());
 }
@@ -592,12 +585,12 @@ TEST(RuntimeExecTest, SqlGroupMeanAfterRenamePushesDownAggregateMapping) {
 
         data = sql.from(
             driver: "sqlite",
-            dsn: ":memory:",
-            query: "select 'edge-1' as host, 90.0 as _value union all select 'edge-1', 70.0 union all select 'edge-2', 30.0",
+            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
         )
-            |> rename(columns: {_value: "usage"})
+            |> rename(columns: {usage: "value"})
             |> group(columns: ["host"])
-            |> mean(column: "usage")
+            |> mean(column: "value")
     )");
     ASSERT_NE(file, nullptr);
 
@@ -608,11 +601,13 @@ TEST(RuntimeExecTest, SqlGroupMeanAfterRenamePushesDownAggregateMapping) {
     const auto data_or = env.lookup("data");
     ASSERT_TRUE(data_or.ok()) << data_or.status();
     ASSERT_EQ(Value::Type::Table, data_or->type());
-    ASSERT_EQ(2, data_or->as_table().rows.size());
+    ASSERT_EQ(3, data_or->as_table().rows.size());
     EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[0]->lookup("host")->string());
-    EXPECT_EQ("80", data_or->as_table().rows[0]->lookup("usage")->string());
+    EXPECT_EQ("82.375", data_or->as_table().rows[0]->lookup("value")->string());
     EXPECT_EQ("\"edge-2\"", data_or->as_table().rows[1]->lookup("host")->string());
-    EXPECT_EQ("30", data_or->as_table().rows[1]->lookup("usage")->string());
+    EXPECT_EQ("88", data_or->as_table().rows[1]->lookup("value")->string());
+    EXPECT_EQ("\"edge-3\"", data_or->as_table().rows[2]->lookup("host")->string());
+    EXPECT_EQ("64.25", data_or->as_table().rows[2]->lookup("value")->string());
 }
 
 TEST(RuntimeExecTest, SqlDistinctAfterRenamePushesDownColumnMapping) {
@@ -626,10 +621,10 @@ TEST(RuntimeExecTest, SqlDistinctAfterRenamePushesDownColumnMapping) {
 
         data = sql.from(
             driver: "sqlite",
-            dsn: ":memory:",
-            query: "select 'edge-2' as host, 20.0 as _value union all select 'edge-1', 91.5 union all select 'edge-1', 42.0",
+            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
         )
-            |> rename(columns: {host: "service", _value: "usage"})
+            |> rename(columns: {host: "service", usage: "value"})
             |> distinct(column: "service")
             |> keep(columns: ["service"])
             |> sort(columns: ["service"], desc: false)
@@ -645,10 +640,11 @@ TEST(RuntimeExecTest, SqlDistinctAfterRenamePushesDownColumnMapping) {
     const auto data_or = env.lookup("data");
     ASSERT_TRUE(data_or.ok()) << data_or.status();
     ASSERT_EQ(Value::Type::Table, data_or->type());
-    ASSERT_EQ(2, data_or->as_table().rows.size());
+    ASSERT_EQ(3, data_or->as_table().rows.size());
     EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[0]->lookup("service")->string());
     EXPECT_EQ(nullptr, data_or->as_table().rows[0]->lookup("host"));
     EXPECT_EQ("\"edge-2\"", data_or->as_table().rows[1]->lookup("service")->string());
+    EXPECT_EQ("\"edge-3\"", data_or->as_table().rows[2]->lookup("service")->string());
 
     const auto plan_or = env.lookup("plan");
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
@@ -657,9 +653,7 @@ TEST(RuntimeExecTest, SqlDistinctAfterRenamePushesDownColumnMapping) {
               "  Project [sqlite pushdown]\n"
               "    Distinct [sqlite pushdown]\n"
               "      Rename [sqlite pushdown]\n"
-              "        SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", query=\"select "
-              "'edge-2' as host, 20.0 as _value union all select 'edge-1', 91.5 union all "
-              "select 'edge-1', 42.0\")\n"
+              "        SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", table=\"cpu\")\n"
               "SQLitePushdown(request: projection=[host AS service], distinct=host, "
               "order_by=[host ASC])\n",
               plan_or->as_string());
@@ -673,10 +667,10 @@ TEST(RuntimeExecTest, ComplexSqlFilterFallsBackToMaterializedExecution) {
 
         data = sql.from(
             driver: "sqlite",
-            dsn: ":memory:",
-            query: "select 'edge-1' as host, 91.5 as _value union all select 'edge-2', 42.0",
+            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
         )
-            |> filter(fn: (r) => r.host == "edge-1" or r._value > 80.0)
+            |> filter(fn: (r) => r.host == "edge-1" or r.usage > 80.0)
 
         plan = data |> explain()
     )");
@@ -689,7 +683,7 @@ TEST(RuntimeExecTest, ComplexSqlFilterFallsBackToMaterializedExecution) {
     const auto data_or = env.lookup("data");
     ASSERT_TRUE(data_or.ok()) << data_or.status();
     ASSERT_EQ(Value::Type::Table, data_or->type());
-    ASSERT_EQ(1, data_or->as_table().rows.size());
+    ASSERT_EQ(3, data_or->as_table().rows.size());
     EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[0]->lookup("host")->string());
 
     const auto plan_or = env.lookup("plan");
@@ -698,8 +692,7 @@ TEST(RuntimeExecTest, ComplexSqlFilterFallsBackToMaterializedExecution) {
     EXPECT_EQ(
         "Materialize [barrier: unsupported lazy builtin](reason=\"unsupported lazy builtin\", "
         "builtin=\"filter\")\n"
-        "  SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", query=\"select 'edge-1' as "
-        "host, 91.5 as _value union all select 'edge-2', 42.0\")\n",
+        "  SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", table=\"cpu\")\n",
         plan_or->as_string());
 }
 
@@ -712,10 +705,10 @@ TEST(RuntimeExecTest, UnsupportedLazyBuiltinAddsMaterializationBarrier) {
 
         data = sql.from(
             driver: "sqlite",
-            dsn: ":memory:",
-            query: "select 'edge-1' as host, 91.5 as _value",
+            dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
         )
-            |> map(fn: (r) => ({host: r.host, score: r._value * 100.0}))
+            |> map(fn: (r) => ({host: r.host, score: r.usage * 100.0}))
             |> limit(n: 1)
 
         plan = data |> explain()
@@ -733,15 +726,14 @@ TEST(RuntimeExecTest, UnsupportedLazyBuiltinAddsMaterializationBarrier) {
         "Limit [memory]\n"
         "  Materialize [barrier: unsupported lazy builtin](reason=\"unsupported lazy builtin\", "
         "builtin=\"map\")\n"
-        "    SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", query=\"select 'edge-1' "
-        "as host, 91.5 as _value\")\n",
+        "    SourceScan [sqlite scan](source=\"sql\", driver=\"sqlite\", table=\"cpu\")\n",
         plan_or->as_string());
 }
 
 TEST(RuntimeExecTest, SqlFromRejectsUnsupportedDriver) {
     auto file = ParseFile(R"(
         import "sql"
-        data = sql.from(driver: "mysql", dsn: ":memory:", query: "select 1")
+        data = sql.from(driver: "mysql", dsn: ":memory:", table: "cpu")
     )");
     ASSERT_NE(file, nullptr);
 
@@ -751,6 +743,21 @@ TEST(RuntimeExecTest, SqlFromRejectsUnsupportedDriver) {
     ASSERT_FALSE(result_or.ok());
     EXPECT_EQ(absl::StatusCode::kUnimplemented, result_or.status().code());
     EXPECT_NE(std::string::npos, result_or.status().message().find("unsupported driver"));
+}
+
+TEST(RuntimeExecTest, SqlFromRejectsRawQuery) {
+    auto file = ParseFile(R"(
+        import "sql"
+        data = sql.from(driver: "sqlite", dsn: ":memory:", query: "select 1")
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_FALSE(result_or.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, result_or.status().code());
+    EXPECT_NE(std::string::npos, result_or.status().message().find("no longer accepts raw SQL"));
 }
 
 TEST(RuntimeExecTest, DeclaresUnknownBuiltinAsPlaceholderFunction) {

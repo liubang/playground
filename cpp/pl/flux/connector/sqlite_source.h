@@ -26,7 +26,7 @@ namespace pl::flux::connector {
 
 class SQLiteSource final : public TableSource {
 public:
-    SQLiteSource(std::string dsn, std::string query);
+    SQLiteSource(std::string dsn, std::string table);
 
     absl::StatusOr<TableSchema> Schema() const override;
     SourceCapabilities Capabilities() const override;
@@ -34,6 +34,7 @@ public:
 
 private:
     std::string dsn_;
+    std::string table_;
     std::string query_;
 };
 
