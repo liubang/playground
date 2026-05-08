@@ -50,8 +50,8 @@ public:
                     google::protobuf::Closure* done)
         : counter_(counter), request_(request), response_(response), done_(done) {}
 
-    const ::pl::braft::proto::FetchAddRequest* request() const { return request_; }
-    ::pl::braft::proto::CounterResponse* response() const { return response_; }
+    [[nodiscard]] const ::pl::braft::proto::FetchAddRequest* request() const { return request_; }
+    [[nodiscard]] ::pl::braft::proto::CounterResponse* response() const { return response_; }
     void Run() override;
 
 private:
@@ -67,7 +67,7 @@ private:
 // to ensure consistency across replicas.
 class Counter : public ::braft::StateMachine {
 public:
-    Counter() : node_(nullptr), value_(0), leader_term_(-1) {}
+    Counter() = default;
 
     ~Counter() override { delete node_; }
 
@@ -135,13 +135,13 @@ public:
     bool is_leader() const { return leader_term_.load(butil::memory_order_acquire) > 0; }
 
     void shutdown() {
-        if (node_) {
+        if (node_ != nullptr) {
             node_->shutdown(nullptr);
         }
     }
 
     void join() {
-        if (node_) {
+        if (node_ != nullptr) {
             node_->join();
         }
     }
@@ -151,7 +151,7 @@ private:
 
     void redirect(::pl::braft::proto::CounterResponse* response) {
         response->set_success(false);
-        if (node_) {
+        if (node_ != nullptr) {
             ::braft::PeerId leader = node_->leader_id();
             if (!leader.is_empty()) {
                 response->set_redirect(leader.to_string());
@@ -165,7 +165,7 @@ private:
             int64_t delta_value = 0;
             ::pl::braft::proto::CounterResponse* response = nullptr;
             ::braft::AsyncClosureGuard closure_guard(iter.done());
-            if (iter.done()) {
+            if (iter.done() != nullptr) {
                 // Applied by this node — get value directly from the closure.
                 auto* c = dynamic_cast<FetchAddClosure*>(iter.done());
                 response = c->response();
@@ -178,7 +178,7 @@ private:
                 delta_value = request.value();
             }
             const int64_t prev = value_.fetch_add(delta_value, butil::memory_order_relaxed);
-            if (response) {
+            if (response != nullptr) {
                 response->set_success(true);
                 response->set_value(prev);
             }
@@ -189,9 +189,9 @@ private:
     }
 
     struct SnapshotArg {
-        int64_t value;
-        ::braft::SnapshotWriter* writer;
-        ::braft::Closure* done;
+        int64_t value{0};
+        ::braft::SnapshotWriter* writer{nullptr};
+        ::braft::Closure* done{nullptr};
     };
 
     static void* save_snapshot(void* arg) {
@@ -267,9 +267,9 @@ private:
     }
 
 private:
-    ::braft::Node* volatile node_;
-    butil::atomic<int64_t> value_;
-    butil::atomic<int64_t> leader_term_;
+    ::braft::Node* volatile node_{nullptr};
+    butil::atomic<int64_t> value_{0};
+    butil::atomic<int64_t> leader_term_{-1};
 };
 
 void FetchAddClosure::Run() {
