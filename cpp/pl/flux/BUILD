@@ -184,6 +184,9 @@ cc_test(
         "connector/sqlite_source_unit_test.cpp",
     ],
     copts = COPTS_WITH_ASAN,
+    data = [
+        "examples/cross_source/metrics.db",
+    ],
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":connector",
@@ -394,6 +397,9 @@ cc_test(
         "runtime_exec_unit_test.cpp",
     ],
     copts = COPTS_WITH_ASAN,
+    data = [
+        "examples/cross_source/metrics.db",
+    ],
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":runtime_exec",
@@ -437,6 +443,7 @@ sh_test(
     ],
     data = [
         ":flux",
+        "examples/cross_source/metrics.db",
     ] + glob([
         "examples/stdlib_conformance/**/*",
     ]),

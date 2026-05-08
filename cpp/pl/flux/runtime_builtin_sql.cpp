@@ -59,6 +59,14 @@ absl::StatusOr<std::string> string_property(const ObjectValue& object,
     return value->as_string();
 }
 
+absl::Status reject_raw_query_property(const ObjectValue& object) {
+    if (object.lookup("query") != nullptr) {
+        return absl::InvalidArgumentError(
+            "sql.from no longer accepts raw SQL `query`; use `table`");
+    }
+    return absl::OkStatus();
+}
+
 absl::StatusOr<Value> builtin_sql_from(const std::vector<Value>& args) {
     auto object_or = require_object_argument(args, "sql.from");
     if (!object_or.ok()) {
@@ -72,21 +80,25 @@ absl::StatusOr<Value> builtin_sql_from(const std::vector<Value>& args) {
     if (!dsn_or.ok()) {
         return dsn_or.status();
     }
-    auto query_or = string_property(**object_or, "sql.from", "query");
-    if (!query_or.ok()) {
-        return query_or.status();
+    auto query_status = reject_raw_query_property(**object_or);
+    if (!query_status.ok()) {
+        return query_status;
+    }
+    auto table_or = string_property(**object_or, "sql.from", "table");
+    if (!table_or.ok()) {
+        return table_or.status();
     }
 
     if (*driver_or != "sqlite") {
         return absl::UnimplementedError(absl::StrCat("sql.from unsupported driver: ", *driver_or));
     }
-    connector::SQLiteSource source(*dsn_or, *query_or);
+    connector::SQLiteSource source(*dsn_or, *table_or);
     auto value_or = source.Scan({});
     if (!value_or.ok()) {
         return absl::Status(value_or.status().code(),
                             absl::StrCat("sql.from ", value_or.status().message()));
     }
-    value_or->as_table_mut().plan = plan::MakeSourceScan("sql", *driver_or, *dsn_or, *query_or);
+    value_or->as_table_mut().plan = plan::MakeSourceScan("sql", *driver_or, *dsn_or, *table_or);
     return value_or;
 }
 
