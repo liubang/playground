@@ -1,4 +1,6 @@
-left = from(
+import "array"
+
+left = array.from(
     bucket: "left",
     rows: [
         {host: "edge-1", cpu: 80.0},
@@ -6,7 +8,7 @@ left = from(
     ],
 )
 
-right = from(
+right = array.from(
     bucket: "right",
     rows: [
         {host: "edge-1", mem: 70.0},
