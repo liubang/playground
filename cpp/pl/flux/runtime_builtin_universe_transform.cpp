@@ -494,7 +494,7 @@ void set_projection_columns(connector::ScanRequest* request,
 }
 
 absl::StatusOr<std::vector<std::string>> sqlite_source_columns(const plan::SourceScanSpec& source) {
-    if (source.source != "sql" || source.driver != "sqlite") {
+    if (source.source != "datasource" || source.driver != "sqlite") {
         return absl::InvalidArgumentError("unsupported pushdown source");
     }
     connector::SQLiteSource sqlite_source(source.dsn, source.table);
@@ -554,7 +554,7 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
         return absl::InvalidArgumentError("missing plan");
     }
     if (node->kind == plan::PlanNodeKind::SourceScan) {
-        if (node->source_scan.source != "sql" || node->source_scan.driver != "sqlite") {
+        if (node->source_scan.source != "datasource" || node->source_scan.driver != "sqlite") {
             return absl::InvalidArgumentError("unsupported pushdown source");
         }
         PushdownPlan plan;
