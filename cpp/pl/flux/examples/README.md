@@ -13,7 +13,8 @@
 展示了 SQLite 源上的 `range/filter/filter/drop/rename/keep/sort/limit/distinct` 下推、连续简单
 filter 的 predicate 累积、`drop()` 反向 projection、`rename()` projection alias、`distinct()`
 列映射，以及
-`explain()` 对 `[sqlite pushdown]`、`[sqlite scan]` 和 barrier/memory 边界的标注。
+`explain()` 对 `[sqlite pushdown]`、`[sqlite scan]` 和 barrier/memory 边界的标注，
+以及 `SQLitePushdown(request: ...)` 物理下推摘要。
 
 其中 [`feature_gallery/join_package.flux`](./feature_gallery/join_package.flux) 专门覆盖显式
 `import "join"` 后的 package API；[`feature_gallery/join_union_pivot.flux`](./feature_gallery/join_union_pivot.flux)

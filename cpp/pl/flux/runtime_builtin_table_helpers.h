@@ -154,6 +154,7 @@ Value with_aggregate_plan(Value value,
                           plan::AggregateFunction fn,
                           std::string column);
 Value with_distinct_plan(Value value, const TableValue& input, std::string column);
+std::optional<std::string> sqlite_pushdown_summary(const std::shared_ptr<plan::PlanNode>& plan);
 
 inline absl::StatusOr<const ArrayValue*> require_array_property(const ObjectValue& object,
                                                                 const std::string& name,
