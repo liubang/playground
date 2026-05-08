@@ -79,7 +79,7 @@ absl::StatusOr<Value> BuiltinRegistry::ImportPackage(const std::string& path) {
         builtin::RegisterTableStdlibPackages();
         builtin::RegisterScalarStdlibPackages();
         builtin::RegisterJoinStdlibPackage();
-        builtin::RegisterDatasourceStdlibPackage();
+        builtin::RegisterSqliteStdlibPackage();
     });
 
     auto package = builtin::ImportRegisteredPackage(path);

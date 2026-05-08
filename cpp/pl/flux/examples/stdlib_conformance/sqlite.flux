@@ -1,8 +1,7 @@
-import "datasource"
+import "sqlite"
 
-row = datasource.from(
-    driver: "sqlite",
-    dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+row = sqlite.from(
+    path: "cpp/pl/flux/examples/cross_source/metrics.db",
     table: "cpu",
 )
     |> filter(fn: (r) => r.host == "edge-1")
