@@ -379,8 +379,10 @@ Value value_from_sqlite_column(sqlite3_stmt* stmt, int column) {
 
 } // namespace
 
-SQLiteSource::SQLiteSource(std::string dsn, std::string query)
-    : dsn_(std::move(dsn)), query_(std::move(query)) {}
+SQLiteSource::SQLiteSource(std::string dsn, std::string table)
+    : dsn_(std::move(dsn)),
+      table_(std::move(table)),
+      query_(absl::StrCat("SELECT * FROM ", quote_identifier(table_))) {}
 
 absl::StatusOr<TableSchema> SQLiteSource::Schema() const {
     auto db_or = open_readonly_db(dsn_);
