@@ -15,9 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/25 10:40
 
+#include "cpp/pl/flux/plan/plan_node.h"
 #include "cpp/pl/flux/runtime_builtin_table_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_universe.h"
-#include "cpp/pl/flux/plan/plan_node.h"
 
 namespace pl::flux {
 namespace {
@@ -151,7 +151,12 @@ absl::StatusOr<Value> builtin_explain(const std::vector<Value>& args) {
     if (!table_or.ok()) {
         return table_or.status();
     }
-    return Value::string(plan::FormatPlan((*table_or)->plan));
+    std::string out = plan::FormatPlan((*table_or)->plan);
+    if (auto summary = sqlite_pushdown_summary((*table_or)->plan); summary.has_value()) {
+        out += *summary;
+        out += "\n";
+    }
+    return Value::string(out);
 }
 
 } // namespace

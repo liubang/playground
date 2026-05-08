@@ -223,7 +223,7 @@ Universe builtin 默认注入，无需 `import`。
 | `keys()`                      | 返回 group key 列名                              |
 | `findColumn(fn:, column:)`    | 找到匹配行并返回某列数组                         |
 | `findRecord(fn:, idx:)`       | 找到匹配行并返回指定位置的 record                |
-| `explain()`                   | 返回已记录的 logical plan 文本和下推状态         |
+| `explain()`                   | 返回已记录的 logical plan 文本、下推状态和 SQLite request 摘要 |
 | `yield(name:)`                | 设置结果名并输出表流                             |
 
 ## 内置包
@@ -255,7 +255,7 @@ Universe builtin 默认注入，无需 `import`。
 | --------------------------------- | ------------------------- |
 | `sql.from(driver:, dsn:, query:)` | 从 SQL 查询物化为内存表流 |
 
-第一版只支持 `driver: "sqlite"`，通过 SQLite C API 执行 `query`，并将 `null`、integer、float、text、blob-as-string 映射到 Flux 运行时值。connector 层已有保守 `ScanRequest` 下推能力；runtime pipeline 已能下推 SQLite 源之上的 `range/filter(simple)/keep/drop/rename/sort/limit/distinct` 线性前缀，以及 `group(columns:) |> count/sum/mean/min/max(column:)`，连续简单 `filter()` 会累积到同一个 `ScanRequest.predicates`，`drop(columns:)` 会基于当前可见 schema 反算为 projection，简单 `rename(columns:)` 会下推为 SQL projection alias，并让后续 predicate/sort/projection/distinct/aggregate 使用重命名后的列语义，复杂 `filter(fn:)` 和其他算子会回退到内存执行。`explain()` 会标注 `[sqlite pushdown]`、`[sqlite scan]`、`[barrier: ...]` 和 `[memory]`，方便确认当前 pipeline 的下推边界。后续 planner 和下推路线见 [DATASOURCE_ARCHITECTURE.md](./DATASOURCE_ARCHITECTURE.md)。
+第一版只支持 `driver: "sqlite"`，通过 SQLite C API 执行 `query`，并将 `null`、integer、float、text、blob-as-string 映射到 Flux 运行时值。connector 层已有保守 `ScanRequest` 下推能力；runtime pipeline 已能下推 SQLite 源之上的 `range/filter(simple)/keep/drop/rename/sort/limit/distinct` 线性前缀，以及 `group(columns:) |> count/sum/mean/min/max(column:)`，连续简单 `filter()` 会累积到同一个 `ScanRequest.predicates`，`drop(columns:)` 会基于当前可见 schema 反算为 projection，简单 `rename(columns:)` 会下推为 SQL projection alias，并让后续 predicate/sort/projection/distinct/aggregate 使用重命名后的列语义，复杂 `filter(fn:)` 和其他算子会回退到内存执行。`explain()` 会标注 `[sqlite pushdown]`、`[sqlite scan]`、`[barrier: ...]` 和 `[memory]`，并在可完整编译时追加 `SQLitePushdown(request: ...)` 摘要，展示 projection、predicates、distinct、group_by、aggregate、order_by 和 limit/offset，方便确认当前 pipeline 的真实下推边界。后续 planner 和下推路线见 [DATASOURCE_ARCHITECTURE.md](./DATASOURCE_ARCHITECTURE.md)。
 
 ### `date`
 
