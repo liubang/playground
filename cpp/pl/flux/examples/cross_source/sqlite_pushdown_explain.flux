@@ -1,6 +1,6 @@
-import "sql"
+import "datasource"
 
-data = sql.from(
+data = datasource.from(
     driver: "sqlite",
     dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
     table: "cpu",
@@ -14,7 +14,7 @@ data = sql.from(
     |> sort(columns: ["value"], desc: true)
     |> limit(n: 10)
 
-services = sql.from(
+services = datasource.from(
     driver: "sqlite",
     dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
     table: "cpu",
