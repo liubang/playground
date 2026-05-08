@@ -21,45 +21,43 @@
 namespace pl::flux::connector {
 namespace {
 
-TEST(SQLiteSourceTest, ScansQueryIntoTableValue) {
-    SQLiteSource source(":memory:",
-                        "select 1 as count, 2.5 as load, 'edge-1' as host, null as note");
+constexpr const char* kMetricsDb = "cpp/pl/flux/examples/cross_source/metrics.db";
+
+TEST(SQLiteSourceTest, ScansTableIntoTableValue) {
+    SQLiteSource source(kMetricsDb, "cpu");
 
     auto value_or = source.Scan({});
 
     ASSERT_TRUE(value_or.ok()) << value_or.status();
     ASSERT_EQ(Value::Type::Table, value_or->type());
     const auto& table = value_or->as_table();
-    ASSERT_EQ(1, table.rows.size());
+    ASSERT_EQ(4, table.rows.size());
     ASSERT_NE(nullptr, table.rows[0]);
-    EXPECT_EQ("1", table.rows[0]->lookup("count")->string());
-    EXPECT_EQ("2.5", table.rows[0]->lookup("load")->string());
     EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
-    EXPECT_EQ("null", table.rows[0]->lookup("note")->string());
+    EXPECT_EQ("\"west\"", table.rows[0]->lookup("region")->string());
+    EXPECT_EQ("71.5", table.rows[0]->lookup("usage")->string());
 }
 
 TEST(SQLiteSourceTest, ReportsSchemaColumnNames) {
-    SQLiteSource source(":memory:", "select 1 as count, 'edge-1' as host");
+    SQLiteSource source(kMetricsDb, "cpu");
 
     auto schema_or = source.Schema();
 
     ASSERT_TRUE(schema_or.ok()) << schema_or.status();
-    ASSERT_EQ(2, schema_or->columns.size());
-    EXPECT_EQ("count", schema_or->columns[0].name);
+    ASSERT_EQ(4, schema_or->columns.size());
+    EXPECT_EQ("_time", schema_or->columns[0].name);
     EXPECT_EQ("host", schema_or->columns[1].name);
+    EXPECT_EQ("region", schema_or->columns[2].name);
+    EXPECT_EQ("usage", schema_or->columns[3].name);
 }
 
 TEST(SQLiteSourceTest, PushesDownProjectionTimeRangePredicateSortAndLimit) {
-    SQLiteSource source(":memory:",
-                        "select '2024-01-01T00:00:00Z' as _time, 'edge-2' as host, 20.0 as "
-                        "_value union all "
-                        "select '2024-01-01T00:01:00Z', 'edge-1', 91.5 union all "
-                        "select '2024-01-01T00:02:00Z', 'edge-1', 42.0");
+    SQLiteSource source(kMetricsDb, "cpu");
     ScanRequest request;
-    request.columns = {"host", "_value"};
+    request.columns = {"host", "usage"};
     request.time_range = TimeRange{
-        .start = "2024-01-01T00:00:30Z",
-        .stop = "2024-01-01T00:03:00Z",
+        .start = "2024-07-01T10:00:30Z",
+        .stop = "2024-07-01T10:04:00Z",
     };
     request.predicates.push_back({
         .op = PredicateOp::Eq,
@@ -67,7 +65,7 @@ TEST(SQLiteSourceTest, PushesDownProjectionTimeRangePredicateSortAndLimit) {
         .literal = Value::string("edge-1"),
     });
     request.order_by.push_back({
-        .column = "_value",
+        .column = "usage",
         .desc = true,
     });
     request.limit = 1;
@@ -80,21 +78,22 @@ TEST(SQLiteSourceTest, PushesDownProjectionTimeRangePredicateSortAndLimit) {
     ASSERT_EQ(1, table.rows.size());
     ASSERT_NE(nullptr, table.rows[0]);
     EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
-    EXPECT_EQ("91.5", table.rows[0]->lookup("_value")->string());
+    EXPECT_EQ("93.25", table.rows[0]->lookup("usage")->string());
     EXPECT_EQ(nullptr, table.rows[0]->lookup("_time"));
 }
 
 TEST(SQLiteSourceTest, PushesDownProjectionAliases) {
-    SQLiteSource source(":memory:", "select 'edge-1' as host, 91.5 as _value");
+    SQLiteSource source(kMetricsDb, "cpu");
     ScanRequest request;
     request.projection_columns.push_back({
         .column = "host",
         .alias = "host",
     });
     request.projection_columns.push_back({
-        .column = "_value",
+        .column = "usage",
         .alias = "usage",
     });
+    request.limit = 1;
 
     auto value_or = source.Scan(request);
 
@@ -104,14 +103,12 @@ TEST(SQLiteSourceTest, PushesDownProjectionAliases) {
     ASSERT_EQ(1, table.rows.size());
     ASSERT_NE(nullptr, table.rows[0]);
     EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
-    EXPECT_EQ("91.5", table.rows[0]->lookup("usage")->string());
-    EXPECT_EQ(nullptr, table.rows[0]->lookup("_value"));
+    EXPECT_EQ("71.5", table.rows[0]->lookup("usage")->string());
+    EXPECT_EQ(nullptr, table.rows[0]->lookup("region"));
 }
 
 TEST(SQLiteSourceTest, PushesDownDistinctColumn) {
-    SQLiteSource source(":memory:", "select 'edge-2' as host, 20.0 as _value union all "
-                                    "select 'edge-1', 91.5 union all "
-                                    "select 'edge-1', 42.0");
+    SQLiteSource source(kMetricsDb, "cpu");
     ScanRequest request;
     request.projection_columns.push_back({
         .column = "host",
@@ -128,16 +125,17 @@ TEST(SQLiteSourceTest, PushesDownDistinctColumn) {
     ASSERT_TRUE(value_or.ok()) << value_or.status();
     ASSERT_EQ(Value::Type::Table, value_or->type());
     const auto& table = value_or->as_table();
-    ASSERT_EQ(2, table.rows.size());
+    ASSERT_EQ(3, table.rows.size());
     ASSERT_NE(nullptr, table.rows[0]);
     ASSERT_NE(nullptr, table.rows[1]);
     EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("service")->string());
     EXPECT_EQ("\"edge-2\"", table.rows[1]->lookup("service")->string());
+    EXPECT_EQ("\"edge-3\"", table.rows[2]->lookup("service")->string());
     EXPECT_EQ(nullptr, table.rows[0]->lookup("host"));
 }
 
 TEST(SQLiteSourceTest, RejectsUnknownPushdownColumn) {
-    SQLiteSource source(":memory:", "select 1 as count");
+    SQLiteSource source(kMetricsDb, "cpu");
     ScanRequest request;
     request.columns = {"missing"};
 

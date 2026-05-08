@@ -497,7 +497,7 @@ absl::StatusOr<std::vector<std::string>> sqlite_source_columns(const plan::Sourc
     if (source.source != "sql" || source.driver != "sqlite") {
         return absl::InvalidArgumentError("unsupported pushdown source");
     }
-    connector::SQLiteSource sqlite_source(source.dsn, source.query);
+    connector::SQLiteSource sqlite_source(source.dsn, source.table);
     auto schema_or = sqlite_source.Schema();
     if (!schema_or.ok()) {
         return schema_or.status();
@@ -722,7 +722,7 @@ Value maybe_pushdown_sqlite_plan(Value value) {
     if (!pushdown_or->request.group_by.empty() && !pushdown_or->request.aggregate.has_value()) {
         return value;
     }
-    connector::SQLiteSource source(pushdown_or->source->dsn, pushdown_or->source->query);
+    connector::SQLiteSource source(pushdown_or->source->dsn, pushdown_or->source->table);
     auto pushed_or = source.Scan(pushdown_or->request);
     if (!pushed_or.ok()) {
         return value;

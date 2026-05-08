@@ -135,11 +135,11 @@ import "sql"
 sql.from(
     driver: "sqlite",
     dsn: "cpp/pl/flux/examples/data/demo.db",
-    query: "select _time, host, region, usage as _value from cpu"
+    table: "cpu"
 )
 |> range(start: 2024-01-01T00:00:00Z)
 |> filter(fn: (r) => r.host == "edge-1")
-|> keep(columns: ["_time", "host", "_value"])
+|> keep(columns: ["_time", "host", "usage"])
 ```
 
 MySQL 示例：
@@ -150,7 +150,7 @@ import "sql"
 sql.from(
     driver: "mysql",
     dsn: "user:password@tcp(127.0.0.1:3306)/metrics",
-    query: "select ts as _time, host, value as _value from cpu"
+    table: "cpu"
 )
 |> range(start: 2024-01-01T00:00:00Z, stop: 2024-01-02T00:00:00Z)
 ```
@@ -462,17 +462,17 @@ SQLiteSource.Scan(range + filter + projection)
 
 ### Phase 1: Minimal sql.from
 
-状态：已完成第一版 SQLite query 物化闭环。当前 `sql.from(driver: "sqlite", dsn:, query:)`
-会通过 SQLite C API 执行查询并返回内存 `TableValue`，后续 `filter/limit/...` 仍走现有
-内存 builtin fallback。暂未支持 `table` 模式、connector 抽象、logical plan 或 pushdown。
+状态：已完成 SQLite table scan 闭环。当前 `sql.from(driver: "sqlite", dsn:, table:)`
+会通过 SQLite C API 扫描指定表并返回内存 `TableValue`，后续 `filter/limit/...` 可继续
+追加 logical plan 并参与保守 pushdown。raw SQL `query:` 不作为用户 API 暴露。
 
-目标：SQLite 查询能进入 Flux 内存表。
+目标：SQLite 表能以 Flux-first 的方式进入 Flux 内存表。
 
 工作项：
 
-- 新增 `sql` package 和 `sql.from(driver:, dsn:, query:)`。
+- 新增 `sql` package 和 `sql.from(driver:, dsn:, table:)`。
 - 先支持 `driver: "sqlite"`。
-- 使用 SQLite C API 执行 query。
+- 使用 SQLite C API 扫描表，SQL 只作为 connector 内部实现细节。
 - 将 SQLite row 转成 `ObjectValue` / `TableValue`。
 - 类型映射覆盖 null/int/float/text/blob-as-string。
 - 增加 runtime eval/exec 单测。
@@ -483,7 +483,7 @@ SQLiteSource.Scan(range + filter + projection)
 ```flux
 import "sql"
 
-sql.from(driver: "sqlite", dsn: "...", query: "select ...")
+sql.from(driver: "sqlite", dsn: "...", table: "cpu")
 |> filter(fn: (r) => r.host == "edge-1")
 |> limit(n: 10)
 ```
@@ -637,7 +637,6 @@ aggregate、order_by、limit/offset 等真实下推字段。
 
 ## Open Questions
 
-- `sql.from` 是否只支持 `query`，还是第一版同时支持 `table`？
 - DSN 是否允许从环境变量读取，避免示例里出现敏感信息？
 - `_time` 在 SQL 中第一版约定为 RFC3339 text，还是支持更多数据库原生时间类型？
 - `TableValue` 内嵌 plan 是否会让值模型过重，未来是否需要拆出 `TableStreamValue`？
@@ -650,7 +649,7 @@ aggregate、order_by、limit/offset 等真实下推字段。
 
 1. 新增 `sql` package registry 入口。
 2. 接入 SQLite C API。
-3. 实现 `sql.from(driver: "sqlite", dsn:, query:)` 到内存 `TableValue`。
+3. 实现 `sql.from(driver: "sqlite", dsn:, table:)` 到内存 `TableValue`。
 4. 补最小单测和 README/SUPPORT_MATRIX。
 
 这样可以尽快验证“外部数据源进入 Flux”的闭环，同时不急着改变现有执行器主干。
