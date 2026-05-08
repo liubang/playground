@@ -1,9 +1,8 @@
 import "csv"
-import "datasource"
+import "sqlite"
 
-cpu = datasource.from(
-    driver: "sqlite",
-    dsn: "cpp/pl/flux/examples/cross_source/metrics.db",
+cpu = sqlite.from(
+    path: "cpp/pl/flux/examples/cross_source/metrics.db",
     table: "cpu",
 )
     |> range(start: 2024-07-01T10:00:30Z, stop: 2024-07-01T10:04:00Z)

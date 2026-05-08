@@ -241,6 +241,27 @@ TEST(FluxCliTest, ExecutesCrossSourceSqliteCsvJoinExample) {
     EXPECT_EQ(std::string::npos, result.output.find("\"edge-4\""));
 }
 
+TEST(FluxCliTest, ExecutesCrossSourceSqliteCsvArrayIncidentExample) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.result_name = "sqlite_csv_array_incidents";
+    auto result = ExecuteExampleScript(
+        "cpp/pl/flux/examples/cross_source/sqlite_csv_array_incidents.flux", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: sqlite_csv_array_incidents\n"));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-1\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-2\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"search\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"ads\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"page\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"ticket\""));
+    EXPECT_NE(std::string::npos, result.output.find("82.375"));
+    EXPECT_NE(std::string::npos, result.output.find("88"));
+    EXPECT_EQ(std::string::npos, result.output.find("\"edge-3\""));
+}
+
 TEST(FluxCliTest, RendersExplainPlanInsideObjectAsMultilineText) {
     auto env = MakeFluxCliEnvironment();
     FluxCliOptions options;
