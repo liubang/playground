@@ -367,7 +367,7 @@ enum class PushdownState {
 };
 
 inline bool IsSqliteSourceScan(const PlanNode& node) {
-    return node.kind == PlanNodeKind::SourceScan && node.source_scan.source == "sql" &&
+    return node.kind == PlanNodeKind::SourceScan && node.source_scan.source == "datasource" &&
            node.source_scan.driver == "sqlite";
 }
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 The Authors. All rights reserved.
+// Copyright (c) 2023 The Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2026/05/06 23:21
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -61,22 +60,21 @@ absl::StatusOr<std::string> string_property(const ObjectValue& object,
 
 absl::Status reject_raw_query_property(const ObjectValue& object) {
     if (object.lookup("query") != nullptr) {
-        return absl::InvalidArgumentError(
-            "sql.from no longer accepts raw SQL `query`; use `table`");
+        return absl::InvalidArgumentError("datasource.from does not accept `query`; use `table`");
     }
     return absl::OkStatus();
 }
 
-absl::StatusOr<Value> builtin_sql_from(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "sql.from");
+absl::StatusOr<Value> builtin_datasource_from(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "datasource.from");
     if (!object_or.ok()) {
         return object_or.status();
     }
-    auto driver_or = string_property(**object_or, "sql.from", "driver");
+    auto driver_or = string_property(**object_or, "datasource.from", "driver");
     if (!driver_or.ok()) {
         return driver_or.status();
     }
-    auto dsn_or = string_property(**object_or, "sql.from", "dsn");
+    auto dsn_or = string_property(**object_or, "datasource.from", "dsn");
     if (!dsn_or.ok()) {
         return dsn_or.status();
     }
@@ -84,33 +82,35 @@ absl::StatusOr<Value> builtin_sql_from(const std::vector<Value>& args) {
     if (!query_status.ok()) {
         return query_status;
     }
-    auto table_or = string_property(**object_or, "sql.from", "table");
+    auto table_or = string_property(**object_or, "datasource.from", "table");
     if (!table_or.ok()) {
         return table_or.status();
     }
 
     if (*driver_or != "sqlite") {
-        return absl::UnimplementedError(absl::StrCat("sql.from unsupported driver: ", *driver_or));
+        return absl::UnimplementedError(
+            absl::StrCat("datasource.from unsupported driver: ", *driver_or));
     }
     connector::SQLiteSource source(*dsn_or, *table_or);
     auto value_or = source.Scan({});
     if (!value_or.ok()) {
         return absl::Status(value_or.status().code(),
-                            absl::StrCat("sql.from ", value_or.status().message()));
+                            absl::StrCat("datasource.from ", value_or.status().message()));
     }
-    value_or->as_table_mut().plan = plan::MakeSourceScan("sql", *driver_or, *dsn_or, *table_or);
+    value_or->as_table_mut().plan =
+        plan::MakeSourceScan("datasource", *driver_or, *dsn_or, *table_or);
     return value_or;
 }
 
-Value make_sql_package() {
+Value make_datasource_package() {
     return Value::object({
-        {"path", Value::string("sql")},
-        {"from", make_builtin_value("sql.from", builtin_sql_from)},
+        {"path", Value::string("datasource")},
+        {"from", make_builtin_value("datasource.from", builtin_datasource_from)},
     });
 }
 
 } // namespace
 
-void RegisterSqlStdlibPackage() { RegisterPackage("sql", make_sql_package); }
+void RegisterDatasourceStdlibPackage() { RegisterPackage("datasource", make_datasource_package); }
 
 } // namespace pl::flux::builtin

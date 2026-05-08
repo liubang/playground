@@ -127,12 +127,12 @@ Flux AST
 
 ## Proposed Packages
 
-短期先新增 `sql` package，避免为每个数据库先设计一套 Flux 语法：
+短期先新增 `datasource` package，避免为每个数据库先设计一套 Flux 语法：
 
 ```flux
-import "sql"
+import "datasource"
 
-sql.from(
+datasource.from(
     driver: "sqlite",
     dsn: "cpp/pl/flux/examples/data/demo.db",
     table: "cpu"
@@ -145,9 +145,9 @@ sql.from(
 MySQL 示例：
 
 ```flux
-import "sql"
+import "datasource"
 
-sql.from(
+datasource.from(
     driver: "mysql",
     dsn: "user:password@tcp(127.0.0.1:3306)/metrics",
     table: "cpu"
@@ -165,7 +165,7 @@ sqlite.from(path: "metrics.db", table: "cpu")
 mysql.from(dsn: "...", table: "cpu")
 ```
 
-但第一版优先用 `sql.from` 收敛接口。
+但第一版优先用 `datasource.from` 收敛接口。
 
 ## Data Model Changes
 
@@ -418,8 +418,8 @@ LIMIT ? OFFSET ?
 
 - 参数必须使用 bind，不拼接用户字面量。
 - 列名必须来自 schema 或经过严格 identifier quote。
-- `query` 模式下统一包成 subquery，便于追加条件。
-- `table` 模式下只允许安全标识符或 quote identifier。
+- connector 内部统一包成 subquery，便于追加条件。
+- 用户入口只接受 `table`，表名必须走安全标识符或 quote identifier。
 - `_time` 类型第一版可以支持 RFC3339 string；后续再补 epoch/int/time affinity 映射。
 
 ## Execution Strategy
@@ -433,7 +433,7 @@ LIMIT ? OFFSET ?
 示例：
 
 ```text
-sql.from
+datasource.from
   |> range
   |> filter(simple)
   |> keep
@@ -460,17 +460,17 @@ SQLiteSource.Scan(range + filter + projection)
 - 暂不改运行时行为。
 - 后续每个阶段都同步 README、SUPPORT_MATRIX 和测试。
 
-### Phase 1: Minimal sql.from
+### Phase 1: Minimal datasource.from
 
-状态：已完成 SQLite table scan 闭环。当前 `sql.from(driver: "sqlite", dsn:, table:)`
+状态：已完成 SQLite table scan 闭环。当前 `datasource.from(driver: "sqlite", dsn:, table:)`
 会通过 SQLite C API 扫描指定表并返回内存 `TableValue`，后续 `filter/limit/...` 可继续
-追加 logical plan 并参与保守 pushdown。raw SQL `query:` 不作为用户 API 暴露。
+追加 logical plan 并参与保守 pushdown。用户 API 不提供 `query` 入口。
 
 目标：SQLite 表能以 Flux-first 的方式进入 Flux 内存表。
 
 工作项：
 
-- 新增 `sql` package 和 `sql.from(driver:, dsn:, table:)`。
+- 新增 `datasource` package 和 `datasource.from(driver:, dsn:, table:)`。
 - 先支持 `driver: "sqlite"`。
 - 使用 SQLite C API 扫描表，SQL 只作为 connector 内部实现细节。
 - 将 SQLite row 转成 `ObjectValue` / `TableValue`。
@@ -481,9 +481,9 @@ SQLiteSource.Scan(range + filter + projection)
 验收：
 
 ```flux
-import "sql"
+import "datasource"
 
-sql.from(driver: "sqlite", dsn: "...", table: "cpu")
+datasource.from(driver: "sqlite", dsn: "...", table: "cpu")
 |> filter(fn: (r) => r.host == "edge-1")
 |> limit(n: 10)
 ```
@@ -493,7 +493,7 @@ sql.from(driver: "sqlite", dsn: "...", table: "cpu")
 ### Phase 2: TableSource Abstraction
 
 状态：已启动第一块。当前已新增 `connector/TableSource` 接口、`SQLiteSource`、
-`ArraySource` 和 `CsvSource`，并将 `sql.from`、`array.from`、`csv.from` 改为通过
+`ArraySource` 和 `CsvSource`，并将 `datasource.from`、`array.from`、`csv.from` 改为通过
 对应 source 的 `Scan({})` 物化，外部行为保持不变。真实 capability、`ScanRequest`
 pushdown 仍未实现。
 
@@ -502,7 +502,7 @@ pushdown 仍未实现。
 工作项：
 
 - 新增 connector 接口。
-- 将 `sql.from` 改为 `SQLiteSource.Scan({})`。
+- 将 `datasource.from` 改为 `SQLiteSource.Scan({})`。
 - 让 `array.from` 和 `csv.from` 至少在内部可适配同一抽象。
 - 保持 `Value::table` 对外行为不变。
 
@@ -514,7 +514,7 @@ pushdown 仍未实现。
 ### Phase 3: Logical Plan Skeleton
 
 状态：已启动。当前已新增 `plan/PlanNode` skeleton，`TableValue` 可携带可选 `plan`，
-`sql.from` 的物化结果会附带 `SourceScan` 节点；当输入 table 已有 plan 时，
+`datasource.from` 的物化结果会附带 `SourceScan` 节点；当输入 table 已有 plan 时，
 `range/filter/keep/limit/sort` 会在保持 eager 内存执行结果不变的同时追加
 `Range/Filter/Project/Limit/Sort` 节点；`explain()` 可输出已记录的 logical plan 文本，
 并标注每个节点当前会走 `sqlite pushdown`、`sqlite scan`、`barrier` 还是 `memory`。
@@ -526,7 +526,7 @@ pushdown 仍未实现。
 工作项：
 
 - 新增 plan node 类型。
-- `sql.from` 返回带 `SourceScan` plan 的 `TableValue`。
+- `datasource.from` 返回带 `SourceScan` plan 的 `TableValue`。
 - `range/filter/keep/limit/sort` 在输入带 plan 时追加节点。
 - 输出或旧 builtin 入口调用 `Materialize`。
 
@@ -619,8 +619,8 @@ aggregate、order_by、limit/offset 等真实下推字段。
 关键测试场景：
 
 - SQLite 基础查询返回 int/float/string/null。
-- `sql.from |> filter |> limit` 走内存 fallback。
-- `sql.from |> range |> filter(simple) |> keep |> limit` 下推。
+- `datasource.from |> filter |> limit` 走内存 fallback。
+- `datasource.from |> range |> filter(simple) |> keep |> limit` 下推。
 - 复杂 filter 不下推但结果正确。
 - SQL 错误能返回可诊断的 `absl::Status`。
 - 空结果、空表、null 值、缺失列。
@@ -647,9 +647,9 @@ aggregate、order_by、limit/offset 等真实下推字段。
 
 下一轮实现建议从 Phase 1 开始：
 
-1. 新增 `sql` package registry 入口。
+1. 新增 `datasource` package registry 入口。
 2. 接入 SQLite C API。
-3. 实现 `sql.from(driver: "sqlite", dsn:, table:)` 到内存 `TableValue`。
+3. 实现 `datasource.from(driver: "sqlite", dsn:, table:)` 到内存 `TableValue`。
 4. 补最小单测和 README/SUPPORT_MATRIX。
 
 这样可以尽快验证“外部数据源进入 Flux”的闭环，同时不急着改变现有执行器主干。
