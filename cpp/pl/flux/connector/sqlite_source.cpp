@@ -506,10 +506,10 @@ absl::StatusOr<Value> SQLiteSource::Scan(const ScanRequest& request) {
             chunk.rows.push_back(row);
             chunks.push_back(std::move(chunk));
         }
-        return Value::table_stream("sql", std::move(chunks));
+        return Value::table_stream("datasource", std::move(chunks));
     }
 
-    return Value::table("sql", std::move(rows));
+    return Value::table("datasource", std::move(rows));
 }
 
 } // namespace pl::flux::connector
