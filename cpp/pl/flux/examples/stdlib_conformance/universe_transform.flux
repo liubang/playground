@@ -1,4 +1,6 @@
-base = from(
+import "array"
+
+base = array.from(
     bucket: "transform",
     rows: [
         {_time: 2024-01-01T00:00:00Z, host: "edge-1", service: "api", _field: "cpu", _value: 10.0},

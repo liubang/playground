@@ -60,57 +60,51 @@ absl::StatusOr<std::string> string_property(const ObjectValue& object,
 
 absl::Status reject_raw_query_property(const ObjectValue& object) {
     if (object.lookup("query") != nullptr) {
-        return absl::InvalidArgumentError("datasource.from does not accept `query`; use `table`");
+        return absl::InvalidArgumentError("sqlite.from does not accept `query`; use `table`");
+    }
+    if (object.lookup("driver") != nullptr || object.lookup("dsn") != nullptr) {
+        return absl::InvalidArgumentError("sqlite.from expects `path` and `table`");
     }
     return absl::OkStatus();
 }
 
-absl::StatusOr<Value> builtin_datasource_from(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "datasource.from");
+absl::StatusOr<Value> builtin_sqlite_from(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "sqlite.from");
     if (!object_or.ok()) {
         return object_or.status();
-    }
-    auto driver_or = string_property(**object_or, "datasource.from", "driver");
-    if (!driver_or.ok()) {
-        return driver_or.status();
-    }
-    auto dsn_or = string_property(**object_or, "datasource.from", "dsn");
-    if (!dsn_or.ok()) {
-        return dsn_or.status();
     }
     auto query_status = reject_raw_query_property(**object_or);
     if (!query_status.ok()) {
         return query_status;
     }
-    auto table_or = string_property(**object_or, "datasource.from", "table");
+    auto path_or = string_property(**object_or, "sqlite.from", "path");
+    if (!path_or.ok()) {
+        return path_or.status();
+    }
+    auto table_or = string_property(**object_or, "sqlite.from", "table");
     if (!table_or.ok()) {
         return table_or.status();
     }
 
-    if (*driver_or != "sqlite") {
-        return absl::UnimplementedError(
-            absl::StrCat("datasource.from unsupported driver: ", *driver_or));
-    }
-    connector::SQLiteSource source(*dsn_or, *table_or);
+    connector::SQLiteSource source(*path_or, *table_or);
     auto value_or = source.Scan({});
     if (!value_or.ok()) {
         return absl::Status(value_or.status().code(),
-                            absl::StrCat("datasource.from ", value_or.status().message()));
+                            absl::StrCat("sqlite.from ", value_or.status().message()));
     }
-    value_or->as_table_mut().plan =
-        plan::MakeSourceScan("datasource", *driver_or, *dsn_or, *table_or);
+    value_or->as_table_mut().plan = plan::MakeSourceScan("sqlite", "sqlite", *path_or, *table_or);
     return value_or;
 }
 
-Value make_datasource_package() {
+Value make_sqlite_package() {
     return Value::object({
-        {"path", Value::string("datasource")},
-        {"from", make_builtin_value("datasource.from", builtin_datasource_from)},
+        {"path", Value::string("sqlite")},
+        {"from", make_builtin_value("sqlite.from", builtin_sqlite_from)},
     });
 }
 
 } // namespace
 
-void RegisterDatasourceStdlibPackage() { RegisterPackage("datasource", make_datasource_package); }
+void RegisterSqliteStdlibPackage() { RegisterPackage("sqlite", make_sqlite_package); }
 
 } // namespace pl::flux::builtin
