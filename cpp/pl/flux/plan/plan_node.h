@@ -431,10 +431,7 @@ inline void FormatPushdownState(const PlanNode& node, std::ostringstream* out) {
     }
 }
 
-inline void FormatPlanNode(const PlanNode& node, size_t depth, std::ostringstream* out) {
-    for (size_t i = 0; i < depth; ++i) {
-        *out << "  ";
-    }
+inline void FormatNodeDetail(const PlanNode& node, std::ostringstream* out) {
     *out << PlanNodeKindName(node.kind);
     FormatPushdownState(node, out);
     if (node.kind == PlanNodeKind::SourceScan) {
@@ -456,10 +453,27 @@ inline void FormatPlanNode(const PlanNode& node, size_t depth, std::ostringstrea
         }
         *out << ")";
     }
+}
+
+inline void FormatPlanTree(const PlanNode& node,
+                           const std::string& prefix,
+                           bool is_last,
+                           bool is_root,
+                           std::ostringstream* out) {
+    // 输出当前节点的连接线和内容
+    if (is_root) {
+        FormatNodeDetail(node, out);
+    } else {
+        *out << prefix << (is_last ? "`- " : "|- ");
+        FormatNodeDetail(node, out);
+    }
     *out << "\n";
-    for (const auto& input : node.inputs) {
-        if (input != nullptr) {
-            FormatPlanNode(*input, depth + 1, out);
+
+    // 递归输出子节点
+    const std::string child_prefix = is_root ? "" : prefix + (is_last ? "   " : "|  ");
+    for (size_t i = 0; i < node.inputs.size(); ++i) {
+        if (node.inputs[i] != nullptr) {
+            FormatPlanTree(*node.inputs[i], child_prefix, i + 1 == node.inputs.size(), false, out);
         }
     }
 }
@@ -469,7 +483,7 @@ inline std::string FormatPlan(const std::shared_ptr<PlanNode>& plan) {
         return "<no plan>";
     }
     std::ostringstream out;
-    FormatPlanNode(*plan, 0, &out);
+    FormatPlanTree(*plan, "", true, true, &out);
     return out.str();
 }
 
