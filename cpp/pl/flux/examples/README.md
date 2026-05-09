@@ -17,8 +17,9 @@ filter 的 predicate 累积、`drop()` 反向 projection、`rename()` projection
 以及 `SQLitePushdown(request: ...)` 物理下推摘要。
 
 [`cross_source/sqlite_csv_array_incidents.flux`](./cross_source/sqlite_csv_array_incidents.flux)
-则把 SQLite 指标聚合、CSV owner 维表和 `array.from` 阈值表串起来，展示 provider.from
-形态下的三源 join 与内存 fallback。
+则把 SQLite 指标聚合、CSV owner 维表和 `array.from` 阈值表串起来，展示 `sqlite.from` /
+`csv.from` / `array.from` provider API 形态下的三源 join 与内存 fallback。示例集不使用
+universe 顶层数据源入口。
 
 其中 [`feature_gallery/join_package.flux`](./feature_gallery/join_package.flux) 专门覆盖显式
 `import "join"` 后的 package API；[`feature_gallery/join_union_pivot.flux`](./feature_gallery/join_union_pivot.flux)

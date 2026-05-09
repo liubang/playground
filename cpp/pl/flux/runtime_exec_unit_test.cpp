@@ -326,11 +326,12 @@ TEST(RuntimeExecTest, ExplainFormatsLogicalPlan) {
     const auto plan_or = env.lookup("plan");
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
     ASSERT_EQ(Value::Type::String, plan_or->type());
-    EXPECT_EQ("Limit [sqlite pushdown]\n"
-              "`- Filter [sqlite pushdown: host == \"edge-1\"]\n"
-              "   `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
-              "SQLitePushdown(request: projection=[*], predicates=[host == \"edge-1\"], limit=1)\n",
-              plan_or->as_string());
+    EXPECT_EQ(
+        "Limit [sqlite pushdown]\n"
+        "`- Filter [sqlite pushdown: host == \"edge-1\"]\n"
+        "   `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
+        "SQLitePushdown(request: projection=[*], predicates=[host == \"edge-1\"], limit=1)\n",
+        plan_or->as_string());
 }
 
 TEST(RuntimeExecTest, ContinuousSqliteFiltersAccumulatePushdownPredicates) {
@@ -736,6 +737,37 @@ TEST(RuntimeExecTest, SqliteFromRejectsQueryArgument) {
     EXPECT_NE(std::string::npos, result_or.status().message().find("does not accept `query`"));
 }
 
+TEST(RuntimeExecTest, ImportsMysqlPackageSkeletonAndRejectsExecutionUntilConnectorExists) {
+    auto file = ParseFile(R"(
+        import "mysql"
+        data = mysql.from(dsn: "user:pass@tcp(127.0.0.1:3306)/metrics", table: "cpu")
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_FALSE(result_or.ok());
+    EXPECT_EQ(absl::StatusCode::kUnimplemented, result_or.status().code());
+    ASSERT_TRUE(env.lookup("mysql").ok());
+    EXPECT_EQ("{path: \"mysql\", from: <builtin mysql.from>}", env.lookup("mysql")->string());
+}
+
+TEST(RuntimeExecTest, MysqlFromRejectsRawQueryArgument) {
+    auto file = ParseFile(R"(
+        import "mysql"
+        data = mysql.from(dsn: "mysql://metrics", query: "select 1")
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_FALSE(result_or.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, result_or.status().code());
+    EXPECT_NE(std::string::npos, result_or.status().message().find("does not accept `query`"));
+}
+
 TEST(RuntimeExecTest, DeclaresUnknownBuiltinAsPlaceholderFunction) {
     auto file = ParseFile(R"(
         builtin mystery : (a: int) => int
@@ -749,6 +781,28 @@ TEST(RuntimeExecTest, DeclaresUnknownBuiltinAsPlaceholderFunction) {
     ASSERT_TRUE(builtin_or.ok()) << builtin_or.status();
     ASSERT_TRUE(env.lookup("mystery").ok());
     EXPECT_EQ(Value::Type::Function, env.lookup("mystery")->type());
+
+    auto result = StatementExecutor::Execute(*file->body[1], env);
+    ASSERT_FALSE(result.ok());
+    EXPECT_EQ(absl::StatusCode::kUnimplemented, result.status().code());
+}
+
+TEST(RuntimeExecTest, DeclaresTopLevelFromAsPlaceholderFunctionOnly) {
+    auto file = ParseFile(R"(
+        builtin from : (bucket: string) => stream[A]
+        result = from(bucket: "telegraf")
+    )");
+    ASSERT_NE(file, nullptr);
+    ASSERT_EQ(2, file->body.size());
+
+    Environment env;
+    BuiltinRegistry::Install(env);
+    EXPECT_FALSE(env.lookup("from").ok());
+
+    auto builtin_or = StatementExecutor::Execute(*file->body[0], env);
+    ASSERT_TRUE(builtin_or.ok()) << builtin_or.status();
+    ASSERT_TRUE(env.lookup("from").ok());
+    EXPECT_EQ(Value::Type::Function, env.lookup("from")->type());
 
     auto result = StatementExecutor::Execute(*file->body[1], env);
     ASSERT_FALSE(result.ok());
@@ -922,7 +976,7 @@ TEST(RuntimeExecTest, ExecutesArrayFromImportedPackage) {
     ASSERT_EQ(Value::Type::Table, result_or->last.value.type());
 }
 
-TEST(RuntimeExecTest, FromRejectsInlineRows) {
+TEST(RuntimeExecTest, TopLevelFromIsNotRuntimeBuiltin) {
     auto file = ParseFile(R"(
         data = from(bucket: "telegraf", rows: [{_value: 1}])
         data
@@ -931,12 +985,11 @@ TEST(RuntimeExecTest, FromRejectsInlineRows) {
 
     Environment env;
     BuiltinRegistry::Install(env);
+    EXPECT_FALSE(env.lookup("from").ok());
     auto result_or = StatementExecutor::ExecuteFile(*file, env);
 
     ASSERT_FALSE(result_or.ok());
-    EXPECT_EQ(absl::StatusCode::kInvalidArgument, result_or.status().code());
-    EXPECT_NE(std::string::npos,
-              std::string(result_or.status().message()).find("use array.from"));
+    EXPECT_EQ(absl::StatusCode::kNotFound, result_or.status().code());
 }
 
 TEST(RuntimeExecTest, ExecutesArrayPackageHelpers) {
@@ -1080,7 +1133,6 @@ TEST(RuntimeExecTest, AppliesGlobalOptionLocationDuringFileExecution) {
         import "array"
 
         option location = {zone: "UTC", offset: "-8h"}
-        builtin from : (bucket: string) => stream[A]
         builtin aggregateWindow : (<-tables: stream[A], every: duration, fn: (values: [B]) => C) => stream[A]
         builtin sum : (values: [int]) => float
 
@@ -1180,7 +1232,6 @@ TEST(RuntimeExecTest, ExecutesInMemoryQueryPipelineFile) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin range : (<-tables: stream[A], start: time, ?stop: time) => stream[A]
         builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
         builtin map : (<-tables: stream[A], fn: (r: A) => B) => stream[B]
@@ -1217,7 +1268,6 @@ TEST(RuntimeExecTest, ExecutesReduceKeepDropAndLimitQueryFile) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin limit : (<-tables: stream[A], n: int) => stream[A]
         builtin keep : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin reduce : (<-tables: stream[A], identity: B, fn: (r: A, accumulator: B) => B) => stream[B]
@@ -1262,7 +1312,6 @@ TEST(RuntimeExecTest, ExecutesRenameDuplicateAndSetQueryFile) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin duplicate : (<-tables: stream[A], column: string, as: string) => stream[A]
         builtin rename : (<-tables: stream[A], columns: A) => stream[B]
         builtin set : (<-tables: stream[A], key: string, value: string) => stream[A]
@@ -1303,7 +1352,6 @@ TEST(RuntimeExecTest, ExecutesSortGroupCountFirstAndLastQueryFile) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], ?columns: [string], ?mode: string) => stream[A]
         builtin sort : (<-tables: stream[A], columns: [string], desc: bool) => stream[A]
         builtin first : (<-tables: stream[A]) => stream[A]
@@ -1358,7 +1406,6 @@ TEST(RuntimeExecTest, ExecutesUnionAndJoinQueryFile) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin union : (tables: [stream[A]]) => stream[A]
         builtin join : (tables: A, ?method: string, on: [string]) => stream[B]
 
@@ -1397,7 +1444,6 @@ TEST(RuntimeExecTest, ExecutesJoinQueryFileUsingMatchingGroupInstancesOnly) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], ?columns: [string], ?mode: string) => stream[A]
         builtin join : (tables: A, ?method: string, on: [string]) => stream[B]
 
@@ -1445,7 +1491,6 @@ TEST(RuntimeExecTest, ExecutesWindowAndOuterJoinQueryFile) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin range : (<-tables: stream[A], start: time, ?stop: time) => stream[A]
         builtin group : (<-tables: stream[A], ?columns: [string], ?mode: string) => stream[A]
         builtin window : (<-tables: stream[A], every: duration, ?createEmpty: bool) => stream[A]
@@ -1497,7 +1542,6 @@ TEST(RuntimeExecTest, ExecutesRankingAndQuantileQueryFile) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], ?columns: [string], ?mode: string) => stream[A]
         builtin spread : (<-tables: stream[A], ?column: string) => stream[A]
         builtin quantile : (<-tables: stream[A], q: B, ?column: string) => stream[A]
@@ -1573,7 +1617,6 @@ TEST(RuntimeExecTest, ExecutesDistinctQueryFile) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin distinct : (<-tables: stream[A], ?column: string) => stream[A]
 
         hosts = array.from(bucket: "cpu", rows: [
@@ -1603,7 +1646,6 @@ TEST(RuntimeExecTest, ExecutesTailQueryFile) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin tail : (<-tables: stream[A], n: int, ?offset: int) => stream[A]
 
         recent = array.from(bucket: "cpu", rows: [
@@ -1634,7 +1676,6 @@ TEST(RuntimeExecTest, ExecutesPivotQueryFile) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin pivot : (<-tables: stream[A], rowKey: [string], columnKey: [string], valueColumn: string) => stream[B]
 
         wide = array.from(bucket: "cpu", rows: [
@@ -1669,7 +1710,6 @@ TEST(RuntimeExecTest, ExecutesFillQueryFile) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin fill : (<-tables: stream[A], ?column: string, ?usePrevious: bool, ?value: B) => stream[A]
 
@@ -1711,7 +1751,6 @@ TEST(RuntimeExecTest, ExecutesElapsedQueryFile) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin elapsed : (<-tables: stream[A], ?unit: duration, ?timeColumn: string, ?columnName: string) => stream[A]
 
@@ -1744,7 +1783,6 @@ TEST(RuntimeExecTest, ExecutesDifferenceQueryFile) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin difference : (<-tables: stream[A], ?column: string) => stream[A]
 
@@ -1777,7 +1815,6 @@ TEST(RuntimeExecTest, ExecutesDifferenceQueryFileWithNonNegativeAndKeepFirst) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin difference : (<-tables: stream[A], ?column: string, ?nonNegative: bool, ?keepFirst: bool) => stream[A]
 
@@ -1808,7 +1845,6 @@ TEST(RuntimeExecTest, ExecutesDerivativeQueryFile) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin derivative : (<-tables: stream[A], ?unit: duration, ?column: string, ?timeColumn: string) => stream[A]
 
@@ -1842,7 +1878,6 @@ TEST(RuntimeExecTest, ExecutesDerivativeQueryFileWithNonNegativeAndInitialZero) 
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin derivative : (<-tables: stream[A], ?unit: duration, ?column: string, ?timeColumn: string, ?nonNegative: bool, ?initialZero: bool) => stream[A]
 
@@ -1873,7 +1908,6 @@ TEST(RuntimeExecTest, ExecutesJoinStdlibPackageHelpers) {
         import "array"
 
         import "join"
-        builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], ?columns: [string], ?mode: string) => stream[A]
 
         cpu = array.from(bucket: "cpu", rows: [
@@ -1953,7 +1987,6 @@ TEST(RuntimeExecTest, ExecutesAggregateWindowQueryFile) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin mean : (values: [float]) => float
         builtin sum : (values: [float]) => float
@@ -2015,7 +2048,6 @@ TEST(RuntimeExecTest, ExecutesAggregateWindowCreateEmptyQueryFile) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin mean : (values: [float]) => float
         builtin count : (<-tables: stream[A], column: string) => stream[A]
@@ -2064,7 +2096,6 @@ TEST(RuntimeExecTest, ExecutesAggregateWindowOffsetQueryFile) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin mean : (values: [float]) => float
         builtin aggregateWindow : (<-tables: stream[A], every: duration, fn: B) => stream[C]
 
@@ -2099,7 +2130,6 @@ TEST(RuntimeExecTest, ExecutesAggregateWindowCalendarMonthQueryFile) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin mean : (values: [float]) => float
         builtin aggregateWindow : (<-tables: stream[A], every: duration, fn: B) => stream[C]
 
@@ -2138,7 +2168,6 @@ TEST(RuntimeExecTest, ExecutesAggregateWindowTimezoneQueryFile) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin mean : (values: [float]) => float
         builtin aggregateWindow : (<-tables: stream[A], every: duration, fn: B) => stream[C]
@@ -2187,7 +2216,6 @@ TEST(RuntimeExecTest, UsesYieldNameForResultCollection) {
     auto file = ParseFile(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin yield : (<-tables: stream[A], ?name: string) => stream[A]
 
         array.from(
@@ -2202,13 +2230,12 @@ TEST(RuntimeExecTest, UsesYieldNameForResultCollection) {
     auto result_or = StatementExecutor::ExecuteFile(*file, env);
 
     ASSERT_TRUE(result_or.ok()) << result_or.status();
-    ASSERT_EQ(3, result_or->results.size());
-    EXPECT_EQ("builtin.from", result_or->results[0].name);
-    EXPECT_EQ("builtin.yield", result_or->results[1].name);
-    EXPECT_EQ("cpu", result_or->results[2].name);
-    ASSERT_EQ(Value::Type::Table, result_or->results[2].value.type());
-    ASSERT_TRUE(result_or->results[2].value.as_table().result_name.has_value());
-    EXPECT_EQ("cpu", *result_or->results[2].value.as_table().result_name);
+    ASSERT_EQ(2, result_or->results.size());
+    EXPECT_EQ("builtin.yield", result_or->results[0].name);
+    EXPECT_EQ("cpu", result_or->results[1].name);
+    ASSERT_EQ(Value::Type::Table, result_or->results[1].value.type());
+    ASSERT_TRUE(result_or->results[1].value.as_table().result_name.has_value());
+    EXPECT_EQ("cpu", *result_or->results[1].value.as_table().result_name);
 }
 
 } // namespace
