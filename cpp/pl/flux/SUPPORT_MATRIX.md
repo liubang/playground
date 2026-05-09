@@ -136,6 +136,7 @@
 - 当前单测覆盖已经足够让解析器和运行时继续安全扩展
 - 运行时具备可测试的值模型、作用域链、表达式求值器和首版语句执行器
 - CSV 数据可以通过 Flux 风格的 `csv.from` 进入运行时，包括 raw 头行 CSV、annotated CSV，以及重复 metadata block 的多表输入
+- 内联内存表统一通过 `import "array"` + `array.from(rows:)` 构造；顶层 `from` 不接受 `rows`
 - `group` 已实现真实的按 group key 重分表语义，并支持 `mode: "by"` / `mode: "except"`
 - `count`、`first`、`last`、`distinct`、`sort`，以及 `filter` / `map` / `limit` / `tail` / `keep` / `drop` / `rename` / `duplicate` / `set` / `reduce` 等算子已经按逻辑表逐表工作，不再是旧的“全表 + `_group` 标签”行为
 - `join()` 已经按相同 group key 实例配对逻辑表，不同 measurement / field 的 join 示例也会先显式 regroup 再连接
