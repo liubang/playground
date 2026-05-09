@@ -360,15 +360,18 @@ inline std::string PredicateListString(const std::vector<PredicateSpec>& predica
 }
 
 enum class PushdownState {
-    SqliteScan,
-    SqlitePushdown,
+    SourceScan,
+    SourcePushdown,
     MaterializeBarrier,
     Memory,
 };
 
-inline bool IsSqliteSourceScan(const PlanNode& node) {
-    return node.kind == PlanNodeKind::SourceScan && node.source_scan.source == "sqlite" &&
-           node.source_scan.driver == "sqlite";
+inline bool IsPushdownSourceScan(const PlanNode& node) {
+    if (node.kind != PlanNodeKind::SourceScan) {
+        return false;
+    }
+    return (node.source_scan.source == "sqlite" && node.source_scan.driver == "sqlite") ||
+           (node.source_scan.source == "mysql" && node.source_scan.driver == "mysql");
 }
 
 inline bool IsPushableUnaryNode(const PlanNode& node) {
@@ -390,8 +393,8 @@ inline bool IsPushableUnaryNode(const PlanNode& node) {
 }
 
 inline PushdownState AnalyzePushdownState(const PlanNode& node) {
-    if (IsSqliteSourceScan(node)) {
-        return PushdownState::SqliteScan;
+    if (IsPushdownSourceScan(node)) {
+        return PushdownState::SourceScan;
     }
     if (node.kind == PlanNodeKind::Materialize) {
         return PushdownState::MaterializeBarrier;
@@ -400,24 +403,38 @@ inline PushdownState AnalyzePushdownState(const PlanNode& node) {
         return PushdownState::Memory;
     }
     const PushdownState input_state = AnalyzePushdownState(*node.inputs[0]);
-    if (input_state == PushdownState::SqliteScan || input_state == PushdownState::SqlitePushdown) {
-        return PushdownState::SqlitePushdown;
+    if (input_state == PushdownState::SourceScan || input_state == PushdownState::SourcePushdown) {
+        return PushdownState::SourcePushdown;
     }
     return PushdownState::Memory;
 }
 
+inline std::optional<std::string> PushdownSourceName(const PlanNode& node) {
+    if (IsPushdownSourceScan(node)) {
+        return node.source_scan.source;
+    }
+    if (!IsPushableUnaryNode(node) || node.inputs.size() != 1 || node.inputs[0] == nullptr) {
+        return std::nullopt;
+    }
+    return PushdownSourceName(*node.inputs[0]);
+}
+
 inline void FormatPushdownState(const PlanNode& node, std::ostringstream* out) {
     switch (AnalyzePushdownState(node)) {
-        case PushdownState::SqliteScan:
-            *out << " [sqlite scan]";
+        case PushdownState::SourceScan: {
+            auto source = PushdownSourceName(node).value_or("source");
+            *out << " [" << source << " scan]";
             return;
-        case PushdownState::SqlitePushdown:
-            *out << " [sqlite pushdown";
+        }
+        case PushdownState::SourcePushdown: {
+            auto source = PushdownSourceName(node).value_or("source");
+            *out << " [" << source << " pushdown";
             if (node.kind == PlanNodeKind::Filter && !node.filter.predicates.empty()) {
                 *out << ": " << PredicateListString(node.filter.predicates);
             }
             *out << "]";
             return;
+        }
         case PushdownState::MaterializeBarrier:
             *out << " [barrier";
             if (!node.materialize.reason.empty()) {

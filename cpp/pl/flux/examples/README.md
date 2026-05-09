@@ -14,7 +14,7 @@
 filter 的 predicate 累积、`drop()` 反向 projection、`rename()` projection alias、`distinct()`
 列映射，以及
 `explain()` 对 `[sqlite pushdown]`、`[sqlite scan]` 和 barrier/memory 边界的标注，
-以及 `SQLitePushdown(request: ...)` 物理下推摘要。
+以及 `SourcePushdown(request: ...)` 物理下推摘要。
 
 [`cross_source/sqlite_csv_array_incidents.flux`](./cross_source/sqlite_csv_array_incidents.flux)
 则把 SQLite 指标聚合、CSV owner 维表和 `array.from` 阈值表串起来，展示 `sqlite.from` /
