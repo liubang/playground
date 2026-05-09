@@ -673,7 +673,6 @@ TEST(FluxCliTest, UsesYieldNameInHumanReadableAndAnnotatedCsvOutput) {
     auto human = ExecuteFluxSource(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin yield : (<-tables: stream[A], ?name: string) => stream[A]
 
         array.from(
@@ -694,7 +693,6 @@ TEST(FluxCliTest, UsesYieldNameInHumanReadableAndAnnotatedCsvOutput) {
     auto csv = ExecuteFluxSource(R"(
         import "array"
 
-        builtin from : (bucket: string) => stream[A]
         builtin yield : (<-tables: stream[A], ?name: string) => stream[A]
 
         array.from(

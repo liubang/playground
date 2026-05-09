@@ -150,7 +150,7 @@ Benchmark 说明见 [benchmark/README.md](./benchmark/README.md)。
 
 表值是内存内逻辑表流，包含 bucket、rows、tables、group key 和 result name 等信息。当前实现优先保证示例和测试中的确定行为，不追求完全模拟官方 Flux query planner。
 
-默认 prelude 会安装 universe builtin；显式 `import` 会从本地 package registry 中加载内置包。未知 package 会被保留为 metadata object，例如 `import x "experimental/foo"` 会绑定 `{path: "experimental/foo", alias: "x"}`，方便调试导入信息。
+默认 prelude 会安装 universe builtin；显式 `import` 会从本地 package registry 中加载内置包。运行时没有 universe 顶层数据源入口；所有数据源都走 provider package API，例如 `array.from`、`csv.from`、`sqlite.from`，后续外部源也按 `mysql.from` 这类形态扩展。未知 package 会被保留为 metadata object，例如 `import x "experimental/foo"` 会绑定 `{path: "experimental/foo", alias: "x"}`，方便调试导入信息。
 
 ## Universe Builtins
 
@@ -164,11 +164,10 @@ Universe builtin 默认注入，无需 `import`。
 | `string(v)`              | 将值转成 Flux 风格字符串          |
 | `contains(set:, value:)` | 判断数组中是否存在值              |
 
-### 数据源与表变换
+### 表变换
 
 | 函数                                       | 说明                                           |
 | ------------------------------------------ | ---------------------------------------------- |
-| `from(bucket:)`                            | Flux universe 源入口占位；内联 rows 请使用 `array.from` |
 | `range(start:, stop:)`                     | 按 `_time` 过滤时间范围                        |
 | `filter(fn:, onEmpty:)`                    | 按谓词过滤行，`onEmpty: "keep"` 可保留空表形状 |
 | `map(fn:)`                                 | 对每行做对象映射                               |
@@ -253,9 +252,19 @@ Universe builtin 默认注入，无需 `import`。
 
 | 函数                              | 说明                      |
 | --------------------------------- | ------------------------- |
-| `sqlite.from(path:, table:)` | 从外部表扫描物化为 Flux 表流 |
+| `sqlite.from(path:, table:)`      | 从外部表扫描物化为 Flux 表流 |
 
 `sqlite.from` 通过 SQLite C API 扫描 `path` 指向的数据库表，并将 `null`、integer、float、text、blob-as-string 映射到 Flux 运行时值。用户入口不提供 `query` 模式，SQL 只作为 SQLite connector 内部 physical plan。connector 层已有保守 `ScanRequest` 下推能力；runtime pipeline 已能下推 SQLite 源之上的 `range/filter(simple)/keep/drop/rename/sort/limit/distinct` 线性前缀，以及 `group(columns:) |> count/sum/mean/min/max(column:)`，连续简单 `filter()` 会累积到同一个 `ScanRequest.predicates`，`drop(columns:)` 会基于当前可见 schema 反算为 projection，简单 `rename(columns:)` 会下推为 SQLite projection alias，并让后续 predicate/sort/projection/distinct/aggregate 使用重命名后的列语义，复杂 `filter(fn:)` 和其他算子会回退到内存执行。`explain()` 会标注 `[sqlite pushdown]`、`[sqlite scan]`、`[barrier: ...]` 和 `[memory]`，并在可完整编译时追加 `SQLitePushdown(request: ...)` 摘要，展示 projection、predicates、distinct、group_by、aggregate、order_by 和 limit/offset，方便确认当前 pipeline 的真实下推边界。后续 planner 和下推路线见 [DATASOURCE_ARCHITECTURE.md](./DATASOURCE_ARCHITECTURE.md)。
+
+当前没有顶层 `from(bucket:)` 或其他 universe 数据源占位。新增数据源时优先补 provider package，例如 `mysql.from`，而不是恢复顶层 `from`。
+
+### `mysql`
+
+| 函数                       | 说明                 |
+| -------------------------- | -------------------- |
+| `mysql.from(dsn:, table:)` | MySQL 数据源入口骨架 |
+
+`mysql.from` 已注册 provider package API，并校验 `dsn` 和 `table` 参数形态；connector 尚未实现，调用会返回 `Unimplemented`。和 `sqlite.from` 一样，用户入口不提供 raw `query` 模式。
 
 ### `date`
 
@@ -380,7 +389,8 @@ Universe builtin 默认注入，无需 `import`。
 | `runtime_exec.*`                   | 文件级语句执行             |
 | `runtime_builtin_universe_*.cpp`   | 默认 universe builtin      |
 | `runtime_builtin_table.cpp`        | `array`、`csv` 包          |
-| `runtime_builtin_sqlite.cpp`   | `sqlite` 包和 SQLite table scan 入口 |
+| `runtime_builtin_sqlite.cpp`       | `sqlite` 包和 SQLite table scan 入口 |
+| `runtime_builtin_mysql.cpp`        | `mysql` 包骨架             |
 | `runtime_builtin_scalar.cpp`       | 标量类 stdlib 包           |
 | `runtime_builtin_package.*`        | 包注册与导入               |
 | `flux_cli.*`、`flux.cpp`           | CLI、REPL、输出格式        |
@@ -401,6 +411,7 @@ Universe builtin 默认注入，无需 `import`。
 - `json.encode` 暂返回 string，尚无 bytes 类型。
 - `csv.from` 覆盖 raw/annotated 常见形态，不是完整 CSV 方言实现。
 - `sqlite.from` 当前只支持 SQLite `table` 模式；connector 抽象、logical plan skeleton、materialization barrier 和 SQLite `range/filter(simple)/keep/sort/limit` 前缀下推已启动，复杂 `filter(fn:)`、跨源 join 下推和更多 SQL 方言仍未实现。
+- `mysql.from` 目前只是 provider API 骨架，尚未连接 MySQL connector。
 - package 覆盖以当前 `stdlib_conformance` 为准，新增函数需要同步样例和快照。
 
 ## 贡献时的收尾清单
