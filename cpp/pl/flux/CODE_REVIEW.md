@@ -21,7 +21,7 @@
   - [W-03 flux_datatype_name 将 Null 错误映射为 string](#w-03-flux_datatype_name-将-null-类型错误映射为-string)
   - [W-04 createEmpty 可能产生重复空窗口](#w-04-aggregate_window-的-createempty-可能产生重复空窗口)
   - [W-05 sum 空窗口返回 null 而非 0](#w-05-empty_window_aggregate_value-中-sum-空窗口返回-null-而非-0)
-  - [W-06 builtin_from 不验证行间 schema 一致性](#w-06-builtin_from-不验证行间-schema-一致性)
+  - [W-06 array.from 不验证行间 schema 一致性](#w-06-arrayfrom-不验证行间-schema-一致性)
   - [W-07 builtin_group except 模式依赖不稳定列顺序](#w-07-builtin_group-的-except-模式依赖不稳定的列顺序)
   - [W-08 ObjectValue::lookup 线性搜索性能瓶颈](#w-08-objectvaluelookup-线性搜索性能瓶颈)
   - [W-09 join_rows 中 O(N²) 复杂度](#w-09-join_rows-中重复线性搜索on²-复杂度)
@@ -498,13 +498,13 @@ Value empty_window_aggregate_value(const FunctionValue& fn) {
 
 ---
 
-### [W-06] `builtin_from` 不验证行间 schema 一致性
+### [W-06] `array.from` 不验证行间 schema 一致性
 
-**涉及文件**：`runtime_builtin_universe_core.cpp`
+**涉及文件**：`runtime_builtin_table.cpp`
 
 **问题描述**：
 
-`from` 函数（通过 `require_table_rows`）解析输入行时，不验证所有行的列集合是否一致。若输入中某些行包含额外的列，后续 `filter`、`map`、`group`、`join` 等操作会因 schema 不一致而产生不可预期的行为（某些行缺少特定列，访问时返回 `null` 而非报错）。
+`array.from` 函数（通过 `require_table_rows`）解析输入行时，不验证所有行的列集合是否一致。若输入中某些行包含额外的列，后续 `filter`、`map`、`group`、`join` 等操作会因 schema 不一致而产生不可预期的行为（某些行缺少特定列，访问时返回 `null` 而非报错）。
 
 **修复建议**：
 
@@ -520,7 +520,7 @@ if (!rows.empty()) {
         for (const auto& [name, _] : rows[i]->properties) {
             if (!expected_columns.count(name)) {
                 return absl::InvalidArgumentError(
-                    absl::StrCat("from: row ", i,
+                    absl::StrCat("array.from: row ", i,
                                  " has unexpected column `", name, "`"));
             }
         }

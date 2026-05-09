@@ -200,6 +200,7 @@ cc_library(
     name = "runtime_builtin",
     srcs = [
         "runtime_builtin.cpp",
+        "runtime_builtin_mysql.cpp",
         "runtime_builtin_package.cpp",
         "runtime_builtin_scalar.cpp",
         "runtime_builtin_sqlite.cpp",

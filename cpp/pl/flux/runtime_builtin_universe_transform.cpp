@@ -887,24 +887,6 @@ Value with_materialization_barrier(Value value,
     return value;
 }
 
-absl::StatusOr<Value> builtin_from(const std::vector<Value>& args) {
-    auto object_or = require_object_argument(args, "from");
-    if (!object_or.ok()) {
-        return object_or.status();
-    }
-    auto bucket_or = require_object_property(**object_or, "from", "bucket");
-    if (!bucket_or.ok()) {
-        return bucket_or.status();
-    }
-    if ((*bucket_or)->type() != Value::Type::String) {
-        return absl::InvalidArgumentError("from `bucket` must be a string");
-    }
-    if (const Value* rows_value = (*object_or)->lookup("rows"); rows_value != nullptr) {
-        return absl::InvalidArgumentError("from does not accept `rows`; use array.from");
-    }
-    return Value::table((*bucket_or)->as_string(), {});
-}
-
 absl::StatusOr<Value> builtin_range(const std::vector<Value>& args) {
     auto object_or = require_object_argument(args, "range");
     if (!object_or.ok()) {
@@ -1562,7 +1544,6 @@ absl::StatusOr<Value> builtin_union(const std::vector<Value>& args) {
 } // namespace
 
 void InstallUniverseTransformBuiltins(Environment& env) {
-    install_builtin(env, "from", builtin_from);
     install_builtin(env, "range", builtin_range, "tables");
     install_builtin(env, "filter", builtin_filter, "tables");
     install_builtin(env, "map", builtin_map, "tables");
@@ -1581,10 +1562,6 @@ void InstallUniverseTransformBuiltins(Environment& env) {
 }
 
 bool InstallKnownUniverseTransformBuiltin(Environment& env, const std::string& name) {
-    if (name == "from") {
-        install_builtin(env, "from", builtin_from);
-        return true;
-    }
     if (name == "range") {
         install_builtin(env, "range", builtin_range, "tables");
         return true;
