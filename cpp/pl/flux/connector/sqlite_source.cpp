@@ -346,7 +346,10 @@ absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
         sql += " OFFSET ?";
     }
 
-    return BuiltSql{std::move(sql), std::move(params), request.limit, request.offset};
+    return BuiltSql{.sql = std::move(sql),
+                    .params = std::move(params),
+                    .limit = request.limit,
+                    .offset = request.offset};
 }
 
 Value value_from_sqlite_column(sqlite3_stmt* stmt, int column) {
@@ -399,7 +402,8 @@ absl::StatusOr<TableSchema> SQLiteSource::Schema() const {
     schema.columns.reserve(static_cast<size_t>(column_count));
     for (int i = 0; i < column_count; ++i) {
         const char* name = sqlite3_column_name(stmt_or->get(), i);
-        schema.columns.push_back({name == nullptr ? "" : name, Value::Type::Null, true});
+        schema.columns.push_back(
+            {.name = name == nullptr ? "" : name, .type = Value::Type::Null, .nullable = true});
     }
     return schema;
 }

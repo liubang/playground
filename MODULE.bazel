@@ -269,6 +269,7 @@ single_version_override(
     version = "1.90.0.bcr.2",
 )
 
+bazel_dep(name = "boost.asio", version = "1.90.0.bcr.1")
 bazel_dep(name = "boost.mysql", version = "1.90.0.bcr.1")
 
 # for test

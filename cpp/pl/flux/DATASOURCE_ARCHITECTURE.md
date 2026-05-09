@@ -85,7 +85,7 @@ Flux source
 - `array.from(rows:, bucket:)`：从对象数组构造内联内存表。
 - `csv.from(csv:, file:, mode:)`：解析 raw/annotated CSV 并构造表。
 - `sqlite.from(path:, table:)`：扫描 SQLite 表；用户 API 不提供 raw SQL/query 入口。
-- `mysql.from(dsn:, table:)`：MySQL provider API 骨架；connector 尚未实现，用户 API 不提供 raw SQL/query 入口。
+- `mysql.from(dsn:, table:)` / `mysql.from(host:, user:, password:, database:, table:, ?port:)`：通过 Boost.MySQL 扫描 MySQL 表；用户 API 不提供 raw SQL/query 入口。
 
 运行时不提供 universe 顶层 `from(bucket:)` 或其他顶层数据源占位。新增数据源必须走 provider package 入口，避免让旧的顶层 `from` 写法重新长回来。
 
@@ -538,19 +538,19 @@ SQL，并用 bind 参数执行；runtime pipeline 已能把 SQLite `SourceScan` 
 组合；连续简单 `filter()` 会沿 plan 递归累积到同一个 `ScanRequest.predicates`。
 `drop(columns:)` 会基于当前可见 schema 反算为 projection，并阻止后续下推 predicate
 引用已不可见列。简单 `rename(columns:)` 会下推为 SQL projection alias；planner 会维护
-当前 Flux 可见列到 SQLite 源列的映射，让 rename 后的 filter/sort/projection 继续安全下推。
+当前 Flux 可见列到 SQL provider 源列的映射，让 rename 后的 filter/sort/projection 继续安全下推。
 若 rename 产生重复可见列名，则保守插入 materialization barrier。
-`distinct(column:)` 会通过当前列映射下推到 SQLite 源列，并保留后续 projection/sort/limit
+`distinct(column:)` 会通过当前列映射下推到 SQL provider 源列，并保留后续 projection/sort/limit
 继续下推的能力。
-`group(columns:)` 只有和上述简单 aggregate 组合时才会触发 SQLite `GROUP BY` 下推；
+`group(columns:)` 只有和上述简单 aggregate 组合时才会触发 SQL provider `GROUP BY` 下推；
 单独 `group()` 仍保持 eager 内存结果。
 `or`、函数调用、正则、`in`、跨列比较、块体函数和 `onEmpty: "keep"` 都不会下推。
-`explain()` 会把已下推节点标为 `[sqlite pushdown]`，把截断点标为 `[barrier: ...]`；
-当 plan 可完整编译为 SQLite `ScanRequest` 时，还会追加 `SQLitePushdown(request: ...)`
+`explain()` 会把已下推节点标为 `[sqlite pushdown]` / `[mysql pushdown]`，把截断点标为 `[barrier: ...]`；
+当 plan 可完整编译为 SQL provider `ScanRequest` 时，还会追加 `SourcePushdown(request: ...)`
 摘要，列出 projection/alias、time range、predicate 累积、distinct、group_by、
 aggregate、order_by、limit/offset 等真实下推字段。
 
-目标：SQLite 能下推简单 range/filter/projection/limit/sort。
+目标：SQLite/MySQL 能下推简单 range/filter/projection/limit/sort。
 
 工作项：
 

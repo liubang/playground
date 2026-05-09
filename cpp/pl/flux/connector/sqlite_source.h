@@ -28,8 +28,8 @@ class SQLiteSource final : public TableSource {
 public:
     SQLiteSource(std::string dsn, std::string table);
 
-    absl::StatusOr<TableSchema> Schema() const override;
-    SourceCapabilities Capabilities() const override;
+    [[nodiscard]] absl::StatusOr<TableSchema> Schema() const override;
+    [[nodiscard]] SourceCapabilities Capabilities() const override;
     absl::StatusOr<Value> Scan(const ScanRequest& request) override;
 
 private:
