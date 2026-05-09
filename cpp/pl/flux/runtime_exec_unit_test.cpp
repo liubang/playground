@@ -326,8 +326,8 @@ TEST(RuntimeExecTest, ExplainFormatsLogicalPlan) {
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
     ASSERT_EQ(Value::Type::String, plan_or->type());
     EXPECT_EQ("Limit [sqlite pushdown]\n"
-              "  Filter [sqlite pushdown: host == \"edge-1\"]\n"
-              "    SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
+              "`- Filter [sqlite pushdown: host == \"edge-1\"]\n"
+              "   `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
               "SQLitePushdown(request: projection=[*], predicates=[host == \"edge-1\"], limit=1)\n",
               plan_or->as_string());
 }
@@ -367,9 +367,9 @@ TEST(RuntimeExecTest, ContinuousSqliteFiltersAccumulatePushdownPredicates) {
     ASSERT_EQ(Value::Type::String, plan_or->type());
     EXPECT_EQ(
         "Limit [sqlite pushdown]\n"
-        "  Filter [sqlite pushdown: usage > 80]\n"
-        "    Filter [sqlite pushdown: host == \"edge-1\"]\n"
-        "      SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
+        "`- Filter [sqlite pushdown: usage > 80]\n"
+        "   `- Filter [sqlite pushdown: host == \"edge-1\"]\n"
+        "      `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
         "SQLitePushdown(request: projection=[*], predicates=[host == \"edge-1\", usage > "
         "80], limit=10)\n",
         plan_or->as_string());
@@ -415,9 +415,9 @@ TEST(RuntimeExecTest, SqliteDropColumnsPushesDownAsProjection) {
     ASSERT_EQ(Value::Type::String, plan_or->type());
     EXPECT_EQ(
         "Limit [sqlite pushdown]\n"
-        "  Filter [sqlite pushdown: host == \"edge-1\"]\n"
-        "    Project [sqlite pushdown]\n"
-        "      SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
+        "`- Filter [sqlite pushdown: host == \"edge-1\"]\n"
+        "   `- Project [sqlite pushdown]\n"
+        "      `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
         "SQLitePushdown(request: projection=[_time, host, usage], predicates=[host == "
         "\"edge-1\"], limit=10)\n",
         plan_or->as_string());
@@ -487,11 +487,11 @@ TEST(RuntimeExecTest, SqliteRenamePushesDownProjectionAliasAndColumnMapping) {
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
     ASSERT_EQ(Value::Type::String, plan_or->type());
     EXPECT_EQ("Limit [sqlite pushdown]\n"
-              "  Sort [sqlite pushdown]\n"
-              "    Project [sqlite pushdown]\n"
-              "      Filter [sqlite pushdown: value > 80]\n"
-              "        Rename [sqlite pushdown]\n"
-              "          SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", "
+              "`- Sort [sqlite pushdown]\n"
+              "   `- Project [sqlite pushdown]\n"
+              "      `- Filter [sqlite pushdown: value > 80]\n"
+              "         `- Rename [sqlite pushdown]\n"
+              "            `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", "
               "table=\"cpu\")\n"
               "SQLitePushdown(request: projection=[host, usage AS value], predicates=[usage > "
               "80], order_by=[usage DESC], limit=1)\n",
@@ -561,9 +561,9 @@ TEST(RuntimeExecTest, SqliteGroupCountPushesDownAggregate) {
     ASSERT_EQ(Value::Type::String, plan_or->type());
     EXPECT_EQ(
         "Aggregate [sqlite pushdown]\n"
-        "  Group [sqlite pushdown]\n"
-        "    Filter [sqlite pushdown: region == \"west\"]\n"
-        "      SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
+        "`- Group [sqlite pushdown]\n"
+        "   `- Filter [sqlite pushdown: region == \"west\"]\n"
+        "      `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
         "SQLitePushdown(request: projection=[*], predicates=[region == \"west\"], "
         "group_by=[host], aggregate=COUNT(usage))\n",
         plan_or->as_string());
@@ -641,10 +641,10 @@ TEST(RuntimeExecTest, SqliteDistinctAfterRenamePushesDownColumnMapping) {
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
     ASSERT_EQ(Value::Type::String, plan_or->type());
     EXPECT_EQ("Sort [sqlite pushdown]\n"
-              "  Project [sqlite pushdown]\n"
-              "    Distinct [sqlite pushdown]\n"
-              "      Rename [sqlite pushdown]\n"
-              "        SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", "
+              "`- Project [sqlite pushdown]\n"
+              "   `- Distinct [sqlite pushdown]\n"
+              "      `- Rename [sqlite pushdown]\n"
+              "         `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", "
               "table=\"cpu\")\n"
               "SQLitePushdown(request: projection=[host AS service], distinct=host, "
               "order_by=[host ASC])\n",
@@ -683,7 +683,7 @@ TEST(RuntimeExecTest, ComplexSqliteFilterFallsBackToMaterializedExecution) {
     EXPECT_EQ(
         "Materialize [barrier: unsupported lazy builtin](reason=\"unsupported lazy builtin\", "
         "builtin=\"filter\")\n"
-        "  SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n",
+        "`- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n",
         plan_or->as_string());
 }
 
@@ -714,9 +714,9 @@ TEST(RuntimeExecTest, UnsupportedLazyBuiltinAddsMaterializationBarrier) {
     ASSERT_EQ(Value::Type::String, plan_or->type());
     EXPECT_EQ(
         "Limit [memory]\n"
-        "  Materialize [barrier: unsupported lazy builtin](reason=\"unsupported lazy builtin\", "
+        "`- Materialize [barrier: unsupported lazy builtin](reason=\"unsupported lazy builtin\", "
         "builtin=\"map\")\n"
-        "    SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n",
+        "   `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n",
         plan_or->as_string());
 }
 
