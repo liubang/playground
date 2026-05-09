@@ -152,7 +152,7 @@ absl::StatusOr<Value> builtin_explain(const std::vector<Value>& args) {
         return table_or.status();
     }
     std::string out = plan::FormatPlan((*table_or)->plan);
-    if (auto summary = sqlite_pushdown_summary((*table_or)->plan); summary.has_value()) {
+    if (auto summary = source_pushdown_summary((*table_or)->plan); summary.has_value()) {
         out += *summary;
         out += "\n";
     }

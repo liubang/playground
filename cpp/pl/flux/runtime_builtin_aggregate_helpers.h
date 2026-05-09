@@ -19,21 +19,18 @@
 
 #include "cpp/pl/flux/compat.h"
 #include "cpp/pl/flux/runtime_builtin_table_helpers.h"
-#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <limits>
 #include <string>
 #include <vector>
 
-namespace pl::flux {
-
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-function"
 #endif
 
-namespace detail {
+namespace pl::flux::detail {
 
 enum class NumericKind {
     UInt,
@@ -160,8 +157,8 @@ inline absl::StatusOr<double> quantile_for_sorted_values(const std::vector<doubl
         return values.front();
     }
     const double position = q * static_cast<double>(values.size() - 1);
-    const size_t lower_index = static_cast<size_t>(std::floor(position));
-    const size_t upper_index = static_cast<size_t>(std::ceil(position));
+    const auto lower_index = static_cast<size_t>(std::floor(position));
+    const auto upper_index = static_cast<size_t>(std::ceil(position));
     const double lower = values[lower_index];
     const double upper = values[upper_index];
     const double weight = position - static_cast<double>(lower_index);
@@ -295,10 +292,8 @@ inline absl::StatusOr<Value> aggregate_min_max(const std::vector<Value>& args,
     return *best;
 }
 
-} // namespace detail
+} // namespace pl::flux::detail
 
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
-
-} // namespace pl::flux

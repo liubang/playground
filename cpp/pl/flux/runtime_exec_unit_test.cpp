@@ -330,7 +330,7 @@ TEST(RuntimeExecTest, ExplainFormatsLogicalPlan) {
         "Limit [sqlite pushdown]\n"
         "`- Filter [sqlite pushdown: host == \"edge-1\"]\n"
         "   `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
-        "SQLitePushdown(request: projection=[*], predicates=[host == \"edge-1\"], limit=1)\n",
+        "SourcePushdown(request: projection=[*], predicates=[host == \"edge-1\"], limit=1)\n",
         plan_or->as_string());
 }
 
@@ -372,7 +372,7 @@ TEST(RuntimeExecTest, ContinuousSqliteFiltersAccumulatePushdownPredicates) {
         "`- Filter [sqlite pushdown: usage > 80]\n"
         "   `- Filter [sqlite pushdown: host == \"edge-1\"]\n"
         "      `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
-        "SQLitePushdown(request: projection=[*], predicates=[host == \"edge-1\", usage > "
+        "SourcePushdown(request: projection=[*], predicates=[host == \"edge-1\", usage > "
         "80], limit=10)\n",
         plan_or->as_string());
 }
@@ -420,7 +420,7 @@ TEST(RuntimeExecTest, SqliteDropColumnsPushesDownAsProjection) {
         "`- Filter [sqlite pushdown: host == \"edge-1\"]\n"
         "   `- Project [sqlite pushdown]\n"
         "      `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
-        "SQLitePushdown(request: projection=[_time, host, usage], predicates=[host == "
+        "SourcePushdown(request: projection=[_time, host, usage], predicates=[host == "
         "\"edge-1\"], limit=10)\n",
         plan_or->as_string());
 }
@@ -495,7 +495,7 @@ TEST(RuntimeExecTest, SqliteRenamePushesDownProjectionAliasAndColumnMapping) {
               "         `- Rename [sqlite pushdown]\n"
               "            `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", "
               "table=\"cpu\")\n"
-              "SQLitePushdown(request: projection=[host, usage AS value], predicates=[usage > "
+              "SourcePushdown(request: projection=[host, usage AS value], predicates=[usage > "
               "80], order_by=[usage DESC], limit=1)\n",
               plan_or->as_string());
 }
@@ -566,7 +566,7 @@ TEST(RuntimeExecTest, SqliteGroupCountPushesDownAggregate) {
         "`- Group [sqlite pushdown]\n"
         "   `- Filter [sqlite pushdown: region == \"west\"]\n"
         "      `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
-        "SQLitePushdown(request: projection=[*], predicates=[region == \"west\"], "
+        "SourcePushdown(request: projection=[*], predicates=[region == \"west\"], "
         "group_by=[host], aggregate=COUNT(usage))\n",
         plan_or->as_string());
 }
@@ -648,7 +648,7 @@ TEST(RuntimeExecTest, SqliteDistinctAfterRenamePushesDownColumnMapping) {
               "      `- Rename [sqlite pushdown]\n"
               "         `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", "
               "table=\"cpu\")\n"
-              "SQLitePushdown(request: projection=[host AS service], distinct=host, "
+              "SourcePushdown(request: projection=[host AS service], distinct=host, "
               "order_by=[host ASC])\n",
               plan_or->as_string());
 }
@@ -737,18 +737,16 @@ TEST(RuntimeExecTest, SqliteFromRejectsQueryArgument) {
     EXPECT_NE(std::string::npos, result_or.status().message().find("does not accept `query`"));
 }
 
-TEST(RuntimeExecTest, ImportsMysqlPackageSkeletonAndRejectsExecutionUntilConnectorExists) {
+TEST(RuntimeExecTest, ImportsMysqlPackage) {
     auto file = ParseFile(R"(
         import "mysql"
-        data = mysql.from(dsn: "user:pass@tcp(127.0.0.1:3306)/metrics", table: "cpu")
     )");
     ASSERT_NE(file, nullptr);
 
     Environment env;
     auto result_or = StatementExecutor::ExecuteFile(*file, env);
 
-    ASSERT_FALSE(result_or.ok());
-    EXPECT_EQ(absl::StatusCode::kUnimplemented, result_or.status().code());
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
     ASSERT_TRUE(env.lookup("mysql").ok());
     EXPECT_EQ("{path: \"mysql\", from: <builtin mysql.from>}", env.lookup("mysql")->string());
 }
@@ -766,6 +764,41 @@ TEST(RuntimeExecTest, MysqlFromRejectsRawQueryArgument) {
     ASSERT_FALSE(result_or.ok());
     EXPECT_EQ(absl::StatusCode::kInvalidArgument, result_or.status().code());
     EXPECT_NE(std::string::npos, result_or.status().message().find("does not accept `query`"));
+}
+
+TEST(RuntimeExecTest, MysqlFromRequiresConnectionShape) {
+    auto file = ParseFile(R"(
+        import "mysql"
+        data = mysql.from(table: "cpu")
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_FALSE(result_or.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, result_or.status().code());
+    EXPECT_NE(std::string::npos, result_or.status().message().find("requires `host`"));
+}
+
+TEST(RuntimeExecTest, MysqlFromRejectsMixedDsnAndHostConnectionShape) {
+    auto file = ParseFile(R"(
+        import "mysql"
+        data = mysql.from(
+            dsn: "user:pass@tcp(127.0.0.1:3306)/metrics",
+            host: "127.0.0.1",
+            table: "cpu",
+        )
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_FALSE(result_or.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, result_or.status().code());
+    EXPECT_NE(std::string::npos,
+              result_or.status().message().find("accepts either `dsn` or host/user"));
 }
 
 TEST(RuntimeExecTest, DeclaresUnknownBuiltinAsPlaceholderFunction) {
