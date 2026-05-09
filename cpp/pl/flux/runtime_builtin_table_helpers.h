@@ -148,13 +148,13 @@ inline Value with_materialization_barrier(Value value,
     return value;
 }
 
-Value maybe_pushdown_sqlite_plan(Value value);
+Value maybe_pushdown_source_plan(Value value);
 Value with_aggregate_plan(Value value,
                           const TableValue& input,
                           plan::AggregateFunction fn,
                           std::string column);
 Value with_distinct_plan(Value value, const TableValue& input, std::string column);
-std::optional<std::string> sqlite_pushdown_summary(const std::shared_ptr<plan::PlanNode>& plan);
+std::optional<std::string> source_pushdown_summary(const std::shared_ptr<plan::PlanNode>& plan);
 
 inline absl::StatusOr<const ArrayValue*> require_array_property(const ObjectValue& object,
                                                                 const std::string& name,
