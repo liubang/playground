@@ -89,15 +89,15 @@ flux> :quit
 
 常用 CLI 参数：
 
-| 参数                   | 说明                       |       |              |
-| ---------------------- | -------------------------- | ----- | ------------ |
-| `ast`                  | 只解析并输出 AST           |       |              |
-| `-e <source>`          | 执行内联源码               |       |              |
-| `--output-format human | csv                        | json` | 切换输出格式 |
-| `--result <name>`      | 只输出指定结果             |       |              |
-| `--list-results`       | 列出脚本可输出的结果名     |       |              |
-| `--quiet`              | 执行但不打印结果           |       |              |
-| `--no-prelude`         | 不注入默认 builtin/prelude |       |              |
+| 参数                                  | 说明                       |
+| ------------------------------------- | -------------------------- |
+| `ast`                                 | 只解析并输出 AST           |
+| `-e <source>`                         | 执行内联源码               |
+| `--output-format human \| csv \| json` | 切换输出格式               |
+| `--result <name>`                     | 只输出指定结果             |
+| `--list-results`                      | 列出脚本可输出的结果名     |
+| `--quiet`                             | 执行但不打印结果           |
+| `--no-prelude`                        | 不注入默认 builtin/prelude |
 
 ## 示例与测试
 
