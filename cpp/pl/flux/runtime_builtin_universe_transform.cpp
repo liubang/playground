@@ -899,15 +899,10 @@ absl::StatusOr<Value> builtin_from(const std::vector<Value>& args) {
     if ((*bucket_or)->type() != Value::Type::String) {
         return absl::InvalidArgumentError("from `bucket` must be a string");
     }
-    std::vector<std::shared_ptr<ObjectValue>> rows;
     if (const Value* rows_value = (*object_or)->lookup("rows"); rows_value != nullptr) {
-        auto rows_or = require_table_rows(*rows_value, "from");
-        if (!rows_or.ok()) {
-            return rows_or.status();
-        }
-        rows = std::move(*rows_or);
+        return absl::InvalidArgumentError("from does not accept `rows`; use array.from");
     }
-    return Value::table((*bucket_or)->as_string(), std::move(rows));
+    return Value::table((*bucket_or)->as_string(), {});
 }
 
 absl::StatusOr<Value> builtin_range(const std::vector<Value>& args) {

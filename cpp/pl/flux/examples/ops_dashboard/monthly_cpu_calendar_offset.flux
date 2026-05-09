@@ -1,4 +1,6 @@
-from(
+import "array"
+
+array.from(
     bucket: "telegraf",
     rows: [
         {_time: "2024-01-20T00:00:00Z", _value: 10.0},
