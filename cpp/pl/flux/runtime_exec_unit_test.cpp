@@ -16,6 +16,7 @@
 // Created: 2026/04/15 00:47
 
 #include "cpp/pl/flux/parser.h"
+#include "cpp/pl/flux/runtime_builtin.h"
 #include "cpp/pl/flux/runtime_exec.h"
 #include <gtest/gtest.h>
 
@@ -921,6 +922,23 @@ TEST(RuntimeExecTest, ExecutesArrayFromImportedPackage) {
     ASSERT_EQ(Value::Type::Table, result_or->last.value.type());
 }
 
+TEST(RuntimeExecTest, FromRejectsInlineRows) {
+    auto file = ParseFile(R"(
+        data = from(bucket: "telegraf", rows: [{_value: 1}])
+        data
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    BuiltinRegistry::Install(env);
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_FALSE(result_or.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, result_or.status().code());
+    EXPECT_NE(std::string::npos,
+              std::string(result_or.status().message()).find("use array.from"));
+}
+
 TEST(RuntimeExecTest, ExecutesArrayPackageHelpers) {
     auto file = ParseFile(R"(
         import "array"
@@ -1059,12 +1077,14 @@ TEST(RuntimeExecTest, ResolvesOptionValuesInsideExpressionsAndBlockFunctions) {
 
 TEST(RuntimeExecTest, AppliesGlobalOptionLocationDuringFileExecution) {
     auto file = ParseFile(R"(
+        import "array"
+
         option location = {zone: "UTC", offset: "-8h"}
         builtin from : (bucket: string) => stream[A]
         builtin aggregateWindow : (<-tables: stream[A], every: duration, fn: (values: [B]) => C) => stream[A]
         builtin sum : (values: [int]) => float
 
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T07:30:00Z", _value: 10.0},
@@ -1158,12 +1178,14 @@ TEST(RuntimeExecTest, TracksNamedResultsForAssignmentsAndExpressions) {
 
 TEST(RuntimeExecTest, ExecutesInMemoryQueryPipelineFile) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin range : (<-tables: stream[A], start: time, ?stop: time) => stream[A]
         builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
         builtin map : (<-tables: stream[A], fn: (r: A) => B) => stream[B]
 
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T00:00:00Z", _measurement: "cpu", _value: 95.0},
@@ -1193,13 +1215,15 @@ TEST(RuntimeExecTest, ExecutesInMemoryQueryPipelineFile) {
 
 TEST(RuntimeExecTest, ExecutesReduceKeepDropAndLimitQueryFile) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin limit : (<-tables: stream[A], n: int) => stream[A]
         builtin keep : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin reduce : (<-tables: stream[A], identity: B, fn: (r: A, accumulator: B) => B) => stream[B]
         builtin drop : (<-tables: stream[A], columns: [string]) => stream[A]
 
-        totals = from(
+        totals = array.from(
             bucket: "telegraf",
             rows: [
                 {_measurement: "cpu", _value: 90.0, host: "a"},
@@ -1236,12 +1260,14 @@ TEST(RuntimeExecTest, ExecutesReduceKeepDropAndLimitQueryFile) {
 
 TEST(RuntimeExecTest, ExecutesRenameDuplicateAndSetQueryFile) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin duplicate : (<-tables: stream[A], column: string, as: string) => stream[A]
         builtin rename : (<-tables: stream[A], columns: A) => stream[B]
         builtin set : (<-tables: stream[A], key: string, value: string) => stream[A]
 
-        shaped = from(
+        shaped = array.from(
             bucket: "telegraf",
             rows: [
                 {_measurement: "cpu", _value: 95.0, host: "a"},
@@ -1275,6 +1301,8 @@ TEST(RuntimeExecTest, ExecutesRenameDuplicateAndSetQueryFile) {
 
 TEST(RuntimeExecTest, ExecutesSortGroupCountFirstAndLastQueryFile) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], ?columns: [string], ?mode: string) => stream[A]
         builtin sort : (<-tables: stream[A], columns: [string], desc: bool) => stream[A]
@@ -1282,7 +1310,7 @@ TEST(RuntimeExecTest, ExecutesSortGroupCountFirstAndLastQueryFile) {
         builtin last : (<-tables: stream[A]) => stream[A]
         builtin count : (<-tables: stream[A], column: string) => stream[A]
 
-        hottest = from(
+        hottest = array.from(
             bucket: "telegraf",
             rows: [
                 {_measurement: "cpu", _value: 70.0, host: "b"},
@@ -1293,8 +1321,8 @@ TEST(RuntimeExecTest, ExecutesSortGroupCountFirstAndLastQueryFile) {
             |> group(columns: ["_measurement"])
             |> sort(columns: ["_value"], desc: true)
             |> first()
-        latest = from(bucket: "telegraf", rows: [{_value: 1}, {_value: 2}]) |> last()
-        counted = from(bucket: "telegraf", rows: [
+        latest = array.from(bucket: "telegraf", rows: [{_value: 1}, {_value: 2}]) |> last()
+        counted = array.from(bucket: "telegraf", rows: [
             {_measurement: "cpu", host: "a", _value: 1},
             {_measurement: "cpu", host: "a"},
             {_measurement: "mem", host: "b", _value: 2},
@@ -1328,15 +1356,17 @@ TEST(RuntimeExecTest, ExecutesSortGroupCountFirstAndLastQueryFile) {
 
 TEST(RuntimeExecTest, ExecutesUnionAndJoinQueryFile) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin union : (tables: [stream[A]]) => stream[A]
         builtin join : (tables: A, ?method: string, on: [string]) => stream[B]
 
-        cpu = from(bucket: "cpu", rows: [
+        cpu = array.from(bucket: "cpu", rows: [
             {_time: "t1", _value: 90.0, host: "a"},
             {_time: "t2", _value: 70.0, host: "b"},
         ])
-        mem = from(bucket: "mem", rows: [
+        mem = array.from(bucket: "mem", rows: [
             {_time: "t1", _value: 40.0},
             {_time: "t3", _value: 20.0},
         ])
@@ -1365,18 +1395,20 @@ TEST(RuntimeExecTest, ExecutesUnionAndJoinQueryFile) {
 
 TEST(RuntimeExecTest, ExecutesJoinQueryFileUsingMatchingGroupInstancesOnly) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], ?columns: [string], ?mode: string) => stream[A]
         builtin join : (tables: A, ?method: string, on: [string]) => stream[B]
 
-        cpu = from(bucket: "cpu", rows: [
+        cpu = array.from(bucket: "cpu", rows: [
             {_time: "t1", host: "a", region: "east", _value: 90.0},
             {_time: "t2", host: "a", region: "east", _value: 91.0},
             {_time: "t3", host: "b", region: "west", _value: 70.0},
             {host: "a", region: "east", _value: 999.0},
         ])
             |> group(columns: ["host"])
-        mem = from(bucket: "mem", rows: [
+        mem = array.from(bucket: "mem", rows: [
             {_time: "t1", host: "a", region: "east", _value: 40.0},
             {_time: "t2", host: "a", region: "east", _value: 41.0},
             {_time: "t4", host: "c", region: "north", _value: 20.0},
@@ -1411,13 +1443,15 @@ TEST(RuntimeExecTest, ExecutesJoinQueryFileUsingMatchingGroupInstancesOnly) {
 
 TEST(RuntimeExecTest, ExecutesWindowAndOuterJoinQueryFile) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin range : (<-tables: stream[A], start: time, ?stop: time) => stream[A]
         builtin group : (<-tables: stream[A], ?columns: [string], ?mode: string) => stream[A]
         builtin window : (<-tables: stream[A], every: duration, ?createEmpty: bool) => stream[A]
         builtin join : (tables: A, ?method: string, on: [string]) => stream[B]
 
-        cpu = from(bucket: "cpu", rows: [
+        cpu = array.from(bucket: "cpu", rows: [
             {_time: 2024-01-01T00:00:10Z, host: "a", _value: 90.0},
             {_time: 2024-01-01T00:02:05Z, host: "a", _value: 91.0},
         ])
@@ -1425,13 +1459,13 @@ TEST(RuntimeExecTest, ExecutesWindowAndOuterJoinQueryFile) {
             |> group(columns: ["host"])
             |> window(every: 1m, createEmpty: true)
 
-        mem = from(bucket: "mem", rows: [
+        mem = array.from(bucket: "mem", rows: [
             {_time: "t2", host: "a", _value: 40.0},
             {_time: "t3", host: "a", _value: 20.0},
         ])
         joined = join(
             tables: {
-                cpu: from(bucket: "cpu", rows: [
+                cpu: array.from(bucket: "cpu", rows: [
                     {_time: "t1", host: "a", _value: 90.0},
                     {_time: "t2", host: "a", _value: 91.0},
                 ]),
@@ -1461,6 +1495,8 @@ TEST(RuntimeExecTest, ExecutesWindowAndOuterJoinQueryFile) {
 
 TEST(RuntimeExecTest, ExecutesRankingAndQuantileQueryFile) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], ?columns: [string], ?mode: string) => stream[A]
         builtin spread : (<-tables: stream[A], ?column: string) => stream[A]
@@ -1469,37 +1505,37 @@ TEST(RuntimeExecTest, ExecutesRankingAndQuantileQueryFile) {
         builtin top : (<-tables: stream[A], n: int, ?columns: [string]) => stream[A]
         builtin bottom : (<-tables: stream[A], n: int, ?columns: [string]) => stream[A]
 
-        byHost = from(bucket: "cpu", rows: [
+        byHost = array.from(bucket: "cpu", rows: [
             {_time: "t1", host: "a", _value: 10.0},
             {_time: "t2", host: "a", _value: 25.0},
             {_time: "t3", host: "b", _value: 40.0},
             {_time: "t4", host: "b", _value: 50.0},
         ]) |> group(columns: ["host"])
         spreaded = byHost |> spread()
-        q = from(bucket: "cpu", rows: [
+        q = array.from(bucket: "cpu", rows: [
             {_time: "t1", _value: 10.0},
             {_time: "t2", _value: 20.0},
             {_time: "t3", _value: 30.0},
             {_time: "t4", _value: 40.0},
         ]) |> quantile(q: 0.25)
-        multiQ = from(bucket: "cpu", rows: [
+        multiQ = array.from(bucket: "cpu", rows: [
             {_time: "t1", _value: 10.0},
             {_time: "t2", _value: 20.0},
             {_time: "t3", _value: 30.0},
             {_time: "t4", _value: 40.0},
         ]) |> quantile(q: [0.5, 0.75, 0.99, 0.999])
-        med = from(bucket: "cpu", rows: [
+        med = array.from(bucket: "cpu", rows: [
             {_time: "t1", _value: 10.0},
             {_time: "t2", _value: 20.0},
             {_time: "t3", _value: 30.0},
             {_time: "t4", _value: 40.0},
         ]) |> median()
-        highest = from(bucket: "cpu", rows: [
+        highest = array.from(bucket: "cpu", rows: [
             {_time: "t1", _value: 10.0},
             {_time: "t2", _value: 20.0},
             {_time: "t3", _value: 30.0},
         ]) |> top(n: 2)
-        lowest = from(bucket: "cpu", rows: [
+        lowest = array.from(bucket: "cpu", rows: [
             {_time: "t1", _value: 10.0},
             {_time: "t2", _value: 20.0},
             {_time: "t3", _value: 30.0},
@@ -1535,10 +1571,12 @@ TEST(RuntimeExecTest, ExecutesRankingAndQuantileQueryFile) {
 
 TEST(RuntimeExecTest, ExecutesDistinctQueryFile) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin distinct : (<-tables: stream[A], ?column: string) => stream[A]
 
-        hosts = from(bucket: "cpu", rows: [
+        hosts = array.from(bucket: "cpu", rows: [
             {_time: "t1", host: "a", region: "east", _value: 90.0},
             {_time: "t2", host: "a", region: "east", _value: 70.0},
             {_time: "t3", host: "b", region: "west", _value: 60.0},
@@ -1563,10 +1601,12 @@ TEST(RuntimeExecTest, ExecutesDistinctQueryFile) {
 
 TEST(RuntimeExecTest, ExecutesTailQueryFile) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin tail : (<-tables: stream[A], n: int, ?offset: int) => stream[A]
 
-        recent = from(bucket: "cpu", rows: [
+        recent = array.from(bucket: "cpu", rows: [
             {_time: "t1", host: "a", _value: 10.0},
             {_time: "t2", host: "b", _value: 20.0},
             {_time: "t3", host: "c", _value: 30.0},
@@ -1592,10 +1632,12 @@ TEST(RuntimeExecTest, ExecutesTailQueryFile) {
 
 TEST(RuntimeExecTest, ExecutesPivotQueryFile) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin pivot : (<-tables: stream[A], rowKey: [string], columnKey: [string], valueColumn: string) => stream[B]
 
-        wide = from(bucket: "cpu", rows: [
+        wide = array.from(bucket: "cpu", rows: [
             {_time: 2024-01-01T00:01:00Z, host: "a", metric: "cpu", usage: 72.0},
             {_time: 2024-01-01T00:01:00Z, host: "a", metric: "mem", usage: 63.0},
             {_time: 2024-01-01T00:02:00Z, host: "a", metric: "cpu", usage: 82.0},
@@ -1625,11 +1667,13 @@ TEST(RuntimeExecTest, ExecutesPivotQueryFile) {
 
 TEST(RuntimeExecTest, ExecutesFillQueryFile) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin fill : (<-tables: stream[A], ?column: string, ?usePrevious: bool, ?value: B) => stream[A]
 
-        carried = from(bucket: "cpu", rows: [
+        carried = array.from(bucket: "cpu", rows: [
             {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
             {_time: 2024-01-01T00:01:00Z, host: "a"},
             {_time: 2024-01-01T00:02:00Z, host: "a", _value: 30.0},
@@ -1637,7 +1681,7 @@ TEST(RuntimeExecTest, ExecutesFillQueryFile) {
         ])
             |> group(columns: ["host"])
             |> fill(usePrevious: true)
-        defaults = from(bucket: "cpu", rows: [
+        defaults = array.from(bucket: "cpu", rows: [
             {_time: 2024-01-01T00:00:00Z, host: "a"},
             {_time: 2024-01-01T00:01:00Z, host: "a", usage: 2.0},
         ])
@@ -1665,11 +1709,13 @@ TEST(RuntimeExecTest, ExecutesFillQueryFile) {
 
 TEST(RuntimeExecTest, ExecutesElapsedQueryFile) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin elapsed : (<-tables: stream[A], ?unit: duration, ?timeColumn: string, ?columnName: string) => stream[A]
 
-        deltas = from(bucket: "cpu", rows: [
+        deltas = array.from(bucket: "cpu", rows: [
             {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
             {_time: 2024-01-01T00:00:10Z, host: "b", _value: 20.0},
             {_time: 2024-01-01T00:00:30Z, host: "a", _value: 30.0},
@@ -1696,11 +1742,13 @@ TEST(RuntimeExecTest, ExecutesElapsedQueryFile) {
 
 TEST(RuntimeExecTest, ExecutesDifferenceQueryFile) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin difference : (<-tables: stream[A], ?column: string) => stream[A]
 
-        deltas = from(bucket: "cpu", rows: [
+        deltas = array.from(bucket: "cpu", rows: [
             {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
             {_time: 2024-01-01T00:00:10Z, host: "b", _value: 20.0},
             {_time: 2024-01-01T00:00:30Z, host: "a", _value: 17.0},
@@ -1727,11 +1775,13 @@ TEST(RuntimeExecTest, ExecutesDifferenceQueryFile) {
 
 TEST(RuntimeExecTest, ExecutesDifferenceQueryFileWithNonNegativeAndKeepFirst) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin difference : (<-tables: stream[A], ?column: string, ?nonNegative: bool, ?keepFirst: bool) => stream[A]
 
-        deltas = from(bucket: "cpu", rows: [
+        deltas = array.from(bucket: "cpu", rows: [
             {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
             {_time: 2024-01-01T00:00:20Z, host: "a", _value: 7.0},
             {_time: 2024-01-01T00:00:40Z, host: "a", _value: 13.0},
@@ -1756,11 +1806,13 @@ TEST(RuntimeExecTest, ExecutesDifferenceQueryFileWithNonNegativeAndKeepFirst) {
 
 TEST(RuntimeExecTest, ExecutesDerivativeQueryFile) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin derivative : (<-tables: stream[A], ?unit: duration, ?column: string, ?timeColumn: string) => stream[A]
 
-        rates = from(bucket: "cpu", rows: [
+        rates = array.from(bucket: "cpu", rows: [
             {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
             {_time: 2024-01-01T00:00:10Z, host: "b", _value: 20.0},
             {_time: 2024-01-01T00:00:30Z, host: "a", _value: 17.0},
@@ -1788,11 +1840,13 @@ TEST(RuntimeExecTest, ExecutesDerivativeQueryFile) {
 
 TEST(RuntimeExecTest, ExecutesDerivativeQueryFileWithNonNegativeAndInitialZero) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin derivative : (<-tables: stream[A], ?unit: duration, ?column: string, ?timeColumn: string, ?nonNegative: bool, ?initialZero: bool) => stream[A]
 
-        rates = from(bucket: "cpu", rows: [
+        rates = array.from(bucket: "cpu", rows: [
             {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
             {_time: 2024-01-01T00:00:10Z, host: "a", _value: 6.0},
             {_time: 2024-01-01T00:00:20Z, host: "a", _value: 8.0},
@@ -1816,16 +1870,18 @@ TEST(RuntimeExecTest, ExecutesDerivativeQueryFileWithNonNegativeAndInitialZero) 
 
 TEST(RuntimeExecTest, ExecutesJoinStdlibPackageHelpers) {
     auto file = ParseFile(R"(
+        import "array"
+
         import "join"
         builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], ?columns: [string], ?mode: string) => stream[A]
 
-        cpu = from(bucket: "cpu", rows: [
+        cpu = array.from(bucket: "cpu", rows: [
             {_time: "t1", host: "a", _value: 90.0},
             {_time: "t2", host: "a", _value: 91.0},
         ])
             |> group(columns: ["host"])
-        mem = from(bucket: "mem", rows: [
+        mem = array.from(bucket: "mem", rows: [
             {_time: "t1", host: "a", _value: 40.0},
             {_time: "t3", host: "a", _value: 20.0},
         ])
@@ -1895,6 +1951,8 @@ TEST(RuntimeExecTest, ExecutesJoinStdlibPackageHelpers) {
 
 TEST(RuntimeExecTest, ExecutesAggregateWindowQueryFile) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin mean : (values: [float]) => float
@@ -1902,7 +1960,7 @@ TEST(RuntimeExecTest, ExecutesAggregateWindowQueryFile) {
         builtin count : (<-tables: stream[A], column: string) => stream[A]
         builtin aggregateWindow : (<-tables: stream[A], every: duration, fn: B) => stream[C]
 
-        windowed = from(
+        windowed = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T00:00:10Z", _value: 10.0, host: "a"},
@@ -1913,13 +1971,13 @@ TEST(RuntimeExecTest, ExecutesAggregateWindowQueryFile) {
         )
             |> group(columns: ["host"])
             |> aggregateWindow(every: 1m, fn: mean)
-        usage = from(bucket: "telegraf", rows: [
+        usage = array.from(bucket: "telegraf", rows: [
                 {_time: "2024-01-01T00:00:10Z", usage: 10.0},
                 {_time: "2024-01-01T00:00:40Z", usage: 30.0},
                 {_time: "2024-01-01T00:01:05Z", usage: 50.0},
             ])
             |> aggregateWindow(every: 1m, fn: sum, column: "usage")
-        samples = from(bucket: "telegraf", rows: [
+        samples = array.from(bucket: "telegraf", rows: [
                 {_time: "2024-01-01T00:00:10Z", _value: 10.0},
                 {_time: "2024-01-01T00:00:40Z", _value: 30.0},
                 {_time: "2024-01-01T00:01:05Z", _value: 50.0},
@@ -1955,13 +2013,15 @@ TEST(RuntimeExecTest, ExecutesAggregateWindowQueryFile) {
 
 TEST(RuntimeExecTest, ExecutesAggregateWindowCreateEmptyQueryFile) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin mean : (values: [float]) => float
         builtin count : (<-tables: stream[A], column: string) => stream[A]
         builtin aggregateWindow : (<-tables: stream[A], every: duration, fn: B) => stream[C]
 
-        padded = from(
+        padded = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T00:00:10Z", _value: 10.0, host: "a"},
@@ -1970,7 +2030,7 @@ TEST(RuntimeExecTest, ExecutesAggregateWindowCreateEmptyQueryFile) {
         )
             |> group(columns: ["host"])
             |> aggregateWindow(every: 1m, fn: mean, createEmpty: true)
-        counts = from(
+        counts = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T00:00:10Z", _value: 10.0},
@@ -2002,11 +2062,13 @@ TEST(RuntimeExecTest, ExecutesAggregateWindowCreateEmptyQueryFile) {
 
 TEST(RuntimeExecTest, ExecutesAggregateWindowOffsetQueryFile) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin mean : (values: [float]) => float
         builtin aggregateWindow : (<-tables: stream[A], every: duration, fn: B) => stream[C]
 
-        shifted = from(
+        shifted = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T00:00:10Z", _value: 10.0},
@@ -2035,11 +2097,13 @@ TEST(RuntimeExecTest, ExecutesAggregateWindowOffsetQueryFile) {
 
 TEST(RuntimeExecTest, ExecutesAggregateWindowCalendarMonthQueryFile) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin mean : (values: [float]) => float
         builtin aggregateWindow : (<-tables: stream[A], every: duration, fn: B) => stream[C]
 
-        monthly = from(
+        monthly = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-15T08:00:00Z", _value: 10.0},
@@ -2072,12 +2136,14 @@ TEST(RuntimeExecTest, ExecutesAggregateWindowCalendarMonthQueryFile) {
 
 TEST(RuntimeExecTest, ExecutesAggregateWindowTimezoneQueryFile) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
         builtin mean : (values: [float]) => float
         builtin aggregateWindow : (<-tables: stream[A], every: duration, fn: B) => stream[C]
 
-        monthly = from(
+        monthly = array.from(
             bucket: "telegraf",
             rows: [
                 {
@@ -2119,10 +2185,12 @@ TEST(RuntimeExecTest, ExecutesAggregateWindowTimezoneQueryFile) {
 
 TEST(RuntimeExecTest, UsesYieldNameForResultCollection) {
     auto file = ParseFile(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin yield : (<-tables: stream[A], ?name: string) => stream[A]
 
-        from(
+        array.from(
             bucket: "telegraf",
             rows: [{_time: "2024-01-01T00:00:00Z", _value: 95.0}],
         )

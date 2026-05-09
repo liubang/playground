@@ -321,7 +321,9 @@ TEST(FluxCliTest, RendersKeptEmptyLogicalTablesWhenRequested) {
     auto env = MakeFluxCliEnvironment();
 
     auto result = ExecuteFluxSource(R"(
-        kept = from(
+        import "array"
+
+        kept = array.from(
             bucket: "telegraf",
             rows: [
                 {host: "edge-1", _value: 95.0},
@@ -351,7 +353,9 @@ TEST(FluxCliTest, EmitsEmptyLogicalTableMetadataInJsonOutput) {
     options.output_format = FluxOutputFormat::Json;
 
     auto result = ExecuteFluxSource(R"(
-        kept = from(
+        import "array"
+
+        kept = array.from(
             bucket: "telegraf",
             rows: [
                 {host: "edge-1", _value: 95.0},
@@ -546,7 +550,9 @@ TEST(FluxCliTest, ExecutesAllCheckedInExamplesWithoutRuntimeErrors) {
 TEST(FluxCliTest, ExecutesTableHelperQueries) {
     auto env = MakeFluxCliEnvironment();
     auto result = ExecuteFluxSource(R"(
-        hosts = from(
+        import "array"
+
+        hosts = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T00:00:00Z", host: "edge-1", region: "us-east", _value: 70},
@@ -665,10 +671,12 @@ TEST(FluxCliTest, UsesYieldNameInHumanReadableAndAnnotatedCsvOutput) {
     auto env = MakeFluxCliEnvironment();
 
     auto human = ExecuteFluxSource(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin yield : (<-tables: stream[A], ?name: string) => stream[A]
 
-        from(
+        array.from(
             bucket: "telegraf",
             rows: [{_time: "2024-01-01T00:00:00Z", _value: 95.0}],
         )
@@ -684,10 +692,12 @@ TEST(FluxCliTest, UsesYieldNameInHumanReadableAndAnnotatedCsvOutput) {
     FluxCliOptions csv_options;
     csv_options.output_format = FluxOutputFormat::Csv;
     auto csv = ExecuteFluxSource(R"(
+        import "array"
+
         builtin from : (bucket: string) => stream[A]
         builtin yield : (<-tables: stream[A], ?name: string) => stream[A]
 
-        from(
+        array.from(
             bucket: "telegraf",
             rows: [{_time: "2024-01-01T00:00:00Z", _value: 95.0}],
         )

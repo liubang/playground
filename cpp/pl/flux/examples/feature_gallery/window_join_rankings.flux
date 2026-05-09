@@ -1,4 +1,6 @@
-cpu = from(bucket: "cpu", rows: [
+import "array"
+
+cpu = array.from(bucket: "cpu", rows: [
     {_time: 2024-01-01T00:00:10Z, host: "a", region: "east", _value: 10.0},
     {_time: 2024-01-01T00:00:40Z, host: "a", region: "east", _value: 25.0},
     {_time: 2024-01-01T00:02:10Z, host: "a", region: "east", _value: 35.0},
@@ -12,13 +14,13 @@ windowed_cpu = cpu
     |> window(every: 1m, createEmpty: true)
     |> yield(name: "windowed_cpu")
 
-cpu_points = from(bucket: "cpu", rows: [
+cpu_points = array.from(bucket: "cpu", rows: [
     {_time: "t1", host: "a", region: "east", _value: 90.0},
     {_time: "t2", host: "a", region: "east", _value: 91.0},
     {_time: "t4", host: "b", region: "west", _value: 92.0},
 ])
 
-mem_points = from(bucket: "mem", rows: [
+mem_points = array.from(bucket: "mem", rows: [
     {_time: "t2", host: "a", region: "east", _value: 40.0},
     {_time: "t3", host: "a", region: "east", _value: 20.0},
     {_time: "t4", host: "b", region: "west", _value: 55.0},
