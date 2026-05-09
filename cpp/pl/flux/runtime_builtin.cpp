@@ -80,6 +80,7 @@ absl::StatusOr<Value> BuiltinRegistry::ImportPackage(const std::string& path) {
         builtin::RegisterScalarStdlibPackages();
         builtin::RegisterJoinStdlibPackage();
         builtin::RegisterSqliteStdlibPackage();
+        builtin::RegisterMysqlStdlibPackage();
     });
 
     auto package = builtin::ImportRegisteredPackage(path);
