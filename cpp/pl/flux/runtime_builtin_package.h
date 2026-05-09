@@ -34,5 +34,6 @@ void RegisterScalarStdlibPackages();
 void RegisterTableStdlibPackages();
 void RegisterJoinStdlibPackage();
 void RegisterSqliteStdlibPackage();
+void RegisterMysqlStdlibPackage();
 
 } // namespace pl::flux::builtin

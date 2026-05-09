@@ -30,7 +30,7 @@
 | `system.flux`             | `system.time`                                                                                                                                                                        |
 | `types.flux`              | `types.isBool`、`types.isDuration`、`types.isFloat`、`types.isInt`、`types.isNumeric`、`types.isRegexp`、`types.isString`、`types.isTime`、`types.isType`、`types.isUInt`            |
 | `universe_core.flux`      | `len`、`string`、`contains`                                                                                                                                                          |
-| `universe_transform.flux` | `from`、`range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`sort`、`group`、`pivot`、`fill`、`union`                                           |
+| `universe_transform.flux` | `range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`sort`、`group`、`pivot`、`fill`、`union`                                                   |
 | `universe_aggregate.flux` | `sum`、`mean`、`min`、`max`、`reduce`、`distinct`、`count`、`spread`、`quantile`、`median`、`first`、`last`、`top`、`bottom`                                                         |
 | `universe_window.flux`    | `elapsed`、`difference`、`derivative`、`window`、`aggregateWindow`                                                                                                                   |
 | `universe_inspect.flux`   | `columns`、`keys`、`findColumn`、`findRecord`、`explain`、`yield`                                                                                                                    |

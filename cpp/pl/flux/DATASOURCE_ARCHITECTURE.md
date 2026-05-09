@@ -85,6 +85,9 @@ Flux source
 - `array.from(rows:, bucket:)`：从对象数组构造内联内存表。
 - `csv.from(csv:, file:, mode:)`：解析 raw/annotated CSV 并构造表。
 - `sqlite.from(path:, table:)`：扫描 SQLite 表；用户 API 不提供 raw SQL/query 入口。
+- `mysql.from(dsn:, table:)`：MySQL provider API 骨架；connector 尚未实现，用户 API 不提供 raw SQL/query 入口。
+
+运行时不提供 universe 顶层 `from(bucket:)` 或其他顶层数据源占位。新增数据源必须走 provider package 入口，避免让旧的顶层 `from` 写法重新长回来。
 
 表变换入口：
 
@@ -130,6 +133,7 @@ Flux AST
 用户入口统一采用 provider package 形态：`array.from` 构造内联表，
 `csv.from` 读取 CSV，`sqlite.from` 扫描 SQLite 表，后续 MySQL/PostgreSQL 等外部源
 也按同样模式扩展为 `mysql.from` / `postgres.from`。
+不恢复或新增 universe 顶层数据源入口。
 
 ```flux
 import "sqlite"
