@@ -150,7 +150,7 @@ int main(int argc, char* argv[]) {
             options.result_name = argv[++i];
             continue;
         }
-        if (arg.rfind("--result=", 0) == 0) {
+        if (arg.starts_with("--result=")) {
             options.result_name = arg.substr(std::string("--result=").size());
             if (options.result_name->empty()) {
                 std::cerr << "--result requires a result name\n";
@@ -171,7 +171,7 @@ int main(int argc, char* argv[]) {
             options.output_format = *output_format;
             continue;
         }
-        if (arg.rfind("--output-format=", 0) == 0 || arg.rfind("--format=", 0) == 0) {
+        if (arg.starts_with("--output-format=") || arg.starts_with("--format=")) {
             const size_t pos = arg.find('=');
             auto output_format = parse_output_format(arg.substr(pos + 1));
             if (!output_format.has_value()) {
@@ -212,7 +212,8 @@ int main(int argc, char* argv[]) {
 
     if (repl || (!file_name.has_value() && !eval_source.has_value())) {
         options.table_borders = isatty(STDOUT_FILENO) != 0;
-        return pl::flux::RunFluxRepl(std::cin, std::cout, std::cerr, isatty(STDIN_FILENO) != 0, options);
+        return pl::flux::RunFluxRepl(std::cin, std::cout, std::cerr, isatty(STDIN_FILENO) != 0,
+                                     options);
     }
 
     std::string source;

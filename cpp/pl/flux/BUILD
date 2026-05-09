@@ -147,10 +147,12 @@ cc_library(
     name = "connector",
     srcs = [
         "connector/memory_source.cpp",
+        "connector/mysql_source.cpp",
         "connector/sqlite_source.cpp",
     ],
     hdrs = [
         "connector/memory_source.h",
+        "connector/mysql_source.h",
         "connector/sqlite_source.h",
         "connector/table_source.h",
     ],
@@ -161,6 +163,8 @@ cc_library(
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:strings",
+        "@boost.mysql//:boost.mysql",
+        "@boost.asio//:boost.asio",
         "@sqlite3",
     ],
 )
@@ -187,6 +191,20 @@ cc_test(
     data = [
         "examples/cross_source/metrics.db",
     ],
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":connector",
+        "@abseil-cpp//absl/status",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "connector_mysql_source_unit_test",
+    srcs = [
+        "connector/mysql_source_unit_test.cpp",
+    ],
+    copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":connector",

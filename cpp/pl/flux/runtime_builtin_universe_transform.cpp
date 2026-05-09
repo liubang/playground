@@ -17,6 +17,7 @@
 
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/ast.h"
+#include "cpp/pl/flux/connector/mysql_source.h"
 #include "cpp/pl/flux/connector/sqlite_source.h"
 #include "cpp/pl/flux/runtime_builtin_table_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_time_helpers.h"
@@ -357,7 +358,7 @@ void append_pushdown_summary_field(std::ostringstream* out,
 
 std::string format_pushdown_request(const connector::ScanRequest& request) {
     std::ostringstream out;
-    out << "SQLitePushdown(request: ";
+    out << "SourcePushdown(request: ";
     bool needs_separator = false;
 
     append_pushdown_summary_field(&out, &needs_separator, "projection",
@@ -493,12 +494,16 @@ void set_projection_columns(connector::ScanRequest* request,
     }
 }
 
-absl::StatusOr<std::vector<std::string>> sqlite_source_columns(const plan::SourceScanSpec& source) {
-    if (source.source != "sqlite" || source.driver != "sqlite") {
-        return absl::InvalidArgumentError("unsupported pushdown source");
+absl::StatusOr<std::vector<std::string>> source_scan_columns(const plan::SourceScanSpec& source) {
+    absl::StatusOr<connector::TableSchema> schema_or =
+        absl::InvalidArgumentError("unsupported pushdown source");
+    if (source.source == "sqlite" && source.driver == "sqlite") {
+        connector::SQLiteSource sqlite_source(source.dsn, source.table);
+        schema_or = sqlite_source.Schema();
+    } else if (source.source == "mysql" && source.driver == "mysql") {
+        connector::MySQLSource mysql_source(source.dsn, source.table);
+        schema_or = mysql_source.Schema();
     }
-    connector::SQLiteSource sqlite_source(source.dsn, source.table);
-    auto schema_or = sqlite_source.Schema();
     if (!schema_or.ok()) {
         return schema_or.status();
     }
@@ -516,7 +521,7 @@ absl::StatusOr<std::vector<std::string>> visible_columns_for_plan(
         return absl::InvalidArgumentError("missing plan");
     }
     if (node->kind == plan::PlanNodeKind::SourceScan) {
-        return sqlite_source_columns(node->source_scan);
+        return source_scan_columns(node->source_scan);
     }
     if (node->inputs.size() != 1) {
         return absl::InvalidArgumentError("non-linear plan has no stable visible columns");
@@ -554,12 +559,13 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
         return absl::InvalidArgumentError("missing plan");
     }
     if (node->kind == plan::PlanNodeKind::SourceScan) {
-        if (node->source_scan.source != "sqlite" || node->source_scan.driver != "sqlite") {
+        if (!((node->source_scan.source == "sqlite" && node->source_scan.driver == "sqlite") ||
+              (node->source_scan.source == "mysql" && node->source_scan.driver == "mysql"))) {
             return absl::InvalidArgumentError("unsupported pushdown source");
         }
         PushdownPlan plan;
         plan.source = &node->source_scan;
-        auto columns_or = sqlite_source_columns(node->source_scan);
+        auto columns_or = source_scan_columns(node->source_scan);
         if (!columns_or.ok()) {
             return columns_or.status();
         }
@@ -710,7 +716,7 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
 
 namespace detail {
 
-Value maybe_pushdown_sqlite_plan(Value value) {
+Value maybe_pushdown_source_plan(Value value) {
     auto& table = value.as_table_mut();
     if (table.plan == nullptr) {
         return value;
@@ -722,8 +728,14 @@ Value maybe_pushdown_sqlite_plan(Value value) {
     if (!pushdown_or->request.group_by.empty() && !pushdown_or->request.aggregate.has_value()) {
         return value;
     }
-    connector::SQLiteSource source(pushdown_or->source->dsn, pushdown_or->source->table);
-    auto pushed_or = source.Scan(pushdown_or->request);
+    absl::StatusOr<Value> pushed_or = absl::InvalidArgumentError("unsupported pushdown source");
+    if (pushdown_or->source->source == "sqlite" && pushdown_or->source->driver == "sqlite") {
+        connector::SQLiteSource source(pushdown_or->source->dsn, pushdown_or->source->table);
+        pushed_or = source.Scan(pushdown_or->request);
+    } else if (pushdown_or->source->source == "mysql" && pushdown_or->source->driver == "mysql") {
+        connector::MySQLSource source(pushdown_or->source->dsn, pushdown_or->source->table);
+        pushed_or = source.Scan(pushdown_or->request);
+    }
     if (!pushed_or.ok()) {
         return value;
     }
@@ -740,7 +752,7 @@ Value with_aggregate_plan(Value value,
                           std::string column) {
     if (input.plan != nullptr) {
         value.as_table_mut().plan = plan::MakeAggregate(input.plan, fn, std::move(column));
-        return maybe_pushdown_sqlite_plan(std::move(value));
+        return maybe_pushdown_source_plan(std::move(value));
     }
     return value;
 }
@@ -748,12 +760,12 @@ Value with_aggregate_plan(Value value,
 Value with_distinct_plan(Value value, const TableValue& input, std::string column) {
     if (input.plan != nullptr) {
         value.as_table_mut().plan = plan::MakeDistinct(input.plan, std::move(column));
-        return maybe_pushdown_sqlite_plan(std::move(value));
+        return maybe_pushdown_source_plan(std::move(value));
     }
     return value;
 }
 
-std::optional<std::string> sqlite_pushdown_summary(const std::shared_ptr<plan::PlanNode>& plan) {
+std::optional<std::string> source_pushdown_summary(const std::shared_ptr<plan::PlanNode>& plan) {
     auto pushdown_or = build_pushdown_plan(plan);
     if (!pushdown_or.ok()) {
         return std::nullopt;
@@ -774,7 +786,7 @@ Value with_filter_plan(Value value,
     if (input.plan != nullptr) {
         if (predicates.has_value()) {
             value.as_table_mut().plan = plan::MakeFilter(input.plan, std::move(*predicates));
-            return maybe_pushdown_sqlite_plan(std::move(value));
+            return maybe_pushdown_source_plan(std::move(value));
         }
         value.as_table_mut().plan =
             plan::MakeMaterializeBarrier(input.plan, "unsupported lazy builtin", "filter");
@@ -788,7 +800,7 @@ Value with_range_plan(Value value,
                       std::optional<std::string> stop) {
     if (input.plan != nullptr) {
         value.as_table_mut().plan = plan::MakeRange(input.plan, std::move(start), std::move(stop));
-        return maybe_pushdown_sqlite_plan(std::move(value));
+        return maybe_pushdown_source_plan(std::move(value));
     }
     return value;
 }
@@ -796,7 +808,7 @@ Value with_range_plan(Value value,
 Value with_project_plan(Value value, const TableValue& input, std::vector<std::string> columns) {
     if (input.plan != nullptr) {
         value.as_table_mut().plan = plan::MakeProject(input.plan, std::move(columns));
-        return maybe_pushdown_sqlite_plan(std::move(value));
+        return maybe_pushdown_source_plan(std::move(value));
     }
     return value;
 }
@@ -822,7 +834,7 @@ Value with_drop_plan(Value value,
         }
     }
     value.as_table_mut().plan = plan::MakeProject(input.plan, std::move(projected_columns));
-    return maybe_pushdown_sqlite_plan(std::move(value));
+    return maybe_pushdown_source_plan(std::move(value));
 }
 
 Value with_rename_plan(Value value,
@@ -839,13 +851,13 @@ Value with_rename_plan(Value value,
         return value;
     }
     value.as_table_mut().plan = std::move(node);
-    return maybe_pushdown_sqlite_plan(std::move(value));
+    return maybe_pushdown_source_plan(std::move(value));
 }
 
 Value with_limit_plan(Value value, const TableValue& input, int64_t n, int64_t offset) {
     if (input.plan != nullptr) {
         value.as_table_mut().plan = plan::MakeLimit(input.plan, n, offset);
-        return maybe_pushdown_sqlite_plan(std::move(value));
+        return maybe_pushdown_source_plan(std::move(value));
     }
     return value;
 }
@@ -864,7 +876,7 @@ Value with_sort_plan(Value value,
             });
         }
         value.as_table_mut().plan = plan::MakeSort(input.plan, std::move(keys));
-        return maybe_pushdown_sqlite_plan(std::move(value));
+        return maybe_pushdown_source_plan(std::move(value));
     }
     return value;
 }
@@ -872,7 +884,7 @@ Value with_sort_plan(Value value,
 Value with_group_plan(Value value, const TableValue& input, std::vector<std::string> columns) {
     if (input.plan != nullptr) {
         value.as_table_mut().plan = plan::MakeGroup(input.plan, std::move(columns));
-        return maybe_pushdown_sqlite_plan(std::move(value));
+        return maybe_pushdown_source_plan(std::move(value));
     }
     return value;
 }
