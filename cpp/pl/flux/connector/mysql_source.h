@@ -13,42 +13,40 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2026/05/07 00:35
+// Created: 2026/05/09
 
 #pragma once
 
 #include "absl/status/statusor.h"
 #include "cpp/pl/flux/connector/table_source.h"
 #include "cpp/pl/flux/runtime_value.h"
-#include <memory>
+#include <cstdint>
 #include <string>
-#include <vector>
 
 namespace pl::flux::connector {
 
-class ArraySource final : public TableSource {
-public:
-    ArraySource(std::string bucket, std::vector<std::shared_ptr<ObjectValue>> rows);
-
-    [[nodiscard]] absl::StatusOr<TableSchema> Schema() const override;
-    [[nodiscard]] SourceCapabilities Capabilities() const override;
-    absl::StatusOr<Value> Scan(const ScanRequest& request) override;
-
-private:
-    std::string bucket_;
-    std::vector<std::shared_ptr<ObjectValue>> rows_;
+struct MySQLConnectionConfig {
+    std::string host;
+    uint16_t port = 3306;
+    std::string user;
+    std::string password;
+    std::string database;
 };
 
-class CsvSource final : public TableSource {
+absl::StatusOr<MySQLConnectionConfig> ParseMySQLDsn(const std::string& dsn);
+
+class MySQLSource final : public TableSource {
 public:
-    explicit CsvSource(std::vector<std::shared_ptr<ObjectValue>> rows);
+    MySQLSource(std::string dsn, std::string table);
 
     [[nodiscard]] absl::StatusOr<TableSchema> Schema() const override;
     [[nodiscard]] SourceCapabilities Capabilities() const override;
     absl::StatusOr<Value> Scan(const ScanRequest& request) override;
 
 private:
-    std::vector<std::shared_ptr<ObjectValue>> rows_;
+    std::string dsn_;
+    std::string table_;
+    std::string query_;
 };
 
 } // namespace pl::flux::connector
