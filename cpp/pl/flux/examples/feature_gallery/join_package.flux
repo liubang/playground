@@ -1,13 +1,15 @@
+import "array"
+
 import "join"
 
-cpu = from(bucket: "cpu", rows: [
+cpu = array.from(bucket: "cpu", rows: [
     {_time: "t1", host: "edge-1", region: "us-east", _value: 81.0},
     {_time: "t2", host: "edge-1", region: "us-east", _value: 88.0},
     {_time: "t3", host: "edge-2", region: "us-west", _value: 72.0},
 ])
     |> group(columns: ["host"])
 
-mem = from(bucket: "mem", rows: [
+mem = array.from(bucket: "mem", rows: [
     {_time: "t1", host: "edge-1", region: "us-east", _value: 63.0},
     {_time: "t3", host: "edge-2", region: "us-west", _value: 55.0},
     {_time: "t4", host: "edge-3", region: "eu-central", _value: 40.0},
