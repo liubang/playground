@@ -1,3 +1,5 @@
+import "array"
+
 import "csv"
 
 cpu = csv.from(file: "cpp/pl/flux/examples/feature_gallery/data/site_ops.annotated.csv")
@@ -14,7 +16,7 @@ cpu
     )
     |> yield(name: "fixed_offset_windows")
 
-from(
+array.from(
     bucket: "spread",
     rows: [
         {_time: "2024-06-01T09:00:00Z", load: 12.0},
@@ -35,7 +37,7 @@ from(
     )
     |> yield(name: "spread_overlap_windows")
 
-from(
+array.from(
     bucket: "lookback",
     rows: [
         {_time: "2024-06-01T09:00:00Z", _value: 2.0},
@@ -50,7 +52,7 @@ from(
     |> aggregateWindow(every: 20s, period: "-40s", fn: count, createEmpty: false)
     |> yield(name: "lookback_windows")
 
-from(
+array.from(
     bucket: "monthly",
     rows: [
         {
@@ -72,7 +74,7 @@ from(
     )
     |> yield(name: "calendar_tz_shape")
 
-from(
+array.from(
     bucket: "monthly-offset",
     rows: [
         {_time: "2024-01-20T00:00:00Z", _value: 10.0},
@@ -82,7 +84,7 @@ from(
     |> aggregateWindow(every: 1mo, offset: 15d, fn: mean, createEmpty: false)
     |> yield(name: "calendar_offset_windows")
 
-from(
+array.from(
     bucket: "selector",
     rows: [
         {_time: "2024-01-01T00:00:10Z", _value: 10.0},

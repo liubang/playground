@@ -36,6 +36,13 @@ const Expression& ParseAssignmentInit(const std::string& source) {
     return *assignment->init;
 }
 
+void InstallBuiltinsAndArrayPackage(Environment& env) {
+    BuiltinRegistry::Install(env);
+    auto array_or = BuiltinRegistry::ImportPackage("array");
+    ASSERT_TRUE(array_or.ok()) << array_or.status();
+    env.define("array", *array_or);
+}
+
 TEST(RuntimeEvalTest, EvaluatesLiteralsArithmeticAndConditionalExpressions) {
     Environment env;
     const auto& expr =
@@ -112,7 +119,7 @@ TEST(RuntimeEvalTest, EvaluatesUnaryMinusForDurationLiterals) {
 
 TEST(RuntimeEvalTest, EvaluatesBuiltinCalls) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
     const auto& expr = ParseAssignmentInit("result = len([1, 2, 3])");
 
     auto result = ExpressionEvaluator::Evaluate(expr, env);
@@ -123,7 +130,7 @@ TEST(RuntimeEvalTest, EvaluatesBuiltinCalls) {
 
 TEST(RuntimeEvalTest, EvaluatesBuiltinCallsWithNamedArgumentObject) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
     const auto& expr =
         ParseAssignmentInit(R"(result = contains(set: ["cpu", "mem"], value: "cpu"))");
 
@@ -135,9 +142,9 @@ TEST(RuntimeEvalTest, EvaluatesBuiltinCallsWithNamedArgumentObject) {
 
 TEST(RuntimeEvalTest, EvaluatesTableHelperBuiltins) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T00:00:00Z", host: "edge-1", region: "us-east", _value: 70},
@@ -158,10 +165,10 @@ TEST(RuntimeEvalTest, EvaluatesTableHelperBuiltins) {
 
 TEST(RuntimeEvalTest, EvaluatesColumnsKeysAndFindRecordBuiltins) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& columns_expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T00:00:00Z", host: "edge-1", region: "us-east", _value: 70},
@@ -180,7 +187,7 @@ TEST(RuntimeEvalTest, EvaluatesColumnsKeysAndFindRecordBuiltins) {
     EXPECT_EQ("\"_value\"", columns->as_table().rows[3]->lookup("_value")->string());
 
     const auto& keys_expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T00:00:00Z", host: "edge-1", region: "us-east", _value: 70},
@@ -197,7 +204,7 @@ TEST(RuntimeEvalTest, EvaluatesColumnsKeysAndFindRecordBuiltins) {
     EXPECT_EQ("\"region\"", keys->as_table().rows[1]->lookup("_value")->string());
 
     const auto& record_expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T00:00:00Z", host: "edge-1", region: "us-east", _value: 70},
@@ -491,7 +498,7 @@ TEST(RuntimeEvalTest, ReportsCsvFromArgumentAndAnnotationErrors) {
 
 TEST(RuntimeEvalTest, EvaluatesAggregateBuiltins) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& sum_expr = ParseAssignmentInit("result = sum([1, 2, 3])");
     auto sum = ExpressionEvaluator::Evaluate(sum_expr, env);
@@ -570,7 +577,7 @@ TEST(RuntimeEvalTest, EvaluatesBlockBodiedUserFunctions) {
 
 TEST(RuntimeEvalTest, EvaluatesPipeIntoBuiltinWithoutExplicitArguments) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
     const auto& expr = ParseAssignmentInit("result = [1, 2, 3] |> len()");
 
     auto result = ExpressionEvaluator::Evaluate(expr, env);
@@ -581,7 +588,7 @@ TEST(RuntimeEvalTest, EvaluatesPipeIntoBuiltinWithoutExplicitArguments) {
 
 TEST(RuntimeEvalTest, EvaluatesPipeIntoBuiltinNamedPipeParameter) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
     const auto& expr = ParseAssignmentInit(R"(result = ["cpu", "mem"] |> contains(value: "cpu"))");
 
     auto result = ExpressionEvaluator::Evaluate(expr, env);
@@ -592,7 +599,7 @@ TEST(RuntimeEvalTest, EvaluatesPipeIntoBuiltinNamedPipeParameter) {
 
 TEST(RuntimeEvalTest, EvaluatesPipeIntoAggregateBuiltin) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
     const auto& expr = ParseAssignmentInit("result = [1, 2, 3, 4] |> mean()");
 
     auto result = ExpressionEvaluator::Evaluate(expr, env);
@@ -603,9 +610,9 @@ TEST(RuntimeEvalTest, EvaluatesPipeIntoAggregateBuiltin) {
 
 TEST(RuntimeEvalTest, EvaluatesInMemoryQueryPipelineBuiltins) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T00:00:00Z", _measurement: "cpu", _value: 92.0, host: "a"},
@@ -631,9 +638,9 @@ TEST(RuntimeEvalTest, EvaluatesInMemoryQueryPipelineBuiltins) {
 
 TEST(RuntimeEvalTest, EvaluatesRangeUsingStopExclusiveAndRfc3339Instants) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2023-12-31T23:00:30-01:00", _value: 1.0, host: "inside"},
@@ -657,9 +664,9 @@ TEST(RuntimeEvalTest, EvaluatesRangeUsingStopExclusiveAndRfc3339Instants) {
 
 TEST(RuntimeEvalTest, EvaluatesReduceKeepDropAndLimitBuiltins) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_measurement: "cpu", _value: 95.0, host: "a"},
@@ -692,9 +699,9 @@ TEST(RuntimeEvalTest, EvaluatesReduceKeepDropAndLimitBuiltins) {
 
 TEST(RuntimeEvalTest, EvaluatesRenameDuplicateAndSetBuiltins) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_measurement: "cpu", _value: 95.0, host: "a"},
@@ -725,10 +732,10 @@ TEST(RuntimeEvalTest, EvaluatesRenameDuplicateAndSetBuiltins) {
 
 TEST(RuntimeEvalTest, EvaluatesSortGroupCountFirstAndLastBuiltins) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& sorted_expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_measurement: "cpu", _value: 70.0, host: "b"},
@@ -754,7 +761,7 @@ TEST(RuntimeEvalTest, EvaluatesSortGroupCountFirstAndLastBuiltins) {
     EXPECT_EQ("{_measurement: \"mem\"}", sorted->as_table().rows[1]->lookup("_group")->string());
 
     const auto& except_expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_measurement: "cpu", host: "a", _value: 70.0},
@@ -775,7 +782,7 @@ TEST(RuntimeEvalTest, EvaluatesSortGroupCountFirstAndLastBuiltins) {
     EXPECT_EQ("1", except_grouped->as_table().rows[1]->lookup("_value")->string());
 
     const auto& count_expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_measurement: "cpu", host: "a", _value: 70.0},
@@ -797,7 +804,7 @@ TEST(RuntimeEvalTest, EvaluatesSortGroupCountFirstAndLastBuiltins) {
     EXPECT_EQ("1", count->as_table().rows[1]->lookup("_value")->string());
 
     const auto& last_expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {host: "a", _value: 1},
@@ -818,10 +825,10 @@ TEST(RuntimeEvalTest, EvaluatesSortGroupCountFirstAndLastBuiltins) {
 
 TEST(RuntimeEvalTest, FilterDropsEmptyLogicalTablesByDefault) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {host: "edge-1", _value: 95.0},
@@ -844,10 +851,10 @@ TEST(RuntimeEvalTest, FilterDropsEmptyLogicalTablesByDefault) {
 
 TEST(RuntimeEvalTest, FilterCanKeepEmptyLogicalTablesExplicitly) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {host: "edge-1", _value: 95.0},
@@ -872,10 +879,10 @@ TEST(RuntimeEvalTest, FilterCanKeepEmptyLogicalTablesExplicitly) {
 
 TEST(RuntimeEvalTest, CountPreservesKeptEmptyLogicalTablesAsZeroRows) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {host: "edge-1", _value: 95.0},
@@ -904,10 +911,10 @@ TEST(RuntimeEvalTest, CountPreservesKeptEmptyLogicalTablesAsZeroRows) {
 
 TEST(RuntimeEvalTest, FirstAndLastDropKeptEmptyLogicalTablesAndSkipNullValues) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& first_expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {host: "edge-1", sample: "ignored"},
@@ -933,7 +940,7 @@ TEST(RuntimeEvalTest, FirstAndLastDropKeptEmptyLogicalTablesAndSkipNullValues) {
     EXPECT_EQ("\"picked\"", first->as_table().rows[1]->lookup("sample")->string());
 
     const auto& last_expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {host: "edge-1", _value: 90.0, sample: "keep"},
@@ -962,12 +969,12 @@ TEST(RuntimeEvalTest, FirstAndLastDropKeptEmptyLogicalTablesAndSkipNullValues) {
 
 TEST(RuntimeEvalTest, EvaluatesUnionAndJoinBuiltins) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& union_expr = ParseAssignmentInit(R"(
         result = union(tables: [
-            from(bucket: "cpu", rows: [{_time: "t1", _value: 90.0}]),
-            from(bucket: "mem", rows: [{_time: "t1", _value: 40.0}, {_time: "t2", _value: 50.0}]),
+            array.from(bucket: "cpu", rows: [{_time: "t1", _value: 90.0}]),
+            array.from(bucket: "mem", rows: [{_time: "t1", _value: 40.0}, {_time: "t2", _value: 50.0}]),
         ])
     )");
     auto union_result = ExpressionEvaluator::Evaluate(union_expr, env);
@@ -978,11 +985,11 @@ TEST(RuntimeEvalTest, EvaluatesUnionAndJoinBuiltins) {
     const auto& join_expr = ParseAssignmentInit(R"(
         result = join(
             tables: {
-                cpu: from(bucket: "cpu", rows: [
+                cpu: array.from(bucket: "cpu", rows: [
                     {_time: "t1", _value: 90.0, host: "a"},
                     {_time: "t2", _value: 70.0, host: "b"},
                 ]),
-                mem: from(bucket: "mem", rows: [
+                mem: array.from(bucket: "mem", rows: [
                     {_time: "t1", _value: 40.0},
                     {_time: "t3", _value: 20.0},
                 ]),
@@ -1003,19 +1010,19 @@ TEST(RuntimeEvalTest, EvaluatesUnionAndJoinBuiltins) {
 
 TEST(RuntimeEvalTest, EvaluatesJoinAgainstMatchingGroupKeyTablesOnly) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
         result = join(
             tables: {
-                cpu: from(bucket: "cpu", rows: [
+                cpu: array.from(bucket: "cpu", rows: [
                     {_time: "t1", host: "a", region: "east", _value: 90.0},
                     {_time: "t2", host: "a", region: "east", _value: 91.0},
                     {_time: "t3", host: "b", region: "west", _value: 70.0},
                     {host: "a", region: "east", _value: 999.0},
                 ])
                     |> group(columns: ["host"]),
-                mem: from(bucket: "mem", rows: [
+                mem: array.from(bucket: "mem", rows: [
                     {_time: "t1", host: "a", region: "east", _value: 40.0},
                     {_time: "t2", host: "a", region: "east", _value: 41.0},
                     {_time: "t4", host: "c", region: "north", _value: 20.0},
@@ -1050,10 +1057,10 @@ TEST(RuntimeEvalTest, EvaluatesJoinAgainstMatchingGroupKeyTablesOnly) {
 
 TEST(RuntimeEvalTest, EvaluatesDistinctBuiltin) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T00:00:10Z", host: "a", region: "east", _value: 10.0},
@@ -1076,10 +1083,10 @@ TEST(RuntimeEvalTest, EvaluatesDistinctBuiltin) {
 
 TEST(RuntimeEvalTest, EvaluatesTailBuiltinWithOffset) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T00:00:10Z", host: "a", _value: 10.0},
@@ -1105,14 +1112,14 @@ TEST(RuntimeEvalTest, EvaluatesTailBuiltinWithOffset) {
 
 TEST(RuntimeEvalTest, PreservesLogicalTablesAcrossRowTransformBuiltins) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& limit_expr = ParseAssignmentInit(R"(
         result = union(
             tables: [
-                from(bucket: "telegraf", rows: [{host: "a", _value: 1.0}, {host: "a", _value: 2.0}])
+                array.from(bucket: "telegraf", rows: [{host: "a", _value: 1.0}, {host: "a", _value: 2.0}])
                     |> group(columns: ["host"]),
-                from(bucket: "telegraf", rows: [{host: "b", _value: 3.0}, {host: "b", _value: 4.0}])
+                array.from(bucket: "telegraf", rows: [{host: "b", _value: 3.0}, {host: "b", _value: 4.0}])
                     |> group(columns: ["host"]),
             ],
         )
@@ -1128,9 +1135,9 @@ TEST(RuntimeEvalTest, PreservesLogicalTablesAcrossRowTransformBuiltins) {
     const auto& map_expr = ParseAssignmentInit(R"(
         result = union(
             tables: [
-                from(bucket: "telegraf", rows: [{host: "a", _value: 1.0}, {host: "a", _value: 2.0}])
+                array.from(bucket: "telegraf", rows: [{host: "a", _value: 1.0}, {host: "a", _value: 2.0}])
                     |> group(columns: ["host"]),
-                from(bucket: "telegraf", rows: [{host: "b", _value: 3.0}, {host: "b", _value: 4.0}])
+                array.from(bucket: "telegraf", rows: [{host: "b", _value: 3.0}, {host: "b", _value: 4.0}])
                     |> group(columns: ["host"]),
             ],
         )
@@ -1146,9 +1153,9 @@ TEST(RuntimeEvalTest, PreservesLogicalTablesAcrossRowTransformBuiltins) {
     const auto& keep_expr = ParseAssignmentInit(R"(
         result = union(
             tables: [
-                from(bucket: "telegraf", rows: [{host: "a", _value: 1.0}, {host: "a", _value: 2.0}])
+                array.from(bucket: "telegraf", rows: [{host: "a", _value: 1.0}, {host: "a", _value: 2.0}])
                     |> group(columns: ["host"]),
-                from(bucket: "telegraf", rows: [{host: "b", _value: 3.0}, {host: "b", _value: 4.0}])
+                array.from(bucket: "telegraf", rows: [{host: "b", _value: 3.0}, {host: "b", _value: 4.0}])
                     |> group(columns: ["host"]),
             ],
         )
@@ -1163,14 +1170,14 @@ TEST(RuntimeEvalTest, PreservesLogicalTablesAcrossRowTransformBuiltins) {
 
 TEST(RuntimeEvalTest, EvaluatesReducePerLogicalTable) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
         result = union(
             tables: [
-                from(bucket: "telegraf", rows: [{host: "a", _value: 1.0}, {host: "a", _value: 2.0}])
+                array.from(bucket: "telegraf", rows: [{host: "a", _value: 1.0}, {host: "a", _value: 2.0}])
                     |> group(columns: ["host"]),
-                from(bucket: "telegraf", rows: [{host: "b", _value: 3.0}, {host: "b", _value: 4.0}])
+                array.from(bucket: "telegraf", rows: [{host: "b", _value: 3.0}, {host: "b", _value: 4.0}])
                     |> group(columns: ["host"]),
             ],
         )
@@ -1196,10 +1203,10 @@ TEST(RuntimeEvalTest, EvaluatesReducePerLogicalTable) {
 
 TEST(RuntimeEvalTest, EvaluatesPivotBuiltin) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: 2024-01-01T00:01:00Z, host: "a", metric: "cpu", usage: 72.0},
@@ -1228,10 +1235,10 @@ TEST(RuntimeEvalTest, EvaluatesPivotBuiltin) {
 
 TEST(RuntimeEvalTest, EvaluatesPivotPerLogicalTableWithoutCrossChunkMerge) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: 2024-01-01T00:01:00Z, host: "a", metric: "cpu", usage: 72.0},
@@ -1261,10 +1268,10 @@ TEST(RuntimeEvalTest, EvaluatesPivotPerLogicalTableWithoutCrossChunkMerge) {
 
 TEST(RuntimeEvalTest, EvaluatesFillBuiltinUsePreviousAndValue) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
@@ -1286,7 +1293,7 @@ TEST(RuntimeEvalTest, EvaluatesFillBuiltinUsePreviousAndValue) {
     EXPECT_EQ(nullptr, result->as_table().rows[3]->lookup("_value"));
 
     const auto& value_expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: 2024-01-01T00:00:00Z, host: "a"},
@@ -1305,10 +1312,10 @@ TEST(RuntimeEvalTest, EvaluatesFillBuiltinUsePreviousAndValue) {
 
 TEST(RuntimeEvalTest, EvaluatesElapsedBuiltin) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
@@ -1334,7 +1341,7 @@ TEST(RuntimeEvalTest, EvaluatesElapsedBuiltin) {
     EXPECT_EQ("5", result->as_table().rows[1]->lookup("elapsed")->string());
 
     const auto& zero_unit_expr = ParseAssignmentInit(R"(
-        result = from(bucket: "telegraf", rows: [
+        result = array.from(bucket: "telegraf", rows: [
                 {_time: 2024-01-01T00:00:00Z, _value: 1.0},
                 {_time: 2024-01-01T00:00:10Z, _value: 2.0},
             ])
@@ -1347,10 +1354,10 @@ TEST(RuntimeEvalTest, EvaluatesElapsedBuiltin) {
 
 TEST(RuntimeEvalTest, EvaluatesDifferenceBuiltin) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
@@ -1377,10 +1384,10 @@ TEST(RuntimeEvalTest, EvaluatesDifferenceBuiltin) {
 
 TEST(RuntimeEvalTest, EvaluatesDifferenceBuiltinWithNonNegativeAndKeepFirst) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
@@ -1403,10 +1410,10 @@ TEST(RuntimeEvalTest, EvaluatesDifferenceBuiltinWithNonNegativeAndKeepFirst) {
 
 TEST(RuntimeEvalTest, EvaluatesDerivativeBuiltin) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
@@ -1431,7 +1438,7 @@ TEST(RuntimeEvalTest, EvaluatesDerivativeBuiltin) {
     EXPECT_EQ("-1", result->as_table().rows[1]->lookup("_value")->string());
 
     const auto& zero_unit_expr = ParseAssignmentInit(R"(
-        result = from(bucket: "telegraf", rows: [
+        result = array.from(bucket: "telegraf", rows: [
                 {_time: 2024-01-01T00:00:00Z, _value: 1.0},
                 {_time: 2024-01-01T00:00:10Z, _value: 2.0},
             ])
@@ -1444,10 +1451,10 @@ TEST(RuntimeEvalTest, EvaluatesDerivativeBuiltin) {
 
 TEST(RuntimeEvalTest, EvaluatesDerivativeBuiltinWithNonNegativeAndInitialZero) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: 2024-01-01T00:00:00Z, host: "a", _value: 10.0},
@@ -1469,10 +1476,10 @@ TEST(RuntimeEvalTest, EvaluatesDerivativeBuiltinWithNonNegativeAndInitialZero) {
 
 TEST(RuntimeEvalTest, EvaluatesAggregateWindowBuiltin) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T00:00:10Z", _value: 10.0, host: "a"},
@@ -1502,7 +1509,7 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowBuiltin) {
     EXPECT_EQ("90", result->as_table().rows[2]->lookup("_value")->string());
 
     const auto& overflow_duration_expr = ParseAssignmentInit(R"(
-        result = from(bucket: "telegraf", rows: [
+        result = array.from(bucket: "telegraf", rows: [
                 {_time: 2024-01-01T00:00:00Z, _value: 1.0},
             ])
             |> aggregateWindow(every: "99999999999999999999d", fn: mean)
@@ -1512,7 +1519,7 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowBuiltin) {
     EXPECT_EQ(absl::StatusCode::kInvalidArgument, overflow_duration.status().code());
 
     const auto& uint_limit_expr = ParseAssignmentInit(R"(
-        result = from(bucket: "telegraf", rows: [
+        result = array.from(bucket: "telegraf", rows: [
                 {_time: 2024-01-01T00:00:00Z, _value: 1.0},
             ])
             |> limit(n: 9223372036854775808u)
@@ -1524,10 +1531,10 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowBuiltin) {
 
 TEST(RuntimeEvalTest, EvaluatesAggregateWindowColumnAndAggregateVariants) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& sum_expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T00:00:10Z", usage: 10.0},
@@ -1545,7 +1552,7 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowColumnAndAggregateVariants) {
     EXPECT_EQ("50", sum_result->as_table().rows[1]->lookup("usage")->string());
 
     const auto& count_expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T00:00:10Z", _value: 10.0},
@@ -1565,10 +1572,10 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowColumnAndAggregateVariants) {
 
 TEST(RuntimeEvalTest, EvaluatesAggregateWindowOffset) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T00:00:10Z", _value: 10.0},
@@ -1594,10 +1601,10 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowOffset) {
 
 TEST(RuntimeEvalTest, EvaluatesAggregateWindowCalendarMonths) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-15T08:00:00Z", _value: 10.0},
@@ -1622,10 +1629,10 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowCalendarMonths) {
 
 TEST(RuntimeEvalTest, EvaluatesAggregateWindowWithTimezoneLocation) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T07:30:00Z", _value: 10.0},
@@ -1653,14 +1660,14 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowWithTimezoneLocation) {
 
 TEST(RuntimeEvalTest, EvaluatesAggregateWindowWithGlobalOptionLocation) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
     env.define_option("location", Value::object({
                                       {"zone", Value::string("UTC")},
                                       {"offset", Value::duration("-8h")},
                                   }));
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T07:30:00Z", _value: 10.0},
@@ -1684,14 +1691,14 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowWithGlobalOptionLocation) {
 
 TEST(RuntimeEvalTest, AggregateWindowExplicitLocationOverridesGlobalOptionLocation) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
     env.define_option("location", Value::object({
                                       {"zone", Value::string("UTC")},
                                       {"offset", Value::duration("-8h")},
                                   }));
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T07:30:00Z", _value: 10.0},
@@ -1716,10 +1723,10 @@ TEST(RuntimeEvalTest, AggregateWindowExplicitLocationOverridesGlobalOptionLocati
 
 TEST(RuntimeEvalTest, EvaluatesAggregateWindowTimezoneOutputShape) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {
@@ -1759,10 +1766,10 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowTimezoneOutputShape) {
 
 TEST(RuntimeEvalTest, EvaluatesAggregateWindowWithPeriodDifferentFromEvery) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T00:00:00Z", _value: 2.0},
@@ -1791,19 +1798,19 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowWithPeriodDifferentFromEvery) {
 
 TEST(RuntimeEvalTest, AggregateWindowPreservesDistinctChunksWithSameGroupKey) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
         result = union(
             tables: [
-                from(
+                array.from(
                     bucket: "telegraf",
                     rows: [
                         {_time: "2024-01-01T00:00:10Z", host: "a", _value: 10.0},
                         {_time: "2024-01-01T00:00:20Z", host: "a", _value: 30.0},
                     ],
                 ) |> group(columns: ["host"]),
-                from(
+                array.from(
                     bucket: "telegraf",
                     rows: [
                         {_time: "2024-01-01T00:00:10Z", host: "a", _value: 100.0},
@@ -1830,10 +1837,10 @@ TEST(RuntimeEvalTest, AggregateWindowPreservesDistinctChunksWithSameGroupKey) {
 
 TEST(RuntimeEvalTest, EvaluatesAggregateWindowWithNegativePeriod) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T00:00:00Z", _value: 2.0},
@@ -1862,10 +1869,10 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowWithNegativePeriod) {
 
 TEST(RuntimeEvalTest, EvaluatesAggregateWindowCalendarOffset) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-20T00:00:00Z", _value: 10.0},
@@ -1889,10 +1896,10 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowCalendarOffset) {
 
 TEST(RuntimeEvalTest, EvaluatesAggregateWindowCreateEmptyAcrossRange) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T00:00:10Z", _value: 10.0, host: "a"},
@@ -1917,10 +1924,10 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowCreateEmptyAcrossRange) {
 
 TEST(RuntimeEvalTest, EvaluatesAggregateWindowSelectorDropsEmptyWindows) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(
+        result = array.from(
             bucket: "telegraf",
             rows: [
                 {_time: "2024-01-01T00:00:10Z", _value: 10.0},
@@ -1943,10 +1950,10 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowSelectorDropsEmptyWindows) {
 
 TEST(RuntimeEvalTest, ReportsAggregateWindowArgumentErrors) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& invalid_every_expr = ParseAssignmentInit(R"(
-        result = from(bucket: "telegraf", rows: [{_time: "2024-01-01T00:00:10Z", _value: 1.0}])
+        result = array.from(bucket: "telegraf", rows: [{_time: "2024-01-01T00:00:10Z", _value: 1.0}])
             |> aggregateWindow(every: 0m, fn: mean)
     )");
     auto invalid_every = ExpressionEvaluator::Evaluate(invalid_every_expr, env);
@@ -1954,7 +1961,7 @@ TEST(RuntimeEvalTest, ReportsAggregateWindowArgumentErrors) {
     EXPECT_EQ(absl::StatusCode::kInvalidArgument, invalid_every.status().code());
 
     const auto& invalid_offset_expr = ParseAssignmentInit(R"(
-        result = from(bucket: "telegraf", rows: [{_time: "2024-01-01T00:00:10Z", _value: 1.0}])
+        result = array.from(bucket: "telegraf", rows: [{_time: "2024-01-01T00:00:10Z", _value: 1.0}])
             |> aggregateWindow(every: 1m, offset: "bad", fn: mean)
     )");
     auto invalid_offset = ExpressionEvaluator::Evaluate(invalid_offset_expr, env);
@@ -1962,7 +1969,7 @@ TEST(RuntimeEvalTest, ReportsAggregateWindowArgumentErrors) {
     EXPECT_EQ(absl::StatusCode::kInvalidArgument, invalid_offset.status().code());
 
     const auto& missing_fn_expr = ParseAssignmentInit(R"(
-        result = from(bucket: "telegraf", rows: [{_time: "2024-01-01T00:00:10Z", _value: 1.0}])
+        result = array.from(bucket: "telegraf", rows: [{_time: "2024-01-01T00:00:10Z", _value: 1.0}])
             |> aggregateWindow(every: 1m)
     )");
     auto missing_fn = ExpressionEvaluator::Evaluate(missing_fn_expr, env);
@@ -1970,7 +1977,7 @@ TEST(RuntimeEvalTest, ReportsAggregateWindowArgumentErrors) {
     EXPECT_EQ(absl::StatusCode::kInvalidArgument, missing_fn.status().code());
 
     const auto& create_empty_expr = ParseAssignmentInit(R"(
-        result = from(bucket: "telegraf", rows: [
+        result = array.from(bucket: "telegraf", rows: [
                 {_time: "2024-01-01T00:00:10Z", _value: 10.0, host: "a"},
                 {_time: "2024-01-01T00:02:05Z", _value: 30.0, host: "a"},
             ])
@@ -1990,7 +1997,7 @@ TEST(RuntimeEvalTest, ReportsAggregateWindowArgumentErrors) {
     EXPECT_EQ("30", create_empty->as_table().rows[2]->lookup("_value")->string());
 
     const auto& create_empty_count_expr = ParseAssignmentInit(R"(
-        result = from(bucket: "telegraf", rows: [
+        result = array.from(bucket: "telegraf", rows: [
                 {_time: "2024-01-01T00:00:10Z", _value: 10.0},
                 {_time: "2024-01-01T00:02:05Z", _value: 30.0},
             ])
@@ -2004,7 +2011,7 @@ TEST(RuntimeEvalTest, ReportsAggregateWindowArgumentErrors) {
     EXPECT_EQ("1", create_empty_count->as_table().rows[2]->lookup("_value")->string());
 
     const auto& invalid_fixed_period_expr = ParseAssignmentInit(R"(
-        result = from(bucket: "telegraf", rows: [{_time: "2024-01-01T00:00:10Z", _value: 1.0}])
+        result = array.from(bucket: "telegraf", rows: [{_time: "2024-01-01T00:00:10Z", _value: 1.0}])
             |> aggregateWindow(every: 1m, period: 1mo, fn: mean)
     )");
     auto invalid_fixed_period = ExpressionEvaluator::Evaluate(invalid_fixed_period_expr, env);
@@ -2014,10 +2021,10 @@ TEST(RuntimeEvalTest, ReportsAggregateWindowArgumentErrors) {
 
 TEST(RuntimeEvalTest, EvaluatesWindowBuiltinWithCreateEmpty) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
-        result = from(bucket: "telegraf", rows: [
+        result = array.from(bucket: "telegraf", rows: [
                 {_time: "2024-01-01T00:00:10Z", _value: 10.0, host: "a"},
                 {_time: "2024-01-01T00:02:05Z", _value: 30.0, host: "a"},
             ])
@@ -2044,16 +2051,16 @@ TEST(RuntimeEvalTest, EvaluatesWindowBuiltinWithCreateEmpty) {
 
 TEST(RuntimeEvalTest, EvaluatesOuterJoinMethods) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& expr = ParseAssignmentInit(R"(
         result = join(
             tables: {
-                cpu: from(bucket: "cpu", rows: [
+                cpu: array.from(bucket: "cpu", rows: [
                     {_time: "t1", host: "a", _value: 90.0},
                     {_time: "t2", host: "a", _value: 91.0},
                 ]),
-                mem: from(bucket: "mem", rows: [
+                mem: array.from(bucket: "mem", rows: [
                     {_time: "t2", host: "a", _value: 40.0},
                     {_time: "t3", host: "a", _value: 20.0},
                 ]),
@@ -2083,10 +2090,10 @@ TEST(RuntimeEvalTest, EvaluatesOuterJoinMethods) {
 
 TEST(RuntimeEvalTest, EvaluatesSpreadQuantileMedianTopAndBottom) {
     Environment env;
-    BuiltinRegistry::Install(env);
+    InstallBuiltinsAndArrayPackage(env);
 
     const auto& spread_expr = ParseAssignmentInit(R"(
-        result = from(bucket: "cpu", rows: [
+        result = array.from(bucket: "cpu", rows: [
                 {_time: "t1", host: "a", _value: 10.0},
                 {_time: "t2", host: "a", _value: 25.0},
                 {_time: "t3", host: "b", _value: 40.0},
@@ -2102,7 +2109,7 @@ TEST(RuntimeEvalTest, EvaluatesSpreadQuantileMedianTopAndBottom) {
     EXPECT_EQ("10", spread->as_table().rows[1]->lookup("_value")->string());
 
     const auto& quantile_expr = ParseAssignmentInit(R"(
-        result = from(bucket: "cpu", rows: [
+        result = array.from(bucket: "cpu", rows: [
                 {_time: "t1", host: "a", _value: 10.0},
                 {_time: "t2", host: "a", _value: 20.0},
                 {_time: "t3", host: "a", _value: 30.0},
@@ -2117,7 +2124,7 @@ TEST(RuntimeEvalTest, EvaluatesSpreadQuantileMedianTopAndBottom) {
     EXPECT_EQ("0.25", quantile->as_table().rows[0]->lookup("quantile")->string());
 
     const auto& multi_quantile_expr = ParseAssignmentInit(R"(
-        result = from(bucket: "cpu", rows: [
+        result = array.from(bucket: "cpu", rows: [
                 {_time: "t1", host: "a", _value: 10.0},
                 {_time: "t2", host: "a", _value: 20.0},
                 {_time: "t3", host: "a", _value: 30.0},
@@ -2138,7 +2145,7 @@ TEST(RuntimeEvalTest, EvaluatesSpreadQuantileMedianTopAndBottom) {
     EXPECT_EQ("0.999", multi_quantile->as_table().rows[3]->lookup("quantile")->string());
 
     const auto& median_expr = ParseAssignmentInit(R"(
-        result = from(bucket: "cpu", rows: [
+        result = array.from(bucket: "cpu", rows: [
                 {_time: "t1", host: "a", _value: 10.0},
                 {_time: "t2", host: "a", _value: 20.0},
                 {_time: "t3", host: "a", _value: 30.0},
@@ -2152,7 +2159,7 @@ TEST(RuntimeEvalTest, EvaluatesSpreadQuantileMedianTopAndBottom) {
     EXPECT_EQ("25", median->as_table().rows[0]->lookup("_value")->string());
 
     const auto& top_expr = ParseAssignmentInit(R"(
-        result = from(bucket: "cpu", rows: [
+        result = array.from(bucket: "cpu", rows: [
                 {_time: "t1", host: "a", _value: 10.0},
                 {_time: "t2", host: "a", _value: 20.0},
                 {_time: "t3", host: "a", _value: 30.0},
@@ -2166,7 +2173,7 @@ TEST(RuntimeEvalTest, EvaluatesSpreadQuantileMedianTopAndBottom) {
     EXPECT_EQ("20", top->as_table().rows[1]->lookup("_value")->string());
 
     const auto& bottom_expr = ParseAssignmentInit(R"(
-        result = from(bucket: "cpu", rows: [
+        result = array.from(bucket: "cpu", rows: [
                 {_time: "t1", host: "a", _value: 10.0},
                 {_time: "t2", host: "a", _value: 20.0},
                 {_time: "t3", host: "a", _value: 30.0},

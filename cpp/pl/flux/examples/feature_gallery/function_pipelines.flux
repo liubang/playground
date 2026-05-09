@@ -1,3 +1,5 @@
+import "array"
+
 option deployment = {name: "feature-gallery"}
 
 hotThreshold = 75.0
@@ -11,7 +13,7 @@ decorate = (r, ?prefix = "svc") => ({
 
 stamp = (<-tables, ?env = "prod") => tables |> set(key: "env", value: env)
 
-from(
+array.from(
     bucket: "inline",
     rows: [
         {_time: "2024-06-01T09:00:00Z", host: "edge-1", _value: 71.0},
