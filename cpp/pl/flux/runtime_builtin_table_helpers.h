@@ -148,7 +148,6 @@ inline Value with_materialization_barrier(Value value,
     return value;
 }
 
-Value maybe_pushdown_source_plan(Value value);
 Value with_aggregate_plan(Value value,
                           const TableValue& input,
                           plan::AggregateFunction fn,
