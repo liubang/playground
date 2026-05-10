@@ -21,25 +21,29 @@ Flux-native single-node federated query engine
 
 也就是：以 Flux 为统一查询接口的单机联邦查询引擎。
 
-它会借鉴 Presto/Trino 的核心查询引擎思想：
+它会借鉴 Presto/Trino 的真实执行流程，而不只是借用术语或 explain 外观：
 
 - 统一语言入口。
-- connector abstraction。
-- logical plan。
-- rule-based optimizer。
-- connector capability。
-- operator pushdown。
-- physical operators。
-- local fallback execution。
+- analyzer / binder 把语言层 AST 转成类型化语义对象。
+- logical plan 作为执行的一等输入，而不是 `TableValue` 的调试 metadata。
+- rule-based optimizer 负责确定性 rewrite 和 connector pushdown。
+- cost-based optimizer 框架负责 statistics、cost 和 alternative plan 的选择；缺统计时明确退化为 RBO。
+- physical planner 把 optimized logical plan 编译成 pipeline/driver/operator 形态。
+- connector abstraction 拆成 metadata、split manager、page source provider。
+- scheduler 即使第一版只单线程同步执行，也保留 task/split/driver 边界。
+- operator 以 page/chunk 流为主通道，`TableValue` 只作为输出或 fallback materialization。
 
-但它不是完整 Presto，也不以分布式执行为目标。暂不考虑：
+但它不是完整 Presto，也不以第一阶段分布式执行为目标。暂不考虑：
 
 - coordinator / worker 架构。
-- split scheduling。
 - distributed exchange。
 - shuffle。
 - cross-node fault tolerance。
 - 分布式 resource group / cluster management。
+
+需要注意：虽然第一阶段不做多节点，单机执行也要保留 split、task、driver、operator、
+exchange 边界的简化形态。这样后续加并发、本地 exchange、跨源 join 或更多 connector 时，
+不会推翻前面的执行主干。
 
 与 Presto 的另一个重要区别是，对外接口不是 SQL federation，而是 Flux federation。
 SQL 数据源可以通过 SQL dialect 下推执行，CSV、内存表、后续 Parquet/HTTP 等数据源则
@@ -100,25 +104,101 @@ Flux source
 
 ## Target Architecture
 
-目标结构分为五层：
+目标结构按真实查询引擎流程拆成以下层次：
 
 ```text
 Flux AST
-  -> Runtime / builtin binding
+  -> Analyzer / Binder
   -> LogicalPlan
-  -> Optimizer / Pushdown
-  -> Physical execution
-       - Connector scan
-       - In-memory operators
-       - Output materialization
+  -> RBO
+  -> CBO framework
+  -> PhysicalPlan
+  -> Scheduler
+  -> Driver / Operator pipeline
+  -> Page / Chunk stream
+  -> TableValue materialization
 ```
 
 核心思想：
 
 - 数据源 builtin 不立即全量读取，而是尽量返回一个可延迟执行的表计划。
 - 表变换 builtin 优先把自己追加为 logical operator。
-- 当遇到必须求值的边界时，再将 plan 编译成 physical execution。
-- connector 能处理的前缀下推给数据源；不能处理的后缀在内存执行。
+- builtin 不负责 optimizer 决策，只负责把语言级调用翻译成 logical node。
+- RBO 负责 connector 能处理的前缀下推、projection pruning、barrier insertion。
+- CBO 只在有 statistics 时选择 alternative plan；缺信息时保持 RBO 输出，不伪造精度。
+- physical planner 明确产出 connector scan、memory operator、materialize、output sink。
+- scheduler 把 split 分配给 driver；第一版可以只有一个 task、一个 split、同步执行。
+- connector 能处理的前缀在 source 执行；不能处理的后缀通过 memory operator 执行。
+
+截至目前，connector、logical plan skeleton、SQLite/MySQL 保守下推和简单聚合下推已经落地。
+接下来优先级不再是继续扩展更多数据源，而是把执行链路补成更接近完整查询引擎的形态：
+
+- 数据源入口返回真正 lazy 的 table plan，而不是先物化再附加 plan metadata。
+- logical plan 先进入 RBO，做确定性的下推、barrier、projection pruning 等规则优化。
+- RBO 输出的 logical plan 编译成 physical plan，明确区分 connector scan、memory operator、
+  materialize barrier 和 output sink。
+- CBO 先以框架形式存在，保留 statistics/cost/alternative plan 的接口；在没有统计信息时明确
+  退化为 RBO 决策，不伪造精度。
+- physical executor 负责拆分 pushed prefix 和 memory suffix，逐步替换当前 scattered
+  在 builtin 内部的 eager/pushdown 混合逻辑。
+
+## Presto-Like Execution Contract
+
+后续每个实现步骤都需要遵守以下边界，避免短期功能导致长期返工：
+
+- Analyzer / Binder：只处理语言层语义、参数形态、函数绑定和类型信息，不访问外部数据。
+- LogicalPlan：表达用户查询语义和 Flux table stream 边界，不包含具体 SQL 字符串或 connector
+  执行对象。
+- RBO：所有确定性 rewrite 都在这里，包括 predicate/projection/limit/sort/aggregate pushdown、
+  column pruning、barrier insertion 和不支持 lazy 的 fallback 标记。
+- CBO：提供 statistics/cost/alternative plan 接口。第一版允许所有 cost 为 unknown，但
+  physical plan 必须能记录“为什么没有做 cost-based 选择”。
+- PhysicalPlan：只描述执行形态，不直接执行；包含 table scan、filter、project、aggregation、
+  join、exchange、materialize、output 等 physical node。
+- Scheduler：把 physical plan 转为 task/pipeline/driver。单机第一版可以同步执行，但 API
+  不能假设永远只有一个 driver。
+- Operator：消费和产生 page/chunk。row-by-row 可以作为内部实现细节，但不能成为长期跨层接口。
+- Connector：拆成 metadata、split manager、page source provider。当前 `TableSource::Scan`
+  是兼容层，后续要逐步退到 connector 内部实现。
+- Materialization：只有输出、inspect、旧 builtin fallback、跨源 join 等边界才把 page/chunk
+  materialize 成 `TableValue`。
+
+任何新数据源都必须走 connector 边界；任何新算子都必须先进入 logical/physical 计划，再决定
+是否提供 eager fallback。除非是在迁移旧代码，否则不再把优化逻辑写进 runtime builtin。
+
+## Code Organization Style
+
+后续实现需要刻意区分“数据结构”和“可插拔架构边界”，不要在两边使用同一种代码风格。
+
+适合保持轻量 struct / free function 的部分：
+
+- `Value` / `ObjectValue` / `TableValue` 这类运行时值模型。
+- logical / physical plan node 这类 IR 数据结构。
+- 谓词、projection、scan request、cost estimate、statistics estimate 等小型不可变/半不可变数据。
+- 格式化、字面量转换、简单校验、列名映射等无状态 helper。
+
+这些部分应优先保持透明、易复制、易测试，避免为每个节点或字段引入不必要的 virtual class。
+
+必须使用 interface / class 边界的部分：
+
+- Connector：`ConnectorMetadata`、`ConnectorSplitManager`、`ConnectorPageSourceProvider`。
+- Optimizer：`PlanOptimizer`、`Rule`、`RuleSet`、`StatsProvider`、`CostCalculator`。
+- Physical planning：`PhysicalPlanner`、operator factory、pipeline builder。
+- Execution：`Scheduler`、`Task`、`Pipeline`、`Driver`、`Operator`、`PageSource`、`OutputBuffer`。
+- Runtime service：执行上下文、内存/错误/统计收集、trace/explain collector。
+
+这些部分需要通过 OOP 表达稳定生命周期、可替换实现和多态扩展点。未来新增数据源、新增 rule、
+新增 physical operator 时，应优先新增实现类并注册到对应边界，而不是修改 builtin 或在
+planner 中堆条件分支。
+
+总体约束：
+
+- IR 用数据结构，执行边界用接口。
+- builtin 只做语言层参数解析和 logical node 构造；不承载 optimizer、connector 或 executor 决策。
+- optimizer rule 以独立对象/接口组织，支持 rule trace 和单测，不写成散落在 builtin 里的 helper。
+- connector 不暴露 SQL 字符串构造细节给 planner；planner 只处理 handle、constraint、assignment。
+- operator 之间传递 page/chunk，不把 `TableValue` 当作长期跨层数据通道。
+- 允许迁移期保留兼容 wrapper，但新代码必须朝上述边界收敛。
 
 必须求值的边界包括：
 
@@ -483,10 +563,9 @@ sqlite.from(path: "...", table: "cpu")
 
 ### Phase 2: TableSource Abstraction
 
-状态：已启动第一块。当前已新增 `connector/TableSource` 接口、`SQLiteSource`、
-`ArraySource` 和 `CsvSource`，并将 `sqlite.from`、`array.from`、`csv.from` 改为通过
-对应 source 的 `Scan({})` 物化，外部行为保持不变。真实 capability、`ScanRequest`
-pushdown 仍未实现。
+状态：已完成。当前已新增 `connector/TableSource` 接口、`SQLiteSource`、`MySQLSource`、
+`ArraySource` 和 `CsvSource`，并将 provider 入口接到对应 source。SQLite/MySQL 已实现
+真实 capability 和 `ScanRequest` pushdown；array/csv 仍是内存 source。
 
 目标：统一 CSV/array/SQL 数据源入口。
 
@@ -528,9 +607,9 @@ pushdown 仍未实现。
 
 ### Phase 4: Conservative Pushdown
 
-状态：已启动。`ScanRequest` 已有简单谓词表示，`SQLiteSource` 会把 projection、
+状态：已完成第一版。`ScanRequest` 已有简单谓词表示，`SQLiteSource` 和 `MySQLSource` 会把 projection、
 `_time` range、简单 AND 谓词、sort、limit/offset 翻译为包裹 base query 的 SQLite
-SQL，并用 bind 参数执行；runtime pipeline 已能把 SQLite `SourceScan` 之上的
+或 MySQL SQL，并用安全参数/格式化执行；runtime pipeline 已能把 SQL provider `SourceScan` 之上的
 `range/filter(simple)/keep/drop/rename/sort/limit` 线性前缀，以及
 `distinct(column:)` 和 `group(columns:) |> count/sum/mean/min/max(column:)` 编译成 pushed-down `ScanRequest`，
 遇到不可完整翻译的 plan 会保守回退到已物化的内存结果。当前 `filter(fn:)` 只提取
@@ -568,6 +647,11 @@ aggregate、order_by、limit/offset 等真实下推字段。
 
 ### Phase 5: MySQL Connector
 
+状态：已完成第一版。`mysql.from` 支持 DSN 和显式 host/user/password/database/port/ssl
+连接配置，`MySQLSource` 使用 Boost.MySQL 扫描表、读取 schema、映射 MySQL 原生类型，
+并复用 SQL provider pushdown 路径。当前 integration test 通过 `FLUX_MYSQL_TEST_DSN`
+可选启用；GitHub Actions 可以依赖 MySQL service 运行真实 fixture。
+
 目标：复用 connector/plan/pushdown 架构接入 MySQL。
 
 工作项：
@@ -584,6 +668,9 @@ aggregate、order_by、limit/offset 等真实下推字段。
 
 ### Phase 6: Aggregation Pushdown
 
+状态：已完成第一版。SQLite/MySQL 已支持 `distinct(column:)`，以及
+`group(columns:) |> count/sum/mean/min/max(column:)` 的简单数据库侧聚合下推。
+
 目标：对简单聚合启用数据库侧执行。
 
 可选范围：
@@ -597,6 +684,117 @@ aggregate、order_by、limit/offset 等真实下推字段。
 - 必须先补充逻辑表语义测试。
 - SQL 聚合结果要与现有 Flux 输出 shape 对齐。
 - 不确定的语义宁可 fallback。
+
+### Phase 7: Lazy Execution and Physical Plan
+
+状态：进行中。当前已新增第一版 physical plan 表示，`explain(physical: true)` 可以展示
+connector scan 是否 lazy、RBO 已触发规则、CBO 当前决策状态和 cost placeholder。
+同时，SQL source pushdown 编译已经开始从 `runtime_builtin_universe_transform.cpp` 迁出到
+`optimizer/source_pushdown`。执行路径仍以 eager table value 为主，真正 lazy materialization
+还没有完成。
+
+当前 physical explain 示例：
+
+```flux
+data |> explain(physical: true)
+```
+
+会输出类似：
+
+```text
+PhysicalPlan
+`- ConnectorScan [lazy](name="connector scan", source="sqlite", driver="sqlite",
+   logical_prefix=[Limit, Filter, SourceScan],
+   rbo=[PushLimitIntoConnectorScan, PushPredicateIntoConnectorScan],
+   cbo="not-run", cost=unknown)
+```
+
+这里的 `[lazy]` 表示 physical node 本身已经按延迟 scan 建模；真正的运行时 lazy
+materialization 还需要后续 executor 接管输出边界。
+
+目标：把当前 eager interpreter 演进成明确的 logical -> optimized logical -> physical -> execute
+流程，同时保持现有内存执行器作为 fallback。
+
+工作项：
+
+- 让 SQL provider `from()` 返回未物化的 lazy table plan。
+- 新增 RBO pass 管线，将 predicate/projection/sort/limit/aggregate pushdown、barrier insertion、
+  projection pruning 从 builtin helper 中迁出。
+- 新增 physical plan node：`ConnectorScan`、`MemoryOperator`、`Materialize`、`OutputSink`。
+- 新增 physical executor：先执行 connector pushed prefix，再把剩余 suffix 交给内存 operator。
+- CBO 先定义 statistics/cost/alternative plan 接口；缺统计时明确使用 RBO 输出。
+- `explain()` 支持 logical、optimized logical、physical 三种视图。
+
+验收：
+
+- `sqlite.from(...) |> range |> filter(simple) |> keep |> limit` 在输出边界才触发 scan。
+- `sqlite.from(...) |> filter(complex) |> limit` 拆成 connector scan + materialize + memory filter/limit。
+- `explain(physical: true)` 能稳定展示 physical node tree 和 RBO/CBO 决策。
+- 所有现有 examples 输出保持不变。
+
+### Phase 8: Presto-Style Connector Runtime
+
+状态：未开始。当前 `TableSource::Scan(ScanRequest)` 仍是 connector 主接口，足够支撑第一版
+pushdown，但不适合作为长期执行引擎边界。
+
+目标：把 connector runtime 拆成 Presto 风格的 metadata / split / page source 三块。
+
+工作项：
+
+- 新增 `ConnectorMetadata`：schema、capability、statistics、table handle、column handle。
+- 新增 `ConnectorSplitManager`：把 table handle + constraint 编译成 split 列表；SQLite/MySQL
+  第一版返回单 split。
+- 新增 `ConnectorPageSourceProvider`：把 split + projected columns + constraints 转成 page/chunk stream。
+- `SQLiteSource` / `MySQLSource` 保留为 page source 内部实现，不再暴露为 planner 直接调用对象。
+- `ArraySource` / `CsvSource` 也适配 split/page source，避免 memory source 特判污染 planner。
+
+验收：
+
+- SQL provider scan 通过 split/page source 执行。
+- physical plan 中能展示 split 数量和 connector handle。
+- `TableSource::Scan` 只作为兼容 wrapper 或测试 helper。
+
+### Phase 9: Scheduler / Driver / Operator Pipeline
+
+状态：未开始。
+
+目标：把 single-node 执行做成 Presto-like driver/operator pipeline，而不是递归调用 builtin。
+
+工作项：
+
+- 新增 `ExecutionTask`、`Pipeline`、`Driver`、`Operator`、`Page`/`Chunk` 抽象。
+- 实现 `TableScanOperator`、`FilterOperator`、`ProjectOperator`、`LimitOperator`、
+  `SortOperator`、`AggregationOperator`、`MaterializeOperator`、`OutputOperator`。
+- physical planner 产出 pipeline，scheduler 同步执行 driver。
+- 旧 eager builtin 作为 `MaterializeOperator` 后的 fallback path。
+
+验收：
+
+- `sqlite.from |> range |> filter(simple) |> keep |> limit` 走
+  `TableScanOperator -> OutputOperator`，scan 到输出边界才发生。
+- `sqlite.from |> filter(complex) |> limit` 走
+  `TableScanOperator -> MaterializeOperator -> FilterOperator -> LimitOperator -> OutputOperator`。
+- `explain(physical: true)` 能展示 pipeline/driver/operator。
+
+### Phase 10: Cost and Join Foundations
+
+状态：未开始。
+
+目标：在不伪造分布式能力的前提下，为 join、exchange 和 CBO 留好真实接口。
+
+工作项：
+
+- 新增 `StatsProvider`、`CostCalculator`、`PlanEnumerator`、`CostComparator`。
+- connector statistics 支持 unknown / connector-provided / derived 三种来源。
+- join 先实现 local hash join physical node；跨源 join 不下推，但 physical plan 中显式展示
+  多 source pipeline + local exchange/materialize + join。
+- 新增 `LocalExchangeNode` 占位，为后续并发和 pipeline 分离做准备。
+
+验收：
+
+- MySQL + SQLite + CSV 跨源 example 的 physical explain 能看到多个 source pipeline 和 local join。
+- CBO 未启用或 stats unknown 时，explain 明确显示 fallback 到 RBO。
+- 不因为不可靠 cost 自动改变 join 顺序。
 
 ## Test Plan
 
@@ -629,13 +827,14 @@ aggregate、order_by、limit/offset 等真实下推字段。
 ## Open Questions
 
 - DSN 是否允许从环境变量读取，避免示例里出现敏感信息？
-- `_time` 在 SQL 中第一版约定为 RFC3339 text，还是支持更多数据库原生时间类型？
+- `_time` 在 SQL 中第一版已支持 SQLite RFC3339 text 和 MySQL 原生 datetime/timestamp；是否继续扩展 epoch/int/time affinity 映射？
 - `TableValue` 内嵌 plan 是否会让值模型过重，未来是否需要拆出 `TableStreamValue`？
 - MySQL integration test 在当前 Bazel/CI 环境中如何稳定运行？
-- 是否需要 `explain()` builtin 或 CLI 参数来显示 logical/physical plan？
+- CBO 的 statistics 来源来自 connector schema、采样、显式 analyze，还是先只做 rule-cost placeholder？
 
 ## Recommended Next Step
 
-下一轮建议继续补 provider 形态下的跨源场景和更多 pushdown 边界测试。
+下一轮建议继续 Phase 7：把 pushdown 编译逻辑从 builtin helper 中迁到 optimizer/physical planner，
+并让 SQL provider 入口返回真正 lazy 的 plan。
 
-这样可以尽快验证“外部数据源进入 Flux”的闭环，同时不急着改变现有执行器主干。
+这样可以先把查询引擎主干补齐，再决定 PostgreSQL、HTTP、Parquet 等新数据源如何接入。
