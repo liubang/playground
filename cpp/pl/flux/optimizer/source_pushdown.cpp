@@ -16,10 +16,12 @@
 // Created: 2026/05/10 00:00
 
 #include "cpp/pl/flux/optimizer/source_pushdown.h"
+
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/connector/mysql_source.h"
 #include "cpp/pl/flux/connector/sqlite_source.h"
+#include "cpp/pl/flux/optimizer/rbo.h"
 #include <algorithm>
 #include <sstream>
 #include <unordered_set>
@@ -190,8 +192,7 @@ absl::StatusOr<std::string> source_column_for_visible(
 }
 
 std::optional<std::string> mapped_column_name(
-    const std::vector<std::pair<std::string, std::string>>& mappings,
-    const std::string& column) {
+    const std::vector<std::pair<std::string, std::string>>& mappings, const std::string& column) {
     for (const auto& [from, to] : mappings) {
         if (from == column) {
             return to;
@@ -292,7 +293,9 @@ absl::StatusOr<std::vector<std::string>> VisibleColumnsForPlan(
     return absl::InvalidArgumentError("plan node has no stable visible columns");
 }
 
-absl::StatusOr<PushdownPlan> BuildPushdownPlan(const std::shared_ptr<plan::PlanNode>& node) {
+namespace {
+
+absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::PlanNode>& node) {
     if (node == nullptr) {
         return absl::InvalidArgumentError("missing plan");
     }
@@ -313,7 +316,7 @@ absl::StatusOr<PushdownPlan> BuildPushdownPlan(const std::shared_ptr<plan::PlanN
     if (node->inputs.size() != 1) {
         return absl::InvalidArgumentError("non-linear plan is not pushable");
     }
-    auto plan_or = BuildPushdownPlan(node->inputs[0]);
+    auto plan_or = build_pushdown_plan(node->inputs[0]);
     if (!plan_or.ok()) {
         return plan_or.status();
     }
@@ -447,6 +450,16 @@ absl::StatusOr<PushdownPlan> BuildPushdownPlan(const std::shared_ptr<plan::PlanN
         default:
             return absl::InvalidArgumentError("plan node is not pushable");
     }
+}
+
+} // namespace
+
+absl::StatusOr<PushdownPlan> BuildPushdownPlan(const std::shared_ptr<plan::PlanNode>& node) {
+    auto optimized_or = DefaultRuleBasedOptimizer().Optimize(node);
+    if (!optimized_or.ok()) {
+        return optimized_or.status();
+    }
+    return build_pushdown_plan(optimized_or->plan);
 }
 
 bool CanExecutePushdownPlan(const PushdownPlan& plan) {
