@@ -18,7 +18,9 @@
 #include "cpp/pl/flux/parser.h"
 #include "cpp/pl/flux/runtime_builtin.h"
 #include "cpp/pl/flux/runtime_exec.h"
+#include <cstdlib>
 #include <gtest/gtest.h>
+#include <optional>
 
 namespace pl::flux {
 namespace {
@@ -28,6 +30,14 @@ std::unique_ptr<File> ParseFile(const std::string& source) {
     auto file = parser.parse_file("exec_test.flux");
     EXPECT_TRUE(parser.errors().empty()) << ::testing::PrintToString(parser.errors());
     return file;
+}
+
+std::optional<std::string> mysql_test_dsn() {
+    const char* dsn = std::getenv("FLUX_MYSQL_TEST_DSN");
+    if (dsn == nullptr || std::string(dsn).empty()) {
+        return std::nullopt;
+    }
+    return std::string(dsn);
 }
 
 TEST(RuntimeExecTest, ExecutesVariableAndExpressionStatements) {
@@ -299,6 +309,74 @@ TEST(RuntimeExecTest, SqlitePipelineAppendsLogicalPlanNodesWhileExecutingEagerly
     ASSERT_NE(nullptr, node);
     EXPECT_EQ(plan::PlanNodeKind::SourceScan, node->kind);
     EXPECT_EQ("sqlite", node->source_scan.driver);
+}
+
+TEST(RuntimeExecTest, MySQLPipelineExecutesThroughRuntimeAndPushdown) {
+    auto dsn = mysql_test_dsn();
+    if (!dsn.has_value()) {
+        GTEST_SKIP() << "set FLUX_MYSQL_TEST_DSN and import "
+                        "cpp/pl/flux/examples/cross_source/mysql_metrics.sql to run MySQL "
+                        "runtime integration tests";
+    }
+    auto file = ParseFile(R"(
+        import "mysql"
+        builtin range : (<-tables: stream[A], start: time, stop: time) => stream[A]
+        builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
+        builtin keep : (<-tables: stream[A], columns: [string]) => stream[A]
+        builtin sort : (<-tables: stream[A], columns: [string], desc: bool) => stream[A]
+        builtin limit : (<-tables: stream[A], n: int) => stream[A]
+
+        data = mysql.from(
+            dsn: ")" + *dsn +
+                          R"(",
+            table: "cpu",
+        )
+            |> range(start: 2024-07-01T10:00:30Z, stop: 2024-07-01T10:04:00Z)
+            |> filter(fn: (r) => r.host == "edge-1")
+            |> keep(columns: ["host", "usage"])
+            |> sort(columns: ["usage"], desc: true)
+            |> limit(n: 1)
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(env.lookup("mysql").ok());
+    const auto data_or = env.lookup("data");
+    ASSERT_TRUE(data_or.ok()) << data_or.status();
+    ASSERT_EQ(Value::Type::Table, data_or->type());
+    ASSERT_EQ(1, data_or->as_table().rows.size());
+    ASSERT_NE(nullptr, data_or->as_table().rows[0]);
+    EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[0]->lookup("host")->string());
+    EXPECT_EQ("93.25", data_or->as_table().rows[0]->lookup("usage")->string());
+    EXPECT_EQ(nullptr, data_or->as_table().rows[0]->lookup("_time"));
+
+    auto node = data_or->as_table().plan;
+    ASSERT_NE(nullptr, node);
+    EXPECT_EQ(plan::PlanNodeKind::Limit, node->kind);
+    ASSERT_EQ(1, node->inputs.size());
+    node = node->inputs[0];
+    ASSERT_NE(nullptr, node);
+    EXPECT_EQ(plan::PlanNodeKind::Sort, node->kind);
+    ASSERT_EQ(1, node->inputs.size());
+    node = node->inputs[0];
+    ASSERT_NE(nullptr, node);
+    EXPECT_EQ(plan::PlanNodeKind::Project, node->kind);
+    ASSERT_EQ(1, node->inputs.size());
+    node = node->inputs[0];
+    ASSERT_NE(nullptr, node);
+    EXPECT_EQ(plan::PlanNodeKind::Filter, node->kind);
+    ASSERT_EQ(1, node->inputs.size());
+    node = node->inputs[0];
+    ASSERT_NE(nullptr, node);
+    EXPECT_EQ(plan::PlanNodeKind::Range, node->kind);
+    ASSERT_EQ(1, node->inputs.size());
+    node = node->inputs[0];
+    ASSERT_NE(nullptr, node);
+    EXPECT_EQ(plan::PlanNodeKind::SourceScan, node->kind);
+    EXPECT_EQ("mysql", node->source_scan.driver);
 }
 
 TEST(RuntimeExecTest, ExplainFormatsLogicalPlan) {
