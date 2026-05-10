@@ -16,18 +16,20 @@
 # Created: 2025/07/01 00:45
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
-load(
-    "//cpp:copts/configure_copts.bzl",
-    "COPTS_WITH_ASAN",
-    "LINKOPTS_WITH_ASAN",
-)
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//cpp/pl/minidfs:__subpackages__"])
 
 cc_library(
     name = "common",
-    srcs = glob(["*.cpp"]),
-    hdrs = glob(["*.h"]),
-    copts =   COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    hdrs = [
+        "checksum.h",
+        "common.h",
+        "compression.h",
+        "constants.h",
+        "error_code.h",
+        "types.h",
+    ],
+    deps = [
+        "@isa-l",
+    ],
 )
