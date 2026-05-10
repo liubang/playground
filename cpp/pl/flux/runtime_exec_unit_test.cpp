@@ -16,6 +16,7 @@
 // Created: 2026/04/15 00:47
 
 #include "cpp/pl/flux/parser.h"
+#include "cpp/pl/flux/execution/materializer.h"
 #include "cpp/pl/flux/runtime_builtin.h"
 #include "cpp/pl/flux/runtime_exec.h"
 #include <cstdlib>
@@ -215,11 +216,15 @@ TEST(RuntimeExecTest, ExecutesSqliteFromSqliteTableThroughMemoryPipeline) {
     ASSERT_TRUE(env.lookup("sqlite").ok());
     ASSERT_TRUE(env.lookup("data").ok());
     ASSERT_EQ(Value::Type::Table, env.lookup("data")->type());
-    ASSERT_EQ(1, env.lookup("data")->as_table().rows.size());
-    ASSERT_NE(nullptr, env.lookup("data")->as_table().rows[0]);
-    EXPECT_EQ("\"edge-1\"", env.lookup("data")->as_table().rows[0]->lookup("host")->string());
-    EXPECT_EQ("71.5", env.lookup("data")->as_table().rows[0]->lookup("usage")->string());
-    EXPECT_EQ("\"west\"", env.lookup("data")->as_table().rows[0]->lookup("region")->string());
+    EXPECT_FALSE(env.lookup("data")->as_table().materialized);
+    auto materialized_or = execution::MaterializeValue(*env.lookup("data"));
+    ASSERT_TRUE(materialized_or.ok()) << materialized_or.status();
+    const auto& table = materialized_or->as_table();
+    ASSERT_EQ(1, table.rows.size());
+    ASSERT_NE(nullptr, table.rows[0]);
+    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
+    EXPECT_EQ("71.5", table.rows[0]->lookup("usage")->string());
+    EXPECT_EQ("\"west\"", table.rows[0]->lookup("region")->string());
 }
 
 TEST(RuntimeExecTest, SqliteFromAttachesSourceScanPlan) {
@@ -241,6 +246,8 @@ TEST(RuntimeExecTest, SqliteFromAttachesSourceScanPlan) {
     ASSERT_TRUE(data_or.ok()) << data_or.status();
     ASSERT_EQ(Value::Type::Table, data_or->type());
     ASSERT_NE(nullptr, data_or->as_table().plan);
+    EXPECT_FALSE(data_or->as_table().materialized);
+    EXPECT_TRUE(data_or->as_table().rows.empty());
     EXPECT_EQ(plan::PlanNodeKind::SourceScan, data_or->as_table().plan->kind);
     EXPECT_EQ("sqlite", data_or->as_table().plan->source_scan.source);
     EXPECT_EQ("sqlite", data_or->as_table().plan->source_scan.driver);
@@ -275,8 +282,12 @@ TEST(RuntimeExecTest, SqlitePipelineAppendsLogicalPlanNodesWhileExecutingEagerly
     const auto data_or = env.lookup("data");
     ASSERT_TRUE(data_or.ok()) << data_or.status();
     ASSERT_EQ(Value::Type::Table, data_or->type());
-    ASSERT_EQ(1, data_or->as_table().rows.size());
-    EXPECT_EQ("93.25", data_or->as_table().rows[0]->lookup("usage")->string());
+    EXPECT_FALSE(data_or->as_table().materialized);
+    auto materialized_or = execution::MaterializeValue(*data_or);
+    ASSERT_TRUE(materialized_or.ok()) << materialized_or.status();
+    const auto& table = materialized_or->as_table();
+    ASSERT_EQ(1, table.rows.size());
+    EXPECT_EQ("93.25", table.rows[0]->lookup("usage")->string());
 
     auto node = data_or->as_table().plan;
     ASSERT_NE(nullptr, node);
@@ -347,11 +358,15 @@ TEST(RuntimeExecTest, MySQLPipelineExecutesThroughRuntimeAndPushdown) {
     const auto data_or = env.lookup("data");
     ASSERT_TRUE(data_or.ok()) << data_or.status();
     ASSERT_EQ(Value::Type::Table, data_or->type());
-    ASSERT_EQ(1, data_or->as_table().rows.size());
-    ASSERT_NE(nullptr, data_or->as_table().rows[0]);
-    EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[0]->lookup("host")->string());
-    EXPECT_EQ("93.25", data_or->as_table().rows[0]->lookup("usage")->string());
-    EXPECT_EQ(nullptr, data_or->as_table().rows[0]->lookup("_time"));
+    EXPECT_FALSE(data_or->as_table().materialized);
+    auto materialized_or = execution::MaterializeValue(*data_or);
+    ASSERT_TRUE(materialized_or.ok()) << materialized_or.status();
+    const auto& table = materialized_or->as_table();
+    ASSERT_EQ(1, table.rows.size());
+    ASSERT_NE(nullptr, table.rows[0]);
+    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
+    EXPECT_EQ("93.25", table.rows[0]->lookup("usage")->string());
+    EXPECT_EQ(nullptr, table.rows[0]->lookup("_time"));
 
     auto node = data_or->as_table().plan;
     ASSERT_NE(nullptr, node);
@@ -412,6 +427,79 @@ TEST(RuntimeExecTest, ExplainFormatsLogicalPlan) {
         plan_or->as_string());
 }
 
+TEST(RuntimeExecTest, ExplainFormatsPhysicalPlan) {
+    auto file = ParseFile(R"(
+        import "sqlite"
+        builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
+        builtin limit : (<-tables: stream[A], n: int) => stream[A]
+        builtin explain : (<-tables: stream[A], ?physical: bool) => string
+
+        data = sqlite.from(
+            path: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
+        )
+            |> filter(fn: (r) => r.host == "edge-1")
+            |> limit(n: 1)
+
+        plan = data |> explain(physical: true)
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto plan_or = env.lookup("plan");
+    ASSERT_TRUE(plan_or.ok()) << plan_or.status();
+    ASSERT_EQ(Value::Type::String, plan_or->type());
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("PhysicalPlan\n"));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("ConnectorScan [lazy]"));
+    EXPECT_NE(std::string::npos,
+              plan_or->as_string().find("logical_prefix=[Limit, Filter, SourceScan]"));
+    EXPECT_NE(std::string::npos,
+              plan_or->as_string().find("rbo=[PushLimitIntoConnectorScan, "
+                                        "PushPredicateIntoConnectorScan]"));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("cbo=\"not-run\""));
+}
+
+TEST(RuntimeExecTest, ExplainDoesNotMaterializeLazySqliteSource) {
+    auto file = ParseFile(R"(
+        import "sqlite"
+        builtin limit : (<-tables: stream[A], n: int) => stream[A]
+        builtin explain : (<-tables: stream[A]) => string
+
+        data = sqlite.from(
+            path: "/tmp/flux-missing-lazy-source.db",
+            table: "cpu",
+        )
+            |> limit(n: 1)
+
+        plan = data |> explain()
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto data_or = env.lookup("data");
+    ASSERT_TRUE(data_or.ok()) << data_or.status();
+    ASSERT_EQ(Value::Type::Table, data_or->type());
+    EXPECT_FALSE(data_or->as_table().materialized);
+    EXPECT_TRUE(data_or->as_table().rows.empty());
+
+    const auto plan_or = env.lookup("plan");
+    ASSERT_TRUE(plan_or.ok()) << plan_or.status();
+    ASSERT_EQ(Value::Type::String, plan_or->type());
+    EXPECT_EQ(
+        "Limit [sqlite pushdown]\n"
+        "`- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n",
+        plan_or->as_string());
+
+    auto materialized_or = execution::MaterializeValue(*data_or);
+    ASSERT_FALSE(materialized_or.ok());
+}
+
 TEST(RuntimeExecTest, ContinuousSqliteFiltersAccumulatePushdownPredicates) {
     auto file = ParseFile(R"(
         import "sqlite"
@@ -438,9 +526,12 @@ TEST(RuntimeExecTest, ContinuousSqliteFiltersAccumulatePushdownPredicates) {
     const auto data_or = env.lookup("data");
     ASSERT_TRUE(data_or.ok()) << data_or.status();
     ASSERT_EQ(Value::Type::Table, data_or->type());
-    ASSERT_EQ(1, data_or->as_table().rows.size());
-    EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[0]->lookup("host")->string());
-    EXPECT_EQ("93.25", data_or->as_table().rows[0]->lookup("usage")->string());
+    auto materialized_or = execution::MaterializeValue(*data_or);
+    ASSERT_TRUE(materialized_or.ok()) << materialized_or.status();
+    const auto& table = materialized_or->as_table();
+    ASSERT_EQ(1, table.rows.size());
+    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
+    EXPECT_EQ("93.25", table.rows[0]->lookup("usage")->string());
 
     const auto plan_or = env.lookup("plan");
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
@@ -482,13 +573,16 @@ TEST(RuntimeExecTest, SqliteDropColumnsPushesDownAsProjection) {
     const auto data_or = env.lookup("data");
     ASSERT_TRUE(data_or.ok()) << data_or.status();
     ASSERT_EQ(Value::Type::Table, data_or->type());
-    ASSERT_EQ(2, data_or->as_table().rows.size());
-    EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[0]->lookup("host")->string());
-    EXPECT_EQ("71.5", data_or->as_table().rows[0]->lookup("usage")->string());
-    EXPECT_EQ(nullptr, data_or->as_table().rows[0]->lookup("region"));
-    EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[1]->lookup("host")->string());
-    EXPECT_EQ("93.25", data_or->as_table().rows[1]->lookup("usage")->string());
-    EXPECT_EQ(nullptr, data_or->as_table().rows[1]->lookup("region"));
+    auto materialized_or = execution::MaterializeValue(*data_or);
+    ASSERT_TRUE(materialized_or.ok()) << materialized_or.status();
+    const auto& table = materialized_or->as_table();
+    ASSERT_EQ(2, table.rows.size());
+    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
+    EXPECT_EQ("71.5", table.rows[0]->lookup("usage")->string());
+    EXPECT_EQ(nullptr, table.rows[0]->lookup("region"));
+    EXPECT_EQ("\"edge-1\"", table.rows[1]->lookup("host")->string());
+    EXPECT_EQ("93.25", table.rows[1]->lookup("usage")->string());
+    EXPECT_EQ(nullptr, table.rows[1]->lookup("region"));
 
     const auto plan_or = env.lookup("plan");
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
@@ -521,10 +615,14 @@ TEST(RuntimeExecTest, SqliteFilterAfterDropPreservesMissingColumnError) {
     Environment env;
     auto result_or = StatementExecutor::ExecuteFile(*file, env);
 
-    ASSERT_FALSE(result_or.ok());
-    EXPECT_EQ(absl::StatusCode::kNotFound, result_or.status().code());
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto data_or = env.lookup("data");
+    ASSERT_TRUE(data_or.ok()) << data_or.status();
+    auto materialized_or = execution::MaterializeValue(*data_or);
+    ASSERT_FALSE(materialized_or.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, materialized_or.status().code());
     EXPECT_NE(std::string::npos,
-              result_or.status().message().find("missing object property: region"));
+              materialized_or.status().message().find("unavailable column: region"));
 }
 
 TEST(RuntimeExecTest, SqliteRenamePushesDownProjectionAliasAndColumnMapping) {
@@ -558,10 +656,13 @@ TEST(RuntimeExecTest, SqliteRenamePushesDownProjectionAliasAndColumnMapping) {
     const auto data_or = env.lookup("data");
     ASSERT_TRUE(data_or.ok()) << data_or.status();
     ASSERT_EQ(Value::Type::Table, data_or->type());
-    ASSERT_EQ(1, data_or->as_table().rows.size());
-    EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[0]->lookup("host")->string());
-    EXPECT_EQ("93.25", data_or->as_table().rows[0]->lookup("value")->string());
-    EXPECT_EQ(nullptr, data_or->as_table().rows[0]->lookup("usage"));
+    auto materialized_or = execution::MaterializeValue(*data_or);
+    ASSERT_TRUE(materialized_or.ok()) << materialized_or.status();
+    const auto& table = materialized_or->as_table();
+    ASSERT_EQ(1, table.rows.size());
+    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
+    EXPECT_EQ("93.25", table.rows[0]->lookup("value")->string());
+    EXPECT_EQ(nullptr, table.rows[0]->lookup("usage"));
 
     const auto plan_or = env.lookup("plan");
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
@@ -596,10 +697,14 @@ TEST(RuntimeExecTest, SqliteFilterAfterRenamePreservesMissingOldColumnError) {
     Environment env;
     auto result_or = StatementExecutor::ExecuteFile(*file, env);
 
-    ASSERT_FALSE(result_or.ok());
-    EXPECT_EQ(absl::StatusCode::kNotFound, result_or.status().code());
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto data_or = env.lookup("data");
+    ASSERT_TRUE(data_or.ok()) << data_or.status();
+    auto materialized_or = execution::MaterializeValue(*data_or);
+    ASSERT_FALSE(materialized_or.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, materialized_or.status().code());
     EXPECT_NE(std::string::npos,
-              result_or.status().message().find("missing object property: usage"));
+              materialized_or.status().message().find("unavailable column: usage"));
 }
 
 TEST(RuntimeExecTest, SqliteGroupCountPushesDownAggregate) {
@@ -629,12 +734,15 @@ TEST(RuntimeExecTest, SqliteGroupCountPushesDownAggregate) {
     const auto data_or = env.lookup("data");
     ASSERT_TRUE(data_or.ok()) << data_or.status();
     ASSERT_EQ(Value::Type::Table, data_or->type());
-    ASSERT_EQ(2, data_or->as_table().rows.size());
-    EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[0]->lookup("host")->string());
-    EXPECT_EQ("2", data_or->as_table().rows[0]->lookup("usage")->string());
-    EXPECT_NE(nullptr, data_or->as_table().rows[0]->lookup("_group"));
-    EXPECT_EQ("\"edge-2\"", data_or->as_table().rows[1]->lookup("host")->string());
-    EXPECT_EQ("1", data_or->as_table().rows[1]->lookup("usage")->string());
+    auto materialized_or = execution::MaterializeValue(*data_or);
+    ASSERT_TRUE(materialized_or.ok()) << materialized_or.status();
+    const auto& table = materialized_or->as_table();
+    ASSERT_EQ(2, table.rows.size());
+    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
+    EXPECT_EQ("2", table.rows[0]->lookup("usage")->string());
+    EXPECT_NE(nullptr, table.rows[0]->lookup("_group"));
+    EXPECT_EQ("\"edge-2\"", table.rows[1]->lookup("host")->string());
+    EXPECT_EQ("1", table.rows[1]->lookup("usage")->string());
 
     const auto plan_or = env.lookup("plan");
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
@@ -673,13 +781,16 @@ TEST(RuntimeExecTest, SqliteGroupMeanAfterRenamePushesDownAggregateMapping) {
     const auto data_or = env.lookup("data");
     ASSERT_TRUE(data_or.ok()) << data_or.status();
     ASSERT_EQ(Value::Type::Table, data_or->type());
-    ASSERT_EQ(3, data_or->as_table().rows.size());
-    EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[0]->lookup("host")->string());
-    EXPECT_EQ("82.375", data_or->as_table().rows[0]->lookup("value")->string());
-    EXPECT_EQ("\"edge-2\"", data_or->as_table().rows[1]->lookup("host")->string());
-    EXPECT_EQ("88", data_or->as_table().rows[1]->lookup("value")->string());
-    EXPECT_EQ("\"edge-3\"", data_or->as_table().rows[2]->lookup("host")->string());
-    EXPECT_EQ("64.25", data_or->as_table().rows[2]->lookup("value")->string());
+    auto materialized_or = execution::MaterializeValue(*data_or);
+    ASSERT_TRUE(materialized_or.ok()) << materialized_or.status();
+    const auto& table = materialized_or->as_table();
+    ASSERT_EQ(3, table.rows.size());
+    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
+    EXPECT_EQ("82.375", table.rows[0]->lookup("value")->string());
+    EXPECT_EQ("\"edge-2\"", table.rows[1]->lookup("host")->string());
+    EXPECT_EQ("88", table.rows[1]->lookup("value")->string());
+    EXPECT_EQ("\"edge-3\"", table.rows[2]->lookup("host")->string());
+    EXPECT_EQ("64.25", table.rows[2]->lookup("value")->string());
 }
 
 TEST(RuntimeExecTest, SqliteDistinctAfterRenamePushesDownColumnMapping) {
@@ -711,11 +822,14 @@ TEST(RuntimeExecTest, SqliteDistinctAfterRenamePushesDownColumnMapping) {
     const auto data_or = env.lookup("data");
     ASSERT_TRUE(data_or.ok()) << data_or.status();
     ASSERT_EQ(Value::Type::Table, data_or->type());
-    ASSERT_EQ(3, data_or->as_table().rows.size());
-    EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[0]->lookup("service")->string());
-    EXPECT_EQ(nullptr, data_or->as_table().rows[0]->lookup("host"));
-    EXPECT_EQ("\"edge-2\"", data_or->as_table().rows[1]->lookup("service")->string());
-    EXPECT_EQ("\"edge-3\"", data_or->as_table().rows[2]->lookup("service")->string());
+    auto materialized_or = execution::MaterializeValue(*data_or);
+    ASSERT_TRUE(materialized_or.ok()) << materialized_or.status();
+    const auto& table = materialized_or->as_table();
+    ASSERT_EQ(3, table.rows.size());
+    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("service")->string());
+    EXPECT_EQ(nullptr, table.rows[0]->lookup("host"));
+    EXPECT_EQ("\"edge-2\"", table.rows[1]->lookup("service")->string());
+    EXPECT_EQ("\"edge-3\"", table.rows[2]->lookup("service")->string());
 
     const auto plan_or = env.lookup("plan");
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
@@ -754,8 +868,11 @@ TEST(RuntimeExecTest, ComplexSqliteFilterFallsBackToMaterializedExecution) {
     const auto data_or = env.lookup("data");
     ASSERT_TRUE(data_or.ok()) << data_or.status();
     ASSERT_EQ(Value::Type::Table, data_or->type());
-    ASSERT_EQ(3, data_or->as_table().rows.size());
-    EXPECT_EQ("\"edge-1\"", data_or->as_table().rows[0]->lookup("host")->string());
+    auto materialized_or = execution::MaterializeValue(*data_or);
+    ASSERT_TRUE(materialized_or.ok()) << materialized_or.status();
+    const auto& table = materialized_or->as_table();
+    ASSERT_EQ(3, table.rows.size());
+    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
 
     const auto plan_or = env.lookup("plan");
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();

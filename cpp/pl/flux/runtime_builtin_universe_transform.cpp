@@ -17,27 +17,40 @@
 
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/ast.h"
-#include "cpp/pl/flux/connector/mysql_source.h"
-#include "cpp/pl/flux/connector/sqlite_source.h"
+#include "cpp/pl/flux/execution/materializer.h"
+#include "cpp/pl/flux/optimizer/source_pushdown.h"
 #include "cpp/pl/flux/runtime_builtin_table_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_time_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_universe.h"
-#include <algorithm>
 #include <limits>
 #include <optional>
-#include <sstream>
 #include <unordered_set>
 
 namespace pl::flux {
 namespace {
 using namespace detail;
 
-struct PushdownPlan {
-    const plan::SourceScanSpec* source = nullptr;
-    connector::ScanRequest request;
-    std::vector<std::string> visible_columns;
-    std::vector<std::string> source_columns;
-};
+absl::StatusOr<Value> materialized_table_value(const TableValue& table) {
+    Value value = table.materialized
+                      ? Value::table_stream(table.bucket, table.tables, table.range_start,
+                                            table.range_stop, table.result_name)
+                      : Value::table_plan(table.bucket, table.plan, table.range_start,
+                                          table.range_stop, table.result_name);
+    value.as_table_mut().plan = table.plan;
+    return execution::MaterializeValue(std::move(value));
+}
+
+absl::StatusOr<const TableValue*> materialized_table_ref(const TableValue& table, Value* storage) {
+    if (table.materialized) {
+        return &table;
+    }
+    auto value_or = materialized_table_value(table);
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+    *storage = std::move(*value_or);
+    return &storage->as_table();
+}
 
 absl::StatusOr<std::string> predicate_property_name(const PropertyKey& key) {
     switch (key.type) {
@@ -220,530 +233,12 @@ std::optional<std::vector<plan::PredicateSpec>> extract_filter_predicates(const 
     return predicates;
 }
 
-connector::PredicateOp to_connector_predicate_op(plan::PredicateOp op) {
-    switch (op) {
-        case plan::PredicateOp::Eq:
-            return connector::PredicateOp::Eq;
-        case plan::PredicateOp::NotEq:
-            return connector::PredicateOp::NotEq;
-        case plan::PredicateOp::Lt:
-            return connector::PredicateOp::Lt;
-        case plan::PredicateOp::Lte:
-            return connector::PredicateOp::Lte;
-        case plan::PredicateOp::Gt:
-            return connector::PredicateOp::Gt;
-        case plan::PredicateOp::Gte:
-            return connector::PredicateOp::Gte;
-    }
-    return connector::PredicateOp::Eq;
-}
-
-connector::AggregateFunction to_connector_aggregate_fn(plan::AggregateFunction fn) {
-    switch (fn) {
-        case plan::AggregateFunction::Count:
-            return connector::AggregateFunction::Count;
-        case plan::AggregateFunction::Sum:
-            return connector::AggregateFunction::Sum;
-        case plan::AggregateFunction::Mean:
-            return connector::AggregateFunction::Mean;
-        case plan::AggregateFunction::Min:
-            return connector::AggregateFunction::Min;
-        case plan::AggregateFunction::Max:
-            return connector::AggregateFunction::Max;
-    }
-    return connector::AggregateFunction::Count;
-}
-
-std::string connector_predicate_op_string(connector::PredicateOp op) {
-    switch (op) {
-        case connector::PredicateOp::Eq:
-            return "==";
-        case connector::PredicateOp::NotEq:
-            return "!=";
-        case connector::PredicateOp::Lt:
-            return "<";
-        case connector::PredicateOp::Lte:
-            return "<=";
-        case connector::PredicateOp::Gt:
-            return ">";
-        case connector::PredicateOp::Gte:
-            return ">=";
-    }
-    return "==";
-}
-
-std::string connector_aggregate_fn_string(connector::AggregateFunction fn) {
-    switch (fn) {
-        case connector::AggregateFunction::Count:
-            return "COUNT";
-        case connector::AggregateFunction::Sum:
-            return "SUM";
-        case connector::AggregateFunction::Mean:
-            return "AVG";
-        case connector::AggregateFunction::Min:
-            return "MIN";
-        case connector::AggregateFunction::Max:
-            return "MAX";
-    }
-    return "COUNT";
-}
-
-Value to_connector_literal(const plan::PredicateLiteral& literal) {
-    switch (literal.kind) {
-        case plan::PredicateLiteralKind::Bool:
-            return Value::boolean(literal.bool_value);
-        case plan::PredicateLiteralKind::Int:
-            return Value::integer(literal.int_value);
-        case plan::PredicateLiteralKind::UInt:
-            return Value::uinteger(literal.uint_value);
-        case plan::PredicateLiteralKind::Float:
-            return Value::floating(literal.float_value);
-        case plan::PredicateLiteralKind::String:
-            return Value::string(literal.string_value);
-        case plan::PredicateLiteralKind::Time:
-            return Value::time(literal.string_value);
-    }
-    return Value::null();
-}
-
-void append_string_list(std::ostringstream* out, const std::vector<std::string>& values) {
-    *out << "[";
-    for (size_t i = 0; i < values.size(); ++i) {
-        if (i != 0) {
-            *out << ", ";
-        }
-        *out << values[i];
-    }
-    *out << "]";
-}
-
-std::string projection_summary(const connector::ScanRequest& request) {
-    std::ostringstream out;
-    out << "[";
-    if (!request.projection_columns.empty()) {
-        for (size_t i = 0; i < request.projection_columns.size(); ++i) {
-            if (i != 0) {
-                out << ", ";
-            }
-            const auto& projection = request.projection_columns[i];
-            out << projection.column;
-            if (!projection.alias.empty() && projection.alias != projection.column) {
-                out << " AS " << projection.alias;
-            }
-        }
-    } else if (!request.columns.empty()) {
-        for (size_t i = 0; i < request.columns.size(); ++i) {
-            if (i != 0) {
-                out << ", ";
-            }
-            out << request.columns[i];
-        }
-    } else {
-        out << "*";
-    }
-    out << "]";
-    return out.str();
-}
-
-void append_pushdown_summary_field(std::ostringstream* out,
-                                   bool* needs_separator,
-                                   const std::string& name,
-                                   const std::string& value) {
-    if (*needs_separator) {
-        *out << ", ";
-    }
-    *out << name << "=" << value;
-    *needs_separator = true;
-}
-
-std::string format_pushdown_request(const connector::ScanRequest& request) {
-    std::ostringstream out;
-    out << "SourcePushdown(request: ";
-    bool needs_separator = false;
-
-    append_pushdown_summary_field(&out, &needs_separator, "projection",
-                                  projection_summary(request));
-
-    if (request.time_range.has_value()) {
-        std::ostringstream range;
-        range << "{";
-        bool has_range_field = false;
-        if (request.time_range->start.has_value()) {
-            range << "start=" << *request.time_range->start;
-            has_range_field = true;
-        }
-        if (request.time_range->stop.has_value()) {
-            if (has_range_field) {
-                range << ", ";
-            }
-            range << "stop=" << *request.time_range->stop;
-        }
-        range << "}";
-        append_pushdown_summary_field(&out, &needs_separator, "time_range", range.str());
-    }
-
-    if (!request.predicates.empty()) {
-        std::ostringstream predicates;
-        predicates << "[";
-        for (size_t i = 0; i < request.predicates.size(); ++i) {
-            if (i != 0) {
-                predicates << ", ";
-            }
-            const auto& predicate = request.predicates[i];
-            predicates << predicate.column << " " << connector_predicate_op_string(predicate.op)
-                       << " " << predicate.literal.string();
-        }
-        predicates << "]";
-        append_pushdown_summary_field(&out, &needs_separator, "predicates", predicates.str());
-    }
-
-    if (request.distinct.has_value()) {
-        append_pushdown_summary_field(&out, &needs_separator, "distinct", *request.distinct);
-    }
-
-    if (!request.group_by.empty()) {
-        std::ostringstream group_by;
-        append_string_list(&group_by, request.group_by);
-        append_pushdown_summary_field(&out, &needs_separator, "group_by", group_by.str());
-    }
-
-    if (request.aggregate.has_value()) {
-        const auto& aggregate = *request.aggregate;
-        std::ostringstream value;
-        value << connector_aggregate_fn_string(aggregate.fn) << "(" << aggregate.column << ")";
-        if (!aggregate.alias.empty() && aggregate.alias != aggregate.column) {
-            value << " AS " << aggregate.alias;
-        }
-        append_pushdown_summary_field(&out, &needs_separator, "aggregate", value.str());
-    }
-
-    if (!request.order_by.empty()) {
-        std::ostringstream order_by;
-        order_by << "[";
-        for (size_t i = 0; i < request.order_by.size(); ++i) {
-            if (i != 0) {
-                order_by << ", ";
-            }
-            order_by << request.order_by[i].column << (request.order_by[i].desc ? " DESC" : " ASC");
-        }
-        order_by << "]";
-        append_pushdown_summary_field(&out, &needs_separator, "order_by", order_by.str());
-    }
-
-    if (request.limit.has_value()) {
-        append_pushdown_summary_field(&out, &needs_separator, "limit",
-                                      std::to_string(*request.limit));
-    }
-    if (request.offset.has_value()) {
-        append_pushdown_summary_field(&out, &needs_separator, "offset",
-                                      std::to_string(*request.offset));
-    }
-
-    out << ")";
-    return out.str();
-}
-
-absl::StatusOr<size_t> visible_column_index(const std::vector<std::string>& visible_columns,
-                                            const std::string& column,
-                                            const std::string& context) {
-    auto it = std::find(visible_columns.begin(), visible_columns.end(), column);
-    if (it == visible_columns.end()) {
-        return absl::InvalidArgumentError(
-            absl::StrCat("pushdown ", context, " references unavailable column: ", column));
-    }
-    return static_cast<size_t>(it - visible_columns.begin());
-}
-
-absl::StatusOr<std::string> source_column_for_visible(
-    const std::vector<std::string>& visible_columns,
-    const std::vector<std::string>& source_columns,
-    const std::string& column,
-    const std::string& context) {
-    auto index_or = visible_column_index(visible_columns, column, context);
-    if (!index_or.ok()) {
-        return index_or.status();
-    }
-    if (*index_or >= source_columns.size()) {
-        return absl::InvalidArgumentError("pushdown column mapping is inconsistent");
-    }
-    return source_columns[*index_or];
-}
-
-bool has_duplicate_columns(const std::vector<std::string>& columns) {
-    std::unordered_set<std::string> seen;
-    seen.reserve(columns.size());
-    for (const auto& column : columns) {
-        if (!seen.insert(column).second) {
-            return true;
-        }
-    }
-    return false;
-}
-
-void set_projection_columns(connector::ScanRequest* request,
-                            const std::vector<std::string>& source_columns,
-                            const std::vector<std::string>& visible_columns) {
-    request->columns.clear();
-    request->projection_columns.clear();
-    request->projection_columns.reserve(visible_columns.size());
-    for (size_t i = 0; i < visible_columns.size(); ++i) {
-        request->projection_columns.push_back({
-            .column = source_columns[i],
-            .alias = visible_columns[i],
-        });
-    }
-}
-
-absl::StatusOr<std::vector<std::string>> source_scan_columns(const plan::SourceScanSpec& source) {
-    absl::StatusOr<connector::TableSchema> schema_or =
-        absl::InvalidArgumentError("unsupported pushdown source");
-    if (source.source == "sqlite" && source.driver == "sqlite") {
-        connector::SQLiteSource sqlite_source(source.dsn, source.table);
-        schema_or = sqlite_source.Schema();
-    } else if (source.source == "mysql" && source.driver == "mysql") {
-        connector::MySQLSource mysql_source(source.dsn, source.table);
-        schema_or = mysql_source.Schema();
-    }
-    if (!schema_or.ok()) {
-        return schema_or.status();
-    }
-    std::vector<std::string> columns;
-    columns.reserve(schema_or->columns.size());
-    for (const auto& column : schema_or->columns) {
-        columns.push_back(column.name);
-    }
-    return columns;
-}
-
-absl::StatusOr<std::vector<std::string>> visible_columns_for_plan(
-    const std::shared_ptr<plan::PlanNode>& node) {
-    if (node == nullptr) {
-        return absl::InvalidArgumentError("missing plan");
-    }
-    if (node->kind == plan::PlanNodeKind::SourceScan) {
-        return source_scan_columns(node->source_scan);
-    }
-    if (node->inputs.size() != 1) {
-        return absl::InvalidArgumentError("non-linear plan has no stable visible columns");
-    }
-    auto columns_or = visible_columns_for_plan(node->inputs[0]);
-    if (!columns_or.ok()) {
-        return columns_or.status();
-    }
-    if (node->kind == plan::PlanNodeKind::Project) {
-        return node->project.columns;
-    }
-    if (node->kind == plan::PlanNodeKind::Rename) {
-        for (auto& column : *columns_or) {
-            if (auto renamed = mapped_column_name(node->rename.columns, column);
-                renamed.has_value()) {
-                column = *renamed;
-            }
-        }
-        if (has_duplicate_columns(*columns_or)) {
-            return absl::InvalidArgumentError("rename produces duplicate columns");
-        }
-        return columns_or;
-    }
-    if (node->kind == plan::PlanNodeKind::Range || node->kind == plan::PlanNodeKind::Filter ||
-        node->kind == plan::PlanNodeKind::Limit || node->kind == plan::PlanNodeKind::Sort ||
-        node->kind == plan::PlanNodeKind::Group || node->kind == plan::PlanNodeKind::Aggregate ||
-        node->kind == plan::PlanNodeKind::Distinct) {
-        return columns_or;
-    }
-    return absl::InvalidArgumentError("plan node has no stable visible columns");
-}
-
-absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::PlanNode>& node) {
-    if (node == nullptr) {
-        return absl::InvalidArgumentError("missing plan");
-    }
-    if (node->kind == plan::PlanNodeKind::SourceScan) {
-        if (!((node->source_scan.source == "sqlite" && node->source_scan.driver == "sqlite") ||
-              (node->source_scan.source == "mysql" && node->source_scan.driver == "mysql"))) {
-            return absl::InvalidArgumentError("unsupported pushdown source");
-        }
-        PushdownPlan plan;
-        plan.source = &node->source_scan;
-        auto columns_or = source_scan_columns(node->source_scan);
-        if (!columns_or.ok()) {
-            return columns_or.status();
-        }
-        plan.visible_columns = std::move(*columns_or);
-        plan.source_columns = plan.visible_columns;
-        return plan;
-    }
-    if (node->inputs.size() != 1) {
-        return absl::InvalidArgumentError("non-linear plan is not pushable");
-    }
-    auto plan_or = build_pushdown_plan(node->inputs[0]);
-    if (!plan_or.ok()) {
-        return plan_or.status();
-    }
-    switch (node->kind) {
-        case plan::PlanNodeKind::Range: {
-            auto source_column_or = source_column_for_visible(
-                plan_or->visible_columns, plan_or->source_columns, "_time", "range");
-            if (!source_column_or.ok()) {
-                return source_column_or.status();
-            }
-            if (*source_column_or != "_time") {
-                return absl::InvalidArgumentError(
-                    "range pushdown requires visible _time to map to source _time");
-            }
-            plan_or->request.time_range = connector::TimeRange{
-                .start = node->range.start,
-                .stop = node->range.stop,
-            };
-            return plan_or;
-        }
-        case plan::PlanNodeKind::Filter:
-            if (node->filter.predicates.empty()) {
-                return absl::InvalidArgumentError("filter has no pushable predicates");
-            }
-            for (const auto& predicate : node->filter.predicates) {
-                auto source_column_or = source_column_for_visible(
-                    plan_or->visible_columns, plan_or->source_columns, predicate.column, "filter");
-                if (!source_column_or.ok()) {
-                    return source_column_or.status();
-                }
-                plan_or->request.predicates.push_back({
-                    .op = to_connector_predicate_op(predicate.op),
-                    .column = *source_column_or,
-                    .literal = to_connector_literal(predicate.literal),
-                });
-            }
-            return plan_or;
-        case plan::PlanNodeKind::Project: {
-            std::vector<std::string> projected_source_columns;
-            projected_source_columns.reserve(node->project.columns.size());
-            for (const auto& column : node->project.columns) {
-                auto source_column_or = source_column_for_visible(
-                    plan_or->visible_columns, plan_or->source_columns, column, "project");
-                if (!source_column_or.ok()) {
-                    return source_column_or.status();
-                }
-                projected_source_columns.push_back(*source_column_or);
-            }
-            set_projection_columns(&plan_or->request, projected_source_columns,
-                                   node->project.columns);
-            plan_or->visible_columns = node->project.columns;
-            plan_or->source_columns = std::move(projected_source_columns);
-            return plan_or;
-        }
-        case plan::PlanNodeKind::Rename:
-            for (auto& column : plan_or->visible_columns) {
-                if (auto renamed = mapped_column_name(node->rename.columns, column);
-                    renamed.has_value()) {
-                    column = *renamed;
-                }
-            }
-            if (has_duplicate_columns(plan_or->visible_columns)) {
-                return absl::InvalidArgumentError("rename produces duplicate columns");
-            }
-            set_projection_columns(&plan_or->request, plan_or->source_columns,
-                                   plan_or->visible_columns);
-            return plan_or;
-        case plan::PlanNodeKind::Group:
-            plan_or->request.group_by.clear();
-            plan_or->request.group_by.reserve(node->group.columns.size());
-            for (const auto& column : node->group.columns) {
-                auto source_column_or = source_column_for_visible(
-                    plan_or->visible_columns, plan_or->source_columns, column, "group");
-                if (!source_column_or.ok()) {
-                    return source_column_or.status();
-                }
-                plan_or->request.group_by.push_back(*source_column_or);
-            }
-            return plan_or;
-        case plan::PlanNodeKind::Aggregate: {
-            if (plan_or->request.distinct.has_value()) {
-                return absl::InvalidArgumentError("aggregate after distinct is not pushable");
-            }
-            auto source_column_or =
-                source_column_for_visible(plan_or->visible_columns, plan_or->source_columns,
-                                          node->aggregate.column, "aggregate");
-            if (!source_column_or.ok()) {
-                return source_column_or.status();
-            }
-            plan_or->request.aggregate = connector::AggregateRequest{
-                .fn = to_connector_aggregate_fn(node->aggregate.fn),
-                .column = *source_column_or,
-                .alias = node->aggregate.column,
-            };
-            plan_or->request.order_by.clear();
-            plan_or->request.limit.reset();
-            plan_or->request.offset.reset();
-            return plan_or;
-        }
-        case plan::PlanNodeKind::Distinct: {
-            auto source_column_or =
-                source_column_for_visible(plan_or->visible_columns, plan_or->source_columns,
-                                          node->distinct.column, "distinct");
-            if (!source_column_or.ok()) {
-                return source_column_or.status();
-            }
-            plan_or->request.distinct = *source_column_or;
-            return plan_or;
-        }
-        case plan::PlanNodeKind::Limit:
-            plan_or->request.limit = node->limit.n;
-            if (node->limit.offset != 0) {
-                plan_or->request.offset = node->limit.offset;
-            }
-            return plan_or;
-        case plan::PlanNodeKind::Sort:
-            plan_or->request.order_by.clear();
-            plan_or->request.order_by.reserve(node->sort.keys.size());
-            for (const auto& key : node->sort.keys) {
-                auto source_column_or = source_column_for_visible(
-                    plan_or->visible_columns, plan_or->source_columns, key.column, "sort");
-                if (!source_column_or.ok()) {
-                    return source_column_or.status();
-                }
-                plan_or->request.order_by.push_back({
-                    .column = *source_column_or,
-                    .desc = key.desc,
-                });
-            }
-            return plan_or;
-        default:
-            return absl::InvalidArgumentError("plan node is not pushable");
-    }
-}
-
 } // namespace
 
 namespace detail {
 
 Value maybe_pushdown_source_plan(Value value) {
-    auto& table = value.as_table_mut();
-    if (table.plan == nullptr) {
-        return value;
-    }
-    auto pushdown_or = build_pushdown_plan(table.plan);
-    if (!pushdown_or.ok()) {
-        return value;
-    }
-    if (!pushdown_or->request.group_by.empty() && !pushdown_or->request.aggregate.has_value()) {
-        return value;
-    }
-    absl::StatusOr<Value> pushed_or = absl::InvalidArgumentError("unsupported pushdown source");
-    if (pushdown_or->source->source == "sqlite" && pushdown_or->source->driver == "sqlite") {
-        connector::SQLiteSource source(pushdown_or->source->dsn, pushdown_or->source->table);
-        pushed_or = source.Scan(pushdown_or->request);
-    } else if (pushdown_or->source->source == "mysql" && pushdown_or->source->driver == "mysql") {
-        connector::MySQLSource source(pushdown_or->source->dsn, pushdown_or->source->table);
-        pushed_or = source.Scan(pushdown_or->request);
-    }
-    if (!pushed_or.ok()) {
-        return value;
-    }
-    pushed_or->as_table_mut().plan = table.plan;
-    pushed_or->as_table_mut().range_start = table.range_start;
-    pushed_or->as_table_mut().range_stop = table.range_stop;
-    pushed_or->as_table_mut().result_name = table.result_name;
-    return *pushed_or;
+    return optimizer::MaybeExecutePushedSourcePlan(std::move(value));
 }
 
 Value with_aggregate_plan(Value value,
@@ -766,14 +261,7 @@ Value with_distinct_plan(Value value, const TableValue& input, std::string colum
 }
 
 std::optional<std::string> source_pushdown_summary(const std::shared_ptr<plan::PlanNode>& plan) {
-    auto pushdown_or = build_pushdown_plan(plan);
-    if (!pushdown_or.ok()) {
-        return std::nullopt;
-    }
-    if (!pushdown_or->request.group_by.empty() && !pushdown_or->request.aggregate.has_value()) {
-        return std::nullopt;
-    }
-    return format_pushdown_request(pushdown_or->request);
+    return optimizer::SourcePushdownSummary(plan);
 }
 
 } // namespace detail
@@ -819,7 +307,7 @@ Value with_drop_plan(Value value,
     if (input.plan == nullptr) {
         return value;
     }
-    auto columns_or = visible_columns_for_plan(input.plan);
+    auto columns_or = optimizer::VisibleColumnsForPlan(input.plan);
     if (!columns_or.ok()) {
         value.as_table_mut().plan =
             plan::MakeMaterializeBarrier(input.plan, "unsupported lazy builtin", "drop");
@@ -844,7 +332,7 @@ Value with_rename_plan(Value value,
         return value;
     }
     auto node = plan::MakeRename(input.plan, std::move(columns));
-    auto visible_columns_or = visible_columns_for_plan(node);
+    auto visible_columns_or = optimizer::VisibleColumnsForPlan(node);
     if (!visible_columns_or.ok()) {
         value.as_table_mut().plan =
             plan::MakeMaterializeBarrier(input.plan, "unsupported lazy builtin", "rename");
@@ -899,6 +387,11 @@ Value with_materialization_barrier(Value value,
     return value;
 }
 
+Value lazy_table_with_plan(const TableValue& input, std::shared_ptr<plan::PlanNode> node) {
+    return Value::table_plan(input.bucket, std::move(node), input.range_start, input.range_stop,
+                             input.result_name);
+}
+
 absl::StatusOr<Value> builtin_range(const std::vector<Value>& args) {
     auto object_or = require_object_argument(args, "range");
     if (!object_or.ok()) {
@@ -914,6 +407,13 @@ absl::StatusOr<Value> builtin_range(const std::vector<Value>& args) {
     }
     const auto start = (*start_or)->string();
     const auto stop = optional_literal_property(**object_or, "stop");
+    if (!(*table_or)->materialized && (*table_or)->plan != nullptr) {
+        auto result =
+            lazy_table_with_plan(**table_or, plan::MakeRange((*table_or)->plan, start, stop));
+        result.as_table_mut().range_start = start;
+        result.as_table_mut().range_stop = stop;
+        return result;
+    }
 
     auto ranged_or = transform_rows_preserving_chunks(
         **table_or, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
@@ -961,6 +461,24 @@ absl::StatusOr<Value> builtin_filter(const std::vector<Value>& args) {
     } else {
         return absl::InvalidArgumentError("filter `onEmpty` must be \"drop\" or \"keep\"");
     }
+    std::optional<std::vector<plan::PredicateSpec>> predicates;
+    if (empty_policy == EmptyChunkPolicy::Drop) {
+        predicates = extract_filter_predicates((*fn_or)->as_function());
+    }
+    Value materialized_input;
+    if (!(*table_or)->materialized && (*table_or)->plan != nullptr) {
+        if (predicates.has_value()) {
+            return lazy_table_with_plan(
+                **table_or,
+                plan::MakeFilter((*table_or)->plan, std::vector<plan::PredicateSpec>(*predicates)));
+        }
+        auto materialized_or = materialized_table_value(**table_or);
+        if (!materialized_or.ok()) {
+            return materialized_or.status();
+        }
+        materialized_input = *materialized_or;
+        table_or = &materialized_input.as_table();
+    }
 
     auto result_or = transform_rows_preserving_chunks(
         **table_or,
@@ -981,10 +499,6 @@ absl::StatusOr<Value> builtin_filter(const std::vector<Value>& args) {
     if (!result_or.ok()) {
         return result_or.status();
     }
-    std::optional<std::vector<plan::PredicateSpec>> predicates;
-    if (empty_policy == EmptyChunkPolicy::Drop) {
-        predicates = extract_filter_predicates((*fn_or)->as_function());
-    }
     return with_filter_plan(std::move(*result_or), **table_or, std::move(predicates));
 }
 
@@ -1004,9 +518,15 @@ absl::StatusOr<Value> builtin_map(const std::vector<Value>& args) {
     if ((*fn_or)->type() != Value::Type::Function) {
         return absl::InvalidArgumentError("map `fn` must be a function");
     }
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    const TableValue* table = *materialized_or;
 
     auto result_or = transform_rows_preserving_chunks(
-        **table_or, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
+        *table, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
             auto mapped_or = ExpressionEvaluator::Invoke(**fn_or, {Value::object(clone_row(row))});
             if (!mapped_or.ok()) {
                 return mapped_or.status();
@@ -1056,6 +576,9 @@ absl::StatusOr<Value> builtin_limit(const std::vector<Value>& args) {
         }
     }
 
+    if (!(*table_or)->materialized && (*table_or)->plan != nullptr) {
+        return lazy_table_with_plan(**table_or, plan::MakeLimit((*table_or)->plan, *n_or, offset));
+    }
     const size_t begin = static_cast<size_t>(offset);
     auto result = slice_table_like(**table_or, [&](size_t size) {
         const size_t end = std::min(size, begin + static_cast<size_t>(*n_or));
@@ -1098,7 +621,13 @@ absl::StatusOr<Value> builtin_tail(const std::vector<Value>& args) {
         }
     }
 
-    auto result = slice_table_like(**table_or, [&](size_t row_count) {
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    const TableValue* table = *materialized_or;
+    auto result = slice_table_like(*table, [&](size_t row_count) {
         const size_t tail_end =
             offset >= static_cast<int64_t>(row_count) ? 0 : row_count - static_cast<size_t>(offset);
         const size_t tail_begin =
@@ -1120,6 +649,10 @@ absl::StatusOr<Value> builtin_keep(const std::vector<Value>& args) {
     auto columns_or = string_array_property(**object_or, "keep", "columns");
     if (!columns_or.ok()) {
         return columns_or.status();
+    }
+    if (!(*table_or)->materialized && (*table_or)->plan != nullptr) {
+        return lazy_table_with_plan(**table_or,
+                                    plan::MakeProject((*table_or)->plan, *columns_or));
     }
     const std::unordered_set<std::string> selected(columns_or->begin(), columns_or->end());
     auto result_or = transform_rows_preserving_chunks(
@@ -1152,6 +685,22 @@ absl::StatusOr<Value> builtin_drop(const std::vector<Value>& args) {
     if (!columns_or.ok()) {
         return columns_or.status();
     }
+    if (!(*table_or)->materialized && (*table_or)->plan != nullptr) {
+        auto visible_or = optimizer::VisibleColumnsForPlan((*table_or)->plan);
+        if (!visible_or.ok()) {
+            return visible_or.status();
+        }
+        const std::unordered_set<std::string> dropped(columns_or->begin(), columns_or->end());
+        std::vector<std::string> projected;
+        projected.reserve(visible_or->size());
+        for (const auto& column : *visible_or) {
+            if (dropped.count(column) == 0) {
+                projected.push_back(column);
+            }
+        }
+        return lazy_table_with_plan(**table_or,
+                                    plan::MakeProject((*table_or)->plan, std::move(projected)));
+    }
     const std::unordered_set<std::string> dropped(columns_or->begin(), columns_or->end());
     auto result_or = transform_rows_preserving_chunks(
         **table_or, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
@@ -1182,6 +731,16 @@ absl::StatusOr<Value> builtin_rename(const std::vector<Value>& args) {
     auto columns_or = string_map_property(**object_or, "rename", "columns");
     if (!columns_or.ok()) {
         return columns_or.status();
+    }
+    if (!(*table_or)->materialized && (*table_or)->plan != nullptr) {
+        auto result = lazy_table_with_plan(**table_or,
+                                           plan::MakeRename((*table_or)->plan, *columns_or));
+        auto visible_or = optimizer::VisibleColumnsForPlan(result.as_table().plan);
+        if (!visible_or.ok()) {
+            return visible_or.status();
+        }
+        (void)visible_or;
+        return result;
     }
 
     auto result_or = transform_rows_preserving_chunks(
@@ -1220,9 +779,15 @@ absl::StatusOr<Value> builtin_duplicate(const std::vector<Value>& args) {
     if (!as_or.ok()) {
         return as_or.status();
     }
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    const TableValue* table = *materialized_or;
 
     auto result_or = transform_rows_preserving_chunks(
-        **table_or, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
+        *table, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
             const Value* value = row.lookup(*column_or);
             if (value == nullptr) {
                 return clone_row(row);
@@ -1253,9 +818,15 @@ absl::StatusOr<Value> builtin_set(const std::vector<Value>& args) {
     if (!value_or.ok()) {
         return value_or.status();
     }
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    const TableValue* table = *materialized_or;
 
     auto result_or = transform_rows_preserving_chunks(
-        **table_or, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
+        *table, [&](const ObjectValue& row) -> absl::StatusOr<std::shared_ptr<ObjectValue>> {
             auto updated = object_with_upserted_property(row, *key_or, **value_or);
             return std::make_shared<ObjectValue>(updated.as_object());
         });
@@ -1281,6 +852,18 @@ absl::StatusOr<Value> builtin_sort(const std::vector<Value>& args) {
     auto desc_or = optional_bool_property(**object_or, "sort", "desc", false);
     if (!desc_or.ok()) {
         return desc_or.status();
+    }
+    if (!(*table_or)->materialized && (*table_or)->plan != nullptr) {
+        std::vector<plan::SortKey> keys;
+        keys.reserve(columns_or->size());
+        for (const auto& column : *columns_or) {
+            keys.push_back({
+                .column = column,
+                .desc = *desc_or,
+            });
+        }
+        return lazy_table_with_plan(**table_or,
+                                    plan::MakeSort((*table_or)->plan, std::move(keys)));
     }
 
     auto chunks = clone_table_chunks(**table_or);
@@ -1323,12 +906,18 @@ absl::StatusOr<Value> builtin_group(const std::vector<Value>& args) {
     if (*mode_or != "by" && *mode_or != "except") {
         return absl::InvalidArgumentError("group `mode` must be either \"by\" or \"except\"");
     }
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    const TableValue* table = *materialized_or;
 
     std::vector<std::string> group_columns = *columns_or;
     if (*mode_or == "except") {
         group_columns.clear();
         const std::unordered_set<std::string> excluded(columns_or->begin(), columns_or->end());
-        for (const auto& column : all_visible_columns_in_order(**table_or)) {
+        for (const auto& column : all_visible_columns_in_order(*table)) {
             if (excluded.count(column) == 0) {
                 group_columns.push_back(column);
             }
@@ -1337,8 +926,8 @@ absl::StatusOr<Value> builtin_group(const std::vector<Value>& args) {
 
     std::vector<TableChunk> chunks;
     std::unordered_map<std::string, size_t> chunk_indexes;
-    chunks.reserve((*table_or)->rows.size());
-    for (const auto& row : (*table_or)->rows) {
+    chunks.reserve(table->rows.size());
+    for (const auto& row : table->rows) {
         if (row != nullptr) {
             auto [grouped_row, key] = clone_row_with_group_and_key(*row, group_columns);
             auto [it, inserted] = chunk_indexes.emplace(key, chunks.size());
@@ -1351,7 +940,7 @@ absl::StatusOr<Value> builtin_group(const std::vector<Value>& args) {
     if (chunks.empty()) {
         chunks.emplace_back();
     }
-    auto result = table_with_chunks_like(**table_or, std::move(chunks));
+    auto result = table_with_chunks_like(*table, std::move(chunks));
     return with_group_plan(std::move(result), **table_or, std::move(group_columns));
 }
 
@@ -1379,6 +968,12 @@ absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
     if (column_key_or->empty()) {
         return absl::InvalidArgumentError("pivot `columnKey` must not be empty");
     }
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    const TableValue* table = *materialized_or;
     std::unordered_map<std::string, size_t> row_key_indexes;
     row_key_indexes.reserve(row_key_or->size());
     for (size_t i = 0; i < row_key_or->size(); ++i) {
@@ -1391,8 +986,8 @@ absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
     }
 
     std::vector<TableChunk> chunks;
-    chunks.reserve((*table_or)->table_count());
-    for (const auto& chunk : (*table_or)->tables) {
+    chunks.reserve(table->table_count());
+    for (const auto& chunk : table->tables) {
         TableChunk next;
         next.group_key = chunk.group_key;
         std::unordered_map<std::string, size_t> row_indexes;
@@ -1453,7 +1048,7 @@ absl::StatusOr<Value> builtin_pivot(const std::vector<Value>& args) {
         }
         chunks.push_back(std::move(next));
     }
-    auto result = table_with_chunks_like(**table_or, std::move(chunks));
+    auto result = table_with_chunks_like(*table, std::move(chunks));
     return with_materialization_barrier(std::move(result), **table_or, "pivot");
 }
 
@@ -1478,11 +1073,17 @@ absl::StatusOr<Value> builtin_fill(const std::vector<Value>& args) {
     if (!*use_previous_or && explicit_value == nullptr) {
         return absl::InvalidArgumentError("fill requires either `usePrevious: true` or a `value`");
     }
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    const TableValue* table = *materialized_or;
 
     std::vector<std::shared_ptr<ObjectValue>> rows;
-    rows.reserve((*table_or)->rows.size());
+    rows.reserve(table->rows.size());
     std::unordered_map<std::string, Value> previous_by_group;
-    for (const auto& row : (*table_or)->rows) {
+    for (const auto& row : table->rows) {
         if (row == nullptr) {
             continue;
         }
@@ -1511,8 +1112,8 @@ absl::StatusOr<Value> builtin_fill(const std::vector<Value>& args) {
         }
         rows.push_back(next_row);
     }
-    auto result = Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
-                               (*table_or)->range_stop);
+    auto result = Value::table(table->bucket, std::move(rows), table->range_start,
+                               table->range_stop);
     return with_materialization_barrier(std::move(result), **table_or, "fill");
 }
 
@@ -1530,9 +1131,19 @@ absl::StatusOr<Value> builtin_union(const std::vector<Value>& args) {
     std::string bucket = "union";
     std::optional<std::string> range_start;
     std::optional<std::string> range_stop;
+    std::vector<Value> materialized_tables;
+    materialized_tables.reserve(tables_or->size());
     for (const auto* table : *tables_or) {
         if (table == nullptr) {
             continue;
+        }
+        if (!table->materialized) {
+            auto materialized_or = materialized_table_value(*table);
+            if (!materialized_or.ok()) {
+                return materialized_or.status();
+            }
+            materialized_tables.push_back(std::move(*materialized_or));
+            table = &materialized_tables.back().as_table();
         }
         if (bucket == "union" && !table->bucket.empty()) {
             bucket = table->bucket;
