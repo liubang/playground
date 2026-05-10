@@ -17,7 +17,6 @@
 
 #pragma once
 
-#include "cpp/pl/flux/plan/plan_node.h"
 #include <memory>
 #include <optional>
 #include <sstream>
