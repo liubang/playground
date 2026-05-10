@@ -16,6 +16,7 @@
 // Created: 2026/04/25 10:40
 
 #include "cpp/pl/flux/compat.h"
+#include "cpp/pl/flux/execution/materializer.h"
 #include "cpp/pl/flux/runtime_builtin_aggregate_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_universe.h"
 #include <optional>
@@ -49,6 +50,20 @@ std::string aggregate_column_argument(const std::vector<Value>& args, const std:
         }
     }
     return "_value";
+}
+
+absl::StatusOr<const TableValue*> materialized_table_ref(const TableValue& table, Value* storage) {
+    if (table.materialized) {
+        return &table;
+    }
+    Value value = Value::table_plan(table.bucket, table.plan, table.range_start, table.range_stop,
+                                    table.result_name);
+    auto materialized_or = execution::MaterializeValue(std::move(value));
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    *storage = std::move(*materialized_or);
+    return &storage->as_table();
 }
 
 absl::StatusOr<Value> table_numeric_aggregate(const TableValue& table,
@@ -180,10 +195,16 @@ absl::StatusOr<Value> builtin_reduce(const std::vector<Value>& args) {
     if ((*identity_or)->type() != Value::Type::Object) {
         return absl::InvalidArgumentError("reduce `identity` must be an object");
     }
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    const TableValue* table = *materialized_or;
 
     std::vector<TableChunk> chunks;
-    chunks.reserve((*table_or)->table_count());
-    for (const auto& chunk : (*table_or)->tables) {
+    chunks.reserve(table->table_count());
+    for (const auto& chunk : table->tables) {
         Value accumulator = **identity_or;
         for (const auto& row : chunk.rows) {
             if (row == nullptr) {
@@ -202,7 +223,7 @@ absl::StatusOr<Value> builtin_reduce(const std::vector<Value>& args) {
         next.rows.push_back(std::make_shared<ObjectValue>(accumulator.as_object()));
         chunks.push_back(std::move(next));
     }
-    auto result = table_with_chunks_like(**table_or, std::move(chunks));
+    auto result = table_with_chunks_like(*table, std::move(chunks));
     return with_materialization_barrier(std::move(result), **table_or, "reduce");
 }
 
@@ -291,10 +312,16 @@ absl::StatusOr<Value> builtin_spread(const std::vector<Value>& args) {
     if (!column_or.ok()) {
         return column_or.status();
     }
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    const TableValue* table = *materialized_or;
 
     std::vector<TableChunk> chunks;
-    chunks.reserve((*table_or)->table_count());
-    for (const auto& chunk : (*table_or)->tables) {
+    chunks.reserve(table->table_count());
+    for (const auto& chunk : table->tables) {
         auto values_or = numeric_values_for_chunk(chunk, "spread", *column_or);
         if (!values_or.ok()) {
             return values_or.status();
@@ -308,7 +335,7 @@ absl::StatusOr<Value> builtin_spread(const std::vector<Value>& args) {
             materialize_group_value_row(chunk, *column_or, Value::floating(*max_it - *min_it)));
         chunks.push_back(std::move(next));
     }
-    auto result = table_with_chunks_like(**table_or, std::move(chunks));
+    auto result = table_with_chunks_like(*table, std::move(chunks));
     return with_materialization_barrier(std::move(result), **table_or, "spread");
 }
 
@@ -329,10 +356,16 @@ absl::StatusOr<Value> builtin_quantile(const std::vector<Value>& args) {
     if (!quantiles_or.ok()) {
         return quantiles_or.status();
     }
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    const TableValue* table = *materialized_or;
 
     std::vector<TableChunk> chunks;
-    chunks.reserve((*table_or)->table_count());
-    for (const auto& chunk : (*table_or)->tables) {
+    chunks.reserve(table->table_count());
+    for (const auto& chunk : table->tables) {
         auto values_or = numeric_values_for_chunk(chunk, "quantile", *column_or);
         if (!values_or.ok()) {
             return values_or.status();
@@ -355,7 +388,7 @@ absl::StatusOr<Value> builtin_quantile(const std::vector<Value>& args) {
         }
         chunks.push_back(std::move(next));
     }
-    auto result = table_with_chunks_like(**table_or, std::move(chunks));
+    auto result = table_with_chunks_like(*table, std::move(chunks));
     return with_materialization_barrier(std::move(result), **table_or, "quantile");
 }
 
@@ -403,8 +436,14 @@ absl::StatusOr<Value> table_order_builtin(const std::vector<Value>& args,
     if (*n_or < 0) {
         return absl::InvalidArgumentError(absl::StrCat(name, " `n` must be non-negative"));
     }
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    const TableValue* table = *materialized_or;
 
-    auto chunks = clone_table_chunks(**table_or);
+    auto chunks = clone_table_chunks(*table);
     for (auto& chunk : chunks) {
         std::stable_sort(
             chunk.rows.begin(), chunk.rows.end(), [&](const auto& lhs, const auto& rhs) {
@@ -423,7 +462,7 @@ absl::StatusOr<Value> table_order_builtin(const std::vector<Value>& args,
             chunk.rows.resize(static_cast<size_t>(*n_or));
         }
     }
-    auto result = table_with_chunks_like(**table_or, std::move(chunks));
+    auto result = table_with_chunks_like(*table, std::move(chunks));
     return with_materialization_barrier(std::move(result), **table_or, name);
 }
 
@@ -450,10 +489,16 @@ absl::StatusOr<Value> table_single_row_builtin(const std::vector<Value>& args,
     if (!column_or.ok()) {
         return column_or.status();
     }
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    const TableValue* table = *materialized_or;
 
     std::vector<TableChunk> chunks;
-    chunks.reserve((*table_or)->table_count());
-    for (const auto& chunk : (*table_or)->tables) {
+    chunks.reserve(table->table_count());
+    for (const auto& chunk : table->tables) {
         TableChunk next;
         if (use_last) {
             for (auto it = chunk.rows.rbegin(); it != chunk.rows.rend(); ++it) {
@@ -482,7 +527,7 @@ absl::StatusOr<Value> table_single_row_builtin(const std::vector<Value>& args,
             chunks.push_back(std::move(next));
         }
     }
-    auto result = table_with_chunks_like(**table_or, std::move(chunks));
+    auto result = table_with_chunks_like(*table, std::move(chunks));
     return with_materialization_barrier(std::move(result), **table_or, name);
 }
 

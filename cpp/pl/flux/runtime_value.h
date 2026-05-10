@@ -116,6 +116,11 @@ public:
                               std::optional<std::string> range_start = std::nullopt,
                               std::optional<std::string> range_stop = std::nullopt,
                               std::optional<std::string> result_name = std::nullopt);
+    static Value table_plan(std::string bucket,
+                            std::shared_ptr<plan::PlanNode> plan,
+                            std::optional<std::string> range_start = std::nullopt,
+                            std::optional<std::string> range_stop = std::nullopt,
+                            std::optional<std::string> result_name = std::nullopt);
     static Value function(std::shared_ptr<FunctionValue> function);
 
     [[nodiscard]] Type type() const { return type_; }
@@ -190,6 +195,7 @@ struct TableValue {
     std::optional<std::string> range_stop;
     std::optional<std::string> result_name;
     std::shared_ptr<plan::PlanNode> plan;
+    bool materialized = true;
 
     [[nodiscard]] std::string string() const;
     bool operator==(const TableValue& other) const;

@@ -23,6 +23,7 @@
 #include "cpp/pl/ascii_table/pretty.h"
 #include "cpp/pl/flux/ast_debug.h"
 #include "cpp/pl/flux/compat.h"
+#include "cpp/pl/flux/execution/materializer.h"
 #include "cpp/pl/flux/parser.h"
 #include "cpp/pl/flux/runtime_builtin.h"
 #include "cpp/pl/flux/runtime_exec.h"
@@ -727,6 +728,40 @@ absl::StatusOr<FileExecutionResult> filter_result_by_name(const FileExecutionRes
         "` was not found; available results: " + absl::StrJoin(available_results, ", "));
 }
 
+absl::StatusOr<NamedResult> materialize_named_result(NamedResult result) {
+    auto value_or = execution::MaterializeValue(std::move(result.value));
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+    result.value = std::move(*value_or);
+    return result;
+}
+
+absl::StatusOr<ExecutionResult> materialize_execution_result(ExecutionResult result) {
+    auto value_or = execution::MaterializeValue(std::move(result.value));
+    if (!value_or.ok()) {
+        return value_or.status();
+    }
+    result.value = std::move(*value_or);
+    return result;
+}
+
+absl::StatusOr<FileExecutionResult> materialize_file_result(FileExecutionResult result) {
+    for (auto& named : result.results) {
+        auto materialized_or = materialize_named_result(std::move(named));
+        if (!materialized_or.ok()) {
+            return materialized_or.status();
+        }
+        named = std::move(*materialized_or);
+    }
+    auto last_or = materialize_execution_result(std::move(result.last));
+    if (!last_or.ok()) {
+        return last_or.status();
+    }
+    result.last = std::move(*last_or);
+    return result;
+}
+
 void append_result_names_output(const FileExecutionResult& result, std::ostringstream& out) {
     for (const auto& named : result.results) {
         if (named.value.is_null()) {
@@ -1015,6 +1050,15 @@ FluxCliResult ExecuteFluxSource(const std::string& source,
                 .exit_code = 1, .output = "", .error = status_message(filtered_or.status()) + "\n"};
         }
         result_or = *filtered_or;
+    }
+    if (!options.list_results && !options.quiet) {
+        auto materialized_or = materialize_file_result(std::move(*result_or));
+        if (!materialized_or.ok()) {
+            return FluxCliResult{.exit_code = 1,
+                                 .output = "",
+                                 .error = status_message(materialized_or.status()) + "\n"};
+        }
+        result_or = std::move(*materialized_or);
     }
 
     std::ostringstream out;
