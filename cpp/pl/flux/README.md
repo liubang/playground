@@ -382,26 +382,29 @@ Universe builtin 默认注入，无需 `import`。
 
 | 文件/模块                          | 职责                       |
 | ---------------------------------- | -------------------------- |
-| `scanner.*`、`token.h`             | 词法扫描                   |
-| `parser.*`、`ast.*`、`ast_debug.*` | 语法解析、AST 与调试输出   |
-| `runtime_value.*`                  | 运行时值模型               |
-| `runtime_env.*`                    | 环境与作用域               |
-| `runtime_eval.*`                   | 表达式求值                 |
-| `runtime_exec.*`                   | 文件级语句执行             |
-| `runtime_builtin_universe_*.cpp`   | 默认 universe builtin      |
-| `runtime_builtin_table.cpp`        | `array`、`csv` 包          |
-| `runtime_builtin_sqlite.cpp`       | `sqlite` 包和 SQLite table scan 入口 |
-| `runtime_builtin_mysql.cpp`        | `mysql` 包骨架             |
-| `runtime_builtin_scalar.cpp`       | 标量类 stdlib 包           |
-| `runtime_builtin_package.*`        | 包注册与导入               |
-| `flux_cli.*`、`flux.cpp`           | CLI、REPL、输出格式        |
+| `common/`                          | 共享兼容层                 |
+| `syntax/scanner.*`、`syntax/token.h` | 词法扫描                  |
+| `syntax/parser.*`、`syntax/ast.*`、`syntax/ast_debug.*` | 语法解析、AST 与调试输出 |
+| `runtime/runtime_value.*`          | 运行时值模型               |
+| `runtime/runtime_env.*`            | 环境与作用域               |
+| `runtime/runtime_eval.*`           | 表达式求值                 |
+| `runtime/runtime_exec.*`           | 文件级语句执行             |
+| `runtime/runtime_builtin_universe_*.cpp` | 默认 universe builtin |
+| `runtime/runtime_builtin_table.cpp` | `array`、`csv` 包         |
+| `runtime/runtime_builtin_sqlite.cpp` | `sqlite` 包和 SQLite table scan 入口 |
+| `runtime/runtime_builtin_mysql.cpp` | `mysql` 包骨架            |
+| `runtime/runtime_builtin_scalar.cpp` | 标量类 stdlib 包          |
+| `runtime/runtime_builtin_package.*` | 包注册与导入              |
+| `connector/`、`optimizer/`、`execution/`、`plan/` | datasource、优化、物理执行与计划 IR |
+| `cli/flux_cli.*`、`cli/flux.cpp`   | CLI、REPL、输出格式        |
+| `*/tests/`                         | 各模块单测和脚本测试       |
 
 内部 helper 按职责拆分：
 
-- `runtime_builtin_table_helpers.h`
-- `runtime_builtin_time_helpers.h`
-- `runtime_builtin_window_helpers.h`
-- `runtime_builtin_aggregate_helpers.h`
+- `runtime/runtime_builtin_table_helpers.h`
+- `runtime/runtime_builtin_time_helpers.h`
+- `runtime/runtime_builtin_window_helpers.h`
+- `runtime/runtime_builtin_aggregate_helpers.h`
 
 ## 已知限制
 

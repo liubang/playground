@@ -180,7 +180,8 @@ absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
         if (!request.group_by.empty()) {
             sql += ", ";
         }
-        auto status = ValidateColumn(schema_columns, request.aggregate->column, "sqlite", "aggregate");
+        auto status =
+            ValidateColumn(schema_columns, request.aggregate->column, "sqlite", "aggregate");
         if (!status.ok()) {
             return status;
         }
@@ -210,7 +211,8 @@ absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
         sql += "*";
     } else {
         for (size_t i = 0; i < request.columns.size(); ++i) {
-            auto status = ValidateColumn(schema_columns, request.columns[i], "sqlite", "projection");
+            auto status =
+                ValidateColumn(schema_columns, request.columns[i], "sqlite", "projection");
             if (!status.ok()) {
                 return status;
             }
@@ -275,7 +277,8 @@ absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
     if (!request.order_by.empty()) {
         sql += " ORDER BY ";
         for (size_t i = 0; i < request.order_by.size(); ++i) {
-            auto status = ValidateColumn(schema_columns, request.order_by[i].column, "sqlite", "sort");
+            auto status =
+                ValidateColumn(schema_columns, request.order_by[i].column, "sqlite", "sort");
             if (!status.ok()) {
                 return status;
             }
@@ -379,6 +382,46 @@ SourceCapabilities SQLiteSource::Capabilities() const {
         .aggregate = true,
         .distinct = true,
     };
+}
+
+absl::StatusOr<TableStatistics> SQLiteSource::Statistics() const {
+    if (cached_statistics_.has_value()) {
+        return *cached_statistics_;
+    }
+
+    auto db_or = open_readonly_db(dsn_);
+    if (!db_or.ok()) {
+        return db_or.status();
+    }
+    auto stmt_or = prepare_statement(
+        db_or->get(), absl::StrCat("SELECT COUNT(*) FROM (", query_, ") AS flux_source"));
+    if (!stmt_or.ok()) {
+        return stmt_or.status();
+    }
+
+    TableStatistics statistics;
+    const int step_rc = sqlite3_step(stmt_or->get());
+    if (step_rc != SQLITE_ROW) {
+        if (step_rc == SQLITE_DONE) {
+            statistics.row_count = 0.0;
+        } else {
+            return absl::InvalidArgumentError(
+                absl::StrCat("sqlite statistics failed: ", sqlite3_errmsg(db_or->get())));
+        }
+    } else {
+        statistics.row_count = static_cast<double>(sqlite3_column_int64(stmt_or->get(), 0));
+    }
+
+    auto schema_or = Schema();
+    if (schema_or.ok()) {
+        statistics.columns.reserve(schema_or->columns.size());
+        for (const auto& column : schema_or->columns) {
+            statistics.columns.push_back({.name = column.name});
+        }
+    }
+
+    cached_statistics_ = statistics;
+    return statistics;
 }
 
 absl::StatusOr<Value> SQLiteSource::Scan(const ScanRequest& request) {
