@@ -27,6 +27,14 @@ std::shared_ptr<plan::PlanNode> SourceScanPlan() {
                                 "cpu");
 }
 
+TEST(PlanNodeTest, DefaultConstructsWithMatchingMaterializeSpec) {
+    plan::PlanNode node;
+
+    EXPECT_EQ(plan::PlanNodeKind::Materialize, node.kind);
+    EXPECT_TRUE(node.materialize().reason.empty());
+    EXPECT_TRUE(node.materialize().builtin.empty());
+}
+
 TEST(RuleBasedOptimizerTest, KeepsLogicalPlanStableWhileRecordingDeterministicTrace) {
     std::vector<plan::PredicateSpec> predicates = {
         {.op = plan::PredicateOp::Eq,
@@ -56,7 +64,7 @@ TEST(RuleBasedOptimizerTest, KeepsLogicalPlanStableWhileRecordingDeterministicTr
               }),
               AppliedRuleNames(*result_or));
     ASSERT_TRUE(result_or->pushdown_plan.has_value());
-    EXPECT_EQ(SourceScanPlan()->source_scan.table, result_or->pushdown_plan->source->table);
+    EXPECT_EQ(SourceScanPlan()->source_scan().table, result_or->pushdown_plan->source->table);
     EXPECT_EQ((std::vector<std::string>{"_time", "host", "usage"}),
               result_or->pushdown_plan->visible_columns);
     EXPECT_EQ((std::vector<std::string>{"_time", "host", "usage"}),
@@ -116,8 +124,8 @@ TEST(RuleBasedOptimizerTest, InsertsMaterializationBarrierBeforeNonPushableUnary
     ASSERT_EQ(1, result_or->plan->inputs.size());
     ASSERT_NE(nullptr, result_or->plan->inputs[0]);
     EXPECT_EQ(plan::PlanNodeKind::Materialize, result_or->plan->inputs[0]->kind);
-    EXPECT_EQ("unsupported lazy builtin", result_or->plan->inputs[0]->materialize.reason);
-    EXPECT_EQ("Map", result_or->plan->inputs[0]->materialize.builtin);
+    EXPECT_EQ("unsupported lazy builtin", result_or->plan->inputs[0]->materialize().reason);
+    EXPECT_EQ("Map", result_or->plan->inputs[0]->materialize().builtin);
     EXPECT_EQ((std::vector<std::string>{"InsertMaterializationBarrier"}),
               AppliedRuleNames(*result_or));
 }

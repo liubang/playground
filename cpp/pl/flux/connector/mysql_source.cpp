@@ -21,6 +21,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
+#include "cpp/pl/flux/connector/sql_builder.h"
 #include <algorithm>
 #include <boost/asio/io_context.hpp>
 #include <boost/mysql/any_connection.hpp>
@@ -309,63 +310,8 @@ std::string quote_table_identifier(const std::string& identifier) {
     return out;
 }
 
-std::string predicate_op_sql(PredicateOp op) {
-    switch (op) {
-        case PredicateOp::Eq:
-            return "=";
-        case PredicateOp::NotEq:
-            return "!=";
-        case PredicateOp::Lt:
-            return "<";
-        case PredicateOp::Lte:
-            return "<=";
-        case PredicateOp::Gt:
-            return ">";
-        case PredicateOp::Gte:
-            return ">=";
-    }
-    return "=";
-}
-
-std::string aggregate_fn_sql(AggregateFunction fn) {
-    switch (fn) {
-        case AggregateFunction::Count:
-            return "COUNT";
-        case AggregateFunction::Sum:
-            return "SUM";
-        case AggregateFunction::Mean:
-            return "AVG";
-        case AggregateFunction::Min:
-            return "MIN";
-        case AggregateFunction::Max:
-            return "MAX";
-    }
-    return "COUNT";
-}
-
-bool schema_has_column(const std::unordered_set<std::string>& columns, const std::string& column) {
-    return columns.find(column) != columns.end();
-}
-
-absl::Status validate_column(const std::unordered_set<std::string>& schema_columns,
-                             const std::string& column,
-                             const std::string& context) {
-    if (!schema_has_column(schema_columns, column)) {
-        std::vector<std::string> columns(schema_columns.begin(), schema_columns.end());
-        std::sort(columns.begin(), columns.end());
-        std::string available;
-        for (size_t i = 0; i < columns.size(); ++i) {
-            if (i != 0) {
-                available += ", ";
-            }
-            available += columns[i];
-        }
-        return absl::InvalidArgumentError(absl::StrCat("mysql source ", context,
-                                                       " unknown column: ", column,
-                                                       "; available columns: ", available));
-    }
-    return absl::OkStatus();
-}
+// predicate_op_sql and aggregate_fn_sql are now in sql_builder.h as
+// PredicateOpSql / AggregateFnSql.  validate_column is ValidateColumn.
 
 std::optional<std::string> rfc3339_to_mysql_datetime(std::string_view literal) {
     absl::Time timestamp;
@@ -417,176 +363,46 @@ absl::StatusOr<std::string> format_literal(mysql::format_options opts,
     }
 }
 
-struct BuiltSql {
-    std::string sql;
+/// MySqlDialect implements SqlDialect for MySQL using Boost.MySQL format_options.
+class MySqlDialect final : public SqlDialect {
+public:
+    explicit MySqlDialect(mysql::format_options opts) : opts_(opts) {}
+
+    [[nodiscard]] std::string QuoteIdentifier(const std::string& identifier) const override {
+        return quote_identifier(identifier);
+    }
+
+    [[nodiscard]] absl::StatusOr<std::string> FormatLiteral(
+        const Value& value, bool normalize_time) const override {
+        return format_literal(opts_, value, normalize_time);
+    }
+
+    [[nodiscard]] std::string SourceName() const override { return "mysql"; }
+
+    [[nodiscard]] std::string FormatLimit(std::optional<int64_t> limit,
+                                          std::optional<int64_t> offset) const override {
+        std::string out;
+        if (limit.has_value()) {
+            out += " LIMIT ";
+            out += std::to_string(*limit);
+        }
+        if (offset.has_value()) {
+            if (!limit.has_value()) {
+                out += " LIMIT 18446744073709551615";
+            }
+            out += " OFFSET ";
+            out += std::to_string(*offset);
+        }
+        return out;
+    }
+
+    [[nodiscard]] std::string UnboundedLimit() const override {
+        return "LIMIT 18446744073709551615";
+    }
+
+private:
+    mysql::format_options opts_;
 };
-
-absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
-                                        const ScanRequest& request,
-                                        const TableSchema& schema,
-                                        mysql::format_options opts) {
-    std::unordered_set<std::string> schema_columns;
-    schema_columns.reserve(schema.columns.size());
-    for (const auto& column : schema.columns) {
-        schema_columns.insert(column.name);
-    }
-
-    if (request.distinct.has_value()) {
-        auto status = validate_column(schema_columns, *request.distinct, "distinct");
-        if (!status.ok()) {
-            return status;
-        }
-    }
-
-    std::string sql = "SELECT ";
-    if (request.aggregate.has_value()) {
-        for (size_t i = 0; i < request.group_by.size(); ++i) {
-            auto status = validate_column(schema_columns, request.group_by[i], "group");
-            if (!status.ok()) {
-                return status;
-            }
-            if (i != 0) {
-                sql += ", ";
-            }
-            sql += quote_identifier(request.group_by[i]);
-        }
-        if (!request.group_by.empty()) {
-            sql += ", ";
-        }
-        auto status = validate_column(schema_columns, request.aggregate->column, "aggregate");
-        if (!status.ok()) {
-            return status;
-        }
-        sql += aggregate_fn_sql(request.aggregate->fn);
-        sql += "(";
-        sql += quote_identifier(request.aggregate->column);
-        sql += ") AS ";
-        sql += quote_identifier(request.aggregate->alias.empty() ? request.aggregate->column
-                                                                 : request.aggregate->alias);
-    } else if (!request.projection_columns.empty()) {
-        for (size_t i = 0; i < request.projection_columns.size(); ++i) {
-            const auto& projection = request.projection_columns[i];
-            auto status = validate_column(schema_columns, projection.column, "projection");
-            if (!status.ok()) {
-                return status;
-            }
-            if (i != 0) {
-                sql += ", ";
-            }
-            sql += quote_identifier(projection.column);
-            if (!projection.alias.empty() && projection.alias != projection.column) {
-                sql += " AS ";
-                sql += quote_identifier(projection.alias);
-            }
-        }
-    } else if (request.columns.empty()) {
-        sql += "*";
-    } else {
-        for (size_t i = 0; i < request.columns.size(); ++i) {
-            auto status = validate_column(schema_columns, request.columns[i], "projection");
-            if (!status.ok()) {
-                return status;
-            }
-            if (i != 0) {
-                sql += ", ";
-            }
-            sql += quote_identifier(request.columns[i]);
-        }
-    }
-    sql += " FROM (";
-    sql += query;
-    sql += ") AS flux_source";
-
-    std::vector<std::string> where_clauses;
-    if (request.time_range.has_value()) {
-        auto status = validate_column(schema_columns, "_time", "time range");
-        if (!status.ok()) {
-            return status;
-        }
-        if (request.time_range->start.has_value()) {
-            auto literal_or = format_literal(opts, Value::string(*request.time_range->start), true);
-            if (!literal_or.ok()) {
-                return literal_or.status();
-            }
-            where_clauses.push_back(quote_identifier("_time") + " >= " + *literal_or);
-        }
-        if (request.time_range->stop.has_value()) {
-            auto literal_or = format_literal(opts, Value::string(*request.time_range->stop), true);
-            if (!literal_or.ok()) {
-                return literal_or.status();
-            }
-            where_clauses.push_back(quote_identifier("_time") + " < " + *literal_or);
-        }
-    }
-    for (const auto& predicate : request.predicates) {
-        auto status = validate_column(schema_columns, predicate.column, "predicate");
-        if (!status.ok()) {
-            return status;
-        }
-        auto literal_or = format_literal(opts, predicate.literal, predicate.column == "_time");
-        if (!literal_or.ok()) {
-            return literal_or.status();
-        }
-        where_clauses.push_back(quote_identifier(predicate.column) + " " +
-                                predicate_op_sql(predicate.op) + " " + *literal_or);
-    }
-    if (!where_clauses.empty()) {
-        sql += " WHERE ";
-        for (size_t i = 0; i < where_clauses.size(); ++i) {
-            if (i != 0) {
-                sql += " AND ";
-            }
-            sql += where_clauses[i];
-        }
-    }
-
-    if (request.aggregate.has_value() && !request.group_by.empty()) {
-        sql += " GROUP BY ";
-        for (size_t i = 0; i < request.group_by.size(); ++i) {
-            if (i != 0) {
-                sql += ", ";
-            }
-            sql += quote_identifier(request.group_by[i]);
-        }
-    } else if (request.distinct.has_value()) {
-        sql += " GROUP BY ";
-        sql += quote_identifier(*request.distinct);
-    }
-
-    if (!request.order_by.empty()) {
-        sql += " ORDER BY ";
-        for (size_t i = 0; i < request.order_by.size(); ++i) {
-            auto status = validate_column(schema_columns, request.order_by[i].column, "sort");
-            if (!status.ok()) {
-                return status;
-            }
-            if (i != 0) {
-                sql += ", ";
-            }
-            sql += quote_identifier(request.order_by[i].column);
-            sql += request.order_by[i].desc ? " DESC" : " ASC";
-        }
-    }
-    if (request.limit.has_value()) {
-        if (*request.limit < 0) {
-            return absl::InvalidArgumentError("mysql source limit must be non-negative");
-        }
-        sql += " LIMIT ";
-        sql += std::to_string(*request.limit);
-    }
-    if (request.offset.has_value()) {
-        if (*request.offset < 0) {
-            return absl::InvalidArgumentError("mysql source offset must be non-negative");
-        }
-        if (!request.limit.has_value()) {
-            sql += " LIMIT 18446744073709551615";
-        }
-        sql += " OFFSET ";
-        sql += std::to_string(*request.offset);
-    }
-
-    return BuiltSql{std::move(sql)};
-}
 
 Value::Type value_type_from_metadata(const mysql::metadata& meta) {
     switch (meta.type()) {
@@ -780,11 +596,12 @@ absl::StatusOr<Value> MySQLSource::Scan(const ScanRequest& request) {
         return absl::InvalidArgumentError(
             absl::StrCat("mysql format options failed: ", opts_or.error().message()));
     }
-    auto sql_or = build_scan_sql(query_, request, *schema_or, opts_or.value());
+    MySqlDialect dialect(opts_or.value());
+    auto sql_or = BuildScanSql(query_, request, *schema_or, dialect);
     if (!sql_or.ok()) {
         return sql_or.status();
     }
-    auto result_or = execute_query(&*conn_or, sql_or->sql, "scan query");
+    auto result_or = execute_query(&*conn_or, *sql_or, "scan query");
     if (!result_or.ok()) {
         return result_or.status();
     }

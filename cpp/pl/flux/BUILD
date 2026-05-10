@@ -209,13 +209,18 @@ cc_library(
 cc_library(
     name = "connector",
     srcs = [
+        "connector/connector_registry.cpp",
+        "connector/connector_registry_init.cpp",
         "connector/memory_source.cpp",
         "connector/mysql_source.cpp",
+        "connector/sql_builder.cpp",
         "connector/sqlite_source.cpp",
     ],
     hdrs = [
+        "connector/connector_registry.h",
         "connector/memory_source.h",
         "connector/mysql_source.h",
+        "connector/sql_builder.h",
         "connector/sqlite_source.h",
         "connector/table_source.h",
     ],
