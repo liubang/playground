@@ -15,9 +15,8 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/25 10:40
 
-#include "cpp/pl/flux/plan/physical_plan.h"
-#include "cpp/pl/flux/plan/plan_node.h"
 #include "cpp/pl/flux/execution/materializer.h"
+#include "cpp/pl/flux/optimizer/explain.h"
 #include "cpp/pl/flux/runtime_builtin_table_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_universe.h"
 
@@ -60,8 +59,8 @@ absl::StatusOr<Value> builtin_yield(const std::vector<Value>& args) {
         return materialized_or.status();
     }
     const TableValue* table = *materialized_or;
-    return Value::table_stream(table->bucket, table->tables, table->range_start,
-                               table->range_stop, *name_or);
+    return Value::table_stream(table->bucket, table->tables, table->range_start, table->range_stop,
+                               *name_or);
 }
 
 absl::StatusOr<Value> builtin_columns(const std::vector<Value>& args) {
@@ -200,14 +199,16 @@ absl::StatusOr<Value> builtin_explain(const std::vector<Value>& args) {
         return physical_or.status();
     }
     if (*physical_or) {
-        return Value::string(plan::FormatPhysicalPlan((*table_or)->plan));
+        return Value::string(optimizer::FormatPhysicalPlan((*table_or)->plan));
     }
-    std::string out = plan::FormatPlan((*table_or)->plan);
-    if (auto summary = source_pushdown_summary((*table_or)->plan); summary.has_value()) {
-        out += *summary;
-        out += "\n";
+    auto optimized_or = optional_bool_property(**object_or, "explain", "optimized", false);
+    if (!optimized_or.ok()) {
+        return optimized_or.status();
     }
-    return Value::string(out);
+    if (*optimized_or) {
+        return Value::string(optimizer::FormatOptimizedLogicalPlan((*table_or)->plan));
+    }
+    return Value::string(optimizer::FormatLogicalPlan((*table_or)->plan));
 }
 
 } // namespace

@@ -114,10 +114,12 @@ cc_library(
 cc_library(
     name = "optimizer",
     srcs = [
+        "optimizer/explain.cpp",
         "optimizer/rbo.cpp",
         "optimizer/source_pushdown.cpp",
     ],
     hdrs = [
+        "optimizer/explain.h",
         "optimizer/rbo.h",
         "optimizer/source_pushdown.h",
     ],
