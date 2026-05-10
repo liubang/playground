@@ -178,7 +178,7 @@ using NodeSpec = std::variant<std::monostate,
 struct PlanNode {
     PlanNodeKind kind = PlanNodeKind::Materialize;
     std::vector<std::shared_ptr<PlanNode>> inputs;
-    NodeSpec spec;
+    NodeSpec spec = MaterializeSpec{};
 
     // -- Typed accessors (const & mutable) ----------------------------------
     // These provide the same ergonomics as direct field access.

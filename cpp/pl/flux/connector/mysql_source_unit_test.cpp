@@ -275,5 +275,29 @@ TEST(MySQLSourceTest, RejectsUnknownPushdownColumnAgainstFixtureSchema) {
     EXPECT_NE(std::string::npos, value_or.status().message().find("available columns"));
 }
 
+TEST(MySQLSourceTest, RejectsNegativeLimitAndOffsetBeforeRunningScanSql) {
+    auto dsn = mysql_test_dsn();
+    if (!dsn.has_value()) {
+        GTEST_SKIP() << "set FLUX_MYSQL_TEST_DSN and import "
+                        "cpp/pl/flux/examples/cross_source/mysql_metrics.sql to run MySQL "
+                        "integration tests";
+    }
+    MySQLSource source(*dsn, "cpu");
+
+    ScanRequest negative_limit;
+    negative_limit.limit = -1;
+    auto limit_or = source.Scan(negative_limit);
+    ASSERT_FALSE(limit_or.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, limit_or.status().code());
+    EXPECT_NE(std::string::npos, limit_or.status().message().find("limit must be non-negative"));
+
+    ScanRequest negative_offset;
+    negative_offset.offset = -1;
+    auto offset_or = source.Scan(negative_offset);
+    ASSERT_FALSE(offset_or.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, offset_or.status().code());
+    EXPECT_NE(std::string::npos, offset_or.status().message().find("offset must be non-negative"));
+}
+
 } // namespace
 } // namespace pl::flux::connector

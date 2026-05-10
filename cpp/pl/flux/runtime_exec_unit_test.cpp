@@ -575,6 +575,7 @@ TEST(RuntimeExecTest, PhysicalExecutionFallsBackToMemoryOperatorAfterConnectorSc
     EXPECT_NE(std::string::npos,
               plan_or->as_string().find("MemoryOperator [eager](name=\"Group\""));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("ConnectorScan [lazy]"));
+    EXPECT_EQ(std::string::npos, plan_or->as_string().find("rbo=[PushAggregateIntoConnectorScan]"));
 }
 
 TEST(RuntimeExecTest, PhysicalExecutorRunsMemorySuffixAfterConnectorScan) {

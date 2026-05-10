@@ -27,6 +27,14 @@ std::shared_ptr<plan::PlanNode> SourceScanPlan() {
                                 "cpu");
 }
 
+TEST(PlanNodeTest, DefaultConstructsWithMatchingMaterializeSpec) {
+    plan::PlanNode node;
+
+    EXPECT_EQ(plan::PlanNodeKind::Materialize, node.kind);
+    EXPECT_TRUE(node.materialize().reason.empty());
+    EXPECT_TRUE(node.materialize().builtin.empty());
+}
+
 TEST(RuleBasedOptimizerTest, KeepsLogicalPlanStableWhileRecordingDeterministicTrace) {
     std::vector<plan::PredicateSpec> predicates = {
         {.op = plan::PredicateOp::Eq,

@@ -72,9 +72,9 @@ absl::Status ValidateColumn(const std::unordered_set<std::string>& schema_column
         }
         available += sorted[i];
     }
-    return absl::InvalidArgumentError(absl::StrCat(
-        source_name, " source ", context, " unknown column: ", column,
-        available.empty() ? "" : absl::StrCat("; available columns: ", available)));
+    return absl::InvalidArgumentError(
+        absl::StrCat(source_name, " source ", context, " unknown column: ", column,
+                     available.empty() ? "" : absl::StrCat("; available columns: ", available)));
 }
 
 absl::Status BuildSelectClause(std::string* sql,
@@ -114,9 +114,9 @@ absl::Status BuildSelectClause(std::string* sql,
         *sql += "(";
         *sql += dialect.QuoteIdentifier(request.aggregate->column);
         *sql += ") AS ";
-        *sql += dialect.QuoteIdentifier(request.aggregate->alias.empty()
-                                            ? request.aggregate->column
-                                            : request.aggregate->alias);
+        *sql +=
+            dialect.QuoteIdentifier(request.aggregate->alias.empty() ? request.aggregate->column
+                                                                     : request.aggregate->alias);
     } else if (!request.projection_columns.empty()) {
         for (size_t i = 0; i < request.projection_columns.size(); ++i) {
             const auto& projection = request.projection_columns[i];
@@ -181,8 +181,7 @@ absl::Status BuildWhereClause(std::string* sql,
         }
     }
     for (const auto& predicate : request.predicates) {
-        auto status =
-            ValidateColumn(schema_columns, predicate.column, source_name, "predicate");
+        auto status = ValidateColumn(schema_columns, predicate.column, source_name, "predicate");
         if (!status.ok()) {
             return status;
         }
@@ -245,6 +244,19 @@ absl::Status BuildOrderByClause(std::string* sql,
     return absl::OkStatus();
 }
 
+absl::Status ValidateLimitOffset(const ScanRequest& request, const SqlDialect& dialect) {
+    const std::string source_name = dialect.SourceName();
+    if (request.limit.has_value() && *request.limit < 0) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(source_name, " source limit must be non-negative"));
+    }
+    if (request.offset.has_value() && *request.offset < 0) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(source_name, " source offset must be non-negative"));
+    }
+    return absl::OkStatus();
+}
+
 absl::StatusOr<std::string> BuildScanSql(const std::string& base_query,
                                          const ScanRequest& request,
                                          const TableSchema& schema,
@@ -277,6 +289,10 @@ absl::StatusOr<std::string> BuildScanSql(const std::string& base_query,
         return status;
     }
 
+    status = ValidateLimitOffset(request, dialect);
+    if (!status.ok()) {
+        return status;
+    }
     sql += dialect.FormatLimit(request.limit, request.offset);
 
     return sql;
