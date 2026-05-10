@@ -731,8 +731,8 @@ PhysicalPlan
   filter/project/rename/sort/limit、materialize barrier 后接 aggregate、以及 distinct fallback。
 - 新增第一版 RBO pass 管线：`PlanOptimizer`、`Rule`、`RuleBasedOptimizer`、deterministic
   rule order 和 rule trace。connector pushdown rule 当前记录 trace，materialize barrier rule
-  已执行真实 rewrite；默认 RBO 结果已经直接携带 connector `PushdownPlan` 和 `ScanRequest`，
-  `BuildPushdownPlan` 只保留为兼容门面，避免执行侧再绕过 optimizer 重新拼请求。
+  已执行真实 rewrite；默认 RBO 结果已经直接携带 connector `PushdownPlan` 和 `ScanRequest`。
+  执行和 explain 都直接消费 `PlanOptimizerResult`，旧的 `optimizer/source_pushdown` 兼容层已删除。
 - logical / optimized logical / physical explain 统一改从 optimizer 入口生成；`plan` 层只保留
   logical/physical IR 数据结构和通用格式化，不再判断 pushdown eligibility 或内嵌 RBO rule 名。
 - `InsertMaterializationBarrier` 已成为第一条真实 RBO rewrite：当非 pushable unary logical node
