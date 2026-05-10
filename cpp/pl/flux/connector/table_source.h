@@ -107,8 +107,8 @@ class TableSource {
 public:
     virtual ~TableSource() = default;
 
-    virtual absl::StatusOr<TableSchema> Schema() const = 0;
-    virtual SourceCapabilities Capabilities() const = 0;
+    [[nodiscard]] virtual absl::StatusOr<TableSchema> Schema() const = 0;
+    [[nodiscard]] virtual SourceCapabilities Capabilities() const = 0;
     virtual absl::StatusOr<Value> Scan(const ScanRequest& request) = 0;
 };
 

@@ -20,7 +20,6 @@
 #include "cpp/pl/flux/optimizer/rbo.h"
 #include "cpp/pl/flux/plan/physical_plan.h"
 #include <sstream>
-#include <utility>
 #include <vector>
 
 namespace pl::flux::optimizer {
