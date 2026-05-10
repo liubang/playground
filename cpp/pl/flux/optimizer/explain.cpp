@@ -18,7 +18,6 @@
 #include "cpp/pl/flux/optimizer/explain.h"
 
 #include "cpp/pl/flux/optimizer/rbo.h"
-#include "cpp/pl/flux/optimizer/source_pushdown.h"
 #include "cpp/pl/flux/plan/physical_plan.h"
 #include <sstream>
 #include <utility>
@@ -176,7 +175,12 @@ std::shared_ptr<plan::PhysicalPlanNode> BuildPhysicalPlan(
 
 std::string FormatLogicalPlan(const std::shared_ptr<plan::PlanNode>& plan) {
     std::string out = FormatLogicalPlanOnly(plan);
-    if (auto summary = SourcePushdownSummary(plan); summary.has_value()) {
+    auto optimized_or = DefaultRuleBasedOptimizer().Optimize(plan);
+    if (optimized_or.ok()) {
+        auto summary = SourcePushdownSummary(*optimized_or);
+        if (!summary.has_value()) {
+            return out;
+        }
         out += *summary;
         out += "\n";
     }
@@ -198,7 +202,7 @@ std::string FormatOptimizedLogicalPlan(const std::shared_ptr<plan::PlanNode>& pl
     if (!rules.empty()) {
         out << "RBO(rules=" << plan::StringList(rules) << ")\n";
     }
-    if (auto summary = SourcePushdownSummary(optimized_or->plan); summary.has_value()) {
+    if (auto summary = SourcePushdownSummary(*optimized_or); summary.has_value()) {
         out << *summary << "\n";
     }
     return out.str();

@@ -24,6 +24,7 @@
 #include "cpp/pl/flux/runtime_value.h"
 #include <algorithm>
 #include <optional>
+#include <sstream>
 #include <unordered_set>
 #include <utility>
 
@@ -321,6 +322,90 @@ bool prefix_contains_any_node_kind(const std::shared_ptr<plan::PlanNode>& node,
     });
 }
 
+std::string connector_predicate_op_string(connector::PredicateOp op) {
+    switch (op) {
+        case connector::PredicateOp::Eq:
+            return "==";
+        case connector::PredicateOp::NotEq:
+            return "!=";
+        case connector::PredicateOp::Lt:
+            return "<";
+        case connector::PredicateOp::Lte:
+            return "<=";
+        case connector::PredicateOp::Gt:
+            return ">";
+        case connector::PredicateOp::Gte:
+            return ">=";
+    }
+    return "==";
+}
+
+std::string connector_aggregate_fn_string(connector::AggregateFunction fn) {
+    switch (fn) {
+        case connector::AggregateFunction::Count:
+            return "COUNT";
+        case connector::AggregateFunction::Sum:
+            return "SUM";
+        case connector::AggregateFunction::Mean:
+            return "AVG";
+        case connector::AggregateFunction::Min:
+            return "MIN";
+        case connector::AggregateFunction::Max:
+            return "MAX";
+    }
+    return "COUNT";
+}
+
+void append_string_list(std::ostringstream* out, const std::vector<std::string>& values) {
+    *out << "[";
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (i != 0) {
+            *out << ", ";
+        }
+        *out << values[i];
+    }
+    *out << "]";
+}
+
+std::string projection_summary(const connector::ScanRequest& request) {
+    std::ostringstream out;
+    out << "[";
+    if (!request.projection_columns.empty()) {
+        for (size_t i = 0; i < request.projection_columns.size(); ++i) {
+            if (i != 0) {
+                out << ", ";
+            }
+            const auto& projection = request.projection_columns[i];
+            out << projection.column;
+            if (!projection.alias.empty() && projection.alias != projection.column) {
+                out << " AS " << projection.alias;
+            }
+        }
+    } else if (!request.columns.empty()) {
+        for (size_t i = 0; i < request.columns.size(); ++i) {
+            if (i != 0) {
+                out << ", ";
+            }
+            out << request.columns[i];
+        }
+    } else {
+        out << "*";
+    }
+    out << "]";
+    return out.str();
+}
+
+void append_pushdown_summary_field(std::ostringstream* out,
+                                   bool* needs_separator,
+                                   const std::string& name,
+                                   const std::string& value) {
+    if (*needs_separator) {
+        *out << ", ";
+    }
+    *out << name << "=" << value;
+    *needs_separator = true;
+}
+
 class PushdownDetectionRule final : public Rule {
 public:
     PushdownDetectionRule(std::string name, std::vector<plan::PlanNodeKind> kinds)
@@ -537,6 +622,104 @@ absl::StatusOr<std::vector<std::string>> VisibleColumnsForPlan(
         return columns_or;
     }
     return absl::InvalidArgumentError("plan node has no stable visible columns");
+}
+
+bool CanExecutePushdownPlan(const PushdownPlan& plan) {
+    return plan.request.group_by.empty() || plan.request.aggregate.has_value();
+}
+
+std::string FormatPushdownRequest(const connector::ScanRequest& request) {
+    std::ostringstream out;
+    out << "SourcePushdown(request: ";
+    bool needs_separator = false;
+
+    append_pushdown_summary_field(&out, &needs_separator, "projection",
+                                  projection_summary(request));
+
+    if (request.time_range.has_value()) {
+        std::ostringstream range;
+        range << "{";
+        bool has_range_field = false;
+        if (request.time_range->start.has_value()) {
+            range << "start=" << *request.time_range->start;
+            has_range_field = true;
+        }
+        if (request.time_range->stop.has_value()) {
+            if (has_range_field) {
+                range << ", ";
+            }
+            range << "stop=" << *request.time_range->stop;
+        }
+        range << "}";
+        append_pushdown_summary_field(&out, &needs_separator, "time_range", range.str());
+    }
+
+    if (!request.predicates.empty()) {
+        std::ostringstream predicates;
+        predicates << "[";
+        for (size_t i = 0; i < request.predicates.size(); ++i) {
+            if (i != 0) {
+                predicates << ", ";
+            }
+            const auto& predicate = request.predicates[i];
+            predicates << predicate.column << " " << connector_predicate_op_string(predicate.op)
+                       << " " << predicate.literal.string();
+        }
+        predicates << "]";
+        append_pushdown_summary_field(&out, &needs_separator, "predicates", predicates.str());
+    }
+
+    if (request.distinct.has_value()) {
+        append_pushdown_summary_field(&out, &needs_separator, "distinct", *request.distinct);
+    }
+
+    if (!request.group_by.empty()) {
+        std::ostringstream group_by;
+        append_string_list(&group_by, request.group_by);
+        append_pushdown_summary_field(&out, &needs_separator, "group_by", group_by.str());
+    }
+
+    if (request.aggregate.has_value()) {
+        const auto& aggregate = *request.aggregate;
+        std::ostringstream value;
+        value << connector_aggregate_fn_string(aggregate.fn) << "(" << aggregate.column << ")";
+        if (!aggregate.alias.empty() && aggregate.alias != aggregate.column) {
+            value << " AS " << aggregate.alias;
+        }
+        append_pushdown_summary_field(&out, &needs_separator, "aggregate", value.str());
+    }
+
+    if (!request.order_by.empty()) {
+        std::ostringstream order_by;
+        order_by << "[";
+        for (size_t i = 0; i < request.order_by.size(); ++i) {
+            if (i != 0) {
+                order_by << ", ";
+            }
+            order_by << request.order_by[i].column << (request.order_by[i].desc ? " DESC" : " ASC");
+        }
+        order_by << "]";
+        append_pushdown_summary_field(&out, &needs_separator, "order_by", order_by.str());
+    }
+
+    if (request.limit.has_value()) {
+        append_pushdown_summary_field(&out, &needs_separator, "limit",
+                                      std::to_string(*request.limit));
+    }
+    if (request.offset.has_value()) {
+        append_pushdown_summary_field(&out, &needs_separator, "offset",
+                                      std::to_string(*request.offset));
+    }
+
+    out << ")";
+    return out.str();
+}
+
+std::optional<std::string> SourcePushdownSummary(const PlanOptimizerResult& result) {
+    if (!result.pushdown_plan.has_value() || !CanExecutePushdownPlan(*result.pushdown_plan)) {
+        return std::nullopt;
+    }
+    return FormatPushdownRequest(result.pushdown_plan->request);
 }
 
 bool IsPushdownSourceScan(const plan::PlanNode& node) {
