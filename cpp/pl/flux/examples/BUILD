@@ -1,4 +1,4 @@
-# Copyright (c) 2023 The Authors. All rights reserved.
+# Copyright (c) 2026 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,18 +13,19 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/11/01 20:29
+# Created: 2026/05/10 23:13
 
-# load("@rules_ragel//ragel:ragel.bzl", "ragel")
+package(default_visibility = ["//cpp/pl/flux:__subpackages__"])
 
-package(default_visibility = ["//visibility:public"])
+filegroup(
+    name = "cross_source_data",
+    srcs = [
+        "cross_source/metrics.db",
+        "cross_source/mysql_metrics.sql",
+    ],
+)
 
-# ragel(
-#     name = "scanner_generated",
-#     src = "syntax/scanner.rl",
-#     data = [
-#         "syntax/unicode.rl",
-#     ],
-#     language = "c++",
-#     ragel_options = ["-I ."],
-# )
+filegroup(
+    name = "all_examples",
+    srcs = glob(["**/*"]),
+)
