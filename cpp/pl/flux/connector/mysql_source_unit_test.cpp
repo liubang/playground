@@ -32,7 +32,7 @@ std::optional<std::string> mysql_test_dsn() {
 }
 
 TEST(MySQLSourceTest, ParsesMysqlUrlDsn) {
-    auto config_or = ParseMySQLDsn("mysql://flux:flux@192.168.50.31:3307/testdb");
+    auto config_or = ParseMySQLDsn("mysql://flux:flux@192.168.50.31:3307/testdb?ssl=true");
 
     ASSERT_TRUE(config_or.ok()) << config_or.status();
     EXPECT_EQ("192.168.50.31", config_or->host);
@@ -40,6 +40,7 @@ TEST(MySQLSourceTest, ParsesMysqlUrlDsn) {
     EXPECT_EQ("flux", config_or->user);
     EXPECT_EQ("flux", config_or->password);
     EXPECT_EQ("testdb", config_or->database);
+    EXPECT_TRUE(config_or->ssl);
 }
 
 TEST(MySQLSourceTest, ParsesTcpDsnWithDefaultPort) {
@@ -51,6 +52,7 @@ TEST(MySQLSourceTest, ParsesTcpDsnWithDefaultPort) {
     EXPECT_EQ("flux", config_or->user);
     EXPECT_EQ("secret", config_or->password);
     EXPECT_EQ("testdb", config_or->database);
+    EXPECT_FALSE(config_or->ssl);
 }
 
 TEST(MySQLSourceTest, RejectsInvalidDsnPort) {
@@ -104,6 +106,7 @@ TEST(MySQLSourceTest, ReportsFixtureSchemaColumnNames) {
     EXPECT_EQ("cores", schema_or->columns[4].name);
     EXPECT_EQ(Value::Type::UInt, schema_or->columns[4].type);
     EXPECT_EQ("active", schema_or->columns[5].name);
+    EXPECT_EQ(Value::Type::Bool, schema_or->columns[5].type);
     EXPECT_EQ("note", schema_or->columns[6].name);
     EXPECT_TRUE(schema_or->columns[6].nullable);
 }
@@ -119,8 +122,8 @@ TEST(MySQLSourceTest, PushesDownProjectionTimeRangePredicateSortAndLimit) {
     ScanRequest request;
     request.columns = {"host", "usage"};
     request.time_range = TimeRange{
-        .start = "2024-07-01 10:00:30",
-        .stop = "2024-07-01 10:04:00",
+        .start = "2024-07-01T18:00:30+08:00",
+        .stop = "2024-07-01T18:04:00+08:00",
     };
     request.predicates.push_back({
         .op = PredicateOp::Eq,
@@ -143,6 +146,48 @@ TEST(MySQLSourceTest, PushesDownProjectionTimeRangePredicateSortAndLimit) {
     EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
     EXPECT_EQ("93.25", table.rows[0]->lookup("usage")->string());
     EXPECT_EQ(nullptr, table.rows[0]->lookup("_time"));
+}
+
+TEST(MySQLSourceTest, MapsMySQLNativeTypesToFluxValues) {
+    auto dsn = mysql_test_dsn();
+    if (!dsn.has_value()) {
+        GTEST_SKIP() << "set FLUX_MYSQL_TEST_DSN and import "
+                        "cpp/pl/flux/examples/cross_source/mysql_metrics.sql to run MySQL "
+                        "integration tests";
+    }
+    MySQLSource source(*dsn, "mysql_types");
+
+    auto schema_or = source.Schema();
+
+    ASSERT_TRUE(schema_or.ok()) << schema_or.status();
+    ASSERT_EQ(11, schema_or->columns.size());
+    EXPECT_EQ(Value::Type::Bool, schema_or->columns[1].type);
+    EXPECT_EQ(Value::Type::Int, schema_or->columns[2].type);
+    EXPECT_EQ(Value::Type::UInt, schema_or->columns[3].type);
+    EXPECT_EQ(Value::Type::String, schema_or->columns[4].type);
+    EXPECT_EQ(Value::Type::String, schema_or->columns[5].type);
+    EXPECT_EQ(Value::Type::String, schema_or->columns[6].type);
+    EXPECT_EQ(Value::Type::Time, schema_or->columns[7].type);
+    EXPECT_EQ(Value::Type::Time, schema_or->columns[8].type);
+    EXPECT_TRUE(schema_or->columns[10].nullable);
+
+    auto value_or = source.Scan({});
+
+    ASSERT_TRUE(value_or.ok()) << value_or.status();
+    ASSERT_EQ(Value::Type::Table, value_or->type());
+    const auto& table = value_or->as_table();
+    ASSERT_EQ(1, table.rows.size());
+    ASSERT_NE(nullptr, table.rows[0]);
+    EXPECT_EQ("true", table.rows[0]->lookup("tiny_bool")->string());
+    EXPECT_EQ("-7", table.rows[0]->lookup("tiny_signed")->string());
+    EXPECT_EQ("18446744073709551615u", table.rows[0]->lookup("huge_unsigned")->string());
+    EXPECT_EQ("\"12345678901234.123456\"", table.rows[0]->lookup("exact_decimal")->string());
+    EXPECT_EQ("\"2024-07-02\"", table.rows[0]->lookup("event_date")->string());
+    EXPECT_EQ("\"12:34:56.123456\"", table.rows[0]->lookup("event_time")->string());
+    EXPECT_EQ("2024-07-02T12:34:56.123456Z", table.rows[0]->lookup("event_datetime")->string());
+    EXPECT_EQ("2024-07-02T12:34:56.123456Z", table.rows[0]->lookup("event_timestamp")->string());
+    EXPECT_EQ("\"flux\"", table.rows[0]->lookup("payload")->string());
+    EXPECT_EQ("null", table.rows[0]->lookup("nullable_text")->string());
 }
 
 TEST(MySQLSourceTest, PushesDownDistinctColumn) {
@@ -227,6 +272,7 @@ TEST(MySQLSourceTest, RejectsUnknownPushdownColumnAgainstFixtureSchema) {
     ASSERT_FALSE(value_or.ok());
     EXPECT_EQ(absl::StatusCode::kInvalidArgument, value_or.status().code());
     EXPECT_NE(std::string::npos, value_or.status().message().find("unknown column"));
+    EXPECT_NE(std::string::npos, value_or.status().message().find("available columns"));
 }
 
 } // namespace

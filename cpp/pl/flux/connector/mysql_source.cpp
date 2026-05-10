@@ -20,6 +20,8 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "absl/time/time.h"
+#include <algorithm>
 #include <boost/asio/io_context.hpp>
 #include <boost/mysql/any_connection.hpp>
 #include <boost/mysql/column_type.hpp>
@@ -67,6 +69,54 @@ bool parse_port(std::string_view text, uint16_t* port) {
     return true;
 }
 
+absl::StatusOr<bool> parse_ssl_query(std::string_view query) {
+    if (query.empty()) {
+        return false;
+    }
+    while (!query.empty()) {
+        const size_t amp = query.find('&');
+        const std::string_view part = amp == std::string_view::npos ? query : query.substr(0, amp);
+        if (amp == std::string_view::npos) {
+            query = {};
+        } else {
+            query.remove_prefix(amp + 1);
+        }
+        if (part.empty()) {
+            continue;
+        }
+        const size_t eq = part.find('=');
+        const std::string_view key = eq == std::string_view::npos ? part : part.substr(0, eq);
+        const std::string_view value = eq == std::string_view::npos ? "" : part.substr(eq + 1);
+        if (key != "ssl") {
+            return absl::InvalidArgumentError(
+                absl::StrCat("mysql dsn unsupported query parameter: ", std::string(key)));
+        }
+        if (value == "true" || value == "1" || value == "enable" || value == "enabled" ||
+            value == "required") {
+            return true;
+        }
+        if (value == "false" || value == "0" || value == "disable" || value == "disabled" ||
+            value.empty()) {
+            return false;
+        }
+        return absl::InvalidArgumentError("mysql dsn ssl parameter must be true or false");
+    }
+    return false;
+}
+
+absl::StatusOr<std::pair<std::string_view, bool>> split_database_and_query(
+    std::string_view database) {
+    const size_t query_start = database.find('?');
+    if (query_start == std::string_view::npos) {
+        return std::pair<std::string_view, bool>{database, false};
+    }
+    auto ssl_or = parse_ssl_query(database.substr(query_start + 1));
+    if (!ssl_or.ok()) {
+        return ssl_or.status();
+    }
+    return std::pair<std::string_view, bool>{database.substr(0, query_start), *ssl_or};
+}
+
 absl::StatusOr<MySQLConnectionConfig> parse_mysql_url(std::string_view dsn) {
     constexpr std::string_view kPrefix = "mysql://";
     dsn.remove_prefix(kPrefix.size());
@@ -103,12 +153,21 @@ absl::StatusOr<MySQLConnectionConfig> parse_mysql_url(std::string_view dsn) {
         return absl::InvalidArgumentError("mysql dsn requires host");
     }
 
+    auto database_or = split_database_and_query(dsn.substr(slash + 1));
+    if (!database_or.ok()) {
+        return database_or.status();
+    }
+    if (database_or->first.empty()) {
+        return absl::InvalidArgumentError("mysql dsn requires database");
+    }
+
     return MySQLConnectionConfig{
         .host = std::string(host),
         .port = port,
         .user = std::string(userinfo.substr(0, colon)),
         .password = std::string(userinfo.substr(colon + 1)),
-        .database = std::string(dsn.substr(slash + 1)),
+        .database = std::string(database_or->first),
+        .ssl = database_or->second,
     };
 }
 
@@ -145,12 +204,21 @@ absl::StatusOr<MySQLConnectionConfig> parse_tcp_dsn(std::string_view dsn) {
         return absl::InvalidArgumentError("mysql dsn requires host");
     }
 
+    auto database_or = split_database_and_query(dsn.substr(close + 2));
+    if (!database_or.ok()) {
+        return database_or.status();
+    }
+    if (database_or->first.empty()) {
+        return absl::InvalidArgumentError("mysql dsn requires database");
+    }
+
     return MySQLConnectionConfig{
         .host = std::string(host),
         .port = port,
         .user = std::string(userinfo.substr(0, colon)),
         .password = std::string(userinfo.substr(colon + 1)),
-        .database = std::string(dsn.substr(close + 2)),
+        .database = std::string(database_or->first),
+        .ssl = database_or->second,
     };
 }
 
@@ -174,12 +242,14 @@ absl::StatusOr<mysql::any_connection> open_connection(asio::io_context* ctx,
     params.username = config_or->user;
     params.password = config_or->password;
     params.database = config_or->database;
-    params.ssl = mysql::ssl_mode::disable;
+    params.ssl = config_or->ssl ? mysql::ssl_mode::enable : mysql::ssl_mode::disable;
 
     try {
         mysql::any_connection conn(*ctx);
         conn.connect(params);
         conn.set_meta_mode(mysql::metadata_mode::full);
+        mysql::results result;
+        conn.execute("SET time_zone = '+00:00'", result);
         return conn;
     } catch (const mysql::error_with_diagnostics& err) {
         return absl::InvalidArgumentError(
@@ -214,6 +284,28 @@ std::string quote_identifier(const std::string& identifier) {
         }
     }
     out.push_back('`');
+    return out;
+}
+
+std::string quote_table_identifier(const std::string& identifier) {
+    std::string out;
+    size_t start = 0;
+    while (start <= identifier.size()) {
+        const size_t dot = identifier.find('.', start);
+        const std::string part = dot == std::string::npos ? identifier.substr(start)
+                                                          : identifier.substr(start, dot - start);
+        if (part.empty()) {
+            return quote_identifier(identifier);
+        }
+        if (!out.empty()) {
+            out.push_back('.');
+        }
+        out += quote_identifier(part);
+        if (dot == std::string::npos) {
+            break;
+        }
+        start = dot + 1;
+    }
     return out;
 }
 
@@ -259,13 +351,34 @@ absl::Status validate_column(const std::unordered_set<std::string>& schema_colum
                              const std::string& column,
                              const std::string& context) {
     if (!schema_has_column(schema_columns, column)) {
-        return absl::InvalidArgumentError(
-            absl::StrCat("mysql source ", context, " unknown column: ", column));
+        std::vector<std::string> columns(schema_columns.begin(), schema_columns.end());
+        std::sort(columns.begin(), columns.end());
+        std::string available;
+        for (size_t i = 0; i < columns.size(); ++i) {
+            if (i != 0) {
+                available += ", ";
+            }
+            available += columns[i];
+        }
+        return absl::InvalidArgumentError(absl::StrCat("mysql source ", context,
+                                                       " unknown column: ", column,
+                                                       "; available columns: ", available));
     }
     return absl::OkStatus();
 }
 
-absl::StatusOr<std::string> format_literal(mysql::format_options opts, const Value& value) {
+std::optional<std::string> rfc3339_to_mysql_datetime(std::string_view literal) {
+    absl::Time timestamp;
+    std::string error;
+    if (!absl::ParseTime(absl::RFC3339_full, literal, &timestamp, &error)) {
+        return std::nullopt;
+    }
+    return absl::FormatTime("%Y-%m-%d %H:%M:%E6S", timestamp, absl::UTCTimeZone());
+}
+
+absl::StatusOr<std::string> format_literal(mysql::format_options opts,
+                                           const Value& value,
+                                           bool normalize_rfc3339_time = false) {
     try {
         switch (value.type()) {
             case Value::Type::Null:
@@ -278,10 +391,23 @@ absl::StatusOr<std::string> format_literal(mysql::format_options opts, const Val
                 return mysql::format_sql(opts, "{}", value.as_uint());
             case Value::Type::Float:
                 return mysql::format_sql(opts, "{}", value.as_float());
-            case Value::Type::String:
-                return mysql::format_sql(opts, "{}", value.as_string());
-            case Value::Type::Time:
-                return mysql::format_sql(opts, "{}", value.as_time().literal);
+            case Value::Type::String: {
+                std::string literal = value.as_string();
+                if (normalize_rfc3339_time) {
+                    if (auto mysql_time = rfc3339_to_mysql_datetime(literal);
+                        mysql_time.has_value()) {
+                        literal = *mysql_time;
+                    }
+                }
+                return mysql::format_sql(opts, "{}", literal);
+            }
+            case Value::Type::Time: {
+                std::string literal = value.as_time().literal;
+                if (auto mysql_time = rfc3339_to_mysql_datetime(literal); mysql_time.has_value()) {
+                    literal = *mysql_time;
+                }
+                return mysql::format_sql(opts, "{}", literal);
+            }
             default:
                 return absl::InvalidArgumentError("mysql source parameter type is not pushable");
         }
@@ -378,14 +504,14 @@ absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
             return status;
         }
         if (request.time_range->start.has_value()) {
-            auto literal_or = format_literal(opts, Value::string(*request.time_range->start));
+            auto literal_or = format_literal(opts, Value::string(*request.time_range->start), true);
             if (!literal_or.ok()) {
                 return literal_or.status();
             }
             where_clauses.push_back(quote_identifier("_time") + " >= " + *literal_or);
         }
         if (request.time_range->stop.has_value()) {
-            auto literal_or = format_literal(opts, Value::string(*request.time_range->stop));
+            auto literal_or = format_literal(opts, Value::string(*request.time_range->stop), true);
             if (!literal_or.ok()) {
                 return literal_or.status();
             }
@@ -397,7 +523,7 @@ absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
         if (!status.ok()) {
             return status;
         }
-        auto literal_or = format_literal(opts, predicate.literal);
+        auto literal_or = format_literal(opts, predicate.literal, predicate.column == "_time");
         if (!literal_or.ok()) {
             return literal_or.status();
         }
@@ -465,6 +591,10 @@ absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
 Value::Type value_type_from_metadata(const mysql::metadata& meta) {
     switch (meta.type()) {
         case mysql::column_type::tinyint:
+            if (meta.column_length() == 1) {
+                return Value::Type::Bool;
+            }
+            return meta.is_unsigned() ? Value::Type::UInt : Value::Type::Int;
         case mysql::column_type::smallint:
         case mysql::column_type::mediumint:
         case mysql::column_type::int_:
@@ -474,10 +604,15 @@ Value::Type value_type_from_metadata(const mysql::metadata& meta) {
         case mysql::column_type::float_:
         case mysql::column_type::double_:
             return Value::Type::Float;
+        case mysql::column_type::decimal:
+            return Value::Type::String;
         case mysql::column_type::date:
+            return Value::Type::String;
         case mysql::column_type::datetime:
         case mysql::column_type::timestamp:
             return Value::Type::Time;
+        case mysql::column_type::time:
+            return Value::Type::String;
         default:
             return Value::Type::String;
     }
@@ -525,9 +660,17 @@ std::string format_time(mysql::time value) {
     return out.str();
 }
 
-Value value_from_mysql_field(mysql::field_view field) {
+Value value_from_mysql_field(mysql::field_view field, const mysql::metadata& meta) {
     if (field.is_null()) {
         return Value::null();
+    }
+    if (meta.type() == mysql::column_type::tinyint && meta.column_length() == 1) {
+        if (field.is_int64()) {
+            return Value::boolean(field.as_int64() != 0);
+        }
+        if (field.is_uint64()) {
+            return Value::boolean(field.as_uint64() != 0);
+        }
     }
     if (field.is_int64()) {
         return Value::integer(field.as_int64());
@@ -595,7 +738,7 @@ absl::StatusOr<MySQLConnectionConfig> ParseMySQLDsn(const std::string& dsn) {
 MySQLSource::MySQLSource(std::string dsn, std::string table)
     : dsn_(std::move(dsn)),
       table_(std::move(table)),
-      query_(absl::StrCat("SELECT * FROM ", quote_identifier(table_))) {}
+      query_(absl::StrCat("SELECT * FROM ", quote_table_identifier(table_))) {}
 
 absl::StatusOr<TableSchema> MySQLSource::Schema() const {
     asio::io_context ctx;
@@ -659,7 +802,7 @@ absl::StatusOr<Value> MySQLSource::Scan(const ScanRequest& request) {
         std::vector<std::pair<std::string, Value>> properties;
         properties.reserve(column_names.size());
         for (size_t i = 0; i < column_names.size(); ++i) {
-            properties.emplace_back(column_names[i], value_from_mysql_field(row.at(i)));
+            properties.emplace_back(column_names[i], value_from_mysql_field(row.at(i), meta[i]));
         }
         rows.push_back(std::make_shared<ObjectValue>(std::move(properties)));
     }
