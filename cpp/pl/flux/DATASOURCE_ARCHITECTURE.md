@@ -687,11 +687,17 @@ aggregate、order_by、limit/offset 等真实下推字段。
 
 ### Phase 7: Lazy Execution and Physical Plan
 
-状态：进行中。当前已新增第一版 physical plan 表示，`explain(physical: true)` 可以展示
-connector scan 是否 lazy、RBO 已触发规则、CBO 当前决策状态和 cost placeholder。
-同时，SQL source pushdown 编译已经开始从 `runtime_builtin_universe_transform.cpp` 迁出到
-`optimizer/source_pushdown`。执行路径仍以 eager table value 为主，真正 lazy materialization
-还没有完成。
+状态：进行中。当前已新增第一版 physical plan 表示和 physical executor 骨架。
+`explain(physical: true)` 可以展示 connector scan 是否 lazy、RBO 已触发规则、CBO 当前决策状态
+和 cost placeholder。SQL source pushdown 编译已经开始从
+`runtime_builtin_universe_transform.cpp` 迁出到 `optimizer/source_pushdown`，`Materializer`
+也已经改为统一进入 `PhysicalExecutor`。
+
+当前执行路径的边界是：完整可下推的 source plan 编译成单个 `ConnectorScanOperator`；不能完整
+下推的单输入 plan 会递归拆成 connector pushed prefix 和 memory suffix，memory suffix
+目前覆盖 `range`、`filter`、`project`、`rename`、`limit`、`sort`、`group`、`distinct`、
+`aggregate` 和 `materialize`。operator 之间仍传递 `TableValue`，这是迁移期兼容层；后续
+不能在这个接口上继续扩散新能力，而要收敛到 page/chunk execution contract。
 
 当前 physical explain 示例：
 
@@ -709,27 +715,36 @@ PhysicalPlan
    cbo="not-run", cost=unknown)
 ```
 
-这里的 `[lazy]` 表示 physical node 本身已经按延迟 scan 建模；真正的运行时 lazy
-materialization 还需要后续 executor 接管输出边界。
+这里的 `[lazy]` 表示 physical node 本身已经按延迟 scan 建模；输出边界现在会通过
+`PhysicalExecutor` 触发 connector scan，并在需要时接上 memory operator fallback。
 
 目标：把当前 eager interpreter 演进成明确的 logical -> optimized logical -> physical -> execute
 流程，同时保持现有内存执行器作为 fallback。
 
-工作项：
+已落地：
 
 - 让 SQL provider `from()` 返回未物化的 lazy table plan。
+- Materializer 统一进入 `PhysicalExecutor`，不再直接调用 pushdown executor。
+- 新增第一版 physical executor：先执行 connector pushed prefix，再把剩余 suffix 交给
+  memory operator。
+- 为 connector scan + memory suffix 增加 executor 级语义测试，覆盖 group 后接
+  filter/project/rename/sort/limit、materialize barrier 后接 aggregate、以及 distinct fallback。
+
+待推进：
+
 - 新增 RBO pass 管线，将 predicate/projection/sort/limit/aggregate pushdown、barrier insertion、
   projection pruning 从 builtin helper 中迁出。
 - 新增 physical plan node：`ConnectorScan`、`MemoryOperator`、`Materialize`、`OutputSink`。
-- 新增 physical executor：先执行 connector pushed prefix，再把剩余 suffix 交给内存 operator。
 - CBO 先定义 statistics/cost/alternative plan 接口；缺统计时明确使用 RBO 输出。
 - `explain()` 支持 logical、optimized logical、physical 三种视图。
 
 验收：
 
 - `sqlite.from(...) |> range |> filter(simple) |> keep |> limit` 在输出边界才触发 scan。
-- `sqlite.from(...) |> filter(complex) |> limit` 拆成 connector scan + materialize + memory filter/limit。
-- `explain(physical: true)` 能稳定展示 physical node tree 和 RBO/CBO 决策。
+- `sqlite.from(...) |> group` 保持 lazy logical plan，并在输出边界拆成 connector scan + memory group。
+- `sqlite.from(...) |> group |> count/mean` 仍能作为整段 aggregate pushdown 执行。
+- `explain(physical: true)` 能稳定展示 physical node tree 和 RBO/CBO 决策，包括 group-only
+  fallback 的 memory operator + connector scan 形态。
 - 所有现有 examples 输出保持不变。
 
 ### Phase 8: Presto-Style Connector Runtime
