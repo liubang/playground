@@ -152,8 +152,8 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
             return absl::InvalidArgumentError("unsupported pushdown source");
         }
         PushdownPlan plan;
-        plan.source = &node->source_scan;
-        auto columns_or = SourceScanColumns(node->source_scan);
+        plan.source = &node->source_scan();
+        auto columns_or = SourceScanColumns(node->source_scan());
         if (!columns_or.ok()) {
             return columns_or.status();
         }
@@ -180,16 +180,16 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
                     "range pushdown requires visible _time to map to source _time");
             }
             plan_or->request.time_range = connector::TimeRange{
-                .start = node->range.start,
-                .stop = node->range.stop,
+                .start = node->range().start,
+                .stop = node->range().stop,
             };
             return plan_or;
         }
         case plan::PlanNodeKind::Filter:
-            if (node->filter.predicates.empty()) {
+            if (node->filter().predicates.empty()) {
                 return absl::InvalidArgumentError("filter has no pushable predicates");
             }
-            for (const auto& predicate : node->filter.predicates) {
+            for (const auto& predicate : node->filter().predicates) {
                 auto source_column_or = source_column_for_visible(
                     plan_or->visible_columns, plan_or->source_columns, predicate.column, "filter");
                 if (!source_column_or.ok()) {
@@ -204,8 +204,8 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
             return plan_or;
         case plan::PlanNodeKind::Project: {
             std::vector<std::string> projected_source_columns;
-            projected_source_columns.reserve(node->project.columns.size());
-            for (const auto& column : node->project.columns) {
+            projected_source_columns.reserve(node->project().columns.size());
+            for (const auto& column : node->project().columns) {
                 auto source_column_or = source_column_for_visible(
                     plan_or->visible_columns, plan_or->source_columns, column, "project");
                 if (!source_column_or.ok()) {
@@ -214,14 +214,14 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
                 projected_source_columns.push_back(*source_column_or);
             }
             set_projection_columns(&plan_or->request, projected_source_columns,
-                                   node->project.columns);
-            plan_or->visible_columns = node->project.columns;
+                                   node->project().columns);
+            plan_or->visible_columns = node->project().columns;
             plan_or->source_columns = std::move(projected_source_columns);
             return plan_or;
         }
         case plan::PlanNodeKind::Rename:
             for (auto& column : plan_or->visible_columns) {
-                if (auto renamed = mapped_column_name(node->rename.columns, column);
+                if (auto renamed = mapped_column_name(node->rename().columns, column);
                     renamed.has_value()) {
                     column = *renamed;
                 }
@@ -234,8 +234,8 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
             return plan_or;
         case plan::PlanNodeKind::Group:
             plan_or->request.group_by.clear();
-            plan_or->request.group_by.reserve(node->group.columns.size());
-            for (const auto& column : node->group.columns) {
+            plan_or->request.group_by.reserve(node->group().columns.size());
+            for (const auto& column : node->group().columns) {
                 auto source_column_or = source_column_for_visible(
                     plan_or->visible_columns, plan_or->source_columns, column, "group");
                 if (!source_column_or.ok()) {
@@ -250,14 +250,14 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
             }
             auto source_column_or =
                 source_column_for_visible(plan_or->visible_columns, plan_or->source_columns,
-                                          node->aggregate.column, "aggregate");
+                                          node->aggregate().column, "aggregate");
             if (!source_column_or.ok()) {
                 return source_column_or.status();
             }
             plan_or->request.aggregate = connector::AggregateRequest{
-                .fn = to_connector_aggregate_fn(node->aggregate.fn),
+                .fn = to_connector_aggregate_fn(node->aggregate().fn),
                 .column = *source_column_or,
-                .alias = node->aggregate.column,
+                .alias = node->aggregate().column,
             };
             plan_or->request.order_by.clear();
             plan_or->request.limit.reset();
@@ -267,7 +267,7 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
         case plan::PlanNodeKind::Distinct: {
             auto source_column_or =
                 source_column_for_visible(plan_or->visible_columns, plan_or->source_columns,
-                                          node->distinct.column, "distinct");
+                                          node->distinct().column, "distinct");
             if (!source_column_or.ok()) {
                 return source_column_or.status();
             }
@@ -275,15 +275,15 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
             return plan_or;
         }
         case plan::PlanNodeKind::Limit:
-            plan_or->request.limit = node->limit.n;
-            if (node->limit.offset != 0) {
-                plan_or->request.offset = node->limit.offset;
+            plan_or->request.limit = node->limit().n;
+            if (node->limit().offset != 0) {
+                plan_or->request.offset = node->limit().offset;
             }
             return plan_or;
         case plan::PlanNodeKind::Sort:
             plan_or->request.order_by.clear();
-            plan_or->request.order_by.reserve(node->sort.keys.size());
-            for (const auto& key : node->sort.keys) {
+            plan_or->request.order_by.reserve(node->sort().keys.size());
+            for (const auto& key : node->sort().keys) {
                 auto source_column_or = source_column_for_visible(
                     plan_or->visible_columns, plan_or->source_columns, key.column, "sort");
                 if (!source_column_or.ok()) {
@@ -588,7 +588,7 @@ absl::StatusOr<std::vector<std::string>> VisibleColumnsForPlan(
         return absl::InvalidArgumentError("missing plan");
     }
     if (node->kind == plan::PlanNodeKind::SourceScan) {
-        return SourceScanColumns(node->source_scan);
+        return SourceScanColumns(node->source_scan());
     }
     if (node->inputs.size() != 1) {
         return absl::InvalidArgumentError("non-linear plan has no stable visible columns");
@@ -598,11 +598,11 @@ absl::StatusOr<std::vector<std::string>> VisibleColumnsForPlan(
         return columns_or.status();
     }
     if (node->kind == plan::PlanNodeKind::Project) {
-        return node->project.columns;
+        return node->project().columns;
     }
     if (node->kind == plan::PlanNodeKind::Rename) {
         for (auto& column : *columns_or) {
-            if (auto renamed = mapped_column_name(node->rename.columns, column);
+            if (auto renamed = mapped_column_name(node->rename().columns, column);
                 renamed.has_value()) {
                 column = *renamed;
             }
@@ -724,7 +724,7 @@ bool IsPushdownSourceScan(const plan::PlanNode& node) {
     if (node.kind != plan::PlanNodeKind::SourceScan) {
         return false;
     }
-    return connector::IsSqlPushdownConnector(node.source_scan.source, node.source_scan.driver);
+    return connector::IsSqlPushdownConnector(node.source_scan().source, node.source_scan().driver);
 }
 
 bool IsPushableUnaryNode(const plan::PlanNode& node) {
@@ -739,7 +739,7 @@ bool IsPushableUnaryNode(const plan::PlanNode& node) {
         case plan::PlanNodeKind::Distinct:
             return true;
         case plan::PlanNodeKind::Filter:
-            return !node.filter.predicates.empty();
+            return !node.filter().predicates.empty();
         default:
             return false;
     }
@@ -764,7 +764,7 @@ PushdownState AnalyzePushdownState(const plan::PlanNode& node) {
 
 std::optional<std::string> PushdownSourceName(const plan::PlanNode& node) {
     if (IsPushdownSourceScan(node)) {
-        return node.source_scan.source;
+        return node.source_scan().source;
     }
     if (!IsPushableUnaryNode(node) || node.inputs.size() != 1 || node.inputs[0] == nullptr) {
         return std::nullopt;

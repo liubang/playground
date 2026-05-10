@@ -41,16 +41,16 @@ void FormatPushdownState(const plan::PlanNode& node, std::ostringstream* out) {
         case PushdownState::SourcePushdown: {
             auto source = PushdownSourceName(node).value_or("source");
             *out << " [" << source << " pushdown";
-            if (node.kind == plan::PlanNodeKind::Filter && !node.filter.predicates.empty()) {
-                *out << ": " << plan::PredicateListString(node.filter.predicates);
+            if (node.kind == plan::PlanNodeKind::Filter && !node.filter().predicates.empty()) {
+                *out << ": " << plan::PredicateListString(node.filter().predicates);
             }
             *out << "]";
             return;
         }
         case PushdownState::MaterializeBarrier:
             *out << " [barrier";
-            if (!node.materialize.reason.empty()) {
-                *out << ": " << node.materialize.reason;
+            if (!node.materialize().reason.empty()) {
+                *out << ": " << node.materialize().reason;
             }
             *out << "]";
             return;
@@ -64,21 +64,21 @@ void FormatLogicalNodeDetail(const plan::PlanNode& node, std::ostringstream* out
     *out << plan::PlanNodeKindName(node.kind);
     FormatPushdownState(node, out);
     if (node.kind == plan::PlanNodeKind::SourceScan) {
-        *out << "(source=\"" << node.source_scan.source << "\", driver=\""
-             << node.source_scan.driver << "\", table=\"" << node.source_scan.table << "\")";
+        *out << "(source=\"" << node.source_scan().source << "\", driver=\""
+             << node.source_scan().driver << "\", table=\"" << node.source_scan().table << "\")";
     } else if (node.kind == plan::PlanNodeKind::Materialize &&
-               (!node.materialize.reason.empty() || !node.materialize.builtin.empty())) {
+               (!node.materialize().reason.empty() || !node.materialize().builtin.empty())) {
         *out << "(";
         bool needs_separator = false;
-        if (!node.materialize.reason.empty()) {
-            *out << "reason=\"" << node.materialize.reason << "\"";
+        if (!node.materialize().reason.empty()) {
+            *out << "reason=\"" << node.materialize().reason << "\"";
             needs_separator = true;
         }
-        if (!node.materialize.builtin.empty()) {
+        if (!node.materialize().builtin.empty()) {
             if (needs_separator) {
                 *out << ", ";
             }
-            *out << "builtin=\"" << node.materialize.builtin << "\"";
+            *out << "builtin=\"" << node.materialize().builtin << "\"";
         }
         *out << ")";
     }
@@ -162,8 +162,8 @@ std::shared_ptr<plan::PhysicalPlanNode> BuildPhysicalPlan(
     }
     if (physical->inputs.empty() && node->kind == plan::PlanNodeKind::SourceScan) {
         physical->kind = plan::PhysicalNodeKind::MemoryScan;
-        physical->source = node->source_scan.source;
-        physical->driver = node->source_scan.driver;
+        physical->source = node->source_scan().source;
+        physical->driver = node->source_scan().driver;
     }
     return physical;
 }

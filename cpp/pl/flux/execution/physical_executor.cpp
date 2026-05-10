@@ -77,17 +77,17 @@ absl::StatusOr<bool> predicate_matches(const ObjectValue& row,
     return false;
 }
 
-bool time_in_range(const ObjectValue& row, const plan::RangeSpec& range) {
+bool time_in_range(const ObjectValue& row, const plan::RangeSpec& range_spec) {
     const Value* value = row.lookup("_time");
     if (value == nullptr) {
         return false;
     }
     const std::string literal =
         value->type() == Value::Type::Time ? value->as_time().literal : value->string();
-    if (!range.start.empty() && literal < range.start) {
+    if (!range_spec.start.empty() && literal < range_spec.start) {
         return false;
     }
-    return !range.stop.has_value() || literal < *range.stop;
+    return !range_spec.stop.has_value() || literal < *range_spec.stop;
 }
 
 Value table_with_plan(Value value, const std::shared_ptr<plan::PlanNode>& plan) {
@@ -121,7 +121,7 @@ absl::StatusOr<Value> apply_range(const Value& input, const std::shared_ptr<plan
         next.group_key = chunk.group_key;
         next.columns = chunk.columns;
         for (const auto& row : chunk.rows) {
-            if (row != nullptr && time_in_range(*row, plan->range)) {
+            if (row != nullptr && time_in_range(*row, plan->range())) {
                 next.rows.push_back(row);
             }
         }
@@ -144,7 +144,7 @@ absl::StatusOr<Value> apply_filter(const Value& input,
                 continue;
             }
             bool keep = true;
-            for (const auto& predicate : plan->filter.predicates) {
+            for (const auto& predicate : plan->filter().predicates) {
                 auto matches_or = predicate_matches(*row, predicate);
                 if (!matches_or.ok()) {
                     return matches_or.status();
@@ -166,14 +166,14 @@ absl::StatusOr<Value> apply_filter(const Value& input,
 absl::StatusOr<Value> apply_project(const Value& input,
                                     const std::shared_ptr<plan::PlanNode>& plan) {
     const auto& table = input.as_table();
-    const std::unordered_set<std::string> selected(plan->project.columns.begin(),
-                                                   plan->project.columns.end());
+    const std::unordered_set<std::string> selected(plan->project().columns.begin(),
+                                                   plan->project().columns.end());
     std::vector<TableChunk> chunks;
     chunks.reserve(table.table_count());
     for (const auto& chunk : table.tables) {
         TableChunk next;
         next.group_key = chunk.group_key;
-        next.columns = plan->project.columns;
+        next.columns = plan->project().columns;
         for (const auto& row : chunk.rows) {
             if (row == nullptr) {
                 continue;
@@ -203,7 +203,7 @@ absl::StatusOr<Value> apply_rename(const Value& input,
         next.columns.reserve(chunk.columns.size());
         for (const auto& column : chunk.columns) {
             next.columns.push_back(
-                mapped_column_name(plan->rename.columns, column).value_or(column));
+                mapped_column_name(plan->rename().columns, column).value_or(column));
         }
         for (const auto& row : chunk.rows) {
             if (row == nullptr) {
@@ -212,7 +212,7 @@ absl::StatusOr<Value> apply_rename(const Value& input,
             std::vector<std::pair<std::string, Value>> props;
             props.reserve(row->properties.size());
             for (const auto& [key, value] : row->properties) {
-                props.emplace_back(mapped_column_name(plan->rename.columns, key).value_or(key),
+                props.emplace_back(mapped_column_name(plan->rename().columns, key).value_or(key),
                                    value);
             }
             next.rows.push_back(std::make_shared<ObjectValue>(std::move(props)));
@@ -224,8 +224,8 @@ absl::StatusOr<Value> apply_rename(const Value& input,
 
 absl::StatusOr<Value> apply_limit(const Value& input, const std::shared_ptr<plan::PlanNode>& plan) {
     const auto& table = input.as_table();
-    const size_t begin = static_cast<size_t>(std::max<int64_t>(0, plan->limit.offset));
-    const size_t count = static_cast<size_t>(std::max<int64_t>(0, plan->limit.n));
+    const size_t begin = static_cast<size_t>(std::max<int64_t>(0, plan->limit().offset));
+    const size_t count = static_cast<size_t>(std::max<int64_t>(0, plan->limit().n));
     std::vector<TableChunk> chunks;
     chunks.reserve(table.table_count());
     for (const auto& chunk : table.tables) {
@@ -252,7 +252,7 @@ absl::StatusOr<Value> apply_sort(const Value& input, const std::shared_ptr<plan:
                 if (lhs == nullptr || rhs == nullptr) {
                     return lhs != nullptr;
                 }
-                for (const auto& key : plan->sort.keys) {
+                for (const auto& key : plan->sort().keys) {
                     const int cmp =
                         compare_values(lhs->lookup(key.column), rhs->lookup(key.column));
                     if (cmp != 0) {
@@ -273,7 +273,7 @@ absl::StatusOr<Value> apply_group(const Value& input, const std::shared_ptr<plan
         if (row == nullptr) {
             continue;
         }
-        auto [grouped_row, key] = clone_row_with_group_and_key(*row, plan->group.columns);
+        auto [grouped_row, key] = clone_row_with_group_and_key(*row, plan->group().columns);
         auto [it, inserted] = chunk_indexes.emplace(key, chunks.size());
         if (inserted) {
             chunks.emplace_back();
@@ -300,7 +300,7 @@ absl::StatusOr<Value> apply_distinct(const Value& input,
             if (row == nullptr) {
                 continue;
             }
-            const Value* value = row->lookup(plan->distinct.column);
+            const Value* value = row->lookup(plan->distinct().column);
             const std::string key = value == nullptr ? "<missing>" : value->string();
             if (seen.insert(key).second) {
                 next.rows.push_back(row);
@@ -318,16 +318,16 @@ absl::StatusOr<Value> apply_aggregate(const Value& input,
     chunks.reserve(table.table_count());
     for (const auto& chunk : table.tables) {
         TableChunk next;
-        if (plan->aggregate.fn == plan::AggregateFunction::Count) {
+        if (plan->aggregate().fn == plan::AggregateFunction::Count) {
             int64_t count = 0;
             for (const auto& row : chunk.rows) {
-                if (row != nullptr && row->lookup(plan->aggregate.column) != nullptr) {
+                if (row != nullptr && row->lookup(plan->aggregate().column) != nullptr) {
                     ++count;
                 }
             }
-            next.rows.push_back(materialize_group_count_row(chunk, plan->aggregate.column, count));
+            next.rows.push_back(materialize_group_count_row(chunk, plan->aggregate().column, count));
         } else {
-            auto values_or = numeric_values_for_chunk(chunk, "aggregate", plan->aggregate.column);
+            auto values_or = numeric_values_for_chunk(chunk, "aggregate", plan->aggregate().column);
             if (!values_or.ok()) {
                 return values_or.status();
             }
@@ -335,7 +335,7 @@ absl::StatusOr<Value> apply_aggregate(const Value& input,
                 continue;
             }
             double value = 0.0;
-            switch (plan->aggregate.fn) {
+            switch (plan->aggregate().fn) {
                 case plan::AggregateFunction::Sum:
                     for (double item : *values_or) {
                         value += item;
@@ -357,7 +357,7 @@ absl::StatusOr<Value> apply_aggregate(const Value& input,
                     break;
             }
             next.rows.push_back(
-                materialize_group_value_row(chunk, plan->aggregate.column, Value::floating(value)));
+                materialize_group_value_row(chunk, plan->aggregate().column, Value::floating(value)));
         }
         chunks.push_back(std::move(next));
     }

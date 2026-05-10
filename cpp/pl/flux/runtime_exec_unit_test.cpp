@@ -255,9 +255,9 @@ TEST(RuntimeExecTest, SqliteFromAttachesSourceScanPlan) {
     EXPECT_FALSE(data_or->as_table().materialized);
     EXPECT_TRUE(data_or->as_table().rows.empty());
     EXPECT_EQ(plan::PlanNodeKind::SourceScan, data_or->as_table().plan->kind);
-    EXPECT_EQ("sqlite", data_or->as_table().plan->source_scan.source);
-    EXPECT_EQ("sqlite", data_or->as_table().plan->source_scan.driver);
-    EXPECT_EQ("cpu", data_or->as_table().plan->source_scan.table);
+    EXPECT_EQ("sqlite", data_or->as_table().plan->source_scan().source);
+    EXPECT_EQ("sqlite", data_or->as_table().plan->source_scan().driver);
+    EXPECT_EQ("cpu", data_or->as_table().plan->source_scan().table);
 }
 
 TEST(RuntimeExecTest, SqlitePipelineAppendsLogicalPlanNodesWhileExecutingEagerly) {
@@ -310,13 +310,13 @@ TEST(RuntimeExecTest, SqlitePipelineAppendsLogicalPlanNodesWhileExecutingEagerly
     node = node->inputs[0];
     ASSERT_NE(nullptr, node);
     EXPECT_EQ(plan::PlanNodeKind::Filter, node->kind);
-    ASSERT_EQ(2, node->filter.predicates.size());
-    EXPECT_EQ("host", node->filter.predicates[0].column);
-    EXPECT_EQ(plan::PredicateOp::Eq, node->filter.predicates[0].op);
-    EXPECT_EQ("edge-1", node->filter.predicates[0].literal.string_value);
-    EXPECT_EQ("usage", node->filter.predicates[1].column);
-    EXPECT_EQ(plan::PredicateOp::Gt, node->filter.predicates[1].op);
-    EXPECT_EQ(80.0, node->filter.predicates[1].literal.float_value);
+    ASSERT_EQ(2, node->filter().predicates.size());
+    EXPECT_EQ("host", node->filter().predicates[0].column);
+    EXPECT_EQ(plan::PredicateOp::Eq, node->filter().predicates[0].op);
+    EXPECT_EQ("edge-1", node->filter().predicates[0].literal.string_value);
+    EXPECT_EQ("usage", node->filter().predicates[1].column);
+    EXPECT_EQ(plan::PredicateOp::Gt, node->filter().predicates[1].op);
+    EXPECT_EQ(80.0, node->filter().predicates[1].literal.float_value);
     ASSERT_EQ(1, node->inputs.size());
     node = node->inputs[0];
     ASSERT_NE(nullptr, node);
@@ -325,7 +325,7 @@ TEST(RuntimeExecTest, SqlitePipelineAppendsLogicalPlanNodesWhileExecutingEagerly
     node = node->inputs[0];
     ASSERT_NE(nullptr, node);
     EXPECT_EQ(plan::PlanNodeKind::SourceScan, node->kind);
-    EXPECT_EQ("sqlite", node->source_scan.driver);
+    EXPECT_EQ("sqlite", node->source_scan().driver);
 }
 
 TEST(RuntimeExecTest, MySQLPipelineExecutesThroughRuntimeAndPushdown) {
@@ -397,7 +397,7 @@ TEST(RuntimeExecTest, MySQLPipelineExecutesThroughRuntimeAndPushdown) {
     node = node->inputs[0];
     ASSERT_NE(nullptr, node);
     EXPECT_EQ(plan::PlanNodeKind::SourceScan, node->kind);
-    EXPECT_EQ("mysql", node->source_scan.driver);
+    EXPECT_EQ("mysql", node->source_scan().driver);
 }
 
 TEST(RuntimeExecTest, ExplainFormatsLogicalPlan) {
