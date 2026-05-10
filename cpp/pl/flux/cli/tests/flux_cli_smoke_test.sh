@@ -20,7 +20,7 @@
 set -euo pipefail
 
 workspace_root="${TEST_SRCDIR}/${TEST_WORKSPACE}"
-flux_bin="${workspace_root}/cpp/pl/flux/flux"
+flux_bin="${workspace_root}/cpp/pl/flux/cli/flux"
 example="${workspace_root}/cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux"
 
 list_output="$("${flux_bin}" --list-results "${example}")"
