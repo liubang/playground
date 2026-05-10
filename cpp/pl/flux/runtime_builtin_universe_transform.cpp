@@ -260,10 +260,6 @@ Value with_distinct_plan(Value value, const TableValue& input, std::string colum
     return value;
 }
 
-std::optional<std::string> source_pushdown_summary(const std::shared_ptr<plan::PlanNode>& plan) {
-    return optimizer::SourcePushdownSummary(plan);
-}
-
 } // namespace detail
 
 namespace {
@@ -651,8 +647,7 @@ absl::StatusOr<Value> builtin_keep(const std::vector<Value>& args) {
         return columns_or.status();
     }
     if (!(*table_or)->materialized && (*table_or)->plan != nullptr) {
-        return lazy_table_with_plan(**table_or,
-                                    plan::MakeProject((*table_or)->plan, *columns_or));
+        return lazy_table_with_plan(**table_or, plan::MakeProject((*table_or)->plan, *columns_or));
     }
     const std::unordered_set<std::string> selected(columns_or->begin(), columns_or->end());
     auto result_or = transform_rows_preserving_chunks(
@@ -733,8 +728,8 @@ absl::StatusOr<Value> builtin_rename(const std::vector<Value>& args) {
         return columns_or.status();
     }
     if (!(*table_or)->materialized && (*table_or)->plan != nullptr) {
-        auto result = lazy_table_with_plan(**table_or,
-                                           plan::MakeRename((*table_or)->plan, *columns_or));
+        auto result =
+            lazy_table_with_plan(**table_or, plan::MakeRename((*table_or)->plan, *columns_or));
         auto visible_or = optimizer::VisibleColumnsForPlan(result.as_table().plan);
         if (!visible_or.ok()) {
             return visible_or.status();
@@ -862,8 +857,7 @@ absl::StatusOr<Value> builtin_sort(const std::vector<Value>& args) {
                 .desc = *desc_or,
             });
         }
-        return lazy_table_with_plan(**table_or,
-                                    plan::MakeSort((*table_or)->plan, std::move(keys)));
+        return lazy_table_with_plan(**table_or, plan::MakeSort((*table_or)->plan, std::move(keys)));
     }
 
     auto chunks = clone_table_chunks(**table_or);
@@ -1130,8 +1124,8 @@ absl::StatusOr<Value> builtin_fill(const std::vector<Value>& args) {
         }
         rows.push_back(next_row);
     }
-    auto result = Value::table(table->bucket, std::move(rows), table->range_start,
-                               table->range_stop);
+    auto result =
+        Value::table(table->bucket, std::move(rows), table->range_start, table->range_stop);
     return with_materialization_barrier(std::move(result), **table_or, "fill");
 }
 

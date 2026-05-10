@@ -467,6 +467,42 @@ TEST(RuntimeExecTest, ExplainFormatsPhysicalPlan) {
     EXPECT_NE(std::string::npos, plan_or->as_string().find("cbo=\"not-run\""));
 }
 
+TEST(RuntimeExecTest, ExplainFormatsOptimizedLogicalPlan) {
+    auto file = ParseFile(R"(
+        import "sqlite"
+        builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
+        builtin limit : (<-tables: stream[A], n: int) => stream[A]
+        builtin explain : (<-tables: stream[A], ?optimized: bool) => string
+
+        data = sqlite.from(
+            path: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
+        )
+            |> filter(fn: (r) => r.host == "edge-1")
+            |> limit(n: 1)
+
+        plan = data |> explain(optimized: true)
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto plan_or = env.lookup("plan");
+    ASSERT_TRUE(plan_or.ok()) << plan_or.status();
+    ASSERT_EQ(Value::Type::String, plan_or->type());
+    EXPECT_EQ("OptimizedLogicalPlan\n"
+              "Limit [sqlite pushdown]\n"
+              "`- Filter [sqlite pushdown: host == \"edge-1\"]\n"
+              "   `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", "
+              "table=\"cpu\")\n"
+              "RBO(rules=[PushLimitIntoConnectorScan, PushPredicateIntoConnectorScan])\n"
+              "SourcePushdown(request: projection=[*], predicates=[host == \"edge-1\"], "
+              "limit=1)\n",
+              plan_or->as_string());
+}
+
 TEST(RuntimeExecTest, ExplainDoesNotMaterializeLazySqliteSource) {
     auto file = ParseFile(R"(
         import "sqlite"
