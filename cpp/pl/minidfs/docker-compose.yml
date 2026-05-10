@@ -1,0 +1,140 @@
+version: "3.8"
+
+# MiniDFS Integration Test Environment
+# Usage: docker compose up -d
+# Tear down: docker compose down -v
+
+services:
+  # ============================================================================
+  # MySQL — NameNode metadata store
+  # ============================================================================
+  mysql:
+    image: mysql:8.0
+    container_name: minidfs-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-minidfs_root}
+      MYSQL_DATABASE: minidfs
+      MYSQL_USER: ${MYSQL_USER:-minidfs}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-minidfs}
+    ports:
+      - "13306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./metadata/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - minidfs-net
+
+  # ============================================================================
+  # NameNode — metadata & namespace management
+  # ============================================================================
+  namenode:
+    build:
+      context: ../../../..
+      dockerfile: cpp/pl/minidfs/Dockerfile
+      target: namenode
+    container_name: minidfs-namenode
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      MINIDFS_MYSQL_HOST: mysql
+      MINIDFS_MYSQL_PORT: "3306"
+      MINIDFS_MYSQL_USER: ${MYSQL_USER:-minidfs}
+      MINIDFS_MYSQL_PASSWORD: ${MYSQL_PASSWORD:-minidfs}
+      MINIDFS_MYSQL_DATABASE: minidfs
+    ports:
+      - "18000:8000"
+    networks:
+      - minidfs-net
+
+  # ============================================================================
+  # DataNode 1
+  # ============================================================================
+  datanode1:
+    build:
+      context: ../../../..
+      dockerfile: cpp/pl/minidfs/Dockerfile
+      target: datanode
+    container_name: minidfs-datanode1
+    restart: unless-stopped
+    depends_on:
+      - namenode
+    environment:
+      MINIDFS_NAMENODE_ADDR: namenode:8000
+      MINIDFS_DATANODE_DATA_DIR: /data/minidfs
+      MINIDFS_DATANODE_RPC_PORT: "9000"
+      MINIDFS_DATANODE_DATA_PORT: "9001"
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    volumes:
+      - datanode1_data:/data/minidfs
+    networks:
+      - minidfs-net
+
+  # ============================================================================
+  # DataNode 2
+  # ============================================================================
+  datanode2:
+    build:
+      context: ../../../..
+      dockerfile: cpp/pl/minidfs/Dockerfile
+      target: datanode
+    container_name: minidfs-datanode2
+    restart: unless-stopped
+    depends_on:
+      - namenode
+    environment:
+      MINIDFS_NAMENODE_ADDR: namenode:8000
+      MINIDFS_DATANODE_DATA_DIR: /data/minidfs
+      MINIDFS_DATANODE_RPC_PORT: "9000"
+      MINIDFS_DATANODE_DATA_PORT: "9001"
+    ports:
+      - "19010:9000"
+      - "19011:9001"
+    volumes:
+      - datanode2_data:/data/minidfs
+    networks:
+      - minidfs-net
+
+  # ============================================================================
+  # DataNode 3
+  # ============================================================================
+  datanode3:
+    build:
+      context: ../../../..
+      dockerfile: cpp/pl/minidfs/Dockerfile
+      target: datanode
+    container_name: minidfs-datanode3
+    restart: unless-stopped
+    depends_on:
+      - namenode
+    environment:
+      MINIDFS_NAMENODE_ADDR: namenode:8000
+      MINIDFS_DATANODE_DATA_DIR: /data/minidfs
+      MINIDFS_DATANODE_RPC_PORT: "9000"
+      MINIDFS_DATANODE_DATA_PORT: "9001"
+    ports:
+      - "19020:9000"
+      - "19021:9001"
+    volumes:
+      - datanode3_data:/data/minidfs
+    networks:
+      - minidfs-net
+
+volumes:
+  mysql_data:
+  datanode1_data:
+  datanode2_data:
+  datanode3_data:
+
+networks:
+  minidfs-net:
+    driver: bridge
