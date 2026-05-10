@@ -15,12 +15,27 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/25 10:40
 
+#include "cpp/pl/flux/execution/materializer.h"
 #include "cpp/pl/flux/runtime_builtin_universe.h"
 #include "cpp/pl/flux/runtime_builtin_window_helpers.h"
 
 namespace pl::flux {
 namespace {
 using namespace detail;
+
+absl::StatusOr<const TableValue*> materialized_table_ref(const TableValue& table, Value* storage) {
+    if (table.materialized) {
+        return &table;
+    }
+    Value value = Value::table_plan(table.bucket, table.plan, table.range_start, table.range_stop,
+                                    table.result_name);
+    auto materialized_or = execution::MaterializeValue(std::move(value));
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    *storage = std::move(*materialized_or);
+    return &storage->as_table();
+}
 
 absl::StatusOr<Value> builtin_elapsed(const std::vector<Value>& args) {
     auto object_or = require_object_argument(args, "elapsed");
@@ -31,6 +46,12 @@ absl::StatusOr<Value> builtin_elapsed(const std::vector<Value>& args) {
     if (!table_or.ok()) {
         return table_or.status();
     }
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    table_or = *materialized_or;
     auto time_column_or = optional_string_property(**object_or, "elapsed", "timeColumn", "_time");
     if (!time_column_or.ok()) {
         return time_column_or.status();
@@ -104,6 +125,12 @@ absl::StatusOr<Value> builtin_difference(const std::vector<Value>& args) {
     if (!table_or.ok()) {
         return table_or.status();
     }
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    table_or = *materialized_or;
     auto column_or = optional_string_property(**object_or, "difference", "column", "_value");
     if (!column_or.ok()) {
         return column_or.status();
@@ -169,6 +196,12 @@ absl::StatusOr<Value> builtin_derivative(const std::vector<Value>& args) {
     if (!table_or.ok()) {
         return table_or.status();
     }
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    table_or = *materialized_or;
     auto column_or = optional_string_property(**object_or, "derivative", "column", "_value");
     if (!column_or.ok()) {
         return column_or.status();
@@ -279,6 +312,12 @@ absl::StatusOr<Value> builtin_window(const std::vector<Value>& args) {
     if (!table_or.ok()) {
         return table_or.status();
     }
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    table_or = *materialized_or;
     auto every_or = require_object_property(**object_or, "window", "every");
     if (!every_or.ok()) {
         return every_or.status();
@@ -564,6 +603,12 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args,
     if (!table_or.ok()) {
         return table_or.status();
     }
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    table_or = *materialized_or;
     auto every_value_or = require_object_property(**object_or, "aggregateWindow", "every");
     if (!every_value_or.ok()) {
         return every_value_or.status();

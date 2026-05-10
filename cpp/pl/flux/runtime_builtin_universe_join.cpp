@@ -18,6 +18,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "cpp/pl/flux/execution/materializer.h"
 #include "cpp/pl/flux/runtime_builtin_package.h"
 #include "cpp/pl/flux/runtime_builtin_table_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_universe.h"
@@ -34,6 +35,20 @@
 namespace pl::flux {
 namespace {
 using namespace detail;
+
+absl::StatusOr<const TableValue*> materialized_table_ref(const TableValue& table, Value* storage) {
+    if (table.materialized) {
+        return &table;
+    }
+    Value value = Value::table_plan(table.bucket, table.plan, table.range_start, table.range_stop,
+                                    table.result_name);
+    auto materialized_or = execution::MaterializeValue(std::move(value));
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    *storage = std::move(*materialized_or);
+    return &storage->as_table();
+}
 
 absl::StatusOr<std::vector<std::pair<std::string, const TableValue*>>>
 require_named_table_object_property(const ObjectValue& object,
@@ -555,6 +570,19 @@ absl::StatusOr<Value> builtin_join(const std::vector<Value>& args) {
     if (tables_or->size() != 2) {
         return absl::InvalidArgumentError("join currently expects exactly two input tables");
     }
+    std::vector<Value> materialized_tables;
+    materialized_tables.reserve(tables_or->size());
+    for (auto& [name, table] : *tables_or) {
+        (void)name;
+        if (table->materialized) {
+            continue;
+        }
+        auto materialized_or = materialized_table_ref(*table, &materialized_tables.emplace_back());
+        if (!materialized_or.ok()) {
+            return materialized_or.status();
+        }
+        table = *materialized_or;
+    }
     auto on_or = string_array_property(**object_or, "join", "on");
     if (!on_or.ok()) {
         return on_or.status();
@@ -596,6 +624,18 @@ absl::StatusOr<Value> builtin_join_package_method(const std::vector<Value>& args
     if (!right_or.ok()) {
         return right_or.status();
     }
+    Value left_materialized;
+    auto left_materialized_or = materialized_table_ref(**left_or, &left_materialized);
+    if (!left_materialized_or.ok()) {
+        return left_materialized_or.status();
+    }
+    left_or = *left_materialized_or;
+    Value right_materialized;
+    auto right_materialized_or = materialized_table_ref(**right_or, &right_materialized);
+    if (!right_materialized_or.ok()) {
+        return right_materialized_or.status();
+    }
+    right_or = *right_materialized_or;
     auto on_value_or = require_object_property(**object_or, name, "on");
     if (!on_value_or.ok()) {
         return on_value_or.status();

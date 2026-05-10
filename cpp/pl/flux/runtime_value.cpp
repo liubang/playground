@@ -184,6 +184,21 @@ Value Value::table_stream(std::string bucket,
     return Value(Type::Table, std::move(table));
 }
 
+Value Value::table_plan(std::string bucket,
+                        std::shared_ptr<plan::PlanNode> plan,
+                        std::optional<std::string> range_start,
+                        std::optional<std::string> range_stop,
+                        std::optional<std::string> result_name) {
+    auto table = std::make_shared<TableValue>();
+    table->bucket = std::move(bucket);
+    table->plan = std::move(plan);
+    table->range_start = std::move(range_start);
+    table->range_stop = std::move(range_stop);
+    table->result_name = std::move(result_name);
+    table->materialized = false;
+    return Value(Type::Table, std::move(table));
+}
+
 Value Value::function(std::shared_ptr<FunctionValue> function) {
     return Value(Type::Function, std::move(function));
 }
@@ -368,7 +383,11 @@ bool TableChunk::operator==(const TableChunk& other) const {
 
 std::string TableValue::string() const {
     std::ostringstream oss;
-    oss << "<table bucket=" << quote_string(bucket) << " rows=" << rows.size();
+    oss << "<table bucket=" << quote_string(bucket);
+    if (!materialized) {
+        oss << " lazy";
+    }
+    oss << " rows=" << rows.size();
     if (table_count() > 1) {
         oss << " tables=" << table_count();
     }
@@ -385,7 +404,8 @@ std::string TableValue::string() const {
 bool TableValue::operator==(const TableValue& other) const {
     if (bucket != other.bucket || range_start != other.range_start ||
         range_stop != other.range_stop || result_name != other.result_name ||
-        rows.size() != other.rows.size() || tables != other.tables) {
+        plan != other.plan || materialized != other.materialized || rows.size() != other.rows.size() ||
+        tables != other.tables) {
         return false;
     }
     for (size_t i = 0; i < rows.size(); ++i) {
