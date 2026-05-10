@@ -372,8 +372,8 @@ public:
         return quote_identifier(identifier);
     }
 
-    [[nodiscard]] absl::StatusOr<std::string> FormatLiteral(
-        const Value& value, bool normalize_time) const override {
+    [[nodiscard]] absl::StatusOr<std::string> FormatLiteral(const Value& value,
+                                                            bool normalize_time) const override {
         return format_literal(opts_, value, normalize_time);
     }
 
@@ -579,6 +579,39 @@ SourceCapabilities MySQLSource::Capabilities() const {
         .aggregate = true,
         .distinct = true,
     };
+}
+
+absl::StatusOr<TableStatistics> MySQLSource::Statistics() const {
+    asio::io_context ctx;
+    auto conn_or = open_connection(&ctx, dsn_);
+    if (!conn_or.ok()) {
+        return conn_or.status();
+    }
+    auto result_or = execute_query(
+        &*conn_or, absl::StrCat("SELECT COUNT(*) AS row_count FROM (", query_, ") AS flux_source"),
+        "statistics query");
+    if (!result_or.ok()) {
+        return result_or.status();
+    }
+
+    TableStatistics statistics;
+    if (!result_or->rows().empty() && !result_or->rows()[0].empty()) {
+        const auto field = result_or->rows()[0].at(0);
+        if (field.is_int64()) {
+            statistics.row_count = static_cast<double>(field.as_int64());
+        } else if (field.is_uint64()) {
+            statistics.row_count = static_cast<double>(field.as_uint64());
+        }
+    }
+
+    auto schema_or = Schema();
+    if (schema_or.ok()) {
+        statistics.columns.reserve(schema_or->columns.size());
+        for (const auto& column : schema_or->columns) {
+            statistics.columns.push_back({.name = column.name});
+        }
+    }
+    return statistics;
 }
 
 absl::StatusOr<Value> MySQLSource::Scan(const ScanRequest& request) {

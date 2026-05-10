@@ -193,17 +193,17 @@
 
 官方 `universe` package 默认加载，不需要 `import`。当前顶层查询变换 builtin 继续按这个模型暴露，但不包含数据源入口。
 
-- 已拆：`runtime_builtin_universe_core.cpp`，承载 `len`、`string`、`contains` 等基础默认 builtin
-- 已拆：`runtime_builtin_universe_transform.cpp`，承载 `range`、`filter`、`map`、`keep`、`drop`、`rename`、`duplicate`、`set`、`sort`、`limit`、`tail`、`group`、`pivot`、`fill`、`union`
-- 已拆：`runtime_builtin_universe_aggregate.cpp`，承载 `sum`、`mean`、`min`、`max`、`count`、`spread`、`quantile`、`median`、`first`、`last`、`top`、`bottom`、`reduce`、`distinct`
-- 已拆：`runtime_builtin_universe_window.cpp`，承载 `window`、`aggregateWindow`、`elapsed`、`difference`、`derivative`
-- 已拆：`runtime_builtin_universe_join.cpp`，承载当前顶层 `join()`，并复用为 `join` package 的底层实现
-- 已拆：`runtime_builtin_universe_inspect.cpp`，承载 `yield`、`columns`、`keys`、`findColumn`、`findRecord` 等结果输出和检查 helper
+- 已拆：`runtime/runtime_builtin_universe_core.cpp`，承载 `len`、`string`、`contains` 等基础默认 builtin
+- 已拆：`runtime/runtime_builtin_universe_transform.cpp`，承载 `range`、`filter`、`map`、`keep`、`drop`、`rename`、`duplicate`、`set`、`sort`、`limit`、`tail`、`group`、`pivot`、`fill`、`union`
+- 已拆：`runtime/runtime_builtin_universe_aggregate.cpp`，承载 `sum`、`mean`、`min`、`max`、`count`、`spread`、`quantile`、`median`、`first`、`last`、`top`、`bottom`、`reduce`、`distinct`
+- 已拆：`runtime/runtime_builtin_universe_window.cpp`，承载 `window`、`aggregateWindow`、`elapsed`、`difference`、`derivative`
+- 已拆：`runtime/runtime_builtin_universe_join.cpp`，承载当前顶层 `join()`，并复用为 `join` package 的底层实现
+- 已拆：`runtime/runtime_builtin_universe_inspect.cpp`，承载 `yield`、`columns`、`keys`、`findColumn`、`findRecord` 等结果输出和检查 helper
 
-- 已拆：`runtime_builtin_table_helpers.h`，承载通用参数校验、表/行/chunk 变换、列投影、排序比较、pivot 辅助和 builtin 安装工具
-- 已拆：`runtime_builtin_time_helpers.h`，承载 RFC3339 解析/格式化、duration/window duration 解析、timezone/location 和窗口边界时间运算
-- 已拆：`runtime_builtin_window_helpers.h`，承载 `window` / `aggregateWindow` 专用的窗口 row/group materialization、空窗口聚合和输出行生成
-- 已拆：`runtime_builtin_aggregate_helpers.h`，承载数值聚合摘要、min/max、quantile 和按 group materialize 聚合输出行
+- 已拆：`runtime/runtime_builtin_table_helpers.h`，承载通用参数校验、表/行/chunk 变换、列投影、排序比较、pivot 辅助和 builtin 安装工具
+- 已拆：`runtime/runtime_builtin_time_helpers.h`，承载 RFC3339 解析/格式化、duration/window duration 解析、timezone/location 和窗口边界时间运算
+- 已拆：`runtime/runtime_builtin_window_helpers.h`，承载 `window` / `aggregateWindow` 专用的窗口 row/group materialization、空窗口聚合和输出行生成
+- 已拆：`runtime/runtime_builtin_aggregate_helpers.h`，承载数值聚合摘要、min/max、quantile 和按 group materialize 聚合输出行
 
 ## 建议优先补的语法
 
