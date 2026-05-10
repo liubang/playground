@@ -183,37 +183,41 @@ struct PlanNode {
     // -- Typed accessors (const & mutable) ----------------------------------
     // These provide the same ergonomics as direct field access.
 
-    const SourceScanSpec& source_scan() const { return std::get<SourceScanSpec>(spec); }
+    [[nodiscard]] const SourceScanSpec& source_scan() const {
+        return std::get<SourceScanSpec>(spec);
+    }
     SourceScanSpec& source_scan() { return std::get<SourceScanSpec>(spec); }
 
-    const RangeSpec& range() const { return std::get<RangeSpec>(spec); }
+    [[nodiscard]] const RangeSpec& range() const { return std::get<RangeSpec>(spec); }
     RangeSpec& range() { return std::get<RangeSpec>(spec); }
 
-    const FilterSpec& filter() const { return std::get<FilterSpec>(spec); }
+    [[nodiscard]] const FilterSpec& filter() const { return std::get<FilterSpec>(spec); }
     FilterSpec& filter() { return std::get<FilterSpec>(spec); }
 
-    const ProjectSpec& project() const { return std::get<ProjectSpec>(spec); }
+    [[nodiscard]] const ProjectSpec& project() const { return std::get<ProjectSpec>(spec); }
     ProjectSpec& project() { return std::get<ProjectSpec>(spec); }
 
-    const RenameSpec& rename() const { return std::get<RenameSpec>(spec); }
+    [[nodiscard]] const RenameSpec& rename() const { return std::get<RenameSpec>(spec); }
     RenameSpec& rename() { return std::get<RenameSpec>(spec); }
 
-    const LimitSpec& limit() const { return std::get<LimitSpec>(spec); }
+    [[nodiscard]] const LimitSpec& limit() const { return std::get<LimitSpec>(spec); }
     LimitSpec& limit() { return std::get<LimitSpec>(spec); }
 
-    const SortSpec& sort() const { return std::get<SortSpec>(spec); }
+    [[nodiscard]] const SortSpec& sort() const { return std::get<SortSpec>(spec); }
     SortSpec& sort() { return std::get<SortSpec>(spec); }
 
-    const GroupSpec& group() const { return std::get<GroupSpec>(spec); }
+    [[nodiscard]] const GroupSpec& group() const { return std::get<GroupSpec>(spec); }
     GroupSpec& group() { return std::get<GroupSpec>(spec); }
 
-    const AggregateSpec& aggregate() const { return std::get<AggregateSpec>(spec); }
+    [[nodiscard]] const AggregateSpec& aggregate() const { return std::get<AggregateSpec>(spec); }
     AggregateSpec& aggregate() { return std::get<AggregateSpec>(spec); }
 
-    const DistinctSpec& distinct() const { return std::get<DistinctSpec>(spec); }
+    [[nodiscard]] const DistinctSpec& distinct() const { return std::get<DistinctSpec>(spec); }
     DistinctSpec& distinct() { return std::get<DistinctSpec>(spec); }
 
-    const MaterializeSpec& materialize() const { return std::get<MaterializeSpec>(spec); }
+    [[nodiscard]] const MaterializeSpec& materialize() const {
+        return std::get<MaterializeSpec>(spec);
+    }
     MaterializeSpec& materialize() { return std::get<MaterializeSpec>(spec); }
 };
 
@@ -269,8 +273,10 @@ inline std::shared_ptr<PlanNode> MakeSourceScan(std::string source,
                                                 std::string table) {
     auto node = std::make_shared<PlanNode>();
     node->kind = PlanNodeKind::SourceScan;
-    node->spec = SourceScanSpec{std::move(source), std::move(driver), std::move(dsn),
-                                std::move(table)};
+    node->spec = SourceScanSpec{.source = std::move(source),
+                                .driver = std::move(driver),
+                                .dsn = std::move(dsn),
+                                .table = std::move(table)};
     return node;
 }
 
@@ -285,7 +291,7 @@ inline std::shared_ptr<PlanNode> MakeRange(std::shared_ptr<PlanNode> input,
                                            std::string start,
                                            std::optional<std::string> stop) {
     auto node = MakeUnaryNode(PlanNodeKind::Range, std::move(input));
-    node->spec = RangeSpec{std::move(start), std::move(stop)};
+    node->spec = RangeSpec{.start = std::move(start), .stop = std::move(stop)};
     return node;
 }
 
@@ -314,7 +320,7 @@ inline std::shared_ptr<PlanNode> MakeLimit(std::shared_ptr<PlanNode> input,
                                            int64_t n,
                                            int64_t offset) {
     auto node = MakeUnaryNode(PlanNodeKind::Limit, std::move(input));
-    node->spec = LimitSpec{n, offset};
+    node->spec = LimitSpec{.n = n, .offset = offset};
     return node;
 }
 
@@ -336,7 +342,7 @@ inline std::shared_ptr<PlanNode> MakeAggregate(std::shared_ptr<PlanNode> input,
                                                AggregateFunction fn,
                                                std::string column) {
     auto node = MakeUnaryNode(PlanNodeKind::Aggregate, std::move(input));
-    node->spec = AggregateSpec{fn, std::move(column)};
+    node->spec = AggregateSpec{.fn = fn, .column = std::move(column)};
     return node;
 }
 
@@ -350,7 +356,7 @@ inline std::shared_ptr<PlanNode> MakeMaterializeBarrier(std::shared_ptr<PlanNode
                                                         std::string reason,
                                                         std::string builtin) {
     auto node = MakeUnaryNode(PlanNodeKind::Materialize, std::move(input));
-    node->spec = MaterializeSpec{std::move(reason), std::move(builtin)};
+    node->spec = MaterializeSpec{.reason = std::move(reason), .builtin = std::move(builtin)};
     return node;
 }
 
@@ -359,7 +365,7 @@ inline std::shared_ptr<PlanNode> MakeMaterializeBarrier(
     auto node = std::make_shared<PlanNode>();
     node->kind = PlanNodeKind::Materialize;
     node->inputs = std::move(inputs);
-    node->spec = MaterializeSpec{std::move(reason), std::move(builtin)};
+    node->spec = MaterializeSpec{.reason = std::move(reason), .builtin = std::move(builtin)};
     return node;
 }
 
