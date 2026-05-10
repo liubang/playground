@@ -500,6 +500,43 @@ TEST(RuntimeExecTest, ExplainDoesNotMaterializeLazySqliteSource) {
     ASSERT_FALSE(materialized_or.ok());
 }
 
+TEST(RuntimeExecTest, PhysicalExecutionFallsBackToMemoryOperatorAfterConnectorScan) {
+    auto file = ParseFile(R"(
+        import "sqlite"
+        builtin group : (<-tables: stream[A], columns: [string]) => stream[A]
+        builtin explain : (<-tables: stream[A], ?physical: bool) => string
+
+        data = sqlite.from(
+            path: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
+        )
+            |> group(columns: ["host"])
+
+        plan = data |> explain(physical: true)
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto data_or = env.lookup("data");
+    ASSERT_TRUE(data_or.ok()) << data_or.status();
+    ASSERT_EQ(Value::Type::Table, data_or->type());
+    EXPECT_FALSE(data_or->as_table().materialized);
+
+    auto materialized_or = execution::MaterializeValue(*data_or);
+    ASSERT_TRUE(materialized_or.ok()) << materialized_or.status();
+    ASSERT_EQ(3, materialized_or->as_table().table_count());
+
+    const auto plan_or = env.lookup("plan");
+    ASSERT_TRUE(plan_or.ok()) << plan_or.status();
+    ASSERT_EQ(Value::Type::String, plan_or->type());
+    EXPECT_NE(std::string::npos,
+              plan_or->as_string().find("MemoryOperator [eager](name=\"Group\""));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("ConnectorScan [lazy]"));
+}
+
 TEST(RuntimeExecTest, ContinuousSqliteFiltersAccumulatePushdownPredicates) {
     auto file = ParseFile(R"(
         import "sqlite"
