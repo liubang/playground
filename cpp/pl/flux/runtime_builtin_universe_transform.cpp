@@ -18,7 +18,7 @@
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/ast.h"
 #include "cpp/pl/flux/execution/materializer.h"
-#include "cpp/pl/flux/optimizer/source_pushdown.h"
+#include "cpp/pl/flux/optimizer/rbo.h"
 #include "cpp/pl/flux/runtime_builtin_table_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_time_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_universe.h"
@@ -237,25 +237,29 @@ std::optional<std::vector<plan::PredicateSpec>> extract_filter_predicates(const 
 
 namespace detail {
 
-Value maybe_pushdown_source_plan(Value value) {
-    return optimizer::MaybeExecutePushedSourcePlan(std::move(value));
-}
-
 Value with_aggregate_plan(Value value,
                           const TableValue& input,
                           plan::AggregateFunction fn,
                           std::string column) {
     if (input.plan != nullptr) {
-        value.as_table_mut().plan = plan::MakeAggregate(input.plan, fn, std::move(column));
-        return maybe_pushdown_source_plan(std::move(value));
+        auto node = plan::MakeAggregate(input.plan, fn, std::move(column));
+        if (!input.materialized) {
+            return Value::table_plan(input.bucket, std::move(node), input.range_start,
+                                     input.range_stop, input.result_name);
+        }
+        value.as_table_mut().plan = std::move(node);
     }
     return value;
 }
 
 Value with_distinct_plan(Value value, const TableValue& input, std::string column) {
     if (input.plan != nullptr) {
-        value.as_table_mut().plan = plan::MakeDistinct(input.plan, std::move(column));
-        return maybe_pushdown_source_plan(std::move(value));
+        auto node = plan::MakeDistinct(input.plan, std::move(column));
+        if (!input.materialized) {
+            return Value::table_plan(input.bucket, std::move(node), input.range_start,
+                                     input.range_stop, input.result_name);
+        }
+        value.as_table_mut().plan = std::move(node);
     }
     return value;
 }
@@ -270,7 +274,7 @@ Value with_filter_plan(Value value,
     if (input.plan != nullptr) {
         if (predicates.has_value()) {
             value.as_table_mut().plan = plan::MakeFilter(input.plan, std::move(*predicates));
-            return maybe_pushdown_source_plan(std::move(value));
+            return value;
         }
         value.as_table_mut().plan =
             plan::MakeMaterializeBarrier(input.plan, "unsupported lazy builtin", "filter");
@@ -284,7 +288,6 @@ Value with_range_plan(Value value,
                       std::optional<std::string> stop) {
     if (input.plan != nullptr) {
         value.as_table_mut().plan = plan::MakeRange(input.plan, std::move(start), std::move(stop));
-        return maybe_pushdown_source_plan(std::move(value));
     }
     return value;
 }
@@ -292,7 +295,6 @@ Value with_range_plan(Value value,
 Value with_project_plan(Value value, const TableValue& input, std::vector<std::string> columns) {
     if (input.plan != nullptr) {
         value.as_table_mut().plan = plan::MakeProject(input.plan, std::move(columns));
-        return maybe_pushdown_source_plan(std::move(value));
     }
     return value;
 }
@@ -318,7 +320,7 @@ Value with_drop_plan(Value value,
         }
     }
     value.as_table_mut().plan = plan::MakeProject(input.plan, std::move(projected_columns));
-    return maybe_pushdown_source_plan(std::move(value));
+    return value;
 }
 
 Value with_rename_plan(Value value,
@@ -335,13 +337,12 @@ Value with_rename_plan(Value value,
         return value;
     }
     value.as_table_mut().plan = std::move(node);
-    return maybe_pushdown_source_plan(std::move(value));
+    return value;
 }
 
 Value with_limit_plan(Value value, const TableValue& input, int64_t n, int64_t offset) {
     if (input.plan != nullptr) {
         value.as_table_mut().plan = plan::MakeLimit(input.plan, n, offset);
-        return maybe_pushdown_source_plan(std::move(value));
     }
     return value;
 }
@@ -360,7 +361,6 @@ Value with_sort_plan(Value value,
             });
         }
         value.as_table_mut().plan = plan::MakeSort(input.plan, std::move(keys));
-        return maybe_pushdown_source_plan(std::move(value));
     }
     return value;
 }
@@ -368,7 +368,6 @@ Value with_sort_plan(Value value,
 Value with_group_plan(Value value, const TableValue& input, std::vector<std::string> columns) {
     if (input.plan != nullptr) {
         value.as_table_mut().plan = plan::MakeGroup(input.plan, std::move(columns));
-        return maybe_pushdown_source_plan(std::move(value));
     }
     return value;
 }

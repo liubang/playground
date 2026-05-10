@@ -23,7 +23,8 @@ namespace pl::flux::optimizer {
 namespace {
 
 std::shared_ptr<plan::PlanNode> SourceScanPlan() {
-    return plan::MakeSourceScan("sqlite", "sqlite", "metrics.db", "cpu");
+    return plan::MakeSourceScan("sqlite", "sqlite", "cpp/pl/flux/examples/cross_source/metrics.db",
+                                "cpu");
 }
 
 TEST(RuleBasedOptimizerTest, KeepsLogicalPlanStableWhileRecordingDeterministicTrace) {
@@ -54,6 +55,42 @@ TEST(RuleBasedOptimizerTest, KeepsLogicalPlanStableWhileRecordingDeterministicTr
                   "PushTimeRangeIntoConnectorScan",
               }),
               AppliedRuleNames(*result_or));
+    ASSERT_TRUE(result_or->pushdown_plan.has_value());
+    EXPECT_EQ(SourceScanPlan()->source_scan.table, result_or->pushdown_plan->source->table);
+    EXPECT_EQ((std::vector<std::string>{"_time", "host", "usage"}),
+              result_or->pushdown_plan->visible_columns);
+    EXPECT_EQ((std::vector<std::string>{"_time", "host", "usage"}),
+              result_or->pushdown_plan->source_columns);
+    ASSERT_TRUE(result_or->pushdown_plan->request.time_range.has_value());
+    EXPECT_EQ("2024-01-01T00:00:00Z", result_or->pushdown_plan->request.time_range->start.value());
+    EXPECT_EQ("2024-01-02T00:00:00Z", result_or->pushdown_plan->request.time_range->stop.value());
+    ASSERT_EQ(1, result_or->pushdown_plan->request.predicates.size());
+    EXPECT_EQ(connector::PredicateOp::Eq, result_or->pushdown_plan->request.predicates[0].op);
+    EXPECT_EQ("host", result_or->pushdown_plan->request.predicates[0].column);
+    EXPECT_EQ("edge-1", result_or->pushdown_plan->request.predicates[0].literal.as_string());
+    EXPECT_EQ(10, result_or->pushdown_plan->request.limit.value());
+    ASSERT_EQ(1, result_or->pushdown_plan->request.order_by.size());
+    EXPECT_EQ("usage", result_or->pushdown_plan->request.order_by[0].column);
+    EXPECT_TRUE(result_or->pushdown_plan->request.order_by[0].desc);
+    ASSERT_EQ(3, result_or->pushdown_plan->request.projection_columns.size());
+    EXPECT_EQ("usage", result_or->pushdown_plan->request.projection_columns[2].column);
+    EXPECT_EQ("usage", result_or->pushdown_plan->request.projection_columns[2].alias);
+}
+
+TEST(RuleBasedOptimizerTest, RecordsAggregatePushdownRequestWithColumnMapping) {
+    auto plan = plan::MakeAggregate(
+        plan::MakeGroup(plan::MakeRename(SourceScanPlan(), {{"usage", "cpu_usage"}}), {"host"}),
+        plan::AggregateFunction::Mean, "cpu_usage");
+
+    auto result_or = DefaultRuleBasedOptimizer().Optimize(plan);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(result_or->pushdown_plan.has_value());
+    EXPECT_EQ((std::vector<std::string>{"host"}), result_or->pushdown_plan->request.group_by);
+    ASSERT_TRUE(result_or->pushdown_plan->request.aggregate.has_value());
+    EXPECT_EQ(connector::AggregateFunction::Mean, result_or->pushdown_plan->request.aggregate->fn);
+    EXPECT_EQ("usage", result_or->pushdown_plan->request.aggregate->column);
+    EXPECT_EQ("cpu_usage", result_or->pushdown_plan->request.aggregate->alias);
 }
 
 TEST(RuleBasedOptimizerTest, TracesMaterializationBarrierWithoutPushdownRules) {
