@@ -15,8 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/15 00:47
 
-#include "cpp/pl/flux/parser.h"
 #include "cpp/pl/flux/execution/materializer.h"
+#include "cpp/pl/flux/execution/physical_executor.h"
+#include "cpp/pl/flux/parser.h"
 #include "cpp/pl/flux/runtime_builtin.h"
 #include "cpp/pl/flux/runtime_exec.h"
 #include <cstdlib>
@@ -39,6 +40,11 @@ std::optional<std::string> mysql_test_dsn() {
         return std::nullopt;
     }
     return std::string(dsn);
+}
+
+std::shared_ptr<plan::PlanNode> SqliteCpuScanPlan() {
+    return plan::MakeSourceScan("sqlite", "sqlite", "cpp/pl/flux/examples/cross_source/metrics.db",
+                                "cpu");
 }
 
 TEST(RuntimeExecTest, ExecutesVariableAndExpressionStatements) {
@@ -456,9 +462,8 @@ TEST(RuntimeExecTest, ExplainFormatsPhysicalPlan) {
     EXPECT_NE(std::string::npos, plan_or->as_string().find("ConnectorScan [lazy]"));
     EXPECT_NE(std::string::npos,
               plan_or->as_string().find("logical_prefix=[Limit, Filter, SourceScan]"));
-    EXPECT_NE(std::string::npos,
-              plan_or->as_string().find("rbo=[PushLimitIntoConnectorScan, "
-                                        "PushPredicateIntoConnectorScan]"));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("rbo=[PushLimitIntoConnectorScan, "
+                                                           "PushPredicateIntoConnectorScan]"));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("cbo=\"not-run\""));
 }
 
@@ -491,10 +496,9 @@ TEST(RuntimeExecTest, ExplainDoesNotMaterializeLazySqliteSource) {
     const auto plan_or = env.lookup("plan");
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
     ASSERT_EQ(Value::Type::String, plan_or->type());
-    EXPECT_EQ(
-        "Limit [sqlite pushdown]\n"
-        "`- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n",
-        plan_or->as_string());
+    EXPECT_EQ("Limit [sqlite pushdown]\n"
+              "`- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n",
+              plan_or->as_string());
 
     auto materialized_or = execution::MaterializeValue(*data_or);
     ASSERT_FALSE(materialized_or.ok());
@@ -535,6 +539,80 @@ TEST(RuntimeExecTest, PhysicalExecutionFallsBackToMemoryOperatorAfterConnectorSc
     EXPECT_NE(std::string::npos,
               plan_or->as_string().find("MemoryOperator [eager](name=\"Group\""));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("ConnectorScan [lazy]"));
+}
+
+TEST(RuntimeExecTest, PhysicalExecutorRunsMemorySuffixAfterConnectorScan) {
+    std::vector<plan::PredicateSpec> predicates = {
+        {.op = plan::PredicateOp::Eq,
+         .column = "region",
+         .literal = {.kind = plan::PredicateLiteralKind::String, .string_value = "west"}},
+    };
+    auto plan = plan::MakeLimit(
+        plan::MakeSort(
+            plan::MakeRename(
+                plan::MakeProject(plan::MakeFilter(plan::MakeGroup(SqliteCpuScanPlan(), {"host"}),
+                                                   std::move(predicates)),
+                                  {"host", "usage"}),
+                {{"usage", "value"}}),
+            {{.column = "value", .desc = true}}),
+        1, 0);
+
+    auto result_or = execution::PhysicalExecutor().Execute(plan);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_EQ(Value::Type::Table, result_or->type());
+    const auto& table = result_or->as_table();
+    EXPECT_TRUE(table.materialized);
+    ASSERT_EQ(2, table.rows.size());
+    ASSERT_NE(nullptr, table.rows[0]);
+    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
+    EXPECT_EQ("93.25", table.rows[0]->lookup("value")->string());
+    EXPECT_EQ(nullptr, table.rows[0]->lookup("usage"));
+    ASSERT_NE(nullptr, table.rows[1]);
+    EXPECT_EQ("\"edge-2\"", table.rows[1]->lookup("host")->string());
+    EXPECT_EQ("88", table.rows[1]->lookup("value")->string());
+}
+
+TEST(RuntimeExecTest, PhysicalExecutorRunsMemoryAggregateAcrossMaterializeBarrier) {
+    auto plan = plan::MakeAggregate(
+        plan::MakeMaterializeBarrier(plan::MakeGroup(SqliteCpuScanPlan(), {"host"}),
+                                     "unsupported lazy builtin", "test"),
+        plan::AggregateFunction::Mean, "usage");
+
+    auto result_or = execution::PhysicalExecutor().Execute(plan);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_EQ(Value::Type::Table, result_or->type());
+    const auto& table = result_or->as_table();
+    EXPECT_TRUE(table.materialized);
+    ASSERT_EQ(3, table.rows.size());
+    ASSERT_NE(nullptr, table.rows[0]);
+    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
+    EXPECT_EQ("82.375", table.rows[0]->lookup("usage")->string());
+    ASSERT_NE(nullptr, table.rows[1]);
+    EXPECT_EQ("\"edge-2\"", table.rows[1]->lookup("host")->string());
+    EXPECT_EQ("88", table.rows[1]->lookup("usage")->string());
+    ASSERT_NE(nullptr, table.rows[2]);
+    EXPECT_EQ("\"edge-3\"", table.rows[2]->lookup("host")->string());
+    EXPECT_EQ("64.25", table.rows[2]->lookup("usage")->string());
+}
+
+TEST(RuntimeExecTest, PhysicalExecutorRunsMemoryDistinctAfterConnectorScan) {
+    auto plan = plan::MakeDistinct(plan::MakeGroup(SqliteCpuScanPlan(), {"region"}), "host");
+
+    auto result_or = execution::PhysicalExecutor().Execute(plan);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_EQ(Value::Type::Table, result_or->type());
+    const auto& table = result_or->as_table();
+    EXPECT_TRUE(table.materialized);
+    ASSERT_EQ(3, table.rows.size());
+    ASSERT_NE(nullptr, table.rows[0]);
+    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
+    ASSERT_NE(nullptr, table.rows[1]);
+    EXPECT_EQ("\"edge-2\"", table.rows[1]->lookup("host")->string());
+    ASSERT_NE(nullptr, table.rows[2]);
+    EXPECT_EQ("\"edge-3\"", table.rows[2]->lookup("host")->string());
 }
 
 TEST(RuntimeExecTest, ContinuousSqliteFiltersAccumulatePushdownPredicates) {
