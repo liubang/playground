@@ -20,7 +20,7 @@
 set -euo pipefail
 
 workspace_root="${TEST_SRCDIR}/${TEST_WORKSPACE}"
-flux_bin="${workspace_root}/cpp/pl/flux/flux"
+flux_bin="${workspace_root}/cpp/pl/flux/cli/flux"
 examples_dir="${workspace_root}/cpp/pl/flux/examples/stdlib_conformance"
 checked_names=()
 
