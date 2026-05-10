@@ -1,4 +1,4 @@
-# Copyright (c) 2023 The Authors. All rights reserved.
+# Copyright (c) 2026 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,18 +13,22 @@
 # limitations under the License.
 
 # Authors: liubang (it.liubang@gmail.com)
-# Created: 2023/11/01 20:29
+# Created: 2026/05/10 23:13
 
-# load("@rules_ragel//ragel:ragel.bzl", "ragel")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load(
+    "//cpp:copts/configure_copts.bzl",
+    "COPTS_WITH_ASAN",
+    "LINKOPTS_WITH_ASAN",
+)
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//cpp/pl/flux:__subpackages__"])
 
-# ragel(
-#     name = "scanner_generated",
-#     src = "syntax/scanner.rl",
-#     data = [
-#         "syntax/unicode.rl",
-#     ],
-#     language = "c++",
-#     ragel_options = ["-I ."],
-# )
+cc_library(
+    name = "common",
+    hdrs = [
+        "compat.h",
+    ],
+    copts = COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+)
