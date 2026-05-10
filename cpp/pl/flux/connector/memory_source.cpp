@@ -33,7 +33,8 @@ TableSchema schema_from_rows(const std::vector<std::shared_ptr<ObjectValue>>& ro
         }
         for (const auto& [name, value] : row->properties) {
             if (seen.insert(name).second) {
-                schema.columns.push_back({name, value.type(), value.is_null()});
+                schema.columns.push_back(
+                    {.name = name, .type = value.type(), .nullable = value.is_null()});
             }
         }
     }

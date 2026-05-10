@@ -421,6 +421,7 @@ public:
         return RuleApplication{
             .plan = node,
             .applied = prefix_contains_any_node_kind(node, kinds_),
+            .detail = "",
         };
     }
 
@@ -490,6 +491,7 @@ public:
         return RuleApplication{
             .plan = std::move(rewritten),
             .applied = applied,
+            .detail = "",
         };
     }
 };
