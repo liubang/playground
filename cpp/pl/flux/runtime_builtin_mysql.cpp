@@ -85,6 +85,20 @@ absl::StatusOr<std::optional<std::string>> optional_string_property(const Object
     return std::optional<std::string>{value->as_string()};
 }
 
+absl::StatusOr<bool> optional_bool_property(const ObjectValue& object,
+                                            const std::string& name,
+                                            const std::string& property,
+                                            bool default_value) {
+    const Value* value = object.lookup(property);
+    if (value == nullptr) {
+        return default_value;
+    }
+    if (value->type() != Value::Type::Bool) {
+        return absl::InvalidArgumentError(absl::StrCat(name, " `", property, "` must be a bool"));
+    }
+    return value->as_bool();
+}
+
 absl::StatusOr<uint16_t> optional_port_property(const ObjectValue& object,
                                                 const std::string& name,
                                                 uint16_t default_value) {
@@ -117,9 +131,9 @@ absl::StatusOr<std::string> connection_dsn(const ObjectValue& object) {
     if (dsn_or->has_value()) {
         if (object.lookup("host") != nullptr || object.lookup("user") != nullptr ||
             object.lookup("password") != nullptr || object.lookup("database") != nullptr ||
-            object.lookup("port") != nullptr) {
+            object.lookup("port") != nullptr || object.lookup("ssl") != nullptr) {
             return absl::InvalidArgumentError(
-                "mysql.from accepts either `dsn` or host/user/password/database, not both");
+                "mysql.from accepts either `dsn` or host/user/password/database/ssl, not both");
         }
         return **dsn_or;
     }
@@ -144,9 +158,13 @@ absl::StatusOr<std::string> connection_dsn(const ObjectValue& object) {
     if (!port_or.ok()) {
         return port_or.status();
     }
+    auto ssl_or = optional_bool_property(object, "mysql.from", "ssl", false);
+    if (!ssl_or.ok()) {
+        return ssl_or.status();
+    }
 
     return absl::StrCat("mysql://", *user_or, ":", *password_or, "@", *host_or, ":", *port_or, "/",
-                        *database_or);
+                        *database_or, "?ssl=", *ssl_or ? "true" : "false");
 }
 
 absl::Status reject_raw_query_property(const ObjectValue& object) {
