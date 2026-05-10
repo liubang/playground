@@ -18,27 +18,14 @@
 #pragma once
 
 #include "absl/status/statusor.h"
-#include "cpp/pl/flux/connector/table_source.h"
+#include "cpp/pl/flux/optimizer/rbo.h"
 #include "cpp/pl/flux/plan/plan_node.h"
 #include "cpp/pl/flux/runtime_value.h"
 #include <memory>
 #include <optional>
 #include <string>
-#include <vector>
 
 namespace pl::flux::optimizer {
-
-struct PushdownPlan {
-    const plan::SourceScanSpec* source = nullptr;
-    connector::ScanRequest request;
-    std::vector<std::string> visible_columns;
-    std::vector<std::string> source_columns;
-};
-
-absl::StatusOr<std::vector<std::string>> SourceScanColumns(const plan::SourceScanSpec& source);
-
-absl::StatusOr<std::vector<std::string>> VisibleColumnsForPlan(
-    const std::shared_ptr<plan::PlanNode>& node);
 
 absl::StatusOr<PushdownPlan> BuildPushdownPlan(const std::shared_ptr<plan::PlanNode>& node);
 
@@ -49,7 +36,5 @@ std::string FormatPushdownRequest(const connector::ScanRequest& request);
 std::optional<std::string> SourcePushdownSummary(const std::shared_ptr<plan::PlanNode>& plan);
 
 absl::StatusOr<Value> ExecutePushdownPlan(const PushdownPlan& plan);
-
-Value MaybeExecutePushedSourcePlan(Value value);
 
 } // namespace pl::flux::optimizer

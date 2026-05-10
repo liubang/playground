@@ -140,6 +140,9 @@ cc_test(
         "optimizer/rbo_unit_test.cpp",
     ],
     copts = COPTS_WITH_ASAN,
+    data = [
+        "examples/cross_source/metrics.db",
+    ],
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":optimizer",
