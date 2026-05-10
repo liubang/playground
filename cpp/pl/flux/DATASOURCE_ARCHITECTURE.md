@@ -690,8 +690,8 @@ aggregate、order_by、limit/offset 等真实下推字段。
 状态：进行中。当前已新增第一版 physical plan 表示和 physical executor 骨架。
 `explain(physical: true)` 可以展示 connector scan 是否 lazy、RBO 已触发规则、CBO 当前决策状态
 和 cost placeholder。SQL source pushdown 编译已经开始从
-`runtime_builtin_universe_transform.cpp` 迁出到 `optimizer/source_pushdown`，`Materializer`
-也已经改为统一进入 `PhysicalExecutor`。
+`runtime_builtin_universe_transform.cpp` 迁出到 optimizer 层，`Materializer` 也已经改为统一进入
+`PhysicalExecutor`。
 
 当前执行路径的边界是：完整可下推的 source plan 编译成单个 `ConnectorScanOperator`；不能完整
 下推的单输入 plan 会递归拆成 connector pushed prefix 和 memory suffix，memory suffix
@@ -731,7 +731,8 @@ PhysicalPlan
   filter/project/rename/sort/limit、materialize barrier 后接 aggregate、以及 distinct fallback。
 - 新增第一版 RBO pass 管线：`PlanOptimizer`、`Rule`、`RuleBasedOptimizer`、deterministic
   rule order 和 rule trace。connector pushdown rule 当前记录 trace，materialize barrier rule
-  已执行真实 rewrite；`BuildPushdownPlan` 已统一从默认 RBO 入口进入，保证后续迁移 rule 时不用再改调用方。
+  已执行真实 rewrite；默认 RBO 结果已经直接携带 connector `PushdownPlan` 和 `ScanRequest`，
+  `BuildPushdownPlan` 只保留为兼容门面，避免执行侧再绕过 optimizer 重新拼请求。
 - logical / optimized logical / physical explain 统一改从 optimizer 入口生成；`plan` 层只保留
   logical/physical IR 数据结构和通用格式化，不再判断 pushdown eligibility 或内嵌 RBO rule 名。
 - `InsertMaterializationBarrier` 已成为第一条真实 RBO rewrite：当非 pushable unary logical node
@@ -739,12 +740,12 @@ PhysicalPlan
   仍可显式构造 barrier，RBO 会稳定记录该决策。
 - `explain(optimized: true)` 已支持 optimized logical plan 视图，会展示 RBO trace，并在可编译时
   附带 `SourcePushdown(request: ...)` 摘要。
+- runtime builtin transform 不再执行 eager pushdown shortcut；可 lazy 的 source pipeline 会保留
+  logical plan，到 materialize/output 边界再由 `PhysicalExecutor` 决定是单个 connector scan，还是
+  connector pushed prefix + memory suffix。
 
 待推进：
 
-- 将 predicate/projection/sort/limit/aggregate pushdown 和 projection pruning 从 builtin helper
-  中迁入 RBO rule 实现；当前 `BuildPushdownPlan` 已消费 RBO 输出，但 `ScanRequest` 填充仍在
-  `optimizer/source_pushdown.cpp` 的兼容 builder 中。
 - 补齐 physical plan node：`OutputSink`。
 - CBO 先定义 statistics/cost/alternative plan 接口；缺统计时明确使用 RBO 输出。
 
