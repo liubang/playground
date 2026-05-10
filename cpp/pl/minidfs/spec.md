@@ -1,872 +1,580 @@
-# C++ HDFS-like 分布式文件系统设计文档
+# MiniDFS — C++20 分布式文件系统设计规约
 
-文档版本：v0.1
+文档版本：v0.2
 项目代号：`MiniDFS`
-实现语言：C++
-元数据后端：MySQL，后续可替换为专用分布式元数据服务
-目标用户：个人开发者 / 小团队 / 内部实验性分布式存储项目
+实现语言：C++20
+构建系统：Bazel
+RPC 框架：brpc
+元数据后端：MySQL (via Boost.MySQL)
+命名空间：`pl::minidfs`
 
 ---
 
-# 1. 项目背景
+# 1. 项目定位
 
-本项目希望使用 C++ 实现一个类似 HDFS 的分布式文件系统。系统初期以**可运行、可测试、可演进**为主要目标，不追求完整兼容 Hadoop HDFS 协议。
+MiniDFS 是一个用 C++20 实现的 HDFS-like 分布式文件系统。追求：
 
-第一阶段使用 MySQL 作为元数据存储，主要保存：
+- 极致性能：零拷贝 I/O、紧凑二进制格式、连接池复用、异步流式传输。
+- 工程品质：强类型抽象、RAII 资源管理、编译期约束、无中间态设计。
+- 可演进性：MetadataStore 可插拔、Block 格式自描述、协议向前兼容。
 
-* 文件和目录元数据；
-* block 元数据；
-* block replica 分布；
-* DataNode 状态；
-* lease 信息；
-* 操作日志。
-
-未来当系统规模扩大，或者 MySQL 成为瓶颈后，可以将元数据后端替换为 FoundationDB、TiKV、etcd-like KV、自研分布式元数据服务，或者基于 Raft 的专用元数据集群。
-
-项目核心思路：
+第一版闭环：
 
 ```text
-Client 访问 NameNode 获取元数据；
-Client 直接访问 DataNode 读写数据；
-NameNode 负责 namespace 和 block 管理；
-DataNode 负责本地 block 存储；
-MySQL 作为第一版权威元数据存储；
-所有元数据访问都通过 MetadataStore 抽象隔离。
+format → start cluster → mkdir → put file → get file → ls → stat → rm
 ```
 
 ---
 
-# 2. 设计目标
+# 2. 技术栈决策
 
-## 2.1 第一版目标
+| 领域     | 选型                          | 理由                                         |
+| -------- | ----------------------------- | -------------------------------------------- |
+| 语言标准 | C++20                         | concepts、coroutines、ranges、constexpr 扩展 |
+| 构建     | Bazel                         | 已有完整工程基础设施                         |
+| RPC      | brpc                          | 高性能、支持 protobuf、已有 Bazel 集成       |
+| MySQL    | Boost.MySQL + Boost.Asio      | 异步连接池、类型安全、header-only            |
+| 序列化   | protobuf                      | 与 brpc 天然配合                             |
+| 日志     | spdlog                        | 高性能、已有依赖                             |
+| 配置     | YAML (自研轻量解析或引入依赖) |                                              |
+| 错误处理 | pl::Result (folly::Expected)  | 已有基础设施                                 |
+| 校验     | CRC32C (ISA-L)                | 硬件加速、SIMD 优化                          |
+| 压缩     | zstd / snappy                 | 已有依赖                                     |
 
-第一版的目标不是做一个完整的 HDFS，而是做出一个真正可运行的分布式文件系统最小闭环。
+---
 
-第一版需要支持：
-
-1. 启动一个 NameNode；
-2. 启动多个 DataNode；
-3. DataNode 注册到 NameNode；
-4. DataNode 定期心跳；
-5. Client 可以创建目录；
-6. Client 可以上传本地文件；
-7. 文件被切分成 block；
-8. block 被写入多个 DataNode；
-9. 元数据写入 MySQL；
-10. Client 可以读取远端文件；
-11. Client 可以列目录；
-12. Client 可以删除文件；
-13. DataNode 异常时，读请求可以切换副本；
-14. 后台可以发现副本不足并补副本。
-
-第一版最重要的闭环是：
+# 3. 架构总览
 
 ```text
-mkdir -> create file -> allocate block -> write block replicas
--> commit block -> complete file -> read file -> delete file
+                      +----------------------+
+                      |        Client        |
+                      | CLI / SDK / Library  |
+                      +----------+-----------+
+                                 |
+                                 | brpc (Metadata RPC)
+                                 |
+                      +----------v-----------+
+                      |       NameNode       |
+                      |----------------------|
+                      | NamespaceManager     |
+                      | BlockManager         |
+                      | DataNodeManager      |
+                      | LeaseManager         |
+                      | PlacementManager     |
+                      | ReplicationManager   |
+                      +----------+-----------+
+                                 |
+                                 | MetadataStore (abstract)
+                                 |
+                      +----------v-----------+
+                      |        MySQL         |
+                      | (Boost.MySQL async)  |
+                      +----------------------+
+
+      brpc (Data RPC / Block Transfer)
++------------------+  +------------------+  +------------------+
+|    DataNode 1    |  |    DataNode 2    |  |    DataNode 3    |
+|------------------|  |------------------|  |------------------|
+| LocalBlockStore  |  | LocalBlockStore  |  | LocalBlockStore  |
+| HeartbeatSender  |  | HeartbeatSender  |  | HeartbeatSender  |
+| BlockReporter    |  | BlockReporter    |  | BlockReporter    |
+| ReplicationWorker|  | ReplicationWorker|  | ReplicationWorker|
++------------------+  +------------------+  +------------------+
 ```
 
 ---
 
-## 2.2 非目标
-
-第一版不做以下能力：
-
-* 不完整兼容 Hadoop HDFS 协议；
-* 不支持 POSIX 语义；
-* 不支持随机写；
-* 不支持文件覆盖写；
-* 不支持 append；
-* 不支持 snapshot；
-* 不支持 erasure coding；
-* 不支持 NameNode Federation；
-* 不支持复杂权限系统；
-* 不支持 Kerberos；
-* 不支持跨机房副本策略；
-* 不支持 rack awareness；
-* 不支持高性能 pipeline write；
-* 不支持复杂小文件优化；
-* 不支持强一致 FUSE 挂载。
-
-这些能力后续可以做，但第一版不要做。
-
----
-
-# 3. 核心设计原则
-
-## 3.1 先做 HDFS-like，不做 HDFS-compatible
-
-本项目第一阶段不直接实现 Hadoop HDFS 协议，而是实现自己的 RPC 协议和 Client SDK。
-
-原因：
-
-1. HDFS 协议复杂；
-2. Hadoop 生态兼容成本高；
-3. 自研阶段需要快速验证核心架构；
-4. 先把分布式文件系统基本能力跑通更重要。
-
-后续如果需要对接 Hive、Spark、Trino，可以再实现：
+# 4. 目录结构
 
 ```text
-Hadoop FileSystem Adapter
-```
-
-或者通过已有协议暴露：
-
-```text
-S3-compatible Gateway
-```
-
----
-
-## 3.2 元数据与数据分离
-
-NameNode 只处理元数据和调度，不传输真实文件数据。
-
-```text
-错误设计：
-Client -> NameNode -> DataNode
-
-正确设计：
-Client -> NameNode 获取 block 位置
-Client -> DataNode 直接读写数据
-```
-
-这样可以避免 NameNode 成为数据带宽瓶颈。
-
----
-
-## 3.3 MySQL 是权威元数据存储
-
-第一版中：
-
-```text
-MySQL metadata = authoritative state
-DataNode local block = physical state
-```
-
-含义是：
-
-* 文件是否存在，以 MySQL 为准；
-* 目录结构，以 MySQL 为准；
-* block 属于哪个文件，以 MySQL 为准；
-* block 有哪些副本，以 MySQL 为准；
-* DataNode 上多余的 block，后台 GC；
-* MySQL 记录存在但 DataNode 不存在的副本，后台修正。
-
----
-
-## 3.4 MetadataStore 必须抽象
-
-不能让 NameNode 业务代码直接拼 SQL。
-
-必须有抽象层：
-
-```cpp
-class MetadataStore {
-public:
-    virtual std::unique_ptr<Transaction> begin() = 0;
-
-    virtual Inode get_inode(uint64_t inode_id) = 0;
-    virtual std::optional<Inode> get_child(uint64_t parent_id, std::string_view name) = 0;
-    virtual void create_inode(const Inode& inode) = 0;
-    virtual void update_inode(const Inode& inode) = 0;
-
-    virtual Block get_block(uint64_t block_id) = 0;
-    virtual void create_block(const Block& block) = 0;
-    virtual void update_block(const Block& block) = 0;
-
-    virtual std::vector<BlockReplica> get_replicas(uint64_t block_id) = 0;
-    virtual void upsert_replica(const BlockReplica& replica) = 0;
-
-    virtual uint64_t alloc_id(IdType type) = 0;
-
-    virtual ~MetadataStore() = default;
-};
-```
-
-第一版实现：
-
-```text
-MySQLMetadataStore
-```
-
-未来可以新增：
-
-```text
-FDBMetadataStore
-TiKVMetadataStore
-CustomMetadataStore
-```
-
-NameNode 上层逻辑不应该感知底层实现。
-
----
-
-# 4. 系统总体架构
-
-```text
-                          +----------------------+
-                          |        Client        |
-                          | CLI / SDK / Tooling  |
-                          +----------+-----------+
-                                     |
-                                     | Metadata RPC
-                                     |
-                          +----------v-----------+
-                          |       NameNode       |
-                          |----------------------|
-                          | NamespaceManager     |
-                          | BlockManager         |
-                          | DataNodeManager      |
-                          | LeaseManager         |
-                          | PlacementManager     |
-                          | ReplicationManager   |
-                          +----------+-----------+
-                                     |
-                                     | MetadataStore
-                                     |
-                          +----------v-----------+
-                          |        MySQL         |
-                          | Metadata Database    |
-                          +----------------------+
-
-        Data RPC / Block Transfer
-+------------------+     +------------------+     +------------------+
-|     DataNode     |     |     DataNode     |     |     DataNode     |
-|------------------|     |------------------|     |------------------|
-| LocalBlockStore  |     | LocalBlockStore  |     | LocalBlockStore  |
-| Heartbeat        |     | Heartbeat        |     | Heartbeat        |
-| BlockReport      |     | BlockReport      |     | BlockReport      |
-+------------------+     +------------------+     +------------------+
-```
-
----
-
-# 5. 进程模型
-
-## 5.1 NameNode
-
-NameNode 是控制面服务。
-
-职责：
-
-* 管理目录树；
-* 管理文件 inode；
-* 管理 block；
-* 管理 block replica；
-* 管理 DataNode 注册和心跳；
-* 分配写入 block；
-* 返回 block location；
-* 检测副本不足；
-* 调度副本修复；
-* 处理 lease；
-* 维护元数据一致性。
-
----
-
-## 5.2 DataNode
-
-DataNode 是数据面服务。
-
-职责：
-
-* 在本地磁盘保存 block；
-* 提供 block 写入接口；
-* 提供 block 读取接口；
-* 校验 checksum；
-* 向 NameNode 注册；
-* 向 NameNode 发送 heartbeat；
-* 向 NameNode 上报 block report；
-* 执行复制任务；
-* 执行删除任务。
-
----
-
-## 5.3 Client
-
-Client 是用户访问入口。
-
-职责：
-
-* 调用 NameNode 创建目录、创建文件、申请 block；
-* 直接向 DataNode 写 block；
-* 直接从 DataNode 读 block；
-* 提供 CLI；
-* 后续提供 SDK。
-
----
-
-# 6. 第一版功能范围
-
-第一版建议命令：
-
-```bash
-minidfs format
-minidfs namenode --config conf/namenode.yaml
-minidfs datanode --config conf/datanode.yaml
-
-minidfs mkdir /tmp
-minidfs put ./local.log /tmp/local.log
-minidfs get /tmp/local.log ./download.log
-minidfs ls /
-minidfs stat /tmp/local.log
-minidfs rm /tmp/local.log
-```
-
-第一版不需要实现完整 Shell。
-
-只要这些命令能稳定工作，就已经形成一个可用闭环。
-
----
-
-# 7. 目录结构设计
-
-推荐仓库结构：
-
-```text
-minidfs/
-├── CMakeLists.txt
-├── README.md
-├── docs/
-│   ├── design.md
-│   ├── metadata-schema.md
-│   ├── rpc-api.md
-│   └── roadmap.md
+cpp/pl/minidfs/
+├── BUILD
+├── spec.md
+├── readme.md
+│
+├── common/
+│   ├── BUILD
+│   ├── types.h              // Inode, Block, BlockReplica, DataNodeInfo, enums
+│   ├── config.h             // Configuration types
+│   ├── config.cpp
+│   ├── constants.h          // 系统常量
+│   ├── compression.h        // CompressionType enum + compress/decompress
+│   ├── compression.cpp
+│   └── checksum.h           // CRC32C utilities
 │
 ├── proto/
+│   ├── BUILD
 │   ├── common.proto
 │   ├── namenode.proto
 │   └── datanode.proto
+│
+├── metadata/
+│   ├── BUILD
+│   ├── metadata_store.h     // 纯虚接口
+│   ├── transaction.h        // Transaction 抽象
+│   ├── mysql_metadata_store.h
+│   ├── mysql_metadata_store.cpp
+│   ├── mysql_connection_pool.h
+│   ├── mysql_connection_pool.cpp
+│   └── id_allocator.h       // 批量 ID 分配
+│
+├── namenode/
+│   ├── BUILD
+│   ├── namenode_server.h
+│   ├── namenode_server.cpp
+│   ├── namenode_service_impl.h
+│   ├── namenode_service_impl.cpp
+│   ├── namespace_manager.h
+│   ├── namespace_manager.cpp
+│   ├── block_manager.h
+│   ├── block_manager.cpp
+│   ├── datanode_manager.h
+│   ├── datanode_manager.cpp
+│   ├── lease_manager.h
+│   ├── lease_manager.cpp
+│   ├── placement_manager.h
+│   ├── placement_manager.cpp
+│   ├── replication_manager.h
+│   └── replication_manager.cpp
+│
+├── datanode/
+│   ├── BUILD
+│   ├── datanode_server.h
+│   ├── datanode_server.cpp
+│   ├── datanode_service_impl.h
+│   ├── datanode_service_impl.cpp
+│   ├── local_block_store.h
+│   ├── local_block_store.cpp
+│   ├── block_format.h       // BlockHeader 定义、序列化
+│   ├── heartbeat_sender.h
+│   ├── heartbeat_sender.cpp
+│   ├── block_reporter.h
+│   ├── block_reporter.cpp
+│   ├── replication_worker.h
+│   └── replication_worker.cpp
+│
+├── client/
+│   ├── BUILD
+│   ├── dfs_client.h
+│   ├── dfs_client.cpp
+│   ├── dfs_input_stream.h
+│   ├── dfs_input_stream.cpp
+│   ├── dfs_output_stream.h
+│   └── dfs_output_stream.cpp
+│
+├── cli/
+│   ├── BUILD
+│   ├── main.cpp             // minidfs 统一入口
+│   ├── cmd_format.h/.cpp
+│   ├── cmd_namenode.h/.cpp
+│   ├── cmd_datanode.h/.cpp
+│   └── cmd_client.h/.cpp    // mkdir/put/get/ls/stat/rm
+│
+├── sql/
+│   └── schema.sql
 │
 ├── conf/
 │   ├── namenode.yaml
 │   ├── datanode.yaml
 │   └── client.yaml
 │
-├── sql/
-│   └── schema.sql
-│
-├── src/
-│   ├── common/
-│   │   ├── status.h
-│   │   ├── result.h
-│   │   ├── config.h
-│   │   ├── logging.h
-│   │   ├── time.h
-│   │   ├── checksum.h
-│   │   └── id_generator.h
-│   │
-│   ├── metadata/
-│   │   ├── metadata_store.h
-│   │   ├── mysql_metadata_store.h
-│   │   ├── mysql_metadata_store.cpp
-│   │   ├── transaction.h
-│   │   ├── mysql_transaction.h
-│   │   └── mysql_connection_pool.h
-│   │
-│   ├── namenode/
-│   │   ├── namenode_server.h
-│   │   ├── namenode_server.cpp
-│   │   ├── namespace_manager.h
-│   │   ├── namespace_manager.cpp
-│   │   ├── block_manager.h
-│   │   ├── block_manager.cpp
-│   │   ├── datanode_manager.h
-│   │   ├── datanode_manager.cpp
-│   │   ├── lease_manager.h
-│   │   ├── lease_manager.cpp
-│   │   ├── placement_manager.h
-│   │   ├── placement_manager.cpp
-│   │   ├── replication_manager.h
-│   │   └── replication_manager.cpp
-│   │
-│   ├── datanode/
-│   │   ├── datanode_server.h
-│   │   ├── datanode_server.cpp
-│   │   ├── local_block_store.h
-│   │   ├── local_block_store.cpp
-│   │   ├── heartbeat_sender.h
-│   │   ├── heartbeat_sender.cpp
-│   │   ├── block_reporter.h
-│   │   ├── block_reporter.cpp
-│   │   ├── replication_worker.h
-│   │   └── replication_worker.cpp
-│   │
-│   ├── client/
-│   │   ├── dfs_client.h
-│   │   ├── dfs_client.cpp
-│   │   ├── dfs_input_stream.h
-│   │   ├── dfs_input_stream.cpp
-│   │   ├── dfs_output_stream.h
-│   │   └── dfs_output_stream.cpp
-│   │
-│   └── tools/
-│       ├── minidfs_main.cpp
-│       ├── namenode_main.cpp
-│       ├── datanode_main.cpp
-│       └── format_main.cpp
-│
-├── tests/
-│   ├── metadata_store_test.cpp
-│   ├── namespace_manager_test.cpp
-│   ├── block_manager_test.cpp
-│   ├── local_block_store_test.cpp
-│   └── integration_test.cpp
-│
-└── docker/
-    ├── docker-compose.yaml
-    └── mysql-init.sql
+└── test/
+    ├── BUILD
+    ├── metadata_store_test.cpp
+    ├── namespace_manager_test.cpp
+    ├── block_manager_test.cpp
+    ├── local_block_store_test.cpp
+    └── integration_test.cpp
 ```
 
 ---
 
-# 8. 模块详细设计
+# 5. 核心数据模型
 
-# 8.1 NamespaceManager
+所有模型定义于 `common/types.h`，全局使用强类型 enum 和 struct。
 
-`NamespaceManager` 负责目录和文件命名空间。
-
-核心能力：
+## 5.1 Inode
 
 ```cpp
-class NamespaceManager {
-public:
-    Status mkdir(const MkdirRequest& req, MkdirResponse* resp);
-
-    Status create_file(const CreateFileRequest& req, CreateFileResponse* resp);
-
-    Status get_file_info(const GetFileInfoRequest& req, GetFileInfoResponse* resp);
-
-    Status list_status(const ListStatusRequest& req, ListStatusResponse* resp);
-
-    Status delete_path(const DeleteRequest& req, DeleteResponse* resp);
-
-    Status rename(const RenameRequest& req, RenameResponse* resp);
-
-private:
-    StatusOr<Inode> resolve_path(std::string_view path);
-    StatusOr<Inode> resolve_parent(std::string_view path);
-};
-```
-
-第一版可以暂时不做 `rename`，但接口可以预留。
-
-路径解析流程：
-
-```text
-输入路径：/a/b/c.txt
-
-1. 从 root inode = 1 开始；
-2. 查找 parent_id = 1, name = "a"；
-3. 查找 parent_id = inode(a), name = "b"；
-4. 查找 parent_id = inode(b), name = "c.txt"；
-5. 返回 inode。
-```
-
-路径解析依赖索引：
-
-```sql
-UNIQUE KEY uk_parent_name (parent_id, name)
-```
-
----
-
-# 8.2 BlockManager
-
-`BlockManager` 负责文件 block 的生命周期。
-
-核心能力：
-
-```cpp
-class BlockManager {
-public:
-    Status allocate_block(const AllocateBlockRequest& req,
-                          AllocateBlockResponse* resp);
-
-    Status commit_block(const CommitBlockRequest& req,
-                        CommitBlockResponse* resp);
-
-    Status get_block_locations(const GetBlockLocationsRequest& req,
-                               GetBlockLocationsResponse* resp);
-
-    Status mark_blocks_deleted(uint64_t inode_id);
-};
-```
-
-block 状态：
-
-```text
-ALLOCATING
-COMMITTED
-CORRUPT
-DELETED
-```
-
-block replica 状态：
-
-```text
-WRITING
-FINALIZED
-CORRUPT
-STALE
-DELETING
-DELETED
-```
-
----
-
-# 8.3 DataNodeManager
-
-`DataNodeManager` 负责 DataNode 生命周期。
-
-```cpp
-class DataNodeManager {
-public:
-    Status register_datanode(const RegisterDataNodeRequest& req,
-                             RegisterDataNodeResponse* resp);
-
-    Status heartbeat(const HeartbeatRequest& req,
-                     HeartbeatResponse* resp);
-
-    std::vector<DataNodeInfo> list_live_datanodes();
-
-    std::vector<DataNodeInfo> choose_datanodes(int replica_num,
-                                               uint64_t block_size);
-};
-```
-
-DataNode 状态：
-
-```text
-LIVE
-STALE
-DEAD
-DECOMMISSIONING
-DECOMMISSIONED
-```
-
-第一版只需要：
-
-```text
-LIVE
-DEAD
-```
-
----
-
-# 8.4 PlacementManager
-
-`PlacementManager` 负责副本放置策略。
-
-第一版策略：
-
-```text
-1. 选择 LIVE DataNode；
-2. 过滤 free_bytes < block_size 的节点；
-3. 过滤已经包含该 block 的节点；
-4. 按 used_ratio 升序；
-5. 随机打散；
-6. 选择 replication 个节点。
-```
-
-接口：
-
-```cpp
-class PlacementManager {
-public:
-    std::vector<DataNodeInfo> choose_targets(
-        const std::vector<DataNodeInfo>& candidates,
-        int replication,
-        uint64_t block_size);
-};
-```
-
-第一版不做 rack awareness。
-
----
-
-# 8.5 LeaseManager
-
-`LeaseManager` 用于控制写文件并发。
-
-第一版语义：
-
-```text
-一个文件同一时间只能有一个 writer。
-```
-
-接口：
-
-```cpp
-class LeaseManager {
-public:
-    Status create_lease(uint64_t inode_id, std::string_view client_id);
-
-    Status check_lease(uint64_t inode_id, std::string_view client_id);
-
-    Status renew_lease(uint64_t inode_id, std::string_view client_id);
-
-    Status close_lease(uint64_t inode_id, std::string_view client_id);
-
-    Status expire_leases();
-};
-```
-
-第一版可以先简单实现：
-
-* create 文件时创建 lease；
-* commit block 时校验 lease；
-* complete 文件时关闭 lease；
-* 暂不做复杂 lease recovery。
-
----
-
-# 8.6 ReplicationManager
-
-`ReplicationManager` 负责副本修复。
-
-第一版可以简单做：
-
-```text
-每隔 30 秒扫描一次 blocks；
-找出 finalized replica 数量 < desired_replica 的 block；
-选择新的 DataNode；
-下发 replicate block 命令。
-```
-
-接口：
-
-```cpp
-class ReplicationManager {
-public:
-    void start();
-    void stop();
-
-private:
-    void scan_once();
-    void schedule_replication(uint64_t block_id);
-};
-```
-
----
-
-# 8.7 LocalBlockStore
-
-DataNode 本地 block 存储。
-
-```cpp
-class LocalBlockStore {
-public:
-    Status write_block(uint64_t block_id,
-                       uint64_t generation_stamp,
-                       const char* data,
-                       size_t size);
-
-    Status finalize_block(uint64_t block_id,
-                          uint64_t generation_stamp);
-
-    Status read_block(uint64_t block_id,
-                      uint64_t offset,
-                      uint64_t length,
-                      std::string* output);
-
-    Status delete_block(uint64_t block_id);
-
-    StatusOr<BlockLocalInfo> get_block_info(uint64_t block_id);
-
-    std::vector<BlockLocalInfo> scan_all_blocks();
-};
-```
-
-DataNode 本地目录：
-
-```text
-/data/minidfs/
-├── current/
-│   ├── blk_1001
-│   ├── blk_1001.meta
-│   ├── blk_1002
-│   └── blk_1002.meta
-├── tmp/
-│   ├── writing_blk_1003
-│   └── writing_blk_1003.meta
-└── trash/
-```
-
-写入流程：
-
-```text
-1. 写 tmp/writing_blk_xxx；
-2. 写 tmp/writing_blk_xxx.meta；
-3. fsync data；
-4. fsync meta；
-5. rename 到 current/blk_xxx；
-6. rename meta 到 current/blk_xxx.meta；
-7. 返回成功。
-```
-
----
-
-# 9. 元数据模型
-
-# 9.1 Inode 模型
-
-文件和目录统一用 inode 表示。
-
-```cpp
-enum class InodeType {
-    DIRECTORY = 1,
-    FILE = 2,
+namespace pl::minidfs {
+
+enum class InodeType : uint8_t {
+    kDirectory = 1,
+    kFile      = 2,
 };
 
-enum class FileState {
-    NORMAL = 0,
-    UNDER_CONSTRUCTION = 1,
-    DELETED = 2,
+enum class FileState : uint8_t {
+    kNormal           = 0,
+    kUnderConstruction = 1,
+    kDeleted          = 2,
 };
 
 struct Inode {
-    uint64_t inode_id;
-    InodeType type;
-    uint64_t parent_id;
+    uint64_t    inode_id;
+    InodeType   type;
+    uint64_t    parent_id;
     std::string name;
 
     std::string owner;
     std::string group;
-    uint32_t permission;
+    uint32_t    permission;
 
-    uint64_t length;
-    uint32_t replication;
-    uint64_t block_size;
+    uint64_t    length;       // 文件总长度（目录为 0）
+    uint32_t    replication;
+    uint64_t    block_size;
 
-    FileState state;
+    FileState   state;
 
-    uint64_t ctime_ms;
-    uint64_t mtime_ms;
-    uint64_t version;
+    uint64_t    ctime_ms;
+    uint64_t    mtime_ms;
+    uint64_t    version;
 };
+
+} // namespace pl::minidfs
 ```
 
----
-
-# 9.2 Block 模型
+## 5.2 Block 元数据
 
 ```cpp
-enum class BlockState {
-    ALLOCATING = 0,
-    COMMITTED = 1,
-    CORRUPT = 2,
-    DELETED = 3,
+enum class BlockState : uint8_t {
+    kAllocating = 0,
+    kCommitted  = 1,
+    kCorrupt    = 2,
+    kDeleted    = 3,
 };
 
-struct Block {
-    uint64_t block_id;
-    uint64_t inode_id;
-    uint32_t block_index;
-    uint64_t generation_stamp;
-    uint64_t length;
+struct BlockMeta {
+    uint64_t   block_id;
+    uint64_t   inode_id;
+    uint32_t   block_index;
+    uint64_t   generation_stamp;
+    uint64_t   length;
     BlockState state;
-    uint32_t desired_replica;
-    uint64_t ctime_ms;
-    uint64_t mtime_ms;
+    uint32_t   desired_replica;
+    uint64_t   ctime_ms;
+    uint64_t   mtime_ms;
 };
 ```
 
----
-
-# 9.3 BlockReplica 模型
+## 5.3 Block Replica
 
 ```cpp
-enum class ReplicaState {
-    WRITING = 0,
-    FINALIZED = 1,
-    CORRUPT = 2,
-    STALE = 3,
-    DELETING = 4,
-    DELETED = 5,
+enum class ReplicaState : uint8_t {
+    kWriting   = 0,
+    kFinalized = 1,
+    kCorrupt   = 2,
+    kStale     = 3,
+    kDeleting  = 4,
+    kDeleted   = 5,
 };
 
 struct BlockReplica {
-    uint64_t block_id;
-    uint64_t datanode_id;
-    uint64_t storage_id;
+    uint64_t     block_id;
+    uint64_t     datanode_id;
+    uint64_t     storage_id;
     ReplicaState state;
-    uint64_t length;
-    uint64_t generation_stamp;
-    uint64_t report_time_ms;
+    uint64_t     length;
+    uint64_t     generation_stamp;
+    uint64_t     report_time_ms;
 };
 ```
 
----
-
-# 9.4 DataNode 模型
+## 5.4 DataNode 信息
 
 ```cpp
-enum class DataNodeState {
-    LIVE = 0,
-    STALE = 1,
-    DEAD = 2,
-    DECOMMISSIONING = 3,
-    DECOMMISSIONED = 4,
+enum class DataNodeState : uint8_t {
+    kLive            = 0,
+    kStale           = 1,
+    kDead            = 2,
+    kDecommissioning = 3,
+    kDecommissioned  = 4,
 };
 
 struct DataNodeInfo {
-    uint64_t datanode_id;
-    std::string uuid;
-    std::string hostname;
-    std::string ip;
-    uint32_t rpc_port;
-    uint32_t data_port;
-
-    std::string rack;
-
+    uint64_t      datanode_id;
+    std::string   uuid;
+    std::string   hostname;
+    std::string   ip;
+    uint32_t      rpc_port;
+    uint32_t      data_port;
+    std::string   rack;
     DataNodeState state;
-
-    uint64_t capacity_bytes;
-    uint64_t used_bytes;
-    uint64_t free_bytes;
-
-    uint64_t last_heartbeat_ms;
+    uint64_t      capacity_bytes;
+    uint64_t      used_bytes;
+    uint64_t      free_bytes;
+    uint64_t      last_heartbeat_ms;
 };
 ```
 
 ---
 
-# 10. MySQL 表结构
+# 6. Block 本地存储格式
 
-# 10.1 `inodes`
+采用**单文件自描述格式**：每个 block 是一个 `blk_<block_id>` 文件，包含 header + data。
+
+## 6.1 BlockHeader（二进制、POD）
+
+```cpp
+namespace pl::minidfs {
+
+static constexpr uint32_t kBlockMagic     = 0x4D444653; // "MDFS"
+static constexpr uint32_t kBlockVersion   = 1;
+static constexpr uint32_t kMaxChunkCount  = 256;
+
+#pragma pack(push, 1)
+struct BlockHeader {
+    uint32_t magic;                           // 魔数 kBlockMagic
+    uint32_t version;                         // 格式版本
+    uint64_t block_id;                        // block ID
+    uint64_t inode_id;                        // 所属文件 inode
+    uint32_t block_index;                     // 文件内 block 序号
+    uint64_t generation_stamp;                // 版本戳，用于 stale 检测
+    uint64_t length;                          // 有效数据长度（压缩前）
+    uint32_t checksum;                        // 整个 data 区域的 CRC32C
+    CompressionType compress_type;            // 压缩类型
+    uint32_t chunk_size;                      // 压缩分块大小（0=不分块）
+    uint32_t chunk_count;                     // 实际 chunk 数量
+    uint32_t chunk_offsets[kMaxChunkCount];   // 每个 chunk 在 data 区的偏移
+    uint32_t chunk_checksums[kMaxChunkCount]; // 每个 chunk 的 CRC32C
+    uint8_t  reserved[32];                    // 预留扩展
+};
+#pragma pack(pop)
+
+static_assert(std::is_trivially_copyable_v<BlockHeader>);
+
+} // namespace pl::minidfs
+```
+
+## 6.2 文件布局
+
+```text
++--------------------+
+| BlockHeader (fixed)|
++--------------------+
+| Data (variable)    |
+| chunk_0 bytes ...  |
+| chunk_1 bytes ...  |
+| ...                |
++--------------------+
+```
+
+## 6.3 DataNode 本地目录结构
+
+```text
+<data_dir>/
+├── current/          // finalized blocks
+│   ├── blk_1001
+│   ├── blk_1002
+│   └── ...
+├── tmp/              // writing blocks (未 finalize)
+│   ├── blk_1003
+│   └── ...
+└── trash/            // 待删除 blocks（延迟 GC）
+    └── ...
+```
+
+写入流程：
+
+1. 写入 `tmp/blk_<id>`（header + data，逐 chunk 写入）
+2. fsync
+3. rename 到 `current/blk_<id>`
+4. 返回成功
+
+---
+
+# 7. MetadataStore 抽象
+
+```cpp
+namespace pl::minidfs {
+
+class Transaction {
+public:
+    virtual ~Transaction() = default;
+    virtual pl::Result<pl::Void> commit() = 0;
+    virtual void rollback() = 0;
+};
+
+class MetadataStore {
+public:
+    virtual ~MetadataStore() = default;
+
+    // Transaction
+    virtual pl::Result<std::unique_ptr<Transaction>> begin_transaction() = 0;
+
+    // Inode
+    virtual pl::Result<Inode> get_inode(uint64_t inode_id) = 0;
+    virtual pl::Result<std::optional<Inode>> get_child(uint64_t parent_id,
+                                                        std::string_view name) = 0;
+    virtual pl::Result<std::vector<Inode>> list_children(uint64_t parent_id) = 0;
+    virtual pl::Result<pl::Void> create_inode(const Inode& inode) = 0;
+    virtual pl::Result<pl::Void> update_inode(const Inode& inode) = 0;
+    virtual pl::Result<pl::Void> delete_inode(uint64_t inode_id) = 0;
+
+    // Block
+    virtual pl::Result<BlockMeta> get_block(uint64_t block_id) = 0;
+    virtual pl::Result<std::vector<BlockMeta>> get_blocks_by_inode(uint64_t inode_id) = 0;
+    virtual pl::Result<pl::Void> create_block(const BlockMeta& block) = 0;
+    virtual pl::Result<pl::Void> update_block(const BlockMeta& block) = 0;
+
+    // Replica
+    virtual pl::Result<std::vector<BlockReplica>> get_replicas(uint64_t block_id) = 0;
+    virtual pl::Result<pl::Void> upsert_replica(const BlockReplica& replica) = 0;
+    virtual pl::Result<pl::Void> delete_replicas_by_block(uint64_t block_id) = 0;
+
+    // DataNode
+    virtual pl::Result<DataNodeInfo> get_datanode(uint64_t datanode_id) = 0;
+    virtual pl::Result<std::optional<DataNodeInfo>> get_datanode_by_uuid(
+        std::string_view uuid) = 0;
+    virtual pl::Result<std::vector<DataNodeInfo>> list_datanodes_by_state(
+        DataNodeState state) = 0;
+    virtual pl::Result<pl::Void> upsert_datanode(const DataNodeInfo& info) = 0;
+
+    // Lease
+    virtual pl::Result<pl::Void> create_lease(uint64_t lease_id, uint64_t inode_id,
+                                               std::string_view client_id,
+                                               uint64_t expire_time_ms) = 0;
+    virtual pl::Result<bool> check_lease(uint64_t inode_id,
+                                          std::string_view client_id) = 0;
+    virtual pl::Result<pl::Void> renew_lease(uint64_t inode_id,
+                                              uint64_t new_expire_ms) = 0;
+    virtual pl::Result<pl::Void> close_lease(uint64_t inode_id) = 0;
+    virtual pl::Result<pl::Void> expire_leases(uint64_t now_ms) = 0;
+
+    // ID Allocation
+    virtual pl::Result<uint64_t> alloc_id(std::string_view name, uint64_t count = 1) = 0;
+
+    // OpLog
+    virtual pl::Result<pl::Void> write_oplog(std::string_view op_type,
+                                              uint64_t target_inode_id,
+                                              std::string_view request_id,
+                                              std::string_view payload_json) = 0;
+    virtual pl::Result<bool> check_request_id(std::string_view request_id) = 0;
+};
+
+} // namespace pl::minidfs
+```
+
+第一版实现 `MySQLMetadataStore`，通过 Boost.MySQL 异步连接池访问 MySQL。
+
+---
+
+# 8. MySQL Schema
 
 ```sql
+CREATE DATABASE IF NOT EXISTS minidfs;
+USE minidfs;
+
+-- Inode 表
 CREATE TABLE inodes (
     inode_id        BIGINT UNSIGNED NOT NULL PRIMARY KEY,
-    type            TINYINT NOT NULL,
+    type            TINYINT UNSIGNED NOT NULL,
     parent_id       BIGINT UNSIGNED NULL,
     name            VARBINARY(255) NOT NULL,
-
     owner           VARCHAR(64) NOT NULL DEFAULT '',
     group_name      VARCHAR(64) NOT NULL DEFAULT '',
-    permission      INT NOT NULL DEFAULT 0755,
-
+    permission      INT UNSIGNED NOT NULL DEFAULT 0755,
     length          BIGINT UNSIGNED NOT NULL DEFAULT 0,
-    replication     INT NOT NULL DEFAULT 3,
+    replication     INT UNSIGNED NOT NULL DEFAULT 3,
     block_size      BIGINT UNSIGNED NOT NULL DEFAULT 134217728,
-
-    file_state      TINYINT NOT NULL DEFAULT 0,
-
+    file_state      TINYINT UNSIGNED NOT NULL DEFAULT 0,
     ctime_ms        BIGINT UNSIGNED NOT NULL,
     mtime_ms        BIGINT UNSIGNED NOT NULL,
     version         BIGINT UNSIGNED NOT NULL DEFAULT 0,
-
     UNIQUE KEY uk_parent_name (parent_id, name),
     KEY idx_parent (parent_id),
     KEY idx_state (file_state)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Block 表
+CREATE TABLE blocks (
+    block_id          BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+    inode_id          BIGINT UNSIGNED NOT NULL,
+    block_index       INT UNSIGNED NOT NULL,
+    generation_stamp  BIGINT UNSIGNED NOT NULL,
+    length            BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    state             TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    desired_replica   INT UNSIGNED NOT NULL DEFAULT 3,
+    ctime_ms          BIGINT UNSIGNED NOT NULL,
+    mtime_ms          BIGINT UNSIGNED NOT NULL,
+    UNIQUE KEY uk_inode_block_index (inode_id, block_index),
+    KEY idx_inode (inode_id),
+    KEY idx_state (state)
 ) ENGINE=InnoDB;
-```
 
-根目录初始化：
+-- Block Replica 表
+CREATE TABLE block_replicas (
+    block_id          BIGINT UNSIGNED NOT NULL,
+    datanode_id       BIGINT UNSIGNED NOT NULL,
+    storage_id        BIGINT UNSIGNED NOT NULL,
+    state             TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    length            BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    generation_stamp  BIGINT UNSIGNED NOT NULL,
+    report_time_ms    BIGINT UNSIGNED NOT NULL,
+    PRIMARY KEY (block_id, datanode_id, storage_id),
+    KEY idx_datanode (datanode_id),
+    KEY idx_state (state)
+) ENGINE=InnoDB;
 
-```sql
+-- DataNode 表
+CREATE TABLE datanodes (
+    datanode_id       BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+    uuid              VARCHAR(128) NOT NULL,
+    hostname          VARCHAR(255) NOT NULL,
+    ip                VARCHAR(64) NOT NULL,
+    rpc_port          INT UNSIGNED NOT NULL,
+    data_port         INT UNSIGNED NOT NULL,
+    rack              VARCHAR(255) NOT NULL DEFAULT '/default-rack',
+    state             TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    capacity_bytes    BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    used_bytes        BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    free_bytes        BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    last_heartbeat_ms BIGINT UNSIGNED NOT NULL,
+    UNIQUE KEY uk_uuid (uuid),
+    KEY idx_state (state),
+    KEY idx_heartbeat (last_heartbeat_ms)
+) ENGINE=InnoDB;
+
+-- Lease 表
+CREATE TABLE leases (
+    lease_id          BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+    inode_id          BIGINT UNSIGNED NOT NULL,
+    client_id         VARCHAR(128) NOT NULL,
+    state             TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    active_flag       TINYINT UNSIGNED NOT NULL DEFAULT 1,
+    expire_time_ms    BIGINT UNSIGNED NOT NULL,
+    ctime_ms          BIGINT UNSIGNED NOT NULL,
+    mtime_ms          BIGINT UNSIGNED NOT NULL,
+    UNIQUE KEY uk_inode_active (inode_id, active_flag),
+    KEY idx_expire (expire_time_ms)
+) ENGINE=InnoDB;
+
+-- ID 分配器
+CREATE TABLE id_allocators (
+    name        VARCHAR(64) NOT NULL PRIMARY KEY,
+    next_id     BIGINT UNSIGNED NOT NULL,
+    step        BIGINT UNSIGNED NOT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO id_allocators VALUES ('inode_id', 1000, 1000);
+INSERT INTO id_allocators VALUES ('block_id', 1000000, 10000);
+INSERT INTO id_allocators VALUES ('lease_id', 1000, 1000);
+INSERT INTO id_allocators VALUES ('datanode_id', 1000, 1000);
+INSERT INTO id_allocators VALUES ('generation_stamp', 1, 10000);
+
+-- 操作日志
+CREATE TABLE metadata_oplog (
+    op_id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    op_type          VARCHAR(64) NOT NULL,
+    target_inode_id  BIGINT UNSIGNED NULL,
+    request_id       VARCHAR(128) NOT NULL,
+    payload_json     JSON NOT NULL,
+    ctime_ms         BIGINT UNSIGNED NOT NULL,
+    UNIQUE KEY uk_request_id (request_id),
+    KEY idx_inode (target_inode_id),
+    KEY idx_ctime (ctime_ms)
+) ENGINE=InnoDB;
+
+-- 根目录初始化
 INSERT INTO inodes (
     inode_id, type, parent_id, name,
     owner, group_name, permission,
@@ -876,229 +584,297 @@ INSERT INTO inodes (
     1, 1, NULL, '',
     'root', 'root', 0755,
     0, 3, 134217728,
-    0, 0, 0, 0
+    0, UNIX_TIMESTAMP(NOW()) * 1000, UNIX_TIMESTAMP(NOW()) * 1000, 0
 );
 ```
 
 ---
 
-# 10.2 `blocks`
+# 9. RPC 协议 (protobuf + brpc)
 
-```sql
-CREATE TABLE blocks (
-    block_id          BIGINT UNSIGNED NOT NULL PRIMARY KEY,
-    inode_id          BIGINT UNSIGNED NOT NULL,
-    block_index       INT UNSIGNED NOT NULL,
-
-    generation_stamp  BIGINT UNSIGNED NOT NULL,
-    length            BIGINT UNSIGNED NOT NULL DEFAULT 0,
-
-    state             TINYINT NOT NULL DEFAULT 0,
-    desired_replica   INT NOT NULL DEFAULT 3,
-
-    ctime_ms          BIGINT UNSIGNED NOT NULL,
-    mtime_ms          BIGINT UNSIGNED NOT NULL,
-
-    UNIQUE KEY uk_file_block_index (inode_id, block_index),
-    KEY idx_inode (inode_id),
-    KEY idx_state (state)
-) ENGINE=InnoDB;
-```
-
----
-
-# 10.3 `block_replicas`
-
-```sql
-CREATE TABLE block_replicas (
-    block_id          BIGINT UNSIGNED NOT NULL,
-    datanode_id       BIGINT UNSIGNED NOT NULL,
-    storage_id        BIGINT UNSIGNED NOT NULL,
-
-    state             TINYINT NOT NULL DEFAULT 0,
-    length            BIGINT UNSIGNED NOT NULL DEFAULT 0,
-    generation_stamp  BIGINT UNSIGNED NOT NULL,
-    report_time_ms    BIGINT UNSIGNED NOT NULL,
-
-    PRIMARY KEY (block_id, datanode_id, storage_id),
-    KEY idx_datanode (datanode_id),
-    KEY idx_state (state)
-) ENGINE=InnoDB;
-```
-
----
-
-# 10.4 `datanodes`
-
-```sql
-CREATE TABLE datanodes (
-    datanode_id       BIGINT UNSIGNED NOT NULL PRIMARY KEY,
-    uuid              VARCHAR(128) NOT NULL,
-    hostname          VARCHAR(255) NOT NULL,
-    ip                VARCHAR(64) NOT NULL,
-    rpc_port          INT NOT NULL,
-    data_port         INT NOT NULL,
-
-    rack              VARCHAR(255) NOT NULL DEFAULT '/default-rack',
-
-    state             TINYINT NOT NULL DEFAULT 0,
-
-    capacity_bytes    BIGINT UNSIGNED NOT NULL DEFAULT 0,
-    used_bytes        BIGINT UNSIGNED NOT NULL DEFAULT 0,
-    free_bytes        BIGINT UNSIGNED NOT NULL DEFAULT 0,
-
-    last_heartbeat_ms BIGINT UNSIGNED NOT NULL,
-
-    UNIQUE KEY uk_uuid (uuid),
-    KEY idx_state (state),
-    KEY idx_heartbeat (last_heartbeat_ms)
-) ENGINE=InnoDB;
-```
-
----
-
-# 10.5 `leases`
-
-```sql
-CREATE TABLE leases (
-    lease_id          BIGINT UNSIGNED NOT NULL PRIMARY KEY,
-    inode_id          BIGINT UNSIGNED NOT NULL,
-    client_id         VARCHAR(128) NOT NULL,
-
-    state             TINYINT NOT NULL DEFAULT 0,
-    active_flag       TINYINT NOT NULL DEFAULT 1,
-
-    expire_time_ms    BIGINT UNSIGNED NOT NULL,
-    ctime_ms          BIGINT UNSIGNED NOT NULL,
-    mtime_ms          BIGINT UNSIGNED NOT NULL,
-
-    UNIQUE KEY uk_inode_active (inode_id, active_flag),
-    KEY idx_expire (expire_time_ms)
-) ENGINE=InnoDB;
-```
-
----
-
-# 10.6 `id_allocators`
-
-```sql
-CREATE TABLE id_allocators (
-    name        VARCHAR(64) NOT NULL PRIMARY KEY,
-    next_id     BIGINT UNSIGNED NOT NULL,
-    step        BIGINT UNSIGNED NOT NULL
-) ENGINE=InnoDB;
-```
-
-初始化：
-
-```sql
-INSERT INTO id_allocators VALUES ('inode_id', 1000, 1000);
-INSERT INTO id_allocators VALUES ('block_id', 1000000, 10000);
-INSERT INTO id_allocators VALUES ('lease_id', 1000, 1000);
-INSERT INTO id_allocators VALUES ('datanode_id', 1000, 1000);
-INSERT INTO id_allocators VALUES ('generation_stamp', 1, 10000);
-```
-
----
-
-# 10.7 `metadata_oplog`
-
-```sql
-CREATE TABLE metadata_oplog (
-    op_id            BIGINT UNSIGNED NOT NULL PRIMARY KEY,
-    op_type          VARCHAR(64) NOT NULL,
-    target_inode_id  BIGINT UNSIGNED NULL,
-    request_id       VARCHAR(128) NOT NULL,
-    payload_json     JSON NOT NULL,
-    ctime_ms         BIGINT UNSIGNED NOT NULL,
-
-    UNIQUE KEY uk_request_id (request_id),
-    KEY idx_inode (target_inode_id),
-    KEY idx_ctime (ctime_ms)
-) ENGINE=InnoDB;
-```
-
-`metadata_oplog` 第一版可以只写，不消费。后续用于：
-
-* 审计；
-* debug；
-* 元数据迁移；
-* 双写校验；
-* 回放恢复。
-
----
-
-# 11. RPC API 设计
-
-# 11.1 Common
+## 9.1 common.proto
 
 ```protobuf
 syntax = "proto3";
+package pl.minidfs;
 
-package minidfs;
+option cc_generic_services = true;
 
-message Status {
-  int32 code = 1;
-  string message = 2;
+message RequestHeader {
+    string request_id = 1;
+    string client_id = 2;
+    string user = 3;
+}
+
+message RpcStatus {
+    int32  code = 1;
+    string message = 2;
 }
 
 message DataNodeEndpoint {
-  uint64 datanode_id = 1;
-  string host = 2;
-  uint32 data_port = 3;
+    uint64 datanode_id = 1;
+    string host = 2;
+    uint32 data_port = 3;
 }
 
 message LocatedBlock {
-  uint64 block_id = 1;
-  uint64 generation_stamp = 2;
-  uint64 offset = 3;
-  uint64 length = 4;
-  repeated DataNodeEndpoint locations = 5;
+    uint64 block_id = 1;
+    uint64 generation_stamp = 2;
+    uint64 offset = 3;
+    uint64 length = 4;
+    repeated DataNodeEndpoint locations = 5;
+}
+
+message FileStatus {
+    uint64 inode_id = 1;
+    string path = 2;
+    bool   is_dir = 3;
+    uint64 length = 4;
+    uint32 replication = 5;
+    uint64 block_size = 6;
+    uint64 mtime_ms = 7;
+    string owner = 8;
+    string group = 9;
+    uint32 permission = 10;
 }
 ```
 
----
-
-# 11.2 NameNodeService
+## 9.2 namenode.proto
 
 ```protobuf
+syntax = "proto3";
+package pl.minidfs;
+
+import "common.proto";
+
+option cc_generic_services = true;
+
+// --- Namespace ---
+message MkdirRequest {
+    RequestHeader header = 1;
+    string path = 2;
+    uint32 permission = 3;
+    bool   create_parent = 4;
+}
+message MkdirResponse { RpcStatus status = 1; }
+
+message CreateFileRequest {
+    RequestHeader header = 1;
+    string path = 2;
+    uint32 replication = 3;
+    uint64 block_size = 4;
+    bool   overwrite = 5;
+}
+message CreateFileResponse {
+    RpcStatus status = 1;
+    uint64    inode_id = 2;
+}
+
+message CompleteFileRequest {
+    RequestHeader header = 1;
+    string path = 2;
+}
+message CompleteFileResponse { RpcStatus status = 1; }
+
+message OpenFileRequest {
+    RequestHeader header = 1;
+    string path = 2;
+}
+message OpenFileResponse {
+    RpcStatus status = 1;
+    uint64    length = 2;
+    repeated LocatedBlock blocks = 3;
+}
+
+message ListStatusRequest {
+    RequestHeader header = 1;
+    string path = 2;
+}
+message ListStatusResponse {
+    RpcStatus status = 1;
+    repeated FileStatus entries = 2;
+}
+
+message GetFileInfoRequest {
+    RequestHeader header = 1;
+    string path = 2;
+}
+message GetFileInfoResponse {
+    RpcStatus  status = 1;
+    FileStatus file_status = 2;
+}
+
+message DeleteRequest {
+    RequestHeader header = 1;
+    string path = 2;
+    bool   recursive = 3;
+}
+message DeleteResponse { RpcStatus status = 1; }
+
+// --- Block ---
+message AllocateBlockRequest {
+    RequestHeader header = 1;
+    string path = 2;
+}
+message AllocateBlockResponse {
+    RpcStatus    status = 1;
+    LocatedBlock block = 2;
+}
+
+message CommitBlockRequest {
+    RequestHeader header = 1;
+    uint64 block_id = 2;
+    uint64 length = 3;
+    uint64 generation_stamp = 4;
+    repeated uint64 succeeded_datanodes = 5;
+}
+message CommitBlockResponse { RpcStatus status = 1; }
+
+// --- DataNode Registration & Heartbeat ---
+message RegisterDataNodeRequest {
+    string uuid = 1;
+    string hostname = 2;
+    string ip = 3;
+    uint32 rpc_port = 4;
+    uint32 data_port = 5;
+    uint64 capacity_bytes = 6;
+    uint64 used_bytes = 7;
+}
+message RegisterDataNodeResponse {
+    RpcStatus status = 1;
+    uint64    datanode_id = 2;
+}
+
+message HeartbeatRequest {
+    uint64 datanode_id = 1;
+    uint64 capacity_bytes = 2;
+    uint64 used_bytes = 3;
+    uint64 free_bytes = 4;
+    uint32 block_count = 5;
+}
+
+message DataNodeCommand {
+    enum Type {
+        NONE = 0;
+        DELETE_BLOCK = 1;
+        REPLICATE_BLOCK = 2;
+    }
+    Type   type = 1;
+    uint64 block_id = 2;
+    uint64 generation_stamp = 3;
+    repeated DataNodeEndpoint targets = 4;
+}
+
+message HeartbeatResponse {
+    RpcStatus status = 1;
+    repeated DataNodeCommand commands = 2;
+}
+
+message BlockReportEntry {
+    uint64 block_id = 1;
+    uint64 generation_stamp = 2;
+    uint64 length = 3;
+}
+
+message BlockReportRequest {
+    uint64 datanode_id = 1;
+    repeated BlockReportEntry blocks = 2;
+}
+message BlockReportResponse {
+    RpcStatus status = 1;
+    repeated uint64 blocks_to_delete = 2;
+}
+
+// --- Service ---
 service NameNodeService {
-  rpc Mkdir(MkdirRequest) returns (MkdirResponse);
-  rpc CreateFile(CreateFileRequest) returns (CreateFileResponse);
-  rpc AllocateBlock(AllocateBlockRequest) returns (AllocateBlockResponse);
-  rpc CommitBlock(CommitBlockRequest) returns (CommitBlockResponse);
-  rpc CompleteFile(CompleteFileRequest) returns (CompleteFileResponse);
+    rpc Mkdir(MkdirRequest) returns (MkdirResponse);
+    rpc CreateFile(CreateFileRequest) returns (CreateFileResponse);
+    rpc AllocateBlock(AllocateBlockRequest) returns (AllocateBlockResponse);
+    rpc CommitBlock(CommitBlockRequest) returns (CommitBlockResponse);
+    rpc CompleteFile(CompleteFileRequest) returns (CompleteFileResponse);
 
-  rpc OpenFile(OpenFileRequest) returns (OpenFileResponse);
-  rpc ListStatus(ListStatusRequest) returns (ListStatusResponse);
-  rpc GetFileInfo(GetFileInfoRequest) returns (GetFileInfoResponse);
-  rpc Delete(DeleteRequest) returns (DeleteResponse);
+    rpc OpenFile(OpenFileRequest) returns (OpenFileResponse);
+    rpc ListStatus(ListStatusRequest) returns (ListStatusResponse);
+    rpc GetFileInfo(GetFileInfoRequest) returns (GetFileInfoResponse);
+    rpc Delete(DeleteRequest) returns (DeleteResponse);
 
-  rpc RegisterDataNode(RegisterDataNodeRequest) returns (RegisterDataNodeResponse);
-  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
-  rpc BlockReport(BlockReportRequest) returns (BlockReportResponse);
+    rpc RegisterDataNode(RegisterDataNodeRequest) returns (RegisterDataNodeResponse);
+    rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+    rpc BlockReport(BlockReportRequest) returns (BlockReportResponse);
 }
 ```
 
----
-
-# 11.3 DataNodeService
+## 9.3 datanode.proto
 
 ```protobuf
-service DataNodeService {
-  rpc WriteBlock(stream WriteBlockRequest) returns (WriteBlockResponse);
-  rpc ReadBlock(ReadBlockRequest) returns (stream ReadBlockResponse);
+syntax = "proto3";
+package pl.minidfs;
 
-  rpc DeleteBlock(DeleteBlockRequest) returns (DeleteBlockResponse);
-  rpc ReplicateBlock(ReplicateBlockRequest) returns (ReplicateBlockResponse);
+import "common.proto";
+
+option cc_generic_services = true;
+
+message WriteBlockRequest {
+    uint64 block_id = 1;
+    uint64 generation_stamp = 2;
+    uint64 offset = 3;
+    bytes  data = 4;
+    bool   last_chunk = 5;
+}
+message WriteBlockResponse {
+    RpcStatus status = 1;
+    uint64    bytes_written = 2;
+}
+
+message ReadBlockRequest {
+    uint64 block_id = 1;
+    uint64 generation_stamp = 2;
+    uint64 offset = 3;
+    uint64 length = 4;
+}
+message ReadBlockResponse {
+    RpcStatus status = 1;
+    bytes     data = 2;
+    uint64    offset = 3;
+    bool      eof = 4;
+}
+
+message DeleteBlockRequest {
+    RequestHeader header = 1;
+    uint64 block_id = 2;
+    uint64 generation_stamp = 3;
+}
+message DeleteBlockResponse {
+    RpcStatus status = 1;
+}
+
+message ReplicateBlockRequest {
+    RequestHeader header = 1;
+    uint64 block_id = 2;
+    uint64 generation_stamp = 3;
+    DataNodeEndpoint source = 4;
+}
+message ReplicateBlockResponse {
+    RpcStatus status = 1;
+}
+
+service DataNodeService {
+    rpc WriteBlock(WriteBlockRequest) returns (WriteBlockResponse);
+    rpc ReadBlock(ReadBlockRequest) returns (ReadBlockResponse);
+    rpc DeleteBlock(DeleteBlockRequest) returns (DeleteBlockResponse);
+    rpc ReplicateBlock(ReplicateBlockRequest) returns (ReplicateBlockResponse);
 }
 ```
+
+注意：brpc 不支持 gRPC streaming，WriteBlock/ReadBlock 采用分 chunk 多次 RPC 或单次大 payload 方式。
+第一版建议 WriteBlock 每次传一个 chunk（默认 1MB），通过 `offset` + `last_chunk` 实现流式写入。
+ReadBlock 同理，通过 `offset` + `length` 实现分段读取。
 
 ---
 
 # 12. 核心流程
 
-# 12.1 format
+## 12.1 format
 
 `format` 初始化 MySQL 表和根目录。
 
@@ -1121,7 +897,7 @@ minidfs format --config conf/namenode.yaml
 
 ---
 
-# 12.2 DataNode 注册
+## 12.2 DataNode 注册
 
 流程：
 
@@ -1139,7 +915,7 @@ minidfs format --config conf/namenode.yaml
 
 ---
 
-# 12.3 mkdir
+## 12.3 mkdir
 
 流程：
 
@@ -1158,7 +934,7 @@ NameNode:
 
 ---
 
-# 12.4 put 文件
+## 12.4 put 文件
 
 假设上传：
 
@@ -1176,30 +952,21 @@ minidfs put ./a.log /warehouse/a.log
    4.1 Client 调用 AllocateBlock；
    4.2 NameNode 选择 DataNode；
    4.3 NameNode 创建 block 和 replica 元数据；
-   4.4 Client 向多个 DataNode 写 block；
+   4.4 Client 向多个 DataNode 写 block（分 chunk 发送）；
    4.5 DataNode 写本地 tmp 文件；
-   4.6 DataNode finalize block；
+   4.6 DataNode finalize block（rename 到 current/）；
    4.7 Client 调用 CommitBlock；
 5. 所有 block commit 完成后，Client 调用 CompleteFile；
 6. NameNode 将文件状态改为 NORMAL；
 7. lease 关闭。
 ```
 
-第一版写副本方式：
-
-```text
-Client 并行写多个 DataNode。
-```
-
-暂时不做：
-
-```text
-Client -> DN1 -> DN2 -> DN3 pipeline
-```
+第一版写副本方式：Client 并行写多个 DataNode。
+暂时不做 pipeline write。
 
 ---
 
-# 12.5 get 文件
+## 12.5 get 文件
 
 ```bash
 minidfs get /warehouse/a.log ./a.log
@@ -1214,12 +981,12 @@ minidfs get /warehouse/a.log ./a.log
 4. 每个 block 选择一个 DataNode；
 5. 读取失败则切换下一个 replica；
 6. 写入本地文件；
-7. 本地计算 checksum，验证文件完整性。
+7. 校验 checksum。
 ```
 
 ---
 
-# 12.6 delete 文件
+## 12.6 delete 文件
 
 ```bash
 minidfs rm /warehouse/a.log
@@ -1234,61 +1001,87 @@ minidfs rm /warehouse/a.log
 4. NameNode 标记 blocks 为 DELETED；
 5. NameNode 标记 block_replicas 为 DELETING；
 6. 后台任务下发 DeleteBlock；
-7. DataNode 删除本地 block；
+7. DataNode 移动 block 到 trash/；
 8. DataNode 上报删除结果；
 9. NameNode 更新 replica 状态为 DELETED。
 ```
 
-第一版也可以简化：
-
-```text
-删除元数据后，DataNode 本地 block 暂不立即删除；
-后台 block report 发现 orphan block 后再清理。
-```
-
 ---
 
-# 13. 本地 block 文件格式
+# 13. 本地 Block 文件格式
 
-第一版推荐一个简单格式：
+采用紧凑二进制自描述格式：每个 block 是一个单独的文件，文件头部为 `BlockHeader`，后跟原始数据。
 
-```text
-blk_<block_id>
-blk_<block_id>.meta
+```cpp
+namespace pl::minidfs {
+
+static constexpr uint32_t kBlockMagic = 0x4D444653; // "MDFS"
+static constexpr uint32_t kBlockVersion = 1;
+static constexpr uint32_t kMaxChunkNum = 256;
+static constexpr uint32_t kDefaultChunkSize = 1 * 1024 * 1024; // 1MB
+
+#pragma pack(push, 1)
+struct BlockHeader {
+    uint32_t magic;              // 魔数 kBlockMagic
+    uint32_t version;            // 格式版本
+    uint64_t block_id;           // block ID
+    uint64_t inode_id;           // 所属文件 inode
+    uint32_t block_index;        // 文件内 block 序号
+    uint64_t generation_stamp;   // 版本戳，用于 stale replica 检测
+    uint64_t data_length;        // 有效数据长度
+    uint32_t compression_type;   // CompressionType
+    uint32_t chunk_size;         // 每个 chunk 的原始大小
+    uint32_t chunk_count;        // 实际 chunk 数
+    uint32_t checksum_type;      // ChecksumType (CRC32C)
+    uint32_t block_checksum;     // 整个 data 区域的 CRC32C
+    uint32_t chunk_offsets[kMaxChunkNum];   // 各 chunk 在 data 区域的偏移
+    uint32_t chunk_checksums[kMaxChunkNum]; // 各 chunk 的 CRC32C
+};
+#pragma pack(pop)
+
+} // namespace pl::minidfs
 ```
 
-data 文件只存原始数据。
-
-meta 文件可以是二进制，也可以第一版用文本。
-
-第一版 meta 文本格式：
+文件布局：
 
 ```text
-version=1
-block_id=10001
-generation_stamp=7
-length=134217728
-checksum_type=crc32c
-chunk_size=1048576
-checksum_count=128
-checksum_0=...
-checksum_1=...
++------------------+
+|   BlockHeader    |  固定大小
++------------------+
+|   Data Region    |  chunk_0 | chunk_1 | ... | chunk_N
++------------------+
 ```
 
-第一版也可以只保存整个 block 的 checksum，后续再做 chunk checksum。
-
-推荐路线：
+DataNode 本地目录结构：
 
 ```text
-v0.1: block-level checksum
-v0.2: chunk-level checksum
+<data_dir>/
+├── current/          # 已 finalize 的 block
+│   ├── blk_1001
+│   └── blk_1002
+├── tmp/              # 正在写入的 block
+│   └── blk_1003.writing
+└── trash/            # 待删除的 block（延迟清理）
+    └── blk_999
+```
+
+写入流程：
+
+```text
+1. 创建 tmp/blk_<id>.writing；
+2. 写入 BlockHeader（先占位，data_length 设为 0）；
+3. 逐 chunk 写入数据，计算每个 chunk checksum；
+4. 写完后回填 BlockHeader（data_length、chunk_count、checksums 等）；
+5. fsync；
+6. rename 到 current/blk_<id>；
+7. 返回成功。
 ```
 
 ---
 
 # 14. 配置文件
 
-# 14.1 NameNode 配置
+## 14.1 NameNode 配置
 
 ```yaml
 server:
@@ -1306,6 +1099,7 @@ mysql:
 filesystem:
   default_replication: 3
   default_block_size: 134217728
+  default_chunk_size: 1048576
   min_write_replica: 2
 
 heartbeat:
@@ -1319,7 +1113,7 @@ replication:
 
 ---
 
-# 14.2 DataNode 配置
+## 14.2 DataNode 配置
 
 ```yaml
 server:
@@ -1345,7 +1139,7 @@ block_report:
 
 ---
 
-# 14.3 Client 配置
+## 14.3 Client 配置
 
 ```yaml
 namenode:
@@ -1360,132 +1154,66 @@ client:
 
 ---
 
-# 15. 第一版实现顺序
+# 15. 实现顺序
 
-这个顺序非常关键。不要从复杂 RPC 和修复逻辑开始。
+本项目不做中间态，每个模块设计到位后一次性实现。整体推进顺序：
 
-## 阶段 1：单机元数据闭环
+## Phase 1：基础设施 + 类型定义
 
-目标：不启动 DataNode，只验证 MySQL 元数据。
+- 统一 namespace `pl::minidfs`；
+- 定义所有核心类型（Inode, Block, BlockReplica, DataNodeInfo, Lease）；
+- 定义 ErrorCode；
+- 复用项目 `pl::Status` / `pl::Result`；
+- 配置加载（YAML）；
+- 日志接入。
 
-任务：
+## Phase 2：元数据层
 
-1. 建 C++ 工程；
-2. 接入日志；
-3. 接入配置；
-4. 接入 MySQL connection pool；
-5. 实现 `MetadataStore`；
-6. 实现 ID allocator；
-7. 实现 `mkdir`；
-8. 实现 `create_file`；
-9. 实现 `list_status`；
-10. 实现 `delete`。
+- MetadataStore 抽象接口；
+- MySQLMetadataStore 实现（boost.mysql + 连接池 + 事务）；
+- ID allocator；
+- schema.sql + format 命令。
 
-验收：
+## Phase 3：NameNode 核心
 
-```bash
-minidfs format
-minidfs mkdir /a
-minidfs mkdir /a/b
-minidfs ls /
-minidfs ls /a
-```
+- NamespaceManager；
+- BlockManager；
+- DataNodeManager；
+- LeaseManager；
+- PlacementManager；
+- ReplicationManager。
 
----
+## Phase 4：DataNode 核心
 
-## 阶段 2：单 DataNode 数据闭环
+- LocalBlockStore（紧凑二进制格式）；
+- HeartbeatSender；
+- BlockReporter；
+- ReplicationWorker。
 
-目标：一个 NameNode，一个 DataNode，单副本写入读取。
+## Phase 5：RPC 服务层
 
-任务：
+- proto 定义；
+- NameNodeServiceImpl（brpc）；
+- DataNodeServiceImpl（brpc）；
+- RPC server 启动框架。
 
-1. 实现 DataNode 本地 block store；
-2. 实现 DataNode 注册；
-3. 实现 heartbeat；
-4. 实现 WriteBlock；
-5. 实现 ReadBlock；
-6. Client 实现 put；
-7. Client 实现 get；
-8. block 元数据写入 MySQL。
+## Phase 6：Client SDK + CLI
 
-验收：
+- DfsClient；
+- DfsInputStream / DfsOutputStream；
+- CLI 工具（format, mkdir, put, get, ls, stat, rm）。
 
-```bash
-minidfs put ./a.txt /a/b/a.txt
-minidfs get /a/b/a.txt ./b.txt
-diff ./a.txt ./b.txt
-```
+## Phase 7：集成 + 部署
 
----
-
-## 阶段 3：多 DataNode 多副本
-
-目标：支持 3 副本。
-
-任务：
-
-1. NameNode 维护 DataNode 列表；
-2. PlacementManager 选择多个 DataNode；
-3. Client 并行写多个副本；
-4. CommitBlock 记录多个 finalized replica；
-5. ReadFile 支持多个 location；
-6. 读失败自动切换副本。
-
-验收：
-
-```text
-1. 启动 3 个 DataNode；
-2. 上传文件；
-3. 确认每个 block 有 3 个 replica；
-4. kill 一个 DataNode；
-5. 仍然可以读取文件。
-```
-
----
-
-## 阶段 4：副本修复
-
-目标：DataNode 挂掉后，系统能自动补副本。
-
-任务：
-
-1. DeadDataNodeScanner；
-2. UnderReplicatedBlockScanner；
-3. ReplicationTask；
-4. DataNode ReplicateBlock；
-5. 复制完成后更新 block_replicas。
-
-验收：
-
-```text
-1. 3 副本写入文件；
-2. kill 一个 DataNode；
-3. NameNode 标记副本不足；
-4. 启动第 4 个 DataNode；
-5. 系统自动补副本；
-6. block replica 数量恢复为 3。
-```
-
----
-
-## 阶段 5：稳定性补强
-
-任务：
-
-1. request_id 幂等；
-2. lease 超时；
-3. block report；
-4. orphan block 清理；
-5. checksum；
-6. metrics；
-7. integration test；
-8. docker-compose 一键启动。
+- 集成测试；
+- docker-compose；
+- 验收全链路闭环。
 
 ---
 
 # 16. 关键事务设计
 
-# 16.1 create file 事务
+## 16.1 create file 事务
 
 ```text
 BEGIN
@@ -1500,15 +1228,7 @@ BEGIN
 COMMIT
 ```
 
-失败场景：
-
-* 目标文件已存在：返回 `AlreadyExists`；
-* 父目录不存在：返回 `NotFound`；
-* 父路径不是目录：返回 `NotDirectory`。
-
----
-
-# 16.2 allocate block 事务
+## 16.2 allocate block 事务
 
 ```text
 BEGIN
@@ -1527,9 +1247,7 @@ BEGIN
 COMMIT
 ```
 
----
-
-# 16.3 commit block 事务
+## 16.3 commit block 事务
 
 ```text
 BEGIN
@@ -1545,9 +1263,7 @@ BEGIN
 COMMIT
 ```
 
----
-
-# 16.4 complete file 事务
+## 16.4 complete file 事务
 
 ```text
 BEGIN
@@ -1567,100 +1283,61 @@ COMMIT
 
 # 17. 错误码设计
 
-建议统一错误码：
-
 ```cpp
-enum class ErrorCode {
-    OK = 0,
+namespace pl::minidfs {
 
-    INVALID_ARGUMENT = 1000,
-    NOT_FOUND = 1001,
-    ALREADY_EXISTS = 1002,
-    NOT_DIRECTORY = 1003,
-    IS_DIRECTORY = 1004,
-    PERMISSION_DENIED = 1005,
+enum class ErrorCode : uint16_t {
+    kOK = 0,
 
-    LEASE_EXPIRED = 2000,
-    LEASE_CONFLICT = 2001,
-    FILE_UNDER_CONSTRUCTION = 2002,
+    // 通用错误 1xxx
+    kInvalidArgument    = 1000,
+    kNotFound           = 1001,
+    kAlreadyExists      = 1002,
+    kNotDirectory       = 1003,
+    kIsDirectory        = 1004,
+    kPermissionDenied   = 1005,
+    kDirectoryNotEmpty  = 1006,
 
-    NO_AVAILABLE_DATANODE = 3000,
-    BLOCK_NOT_FOUND = 3001,
-    BLOCK_CORRUPT = 3002,
-    REPLICA_NOT_FOUND = 3003,
+    // Lease 错误 2xxx
+    kLeaseExpired           = 2000,
+    kLeaseConflict          = 2001,
+    kFileUnderConstruction  = 2002,
 
-    MYSQL_ERROR = 4000,
-    RPC_ERROR = 5000,
-    IO_ERROR = 6000,
+    // DataNode/Block 错误 3xxx
+    kNoAvailableDataNode = 3000,
+    kBlockNotFound       = 3001,
+    kBlockCorrupt        = 3002,
+    kReplicaNotFound     = 3003,
+    kChecksumMismatch    = 3004,
 
-    INTERNAL_ERROR = 9000,
+    // 基础设施错误 4xxx+
+    kMySQLError   = 4000,
+    kRPCError     = 5000,
+    kIOError      = 6000,
+
+    kInternalError = 9000,
 };
+
+} // namespace pl::minidfs
 ```
 
 ---
 
 # 18. 幂等设计
 
-所有可能重试的接口都应该支持 `request_id`。
+所有可能重试的接口都支持 `request_id`（通过 `RequestHeader`）。
 
-例如：
-
-```protobuf
-message RequestHeader {
-  string request_id = 1;
-  string client_id = 2;
-  string user = 3;
-}
-```
-
-需要幂等的请求：
-
-```text
-CreateFile
-AllocateBlock
-CommitBlock
-CompleteFile
-Delete
-WriteBlock
-DeleteBlock
-ReplicateBlock
-```
-
-第一版可以只在 NameNode 层实现 request_id 去重。
-
-方式：
-
-```text
-metadata_oplog.request_id 唯一索引
-```
-
-如果请求重复：
-
-```text
-1. 查询 request_id 对应结果；
-2. 返回之前的结果；
-3. 或者返回 AlreadyProcessed。
-```
-
-MVP 可以先简化为：
-
-```text
-重复 request_id 直接返回 OK。
-```
-
-后续再做精确结果缓存。
+NameNode 通过 `metadata_oplog.request_id` 唯一索引实现去重。重复 request_id 直接返回之前的结果。
 
 ---
 
-# 19. 一致性设计
-
-第一版一致性模型：
+# 19. 一致性模型
 
 ```text
-1. 元数据强一致；
+1. 元数据强一致（MySQL 事务）；
 2. 数据副本最终一致；
 3. 文件 close 后可读；
-4. under_construction 文件默认不可读；
+4. under_construction 文件不可读；
 5. 删除是异步物理删除；
 6. 副本修复是异步完成。
 ```
@@ -1668,36 +1345,18 @@ MVP 可以先简化为：
 写成功条件：
 
 ```text
-min_write_replica = 2
-desired_replica = 3
+min_write_replica = 2 （至少写成功 2 个副本才 commit）
+desired_replica = 3   （期望 3 副本，不足时后台补齐）
 ```
-
-含义：
-
-* 写入 2 个副本成功即可 commit；
-* 第 3 个副本失败时，后台补齐；
-* 如果只成功 1 个副本，则写入失败；
-* 失败 block 应该被标记为 stale 或删除。
-
-个人实现时也可以先设置：
-
-```text
-min_write_replica = 1
-desired_replica = 1
-```
-
-等单副本稳定后再开 3 副本。
 
 ---
 
 # 20. 部署设计
 
-第一版建议使用 docker-compose：
-
 ```yaml
 services:
   mysql:
-    image: mysql:8.3
+    image: mysql:8.4
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: minidfs
@@ -1708,7 +1367,7 @@ services:
 
   namenode:
     image: minidfs:latest
-    command: ["minidfs-namenode", "--config", "/conf/namenode.yaml"]
+    command: ["minidfs", "namenode", "--config", "/conf/namenode.yaml"]
     depends_on:
       - mysql
     ports:
@@ -1716,7 +1375,7 @@ services:
 
   datanode1:
     image: minidfs:latest
-    command: ["minidfs-datanode", "--config", "/conf/datanode1.yaml"]
+    command: ["minidfs", "datanode", "--config", "/conf/datanode1.yaml"]
     depends_on:
       - namenode
     ports:
@@ -1725,7 +1384,7 @@ services:
 
   datanode2:
     image: minidfs:latest
-    command: ["minidfs-datanode", "--config", "/conf/datanode2.yaml"]
+    command: ["minidfs", "datanode", "--config", "/conf/datanode2.yaml"]
     depends_on:
       - namenode
     ports:
@@ -1734,7 +1393,7 @@ services:
 
   datanode3:
     image: minidfs:latest
-    command: ["minidfs-datanode", "--config", "/conf/datanode3.yaml"]
+    command: ["minidfs", "datanode", "--config", "/conf/datanode3.yaml"]
     depends_on:
       - namenode
     ports:
@@ -1748,21 +1407,20 @@ services:
 
 ## 21.1 单元测试
 
-必须覆盖：
-
 ```text
 MetadataStoreTest
-  - create inode
-  - get child
-  - list children
-  - create block
-  - update replica
+  - create/get/update/delete inode
+  - create/get block
+  - upsert/get replicas
+  - id allocation
+  - transaction rollback
 
 NamespaceManagerTest
-  - mkdir
+  - mkdir / nested mkdir
   - create file
   - path resolve
-  - delete
+  - list status
+  - delete file / directory
   - duplicate create
 
 BlockManagerTest
@@ -1772,17 +1430,14 @@ BlockManagerTest
 
 LocalBlockStoreTest
   - write block
-  - read block
+  - read block (full / partial)
   - finalize block
   - delete block
   - restart scan
+  - checksum verification
 ```
 
----
-
 ## 21.2 集成测试
-
-测试场景：
 
 ```text
 1. 单副本 put/get；
@@ -1793,272 +1448,31 @@ LocalBlockStoreTest
 6. DataNode 重启后 block report；
 7. NameNode 重启后仍能读取文件；
 8. 写入过程中 DataNode 失败；
-9. 写入过程中 Client 失败；
-10. 重复请求幂等。
+9. 重复请求幂等。
 ```
 
 ---
 
-## 21.3 压力测试
-
-第一版简单做：
-
-```bash
-for i in $(seq 1 1000); do
-  minidfs put ./small_file /bench/file_$i
-done
-```
-
-测试指标：
+# 22. 后续演进路线
 
 ```text
-create QPS
-put 吞吐
-get 吞吐
-NameNode RPC latency
-MySQL query latency
-DataNode disk write throughput
+v0.1 - 完整多副本系统（本项目第一版目标）
+v0.2 - lease recovery + checksum 全链路
+v0.3 - NameNode active-standby（基于 braft）
+v0.4 - pipeline write
+v0.5 - DataNode decommission + rack awareness
+v1.0 - 可试用版本（简单权限、大目录分页、metrics、admin）
+v2.0 - MetadataStore 可替换（FDB/TiKV/自研）
 ```
 
 ---
 
-# 22. 可观测性
-
-## 22.1 日志
-
-建议日志格式：
-
-```text
-[2026-05-06 18:00:00.123] [INFO] [namenode] request_id=xxx op=create path=/a/b.txt inode_id=1001 cost_ms=4
-[2026-05-06 18:00:01.456] [INFO] [datanode] op=write_block block_id=2001 length=134217728 cost_ms=120
-```
-
-不要第一版就强制 JSON 日志。
-
----
-
-## 22.2 Metrics
-
-NameNode metrics：
-
-```text
-namenode_rpc_total
-namenode_rpc_latency_ms
-namenode_mysql_query_latency_ms
-namenode_live_datanodes
-namenode_dead_datanodes
-namenode_under_replicated_blocks
-namenode_missing_blocks
-namenode_files_total
-namenode_blocks_total
-```
-
-DataNode metrics：
-
-```text
-datanode_write_bytes_total
-datanode_read_bytes_total
-datanode_write_latency_ms
-datanode_read_latency_ms
-datanode_disk_used_bytes
-datanode_disk_free_bytes
-datanode_blocks_total
-datanode_failed_write_total
-datanode_failed_read_total
-```
-
----
-
-# 23. 后续演进路线
-
-## 23.1 v0.1：单副本最小系统
-
-能力：
-
-* MySQL 元数据；
-* 单 NameNode；
-* 单 DataNode；
-* mkdir；
-* put；
-* get；
-* ls；
-* rm。
-
----
-
-## 23.2 v0.2：多副本
-
-能力：
-
-* 多 DataNode；
-* block replica；
-* 读副本切换；
-* 写多个副本；
-* DataNode heartbeat。
-
----
-
-## 23.3 v0.3：自动修复
-
-能力：
-
-* dead DataNode 检测；
-* under-replication 扫描；
-* ReplicateBlock；
-* DeleteBlock；
-* block report。
-
----
-
-## 23.4 v0.4：稳定性
-
-能力：
-
-* lease recovery；
-* request idempotency；
-* checksum；
-* metrics；
-* admin command；
-* docker-compose；
-* integration test。
-
----
-
-## 23.5 v1.0：可试用版本
-
-能力：
-
-* NameNode active-standby；
-* MySQL leader lease；
-* DataNode decommission；
-* 简单权限；
-* 大目录分页；
-* pipeline write；
-* 更完整的客户端库。
-
----
-
-## 23.6 v2.0：替换元数据服务
-
-能力：
-
-* 抽象 MetadataStore 完整落地；
-* 新增分布式 MetadataStore；
-* MySQL oplog mirror；
-* 双写；
-* shadow read；
-* 切主；
-* MySQL 降级为备份或审计库。
-
----
-
-# 24. 主要风险
-
-## 24.1 过早做复杂功能
-
-最大风险是你一开始就做：
-
-* HA；
-* pipeline；
-* snapshot；
-* HDFS 兼容；
-* FUSE；
-* 权限系统；
-* erasure coding。
-
-这些都会拖慢第一版闭环。
-
-建议先坚持：
-
-```text
-单副本跑通 -> 多副本跑通 -> 修复跑通 -> 再谈高级功能。
-```
-
----
-
-## 24.2 MySQL 元数据瓶颈
-
-MySQL 初期足够用，但未来会遇到：
-
-* path resolve QPS 高；
-* block report 写入量大；
-* 大目录 list 慢；
-* 单表数据膨胀；
-* NameNode 多实例缓存一致性问题。
-
-所以必须保留：
-
-```text
-MetadataStore 抽象
-metadata_oplog
-ID allocator
-inode 模型
-```
-
-这些会让后续迁移更容易。
-
----
-
-## 24.3 本地 block 状态和 MySQL 不一致
-
-典型问题：
-
-```text
-MySQL 认为 block 存在，但 DataNode 本地不存在；
-DataNode 本地有 block，但 MySQL 没有记录；
-replica length 不一致；
-checksum 不一致；
-DataNode 写一半崩溃。
-```
-
-解决方式：
-
-```text
-1. 写 tmp 文件；
-2. finalize 后再 commit；
-3. DataNode 启动时扫描本地 block；
-4. 定期 block report；
-5. NameNode 后台 reconcile；
-6. orphan block 延迟删除。
-```
-
----
-
-# 25. 最终建议
-
-这个项目你自己动手写的话，建议第一版严格控制成：
-
-```text
-一个 C++ 写的、MySQL 做元数据的、支持多 DataNode 多副本的大文件分布式存储系统。
-```
-
-第一阶段不要追求“像不像真正的 HDFS”，而是追求下面这个闭环稳定：
-
-```text
-启动集群
--> 创建目录
--> 上传大文件
--> 写入多个 DataNode
--> 元数据落 MySQL
--> 下载文件
--> 校验一致
--> kill DataNode
--> 仍然可读
--> 自动补副本
-```
-
-只要这个闭环完成，后续你就有了一个真正能演进的系统骨架。
-
-下一步最适合先写的是：
-
-```text
-1. schema.sql
-2. MetadataStore 接口
-3. MySQLMetadataStore
-4. NamespaceManager
-5. LocalBlockStore
-6. 单副本 put/get
-```
-
-把这 6 个模块写完，这个项目就从“设计”进入“系统雏形”阶段了。
-
+# 23. 主要风险与应对
+
+| 风险                           | 应对                                        |
+| ------------------------------ | ------------------------------------------- |
+| MySQL 元数据瓶颈               | MetadataStore 抽象 + ID 批量分配 + 连接池   |
+| 本地 block 状态与 MySQL 不一致 | tmp→current rename + block report reconcile |
+| brpc 大 payload 性能           | chunk 分段传输 + 零拷贝 IOBuf               |
+| DataNode 写一半崩溃            | tmp 目录隔离 + 启动时清理未完成 block       |
+| NameNode 单点                  | 第一版接受，后续 braft 解决                 |

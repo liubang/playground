@@ -15,3 +15,31 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2025/06/30 00:47
 
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load(
+    "//cpp:copts/configure_copts.bzl",
+    "COPTS",
+    "LINKOPTS",
+)
+
+cc_binary(
+    name = "namenode",
+    srcs = ["namenode_main.cpp"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        "//cpp/pl/minidfs/metadata:metadata_store",
+        "//cpp/pl/minidfs/metadata:mysql_connection_pool",
+        "//cpp/pl/minidfs/metadata:mysql_metadata_store",
+        "//cpp/pl/minidfs/namenode:admin_service_impl",
+        "//cpp/pl/minidfs/namenode:block_manager",
+        "//cpp/pl/minidfs/namenode:datanode_manager",
+        "//cpp/pl/minidfs/namenode:lease_manager",
+        "//cpp/pl/minidfs/namenode:namenode_service_impl",
+        "//cpp/pl/minidfs/namenode:namespace_manager",
+        "//cpp/pl/minidfs/namenode:placement_manager",
+        "@brpc//:brpc",
+        "@folly//folly/logging",
+        "@gflags",
+    ],
+)

@@ -13,17 +13,32 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
+// Created: 2025/07/01 00:45
 
 #pragma once
 
 #include <cstdint>
+#include <string_view>
 
-namespace pl::dfs {
+namespace pl::minidfs {
 
 enum class CompressionType : uint8_t {
-    NONE = 0,
-    SNAPPY = 1,
-    ZSTD = 2,
+    kNone = 0,
+    kSnappy = 1,
+    kZstd = 2,
 };
 
+/// Return the human-readable name of a compression type.
+constexpr std::string_view compression_type_name(CompressionType type) {
+    switch (type) {
+        case CompressionType::kNone:
+            return "none";
+        case CompressionType::kSnappy:
+            return "snappy";
+        case CompressionType::kZstd:
+            return "zstd";
+    }
+    return "unknown";
 }
+
+} // namespace pl::minidfs
