@@ -729,11 +729,14 @@ PhysicalPlan
   memory operator。
 - 为 connector scan + memory suffix 增加 executor 级语义测试，覆盖 group 后接
   filter/project/rename/sort/limit、materialize barrier 后接 aggregate、以及 distinct fallback。
+- 新增第一版 RBO pass 管线骨架：`PlanOptimizer`、`Rule`、`RuleBasedOptimizer`、deterministic
+  rule order 和 rule trace。当前 rule 只记录 connector pushdown trace，不改写 logical plan；
+  `BuildPushdownPlan` 已统一从默认 RBO 入口进入，保证后续迁移 rule 时不用再改调用方。
 
 待推进：
 
-- 新增 RBO pass 管线，将 predicate/projection/sort/limit/aggregate pushdown、barrier insertion、
-  projection pruning 从 builtin helper 中迁出。
+- 将 predicate/projection/sort/limit/aggregate pushdown、barrier insertion、projection pruning
+  从 builtin helper 中迁入 RBO rule 实现。
 - 新增 physical plan node：`ConnectorScan`、`MemoryOperator`、`Materialize`、`OutputSink`。
 - CBO 先定义 statistics/cost/alternative plan 接口；缺统计时明确使用 RBO 输出。
 - `explain()` 支持 logical、optimized logical、physical 三种视图。
