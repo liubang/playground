@@ -20,6 +20,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "cpp/pl/flux/connector/sql_builder.h"
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -87,57 +88,12 @@ std::string quote_identifier(const std::string& identifier) {
     return out;
 }
 
-std::string predicate_op_sql(PredicateOp op) {
-    switch (op) {
-        case PredicateOp::Eq:
-            return "=";
-        case PredicateOp::NotEq:
-            return "!=";
-        case PredicateOp::Lt:
-            return "<";
-        case PredicateOp::Lte:
-            return "<=";
-        case PredicateOp::Gt:
-            return ">";
-        case PredicateOp::Gte:
-            return ">=";
-    }
-    return "=";
-}
-
-std::string aggregate_fn_sql(AggregateFunction fn) {
-    switch (fn) {
-        case AggregateFunction::Count:
-            return "COUNT";
-        case AggregateFunction::Sum:
-            return "SUM";
-        case AggregateFunction::Mean:
-            return "AVG";
-        case AggregateFunction::Min:
-            return "MIN";
-        case AggregateFunction::Max:
-            return "MAX";
-    }
-    return "COUNT";
-}
+// predicate_op_sql / aggregate_fn_sql / validate_column are now shared via
+// sql_builder.h as PredicateOpSql / AggregateFnSql / ValidateColumn.
 
 struct SqliteParam {
     Value value;
 };
-
-bool schema_has_column(const std::unordered_set<std::string>& columns, const std::string& column) {
-    return columns.find(column) != columns.end();
-}
-
-absl::Status validate_column(const std::unordered_set<std::string>& schema_columns,
-                             const std::string& column,
-                             const std::string& context) {
-    if (!schema_has_column(schema_columns, column)) {
-        return absl::InvalidArgumentError(
-            absl::StrCat("sqlite source ", context, " unknown column: ", column));
-    }
-    return absl::OkStatus();
-}
 
 absl::Status bind_value(sqlite3_stmt* stmt, int index, const Value& value) {
     int rc = SQLITE_OK;
@@ -203,7 +159,7 @@ absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
     }
 
     if (request.distinct.has_value()) {
-        auto status = validate_column(schema_columns, *request.distinct, "distinct");
+        auto status = ValidateColumn(schema_columns, *request.distinct, "sqlite", "distinct");
         if (!status.ok()) {
             return status;
         }
@@ -212,7 +168,7 @@ absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
     std::string sql = "SELECT ";
     if (request.aggregate.has_value()) {
         for (size_t i = 0; i < request.group_by.size(); ++i) {
-            auto status = validate_column(schema_columns, request.group_by[i], "group");
+            auto status = ValidateColumn(schema_columns, request.group_by[i], "sqlite", "group");
             if (!status.ok()) {
                 return status;
             }
@@ -224,11 +180,11 @@ absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
         if (!request.group_by.empty()) {
             sql += ", ";
         }
-        auto status = validate_column(schema_columns, request.aggregate->column, "aggregate");
+        auto status = ValidateColumn(schema_columns, request.aggregate->column, "sqlite", "aggregate");
         if (!status.ok()) {
             return status;
         }
-        sql += aggregate_fn_sql(request.aggregate->fn);
+        sql += AggregateFnSql(request.aggregate->fn);
         sql += "(";
         sql += quote_identifier(request.aggregate->column);
         sql += ") AS ";
@@ -237,7 +193,7 @@ absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
     } else if (!request.projection_columns.empty()) {
         for (size_t i = 0; i < request.projection_columns.size(); ++i) {
             const auto& projection = request.projection_columns[i];
-            auto status = validate_column(schema_columns, projection.column, "projection");
+            auto status = ValidateColumn(schema_columns, projection.column, "sqlite", "projection");
             if (!status.ok()) {
                 return status;
             }
@@ -254,7 +210,7 @@ absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
         sql += "*";
     } else {
         for (size_t i = 0; i < request.columns.size(); ++i) {
-            auto status = validate_column(schema_columns, request.columns[i], "projection");
+            auto status = ValidateColumn(schema_columns, request.columns[i], "sqlite", "projection");
             if (!status.ok()) {
                 return status;
             }
@@ -271,7 +227,7 @@ absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
     std::vector<std::string> where_clauses;
     std::vector<SqliteParam> params;
     if (request.time_range.has_value()) {
-        auto status = validate_column(schema_columns, "_time", "time range");
+        auto status = ValidateColumn(schema_columns, "_time", "sqlite", "time range");
         if (!status.ok()) {
             return status;
         }
@@ -285,12 +241,12 @@ absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
         }
     }
     for (const auto& predicate : request.predicates) {
-        auto status = validate_column(schema_columns, predicate.column, "predicate");
+        auto status = ValidateColumn(schema_columns, predicate.column, "sqlite", "predicate");
         if (!status.ok()) {
             return status;
         }
         where_clauses.push_back(quote_identifier(predicate.column) + " " +
-                                predicate_op_sql(predicate.op) + " ?");
+                                PredicateOpSql(predicate.op) + " ?");
         params.push_back({predicate.literal});
     }
     if (!where_clauses.empty()) {
@@ -319,7 +275,7 @@ absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
     if (!request.order_by.empty()) {
         sql += " ORDER BY ";
         for (size_t i = 0; i < request.order_by.size(); ++i) {
-            auto status = validate_column(schema_columns, request.order_by[i].column, "sort");
+            auto status = ValidateColumn(schema_columns, request.order_by[i].column, "sqlite", "sort");
             if (!status.ok()) {
                 return status;
             }
@@ -388,6 +344,10 @@ SQLiteSource::SQLiteSource(std::string dsn, std::string table)
       query_(absl::StrCat("SELECT * FROM ", quote_identifier(table_))) {}
 
 absl::StatusOr<TableSchema> SQLiteSource::Schema() const {
+    if (cached_schema_.has_value()) {
+        return *cached_schema_;
+    }
+
     auto db_or = open_readonly_db(dsn_);
     if (!db_or.ok()) {
         return db_or.status();
@@ -405,6 +365,7 @@ absl::StatusOr<TableSchema> SQLiteSource::Schema() const {
         schema.columns.push_back(
             {.name = name == nullptr ? "" : name, .type = Value::Type::Null, .nullable = true});
     }
+    cached_schema_ = schema;
     return schema;
 }
 

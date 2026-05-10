@@ -23,9 +23,14 @@
 #include <sstream>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace pl::flux::plan {
+
+// ---------------------------------------------------------------------------
+// Node kind enum (retained for fast switch-based dispatch).
+// ---------------------------------------------------------------------------
 
 enum class PlanNodeKind {
     SourceScan,
@@ -45,6 +50,10 @@ enum class PlanNodeKind {
     Yield,
     Materialize,
 };
+
+// ---------------------------------------------------------------------------
+// Spec structs (unchanged from before).
+// ---------------------------------------------------------------------------
 
 struct SourceScanSpec {
     std::string source;
@@ -143,21 +152,78 @@ struct MaterializeSpec {
     std::string builtin;
 };
 
+// ---------------------------------------------------------------------------
+// NodeSpec variant — only the active spec occupies memory.
+// std::monostate is used for node kinds that carry no extra data
+// (Map, Window, Join, Union, Yield).
+// ---------------------------------------------------------------------------
+
+using NodeSpec = std::variant<std::monostate,
+                              SourceScanSpec,
+                              RangeSpec,
+                              FilterSpec,
+                              ProjectSpec,
+                              RenameSpec,
+                              LimitSpec,
+                              SortSpec,
+                              GroupSpec,
+                              AggregateSpec,
+                              DistinctSpec,
+                              MaterializeSpec>;
+
+// ---------------------------------------------------------------------------
+// PlanNode — the core logical plan tree node.
+// ---------------------------------------------------------------------------
+
 struct PlanNode {
     PlanNodeKind kind = PlanNodeKind::Materialize;
     std::vector<std::shared_ptr<PlanNode>> inputs;
-    SourceScanSpec source_scan;
-    RangeSpec range;
-    FilterSpec filter;
-    ProjectSpec project;
-    RenameSpec rename;
-    LimitSpec limit;
-    SortSpec sort;
-    GroupSpec group;
-    AggregateSpec aggregate;
-    DistinctSpec distinct;
-    MaterializeSpec materialize;
+    NodeSpec spec = MaterializeSpec{};
+
+    // -- Typed accessors (const & mutable) ----------------------------------
+    // These provide the same ergonomics as direct field access.
+
+    [[nodiscard]] const SourceScanSpec& source_scan() const {
+        return std::get<SourceScanSpec>(spec);
+    }
+    SourceScanSpec& source_scan() { return std::get<SourceScanSpec>(spec); }
+
+    [[nodiscard]] const RangeSpec& range() const { return std::get<RangeSpec>(spec); }
+    RangeSpec& range() { return std::get<RangeSpec>(spec); }
+
+    [[nodiscard]] const FilterSpec& filter() const { return std::get<FilterSpec>(spec); }
+    FilterSpec& filter() { return std::get<FilterSpec>(spec); }
+
+    [[nodiscard]] const ProjectSpec& project() const { return std::get<ProjectSpec>(spec); }
+    ProjectSpec& project() { return std::get<ProjectSpec>(spec); }
+
+    [[nodiscard]] const RenameSpec& rename() const { return std::get<RenameSpec>(spec); }
+    RenameSpec& rename() { return std::get<RenameSpec>(spec); }
+
+    [[nodiscard]] const LimitSpec& limit() const { return std::get<LimitSpec>(spec); }
+    LimitSpec& limit() { return std::get<LimitSpec>(spec); }
+
+    [[nodiscard]] const SortSpec& sort() const { return std::get<SortSpec>(spec); }
+    SortSpec& sort() { return std::get<SortSpec>(spec); }
+
+    [[nodiscard]] const GroupSpec& group() const { return std::get<GroupSpec>(spec); }
+    GroupSpec& group() { return std::get<GroupSpec>(spec); }
+
+    [[nodiscard]] const AggregateSpec& aggregate() const { return std::get<AggregateSpec>(spec); }
+    AggregateSpec& aggregate() { return std::get<AggregateSpec>(spec); }
+
+    [[nodiscard]] const DistinctSpec& distinct() const { return std::get<DistinctSpec>(spec); }
+    DistinctSpec& distinct() { return std::get<DistinctSpec>(spec); }
+
+    [[nodiscard]] const MaterializeSpec& materialize() const {
+        return std::get<MaterializeSpec>(spec);
+    }
+    MaterializeSpec& materialize() { return std::get<MaterializeSpec>(spec); }
 };
+
+// ---------------------------------------------------------------------------
+// PlanNodeKindName
+// ---------------------------------------------------------------------------
 
 inline std::string PlanNodeKindName(PlanNodeKind kind) {
     switch (kind) {
@@ -197,16 +263,20 @@ inline std::string PlanNodeKindName(PlanNodeKind kind) {
     return "Unknown";
 }
 
+// ---------------------------------------------------------------------------
+// Factory functions
+// ---------------------------------------------------------------------------
+
 inline std::shared_ptr<PlanNode> MakeSourceScan(std::string source,
                                                 std::string driver,
                                                 std::string dsn,
                                                 std::string table) {
     auto node = std::make_shared<PlanNode>();
     node->kind = PlanNodeKind::SourceScan;
-    node->source_scan.source = std::move(source);
-    node->source_scan.driver = std::move(driver);
-    node->source_scan.dsn = std::move(dsn);
-    node->source_scan.table = std::move(table);
+    node->spec = SourceScanSpec{.source = std::move(source),
+                                .driver = std::move(driver),
+                                .dsn = std::move(dsn),
+                                .table = std::move(table)};
     return node;
 }
 
@@ -221,29 +291,28 @@ inline std::shared_ptr<PlanNode> MakeRange(std::shared_ptr<PlanNode> input,
                                            std::string start,
                                            std::optional<std::string> stop) {
     auto node = MakeUnaryNode(PlanNodeKind::Range, std::move(input));
-    node->range.start = std::move(start);
-    node->range.stop = std::move(stop);
+    node->spec = RangeSpec{.start = std::move(start), .stop = std::move(stop)};
     return node;
 }
 
 inline std::shared_ptr<PlanNode> MakeFilter(std::shared_ptr<PlanNode> input,
                                             std::vector<PredicateSpec> predicates) {
     auto node = MakeUnaryNode(PlanNodeKind::Filter, std::move(input));
-    node->filter.predicates = std::move(predicates);
+    node->spec = FilterSpec{std::move(predicates)};
     return node;
 }
 
 inline std::shared_ptr<PlanNode> MakeProject(std::shared_ptr<PlanNode> input,
                                              std::vector<std::string> columns) {
     auto node = MakeUnaryNode(PlanNodeKind::Project, std::move(input));
-    node->project.columns = std::move(columns);
+    node->spec = ProjectSpec{std::move(columns)};
     return node;
 }
 
 inline std::shared_ptr<PlanNode> MakeRename(
     std::shared_ptr<PlanNode> input, std::vector<std::pair<std::string, std::string>> columns) {
     auto node = MakeUnaryNode(PlanNodeKind::Rename, std::move(input));
-    node->rename.columns = std::move(columns);
+    node->spec = RenameSpec{std::move(columns)};
     return node;
 }
 
@@ -251,22 +320,21 @@ inline std::shared_ptr<PlanNode> MakeLimit(std::shared_ptr<PlanNode> input,
                                            int64_t n,
                                            int64_t offset) {
     auto node = MakeUnaryNode(PlanNodeKind::Limit, std::move(input));
-    node->limit.n = n;
-    node->limit.offset = offset;
+    node->spec = LimitSpec{.n = n, .offset = offset};
     return node;
 }
 
 inline std::shared_ptr<PlanNode> MakeSort(std::shared_ptr<PlanNode> input,
                                           std::vector<SortKey> keys) {
     auto node = MakeUnaryNode(PlanNodeKind::Sort, std::move(input));
-    node->sort.keys = std::move(keys);
+    node->spec = SortSpec{std::move(keys)};
     return node;
 }
 
 inline std::shared_ptr<PlanNode> MakeGroup(std::shared_ptr<PlanNode> input,
                                            std::vector<std::string> columns) {
     auto node = MakeUnaryNode(PlanNodeKind::Group, std::move(input));
-    node->group.columns = std::move(columns);
+    node->spec = GroupSpec{std::move(columns)};
     return node;
 }
 
@@ -274,14 +342,13 @@ inline std::shared_ptr<PlanNode> MakeAggregate(std::shared_ptr<PlanNode> input,
                                                AggregateFunction fn,
                                                std::string column) {
     auto node = MakeUnaryNode(PlanNodeKind::Aggregate, std::move(input));
-    node->aggregate.fn = fn;
-    node->aggregate.column = std::move(column);
+    node->spec = AggregateSpec{.fn = fn, .column = std::move(column)};
     return node;
 }
 
 inline std::shared_ptr<PlanNode> MakeDistinct(std::shared_ptr<PlanNode> input, std::string column) {
     auto node = MakeUnaryNode(PlanNodeKind::Distinct, std::move(input));
-    node->distinct.column = std::move(column);
+    node->spec = DistinctSpec{std::move(column)};
     return node;
 }
 
@@ -289,8 +356,7 @@ inline std::shared_ptr<PlanNode> MakeMaterializeBarrier(std::shared_ptr<PlanNode
                                                         std::string reason,
                                                         std::string builtin) {
     auto node = MakeUnaryNode(PlanNodeKind::Materialize, std::move(input));
-    node->materialize.reason = std::move(reason);
-    node->materialize.builtin = std::move(builtin);
+    node->spec = MaterializeSpec{.reason = std::move(reason), .builtin = std::move(builtin)};
     return node;
 }
 
@@ -299,10 +365,13 @@ inline std::shared_ptr<PlanNode> MakeMaterializeBarrier(
     auto node = std::make_shared<PlanNode>();
     node->kind = PlanNodeKind::Materialize;
     node->inputs = std::move(inputs);
-    node->materialize.reason = std::move(reason);
-    node->materialize.builtin = std::move(builtin);
+    node->spec = MaterializeSpec{.reason = std::move(reason), .builtin = std::move(builtin)};
     return node;
 }
+
+// ---------------------------------------------------------------------------
+// Predicate / formatting utilities
+// ---------------------------------------------------------------------------
 
 inline std::string PredicateOpName(PredicateOp op) {
     switch (op) {
@@ -359,26 +428,46 @@ inline std::string PredicateListString(const std::vector<PredicateSpec>& predica
     return out.str();
 }
 
+inline std::string StringList(const std::vector<std::string>& items) {
+    std::ostringstream out;
+    out << "[";
+    for (size_t i = 0; i < items.size(); ++i) {
+        if (i != 0) {
+            out << ", ";
+        }
+        out << items[i];
+    }
+    out << "]";
+    return out.str();
+}
+
+// ---------------------------------------------------------------------------
+// Plan tree formatting
+// ---------------------------------------------------------------------------
+
 inline void FormatNodeDetail(const PlanNode& node, std::ostringstream* out) {
     *out << PlanNodeKindName(node.kind);
     if (node.kind == PlanNodeKind::SourceScan) {
-        *out << "(source=\"" << node.source_scan.source << "\", driver=\""
-             << node.source_scan.driver << "\", table=\"" << node.source_scan.table << "\")";
-    } else if (node.kind == PlanNodeKind::Materialize &&
-               (!node.materialize.reason.empty() || !node.materialize.builtin.empty())) {
-        *out << "(";
-        bool needs_separator = false;
-        if (!node.materialize.reason.empty()) {
-            *out << "reason=\"" << node.materialize.reason << "\"";
-            needs_separator = true;
-        }
-        if (!node.materialize.builtin.empty()) {
-            if (needs_separator) {
-                *out << ", ";
+        const auto& ss = node.source_scan();
+        *out << "(source=\"" << ss.source << "\", driver=\"" << ss.driver << "\", table=\""
+             << ss.table << "\")";
+    } else if (node.kind == PlanNodeKind::Materialize) {
+        const auto& ms = node.materialize();
+        if (!ms.reason.empty() || !ms.builtin.empty()) {
+            *out << "(";
+            bool needs_separator = false;
+            if (!ms.reason.empty()) {
+                *out << "reason=\"" << ms.reason << "\"";
+                needs_separator = true;
             }
-            *out << "builtin=\"" << node.materialize.builtin << "\"";
+            if (!ms.builtin.empty()) {
+                if (needs_separator) {
+                    *out << ", ";
+                }
+                *out << "builtin=\"" << ms.builtin << "\"";
+            }
+            *out << ")";
         }
-        *out << ")";
     }
 }
 
