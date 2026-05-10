@@ -104,10 +104,49 @@ cc_library(
 cc_library(
     name = "plan",
     hdrs = [
+        "plan/physical_plan.h",
         "plan/plan_node.h",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
+)
+
+cc_library(
+    name = "optimizer",
+    srcs = [
+        "optimizer/source_pushdown.cpp",
+    ],
+    hdrs = [
+        "optimizer/source_pushdown.h",
+    ],
+    copts = COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":connector",
+        ":plan",
+        ":runtime_value",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings:strings",
+    ],
+)
+
+cc_library(
+    name = "execution",
+    srcs = [
+        "execution/materializer.cpp",
+    ],
+    hdrs = [
+        "execution/materializer.h",
+    ],
+    copts = COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":optimizer",
+        ":runtime_value",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+    ],
 )
 
 cc_library(
@@ -248,6 +287,8 @@ cc_library(
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":connector",
+        ":execution",
+        ":optimizer",
         ":parser",
         ":runtime_env",
         ":runtime_eval",
@@ -312,6 +353,7 @@ cc_library(
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
+        ":execution",
         ":parser",
         ":runtime_builtin",
         ":runtime_exec",
@@ -426,6 +468,7 @@ cc_test(
     ],
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
+        ":execution",
         ":runtime_exec",
         "@abseil-cpp//absl/status",
         "@googletest//:gtest_main",
