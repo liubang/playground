@@ -17,7 +17,6 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
-#include "cpp/pl/flux/connector/sqlite_source.h"
 #include "cpp/pl/flux/plan/plan_node.h"
 #include "cpp/pl/flux/runtime_builtin_package.h"
 #include <memory>
@@ -86,14 +85,7 @@ absl::StatusOr<Value> builtin_sqlite_from(const std::vector<Value>& args) {
         return table_or.status();
     }
 
-    connector::SQLiteSource source(*path_or, *table_or);
-    auto value_or = source.Scan({});
-    if (!value_or.ok()) {
-        return absl::Status(value_or.status().code(),
-                            absl::StrCat("sqlite.from ", value_or.status().message()));
-    }
-    value_or->as_table_mut().plan = plan::MakeSourceScan("sqlite", "sqlite", *path_or, *table_or);
-    return value_or;
+    return Value::table_plan("sqlite", plan::MakeSourceScan("sqlite", "sqlite", *path_or, *table_or));
 }
 
 Value make_sqlite_package() {

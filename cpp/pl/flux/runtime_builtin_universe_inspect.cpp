@@ -15,13 +15,29 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/25 10:40
 
+#include "cpp/pl/flux/plan/physical_plan.h"
 #include "cpp/pl/flux/plan/plan_node.h"
+#include "cpp/pl/flux/execution/materializer.h"
 #include "cpp/pl/flux/runtime_builtin_table_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_universe.h"
 
 namespace pl::flux {
 namespace {
 using namespace detail;
+
+absl::StatusOr<const TableValue*> materialized_table_ref(const TableValue& table, Value* storage) {
+    if (table.materialized) {
+        return &table;
+    }
+    Value value = Value::table_plan(table.bucket, table.plan, table.range_start, table.range_stop,
+                                    table.result_name);
+    auto materialized_or = execution::MaterializeValue(std::move(value));
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    *storage = std::move(*materialized_or);
+    return &storage->as_table();
+}
 
 absl::StatusOr<Value> builtin_yield(const std::vector<Value>& args) {
     auto object_or = require_object_argument(args, "yield");
@@ -38,8 +54,14 @@ absl::StatusOr<Value> builtin_yield(const std::vector<Value>& args) {
     if (!name_or.ok()) {
         return name_or.status();
     }
-    return Value::table_stream((*table_or)->bucket, (*table_or)->tables, (*table_or)->range_start,
-                               (*table_or)->range_stop, *name_or);
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    const TableValue* table = *materialized_or;
+    return Value::table_stream(table->bucket, table->tables, table->range_start,
+                               table->range_stop, *name_or);
 }
 
 absl::StatusOr<Value> builtin_columns(const std::vector<Value>& args) {
@@ -51,14 +73,19 @@ absl::StatusOr<Value> builtin_columns(const std::vector<Value>& args) {
     if (!table_or.ok()) {
         return table_or.status();
     }
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    const TableValue* table = *materialized_or;
 
     std::vector<std::shared_ptr<ObjectValue>> rows;
-    for (const auto& column : visible_columns_in_order(**table_or)) {
+    for (const auto& column : visible_columns_in_order(*table)) {
         rows.push_back(std::make_shared<ObjectValue>(
             std::vector<std::pair<std::string, Value>>{{"_value", Value::string(column)}}));
     }
-    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
-                        (*table_or)->range_stop);
+    return Value::table(table->bucket, std::move(rows), table->range_start, table->range_stop);
 }
 
 absl::StatusOr<Value> builtin_keys(const std::vector<Value>& args) {
@@ -70,14 +97,19 @@ absl::StatusOr<Value> builtin_keys(const std::vector<Value>& args) {
     if (!table_or.ok()) {
         return table_or.status();
     }
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    const TableValue* table = *materialized_or;
 
     std::vector<std::shared_ptr<ObjectValue>> rows;
-    for (const auto& column : group_columns_in_order(**table_or)) {
+    for (const auto& column : group_columns_in_order(*table)) {
         rows.push_back(std::make_shared<ObjectValue>(
             std::vector<std::pair<std::string, Value>>{{"_value", Value::string(column)}}));
     }
-    return Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
-                        (*table_or)->range_stop);
+    return Value::table(table->bucket, std::move(rows), table->range_start, table->range_stop);
 }
 
 absl::StatusOr<Value> builtin_find_column(const std::vector<Value>& args) {
@@ -97,8 +129,14 @@ absl::StatusOr<Value> builtin_find_column(const std::vector<Value>& args) {
     if (!column_or.ok()) {
         return column_or.status();
     }
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    const TableValue* table = *materialized_or;
 
-    auto rows_or = filter_rows_by_function(**table_or, **fn_or, "findColumn");
+    auto rows_or = filter_rows_by_function(*table, **fn_or, "findColumn");
     if (!rows_or.ok()) {
         return rows_or.status();
     }
@@ -131,8 +169,14 @@ absl::StatusOr<Value> builtin_find_record(const std::vector<Value>& args) {
     if (!idx_or.ok()) {
         return idx_or.status();
     }
+    Value materialized_input;
+    auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
+    if (!materialized_or.ok()) {
+        return materialized_or.status();
+    }
+    const TableValue* table = *materialized_or;
 
-    auto rows_or = filter_rows_by_function(**table_or, **fn_or, "findRecord");
+    auto rows_or = filter_rows_by_function(*table, **fn_or, "findRecord");
     if (!rows_or.ok()) {
         return rows_or.status();
     }
@@ -150,6 +194,13 @@ absl::StatusOr<Value> builtin_explain(const std::vector<Value>& args) {
     auto table_or = require_table_property(**object_or, "explain", "tables");
     if (!table_or.ok()) {
         return table_or.status();
+    }
+    auto physical_or = optional_bool_property(**object_or, "explain", "physical", false);
+    if (!physical_or.ok()) {
+        return physical_or.status();
+    }
+    if (*physical_or) {
+        return Value::string(plan::FormatPhysicalPlan((*table_or)->plan));
     }
     std::string out = plan::FormatPlan((*table_or)->plan);
     if (auto summary = source_pushdown_summary((*table_or)->plan); summary.has_value()) {
