@@ -205,6 +205,9 @@ cc_test(
         "connector/mysql_source_unit_test.cpp",
     ],
     copts = COPTS_WITH_ASAN,
+    data = [
+        "examples/cross_source/mysql_metrics.sql",
+    ],
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":connector",

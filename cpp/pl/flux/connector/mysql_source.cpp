@@ -28,6 +28,7 @@
 #include <boost/mysql/field_view.hpp>
 #include <boost/mysql/format_sql.hpp>
 #include <boost/mysql/metadata_collection_view.hpp>
+#include <boost/mysql/metadata_mode.hpp>
 #include <boost/mysql/results.hpp>
 #include <boost/mysql/ssl_mode.hpp>
 #include <cstdint>
@@ -178,6 +179,7 @@ absl::StatusOr<mysql::any_connection> open_connection(asio::io_context* ctx,
     try {
         mysql::any_connection conn(*ctx);
         conn.connect(params);
+        conn.set_meta_mode(mysql::metadata_mode::full);
         return conn;
     } catch (const mysql::error_with_diagnostics& err) {
         return absl::InvalidArgumentError(
