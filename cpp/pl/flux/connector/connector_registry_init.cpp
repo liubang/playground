@@ -13,31 +13,24 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2026/05/07 00:35
+// Created: 2026/05/10 15:30
 
-#pragma once
+#include "cpp/pl/flux/connector/connector_registry.h"
 
-#include "absl/status/statusor.h"
-#include "cpp/pl/flux/connector/table_source.h"
-#include "cpp/pl/flux/runtime_value.h"
-#include <optional>
-#include <string>
+#include "cpp/pl/flux/connector/mysql_source.h"
+#include "cpp/pl/flux/connector/sqlite_source.h"
+#include <memory>
 
 namespace pl::flux::connector {
 
-class SQLiteSource final : public TableSource {
-public:
-    SQLiteSource(std::string dsn, std::string table);
+void RegisterBuiltinConnectors(ConnectorRegistry& registry) {
+    registry.Register("sqlite", [](const SourceSpec& spec) -> std::unique_ptr<TableSource> {
+        return std::make_unique<SQLiteSource>(spec.dsn, spec.table);
+    });
 
-    [[nodiscard]] absl::StatusOr<TableSchema> Schema() const override;
-    [[nodiscard]] SourceCapabilities Capabilities() const override;
-    absl::StatusOr<Value> Scan(const ScanRequest& request) override;
-
-private:
-    std::string dsn_;
-    std::string table_;
-    std::string query_;
-    mutable std::optional<TableSchema> cached_schema_;
-};
+    registry.Register("mysql", [](const SourceSpec& spec) -> std::unique_ptr<TableSource> {
+        return std::make_unique<MySQLSource>(spec.dsn, spec.table);
+    });
+}
 
 } // namespace pl::flux::connector
