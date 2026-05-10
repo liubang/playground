@@ -20,10 +20,18 @@
 #include "absl/status/statusor.h"
 #include "cpp/pl/flux/plan/plan_node.h"
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 namespace pl::flux::optimizer {
+
+enum class PushdownState {
+    SourceScan,
+    SourcePushdown,
+    MaterializeBarrier,
+    Memory,
+};
 
 struct RuleTrace {
     std::string rule;
@@ -73,5 +81,12 @@ private:
 RuleBasedOptimizer DefaultRuleBasedOptimizer();
 
 std::vector<std::string> AppliedRuleNames(const PlanOptimizerResult& result);
+
+bool IsPushdownSourceScan(const plan::PlanNode& node);
+bool IsPushableUnaryNode(const plan::PlanNode& node);
+PushdownState AnalyzePushdownState(const plan::PlanNode& node);
+std::optional<std::string> PushdownSourceName(const plan::PlanNode& node);
+bool ContainsPlanNodeKind(const plan::PlanNode& node, plan::PlanNodeKind kind);
+bool IsExecutableConnectorPrefix(const plan::PlanNode& node);
 
 } // namespace pl::flux::optimizer

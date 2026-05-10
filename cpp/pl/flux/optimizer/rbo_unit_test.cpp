@@ -47,16 +47,16 @@ TEST(RuleBasedOptimizerTest, KeepsLogicalPlanStableWhileRecordingDeterministicTr
     ASSERT_TRUE(result_or.ok()) << result_or.status();
     EXPECT_EQ(plan, result_or->plan);
     EXPECT_EQ((std::vector<std::string>{
-                  "PushTimeRangeIntoConnectorScan",
-                  "PushPredicateIntoConnectorScan",
-                  "PushProjectionIntoConnectorScan",
-                  "PushSortIntoConnectorScan",
                   "PushLimitIntoConnectorScan",
+                  "PushSortIntoConnectorScan",
+                  "PushProjectionIntoConnectorScan",
+                  "PushPredicateIntoConnectorScan",
+                  "PushTimeRangeIntoConnectorScan",
               }),
               AppliedRuleNames(*result_or));
 }
 
-TEST(RuleBasedOptimizerTest, DoesNotTraceNonPrefixOperatorsAsPushdown) {
+TEST(RuleBasedOptimizerTest, TracesMaterializationBarrierWithoutPushdownRules) {
     auto plan = plan::MakeMaterializeBarrier(plan::MakeGroup(SourceScanPlan(), {"host"}),
                                              "unsupported lazy builtin", "test");
 
@@ -64,7 +64,25 @@ TEST(RuleBasedOptimizerTest, DoesNotTraceNonPrefixOperatorsAsPushdown) {
 
     ASSERT_TRUE(result_or.ok()) << result_or.status();
     EXPECT_EQ(plan, result_or->plan);
-    EXPECT_TRUE(AppliedRuleNames(*result_or).empty());
+    EXPECT_EQ((std::vector<std::string>{"InsertMaterializationBarrier"}),
+              AppliedRuleNames(*result_or));
+}
+
+TEST(RuleBasedOptimizerTest, InsertsMaterializationBarrierBeforeNonPushableUnaryNode) {
+    auto plan = plan::MakeUnaryNode(plan::PlanNodeKind::Map, SourceScanPlan());
+
+    auto result_or = DefaultRuleBasedOptimizer().Optimize(plan);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_NE(plan, result_or->plan);
+    ASSERT_EQ(plan::PlanNodeKind::Map, result_or->plan->kind);
+    ASSERT_EQ(1, result_or->plan->inputs.size());
+    ASSERT_NE(nullptr, result_or->plan->inputs[0]);
+    EXPECT_EQ(plan::PlanNodeKind::Materialize, result_or->plan->inputs[0]->kind);
+    EXPECT_EQ("unsupported lazy builtin", result_or->plan->inputs[0]->materialize.reason);
+    EXPECT_EQ("Map", result_or->plan->inputs[0]->materialize.builtin);
+    EXPECT_EQ((std::vector<std::string>{"InsertMaterializationBarrier"}),
+              AppliedRuleNames(*result_or));
 }
 
 } // namespace

@@ -729,17 +729,24 @@ PhysicalPlan
   memory operator。
 - 为 connector scan + memory suffix 增加 executor 级语义测试，覆盖 group 后接
   filter/project/rename/sort/limit、materialize barrier 后接 aggregate、以及 distinct fallback。
-- 新增第一版 RBO pass 管线骨架：`PlanOptimizer`、`Rule`、`RuleBasedOptimizer`、deterministic
-  rule order 和 rule trace。当前 rule 只记录 connector pushdown trace，不改写 logical plan；
-  `BuildPushdownPlan` 已统一从默认 RBO 入口进入，保证后续迁移 rule 时不用再改调用方。
+- 新增第一版 RBO pass 管线：`PlanOptimizer`、`Rule`、`RuleBasedOptimizer`、deterministic
+  rule order 和 rule trace。connector pushdown rule 当前记录 trace，materialize barrier rule
+  已执行真实 rewrite；`BuildPushdownPlan` 已统一从默认 RBO 入口进入，保证后续迁移 rule 时不用再改调用方。
+- logical / optimized logical / physical explain 统一改从 optimizer 入口生成；`plan` 层只保留
+  logical/physical IR 数据结构和通用格式化，不再判断 pushdown eligibility 或内嵌 RBO rule 名。
+- `InsertMaterializationBarrier` 已成为第一条真实 RBO rewrite：当非 pushable unary logical node
+  直接接在可下推 source prefix 上时，RBO 会在边界插入 materialize barrier。迁移期旧 builtin
+  仍可显式构造 barrier，RBO 会稳定记录该决策。
+- `explain(optimized: true)` 已支持 optimized logical plan 视图，会展示 RBO trace，并在可编译时
+  附带 `SourcePushdown(request: ...)` 摘要。
 
 待推进：
 
-- 将 predicate/projection/sort/limit/aggregate pushdown、barrier insertion、projection pruning
-  从 builtin helper 中迁入 RBO rule 实现。
-- 新增 physical plan node：`ConnectorScan`、`MemoryOperator`、`Materialize`、`OutputSink`。
+- 将 predicate/projection/sort/limit/aggregate pushdown 和 projection pruning 从 builtin helper
+  中迁入 RBO rule 实现；当前 `BuildPushdownPlan` 已消费 RBO 输出，但 `ScanRequest` 填充仍在
+  `optimizer/source_pushdown.cpp` 的兼容 builder 中。
+- 补齐 physical plan node：`OutputSink`。
 - CBO 先定义 statistics/cost/alternative plan 接口；缺统计时明确使用 RBO 输出。
-- `explain()` 支持 logical、optimized logical、physical 三种视图。
 
 验收：
 
