@@ -17,13 +17,13 @@
 
 #include "cpp/pl/minidfs/client/dfs_client.h"
 
+#include "cpp/pl/minidfs/common/checksum.h"
 #include "cpp/pl/minidfs/common/constants.h"
 #include "cpp/pl/minidfs/common/error_code.h"
 #include "cpp/pl/minidfs/protocol/minidfs.pb.h"
 #include <algorithm>
 #include <brpc/channel.h>
 #include <brpc/controller.h>
-#include <crc32c/crc32c.h>
 #include <cstdint>
 #include <cstring>
 #include <fcntl.h>
@@ -366,7 +366,7 @@ Result<uint64_t> DfsClient::write_block(uint64_t inode_id,
 
         write_req.set_data(data + offset, this_chunk);
         write_req.set_chunk_index(chunk_index);
-        write_req.set_checksum(crc32c::Crc32c(data + offset, this_chunk));
+        write_req.set_checksum(compute_crc32c(data + offset, this_chunk));
         write_req.set_is_last_chunk(offset + this_chunk >= length);
 
         protocol::WriteBlockResponse write_resp;
@@ -463,6 +463,339 @@ Result<Void> DfsClient::get(std::string_view dfs_path, std::string_view local_pa
     RETURN_VOID;
 }
 
+// =============================================================================
+// Admin / diagnostic operations
+// =============================================================================
+
+Result<DfsClient::ClusterInfo> DfsClient::get_cluster_info() {
+    protocol::AdminService_Stub stub(&namenode_channel_);
+    brpc::Controller cntl;
+
+    protocol::GetClusterInfoRequest request;
+    protocol::GetClusterInfoResponse response;
+    stub.GetClusterInfo(&cntl, &request, &response, nullptr);
+
+    if (cntl.Failed()) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
+                            "GetClusterInfo RPC failed: {}", cntl.ErrorText());
+    }
+    if (response.status().code() != 0) {
+        return pl::makeError(static_cast<status_code_t>(response.status().code()),
+                             response.status().message());
+    }
+
+    return ClusterInfo{
+        .total_capacity_bytes = response.total_capacity_bytes(),
+        .used_bytes = response.used_bytes(),
+        .free_bytes = response.free_bytes(),
+        .live_datanodes = response.live_datanodes(),
+        .dead_datanodes = response.dead_datanodes(),
+        .total_blocks = response.total_blocks(),
+        .total_files = response.total_files(),
+        .total_directories = response.total_directories(),
+        .under_replicated_blocks = response.under_replicated_blocks(),
+    };
+}
+
+Result<std::vector<DfsClient::DataNodeSummary>> DfsClient::list_datanodes(bool include_dead) {
+    protocol::AdminService_Stub stub(&namenode_channel_);
+    brpc::Controller cntl;
+
+    protocol::ListDataNodesRequest request;
+    request.set_include_dead(include_dead);
+
+    protocol::ListDataNodesResponse response;
+    stub.ListDataNodes(&cntl, &request, &response, nullptr);
+
+    if (cntl.Failed()) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
+                            "ListDataNodes RPC failed: {}", cntl.ErrorText());
+    }
+    if (response.status().code() != 0) {
+        return pl::makeError(static_cast<status_code_t>(response.status().code()),
+                             response.status().message());
+    }
+
+    std::vector<DataNodeSummary> result;
+    result.reserve(response.datanodes_size());
+    for (const auto& dn : response.datanodes()) {
+        result.push_back(DataNodeSummary{
+            .datanode_id = dn.datanode_id(),
+            .uuid = dn.uuid(),
+            .hostname = dn.hostname(),
+            .ip = dn.ip(),
+            .rpc_port = dn.rpc_port(),
+            .data_port = dn.data_port(),
+            .rack = dn.rack(),
+            .state = dn.state(),
+            .capacity_bytes = dn.capacity_bytes(),
+            .used_bytes = dn.used_bytes(),
+            .free_bytes = dn.free_bytes(),
+            .last_heartbeat_ms = dn.last_heartbeat_ms(),
+            .block_count = dn.block_count(),
+        });
+    }
+    return result;
+}
+
+Result<DfsClient::DataNodeSummary> DfsClient::get_datanode_info(uint64_t datanode_id) {
+    protocol::AdminService_Stub stub(&namenode_channel_);
+    brpc::Controller cntl;
+
+    protocol::GetDataNodeInfoRequest request;
+    request.set_datanode_id(datanode_id);
+
+    protocol::GetDataNodeInfoResponse response;
+    stub.GetDataNodeInfo(&cntl, &request, &response, nullptr);
+
+    if (cntl.Failed()) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
+                            "GetDataNodeInfo RPC failed: {}", cntl.ErrorText());
+    }
+    if (response.status().code() != 0) {
+        return pl::makeError(static_cast<status_code_t>(response.status().code()),
+                             response.status().message());
+    }
+
+    const auto& dn = response.datanode();
+    return DataNodeSummary{
+        .datanode_id = dn.datanode_id(),
+        .uuid = dn.uuid(),
+        .hostname = dn.hostname(),
+        .ip = dn.ip(),
+        .rpc_port = dn.rpc_port(),
+        .data_port = dn.data_port(),
+        .rack = dn.rack(),
+        .state = dn.state(),
+        .capacity_bytes = dn.capacity_bytes(),
+        .used_bytes = dn.used_bytes(),
+        .free_bytes = dn.free_bytes(),
+        .last_heartbeat_ms = dn.last_heartbeat_ms(),
+        .block_count = dn.block_count(),
+    };
+}
+
+Result<DfsClient::DataNodeSummary> DfsClient::get_datanode_info_by_uuid(std::string_view uuid) {
+    protocol::AdminService_Stub stub(&namenode_channel_);
+    brpc::Controller cntl;
+
+    protocol::GetDataNodeInfoRequest request;
+    request.set_uuid(std::string(uuid));
+
+    protocol::GetDataNodeInfoResponse response;
+    stub.GetDataNodeInfo(&cntl, &request, &response, nullptr);
+
+    if (cntl.Failed()) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
+                            "GetDataNodeInfo RPC failed: {}", cntl.ErrorText());
+    }
+    if (response.status().code() != 0) {
+        return pl::makeError(static_cast<status_code_t>(response.status().code()),
+                             response.status().message());
+    }
+
+    const auto& dn = response.datanode();
+    return DataNodeSummary{
+        .datanode_id = dn.datanode_id(),
+        .uuid = dn.uuid(),
+        .hostname = dn.hostname(),
+        .ip = dn.ip(),
+        .rpc_port = dn.rpc_port(),
+        .data_port = dn.data_port(),
+        .rack = dn.rack(),
+        .state = dn.state(),
+        .capacity_bytes = dn.capacity_bytes(),
+        .used_bytes = dn.used_bytes(),
+        .free_bytes = dn.free_bytes(),
+        .last_heartbeat_ms = dn.last_heartbeat_ms(),
+        .block_count = dn.block_count(),
+    };
+}
+
+namespace {
+
+DfsClient::InodeDetail to_inode_detail(const protocol::InodeInfoProto& proto) {
+    return DfsClient::InodeDetail{
+        .inode_id = proto.inode_id(),
+        .type = proto.type(),
+        .parent_id = proto.parent_id(),
+        .name = proto.name(),
+        .owner = proto.owner(),
+        .group = proto.group(),
+        .permission = proto.permission(),
+        .length = proto.length(),
+        .replication = proto.replication(),
+        .block_size = proto.block_size(),
+        .state = proto.state(),
+        .ctime_ms = proto.ctime_ms(),
+        .mtime_ms = proto.mtime_ms(),
+        .block_count = proto.block_count(),
+        .child_count = proto.child_count(),
+    };
+}
+
+} // namespace
+
+Result<DfsClient::InodeDetail> DfsClient::get_inode_info(uint64_t inode_id) {
+    protocol::AdminService_Stub stub(&namenode_channel_);
+    brpc::Controller cntl;
+
+    protocol::GetInodeInfoRequest request;
+    request.set_inode_id(inode_id);
+
+    protocol::GetInodeInfoResponse response;
+    stub.GetInodeInfo(&cntl, &request, &response, nullptr);
+
+    if (cntl.Failed()) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
+                            "GetInodeInfo RPC failed: {}", cntl.ErrorText());
+    }
+    if (response.status().code() != 0) {
+        return pl::makeError(static_cast<status_code_t>(response.status().code()),
+                             response.status().message());
+    }
+    return to_inode_detail(response.inode());
+}
+
+Result<DfsClient::InodeDetail> DfsClient::get_inode_info_by_path(std::string_view path) {
+    protocol::AdminService_Stub stub(&namenode_channel_);
+    brpc::Controller cntl;
+
+    protocol::GetInodeInfoRequest request;
+    request.set_path(std::string(path));
+
+    protocol::GetInodeInfoResponse response;
+    stub.GetInodeInfo(&cntl, &request, &response, nullptr);
+
+    if (cntl.Failed()) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
+                            "GetInodeInfo RPC failed: {}", cntl.ErrorText());
+    }
+    if (response.status().code() != 0) {
+        return pl::makeError(static_cast<status_code_t>(response.status().code()),
+                             response.status().message());
+    }
+    return to_inode_detail(response.inode());
+}
+
+namespace {
+
+std::vector<DfsClient::FileBlockDetail> to_file_blocks(
+    const google::protobuf::RepeatedPtrField<protocol::FileBlockInfoProto>& blocks_proto) {
+    std::vector<DfsClient::FileBlockDetail> blocks;
+    blocks.reserve(blocks_proto.size());
+    for (const auto& b : blocks_proto) {
+        DfsClient::FileBlockDetail detail{
+            .block_id = b.block_id(),
+            .block_index = b.block_index(),
+            .generation_stamp = b.generation_stamp(),
+            .length = b.length(),
+            .state = b.state(),
+            .desired_replicas = b.desired_replicas(),
+            .actual_replicas = b.actual_replicas(),
+        };
+        for (const auto& loc : b.locations()) {
+            detail.locations.push_back(DfsClient::BlockLocation{
+                .datanode_id = loc.datanode_id(),
+                .host = loc.host(),
+                .data_port = loc.data_port(),
+            });
+        }
+        blocks.push_back(std::move(detail));
+    }
+    return blocks;
+}
+
+} // namespace
+
+Result<std::vector<DfsClient::FileBlockDetail>> DfsClient::get_file_blocks(uint64_t inode_id) {
+    protocol::AdminService_Stub stub(&namenode_channel_);
+    brpc::Controller cntl;
+
+    protocol::GetFileBlocksRequest request;
+    request.set_inode_id(inode_id);
+
+    protocol::GetFileBlocksResponse response;
+    stub.GetFileBlocks(&cntl, &request, &response, nullptr);
+
+    if (cntl.Failed()) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
+                            "GetFileBlocks RPC failed: {}", cntl.ErrorText());
+    }
+    if (response.status().code() != 0) {
+        return pl::makeError(static_cast<status_code_t>(response.status().code()),
+                             response.status().message());
+    }
+    return to_file_blocks(response.blocks());
+}
+
+Result<std::vector<DfsClient::FileBlockDetail>> DfsClient::get_file_blocks_by_path(
+    std::string_view path) {
+    protocol::AdminService_Stub stub(&namenode_channel_);
+    brpc::Controller cntl;
+
+    protocol::GetFileBlocksRequest request;
+    request.set_path(std::string(path));
+
+    protocol::GetFileBlocksResponse response;
+    stub.GetFileBlocks(&cntl, &request, &response, nullptr);
+
+    if (cntl.Failed()) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
+                            "GetFileBlocks RPC failed: {}", cntl.ErrorText());
+    }
+    if (response.status().code() != 0) {
+        return pl::makeError(static_cast<status_code_t>(response.status().code()),
+                             response.status().message());
+    }
+    return to_file_blocks(response.blocks());
+}
+
+Result<DfsClient::BlockDetail> DfsClient::get_block_info(uint64_t block_id) {
+    protocol::AdminService_Stub stub(&namenode_channel_);
+    brpc::Controller cntl;
+
+    protocol::GetBlockInfoRequest request;
+    request.set_block_id(block_id);
+
+    protocol::GetBlockInfoResponse response;
+    stub.GetBlockInfo(&cntl, &request, &response, nullptr);
+
+    if (cntl.Failed()) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
+                            "GetBlockInfo RPC failed: {}", cntl.ErrorText());
+    }
+    if (response.status().code() != 0) {
+        return pl::makeError(static_cast<status_code_t>(response.status().code()),
+                             response.status().message());
+    }
+
+    BlockDetail detail{
+        .block_id = response.block_id(),
+        .inode_id = response.inode_id(),
+        .block_index = response.block_index(),
+        .generation_stamp = response.generation_stamp(),
+        .length = response.length(),
+        .state = response.state(),
+        .desired_replicas = response.desired_replicas(),
+    };
+    for (const auto& r : response.replicas()) {
+        detail.replicas.push_back(ReplicaDetail{
+            .datanode_id = r.datanode_id(),
+            .hostname = r.hostname(),
+            .state = r.state(),
+            .length = r.length(),
+            .generation_stamp = r.generation_stamp(),
+            .report_time_ms = r.report_time_ms(),
+        });
+    }
+    return detail;
+}
+
+// =============================================================================
+// File read
+// =============================================================================
+
 Result<std::string> DfsClient::read_block(const LocatedBlock& block) {
     // Try each replica location until one succeeds
     for (const auto& loc : block.locations) {
@@ -500,7 +833,7 @@ Result<std::string> DfsClient::read_block(const LocatedBlock& block) {
         }
 
         // Verify checksum
-        uint32_t computed = crc32c::Crc32c(resp.data().data(), resp.data().size());
+        uint32_t computed = compute_crc32c(resp.data().data(), resp.data().size());
         if (computed != resp.checksum()) {
             XLOGF(WARN, "ReadBlock from {}: checksum mismatch, trying next replica", addr);
             continue;

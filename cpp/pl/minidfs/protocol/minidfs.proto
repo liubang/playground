@@ -266,6 +266,16 @@ service DataNodeProtocolService {
     rpc CommitBlock(CommitBlockRequest) returns (CommitBlockResponse);
 }
 
+// Admin service — cluster management and diagnostics
+service AdminService {
+    rpc GetClusterInfo(GetClusterInfoRequest) returns (GetClusterInfoResponse);
+    rpc ListDataNodes(ListDataNodesRequest) returns (ListDataNodesResponse);
+    rpc GetDataNodeInfo(GetDataNodeInfoRequest) returns (GetDataNodeInfoResponse);
+    rpc GetInodeInfo(GetInodeInfoRequest) returns (GetInodeInfoResponse);
+    rpc GetFileBlocks(GetFileBlocksRequest) returns (GetFileBlocksResponse);
+    rpc GetBlockInfo(GetBlockInfoRequest) returns (GetBlockInfoResponse);
+}
+
 // DataNode-to-DataNode transfer service (pipeline protocol) and client reads
 service DataTransferService {
     rpc WriteBlock(WriteBlockRequest) returns (WriteBlockResponse);
@@ -313,4 +323,135 @@ message TransferBlockRequest {
 
 message TransferBlockResponse {
     StatusProto status = 1;
+}
+
+// ============================================================================
+// Admin messages
+// ============================================================================
+
+message GetClusterInfoRequest {}
+
+message GetClusterInfoResponse {
+    StatusProto status = 1;
+    uint64 total_capacity_bytes = 2;
+    uint64 used_bytes = 3;
+    uint64 free_bytes = 4;
+    uint32 live_datanodes = 5;
+    uint32 dead_datanodes = 6;
+    uint64 total_blocks = 7;
+    uint64 total_files = 8;
+    uint64 total_directories = 9;
+    uint32 under_replicated_blocks = 10;
+}
+
+message ListDataNodesRequest {
+    bool include_dead = 1;   // include dead/decommissioned nodes
+}
+
+message DataNodeInfoProto {
+    uint64 datanode_id = 1;
+    string uuid = 2;
+    string hostname = 3;
+    string ip = 4;
+    uint32 rpc_port = 5;
+    uint32 data_port = 6;
+    string rack = 7;
+    string state = 8;        // live/stale/dead/decommissioning/decommissioned
+    uint64 capacity_bytes = 9;
+    uint64 used_bytes = 10;
+    uint64 free_bytes = 11;
+    uint64 last_heartbeat_ms = 12;
+    uint32 block_count = 13;
+}
+
+message ListDataNodesResponse {
+    StatusProto status = 1;
+    repeated DataNodeInfoProto datanodes = 2;
+}
+
+message GetDataNodeInfoRequest {
+    uint64 datanode_id = 1;  // lookup by id
+    string uuid = 2;         // or lookup by uuid (one of these is required)
+}
+
+message GetDataNodeInfoResponse {
+    StatusProto status = 1;
+    DataNodeInfoProto datanode = 2;
+    repeated BlockInfoProto blocks = 3;  // blocks stored on this datanode
+}
+
+message GetInodeInfoRequest {
+    uint64 inode_id = 1;     // lookup by id
+    string path = 2;         // or lookup by path (one of these is required)
+}
+
+message InodeInfoProto {
+    uint64 inode_id = 1;
+    string type = 2;         // "directory" or "file"
+    uint64 parent_id = 3;
+    string name = 4;
+    string full_path = 5;
+    string owner = 6;
+    string group = 7;
+    uint32 permission = 8;
+    uint64 length = 9;
+    uint32 replication = 10;
+    uint64 block_size = 11;
+    string state = 12;       // normal/under_construction/deleted
+    uint64 ctime_ms = 13;
+    uint64 mtime_ms = 14;
+    uint32 block_count = 15;
+    uint32 child_count = 16; // number of children (for directories)
+}
+
+message GetInodeInfoResponse {
+    StatusProto status = 1;
+    InodeInfoProto inode = 2;
+}
+
+message GetFileBlocksRequest {
+    uint64 inode_id = 1;     // lookup by inode id
+    string path = 2;         // or by path
+}
+
+message FileBlockInfoProto {
+    uint64 block_id = 1;
+    uint32 block_index = 2;
+    uint64 generation_stamp = 3;
+    uint64 length = 4;
+    string state = 5;        // allocating/committed/corrupt/deleted
+    uint32 desired_replicas = 6;
+    uint32 actual_replicas = 7;
+    repeated DataNodeEndpointProto locations = 8;
+}
+
+message GetFileBlocksResponse {
+    StatusProto status = 1;
+    InodeInfoProto file_info = 2;
+    repeated FileBlockInfoProto blocks = 3;
+}
+
+message GetBlockInfoRequest {
+    uint64 block_id = 1;
+}
+
+message BlockReplicaInfoProto {
+    uint64 datanode_id = 1;
+    string hostname = 2;
+    string state = 3;        // writing/finalized/corrupt/stale/deleting/deleted
+    uint64 length = 4;
+    uint64 generation_stamp = 5;
+    uint64 report_time_ms = 6;
+}
+
+message GetBlockInfoResponse {
+    StatusProto status = 1;
+    uint64 block_id = 2;
+    uint64 inode_id = 3;
+    uint32 block_index = 4;
+    uint64 generation_stamp = 5;
+    uint64 length = 6;
+    string state = 7;
+    uint32 desired_replicas = 8;
+    repeated BlockReplicaInfoProto replicas = 9;
 }

@@ -38,8 +38,8 @@ namespace pl::minidfs {
 struct MySQLConfig {
     std::string host = "127.0.0.1";
     uint16_t port = 3306;
-    std::string user = "minidfs";
-    std::string password = "minidfs";
+    std::string user;
+    std::string password;
     std::string database = "minidfs";
     uint32_t pool_size = 16;
 };

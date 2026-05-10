@@ -1,50 +1,396 @@
-# DFS(Distributed File System)
+# MiniDFS — C++20 分布式文件系统
 
-## 设计点
+MiniDFS 是一个用 C++20 实现的 HDFS-like 分布式文件系统，基于 brpc 进行 RPC 通信，使用 MySQL 存储元数据。项目追求极致性能（ISA-L 硬件加速校验、零拷贝 I/O、连接池复用）和工程品质（强类型抽象、RAII 资源管理、编译期约束）。
 
-考虑到文件可能非常大，并且大小不均，DFS会把文件分成一个个block来存储，每个block大小为64MB（可配置）。但是通常情况下，不会设置太小。
+## 架构
 
-- 使用DFS系统的需求存储的文件都偏大，所以较大的block有利于减少系统内部的寻址和交互次数;
-- 大的block意味着client可能在一个block上执行多次操作，这可以复用连接，节省网络开销;
-- 更大的block可以减少block的数量，从而节省元数据存储开销，相当于节省了内存资源;
+```text
+                  +----------------------+
+                  |        Client        |
+                  | CLI / SDK / Library  |
+                  +----------+-----------+
+                             |
+                             | brpc (Metadata RPC)
+                             |
+                  +----------v-----------+
+                  |       NameNode       |
+                  |----------------------|
+                  | NamespaceManager     |
+                  | BlockManager         |
+                  | DataNodeManager      |
+                  | PlacementManager     |
+                  | ReplicationManager   |
+                  | LeaseManager         |
+                  | AdminService         |
+                  +----------+-----------+
+                             |
+                  +----------v-----------+
+                  |  MySQL MetadataStore |
+                  +----------------------+
 
-DFS的master设计
+  +----------------+    +----------------+    +----------------+
+  |   DataNode 1   |    |   DataNode 2   |    |   DataNode 3   |
+  |----------------|    |----------------|    |----------------|
+  | LocalBlockStore|    | LocalBlockStore|    | LocalBlockStore|
+  | PipelineRecv   |    | PipelineRecv   |    | PipelineRecv   |
+  | BlockReporter  |    | BlockReporter  |    | BlockReporter  |
+  | HeartbeatSender|    | HeartbeatSender|    | HeartbeatSender|
+  | ReplicationWkr |    | ReplicationWkr |    | ReplicationWkr |
+  +----------------+    +----------------+    +----------------+
+```
 
-- 文件位置等信息 -> 元数据
-- 单点还是分布式？
+## 技术栈
 
-|          | 单中心节点                 | 多中心节点                                       |
-| -------- | -------------------------- | ------------------------------------------------ |
-| 优点     | 实现难度低，一致性容易保证 | 实现难度极高，一致性难以保证，系统可靠性难以验证 |
-| 缺点     | 成为整个系统的瓶颈         | 不存在瓶颈，可扩展性强                           |
-| 工作重心 | 缩减元数据，减少master压力 | 设计一个分布式的元数据管理系统，并验证其可靠性   |
+| 领域     | 选型                     | 说明                           |
+| -------- | ------------------------ | ------------------------------ |
+| 语言     | C++20                    | concepts, ranges, constexpr    |
+| 构建     | Bazel 8 (bzlmod)         | 确定性构建                     |
+| RPC      | brpc + protobuf          | 高性能、低延迟                 |
+| 元数据   | MySQL (Boost.MySQL)      | 异步连接池、类型安全           |
+| 校验     | CRC32C (ISA-L)           | SIMD 硬件加速                  |
+| 压缩     | zstd / snappy            | 可选块压缩                     |
+| 错误处理 | pl::Result (folly::Expected) | 类型安全的错误传播         |
+| 日志     | folly xlog               | 结构化日志                     |
 
-目前可以先考虑采用单master节点的方案。
+## 目录结构
 
-master用来存储整个文件系统的三类元数据：
+```
+cpp/pl/minidfs/
+├── common/          # 公共类型、常量、校验、压缩、错误码
+│   └── tests/       # common 单元测试（5 个 target）
+├── protocol/        # protobuf 服务定义
+├── metadata/        # MetadataStore 接口及 MySQL 实现
+├── namenode/        # NameNode 业务逻辑（6 个 Manager）
+│   └── tests/       # namenode 单元测试（6 个 target）
+├── datanode/        # DataNode 存储引擎及服务
+│   └── tests/       # datanode 单元测试（5 个 target）
+├── master/          # NameNode 启动入口
+├── client/          # CLI 工具及 DfsClient SDK
+├── docker-compose.yml
+├── Dockerfile
+├── spec.md          # 详细设计规约
+└── readme.md
+```
 
-- 所有文件和block的namespace【持久化】
-- 文件到block的映射【持久化】
-- 每个block的位置【不持久化】
+## 构建依赖
 
-DFS读取文件的过程简单概括为：
-文件名 -> 获取文件对应的所有block -> 获取所有block的位置 -> 依次到对应的datanode中读取block
+### 系统工具
 
-为什么block的位置不做持久化？
-因为master在启动的时候，可以从各个datanode收集block的位置信息。
+- Bazel 8+（推荐通过 [bazelisk](https://github.com/bazelbuild/bazelisk) 安装）
+- C++20 编译器：Clang 16+ 或 GCC 13+
+- autoconf, automake, libtool（ISA-L 构建需要）
+- nasm（ISA-L 汇编优化需要，x86_64 环境）
+- pkg-config
 
-master高可用设计
+macOS 安装：
 
-- master采用主备方案，当前正在使用的master为主，另一个为从
-- 主master接收写请求，并向从同步wal，只有从同步完成，元数据才算操作成功
+```bash
+brew install bazelisk autoconf automake libtool nasm pkg-config
+```
 
-block的高可用设计
+Ubuntu/Debian 安装：
 
-- 文件是被拆分成多个block来存储的，每个block都有三个副本。所以，文件数据的高可用是以block为粒度来保持的;
-- master来维持block的副本信息;
-- 对一个block的每次写入，必须确保三个副本都写入完成，才视为成功;
-- 一个block的所有副本都具有完整的数据;
-- 如果datanode宕机，它上面的所有block都有另外两个副本;
-- 如果这个宕机的副本在一段时间内没有恢复，那么master就会在其他datanode上重建副本，确保副本数维持在3个;
+```bash
+sudo apt-get install -y build-essential clang lld git curl \
+    autoconf automake libtool nasm pkg-config
+# 安装 bazelisk
+curl -fSL https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64 \
+    -o /usr/local/bin/bazel && sudo chmod +x /usr/local/bin/bazel
+```
+
+### 第三方库（Bazel 自动管理）
+
+以下依赖由 `MODULE.bazel` 声明，Bazel 会自动下载，无需手动安装：
+
+- brpc 1.16.0（RPC 框架）
+- protobuf 31.1（序列化）
+- folly 2025.01.13（Expected、xlog）
+- Boost.MySQL 1.90（异步 MySQL 客户端）
+- ISA-L 2.31（硬件加速 CRC32C）
+- zstd 1.5.6、snappy 1.2.1（压缩）
+- fmt 12.1.0（格式化）
+- gflags 2.2.2（命令行参数）
+- googletest 1.17（单元测试）
+
+### 外部服务
+
+- MySQL 8.0+（NameNode 元数据存储）
+
+## 构建
+
+```bash
+# 构建全部
+bazel build //cpp/pl/minidfs/...
+
+# 单独构建各组件
+bazel build //cpp/pl/minidfs/master:namenode       # NameNode 服务
+bazel build //cpp/pl/minidfs/client:datanode       # DataNode 服务
+bazel build //cpp/pl/minidfs/client:minidfs        # CLI 客户端
+
+# 优化构建（推荐用于部署）
+bazel build -c opt //cpp/pl/minidfs/master:namenode
+bazel build -c opt //cpp/pl/minidfs/client:datanode
+bazel build -c opt //cpp/pl/minidfs/client:minidfs
+```
+
+构建产物位于：
+
+```
+bazel-bin/cpp/pl/minidfs/master/namenode      # NameNode 二进制
+bazel-bin/cpp/pl/minidfs/client/datanode      # DataNode 二进制
+bazel-bin/cpp/pl/minidfs/client/minidfs       # CLI 二进制
+```
+
+## 运行测试
+
+```bash
+# 全部单元测试（16 个 test target）
+bazel test //cpp/pl/minidfs/...
+
+# 按模块运行
+bazel test //cpp/pl/minidfs/common/tests/...     # common: 5 个
+bazel test //cpp/pl/minidfs/namenode/tests/...   # namenode: 6 个
+bazel test //cpp/pl/minidfs/datanode/tests/...   # datanode: 5 个
+```
+
+## 手动部署
+
+### 1. 准备 MySQL
+
+创建数据库并初始化 schema：
+
+```bash
+mysql -h <host> -u root -p < cpp/pl/minidfs/metadata/schema.sql
+```
+
+或手动执行 `schema.sql` 中的建表语句。确保创建好用于连接的数据库用户并授权：
+
+```sql
+CREATE USER 'minidfs'@'%' IDENTIFIED BY '<your_password>';
+GRANT ALL PRIVILEGES ON minidfs.* TO 'minidfs'@'%';
+FLUSH PRIVILEGES;
+```
+
+### 2. 启动 NameNode
+
+```bash
+./namenode \
+    -port=9000 \
+    -mysql_host=127.0.0.1 \
+    -mysql_port=3306 \
+    -mysql_user=minidfs \
+    -mysql_password=<your_password> \
+    -mysql_database=minidfs \
+    -mysql_pool_size=8
+```
+
+### 3. 启动 DataNode（每台机器一个）
+
+```bash
+./datanode \
+    -port=9100 \
+    -storage_root=/data/minidfs/dn1 \
+    -namenode_addr=<namenode_host>:9000 \
+    -hostname=$(hostname) \
+    -ip=<本机IP> \
+    -rpc_port=9100 \
+    -rack=/rack1 \
+    -heartbeat_interval_ms=3000 \
+    -block_report_interval_ms=600000
+```
+
+不同 DataNode 使用不同的 `storage_root` 和端口（如果部署在同一台机器上）。
+
+### 4. 使用 CLI 客户端
+
+```bash
+./minidfs -namenode=<namenode_host>:9000 <command> [args...]
+```
+
+## Docker 部署
+
+使用 docker compose 一键启动完整集群（1 NameNode + 3 DataNode + MySQL）：
+
+```bash
+cd cpp/pl/minidfs
+
+# 创建 .env 文件配置密码（可选，有默认值）
+cat > .env <<EOF
+MYSQL_USER=minidfs
+MYSQL_PASSWORD=your_password
+MYSQL_ROOT_PASSWORD=your_root_password
+EOF
+
+# 启动集群
+docker compose up -d
+
+# 查看状态
+docker compose ps
+
+# 查看日志
+docker compose logs -f namenode
+docker compose logs -f datanode1
+
+# 销毁环境（含数据卷）
+docker compose down -v
+```
+
+端口映射：
+
+| 服务      | 容器端口 | 宿主端口 |
+| --------- | -------- | -------- |
+| MySQL     | 3306     | 13306    |
+| NameNode  | 8000     | 18000    |
+| DataNode1 | 9000/9001| 19000/19001 |
+| DataNode2 | 9000/9001| 19010/19011 |
+| DataNode3 | 9000/9001| 19020/19021 |
 
 ## 支持的操作
+
+### 文件系统操作
+
+| 操作   | 说明                             |
+| ------ | -------------------------------- |
+| mkdir  | 创建目录（支持多级路径）         |
+| ls     | 列出目录内容（-d/-h/-R/-t/-S/-r）|
+| stat   | 查看文件/目录详细信息            |
+| put    | 上传本地文件到 DFS               |
+| get    | 从 DFS 下载文件到本地            |
+| rm     | 删除文件或目录（-r 递归删除）    |
+| mv     | 重命名/移动文件或目录            |
+
+### 管理与诊断操作
+
+| 操作       | 说明                                       |
+| ---------- | ------------------------------------------ |
+| fsinfo     | 查看集群概览（容量、节点数、块数、文件数） |
+| datanodes  | 列出所有 DataNode 及状态                   |
+| datanode   | 查看单个 DataNode 详细信息                 |
+| inode      | 查看 inode 详情（支持 ID 或路径查询）      |
+| blocks     | 查看文件的所有 block 及副本分布            |
+| block      | 查看单个 block 的副本详情                  |
+
+## CLI 命令参考
+
+```
+Usage: minidfs [options] <command> [args...]
+
+File System Commands:
+  mkdir <path>               创建目录
+  ls [-d] [-h] [-R] [-t] [-S] [-r] [path]
+                             列出目录内容（默认 /）
+      -d  显示目录自身信息，不列出内容
+      -h  以 human-readable 格式显示大小
+      -R  递归列出所有子目录
+      -t  按修改时间排序（最新在前）
+      -S  按文件大小排序（最大在前）
+      -r  反转排序顺序
+  stat <path>                查看文件/目录详细信息
+  rm [-r] <path>             删除文件或目录（-r 递归）
+  mv <src> <dst>             重命名/移动
+  put <local> <dfs_path>     上传本地文件
+  get <dfs_path> <local>     下载文件到本地
+
+Admin Commands:
+  fsinfo                     查看集群概览
+  datanodes [-a|--all]       列出所有 DataNode（-a 含已下线节点）
+  datanode <id>              查看 DataNode 详情
+  inode <id|path>            查看 inode 详情
+  blocks <id|path>           列出文件的 block 列表
+  block <block_id>           查看 block 详情及副本
+
+Options:
+  -namenode=<host:port>      NameNode 地址（默认 127.0.0.1:8020）
+  -rpc_timeout_ms=<ms>       RPC 超时时间（默认 5000）
+  -replication=<n>           副本数（默认 3）
+  -block_size=<bytes>        块大小（默认 128MB）
+```
+
+### 使用示例
+
+```bash
+# 连接 NameNode
+export NAMENODE=192.168.1.100:9000
+
+# 创建目录
+minidfs -namenode=$NAMENODE mkdir /data
+minidfs -namenode=$NAMENODE mkdir /data/logs
+
+# 上传文件
+minidfs -namenode=$NAMENODE put ./access.log /data/logs/access.log
+
+# 查看目录
+minidfs -namenode=$NAMENODE ls /data/logs
+
+# 递归列出目录（human-readable 大小）
+minidfs -namenode=$NAMENODE ls -hR /data
+
+# 按修改时间排序
+minidfs -namenode=$NAMENODE ls -t /data/logs
+
+# 按文件大小倒序排列
+minidfs -namenode=$NAMENODE ls -Sr /data/logs
+
+# 只看目录自身属性
+minidfs -namenode=$NAMENODE ls -d /data/logs
+
+# 查看文件详情
+minidfs -namenode=$NAMENODE stat /data/logs/access.log
+
+# 下载文件
+minidfs -namenode=$NAMENODE get /data/logs/access.log ./downloaded.log
+
+# 移动/重命名
+minidfs -namenode=$NAMENODE mv /data/logs/access.log /data/logs/access.log.bak
+
+# 删除文件
+minidfs -namenode=$NAMENODE rm /data/logs/access.log.bak
+
+# 递归删除目录
+minidfs -namenode=$NAMENODE rm -r /data/logs
+
+# 指定副本数和块大小上传
+minidfs -namenode=$NAMENODE -replication=2 -block_size=67108864 put ./large.dat /data/large.dat
+```
+
+### 管理命令示例
+
+```bash
+# 查看集群概览
+minidfs -namenode=$NAMENODE fsinfo
+
+# 列出所有活跃 DataNode
+minidfs -namenode=$NAMENODE datanodes
+
+# 列出所有 DataNode（含已宕机）
+minidfs -namenode=$NAMENODE datanodes --all
+
+# 查看某个 DataNode 详情
+minidfs -namenode=$NAMENODE datanode 1
+
+# 通过路径查看 inode 信息
+minidfs -namenode=$NAMENODE inode /data/logs/access.log
+
+# 通过 inode ID 查看
+minidfs -namenode=$NAMENODE inode 42
+
+# 查看文件的 block 分布
+minidfs -namenode=$NAMENODE blocks /data/logs/access.log
+
+# 查看单个 block 的副本详情
+minidfs -namenode=$NAMENODE block 1001
+```
+
+## 设计要点
+
+**Block 存储**：文件被拆分为固定大小的 Block（默认 128MB），每个 Block 维护 3 副本分布在不同 DataNode 上。Block 使用自描述二进制格式（BlockHeader），支持分 chunk 校验和可选压缩。
+
+**写入流水线**：Client 写入时，数据通过 pipeline 依次转发到多个 DataNode，确保所有副本写入完成后才返回成功。
+
+**心跳与副本管理**：DataNode 定期向 NameNode 发送心跳汇报状态，NameNode 据此维护集群视图、检测宕机节点并触发副本补充。
+
+**租约机制**：文件写入通过 Lease 保证互斥，避免并发写入冲突。
+
+**CRC32C 校验**：使用 Intel ISA-L 库的 SIMD 加速实现，每个 chunk 独立校验，支持增量计算和快速验证。
+
+更多设计细节参见 [spec.md](spec.md)。

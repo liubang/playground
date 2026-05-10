@@ -29,6 +29,6 @@ cc_library(
         "types.h",
     ],
     deps = [
-        "@crc32c",
+        "@isa-l",
     ],
 )

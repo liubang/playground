@@ -83,6 +83,108 @@ public:
     /// Read a DFS file to a local path.
     [[nodiscard]] Result<Void> get(std::string_view dfs_path, std::string_view local_path);
 
+    // =========================================================================
+    // Admin / diagnostic operations
+    // =========================================================================
+
+    /// Cluster-wide summary (capacity, nodes, blocks, files).
+    struct ClusterInfo {
+        uint64_t total_capacity_bytes = 0;
+        uint64_t used_bytes = 0;
+        uint64_t free_bytes = 0;
+        uint32_t live_datanodes = 0;
+        uint32_t dead_datanodes = 0;
+        uint64_t total_blocks = 0;
+        uint64_t total_files = 0;
+        uint64_t total_directories = 0;
+        uint32_t under_replicated_blocks = 0;
+    };
+    [[nodiscard]] Result<ClusterInfo> get_cluster_info();
+
+    /// Per-DataNode summary returned by list_datanodes / get_datanode_info.
+    struct DataNodeSummary {
+        uint64_t datanode_id = 0;
+        std::string uuid;
+        std::string hostname;
+        std::string ip;
+        uint32_t rpc_port = 0;
+        uint32_t data_port = 0;
+        std::string rack;
+        std::string state;
+        uint64_t capacity_bytes = 0;
+        uint64_t used_bytes = 0;
+        uint64_t free_bytes = 0;
+        uint64_t last_heartbeat_ms = 0;
+        uint32_t block_count = 0;
+    };
+    [[nodiscard]] Result<std::vector<DataNodeSummary>> list_datanodes(bool include_dead = false);
+    [[nodiscard]] Result<DataNodeSummary> get_datanode_info(uint64_t datanode_id);
+    [[nodiscard]] Result<DataNodeSummary> get_datanode_info_by_uuid(std::string_view uuid);
+
+    /// Inode details (file or directory).
+    struct InodeDetail {
+        uint64_t inode_id = 0;
+        std::string type;
+        uint64_t parent_id = 0;
+        std::string name;
+        std::string owner;
+        std::string group;
+        uint32_t permission = 0;
+        uint64_t length = 0;
+        uint32_t replication = 0;
+        uint64_t block_size = 0;
+        std::string state;
+        uint64_t ctime_ms = 0;
+        uint64_t mtime_ms = 0;
+        uint32_t block_count = 0;
+        uint32_t child_count = 0;
+    };
+    [[nodiscard]] Result<InodeDetail> get_inode_info(uint64_t inode_id);
+    [[nodiscard]] Result<InodeDetail> get_inode_info_by_path(std::string_view path);
+
+    /// Block location info.
+    struct BlockLocation {
+        uint64_t datanode_id = 0;
+        std::string host;
+        uint32_t data_port = 0;
+    };
+
+    /// Per-block detail for file blocks listing.
+    struct FileBlockDetail {
+        uint64_t block_id = 0;
+        uint32_t block_index = 0;
+        uint64_t generation_stamp = 0;
+        uint64_t length = 0;
+        std::string state;
+        uint32_t desired_replicas = 0;
+        uint32_t actual_replicas = 0;
+        std::vector<BlockLocation> locations;
+    };
+    [[nodiscard]] Result<std::vector<FileBlockDetail>> get_file_blocks(uint64_t inode_id);
+    [[nodiscard]] Result<std::vector<FileBlockDetail>> get_file_blocks_by_path(std::string_view path);
+
+    /// Detailed replica info for a single block.
+    struct ReplicaDetail {
+        uint64_t datanode_id = 0;
+        std::string hostname;
+        std::string state;
+        uint64_t length = 0;
+        uint64_t generation_stamp = 0;
+        uint64_t report_time_ms = 0;
+    };
+
+    struct BlockDetail {
+        uint64_t block_id = 0;
+        uint64_t inode_id = 0;
+        uint32_t block_index = 0;
+        uint64_t generation_stamp = 0;
+        uint64_t length = 0;
+        std::string state;
+        uint32_t desired_replicas = 0;
+        std::vector<ReplicaDetail> replicas;
+    };
+    [[nodiscard]] Result<BlockDetail> get_block_info(uint64_t block_id);
+
 private:
     explicit DfsClient(DfsClientConfig config);
 

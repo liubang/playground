@@ -33,7 +33,6 @@ cc_library(
         "//cpp/pl/minidfs/protocol:minidfs_cc_proto",
         "//cpp/pl/status",
         "@brpc//:brpc",
-        "@crc32c",
         "@fmt",
         "@folly//folly/logging",
     ],

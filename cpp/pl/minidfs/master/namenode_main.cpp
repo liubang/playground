@@ -20,6 +20,7 @@
 #include "cpp/pl/minidfs/namenode/block_manager.h"
 #include "cpp/pl/minidfs/namenode/datanode_manager.h"
 #include "cpp/pl/minidfs/namenode/lease_manager.h"
+#include "cpp/pl/minidfs/namenode/admin_service_impl.h"
 #include "cpp/pl/minidfs/namenode/namenode_service_impl.h"
 #include "cpp/pl/minidfs/namenode/namespace_manager.h"
 #include "cpp/pl/minidfs/namenode/placement_manager.h"
@@ -73,6 +74,7 @@ int main(int argc, char* argv[]) {
     // Create service implementations
     pl::minidfs::NameNodeServiceImpl namenode_service(&ns_mgr, &block_mgr, &lease_mgr);
     pl::minidfs::DataNodeProtocolServiceImpl datanode_protocol_service(&dn_mgr, &block_mgr);
+    pl::minidfs::AdminServiceImpl admin_service(&ns_mgr, &dn_mgr, &metadata_store);
 
     // Start brpc server
     brpc::Server server;
@@ -83,6 +85,10 @@ int main(int argc, char* argv[]) {
     }
     if (server.AddService(&datanode_protocol_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
         XLOG(FATAL, "failed to add DataNodeProtocolService");
+        return 1;
+    }
+    if (server.AddService(&admin_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+        XLOG(FATAL, "failed to add AdminService");
         return 1;
     }
 

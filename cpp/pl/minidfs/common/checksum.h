@@ -17,9 +17,9 @@
 
 #pragma once
 
-#include <crc32c/crc32c.h>
 #include <cstdint>
 #include <cstring>
+#include <isa-l/crc.h>
 #include <string_view>
 
 namespace pl::minidfs {
@@ -30,18 +30,21 @@ enum class ChecksumType : uint8_t {
 };
 
 /// Compute CRC32C checksum over a byte range.
+/// Uses Intel ISA-L hardware-accelerated CRC32 iSCSI (same polynomial as CRC32C).
 [[nodiscard]] inline uint32_t compute_crc32c(const void* data, size_t size) {
-    return crc32c::Crc32c(reinterpret_cast<const uint8_t*>(data), size);
+    return ::crc32_iscsi(const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(data)),
+                         static_cast<int>(size), 0);
 }
 
 /// Compute CRC32C checksum over a string_view.
 [[nodiscard]] inline uint32_t compute_crc32c(std::string_view data) {
-    return crc32c::Crc32c(data.data(), data.size());
+    return compute_crc32c(data.data(), data.size());
 }
 
 /// Extend an existing CRC32C checksum with additional data.
 [[nodiscard]] inline uint32_t extend_crc32c(uint32_t crc, const void* data, size_t size) {
-    return crc32c::Extend(crc, reinterpret_cast<const uint8_t*>(data), size);
+    return ::crc32_iscsi(const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(data)),
+                         static_cast<int>(size), crc);
 }
 
 /// Verify that the given checksum matches the data.

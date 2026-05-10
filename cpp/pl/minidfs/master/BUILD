@@ -30,6 +30,7 @@ cc_binary(
         "//cpp/pl/minidfs/metadata:metadata_store",
         "//cpp/pl/minidfs/metadata:mysql_connection_pool",
         "//cpp/pl/minidfs/metadata:mysql_metadata_store",
+        "//cpp/pl/minidfs/namenode:admin_service_impl",
         "//cpp/pl/minidfs/namenode:block_manager",
         "//cpp/pl/minidfs/namenode:datanode_manager",
         "//cpp/pl/minidfs/namenode:lease_manager",

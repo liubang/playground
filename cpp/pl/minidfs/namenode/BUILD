@@ -103,3 +103,18 @@ cc_library(
         "@brpc//:brpc",
     ],
 )
+
+cc_library(
+    name = "admin_service_impl",
+    srcs = ["admin_service_impl.cpp"],
+    hdrs = ["admin_service_impl.h"],
+    deps = [
+        ":datanode_manager",
+        ":namespace_manager",
+        "//cpp/pl/minidfs/common",
+        "//cpp/pl/minidfs/metadata:metadata_store",
+        "//cpp/pl/minidfs/protocol:minidfs_cc_proto",
+        "//cpp/pl/status",
+        "@brpc//:brpc",
+    ],
+)

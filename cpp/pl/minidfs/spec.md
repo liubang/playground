@@ -38,7 +38,7 @@ format → start cluster → mkdir → put file → get file → ls → stat →
 | 日志     | spdlog                        | 高性能、已有依赖                             |
 | 配置     | YAML (自研轻量解析或引入依赖) |                                              |
 | 错误处理 | pl::Result (folly::Expected)  | 已有基础设施                                 |
-| 校验     | CRC32C (crc32c lib)           | 硬件加速、已有依赖                           |
+| 校验     | CRC32C (ISA-L)                | 硬件加速、SIMD 优化                          |
 | 压缩     | zstd / snappy                 | 已有依赖                                     |
 
 ---
