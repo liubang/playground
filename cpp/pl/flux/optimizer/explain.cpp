@@ -17,6 +17,7 @@
 
 #include "cpp/pl/flux/optimizer/explain.h"
 
+#include "cpp/pl/flux/optimizer/cbo.h"
 #include "cpp/pl/flux/optimizer/rbo.h"
 #include "cpp/pl/flux/plan/physical_plan.h"
 #include <sstream>
@@ -25,12 +26,18 @@
 namespace pl::flux::optimizer {
 namespace {
 
-std::vector<std::string> AppliedRulesForPlan(const std::shared_ptr<plan::PlanNode>& node) {
-    auto optimized_or = DefaultRuleBasedOptimizer().Optimize(node);
-    if (!optimized_or.ok()) {
-        return {};
+void ApplyCboTrace(const CboPlanResult& cbo_result, plan::PhysicalPlanNode* physical) {
+    physical->optimizer.rbo_rules = AppliedRuleNames(cbo_result.rbo_result);
+    physical->optimizer.cbo_decision = cbo_result.decision;
+    physical->optimizer.cost = cbo_result.cost;
+}
+
+void ApplyCboTraceForPlan(const std::shared_ptr<plan::PlanNode>& node,
+                          plan::PhysicalPlanNode* physical) {
+    auto cbo_or = DefaultCostBasedOptimizer().OptimizeWithTrace(node);
+    if (cbo_or.ok()) {
+        ApplyCboTrace(*cbo_or, physical);
     }
-    return AppliedRuleNames(*optimized_or);
 }
 
 void FormatPushdownState(const plan::PlanNode& node, std::ostringstream* out) {
@@ -134,7 +141,7 @@ std::shared_ptr<plan::PhysicalPlanNode> MakeConnectorPhysicalPlan(
     physical->driver = physical->source;
     physical->lazy = true;
     CollectLogicalPrefix(*node, &physical->logical_prefix);
-    physical->optimizer.rbo_rules = AppliedRulesForPlan(node);
+    ApplyCboTraceForPlan(node, physical.get());
     return physical;
 }
 
@@ -156,8 +163,9 @@ std::shared_ptr<plan::PhysicalPlanNode> BuildPhysicalPlan(
                          : plan::PhysicalNodeKind::MemoryOperator;
     physical->name = plan::PlanNodeKindName(node->kind);
     physical->lazy = false;
-    if (node->kind == plan::PlanNodeKind::Materialize) {
-        physical->optimizer.rbo_rules = AppliedRulesForPlan(node);
+    ApplyCboTraceForPlan(node, physical.get());
+    if (node->kind != plan::PlanNodeKind::Materialize) {
+        physical->optimizer.rbo_rules.clear();
     }
     for (const auto& input : node->inputs) {
         physical->inputs.push_back(BuildPhysicalPlan(input));
@@ -211,11 +219,11 @@ std::string FormatPhysicalPlan(const std::shared_ptr<plan::PlanNode>& plan) {
     if (plan == nullptr) {
         return "<no physical plan>\n";
     }
-    auto optimized_or = DefaultRuleBasedOptimizer().Optimize(plan);
-    if (!optimized_or.ok()) {
-        return optimized_or.status().ToString() + "\n";
+    auto cbo_or = DefaultCostBasedOptimizer().OptimizeWithTrace(plan);
+    if (!cbo_or.ok()) {
+        return cbo_or.status().ToString() + "\n";
     }
-    return plan::FormatPhysicalPlan(BuildPhysicalPlan(optimized_or->plan));
+    return plan::FormatPhysicalPlan(BuildPhysicalPlan(cbo_or->rbo_result.plan));
 }
 
 } // namespace pl::flux::optimizer

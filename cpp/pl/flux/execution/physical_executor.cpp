@@ -20,9 +20,9 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/connector/connector_registry.h"
-#include "cpp/pl/flux/optimizer/rbo.h"
-#include "cpp/pl/flux/runtime_builtin_aggregate_helpers.h"
-#include "cpp/pl/flux/runtime_builtin_table_helpers.h"
+#include "cpp/pl/flux/optimizer/cbo.h"
+#include "cpp/pl/flux/runtime/runtime_builtin_aggregate_helpers.h"
+#include "cpp/pl/flux/runtime/runtime_builtin_table_helpers.h"
 #include <algorithm>
 #include <cstddef>
 #include <unordered_map>
@@ -103,8 +103,8 @@ absl::StatusOr<Value> execute_pushdown_plan(const optimizer::PushdownPlan& plan)
     if (!optimizer::CanExecutePushdownPlan(plan)) {
         return absl::InvalidArgumentError("group without aggregate is not executable pushdown");
     }
-    connector::SourceSpec spec{
-        plan.source->source, plan.source->driver, plan.source->dsn, plan.source->table};
+    connector::SourceSpec spec{plan.source->source, plan.source->driver, plan.source->dsn,
+                               plan.source->table};
     auto source_or = connector::ConnectorRegistry::Global().Create(spec);
     if (!source_or.ok()) {
         return source_or.status();
@@ -325,7 +325,8 @@ absl::StatusOr<Value> apply_aggregate(const Value& input,
                     ++count;
                 }
             }
-            next.rows.push_back(materialize_group_count_row(chunk, plan->aggregate().column, count));
+            next.rows.push_back(
+                materialize_group_count_row(chunk, plan->aggregate().column, count));
         } else {
             auto values_or = numeric_values_for_chunk(chunk, "aggregate", plan->aggregate().column);
             if (!values_or.ok()) {
@@ -356,8 +357,8 @@ absl::StatusOr<Value> apply_aggregate(const Value& input,
                 case plan::AggregateFunction::Count:
                     break;
             }
-            next.rows.push_back(
-                materialize_group_value_row(chunk, plan->aggregate().column, Value::floating(value)));
+            next.rows.push_back(materialize_group_value_row(chunk, plan->aggregate().column,
+                                                            Value::floating(value)));
         }
         chunks.push_back(std::move(next));
     }
@@ -426,16 +427,17 @@ absl::StatusOr<std::unique_ptr<Operator>> PhysicalPlanner::Plan(
     if (logical_plan == nullptr) {
         return absl::InvalidArgumentError("missing physical plan root");
     }
-    auto optimized_or = optimizer::DefaultRuleBasedOptimizer().Optimize(logical_plan);
-    if (!optimized_or.ok()) {
-        return optimized_or.status();
+    auto cbo_or = optimizer::FastCostBasedOptimizer().OptimizeWithTrace(logical_plan);
+    if (!cbo_or.ok()) {
+        return cbo_or.status();
     }
-    if (optimized_or->pushdown_plan.has_value() &&
-        optimizer::CanExecutePushdownPlan(*optimized_or->pushdown_plan)) {
+    auto& optimized = cbo_or->rbo_result;
+    if (optimized.pushdown_plan.has_value() &&
+        optimizer::CanExecutePushdownPlan(*optimized.pushdown_plan)) {
         return std::unique_ptr<Operator>(
-            new ConnectorScanOperator(std::move(*optimized_or->pushdown_plan)));
+            new ConnectorScanOperator(std::move(*optimized.pushdown_plan)));
     }
-    const auto& optimized_plan = optimized_or->plan;
+    const auto& optimized_plan = optimized.plan;
     if (optimized_plan->inputs.size() != 1 || optimized_plan->inputs[0] == nullptr) {
         return absl::InvalidArgumentError("plan is not executable");
     }

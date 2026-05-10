@@ -49,6 +49,17 @@ bool has_scan_pushdown(const ScanRequest& request) {
            request.limit.has_value() || request.offset.has_value();
 }
 
+TableStatistics statistics_from_rows(const std::vector<std::shared_ptr<ObjectValue>>& rows) {
+    TableStatistics statistics;
+    statistics.row_count = static_cast<double>(rows.size());
+    const auto schema = schema_from_rows(rows);
+    statistics.columns.reserve(schema.columns.size());
+    for (const auto& column : schema.columns) {
+        statistics.columns.push_back({.name = column.name});
+    }
+    return statistics;
+}
+
 } // namespace
 
 ArraySource::ArraySource(std::string bucket, std::vector<std::shared_ptr<ObjectValue>> rows)
@@ -57,6 +68,10 @@ ArraySource::ArraySource(std::string bucket, std::vector<std::shared_ptr<ObjectV
 absl::StatusOr<TableSchema> ArraySource::Schema() const { return schema_from_rows(rows_); }
 
 SourceCapabilities ArraySource::Capabilities() const { return {}; }
+
+absl::StatusOr<TableStatistics> ArraySource::Statistics() const {
+    return statistics_from_rows(rows_);
+}
 
 absl::StatusOr<Value> ArraySource::Scan(const ScanRequest& request) {
     if (has_scan_pushdown(request)) {
@@ -70,6 +85,10 @@ CsvSource::CsvSource(std::vector<std::shared_ptr<ObjectValue>> rows) : rows_(std
 absl::StatusOr<TableSchema> CsvSource::Schema() const { return schema_from_rows(rows_); }
 
 SourceCapabilities CsvSource::Capabilities() const { return {}; }
+
+absl::StatusOr<TableStatistics> CsvSource::Statistics() const {
+    return statistics_from_rows(rows_);
+}
 
 absl::StatusOr<Value> CsvSource::Scan(const ScanRequest& request) {
     if (has_scan_pushdown(request)) {

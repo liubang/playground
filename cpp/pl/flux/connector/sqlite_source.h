@@ -19,7 +19,7 @@
 
 #include "absl/status/statusor.h"
 #include "cpp/pl/flux/connector/table_source.h"
-#include "cpp/pl/flux/runtime_value.h"
+#include "cpp/pl/flux/runtime/runtime_value.h"
 #include <optional>
 #include <string>
 
@@ -31,6 +31,7 @@ public:
 
     [[nodiscard]] absl::StatusOr<TableSchema> Schema() const override;
     [[nodiscard]] SourceCapabilities Capabilities() const override;
+    [[nodiscard]] absl::StatusOr<TableStatistics> Statistics() const override;
     absl::StatusOr<Value> Scan(const ScanRequest& request) override;
 
 private:
@@ -38,6 +39,7 @@ private:
     std::string table_;
     std::string query_;
     mutable std::optional<TableSchema> cached_schema_;
+    mutable std::optional<TableStatistics> cached_statistics_;
 };
 
 } // namespace pl::flux::connector
