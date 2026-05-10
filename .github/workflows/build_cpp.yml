@@ -60,6 +60,21 @@ jobs:
           ]
     name: test-linux
     runs-on: ubuntu-24.04
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: flux_test
+          MYSQL_USER: flux
+          MYSQL_PASSWORD: flux
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - uses: actions/checkout@v5
         with:
@@ -71,17 +86,42 @@ jobs:
           disk-cache: ${{ github.workflow }}-${{ runner.os }}-${{ matrix.compiler.name }}
       - run: |
           sudo apt-get update
-          sudo apt-get install -y nasm libomp-dev lcov
+          sudo apt-get install -y nasm libomp-dev lcov default-mysql-client
+      - name: seed MySQL fixture
+        run: |
+          mysql \
+            -h127.0.0.1 \
+            -P3306 \
+            -uflux \
+            -pflux \
+            flux_test \
+            < cpp/pl/flux/examples/cross_source/mysql_metrics.sql
       - name: run test
         run: |
           bazel test \
             --config=release \
             ${{ matrix.compiler.flag }} \
+            --test_env=FLUX_MYSQL_TEST_DSN=mysql://flux:flux@127.0.0.1:3306/flux_test \
             //cpp/...
   coverage:
     name: coverage
     runs-on: ubuntu-24.04
     needs: [test-macos, test-linux]
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: flux_test
+          MYSQL_USER: flux
+          MYSQL_PASSWORD: flux
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - uses: actions/checkout@v5
         with:
@@ -93,12 +133,22 @@ jobs:
           disk-cache: ${{ github.workflow }}-${{ runner.os }}-gcc-coverage
       - run: |
           sudo apt-get update
-          sudo apt-get install -y nasm libomp-dev lcov
+          sudo apt-get install -y nasm libomp-dev lcov default-mysql-client
+      - name: seed MySQL fixture
+        run: |
+          mysql \
+            -h127.0.0.1 \
+            -P3306 \
+            -uflux \
+            -pflux \
+            flux_test \
+            < cpp/pl/flux/examples/cross_source/mysql_metrics.sql
       - name: run coverage
         run: |
           bazel coverage \
             --config=release \
             --action_env=CC=gcc-14 \
+            --test_env=FLUX_MYSQL_TEST_DSN=mysql://flux:flux@127.0.0.1:3306/flux_test \
             --verbose_failures \
             --combined_report=lcov \
             --instrument_test_targets \
