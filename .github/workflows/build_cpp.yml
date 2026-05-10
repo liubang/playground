@@ -39,9 +39,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-brew-llvm-nasm-libomp-
       - run: |
-          brew install llvm
-          brew install nasm
-          brew install libomp
+          brew install llvm nasm libomp autoconf automake libtool pkg-config
       - name: run test
         run: |
           bazel test \
