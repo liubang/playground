@@ -19,8 +19,7 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
-#include "cpp/pl/flux/connector/mysql_source.h"
-#include "cpp/pl/flux/connector/sqlite_source.h"
+#include "cpp/pl/flux/connector/connector_registry.h"
 #include "cpp/pl/flux/runtime_value.h"
 #include <algorithm>
 #include <optional>
@@ -566,15 +565,12 @@ std::vector<std::string> AppliedRuleNames(const PlanOptimizerResult& result) {
 }
 
 absl::StatusOr<std::vector<std::string>> SourceScanColumns(const plan::SourceScanSpec& source) {
-    absl::StatusOr<connector::TableSchema> schema_or =
-        absl::InvalidArgumentError("unsupported pushdown source");
-    if (source.source == "sqlite" && source.driver == "sqlite") {
-        connector::SQLiteSource sqlite_source(source.dsn, source.table);
-        schema_or = sqlite_source.Schema();
-    } else if (source.source == "mysql" && source.driver == "mysql") {
-        connector::MySQLSource mysql_source(source.dsn, source.table);
-        schema_or = mysql_source.Schema();
+    connector::SourceSpec spec{source.source, source.driver, source.dsn, source.table};
+    auto source_or = connector::ConnectorRegistry::Global().Create(spec);
+    if (!source_or.ok()) {
+        return source_or.status();
     }
+    auto schema_or = (*source_or)->Schema();
     if (!schema_or.ok()) {
         return schema_or.status();
     }
@@ -728,8 +724,7 @@ bool IsPushdownSourceScan(const plan::PlanNode& node) {
     if (node.kind != plan::PlanNodeKind::SourceScan) {
         return false;
     }
-    return (node.source_scan.source == "sqlite" && node.source_scan.driver == "sqlite") ||
-           (node.source_scan.source == "mysql" && node.source_scan.driver == "mysql");
+    return connector::IsSqlPushdownConnector(node.source_scan.source, node.source_scan.driver);
 }
 
 bool IsPushableUnaryNode(const plan::PlanNode& node) {

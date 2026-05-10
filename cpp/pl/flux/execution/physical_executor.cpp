@@ -19,8 +19,7 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
-#include "cpp/pl/flux/connector/mysql_source.h"
-#include "cpp/pl/flux/connector/sqlite_source.h"
+#include "cpp/pl/flux/connector/connector_registry.h"
 #include "cpp/pl/flux/optimizer/rbo.h"
 #include "cpp/pl/flux/runtime_builtin_aggregate_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_table_helpers.h"
@@ -104,15 +103,13 @@ absl::StatusOr<Value> execute_pushdown_plan(const optimizer::PushdownPlan& plan)
     if (!optimizer::CanExecutePushdownPlan(plan)) {
         return absl::InvalidArgumentError("group without aggregate is not executable pushdown");
     }
-    if (plan.source->source == "sqlite" && plan.source->driver == "sqlite") {
-        connector::SQLiteSource source(plan.source->dsn, plan.source->table);
-        return source.Scan(plan.request);
+    connector::SourceSpec spec{
+        plan.source->source, plan.source->driver, plan.source->dsn, plan.source->table};
+    auto source_or = connector::ConnectorRegistry::Global().Create(spec);
+    if (!source_or.ok()) {
+        return source_or.status();
     }
-    if (plan.source->source == "mysql" && plan.source->driver == "mysql") {
-        connector::MySQLSource source(plan.source->dsn, plan.source->table);
-        return source.Scan(plan.request);
-    }
-    return absl::InvalidArgumentError("unsupported pushdown source");
+    return (*source_or)->Scan(plan.request);
 }
 
 absl::StatusOr<Value> apply_range(const Value& input, const std::shared_ptr<plan::PlanNode>& plan) {

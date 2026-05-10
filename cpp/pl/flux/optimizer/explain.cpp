@@ -25,13 +25,11 @@
 namespace pl::flux::optimizer {
 namespace {
 
-std::vector<std::string> AppliedRulesForPlan(const std::shared_ptr<plan::PlanNode>& node) {
-    auto optimized_or = DefaultRuleBasedOptimizer().Optimize(node);
-    if (!optimized_or.ok()) {
-        return {};
-    }
-    return AppliedRuleNames(*optimized_or);
-}
+// Cached rules are passed in from the single top-level Optimize() call to
+// avoid redundant re-optimization inside BuildPhysicalPlan.
+struct PhysicalPlanContext {
+    std::vector<std::string> applied_rules;
+};
 
 void FormatPushdownState(const plan::PlanNode& node, std::ostringstream* out) {
     switch (AnalyzePushdownState(node)) {
@@ -126,7 +124,7 @@ void CollectLogicalPrefix(const plan::PlanNode& node, std::vector<std::string>* 
 }
 
 std::shared_ptr<plan::PhysicalPlanNode> MakeConnectorPhysicalPlan(
-    const std::shared_ptr<plan::PlanNode>& node) {
+    const std::shared_ptr<plan::PlanNode>& node, const PhysicalPlanContext& ctx) {
     auto physical = std::make_shared<plan::PhysicalPlanNode>();
     physical->kind = plan::PhysicalNodeKind::ConnectorScan;
     physical->name = "connector scan";
@@ -134,12 +132,12 @@ std::shared_ptr<plan::PhysicalPlanNode> MakeConnectorPhysicalPlan(
     physical->driver = physical->source;
     physical->lazy = true;
     CollectLogicalPrefix(*node, &physical->logical_prefix);
-    physical->optimizer.rbo_rules = AppliedRulesForPlan(node);
+    physical->optimizer.rbo_rules = ctx.applied_rules;
     return physical;
 }
 
 std::shared_ptr<plan::PhysicalPlanNode> BuildPhysicalPlan(
-    const std::shared_ptr<plan::PlanNode>& node) {
+    const std::shared_ptr<plan::PlanNode>& node, const PhysicalPlanContext& ctx) {
     if (node == nullptr) {
         return nullptr;
     }
@@ -147,7 +145,7 @@ std::shared_ptr<plan::PhysicalPlanNode> BuildPhysicalPlan(
     const PushdownState pushdown_state = AnalyzePushdownState(*node);
     if (pushdown_state == PushdownState::SourceScan ||
         (pushdown_state == PushdownState::SourcePushdown && IsExecutableConnectorPrefix(*node))) {
-        return MakeConnectorPhysicalPlan(node);
+        return MakeConnectorPhysicalPlan(node, ctx);
     }
 
     auto physical = std::make_shared<plan::PhysicalPlanNode>();
@@ -157,10 +155,10 @@ std::shared_ptr<plan::PhysicalPlanNode> BuildPhysicalPlan(
     physical->name = plan::PlanNodeKindName(node->kind);
     physical->lazy = false;
     if (node->kind == plan::PlanNodeKind::Materialize) {
-        physical->optimizer.rbo_rules = AppliedRulesForPlan(node);
+        physical->optimizer.rbo_rules = ctx.applied_rules;
     }
     for (const auto& input : node->inputs) {
-        physical->inputs.push_back(BuildPhysicalPlan(input));
+        physical->inputs.push_back(BuildPhysicalPlan(input, ctx));
     }
     if (physical->inputs.empty() && node->kind == plan::PlanNodeKind::SourceScan) {
         physical->kind = plan::PhysicalNodeKind::MemoryScan;
@@ -215,7 +213,8 @@ std::string FormatPhysicalPlan(const std::shared_ptr<plan::PlanNode>& plan) {
     if (!optimized_or.ok()) {
         return optimized_or.status().ToString() + "\n";
     }
-    return plan::FormatPhysicalPlan(BuildPhysicalPlan(optimized_or->plan));
+    PhysicalPlanContext ctx{AppliedRuleNames(*optimized_or)};
+    return plan::FormatPhysicalPlan(BuildPhysicalPlan(optimized_or->plan, ctx));
 }
 
 } // namespace pl::flux::optimizer
