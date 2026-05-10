@@ -19,7 +19,9 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
-#include "cpp/pl/flux/optimizer/source_pushdown.h"
+#include "cpp/pl/flux/connector/mysql_source.h"
+#include "cpp/pl/flux/connector/sqlite_source.h"
+#include "cpp/pl/flux/optimizer/rbo.h"
 #include "cpp/pl/flux/runtime_builtin_aggregate_helpers.h"
 #include "cpp/pl/flux/runtime_builtin_table_helpers.h"
 #include <algorithm>
@@ -93,6 +95,24 @@ Value table_with_plan(Value value, const std::shared_ptr<plan::PlanNode>& plan) 
     value.as_table_mut().plan = plan;
     value.as_table_mut().materialized = true;
     return value;
+}
+
+absl::StatusOr<Value> execute_pushdown_plan(const optimizer::PushdownPlan& plan) {
+    if (plan.source == nullptr) {
+        return absl::InvalidArgumentError("pushdown plan has no source");
+    }
+    if (!optimizer::CanExecutePushdownPlan(plan)) {
+        return absl::InvalidArgumentError("group without aggregate is not executable pushdown");
+    }
+    if (plan.source->source == "sqlite" && plan.source->driver == "sqlite") {
+        connector::SQLiteSource source(plan.source->dsn, plan.source->table);
+        return source.Scan(plan.request);
+    }
+    if (plan.source->source == "mysql" && plan.source->driver == "mysql") {
+        connector::MySQLSource source(plan.source->dsn, plan.source->table);
+        return source.Scan(plan.request);
+    }
+    return absl::InvalidArgumentError("unsupported pushdown source");
 }
 
 absl::StatusOr<Value> apply_range(const Value& input, const std::shared_ptr<plan::PlanNode>& plan) {
@@ -351,7 +371,7 @@ class ConnectorScanOperator final : public Operator {
 public:
     explicit ConnectorScanOperator(optimizer::PushdownPlan plan) : plan_(std::move(plan)) {}
 
-    absl::StatusOr<Value> Next() override { return optimizer::ExecutePushdownPlan(plan_); }
+    absl::StatusOr<Value> Next() override { return execute_pushdown_plan(plan_); }
 
 private:
     optimizer::PushdownPlan plan_;
@@ -409,19 +429,24 @@ absl::StatusOr<std::unique_ptr<Operator>> PhysicalPlanner::Plan(
     if (logical_plan == nullptr) {
         return absl::InvalidArgumentError("missing physical plan root");
     }
-    auto pushdown_or = optimizer::BuildPushdownPlan(logical_plan);
-    if (pushdown_or.ok() && optimizer::CanExecutePushdownPlan(*pushdown_or)) {
-        return std::unique_ptr<Operator>(new ConnectorScanOperator(std::move(*pushdown_or)));
+    auto optimized_or = optimizer::DefaultRuleBasedOptimizer().Optimize(logical_plan);
+    if (!optimized_or.ok()) {
+        return optimized_or.status();
     }
-    if (logical_plan->inputs.size() != 1 || logical_plan->inputs[0] == nullptr) {
-        return pushdown_or.ok() ? absl::InvalidArgumentError("plan is not executable")
-                                : pushdown_or.status();
+    if (optimized_or->pushdown_plan.has_value() &&
+        optimizer::CanExecutePushdownPlan(*optimized_or->pushdown_plan)) {
+        return std::unique_ptr<Operator>(
+            new ConnectorScanOperator(std::move(*optimized_or->pushdown_plan)));
     }
-    auto input_or = Plan(logical_plan->inputs[0]);
+    const auto& optimized_plan = optimized_or->plan;
+    if (optimized_plan->inputs.size() != 1 || optimized_plan->inputs[0] == nullptr) {
+        return absl::InvalidArgumentError("plan is not executable");
+    }
+    auto input_or = Plan(optimized_plan->inputs[0]);
     if (!input_or.ok()) {
         return input_or.status();
     }
-    return std::unique_ptr<Operator>(new MemoryUnaryOperator(logical_plan, std::move(*input_or)));
+    return std::unique_ptr<Operator>(new MemoryUnaryOperator(optimized_plan, std::move(*input_or)));
 }
 
 Driver::Driver(std::unique_ptr<Operator> root) : root_(std::move(root)) {}
