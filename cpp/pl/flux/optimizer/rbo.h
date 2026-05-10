@@ -18,6 +18,7 @@
 #pragma once
 
 #include "absl/status/statusor.h"
+#include "cpp/pl/flux/connector/table_source.h"
 #include "cpp/pl/flux/plan/plan_node.h"
 #include <memory>
 #include <optional>
@@ -31,6 +32,13 @@ enum class PushdownState {
     SourcePushdown,
     MaterializeBarrier,
     Memory,
+};
+
+struct PushdownPlan {
+    const plan::SourceScanSpec* source = nullptr;
+    connector::ScanRequest request;
+    std::vector<std::string> visible_columns;
+    std::vector<std::string> source_columns;
 };
 
 struct RuleTrace {
@@ -48,6 +56,7 @@ struct RuleApplication {
 struct PlanOptimizerResult {
     std::shared_ptr<plan::PlanNode> plan;
     std::vector<RuleTrace> trace;
+    std::optional<PushdownPlan> pushdown_plan;
 };
 
 class Rule {
@@ -82,6 +91,9 @@ RuleBasedOptimizer DefaultRuleBasedOptimizer();
 
 std::vector<std::string> AppliedRuleNames(const PlanOptimizerResult& result);
 
+absl::StatusOr<std::vector<std::string>> SourceScanColumns(const plan::SourceScanSpec& source);
+absl::StatusOr<std::vector<std::string>> VisibleColumnsForPlan(
+    const std::shared_ptr<plan::PlanNode>& node);
 bool IsPushdownSourceScan(const plan::PlanNode& node);
 bool IsPushableUnaryNode(const plan::PlanNode& node);
 PushdownState AnalyzePushdownState(const plan::PlanNode& node);
