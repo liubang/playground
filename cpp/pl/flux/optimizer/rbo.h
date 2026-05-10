@@ -94,6 +94,9 @@ std::vector<std::string> AppliedRuleNames(const PlanOptimizerResult& result);
 absl::StatusOr<std::vector<std::string>> SourceScanColumns(const plan::SourceScanSpec& source);
 absl::StatusOr<std::vector<std::string>> VisibleColumnsForPlan(
     const std::shared_ptr<plan::PlanNode>& node);
+bool CanExecutePushdownPlan(const PushdownPlan& plan);
+std::string FormatPushdownRequest(const connector::ScanRequest& request);
+std::optional<std::string> SourcePushdownSummary(const PlanOptimizerResult& result);
 bool IsPushdownSourceScan(const plan::PlanNode& node);
 bool IsPushableUnaryNode(const plan::PlanNode& node);
 PushdownState AnalyzePushdownState(const plan::PlanNode& node);
