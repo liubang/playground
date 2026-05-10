@@ -29,23 +29,32 @@ package(default_visibility = ["//visibility:public"])
 
 # ragel(
 #     name = "scanner_generated",
-#     src = "scanner.rl",
+#     src = "syntax/scanner.rl",
 #     data = [
-#         "unicode.rl",
+#         "syntax/unicode.rl",
 #     ],
 #     language = "c++",
 #     ragel_options = ["-I ."],
 # )
 
 cc_library(
+    name = "common",
+    hdrs = [
+        "common/compat.h",
+    ],
+    copts = COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+)
+
+cc_library(
     name = "scanner",
     srcs = [
-        "scanner.cpp",
-        "scanner_generated.cc",
+        "syntax/scanner.cpp",
+        "syntax/scanner_generated.cc",
     ],
     hdrs = [
-        "scanner.h",
-        "token.h",
+        "syntax/scanner.h",
+        "syntax/token.h",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
@@ -54,7 +63,7 @@ cc_library(
 cc_binary(
     name = "scanner_test",
     srcs = [
-        "scanner_test.cpp",
+        "syntax/tests/scanner_test.cpp",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
@@ -66,7 +75,7 @@ cc_binary(
 cc_test(
     name = "scanner_unit_test",
     srcs = [
-        "scanner_unit_test.cpp",
+        "syntax/tests/scanner_unit_test.cpp",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
@@ -79,21 +88,21 @@ cc_test(
 cc_library(
     name = "parser",
     srcs = [
-        "ast.cpp",
-        "ast_debug.cpp",
-        "parser.cpp",
-        "strconv.cpp",
+        "syntax/ast.cpp",
+        "syntax/ast_debug.cpp",
+        "syntax/parser.cpp",
+        "syntax/strconv.cpp",
     ],
     hdrs = [
-        "ast.h",
-        "ast_debug.h",
-        "compat.h",
-        "parser.h",
-        "strconv.h",
+        "syntax/ast.h",
+        "syntax/ast_debug.h",
+        "syntax/parser.h",
+        "syntax/strconv.h",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
+        ":common",
         ":scanner",
         "//cpp/pl/lang",
         "@abseil-cpp//absl/status:statusor",
@@ -114,10 +123,12 @@ cc_library(
 cc_library(
     name = "optimizer",
     srcs = [
+        "optimizer/cbo.cpp",
         "optimizer/explain.cpp",
         "optimizer/rbo.cpp",
     ],
     hdrs = [
+        "optimizer/cbo.h",
         "optimizer/explain.h",
         "optimizer/rbo.h",
     ],
@@ -134,9 +145,25 @@ cc_library(
 )
 
 cc_test(
+    name = "optimizer_cbo_unit_test",
+    srcs = [
+        "optimizer/tests/cbo_unit_test.cpp",
+    ],
+    copts = COPTS_WITH_ASAN,
+    data = [
+        "examples/cross_source/metrics.db",
+    ],
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":optimizer",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "optimizer_rbo_unit_test",
     srcs = [
-        "optimizer/rbo_unit_test.cpp",
+        "optimizer/tests/rbo_unit_test.cpp",
     ],
     copts = COPTS_WITH_ASAN,
     data = [
@@ -175,15 +202,15 @@ cc_library(
 cc_library(
     name = "runtime_value",
     srcs = [
-        "runtime_value.cpp",
+        "runtime/runtime_value.cpp",
     ],
     hdrs = [
-        "compat.h",
-        "runtime_value.h",
+        "runtime/runtime_value.h",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
+        ":common",
         ":plan",
         "@abseil-cpp//absl/status:statusor",
     ],
@@ -192,10 +219,10 @@ cc_library(
 cc_library(
     name = "runtime_env",
     srcs = [
-        "runtime_env.cpp",
+        "runtime/runtime_env.cpp",
     ],
     hdrs = [
-        "runtime_env.h",
+        "runtime/runtime_env.h",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
@@ -241,7 +268,7 @@ cc_library(
 cc_test(
     name = "connector_memory_source_unit_test",
     srcs = [
-        "connector/memory_source_unit_test.cpp",
+        "connector/tests/memory_source_unit_test.cpp",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
@@ -254,7 +281,7 @@ cc_test(
 cc_test(
     name = "connector_sqlite_source_unit_test",
     srcs = [
-        "connector/sqlite_source_unit_test.cpp",
+        "connector/tests/sqlite_source_unit_test.cpp",
     ],
     copts = COPTS_WITH_ASAN,
     data = [
@@ -271,7 +298,7 @@ cc_test(
 cc_test(
     name = "connector_mysql_source_unit_test",
     srcs = [
-        "connector/mysql_source_unit_test.cpp",
+        "connector/tests/mysql_source_unit_test.cpp",
     ],
     copts = COPTS_WITH_ASAN,
     data = [
@@ -288,32 +315,32 @@ cc_test(
 cc_library(
     name = "runtime_builtin",
     srcs = [
-        "runtime_builtin.cpp",
-        "runtime_builtin_mysql.cpp",
-        "runtime_builtin_package.cpp",
-        "runtime_builtin_scalar.cpp",
-        "runtime_builtin_sqlite.cpp",
-        "runtime_builtin_table.cpp",
-        "runtime_builtin_universe_aggregate.cpp",
-        "runtime_builtin_universe_core.cpp",
-        "runtime_builtin_universe_inspect.cpp",
-        "runtime_builtin_universe_join.cpp",
-        "runtime_builtin_universe_transform.cpp",
-        "runtime_builtin_universe_window.cpp",
+        "runtime/runtime_builtin.cpp",
+        "runtime/runtime_builtin_mysql.cpp",
+        "runtime/runtime_builtin_package.cpp",
+        "runtime/runtime_builtin_scalar.cpp",
+        "runtime/runtime_builtin_sqlite.cpp",
+        "runtime/runtime_builtin_table.cpp",
+        "runtime/runtime_builtin_universe_aggregate.cpp",
+        "runtime/runtime_builtin_universe_core.cpp",
+        "runtime/runtime_builtin_universe_inspect.cpp",
+        "runtime/runtime_builtin_universe_join.cpp",
+        "runtime/runtime_builtin_universe_transform.cpp",
+        "runtime/runtime_builtin_universe_window.cpp",
     ],
     hdrs = [
-        "compat.h",
-        "runtime_builtin.h",
-        "runtime_builtin_aggregate_helpers.h",
-        "runtime_builtin_package.h",
-        "runtime_builtin_table_helpers.h",
-        "runtime_builtin_time_helpers.h",
-        "runtime_builtin_universe.h",
-        "runtime_builtin_window_helpers.h",
+        "runtime/runtime_builtin.h",
+        "runtime/runtime_builtin_aggregate_helpers.h",
+        "runtime/runtime_builtin_package.h",
+        "runtime/runtime_builtin_table_helpers.h",
+        "runtime/runtime_builtin_time_helpers.h",
+        "runtime/runtime_builtin_universe.h",
+        "runtime/runtime_builtin_window_helpers.h",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
+        ":common",
         ":connector",
         ":execution",
         ":optimizer",
@@ -332,15 +359,15 @@ cc_library(
 cc_library(
     name = "runtime_eval",
     srcs = [
-        "runtime_eval.cpp",
+        "runtime/runtime_eval.cpp",
     ],
     hdrs = [
-        "compat.h",
-        "runtime_eval.h",
+        "runtime/runtime_eval.h",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
+        ":common",
         ":parser",
         ":runtime_env",
         "@abseil-cpp//absl/status",
@@ -352,7 +379,7 @@ cc_library(
 cc_library(
     name = "runtime_builtin_table_helpers",
     hdrs = [
-        "runtime_builtin_table_helpers.h",
+        "runtime/runtime_builtin_table_helpers.h",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
@@ -368,7 +395,7 @@ cc_library(
 cc_library(
     name = "runtime_builtin_aggregate_helpers",
     hdrs = [
-        "runtime_builtin_aggregate_helpers.h",
+        "runtime/runtime_builtin_aggregate_helpers.h",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
@@ -380,15 +407,15 @@ cc_library(
 cc_library(
     name = "runtime_exec",
     srcs = [
-        "runtime_exec.cpp",
+        "runtime/runtime_exec.cpp",
     ],
     hdrs = [
-        "compat.h",
-        "runtime_exec.h",
+        "runtime/runtime_exec.h",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
+        ":common",
         ":runtime_builtin",
         ":runtime_eval",
         "@abseil-cpp//absl/status",
@@ -400,15 +427,15 @@ cc_library(
 cc_library(
     name = "flux_cli",
     srcs = [
-        "flux_cli.cpp",
+        "cli/flux_cli.cpp",
     ],
     hdrs = [
-        "compat.h",
-        "flux_cli.h",
+        "cli/flux_cli.h",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
+        ":common",
         ":execution",
         ":parser",
         ":runtime_builtin",
@@ -424,7 +451,7 @@ cc_library(
 cc_binary(
     name = "flux",
     srcs = [
-        "flux.cpp",
+        "cli/flux.cpp",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
@@ -436,7 +463,7 @@ cc_binary(
 cc_binary(
     name = "parser_test",
     srcs = [
-        "parser_test.cpp",
+        "syntax/tests/parser_test.cpp",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
@@ -448,7 +475,7 @@ cc_binary(
 cc_test(
     name = "parser_unit_test",
     srcs = [
-        "parser_unit_test.cpp",
+        "syntax/tests/parser_unit_test.cpp",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
@@ -461,7 +488,7 @@ cc_test(
 cc_test(
     name = "strconv_unit_test",
     srcs = [
-        "strconv_unit_test.cpp",
+        "syntax/tests/strconv_unit_test.cpp",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
@@ -474,7 +501,7 @@ cc_test(
 cc_test(
     name = "runtime_value_unit_test",
     srcs = [
-        "runtime_value_unit_test.cpp",
+        "runtime/tests/runtime_value_unit_test.cpp",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
@@ -487,7 +514,7 @@ cc_test(
 cc_test(
     name = "runtime_env_unit_test",
     srcs = [
-        "runtime_env_unit_test.cpp",
+        "runtime/tests/runtime_env_unit_test.cpp",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
@@ -501,7 +528,7 @@ cc_test(
 cc_test(
     name = "runtime_eval_unit_test",
     srcs = [
-        "runtime_eval_unit_test.cpp",
+        "runtime/tests/runtime_eval_unit_test.cpp",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
@@ -516,7 +543,7 @@ cc_test(
 cc_test(
     name = "runtime_exec_unit_test",
     srcs = [
-        "runtime_exec_unit_test.cpp",
+        "runtime/tests/runtime_exec_unit_test.cpp",
     ],
     copts = COPTS_WITH_ASAN,
     data = [
@@ -534,7 +561,7 @@ cc_test(
 cc_test(
     name = "flux_cli_unit_test",
     srcs = [
-        "flux_cli_unit_test.cpp",
+        "cli/tests/flux_cli_unit_test.cpp",
     ],
     copts = COPTS_WITH_ASAN,
     data = glob([
@@ -550,7 +577,7 @@ cc_test(
 sh_test(
     name = "flux_cli_smoke_test",
     srcs = [
-        "flux_cli_smoke_test.sh",
+        "cli/tests/flux_cli_smoke_test.sh",
     ],
     data = [
         ":flux",
@@ -562,7 +589,7 @@ sh_test(
 sh_test(
     name = "stdlib_conformance_test",
     srcs = [
-        "stdlib_conformance_test.sh",
+        "cli/tests/stdlib_conformance_test.sh",
     ],
     data = [
         ":flux",

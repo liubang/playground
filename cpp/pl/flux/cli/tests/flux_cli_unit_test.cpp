@@ -1,0 +1,985 @@
+// Copyright (c) 2026 The Authors. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Authors: liubang (it.liubang@gmail.com)
+// Created: 2026/04/15 23:39
+
+#include "cpp/pl/flux/cli/flux_cli.h"
+#include <algorithm>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <gtest/gtest.h>
+#include <sstream>
+#include <vector>
+
+namespace pl::flux {
+namespace {
+
+std::string ReplaceAll(std::string text,
+                       const std::string& needle,
+                       const std::string& replacement) {
+    size_t pos = 0;
+    while ((pos = text.find(needle, pos)) != std::string::npos) {
+        text.replace(pos, needle.size(), replacement);
+        pos += replacement.size();
+    }
+    return text;
+}
+
+std::string RunfilePath(const std::string& relative_path) {
+    const char* test_srcdir = std::getenv("TEST_SRCDIR");
+    const char* test_workspace = std::getenv("TEST_WORKSPACE");
+    if (test_srcdir == nullptr || test_workspace == nullptr) {
+        return relative_path;
+    }
+    std::filesystem::path p = std::filesystem::path(test_srcdir) / test_workspace / relative_path;
+    // Resolve symlinks and ".." components so that the resulting path stays within the OS PATH_MAX
+    // limit. Bazel sandbox runfiles trees are often reached via many levels of "../../.."
+    // indirection.
+    std::error_code ec;
+    auto canonical = std::filesystem::canonical(p, ec);
+    if (!ec) {
+        return canonical.string();
+    }
+    // Fail back to the unresolved path when canonical() fails (e.g. when the file does not exist
+    // yet).
+    return p.string();
+}
+
+std::string ReadAllText(const std::string& path) {
+    std::ifstream file(path);
+    EXPECT_TRUE(file.is_open()) << "failed to open " << path;
+    std::ostringstream buffer;
+    buffer << file.rdbuf();
+    return buffer.str();
+}
+
+std::string RewriteExamplePaths(std::string source) {
+    source =
+        ReplaceAll(source, "cpp/pl/flux/examples/ops_dashboard/data/cpu_usage.annotated.csv",
+                   RunfilePath("cpp/pl/flux/examples/ops_dashboard/data/cpu_usage.annotated.csv"));
+    source = ReplaceAll(
+        source, "cpp/pl/flux/examples/ops_dashboard/data/cpu_monthly_usage.annotated.csv",
+        RunfilePath("cpp/pl/flux/examples/ops_dashboard/data/cpu_monthly_usage.annotated.csv"));
+    source =
+        ReplaceAll(source, "cpp/pl/flux/examples/ops_dashboard/data/mem_usage.annotated.csv",
+                   RunfilePath("cpp/pl/flux/examples/ops_dashboard/data/mem_usage.annotated.csv"));
+    source =
+        ReplaceAll(source, "cpp/pl/flux/examples/feature_gallery/data/site_ops.annotated.csv",
+                   RunfilePath("cpp/pl/flux/examples/feature_gallery/data/site_ops.annotated.csv"));
+    source = ReplaceAll(
+        source, "cpp/pl/flux/examples/feature_gallery/data/service_counters.annotated.csv",
+        RunfilePath("cpp/pl/flux/examples/feature_gallery/data/service_counters.annotated.csv"));
+    source = ReplaceAll(source, "cpp/pl/flux/examples/feature_gallery/data/alerts.raw.csv",
+                        RunfilePath("cpp/pl/flux/examples/feature_gallery/data/alerts.raw.csv"));
+    source = ReplaceAll(
+        source, "cpp/pl/flux/examples/feature_gallery/data/multi_block.annotated.csv",
+        RunfilePath("cpp/pl/flux/examples/feature_gallery/data/multi_block.annotated.csv"));
+    source = ReplaceAll(source, "cpp/pl/flux/examples/cross_source/metrics.db",
+                        RunfilePath("cpp/pl/flux/examples/cross_source/metrics.db"));
+    source = ReplaceAll(source, "cpp/pl/flux/examples/cross_source/owners.csv",
+                        RunfilePath("cpp/pl/flux/examples/cross_source/owners.csv"));
+    return source;
+}
+
+FluxCliResult ExecuteExampleScript(const std::string& relative_path,
+                                   Environment& env,
+                                   const FluxCliOptions& options = {}) {
+    const std::string path = RunfilePath(relative_path);
+    return ExecuteFluxSource(RewriteExamplePaths(ReadAllText(path)), path, env, options);
+}
+
+std::vector<std::string> AllExampleScripts() {
+    std::vector<std::string> paths;
+    // RunfilePath already returns a canonical absolute path. We compute paths
+    // relative to the workspace root. (i.e. the _main runfiles directory) so
+    // that they can be passed back to RunfilePath() by callers.
+    const std::filesystem::path root = RunfilePath("cpp/pl/flux/examples");
+    const std::filesystem::path workspace_root = RunfilePath("");
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(root)) {
+        if (!entry.is_regular_file() || entry.path().extension() != ".flux") {
+            continue;
+        }
+        paths.push_back(std::filesystem::relative(entry.path(), workspace_root).string());
+    }
+    std::sort(paths.begin(), paths.end());
+    return paths;
+}
+
+bool RequiresExternalMySQL(const std::string& path) {
+    return path.find("/cross_source/mysql_") != std::string::npos ||
+           path.find("\\cross_source\\mysql_") != std::string::npos;
+}
+
+TEST(FluxCliTest, ExecutesSourceWithPreludeBuiltins) {
+    auto env = MakeFluxCliEnvironment();
+
+    auto result = ExecuteFluxSource("sum([1, 2, 3])", "<test>", env);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_EQ("6\n", result.output);
+    EXPECT_TRUE(result.error.empty());
+}
+
+TEST(FluxCliTest, DisablesPreludeBuiltinsWhenRequested) {
+    FluxCliOptions options;
+    options.install_builtins = false;
+    auto env = MakeFluxCliEnvironment(options);
+
+    auto result = ExecuteFluxSource("sum([1, 2, 3])", "<test>", env, options);
+
+    EXPECT_EQ(1, result.exit_code);
+    EXPECT_TRUE(result.output.empty());
+    EXPECT_NE(std::string::npos, result.error.find("sum"));
+}
+
+TEST(FluxCliTest, ExecutesFluxFileSourceWithImportsAndPipelines) {
+    auto env = MakeFluxCliEnvironment();
+    auto result = ExecuteFluxSource(R"(
+        import "csv"
+
+        data = csv.from(
+            csv: "_time,_measurement,_value\n2024-01-01T00:00:00Z,cpu,95.5\n",
+            mode: "raw",
+        )
+            |> filter(fn: (r) => r._measurement == "cpu")
+            |> limit(n: 1)
+    )",
+                                    "query.flux", env);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_NE(std::string::npos, result.output.find("Result: data\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Table: bucket=csv, rows=1, tables=1\n"));
+    EXPECT_NE(std::string::npos, result.output.find("_time"));
+    EXPECT_NE(std::string::npos, result.output.find("_measurement"));
+    EXPECT_NE(std::string::npos, result.output.find("_value"));
+    EXPECT_NE(std::string::npos, result.output.find("\"2024-01-01T00:00:00Z\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"cpu\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"95.5\""));
+    EXPECT_NE(std::string::npos, result.output.find("+"));
+    EXPECT_TRUE(result.error.empty());
+}
+
+TEST(FluxCliTest, ExecutesCheckedInOpsDashboardExample) {
+    auto env = MakeFluxCliEnvironment();
+    auto result = ExecuteExampleScript("cpp/pl/flux/examples/ops_dashboard/query.flux", env);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: host_health\n"));
+    EXPECT_NE(std::string::npos, result.output.find("2024-05-01T10:01:00Z"));
+    EXPECT_NE(std::string::npos, result.output.find("2024-05-01T10:02:00Z"));
+    EXPECT_NE(std::string::npos, result.output.find("72"));
+    EXPECT_NE(std::string::npos, result.output.find("63"));
+    EXPECT_NE(std::string::npos, result.output.find("82"));
+    EXPECT_NE(std::string::npos, result.output.find("68"));
+    EXPECT_NE(std::string::npos, result.output.find("_value_cpu"));
+    EXPECT_NE(std::string::npos, result.output.find("_value_mem"));
+}
+
+TEST(FluxCliTest, ExecutesFeatureGalleryJoinExampleWithRenamedColumns) {
+    auto env = MakeFluxCliEnvironment();
+    auto result =
+        ExecuteExampleScript("cpp/pl/flux/examples/feature_gallery/join_union_pivot.flux", env);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: joined_health\n"));
+    EXPECT_NE(std::string::npos, result.output.find("_value_cpu"));
+    EXPECT_NE(std::string::npos, result.output.find("_value_mem"));
+    EXPECT_NE(std::string::npos, result.output.find("region_cpu"));
+    EXPECT_NE(std::string::npos, result.output.find("region_mem"));
+    EXPECT_NE(std::string::npos, result.output.find("2024-06-01T09:01:00Z"));
+    EXPECT_NE(std::string::npos, result.output.find("73.5"));
+    EXPECT_NE(std::string::npos, result.output.find("60"));
+}
+
+TEST(FluxCliTest, ExecutesFeatureGalleryArrayWatchlistExample) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.result_name = "array_watchlist_join";
+    auto result = ExecuteExampleScript(
+        "cpp/pl/flux/examples/feature_gallery/array_watchlist_join.flux", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: array_watchlist_join\n"));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-1\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-3\""));
+    EXPECT_EQ(std::string::npos, result.output.find("\"edge-2\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"primary\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"canary\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"ops\""));
+    EXPECT_NE(std::string::npos, result.output.find("73.5"));
+    EXPECT_NE(std::string::npos, result.output.find("58"));
+}
+
+TEST(FluxCliTest, ExecutesCrossSourceSqliteCsvJoinExample) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.result_name = "sqlite_csv_join";
+    auto result = ExecuteExampleScript("cpp/pl/flux/examples/cross_source/sqlite_csv_join.flux",
+                                       env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: sqlite_csv_join\n"));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-1\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-2\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"search\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"ads\""));
+    EXPECT_NE(std::string::npos, result.output.find("93.25"));
+    EXPECT_NE(std::string::npos, result.output.find("88"));
+    EXPECT_EQ(std::string::npos, result.output.find("\"edge-3\""));
+    EXPECT_EQ(std::string::npos, result.output.find("\"edge-4\""));
+}
+
+TEST(FluxCliTest, ExecutesCrossSourceSqliteCsvArrayIncidentExample) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.result_name = "sqlite_csv_array_incidents";
+    auto result = ExecuteExampleScript(
+        "cpp/pl/flux/examples/cross_source/sqlite_csv_array_incidents.flux", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: sqlite_csv_array_incidents\n"));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-1\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-2\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"search\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"ads\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"page\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"ticket\""));
+    EXPECT_NE(std::string::npos, result.output.find("82.375"));
+    EXPECT_NE(std::string::npos, result.output.find("88"));
+    EXPECT_EQ(std::string::npos, result.output.find("\"edge-3\""));
+}
+
+TEST(FluxCliTest, RendersExplainPlanInsideObjectAsMultilineText) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.result_name = "_result";
+    auto result = ExecuteExampleScript(
+        "cpp/pl/flux/examples/cross_source/sqlite_pushdown_explain.flux", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("values: [93.25]"));
+    EXPECT_NE(std::string::npos, result.output.find("plan: |\n"));
+    EXPECT_NE(std::string::npos, result.output.find("    Limit [sqlite pushdown]\n"));
+    EXPECT_NE(std::string::npos, result.output.find("    `- Sort [sqlite pushdown]\n"));
+    EXPECT_NE(std::string::npos, result.output.find("    SourcePushdown(request: "));
+    EXPECT_NE(std::string::npos, result.output.find("distinctPlan: |\n"));
+    EXPECT_NE(std::string::npos, result.output.find("distinct=host"));
+    EXPECT_EQ(std::string::npos, result.output.find("\\n"));
+}
+
+TEST(FluxCliTest, KeepsWatchlistFocusExampleAlignedWithOfficialFilterSemantics) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.result_name = "watchlist_focus";
+
+    auto result = ExecuteExampleScript(
+        "cpp/pl/flux/examples/feature_gallery/nested_multi_table_health.flux", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: watchlist_focus\n"));
+    EXPECT_NE(std::string::npos, result.output.find("rows=2, tables=2"));
+    EXPECT_NE(std::string::npos, result.output.find("Logical table 0\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Logical table 1\n"));
+    EXPECT_EQ(std::string::npos, result.output.find("Logical table 2\n"));
+}
+
+TEST(FluxCliTest, DemonstratesFilterOnEmptyKeepInFeatureGalleryExample) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.result_name = "watchlist_focus_keep";
+
+    auto result = ExecuteExampleScript(
+        "cpp/pl/flux/examples/feature_gallery/nested_multi_table_health.flux", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: watchlist_focus_keep\n"));
+    EXPECT_NE(std::string::npos, result.output.find("rows=2, tables=3"));
+    EXPECT_NE(std::string::npos, result.output.find("Logical table 0\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Logical table 1\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Logical table 2\n"));
+    EXPECT_NE(std::string::npos,
+              result.output.find("(empty logical table, group={host: \"edge-2\"}"));
+}
+
+TEST(FluxCliTest, RendersKeptEmptyLogicalTablesWhenRequested) {
+    auto env = MakeFluxCliEnvironment();
+
+    auto result = ExecuteFluxSource(R"(
+        import "array"
+
+        kept = array.from(
+            bucket: "telegraf",
+            rows: [
+                {host: "edge-1", _value: 95.0},
+                {host: "edge-2", _value: 60.0},
+                {host: "edge-3", _value: 85.0},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> filter(fn: (r) => r._value >= 80.0, onEmpty: "keep")
+    )",
+                                    "<test>", env);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Table: bucket=telegraf, rows=2, tables=3"));
+    EXPECT_NE(std::string::npos, result.output.find("Logical table 0\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Logical table 1\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Logical table 2\n"));
+    EXPECT_NE(std::string::npos,
+              result.output.find(
+                  "(empty logical table, group={host: \"edge-2\"}, columns=[host, _value]"));
+}
+
+TEST(FluxCliTest, EmitsEmptyLogicalTableMetadataInJsonOutput) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.output_format = FluxOutputFormat::Json;
+
+    auto result = ExecuteFluxSource(R"(
+        import "array"
+
+        kept = array.from(
+            bucket: "telegraf",
+            rows: [
+                {host: "edge-1", _value: 95.0},
+                {host: "edge-2", _value: 60.0},
+                {host: "edge-3", _value: 85.0},
+            ],
+        )
+            |> group(columns: ["host"])
+            |> filter(fn: (r) => r._value >= 80.0, onEmpty: "keep")
+    )",
+                                    "<test>", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("\"tables\":["));
+    EXPECT_NE(std::string::npos, result.output.find("\"groupKey\":{\"host\":\"edge-2\"}"));
+    EXPECT_NE(std::string::npos,
+              result.output.find("\"columns\":[\"host\",\"_value\",\"_group\"]"));
+    EXPECT_NE(std::string::npos, result.output.find("\"rows\":[]"));
+}
+
+TEST(FluxCliTest, ExecutesTaskDrivenFeatureGalleryExample) {
+    auto env = MakeFluxCliEnvironment();
+    auto result =
+        ExecuteExampleScript("cpp/pl/flux/examples/feature_gallery/task_driven_rollup.flux", env);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: task_driven_rollup\n"));
+    EXPECT_NE(std::string::npos, result.output.find("\"task-driven-rollup\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"ops\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-1\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-2\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-3\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"critical\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"warm\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"steady\""));
+}
+
+TEST(FluxCliTest, ExecutesStdlibPackagesFeatureGalleryExample) {
+    auto env = MakeFluxCliEnvironment();
+    auto result =
+        ExecuteExampleScript("cpp/pl/flux/examples/feature_gallery/stdlib_packages.flux", env);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: stdlib_service_health\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Result: stdlib_alert_candidates\n"));
+    EXPECT_NE(std::string::npos, result.output.find("\"API\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"WORKER\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"us-east/api/edge-1\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"node-1\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"1\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"API-edge-1\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"critical\""));
+    EXPECT_NE(std::string::npos, result.output.find("88"));
+    EXPECT_NE(std::string::npos, result.output.find("8"));
+}
+
+TEST(FluxCliTest, ExecutesDateCalendarFeatureGalleryExample) {
+    auto env = MakeFluxCliEnvironment();
+    auto result =
+        ExecuteExampleScript("cpp/pl/flux/examples/feature_gallery/date_calendar.flux", env);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: date_calendar_shape\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Result: date_weekday_service_counts\n"));
+    EXPECT_NE(std::string::npos, result.output.find("2024-06-01T09:01:10Z"));
+    EXPECT_NE(std::string::npos, result.output.find("2024-06-01T09:00:00Z"));
+    EXPECT_NE(std::string::npos, result.output.find("2024-06-01T09:31:10Z"));
+    EXPECT_NE(std::string::npos, result.output.find("2024-06-01T08:46:10Z"));
+    EXPECT_NE(std::string::npos, result.output.find("\"api\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"worker\""));
+    EXPECT_NE(std::string::npos, result.output.find("2024"));
+    EXPECT_NE(std::string::npos, result.output.find("6"));
+    EXPECT_NE(std::string::npos, result.output.find("9"));
+}
+
+TEST(FluxCliTest, ExecutesJoinPackageFeatureGalleryExample) {
+    auto env = MakeFluxCliEnvironment();
+    auto result =
+        ExecuteExampleScript("cpp/pl/flux/examples/feature_gallery/join_package.flux", env);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: join_package_inner\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Result: join_package_left\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Result: join_package_right\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Result: join_package_full\n"));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-1\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-3\""));
+    EXPECT_NE(std::string::npos, result.output.find("88"));
+    EXPECT_NE(std::string::npos, result.output.find("144"));
+    EXPECT_NE(std::string::npos, result.output.find("null"));
+}
+
+TEST(FluxCliTest, ExecutesCheckedInOpsDashboardQueryVariants) {
+    struct ExampleCase {
+        std::string path;
+        std::vector<std::string> expected_output_fragments;
+    };
+
+    const std::vector<ExampleCase> cases = {
+        {
+            "cpp/pl/flux/examples/ops_dashboard/cpu_top_windows.flux",
+            {"Result: cpu_top_windows\n", "91", "82", "72"},
+        },
+        {
+            "cpp/pl/flux/examples/ops_dashboard/cpu_distinct_hosts.flux",
+            {"Result: cpu_distinct_hosts\n", "\"edge-1\"", "\"edge-2\"", "\"us-east\"",
+             "\"us-west\"", "70", "91"},
+        },
+        {
+            "cpp/pl/flux/examples/ops_dashboard/cpu_gap_fill.flux",
+            {"Result: cpu_gap_fill\n", "2024-05-01T10:00:30Z", "2024-05-01T10:01:00Z",
+             "2024-05-01T10:01:30Z", "\"edge-1\"", "70", "74", "82"},
+        },
+        {
+            "cpp/pl/flux/examples/ops_dashboard/cpu_elapsed_by_host.flux",
+            {"Result: cpu_elapsed_by_host\n", "2024-05-01T10:00:40Z", "2024-05-01T10:01:05Z",
+             "2024-05-01T10:01:10Z", "\"edge-1\"", "\"edge-2\"", "30", "25", "50"},
+        },
+        {
+            "cpp/pl/flux/examples/ops_dashboard/cpu_usage_difference.flux",
+            {"Result: cpu_usage_difference\n", "2024-05-01T10:00:40Z", "2024-05-01T10:01:05Z",
+             "2024-05-01T10:01:10Z", "\"edge-1\"", "\"edge-2\"", "4", "8", "-4"},
+        },
+        {
+            "cpp/pl/flux/examples/ops_dashboard/cpu_usage_derivative.flux",
+            {"Result: cpu_usage_derivative\n", "2024-05-01T10:00:40Z", "2024-05-01T10:01:05Z",
+             "2024-05-01T10:01:10Z", "\"edge-1\"", "\"edge-2\"", "0.133333333333333", "0.32",
+             "-0.08"},
+        },
+        {
+            "cpp/pl/flux/examples/ops_dashboard/latest_two_cpu_windows.flux",
+            {"Result: latest_two_cpu_windows\n", "2024-05-01T10:01:05Z", "2024-05-01T10:00:20Z",
+             "\"edge-1\"", "\"edge-2\"", "82", "91"},
+        },
+        {
+            "cpp/pl/flux/examples/ops_dashboard/host_usage_pivot.flux",
+            {"Result: host_usage_pivot\n", "2024-05-01T10:01:00Z", "2024-05-01T10:02:00Z",
+             "\"edge-1\"", "\"edge-2\"", "cpu", "mem", "72", "63", "91", "75"},
+        },
+        {
+            "cpp/pl/flux/examples/ops_dashboard/monthly_cpu_calendar.flux",
+            {"Result: monthly_cpu_calendar\n", "2024-01-01T00:00:00Z", "2024-02-01T00:00:00Z",
+             "2024-03-01T00:00:00Z", "60", "77"},
+        },
+        {
+            "cpp/pl/flux/examples/ops_dashboard/fleet_usage_union.flux",
+            {"Result: fleet_usage\n", "\"cpu\"", "\"mem\"", "\"edge-2\"", "91"},
+        },
+        {
+            "cpp/pl/flux/examples/ops_dashboard/edge1_cpu_rollup.flux",
+            {"Result: edge1_cpu_rollup\n", "samples", "3", "226"},
+        },
+        {
+            "cpp/pl/flux/examples/ops_dashboard/latest_west_cpu.flux",
+            {"Result: latest_west_cpu\n", "\"edge-2\"", "\"us-west\"", "87"},
+        },
+        {
+            "cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux",
+            {"Result: latest_west_cpu\n", "Result: latest_east_mem\n", "\"edge-2\"", "\"us-east\"",
+             "87", "68"},
+        },
+    };
+
+    for (const auto& example : cases) {
+        SCOPED_TRACE(example.path);
+        auto env = MakeFluxCliEnvironment();
+        auto result = ExecuteExampleScript(example.path, env);
+
+        EXPECT_EQ(0, result.exit_code);
+        EXPECT_TRUE(result.error.empty());
+        for (const auto& fragment : example.expected_output_fragments) {
+            EXPECT_NE(std::string::npos, result.output.find(fragment));
+        }
+    }
+}
+
+TEST(FluxCliTest, ExecutesAllCheckedInExamplesWithoutRuntimeErrors) {
+    for (const auto& path : AllExampleScripts()) {
+        if (RequiresExternalMySQL(path)) {
+            continue;
+        }
+        SCOPED_TRACE(path);
+        auto env = MakeFluxCliEnvironment();
+        auto result = ExecuteExampleScript(path, env);
+        EXPECT_EQ(0, result.exit_code);
+        EXPECT_TRUE(result.error.empty());
+    }
+}
+
+TEST(FluxCliTest, ExecutesTableHelperQueries) {
+    auto env = MakeFluxCliEnvironment();
+    auto result = ExecuteFluxSource(R"(
+        import "array"
+
+        hosts = array.from(
+            bucket: "telegraf",
+            rows: [
+                {_time: "2024-01-01T00:00:00Z", host: "edge-1", region: "us-east", _value: 70},
+                {_time: "2024-01-01T00:01:00Z", host: "edge-2", region: "us-west", _value: 91},
+            ],
+        )
+            |> group(columns: ["host", "region"])
+
+        host_columns = hosts |> columns() |> yield(name: "host_columns")
+        host_keys = hosts |> keys() |> yield(name: "host_keys")
+        west_values = hosts |> findColumn(fn: (r) => r.region == "us-west", column: "_value")
+        west_record = hosts |> findRecord(fn: (r) => r.region == "us-west")
+    )",
+                                    "<test>", env);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: host_columns\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Result: host_keys\n"));
+    EXPECT_NE(std::string::npos, result.output.find("\"_time\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"host\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"region\""));
+    EXPECT_NE(std::string::npos, result.output.find("Result: west_values\n"));
+    EXPECT_NE(std::string::npos, result.output.find("[91]"));
+    EXPECT_NE(std::string::npos, result.output.find("Result: west_record\n"));
+    EXPECT_NE(std::string::npos, result.output.find("\"edge-2\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"us-west\""));
+}
+
+TEST(FluxCliTest, RendersMultipleNamedResultsAsSeparateBlocks) {
+    auto env = MakeFluxCliEnvironment();
+    auto result = ExecuteFluxSource(R"(
+        value = 41
+        value + 1
+    )",
+                                    "<test>", env);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_EQ("Result: value\n"
+              "41\n"
+              "\n"
+              "Result: _result\n"
+              "42\n",
+              result.output);
+    EXPECT_TRUE(result.error.empty());
+}
+
+TEST(FluxCliTest, EmitsAnnotatedCsvForTableResults) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.output_format = FluxOutputFormat::Csv;
+
+    auto result = ExecuteFluxSource(R"(
+        import "csv"
+
+        data = csv.from(
+            csv: "_time,_measurement,_value\n2024-01-01T00:00:00Z,cpu,95.5\n",
+            mode: "raw",
+        )
+    )",
+                                    "query.flux", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_EQ("#datatype,string,long,string,string,string\n"
+              "#group,false,false,false,false,false\n"
+              "#default,data,,,,\n"
+              ",result,table,_time,_measurement,_value\n"
+              ",data,0,2024-01-01T00:00:00Z,cpu,95.5\n",
+              result.output);
+    EXPECT_TRUE(result.error.empty());
+}
+
+TEST(FluxCliTest, RendersTablesWithoutBordersWhenDisabled) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.table_borders = false;
+
+    auto result = ExecuteExampleScript(
+        "cpp/pl/flux/examples/ops_dashboard/monthly_cpu_calendar.flux", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("Result: monthly_cpu_calendar\n"));
+    EXPECT_NE(std::string::npos, result.output.find("Table: bucket=csv, rows=2, tables=1\n"));
+    EXPECT_NE(std::string::npos, result.output.find("_time"));
+    EXPECT_NE(std::string::npos, result.output.find("2024-01-01T00:00:00Z"));
+    EXPECT_NE(std::string::npos, result.output.find("60"));
+    EXPECT_EQ(std::string::npos, result.output.find('+'));
+    EXPECT_EQ(std::string::npos, result.output.find('|'));
+}
+
+TEST(FluxCliTest, EmitsAnnotatedCsvForScalarResults) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.output_format = FluxOutputFormat::Csv;
+
+    auto result = ExecuteFluxSource("value = 41\nvalue + 1", "<test>", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_EQ("#datatype,string,long,long\n"
+              "#group,false,false,false\n"
+              "#default,value,,\n"
+              ",result,table,_value\n"
+              ",value,0,41\n"
+              "\n"
+              "#datatype,string,long,long\n"
+              "#group,false,false,false\n"
+              "#default,_result,,\n"
+              ",result,table,_value\n"
+              ",_result,1,42\n",
+              result.output);
+    EXPECT_TRUE(result.error.empty());
+}
+
+TEST(FluxCliTest, UsesYieldNameInHumanReadableAndAnnotatedCsvOutput) {
+    auto env = MakeFluxCliEnvironment();
+
+    auto human = ExecuteFluxSource(R"(
+        import "array"
+
+        builtin yield : (<-tables: stream[A], ?name: string) => stream[A]
+
+        array.from(
+            bucket: "telegraf",
+            rows: [{_time: "2024-01-01T00:00:00Z", _value: 95.0}],
+        )
+            |> yield(name: "cpu")
+    )",
+                                   "<test>", env);
+
+    EXPECT_EQ(0, human.exit_code);
+    EXPECT_NE(std::string::npos, human.output.find("Result: cpu\n"));
+    EXPECT_TRUE(human.error.empty());
+
+    env = MakeFluxCliEnvironment();
+    FluxCliOptions csv_options;
+    csv_options.output_format = FluxOutputFormat::Csv;
+    auto csv = ExecuteFluxSource(R"(
+        import "array"
+
+        builtin yield : (<-tables: stream[A], ?name: string) => stream[A]
+
+        array.from(
+            bucket: "telegraf",
+            rows: [{_time: "2024-01-01T00:00:00Z", _value: 95.0}],
+        )
+            |> yield(name: "cpu")
+    )",
+                                 "<test>", env, csv_options);
+
+    EXPECT_EQ(0, csv.exit_code);
+    EXPECT_NE(std::string::npos, csv.output.find("#default,cpu,,,"));
+    EXPECT_NE(std::string::npos, csv.output.find("2024-01-01T00:00:00Z"));
+    EXPECT_NE(std::string::npos, csv.output.find(",cpu,"));
+    EXPECT_TRUE(csv.error.empty());
+}
+
+TEST(FluxCliTest, EmitsAnnotatedCsvUsingExistingTableMetadataAndGroupColumns) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.output_format = FluxOutputFormat::Csv;
+
+    auto result = ExecuteFluxSource(R"(
+        import "csv"
+
+        data = csv.from(csv: "#datatype,string,long,dateTime:RFC3339,string,double\n#group,false,false,true,true,false\n#default,_result,,,,\n,result,table,_time,_measurement,_value\n,cpu,0,2024-01-01T00:00:00Z,cpu,95.5\n\n#datatype,string,long,dateTime:RFC3339,string,double\n#group,false,false,true,true,false\n#default,_result,,,,\n,result,table,_time,_measurement,_value\n,mem,1,2024-01-01T00:01:00Z,mem,42.0\n")
+    )",
+                                    "query.flux", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("#group,false,false,true,true,false"));
+    EXPECT_NE(std::string::npos, result.output.find(",result,table,_time,_measurement,_value"));
+    EXPECT_NE(std::string::npos, result.output.find(",cpu,0,2024-01-01T00:00:00Z,cpu,95.5"));
+    EXPECT_NE(std::string::npos, result.output.find(",mem,1,2024-01-01T00:01:00Z,mem,42"));
+}
+
+TEST(FluxCliTest, ReportsParserAndRuntimeErrors) {
+    auto env = MakeFluxCliEnvironment();
+
+    auto parse_result = ExecuteFluxSource("value = [1 2]", "<bad>", env);
+    EXPECT_EQ(2, parse_result.exit_code);
+    EXPECT_TRUE(parse_result.output.empty());
+    EXPECT_NE(std::string::npos, parse_result.error.find("parser errors"));
+
+    auto runtime_result = ExecuteFluxSource("missing + 1", "<bad>", env);
+    EXPECT_EQ(1, runtime_result.exit_code);
+    EXPECT_TRUE(runtime_result.output.empty());
+    EXPECT_NE(std::string::npos, runtime_result.error.find("missing"));
+}
+
+TEST(FluxCliTest, EmitsJsonForMixedResults) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.output_format = FluxOutputFormat::Json;
+
+    auto result = ExecuteFluxSource(R"(
+        import "csv"
+
+        value = 41
+        data = csv.from(
+            csv: "_time,_measurement,_value\n2024-01-01T00:00:00Z,cpu,95.5\n",
+            mode: "raw",
+        )
+        value + 1
+    )",
+                                    "<test>", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.error.empty());
+    EXPECT_NE(std::string::npos, result.output.find("\"imports\":[\"csv\"]"));
+    EXPECT_NE(std::string::npos, result.output.find("\"name\":\"value\",\"value\":41"));
+    EXPECT_NE(std::string::npos,
+              result.output.find("\"name\":\"data\",\"value\":{\"type\":\"table\""));
+    EXPECT_NE(std::string::npos,
+              result.output.find("\"rows\":[{\"_time\":\"2024-01-01T00:00:00Z\""));
+    EXPECT_NE(std::string::npos, result.output.find("\"last\":42"));
+}
+
+TEST(FluxCliTest, FiltersNamedResultsAcrossOutputFormats) {
+    const std::string source = R"(
+        import "csv"
+
+        west_cpu = csv.from(
+            file: "cpp/pl/flux/examples/ops_dashboard/data/cpu_usage.annotated.csv",
+        )
+            |> filter(fn: (r) => r.region == "us-west")
+            |> sort(columns: ["_time"])
+            |> last()
+            |> yield(name: "latest_west_cpu")
+
+        east_mem = csv.from(
+            file: "cpp/pl/flux/examples/ops_dashboard/data/mem_usage.annotated.csv",
+        )
+            |> filter(fn: (r) => r.region == "us-east")
+            |> sort(columns: ["_time"])
+            |> last()
+            |> yield(name: "latest_east_mem")
+    )";
+
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions human_options;
+    human_options.result_name = "latest_east_mem";
+    auto human = ExecuteFluxSource(RewriteExamplePaths(source), "<test>", env, human_options);
+
+    EXPECT_EQ(0, human.exit_code);
+    EXPECT_TRUE(human.error.empty());
+    EXPECT_NE(std::string::npos, human.output.find("Result: latest_east_mem\n"));
+    EXPECT_NE(std::string::npos, human.output.find("\"us-east\""));
+    EXPECT_NE(std::string::npos, human.output.find("68"));
+    EXPECT_EQ(std::string::npos, human.output.find("latest_west_cpu"));
+    EXPECT_EQ(std::string::npos, human.output.find("\"us-west\""));
+
+    env = MakeFluxCliEnvironment();
+    FluxCliOptions csv_options;
+    csv_options.output_format = FluxOutputFormat::Csv;
+    csv_options.result_name = "latest_west_cpu";
+    auto csv = ExecuteFluxSource(RewriteExamplePaths(source), "<test>", env, csv_options);
+
+    EXPECT_EQ(0, csv.exit_code);
+    EXPECT_TRUE(csv.error.empty());
+    EXPECT_NE(std::string::npos, csv.output.find(",_result,0,2024-05-01T10:01:10Z"));
+    EXPECT_NE(std::string::npos, csv.output.find(",us-west,"));
+    EXPECT_EQ(std::string::npos, csv.output.find("latest_east_mem"));
+    EXPECT_EQ(std::string::npos, csv.output.find(",us-east,"));
+
+    env = MakeFluxCliEnvironment();
+    FluxCliOptions json_options;
+    json_options.output_format = FluxOutputFormat::Json;
+    json_options.result_name = "latest_east_mem";
+    auto json = ExecuteFluxSource(RewriteExamplePaths(source), "<test>", env, json_options);
+
+    EXPECT_EQ(0, json.exit_code);
+    EXPECT_TRUE(json.error.empty());
+    EXPECT_NE(std::string::npos, json.output.find("\"results\":[{\"name\":\"latest_east_mem\""));
+    EXPECT_NE(std::string::npos, json.output.find("\"last\":{\"type\":\"table\""));
+    EXPECT_NE(std::string::npos, json.output.find("\"region\":\"us-east\""));
+    EXPECT_EQ(std::string::npos, json.output.find("latest_west_cpu"));
+    EXPECT_EQ(std::string::npos, json.output.find("\"region\":\"us-west\""));
+}
+
+TEST(FluxCliTest, ReportsMissingNamedResultFilter) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.result_name = "missing";
+
+    auto result = ExecuteFluxSource("value = 41\nvalue + 1", "<test>", env, options);
+
+    EXPECT_EQ(1, result.exit_code);
+    EXPECT_TRUE(result.output.empty());
+    EXPECT_NE(std::string::npos, result.error.find("result `missing` was not found"));
+    EXPECT_NE(std::string::npos, result.error.find("available results: value, _result"));
+}
+
+TEST(FluxCliTest, ListsNamedResultsWithoutRenderingValues) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.list_results = true;
+
+    auto result = ExecuteFluxSource(R"(
+        value = 41
+        value + 1
+    )",
+                                    "<test>", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_EQ("value\n_result\n", result.output);
+    EXPECT_TRUE(result.error.empty());
+}
+
+TEST(FluxCliTest, ListsFilteredNamedResults) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.list_results = true;
+    options.result_name = "latest_east_mem";
+
+    auto result = ExecuteExampleScript("cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux",
+                                       env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_EQ("latest_east_mem\n", result.output);
+    EXPECT_TRUE(result.error.empty());
+}
+
+TEST(FluxCliTest, DumpsAstAsTreeAndJson) {
+    auto tree_result = DumpFluxAstSource("value = 1 + 2", "<test>");
+    EXPECT_EQ(0, tree_result.exit_code);
+    EXPECT_TRUE(tree_result.error.empty());
+    EXPECT_NE(std::string::npos, tree_result.output.find("File name=\"<test>\""));
+    EXPECT_NE(std::string::npos, tree_result.output.find("VariableAssignment id=value"));
+    EXPECT_NE(std::string::npos, tree_result.output.find("BinaryExpr op=+"));
+
+    FluxAstOptions json_options;
+    json_options.json = true;
+    auto json_result = DumpFluxAstSource("value = 1 + 2", "<test>", json_options);
+    EXPECT_EQ(0, json_result.exit_code);
+    EXPECT_TRUE(json_result.error.empty());
+    EXPECT_NE(std::string::npos, json_result.output.find("\"type\":\"File\""));
+    EXPECT_NE(std::string::npos, json_result.output.find("VariableAssignment"));
+}
+
+TEST(FluxCliTest, DumpsPartialAstAndReportsParserErrors) {
+    auto result = DumpFluxAstSource("value = [1 2]", "<bad>");
+
+    EXPECT_EQ(2, result.exit_code);
+    EXPECT_NE(std::string::npos, result.output.find("File name=\"<bad>\""));
+    EXPECT_NE(std::string::npos, result.error.find("parser errors"));
+}
+
+TEST(FluxCliTest, ReplPreservesEnvironmentBetweenInputs) {
+    std::istringstream input("x = 40\nx + 2\n:quit\n");
+    std::ostringstream output;
+    std::ostringstream error;
+
+    int exit_code = RunFluxRepl(input, output, error, false);
+
+    EXPECT_EQ(0, exit_code);
+    EXPECT_EQ("40\n42\n", output.str());
+    EXPECT_TRUE(error.str().empty());
+}
+
+TEST(FluxCliTest, ReplSupportsMultiLineInputAndContinuationPrompt) {
+    std::istringstream input("config = {\n"
+                             "host: \"local\",\n"
+                             "port: 8080,\n"
+                             "}\n"
+                             "config.host\n"
+                             ":quit\n");
+    std::ostringstream output;
+    std::ostringstream error;
+
+    int exit_code = RunFluxRepl(input, output, error, true);
+
+    EXPECT_EQ(0, exit_code);
+    EXPECT_NE(std::string::npos, output.str().find("Flux REPL. Type :help for commands.\n"));
+    EXPECT_NE(std::string::npos, output.str().find("flux> "));
+    EXPECT_NE(std::string::npos, output.str().find("....> "));
+    EXPECT_NE(std::string::npos, output.str().find("{host: \"local\", port: 8080}"));
+    EXPECT_NE(std::string::npos, output.str().find("\"local\""));
+    EXPECT_TRUE(error.str().empty());
+}
+
+TEST(FluxCliTest, ReplHelpCommandPrintsBuiltInCommands) {
+    std::istringstream input("help\n:help\nquit\n");
+    std::ostringstream output;
+    std::ostringstream error;
+
+    int exit_code = RunFluxRepl(input, output, error, true);
+
+    EXPECT_EQ(0, exit_code);
+    EXPECT_NE(std::string::npos, output.str().find("Flux REPL commands:\n"));
+    EXPECT_NE(std::string::npos, output.str().find("help, :help, .help  Show this help text.\n"));
+    EXPECT_NE(std::string::npos,
+              output.str().find("quit, :quit, .quit, exit, :exit, .exit Leave the REPL.\n"));
+    EXPECT_TRUE(error.str().empty());
+}
+
+TEST(FluxCliTest, QuietModeSuppressesValueOutput) {
+    auto env = MakeFluxCliEnvironment();
+    FluxCliOptions options;
+    options.quiet = true;
+
+    auto result = ExecuteFluxSource("1 + 2", "<test>", env, options);
+
+    EXPECT_EQ(0, result.exit_code);
+    EXPECT_TRUE(result.output.empty());
+    EXPECT_TRUE(result.error.empty());
+}
+
+TEST(FluxCliTest, TrailingSemicolonReportsParserErrorInsteadOfCrashing) {
+    auto env = MakeFluxCliEnvironment();
+
+    auto result = ExecuteFluxSource("1;", "<test>", env);
+
+    EXPECT_EQ(2, result.exit_code);
+    EXPECT_TRUE(result.output.empty());
+    EXPECT_NE(std::string::npos, result.error.find("parser errors"));
+    EXPECT_NE(std::string::npos, result.error.find("unexpected token for statement"));
+}
+
+} // namespace
+} // namespace pl::flux

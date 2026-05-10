@@ -18,7 +18,7 @@
 #pragma once
 
 #include "absl/status/statusor.h"
-#include "cpp/pl/flux/runtime_value.h"
+#include "cpp/pl/flux/runtime/runtime_value.h"
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -34,6 +34,18 @@ struct ColumnSchema {
 
 struct TableSchema {
     std::vector<ColumnSchema> columns;
+};
+
+struct ColumnStatistics {
+    std::string name;
+    std::optional<double> distinct_values;
+    std::optional<double> null_fraction;
+};
+
+struct TableStatistics {
+    std::optional<double> row_count;
+    std::optional<double> size_bytes;
+    std::vector<ColumnStatistics> columns;
 };
 
 struct SourceCapabilities {
@@ -109,6 +121,9 @@ public:
 
     [[nodiscard]] virtual absl::StatusOr<TableSchema> Schema() const = 0;
     [[nodiscard]] virtual SourceCapabilities Capabilities() const = 0;
+    [[nodiscard]] virtual absl::StatusOr<TableStatistics> Statistics() const {
+        return TableStatistics{};
+    }
     virtual absl::StatusOr<Value> Scan(const ScanRequest& request) = 0;
 };
 
