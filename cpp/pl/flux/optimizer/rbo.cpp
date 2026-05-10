@@ -20,7 +20,7 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/connector/connector_registry.h"
-#include "cpp/pl/flux/runtime_value.h"
+#include "cpp/pl/flux/runtime/runtime_value.h"
 #include <algorithm>
 #include <optional>
 #include <sstream>

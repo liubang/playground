@@ -18,7 +18,7 @@
 #pragma once
 
 #include "absl/status/statusor.h"
-#include "cpp/pl/flux/runtime_value.h"
+#include "cpp/pl/flux/runtime/runtime_value.h"
 
 namespace pl::flux::execution {
 

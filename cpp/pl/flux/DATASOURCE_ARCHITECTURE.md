@@ -687,10 +687,10 @@ aggregate、order_by、limit/offset 等真实下推字段。
 
 ### Phase 7: Lazy Execution and Physical Plan
 
-状态：进行中。当前已新增第一版 physical plan 表示和 physical executor 骨架。
+状态：进行中。当前已新增第一版 physical plan 表示、physical executor 骨架和最小 CBO 闭环。
 `explain(physical: true)` 可以展示 connector scan 是否 lazy、RBO 已触发规则、CBO 当前决策状态
-和 cost placeholder。SQL source pushdown 编译已经开始从
-`runtime_builtin_universe_transform.cpp` 迁出到 optimizer 层，`Materializer` 也已经改为统一进入
+和基于 connector statistics 的 cost estimate。SQL source pushdown 编译已经开始从
+`runtime/runtime_builtin_universe_transform.cpp` 迁出到 optimizer 层，`Materializer` 也已经改为统一进入
 `PhysicalExecutor`。
 
 当前执行路径的边界是：完整可下推的 source plan 编译成单个 `ConnectorScanOperator`；不能完整
@@ -712,11 +712,14 @@ PhysicalPlan
 `- ConnectorScan [lazy](name="connector scan", source="sqlite", driver="sqlite",
    logical_prefix=[Limit, Filter, SourceScan],
    rbo=[PushLimitIntoConnectorScan, PushPredicateIntoConnectorScan],
-   cbo="not-run", cost=unknown)
+   cbo="chosen", cost={rows=1, cpu=..., io=...})
 ```
 
 这里的 `[lazy]` 表示 physical node 本身已经按延迟 scan 建模；输出边界现在会通过
 `PhysicalExecutor` 触发 connector scan，并在需要时接上 memory operator fallback。
+执行路径使用 fast CBO，只消费 RBO 形态决策，不会为了执行预先读取 connector 统计；physical
+explain 使用完整 CBO，会在 connector 支持时读取统计并展示真实 cost，缺统计时明确显示
+`cbo="no-stats", cost=unknown`。
 
 目标：把当前 eager interpreter 演进成明确的 logical -> optimized logical -> physical -> execute
 流程，同时保持现有内存执行器作为 fallback。
@@ -743,11 +746,21 @@ PhysicalPlan
 - runtime builtin transform 不再执行 eager pushdown shortcut；可 lazy 的 source pipeline 会保留
   logical plan，到 materialize/output 边界再由 `PhysicalExecutor` 决定是单个 connector scan，还是
   connector pushed prefix + memory suffix。
+- 新增 `optimizer/cbo.{h,cpp}`：定义 `StatsProvider`、`CostModel`、`PlanAlternative`、
+  `CostBasedOptimizer` 和 `CboPlanResult`。当前 CBO 先以 RBO 输出作为合法候选形态，在有统计时
+  计算 rows/cpu/io，并记录 `chosen`；无统计或执行快路径时明确 fallback 到 RBO。
+- `TableSource` 新增轻量 `Statistics()` 接口；SQLite/MySQL 第一版通过 `COUNT(*)` 暴露 row count，
+  array/csv source 通过内存行数暴露统计。统计只进入 optimizer/explain 边界，避免污染 scan
+  执行路径。
+- `PhysicalPlanner` 已改为消费 `FastCostBasedOptimizer()`：完整可下推计划仍编译成单个
+  `ConnectorScanOperator`，不可完整下推计划仍拆成 connector prefix + memory suffix，但规划入口
+  已经统一经过 CBO facade，后续切入 CBO 候选选择不需要再改 executor 边界。
 
 待推进：
 
 - 补齐 physical plan node：`OutputSink`。
-- CBO 先定义 statistics/cost/alternative plan 接口；缺统计时明确使用 RBO 输出。
+- 扩充 CBO alternative 枚举与选择逻辑：更多 connector/memory 交换点、排序/limit/aggregate 的
+  多候选比较、统计缓存和列级 distinct/null fraction。
 
 验收：
 
@@ -826,10 +839,11 @@ pushdown，但不适合作为长期执行引擎边界。
 
 测试分层：
 
-- `runtime_eval_unit_test.cpp`：表达式和 package 调用。
-- `runtime_exec_unit_test.cpp`：Flux 文件执行、pipeline 行为。
-- 新增 connector 单测：SQLite query、类型映射、错误处理、SQL builder。
-- `flux_cli_unit_test.cpp`：CLI 输出和 examples 兼容。
+- `runtime/tests/runtime_eval_unit_test.cpp`：表达式和 package 调用。
+- `runtime/tests/runtime_exec_unit_test.cpp`：Flux 文件执行、pipeline 行为。
+- `connector/tests/*_unit_test.cpp`：SQLite/MySQL query、类型映射、错误处理、SQL builder。
+- `optimizer/tests/*_unit_test.cpp`：RBO/CBO 规则、trace 和 cost fallback。
+- `cli/tests/flux_cli_unit_test.cpp`：CLI 输出和 examples 兼容。
 
 关键测试场景：
 

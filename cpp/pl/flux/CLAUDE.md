@@ -163,10 +163,11 @@
 
 ### 7.3 测试放置约定
 
-- 运行时表达式和值语义优先放在 `runtime_eval_unit_test.cpp`
-- 执行流或更高层行为放在 `runtime_exec_unit_test.cpp`
-- CLI/example 约束放在 `flux_cli_unit_test.cpp`
-- 解析器行为放在 `parser_unit_test.cpp`
+- 运行时表达式和值语义优先放在 `runtime/tests/runtime_eval_unit_test.cpp`
+- 执行流或更高层行为放在 `runtime/tests/runtime_exec_unit_test.cpp`
+- CLI/example 约束放在 `cli/tests/flux_cli_unit_test.cpp`
+- 解析器行为放在 `syntax/tests/parser_unit_test.cpp`
+- connector/optimizer 模块单测放在各自的 `tests/` 子目录，避免模块根目录继续堆测试文件。
 
 ## 10. 文档规则
 
