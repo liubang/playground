@@ -113,9 +113,11 @@ cc_library(
 cc_library(
     name = "optimizer",
     srcs = [
+        "optimizer/rbo.cpp",
         "optimizer/source_pushdown.cpp",
     ],
     hdrs = [
+        "optimizer/rbo.h",
         "optimizer/source_pushdown.h",
     ],
     copts = COPTS_WITH_ASAN,
@@ -127,6 +129,19 @@ cc_library(
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:strings",
+    ],
+)
+
+cc_test(
+    name = "optimizer_rbo_unit_test",
+    srcs = [
+        "optimizer/rbo_unit_test.cpp",
+    ],
+    copts = COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":optimizer",
+        "@googletest//:gtest_main",
     ],
 )
 
