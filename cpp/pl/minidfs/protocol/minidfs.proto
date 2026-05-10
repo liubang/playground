@@ -1,0 +1,316 @@
+// Copyright (c) 2026 The Authors. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Authors: liubang (it.liubang@gmail.com)
+
+syntax = "proto3";
+
+package pl.minidfs.protocol;
+
+option cc_generic_services = true;
+
+// ============================================================================
+// Common types
+// ============================================================================
+
+message StatusProto {
+    uint32 code = 1;
+    string message = 2;
+}
+
+message DataNodeEndpointProto {
+    uint64 datanode_id = 1;
+    string host = 2;
+    uint32 data_port = 3;
+}
+
+message LocatedBlockProto {
+    uint64 block_id = 1;
+    uint64 generation_stamp = 2;
+    uint64 offset = 3;
+    uint64 length = 4;
+    repeated DataNodeEndpointProto locations = 5;
+}
+
+message FileStatusProto {
+    uint64 inode_id = 1;
+    string path = 2;
+    bool is_dir = 3;
+    uint64 length = 4;
+    uint32 replication = 5;
+    uint64 block_size = 6;
+    uint64 mtime_ms = 7;
+    string owner = 8;
+    string group = 9;
+    uint32 permission = 10;
+}
+
+message BlockInfoProto {
+    uint64 block_id = 1;
+    uint64 generation_stamp = 2;
+    uint64 length = 3;
+}
+
+// ============================================================================
+// NameNode Client Protocol — RPCs called by DFS clients
+// ============================================================================
+
+message MkdirRequest {
+    string path = 1;
+    string owner = 2;
+    string group = 3;
+    uint32 permission = 4;
+}
+
+message MkdirResponse {
+    StatusProto status = 1;
+    uint64 inode_id = 2;
+}
+
+message CreateFileRequest {
+    string path = 1;
+    string owner = 2;
+    string group = 3;
+    uint32 permission = 4;
+    uint32 replication = 5;
+    uint64 block_size = 6;
+    string client_id = 7;
+}
+
+message CreateFileResponse {
+    StatusProto status = 1;
+    uint64 inode_id = 2;
+    uint64 lease_id = 3;
+}
+
+message AllocateBlockRequest {
+    uint64 inode_id = 1;
+    uint32 block_index = 2;
+    uint32 replication = 3;
+}
+
+message AllocateBlockResponse {
+    StatusProto status = 1;
+    LocatedBlockProto block = 2;
+}
+
+message CompleteFileRequest {
+    uint64 inode_id = 1;
+    string client_id = 2;
+}
+
+message CompleteFileResponse {
+    StatusProto status = 1;
+}
+
+message GetLocatedBlocksRequest {
+    uint64 inode_id = 1;
+}
+
+message GetLocatedBlocksResponse {
+    StatusProto status = 1;
+    repeated LocatedBlockProto blocks = 2;
+}
+
+message GetFileStatusRequest {
+    string path = 1;
+}
+
+message GetFileStatusResponse {
+    StatusProto status = 1;
+    FileStatusProto file_status = 2;
+}
+
+message ListStatusRequest {
+    string path = 1;
+}
+
+message ListStatusResponse {
+    StatusProto status = 1;
+    repeated FileStatusProto entries = 2;
+}
+
+message DeleteRequest {
+    string path = 1;
+    bool recursive = 2;
+}
+
+message DeleteResponse {
+    StatusProto status = 1;
+}
+
+message RenameRequest {
+    string src = 1;
+    string dst = 2;
+}
+
+message RenameResponse {
+    StatusProto status = 1;
+}
+
+message RenewLeaseRequest {
+    uint64 inode_id = 1;
+    string client_id = 2;
+}
+
+message RenewLeaseResponse {
+    StatusProto status = 1;
+}
+
+// ============================================================================
+// NameNode DataNode Protocol — RPCs called by DataNodes
+// ============================================================================
+
+message RegisterDataNodeRequest {
+    string uuid = 1;
+    string hostname = 2;
+    string ip = 3;
+    uint32 rpc_port = 4;
+    uint32 data_port = 5;
+    string rack = 6;
+    uint64 capacity_bytes = 7;
+}
+
+message RegisterDataNodeResponse {
+    StatusProto status = 1;
+    uint64 datanode_id = 2;
+}
+
+message HeartbeatRequest {
+    uint64 datanode_id = 1;
+    uint64 capacity_bytes = 2;
+    uint64 used_bytes = 3;
+    uint64 free_bytes = 4;
+}
+
+message DataNodeCommand {
+    enum CommandType {
+        NONE = 0;
+        REPLICATE = 1;
+        DELETE = 2;
+        INVALIDATE = 3;
+        SHUTDOWN = 4;
+    }
+    CommandType type = 1;
+    uint64 block_id = 2;
+    uint64 generation_stamp = 3;
+    string target_host = 4;
+    uint32 target_port = 5;
+}
+
+message HeartbeatResponse {
+    StatusProto status = 1;
+    repeated DataNodeCommand commands = 2;
+}
+
+message BlockReportRequest {
+    uint64 datanode_id = 1;
+    repeated BlockInfoProto blocks = 2;
+}
+
+message BlockReportResponse {
+    StatusProto status = 1;
+    repeated uint64 blocks_to_delete = 2;
+}
+
+message CommitBlockRequest {
+    uint64 block_id = 1;
+    uint64 length = 2;
+    uint64 generation_stamp = 3;
+    uint64 datanode_id = 4;
+}
+
+message CommitBlockResponse {
+    StatusProto status = 1;
+}
+
+// ============================================================================
+// Services
+// ============================================================================
+
+// Client-facing NameNode service
+service NameNodeService {
+    // Namespace operations
+    rpc Mkdir(MkdirRequest) returns (MkdirResponse);
+    rpc CreateFile(CreateFileRequest) returns (CreateFileResponse);
+    rpc CompleteFile(CompleteFileRequest) returns (CompleteFileResponse);
+    rpc GetFileStatus(GetFileStatusRequest) returns (GetFileStatusResponse);
+    rpc ListStatus(ListStatusRequest) returns (ListStatusResponse);
+    rpc Delete(DeleteRequest) returns (DeleteResponse);
+    rpc Rename(RenameRequest) returns (RenameResponse);
+
+    // Block operations
+    rpc AllocateBlock(AllocateBlockRequest) returns (AllocateBlockResponse);
+    rpc GetLocatedBlocks(GetLocatedBlocksRequest) returns (GetLocatedBlocksResponse);
+
+    // Lease operations
+    rpc RenewLease(RenewLeaseRequest) returns (RenewLeaseResponse);
+}
+
+// DataNode-facing NameNode service (called by DataNodes)
+service DataNodeProtocolService {
+    rpc RegisterDataNode(RegisterDataNodeRequest) returns (RegisterDataNodeResponse);
+    rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+    rpc BlockReport(BlockReportRequest) returns (BlockReportResponse);
+    rpc CommitBlock(CommitBlockRequest) returns (CommitBlockResponse);
+}
+
+// DataNode-to-DataNode transfer service (pipeline protocol) and client reads
+service DataTransferService {
+    rpc WriteBlock(WriteBlockRequest) returns (WriteBlockResponse);
+    rpc ReadBlock(ReadBlockRequest) returns (ReadBlockResponse);
+    rpc TransferBlock(TransferBlockRequest) returns (TransferBlockResponse);
+}
+
+message WriteBlockRequest {
+    uint64 block_id = 1;
+    uint64 inode_id = 2;
+    uint32 block_index = 3;
+    uint64 generation_stamp = 4;
+    repeated DataNodeEndpointProto pipeline = 5;  // remaining pipeline targets
+    bytes data = 6;                               // chunk data payload
+    uint32 chunk_index = 7;
+    uint32 checksum = 8;                          // CRC32C of data
+    bool is_last_chunk = 9;                       // signals finalization
+}
+
+message WriteBlockResponse {
+    StatusProto status = 1;
+    uint32 ack_status = 2;  // AckStatus enum value
+}
+
+message ReadBlockRequest {
+    uint64 block_id = 1;
+    uint64 generation_stamp = 2;
+    uint64 offset = 3;        // byte offset within block
+    uint64 length = 4;        // bytes to read (0 = entire block)
+}
+
+message ReadBlockResponse {
+    StatusProto status = 1;
+    bytes data = 2;
+    uint64 length = 3;
+    uint32 checksum = 4;      // CRC32C of data
+}
+
+message TransferBlockRequest {
+    uint64 block_id = 1;
+    uint64 generation_stamp = 2;
+    bytes data = 3;           // full block data
+    DataNodeEndpointProto target = 4;
+}
+
+message TransferBlockResponse {
+    StatusProto status = 1;
+}

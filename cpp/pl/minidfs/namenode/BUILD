@@ -1,4 +1,4 @@
-# Copyright (c) 2025 The Authors. All rights reserved.
+# Copyright (c) 2026 The Authors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,88 +19,87 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 package(default_visibility = ["//cpp/pl/minidfs:__subpackages__"])
 
 cc_library(
-    name = "block_format",
-    srcs = ["block.cpp"],
-    hdrs = [
-        "block.h",
-        "block_format.h",
-    ],
+    name = "datanode_manager",
+    srcs = ["datanode_manager.cpp"],
+    hdrs = ["datanode_manager.h"],
     deps = [
         "//cpp/pl/minidfs/common",
+        "//cpp/pl/minidfs/metadata:metadata_store",
+        "//cpp/pl/status",
     ],
 )
 
 cc_library(
-    name = "local_block_store",
-    srcs = ["local_block_store.cpp"],
-    hdrs = ["local_block_store.h"],
+    name = "placement_manager",
+    srcs = ["placement_manager.cpp"],
+    hdrs = ["placement_manager.h"],
     deps = [
-        ":block_format",
+        ":datanode_manager",
         "//cpp/pl/minidfs/common",
+        "//cpp/pl/status",
+    ],
+)
+
+cc_library(
+    name = "block_manager",
+    srcs = ["block_manager.cpp"],
+    hdrs = ["block_manager.h"],
+    deps = [
+        ":placement_manager",
+        "//cpp/pl/minidfs/common",
+        "//cpp/pl/minidfs/metadata:metadata_store",
         "//cpp/pl/status",
         "@fmt",
     ],
 )
 
 cc_library(
-    name = "pipeline_receiver",
-    srcs = ["pipeline_receiver.cpp"],
-    hdrs = ["pipeline_receiver.h"],
+    name = "lease_manager",
+    srcs = ["lease_manager.cpp"],
+    hdrs = ["lease_manager.h"],
     deps = [
-        ":local_block_store",
         "//cpp/pl/minidfs/common",
+        "//cpp/pl/minidfs/metadata:metadata_store",
+        "//cpp/pl/status",
+    ],
+)
+
+cc_library(
+    name = "namespace_manager",
+    srcs = ["namespace_manager.cpp"],
+    hdrs = ["namespace_manager.h"],
+    deps = [
+        "//cpp/pl/minidfs/common",
+        "//cpp/pl/minidfs/metadata:metadata_store",
         "//cpp/pl/status",
         "@fmt",
     ],
 )
 
 cc_library(
-    name = "heartbeat_sender",
-    srcs = ["heartbeat_sender.cpp"],
-    hdrs = ["heartbeat_sender.h"],
+    name = "replication_manager",
+    srcs = ["replication_manager.cpp"],
+    hdrs = ["replication_manager.h"],
     deps = [
-        ":local_block_store",
+        ":placement_manager",
         "//cpp/pl/minidfs/common",
+        "//cpp/pl/minidfs/metadata:metadata_store",
         "//cpp/pl/status",
-        "@folly//folly/logging",
     ],
 )
 
 cc_library(
-    name = "block_reporter",
-    srcs = ["block_reporter.cpp"],
-    hdrs = ["block_reporter.h"],
+    name = "namenode_service_impl",
+    srcs = ["namenode_service_impl.cpp"],
+    hdrs = ["namenode_service_impl.h"],
     deps = [
-        ":local_block_store",
-        "//cpp/pl/minidfs/common",
-        "//cpp/pl/status",
-        "@folly//folly/logging",
-    ],
-)
-
-cc_library(
-    name = "replication_worker",
-    srcs = ["replication_worker.cpp"],
-    hdrs = ["replication_worker.h"],
-    deps = [
-        ":local_block_store",
-        "//cpp/pl/status",
-        "@folly//folly/logging",
-    ],
-)
-
-cc_library(
-    name = "data_transfer_service_impl",
-    srcs = ["data_transfer_service_impl.cpp"],
-    hdrs = ["data_transfer_service_impl.h"],
-    deps = [
-        ":block_reporter",
-        ":local_block_store",
-        ":pipeline_receiver",
+        ":block_manager",
+        ":datanode_manager",
+        ":lease_manager",
+        ":namespace_manager",
         "//cpp/pl/minidfs/common",
         "//cpp/pl/minidfs/protocol:minidfs_cc_proto",
         "//cpp/pl/status",
         "@brpc//:brpc",
-        "@folly//folly/logging",
     ],
 )

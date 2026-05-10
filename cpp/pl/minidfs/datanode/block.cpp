@@ -13,7 +13,14 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
+// Created: 2025/07/01 00:45
 
-#include "block.h"
+#include "cpp/pl/minidfs/datanode/block_format.h"
 
-namespace pl::dfs {}
+namespace pl::minidfs {
+
+// BlockHeader is fully defined in the header as a POD struct with inline utility functions.
+// This .cpp is reserved for future non-inline implementations (e.g., advanced validation,
+// block file I/O wrappers) that don't belong in the header.
+
+} // namespace pl::minidfs

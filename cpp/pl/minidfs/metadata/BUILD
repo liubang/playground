@@ -19,16 +19,34 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 package(default_visibility = ["//cpp/pl/minidfs:__subpackages__"])
 
 cc_library(
-    name = "common",
-    hdrs = [
-        "checksum.h",
-        "common.h",
-        "compression.h",
-        "constants.h",
-        "error_code.h",
-        "types.h",
-    ],
+    name = "metadata_store",
+    hdrs = ["metadata_store.h"],
     deps = [
-        "@crc32c",
+        "//cpp/pl/minidfs/common",
+        "//cpp/pl/status",
+    ],
+)
+
+cc_library(
+    name = "mysql_connection_pool",
+    srcs = ["mysql_connection_pool.cpp"],
+    hdrs = ["mysql_connection_pool.h"],
+    deps = [
+        "//cpp/pl/minidfs/common",
+        "//cpp/pl/status",
+        "@boost.asio//:boost.asio",
+        "@boost.mysql//:boost.mysql",
+    ],
+)
+
+cc_library(
+    name = "mysql_metadata_store",
+    srcs = ["mysql_metadata_store.cpp"],
+    hdrs = ["mysql_metadata_store.h"],
+    deps = [
+        ":metadata_store",
+        ":mysql_connection_pool",
+        "@boost.mysql//:boost.mysql",
+        "@fmt",
     ],
 )
