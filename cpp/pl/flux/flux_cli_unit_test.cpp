@@ -118,6 +118,11 @@ std::vector<std::string> AllExampleScripts() {
     return paths;
 }
 
+bool RequiresExternalMySQL(const std::string& path) {
+    return path.find("/cross_source/mysql_") != std::string::npos ||
+           path.find("\\cross_source\\mysql_") != std::string::npos;
+}
+
 TEST(FluxCliTest, ExecutesSourceWithPreludeBuiltins) {
     auto env = MakeFluxCliEnvironment();
 
@@ -539,6 +544,9 @@ TEST(FluxCliTest, ExecutesCheckedInOpsDashboardQueryVariants) {
 
 TEST(FluxCliTest, ExecutesAllCheckedInExamplesWithoutRuntimeErrors) {
     for (const auto& path : AllExampleScripts()) {
+        if (RequiresExternalMySQL(path)) {
+            continue;
+        }
         SCOPED_TRACE(path);
         auto env = MakeFluxCliEnvironment();
         auto result = ExecuteExampleScript(path, env);

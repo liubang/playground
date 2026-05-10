@@ -164,6 +164,7 @@ cc_library(
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:strings",
+        "@abseil-cpp//absl/time:time",
         "@boost.mysql//:boost.mysql",
         "@boost.asio//:boost.asio",
         "@sqlite3",

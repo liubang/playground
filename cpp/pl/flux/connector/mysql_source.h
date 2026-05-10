@@ -31,6 +31,7 @@ struct MySQLConnectionConfig {
     std::string user;
     std::string password;
     std::string database;
+    bool ssl = false;
 };
 
 absl::StatusOr<MySQLConnectionConfig> ParseMySQLDsn(const std::string& dsn);
