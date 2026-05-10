@@ -127,6 +127,25 @@ inline std::shared_ptr<PhysicalPlanNode> MakeConnectorPhysicalPlan(const PlanNod
     return physical;
 }
 
+inline bool ContainsPlanNodeKind(const PlanNode& node, PlanNodeKind kind) {
+    if (node.kind == kind) {
+        return true;
+    }
+    for (const auto& input : node.inputs) {
+        if (input != nullptr && ContainsPlanNodeKind(*input, kind)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline bool IsExecutableConnectorPrefix(const PlanNode& node) {
+    if (!ContainsPlanNodeKind(node, PlanNodeKind::Group)) {
+        return true;
+    }
+    return ContainsPlanNodeKind(node, PlanNodeKind::Aggregate);
+}
+
 inline std::shared_ptr<PhysicalPlanNode> BuildPhysicalPlan(const std::shared_ptr<PlanNode>& plan) {
     if (plan == nullptr) {
         return nullptr;
@@ -134,7 +153,7 @@ inline std::shared_ptr<PhysicalPlanNode> BuildPhysicalPlan(const std::shared_ptr
 
     const PushdownState pushdown_state = AnalyzePushdownState(*plan);
     if (pushdown_state == PushdownState::SourceScan ||
-        pushdown_state == PushdownState::SourcePushdown) {
+        (pushdown_state == PushdownState::SourcePushdown && IsExecutableConnectorPrefix(*plan))) {
         return MakeConnectorPhysicalPlan(*plan);
     }
 

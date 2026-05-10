@@ -906,6 +906,24 @@ absl::StatusOr<Value> builtin_group(const std::vector<Value>& args) {
     if (*mode_or != "by" && *mode_or != "except") {
         return absl::InvalidArgumentError("group `mode` must be either \"by\" or \"except\"");
     }
+    if (!(*table_or)->materialized && (*table_or)->plan != nullptr) {
+        std::vector<std::string> group_columns = *columns_or;
+        if (*mode_or == "except") {
+            auto visible_or = optimizer::VisibleColumnsForPlan((*table_or)->plan);
+            if (!visible_or.ok()) {
+                return visible_or.status();
+            }
+            group_columns.clear();
+            const std::unordered_set<std::string> excluded(columns_or->begin(), columns_or->end());
+            for (const auto& column : *visible_or) {
+                if (excluded.count(column) == 0) {
+                    group_columns.push_back(column);
+                }
+            }
+        }
+        return lazy_table_with_plan(**table_or,
+                                    plan::MakeGroup((*table_or)->plan, std::move(group_columns)));
+    }
     Value materialized_input;
     auto materialized_or = materialized_table_ref(**table_or, &materialized_input);
     if (!materialized_or.ok()) {

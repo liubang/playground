@@ -18,7 +18,7 @@
 #include "cpp/pl/flux/execution/materializer.h"
 
 #include "absl/status/status.h"
-#include "cpp/pl/flux/optimizer/source_pushdown.h"
+#include "cpp/pl/flux/execution/physical_executor.h"
 
 namespace pl::flux::execution {
 
@@ -33,11 +33,7 @@ absl::StatusOr<Value> Materializer::Materialize(Value value) const {
     if (table.plan == nullptr) {
         return absl::InvalidArgumentError("cannot materialize lazy table without a plan");
     }
-    auto pushdown_or = optimizer::BuildPushdownPlan(table.plan);
-    if (!pushdown_or.ok()) {
-        return pushdown_or.status();
-    }
-    auto materialized_or = optimizer::ExecutePushdownPlan(*pushdown_or);
+    auto materialized_or = PhysicalExecutor().Execute(table.plan);
     if (!materialized_or.ok()) {
         return materialized_or.status();
     }

@@ -135,17 +135,22 @@ cc_library(
     name = "execution",
     srcs = [
         "execution/materializer.cpp",
+        "execution/physical_executor.cpp",
     ],
     hdrs = [
         "execution/materializer.h",
+        "execution/physical_executor.h",
     ],
     copts = COPTS_WITH_ASAN,
     linkopts = LINKOPTS_WITH_ASAN,
     deps = [
         ":optimizer",
+        ":runtime_builtin_aggregate_helpers",
+        ":runtime_builtin_table_helpers",
         ":runtime_value",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
     ],
 )
 
@@ -318,6 +323,34 @@ cc_library(
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "runtime_builtin_table_helpers",
+    hdrs = [
+        "runtime_builtin_table_helpers.h",
+    ],
+    copts = COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":runtime_env",
+        ":runtime_eval",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "runtime_builtin_aggregate_helpers",
+    hdrs = [
+        "runtime_builtin_aggregate_helpers.h",
+    ],
+    copts = COPTS_WITH_ASAN,
+    linkopts = LINKOPTS_WITH_ASAN,
+    deps = [
+        ":runtime_builtin_table_helpers",
     ],
 )
 
