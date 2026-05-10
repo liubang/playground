@@ -15,3 +15,17 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2025/06/30 00:47
 
+load("@protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
+load("@protobuf//bazel:proto_library.bzl", "proto_library")
+
+package(default_visibility = ["//cpp/pl/minidfs:__subpackages__"])
+
+proto_library(
+    name = "minidfs_proto",
+    srcs = ["minidfs.proto"],
+)
+
+cc_proto_library(
+    name = "minidfs_cc_proto",
+    deps = [":minidfs_proto"],
+)
