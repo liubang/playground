@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "cpp/pl/flux/plan/plan_node.h"
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -67,19 +68,6 @@ inline std::string PhysicalNodeKindName(PhysicalNodeKind kind) {
             return "Materialize";
     }
     return "MemoryOperator";
-}
-
-inline std::string StringList(const std::vector<std::string>& values) {
-    std::ostringstream out;
-    out << "[";
-    for (size_t i = 0; i < values.size(); ++i) {
-        if (i != 0) {
-            out << ", ";
-        }
-        out << values[i];
-    }
-    out << "]";
-    return out.str();
 }
 
 inline std::string CostString(const CostEstimate& cost) {
