@@ -19,6 +19,7 @@
 
 #include "absl/status/status.h"
 #include <algorithm>
+#include <optional>
 #include <utility>
 
 namespace pl::flux::optimizer {
@@ -32,7 +33,7 @@ bool prefix_contains_node_kind(const std::shared_ptr<plan::PlanNode>& node,
     if (node->kind == kind) {
         return true;
     }
-    if (!plan::IsPushableUnaryNode(*node) || node->inputs.size() != 1) {
+    if (!IsPushableUnaryNode(*node) || node->inputs.size() != 1) {
         return false;
     }
     return prefix_contains_node_kind(node->inputs[0], kind);
@@ -66,6 +67,71 @@ public:
 private:
     std::string name_;
     std::vector<plan::PlanNodeKind> kinds_;
+};
+
+bool insert_materialization_barriers(const std::shared_ptr<plan::PlanNode>& node,
+                                     std::shared_ptr<plan::PlanNode>* rewritten) {
+    if (node == nullptr) {
+        *rewritten = node;
+        return false;
+    }
+    if (node->kind == plan::PlanNodeKind::SourceScan) {
+        *rewritten = node;
+        return false;
+    }
+
+    bool changed = false;
+    std::vector<std::shared_ptr<plan::PlanNode>> rewritten_inputs;
+    rewritten_inputs.reserve(node->inputs.size());
+    for (const auto& input : node->inputs) {
+        std::shared_ptr<plan::PlanNode> next_input;
+        changed = insert_materialization_barriers(input, &next_input) || changed;
+        rewritten_inputs.push_back(std::move(next_input));
+    }
+
+    auto next = changed ? std::make_shared<plan::PlanNode>(*node) : node;
+    if (changed) {
+        next->inputs = std::move(rewritten_inputs);
+    }
+
+    if (node->kind == plan::PlanNodeKind::Materialize) {
+        *rewritten = next;
+        return true;
+    }
+    if (node->inputs.size() == 1 && node->inputs[0] != nullptr && !IsPushableUnaryNode(*node)) {
+        const PushdownState input_state = AnalyzePushdownState(*node->inputs[0]);
+        if (input_state == PushdownState::SourceScan ||
+            input_state == PushdownState::SourcePushdown) {
+            if (next == node) {
+                next = std::make_shared<plan::PlanNode>(*node);
+            }
+            next->inputs[0] = plan::MakeMaterializeBarrier(
+                node->inputs[0], "unsupported lazy builtin", plan::PlanNodeKindName(node->kind));
+            *rewritten = std::move(next);
+            return true;
+        }
+    }
+
+    *rewritten = std::move(next);
+    return changed;
+}
+
+class InsertMaterializationBarrierRule final : public Rule {
+public:
+    [[nodiscard]] std::string Name() const override { return "InsertMaterializationBarrier"; }
+
+    [[nodiscard]] absl::StatusOr<RuleApplication> Apply(
+        const std::shared_ptr<plan::PlanNode>& node) const override {
+        if (node == nullptr) {
+            return absl::InvalidArgumentError("missing plan");
+        }
+        std::shared_ptr<plan::PlanNode> rewritten;
+        const bool applied = insert_materialization_barriers(node, &rewritten);
+        return RuleApplication{
+            .plan = std::move(rewritten),
+            .applied = applied,
+        };
+    }
 };
 
 std::unique_ptr<Rule> MakeTraceOnlyPushdownRule(std::string name,
@@ -104,21 +170,22 @@ absl::StatusOr<PlanOptimizerResult> RuleBasedOptimizer::Optimize(
 RuleBasedOptimizer DefaultRuleBasedOptimizer() {
     std::vector<std::unique_ptr<Rule>> rules;
     rules.push_back(
-        MakeTraceOnlyPushdownRule("PushTimeRangeIntoConnectorScan", {plan::PlanNodeKind::Range}));
+        MakeTraceOnlyPushdownRule("PushLimitIntoConnectorScan", {plan::PlanNodeKind::Limit}));
     rules.push_back(
-        MakeTraceOnlyPushdownRule("PushPredicateIntoConnectorScan", {plan::PlanNodeKind::Filter}));
+        MakeTraceOnlyPushdownRule("PushSortIntoConnectorScan", {plan::PlanNodeKind::Sort}));
     rules.push_back(
         MakeTraceOnlyPushdownRule("PushProjectionIntoConnectorScan",
                                   {plan::PlanNodeKind::Project, plan::PlanNodeKind::Rename}));
     rules.push_back(
-        MakeTraceOnlyPushdownRule("PushSortIntoConnectorScan", {plan::PlanNodeKind::Sort}));
+        MakeTraceOnlyPushdownRule("PushPredicateIntoConnectorScan", {plan::PlanNodeKind::Filter}));
     rules.push_back(
-        MakeTraceOnlyPushdownRule("PushLimitIntoConnectorScan", {plan::PlanNodeKind::Limit}));
+        MakeTraceOnlyPushdownRule("PushTimeRangeIntoConnectorScan", {plan::PlanNodeKind::Range}));
     rules.push_back(
         MakeTraceOnlyPushdownRule("PushDistinctIntoConnectorScan", {plan::PlanNodeKind::Distinct}));
     rules.push_back(
         MakeTraceOnlyPushdownRule("PushAggregateIntoConnectorScan",
                                   {plan::PlanNodeKind::Group, plan::PlanNodeKind::Aggregate}));
+    rules.push_back(std::unique_ptr<Rule>(new InsertMaterializationBarrierRule()));
     return RuleBasedOptimizer(std::move(rules));
 }
 
@@ -130,6 +197,78 @@ std::vector<std::string> AppliedRuleNames(const PlanOptimizerResult& result) {
         }
     }
     return rules;
+}
+
+bool IsPushdownSourceScan(const plan::PlanNode& node) {
+    if (node.kind != plan::PlanNodeKind::SourceScan) {
+        return false;
+    }
+    return (node.source_scan.source == "sqlite" && node.source_scan.driver == "sqlite") ||
+           (node.source_scan.source == "mysql" && node.source_scan.driver == "mysql");
+}
+
+bool IsPushableUnaryNode(const plan::PlanNode& node) {
+    switch (node.kind) {
+        case plan::PlanNodeKind::Range:
+        case plan::PlanNodeKind::Project:
+        case plan::PlanNodeKind::Rename:
+        case plan::PlanNodeKind::Limit:
+        case plan::PlanNodeKind::Sort:
+        case plan::PlanNodeKind::Group:
+        case plan::PlanNodeKind::Aggregate:
+        case plan::PlanNodeKind::Distinct:
+            return true;
+        case plan::PlanNodeKind::Filter:
+            return !node.filter.predicates.empty();
+        default:
+            return false;
+    }
+}
+
+PushdownState AnalyzePushdownState(const plan::PlanNode& node) {
+    if (IsPushdownSourceScan(node)) {
+        return PushdownState::SourceScan;
+    }
+    if (node.kind == plan::PlanNodeKind::Materialize) {
+        return PushdownState::MaterializeBarrier;
+    }
+    if (!IsPushableUnaryNode(node) || node.inputs.size() != 1 || node.inputs[0] == nullptr) {
+        return PushdownState::Memory;
+    }
+    const PushdownState input_state = AnalyzePushdownState(*node.inputs[0]);
+    if (input_state == PushdownState::SourceScan || input_state == PushdownState::SourcePushdown) {
+        return PushdownState::SourcePushdown;
+    }
+    return PushdownState::Memory;
+}
+
+std::optional<std::string> PushdownSourceName(const plan::PlanNode& node) {
+    if (IsPushdownSourceScan(node)) {
+        return node.source_scan.source;
+    }
+    if (!IsPushableUnaryNode(node) || node.inputs.size() != 1 || node.inputs[0] == nullptr) {
+        return std::nullopt;
+    }
+    return PushdownSourceName(*node.inputs[0]);
+}
+
+bool ContainsPlanNodeKind(const plan::PlanNode& node, plan::PlanNodeKind kind) {
+    if (node.kind == kind) {
+        return true;
+    }
+    for (const auto& input : node.inputs) {
+        if (input != nullptr && ContainsPlanNodeKind(*input, kind)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool IsExecutableConnectorPrefix(const plan::PlanNode& node) {
+    if (!ContainsPlanNodeKind(node, plan::PlanNodeKind::Group)) {
+        return true;
+    }
+    return ContainsPlanNodeKind(node, plan::PlanNodeKind::Aggregate);
 }
 
 } // namespace pl::flux::optimizer
