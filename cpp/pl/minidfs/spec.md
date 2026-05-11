@@ -35,10 +35,10 @@ format → start cluster → mkdir → put file → get file → ls → stat →
 | RPC      | brpc                          | 高性能、支持 protobuf、已有 Bazel 集成       |
 | MySQL    | Boost.MySQL + Boost.Asio      | 异步连接池、类型安全、header-only            |
 | 序列化   | protobuf                      | 与 brpc 天然配合                             |
-| 日志     | spdlog                        | 高性能、已有依赖                             |
-| 配置     | YAML (自研轻量解析或引入依赖) |                                              |
+| 日志     | folly xlog                    | 结构化日志、已有依赖                         |
+| 配置     | YAML (yaml-cpp)               | 已有依赖                                     |
 | 错误处理 | pl::Result (folly::Expected)  | 已有基础设施                                 |
-| 校验     | CRC32C (ISA-L)                | 硬件加速、SIMD 优化                          |
+| 校验     | CRC32C (ISA-L / crc32c)       | Linux: ISA-L (SIMD)，macOS: Google crc32c (ARM HW) |
 | 压缩     | zstd / snappy                 | 已有依赖                                     |
 
 ---
@@ -91,39 +91,40 @@ cpp/pl/minidfs/
 ├── BUILD
 ├── spec.md
 ├── readme.md
+├── Dockerfile
+├── docker-compose.yml
 │
 ├── common/
 │   ├── BUILD
+│   ├── common.h              // 统一头文件
 │   ├── types.h              // Inode, Block, BlockReplica, DataNodeInfo, enums
-│   ├── config.h             // Configuration types
+│   ├── error_code.h         // ErrorCode enum
+│   ├── config.h             // Configuration types (NameNodeConfig, DataNodeConfig, ClientConfig)
 │   ├── config.cpp
 │   ├── constants.h          // 系统常量
 │   ├── compression.h        // CompressionType enum + compress/decompress
-│   ├── compression.cpp
-│   └── checksum.h           // CRC32C utilities
+│   └── checksum.h           // CRC32C utilities (Linux: ISA-L, macOS: crc32c)
 │
-├── proto/
+├── protocol/
 │   ├── BUILD
-│   ├── common.proto
-│   ├── namenode.proto
-│   └── datanode.proto
+│   └── minidfs.proto        // 统一 proto 文件（4 service: NameNodeService,
+│                            //   DataNodeProtocolService, AdminService, DataTransferService）
 │
 ├── metadata/
 │   ├── BUILD
 │   ├── metadata_store.h     // 纯虚接口
-│   ├── transaction.h        // Transaction 抽象
 │   ├── mysql_metadata_store.h
 │   ├── mysql_metadata_store.cpp
 │   ├── mysql_connection_pool.h
 │   ├── mysql_connection_pool.cpp
-│   └── id_allocator.h       // 批量 ID 分配
+│   └── schema.sql           // DDL + 初始数据
 │
 ├── namenode/
 │   ├── BUILD
-│   ├── namenode_server.h
-│   ├── namenode_server.cpp
 │   ├── namenode_service_impl.h
 │   ├── namenode_service_impl.cpp
+│   ├── admin_service_impl.h
+│   ├── admin_service_impl.cpp
 │   ├── namespace_manager.h
 │   ├── namespace_manager.cpp
 │   ├── block_manager.h
@@ -133,19 +134,19 @@ cpp/pl/minidfs/
 │   ├── lease_manager.h
 │   ├── lease_manager.cpp
 │   ├── placement_manager.h
-│   ├── placement_manager.cpp
-│   ├── replication_manager.h
-│   └── replication_manager.cpp
+│   └── placement_manager.cpp
 │
 ├── datanode/
 │   ├── BUILD
-│   ├── datanode_server.h
-│   ├── datanode_server.cpp
-│   ├── datanode_service_impl.h
-│   ├── datanode_service_impl.cpp
+│   ├── data_transfer_service_impl.h
+│   ├── data_transfer_service_impl.cpp
 │   ├── local_block_store.h
 │   ├── local_block_store.cpp
-│   ├── block_format.h       // BlockHeader 定义、序列化
+│   ├── block_format.h       // BlockHeader 定义
+│   ├── block.h              // Block 抽象
+│   ├── block.cpp
+│   ├── pipeline_receiver.h
+│   ├── pipeline_receiver.cpp
 │   ├── heartbeat_sender.h
 │   ├── heartbeat_sender.cpp
 │   ├── block_reporter.h
@@ -158,33 +159,14 @@ cpp/pl/minidfs/
 │   ├── dfs_client.h
 │   ├── dfs_client.cpp
 │   ├── dfs_input_stream.h
-│   ├── dfs_input_stream.cpp
 │   ├── dfs_output_stream.h
-│   └── dfs_output_stream.cpp
+│   ├── cli_main.cpp         // minidfs CLI 入口
+│   └── datanode_main.cpp    // DataNode 服务入口
 │
-├── cli/
-│   ├── BUILD
-│   ├── main.cpp             // minidfs 统一入口
-│   ├── cmd_format.h/.cpp
-│   ├── cmd_namenode.h/.cpp
-│   ├── cmd_datanode.h/.cpp
-│   └── cmd_client.h/.cpp    // mkdir/put/get/ls/stat/rm
-│
-├── sql/
-│   └── schema.sql
-│
-├── conf/
-│   ├── namenode.yaml
-│   ├── datanode.yaml
-│   └── client.yaml
-│
-└── test/
+└── master/
     ├── BUILD
-    ├── metadata_store_test.cpp
-    ├── namespace_manager_test.cpp
-    ├── block_manager_test.cpp
-    ├── local_block_store_test.cpp
-    └── integration_test.cpp
+    ├── namenode_main.cpp     // NameNode 服务入口
+    └── format_main.cpp       // format 命令入口
 ```
 
 ---
@@ -461,414 +443,197 @@ public:
 # 8. MySQL Schema
 
 ```sql
-CREATE DATABASE IF NOT EXISTS minidfs;
+CREATE DATABASE IF NOT EXISTS minidfs DEFAULT CHARACTER SET utf8mb4;
 USE minidfs;
 
 -- Inode 表
-CREATE TABLE inodes (
+CREATE TABLE IF NOT EXISTS inodes (
     inode_id        BIGINT UNSIGNED NOT NULL PRIMARY KEY,
-    type            TINYINT UNSIGNED NOT NULL,
-    parent_id       BIGINT UNSIGNED NULL,
-    name            VARBINARY(255) NOT NULL,
-    owner           VARCHAR(64) NOT NULL DEFAULT '',
-    group_name      VARCHAR(64) NOT NULL DEFAULT '',
-    permission      INT UNSIGNED NOT NULL DEFAULT 0755,
+    type            TINYINT UNSIGNED NOT NULL COMMENT '1=directory, 2=file',
+    parent_id       BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    name            VARCHAR(255) NOT NULL,
+    owner           VARCHAR(128) NOT NULL DEFAULT '',
+    `group`         VARCHAR(128) NOT NULL DEFAULT '',
+    permission      INT UNSIGNED NOT NULL DEFAULT 755,
     length          BIGINT UNSIGNED NOT NULL DEFAULT 0,
     replication     INT UNSIGNED NOT NULL DEFAULT 3,
     block_size      BIGINT UNSIGNED NOT NULL DEFAULT 134217728,
-    file_state      TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    ctime_ms        BIGINT UNSIGNED NOT NULL,
-    mtime_ms        BIGINT UNSIGNED NOT NULL,
+    state           TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=normal,1=under_construction,2=deleted',
+    ctime_ms        BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    mtime_ms        BIGINT UNSIGNED NOT NULL DEFAULT 0,
     version         BIGINT UNSIGNED NOT NULL DEFAULT 0,
     UNIQUE KEY uk_parent_name (parent_id, name),
-    KEY idx_parent (parent_id),
-    KEY idx_state (file_state)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    KEY idx_parent (parent_id)
+) ENGINE=InnoDB;
+
+-- 根目录初始化
+INSERT IGNORE INTO inodes (inode_id, type, parent_id, name, owner, `group`, permission, ctime_ms, mtime_ms)
+VALUES (1, 1, 0, '/', 'root', 'supergroup', 755, UNIX_TIMESTAMP()*1000, UNIX_TIMESTAMP()*1000);
 
 -- Block 表
-CREATE TABLE blocks (
-    block_id          BIGINT UNSIGNED NOT NULL PRIMARY KEY,
-    inode_id          BIGINT UNSIGNED NOT NULL,
-    block_index       INT UNSIGNED NOT NULL,
-    generation_stamp  BIGINT UNSIGNED NOT NULL,
-    length            BIGINT UNSIGNED NOT NULL DEFAULT 0,
-    state             TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    desired_replica   INT UNSIGNED NOT NULL DEFAULT 3,
-    ctime_ms          BIGINT UNSIGNED NOT NULL,
-    mtime_ms          BIGINT UNSIGNED NOT NULL,
-    UNIQUE KEY uk_inode_block_index (inode_id, block_index),
-    KEY idx_inode (inode_id),
+CREATE TABLE IF NOT EXISTS blocks (
+    block_id        BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+    inode_id        BIGINT UNSIGNED NOT NULL,
+    block_index     INT UNSIGNED NOT NULL,
+    generation_stamp BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    length          BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    state           TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=allocating,1=committed,2=corrupt,3=deleted',
+    desired_replica INT UNSIGNED NOT NULL DEFAULT 3,
+    ctime_ms        BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    mtime_ms        BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    KEY idx_inode (inode_id, block_index),
     KEY idx_state (state)
 ) ENGINE=InnoDB;
 
 -- Block Replica 表
-CREATE TABLE block_replicas (
-    block_id          BIGINT UNSIGNED NOT NULL,
-    datanode_id       BIGINT UNSIGNED NOT NULL,
-    storage_id        BIGINT UNSIGNED NOT NULL,
-    state             TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    length            BIGINT UNSIGNED NOT NULL DEFAULT 0,
-    generation_stamp  BIGINT UNSIGNED NOT NULL,
-    report_time_ms    BIGINT UNSIGNED NOT NULL,
+CREATE TABLE IF NOT EXISTS block_replicas (
+    block_id        BIGINT UNSIGNED NOT NULL,
+    datanode_id     BIGINT UNSIGNED NOT NULL,
+    storage_id      BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    state           TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=writing,1=finalized,2=corrupt,3=stale,4=deleting,5=deleted',
+    length          BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    generation_stamp BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    report_time_ms  BIGINT UNSIGNED NOT NULL DEFAULT 0,
     PRIMARY KEY (block_id, datanode_id, storage_id),
-    KEY idx_datanode (datanode_id),
-    KEY idx_state (state)
+    KEY idx_datanode (datanode_id)
 ) ENGINE=InnoDB;
 
 -- DataNode 表
-CREATE TABLE datanodes (
-    datanode_id       BIGINT UNSIGNED NOT NULL PRIMARY KEY,
-    uuid              VARCHAR(128) NOT NULL,
-    hostname          VARCHAR(255) NOT NULL,
-    ip                VARCHAR(64) NOT NULL,
-    rpc_port          INT UNSIGNED NOT NULL,
-    data_port         INT UNSIGNED NOT NULL,
-    rack              VARCHAR(255) NOT NULL DEFAULT '/default-rack',
-    state             TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    capacity_bytes    BIGINT UNSIGNED NOT NULL DEFAULT 0,
-    used_bytes        BIGINT UNSIGNED NOT NULL DEFAULT 0,
-    free_bytes        BIGINT UNSIGNED NOT NULL DEFAULT 0,
-    last_heartbeat_ms BIGINT UNSIGNED NOT NULL,
-    UNIQUE KEY uk_uuid (uuid),
-    KEY idx_state (state),
-    KEY idx_heartbeat (last_heartbeat_ms)
+CREATE TABLE IF NOT EXISTS datanodes (
+    datanode_id     BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+    uuid            VARCHAR(64) NOT NULL,
+    hostname        VARCHAR(255) NOT NULL DEFAULT '',
+    ip              VARCHAR(45) NOT NULL DEFAULT '',
+    rpc_port        INT UNSIGNED NOT NULL DEFAULT 0,
+    data_port       INT UNSIGNED NOT NULL DEFAULT 0,
+    rack            VARCHAR(255) NOT NULL DEFAULT '/default-rack',
+    state           TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=live,1=stale,2=dead,3=decommissioning,4=decommissioned',
+    capacity_bytes  BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    used_bytes      BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    free_bytes      BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    last_heartbeat_ms BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    UNIQUE KEY uk_uuid (uuid)
 ) ENGINE=InnoDB;
 
 -- Lease 表
-CREATE TABLE leases (
-    lease_id          BIGINT UNSIGNED NOT NULL PRIMARY KEY,
-    inode_id          BIGINT UNSIGNED NOT NULL,
-    client_id         VARCHAR(128) NOT NULL,
-    state             TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    active_flag       TINYINT UNSIGNED NOT NULL DEFAULT 1,
-    expire_time_ms    BIGINT UNSIGNED NOT NULL,
-    ctime_ms          BIGINT UNSIGNED NOT NULL,
-    mtime_ms          BIGINT UNSIGNED NOT NULL,
-    UNIQUE KEY uk_inode_active (inode_id, active_flag),
-    KEY idx_expire (expire_time_ms)
+CREATE TABLE IF NOT EXISTS leases (
+    lease_id        BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+    inode_id        BIGINT UNSIGNED NOT NULL,
+    client_id       VARCHAR(128) NOT NULL,
+    state           TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=active,1=closed',
+    expire_time_ms  BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    ctime_ms        BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    mtime_ms        BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    KEY idx_inode_state (inode_id, state),
+    KEY idx_expire (state, expire_time_ms)
 ) ENGINE=InnoDB;
 
 -- ID 分配器
-CREATE TABLE id_allocators (
-    name        VARCHAR(64) NOT NULL PRIMARY KEY,
-    next_id     BIGINT UNSIGNED NOT NULL,
-    step        BIGINT UNSIGNED NOT NULL
+CREATE TABLE IF NOT EXISTS id_allocators (
+    name            VARCHAR(64) NOT NULL PRIMARY KEY,
+    next_id         BIGINT UNSIGNED NOT NULL DEFAULT 0
 ) ENGINE=InnoDB;
 
-INSERT INTO id_allocators VALUES ('inode_id', 1000, 1000);
-INSERT INTO id_allocators VALUES ('block_id', 1000000, 10000);
-INSERT INTO id_allocators VALUES ('lease_id', 1000, 1000);
-INSERT INTO id_allocators VALUES ('datanode_id', 1000, 1000);
-INSERT INTO id_allocators VALUES ('generation_stamp', 1, 10000);
+INSERT IGNORE INTO id_allocators (name, next_id) VALUES ('inode', 1000);
+INSERT IGNORE INTO id_allocators (name, next_id) VALUES ('block', 1000);
+INSERT IGNORE INTO id_allocators (name, next_id) VALUES ('datanode', 1000);
+INSERT IGNORE INTO id_allocators (name, next_id) VALUES ('lease', 1000);
 
--- 操作日志
-CREATE TABLE metadata_oplog (
-    op_id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    op_type          VARCHAR(64) NOT NULL,
-    target_inode_id  BIGINT UNSIGNED NULL,
-    request_id       VARCHAR(128) NOT NULL,
-    payload_json     JSON NOT NULL,
-    ctime_ms         BIGINT UNSIGNED NOT NULL,
+-- 操作日志（幂等去重）
+CREATE TABLE IF NOT EXISTS op_log (
+    id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    op_type         VARCHAR(64) NOT NULL,
+    target_inode_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    request_id      VARCHAR(128) NOT NULL,
+    payload_json    TEXT,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_request_id (request_id),
-    KEY idx_inode (target_inode_id),
-    KEY idx_ctime (ctime_ms)
+    KEY idx_inode (target_inode_id)
 ) ENGINE=InnoDB;
-
--- 根目录初始化
-INSERT INTO inodes (
-    inode_id, type, parent_id, name,
-    owner, group_name, permission,
-    length, replication, block_size,
-    file_state, ctime_ms, mtime_ms, version
-) VALUES (
-    1, 1, NULL, '',
-    'root', 'root', 0755,
-    0, 3, 134217728,
-    0, UNIX_TIMESTAMP(NOW()) * 1000, UNIX_TIMESTAMP(NOW()) * 1000, 0
-);
 ```
 
 ---
 
 # 9. RPC 协议 (protobuf + brpc)
 
-## 9.1 common.proto
+所有 proto 定义在单一文件 `protocol/minidfs.proto` 中，package 为 `pl.minidfs.protocol`。
+
+## 9.1 服务概览
+
+| 服务                      | 调用方         | 职责                               |
+| ------------------------- | -------------- | ---------------------------------- |
+| NameNodeService           | Client         | 文件系统操作 + Block 分配 + Lease  |
+| DataNodeProtocolService   | DataNode       | 注册、心跳、BlockReport、CommitBlock |
+| AdminService              | CLI/运维       | 集群信息、DataNode 详情、Inode/Block 查询 |
+| DataTransferService       | Client/DataNode| Block 读写（pipeline write）       |
+
+## 9.2 消息命名约定
+
+- 公共类型使用 `Proto` 后缀：`StatusProto`、`LocatedBlockProto`、`FileStatusProto`、`DataNodeEndpointProto` 等
+- Request/Response 不加后缀
+- 可变更操作的 `RequestHeader` 放在 field 15 位置（非 field 1），便于业务字段紧凑排列
+
+## 9.3 NameNodeService（Client 调用）
 
 ```protobuf
-syntax = "proto3";
-package pl.minidfs;
+service NameNodeService {
+    // Namespace operations
+    rpc Mkdir(MkdirRequest) returns (MkdirResponse);
+    rpc CreateFile(CreateFileRequest) returns (CreateFileResponse);
+    rpc CompleteFile(CompleteFileRequest) returns (CompleteFileResponse);
+    rpc GetFileStatus(GetFileStatusRequest) returns (GetFileStatusResponse);
+    rpc ListStatus(ListStatusRequest) returns (ListStatusResponse);
+    rpc Delete(DeleteRequest) returns (DeleteResponse);
+    rpc Rename(RenameRequest) returns (RenameResponse);
 
-option cc_generic_services = true;
+    // Block operations
+    rpc AllocateBlock(AllocateBlockRequest) returns (AllocateBlockResponse);
+    rpc GetLocatedBlocks(GetLocatedBlocksRequest) returns (GetLocatedBlocksResponse);
 
-message RequestHeader {
-    string request_id = 1;
-    string client_id = 2;
-    string user = 3;
-}
-
-message RpcStatus {
-    int32  code = 1;
-    string message = 2;
-}
-
-message DataNodeEndpoint {
-    uint64 datanode_id = 1;
-    string host = 2;
-    uint32 data_port = 3;
-}
-
-message LocatedBlock {
-    uint64 block_id = 1;
-    uint64 generation_stamp = 2;
-    uint64 offset = 3;
-    uint64 length = 4;
-    repeated DataNodeEndpoint locations = 5;
-}
-
-message FileStatus {
-    uint64 inode_id = 1;
-    string path = 2;
-    bool   is_dir = 3;
-    uint64 length = 4;
-    uint32 replication = 5;
-    uint64 block_size = 6;
-    uint64 mtime_ms = 7;
-    string owner = 8;
-    string group = 9;
-    uint32 permission = 10;
+    // Lease operations
+    rpc RenewLease(RenewLeaseRequest) returns (RenewLeaseResponse);
 }
 ```
 
-## 9.2 namenode.proto
+## 9.4 DataNodeProtocolService（DataNode 调用）
 
 ```protobuf
-syntax = "proto3";
-package pl.minidfs;
-
-import "common.proto";
-
-option cc_generic_services = true;
-
-// --- Namespace ---
-message MkdirRequest {
-    RequestHeader header = 1;
-    string path = 2;
-    uint32 permission = 3;
-    bool   create_parent = 4;
-}
-message MkdirResponse { RpcStatus status = 1; }
-
-message CreateFileRequest {
-    RequestHeader header = 1;
-    string path = 2;
-    uint32 replication = 3;
-    uint64 block_size = 4;
-    bool   overwrite = 5;
-}
-message CreateFileResponse {
-    RpcStatus status = 1;
-    uint64    inode_id = 2;
-}
-
-message CompleteFileRequest {
-    RequestHeader header = 1;
-    string path = 2;
-}
-message CompleteFileResponse { RpcStatus status = 1; }
-
-message OpenFileRequest {
-    RequestHeader header = 1;
-    string path = 2;
-}
-message OpenFileResponse {
-    RpcStatus status = 1;
-    uint64    length = 2;
-    repeated LocatedBlock blocks = 3;
-}
-
-message ListStatusRequest {
-    RequestHeader header = 1;
-    string path = 2;
-}
-message ListStatusResponse {
-    RpcStatus status = 1;
-    repeated FileStatus entries = 2;
-}
-
-message GetFileInfoRequest {
-    RequestHeader header = 1;
-    string path = 2;
-}
-message GetFileInfoResponse {
-    RpcStatus  status = 1;
-    FileStatus file_status = 2;
-}
-
-message DeleteRequest {
-    RequestHeader header = 1;
-    string path = 2;
-    bool   recursive = 3;
-}
-message DeleteResponse { RpcStatus status = 1; }
-
-// --- Block ---
-message AllocateBlockRequest {
-    RequestHeader header = 1;
-    string path = 2;
-}
-message AllocateBlockResponse {
-    RpcStatus    status = 1;
-    LocatedBlock block = 2;
-}
-
-message CommitBlockRequest {
-    RequestHeader header = 1;
-    uint64 block_id = 2;
-    uint64 length = 3;
-    uint64 generation_stamp = 4;
-    repeated uint64 succeeded_datanodes = 5;
-}
-message CommitBlockResponse { RpcStatus status = 1; }
-
-// --- DataNode Registration & Heartbeat ---
-message RegisterDataNodeRequest {
-    string uuid = 1;
-    string hostname = 2;
-    string ip = 3;
-    uint32 rpc_port = 4;
-    uint32 data_port = 5;
-    uint64 capacity_bytes = 6;
-    uint64 used_bytes = 7;
-}
-message RegisterDataNodeResponse {
-    RpcStatus status = 1;
-    uint64    datanode_id = 2;
-}
-
-message HeartbeatRequest {
-    uint64 datanode_id = 1;
-    uint64 capacity_bytes = 2;
-    uint64 used_bytes = 3;
-    uint64 free_bytes = 4;
-    uint32 block_count = 5;
-}
-
-message DataNodeCommand {
-    enum Type {
-        NONE = 0;
-        DELETE_BLOCK = 1;
-        REPLICATE_BLOCK = 2;
-    }
-    Type   type = 1;
-    uint64 block_id = 2;
-    uint64 generation_stamp = 3;
-    repeated DataNodeEndpoint targets = 4;
-}
-
-message HeartbeatResponse {
-    RpcStatus status = 1;
-    repeated DataNodeCommand commands = 2;
-}
-
-message BlockReportEntry {
-    uint64 block_id = 1;
-    uint64 generation_stamp = 2;
-    uint64 length = 3;
-}
-
-message BlockReportRequest {
-    uint64 datanode_id = 1;
-    repeated BlockReportEntry blocks = 2;
-}
-message BlockReportResponse {
-    RpcStatus status = 1;
-    repeated uint64 blocks_to_delete = 2;
-}
-
-// --- Service ---
-service NameNodeService {
-    rpc Mkdir(MkdirRequest) returns (MkdirResponse);
-    rpc CreateFile(CreateFileRequest) returns (CreateFileResponse);
-    rpc AllocateBlock(AllocateBlockRequest) returns (AllocateBlockResponse);
-    rpc CommitBlock(CommitBlockRequest) returns (CommitBlockResponse);
-    rpc CompleteFile(CompleteFileRequest) returns (CompleteFileResponse);
-
-    rpc OpenFile(OpenFileRequest) returns (OpenFileResponse);
-    rpc ListStatus(ListStatusRequest) returns (ListStatusResponse);
-    rpc GetFileInfo(GetFileInfoRequest) returns (GetFileInfoResponse);
-    rpc Delete(DeleteRequest) returns (DeleteResponse);
-
+service DataNodeProtocolService {
     rpc RegisterDataNode(RegisterDataNodeRequest) returns (RegisterDataNodeResponse);
     rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
     rpc BlockReport(BlockReportRequest) returns (BlockReportResponse);
+    rpc CommitBlock(CommitBlockRequest) returns (CommitBlockResponse);
 }
 ```
 
-## 9.3 datanode.proto
+## 9.5 AdminService（运维诊断）
 
 ```protobuf
-syntax = "proto3";
-package pl.minidfs;
-
-import "common.proto";
-
-option cc_generic_services = true;
-
-message WriteBlockRequest {
-    uint64 block_id = 1;
-    uint64 generation_stamp = 2;
-    uint64 offset = 3;
-    bytes  data = 4;
-    bool   last_chunk = 5;
-}
-message WriteBlockResponse {
-    RpcStatus status = 1;
-    uint64    bytes_written = 2;
-}
-
-message ReadBlockRequest {
-    uint64 block_id = 1;
-    uint64 generation_stamp = 2;
-    uint64 offset = 3;
-    uint64 length = 4;
-}
-message ReadBlockResponse {
-    RpcStatus status = 1;
-    bytes     data = 2;
-    uint64    offset = 3;
-    bool      eof = 4;
-}
-
-message DeleteBlockRequest {
-    RequestHeader header = 1;
-    uint64 block_id = 2;
-    uint64 generation_stamp = 3;
-}
-message DeleteBlockResponse {
-    RpcStatus status = 1;
-}
-
-message ReplicateBlockRequest {
-    RequestHeader header = 1;
-    uint64 block_id = 2;
-    uint64 generation_stamp = 3;
-    DataNodeEndpoint source = 4;
-}
-message ReplicateBlockResponse {
-    RpcStatus status = 1;
-}
-
-service DataNodeService {
-    rpc WriteBlock(WriteBlockRequest) returns (WriteBlockResponse);
-    rpc ReadBlock(ReadBlockRequest) returns (ReadBlockResponse);
-    rpc DeleteBlock(DeleteBlockRequest) returns (DeleteBlockResponse);
-    rpc ReplicateBlock(ReplicateBlockRequest) returns (ReplicateBlockResponse);
+service AdminService {
+    rpc GetClusterInfo(GetClusterInfoRequest) returns (GetClusterInfoResponse);
+    rpc ListDataNodes(ListDataNodesRequest) returns (ListDataNodesResponse);
+    rpc GetDataNodeInfo(GetDataNodeInfoRequest) returns (GetDataNodeInfoResponse);
+    rpc GetInodeInfo(GetInodeInfoRequest) returns (GetInodeInfoResponse);
+    rpc GetFileBlocks(GetFileBlocksRequest) returns (GetFileBlocksResponse);
+    rpc GetBlockInfo(GetBlockInfoRequest) returns (GetBlockInfoResponse);
 }
 ```
 
-注意：brpc 不支持 gRPC streaming，WriteBlock/ReadBlock 采用分 chunk 多次 RPC 或单次大 payload 方式。
-第一版建议 WriteBlock 每次传一个 chunk（默认 1MB），通过 `offset` + `last_chunk` 实现流式写入。
-ReadBlock 同理，通过 `offset` + `length` 实现分段读取。
+## 9.6 DataTransferService（数据传输 + Pipeline）
+
+```protobuf
+service DataTransferService {
+    rpc WriteBlock(WriteBlockRequest) returns (WriteBlockResponse);
+    rpc ReadBlock(ReadBlockRequest) returns (ReadBlockResponse);
+    rpc TransferBlock(TransferBlockRequest) returns (TransferBlockResponse);
+}
+```
+
+WriteBlock 支持 pipeline 模式：请求中携带 `repeated DataNodeEndpointProto pipeline` 字段，接收端写入本地后将数据继续转发给 pipeline 中的下一个节点。
+
+注意：brpc 不支持 gRPC streaming，WriteBlock/ReadBlock 采用分 chunk 多次 RPC 方式。
+每次 WriteBlock 传一个 chunk，通过 `chunk_index` + `is_last_chunk` 实现流式写入。
+ReadBlock 通过 `offset` + `length` 实现分段读取。
 
 ---
 
@@ -876,7 +641,7 @@ ReadBlock 同理，通过 `offset` + `length` 实现分段读取。
 
 ## 12.1 format
 
-`format` 初始化 MySQL 表和根目录。
+`format` 初始化 MySQL 表和根目录。它是一个独立二进制（`master/format_main.cpp`），使用 gflags 接收参数。
 
 流程：
 
@@ -892,7 +657,8 @@ ReadBlock 同理，通过 `offset` + `length` 实现分段读取。
 命令：
 
 ```bash
-minidfs format --config conf/namenode.yaml
+format --schema_file=cpp/pl/minidfs/metadata/schema.sql \
+    --mysql_host=127.0.0.1 --mysql_port=3306 --mysql_user=root --mysql_password=<pwd> [--force]
 ```
 
 ---
@@ -928,7 +694,7 @@ NameNode:
 3. 检查 warehouse 是否存在；
 4. 分配 inode_id；
 5. 插入 inodes；
-6. 写 metadata_oplog；
+6. 写 op_log；
 7. 提交事务。
 ```
 
@@ -946,23 +712,104 @@ minidfs put ./a.log /warehouse/a.log
 
 ```text
 1. Client 调用 CreateFile；
-2. NameNode 创建 under_construction 文件；
+2. NameNode 创建 under_construction 文件，分配 lease；
 3. Client 本地按 block_size 切分文件；
 4. 对每个 block：
    4.1 Client 调用 AllocateBlock；
-   4.2 NameNode 选择 DataNode；
-   4.3 NameNode 创建 block 和 replica 元数据；
-   4.4 Client 向多个 DataNode 写 block（分 chunk 发送）；
-   4.5 DataNode 写本地 tmp 文件；
-   4.6 DataNode finalize block（rename 到 current/）；
-   4.7 Client 调用 CommitBlock；
+   4.2 NameNode 通过 PlacementManager 选择 DataNode 列表；
+   4.3 NameNode 创建 block（ALLOCATING）和 replica 元数据（WRITING）；
+   4.4 Client 通过 pipeline 写入 DataNode（见 12.4.1）；
+   4.5 最后一个 chunk 写入时，各 DataNode 执行 finalize（tmp/ → current/）；
+   4.6 Client 调用 CommitBlock，NameNode 更新 block 状态为 COMMITTED；
 5. 所有 block commit 完成后，Client 调用 CompleteFile；
 6. NameNode 将文件状态改为 NORMAL；
 7. lease 关闭。
 ```
 
-第一版写副本方式：Client 并行写多个 DataNode。
-暂时不做 pipeline write。
+### 12.4.1 Pipeline 写入详细流程
+
+写副本采用 pipeline 模式：Client 只连接第一个 DataNode，由各级 DataNode 逐级转发至下游，ACK 从尾到头冒泡回 Client。
+
+以 3 副本（DN1 → DN2 → DN3）写入一个 Block 为例：
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant NN as NameNode
+    participant DN1 as DataNode 1
+    participant DN2 as DataNode 2
+    participant DN3 as DataNode 3
+
+    C->>NN: AllocateBlock(inode_id, block_index)
+    NN-->>C: block_id, locations=[DN1, DN2, DN3]
+
+    Note over C,DN3: Pipeline 建立：Client → DN1 → DN2 → DN3
+
+    rect rgb(235, 245, 255)
+    Note over C,DN3: Chunk 0（pipeline=[DN2,DN3]）
+    C->>DN1: WriteBlock(chunk_0, pipeline=[DN2,DN3], chunk_index=0)
+    DN1->>DN1: CRC32C 校验 → create_block(tmp/) → append_chunk
+    DN1->>DN2: WriteBlock(chunk_0, pipeline=[DN3], chunk_index=0)
+    DN2->>DN2: CRC32C 校验 → create_block(tmp/) → append_chunk
+    DN2->>DN3: WriteBlock(chunk_0, pipeline=[], chunk_index=0)
+    DN3->>DN3: CRC32C 校验 → create_block(tmp/) → append_chunk
+    DN3-->>DN2: ACK(Success)
+    DN2-->>DN1: ACK(Success)
+    DN1-->>C: ACK(Success)
+    end
+
+    rect rgb(235, 245, 255)
+    Note over C,DN3: Chunk 1 ... Chunk N-1（中间 chunk，同上流程）
+    C->>DN1: WriteBlock(chunk_i, pipeline=[DN2,DN3])
+    DN1->>DN2: forward(chunk_i, pipeline=[DN3])
+    DN2->>DN3: forward(chunk_i, pipeline=[])
+    DN3-->>DN2: ACK
+    DN2-->>DN1: ACK
+    DN1-->>C: ACK
+    end
+
+    rect rgb(255, 245, 235)
+    Note over C,DN3: 最后一个 Chunk（is_last_chunk=true）
+    C->>DN1: WriteBlock(last_chunk, is_last=true)
+    DN1->>DN1: append_chunk → finalize_block(tmp/ → current/)
+    DN1->>DN2: forward(last_chunk, is_last=true)
+    DN2->>DN2: append_chunk → finalize_block(tmp/ → current/)
+    DN2->>DN3: forward(last_chunk, is_last=true)
+    DN3->>DN3: append_chunk → finalize_block(tmp/ → current/)
+    DN3-->>DN2: ACK(Success)
+    DN2-->>DN1: ACK(Success)
+    DN1-->>C: ACK(Success)
+    end
+
+    C->>NN: CommitBlock(block_id, length, generation_stamp)
+    NN-->>C: OK
+```
+
+**单个 DataNode 处理 WriteBlock 的逻辑：**
+
+```text
+1. chunk_index == 0 ?
+   └─ YES → create_block(): 在 tmp/ 创建文件，写入空 BlockHeader
+2. 校验 CRC32C(data) == request.checksum
+   └─ 不匹配 → 返回 AckStatus::kChecksumError
+3. append_chunk(): 数据追加到 tmp/blk_<id>_<gs>.blk
+4. pipeline 不为空?
+   └─ YES → 弹出 pipeline[0] 作为下一跳，剩余作为新 pipeline
+          → 转发 WriteBlockRequest 到下一跳
+          → 等待下游 ACK
+          → 下游失败 → 返回 AckStatus::kDownstreamError
+5. is_last_chunk == true?
+   └─ YES → finalize_block(): 回填 BlockHeader + fsync + rename(tmp/ → current/)
+          → 通知 BlockReporter
+6. 返回 ACK(Success) 给上游
+```
+
+**设计要点：**
+
+- pipeline 逐级缩短：Client 发给 DN1 时 `pipeline=[DN2,DN3]`，DN1 转发给 DN2 时 `pipeline=[DN3]`，DN2 转发给 DN3 时 `pipeline=[]`。
+- ACK 从尾到头冒泡：Client 收到成功 ACK 时，所有副本都已写入。
+- 每个 chunk 独立一次 RPC：brpc 不支持 gRPC streaming，每个 chunk（默认 1MB）是一个完整的 WriteBlock 请求-响应周期。
+- Client 出口带宽只需承担一份数据量，副本复制的带宽分摊到各 DataNode 之间。
 
 ---
 
@@ -1079,9 +926,31 @@ DataNode 本地目录结构：
 
 ---
 
-# 14. 配置文件
+# 14. 配置与二进制模型
 
-## 14.1 NameNode 配置
+当前实现使用 **gflags 命令行参数** 作为所有二进制的配置方式。YAML 配置加载基础设施（`common/config.h`）已实现，供未来迁移使用。
+
+## 14.1 二进制程序
+
+系统由 4 个独立二进制组成（非子命令模式）：
+
+| 二进制               | 源文件                      | 职责                           |
+| -------------------- | --------------------------- | ------------------------------ |
+| `namenode`           | `master/namenode_main.cpp`  | NameNode 服务（注册 3 个 brpc service） |
+| `format`             | `master/format_main.cpp`    | 初始化 MySQL schema            |
+| `datanode`           | `client/datanode_main.cpp`  | DataNode 服务                  |
+| `minidfs`            | `client/cli_main.cpp`       | CLI 客户端（文件系统 + admin 命令） |
+
+NameNode 进程注册的 3 个 brpc service：
+- NameNodeServiceImpl（Client 调用）
+- DataNodeProtocolServiceImpl（DataNode 调用）
+- AdminServiceImpl（运维诊断）
+
+注意：ReplicationManager 源码存在但当前未在 namenode_main.cpp 中实例化。
+
+## 14.2 YAML 配置结构（config.h 定义，未来使用）
+
+### NameNode 配置
 
 ```yaml
 server:
@@ -1111,9 +980,7 @@ replication:
   max_replication_tasks_per_round: 100
 ```
 
----
-
-## 14.2 DataNode 配置
+### DataNode 配置
 
 ```yaml
 server:
@@ -1137,9 +1004,7 @@ block_report:
   interval_ms: 600000
 ```
 
----
-
-## 14.3 Client 配置
+### Client 配置
 
 ```yaml
 namenode:
@@ -1327,7 +1192,7 @@ enum class ErrorCode : uint16_t {
 
 所有可能重试的接口都支持 `request_id`（通过 `RequestHeader`）。
 
-NameNode 通过 `metadata_oplog.request_id` 唯一索引实现去重。重复 request_id 直接返回之前的结果。
+NameNode 通过 `op_log.request_id` 唯一索引实现去重。重复 request_id 直接返回之前的结果。
 
 ---
 
@@ -1459,8 +1324,7 @@ LocalBlockStoreTest
 v0.1 - 完整多副本系统（本项目第一版目标）
 v0.2 - lease recovery + checksum 全链路
 v0.3 - NameNode active-standby（基于 braft）
-v0.4 - pipeline write
-v0.5 - DataNode decommission + rack awareness
+v0.4 - DataNode decommission + rack awareness
 v1.0 - 可试用版本（简单权限、大目录分页、metrics、admin）
 v2.0 - MetadataStore 可替换（FDB/TiKV/自研）
 ```

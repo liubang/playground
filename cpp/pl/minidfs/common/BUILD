@@ -29,7 +29,19 @@ cc_library(
         "error_code.h",
         "types.h",
     ],
+    deps = select({
+        "//:linux": ["@isa-l"],
+        "//:darwin": ["@crc32c"],
+        "//conditions:default": ["@crc32c"],
+    }),
+)
+
+cc_library(
+    name = "config",
+    srcs = ["config.cpp"],
+    hdrs = ["config.h"],
     deps = [
-        "@isa-l",
+        ":common",
+        "//cpp/pl/status",
     ],
 )

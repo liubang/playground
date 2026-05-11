@@ -19,8 +19,14 @@
 
 #include <cstdint>
 #include <cstring>
-#include <isa-l/crc.h>
 #include <string_view>
+
+// 平台适配：Linux 使用 ISA-L (SIMD 优化)，macOS 使用 Google crc32c (ARM 硬件指令)
+#if defined(__linux__)
+#include <isa-l/crc.h>
+#elif defined(__APPLE__)
+#include <crc32c/crc32c.h>
+#endif
 
 namespace pl::minidfs {
 
@@ -30,10 +36,17 @@ enum class ChecksumType : uint8_t {
 };
 
 /// Compute CRC32C checksum over a byte range.
-/// Uses Intel ISA-L hardware-accelerated CRC32 iSCSI (same polynomial as CRC32C).
 [[nodiscard]] inline uint32_t compute_crc32c(const void* data, size_t size) {
+#if defined(__linux__)
+    // ISA-L: crc32_iscsi 使用与 CRC32C 相同的多项式 (iSCSI polynomial)
     return ::crc32_iscsi(const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(data)),
                          static_cast<int>(size), 0);
+#elif defined(__APPLE__)
+    // Google crc32c: 在 ARM64 macOS 上利用硬件 CRC32 指令
+    return ::crc32c_value(reinterpret_cast<const uint8_t*>(data), size);
+#else
+#error "Unsupported platform for CRC32C"
+#endif
 }
 
 /// Compute CRC32C checksum over a string_view.
@@ -43,8 +56,14 @@ enum class ChecksumType : uint8_t {
 
 /// Extend an existing CRC32C checksum with additional data.
 [[nodiscard]] inline uint32_t extend_crc32c(uint32_t crc, const void* data, size_t size) {
+#if defined(__linux__)
     return ::crc32_iscsi(const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(data)),
                          static_cast<int>(size), crc);
+#elif defined(__APPLE__)
+    return ::crc32c_extend(crc, reinterpret_cast<const uint8_t*>(data), size);
+#else
+#error "Unsupported platform for CRC32C"
+#endif
 }
 
 /// Verify that the given checksum matches the data.

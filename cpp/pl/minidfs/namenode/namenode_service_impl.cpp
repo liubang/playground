@@ -68,8 +68,38 @@ void NameNodeServiceImpl::fill_located_block(protocol::LocatedBlockProto* proto,
 
 NameNodeServiceImpl::NameNodeServiceImpl(NamespaceManager* ns_mgr,
                                          BlockManager* block_mgr,
-                                         LeaseManager* lease_mgr)
-    : ns_mgr_(ns_mgr), block_mgr_(block_mgr), lease_mgr_(lease_mgr) {}
+                                         LeaseManager* lease_mgr,
+                                         MetadataStore* metadata_store)
+    : ns_mgr_(ns_mgr), block_mgr_(block_mgr), lease_mgr_(lease_mgr),
+      metadata_store_(metadata_store) {}
+
+bool NameNodeServiceImpl::check_idempotent(const protocol::RequestHeader& header,
+                                           protocol::StatusProto* status) {
+    if (header.request_id().empty()) {
+        return false;
+    }
+    auto result = metadata_store_->check_request_id(header.request_id());
+    if (result.hasError()) {
+        return false;
+    }
+    if (result.value()) {
+        // 已处理过，直接返回成功
+        fill_status(status, 0);
+        return true;
+    }
+    return false;
+}
+
+void NameNodeServiceImpl::write_oplog(std::string_view op_type,
+                                      uint64_t target_inode_id,
+                                      const protocol::RequestHeader& header) {
+    if (header.request_id().empty()) {
+        return;
+    }
+    // best-effort: 写入失败不影响主流程
+    (void)metadata_store_->write_oplog(op_type, target_inode_id,
+                                       header.request_id(), "{}");
+}
 
 // ============================================================================
 // Namespace Operations
@@ -81,11 +111,19 @@ void NameNodeServiceImpl::Mkdir(google::protobuf::RpcController* /*controller*/,
                                 google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
 
+    if (request->has_header() && check_idempotent(request->header(), response->mutable_status())) {
+        return;
+    }
+
     auto result = ns_mgr_->mkdir(request->path(), request->owner(), request->group(),
                                  request->permission(), /*create_parent=*/true);
     if (result.hasError()) {
         fill_status(response->mutable_status(), result.error().code(), result.error().message());
         return;
+    }
+
+    if (request->has_header()) {
+        write_oplog("mkdir", result.value().inode_id, request->header());
     }
     fill_status(response->mutable_status(), 0);
     response->set_inode_id(result.value().inode_id);
@@ -96,6 +134,10 @@ void NameNodeServiceImpl::CreateFile(google::protobuf::RpcController* /*controll
                                      protocol::CreateFileResponse* response,
                                      google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
+
+    if (request->has_header() && check_idempotent(request->header(), response->mutable_status())) {
+        return;
+    }
 
     uint32_t replication =
         request->replication() > 0 ? request->replication() : kDefaultReplication;
@@ -116,6 +158,9 @@ void NameNodeServiceImpl::CreateFile(google::protobuf::RpcController* /*controll
         return;
     }
 
+    if (request->has_header()) {
+        write_oplog("create_file", result.value().inode_id, request->header());
+    }
     fill_status(response->mutable_status(), 0);
     response->set_inode_id(result.value().inode_id);
     response->set_lease_id(lease_result.value().lease_id);
@@ -194,10 +239,18 @@ void NameNodeServiceImpl::Delete(google::protobuf::RpcController* /*controller*/
                                  google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
 
+    if (request->has_header() && check_idempotent(request->header(), response->mutable_status())) {
+        return;
+    }
+
     auto result = ns_mgr_->remove(request->path(), request->recursive());
     if (result.hasError()) {
         fill_status(response->mutable_status(), result.error().code(), result.error().message());
         return;
+    }
+
+    if (request->has_header()) {
+        write_oplog("delete", result.value().inode_id, request->header());
     }
     fill_status(response->mutable_status(), 0);
 }
@@ -208,10 +261,18 @@ void NameNodeServiceImpl::Rename(google::protobuf::RpcController* /*controller*/
                                  google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
 
+    if (request->has_header() && check_idempotent(request->header(), response->mutable_status())) {
+        return;
+    }
+
     auto result = ns_mgr_->rename(request->src(), request->dst());
     if (result.hasError()) {
         fill_status(response->mutable_status(), result.error().code(), result.error().message());
         return;
+    }
+
+    if (request->has_header()) {
+        write_oplog("rename", 0, request->header());
     }
     fill_status(response->mutable_status(), 0);
 }
@@ -226,6 +287,10 @@ void NameNodeServiceImpl::AllocateBlock(google::protobuf::RpcController* /*contr
                                         google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
 
+    if (request->has_header() && check_idempotent(request->header(), response->mutable_status())) {
+        return;
+    }
+
     uint32_t replication =
         request->replication() > 0 ? request->replication() : kDefaultReplication;
     auto result =
@@ -235,6 +300,9 @@ void NameNodeServiceImpl::AllocateBlock(google::protobuf::RpcController* /*contr
         return;
     }
 
+    if (request->has_header()) {
+        write_oplog("allocate_block", request->inode_id(), request->header());
+    }
     fill_status(response->mutable_status(), 0);
     fill_located_block(response->mutable_block(), result.value());
 }

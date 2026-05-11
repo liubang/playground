@@ -33,13 +33,12 @@ jobs:
           path: |
             ~/Library/Caches/Homebrew
             /opt/homebrew/Cellar/llvm
-            /opt/homebrew/Cellar/nasm
             /opt/homebrew/Cellar/libomp
-          key: ${{ runner.os }}-brew-llvm-nasm-libomp-${{ hashFiles('.github/workflows/build_cpp.yml') }}
+          key: ${{ runner.os }}-brew-llvm-libomp-${{ hashFiles('.github/workflows/build_cpp.yml') }}
           restore-keys: |
-            ${{ runner.os }}-brew-llvm-nasm-libomp-
+            ${{ runner.os }}-brew-llvm-libomp-
       - run: |
-          brew install llvm nasm libomp autoconf automake libtool pkg-config
+          brew install llvm libomp pkg-config
       - name: run test
         run: |
           bazel test \
