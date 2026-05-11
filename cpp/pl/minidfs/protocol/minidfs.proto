@@ -30,6 +30,12 @@ message StatusProto {
     string message = 2;
 }
 
+message RequestHeader {
+    string request_id = 1;   // unique request ID for idempotency
+    string client_id = 2;    // client identifier
+    string user = 3;         // user who initiated the request
+}
+
 message DataNodeEndpointProto {
     uint64 datanode_id = 1;
     string host = 2;
@@ -72,6 +78,7 @@ message MkdirRequest {
     string owner = 2;
     string group = 3;
     uint32 permission = 4;
+    RequestHeader header = 15;
 }
 
 message MkdirResponse {
@@ -87,6 +94,7 @@ message CreateFileRequest {
     uint32 replication = 5;
     uint64 block_size = 6;
     string client_id = 7;
+    RequestHeader header = 15;
 }
 
 message CreateFileResponse {
@@ -99,6 +107,7 @@ message AllocateBlockRequest {
     uint64 inode_id = 1;
     uint32 block_index = 2;
     uint32 replication = 3;
+    RequestHeader header = 15;
 }
 
 message AllocateBlockResponse {
@@ -109,6 +118,7 @@ message AllocateBlockResponse {
 message CompleteFileRequest {
     uint64 inode_id = 1;
     string client_id = 2;
+    RequestHeader header = 15;
 }
 
 message CompleteFileResponse {
@@ -145,6 +155,7 @@ message ListStatusResponse {
 message DeleteRequest {
     string path = 1;
     bool recursive = 2;
+    RequestHeader header = 15;
 }
 
 message DeleteResponse {
@@ -154,6 +165,7 @@ message DeleteResponse {
 message RenameRequest {
     string src = 1;
     string dst = 2;
+    RequestHeader header = 15;
 }
 
 message RenameResponse {

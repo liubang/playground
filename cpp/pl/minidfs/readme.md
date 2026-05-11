@@ -1,6 +1,6 @@
 # MiniDFS — C++20 分布式文件系统
 
-MiniDFS 是一个用 C++20 实现的 HDFS-like 分布式文件系统，基于 brpc 进行 RPC 通信，使用 MySQL 存储元数据。项目追求极致性能（ISA-L 硬件加速校验、零拷贝 I/O、连接池复用）和工程品质（强类型抽象、RAII 资源管理、编译期约束）。
+MiniDFS 是一个用 C++20 实现的 HDFS-like 分布式文件系统，基于 brpc 进行 RPC 通信，使用 MySQL 存储元数据。项目追求极致性能（硬件加速 CRC32C 校验、零拷贝 I/O、连接池复用）和工程品质（强类型抽象、RAII 资源管理、编译期约束）。
 
 ## 架构
 
@@ -47,7 +47,7 @@ MiniDFS 是一个用 C++20 实现的 HDFS-like 分布式文件系统，基于 br
 | 构建     | Bazel 8 (bzlmod)         | 确定性构建                     |
 | RPC      | brpc + protobuf          | 高性能、低延迟                 |
 | 元数据   | MySQL (Boost.MySQL)      | 异步连接池、类型安全           |
-| 校验     | CRC32C (ISA-L)           | SIMD 硬件加速                  |
+| 校验     | CRC32C                   | Linux: ISA-L (SIMD)，macOS: crc32c (ARM HW) |
 | 压缩     | zstd / snappy            | 可选块压缩                     |
 | 错误处理 | pl::Result (folly::Expected) | 类型安全的错误传播         |
 | 日志     | folly xlog               | 结构化日志                     |
@@ -78,14 +78,14 @@ cpp/pl/minidfs/
 
 - Bazel 8+（推荐通过 [bazelisk](https://github.com/bazelbuild/bazelisk) 安装）
 - C++20 编译器：Clang 16+ 或 GCC 13+
-- autoconf, automake, libtool（ISA-L 构建需要）
-- nasm（ISA-L 汇编优化需要，x86_64 环境）
+- autoconf, automake, libtool（ISA-L 构建需要，仅 Linux）
+- nasm（ISA-L 汇编优化需要，仅 Linux x86_64）
 - pkg-config
 
 macOS 安装：
 
 ```bash
-brew install bazelisk autoconf automake libtool nasm pkg-config
+brew install bazelisk pkg-config
 ```
 
 Ubuntu/Debian 安装：
@@ -106,7 +106,8 @@ curl -fSL https://github.com/bazelbuild/bazelisk/releases/latest/download/bazeli
 - protobuf 31.1（序列化）
 - folly 2025.01.13（Expected、xlog）
 - Boost.MySQL 1.90（异步 MySQL 客户端）
-- ISA-L 2.31（硬件加速 CRC32C）
+- ISA-L 2.31（硬件加速 CRC32C，仅 Linux）
+- crc32c（硬件加速 CRC32C，仅 macOS）
 - zstd 1.5.6、snappy 1.2.1（压缩）
 - fmt 12.1.0（格式化）
 - gflags 2.2.2（命令行参数）
@@ -155,15 +156,25 @@ bazel test //cpp/pl/minidfs/datanode/tests/...   # datanode: 5 个
 
 ## 手动部署
 
-### 1. 准备 MySQL
+### 1. 初始化数据库 (format)
 
-创建数据库并初始化 schema：
+使用 format 工具自动创建数据库和表结构：
+
+```bash
+./format --schema_file=cpp/pl/minidfs/metadata/schema.sql \
+    --mysql_host=127.0.0.1 --mysql_port=3306 --mysql_user=root --mysql_password=<pwd> \
+    [--mysql_database=minidfs] [--force]
+```
+
+`--force` 会先删除已有数据库再重建，适用于开发环境重置。`--mysql_database` 默认为 `minidfs`。
+
+也可以手动执行 schema.sql：
 
 ```bash
 mysql -h <host> -u root -p < cpp/pl/minidfs/metadata/schema.sql
 ```
 
-或手动执行 `schema.sql` 中的建表语句。确保创建好用于连接的数据库用户并授权：
+确保创建好用于连接的数据库用户并授权：
 
 ```sql
 CREATE USER 'minidfs'@'%' IDENTIFIED BY '<your_password>';
@@ -391,6 +402,6 @@ minidfs -namenode=$NAMENODE block 1001
 
 **租约机制**：文件写入通过 Lease 保证互斥，避免并发写入冲突。
 
-**CRC32C 校验**：使用 Intel ISA-L 库的 SIMD 加速实现，每个 chunk 独立校验，支持增量计算和快速验证。
+**CRC32C 校验**：Linux 使用 Intel ISA-L 库的 SIMD 加速实现，macOS 使用 Google crc32c 库（利用 ARM 硬件 CRC 指令）。两者计算结果一致（相同多项式），每个 chunk 独立校验，支持增量计算和快速验证。
 
 更多设计细节参见 [spec.md](spec.md)。

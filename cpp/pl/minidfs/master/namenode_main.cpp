@@ -72,7 +72,7 @@ int main(int argc, char* argv[]) {
     pl::minidfs::LeaseManager lease_mgr(&metadata_store);
 
     // Create service implementations
-    pl::minidfs::NameNodeServiceImpl namenode_service(&ns_mgr, &block_mgr, &lease_mgr);
+    pl::minidfs::NameNodeServiceImpl namenode_service(&ns_mgr, &block_mgr, &lease_mgr, &metadata_store);
     pl::minidfs::DataNodeProtocolServiceImpl datanode_protocol_service(&dn_mgr, &block_mgr);
     pl::minidfs::AdminServiceImpl admin_service(&ns_mgr, &dn_mgr, &metadata_store);
 
