@@ -43,3 +43,14 @@ cc_binary(
         "@gflags",
     ],
 )
+
+cc_binary(
+    name = "format",
+    srcs = ["format_main.cpp"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        "//cpp/pl/minidfs/metadata:mysql_connection_pool",
+        "@gflags",
+    ],
+)
