@@ -25,7 +25,11 @@ load(
 cc_library(
     name = "dfs_client",
     srcs = ["dfs_client.cpp"],
-    hdrs = ["dfs_client.h"],
+    hdrs = [
+        "dfs_client.h",
+        "dfs_input_stream.h",
+        "dfs_output_stream.h",
+    ],
     copts = COPTS,
     linkopts = LINKOPTS,
     visibility = ["//cpp/pl/minidfs:__subpackages__"],
