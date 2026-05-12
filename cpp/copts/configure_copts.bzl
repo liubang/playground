@@ -29,20 +29,14 @@ COPTS = select({
     "//cpp:clang_compiler": LLVM_FLAGS,
     "//cpp:gcc_compiler": GCC_FLAGS,
     "//conditions:default": GCC_FLAGS,
+}) + select({
+    "//cpp:asan_enabled": ASAN_FLAGS,
+    "//conditions:default": [],
 })
 
-LINKOPTS = []
-
-COPTS_WITH_ASAN = select({
-    "//cpp:clang_compiler": LLVM_FLAGS + ASAN_FLAGS,
-    "//cpp:gcc_compiler": GCC_FLAGS + ASAN_FLAGS,
-    "//conditions:default": GCC_FLAGS + ASAN_FLAGS,
-})
-
-LINKOPTS_WITH_ASAN = select({
-    "//cpp:clang_compiler": LINKOPTS + ASAN_LINKOPTS,
-    "//cpp:gcc_compiler": LINKOPTS + ASAN_LINKOPTS,
-    "//conditions:default": LINKOPTS + ASAN_LINKOPTS,
+LINKOPTS = select({
+    "//cpp:asan_enabled": ASAN_LINKOPTS,
+    "//conditions:default": [],
 })
 
 TEST_COPTS = select({

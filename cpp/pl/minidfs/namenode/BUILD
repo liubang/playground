@@ -101,7 +101,7 @@ cc_library(
         "//cpp/pl/minidfs/common",
         "//cpp/pl/minidfs/protocol:minidfs_cc_proto",
         "//cpp/pl/status",
-        "@brpc//:brpc",
+        "@brpc",
     ],
 )
 
@@ -116,6 +116,6 @@ cc_library(
         "//cpp/pl/minidfs/metadata:metadata_store",
         "//cpp/pl/minidfs/protocol:minidfs_cc_proto",
         "//cpp/pl/status",
-        "@brpc//:brpc",
+        "@brpc",
     ],
 )

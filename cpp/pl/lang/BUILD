@@ -16,6 +16,7 @@
 # Created: 2024/12/06 17:18
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
+
 cc_library(
     name = "lang",
     hdrs = [

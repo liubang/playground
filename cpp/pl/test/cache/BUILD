@@ -17,7 +17,7 @@
 
 load(
     "//cpp:copts/configure_copts.bzl",
-    "LINKOPTS_WITH_ASAN",
+    "LINKOPTS",
     "TEST_COPTS",
 )
 
@@ -28,7 +28,6 @@ load(
             "%s" % f,
         ],
         copts = [
-             
             "-ffast-math",
         ] + TEST_COPTS + select({
             "//:linux_x86_64": [
@@ -38,7 +37,7 @@ load(
             "//:darwin": ["-mcpu=apple-m1"],
             "//conditions:default": [],
         }),
-        linkopts = LINKOPTS_WITH_ASAN + select({
+        linkopts = LINKOPTS + select({
             "//:linux_x86_64": ["-fopenmp"],
             "//conditions:default": [],
         }),

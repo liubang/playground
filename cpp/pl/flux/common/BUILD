@@ -18,8 +18,8 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "COPTS_WITH_ASAN",
-    "LINKOPTS_WITH_ASAN",
+    "COPTS",
+    "LINKOPTS",
 )
 
 package(default_visibility = ["//cpp/pl/flux:__subpackages__"])
@@ -29,6 +29,6 @@ cc_library(
     hdrs = [
         "compat.h",
     ],
-    copts = COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
 )

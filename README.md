@@ -10,6 +10,9 @@
   <a href="https://github.com/liubang/playground/actions/workflows/build_python.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_python.yml?label=build-python&style=flat-square&branch=main" alt="build-python" />
   </a>
+  <a href="https://liubang.github.io/playground/">
+    <img src="https://img.shields.io/endpoint?url=https://liubang.github.io/playground/badge.json&style=flat-square" alt="coverage-cpp" />
+  </a>
 </p>
 
 个人多语言实验项目，用于学习、原型验证和小型方案探索。涵盖 C++、Go、Python、PHP、TLA+、LaTeX 等多个技术方向。

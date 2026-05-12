@@ -18,8 +18,8 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "COPTS_WITH_ASAN",
-    "LINKOPTS_WITH_ASAN",
+    "COPTS",
+    "LINKOPTS",
 )
 
 package(default_visibility = ["//cpp/pl/flux:__subpackages__"])
@@ -36,8 +36,8 @@ cc_library(
         "explain.h",
         "rbo.h",
     ],
-    copts = COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/flux/connector",
         "//cpp/pl/flux/plan",
@@ -53,11 +53,11 @@ cc_test(
     srcs = [
         "tests/cbo_unit_test.cpp",
     ],
-    copts = COPTS_WITH_ASAN,
+    copts = COPTS,
     data = [
         "//cpp/pl/flux/examples:cross_source_data",
     ],
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         ":optimizer",
         "@googletest//:gtest_main",
@@ -69,11 +69,11 @@ cc_test(
     srcs = [
         "tests/rbo_unit_test.cpp",
     ],
-    copts = COPTS_WITH_ASAN,
+    copts = COPTS,
     data = [
         "//cpp/pl/flux/examples:cross_source_data",
     ],
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         ":optimizer",
         "@googletest//:gtest_main",
