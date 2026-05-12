@@ -17,15 +17,15 @@
 
 load(
     "//cpp:copts/configure_copts.bzl",
-    "LINKOPTS_WITH_ASAN",
+    "LINKOPTS",
     "TEST_COPTS",
 )
 
 cc_test(
     name = "test_fibonacci",
     srcs = ["fibonacci.cpp"],
-    copts =   TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
     deps = [
         "@catch2//:catch2_main",
     ],

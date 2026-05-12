@@ -18,8 +18,8 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "COPTS_WITH_ASAN",
-    "LINKOPTS_WITH_ASAN",
+    "COPTS",
+    "LINKOPTS",
     "TEST_COPTS",
 )
 
@@ -39,9 +39,8 @@ cc_test(
         "bloom_test.cpp",
     ],
     copts = [
-         
     ] + TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/bloom:bloom_filter",
         "@googletest//:gtest_main",

@@ -19,14 +19,14 @@ load("@rules_cc//cc:defs.bzl", "cc_binary")
 load(
     "//cpp:copts/configure_copts.bzl",
     "COPTS",
-    "COPTS_WITH_ASAN",
-    "LINKOPTS_WITH_ASAN",
+    "LINKOPTS",
 )
 
 cc_binary(
     name = "setjmp_impl",
     srcs = ["setjmp_impl.cpp"],
-    copts =   COPTS,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/lang",
     ],
@@ -35,6 +35,6 @@ cc_binary(
 cc_binary(
     name = "context_impl",
     srcs = ["context_impl.cpp"],
-    copts =   COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
 )

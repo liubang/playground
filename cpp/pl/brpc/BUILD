@@ -29,7 +29,7 @@ cc_binary(
     linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/brpc/proto:echo_cc_proto",
-        "@brpc//:brpc",
+        "@brpc",
     ],
 )
 
@@ -40,6 +40,6 @@ cc_binary(
     linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/brpc/proto:echo_cc_proto",
-        "@brpc//:brpc",
+        "@brpc",
     ],
 )

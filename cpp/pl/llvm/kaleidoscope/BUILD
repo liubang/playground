@@ -17,8 +17,8 @@
 
 load(
     "//cpp:copts/configure_copts.bzl",
-    "COPTS_WITH_ASAN",
-    "LINKOPTS_WITH_ASAN",
+    "COPTS",
+    "LINKOPTS",
 )
 
 cc_library(
@@ -31,16 +31,16 @@ cc_library(
         "ast.h",
         "laxer.h",
     ],
-    copts =   COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     visibility = ["//visibility:public"],
 )
 
 cc_binary(
     name = "kaleidoscope",
     srcs = ["main.cpp"],
-    copts =   COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     visibility = ["//visibility:public"],
     deps = [
         ":kaleidoscope_lib",

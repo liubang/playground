@@ -18,8 +18,8 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "COPTS_WITH_ASAN",
-    "LINKOPTS_WITH_ASAN",
+    "COPTS",
+    "LINKOPTS",
     "TEST_COPTS",
 )
 
@@ -33,9 +33,8 @@ cc_library(
         "arena_old.h",
     ],
     copts = [
-         
-    ] + COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    ] + COPTS,
+    linkopts = LINKOPTS,
     visibility = ["//visibility:public"],
     deps = [
         "//cpp/pl/utility",
@@ -48,9 +47,8 @@ cc_test(
         "arena_test.cpp",
     ],
     copts = [
-         
     ] + TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/arena",
         "@googletest//:gtest_main",
@@ -63,9 +61,8 @@ cc_test(
         "arena_old_test.cpp",
     ],
     copts = [
-         
     ] + TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/arena",
         "@googletest//:gtest_main",

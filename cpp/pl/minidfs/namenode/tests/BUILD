@@ -18,7 +18,7 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "LINKOPTS_WITH_ASAN",
+    "LINKOPTS",
     "TEST_COPTS",
 )
 
@@ -36,7 +36,7 @@ cc_test(
     name = "namespace_manager_test",
     srcs = ["namespace_manager_test.cpp"],
     copts = TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         ":mock_metadata_store",
         "//cpp/pl/minidfs/namenode:namespace_manager",
@@ -48,7 +48,7 @@ cc_test(
     name = "lease_manager_test",
     srcs = ["lease_manager_test.cpp"],
     copts = TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         ":mock_metadata_store",
         "//cpp/pl/minidfs/namenode:lease_manager",
@@ -60,7 +60,7 @@ cc_test(
     name = "datanode_manager_test",
     srcs = ["datanode_manager_test.cpp"],
     copts = TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         ":mock_metadata_store",
         "//cpp/pl/minidfs/namenode:datanode_manager",
@@ -72,7 +72,7 @@ cc_test(
     name = "placement_manager_test",
     srcs = ["placement_manager_test.cpp"],
     copts = TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         ":mock_metadata_store",
         "//cpp/pl/minidfs/namenode:datanode_manager",
@@ -85,7 +85,7 @@ cc_test(
     name = "block_manager_test",
     srcs = ["block_manager_test.cpp"],
     copts = TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         ":mock_metadata_store",
         "//cpp/pl/minidfs/namenode:block_manager",
@@ -99,7 +99,7 @@ cc_test(
     name = "replication_manager_test",
     srcs = ["replication_manager_test.cpp"],
     copts = TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         ":mock_metadata_store",
         "//cpp/pl/minidfs/namenode:datanode_manager",
