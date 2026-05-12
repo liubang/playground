@@ -18,8 +18,8 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "COPTS_WITH_ASAN",
-    "LINKOPTS_WITH_ASAN",
+    "COPTS",
+    "LINKOPTS",
 )
 
 package(default_visibility = ["//visibility:public"])
@@ -28,8 +28,8 @@ cc_library(
     name = "sstable",
     srcs = glob(["*.cpp"]),
     hdrs = glob(["*.h"]),
-    copts = COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/arena",
         "//cpp/pl/bits",

@@ -1,12 +1,12 @@
 # MiniDFS — C++20 分布式文件系统设计规约
 
-文档版本：v0.2
-项目代号：`MiniDFS`
-实现语言：C++20
-构建系统：Bazel
-RPC 框架：brpc
-元数据后端：MySQL (via Boost.MySQL)
-命名空间：`pl::minidfs`
+- 文档版本：v0.2
+- 项目代号：`MiniDFS`
+- 实现语言：C++20
+- 构建系统：Bazel
+- RPC 框架：brpc
+- 元数据后端：MySQL (via Boost.MySQL)
+- 命名空间：`pl::minidfs`
 
 ---
 
@@ -21,25 +21,25 @@ MiniDFS 是一个用 C++20 实现的 HDFS-like 分布式文件系统。追求：
 第一版闭环：
 
 ```text
-format → start cluster → mkdir → put file → get file → ls → stat → rm
+format -> start cluster -> mkdir -> put file -> get file -> ls -> stat -> rm
 ```
 
 ---
 
 # 2. 技术栈决策
 
-| 领域     | 选型                          | 理由                                         |
-| -------- | ----------------------------- | -------------------------------------------- |
-| 语言标准 | C++20                         | concepts、coroutines、ranges、constexpr 扩展 |
-| 构建     | Bazel                         | 已有完整工程基础设施                         |
-| RPC      | brpc                          | 高性能、支持 protobuf、已有 Bazel 集成       |
-| MySQL    | Boost.MySQL + Boost.Asio      | 异步连接池、类型安全、header-only            |
-| 序列化   | protobuf                      | 与 brpc 天然配合                             |
-| 日志     | folly xlog                    | 结构化日志、已有依赖                         |
-| 配置     | YAML (yaml-cpp)               | 已有依赖                                     |
-| 错误处理 | pl::Result (folly::Expected)  | 已有基础设施                                 |
-| 校验     | CRC32C (ISA-L / crc32c)       | Linux: ISA-L (SIMD)，macOS: Google crc32c (ARM HW) |
-| 压缩     | zstd / snappy                 | 已有依赖                                     |
+| 领域     | 选型                         | 理由                                               |
+| -------- | ---------------------------- | -------------------------------------------------- |
+| 语言标准 | C++20                        | concepts、coroutines、ranges、constexpr 扩展       |
+| 构建     | Bazel                        | 已有完整工程基础设施                               |
+| RPC      | brpc                         | 高性能、支持 protobuf、已有 Bazel 集成             |
+| MySQL    | Boost.MySQL + Boost.Asio     | 异步连接池、类型安全、header-only                  |
+| 序列化   | protobuf                     | 与 brpc 天然配合                                   |
+| 日志     | folly xlog                   | 结构化日志、已有依赖                               |
+| 配置     | YAML (yaml-cpp)              | 已有依赖                                           |
+| 错误处理 | pl::Result (folly::Expected) | 已有基础设施                                       |
+| 校验     | CRC32C (ISA-L / crc32c)      | Linux: ISA-L (SIMD)，macOS: Google crc32c (ARM HW) |
+| 压缩     | zstd / snappy                | 已有依赖                                           |
 
 ---
 
@@ -560,12 +560,12 @@ CREATE TABLE IF NOT EXISTS op_log (
 
 ## 9.1 服务概览
 
-| 服务                      | 调用方         | 职责                               |
-| ------------------------- | -------------- | ---------------------------------- |
-| NameNodeService           | Client         | 文件系统操作 + Block 分配 + Lease  |
-| DataNodeProtocolService   | DataNode       | 注册、心跳、BlockReport、CommitBlock |
-| AdminService              | CLI/运维       | 集群信息、DataNode 详情、Inode/Block 查询 |
-| DataTransferService       | Client/DataNode| Block 读写（pipeline write）       |
+| 服务                    | 调用方          | 职责                                      |
+| ----------------------- | --------------- | ----------------------------------------- |
+| NameNodeService         | Client          | 文件系统操作 + Block 分配 + Lease         |
+| DataNodeProtocolService | DataNode        | 注册、心跳、BlockReport、CommitBlock      |
+| AdminService            | CLI/运维        | 集群信息、DataNode 详情、Inode/Block 查询 |
+| DataTransferService     | Client/DataNode | Block 读写（pipeline write）              |
 
 ## 9.2 消息命名约定
 
@@ -934,14 +934,15 @@ DataNode 本地目录结构：
 
 系统由 4 个独立二进制组成（非子命令模式）：
 
-| 二进制               | 源文件                      | 职责                           |
-| -------------------- | --------------------------- | ------------------------------ |
-| `namenode`           | `master/namenode_main.cpp`  | NameNode 服务（注册 3 个 brpc service） |
-| `format`             | `master/format_main.cpp`    | 初始化 MySQL schema            |
-| `datanode`           | `client/datanode_main.cpp`  | DataNode 服务                  |
-| `minidfs`            | `client/cli_main.cpp`       | CLI 客户端（文件系统 + admin 命令） |
+| 二进制     | 源文件                     | 职责                                    |
+| ---------- | -------------------------- | --------------------------------------- |
+| `namenode` | `master/namenode_main.cpp` | NameNode 服务（注册 3 个 brpc service） |
+| `format`   | `master/format_main.cpp`   | 初始化 MySQL schema                     |
+| `datanode` | `client/datanode_main.cpp` | DataNode 服务                           |
+| `minidfs`  | `client/cli_main.cpp`      | CLI 客户端（文件系统 + admin 命令）     |
 
 NameNode 进程注册的 3 个 brpc service：
+
 - NameNodeServiceImpl（Client 调用）
 - DataNodeProtocolServiceImpl（DataNode 调用）
 - AdminServiceImpl（运维诊断）
@@ -1333,10 +1334,10 @@ v2.0 - MetadataStore 可替换（FDB/TiKV/自研）
 
 # 23. 主要风险与应对
 
-| 风险                           | 应对                                        |
-| ------------------------------ | ------------------------------------------- |
-| MySQL 元数据瓶颈               | MetadataStore 抽象 + ID 批量分配 + 连接池   |
-| 本地 block 状态与 MySQL 不一致 | tmp→current rename + block report reconcile |
-| brpc 大 payload 性能           | chunk 分段传输 + 零拷贝 IOBuf               |
-| DataNode 写一半崩溃            | tmp 目录隔离 + 启动时清理未完成 block       |
-| NameNode 单点                  | 第一版接受，后续 braft 解决                 |
+| 风险                           | 应对                                         |
+| ------------------------------ | -------------------------------------------- |
+| MySQL 元数据瓶颈               | MetadataStore 抽象 + ID 批量分配 + 连接池    |
+| 本地 block 状态与 MySQL 不一致 | tmp->current rename + block report reconcile |
+| brpc 大 payload 性能           | chunk 分段传输 + 零拷贝 IOBuf                |
+| DataNode 写一半崩溃            | tmp 目录隔离 + 启动时清理未完成 block        |
+| NameNode 单点                  | 第一版接受，后续 braft 解决                  |

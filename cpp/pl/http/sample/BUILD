@@ -18,8 +18,8 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "COPTS_WITH_ASAN",
-    "LINKOPTS_WITH_ASAN",
+    "COPTS",
+    "LINKOPTS",
 )
 
 cc_binary(
@@ -27,8 +27,8 @@ cc_binary(
     srcs = [
         "http_server.cpp",
     ],
-    copts = COPTS_WITH_ASAN  ,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/http:server",
     ],

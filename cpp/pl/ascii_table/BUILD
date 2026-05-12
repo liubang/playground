@@ -18,24 +18,24 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "COPTS_WITH_ASAN",
-    "LINKOPTS_WITH_ASAN",
+    "COPTS",
+    "LINKOPTS",
 )
 
 cc_library(
     name = "pretty",
     srcs = ["pretty.cpp"],
     hdrs = ["pretty.h"],
-    copts =   COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     visibility = ["//visibility:public"],
 )
 
 cc_binary(
     name = "pretty_test",
     srcs = ["pretty_test.cpp"],
-    copts =   COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         ":pretty",
     ],
@@ -44,8 +44,8 @@ cc_binary(
 cc_test(
     name = "pretty_unit_test",
     srcs = ["pretty_unit_test.cpp"],
-    copts =   COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         ":pretty",
         "@googletest//:gtest_main",

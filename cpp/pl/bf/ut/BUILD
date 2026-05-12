@@ -18,7 +18,7 @@
 load("@rules_cc//cc:defs.bzl", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "LINKOPTS_WITH_ASAN",
+    "LINKOPTS",
     "TEST_COPTS",
 )
 
@@ -26,9 +26,8 @@ cc_test(
     name = "yabf_test",
     srcs = ["yabf_test.cpp"],
     copts = [
-         
     ] + TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/bf:yabf",
         "@googletest//:gtest_main",
