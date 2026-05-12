@@ -18,7 +18,7 @@
 load("@rules_cc//cc:defs.bzl", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "LINKOPTS_WITH_ASAN",
+    "LINKOPTS",
     "TEST_COPTS",
 )
 
@@ -29,7 +29,7 @@ load(
             "%s" % f,
         ],
         copts = TEST_COPTS,
-        linkopts = LINKOPTS_WITH_ASAN,
+        linkopts = LINKOPTS,
         deps = [
             "//cpp/pl/debug",
         ],

@@ -18,7 +18,7 @@
 load("@rules_cc//cc:defs.bzl", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "LINKOPTS_WITH_ASAN",
+    "LINKOPTS",
     "TEST_COPTS",
 )
 
@@ -28,8 +28,8 @@ load(
         srcs = [
             "%s" % f,
         ],
-        copts =   TEST_COPTS,
-        linkopts = LINKOPTS_WITH_ASAN + ["-pthread"],
+        copts = TEST_COPTS,
+        linkopts = LINKOPTS + ["-pthread"],
         deps = [
             "//cpp/pl/log:logger",
             "//cpp/pl/random",

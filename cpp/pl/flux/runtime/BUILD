@@ -18,8 +18,8 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "COPTS_WITH_ASAN",
-    "LINKOPTS_WITH_ASAN",
+    "COPTS",
+    "LINKOPTS",
 )
 
 package(default_visibility = ["//cpp/pl/flux:__subpackages__"])
@@ -32,8 +32,8 @@ cc_library(
     hdrs = [
         "runtime_value.h",
     ],
-    copts = COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/flux/common",
         "//cpp/pl/flux/plan",
@@ -49,8 +49,8 @@ cc_library(
     hdrs = [
         "runtime_env.h",
     ],
-    copts = COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         ":runtime_value",
         "@abseil-cpp//absl/status",
@@ -66,8 +66,8 @@ cc_library(
     hdrs = [
         "runtime_eval.h",
     ],
-    copts = COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         ":runtime_env",
         "//cpp/pl/flux/common",
@@ -83,8 +83,8 @@ cc_library(
     hdrs = [
         "runtime_builtin_table_helpers.h",
     ],
-    copts = COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         ":runtime_env",
         ":runtime_eval",
@@ -99,8 +99,8 @@ cc_library(
     hdrs = [
         "runtime_builtin_aggregate_helpers.h",
     ],
-    copts = COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         ":runtime_builtin_table_helpers",
         "//cpp/pl/flux/common",
@@ -132,8 +132,8 @@ cc_library(
         "runtime_builtin_universe.h",
         "runtime_builtin_window_helpers.h",
     ],
-    copts = COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         ":runtime_env",
         ":runtime_eval",
@@ -159,8 +159,8 @@ cc_library(
     hdrs = [
         "runtime_exec.h",
     ],
-    copts = COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         ":runtime_builtin",
         ":runtime_eval",
@@ -176,8 +176,8 @@ cc_test(
     srcs = [
         "tests/runtime_value_unit_test.cpp",
     ],
-    copts = COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         ":runtime_value",
         "@googletest//:gtest_main",
@@ -189,8 +189,8 @@ cc_test(
     srcs = [
         "tests/runtime_env_unit_test.cpp",
     ],
-    copts = COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         ":runtime_env",
         "@abseil-cpp//absl/status",
@@ -203,8 +203,8 @@ cc_test(
     srcs = [
         "tests/runtime_eval_unit_test.cpp",
     ],
-    copts = COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         ":runtime_builtin",
         ":runtime_eval",
@@ -218,11 +218,11 @@ cc_test(
     srcs = [
         "tests/runtime_exec_unit_test.cpp",
     ],
-    copts = COPTS_WITH_ASAN,
+    copts = COPTS,
     data = [
         "//cpp/pl/flux/examples:cross_source_data",
     ],
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         ":runtime_exec",
         "//cpp/pl/flux/execution",

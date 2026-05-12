@@ -153,6 +153,17 @@ jobs:
           ls -lh ./bazel-out/_coverage/_coverage_report.dat
           genhtml --ignore-errors negative --output coverage ./bazel-out/_coverage/_coverage_report.dat
           cp -r ./registry ./coverage/
+      - name: generate coverage badge
+        run: |
+          COVERAGE=$(lcov --summary ./bazel-out/_coverage/_coverage_report.dat 2>&1 | grep "lines" | awk '{print $2}' | tr -d '%')
+          if [ "$(echo "$COVERAGE >= 80" | bc)" -eq 1 ]; then
+            COLOR="brightgreen"
+          elif [ "$(echo "$COVERAGE >= 60" | bc)" -eq 1 ]; then
+            COLOR="yellow"
+          else
+            COLOR="red"
+          fi
+          echo "{\"schemaVersion\":1,\"label\":\"coverage-cpp\",\"message\":\"${COVERAGE}%\",\"color\":\"${COLOR}\"}" > coverage/badge.json
       - name: Deploy 🚀
         uses: peaceiris/actions-gh-pages@v4
         if: ${{ github.ref == 'refs/heads/main' }}

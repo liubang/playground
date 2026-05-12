@@ -18,16 +18,16 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "COPTS_WITH_ASAN",
-    "LINKOPTS_WITH_ASAN",
+    "COPTS",
+    "LINKOPTS",
     "TEST_COPTS",
 )
 
 cc_library(
     name = "hash",
     hdrs = glob(["*.h"]),
-    copts =   COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     visibility = ["//visibility:public"],
 )
 
@@ -37,9 +37,9 @@ cc_library(
 #         "murmurhash2_test.cpp",
 #     ],
 #     copts = [
-#          
+#
 #     ] + TEST_COPTS,
-#     linkopts = LINKOPTS_WITH_ASAN,
+#     linkopts = LINKOPTS,
 #     deps = [
 #         "//cpp/pl/hash",
 #         "@googletest//:gtest_main",

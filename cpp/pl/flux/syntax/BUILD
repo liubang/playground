@@ -18,8 +18,8 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "COPTS_WITH_ASAN",
-    "LINKOPTS_WITH_ASAN",
+    "COPTS",
+    "LINKOPTS",
 )
 
 package(default_visibility = ["//cpp/pl/flux:__subpackages__"])
@@ -34,9 +34,9 @@ cc_library(
         "scanner.h",
         "token.h",
     ],
-    copts = COPTS_WITH_ASAN,
+    copts = COPTS,
     includes = ["."],
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
 )
 
 cc_library(
@@ -53,9 +53,9 @@ cc_library(
         "parser.h",
         "strconv.h",
     ],
-    copts = COPTS_WITH_ASAN,
+    copts = COPTS,
     includes = ["."],
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         ":scanner",
         "//cpp/pl/flux/common",
@@ -70,8 +70,8 @@ cc_binary(
     srcs = [
         "tests/scanner_test.cpp",
     ],
-    copts = COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         ":scanner",
     ],
@@ -82,8 +82,8 @@ cc_test(
     srcs = [
         "tests/scanner_unit_test.cpp",
     ],
-    copts = COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         ":scanner",
         "@googletest//:gtest_main",
@@ -95,8 +95,8 @@ cc_binary(
     srcs = [
         "tests/parser_test.cpp",
     ],
-    copts = COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         ":parser",
     ],
@@ -107,8 +107,8 @@ cc_test(
     srcs = [
         "tests/parser_unit_test.cpp",
     ],
-    copts = COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         ":parser",
         "@googletest//:gtest_main",
@@ -120,8 +120,8 @@ cc_test(
     srcs = [
         "tests/strconv_unit_test.cpp",
     ],
-    copts = COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         ":parser",
         "@googletest//:gtest_main",

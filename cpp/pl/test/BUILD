@@ -18,8 +18,8 @@
 load("@rules_cc//cc:defs.bzl", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "COPTS_WITH_ASAN",
-    "LINKOPTS_WITH_ASAN",
+    "COPTS",
+    "LINKOPTS",
 )
 
 [
@@ -28,8 +28,8 @@ load(
         srcs = [
             "%s" % f,
         ],
-        copts =   COPTS_WITH_ASAN,
-        linkopts = LINKOPTS_WITH_ASAN + ["-pthread"],
+        copts = COPTS,
+        linkopts = LINKOPTS + ["-pthread"],
         deps = [
             "@curl",
         ],
@@ -43,8 +43,8 @@ load(
         srcs = [
             "%s" % f,
         ],
-        copts = ["-std=c11"] + COPTS_WITH_ASAN,
-        linkopts = LINKOPTS_WITH_ASAN + ["-pthread"],
+        copts = ["-std=c11"] + COPTS,
+        linkopts = LINKOPTS + ["-pthread"],
         deps = [
         ],
     )

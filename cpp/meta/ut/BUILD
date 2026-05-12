@@ -18,7 +18,7 @@
 load("@rules_cc//cc:defs.bzl", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "LINKOPTS_WITH_ASAN",
+    "LINKOPTS",
     "TEST_COPTS",
 )
 
@@ -27,8 +27,8 @@ cc_test(
     srcs = [
         "expression_test.cpp",
     ],
-    copts =   TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/meta",
         "@catch2//:catch2_main",
@@ -41,8 +41,8 @@ cc_test(
         "traits_test.cpp",
         "traits_test.h",
     ],
-    copts =   TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/meta",
         "@catch2//:catch2_main",
@@ -55,8 +55,8 @@ cc_test(
         "utils_test.cpp",
         "utils_test.h",
     ],
-    copts =   TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/meta",
         "@catch2//:catch2_main",
@@ -66,8 +66,8 @@ cc_test(
 cc_test(
     name = "tuple_iteration_apply_test",
     srcs = ["tuple_iteration_apply_test.cpp"],
-    copts =   TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/meta",
         "@catch2//:catch2_main",
@@ -78,7 +78,7 @@ cc_test(
 #     name = "tuple_iteration_basics_test",
 #     srcs = ["tuple_iteration_basics_test.cpp"],
 #     copts =   TEST_COPTS,
-#     linkopts = LINKOPTS_WITH_ASAN,
+#     linkopts = LINKOPTS,
 #     deps = [
 #         "//cpp/meta",
 #         "@catch2//:catch2_main",
@@ -88,8 +88,8 @@ cc_test(
 cc_test(
     name = "type_list_test",
     srcs = ["type_list_test.cpp"],
-    copts =   TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/meta",
         "@catch2//:catch2_main",
@@ -99,8 +99,8 @@ cc_test(
 cc_test(
     name = "function_test",
     srcs = ["function_test.cpp"],
-    copts =   TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/meta",
         "@catch2//:catch2_main",
@@ -110,8 +110,8 @@ cc_test(
 cc_test(
     name = "unique_ptr_test",
     srcs = ["unique_ptr_test.cpp"],
-    copts =   TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/meta",
         "@catch2//:catch2_main",
@@ -121,8 +121,8 @@ cc_test(
 cc_test(
     name = "optional_test",
     srcs = ["optional_test.cpp"],
-    copts =   TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/meta",
         "@catch2//:catch2_main",
@@ -132,8 +132,8 @@ cc_test(
 cc_test(
     name = "match_test",
     srcs = ["match_test.cpp"],
-    copts =   TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/meta",
         "@catch2//:catch2_main",

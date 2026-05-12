@@ -18,7 +18,7 @@
 load("@rules_cc//cc:defs.bzl", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "LINKOPTS_WITH_ASAN",
+    "LINKOPTS",
     "TEST_COPTS",
 )
 
@@ -26,7 +26,7 @@ cc_test(
     name = "local_block_store_test",
     srcs = ["local_block_store_test.cpp"],
     copts = TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/minidfs/datanode:local_block_store",
         "@googletest//:gtest_main",
@@ -37,7 +37,7 @@ cc_test(
     name = "block_reporter_test",
     srcs = ["block_reporter_test.cpp"],
     copts = TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/minidfs/datanode:block_reporter",
         "//cpp/pl/minidfs/datanode:local_block_store",
@@ -49,7 +49,7 @@ cc_test(
     name = "heartbeat_sender_test",
     srcs = ["heartbeat_sender_test.cpp"],
     copts = TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/minidfs/datanode:heartbeat_sender",
         "//cpp/pl/minidfs/datanode:local_block_store",
@@ -61,7 +61,7 @@ cc_test(
     name = "pipeline_receiver_test",
     srcs = ["pipeline_receiver_test.cpp"],
     copts = TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/minidfs/common",
         "//cpp/pl/minidfs/datanode:local_block_store",
@@ -74,7 +74,7 @@ cc_test(
     name = "replication_worker_test",
     srcs = ["replication_worker_test.cpp"],
     copts = TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/minidfs/datanode:local_block_store",
         "//cpp/pl/minidfs/datanode:replication_worker",
