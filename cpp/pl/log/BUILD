@@ -18,8 +18,8 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "COPTS_WITH_ASAN",
-    "LINKOPTS_WITH_ASAN",
+    "COPTS",
+    "LINKOPTS",
 )
 
 cc_library(
@@ -32,8 +32,8 @@ cc_library(
         "logger.h",
         "logstream.h",
     ],
-    copts =   COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     visibility = ["//visibility:public"],
     deps = [
         "//cpp/pl/thread",
@@ -44,8 +44,8 @@ cc_library(
 cc_test(
     name = "logger_test",
     srcs = ["logger_test.cpp"],
-    copts =   COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         ":logger",
     ],

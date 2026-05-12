@@ -17,8 +17,8 @@
 
 load(
     "//cpp:copts/configure_copts.bzl",
-    "COPTS_WITH_ASAN",
-    "LINKOPTS_WITH_ASAN",
+    "COPTS",
+    "LINKOPTS",
 )
 
 cc_test(
@@ -26,8 +26,8 @@ cc_test(
     srcs = [
         "time.cpp",
     ],
-    copts =   COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         "@boost.date_time",
     ],
@@ -36,8 +36,8 @@ cc_test(
 cc_test(
     name = "test_named_parameters",
     srcs = ["test_named_parameters.cpp"],
-    copts =   COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         "@boost.mpl",
         "@boost.parameter",
@@ -48,8 +48,8 @@ cc_test(
 cc_test(
     name = "test_scope_exit",
     srcs = ["test_scope_exit.cpp"],
-    copts =   COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         "@boost.scope",
     ],

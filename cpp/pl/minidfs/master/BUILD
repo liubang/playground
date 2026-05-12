@@ -38,7 +38,7 @@ cc_binary(
         "//cpp/pl/minidfs/namenode:namenode_service_impl",
         "//cpp/pl/minidfs/namenode:namespace_manager",
         "//cpp/pl/minidfs/namenode:placement_manager",
-        "@brpc//:brpc",
+        "@brpc",
         "@folly//folly/logging",
         "@gflags",
     ],

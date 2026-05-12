@@ -18,8 +18,8 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "COPTS_WITH_ASAN",
-    "LINKOPTS_WITH_ASAN",
+    "COPTS",
+    "LINKOPTS",
 )
 
 cc_library(
@@ -36,8 +36,8 @@ cc_test(
     srcs = [
         "construct_log_test.cpp",
     ],
-    copts =   COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         ":utility",
     ],
