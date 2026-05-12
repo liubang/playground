@@ -19,8 +19,8 @@ load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "COPTS_WITH_ASAN",
-    "LINKOPTS_WITH_ASAN",
+    "COPTS",
+    "LINKOPTS",
 )
 
 package(default_visibility = ["//cpp/pl/flux:__subpackages__"])
@@ -33,8 +33,8 @@ cc_library(
     hdrs = [
         "flux_cli.h",
     ],
-    copts = COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/ascii_table:pretty",
         "//cpp/pl/flux/common",
@@ -54,8 +54,8 @@ cc_binary(
     srcs = [
         "flux.cpp",
     ],
-    copts = COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         ":flux_cli",
     ],
@@ -66,11 +66,11 @@ cc_test(
     srcs = [
         "tests/flux_cli_unit_test.cpp",
     ],
-    copts = COPTS_WITH_ASAN,
+    copts = COPTS,
     data = [
         "//cpp/pl/flux/examples:all_examples",
     ],
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         ":flux_cli",
         "@googletest//:gtest_main",
@@ -95,7 +95,7 @@ sh_test(
     ],
     data = [
         ":flux",
-        "//cpp/pl/flux/examples:cross_source_data",
         "//cpp/pl/flux/examples:all_examples",
+        "//cpp/pl/flux/examples:cross_source_data",
     ],
 )

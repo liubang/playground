@@ -15,6 +15,20 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2020/07/20 00:32
 
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
+
+bool_flag(
+    name = "asan",
+    build_setting_default = False,
+    visibility = [":__subpackages__"],
+)
+
+config_setting(
+    name = "asan_enabled",
+    flag_values = {":asan": "True"},
+    visibility = [":__subpackages__"],
+)
+
 config_setting(
     name = "clang_compiler",
     flag_values = {

@@ -18,7 +18,7 @@
 load("@rules_cc//cc:defs.bzl", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "LINKOPTS_WITH_ASAN",
+    "LINKOPTS",
     "TEST_COPTS",
 )
 
@@ -26,7 +26,7 @@ cc_test(
     name = "checksum_test",
     srcs = ["checksum_test.cpp"],
     copts = TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/minidfs/common",
         "@googletest//:gtest_main",
@@ -37,7 +37,7 @@ cc_test(
     name = "compression_test",
     srcs = ["compression_test.cpp"],
     copts = TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/minidfs/common",
         "@googletest//:gtest_main",
@@ -48,7 +48,7 @@ cc_test(
     name = "constants_test",
     srcs = ["constants_test.cpp"],
     copts = TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/minidfs/common",
         "@googletest//:gtest_main",
@@ -59,7 +59,7 @@ cc_test(
     name = "error_code_test",
     srcs = ["error_code_test.cpp"],
     copts = TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/minidfs/common",
         "@googletest//:gtest_main",
@@ -70,7 +70,7 @@ cc_test(
     name = "types_test",
     srcs = ["types_test.cpp"],
     copts = TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/minidfs/common",
         "@googletest//:gtest_main",

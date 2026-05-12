@@ -15,7 +15,8 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/05/21 23:26
 
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_binary")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+
 cc_library(
     name = "yabf",
     hdrs = ["yabf.h"],

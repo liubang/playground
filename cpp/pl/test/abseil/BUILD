@@ -17,7 +17,7 @@
 
 load(
     "//cpp:copts/configure_copts.bzl",
-    "LINKOPTS_WITH_ASAN",
+    "LINKOPTS",
     "TEST_COPTS",
 )
 
@@ -121,9 +121,8 @@ _abseil_deps = [
             "%s" % f,
         ],
         copts = [
-             
         ] + TEST_COPTS,
-        linkopts = LINKOPTS_WITH_ASAN,
+        linkopts = LINKOPTS,
         deps = _abseil_deps + [
             "@googletest//:gtest_main",
         ],

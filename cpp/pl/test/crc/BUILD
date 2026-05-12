@@ -17,7 +17,7 @@
 
 load(
     "//cpp:copts/configure_copts.bzl",
-    "LINKOPTS_WITH_ASAN",
+    "LINKOPTS",
     "TEST_COPTS",
 )
 
@@ -25,9 +25,8 @@ cc_test(
     name = "crc_benchmark",
     srcs = ["crc_benchmark.cpp"],
     copts = [
-         
     ] + TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         "@boost.crc",
         "@google_benchmark//:benchmark_main",

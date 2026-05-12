@@ -16,6 +16,7 @@
 # Created: 2024/06/22 00:01
 
 load("@rules_cc//cc:defs.bzl", "cc_library")
+
 cc_library(
     name = "random",
     hdrs = ["random.h"],

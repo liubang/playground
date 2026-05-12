@@ -17,11 +17,11 @@
 
 # load("@rules_ragel//ragel:ragel.bzl", "ragel")
 
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_binary")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "COPTS_WITH_ASAN",
-    "LINKOPTS_WITH_ASAN",
+    "COPTS",
+    "LINKOPTS",
 )
 
 package(default_visibility = ["//visibility:public"])
@@ -47,8 +47,8 @@ cc_library(
         "scanner.h",
         "token.h",
     ],
-    copts =   COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
 )
 
 cc_binary(
@@ -56,8 +56,8 @@ cc_binary(
     srcs = [
         "scanner_test.cpp",
     ],
-    copts =   COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     deps = [
         ":scanner",
     ],

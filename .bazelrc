@@ -31,7 +31,11 @@ build --host_cxxopt=-std=c++20
 build --@boost.asio//:ssl=openssl
 build --@boost.mysql//:ssl=openssl
 
+# asan default on for dev/test
+build --//cpp:asan=True
+
 build:release --compilation_mode=opt
+build:release --//cpp:asan=False
 
 # for llvm
 build:llvm --action_env=CC=/opt/app/llvm/bin/clang

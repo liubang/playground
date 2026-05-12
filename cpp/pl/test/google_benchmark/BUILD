@@ -17,7 +17,7 @@
 
 load(
     "//cpp:copts/configure_copts.bzl",
-    "LINKOPTS_WITH_ASAN",
+    "LINKOPTS",
     "TEST_COPTS",
 )
 
@@ -28,9 +28,8 @@ load(
             "%s" % f,
         ],
         copts = [
-             
         ] + TEST_COPTS,
-        linkopts = LINKOPTS_WITH_ASAN + ["-pthread"],
+        linkopts = LINKOPTS + ["-pthread"],
         deps = [
             "//cpp/pl/lang",
             "@google_benchmark//:benchmark_main",

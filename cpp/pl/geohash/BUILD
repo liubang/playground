@@ -18,8 +18,8 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "COPTS_WITH_ASAN",
-    "LINKOPTS_WITH_ASAN",
+    "COPTS",
+    "LINKOPTS",
     "TEST_COPTS",
 )
 
@@ -27,8 +27,8 @@ cc_library(
     name = "geohash",
     srcs = ["geohash.cpp"],
     hdrs = ["geohash.h"],
-    copts =   COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     visibility = ["//visibility:public"],
 )
 
@@ -36,8 +36,8 @@ cc_library(
     name = "geo",
     srcs = ["geo.cpp"],
     hdrs = ["geo.h"],
-    copts =   COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN,
+    copts = COPTS,
+    linkopts = LINKOPTS,
     visibility = ["//visibility:public"],
     deps = [":geohash"],
 )
@@ -48,9 +48,8 @@ cc_test(
         "geohash_test.cpp",
     ],
     copts = [
-         
     ] + TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/geohash:geo",
         "@googletest//:gtest_main",

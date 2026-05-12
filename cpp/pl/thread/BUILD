@@ -18,8 +18,8 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
-    "COPTS_WITH_ASAN",
-    "LINKOPTS_WITH_ASAN",
+    "COPTS",
+    "LINKOPTS",
     "TEST_COPTS",
 )
 
@@ -33,8 +33,8 @@ cc_library(
     name = "thread",
     srcs = ["thread.cpp"],
     hdrs = ["thread.h"],
-    copts = COPTS_WITH_ASAN,
-    linkopts = LINKOPTS_WITH_ASAN + ["-pthread"],
+    copts = COPTS,
+    linkopts = LINKOPTS + ["-pthread"],
     visibility = ["//visibility:public"],
 )
 
@@ -42,7 +42,7 @@ cc_test(
     name = "thread_pool_test",
     srcs = ["thread_pool_test.cpp"],
     copts = TEST_COPTS,
-    linkopts = LINKOPTS_WITH_ASAN,
+    linkopts = LINKOPTS,
     deps = [
         ":thread_pool",
         "//cpp/pl/log:logger",
