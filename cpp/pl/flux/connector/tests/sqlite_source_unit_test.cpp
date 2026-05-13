@@ -63,6 +63,69 @@ TEST(SQLiteSourceTest, ReportsTableStatistics) {
     EXPECT_EQ("_time", statistics_or->columns[0].name);
 }
 
+TEST(SQLiteSourceTest, RuntimeMetadataSplitAndPageSourceScansTable) {
+    SourceSpec spec{.source = "sqlite", .driver = "sqlite", .dsn = kMetricsDb, .table = "cpu"};
+    SQLiteConnectorMetadata metadata(spec);
+
+    auto handle_or = metadata.GetTableHandle(spec);
+    ASSERT_TRUE(handle_or.ok()) << handle_or.status();
+    auto schema_or = metadata.Schema(*handle_or);
+    ASSERT_TRUE(schema_or.ok()) << schema_or.status();
+    ASSERT_EQ(4, schema_or->columns.size());
+
+    ScanRequest request;
+    request.columns = {"host", "usage"};
+    request.order_by.push_back({.column = "host", .desc = false});
+    SingleSplitManager split_manager;
+    auto splits_or = split_manager.GetSplits(*handle_or, request);
+    ASSERT_TRUE(splits_or.ok()) << splits_or.status();
+    ASSERT_EQ(1, splits_or->size());
+
+    SQLitePageSourceProvider provider(2);
+    auto page_source_or = provider.CreatePageSource(splits_or->front());
+    ASSERT_TRUE(page_source_or.ok()) << page_source_or.status();
+
+    auto first_or = (*page_source_or)->NextPage();
+    ASSERT_TRUE(first_or.ok()) << first_or.status();
+    ASSERT_TRUE(first_or->has_value());
+    EXPECT_EQ(2, first_or->value().table.rows.size());
+    EXPECT_EQ("\"edge-1\"", first_or->value().table.rows[0]->lookup("host")->string());
+
+    auto second_or = (*page_source_or)->NextPage();
+    ASSERT_TRUE(second_or.ok()) << second_or.status();
+    ASSERT_TRUE(second_or->has_value());
+    EXPECT_EQ(2, second_or->value().table.rows.size());
+
+    auto done_or = (*page_source_or)->NextPage();
+    ASSERT_TRUE(done_or.ok()) << done_or.status();
+    EXPECT_FALSE(done_or->has_value());
+}
+
+TEST(SQLiteSourceTest, RuntimePageSourceEmitsSingleEmptyPage) {
+    SourceSpec spec{.source = "sqlite", .driver = "sqlite", .dsn = kMetricsDb, .table = "cpu"};
+    SQLiteConnectorMetadata metadata(spec);
+    auto handle_or = metadata.GetTableHandle(spec);
+    ASSERT_TRUE(handle_or.ok()) << handle_or.status();
+
+    ScanRequest request;
+    request.limit = 0;
+    SingleSplitManager split_manager;
+    auto splits_or = split_manager.GetSplits(*handle_or, request);
+    ASSERT_TRUE(splits_or.ok()) << splits_or.status();
+    SQLitePageSourceProvider provider(2);
+    auto page_source_or = provider.CreatePageSource(splits_or->front());
+    ASSERT_TRUE(page_source_or.ok()) << page_source_or.status();
+
+    auto page_or = (*page_source_or)->NextPage();
+    ASSERT_TRUE(page_or.ok()) << page_or.status();
+    ASSERT_TRUE(page_or->has_value());
+    EXPECT_TRUE(page_or->value().table.rows.empty());
+
+    auto done_or = (*page_source_or)->NextPage();
+    ASSERT_TRUE(done_or.ok()) << done_or.status();
+    EXPECT_FALSE(done_or->has_value());
+}
+
 TEST(SQLiteSourceTest, PushesDownProjectionTimeRangePredicateSortAndLimit) {
     SQLiteSource source(kMetricsDb, "cpu");
     ScanRequest request;

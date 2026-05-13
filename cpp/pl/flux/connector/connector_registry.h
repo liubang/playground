@@ -18,7 +18,6 @@
 #pragma once
 
 #include "absl/status/statusor.h"
-#include "cpp/pl/flux/connector/table_source.h"
 #include <functional>
 #include <memory>
 #include <string>
@@ -26,6 +25,8 @@
 #include <vector>
 
 namespace pl::flux::connector {
+
+struct ConnectorRuntime;
 
 /// SourceSpec identifies a data source for connector creation.
 /// It corresponds to plan::SourceScanSpec but lives in the connector layer
@@ -37,22 +38,22 @@ struct SourceSpec {
     std::string table;
 };
 
-/// Factory function type: given a SourceSpec, produce a TableSource instance.
-using ConnectorFactory = std::function<std::unique_ptr<TableSource>(const SourceSpec&)>;
+/// Factory function type: given a SourceSpec, produce a complete connector runtime.
+using ConnectorRuntimeFactory = std::function<std::unique_ptr<ConnectorRuntime>(const SourceSpec&)>;
 
 /// ConnectorRegistry provides a centralized registry for connector factories.
 /// New data sources register themselves at startup; the optimizer and executor
-/// query the registry to create TableSource instances without hard-coding
+/// query the registry to create connector runtime instances without hard-coding
 /// specific connector types.
 class ConnectorRegistry {
 public:
     /// Register a connector factory for the given source name.
     /// The source name should match SourceScanSpec.source (e.g., "sqlite", "mysql").
-    void Register(std::string source, ConnectorFactory factory);
+    void Register(std::string source, ConnectorRuntimeFactory factory);
 
-    /// Create a TableSource for the given spec.  Returns an error if no factory
-    /// is registered for the spec's source.
-    [[nodiscard]] absl::StatusOr<std::unique_ptr<TableSource>> Create(
+    /// Create a connector runtime for the given spec. Returns an error if no
+    /// factory is registered for the spec's source.
+    [[nodiscard]] absl::StatusOr<std::unique_ptr<ConnectorRuntime>> CreateRuntime(
         const SourceSpec& spec) const;
 
     /// Check whether a connector is registered for the given source name.
@@ -66,7 +67,7 @@ public:
     static ConnectorRegistry& Global();
 
 private:
-    std::unordered_map<std::string, ConnectorFactory> factories_;
+    std::unordered_map<std::string, ConnectorRuntimeFactory> factories_;
 };
 
 /// Helper: check if a source/driver pair is a pushdown-capable SQL connector.
