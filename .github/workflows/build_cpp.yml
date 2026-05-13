@@ -148,7 +148,7 @@ jobs:
             --test_env=FLUX_MYSQL_TEST_DSN=mysql://flux:flux@127.0.0.1:3306/flux_test \
             --verbose_failures \
             --combined_report=lcov \
-            --instrument_test_targets \
+            --instrumentation_filter="//cpp/pl[/:]" \
             //cpp/...
           ls -lh ./bazel-out/_coverage/_coverage_report.dat
           genhtml --ignore-errors negative --output coverage ./bazel-out/_coverage/_coverage_report.dat
