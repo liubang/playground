@@ -15,7 +15,13 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2025/06/30 00:47
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+
+load(
+    "//cpp:copts/configure_copts.bzl",
+    "COPTS",
+    "LINKOPTS",
+)
 
 package(default_visibility = ["//cpp/pl/minidfs:__subpackages__"])
 
@@ -103,5 +109,24 @@ cc_library(
         "//cpp/pl/status",
         "@brpc",
         "@folly//folly/logging",
+    ],
+)
+
+cc_binary(
+    name = "datanode",
+    srcs = ["datanode_main.cpp"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        "//cpp/pl/minidfs/datanode:block_reporter",
+        "//cpp/pl/minidfs/datanode:data_transfer_service_impl",
+        "//cpp/pl/minidfs/datanode:heartbeat_sender",
+        "//cpp/pl/minidfs/datanode:local_block_store",
+        "//cpp/pl/minidfs/datanode:replication_worker",
+        "//cpp/pl/minidfs/protocol:minidfs_cc_proto",
+        "@brpc",
+        "@fmt",
+        "@folly//folly/logging",
+        "@gflags",
     ],
 )
