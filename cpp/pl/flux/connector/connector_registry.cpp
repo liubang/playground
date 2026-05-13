@@ -19,26 +19,28 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
+#include "cpp/pl/flux/connector/connector_runtime.h"
 
 namespace pl::flux::connector {
 
-void ConnectorRegistry::Register(std::string source, ConnectorFactory factory) {
+void ConnectorRegistry::Register(std::string source, ConnectorRuntimeFactory factory) {
     factories_[std::move(source)] = std::move(factory);
 }
 
-absl::StatusOr<std::unique_ptr<TableSource>> ConnectorRegistry::Create(
+absl::StatusOr<std::unique_ptr<ConnectorRuntime>> ConnectorRegistry::CreateRuntime(
     const SourceSpec& spec) const {
     auto it = factories_.find(spec.source);
     if (it == factories_.end()) {
         return absl::InvalidArgumentError(
             absl::StrCat("no connector registered for source: ", spec.source));
     }
-    auto source = it->second(spec);
-    if (source == nullptr) {
-        return absl::InternalError(
-            absl::StrCat("connector factory returned null for source: ", spec.source));
+    auto runtime = it->second(spec);
+    if (runtime == nullptr || runtime->metadata == nullptr || runtime->split_manager == nullptr ||
+        runtime->page_source_provider == nullptr) {
+        return absl::InternalError(absl::StrCat(
+            "connector runtime factory returned incomplete runtime for source: ", spec.source));
     }
-    return source;
+    return runtime;
 }
 
 bool ConnectorRegistry::HasConnector(const std::string& source) const {

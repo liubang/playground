@@ -21,29 +21,52 @@
 #include "cpp/pl/flux/plan/plan_node.h"
 #include "cpp/pl/flux/runtime/runtime_value.h"
 #include <memory>
+#include <optional>
+#include <string>
+#include <vector>
 
 namespace pl::flux::execution {
+
+struct Page {
+    TableValue table;
+};
 
 class Operator {
 public:
     virtual ~Operator() = default;
-    virtual absl::StatusOr<Value> Next() = 0;
+    [[nodiscard]] virtual std::string name() const = 0;
+    virtual absl::StatusOr<std::optional<Page>> NextPage() = 0;
+};
+
+struct Pipeline {
+    std::string name;
+    std::vector<std::string> operators;
+    std::unique_ptr<Operator> root;
+};
+
+struct ExecutionTask {
+    std::vector<Pipeline> pipelines;
 };
 
 class PhysicalPlanner {
 public:
-    [[nodiscard]] absl::StatusOr<std::unique_ptr<Operator>> Plan(
+    [[nodiscard]] absl::StatusOr<ExecutionTask> Plan(
         const std::shared_ptr<plan::PlanNode>& logical_plan) const;
 };
 
 class Driver {
 public:
-    explicit Driver(std::unique_ptr<Operator> root);
+    explicit Driver(Pipeline pipeline);
 
-    absl::StatusOr<Value> Run();
+    [[nodiscard]] absl::StatusOr<Value> Run() const;
 
 private:
-    std::unique_ptr<Operator> root_;
+    Pipeline pipeline_;
+};
+
+class Scheduler {
+public:
+    [[nodiscard]] absl::StatusOr<Value> Run(ExecutionTask task) const;
 };
 
 class PhysicalExecutor {

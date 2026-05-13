@@ -35,6 +35,7 @@ cc_library(
         "sqlite_source.cpp",
     ],
     hdrs = [
+        "connector_runtime.h",
         "connector_registry.h",
         "memory_source.h",
         "mysql_source.h",
@@ -90,6 +91,23 @@ cc_test(
     name = "mysql_source_unit_test",
     srcs = [
         "tests/mysql_source_unit_test.cpp",
+    ],
+    copts = COPTS,
+    data = [
+        "//cpp/pl/flux/examples:cross_source_data",
+    ],
+    linkopts = LINKOPTS,
+    deps = [
+        ":connector",
+        "@abseil-cpp//absl/status",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "connector_runtime_conformance_unit_test",
+    srcs = [
+        "tests/connector_runtime_conformance_unit_test.cpp",
     ],
     copts = COPTS,
     data = [

@@ -17,6 +17,8 @@
 
 #include "cpp/pl/flux/optimizer/explain.h"
 
+#include "cpp/pl/flux/connector/connector_registry.h"
+#include "cpp/pl/flux/connector/connector_runtime.h"
 #include "cpp/pl/flux/optimizer/cbo.h"
 #include "cpp/pl/flux/optimizer/rbo.h"
 #include "cpp/pl/flux/plan/physical_plan.h"
@@ -132,17 +134,95 @@ void CollectLogicalPrefix(const plan::PlanNode& node, std::vector<std::string>* 
     }
 }
 
+const plan::SourceScanSpec* FindSourceScan(const plan::PlanNode& node) {
+    if (node.kind == plan::PlanNodeKind::SourceScan) {
+        return &node.source_scan();
+    }
+    for (const auto& input : node.inputs) {
+        if (input != nullptr) {
+            const auto* source = FindSourceScan(*input);
+            if (source != nullptr) {
+                return source;
+            }
+        }
+    }
+    return nullptr;
+}
+
+void ApplyConnectorRuntimeDetail(const std::shared_ptr<plan::PlanNode>& node,
+                                 plan::PhysicalPlanNode* physical) {
+    const auto* source = FindSourceScan(*node);
+    if (source == nullptr) {
+        return;
+    }
+    physical->source = source->source;
+    physical->driver = source->driver;
+    physical->table = source->table;
+    physical->connector_handle = source->source + ":" + source->driver + ":" + source->table;
+
+    auto optimized_or = DefaultRuleBasedOptimizer().Optimize(node);
+    if (!optimized_or.ok() || !optimized_or->pushdown_plan.has_value()) {
+        return;
+    }
+    const auto& pushdown = *optimized_or->pushdown_plan;
+    connector::SourceSpec spec{.source = source->source,
+                               .driver = source->driver,
+                               .dsn = source->dsn,
+                               .table = source->table};
+    auto runtime_or = connector::ConnectorRegistry::Global().CreateRuntime(spec);
+    if (!runtime_or.ok()) {
+        return;
+    }
+    auto handle_or = (*runtime_or)->metadata->GetTableHandle(spec);
+    if (!handle_or.ok()) {
+        return;
+    }
+    auto splits_or = (*runtime_or)->split_manager->GetSplits(*handle_or, pushdown.request);
+    if (splits_or.ok()) {
+        physical->split_count = splits_or->size();
+    }
+}
+
 std::shared_ptr<plan::PhysicalPlanNode> MakeConnectorPhysicalPlan(
     const std::shared_ptr<plan::PlanNode>& node) {
     auto physical = std::make_shared<plan::PhysicalPlanNode>();
     physical->kind = plan::PhysicalNodeKind::ConnectorScan;
     physical->name = "connector scan";
+    physical->operator_name = "ConnectorScanOperator";
     physical->source = PushdownSourceName(*node).value_or("source");
     physical->driver = physical->source;
     physical->lazy = true;
     CollectLogicalPrefix(*node, &physical->logical_prefix);
+    ApplyConnectorRuntimeDetail(node, physical.get());
     ApplyCboTraceForPlan(node, physical.get());
     return physical;
+}
+
+std::string OperatorNameForPlanNode(plan::PlanNodeKind kind) {
+    switch (kind) {
+        case plan::PlanNodeKind::Range:
+            return "RangeOperator";
+        case plan::PlanNodeKind::Filter:
+            return "FilterOperator";
+        case plan::PlanNodeKind::Project:
+            return "ProjectOperator";
+        case plan::PlanNodeKind::Rename:
+            return "RenameOperator";
+        case plan::PlanNodeKind::Limit:
+            return "LimitOperator";
+        case plan::PlanNodeKind::Sort:
+            return "SortOperator";
+        case plan::PlanNodeKind::Group:
+            return "GroupOperator";
+        case plan::PlanNodeKind::Aggregate:
+            return "AggregateOperator";
+        case plan::PlanNodeKind::Distinct:
+            return "DistinctOperator";
+        case plan::PlanNodeKind::Materialize:
+            return "MaterializeOperator";
+        default:
+            return "MemoryOperator";
+    }
 }
 
 std::shared_ptr<plan::PhysicalPlanNode> BuildPhysicalPlan(
@@ -162,6 +242,7 @@ std::shared_ptr<plan::PhysicalPlanNode> BuildPhysicalPlan(
                          ? plan::PhysicalNodeKind::Materialize
                          : plan::PhysicalNodeKind::MemoryOperator;
     physical->name = plan::PlanNodeKindName(node->kind);
+    physical->operator_name = OperatorNameForPlanNode(node->kind);
     physical->lazy = false;
     ApplyCboTraceForPlan(node, physical.get());
     if (node->kind != plan::PlanNodeKind::Materialize) {
@@ -172,6 +253,7 @@ std::shared_ptr<plan::PhysicalPlanNode> BuildPhysicalPlan(
     }
     if (physical->inputs.empty() && node->kind == plan::PlanNodeKind::SourceScan) {
         physical->kind = plan::PhysicalNodeKind::MemoryScan;
+        physical->operator_name = "MemoryScanOperator";
         physical->source = node->source_scan().source;
         physical->driver = node->source_scan().driver;
     }
@@ -186,6 +268,7 @@ std::shared_ptr<plan::PhysicalPlanNode> BuildOutputPhysicalPlan(
     auto output = std::make_shared<plan::PhysicalPlanNode>();
     output->kind = plan::PhysicalNodeKind::OutputSink;
     output->name = "output";
+    output->operator_name = "OutputOperator";
     output->lazy = false;
     output->inputs.push_back(BuildPhysicalPlan(node));
     return output;

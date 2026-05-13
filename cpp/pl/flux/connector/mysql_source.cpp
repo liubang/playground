@@ -28,12 +28,15 @@
 #include <boost/mysql/column_type.hpp>
 #include <boost/mysql/connect_params.hpp>
 #include <boost/mysql/error_with_diagnostics.hpp>
+#include <boost/mysql/execution_state.hpp>
 #include <boost/mysql/field_view.hpp>
 #include <boost/mysql/format_sql.hpp>
 #include <boost/mysql/metadata_collection_view.hpp>
 #include <boost/mysql/metadata_mode.hpp>
 #include <boost/mysql/results.hpp>
+#include <boost/mysql/rows_view.hpp>
 #include <boost/mysql/ssl_mode.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <iomanip>
@@ -42,7 +45,6 @@
 #include <sstream>
 #include <string>
 #include <string_view>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -536,6 +538,45 @@ absl::StatusOr<TableSchema> schema_from_result(const mysql::results& result) {
     return schema;
 }
 
+std::vector<std::string> mysql_column_names(mysql::metadata_collection_view meta) {
+    std::vector<std::string> column_names;
+    column_names.reserve(meta.size());
+    for (const auto& column : meta) {
+        const auto name = column.column_name();
+        column_names.emplace_back(name.data(), name.size());
+    }
+    return column_names;
+}
+
+std::shared_ptr<ObjectValue> row_from_mysql_view(mysql::row_view row,
+                                                 mysql::metadata_collection_view meta,
+                                                 const std::vector<std::string>& column_names) {
+    std::vector<std::pair<std::string, Value>> properties;
+    properties.reserve(column_names.size());
+    for (size_t i = 0; i < column_names.size(); ++i) {
+        properties.emplace_back(column_names[i], value_from_mysql_field(row.at(i), meta[i]));
+    }
+    return std::make_shared<ObjectValue>(std::move(properties));
+}
+
+std::shared_ptr<ObjectValue> mysql_row_with_group(const std::shared_ptr<ObjectValue>& row,
+                                                  const std::vector<std::string>& group_by) {
+    if (row == nullptr) {
+        return nullptr;
+    }
+    std::vector<std::pair<std::string, Value>> group_props;
+    group_props.reserve(group_by.size());
+    for (const auto& column : group_by) {
+        const Value* value = row->lookup(column);
+        if (value != nullptr) {
+            group_props.emplace_back(column, *value);
+        }
+    }
+    std::vector<std::pair<std::string, Value>> props = row->properties;
+    props.emplace_back("_group", Value::object(std::move(group_props)));
+    return std::make_shared<ObjectValue>(std::move(props));
+}
+
 } // namespace
 
 absl::StatusOr<MySQLConnectionConfig> ParseMySQLDsn(const std::string& dsn) {
@@ -608,7 +649,8 @@ absl::StatusOr<TableStatistics> MySQLSource::Statistics() const {
     if (schema_or.ok()) {
         statistics.columns.reserve(schema_or->columns.size());
         for (const auto& column : schema_or->columns) {
-            statistics.columns.push_back({.name = column.name});
+            statistics.columns.push_back(
+                {.name = column.name, .distinct_values = {}, .null_fraction = {}});
         }
     }
     return statistics;
@@ -640,38 +682,18 @@ absl::StatusOr<Value> MySQLSource::Scan(const ScanRequest& request) {
     }
 
     const mysql::metadata_collection_view meta = result_or->meta();
-    std::vector<std::string> column_names;
-    column_names.reserve(meta.size());
-    for (const auto& column : meta) {
-        const auto name = column.column_name();
-        column_names.emplace_back(name.data(), name.size());
-    }
+    std::vector<std::string> column_names = mysql_column_names(meta);
 
     std::vector<std::shared_ptr<ObjectValue>> rows;
     for (const auto row : result_or->rows()) {
-        std::vector<std::pair<std::string, Value>> properties;
-        properties.reserve(column_names.size());
-        for (size_t i = 0; i < column_names.size(); ++i) {
-            properties.emplace_back(column_names[i], value_from_mysql_field(row.at(i), meta[i]));
-        }
-        rows.push_back(std::make_shared<ObjectValue>(std::move(properties)));
+        rows.push_back(row_from_mysql_view(row, meta, column_names));
     }
 
     if (request.aggregate.has_value()) {
         std::vector<TableChunk> chunks;
         chunks.reserve(rows.size());
         for (auto& row : rows) {
-            std::vector<std::pair<std::string, Value>> group_props;
-            group_props.reserve(request.group_by.size());
-            for (const auto& column : request.group_by) {
-                const Value* value = row == nullptr ? nullptr : row->lookup(column);
-                if (value != nullptr) {
-                    group_props.emplace_back(column, *value);
-                }
-            }
-            std::vector<std::pair<std::string, Value>> props = row->properties;
-            props.emplace_back("_group", Value::object(std::move(group_props)));
-            row = std::make_shared<ObjectValue>(std::move(props));
+            row = mysql_row_with_group(row, request.group_by);
             TableChunk chunk;
             chunk.rows.push_back(row);
             chunks.push_back(std::move(chunk));
@@ -680,6 +702,178 @@ absl::StatusOr<Value> MySQLSource::Scan(const ScanRequest& request) {
     }
 
     return Value::table("mysql", std::move(rows));
+}
+
+MySQLConnectorMetadata::MySQLConnectorMetadata(SourceSpec spec) : spec_(std::move(spec)) {}
+
+absl::StatusOr<TableHandle> MySQLConnectorMetadata::GetTableHandle(const SourceSpec& spec) const {
+    if (spec.source != "mysql" && spec.driver != "mysql") {
+        return absl::InvalidArgumentError(
+            absl::StrCat("mysql metadata cannot open source: ", spec.source));
+    }
+    if (spec.dsn.empty()) {
+        return absl::InvalidArgumentError("mysql metadata requires dsn");
+    }
+    if (spec.table.empty()) {
+        return absl::InvalidArgumentError("mysql metadata requires table");
+    }
+    return TableHandle{
+        .source = spec.source,
+        .driver = spec.driver,
+        .dsn = spec.dsn,
+        .table = spec.table,
+    };
+}
+
+absl::StatusOr<TableSchema> MySQLConnectorMetadata::Schema(const TableHandle& table) const {
+    return MySQLSource(table.dsn, table.table).Schema();
+}
+
+SourceCapabilities MySQLConnectorMetadata::Capabilities(const TableHandle& table) const {
+    return MySQLSource(table.dsn, table.table).Capabilities();
+}
+
+absl::StatusOr<TableStatistics> MySQLConnectorMetadata::Statistics(const TableHandle& table) const {
+    return MySQLSource(table.dsn, table.table).Statistics();
+}
+
+MySQLPageSourceProvider::MySQLPageSourceProvider(size_t rows_per_page)
+    : rows_per_page_(std::max<size_t>(1, rows_per_page)) {}
+
+struct MySQLPageSource::Impl {
+    asio::io_context ctx;
+    mysql::any_connection conn;
+    mysql::execution_state state;
+    ScanRequest request;
+    std::vector<std::string> column_names;
+    bool emitted_empty = false;
+    bool emitted_any_row = false;
+
+    Impl() : conn(ctx) {}
+};
+
+MySQLPageSource::MySQLPageSource(std::string dsn,
+                                 std::string table,
+                                 ScanRequest request,
+                                 size_t rows_per_page)
+    : impl_(std::make_unique<Impl>()),
+      dsn_(std::move(dsn)),
+      table_(std::move(table)),
+      rows_per_page_(std::max<size_t>(1, rows_per_page)) {
+    impl_->request = std::move(request);
+}
+
+absl::Status MySQLPageSource::Initialize() {
+    auto conn_or = open_connection(&impl_->ctx, dsn_);
+    if (!conn_or.ok()) {
+        return conn_or.status();
+    }
+    impl_->conn = std::move(*conn_or);
+    auto schema_or = MySQLSource(dsn_, table_).Schema();
+    if (!schema_or.ok()) {
+        return schema_or.status();
+    }
+    const auto opts_or = impl_->conn.format_opts();
+    if (opts_or.has_error()) {
+        return absl::InvalidArgumentError(
+            absl::StrCat("mysql format options failed: ", opts_or.error().message()));
+    }
+    MySqlDialect dialect(opts_or.value());
+    auto sql_or = BuildScanSql(absl::StrCat("SELECT * FROM ", quote_table_identifier(table_)),
+                               impl_->request, *schema_or, dialect);
+    if (!sql_or.ok()) {
+        return sql_or.status();
+    }
+    try {
+        impl_->conn.start_execution(*sql_or, impl_->state);
+        impl_->column_names = mysql_column_names(impl_->state.meta());
+    } catch (const mysql::error_with_diagnostics& err) {
+        return absl::InvalidArgumentError(
+            absl::StrCat("mysql scan start failed: ", mysql_error_message(err)));
+    } catch (const std::exception& err) {
+        return absl::InvalidArgumentError(absl::StrCat("mysql scan start failed: ", err.what()));
+    }
+    return absl::OkStatus();
+}
+
+absl::StatusOr<std::optional<ConnectorPage>> MySQLPageSource::NextPage() {
+    if (impl_ == nullptr || impl_->state.should_start_op()) {
+        return absl::InvalidArgumentError("mysql page source is not initialized");
+    }
+    if (impl_->state.complete()) {
+        if (!impl_->emitted_empty && !impl_->emitted_any_row) {
+            impl_->emitted_empty = true;
+            return ConnectorPage{.table = Value::table("mysql", {}).as_table()};
+        }
+        return std::nullopt;
+    }
+
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve(rows_per_page_);
+    try {
+        while (rows.size() < rows_per_page_ && impl_->state.should_read_rows()) {
+            mysql::rows_view batch = impl_->conn.read_some_rows(impl_->state);
+            if (batch.empty()) {
+                if (impl_->state.complete()) {
+                    break;
+                }
+                return absl::InternalError("mysql scan read returned an empty batch before EOF");
+            }
+            const auto meta = impl_->state.meta();
+            for (const auto row : batch) {
+                auto object = row_from_mysql_view(row, meta, impl_->column_names);
+                if (impl_->request.aggregate.has_value()) {
+                    object = mysql_row_with_group(object, impl_->request.group_by);
+                }
+                rows.push_back(std::move(object));
+            }
+        }
+    } catch (const mysql::error_with_diagnostics& err) {
+        return absl::InvalidArgumentError(
+            absl::StrCat("mysql scan read failed: ", mysql_error_message(err)));
+    } catch (const std::exception& err) {
+        return absl::InvalidArgumentError(absl::StrCat("mysql scan read failed: ", err.what()));
+    }
+
+    if (rows.empty()) {
+        if (!impl_->emitted_empty && !impl_->emitted_any_row) {
+            impl_->emitted_empty = true;
+            return ConnectorPage{.table = Value::table("mysql", {}).as_table()};
+        }
+        return std::nullopt;
+    }
+
+    impl_->emitted_any_row = true;
+    if (impl_->request.aggregate.has_value()) {
+        std::vector<TableChunk> chunks;
+        chunks.reserve(rows.size());
+        for (auto& row : rows) {
+            TableChunk chunk;
+            chunk.rows.push_back(std::move(row));
+            chunks.push_back(std::move(chunk));
+        }
+        return ConnectorPage{.table = Value::table_stream("mysql", std::move(chunks)).as_table()};
+    }
+    return ConnectorPage{.table = Value::table("mysql", std::move(rows)).as_table()};
+}
+
+absl::StatusOr<std::unique_ptr<ConnectorPageSource>> MySQLPageSourceProvider::CreatePageSource(
+    const ConnectorSplit& split) const {
+    auto page_source = std::make_unique<MySQLPageSource>(split.table.dsn, split.table.table,
+                                                         split.request, rows_per_page_);
+    auto status = page_source->Initialize();
+    if (!status.ok()) {
+        return status;
+    }
+    return page_source;
+}
+
+std::unique_ptr<ConnectorRuntime> MakeMySQLConnectorRuntime(const SourceSpec& spec) {
+    auto runtime = std::make_unique<ConnectorRuntime>();
+    runtime->metadata = std::make_unique<MySQLConnectorMetadata>(spec);
+    runtime->split_manager = std::make_unique<SingleSplitManager>();
+    runtime->page_source_provider = std::make_unique<MySQLPageSourceProvider>();
+    return runtime;
 }
 
 } // namespace pl::flux::connector

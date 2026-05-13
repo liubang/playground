@@ -460,7 +460,12 @@ TEST(RuntimeExecTest, ExplainFormatsPhysicalPlan) {
     ASSERT_EQ(Value::Type::String, plan_or->type());
     EXPECT_NE(std::string::npos, plan_or->as_string().find("PhysicalPlan\n"));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("OutputSink [eager](name=\"output\""));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("operator=\"OutputOperator\""));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("ConnectorScan [lazy]"));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("operator=\"ConnectorScanOperator\""));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("table=\"cpu\""));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("handle=\"sqlite:sqlite:cpu\""));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("splits=1"));
     EXPECT_NE(std::string::npos,
               plan_or->as_string().find("logical_prefix=[Limit, Filter, SourceScan]"));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("rbo=[PushLimitIntoConnectorScan, "
@@ -578,6 +583,7 @@ TEST(RuntimeExecTest, PhysicalExecutionFallsBackToMemoryOperatorAfterConnectorSc
     EXPECT_NE(std::string::npos, plan_or->as_string().find("OutputSink [eager](name=\"output\""));
     EXPECT_NE(std::string::npos,
               plan_or->as_string().find("MemoryOperator [eager](name=\"Group\""));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("operator=\"GroupOperator\""));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("ConnectorScan [lazy]"));
     EXPECT_EQ(std::string::npos, plan_or->as_string().find("rbo=[PushAggregateIntoConnectorScan]"));
 }
@@ -604,14 +610,68 @@ TEST(RuntimeExecTest, PhysicalExecutorRunsMemorySuffixAfterConnectorScan) {
     ASSERT_EQ(Value::Type::Table, result_or->type());
     const auto& table = result_or->as_table();
     EXPECT_TRUE(table.materialized);
-    ASSERT_EQ(2, table.rows.size());
+    ASSERT_EQ(1, table.rows.size());
     ASSERT_NE(nullptr, table.rows[0]);
     EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
     EXPECT_EQ("93.25", table.rows[0]->lookup("value")->string());
     EXPECT_EQ(nullptr, table.rows[0]->lookup("usage"));
-    ASSERT_NE(nullptr, table.rows[1]);
-    EXPECT_EQ("\"edge-2\"", table.rows[1]->lookup("host")->string());
-    EXPECT_EQ("88", table.rows[1]->lookup("value")->string());
+}
+
+TEST(RuntimeExecTest, PhysicalExecutorRunsConnectorScanThroughEmptyPageSource) {
+    auto plan = plan::MakeLimit(SqliteCpuScanPlan(), 0, 0);
+
+    auto result_or = execution::PhysicalExecutor().Execute(plan);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_EQ(Value::Type::Table, result_or->type());
+    const auto& table = result_or->as_table();
+    EXPECT_TRUE(table.materialized);
+    EXPECT_TRUE(table.rows.empty());
+}
+
+TEST(RuntimeExecTest, PhysicalPlannerBuildsOperatorPipeline) {
+    std::vector<plan::PredicateSpec> predicates = {
+        {.op = plan::PredicateOp::Eq,
+         .column = "region",
+         .literal = {.kind = plan::PredicateLiteralKind::String, .string_value = "west"}},
+    };
+    auto plan = plan::MakeLimit(
+        plan::MakeFilter(plan::MakeGroup(SqliteCpuScanPlan(), {"host"}), std::move(predicates)), 1,
+        0);
+
+    auto task_or = execution::PhysicalPlanner().Plan(plan);
+
+    ASSERT_TRUE(task_or.ok()) << task_or.status();
+    ASSERT_EQ(1, task_or->pipelines.size());
+    EXPECT_EQ("main", task_or->pipelines[0].name);
+    EXPECT_EQ((std::vector<std::string>{
+                  "ConnectorScanOperator",
+                  "GroupOperator",
+                  "FilterOperator",
+                  "LimitOperator",
+                  "OutputOperator",
+              }),
+              task_or->pipelines[0].operators);
+}
+
+TEST(RuntimeExecTest, PhysicalPlannerPreservesMaterializeOperatorInPipeline) {
+    auto plan = plan::MakeAggregate(
+        plan::MakeMaterializeBarrier(plan::MakeGroup(SqliteCpuScanPlan(), {"host"}),
+                                     "unsupported lazy builtin", "test"),
+        plan::AggregateFunction::Mean, "usage");
+
+    auto task_or = execution::PhysicalPlanner().Plan(plan);
+
+    ASSERT_TRUE(task_or.ok()) << task_or.status();
+    ASSERT_EQ(1, task_or->pipelines.size());
+    EXPECT_EQ((std::vector<std::string>{
+                  "ConnectorScanOperator",
+                  "GroupOperator",
+                  "MaterializeOperator",
+                  "AggregateOperator",
+                  "OutputOperator",
+              }),
+              task_or->pipelines[0].operators);
 }
 
 TEST(RuntimeExecTest, PhysicalExecutorRunsMemoryAggregateAcrossMaterializeBarrier) {

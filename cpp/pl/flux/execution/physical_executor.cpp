@@ -20,11 +20,14 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/connector/connector_registry.h"
+#include "cpp/pl/flux/connector/connector_runtime.h"
 #include "cpp/pl/flux/optimizer/cbo.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_aggregate_helpers.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_table_helpers.h"
 #include <algorithm>
 #include <cstddef>
+#include <optional>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -96,20 +99,50 @@ Value table_with_plan(Value value, const std::shared_ptr<plan::PlanNode>& plan) 
     return value;
 }
 
-absl::StatusOr<Value> execute_pushdown_plan(const optimizer::PushdownPlan& plan) {
+connector::SourceSpec source_spec_from_plan(const optimizer::PushdownPlan& plan) {
+    return connector::SourceSpec{.source = plan.source->source,
+                                 .driver = plan.source->driver,
+                                 .dsn = plan.source->dsn,
+                                 .table = plan.source->table};
+}
+
+absl::Status validate_executable_pushdown_plan(const optimizer::PushdownPlan& plan) {
     if (plan.source == nullptr) {
         return absl::InvalidArgumentError("pushdown plan has no source");
     }
     if (!optimizer::CanExecutePushdownPlan(plan)) {
         return absl::InvalidArgumentError("group without aggregate is not executable pushdown");
     }
-    connector::SourceSpec spec{plan.source->source, plan.source->driver, plan.source->dsn,
-                               plan.source->table};
-    auto source_or = connector::ConnectorRegistry::Global().Create(spec);
-    if (!source_or.ok()) {
-        return source_or.status();
+    return absl::OkStatus();
+}
+
+absl::StatusOr<std::unique_ptr<connector::ConnectorRuntime>> create_connector_runtime(
+    const optimizer::PushdownPlan& plan) {
+    auto status = validate_executable_pushdown_plan(plan);
+    if (!status.ok()) {
+        return status;
     }
-    return (*source_or)->Scan(plan.request);
+    return connector::ConnectorRegistry::Global().CreateRuntime(source_spec_from_plan(plan));
+}
+
+absl::StatusOr<std::vector<connector::ConnectorSplit>> create_connector_splits(
+    connector::ConnectorRuntime* runtime, const optimizer::PushdownPlan& plan) {
+    if (runtime == nullptr) {
+        return absl::InvalidArgumentError("connector runtime is missing");
+    }
+    const connector::SourceSpec spec = source_spec_from_plan(plan);
+    auto handle_or = runtime->metadata->GetTableHandle(spec);
+    if (!handle_or.ok()) {
+        return handle_or.status();
+    }
+    auto splits_or = runtime->split_manager->GetSplits(*handle_or, plan.request);
+    if (!splits_or.ok()) {
+        return splits_or.status();
+    }
+    if (splits_or->empty()) {
+        return absl::InvalidArgumentError("connector split manager returned no splits");
+    }
+    return *splits_or;
 }
 
 absl::StatusOr<Value> apply_range(const Value& input, const std::shared_ptr<plan::PlanNode>& plan) {
@@ -216,27 +249,6 @@ absl::StatusOr<Value> apply_rename(const Value& input,
                                    value);
             }
             next.rows.push_back(std::make_shared<ObjectValue>(std::move(props)));
-        }
-        chunks.push_back(std::move(next));
-    }
-    return table_with_plan(table_with_chunks_like(table, std::move(chunks)), plan);
-}
-
-absl::StatusOr<Value> apply_limit(const Value& input, const std::shared_ptr<plan::PlanNode>& plan) {
-    const auto& table = input.as_table();
-    const size_t begin = static_cast<size_t>(std::max<int64_t>(0, plan->limit().offset));
-    const size_t count = static_cast<size_t>(std::max<int64_t>(0, plan->limit().n));
-    std::vector<TableChunk> chunks;
-    chunks.reserve(table.table_count());
-    for (const auto& chunk : table.tables) {
-        TableChunk next;
-        next.group_key = chunk.group_key;
-        next.columns = chunk.columns;
-        if (begin < chunk.rows.size()) {
-            const size_t end = std::min(chunk.rows.size(), begin + count);
-            next.rows.insert(next.rows.end(),
-                             chunk.rows.begin() + static_cast<std::ptrdiff_t>(begin),
-                             chunk.rows.begin() + static_cast<std::ptrdiff_t>(end));
         }
         chunks.push_back(std::move(next));
     }
@@ -365,68 +377,274 @@ absl::StatusOr<Value> apply_aggregate(const Value& input,
     return table_with_plan(table_with_chunks_like(table, std::move(chunks)), plan);
 }
 
+Value value_from_page(const Page& page) {
+    Value value = Value::table_stream(page.table.bucket, page.table.tables, page.table.range_start,
+                                      page.table.range_stop, page.table.result_name);
+    value.as_table_mut().plan = page.table.plan;
+    value.as_table_mut().materialized = page.table.materialized;
+    return value;
+}
+
+Page page_from_value(const Value& value) { return Page{.table = value.as_table()}; }
+
+absl::StatusOr<std::optional<Page>> next_input_page(Operator* input) {
+    if (input == nullptr) {
+        return absl::InvalidArgumentError("operator has no input");
+    }
+    return input->NextPage();
+}
+
+absl::StatusOr<Value> collect_input_value(Operator* input) {
+    if (input == nullptr) {
+        return absl::InvalidArgumentError("operator has no input");
+    }
+    std::optional<TableValue> output;
+    while (true) {
+        auto page_or = input->NextPage();
+        if (!page_or.ok()) {
+            return page_or.status();
+        }
+        if (!page_or->has_value()) {
+            break;
+        }
+        if (!output.has_value()) {
+            output = std::move(page_or->value().table);
+            continue;
+        }
+        output->tables.insert(output->tables.end(), page_or->value().table.tables.begin(),
+                              page_or->value().table.tables.end());
+        output->rows.insert(output->rows.end(), page_or->value().table.rows.begin(),
+                            page_or->value().table.rows.end());
+    }
+    if (!output.has_value()) {
+        return Value::table_stream("", {});
+    }
+    Value value = Value::table_stream(output->bucket, output->tables, output->range_start,
+                                      output->range_stop, output->result_name);
+    value.as_table_mut().plan = output->plan;
+    value.as_table_mut().materialized = output->materialized;
+    return value;
+}
+
 class ConnectorScanOperator final : public Operator {
 public:
     explicit ConnectorScanOperator(optimizer::PushdownPlan plan) : plan_(std::move(plan)) {}
 
-    absl::StatusOr<Value> Next() override { return execute_pushdown_plan(plan_); }
+    [[nodiscard]] std::string name() const override { return "ConnectorScanOperator"; }
+
+    absl::StatusOr<std::optional<Page>> NextPage() override {
+        if (!initialized_) {
+            auto status = Initialize();
+            if (!status.ok()) {
+                return status;
+            }
+        }
+
+        while (true) {
+            if (page_source_ == nullptr) {
+                if (next_split_ >= splits_.size()) {
+                    return std::nullopt;
+                }
+                auto page_source_or =
+                    runtime_->page_source_provider->CreatePageSource(splits_[next_split_]);
+                if (!page_source_or.ok()) {
+                    return page_source_or.status();
+                }
+                page_source_ = std::move(*page_source_or);
+                ++next_split_;
+            }
+
+            auto page_or = page_source_->NextPage();
+            if (!page_or.ok()) {
+                return page_or.status();
+            }
+            if (!page_or->has_value()) {
+                page_source_.reset();
+                continue;
+            }
+            return Page{.table = page_or->value().table};
+        }
+    }
 
 private:
+    absl::Status Initialize() {
+        auto runtime_or = create_connector_runtime(plan_);
+        if (!runtime_or.ok()) {
+            return runtime_or.status();
+        }
+        runtime_ = std::move(*runtime_or);
+        auto splits_or = create_connector_splits(runtime_.get(), plan_);
+        if (!splits_or.ok()) {
+            return splits_or.status();
+        }
+        splits_ = std::move(*splits_or);
+        initialized_ = true;
+        return absl::OkStatus();
+    }
+
     optimizer::PushdownPlan plan_;
+    std::unique_ptr<connector::ConnectorRuntime> runtime_;
+    std::vector<connector::ConnectorSplit> splits_;
+    std::unique_ptr<connector::ConnectorPageSource> page_source_;
+    size_t next_split_ = 0;
+    bool initialized_ = false;
 };
 
-class MaterializeOperator final : public Operator {
+class StreamingUnaryOperator : public Operator {
 public:
-    MaterializeOperator(std::shared_ptr<plan::PlanNode> plan, std::unique_ptr<Operator> input)
+    StreamingUnaryOperator(std::shared_ptr<plan::PlanNode> plan, std::unique_ptr<Operator> input)
         : plan_(std::move(plan)), input_(std::move(input)) {}
 
-    absl::StatusOr<Value> Next() override {
-        auto input_or = input_->Next();
+    absl::StatusOr<std::optional<Page>> NextPage() override {
+        auto input_or = next_input_page(input_.get());
         if (!input_or.ok()) {
             return input_or.status();
         }
-        input_or->as_table_mut().plan = plan_;
-        input_or->as_table_mut().materialized = true;
-        return *input_or;
+        if (!input_or->has_value()) {
+            return std::nullopt;
+        }
+        auto value_or = Apply(value_from_page(**input_or));
+        if (!value_or.ok()) {
+            return value_or.status();
+        }
+        return page_from_value(*value_or);
     }
+
+protected:
+    [[nodiscard]] const std::shared_ptr<plan::PlanNode>& plan() const { return plan_; }
+    [[nodiscard]] Operator* input() const { return input_.get(); }
+    virtual absl::StatusOr<Value> Apply(const Value& input) const = 0;
 
 private:
     std::shared_ptr<plan::PlanNode> plan_;
     std::unique_ptr<Operator> input_;
 };
 
-class MemoryUnaryOperator final : public Operator {
+class BlockingUnaryOperator : public Operator {
 public:
-    MemoryUnaryOperator(std::shared_ptr<plan::PlanNode> plan, std::unique_ptr<Operator> input)
+    BlockingUnaryOperator(std::shared_ptr<plan::PlanNode> plan, std::unique_ptr<Operator> input)
         : plan_(std::move(plan)), input_(std::move(input)) {}
 
-    absl::StatusOr<Value> Next() override {
-        auto input_or = input_->Next();
+    absl::StatusOr<std::optional<Page>> NextPage() override {
+        if (emitted_) {
+            return std::nullopt;
+        }
+        emitted_ = true;
+        auto input_or = collect_input_value(input_.get());
         if (!input_or.ok()) {
             return input_or.status();
         }
-        switch (plan_->kind) {
-            case plan::PlanNodeKind::Range:
-                return apply_range(*input_or, plan_);
-            case plan::PlanNodeKind::Filter:
-                return apply_filter(*input_or, plan_);
-            case plan::PlanNodeKind::Project:
-                return apply_project(*input_or, plan_);
-            case plan::PlanNodeKind::Rename:
-                return apply_rename(*input_or, plan_);
-            case plan::PlanNodeKind::Limit:
-                return apply_limit(*input_or, plan_);
-            case plan::PlanNodeKind::Sort:
-                return apply_sort(*input_or, plan_);
-            case plan::PlanNodeKind::Group:
-                return apply_group(*input_or, plan_);
-            case plan::PlanNodeKind::Distinct:
-                return apply_distinct(*input_or, plan_);
-            case plan::PlanNodeKind::Aggregate:
-                return apply_aggregate(*input_or, plan_);
-            default: {
-                return absl::InvalidArgumentError(absl::StrCat(
-                    "unsupported physical operator: ", plan::PlanNodeKindName(plan_->kind)));
+        auto value_or = Apply(*input_or);
+        if (!value_or.ok()) {
+            return value_or.status();
+        }
+        return page_from_value(*value_or);
+    }
+
+protected:
+    [[nodiscard]] const std::shared_ptr<plan::PlanNode>& plan() const { return plan_; }
+    virtual absl::StatusOr<Value> Apply(const Value& input) const = 0;
+
+private:
+    std::shared_ptr<plan::PlanNode> plan_;
+    std::unique_ptr<Operator> input_;
+    bool emitted_ = false;
+};
+
+class RangeOperator final : public StreamingUnaryOperator {
+public:
+    using StreamingUnaryOperator::StreamingUnaryOperator;
+    [[nodiscard]] std::string name() const override { return "RangeOperator"; }
+
+private:
+    absl::StatusOr<Value> Apply(const Value& input) const override {
+        return apply_range(input, plan());
+    }
+};
+
+class FilterOperator final : public StreamingUnaryOperator {
+public:
+    using StreamingUnaryOperator::StreamingUnaryOperator;
+    [[nodiscard]] std::string name() const override { return "FilterOperator"; }
+
+private:
+    absl::StatusOr<Value> Apply(const Value& input) const override {
+        return apply_filter(input, plan());
+    }
+};
+
+class ProjectOperator final : public StreamingUnaryOperator {
+public:
+    using StreamingUnaryOperator::StreamingUnaryOperator;
+    [[nodiscard]] std::string name() const override { return "ProjectOperator"; }
+
+private:
+    absl::StatusOr<Value> Apply(const Value& input) const override {
+        return apply_project(input, plan());
+    }
+};
+
+class RenameOperator final : public StreamingUnaryOperator {
+public:
+    using StreamingUnaryOperator::StreamingUnaryOperator;
+    [[nodiscard]] std::string name() const override { return "RenameOperator"; }
+
+private:
+    absl::StatusOr<Value> Apply(const Value& input) const override {
+        return apply_rename(input, plan());
+    }
+};
+
+class LimitOperator final : public Operator {
+public:
+    LimitOperator(std::shared_ptr<plan::PlanNode> plan, std::unique_ptr<Operator> input)
+        : plan_(std::move(plan)),
+          input_(std::move(input)),
+          remaining_offset_(std::max<int64_t>(0, plan_->limit().offset)),
+          remaining_limit_(std::max<int64_t>(0, plan_->limit().n)) {}
+    [[nodiscard]] std::string name() const override { return "LimitOperator"; }
+
+    absl::StatusOr<std::optional<Page>> NextPage() override {
+        if (remaining_limit_ == 0) {
+            return std::nullopt;
+        }
+        while (true) {
+            auto input_or = next_input_page(input_.get());
+            if (!input_or.ok()) {
+                return input_or.status();
+            }
+            if (!input_or->has_value()) {
+                return std::nullopt;
+            }
+
+            TableValue table = std::move(input_or->value().table);
+            std::vector<TableChunk> chunks;
+            for (const auto& source : table.tables) {
+                TableChunk chunk;
+                chunk.group_key = source.group_key;
+                chunk.columns = source.columns;
+                for (const auto& row : source.rows) {
+                    if (remaining_offset_ > 0) {
+                        --remaining_offset_;
+                        continue;
+                    }
+                    if (remaining_limit_ == 0) {
+                        break;
+                    }
+                    chunk.rows.push_back(row);
+                    --remaining_limit_;
+                }
+                chunks.push_back(std::move(chunk));
+                if (remaining_limit_ == 0) {
+                    break;
+                }
+            }
+            Value value = Value::table_stream(table.bucket, std::move(chunks), table.range_start,
+                                              table.range_stop, table.result_name);
+            value.as_table_mut().plan = plan_;
+            value.as_table_mut().materialized = table.materialized;
+            if (!value.as_table().rows.empty() || remaining_limit_ == 0) {
+                return page_from_value(value);
             }
         }
     }
@@ -434,29 +652,96 @@ public:
 private:
     std::shared_ptr<plan::PlanNode> plan_;
     std::unique_ptr<Operator> input_;
+    int64_t remaining_offset_ = 0;
+    int64_t remaining_limit_ = 0;
+};
+
+class SortOperator final : public BlockingUnaryOperator {
+public:
+    using BlockingUnaryOperator::BlockingUnaryOperator;
+    [[nodiscard]] std::string name() const override { return "SortOperator"; }
+
+private:
+    absl::StatusOr<Value> Apply(const Value& input) const override {
+        return apply_sort(input, plan());
+    }
+};
+
+class GroupOperator final : public BlockingUnaryOperator {
+public:
+    using BlockingUnaryOperator::BlockingUnaryOperator;
+    [[nodiscard]] std::string name() const override { return "GroupOperator"; }
+
+private:
+    absl::StatusOr<Value> Apply(const Value& input) const override {
+        return apply_group(input, plan());
+    }
+};
+
+class DistinctOperator final : public BlockingUnaryOperator {
+public:
+    using BlockingUnaryOperator::BlockingUnaryOperator;
+    [[nodiscard]] std::string name() const override { return "DistinctOperator"; }
+
+private:
+    absl::StatusOr<Value> Apply(const Value& input) const override {
+        return apply_distinct(input, plan());
+    }
+};
+
+class AggregateOperator final : public BlockingUnaryOperator {
+public:
+    using BlockingUnaryOperator::BlockingUnaryOperator;
+    [[nodiscard]] std::string name() const override { return "AggregateOperator"; }
+
+private:
+    absl::StatusOr<Value> Apply(const Value& input) const override {
+        return apply_aggregate(input, plan());
+    }
+};
+
+class MaterializeOperator final : public StreamingUnaryOperator {
+public:
+    using StreamingUnaryOperator::StreamingUnaryOperator;
+    [[nodiscard]] std::string name() const override { return "MaterializeOperator"; }
+
+private:
+    absl::StatusOr<Value> Apply(const Value& input) const override {
+        Value output = input;
+        output.as_table_mut().plan = plan();
+        output.as_table_mut().materialized = true;
+        return output;
+    }
 };
 
 class OutputOperator final : public Operator {
 public:
     explicit OutputOperator(std::unique_ptr<Operator> input) : input_(std::move(input)) {}
 
-    absl::StatusOr<Value> Next() override {
-        auto value_or = input_->Next();
-        if (!value_or.ok()) {
-            return value_or.status();
+    [[nodiscard]] std::string name() const override { return "OutputOperator"; }
+
+    absl::StatusOr<std::optional<Page>> NextPage() override {
+        auto input_or = next_input_page(input_.get());
+        if (!input_or.ok()) {
+            return input_or.status();
         }
-        if (value_or->type() == Value::Type::Table) {
-            value_or->as_table_mut().materialized = true;
+        if (!input_or->has_value()) {
+            return std::nullopt;
         }
-        return *value_or;
+        input_or->value().table.materialized = true;
+        return input_or;
     }
 
 private:
     std::unique_ptr<Operator> input_;
 };
 
-absl::StatusOr<std::unique_ptr<Operator>> BuildOperator(
-    const std::shared_ptr<plan::PlanNode>& logical_plan) {
+struct PlannedOperator {
+    std::unique_ptr<Operator> root;
+    std::vector<std::string> operators;
+};
+
+absl::StatusOr<PlannedOperator> BuildOperator(const std::shared_ptr<plan::PlanNode>& logical_plan) {
     if (logical_plan == nullptr) {
         return absl::InvalidArgumentError("missing physical plan root");
     }
@@ -467,42 +752,140 @@ absl::StatusOr<std::unique_ptr<Operator>> BuildOperator(
     auto& optimized = cbo_or->rbo_result;
     if (optimized.pushdown_plan.has_value() &&
         optimizer::CanExecutePushdownPlan(*optimized.pushdown_plan)) {
-        return std::unique_ptr<Operator>(
+        PlannedOperator planned;
+        planned.root = std::unique_ptr<Operator>(
             new ConnectorScanOperator(std::move(*optimized.pushdown_plan)));
+        planned.operators.push_back(planned.root->name());
+        return planned;
     }
     const auto& optimized_plan = optimized.plan;
     if (optimized_plan->inputs.size() != 1 || optimized_plan->inputs[0] == nullptr) {
         return absl::InvalidArgumentError("plan is not executable");
     }
-    auto input_or = BuildOperator(optimized_plan->inputs[0]);
-    if (!input_or.ok()) {
-        return input_or.status();
+    auto planned_or = BuildOperator(optimized_plan->inputs[0]);
+    if (!planned_or.ok()) {
+        return planned_or.status();
     }
+    std::unique_ptr<Operator> current;
     if (optimized_plan->kind == plan::PlanNodeKind::Materialize) {
-        return std::unique_ptr<Operator>(
-            new MaterializeOperator(optimized_plan, std::move(*input_or)));
+        current = std::unique_ptr<Operator>(
+            new MaterializeOperator(optimized_plan, std::move(planned_or->root)));
+    } else if (optimized_plan->kind == plan::PlanNodeKind::Range) {
+        current = std::unique_ptr<Operator>(
+            new RangeOperator(optimized_plan, std::move(planned_or->root)));
+    } else if (optimized_plan->kind == plan::PlanNodeKind::Filter) {
+        current = std::unique_ptr<Operator>(
+            new FilterOperator(optimized_plan, std::move(planned_or->root)));
+    } else if (optimized_plan->kind == plan::PlanNodeKind::Project) {
+        current = std::unique_ptr<Operator>(
+            new ProjectOperator(optimized_plan, std::move(planned_or->root)));
+    } else if (optimized_plan->kind == plan::PlanNodeKind::Rename) {
+        current = std::unique_ptr<Operator>(
+            new RenameOperator(optimized_plan, std::move(planned_or->root)));
+    } else if (optimized_plan->kind == plan::PlanNodeKind::Limit) {
+        current = std::unique_ptr<Operator>(
+            new LimitOperator(optimized_plan, std::move(planned_or->root)));
+    } else if (optimized_plan->kind == plan::PlanNodeKind::Sort) {
+        current = std::unique_ptr<Operator>(
+            new SortOperator(optimized_plan, std::move(planned_or->root)));
+    } else if (optimized_plan->kind == plan::PlanNodeKind::Group) {
+        current = std::unique_ptr<Operator>(
+            new GroupOperator(optimized_plan, std::move(planned_or->root)));
+    } else if (optimized_plan->kind == plan::PlanNodeKind::Distinct) {
+        current = std::unique_ptr<Operator>(
+            new DistinctOperator(optimized_plan, std::move(planned_or->root)));
+    } else if (optimized_plan->kind == plan::PlanNodeKind::Aggregate) {
+        current = std::unique_ptr<Operator>(
+            new AggregateOperator(optimized_plan, std::move(planned_or->root)));
+    } else {
+        return absl::InvalidArgumentError(absl::StrCat(
+            "unsupported physical operator: ", plan::PlanNodeKindName(optimized_plan->kind)));
     }
-    return std::unique_ptr<Operator>(new MemoryUnaryOperator(optimized_plan, std::move(*input_or)));
+    planned_or->root = std::move(current);
+    planned_or->operators.push_back(planned_or->root->name());
+    return std::move(*planned_or);
 }
 
 } // namespace
 
-absl::StatusOr<std::unique_ptr<Operator>> PhysicalPlanner::Plan(
+absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
     const std::shared_ptr<plan::PlanNode>& logical_plan) const {
-    auto input_or = BuildOperator(logical_plan);
-    if (!input_or.ok()) {
-        return input_or.status();
+    auto planned_or = BuildOperator(logical_plan);
+    if (!planned_or.ok()) {
+        return planned_or.status();
     }
-    return std::unique_ptr<Operator>(new OutputOperator(std::move(*input_or)));
+    std::unique_ptr<Operator> output(new OutputOperator(std::move(planned_or->root)));
+    planned_or->operators.push_back(output->name());
+
+    ExecutionTask task;
+    Pipeline pipeline;
+    pipeline.name = "main";
+    pipeline.operators = std::move(planned_or->operators);
+    pipeline.root = std::move(output);
+    task.pipelines.push_back(std::move(pipeline));
+    return task;
 }
 
-Driver::Driver(std::unique_ptr<Operator> root) : root_(std::move(root)) {}
+Driver::Driver(Pipeline pipeline) : pipeline_(std::move(pipeline)) {}
 
-absl::StatusOr<Value> Driver::Run() {
-    if (root_ == nullptr) {
-        return absl::InvalidArgumentError("driver has no root operator");
+absl::StatusOr<Value> Driver::Run() const {
+    if (pipeline_.root == nullptr) {
+        return absl::InvalidArgumentError("pipeline has no root operator");
     }
-    return root_->Next();
+    std::optional<TableValue> output;
+    while (true) {
+        auto page_or = pipeline_.root->NextPage();
+        if (!page_or.ok()) {
+            return page_or.status();
+        }
+        if (!page_or->has_value()) {
+            break;
+        }
+        if (!output.has_value()) {
+            output = std::move(page_or->value().table);
+            continue;
+        }
+        output->tables.insert(output->tables.end(), page_or->value().table.tables.begin(),
+                              page_or->value().table.tables.end());
+        output->rows.insert(output->rows.end(), page_or->value().table.rows.begin(),
+                            page_or->value().table.rows.end());
+    }
+    if (!output.has_value()) {
+        return Value::table_stream("", {});
+    }
+    Value value = Value::table_stream(output->bucket, output->tables, output->range_start,
+                                      output->range_stop, output->result_name);
+    value.as_table_mut().plan = output->plan;
+    value.as_table_mut().materialized = true;
+    return value;
+}
+
+absl::StatusOr<Value> Scheduler::Run(ExecutionTask task) const {
+    if (task.pipelines.empty()) {
+        return absl::InvalidArgumentError("execution task has no pipelines");
+    }
+    std::optional<TableValue> output;
+    for (auto& pipeline : task.pipelines) {
+        auto value_or = Driver(std::move(pipeline)).Run();
+        if (!value_or.ok()) {
+            return value_or.status();
+        }
+        const auto& table = value_or->as_table();
+        if (!output.has_value()) {
+            output = table;
+            continue;
+        }
+        output->tables.insert(output->tables.end(), table.tables.begin(), table.tables.end());
+        output->rows.insert(output->rows.end(), table.rows.begin(), table.rows.end());
+    }
+    if (!output.has_value()) {
+        return Value::table_stream("", {});
+    }
+    Value value = Value::table_stream(output->bucket, output->tables, output->range_start,
+                                      output->range_stop, output->result_name);
+    value.as_table_mut().plan = output->plan;
+    value.as_table_mut().materialized = true;
+    return value;
 }
 
 absl::StatusOr<Value> PhysicalExecutor::Execute(
@@ -511,7 +894,7 @@ absl::StatusOr<Value> PhysicalExecutor::Execute(
     if (!operator_or.ok()) {
         return operator_or.status();
     }
-    return Driver(std::move(*operator_or)).Run();
+    return Scheduler().Run(std::move(*operator_or));
 }
 
 } // namespace pl::flux::execution

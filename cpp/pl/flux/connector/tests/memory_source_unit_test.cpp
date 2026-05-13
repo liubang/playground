@@ -76,5 +76,26 @@ TEST(MemorySourceTest, RejectsPushdownUntilImplemented) {
     EXPECT_EQ(absl::StatusCode::kUnimplemented, value_or.status().code());
 }
 
+TEST(MemorySourceTest, RuntimeEmitsRowsThroughPageSource) {
+    SourceSpec spec{.source = "array", .driver = "memory", .table = "hosts"};
+    auto runtime = MakeMemoryConnectorRuntime(spec, "hosts", make_rows(), 1);
+    ASSERT_NE(nullptr, runtime);
+
+    auto handle_or = runtime->metadata->GetTableHandle(spec);
+    ASSERT_TRUE(handle_or.ok()) << handle_or.status();
+    auto splits_or = runtime->split_manager->GetSplits(*handle_or, {});
+    ASSERT_TRUE(splits_or.ok()) << splits_or.status();
+    ASSERT_EQ(1, splits_or->size());
+
+    auto page_source_or = runtime->page_source_provider->CreatePageSource(splits_or->front());
+    ASSERT_TRUE(page_source_or.ok()) << page_source_or.status();
+    auto page_or = (*page_source_or)->NextPage();
+    ASSERT_TRUE(page_or.ok()) << page_or.status();
+    ASSERT_TRUE(page_or->has_value());
+    EXPECT_EQ("hosts", page_or->value().table.bucket);
+    ASSERT_EQ(1, page_or->value().table.rows.size());
+    EXPECT_EQ("\"edge-1\"", page_or->value().table.rows[0]->lookup("host")->string());
+}
+
 } // namespace
 } // namespace pl::flux::connector

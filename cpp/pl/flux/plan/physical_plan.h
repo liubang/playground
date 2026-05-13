@@ -49,8 +49,12 @@ struct OptimizerTrace {
 struct PhysicalPlanNode {
     PhysicalNodeKind kind = PhysicalNodeKind::MemoryOperator;
     std::string name;
+    std::string operator_name;
     std::string source;
     std::string driver;
+    std::string table;
+    std::string connector_handle;
+    std::optional<size_t> split_count;
     std::vector<std::string> logical_prefix;
     bool lazy = false;
     OptimizerTrace optimizer;
@@ -104,11 +108,23 @@ inline void FormatPhysicalNodeDetail(const PhysicalPlanNode& node, std::ostrings
     *out << PhysicalNodeKindName(node.kind);
     *out << (node.lazy ? " [lazy]" : " [eager]");
     *out << "(name=\"" << node.name << "\"";
+    if (!node.operator_name.empty()) {
+        *out << ", operator=\"" << node.operator_name << "\"";
+    }
     if (!node.source.empty()) {
         *out << ", source=\"" << node.source << "\"";
     }
     if (!node.driver.empty()) {
         *out << ", driver=\"" << node.driver << "\"";
+    }
+    if (!node.table.empty()) {
+        *out << ", table=\"" << node.table << "\"";
+    }
+    if (!node.connector_handle.empty()) {
+        *out << ", handle=\"" << node.connector_handle << "\"";
+    }
+    if (node.split_count.has_value()) {
+        *out << ", splits=" << *node.split_count;
     }
     if (!node.logical_prefix.empty()) {
         *out << ", logical_prefix=" << StringList(node.logical_prefix);
