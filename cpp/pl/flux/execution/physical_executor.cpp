@@ -375,6 +375,26 @@ private:
     optimizer::PushdownPlan plan_;
 };
 
+class MaterializeOperator final : public Operator {
+public:
+    MaterializeOperator(std::shared_ptr<plan::PlanNode> plan, std::unique_ptr<Operator> input)
+        : plan_(std::move(plan)), input_(std::move(input)) {}
+
+    absl::StatusOr<Value> Next() override {
+        auto input_or = input_->Next();
+        if (!input_or.ok()) {
+            return input_or.status();
+        }
+        input_or->as_table_mut().plan = plan_;
+        input_or->as_table_mut().materialized = true;
+        return *input_or;
+    }
+
+private:
+    std::shared_ptr<plan::PlanNode> plan_;
+    std::unique_ptr<Operator> input_;
+};
+
 class MemoryUnaryOperator final : public Operator {
 public:
     MemoryUnaryOperator(std::shared_ptr<plan::PlanNode> plan, std::unique_ptr<Operator> input)
@@ -404,10 +424,6 @@ public:
                 return apply_distinct(*input_or, plan_);
             case plan::PlanNodeKind::Aggregate:
                 return apply_aggregate(*input_or, plan_);
-            case plan::PlanNodeKind::Materialize:
-                input_or->as_table_mut().plan = plan_;
-                input_or->as_table_mut().materialized = true;
-                return *input_or;
             default: {
                 return absl::InvalidArgumentError(absl::StrCat(
                     "unsupported physical operator: ", plan::PlanNodeKindName(plan_->kind)));
@@ -420,10 +436,27 @@ private:
     std::unique_ptr<Operator> input_;
 };
 
-} // namespace
+class OutputOperator final : public Operator {
+public:
+    explicit OutputOperator(std::unique_ptr<Operator> input) : input_(std::move(input)) {}
 
-absl::StatusOr<std::unique_ptr<Operator>> PhysicalPlanner::Plan(
-    const std::shared_ptr<plan::PlanNode>& logical_plan) const {
+    absl::StatusOr<Value> Next() override {
+        auto value_or = input_->Next();
+        if (!value_or.ok()) {
+            return value_or.status();
+        }
+        if (value_or->type() == Value::Type::Table) {
+            value_or->as_table_mut().materialized = true;
+        }
+        return *value_or;
+    }
+
+private:
+    std::unique_ptr<Operator> input_;
+};
+
+absl::StatusOr<std::unique_ptr<Operator>> BuildOperator(
+    const std::shared_ptr<plan::PlanNode>& logical_plan) {
     if (logical_plan == nullptr) {
         return absl::InvalidArgumentError("missing physical plan root");
     }
@@ -441,11 +474,26 @@ absl::StatusOr<std::unique_ptr<Operator>> PhysicalPlanner::Plan(
     if (optimized_plan->inputs.size() != 1 || optimized_plan->inputs[0] == nullptr) {
         return absl::InvalidArgumentError("plan is not executable");
     }
-    auto input_or = Plan(optimized_plan->inputs[0]);
+    auto input_or = BuildOperator(optimized_plan->inputs[0]);
     if (!input_or.ok()) {
         return input_or.status();
     }
+    if (optimized_plan->kind == plan::PlanNodeKind::Materialize) {
+        return std::unique_ptr<Operator>(
+            new MaterializeOperator(optimized_plan, std::move(*input_or)));
+    }
     return std::unique_ptr<Operator>(new MemoryUnaryOperator(optimized_plan, std::move(*input_or)));
+}
+
+} // namespace
+
+absl::StatusOr<std::unique_ptr<Operator>> PhysicalPlanner::Plan(
+    const std::shared_ptr<plan::PlanNode>& logical_plan) const {
+    auto input_or = BuildOperator(logical_plan);
+    if (!input_or.ok()) {
+        return input_or.status();
+    }
+    return std::unique_ptr<Operator>(new OutputOperator(std::move(*input_or)));
 }
 
 Driver::Driver(std::unique_ptr<Operator> root) : root_(std::move(root)) {}

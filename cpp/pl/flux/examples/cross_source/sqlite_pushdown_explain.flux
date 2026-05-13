@@ -26,5 +26,7 @@ services = sqlite.from(
     values: data |> findColumn(fn: (r) => true, column: "value"),
     services: services |> findColumn(fn: (r) => true, column: "service"),
     plan: data |> explain(),
+    physicalPlan: data |> explain(physical: true),
     distinctPlan: services |> explain(),
+    distinctPhysicalPlan: services |> explain(physical: true),
 }
