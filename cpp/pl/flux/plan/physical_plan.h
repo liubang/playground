@@ -27,6 +27,7 @@
 namespace pl::flux::plan {
 
 enum class PhysicalNodeKind {
+    OutputSink,
     ConnectorScan,
     MemoryScan,
     MemoryOperator,
@@ -58,6 +59,8 @@ struct PhysicalPlanNode {
 
 inline std::string PhysicalNodeKindName(PhysicalNodeKind kind) {
     switch (kind) {
+        case PhysicalNodeKind::OutputSink:
+            return "OutputSink";
         case PhysicalNodeKind::ConnectorScan:
             return "ConnectorScan";
         case PhysicalNodeKind::MemoryScan:

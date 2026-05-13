@@ -178,6 +178,19 @@ std::shared_ptr<plan::PhysicalPlanNode> BuildPhysicalPlan(
     return physical;
 }
 
+std::shared_ptr<plan::PhysicalPlanNode> BuildOutputPhysicalPlan(
+    const std::shared_ptr<plan::PlanNode>& node) {
+    if (node == nullptr) {
+        return nullptr;
+    }
+    auto output = std::make_shared<plan::PhysicalPlanNode>();
+    output->kind = plan::PhysicalNodeKind::OutputSink;
+    output->name = "output";
+    output->lazy = false;
+    output->inputs.push_back(BuildPhysicalPlan(node));
+    return output;
+}
+
 } // namespace
 
 std::string FormatLogicalPlan(const std::shared_ptr<plan::PlanNode>& plan) {
@@ -223,7 +236,7 @@ std::string FormatPhysicalPlan(const std::shared_ptr<plan::PlanNode>& plan) {
     if (!cbo_or.ok()) {
         return cbo_or.status().ToString() + "\n";
     }
-    return plan::FormatPhysicalPlan(BuildPhysicalPlan(cbo_or->rbo_result.plan));
+    return plan::FormatPhysicalPlan(BuildOutputPhysicalPlan(cbo_or->rbo_result.plan));
 }
 
 } // namespace pl::flux::optimizer

@@ -687,16 +687,19 @@ aggregate、order_by、limit/offset 等真实下推字段。
 
 ### Phase 7: Lazy Execution and Physical Plan
 
-状态：进行中。当前已新增第一版 physical plan 表示、physical executor 骨架和最小 CBO 闭环。
+状态：已完成当前阶段。当前已新增第一版 physical plan 表示、physical executor 骨架、
+显式 `OutputSink` 根节点和最小 CBO 闭环。
 `explain(physical: true)` 可以展示 connector scan 是否 lazy、RBO 已触发规则、CBO 当前决策状态
 和基于 connector statistics 的 cost estimate。SQL source pushdown 编译已经开始从
 `runtime/runtime_builtin_universe_transform.cpp` 迁出到 optimizer 层，`Materializer` 也已经改为统一进入
 `PhysicalExecutor`。
 
-当前执行路径的边界是：完整可下推的 source plan 编译成单个 `ConnectorScanOperator`；不能完整
-下推的单输入 plan 会递归拆成 connector pushed prefix 和 memory suffix，memory suffix
+当前执行路径的边界是：所有输出边界先进入 `OutputOperator`；完整可下推的 source plan 在其下
+编译成单个 `ConnectorScanOperator`；不能完整下推的单输入 plan 会递归拆成 connector pushed
+prefix 和 memory suffix，memory suffix
 目前覆盖 `range`、`filter`、`project`、`rename`、`limit`、`sort`、`group`、`distinct`、
-`aggregate` 和 `materialize`。operator 之间仍传递 `TableValue`，这是迁移期兼容层；后续
+`aggregate`，并通过独立 `MaterializeOperator` 表达 materialization barrier。operator
+之间仍传递 `TableValue`，这是迁移期兼容层；后续
 不能在这个接口上继续扩散新能力，而要收敛到 page/chunk execution contract。
 
 当前 physical explain 示例：
@@ -709,14 +712,16 @@ data |> explain(physical: true)
 
 ```text
 PhysicalPlan
-`- ConnectorScan [lazy](name="connector scan", source="sqlite", driver="sqlite",
-   logical_prefix=[Limit, Filter, SourceScan],
-   rbo=[PushLimitIntoConnectorScan, PushPredicateIntoConnectorScan],
-   cbo="chosen", cost={rows=1, cpu=..., io=...})
+`- OutputSink [eager](name="output", cbo="not-run", cost=unknown)
+   `- ConnectorScan [lazy](name="connector scan", source="sqlite", driver="sqlite",
+      logical_prefix=[Limit, Filter, SourceScan],
+      rbo=[PushLimitIntoConnectorScan, PushPredicateIntoConnectorScan],
+      cbo="chosen", cost={rows=1, cpu=..., io=...})
 ```
 
-这里的 `[lazy]` 表示 physical node 本身已经按延迟 scan 建模；输出边界现在会通过
-`PhysicalExecutor` 触发 connector scan，并在需要时接上 memory operator fallback。
+这里的 `OutputSink` 是用户可观察输出边界；`[lazy]` 表示 connector scan 本身已经按延迟
+scan 建模。输出边界现在会通过 `PhysicalExecutor` 触发 connector scan，并在需要时接上
+memory operator fallback。
 执行路径使用 fast CBO，只消费 RBO 形态决策，不会为了执行预先读取 connector 统计；physical
 explain 使用完整 CBO，会在 connector 支持时读取统计并展示真实 cost，缺统计时明确显示
 `cbo="no-stats", cost=unknown`。
@@ -730,6 +735,10 @@ explain 使用完整 CBO，会在 connector 支持时读取统计并展示真实
 - Materializer 统一进入 `PhysicalExecutor`，不再直接调用 pushdown executor。
 - 新增第一版 physical executor：先执行 connector pushed prefix，再把剩余 suffix 交给
   memory operator。
+- `PhysicalPlan` 已补齐 `OutputSink` 节点；`explain(physical: true)` 现在稳定以
+  `OutputSink` 为根，下面再展示 connector scan、memory operator 或 materialize barrier。
+- 执行侧已拆出 `OutputOperator` 和 `MaterializeOperator`，planner 根部统一包输出 operator，
+  materialization barrier 不再混在通用 memory unary operator 分支里。
 - 为 connector scan + memory suffix 增加 executor 级语义测试，覆盖 group 后接
   filter/project/rename/sort/limit、materialize barrier 后接 aggregate、以及 distinct fallback。
 - 新增第一版 RBO pass 管线：`PlanOptimizer`、`Rule`、`RuleBasedOptimizer`、deterministic
@@ -758,7 +767,6 @@ explain 使用完整 CBO，会在 connector 支持时读取统计并展示真实
 
 待推进：
 
-- 补齐 physical plan node：`OutputSink`。
 - 扩充 CBO alternative 枚举与选择逻辑：更多 connector/memory 交换点、排序/limit/aggregate 的
   多候选比较、统计缓存和列级 distinct/null fraction。
 
@@ -767,8 +775,8 @@ explain 使用完整 CBO，会在 connector 支持时读取统计并展示真实
 - `sqlite.from(...) |> range |> filter(simple) |> keep |> limit` 在输出边界才触发 scan。
 - `sqlite.from(...) |> group` 保持 lazy logical plan，并在输出边界拆成 connector scan + memory group。
 - `sqlite.from(...) |> group |> count/mean` 仍能作为整段 aggregate pushdown 执行。
-- `explain(physical: true)` 能稳定展示 physical node tree 和 RBO/CBO 决策，包括 group-only
-  fallback 的 memory operator + connector scan 形态。
+- `explain(physical: true)` 能稳定展示以 `OutputSink` 为根的 physical node tree 和 RBO/CBO
+  决策，包括 group-only fallback 的 memory operator + connector scan 形态。
 - 所有现有 examples 输出保持不变。
 
 ### Phase 8: Presto-Style Connector Runtime
@@ -795,7 +803,10 @@ pushdown，但不适合作为长期执行引擎边界。
 
 ### Phase 9: Scheduler / Driver / Operator Pipeline
 
-状态：未开始。
+状态：已启动迁移期骨架。当前已有 `Operator`、`Driver`、`ConnectorScanOperator`、
+`MemoryUnaryOperator`、`MaterializeOperator` 和 `OutputOperator`；physical planner 已经能产出
+同步执行的单 root operator tree。尚未引入 `ExecutionTask`、`Pipeline`、`Page`/`Chunk` 和真正的
+pipeline scheduler。
 
 目标：把 single-node 执行做成 Presto-like driver/operator pipeline，而不是递归调用 builtin。
 
@@ -804,6 +815,8 @@ pushdown，但不适合作为长期执行引擎边界。
 - 新增 `ExecutionTask`、`Pipeline`、`Driver`、`Operator`、`Page`/`Chunk` 抽象。
 - 实现 `TableScanOperator`、`FilterOperator`、`ProjectOperator`、`LimitOperator`、
   `SortOperator`、`AggregationOperator`、`MaterializeOperator`、`OutputOperator`。
+  其中 `ConnectorScanOperator`、`MaterializeOperator`、`OutputOperator` 和迁移期
+  `MemoryUnaryOperator` 已落地；按算子拆分的 memory operators 仍待继续推进。
 - physical planner 产出 pipeline，scheduler 同步执行 driver。
 - 旧 eager builtin 作为 `MaterializeOperator` 后的 fallback path。
 
@@ -813,7 +826,8 @@ pushdown，但不适合作为长期执行引擎边界。
   `TableScanOperator -> OutputOperator`，scan 到输出边界才发生。
 - `sqlite.from |> filter(complex) |> limit` 走
   `TableScanOperator -> MaterializeOperator -> FilterOperator -> LimitOperator -> OutputOperator`。
-- `explain(physical: true)` 能展示 pipeline/driver/operator。
+- `explain(physical: true)` 目前能展示 output/connector/memory/materialize operator tree；
+  后续补充 pipeline/driver/operator 的更细粒度展示。
 
 ### Phase 10: Cost and Join Foundations
 

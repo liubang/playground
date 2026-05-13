@@ -17,9 +17,9 @@
 
 #include "cpp/pl/flux/execution/materializer.h"
 #include "cpp/pl/flux/execution/physical_executor.h"
-#include "cpp/pl/flux/syntax/parser.h"
 #include "cpp/pl/flux/runtime/runtime_builtin.h"
 #include "cpp/pl/flux/runtime/runtime_exec.h"
+#include "cpp/pl/flux/syntax/parser.h"
 #include <cstdlib>
 #include <gtest/gtest.h>
 #include <optional>
@@ -459,6 +459,7 @@ TEST(RuntimeExecTest, ExplainFormatsPhysicalPlan) {
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
     ASSERT_EQ(Value::Type::String, plan_or->type());
     EXPECT_NE(std::string::npos, plan_or->as_string().find("PhysicalPlan\n"));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("OutputSink [eager](name=\"output\""));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("ConnectorScan [lazy]"));
     EXPECT_NE(std::string::npos,
               plan_or->as_string().find("logical_prefix=[Limit, Filter, SourceScan]"));
@@ -569,10 +570,12 @@ TEST(RuntimeExecTest, PhysicalExecutionFallsBackToMemoryOperatorAfterConnectorSc
     auto materialized_or = execution::MaterializeValue(*data_or);
     ASSERT_TRUE(materialized_or.ok()) << materialized_or.status();
     ASSERT_EQ(3, materialized_or->as_table().table_count());
+    EXPECT_TRUE(materialized_or->as_table().materialized);
 
     const auto plan_or = env.lookup("plan");
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
     ASSERT_EQ(Value::Type::String, plan_or->type());
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("OutputSink [eager](name=\"output\""));
     EXPECT_NE(std::string::npos,
               plan_or->as_string().find("MemoryOperator [eager](name=\"Group\""));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("ConnectorScan [lazy]"));
