@@ -222,7 +222,7 @@ Universe builtin 默认注入，无需 `import`。
 | `keys()`                      | 返回 group key 列名                              |
 | `findColumn(fn:, column:)`    | 找到匹配行并返回某列数组                         |
 | `findRecord(fn:, idx:)`       | 找到匹配行并返回指定位置的 record                |
-| `explain()`                   | 返回已记录的 logical plan 文本、下推状态和 SQLite request 摘要 |
+| `explain()`                   | 返回 logical / optimized logical / physical plan、下推状态和 SQL request 摘要 |
 | `yield(name:)`                | 设置结果名并输出表流                             |
 
 ## 内置包
@@ -254,7 +254,7 @@ Universe builtin 默认注入，无需 `import`。
 | --------------------------------- | ------------------------- |
 | `sqlite.from(path:, table:)`      | 从外部表扫描物化为 Flux 表流 |
 
-`sqlite.from` 通过 SQLite C API 扫描 `path` 指向的数据库表，并将 `null`、integer、float、text、blob-as-string 映射到 Flux 运行时值。用户入口不提供 `query` 模式，SQL 只作为 SQLite connector 内部 physical plan。connector 层已有保守 `ScanRequest` 下推能力；runtime pipeline 已能下推 SQLite 源之上的 `range/filter(simple)/keep/drop/rename/sort/limit/distinct` 线性前缀，以及 `group(columns:) |> count/sum/mean/min/max(column:)`，连续简单 `filter()` 会累积到同一个 `ScanRequest.predicates`，`drop(columns:)` 会基于当前可见 schema 反算为 projection，简单 `rename(columns:)` 会下推为 SQLite projection alias，并让后续 predicate/sort/projection/distinct/aggregate 使用重命名后的列语义，复杂 `filter(fn:)` 和其他算子会回退到内存执行。`explain()` 会标注 `[sqlite pushdown]`、`[sqlite scan]`、`[barrier: ...]` 和 `[memory]`，并在可完整编译时追加 `SourcePushdown(request: ...)` 摘要，展示 projection、predicates、distinct、group_by、aggregate、order_by 和 limit/offset，方便确认当前 pipeline 的真实下推边界。后续 planner 和下推路线见 [DATASOURCE_ARCHITECTURE.md](./DATASOURCE_ARCHITECTURE.md)。
+`sqlite.from` 通过 SQLite C API 扫描 `path` 指向的数据库表，并将 `null`、integer、float、text、blob-as-string 映射到 Flux 运行时值。用户入口不提供 `query` 模式，SQL 只作为 SQLite connector 内部 physical plan。connector 层已有保守 `ScanRequest` 下推能力；runtime pipeline 已能下推 SQLite 源之上的 `range/filter(simple)/keep/drop/rename/sort/limit/distinct` 线性前缀，以及 `group(columns:) |> count/sum/mean/min/max(column:)`，连续简单 `filter()` 会累积到同一个 `ScanRequest.predicates`，`drop(columns:)` 会基于当前可见 schema 反算为 projection，简单 `rename(columns:)` 会下推为 SQLite projection alias，并让后续 predicate/sort/projection/distinct/aggregate 使用重命名后的列语义，复杂 `filter(fn:)` 和其他算子会回退到内存执行。`explain()` 会标注 `[sqlite pushdown]`、`[sqlite scan]`、`[barrier: ...]` 和 `[memory]`，并在可完整编译时追加 `SourcePushdown(request: ...)` 摘要；`explain(physical: true)` 会展示 `OutputSink`、lazy connector scan、memory operator、materialize operator，以及 RBO/CBO 决策和 cost 信息，方便确认当前 pipeline 的真实输出边界和下推边界。后续 planner 和下推路线见 [DATASOURCE_ARCHITECTURE.md](./DATASOURCE_ARCHITECTURE.md)。
 
 当前没有顶层 `from(bucket:)` 或其他 universe 数据源占位。新增数据源时优先补 provider package，例如 `mysql.from`，而不是恢复顶层 `from`。
 
@@ -265,7 +265,7 @@ Universe builtin 默认注入，无需 `import`。
 | `mysql.from(dsn:, table:)` | 从 MySQL 表扫描物化为 Flux 表流 |
 | `mysql.from(host:, user:, password:, database:, table:, ?port:)` | 同上，使用显式连接字段 |
 
-`mysql.from` 使用 Boost.MySQL 连接外部 MySQL，支持 `mysql://user:password@host[:port]/database` 和 `user:password@tcp(host[:port])/database` 两类 `dsn`，也支持显式 `host/user/password/database/port` 字段；`port` 默认 3306。connector 会扫描 `table` 指向的表，并将 null、signed/unsigned integer、float/double、string/blob、date/datetime/time 映射到 Flux 运行时值。和 `sqlite.from` 一样，用户入口不提供 raw `query` 模式，SQL 只作为 connector 内部 physical plan。runtime pipeline 会把 MySQL 源之上的 `range/filter(simple)/keep/drop/rename/sort/limit/distinct` 线性前缀，以及简单 `group(columns:) |> count/sum/mean/min/max(column:)` 聚合编译为 `ScanRequest` 并重新扫描下推；复杂 `filter(fn:)` 和其他算子会回退到内存执行。`explain()` 会标注 `[mysql pushdown]` / `[mysql scan]`，并在可完整编译时追加 `SourcePushdown(request: ...)` 摘要。
+`mysql.from` 使用 Boost.MySQL 连接外部 MySQL，支持 `mysql://user:password@host[:port]/database` 和 `user:password@tcp(host[:port])/database` 两类 `dsn`，也支持显式 `host/user/password/database/port` 字段；`port` 默认 3306。connector 会扫描 `table` 指向的表，并将 null、signed/unsigned integer、float/double、string/blob、date/datetime/time 映射到 Flux 运行时值。和 `sqlite.from` 一样，用户入口不提供 raw `query` 模式，SQL 只作为 connector 内部 physical plan。runtime pipeline 会把 MySQL 源之上的 `range/filter(simple)/keep/drop/rename/sort/limit/distinct` 线性前缀，以及简单 `group(columns:) |> count/sum/mean/min/max(column:)` 聚合编译为 `ScanRequest` 并重新扫描下推；复杂 `filter(fn:)` 和其他算子会回退到内存执行。`explain()` 会标注 `[mysql pushdown]` / `[mysql scan]`，并在可完整编译时追加 `SourcePushdown(request: ...)` 摘要；`explain(physical: true)` 会和 SQLite 路径一样展示 `OutputSink` 根节点、connector scan / memory fallback 边界和 optimizer trace。
 
 ### `date`
 
