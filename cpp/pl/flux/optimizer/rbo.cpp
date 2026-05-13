@@ -20,6 +20,7 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/connector/connector_registry.h"
+#include "cpp/pl/flux/connector/connector_runtime.h"
 #include "cpp/pl/flux/runtime/runtime_value.h"
 #include <algorithm>
 #include <optional>
@@ -565,12 +566,17 @@ std::vector<std::string> AppliedRuleNames(const PlanOptimizerResult& result) {
 }
 
 absl::StatusOr<std::vector<std::string>> SourceScanColumns(const plan::SourceScanSpec& source) {
-    connector::SourceSpec spec{source.source, source.driver, source.dsn, source.table};
-    auto source_or = connector::ConnectorRegistry::Global().Create(spec);
-    if (!source_or.ok()) {
-        return source_or.status();
+    connector::SourceSpec spec{
+        .source = source.source, .driver = source.driver, .dsn = source.dsn, .table = source.table};
+    auto runtime_or = connector::ConnectorRegistry::Global().CreateRuntime(spec);
+    if (!runtime_or.ok()) {
+        return runtime_or.status();
     }
-    auto schema_or = (*source_or)->Schema();
+    auto handle_or = (*runtime_or)->metadata->GetTableHandle(spec);
+    if (!handle_or.ok()) {
+        return handle_or.status();
+    }
+    auto schema_or = (*runtime_or)->metadata->Schema(*handle_or);
     if (!schema_or.ok()) {
         return schema_or.status();
     }
