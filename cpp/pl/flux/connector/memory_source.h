@@ -18,39 +18,80 @@
 #pragma once
 
 #include "absl/status/statusor.h"
+#include "cpp/pl/flux/connector/connector_runtime.h"
 #include "cpp/pl/flux/connector/table_source.h"
 #include "cpp/pl/flux/runtime/runtime_value.h"
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
 
 namespace pl::flux::connector {
 
-class ArraySource final : public TableSource {
+class ArraySource final {
 public:
     ArraySource(std::string bucket, std::vector<std::shared_ptr<ObjectValue>> rows);
 
-    [[nodiscard]] absl::StatusOr<TableSchema> Schema() const override;
-    [[nodiscard]] SourceCapabilities Capabilities() const override;
-    [[nodiscard]] absl::StatusOr<TableStatistics> Statistics() const override;
-    absl::StatusOr<Value> Scan(const ScanRequest& request) override;
+    [[nodiscard]] absl::StatusOr<TableSchema> Schema() const;
+    [[nodiscard]] SourceCapabilities Capabilities() const;
+    [[nodiscard]] absl::StatusOr<TableStatistics> Statistics() const;
+    absl::StatusOr<Value> Scan(const ScanRequest& request);
 
 private:
     std::string bucket_;
     std::vector<std::shared_ptr<ObjectValue>> rows_;
 };
 
-class CsvSource final : public TableSource {
+class CsvSource final {
 public:
     explicit CsvSource(std::vector<std::shared_ptr<ObjectValue>> rows);
 
-    [[nodiscard]] absl::StatusOr<TableSchema> Schema() const override;
-    [[nodiscard]] SourceCapabilities Capabilities() const override;
-    [[nodiscard]] absl::StatusOr<TableStatistics> Statistics() const override;
-    absl::StatusOr<Value> Scan(const ScanRequest& request) override;
+    [[nodiscard]] absl::StatusOr<TableSchema> Schema() const;
+    [[nodiscard]] SourceCapabilities Capabilities() const;
+    [[nodiscard]] absl::StatusOr<TableStatistics> Statistics() const;
+    absl::StatusOr<Value> Scan(const ScanRequest& request);
 
 private:
     std::vector<std::shared_ptr<ObjectValue>> rows_;
 };
+
+class MemoryConnectorMetadata final : public ConnectorMetadata {
+public:
+    MemoryConnectorMetadata(SourceSpec spec,
+                            std::string bucket,
+                            std::vector<std::shared_ptr<ObjectValue>> rows);
+
+    [[nodiscard]] absl::StatusOr<TableHandle> GetTableHandle(const SourceSpec& spec) const override;
+    [[nodiscard]] absl::StatusOr<TableSchema> Schema(const TableHandle& table) const override;
+    [[nodiscard]] SourceCapabilities Capabilities(const TableHandle& table) const override;
+    [[nodiscard]] absl::StatusOr<TableStatistics> Statistics(
+        const TableHandle& table) const override;
+
+private:
+    SourceSpec spec_;
+    std::string bucket_;
+    std::vector<std::shared_ptr<ObjectValue>> rows_;
+};
+
+class MemoryPageSourceProvider final : public ConnectorPageSourceProvider {
+public:
+    MemoryPageSourceProvider(std::string bucket,
+                             std::vector<std::shared_ptr<ObjectValue>> rows,
+                             size_t rows_per_page = 1024);
+
+    [[nodiscard]] absl::StatusOr<std::unique_ptr<ConnectorPageSource>> CreatePageSource(
+        const ConnectorSplit& split) const override;
+
+private:
+    std::string bucket_;
+    std::vector<std::shared_ptr<ObjectValue>> rows_;
+    size_t rows_per_page_ = 1024;
+};
+
+std::unique_ptr<ConnectorRuntime> MakeMemoryConnectorRuntime(
+    const SourceSpec& spec,
+    std::string bucket,
+    std::vector<std::shared_ptr<ObjectValue>> rows,
+    size_t rows_per_page = 1024);
 
 } // namespace pl::flux::connector

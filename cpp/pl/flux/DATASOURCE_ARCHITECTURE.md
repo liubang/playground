@@ -158,8 +158,8 @@ Flux AST
 - Scheduler：把 physical plan 转为 task/pipeline/driver。单机第一版可以同步执行，但 API
   不能假设永远只有一个 driver。
 - Operator：消费和产生 page/chunk。row-by-row 可以作为内部实现细节，但不能成为长期跨层接口。
-- Connector：拆成 metadata、split manager、page source provider。当前 `TableSource::Scan`
-  是兼容层，后续要逐步退到 connector 内部实现。
+- Connector：拆成 metadata、split manager、page source provider。registry、optimizer 和 physical
+  execution 只面向 connector runtime；不再存在共享 `TableSource` 执行抽象。
 - Materialization：只有输出、inspect、旧 builtin fallback、跨源 join 等边界才把 page/chunk
   materialize 成 `TableValue`。
 
@@ -198,7 +198,8 @@ planner 中堆条件分支。
 - optimizer rule 以独立对象/接口组织，支持 rule trace 和单测，不写成散落在 builtin 里的 helper。
 - connector 不暴露 SQL 字符串构造细节给 planner；planner 只处理 handle、constraint、assignment。
 - operator 之间传递 page/chunk，不把 `TableValue` 当作长期跨层数据通道。
-- 允许迁移期保留兼容 wrapper，但新代码必须朝上述边界收敛。
+- connector 内部可以保留具体 source helper 方便 fixture 和单测，但不得形成共享 scan factory；
+  registry、optimizer、physical execution 代码不得依赖这些 helper。
 
 必须求值的边界包括：
 
@@ -333,21 +334,24 @@ struct ScanRequest {
     std::optional<int64_t> offset;
 };
 
-class TableSource {
+struct ConnectorRuntime {
+    std::unique_ptr<ConnectorMetadata> metadata;
+    std::unique_ptr<ConnectorSplitManager> split_manager;
+    std::unique_ptr<ConnectorPageSourceProvider> page_source_provider;
+};
+
+class ConnectorPageSource {
 public:
-    virtual ~TableSource() = default;
-    virtual absl::StatusOr<TableSchema> Schema() const = 0;
-    virtual SourceCapabilities Capabilities() const = 0;
-    virtual absl::StatusOr<Value> Scan(const ScanRequest& request) = 0;
+    virtual ~ConnectorPageSource() = default;
+    virtual absl::StatusOr<std::optional<ConnectorPage>> NextPage() = 0;
 };
 ```
 
 第一批实现：
 
-- `ArraySource`：包装当前 `array.from` rows。
-- `CsvSource`：包装当前 CSV 解析结果。初期仍可物化，后续可做流式解析。
-- `SQLiteSource`：基于 SQLite C API，将 `ScanRequest` 翻译为 SQL。
-- `MySQLSource`：可以先预留接口，真正依赖和构建方式后续单独评估。
+- memory runtime：包装当前 `array.from` / CSV rows，通过 split/page source 对 executor 暴露。
+- SQLite runtime：metadata 通过 SQLite schema/statistics，page source 持有 statement 逐页读取。
+- MySQL runtime：metadata 通过 MySQL schema/statistics，page source 通过 execution state 逐批读取。
 
 注意：仓库根目录已有 `sqlite3` bazel dependency，可优先用 SQLite 做第一条外部数据源闭环。
 
@@ -561,25 +565,25 @@ sqlite.from(path: "...", table: "cpu")
 
 能通过现有内存算子继续执行。
 
-### Phase 2: TableSource Abstraction
+### Phase 2: Connector Source Abstraction
 
-状态：已完成。当前已新增 `connector/TableSource` 接口、`SQLiteSource`、`MySQLSource`、
-`ArraySource` 和 `CsvSource`，并将 provider 入口接到对应 source。SQLite/MySQL 已实现
-真实 capability 和 `ScanRequest` pushdown；array/csv 仍是内存 source。
+状态：已完成并在 Phase 8 后收口。共享 `TableSource` 抽象已移除；新执行路径统一通过
+`ConnectorRuntime` 的 metadata / split / page source 三件套。SQLite/MySQL 已实现真实 capability、
+statistics 和 `ScanRequest` pushdown；array/csv 通过 memory runtime 暴露同形状 page source。
 
 目标：统一 CSV/array/SQL 数据源入口。
 
 工作项：
 
-- 新增 connector 接口。
-- 将 `sqlite.from` 改为 `SQLiteSource.Scan({})`。
-- 让 `array.from` 和 `csv.from` 至少在内部可适配同一抽象。
+- 新增 connector source 抽象，后续演进为 `ConnectorRuntime`。
+- 将 `sqlite.from` 改为构造 lazy source plan，再由 physical execution 触发 connector scan。
+- 让 `array.from` 和 `csv.from` 在内部适配同一 runtime/page source 抽象。
 - 保持 `Value::table` 对外行为不变。
 
 验收：
 
 - 现有 examples 和 conformance 不变。
-- 新增 connector 层单测。
+- 新增 connector runtime conformance 单测。
 
 ### Phase 3: Logical Plan Skeleton
 
@@ -694,13 +698,15 @@ aggregate、order_by、limit/offset 等真实下推字段。
 `runtime/runtime_builtin_universe_transform.cpp` 迁出到 optimizer 层，`Materializer` 也已经改为统一进入
 `PhysicalExecutor`。
 
-当前执行路径的边界是：所有输出边界先进入 `OutputOperator`；完整可下推的 source plan 在其下
-编译成单个 `ConnectorScanOperator`；不能完整下推的单输入 plan 会递归拆成 connector pushed
-prefix 和 memory suffix，memory suffix
-目前覆盖 `range`、`filter`、`project`、`rename`、`limit`、`sort`、`group`、`distinct`、
-`aggregate`，并通过独立 `MaterializeOperator` 表达 materialization barrier。operator
-之间仍传递 `TableValue`，这是迁移期兼容层；后续
-不能在这个接口上继续扩散新能力，而要收敛到 page/chunk execution contract。
+当前执行路径的边界是：`PhysicalPlanner` 产出 `ExecutionTask`，其中包含同步执行的
+`Pipeline`；`Scheduler` 运行 task，`Driver` 运行 pipeline，operator 之间通过 `Page`
+传递表数据。所有输出边界先进入 `OutputOperator`；完整可下推的 source plan 在其下编译成
+`ConnectorScanOperator`；不能完整下推的单输入 plan 会拆成 connector pushed prefix 和 memory
+suffix，memory suffix 目前覆盖 `RangeOperator`、`FilterOperator`、`ProjectOperator`、
+`RenameOperator`、`LimitOperator`、`SortOperator`、`GroupOperator`、`DistinctOperator`、
+`AggregateOperator`，并通过独立 `MaterializeOperator` 表达 materialization barrier。
+`Page` 当前承载 `TableValue`，这是等待 Phase 8 connector page source 接入前的兼容分页；
+后续不能再退回跨层 `TableValue` 递归调用，而应继续收敛到 page/chunk execution contract。
 
 当前 physical explain 示例：
 
@@ -712,8 +718,9 @@ data |> explain(physical: true)
 
 ```text
 PhysicalPlan
-`- OutputSink [eager](name="output", cbo="not-run", cost=unknown)
-   `- ConnectorScan [lazy](name="connector scan", source="sqlite", driver="sqlite",
+`- OutputSink [eager](name="output", operator="OutputOperator", cbo="not-run", cost=unknown)
+   `- ConnectorScan [lazy](name="connector scan", operator="ConnectorScanOperator",
+      source="sqlite", driver="sqlite",
       logical_prefix=[Limit, Filter, SourceScan],
       rbo=[PushLimitIntoConnectorScan, PushPredicateIntoConnectorScan],
       cbo="chosen", cost={rows=1, cpu=..., io=...})
@@ -737,8 +744,12 @@ explain 使用完整 CBO，会在 connector 支持时读取统计并展示真实
   memory operator。
 - `PhysicalPlan` 已补齐 `OutputSink` 节点；`explain(physical: true)` 现在稳定以
   `OutputSink` 为根，下面再展示 connector scan、memory operator 或 materialize barrier。
-- 执行侧已拆出 `OutputOperator` 和 `MaterializeOperator`，planner 根部统一包输出 operator，
-  materialization barrier 不再混在通用 memory unary operator 分支里。
+- 执行侧已拆出 `ExecutionTask`、`Pipeline`、`Scheduler`、`Driver`、`Page` 和 operator
+  pipeline；planner 根部统一包 `OutputOperator`，materialization barrier 由独立
+  `MaterializeOperator` 表达。
+- memory suffix 已从单个 `MemoryUnaryOperator` 拆成 typed operators：`RangeOperator`、
+  `FilterOperator`、`ProjectOperator`、`RenameOperator`、`LimitOperator`、`SortOperator`、
+  `GroupOperator`、`DistinctOperator` 和 `AggregateOperator`。
 - 为 connector scan + memory suffix 增加 executor 级语义测试，覆盖 group 后接
   filter/project/rename/sort/limit、materialize barrier 后接 aggregate、以及 distinct fallback。
 - 新增第一版 RBO pass 管线：`PlanOptimizer`、`Rule`、`RuleBasedOptimizer`、deterministic
@@ -758,9 +769,9 @@ explain 使用完整 CBO，会在 connector 支持时读取统计并展示真实
 - 新增 `optimizer/cbo.{h,cpp}`：定义 `StatsProvider`、`CostModel`、`PlanAlternative`、
   `CostBasedOptimizer` 和 `CboPlanResult`。当前 CBO 先以 RBO 输出作为合法候选形态，在有统计时
   计算 rows/cpu/io，并记录 `chosen`；无统计或执行快路径时明确 fallback 到 RBO。
-- `TableSource` 新增轻量 `Statistics()` 接口；SQLite/MySQL 第一版通过 `COUNT(*)` 暴露 row count，
-  array/csv source 通过内存行数暴露统计。统计只进入 optimizer/explain 边界，避免污染 scan
-  执行路径。
+- `ConnectorMetadata` 暴露轻量 `Statistics()` 接口；SQLite/MySQL 第一版通过 `COUNT(*)` 暴露
+  row count，array/csv memory runtime 通过内存行数暴露统计。统计只进入 optimizer/explain 边界，
+  避免污染 page source 执行路径。
 - `PhysicalPlanner` 已改为消费 `FastCostBasedOptimizer()`：完整可下推计划仍编译成单个
   `ConnectorScanOperator`，不可完整下推计划仍拆成 connector prefix + memory suffix，但规划入口
   已经统一经过 CBO facade，后续切入 CBO 候选选择不需要再改 executor 边界。
@@ -781,32 +792,43 @@ explain 使用完整 CBO，会在 connector 支持时读取统计并展示真实
 
 ### Phase 8: Presto-Style Connector Runtime
 
-状态：未开始。当前 `TableSource::Scan(ScanRequest)` 仍是 connector 主接口，足够支撑第一版
-pushdown，但不适合作为长期执行引擎边界。
+状态：已完成。当前已有 `ConnectorMetadata`、`ConnectorSplitManager`、
+`ConnectorPageSourceProvider` 和 `ConnectorPageSource` 抽象；`ConnectorRegistry` 只注册 connector
+runtime factory，不再暴露旧 source factory。SQLite 和 MySQL 均已接入 metadata / split /
+page source runtime；SQLite page source 持有 `sqlite3_stmt` 逐页 `step`，MySQL page source 持有
+Boost.MySQL execution state 逐批 `read_some_rows`。array/csv memory source 也有同形状 runtime。
+`ConnectorScanOperator` 对 pushed plan 统一通过 runtime 创建 table handle、split 和 page source，
+再按 split 顺序逐页产出 `Page`。
 
 目标：把 connector runtime 拆成 Presto 风格的 metadata / split / page source 三块。
 
 工作项：
 
-- 新增 `ConnectorMetadata`：schema、capability、statistics、table handle、column handle。
-- 新增 `ConnectorSplitManager`：把 table handle + constraint 编译成 split 列表；SQLite/MySQL
-  第一版返回单 split。
+- 新增 `ConnectorMetadata`：schema、capability、statistics、table handle、column handle。SQLite/MySQL/
+  memory runtime 已完成。
+- 新增 `ConnectorSplitManager`：把 table handle + constraint 编译成 split 列表；SQLite/MySQL/memory
+  第一版返回 single split，executor 已按 split 列表顺序调度 page source。
 - 新增 `ConnectorPageSourceProvider`：把 split + projected columns + constraints 转成 page/chunk stream。
-- `SQLiteSource` / `MySQLSource` 保留为 page source 内部实现，不再暴露为 planner 直接调用对象。
-- `ArraySource` / `CsvSource` 也适配 split/page source，避免 memory source 特判污染 planner。
+  SQLite/MySQL page source 复用 SQL 编译，但读取层已经是真正 incremental page source，不再先扫完整表。
+- `SQLiteSource` / `MySQLSource` 不再通过 registry 暴露为 planner/executor 直接调用对象；registry 和
+  physical execution 入口统一为 runtime factory。
+- `ArraySource` / `CsvSource` 已适配 split/page source，避免 memory source 特判污染 planner。
 
 验收：
 
 - SQL provider scan 通过 split/page source 执行。
+- Connector runtime conformance 单测覆盖 metadata、split、多 page、empty page 和错误传播行为。
+- `ConnectorScanOperator` 覆盖 empty page source 执行路径。
 - physical plan 中能展示 split 数量和 connector handle。
-- `TableSource::Scan` 只作为兼容 wrapper 或测试 helper。
+- 共享 `TableSource` / scan factory 已移除；registry、optimizer 或 physical execution 不依赖具体
+  source helper。
 
 ### Phase 9: Scheduler / Driver / Operator Pipeline
 
-状态：已启动迁移期骨架。当前已有 `Operator`、`Driver`、`ConnectorScanOperator`、
-`MemoryUnaryOperator`、`MaterializeOperator` 和 `OutputOperator`；physical planner 已经能产出
-同步执行的单 root operator tree。尚未引入 `ExecutionTask`、`Pipeline`、`Page`/`Chunk` 和真正的
-pipeline scheduler。
+状态：已完成单机同步版 operator pipeline。当前已有 `ExecutionTask`、`Pipeline`、`Scheduler`、
+`Driver`、`Page` 和 typed `Operator`；physical planner 已经能产出同步执行的 pipeline。
+`ConnectorScanOperator` 已能按 connector split 顺序消费 page source；`Scheduler` 可以执行多个
+pipeline 并合并输出。当前调度是单机同步顺序执行，尚未引入本地 exchange 或并行 driver。
 
 目标：把 single-node 执行做成 Presto-like driver/operator pipeline，而不是递归调用 builtin。
 
@@ -815,19 +837,24 @@ pipeline scheduler。
 - 新增 `ExecutionTask`、`Pipeline`、`Driver`、`Operator`、`Page`/`Chunk` 抽象。
 - 实现 `TableScanOperator`、`FilterOperator`、`ProjectOperator`、`LimitOperator`、
   `SortOperator`、`AggregationOperator`、`MaterializeOperator`、`OutputOperator`。
-  其中 `ConnectorScanOperator`、`MaterializeOperator`、`OutputOperator` 和迁移期
-  `MemoryUnaryOperator` 已落地；按算子拆分的 memory operators 仍待继续推进。
+  当前对应实现为 `ConnectorScanOperator`、`RangeOperator`、`FilterOperator`、
+  `ProjectOperator`、`RenameOperator`、`LimitOperator`、`SortOperator`、`GroupOperator`、
+  `DistinctOperator`、`AggregateOperator`、`MaterializeOperator` 和 `OutputOperator`。
 - physical planner 产出 pipeline，scheduler 同步执行 driver。
-- 旧 eager builtin 作为 `MaterializeOperator` 后的 fallback path。
+- streaming memory operator 已逐 page 消费/产出；需要全局语义的 sort/group/distinct/aggregate
+  是明确的 blocking operator，先收集输入 pages 再产出结果。
+- 旧 eager builtin fallback 已被限制在 typed memory operators 内部，operator 之间不再递归传
+  `Value`。
 
 验收：
 
 - `sqlite.from |> range |> filter(simple) |> keep |> limit` 走
-  `TableScanOperator -> OutputOperator`，scan 到输出边界才发生。
+  `ConnectorScanOperator -> OutputOperator`，scan 到输出边界才发生。
 - `sqlite.from |> filter(complex) |> limit` 走
-  `TableScanOperator -> MaterializeOperator -> FilterOperator -> LimitOperator -> OutputOperator`。
-- `explain(physical: true)` 目前能展示 output/connector/memory/materialize operator tree；
-  后续补充 pipeline/driver/operator 的更细粒度展示。
+  `ConnectorScanOperator -> FilterOperator -> LimitOperator -> OutputOperator`，复杂谓词不会下推，
+  但会在 memory suffix 中执行。
+- `explain(physical: true)` 能展示 output/connector/memory/materialize operator tree，并标注
+  具体 operator 名。
 
 ### Phase 10: Cost and Join Foundations
 

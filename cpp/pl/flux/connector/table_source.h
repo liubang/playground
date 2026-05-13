@@ -115,16 +115,4 @@ struct ScanRequest {
     std::optional<int64_t> offset;
 };
 
-class TableSource {
-public:
-    virtual ~TableSource() = default;
-
-    [[nodiscard]] virtual absl::StatusOr<TableSchema> Schema() const = 0;
-    [[nodiscard]] virtual SourceCapabilities Capabilities() const = 0;
-    [[nodiscard]] virtual absl::StatusOr<TableStatistics> Statistics() const {
-        return TableStatistics{};
-    }
-    virtual absl::StatusOr<Value> Scan(const ScanRequest& request) = 0;
-};
-
 } // namespace pl::flux::connector

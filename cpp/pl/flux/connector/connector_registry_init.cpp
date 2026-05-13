@@ -16,20 +16,18 @@
 // Created: 2026/05/10 15:30
 
 #include "cpp/pl/flux/connector/connector_registry.h"
-
 #include "cpp/pl/flux/connector/mysql_source.h"
 #include "cpp/pl/flux/connector/sqlite_source.h"
-#include <memory>
 
 namespace pl::flux::connector {
 
 void RegisterBuiltinConnectors(ConnectorRegistry& registry) {
-    registry.Register("sqlite", [](const SourceSpec& spec) -> std::unique_ptr<TableSource> {
-        return std::make_unique<SQLiteSource>(spec.dsn, spec.table);
+    registry.Register("sqlite", [](const SourceSpec& spec) {
+        return MakeSQLiteConnectorRuntime(spec);
     });
 
-    registry.Register("mysql", [](const SourceSpec& spec) -> std::unique_ptr<TableSource> {
-        return std::make_unique<MySQLSource>(spec.dsn, spec.table);
+    registry.Register("mysql", [](const SourceSpec& spec) {
+        return MakeMySQLConnectorRuntime(spec);
     });
 }
 
