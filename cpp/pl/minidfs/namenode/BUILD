@@ -15,7 +15,12 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2026/05/10 22:46
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load(
+    "//cpp:copts/configure_copts.bzl",
+    "COPTS",
+    "LINKOPTS",
+)
 
 package(default_visibility = ["//cpp/pl/minidfs:__subpackages__"])
 
@@ -117,5 +122,38 @@ cc_library(
         "//cpp/pl/minidfs/protocol:minidfs_cc_proto",
         "//cpp/pl/status",
         "@brpc",
+    ],
+)
+
+cc_binary(
+    name = "namenode",
+    srcs = ["namenode_main.cpp"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":admin_service_impl",
+        ":block_manager",
+        ":datanode_manager",
+        ":lease_manager",
+        ":namenode_service_impl",
+        ":namespace_manager",
+        ":placement_manager",
+        "//cpp/pl/minidfs/metadata:metadata_store",
+        "//cpp/pl/minidfs/metadata:mysql_connection_pool",
+        "//cpp/pl/minidfs/metadata:mysql_metadata_store",
+        "@brpc",
+        "@folly//folly/logging",
+        "@gflags",
+    ],
+)
+
+cc_binary(
+    name = "format",
+    srcs = ["format_main.cpp"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        "//cpp/pl/minidfs/metadata:mysql_connection_pool",
+        "@gflags",
     ],
 )

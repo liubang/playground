@@ -35,8 +35,8 @@ COPY . .
 
 # Build NameNode and DataNode binaries
 RUN bazel build -c opt \
-    //cpp/pl/minidfs/master:namenode \
-    //cpp/pl/minidfs/client:datanode \
+    //cpp/pl/minidfs/namenode:namenode \
+    //cpp/pl/minidfs/datanode:datanode \
     //cpp/pl/minidfs/client:minidfs
 
 # ============================================================================
@@ -48,7 +48,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /src/bazel-bin/cpp/pl/minidfs/master/namenode /usr/local/bin/minidfs-namenode
+COPY --from=builder /src/bazel-bin/cpp/pl/minidfs/namenode/namenode /usr/local/bin/minidfs-namenode
 
 EXPOSE 8000
 
@@ -63,7 +63,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /src/bazel-bin/cpp/pl/minidfs/client/datanode /usr/local/bin/minidfs-datanode
+COPY --from=builder /src/bazel-bin/cpp/pl/minidfs/datanode/datanode /usr/local/bin/minidfs-datanode
 
 RUN mkdir -p /data/minidfs
 
