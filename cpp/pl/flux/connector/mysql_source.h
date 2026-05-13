@@ -18,9 +18,13 @@
 #pragma once
 
 #include "absl/status/statusor.h"
+#include "cpp/pl/flux/connector/connector_runtime.h"
 #include "cpp/pl/flux/connector/table_source.h"
 #include "cpp/pl/flux/runtime/runtime_value.h"
+#include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <optional>
 #include <string>
 
 namespace pl::flux::connector {
@@ -36,19 +40,61 @@ struct MySQLConnectionConfig {
 
 absl::StatusOr<MySQLConnectionConfig> ParseMySQLDsn(const std::string& dsn);
 
-class MySQLSource final : public TableSource {
+class MySQLSource final {
 public:
     MySQLSource(std::string dsn, std::string table);
 
-    [[nodiscard]] absl::StatusOr<TableSchema> Schema() const override;
-    [[nodiscard]] SourceCapabilities Capabilities() const override;
-    [[nodiscard]] absl::StatusOr<TableStatistics> Statistics() const override;
-    absl::StatusOr<Value> Scan(const ScanRequest& request) override;
+    [[nodiscard]] absl::StatusOr<TableSchema> Schema() const;
+    [[nodiscard]] SourceCapabilities Capabilities() const;
+    [[nodiscard]] absl::StatusOr<TableStatistics> Statistics() const;
+    absl::StatusOr<Value> Scan(const ScanRequest& request);
 
 private:
     std::string dsn_;
     std::string table_;
     std::string query_;
 };
+
+class MySQLConnectorMetadata final : public ConnectorMetadata {
+public:
+    explicit MySQLConnectorMetadata(SourceSpec spec);
+
+    [[nodiscard]] absl::StatusOr<TableHandle> GetTableHandle(const SourceSpec& spec) const override;
+    [[nodiscard]] absl::StatusOr<TableSchema> Schema(const TableHandle& table) const override;
+    [[nodiscard]] SourceCapabilities Capabilities(const TableHandle& table) const override;
+    [[nodiscard]] absl::StatusOr<TableStatistics> Statistics(
+        const TableHandle& table) const override;
+
+private:
+    SourceSpec spec_;
+};
+
+class MySQLPageSourceProvider final : public ConnectorPageSourceProvider {
+public:
+    explicit MySQLPageSourceProvider(size_t rows_per_page = 1024);
+
+    [[nodiscard]] absl::StatusOr<std::unique_ptr<ConnectorPageSource>> CreatePageSource(
+        const ConnectorSplit& split) const override;
+
+private:
+    size_t rows_per_page_ = 1024;
+};
+
+class MySQLPageSource final : public ConnectorPageSource {
+public:
+    MySQLPageSource(std::string dsn, std::string table, ScanRequest request, size_t rows_per_page);
+
+    absl::Status Initialize();
+    absl::StatusOr<std::optional<ConnectorPage>> NextPage() override;
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+    std::string dsn_;
+    std::string table_;
+    size_t rows_per_page_ = 1024;
+};
+
+std::unique_ptr<ConnectorRuntime> MakeMySQLConnectorRuntime(const SourceSpec& spec);
 
 } // namespace pl::flux::connector

@@ -18,6 +18,9 @@
 #include "cpp/pl/flux/connector/memory_source.h"
 
 #include "absl/status/status.h"
+#include <algorithm>
+#include <cstddef>
+#include <memory>
 #include <unordered_set>
 #include <utility>
 
@@ -55,7 +58,8 @@ TableStatistics statistics_from_rows(const std::vector<std::shared_ptr<ObjectVal
     const auto schema = schema_from_rows(rows);
     statistics.columns.reserve(schema.columns.size());
     for (const auto& column : schema.columns) {
-        statistics.columns.push_back({.name = column.name});
+        statistics.columns.push_back(
+            {.name = column.name, .distinct_values = {}, .null_fraction = {}});
     }
     return statistics;
 }
@@ -95,6 +99,65 @@ absl::StatusOr<Value> CsvSource::Scan(const ScanRequest& request) {
         return absl::UnimplementedError("csv source scan pushdown is not implemented");
     }
     return Value::table("csv", rows_);
+}
+
+MemoryConnectorMetadata::MemoryConnectorMetadata(SourceSpec spec,
+                                                 std::string bucket,
+                                                 std::vector<std::shared_ptr<ObjectValue>> rows)
+    : spec_(std::move(spec)), bucket_(std::move(bucket)), rows_(std::move(rows)) {}
+
+absl::StatusOr<TableHandle> MemoryConnectorMetadata::GetTableHandle(const SourceSpec& spec) const {
+    return TableHandle{
+        .source = spec.source,
+        .driver = spec.driver,
+        .dsn = spec.dsn,
+        .table = spec.table.empty() ? bucket_ : spec.table,
+    };
+}
+
+absl::StatusOr<TableSchema> MemoryConnectorMetadata::Schema(const TableHandle& table) const {
+    (void)table;
+    return schema_from_rows(rows_);
+}
+
+SourceCapabilities MemoryConnectorMetadata::Capabilities(const TableHandle& table) const {
+    (void)table;
+    return {};
+}
+
+absl::StatusOr<TableStatistics> MemoryConnectorMetadata::Statistics(
+    const TableHandle& table) const {
+    (void)table;
+    return statistics_from_rows(rows_);
+}
+
+MemoryPageSourceProvider::MemoryPageSourceProvider(std::string bucket,
+                                                   std::vector<std::shared_ptr<ObjectValue>> rows,
+                                                   size_t rows_per_page)
+    : bucket_(std::move(bucket)),
+      rows_(std::move(rows)),
+      rows_per_page_(std::max<size_t>(1, rows_per_page)) {}
+
+absl::StatusOr<std::unique_ptr<ConnectorPageSource>> MemoryPageSourceProvider::CreatePageSource(
+    const ConnectorSplit& split) const {
+    if (has_scan_pushdown(split.request)) {
+        return absl::UnimplementedError("memory source scan pushdown is not implemented");
+    }
+    return std::unique_ptr<ConnectorPageSource>(
+        new TableValuePageSource(Value::table(bucket_, rows_).as_table(), rows_per_page_));
+}
+
+std::unique_ptr<ConnectorRuntime> MakeMemoryConnectorRuntime(
+    const SourceSpec& spec,
+    std::string bucket,
+    std::vector<std::shared_ptr<ObjectValue>> rows,
+    size_t rows_per_page) {
+    auto runtime = std::make_unique<ConnectorRuntime>();
+    runtime->metadata = std::make_unique<MemoryConnectorMetadata>(spec, bucket, rows);
+    runtime->split_manager = std::make_unique<SingleSplitManager>();
+    runtime->page_source_provider = std::make_unique<MemoryPageSourceProvider>(
+        std::move(bucket), std::move(rows), rows_per_page);
+    return runtime;
 }
 
 } // namespace pl::flux::connector

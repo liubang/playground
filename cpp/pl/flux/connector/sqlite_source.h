@@ -18,21 +18,24 @@
 #pragma once
 
 #include "absl/status/statusor.h"
+#include "cpp/pl/flux/connector/connector_runtime.h"
 #include "cpp/pl/flux/connector/table_source.h"
 #include "cpp/pl/flux/runtime/runtime_value.h"
+#include <cstddef>
+#include <memory>
 #include <optional>
 #include <string>
 
 namespace pl::flux::connector {
 
-class SQLiteSource final : public TableSource {
+class SQLiteSource final {
 public:
     SQLiteSource(std::string dsn, std::string table);
 
-    [[nodiscard]] absl::StatusOr<TableSchema> Schema() const override;
-    [[nodiscard]] SourceCapabilities Capabilities() const override;
-    [[nodiscard]] absl::StatusOr<TableStatistics> Statistics() const override;
-    absl::StatusOr<Value> Scan(const ScanRequest& request) override;
+    [[nodiscard]] absl::StatusOr<TableSchema> Schema() const;
+    [[nodiscard]] SourceCapabilities Capabilities() const;
+    [[nodiscard]] absl::StatusOr<TableStatistics> Statistics() const;
+    absl::StatusOr<Value> Scan(const ScanRequest& request);
 
 private:
     std::string dsn_;
@@ -41,5 +44,47 @@ private:
     mutable std::optional<TableSchema> cached_schema_;
     mutable std::optional<TableStatistics> cached_statistics_;
 };
+
+class SQLiteConnectorMetadata final : public ConnectorMetadata {
+public:
+    explicit SQLiteConnectorMetadata(SourceSpec spec);
+
+    [[nodiscard]] absl::StatusOr<TableHandle> GetTableHandle(const SourceSpec& spec) const override;
+    [[nodiscard]] absl::StatusOr<TableSchema> Schema(const TableHandle& table) const override;
+    [[nodiscard]] SourceCapabilities Capabilities(const TableHandle& table) const override;
+    [[nodiscard]] absl::StatusOr<TableStatistics> Statistics(
+        const TableHandle& table) const override;
+
+private:
+    SourceSpec spec_;
+};
+
+class SQLitePageSource final : public ConnectorPageSource {
+public:
+    SQLitePageSource(std::string dsn, std::string table, ScanRequest request, size_t rows_per_page);
+
+    absl::Status Initialize();
+    absl::StatusOr<std::optional<ConnectorPage>> NextPage() override;
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+    std::string dsn_;
+    std::string table_;
+    size_t rows_per_page_ = 1024;
+};
+
+class SQLitePageSourceProvider final : public ConnectorPageSourceProvider {
+public:
+    explicit SQLitePageSourceProvider(size_t rows_per_page = 1024);
+
+    [[nodiscard]] absl::StatusOr<std::unique_ptr<ConnectorPageSource>> CreatePageSource(
+        const ConnectorSplit& split) const override;
+
+private:
+    size_t rows_per_page_ = 1024;
+};
+
+std::unique_ptr<ConnectorRuntime> MakeSQLiteConnectorRuntime(const SourceSpec& spec);
 
 } // namespace pl::flux::connector

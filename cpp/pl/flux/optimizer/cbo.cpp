@@ -19,6 +19,7 @@
 
 #include "absl/status/status.h"
 #include "cpp/pl/flux/connector/connector_registry.h"
+#include "cpp/pl/flux/connector/connector_runtime.h"
 #include <algorithm>
 #include <cmath>
 #include <memory>
@@ -64,12 +65,19 @@ public:
         }
 
         const auto& source = node->source_scan();
-        connector::SourceSpec spec{source.source, source.driver, source.dsn, source.table};
-        auto source_or = connector::ConnectorRegistry::Global().Create(spec);
-        if (!source_or.ok()) {
+        connector::SourceSpec spec{.source = source.source,
+                                   .driver = source.driver,
+                                   .dsn = source.dsn,
+                                   .table = source.table};
+        auto runtime_or = connector::ConnectorRegistry::Global().CreateRuntime(spec);
+        if (!runtime_or.ok()) {
             return PlanStatistics{};
         }
-        auto statistics_or = (*source_or)->Statistics();
+        auto handle_or = (*runtime_or)->metadata->GetTableHandle(spec);
+        if (!handle_or.ok()) {
+            return PlanStatistics{};
+        }
+        auto statistics_or = (*runtime_or)->metadata->Statistics(*handle_or);
         if (!statistics_or.ok()) {
             return PlanStatistics{};
         }
