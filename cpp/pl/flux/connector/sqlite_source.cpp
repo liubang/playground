@@ -21,6 +21,8 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/connector/sql_builder.h"
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -86,6 +88,10 @@ std::string quote_identifier(const std::string& identifier) {
     }
     out.push_back('"');
     return out;
+}
+
+std::string query_for_table(const std::string& table) {
+    return absl::StrCat("SELECT * FROM ", quote_identifier(table));
 }
 
 // predicate_op_sql / aggregate_fn_sql / validate_column are now shared via
@@ -339,12 +345,75 @@ Value value_from_sqlite_column(sqlite3_stmt* stmt, int column) {
     }
 }
 
+absl::Status bind_scan_sql(sqlite3_stmt* stmt, const BuiltSql& sql) {
+    int bind_index = 1;
+    for (const auto& param : sql.params) {
+        auto status = bind_value(stmt, bind_index, param.value);
+        if (!status.ok()) {
+            return status;
+        }
+        ++bind_index;
+    }
+    if (sql.limit.has_value()) {
+        auto status = bind_int64(stmt, bind_index, *sql.limit);
+        if (!status.ok()) {
+            return status;
+        }
+        ++bind_index;
+    }
+    if (sql.offset.has_value()) {
+        auto status = bind_int64(stmt, bind_index, *sql.offset);
+        if (!status.ok()) {
+            return status;
+        }
+    }
+    return absl::OkStatus();
+}
+
+std::vector<std::string> sqlite_column_names(sqlite3_stmt* stmt) {
+    const int column_count = sqlite3_column_count(stmt);
+    std::vector<std::string> column_names;
+    column_names.reserve(static_cast<size_t>(column_count));
+    for (int i = 0; i < column_count; ++i) {
+        const char* name = sqlite3_column_name(stmt, i);
+        column_names.emplace_back(name == nullptr ? "" : name);
+    }
+    return column_names;
+}
+
+std::shared_ptr<ObjectValue> row_from_sqlite_stmt(sqlite3_stmt* stmt,
+                                                  const std::vector<std::string>& column_names) {
+    std::vector<std::pair<std::string, Value>> properties;
+    properties.reserve(column_names.size());
+    for (int i = 0; i < static_cast<int>(column_names.size()); ++i) {
+        properties.emplace_back(column_names[static_cast<size_t>(i)],
+                                value_from_sqlite_column(stmt, i));
+    }
+    return std::make_shared<ObjectValue>(std::move(properties));
+}
+
+std::shared_ptr<ObjectValue> row_with_group(const std::shared_ptr<ObjectValue>& row,
+                                            const std::vector<std::string>& group_by) {
+    if (row == nullptr) {
+        return nullptr;
+    }
+    std::vector<std::pair<std::string, Value>> group_props;
+    group_props.reserve(group_by.size());
+    for (const auto& column : group_by) {
+        const Value* value = row->lookup(column);
+        if (value != nullptr) {
+            group_props.emplace_back(column, *value);
+        }
+    }
+    std::vector<std::pair<std::string, Value>> props = row->properties;
+    props.emplace_back("_group", Value::object(std::move(group_props)));
+    return std::make_shared<ObjectValue>(std::move(props));
+}
+
 } // namespace
 
 SQLiteSource::SQLiteSource(std::string dsn, std::string table)
-    : dsn_(std::move(dsn)),
-      table_(std::move(table)),
-      query_(absl::StrCat("SELECT * FROM ", quote_identifier(table_))) {}
+    : dsn_(std::move(dsn)), table_(std::move(table)), query_(query_for_table(table_)) {}
 
 absl::StatusOr<TableSchema> SQLiteSource::Schema() const {
     if (cached_schema_.has_value()) {
@@ -416,7 +485,8 @@ absl::StatusOr<TableStatistics> SQLiteSource::Statistics() const {
     if (schema_or.ok()) {
         statistics.columns.reserve(schema_or->columns.size());
         for (const auto& column : schema_or->columns) {
-            statistics.columns.push_back({.name = column.name});
+            statistics.columns.push_back(
+                {.name = column.name, .distinct_values = {}, .null_fraction = {}});
         }
     }
 
@@ -444,36 +514,12 @@ absl::StatusOr<Value> SQLiteSource::Scan(const ScanRequest& request) {
     }
 
     sqlite3_stmt* stmt = stmt_or->get();
-    int bind_index = 1;
-    for (const auto& param : sql_or->params) {
-        auto status = bind_value(stmt, bind_index, param.value);
-        if (!status.ok()) {
-            return status;
-        }
-        ++bind_index;
-    }
-    if (sql_or->limit.has_value()) {
-        auto status = bind_int64(stmt, bind_index, *sql_or->limit);
-        if (!status.ok()) {
-            return status;
-        }
-        ++bind_index;
-    }
-    if (sql_or->offset.has_value()) {
-        auto status = bind_int64(stmt, bind_index, *sql_or->offset);
-        if (!status.ok()) {
-            return status;
-        }
-        ++bind_index;
+    auto bind_status = bind_scan_sql(stmt, *sql_or);
+    if (!bind_status.ok()) {
+        return bind_status;
     }
 
-    const int column_count = sqlite3_column_count(stmt);
-    std::vector<std::string> column_names;
-    column_names.reserve(static_cast<size_t>(column_count));
-    for (int i = 0; i < column_count; ++i) {
-        const char* name = sqlite3_column_name(stmt, i);
-        column_names.emplace_back(name == nullptr ? "" : name);
-    }
+    std::vector<std::string> column_names = sqlite_column_names(stmt);
 
     std::vector<std::shared_ptr<ObjectValue>> rows;
     while (true) {
@@ -486,30 +532,14 @@ absl::StatusOr<Value> SQLiteSource::Scan(const ScanRequest& request) {
                 absl::StrCat("sqlite step failed: ", sqlite3_errmsg(db_or->get())));
         }
 
-        std::vector<std::pair<std::string, Value>> properties;
-        properties.reserve(column_names.size());
-        for (int i = 0; i < column_count; ++i) {
-            properties.emplace_back(column_names[static_cast<size_t>(i)],
-                                    value_from_sqlite_column(stmt, i));
-        }
-        rows.push_back(std::make_shared<ObjectValue>(std::move(properties)));
+        rows.push_back(row_from_sqlite_stmt(stmt, column_names));
     }
 
     if (request.aggregate.has_value()) {
         std::vector<TableChunk> chunks;
         chunks.reserve(rows.size());
         for (auto& row : rows) {
-            std::vector<std::pair<std::string, Value>> group_props;
-            group_props.reserve(request.group_by.size());
-            for (const auto& column : request.group_by) {
-                const Value* value = row == nullptr ? nullptr : row->lookup(column);
-                if (value != nullptr) {
-                    group_props.emplace_back(column, *value);
-                }
-            }
-            std::vector<std::pair<std::string, Value>> props = row->properties;
-            props.emplace_back("_group", Value::object(std::move(group_props)));
-            row = std::make_shared<ObjectValue>(std::move(props));
+            row = row_with_group(row, request.group_by);
             TableChunk chunk;
             chunk.rows.push_back(row);
             chunks.push_back(std::move(chunk));
@@ -518,6 +548,163 @@ absl::StatusOr<Value> SQLiteSource::Scan(const ScanRequest& request) {
     }
 
     return Value::table("sqlite", std::move(rows));
+}
+
+SQLiteConnectorMetadata::SQLiteConnectorMetadata(SourceSpec spec) : spec_(std::move(spec)) {}
+
+absl::StatusOr<TableHandle> SQLiteConnectorMetadata::GetTableHandle(const SourceSpec& spec) const {
+    if (spec.source != "sqlite" && spec.driver != "sqlite") {
+        return absl::InvalidArgumentError(
+            absl::StrCat("sqlite metadata cannot open source: ", spec.source));
+    }
+    if (spec.dsn.empty()) {
+        return absl::InvalidArgumentError("sqlite metadata requires dsn");
+    }
+    if (spec.table.empty()) {
+        return absl::InvalidArgumentError("sqlite metadata requires table");
+    }
+    return TableHandle{
+        .source = spec.source,
+        .driver = spec.driver,
+        .dsn = spec.dsn,
+        .table = spec.table,
+    };
+}
+
+absl::StatusOr<TableSchema> SQLiteConnectorMetadata::Schema(const TableHandle& table) const {
+    return SQLiteSource(table.dsn, table.table).Schema();
+}
+
+SourceCapabilities SQLiteConnectorMetadata::Capabilities(const TableHandle& table) const {
+    return SQLiteSource(table.dsn, table.table).Capabilities();
+}
+
+absl::StatusOr<TableStatistics> SQLiteConnectorMetadata::Statistics(
+    const TableHandle& table) const {
+    return SQLiteSource(table.dsn, table.table).Statistics();
+}
+
+struct SQLitePageSource::Impl {
+    SqliteDb db;
+    SqliteStmt stmt;
+    ScanRequest request;
+    std::vector<std::string> column_names;
+    bool done = false;
+    bool emitted_empty = false;
+    bool emitted_any_row = false;
+};
+
+SQLitePageSource::SQLitePageSource(std::string dsn,
+                                   std::string table,
+                                   ScanRequest request,
+                                   size_t rows_per_page)
+    : impl_(std::make_unique<Impl>()),
+      dsn_(std::move(dsn)),
+      table_(std::move(table)),
+      rows_per_page_(std::max<size_t>(1, rows_per_page)) {
+    impl_->request = std::move(request);
+}
+
+absl::Status SQLitePageSource::Initialize() {
+    auto db_or = open_readonly_db(dsn_);
+    if (!db_or.ok()) {
+        return db_or.status();
+    }
+    impl_->db = std::move(*db_or);
+    auto schema_or = SQLiteSource(dsn_, table_).Schema();
+    if (!schema_or.ok()) {
+        return schema_or.status();
+    }
+    auto sql_or = build_scan_sql(query_for_table(table_), impl_->request, *schema_or);
+    if (!sql_or.ok()) {
+        return sql_or.status();
+    }
+    auto stmt_or = prepare_statement(impl_->db.get(), sql_or->sql);
+    if (!stmt_or.ok()) {
+        return stmt_or.status();
+    }
+    auto bind_status = bind_scan_sql(stmt_or->get(), *sql_or);
+    if (!bind_status.ok()) {
+        return bind_status;
+    }
+    impl_->stmt = std::move(*stmt_or);
+    impl_->column_names = sqlite_column_names(impl_->stmt.get());
+    return absl::OkStatus();
+}
+
+absl::StatusOr<std::optional<ConnectorPage>> SQLitePageSource::NextPage() {
+    if (impl_ == nullptr || impl_->stmt == nullptr) {
+        return absl::InvalidArgumentError("sqlite page source is not initialized");
+    }
+    if (impl_->done) {
+        if (!impl_->emitted_empty && !impl_->emitted_any_row) {
+            impl_->emitted_empty = true;
+            return ConnectorPage{.table = Value::table("sqlite", {}).as_table()};
+        }
+        return std::nullopt;
+    }
+
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve(rows_per_page_);
+    while (rows.size() < rows_per_page_) {
+        const int step_rc = sqlite3_step(impl_->stmt.get());
+        if (step_rc == SQLITE_DONE) {
+            impl_->done = true;
+            break;
+        }
+        if (step_rc != SQLITE_ROW) {
+            return absl::InvalidArgumentError(
+                absl::StrCat("sqlite step failed: ", sqlite3_errmsg(impl_->db.get())));
+        }
+        auto row = row_from_sqlite_stmt(impl_->stmt.get(), impl_->column_names);
+        if (impl_->request.aggregate.has_value()) {
+            row = row_with_group(row, impl_->request.group_by);
+        }
+        rows.push_back(std::move(row));
+    }
+
+    if (rows.empty()) {
+        if (!impl_->emitted_empty && !impl_->emitted_any_row) {
+            impl_->emitted_empty = true;
+            return ConnectorPage{.table = Value::table("sqlite", {}).as_table()};
+        }
+        return std::nullopt;
+    }
+
+    impl_->emitted_any_row = true;
+    if (impl_->request.aggregate.has_value()) {
+        std::vector<TableChunk> chunks;
+        chunks.reserve(rows.size());
+        for (auto& row : rows) {
+            TableChunk chunk;
+            chunk.rows.push_back(std::move(row));
+            chunks.push_back(std::move(chunk));
+        }
+        return ConnectorPage{.table = Value::table_stream("sqlite", std::move(chunks)).as_table()};
+    }
+    return ConnectorPage{.table = Value::table("sqlite", std::move(rows)).as_table()};
+}
+
+SQLitePageSourceProvider::SQLitePageSourceProvider(size_t rows_per_page)
+    : rows_per_page_(std::max<size_t>(1, rows_per_page)) {}
+
+absl::StatusOr<std::unique_ptr<ConnectorPageSource>> SQLitePageSourceProvider::CreatePageSource(
+    const ConnectorSplit& split) const {
+    auto page_source = std::make_unique<SQLitePageSource>(split.table.dsn, split.table.table,
+                                                          split.request, rows_per_page_);
+    auto status = page_source->Initialize();
+    if (!status.ok()) {
+        return status;
+    }
+    return page_source;
+}
+
+std::unique_ptr<ConnectorRuntime> MakeSQLiteConnectorRuntime(const SourceSpec& spec) {
+    auto runtime = std::make_unique<ConnectorRuntime>();
+    runtime->metadata = std::make_unique<SQLiteConnectorMetadata>(spec);
+    runtime->split_manager = std::make_unique<SingleSplitManager>();
+    runtime->page_source_provider = std::make_unique<SQLitePageSourceProvider>();
+    return runtime;
 }
 
 } // namespace pl::flux::connector

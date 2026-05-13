@@ -37,6 +37,7 @@ cc_library(
     copts = COPTS,
     linkopts = LINKOPTS,
     deps = [
+        "//cpp/pl/flux/connector",
         "//cpp/pl/flux/optimizer",
         "//cpp/pl/flux/runtime:runtime_builtin_aggregate_helpers",
         "//cpp/pl/flux/runtime:runtime_builtin_table_helpers",
