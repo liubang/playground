@@ -523,6 +523,25 @@ Value value_from_mysql_field(mysql::field_view field, const mysql::metadata& met
     return Value::string("");
 }
 
+std::optional<double> numeric_from_mysql_field(mysql::field_view field) {
+    if (field.is_null()) {
+        return std::nullopt;
+    }
+    if (field.is_int64()) {
+        return static_cast<double>(field.as_int64());
+    }
+    if (field.is_uint64()) {
+        return static_cast<double>(field.as_uint64());
+    }
+    if (field.is_float()) {
+        return static_cast<double>(field.as_float());
+    }
+    if (field.is_double()) {
+        return field.as_double();
+    }
+    return std::nullopt;
+}
+
 absl::StatusOr<TableSchema> schema_from_result(const mysql::results& result) {
     const mysql::metadata_collection_view meta = result.meta();
     TableSchema schema;
@@ -649,10 +668,37 @@ absl::StatusOr<TableStatistics> MySQLSource::Statistics() const {
     if (schema_or.ok()) {
         statistics.columns.reserve(schema_or->columns.size());
         for (const auto& column : schema_or->columns) {
+            auto column_stats_or = execute_query(
+                &*conn_or,
+                absl::StrCat("SELECT COUNT(DISTINCT ", quote_identifier(column.name),
+                             "), SUM(CASE WHEN ", quote_identifier(column.name),
+                             " IS NULL THEN 1 ELSE 0 END), AVG(CHAR_LENGTH(CAST(",
+                             quote_identifier(column.name), " AS CHAR))) FROM (", query_,
+                             ") AS flux_source"),
+                "column statistics query");
+            if (!column_stats_or.ok() || column_stats_or->rows().empty() ||
+                column_stats_or->rows()[0].size() < 3) {
+                statistics.columns.push_back({.name = column.name});
+                continue;
+            }
+            const auto row = column_stats_or->rows()[0];
+            const auto distinct_values = numeric_from_mysql_field(row.at(0));
+            std::optional<double> null_fraction;
+            const auto null_count = numeric_from_mysql_field(row.at(1));
+            if (statistics.row_count.has_value() && *statistics.row_count > 0.0 &&
+                null_count.has_value()) {
+                null_fraction = *null_count / *statistics.row_count;
+            } else if (statistics.row_count.has_value() && *statistics.row_count == 0.0) {
+                null_fraction = 0.0;
+            }
+            auto average_width_bytes = numeric_from_mysql_field(row.at(2));
+            if (!average_width_bytes.has_value() && statistics.row_count.value_or(0.0) == 0.0) {
+                average_width_bytes = 0.0;
+            }
             statistics.columns.push_back({.name = column.name,
-                                          .distinct_values = {},
-                                          .null_fraction = {},
-                                          .average_width_bytes = {}});
+                                          .distinct_values = distinct_values,
+                                          .null_fraction = null_fraction,
+                                          .average_width_bytes = average_width_bytes});
         }
     }
     return statistics;

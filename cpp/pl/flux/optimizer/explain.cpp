@@ -28,8 +28,23 @@
 namespace pl::flux::optimizer {
 namespace {
 
+std::string FormatCboAlternative(const PlanAlternative& alternative) {
+    std::ostringstream out;
+    out << alternative.name;
+    if (alternative.chosen) {
+        out << "*";
+    }
+    out << ":" << plan::CostString(alternative.cost);
+    return out.str();
+}
+
 void ApplyCboTrace(const CboPlanResult& cbo_result, plan::PhysicalPlanNode* physical) {
     physical->optimizer.rbo_rules = AppliedRuleNames(cbo_result.rbo_result);
+    physical->optimizer.cbo_alternatives.clear();
+    physical->optimizer.cbo_alternatives.reserve(cbo_result.alternatives.size());
+    for (const auto& alternative : cbo_result.alternatives) {
+        physical->optimizer.cbo_alternatives.push_back(FormatCboAlternative(alternative));
+    }
     physical->optimizer.cbo_decision = cbo_result.decision;
     physical->optimizer.cost = cbo_result.cost;
 }
@@ -94,7 +109,8 @@ void FormatLogicalNodeDetail(const plan::PlanNode& node, std::ostringstream* out
         *out << ")";
     } else if (node.kind == plan::PlanNodeKind::Join) {
         *out << "(method=\"" << plan::JoinMethodName(node.join().method) << "\", on="
-             << plan::StringList(node.join().on) << ")";
+             << plan::StringList(node.join().on) << ", build=\""
+             << plan::JoinBuildSideName(node.join().build_side) << "\")";
     } else if (node.kind == plan::PlanNodeKind::Exchange) {
         *out << "(kind=\"" << plan::ExchangeKindName(node.exchange().kind) << "\"";
         if (!node.exchange().partition_keys.empty()) {

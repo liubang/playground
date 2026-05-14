@@ -61,6 +61,12 @@ TEST(SQLiteSourceTest, ReportsTableStatistics) {
     EXPECT_EQ(4.0, *statistics_or->row_count);
     ASSERT_EQ(4, statistics_or->columns.size());
     EXPECT_EQ("_time", statistics_or->columns[0].name);
+    EXPECT_TRUE(statistics_or->columns[1].distinct_values.has_value());
+    EXPECT_EQ(3.0, *statistics_or->columns[1].distinct_values);
+    EXPECT_TRUE(statistics_or->columns[1].null_fraction.has_value());
+    EXPECT_EQ(0.0, *statistics_or->columns[1].null_fraction);
+    EXPECT_TRUE(statistics_or->columns[1].average_width_bytes.has_value());
+    EXPECT_GT(*statistics_or->columns[1].average_width_bytes, 0.0);
 }
 
 TEST(SQLiteSourceTest, RuntimeMetadataSplitAndPageSourceScansTable) {
