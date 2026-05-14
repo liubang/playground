@@ -110,6 +110,37 @@ TEST(ConnectorRuntimeConformanceTest, MemoryRuntimeExposesMetadataSplitsAndMulti
     EXPECT_EQ("\"edge-3\"", second.rows[0]->lookup("host")->string());
 }
 
+TEST(ConnectorRuntimeConformanceTest, PageSourceReportsSplitLifecycleStats) {
+    SourceSpec spec{.source = "array", .driver = "memory", .table = "hosts"};
+    auto runtime = MakeMemoryConnectorRuntime(spec, "hosts", make_rows(), 2);
+    ASSERT_NE(nullptr, runtime);
+
+    auto handle_or = runtime->metadata->GetTableHandle(spec);
+    ASSERT_TRUE(handle_or.ok()) << handle_or.status();
+    auto splits_or = runtime->split_manager->GetSplits(*handle_or, {});
+    ASSERT_TRUE(splits_or.ok()) << splits_or.status();
+    ASSERT_EQ(1, splits_or->size());
+    EXPECT_EQ(0, splits_or->front().split_id);
+    EXPECT_FALSE(splits_or->front().finished);
+
+    auto source_or = runtime->page_source_provider->CreatePageSource(splits_or->front());
+    ASSERT_TRUE(source_or.ok()) << source_or.status();
+    EXPECT_FALSE((*source_or)->Finished());
+
+    ASSERT_TRUE((*source_or)->NextPage().ok());
+    ASSERT_TRUE((*source_or)->NextPage().ok());
+    auto done_or = (*source_or)->NextPage();
+    ASSERT_TRUE(done_or.ok()) << done_or.status();
+    EXPECT_FALSE(done_or->has_value());
+
+    ConnectorSplitStats stats = (*source_or)->Stats();
+    EXPECT_TRUE((*source_or)->Finished());
+    EXPECT_TRUE(stats.finished);
+    EXPECT_EQ(0, stats.split_id);
+    EXPECT_EQ(2, stats.pages_produced);
+    EXPECT_EQ(3, stats.rows_produced);
+}
+
 TEST(ConnectorRuntimeConformanceTest, MemoryRuntimeEmitsSingleEmptyPage) {
     SourceSpec spec{.source = "array", .driver = "memory", .table = "hosts"};
     auto runtime = MakeMemoryConnectorRuntime(spec, "hosts", {}, 2);

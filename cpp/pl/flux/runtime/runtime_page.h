@@ -17,8 +17,12 @@
 
 #pragma once
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/runtime/runtime_value.h"
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -31,6 +35,25 @@ struct ColumnVector {
     std::string name;
     Value::Type type = Value::Type::Null;
     std::vector<Value> values;
+};
+
+struct PageColumnSchema {
+    std::string name;
+    Value::Type type = Value::Type::Null;
+    bool nullable = false;
+};
+
+struct PageSchema {
+    std::vector<PageColumnSchema> columns;
+
+    [[nodiscard]] std::optional<size_t> FindColumn(const std::string& name) const {
+        for (size_t index = 0; index < columns.size(); ++index) {
+            if (columns[index].name == name) {
+                return index;
+            }
+        }
+        return std::nullopt;
+    }
 };
 
 struct PageChunk {
@@ -58,6 +81,151 @@ struct Page {
 
     [[nodiscard]] bool empty() const { return row_count() == 0; }
 };
+
+inline Value::Type merge_page_type(Value::Type current, const Value& value) {
+    if (value.is_null()) {
+        return current;
+    }
+    if (current == Value::Type::Null) {
+        return value.type();
+    }
+    return current;
+}
+
+inline PageSchema SchemaFromPageChunk(const PageChunk& chunk) {
+    PageSchema schema;
+    schema.columns.reserve(chunk.columns.size());
+    for (const auto& column : chunk.columns) {
+        PageColumnSchema item;
+        item.name = column.name;
+        item.type = column.type;
+        item.nullable = false;
+        for (const auto& value : column.values) {
+            item.type = merge_page_type(item.type, value);
+            if (value.is_null()) {
+                item.nullable = true;
+            }
+        }
+        schema.columns.push_back(std::move(item));
+    }
+    return schema;
+}
+
+inline PageSchema SchemaFromPage(const Page& page) {
+    PageSchema schema;
+    for (const auto& chunk : page.chunks) {
+        PageSchema chunk_schema = SchemaFromPageChunk(chunk);
+        for (const auto& column : chunk_schema.columns) {
+            auto index = schema.FindColumn(column.name);
+            if (!index.has_value()) {
+                schema.columns.push_back(column);
+                continue;
+            }
+            auto& existing = schema.columns[*index];
+            if (existing.type == Value::Type::Null) {
+                existing.type = column.type;
+            }
+            existing.nullable = existing.nullable || column.nullable;
+        }
+    }
+    return schema;
+}
+
+inline absl::Status ValidatePageChunk(const PageChunk& chunk) {
+    for (const auto& column : chunk.columns) {
+        if (column.values.size() != chunk.row_count) {
+            return absl::InvalidArgumentError(absl::StrCat(
+                "page column ", column.name, " has ", column.values.size(),
+                " values but chunk has ", chunk.row_count, " rows"));
+        }
+    }
+    return absl::OkStatus();
+}
+
+inline absl::Status ValidatePage(const Page& page) {
+    for (const auto& chunk : page.chunks) {
+        auto status = ValidatePageChunk(chunk);
+        if (!status.ok()) {
+            return status;
+        }
+    }
+    return absl::OkStatus();
+}
+
+inline const Value* PageChunkValueAt(const PageChunk& chunk,
+                                     size_t row_index,
+                                     const std::string& column_name) {
+    if (row_index >= chunk.row_count) {
+        return nullptr;
+    }
+    for (const auto& column : chunk.columns) {
+        if (column.name != column_name) {
+            continue;
+        }
+        if (row_index >= column.values.size()) {
+            return nullptr;
+        }
+        return &column.values[row_index];
+    }
+    return nullptr;
+}
+
+inline std::shared_ptr<ObjectValue> RowFromPageChunk(const PageChunk& chunk, size_t row_index) {
+    std::vector<std::pair<std::string, Value>> props;
+    props.reserve(chunk.columns.size());
+    if (row_index >= chunk.row_count) {
+        return std::make_shared<ObjectValue>(std::move(props));
+    }
+    for (const auto& column : chunk.columns) {
+        props.emplace_back(column.name,
+                           row_index < column.values.size() ? column.values[row_index]
+                                                            : Value::null());
+    }
+    return std::make_shared<ObjectValue>(std::move(props));
+}
+
+inline PageChunk SlicePageChunkRows(const PageChunk& source, size_t start, size_t count) {
+    PageChunk chunk;
+    chunk.group_key = source.group_key;
+    if (start >= source.row_count || count == 0) {
+        chunk.row_count = 0;
+        chunk.columns.reserve(source.columns.size());
+        for (const auto& column : source.columns) {
+            chunk.columns.push_back(ColumnVector{
+                .name = column.name,
+                .type = column.type,
+            });
+        }
+        return chunk;
+    }
+
+    const size_t end = std::min(source.row_count, start + count);
+    chunk.row_count = end - start;
+    chunk.columns.reserve(source.columns.size());
+    for (const auto& source_column : source.columns) {
+        ColumnVector column;
+        column.name = source_column.name;
+        column.type = source_column.type;
+        column.values.reserve(chunk.row_count);
+        column.values.insert(column.values.end(),
+                             source_column.values.begin() + static_cast<std::ptrdiff_t>(start),
+                             source_column.values.begin() + static_cast<std::ptrdiff_t>(end));
+        chunk.columns.push_back(std::move(column));
+    }
+    return chunk;
+}
+
+inline Page PageLike(const Page& source, std::vector<PageChunk> chunks) {
+    Page page;
+    page.bucket = source.bucket;
+    page.chunks = std::move(chunks);
+    page.range_start = source.range_start;
+    page.range_stop = source.range_stop;
+    page.result_name = source.result_name;
+    page.plan = source.plan;
+    page.materialized = source.materialized;
+    return page;
+}
 
 inline std::vector<std::string> infer_page_columns(const TableChunk& chunk) {
     if (!chunk.columns.empty()) {
@@ -188,6 +356,22 @@ inline void AppendPage(Page* output, Page page) {
     if (output == nullptr) {
         return;
     }
+    if (output->bucket.empty()) {
+        output->bucket = page.bucket;
+    }
+    if (!output->range_start.has_value()) {
+        output->range_start = page.range_start;
+    }
+    if (!output->range_stop.has_value()) {
+        output->range_stop = page.range_stop;
+    }
+    if (!output->result_name.has_value()) {
+        output->result_name = page.result_name;
+    }
+    if (output->plan == nullptr) {
+        output->plan = page.plan;
+    }
+    output->materialized = output->materialized || page.materialized;
     output->chunks.insert(output->chunks.end(), page.chunks.begin(), page.chunks.end());
 }
 
