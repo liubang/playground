@@ -50,7 +50,7 @@ markdown-it-py==4.2.0
     # via rich
 mdurl==0.1.2
     # via markdown-it-py
-mlx==0.29.3
+mlx==0.29.4
     # via -r cpp/pl/recall/embedding_server/requirements.in
 mlx-metal==0.29.3
     # via mlx
