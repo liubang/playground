@@ -145,116 +145,6 @@ absl::StatusOr<std::vector<connector::ConnectorSplit>> create_connector_splits(
     return *splits_or;
 }
 
-absl::StatusOr<Value> apply_range(const Value& input, const std::shared_ptr<plan::PlanNode>& plan) {
-    const auto& table = input.as_table();
-    std::vector<TableChunk> chunks;
-    chunks.reserve(table.table_count());
-    for (const auto& chunk : table.tables) {
-        TableChunk next;
-        next.group_key = chunk.group_key;
-        next.columns = chunk.columns;
-        for (const auto& row : chunk.rows) {
-            if (row != nullptr && time_in_range(*row, plan->range())) {
-                next.rows.push_back(row);
-            }
-        }
-        chunks.push_back(std::move(next));
-    }
-    return table_with_plan(table_with_chunks_like(table, std::move(chunks)), plan);
-}
-
-absl::StatusOr<Value> apply_filter(const Value& input,
-                                   const std::shared_ptr<plan::PlanNode>& plan) {
-    const auto& table = input.as_table();
-    std::vector<TableChunk> chunks;
-    chunks.reserve(table.table_count());
-    for (const auto& chunk : table.tables) {
-        TableChunk next;
-        next.group_key = chunk.group_key;
-        next.columns = chunk.columns;
-        for (const auto& row : chunk.rows) {
-            if (row == nullptr) {
-                continue;
-            }
-            bool keep = true;
-            for (const auto& predicate : plan->filter().predicates) {
-                auto matches_or = predicate_matches(*row, predicate);
-                if (!matches_or.ok()) {
-                    return matches_or.status();
-                }
-                if (!*matches_or) {
-                    keep = false;
-                    break;
-                }
-            }
-            if (keep) {
-                next.rows.push_back(row);
-            }
-        }
-        chunks.push_back(std::move(next));
-    }
-    return table_with_plan(table_with_chunks_like(table, std::move(chunks)), plan);
-}
-
-absl::StatusOr<Value> apply_project(const Value& input,
-                                    const std::shared_ptr<plan::PlanNode>& plan) {
-    const auto& table = input.as_table();
-    const std::unordered_set<std::string> selected(plan->project().columns.begin(),
-                                                   plan->project().columns.end());
-    std::vector<TableChunk> chunks;
-    chunks.reserve(table.table_count());
-    for (const auto& chunk : table.tables) {
-        TableChunk next;
-        next.group_key = chunk.group_key;
-        next.columns = plan->project().columns;
-        for (const auto& row : chunk.rows) {
-            if (row == nullptr) {
-                continue;
-            }
-            std::vector<std::pair<std::string, Value>> props;
-            props.reserve(row->properties.size());
-            for (const auto& [key, value] : row->properties) {
-                if (selected.count(key) != 0) {
-                    props.emplace_back(key, value);
-                }
-            }
-            next.rows.push_back(std::make_shared<ObjectValue>(std::move(props)));
-        }
-        chunks.push_back(std::move(next));
-    }
-    return table_with_plan(table_with_chunks_like(table, std::move(chunks)), plan);
-}
-
-absl::StatusOr<Value> apply_rename(const Value& input,
-                                   const std::shared_ptr<plan::PlanNode>& plan) {
-    const auto& table = input.as_table();
-    std::vector<TableChunk> chunks;
-    chunks.reserve(table.table_count());
-    for (const auto& chunk : table.tables) {
-        TableChunk next;
-        next.group_key = chunk.group_key;
-        next.columns.reserve(chunk.columns.size());
-        for (const auto& column : chunk.columns) {
-            next.columns.push_back(
-                mapped_column_name(plan->rename().columns, column).value_or(column));
-        }
-        for (const auto& row : chunk.rows) {
-            if (row == nullptr) {
-                continue;
-            }
-            std::vector<std::pair<std::string, Value>> props;
-            props.reserve(row->properties.size());
-            for (const auto& [key, value] : row->properties) {
-                props.emplace_back(mapped_column_name(plan->rename().columns, key).value_or(key),
-                                   value);
-            }
-            next.rows.push_back(std::make_shared<ObjectValue>(std::move(props)));
-        }
-        chunks.push_back(std::move(next));
-    }
-    return table_with_plan(table_with_chunks_like(table, std::move(chunks)), plan);
-}
-
 absl::StatusOr<Value> apply_sort(const Value& input, const std::shared_ptr<plan::PlanNode>& plan) {
     const auto& table = input.as_table();
     auto chunks = clone_table_chunks(table);
@@ -388,6 +278,139 @@ Value value_from_page(const Page& page) {
 
 Page page_from_value(const Value& value) { return PageFromTableValue(value.as_table()); }
 
+Page page_with_plan(Page page, const std::shared_ptr<plan::PlanNode>& plan) {
+    page.plan = plan;
+    return page;
+}
+
+absl::StatusOr<Page> apply_range_page(Page input, const std::shared_ptr<plan::PlanNode>& plan) {
+    auto status = ValidatePage(input);
+    if (!status.ok()) {
+        return status;
+    }
+    std::vector<PageChunk> chunks;
+    chunks.reserve(input.chunks.size());
+    for (const auto& source : input.chunks) {
+        PageChunk chunk;
+        chunk.group_key = source.group_key;
+        chunk.row_count = 0;
+        chunk.columns.reserve(source.columns.size());
+        for (const auto& source_column : source.columns) {
+            chunk.columns.push_back(ColumnVector{.name = source_column.name,
+                                                 .type = source_column.type});
+        }
+        for (size_t row_index = 0; row_index < source.row_count; ++row_index) {
+            auto row = RowFromPageChunk(source, row_index);
+            if (!time_in_range(*row, plan->range())) {
+                continue;
+            }
+            for (size_t column_index = 0; column_index < source.columns.size(); ++column_index) {
+                chunk.columns[column_index].values.push_back(
+                    source.columns[column_index].values[row_index]);
+            }
+            ++chunk.row_count;
+        }
+        chunks.push_back(std::move(chunk));
+    }
+    return page_with_plan(PageLike(input, std::move(chunks)), plan);
+}
+
+absl::StatusOr<Page> apply_filter_page(Page input, const std::shared_ptr<plan::PlanNode>& plan) {
+    auto status = ValidatePage(input);
+    if (!status.ok()) {
+        return status;
+    }
+    std::vector<PageChunk> chunks;
+    chunks.reserve(input.chunks.size());
+    for (const auto& source : input.chunks) {
+        PageChunk chunk;
+        chunk.group_key = source.group_key;
+        chunk.row_count = 0;
+        chunk.columns.reserve(source.columns.size());
+        for (const auto& source_column : source.columns) {
+            chunk.columns.push_back(ColumnVector{.name = source_column.name,
+                                                 .type = source_column.type});
+        }
+        for (size_t row_index = 0; row_index < source.row_count; ++row_index) {
+            auto row = RowFromPageChunk(source, row_index);
+            bool keep = true;
+            for (const auto& predicate : plan->filter().predicates) {
+                auto matches_or = predicate_matches(*row, predicate);
+                if (!matches_or.ok()) {
+                    return matches_or.status();
+                }
+                if (!*matches_or) {
+                    keep = false;
+                    break;
+                }
+            }
+            if (!keep) {
+                continue;
+            }
+            for (size_t column_index = 0; column_index < source.columns.size(); ++column_index) {
+                chunk.columns[column_index].values.push_back(
+                    source.columns[column_index].values[row_index]);
+            }
+            ++chunk.row_count;
+        }
+        chunks.push_back(std::move(chunk));
+    }
+    return page_with_plan(PageLike(input, std::move(chunks)), plan);
+}
+
+absl::StatusOr<Page> apply_project_page(Page input, const std::shared_ptr<plan::PlanNode>& plan) {
+    auto status = ValidatePage(input);
+    if (!status.ok()) {
+        return status;
+    }
+    std::vector<PageChunk> chunks;
+    chunks.reserve(input.chunks.size());
+    for (const auto& source : input.chunks) {
+        PageChunk chunk;
+        chunk.group_key = source.group_key;
+        chunk.row_count = source.row_count;
+        chunk.columns.reserve(plan->project().columns.size());
+        PageSchema schema = SchemaFromPageChunk(source);
+        for (const auto& column_name : plan->project().columns) {
+            ColumnVector column;
+            column.name = column_name;
+            column.values.reserve(source.row_count);
+            auto source_index = schema.FindColumn(column_name);
+            if (source_index.has_value()) {
+                const auto& source_column = source.columns[*source_index];
+                column.type = source_column.type;
+                column.values = source_column.values;
+            } else {
+                column.type = Value::Type::Null;
+                column.values.assign(source.row_count, Value::null());
+            }
+            chunk.columns.push_back(std::move(column));
+        }
+        chunks.push_back(std::move(chunk));
+    }
+    return page_with_plan(PageLike(input, std::move(chunks)), plan);
+}
+
+absl::StatusOr<Page> apply_rename_page(Page input, const std::shared_ptr<plan::PlanNode>& plan) {
+    auto status = ValidatePage(input);
+    if (!status.ok()) {
+        return status;
+    }
+    for (auto& chunk : input.chunks) {
+        for (auto& column : chunk.columns) {
+            column.name = mapped_column_name(plan->rename().columns, column.name).value_or(
+                column.name);
+        }
+    }
+    return page_with_plan(std::move(input), plan);
+}
+
+Page materialize_page(Page input, const std::shared_ptr<plan::PlanNode>& plan) {
+    input.plan = plan;
+    input.materialized = true;
+    return input;
+}
+
 absl::StatusOr<std::optional<Page>> next_input_page(Operator* input) {
     if (input == nullptr) {
         return absl::InvalidArgumentError("operator has no input");
@@ -453,8 +476,16 @@ public:
                 return page_or.status();
             }
             if (!page_or->has_value()) {
+                if (next_split_ > 0) {
+                    splits_[next_split_ - 1].finished = page_source_->Finished();
+                    split_stats_.push_back(page_source_->Stats());
+                }
                 page_source_.reset();
                 continue;
+            }
+            auto status = ValidatePage(page_or->value());
+            if (!status.ok()) {
+                return status;
             }
             return page_or;
         }
@@ -479,14 +510,15 @@ private:
     optimizer::PushdownPlan plan_;
     std::unique_ptr<connector::ConnectorRuntime> runtime_;
     std::vector<connector::ConnectorSplit> splits_;
+    std::vector<connector::ConnectorSplitStats> split_stats_;
     std::unique_ptr<connector::ConnectorPageSource> page_source_;
     size_t next_split_ = 0;
     bool initialized_ = false;
 };
 
-class StreamingUnaryOperator : public Operator {
+class PageUnaryOperator : public Operator {
 public:
-    StreamingUnaryOperator(std::shared_ptr<plan::PlanNode> plan, std::unique_ptr<Operator> input)
+    PageUnaryOperator(std::shared_ptr<plan::PlanNode> plan, std::unique_ptr<Operator> input)
         : plan_(std::move(plan)), input_(std::move(input)) {}
 
     absl::StatusOr<std::optional<Page>> NextPage() override {
@@ -497,17 +529,17 @@ public:
         if (!input_or->has_value()) {
             return std::nullopt;
         }
-        auto value_or = Apply(value_from_page(**input_or));
-        if (!value_or.ok()) {
-            return value_or.status();
+        auto page_or = Apply(std::move(**input_or));
+        if (!page_or.ok()) {
+            return page_or.status();
         }
-        return page_from_value(*value_or);
+        return std::move(*page_or);
     }
 
 protected:
     [[nodiscard]] const std::shared_ptr<plan::PlanNode>& plan() const { return plan_; }
     [[nodiscard]] Operator* input() const { return input_.get(); }
-    virtual absl::StatusOr<Value> Apply(const Value& input) const = 0;
+    virtual absl::StatusOr<Page> Apply(Page input) const = 0;
 
 private:
     std::shared_ptr<plan::PlanNode> plan_;
@@ -545,47 +577,47 @@ private:
     bool emitted_ = false;
 };
 
-class RangeOperator final : public StreamingUnaryOperator {
+class RangeOperator final : public PageUnaryOperator {
 public:
-    using StreamingUnaryOperator::StreamingUnaryOperator;
+    using PageUnaryOperator::PageUnaryOperator;
     [[nodiscard]] std::string name() const override { return "RangeOperator"; }
 
 private:
-    absl::StatusOr<Value> Apply(const Value& input) const override {
-        return apply_range(input, plan());
+    absl::StatusOr<Page> Apply(Page input) const override {
+        return apply_range_page(std::move(input), plan());
     }
 };
 
-class FilterOperator final : public StreamingUnaryOperator {
+class FilterOperator final : public PageUnaryOperator {
 public:
-    using StreamingUnaryOperator::StreamingUnaryOperator;
+    using PageUnaryOperator::PageUnaryOperator;
     [[nodiscard]] std::string name() const override { return "FilterOperator"; }
 
 private:
-    absl::StatusOr<Value> Apply(const Value& input) const override {
-        return apply_filter(input, plan());
+    absl::StatusOr<Page> Apply(Page input) const override {
+        return apply_filter_page(std::move(input), plan());
     }
 };
 
-class ProjectOperator final : public StreamingUnaryOperator {
+class ProjectOperator final : public PageUnaryOperator {
 public:
-    using StreamingUnaryOperator::StreamingUnaryOperator;
+    using PageUnaryOperator::PageUnaryOperator;
     [[nodiscard]] std::string name() const override { return "ProjectOperator"; }
 
 private:
-    absl::StatusOr<Value> Apply(const Value& input) const override {
-        return apply_project(input, plan());
+    absl::StatusOr<Page> Apply(Page input) const override {
+        return apply_project_page(std::move(input), plan());
     }
 };
 
-class RenameOperator final : public StreamingUnaryOperator {
+class RenameOperator final : public PageUnaryOperator {
 public:
-    using StreamingUnaryOperator::StreamingUnaryOperator;
+    using PageUnaryOperator::PageUnaryOperator;
     [[nodiscard]] std::string name() const override { return "RenameOperator"; }
 
 private:
-    absl::StatusOr<Value> Apply(const Value& input) const override {
-        return apply_rename(input, plan());
+    absl::StatusOr<Page> Apply(Page input) const override {
+        return apply_rename_page(std::move(input), plan());
     }
 };
 
@@ -611,34 +643,33 @@ public:
                 return std::nullopt;
             }
 
-            TableValue table = TableValueFromPage(input_or->value());
-            std::vector<TableChunk> chunks;
-            for (const auto& source : table.tables) {
-                TableChunk chunk;
-                chunk.group_key = source.group_key;
-                chunk.columns = source.columns;
-                for (const auto& row : source.rows) {
-                    if (remaining_offset_ > 0) {
-                        --remaining_offset_;
-                        continue;
-                    }
-                    if (remaining_limit_ == 0) {
-                        break;
-                    }
-                    chunk.rows.push_back(row);
-                    --remaining_limit_;
-                }
-                chunks.push_back(std::move(chunk));
+            Page input = std::move(input_or->value());
+            auto status = ValidatePage(input);
+            if (!status.ok()) {
+                return status;
+            }
+            std::vector<PageChunk> chunks;
+            chunks.reserve(input.chunks.size());
+            for (const auto& source : input.chunks) {
                 if (remaining_limit_ == 0) {
                     break;
                 }
+                if (remaining_offset_ >= static_cast<int64_t>(source.row_count)) {
+                    remaining_offset_ -= static_cast<int64_t>(source.row_count);
+                    continue;
+                }
+                const size_t start = static_cast<size_t>(remaining_offset_);
+                remaining_offset_ = 0;
+                const size_t take = std::min<size_t>(
+                    source.row_count - start, static_cast<size_t>(remaining_limit_));
+                PageChunk chunk = SlicePageChunkRows(source, start, take);
+                remaining_limit_ -= static_cast<int64_t>(chunk.row_count);
+                chunks.push_back(std::move(chunk));
             }
-            Value value = Value::table_stream(table.bucket, std::move(chunks), table.range_start,
-                                              table.range_stop, table.result_name);
-            value.as_table_mut().plan = plan_;
-            value.as_table_mut().materialized = table.materialized;
-            if (!value.as_table().rows.empty() || remaining_limit_ == 0) {
-                return page_from_value(value);
+            Page output = PageLike(input, std::move(chunks));
+            output.plan = plan_;
+            if (!output.empty() || remaining_limit_ == 0) {
+                return output;
             }
         }
     }
@@ -694,17 +725,14 @@ private:
     }
 };
 
-class MaterializeOperator final : public StreamingUnaryOperator {
+class MaterializeOperator final : public PageUnaryOperator {
 public:
-    using StreamingUnaryOperator::StreamingUnaryOperator;
+    using PageUnaryOperator::PageUnaryOperator;
     [[nodiscard]] std::string name() const override { return "MaterializeOperator"; }
 
 private:
-    absl::StatusOr<Value> Apply(const Value& input) const override {
-        Value output = input;
-        output.as_table_mut().plan = plan();
-        output.as_table_mut().materialized = true;
-        return output;
+    absl::StatusOr<Page> Apply(Page input) const override {
+        return materialize_page(std::move(input), plan());
     }
 };
 
@@ -721,6 +749,10 @@ public:
         }
         if (!input_or->has_value()) {
             return std::nullopt;
+        }
+        auto status = ValidatePage(input_or->value());
+        if (!status.ok()) {
+            return status;
         }
         input_or->value().materialized = true;
         return input_or;
