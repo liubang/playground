@@ -58,10 +58,33 @@ TableStatistics statistics_from_rows(const std::vector<std::shared_ptr<ObjectVal
     const auto schema = schema_from_rows(rows);
     statistics.columns.reserve(schema.columns.size());
     for (const auto& column : schema.columns) {
+        size_t null_count = 0;
+        size_t non_null_count = 0;
+        size_t total_width = 0;
+        std::unordered_set<std::string> distinct_values;
+        for (const auto& row : rows) {
+            const Value* value = row == nullptr ? nullptr : row->lookup(column.name);
+            if (value == nullptr || value->is_null()) {
+                ++null_count;
+                continue;
+            }
+            const std::string encoded = value->string();
+            distinct_values.insert(encoded);
+            total_width += encoded.size();
+            ++non_null_count;
+        }
         statistics.columns.push_back({.name = column.name,
-                                      .distinct_values = {},
-                                      .null_fraction = {},
-                                      .average_width_bytes = {}});
+                                      .distinct_values =
+                                          static_cast<double>(distinct_values.size()),
+                                      .null_fraction = rows.empty()
+                                                           ? 0.0
+                                                           : static_cast<double>(null_count) /
+                                                                 static_cast<double>(rows.size()),
+                                      .average_width_bytes =
+                                          non_null_count == 0
+                                              ? 0.0
+                                              : static_cast<double>(total_width) /
+                                                    static_cast<double>(non_null_count)});
     }
     return statistics;
 }

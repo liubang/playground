@@ -98,6 +98,14 @@ TEST(ConnectorRuntimeConformanceTest, MemoryRuntimeExposesMetadataSplitsAndMulti
     ASSERT_NE(nullptr, runtime);
 
     expect_basic_runtime_contract(*runtime, spec);
+    auto handle_or = runtime->metadata->GetTableHandle(spec);
+    ASSERT_TRUE(handle_or.ok()) << handle_or.status();
+    auto statistics_or = runtime->metadata->Statistics(*handle_or);
+    ASSERT_TRUE(statistics_or.ok()) << statistics_or.status();
+    ASSERT_EQ(2, statistics_or->columns.size());
+    EXPECT_EQ(3.0, *statistics_or->columns[0].distinct_values);
+    EXPECT_EQ(0.0, *statistics_or->columns[0].null_fraction);
+    EXPECT_GT(*statistics_or->columns[0].average_width_bytes, 0.0);
 
     auto pages_or = collect_pages(*runtime, spec, {});
     ASSERT_TRUE(pages_or.ok()) << pages_or.status();
