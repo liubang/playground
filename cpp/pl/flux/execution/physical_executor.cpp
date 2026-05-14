@@ -378,14 +378,15 @@ absl::StatusOr<Value> apply_aggregate(const Value& input,
 }
 
 Value value_from_page(const Page& page) {
-    Value value = Value::table_stream(page.table.bucket, page.table.tables, page.table.range_start,
-                                      page.table.range_stop, page.table.result_name);
-    value.as_table_mut().plan = page.table.plan;
-    value.as_table_mut().materialized = page.table.materialized;
+    TableValue table = TableValueFromPage(page);
+    Value value = Value::table_stream(table.bucket, std::move(table.tables), table.range_start,
+                                      table.range_stop, table.result_name);
+    value.as_table_mut().plan = table.plan;
+    value.as_table_mut().materialized = table.materialized;
     return value;
 }
 
-Page page_from_value(const Value& value) { return Page{.table = value.as_table()}; }
+Page page_from_value(const Value& value) { return PageFromTableValue(value.as_table()); }
 
 absl::StatusOr<std::optional<Page>> next_input_page(Operator* input) {
     if (input == nullptr) {
@@ -398,7 +399,7 @@ absl::StatusOr<Value> collect_input_value(Operator* input) {
     if (input == nullptr) {
         return absl::InvalidArgumentError("operator has no input");
     }
-    std::optional<TableValue> output;
+    std::optional<Page> output;
     while (true) {
         auto page_or = input->NextPage();
         if (!page_or.ok()) {
@@ -408,22 +409,15 @@ absl::StatusOr<Value> collect_input_value(Operator* input) {
             break;
         }
         if (!output.has_value()) {
-            output = std::move(page_or->value().table);
+            output = std::move(page_or->value());
             continue;
         }
-        output->tables.insert(output->tables.end(), page_or->value().table.tables.begin(),
-                              page_or->value().table.tables.end());
-        output->rows.insert(output->rows.end(), page_or->value().table.rows.begin(),
-                            page_or->value().table.rows.end());
+        AppendPage(&*output, std::move(page_or->value()));
     }
     if (!output.has_value()) {
         return Value::table_stream("", {});
     }
-    Value value = Value::table_stream(output->bucket, output->tables, output->range_start,
-                                      output->range_stop, output->result_name);
-    value.as_table_mut().plan = output->plan;
-    value.as_table_mut().materialized = output->materialized;
-    return value;
+    return value_from_page(*output);
 }
 
 class ConnectorScanOperator final : public Operator {
@@ -462,7 +456,7 @@ public:
                 page_source_.reset();
                 continue;
             }
-            return Page{.table = page_or->value().table};
+            return page_or;
         }
     }
 
@@ -617,7 +611,7 @@ public:
                 return std::nullopt;
             }
 
-            TableValue table = std::move(input_or->value().table);
+            TableValue table = TableValueFromPage(input_or->value());
             std::vector<TableChunk> chunks;
             for (const auto& source : table.tables) {
                 TableChunk chunk;
@@ -728,7 +722,7 @@ public:
         if (!input_or->has_value()) {
             return std::nullopt;
         }
-        input_or->value().table.materialized = true;
+        input_or->value().materialized = true;
         return input_or;
     }
 
@@ -832,7 +826,7 @@ absl::StatusOr<Value> Driver::Run() const {
     if (pipeline_.root == nullptr) {
         return absl::InvalidArgumentError("pipeline has no root operator");
     }
-    std::optional<TableValue> output;
+    std::optional<Page> output;
     while (true) {
         auto page_or = pipeline_.root->NextPage();
         if (!page_or.ok()) {
@@ -842,20 +836,15 @@ absl::StatusOr<Value> Driver::Run() const {
             break;
         }
         if (!output.has_value()) {
-            output = std::move(page_or->value().table);
+            output = std::move(page_or->value());
             continue;
         }
-        output->tables.insert(output->tables.end(), page_or->value().table.tables.begin(),
-                              page_or->value().table.tables.end());
-        output->rows.insert(output->rows.end(), page_or->value().table.rows.begin(),
-                            page_or->value().table.rows.end());
+        AppendPage(&*output, std::move(page_or->value()));
     }
     if (!output.has_value()) {
         return Value::table_stream("", {});
     }
-    Value value = Value::table_stream(output->bucket, output->tables, output->range_start,
-                                      output->range_stop, output->result_name);
-    value.as_table_mut().plan = output->plan;
+    Value value = value_from_page(*output);
     value.as_table_mut().materialized = true;
     return value;
 }

@@ -796,14 +796,14 @@ absl::Status MySQLPageSource::Initialize() {
     return absl::OkStatus();
 }
 
-absl::StatusOr<std::optional<ConnectorPage>> MySQLPageSource::NextPage() {
+absl::StatusOr<std::optional<Page>> MySQLPageSource::NextPage() {
     if (impl_ == nullptr || impl_->state.should_start_op()) {
         return absl::InvalidArgumentError("mysql page source is not initialized");
     }
     if (impl_->state.complete()) {
         if (!impl_->emitted_empty && !impl_->emitted_any_row) {
             impl_->emitted_empty = true;
-            return ConnectorPage{.table = Value::table("mysql", {}).as_table()};
+            return PageFromRows("mysql", {});
         }
         return std::nullopt;
     }
@@ -838,7 +838,7 @@ absl::StatusOr<std::optional<ConnectorPage>> MySQLPageSource::NextPage() {
     if (rows.empty()) {
         if (!impl_->emitted_empty && !impl_->emitted_any_row) {
             impl_->emitted_empty = true;
-            return ConnectorPage{.table = Value::table("mysql", {}).as_table()};
+            return PageFromRows("mysql", {});
         }
         return std::nullopt;
     }
@@ -852,9 +852,9 @@ absl::StatusOr<std::optional<ConnectorPage>> MySQLPageSource::NextPage() {
             chunk.rows.push_back(std::move(row));
             chunks.push_back(std::move(chunk));
         }
-        return ConnectorPage{.table = Value::table_stream("mysql", std::move(chunks)).as_table()};
+        return PageFromTableChunks("mysql", std::move(chunks));
     }
-    return ConnectorPage{.table = Value::table("mysql", std::move(rows)).as_table()};
+    return PageFromRows("mysql", std::move(rows));
 }
 
 absl::StatusOr<std::unique_ptr<ConnectorPageSource>> MySQLPageSourceProvider::CreatePageSource(
