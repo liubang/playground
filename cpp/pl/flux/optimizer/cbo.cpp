@@ -18,6 +18,7 @@
 #include "cpp/pl/flux/optimizer/cbo.h"
 
 #include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/connector/connector_registry.h"
 #include "cpp/pl/flux/connector/connector_runtime.h"
 #include <algorithm>
@@ -139,11 +140,14 @@ private:
             }
             const double left_rows = *left_or->rows;
             const double right_rows = *right_or->rows;
+            const bool build_left = node->join().build_side == plan::JoinBuildSide::Left;
+            const double build_rows = build_left ? left_rows : right_rows;
+            const double probe_rows = build_left ? right_rows : left_rows;
             const double output_rows = std::max(1.0, std::min(left_rows, right_rows));
             return plan::CostEstimate{
                 .rows = output_rows,
                 .cpu = left_or->cpu.value_or(0.0) + right_or->cpu.value_or(0.0) +
-                       right_rows * kJoinBuildCpuPerRow + left_rows * kJoinProbeCpuPerRow,
+                       build_rows * kJoinBuildCpuPerRow + probe_rows * kJoinProbeCpuPerRow,
                 .io = left_or->io.value_or(0.0) + right_or->io.value_or(0.0),
             };
         }
@@ -242,6 +246,50 @@ std::string cbo_decision(const CboOptions& options, const plan::CostEstimate& co
     return options.collect_connector_stats ? "no-stats" : "fallback-rbo";
 }
 
+std::string join_alternative_name(plan::JoinBuildSide side) {
+    return absl::StrCat("local_hash_join_build_", plan::JoinBuildSideName(side));
+}
+
+absl::StatusOr<plan::CostEstimate> EstimateJoinWithBuildSide(
+    const std::shared_ptr<plan::PlanNode>& node,
+    plan::JoinBuildSide side,
+    const HeuristicCostModel& cost_model,
+    const ConnectorStatsProvider& stats_provider) {
+    if (node == nullptr || node->kind != plan::PlanNodeKind::Join) {
+        return unknown_cost();
+    }
+    auto original = node->join().build_side;
+    node->join().build_side = side;
+    auto cost_or = cost_model.EstimateCost(node, stats_provider);
+    node->join().build_side = original;
+    return cost_or;
+}
+
+absl::Status ChooseJoinBuildSide(const std::shared_ptr<plan::PlanNode>& node,
+                                 const HeuristicCostModel& cost_model,
+                                 const ConnectorStatsProvider& stats_provider) {
+    if (node == nullptr || node->kind != plan::PlanNodeKind::Join) {
+        return absl::OkStatus();
+    }
+    auto left_cost_or =
+        EstimateJoinWithBuildSide(node, plan::JoinBuildSide::Left, cost_model, stats_provider);
+    if (!left_cost_or.ok()) {
+        return left_cost_or.status();
+    }
+    auto right_cost_or =
+        EstimateJoinWithBuildSide(node, plan::JoinBuildSide::Right, cost_model, stats_provider);
+    if (!right_cost_or.ok()) {
+        return right_cost_or.status();
+    }
+    if (left_cost_or->cpu.has_value() && right_cost_or->cpu.has_value() &&
+        *left_cost_or->cpu < *right_cost_or->cpu) {
+        node->join().build_side = plan::JoinBuildSide::Left;
+    } else {
+        node->join().build_side = plan::JoinBuildSide::Right;
+    }
+    return absl::OkStatus();
+}
+
 } // namespace
 
 CostBasedOptimizer::CostBasedOptimizer(CboOptions options) : options_(options) {}
@@ -255,6 +303,10 @@ absl::StatusOr<CboPlanResult> CostBasedOptimizer::OptimizeWithTrace(
 
     ConnectorStatsProvider stats_provider(options_);
     HeuristicCostModel cost_model;
+    auto choose_status = ChooseJoinBuildSide(rbo_or->plan, cost_model, stats_provider);
+    if (!choose_status.ok()) {
+        return choose_status;
+    }
     auto cost_or = cost_model.EstimateCost(rbo_or->plan, stats_provider);
     if (!cost_or.ok()) {
         return cost_or.status();
@@ -283,12 +335,19 @@ absl::StatusOr<CboPlanResult> CostBasedOptimizer::OptimizeWithTrace(
             .reason = "dominated-by-full-connector-pushdown",
         });
     } else if (shape == PhysicalShape::LocalHashJoin) {
+        const auto chosen_side = result.rbo_result.plan->join().build_side;
+        const auto other_side = chosen_side == plan::JoinBuildSide::Left
+                                    ? plan::JoinBuildSide::Right
+                                    : plan::JoinBuildSide::Left;
+        result.alternatives[0].name = join_alternative_name(chosen_side);
+        auto other_cost_or =
+            EstimateJoinWithBuildSide(result.rbo_result.plan, other_side, cost_model, stats_provider);
         result.alternatives.push_back(PlanAlternative{
-            .name = "local_hash_join_build_left",
+            .name = join_alternative_name(other_side),
             .shape = PhysicalShape::LocalHashJoin,
-            .cost = *cost_or,
+            .cost = other_cost_or.ok() ? *other_cost_or : unknown_cost(),
             .chosen = false,
-            .reason = "build-right-is-default-until-side-costing-is-enabled",
+            .reason = "higher-build-probe-cost",
         });
     } else if (shape == PhysicalShape::ConnectorPrefixMemorySuffix) {
         result.alternatives.push_back(PlanAlternative{

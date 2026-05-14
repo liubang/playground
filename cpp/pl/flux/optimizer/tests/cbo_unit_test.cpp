@@ -104,5 +104,23 @@ TEST(CostBasedOptimizerTest, EnumeratesLocalHashJoinAlternative) {
     EXPECT_GE(result_or->alternatives.size(), 2);
 }
 
+TEST(CostBasedOptimizerTest, ChoosesSmallerJoinBuildSide) {
+    auto logical_plan = plan::MakeJoin(
+        plan::MakeLimit(plan::MakeProject(SourceScanPlan(), {"host", "usage"}), 1, 0),
+        plan::MakeProject(SourceScanPlan(), {"host", "region"}), {"host"});
+
+    auto result_or = DefaultCostBasedOptimizer().OptimizeWithTrace(logical_plan);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_NE(nullptr, result_or->rbo_result.plan);
+    ASSERT_EQ(plan::PlanNodeKind::Join, result_or->rbo_result.plan->kind);
+    EXPECT_EQ(plan::JoinBuildSide::Left, result_or->rbo_result.plan->join().build_side);
+    ASSERT_GE(result_or->alternatives.size(), 2);
+    EXPECT_EQ("local_hash_join_build_left", result_or->alternatives[0].name);
+    EXPECT_TRUE(result_or->alternatives[0].chosen);
+    EXPECT_EQ("local_hash_join_build_right", result_or->alternatives[1].name);
+    EXPECT_FALSE(result_or->alternatives[1].chosen);
+}
+
 } // namespace
 } // namespace pl::flux::optimizer
