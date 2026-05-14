@@ -18,6 +18,7 @@
 #pragma once
 
 #include "absl/status/statusor.h"
+#include "cpp/pl/flux/connector/table_source.h"
 #include "cpp/pl/flux/optimizer/rbo.h"
 #include "cpp/pl/flux/plan/physical_plan.h"
 #include <memory>
@@ -34,11 +35,14 @@ struct CboOptions {
 struct PlanStatistics {
     std::optional<double> row_count;
     std::optional<double> size_bytes;
+    std::vector<connector::ColumnStatistics> columns;
 };
 
 enum class PhysicalShape {
     ConnectorScan,
     ConnectorPrefixMemorySuffix,
+    LocalHashJoin,
+    Exchange,
     MemoryScan,
 };
 
