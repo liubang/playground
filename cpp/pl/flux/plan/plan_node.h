@@ -47,6 +47,7 @@ enum class PlanNodeKind {
     Window,
     Join,
     Union,
+    Exchange,
     Yield,
     Materialize,
 };
@@ -147,6 +148,30 @@ struct DistinctSpec {
     std::string column;
 };
 
+enum class JoinMethod {
+    Inner,
+    Left,
+    Right,
+    Full,
+};
+
+struct JoinSpec {
+    std::vector<std::string> on;
+    std::string left_name = "left";
+    std::string right_name = "right";
+    JoinMethod method = JoinMethod::Inner;
+};
+
+enum class ExchangeKind {
+    Gather,
+    Repartition,
+};
+
+struct ExchangeSpec {
+    ExchangeKind kind = ExchangeKind::Gather;
+    std::vector<std::string> partition_keys;
+};
+
 struct MaterializeSpec {
     std::string reason;
     std::string builtin;
@@ -155,7 +180,7 @@ struct MaterializeSpec {
 // ---------------------------------------------------------------------------
 // NodeSpec variant — only the active spec occupies memory.
 // std::monostate is used for node kinds that carry no extra data
-// (Map, Window, Join, Union, Yield).
+// (Map, Window, Union, Yield).
 // ---------------------------------------------------------------------------
 
 using NodeSpec = std::variant<std::monostate,
@@ -169,6 +194,8 @@ using NodeSpec = std::variant<std::monostate,
                               GroupSpec,
                               AggregateSpec,
                               DistinctSpec,
+                              JoinSpec,
+                              ExchangeSpec,
                               MaterializeSpec>;
 
 // ---------------------------------------------------------------------------
@@ -215,6 +242,12 @@ struct PlanNode {
     [[nodiscard]] const DistinctSpec& distinct() const { return std::get<DistinctSpec>(spec); }
     DistinctSpec& distinct() { return std::get<DistinctSpec>(spec); }
 
+    [[nodiscard]] const JoinSpec& join() const { return std::get<JoinSpec>(spec); }
+    JoinSpec& join() { return std::get<JoinSpec>(spec); }
+
+    [[nodiscard]] const ExchangeSpec& exchange() const { return std::get<ExchangeSpec>(spec); }
+    ExchangeSpec& exchange() { return std::get<ExchangeSpec>(spec); }
+
     [[nodiscard]] const MaterializeSpec& materialize() const {
         return std::get<MaterializeSpec>(spec);
     }
@@ -255,6 +288,8 @@ inline std::string PlanNodeKindName(PlanNodeKind kind) {
             return "Join";
         case PlanNodeKind::Union:
             return "Union";
+        case PlanNodeKind::Exchange:
+            return "Exchange";
         case PlanNodeKind::Yield:
             return "Yield";
         case PlanNodeKind::Materialize:
@@ -350,6 +385,60 @@ inline std::shared_ptr<PlanNode> MakeDistinct(std::shared_ptr<PlanNode> input, s
     auto node = MakeUnaryNode(PlanNodeKind::Distinct, std::move(input));
     node->spec = DistinctSpec{std::move(column)};
     return node;
+}
+
+inline std::shared_ptr<PlanNode> MakeJoin(std::shared_ptr<PlanNode> left,
+                                          std::shared_ptr<PlanNode> right,
+                                          std::vector<std::string> on,
+                                          JoinMethod method = JoinMethod::Inner,
+                                          std::string left_name = "left",
+                                          std::string right_name = "right") {
+    auto node = std::make_shared<PlanNode>();
+    node->kind = PlanNodeKind::Join;
+    node->inputs.push_back(std::move(left));
+    node->inputs.push_back(std::move(right));
+    node->spec = JoinSpec{
+        .on = std::move(on),
+        .left_name = std::move(left_name),
+        .right_name = std::move(right_name),
+        .method = method,
+    };
+    return node;
+}
+
+inline std::shared_ptr<PlanNode> MakeExchange(std::shared_ptr<PlanNode> input,
+                                              ExchangeKind kind,
+                                              std::vector<std::string> partition_keys = {}) {
+    auto node = MakeUnaryNode(PlanNodeKind::Exchange, std::move(input));
+    node->spec = ExchangeSpec{
+        .kind = kind,
+        .partition_keys = std::move(partition_keys),
+    };
+    return node;
+}
+
+inline std::string JoinMethodName(JoinMethod method) {
+    switch (method) {
+        case JoinMethod::Inner:
+            return "inner";
+        case JoinMethod::Left:
+            return "left";
+        case JoinMethod::Right:
+            return "right";
+        case JoinMethod::Full:
+            return "full";
+    }
+    return "inner";
+}
+
+inline std::string ExchangeKindName(ExchangeKind kind) {
+    switch (kind) {
+        case ExchangeKind::Gather:
+            return "gather";
+        case ExchangeKind::Repartition:
+            return "repartition";
+    }
+    return "gather";
 }
 
 inline std::shared_ptr<PlanNode> MakeMaterializeBarrier(std::shared_ptr<PlanNode> input,
@@ -468,6 +557,17 @@ inline void FormatNodeDetail(const PlanNode& node, std::ostringstream* out) {
             }
             *out << ")";
         }
+    } else if (node.kind == PlanNodeKind::Join) {
+        const auto& join = node.join();
+        *out << "(method=\"" << JoinMethodName(join.method) << "\", on="
+             << StringList(join.on) << ")";
+    } else if (node.kind == PlanNodeKind::Exchange) {
+        const auto& exchange = node.exchange();
+        *out << "(kind=\"" << ExchangeKindName(exchange.kind) << "\"";
+        if (!exchange.partition_keys.empty()) {
+            *out << ", keys=" << StringList(exchange.partition_keys);
+        }
+        *out << ")";
     }
 }
 

@@ -42,7 +42,7 @@ TEST(CostBasedOptimizerTest, ChoosesConnectorScanWhenStatsAreAvailable) {
     EXPECT_EQ("chosen", result_or->decision);
     ASSERT_TRUE(result_or->cost.rows.has_value());
     EXPECT_EQ(1.0, *result_or->cost.rows);
-    ASSERT_EQ(1, result_or->alternatives.size());
+    ASSERT_EQ(2, result_or->alternatives.size());
     EXPECT_EQ(PhysicalShape::ConnectorScan, result_or->alternatives[0].shape);
     EXPECT_TRUE(result_or->alternatives[0].chosen);
     ASSERT_TRUE(result_or->rbo_result.pushdown_plan.has_value());
@@ -56,7 +56,7 @@ TEST(CostBasedOptimizerTest, KeepsRboFastPathWithoutConnectorStats) {
     ASSERT_TRUE(result_or.ok()) << result_or.status();
     EXPECT_EQ("fallback-rbo", result_or->decision);
     EXPECT_FALSE(result_or->cost.rows.has_value());
-    ASSERT_EQ(1, result_or->alternatives.size());
+    ASSERT_EQ(2, result_or->alternatives.size());
     EXPECT_EQ(PhysicalShape::ConnectorScan, result_or->alternatives[0].shape);
     ASSERT_TRUE(result_or->rbo_result.pushdown_plan.has_value());
 }
@@ -82,10 +82,26 @@ TEST(CostBasedOptimizerTest, CostsMemorySuffixAfterConnectorPrefix) {
     EXPECT_EQ("chosen", result_or->decision);
     ASSERT_TRUE(result_or->cost.rows.has_value());
     EXPECT_GT(*result_or->cost.rows, 0.0);
-    ASSERT_EQ(1, result_or->alternatives.size());
+    ASSERT_EQ(2, result_or->alternatives.size());
     EXPECT_EQ(PhysicalShape::ConnectorPrefixMemorySuffix, result_or->alternatives[0].shape);
     ASSERT_TRUE(result_or->rbo_result.pushdown_plan.has_value());
     EXPECT_FALSE(CanExecutePushdownPlan(*result_or->rbo_result.pushdown_plan));
+}
+
+TEST(CostBasedOptimizerTest, EnumeratesLocalHashJoinAlternative) {
+    auto logical_plan =
+        plan::MakeJoin(plan::MakeProject(SourceScanPlan(), {"host", "usage"}),
+                       plan::MakeProject(SourceScanPlan(), {"host", "region"}), {"host"});
+
+    auto result_or = DefaultCostBasedOptimizer().OptimizeWithTrace(logical_plan);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    EXPECT_EQ("chosen", result_or->decision);
+    ASSERT_TRUE(result_or->cost.rows.has_value());
+    ASSERT_FALSE(result_or->alternatives.empty());
+    EXPECT_EQ(PhysicalShape::LocalHashJoin, result_or->alternatives[0].shape);
+    EXPECT_TRUE(result_or->alternatives[0].chosen);
+    EXPECT_GE(result_or->alternatives.size(), 2);
 }
 
 } // namespace

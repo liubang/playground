@@ -58,8 +58,10 @@ TableStatistics statistics_from_rows(const std::vector<std::shared_ptr<ObjectVal
     const auto schema = schema_from_rows(rows);
     statistics.columns.reserve(schema.columns.size());
     for (const auto& column : schema.columns) {
-        statistics.columns.push_back(
-            {.name = column.name, .distinct_values = {}, .null_fraction = {}});
+        statistics.columns.push_back({.name = column.name,
+                                      .distinct_values = {},
+                                      .null_fraction = {},
+                                      .average_width_bytes = {}});
     }
     return statistics;
 }
