@@ -121,6 +121,19 @@ archive_override(
     strip_prefix = "braft-1.1.2",
     urls = ["https://github.com/baidu/braft/archive/refs/tags/v1.1.2.tar.gz"],
 )
+# Facebook AI Similarity Search (CPU-only)
+bazel_dep(name = "faiss", version = "1.14.1")
+archive_override(
+    module_name = "faiss",
+    integrity = "sha256-AhbTjYxcRgQzgVty083mcl6qXVdwV2J3oqvAH/xBTSA=",
+    patch_strip = 1,
+    patches = [
+        "//bazel:faiss-bazel8-compat.patch",
+    ],
+    strip_prefix = "faiss-1.14.1",
+    urls = ["https://github.com/facebookresearch/faiss/archive/refs/tags/v1.14.1.tar.gz"],
+)
+
 bazel_dep(name = "isa-l", version = "2.31")
 bazel_dep(name = "xxhash", version = "0.8.3")
 bazel_dep(name = "magic_enum", version = "0.9.7")
@@ -358,4 +371,11 @@ pip.parse(
     python_version = "3.13",
     requirements_lock = "//python:requirements_lock.txt",
 )
+pip.parse(
+    experimental_index_url = "https://mirrors.aliyun.com/pypi/simple",
+    hub_name = "pip_embedding",
+    python_version = "3.13",
+    requirements_lock = "//cpp/pl/recall/embedding_server:requirements_lock.txt",
+)
 use_repo(pip, "pip")
+use_repo(pip, "pip_embedding")
