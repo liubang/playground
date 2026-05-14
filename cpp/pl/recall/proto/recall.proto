@@ -1,0 +1,152 @@
+// Copyright (c) 2026 The Authors. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Authors: liubang (it.liubang@gmail.com)
+// Created: 2026/05/14 10:45
+
+syntax = "proto3";
+
+package pl.recall.proto;
+
+option cc_generic_services = true;
+
+// =========================================================================
+// 业务消息定义（用于 JSON 序列化/反序列化）
+// =========================================================================
+
+// 库表元信息，作为召回结果返回
+message TableMeta {
+  string database = 1;
+  string table = 2;
+  string comment = 3;
+  repeated ColumnMeta columns = 4;
+}
+
+message ColumnMeta {
+  string name = 1;
+  string type = 2;
+  string comment = 3;
+}
+
+// 向索引中添加库表向量
+message AddRequest {
+  // 库表唯一标识 (database.table)
+  string table_id = 1;
+  // 预计算好的 embedding 向量
+  repeated float embedding = 2;
+  // 库表元信息
+  TableMeta meta = 3;
+}
+
+message AddResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 批量添加
+message BatchAddRequest {
+  repeated AddRequest items = 1;
+}
+
+message BatchAddResponse {
+  int32 success_count = 1;
+  int32 fail_count = 2;
+  string message = 3;
+}
+
+// 向量检索请求
+message SearchRequest {
+  // query 的 embedding 向量
+  repeated float embedding = 1;
+  // 返回 top-k 个结果
+  int32 top_k = 2;
+}
+
+message SearchResult {
+  string table_id = 1;
+  float distance = 2;
+  TableMeta meta = 3;
+}
+
+message SearchResponse {
+  repeated SearchResult results = 1;
+}
+
+// 索引快照管理
+message SnapshotRequest {
+  string path = 1;
+}
+
+message SnapshotResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 索引状态
+message StatsRequest {}
+
+message StatsResponse {
+  int64 total_vectors = 1;
+  int32 dimension = 2;
+  string index_type = 3;
+  bool is_trained = 4;
+}
+
+// =========================================================================
+// 文本直通接口（服务端自动调用 Embedding API）
+// =========================================================================
+
+// 通过文本添加库表向量（服务端自动计算 embedding）
+message AddByTextRequest {
+  string table_id = 1;
+  // 用于计算 embedding 的文本（通常是 "database.table: comment, col1 type1, col2 type2, ..."）
+  string text = 2;
+  TableMeta meta = 3;
+}
+
+// 批量文本添加
+message BatchAddByTextRequest {
+  repeated AddByTextRequest items = 1;
+}
+
+// 通过文本检索（服务端自动计算 query embedding）
+message SearchByTextRequest {
+  // 用户的自然语言查询
+  string text = 1;
+  int32 top_k = 2;
+}
+
+// =========================================================================
+// HTTP 服务入口（brpc 要求通过 protobuf service 注册）
+// =========================================================================
+
+// 空消息，HTTP body 由服务端手动解析 JSON
+message HttpRequest {}
+message HttpResponse {}
+
+// HTTP 服务入口，所有 /api/recall/* 请求路由到 default_method
+service RecallHttpService {
+  rpc default_method(HttpRequest) returns (HttpResponse);
+}
+
+// HTTP API 路由（由 C++ 服务端在 default_method 中分发）:
+//   POST /api/recall/add              -> AddRequest / AddResponse
+//   POST /api/recall/batch_add        -> BatchAddRequest / BatchAddResponse
+//   POST /api/recall/search           -> SearchRequest / SearchResponse
+//   POST /api/recall/add_by_text      -> AddByTextRequest / AddResponse
+//   POST /api/recall/batch_add_by_text -> BatchAddByTextRequest / BatchAddResponse
+//   POST /api/recall/search_by_text   -> SearchByTextRequest / SearchResponse
+//   POST /api/recall/snapshot/save    -> SnapshotRequest / SnapshotResponse
+//   POST /api/recall/snapshot/load    -> SnapshotRequest / SnapshotResponse
+//   GET  /api/recall/stats            -> StatsResponse
