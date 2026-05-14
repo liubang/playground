@@ -143,8 +143,12 @@ absl::StatusOr<std::unique_ptr<ConnectorPageSource>> MemoryPageSourceProvider::C
     if (has_scan_pushdown(split.request)) {
         return absl::UnimplementedError("memory source scan pushdown is not implemented");
     }
+    TableChunk chunk;
+    chunk.rows = rows_;
+    std::vector<TableChunk> chunks;
+    chunks.push_back(std::move(chunk));
     return std::unique_ptr<ConnectorPageSource>(
-        new TableValuePageSource(Value::table(bucket_, rows_).as_table(), rows_per_page_));
+        new ChunkedPageSource(bucket_, std::move(chunks), rows_per_page_));
 }
 
 std::unique_ptr<ConnectorRuntime> MakeMemoryConnectorRuntime(

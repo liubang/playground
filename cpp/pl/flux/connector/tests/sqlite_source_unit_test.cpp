@@ -88,13 +88,15 @@ TEST(SQLiteSourceTest, RuntimeMetadataSplitAndPageSourceScansTable) {
     auto first_or = (*page_source_or)->NextPage();
     ASSERT_TRUE(first_or.ok()) << first_or.status();
     ASSERT_TRUE(first_or->has_value());
-    EXPECT_EQ(2, first_or->value().table.rows.size());
-    EXPECT_EQ("\"edge-1\"", first_or->value().table.rows[0]->lookup("host")->string());
+    TableValue first = TableValueFromPage(first_or->value());
+    EXPECT_EQ(2, first.rows.size());
+    EXPECT_EQ("\"edge-1\"", first.rows[0]->lookup("host")->string());
 
     auto second_or = (*page_source_or)->NextPage();
     ASSERT_TRUE(second_or.ok()) << second_or.status();
     ASSERT_TRUE(second_or->has_value());
-    EXPECT_EQ(2, second_or->value().table.rows.size());
+    TableValue second = TableValueFromPage(second_or->value());
+    EXPECT_EQ(2, second.rows.size());
 
     auto done_or = (*page_source_or)->NextPage();
     ASSERT_TRUE(done_or.ok()) << done_or.status();
@@ -119,7 +121,7 @@ TEST(SQLiteSourceTest, RuntimePageSourceEmitsSingleEmptyPage) {
     auto page_or = (*page_source_or)->NextPage();
     ASSERT_TRUE(page_or.ok()) << page_or.status();
     ASSERT_TRUE(page_or->has_value());
-    EXPECT_TRUE(page_or->value().table.rows.empty());
+    EXPECT_TRUE(page_or->value().empty());
 
     auto done_or = (*page_source_or)->NextPage();
     ASSERT_TRUE(done_or.ok()) << done_or.status();

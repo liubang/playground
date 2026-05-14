@@ -19,6 +19,7 @@
 
 #include "absl/status/statusor.h"
 #include "cpp/pl/flux/plan/plan_node.h"
+#include "cpp/pl/flux/runtime/runtime_page.h"
 #include "cpp/pl/flux/runtime/runtime_value.h"
 #include <memory>
 #include <optional>
@@ -26,10 +27,6 @@
 #include <vector>
 
 namespace pl::flux::execution {
-
-struct Page {
-    TableValue table;
-};
 
 class Operator {
 public:
