@@ -31,6 +31,8 @@ enum class PhysicalNodeKind {
     ConnectorScan,
     MemoryScan,
     MemoryOperator,
+    LocalHashJoin,
+    Exchange,
     Materialize,
 };
 
@@ -71,6 +73,10 @@ inline std::string PhysicalNodeKindName(PhysicalNodeKind kind) {
             return "MemoryScan";
         case PhysicalNodeKind::MemoryOperator:
             return "MemoryOperator";
+        case PhysicalNodeKind::LocalHashJoin:
+            return "LocalHashJoin";
+        case PhysicalNodeKind::Exchange:
+            return "Exchange";
         case PhysicalNodeKind::Materialize:
             return "Materialize";
     }

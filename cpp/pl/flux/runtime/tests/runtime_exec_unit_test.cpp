@@ -716,6 +716,58 @@ TEST(RuntimeExecTest, PhysicalExecutorRunsMemoryDistinctAfterConnectorScan) {
     EXPECT_EQ("\"edge-3\"", table.rows[2]->lookup("host")->string());
 }
 
+TEST(RuntimeExecTest, PhysicalExecutorRunsLocalHashJoinAcrossConnectorInputs) {
+    auto left = plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"});
+    auto right = plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"});
+    auto join = plan::MakeJoin(std::move(left), std::move(right), {"host"});
+
+    auto result_or = execution::PhysicalExecutor().Execute(join);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_EQ(Value::Type::Table, result_or->type());
+    const auto& table = result_or->as_table();
+    EXPECT_TRUE(table.materialized);
+    ASSERT_EQ(6, table.rows.size());
+    ASSERT_NE(nullptr, table.rows[0]);
+    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
+    EXPECT_NE(nullptr, table.rows[0]->lookup("usage"));
+    EXPECT_NE(nullptr, table.rows[0]->lookup("region"));
+}
+
+TEST(RuntimeExecTest, PhysicalPlannerBuildsMultiInputJoinPipeline) {
+    auto join = plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
+                               {"host"});
+
+    auto task_or = execution::PhysicalPlanner().Plan(join);
+
+    ASSERT_TRUE(task_or.ok()) << task_or.status();
+    ASSERT_EQ(1, task_or->pipelines.size());
+    EXPECT_EQ((std::vector<std::string>{
+                  "ConnectorScanOperator",
+                  "ConnectorScanOperator",
+                  "LocalHashJoinOperator",
+                  "OutputOperator",
+              }),
+              task_or->pipelines[0].operators);
+}
+
+TEST(RuntimeExecTest, PhysicalExecutorRunsExchangePlaceholderAsPageBoundary) {
+    auto plan = plan::MakeLimit(
+        plan::MakeExchange(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                           plan::ExchangeKind::Gather),
+        1, 0);
+
+    auto result_or = execution::PhysicalExecutor().Execute(plan);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_EQ(Value::Type::Table, result_or->type());
+    const auto& table = result_or->as_table();
+    EXPECT_TRUE(table.materialized);
+    ASSERT_EQ(1, table.rows.size());
+    EXPECT_NE(nullptr, table.rows[0]->lookup("host"));
+}
+
 TEST(RuntimeExecTest, ContinuousSqliteFiltersAccumulatePushdownPredicates) {
     auto file = ParseFile(R"(
         import "sqlite"

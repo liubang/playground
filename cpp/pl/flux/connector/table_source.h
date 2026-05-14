@@ -40,6 +40,7 @@ struct ColumnStatistics {
     std::string name;
     std::optional<double> distinct_values;
     std::optional<double> null_fraction;
+    std::optional<double> average_width_bytes;
 };
 
 struct TableStatistics {

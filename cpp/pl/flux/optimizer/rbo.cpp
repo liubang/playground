@@ -622,8 +622,12 @@ absl::StatusOr<std::vector<std::string>> VisibleColumnsForPlan(
         node->kind == plan::PlanNodeKind::Limit || node->kind == plan::PlanNodeKind::Sort ||
         node->kind == plan::PlanNodeKind::Group || node->kind == plan::PlanNodeKind::Aggregate ||
         node->kind == plan::PlanNodeKind::Distinct ||
+        node->kind == plan::PlanNodeKind::Exchange ||
         node->kind == plan::PlanNodeKind::Materialize) {
         return columns_or;
+    }
+    if (node->kind == plan::PlanNodeKind::Join) {
+        return absl::InvalidArgumentError("join output columns depend on both inputs");
     }
     return absl::InvalidArgumentError("plan node has no stable visible columns");
 }
@@ -743,6 +747,7 @@ bool IsPushableUnaryNode(const plan::PlanNode& node) {
         case plan::PlanNodeKind::Group:
         case plan::PlanNodeKind::Aggregate:
         case plan::PlanNodeKind::Distinct:
+        case plan::PlanNodeKind::Exchange:
             return true;
         case plan::PlanNodeKind::Filter:
             return !node.filter().predicates.empty();
