@@ -92,9 +92,10 @@ TEST(MemorySourceTest, RuntimeEmitsRowsThroughPageSource) {
     auto page_or = (*page_source_or)->NextPage();
     ASSERT_TRUE(page_or.ok()) << page_or.status();
     ASSERT_TRUE(page_or->has_value());
-    EXPECT_EQ("hosts", page_or->value().table.bucket);
-    ASSERT_EQ(1, page_or->value().table.rows.size());
-    EXPECT_EQ("\"edge-1\"", page_or->value().table.rows[0]->lookup("host")->string());
+    TableValue table = TableValueFromPage(page_or->value());
+    EXPECT_EQ("hosts", table.bucket);
+    ASSERT_EQ(1, table.rows.size());
+    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
 }
 
 } // namespace

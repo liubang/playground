@@ -30,6 +30,7 @@ cc_library(
         "runtime_value.cpp",
     ],
     hdrs = [
+        "runtime_page.h",
         "runtime_value.h",
     ],
     copts = COPTS,
@@ -175,6 +176,19 @@ cc_test(
     name = "runtime_value_unit_test",
     srcs = [
         "tests/runtime_value_unit_test.cpp",
+    ],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":runtime_value",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "runtime_page_unit_test",
+    srcs = [
+        "tests/runtime_page_unit_test.cpp",
     ],
     copts = COPTS,
     linkopts = LINKOPTS,

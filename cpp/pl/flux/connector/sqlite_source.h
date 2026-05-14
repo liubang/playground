@@ -64,7 +64,7 @@ public:
     SQLitePageSource(std::string dsn, std::string table, ScanRequest request, size_t rows_per_page);
 
     absl::Status Initialize();
-    absl::StatusOr<std::optional<ConnectorPage>> NextPage() override;
+    absl::StatusOr<std::optional<Page>> NextPage() override;
 
 private:
     struct Impl;

@@ -39,9 +39,9 @@ std::vector<std::shared_ptr<ObjectValue>> make_rows() {
     return rows;
 }
 
-absl::StatusOr<std::vector<ConnectorPage>> collect_pages(ConnectorRuntime& runtime,
-                                                         const SourceSpec& spec,
-                                                         const ScanRequest& request) {
+absl::StatusOr<std::vector<Page>> collect_pages(ConnectorRuntime& runtime,
+                                                const SourceSpec& spec,
+                                                const ScanRequest& request) {
     auto handle_or = runtime.metadata->GetTableHandle(spec);
     if (!handle_or.ok()) {
         return handle_or.status();
@@ -51,7 +51,7 @@ absl::StatusOr<std::vector<ConnectorPage>> collect_pages(ConnectorRuntime& runti
         return splits_or.status();
     }
 
-    std::vector<ConnectorPage> pages;
+    std::vector<Page> pages;
     for (const auto& split : *splits_or) {
         auto source_or = runtime.page_source_provider->CreatePageSource(split);
         if (!source_or.ok()) {
@@ -102,10 +102,12 @@ TEST(ConnectorRuntimeConformanceTest, MemoryRuntimeExposesMetadataSplitsAndMulti
     auto pages_or = collect_pages(*runtime, spec, {});
     ASSERT_TRUE(pages_or.ok()) << pages_or.status();
     ASSERT_EQ(2, pages_or->size());
-    ASSERT_EQ(2, pages_or->at(0).table.rows.size());
-    ASSERT_EQ(1, pages_or->at(1).table.rows.size());
-    EXPECT_EQ("\"edge-1\"", pages_or->at(0).table.rows[0]->lookup("host")->string());
-    EXPECT_EQ("\"edge-3\"", pages_or->at(1).table.rows[0]->lookup("host")->string());
+    TableValue first = TableValueFromPage(pages_or->at(0));
+    TableValue second = TableValueFromPage(pages_or->at(1));
+    ASSERT_EQ(2, first.rows.size());
+    ASSERT_EQ(1, second.rows.size());
+    EXPECT_EQ("\"edge-1\"", first.rows[0]->lookup("host")->string());
+    EXPECT_EQ("\"edge-3\"", second.rows[0]->lookup("host")->string());
 }
 
 TEST(ConnectorRuntimeConformanceTest, MemoryRuntimeEmitsSingleEmptyPage) {
@@ -116,7 +118,7 @@ TEST(ConnectorRuntimeConformanceTest, MemoryRuntimeEmitsSingleEmptyPage) {
     auto pages_or = collect_pages(*runtime, spec, {});
     ASSERT_TRUE(pages_or.ok()) << pages_or.status();
     ASSERT_EQ(1, pages_or->size());
-    EXPECT_TRUE(pages_or->front().table.rows.empty());
+    EXPECT_TRUE(pages_or->front().empty());
 }
 
 TEST(ConnectorRuntimeConformanceTest, SQLiteRuntimeExposesMetadataSplitsAndStreamingPages) {
@@ -132,9 +134,10 @@ TEST(ConnectorRuntimeConformanceTest, SQLiteRuntimeExposesMetadataSplitsAndStrea
     auto pages_or = collect_pages(*runtime, spec, request);
     ASSERT_TRUE(pages_or.ok()) << pages_or.status();
     ASSERT_EQ(1, pages_or->size());
-    ASSERT_EQ(4, pages_or->front().table.rows.size());
-    EXPECT_EQ("\"edge-1\"", pages_or->front().table.rows[0]->lookup("host")->string());
-    EXPECT_EQ(nullptr, pages_or->front().table.rows[0]->lookup("region"));
+    TableValue table = TableValueFromPage(pages_or->front());
+    ASSERT_EQ(4, table.rows.size());
+    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
+    EXPECT_EQ(nullptr, table.rows[0]->lookup("region"));
 }
 
 TEST(ConnectorRuntimeConformanceTest, SQLiteRuntimePageSourceEmitsSingleEmptyPage) {
@@ -147,7 +150,7 @@ TEST(ConnectorRuntimeConformanceTest, SQLiteRuntimePageSourceEmitsSingleEmptyPag
     auto pages_or = collect_pages(*runtime, spec, request);
     ASSERT_TRUE(pages_or.ok()) << pages_or.status();
     ASSERT_EQ(1, pages_or->size());
-    EXPECT_TRUE(pages_or->front().table.rows.empty());
+    EXPECT_TRUE(pages_or->front().empty());
 }
 
 TEST(ConnectorRuntimeConformanceTest, SQLiteRuntimeRejectsUnknownPageSourceColumn) {
@@ -181,8 +184,9 @@ TEST(ConnectorRuntimeConformanceTest, MySQLRuntimeConformsWhenIntegrationDsnIsCo
     auto pages_or = collect_pages(*runtime, spec, request);
     ASSERT_TRUE(pages_or.ok()) << pages_or.status();
     ASSERT_FALSE(pages_or->empty());
-    ASSERT_LE(1, pages_or->front().table.rows.size());
-    EXPECT_NE(nullptr, pages_or->front().table.rows[0]->lookup("host"));
+    TableValue table = TableValueFromPage(pages_or->front());
+    ASSERT_LE(1, table.rows.size());
+    EXPECT_NE(nullptr, table.rows[0]->lookup("host"));
 }
 
 } // namespace

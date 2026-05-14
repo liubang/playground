@@ -632,14 +632,14 @@ absl::Status SQLitePageSource::Initialize() {
     return absl::OkStatus();
 }
 
-absl::StatusOr<std::optional<ConnectorPage>> SQLitePageSource::NextPage() {
+absl::StatusOr<std::optional<Page>> SQLitePageSource::NextPage() {
     if (impl_ == nullptr || impl_->stmt == nullptr) {
         return absl::InvalidArgumentError("sqlite page source is not initialized");
     }
     if (impl_->done) {
         if (!impl_->emitted_empty && !impl_->emitted_any_row) {
             impl_->emitted_empty = true;
-            return ConnectorPage{.table = Value::table("sqlite", {}).as_table()};
+            return PageFromRows("sqlite", {});
         }
         return std::nullopt;
     }
@@ -666,7 +666,7 @@ absl::StatusOr<std::optional<ConnectorPage>> SQLitePageSource::NextPage() {
     if (rows.empty()) {
         if (!impl_->emitted_empty && !impl_->emitted_any_row) {
             impl_->emitted_empty = true;
-            return ConnectorPage{.table = Value::table("sqlite", {}).as_table()};
+            return PageFromRows("sqlite", {});
         }
         return std::nullopt;
     }
@@ -680,9 +680,9 @@ absl::StatusOr<std::optional<ConnectorPage>> SQLitePageSource::NextPage() {
             chunk.rows.push_back(std::move(row));
             chunks.push_back(std::move(chunk));
         }
-        return ConnectorPage{.table = Value::table_stream("sqlite", std::move(chunks)).as_table()};
+        return PageFromTableChunks("sqlite", std::move(chunks));
     }
-    return ConnectorPage{.table = Value::table("sqlite", std::move(rows)).as_table()};
+    return PageFromRows("sqlite", std::move(rows));
 }
 
 SQLitePageSourceProvider::SQLitePageSourceProvider(size_t rows_per_page)
