@@ -411,9 +411,63 @@ Page materialize_page(Page input, const std::shared_ptr<plan::PlanNode>& plan) {
     return input;
 }
 
-Page exchange_page(Page input, const std::shared_ptr<plan::PlanNode>& plan) {
-    input.plan = plan;
-    return input;
+std::optional<std::string> exchange_partition_key(const ObjectValue& row,
+                                                  const std::vector<std::string>& columns) {
+    if (columns.empty()) {
+        return std::string("__single_partition__");
+    }
+    std::string key;
+    for (const auto& column : columns) {
+        const Value* value = row.lookup(column);
+        if (value == nullptr || value->is_null()) {
+            absl::StrAppend(&key, column, "=<null>\n");
+        } else {
+            absl::StrAppend(&key, column, "=", value->string(), "\n");
+        }
+    }
+    return key;
+}
+
+Value apply_exchange_value(const Value& input_value, const std::shared_ptr<plan::PlanNode>& plan) {
+    const auto& input = input_value.as_table();
+    std::vector<TableChunk> chunks;
+    if (plan->exchange().kind == plan::ExchangeKind::Gather ||
+        plan->exchange().partition_keys.empty()) {
+        TableChunk chunk;
+        chunk.rows = input.rows;
+        chunk.columns = all_visible_columns_in_order(input);
+        chunks.push_back(std::move(chunk));
+    } else {
+        std::unordered_map<std::string, size_t> partition_index;
+        std::vector<std::string> partition_order;
+        for (const auto& row : input.rows) {
+            if (row == nullptr) {
+                continue;
+            }
+            auto key = exchange_partition_key(*row, plan->exchange().partition_keys);
+            if (!key.has_value()) {
+                continue;
+            }
+            auto it = partition_index.find(*key);
+            if (it == partition_index.end()) {
+                const size_t index = chunks.size();
+                partition_index.emplace(*key, index);
+                partition_order.push_back(*key);
+                chunks.push_back(TableChunk{});
+                it = partition_index.find(partition_order.back());
+            }
+            chunks[it->second].rows.push_back(row);
+        }
+        const auto columns = all_visible_columns_in_order(input);
+        for (auto& chunk : chunks) {
+            chunk.columns = columns;
+        }
+    }
+    Value value = Value::table_stream(input.bucket, std::move(chunks), input.range_start,
+                                      input.range_stop, input.result_name);
+    value.as_table_mut().plan = plan;
+    value.as_table_mut().materialized = true;
+    return value;
 }
 
 std::optional<std::string> local_join_key(const ObjectValue& row,
@@ -496,53 +550,104 @@ absl::StatusOr<Value> local_hash_join_values(const Value& left_value,
     auto left_null = null_row_for_columns(left_columns);
     auto right_null = null_row_for_columns(right_columns);
 
-    std::unordered_map<std::string, std::vector<size_t>> right_rows_by_key;
-    right_rows_by_key.reserve(right_table.rows.size());
-    for (size_t row_index = 0; row_index < right_table.rows.size(); ++row_index) {
-        const auto& row = right_table.rows[row_index];
-        if (row == nullptr) {
-            continue;
-        }
-        auto key = local_join_key(*row, spec.on);
-        if (key.has_value()) {
-            right_rows_by_key[*key].push_back(row_index);
-        }
-    }
-
-    std::vector<bool> matched_right(right_table.rows.size(), false);
     TableChunk chunk;
-    for (const auto& left_row : left_table.rows) {
-        if (left_row == nullptr) {
-            continue;
-        }
-        bool matched = false;
-        auto key = local_join_key(*left_row, spec.on);
-        if (key.has_value()) {
-            auto it = right_rows_by_key.find(*key);
-            if (it != right_rows_by_key.end()) {
-                matched = true;
-                for (size_t right_index : it->second) {
-                    matched_right[right_index] = true;
-                    chunk.rows.push_back(local_join_row(left_row.get(), left_columns,
-                                                        right_table.rows[right_index].get(),
-                                                        right_columns, spec));
-                }
-            }
-        }
-        if (!matched &&
-            (spec.method == plan::JoinMethod::Left || spec.method == plan::JoinMethod::Full)) {
-            chunk.rows.push_back(local_join_row(left_row.get(), left_columns, right_null.get(),
-                                                right_columns, spec));
-        }
-    }
-    if (spec.method == plan::JoinMethod::Right || spec.method == plan::JoinMethod::Full) {
-        for (size_t right_index = 0; right_index < right_table.rows.size(); ++right_index) {
-            if (matched_right[right_index] || right_table.rows[right_index] == nullptr) {
+    if (spec.build_side == plan::JoinBuildSide::Left) {
+        std::unordered_map<std::string, std::vector<size_t>> left_rows_by_key;
+        left_rows_by_key.reserve(left_table.rows.size());
+        for (size_t row_index = 0; row_index < left_table.rows.size(); ++row_index) {
+            const auto& row = left_table.rows[row_index];
+            if (row == nullptr) {
                 continue;
             }
-            chunk.rows.push_back(local_join_row(left_null.get(), left_columns,
-                                                right_table.rows[right_index].get(),
-                                                right_columns, spec));
+            auto key = local_join_key(*row, spec.on);
+            if (key.has_value()) {
+                left_rows_by_key[*key].push_back(row_index);
+            }
+        }
+
+        std::vector<bool> matched_left(left_table.rows.size(), false);
+        for (const auto& right_row : right_table.rows) {
+            if (right_row == nullptr) {
+                continue;
+            }
+            bool matched = false;
+            auto key = local_join_key(*right_row, spec.on);
+            if (key.has_value()) {
+                auto it = left_rows_by_key.find(*key);
+                if (it != left_rows_by_key.end()) {
+                    matched = true;
+                    for (size_t left_index : it->second) {
+                        matched_left[left_index] = true;
+                        chunk.rows.push_back(local_join_row(left_table.rows[left_index].get(),
+                                                            left_columns, right_row.get(),
+                                                            right_columns, spec));
+                    }
+                }
+            }
+            if (!matched &&
+                (spec.method == plan::JoinMethod::Right || spec.method == plan::JoinMethod::Full)) {
+                chunk.rows.push_back(local_join_row(left_null.get(), left_columns, right_row.get(),
+                                                    right_columns, spec));
+            }
+        }
+        if (spec.method == plan::JoinMethod::Left || spec.method == plan::JoinMethod::Full) {
+            for (size_t left_index = 0; left_index < left_table.rows.size(); ++left_index) {
+                if (matched_left[left_index] || left_table.rows[left_index] == nullptr) {
+                    continue;
+                }
+                chunk.rows.push_back(local_join_row(left_table.rows[left_index].get(),
+                                                    left_columns, right_null.get(), right_columns,
+                                                    spec));
+            }
+        }
+    } else {
+        std::unordered_map<std::string, std::vector<size_t>> right_rows_by_key;
+        right_rows_by_key.reserve(right_table.rows.size());
+        for (size_t row_index = 0; row_index < right_table.rows.size(); ++row_index) {
+            const auto& row = right_table.rows[row_index];
+            if (row == nullptr) {
+                continue;
+            }
+            auto key = local_join_key(*row, spec.on);
+            if (key.has_value()) {
+                right_rows_by_key[*key].push_back(row_index);
+            }
+        }
+
+        std::vector<bool> matched_right(right_table.rows.size(), false);
+        for (const auto& left_row : left_table.rows) {
+            if (left_row == nullptr) {
+                continue;
+            }
+            bool matched = false;
+            auto key = local_join_key(*left_row, spec.on);
+            if (key.has_value()) {
+                auto it = right_rows_by_key.find(*key);
+                if (it != right_rows_by_key.end()) {
+                    matched = true;
+                    for (size_t right_index : it->second) {
+                        matched_right[right_index] = true;
+                        chunk.rows.push_back(local_join_row(left_row.get(), left_columns,
+                                                            right_table.rows[right_index].get(),
+                                                            right_columns, spec));
+                    }
+                }
+            }
+            if (!matched &&
+                (spec.method == plan::JoinMethod::Left || spec.method == plan::JoinMethod::Full)) {
+                chunk.rows.push_back(local_join_row(left_row.get(), left_columns, right_null.get(),
+                                                    right_columns, spec));
+            }
+        }
+        if (spec.method == plan::JoinMethod::Right || spec.method == plan::JoinMethod::Full) {
+            for (size_t right_index = 0; right_index < right_table.rows.size(); ++right_index) {
+                if (matched_right[right_index] || right_table.rows[right_index] == nullptr) {
+                    continue;
+                }
+                chunk.rows.push_back(local_join_row(left_null.get(), left_columns,
+                                                    right_table.rows[right_index].get(),
+                                                    right_columns, spec));
+            }
         }
     }
 
@@ -767,15 +872,29 @@ private:
     }
 };
 
-class ExchangeOperator final : public PageUnaryOperator {
+class ExchangeOperator final : public Operator {
 public:
-    using PageUnaryOperator::PageUnaryOperator;
+    ExchangeOperator(std::shared_ptr<plan::PlanNode> plan, std::unique_ptr<Operator> input)
+        : plan_(std::move(plan)), input_(std::move(input)) {}
+
     [[nodiscard]] std::string name() const override { return "ExchangeOperator"; }
 
-private:
-    absl::StatusOr<Page> Apply(Page input) const override {
-        return exchange_page(std::move(input), plan());
+    absl::StatusOr<std::optional<Page>> NextPage() override {
+        if (emitted_) {
+            return std::nullopt;
+        }
+        emitted_ = true;
+        auto input_or = collect_input_value(input_.get());
+        if (!input_or.ok()) {
+            return input_or.status();
+        }
+        return page_from_value(apply_exchange_value(*input_or, plan_));
     }
+
+private:
+    std::shared_ptr<plan::PlanNode> plan_;
+    std::unique_ptr<Operator> input_;
+    bool emitted_ = false;
 };
 
 class LimitOperator final : public Operator {
@@ -1050,6 +1169,29 @@ absl::StatusOr<PlannedOperator> BuildOperator(const std::shared_ptr<plan::PlanNo
     return std::move(*planned_or);
 }
 
+std::vector<std::string> operator_names_for_plan(const std::shared_ptr<plan::PlanNode>& node) {
+    if (node == nullptr) {
+        return {};
+    }
+    auto planned_or = BuildOperator(node);
+    if (!planned_or.ok()) {
+        return {plan::PlanNodeKindName(node->kind)};
+    }
+    return planned_or->operators;
+}
+
+void AddInputPipelineDescriptor(const std::shared_ptr<plan::PlanNode>& node,
+                                std::string id,
+                                std::string name,
+                                std::vector<Pipeline>* pipelines) {
+    Pipeline pipeline;
+    pipeline.id = std::move(id);
+    pipeline.name = std::move(name);
+    pipeline.role = "input";
+    pipeline.operators = operator_names_for_plan(node);
+    pipelines->push_back(std::move(pipeline));
+}
+
 } // namespace
 
 absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
@@ -1062,8 +1204,22 @@ absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
     planned_or->operators.push_back(output->name());
 
     ExecutionTask task;
+    auto optimized_or = optimizer::FastCostBasedOptimizer().OptimizeWithTrace(logical_plan);
+    if (optimized_or.ok() && optimized_or->rbo_result.plan != nullptr &&
+        optimized_or->rbo_result.plan->kind == plan::PlanNodeKind::Join &&
+        optimized_or->rbo_result.plan->inputs.size() == 2) {
+        AddInputPipelineDescriptor(optimized_or->rbo_result.plan->inputs[0], "join-left",
+                                   "join left input", &task.pipelines);
+        AddInputPipelineDescriptor(optimized_or->rbo_result.plan->inputs[1], "join-right",
+                                   "join right input", &task.pipelines);
+    }
     Pipeline pipeline;
+    pipeline.id = "main";
     pipeline.name = "main";
+    pipeline.role = "root";
+    if (!task.pipelines.empty()) {
+        pipeline.dependencies = {"join-left", "join-right"};
+    }
     pipeline.operators = std::move(planned_or->operators);
     pipeline.root = std::move(output);
     task.pipelines.push_back(std::move(pipeline));
@@ -1104,7 +1260,12 @@ absl::StatusOr<Value> Scheduler::Run(ExecutionTask task) const {
         return absl::InvalidArgumentError("execution task has no pipelines");
     }
     std::optional<TableValue> output;
+    bool ran_pipeline = false;
     for (auto& pipeline : task.pipelines) {
+        if (pipeline.root == nullptr) {
+            continue;
+        }
+        ran_pipeline = true;
         auto value_or = Driver(std::move(pipeline)).Run();
         if (!value_or.ok()) {
             return value_or.status();
@@ -1116,6 +1277,9 @@ absl::StatusOr<Value> Scheduler::Run(ExecutionTask task) const {
         }
         output->tables.insert(output->tables.end(), table.tables.begin(), table.tables.end());
         output->rows.insert(output->rows.end(), table.rows.begin(), table.rows.end());
+    }
+    if (!ran_pipeline) {
+        return absl::InvalidArgumentError("execution task has no runnable pipelines");
     }
     if (!output.has_value()) {
         return Value::table_stream("", {});

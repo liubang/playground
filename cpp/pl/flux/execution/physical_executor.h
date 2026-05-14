@@ -36,7 +36,10 @@ public:
 };
 
 struct Pipeline {
+    std::string id;
     std::string name;
+    std::string role;
+    std::vector<std::string> dependencies;
     std::vector<std::string> operators;
     std::unique_ptr<Operator> root;
 };
