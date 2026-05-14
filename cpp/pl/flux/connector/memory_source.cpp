@@ -148,7 +148,7 @@ absl::StatusOr<std::unique_ptr<ConnectorPageSource>> MemoryPageSourceProvider::C
     std::vector<TableChunk> chunks;
     chunks.push_back(std::move(chunk));
     return std::unique_ptr<ConnectorPageSource>(
-        new ChunkedPageSource(bucket_, std::move(chunks), rows_per_page_));
+        new ChunkedPageSource(bucket_, std::move(chunks), rows_per_page_, split.split_id));
 }
 
 std::unique_ptr<ConnectorRuntime> MakeMemoryConnectorRuntime(

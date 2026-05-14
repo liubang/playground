@@ -22,6 +22,7 @@
 #include "cpp/pl/flux/connector/table_source.h"
 #include "cpp/pl/flux/runtime/runtime_value.h"
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -61,10 +62,16 @@ private:
 
 class SQLitePageSource final : public ConnectorPageSource {
 public:
-    SQLitePageSource(std::string dsn, std::string table, ScanRequest request, size_t rows_per_page);
+    SQLitePageSource(std::string dsn,
+                     std::string table,
+                     ScanRequest request,
+                     size_t rows_per_page,
+                     int64_t split_id = 0);
 
     absl::Status Initialize();
     absl::StatusOr<std::optional<Page>> NextPage() override;
+    [[nodiscard]] ConnectorSplitStats Stats() const override;
+    [[nodiscard]] bool Finished() const override;
 
 private:
     struct Impl;
@@ -72,6 +79,7 @@ private:
     std::string dsn_;
     std::string table_;
     size_t rows_per_page_ = 1024;
+    ConnectorSplitStats stats_;
 };
 
 class SQLitePageSourceProvider final : public ConnectorPageSourceProvider {

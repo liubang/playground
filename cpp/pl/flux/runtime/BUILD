@@ -38,7 +38,9 @@ cc_library(
     deps = [
         "//cpp/pl/flux/common",
         "//cpp/pl/flux/plan",
+        "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
     ],
 )
 
