@@ -50,6 +50,15 @@ struct ConnectorSplit {
     TableHandle table;
     ScanRequest request;
     int64_t split_id = 0;
+    std::optional<std::string> partition;
+    bool finished = false;
+};
+
+struct ConnectorSplitStats {
+    int64_t split_id = 0;
+    size_t pages_produced = 0;
+    size_t rows_produced = 0;
+    bool finished = false;
 };
 
 class ConnectorPageSource {
@@ -57,6 +66,10 @@ public:
     virtual ~ConnectorPageSource() = default;
 
     virtual absl::StatusOr<std::optional<Page>> NextPage() = 0;
+
+    [[nodiscard]] virtual ConnectorSplitStats Stats() const { return {}; }
+
+    [[nodiscard]] virtual bool Finished() const { return Stats().finished; }
 };
 
 class ConnectorMetadata {
@@ -115,23 +128,26 @@ class SingleSplitManager final : public ConnectorSplitManager {
 public:
     [[nodiscard]] absl::StatusOr<std::vector<ConnectorSplit>> GetSplits(
         const TableHandle& table, const ScanRequest& request) const override {
-        return std::vector<ConnectorSplit>{ConnectorSplit{
-            .table = table,
-            .request = request,
-            .split_id = 0,
-        }};
+        return std::vector<ConnectorSplit>{
+            ConnectorSplit{.table = table, .request = request, .split_id = 0, .partition = {}}};
     }
 };
 
 class ChunkedPageSource final : public ConnectorPageSource {
 public:
-    ChunkedPageSource(std::string bucket, std::vector<TableChunk> chunks, size_t rows_per_page)
+    ChunkedPageSource(std::string bucket,
+                      std::vector<TableChunk> chunks,
+                      size_t rows_per_page,
+                      int64_t split_id = 0)
         : bucket_(std::move(bucket)),
           chunks_(std::move(chunks)),
-          rows_per_page_(std::max<size_t>(1, rows_per_page)) {}
+          rows_per_page_(std::max<size_t>(1, rows_per_page)) {
+        stats_.split_id = split_id;
+    }
 
     absl::StatusOr<std::optional<Page>> NextPage() override {
         if (next_chunk_ >= chunks_.size()) {
+            stats_.finished = true;
             return std::nullopt;
         }
 
@@ -156,8 +172,15 @@ public:
 
         std::vector<TableChunk> chunks;
         chunks.push_back(std::move(chunk));
-        return PageFromTableChunks(bucket_, std::move(chunks));
+        Page page = PageFromTableChunks(bucket_, chunks);
+        ++stats_.pages_produced;
+        stats_.rows_produced += page.row_count();
+        return page;
     }
+
+    [[nodiscard]] ConnectorSplitStats Stats() const override { return stats_; }
+
+    [[nodiscard]] bool Finished() const override { return stats_.finished; }
 
 private:
     std::string bucket_;
@@ -165,6 +188,7 @@ private:
     size_t rows_per_page_ = 1024;
     size_t next_chunk_ = 0;
     size_t next_row_ = 0;
+    ConnectorSplitStats stats_;
 };
 
 } // namespace pl::flux::connector

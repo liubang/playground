@@ -74,5 +74,55 @@ TEST(RuntimePageTest, PreservesEmptyPageAsPageMetadata) {
     EXPECT_TRUE(table.rows.empty());
 }
 
+TEST(RuntimePageTest, ValidatesColumnVectorRowCounts) {
+    Page page;
+    PageChunk chunk;
+    chunk.row_count = 2;
+    chunk.columns.push_back(ColumnVector{
+        .name = "host",
+        .type = Value::Type::String,
+        .values = {Value::string("edge-1")},
+    });
+    page.chunks.push_back(std::move(chunk));
+
+    EXPECT_FALSE(ValidatePage(page).ok());
+}
+
+TEST(RuntimePageTest, InfersSchemaAndReadsRowsFromColumnVectors) {
+    Page page = PageFromRows(
+        "cpu",
+        {row({{"host", Value::string("edge-1")}, {"usage", Value::floating(71.5)}}),
+         row({{"host", Value::string("edge-2")}, {"usage", Value::null()}})});
+
+    PageSchema schema = SchemaFromPage(page);
+
+    ASSERT_EQ(2, schema.columns.size());
+    EXPECT_EQ("host", schema.columns[0].name);
+    EXPECT_EQ(Value::Type::String, schema.columns[0].type);
+    EXPECT_FALSE(schema.columns[0].nullable);
+    EXPECT_EQ("usage", schema.columns[1].name);
+    EXPECT_EQ(Value::Type::Float, schema.columns[1].type);
+    EXPECT_TRUE(schema.columns[1].nullable);
+
+    auto materialized = RowFromPageChunk(page.chunks[0], 1);
+    EXPECT_EQ("\"edge-2\"", materialized->lookup("host")->string());
+    EXPECT_TRUE(materialized->lookup("usage")->is_null());
+}
+
+TEST(RuntimePageTest, SlicesChunksWithoutMaterializingRows) {
+    Page page = PageFromRows(
+        "cpu",
+        {row({{"host", Value::string("edge-1")}, {"usage", Value::integer(1)}}),
+         row({{"host", Value::string("edge-2")}, {"usage", Value::integer(2)}}),
+         row({{"host", Value::string("edge-3")}, {"usage", Value::integer(3)}})});
+
+    PageChunk slice = SlicePageChunkRows(page.chunks[0], 1, 2);
+
+    EXPECT_EQ(2, slice.row_count);
+    ASSERT_EQ(2, slice.columns.size());
+    EXPECT_EQ("\"edge-2\"", slice.columns[0].values[0].string());
+    EXPECT_EQ("3", slice.columns[1].values[1].string());
+}
+
 } // namespace
 } // namespace pl::flux
