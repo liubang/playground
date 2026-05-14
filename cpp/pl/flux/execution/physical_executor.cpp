@@ -411,6 +411,152 @@ Page materialize_page(Page input, const std::shared_ptr<plan::PlanNode>& plan) {
     return input;
 }
 
+Page exchange_page(Page input, const std::shared_ptr<plan::PlanNode>& plan) {
+    input.plan = plan;
+    return input;
+}
+
+std::optional<std::string> local_join_key(const ObjectValue& row,
+                                          const std::vector<std::string>& columns) {
+    std::string key;
+    for (const auto& column : columns) {
+        const Value* value = row.lookup(column);
+        if (value == nullptr || value->is_null()) {
+            return std::nullopt;
+        }
+        absl::StrAppend(&key, column, "=", value->string(), "\n");
+    }
+    return key;
+}
+
+std::shared_ptr<ObjectValue> null_row_for_columns(const std::vector<std::string>& columns) {
+    std::vector<std::pair<std::string, Value>> props;
+    props.reserve(columns.size());
+    for (const auto& column : columns) {
+        props.emplace_back(column, Value::null());
+    }
+    return std::make_shared<ObjectValue>(std::move(props));
+}
+
+std::shared_ptr<ObjectValue> local_join_row(const ObjectValue* left,
+                                            const std::vector<std::string>& left_columns,
+                                            const ObjectValue* right,
+                                            const std::vector<std::string>& right_columns,
+                                            const plan::JoinSpec& spec) {
+    const std::unordered_set<std::string> on_columns(spec.on.begin(), spec.on.end());
+    const std::unordered_set<std::string> right_column_set(right_columns.begin(),
+                                                           right_columns.end());
+    std::vector<std::pair<std::string, Value>> props;
+    props.reserve(left_columns.size() + right_columns.size());
+
+    auto append = [&](const std::string& column, const Value* value) {
+        props.emplace_back(column, value == nullptr ? Value::null() : *value);
+    };
+    for (const auto& column : spec.on) {
+        const Value* value = left == nullptr ? nullptr : left->lookup(column);
+        if ((value == nullptr || value->is_null()) && right != nullptr) {
+            value = right->lookup(column);
+        }
+        append(column, value);
+    }
+    for (const auto& column : left_columns) {
+        if (column == "_group" || on_columns.count(column) != 0) {
+            continue;
+        }
+        const std::string output_name = right_column_set.count(column) == 0
+                                            ? column
+                                            : absl::StrCat(column, "_", spec.left_name);
+        append(output_name, left == nullptr ? nullptr : left->lookup(column));
+    }
+    const std::unordered_set<std::string> left_column_set(left_columns.begin(),
+                                                          left_columns.end());
+    for (const auto& column : right_columns) {
+        if (column == "_group" || on_columns.count(column) != 0) {
+            continue;
+        }
+        const std::string output_name = left_column_set.count(column) == 0
+                                            ? column
+                                            : absl::StrCat(column, "_", spec.right_name);
+        append(output_name, right == nullptr ? nullptr : right->lookup(column));
+    }
+    return std::make_shared<ObjectValue>(std::move(props));
+}
+
+absl::StatusOr<Value> local_hash_join_values(const Value& left_value,
+                                             const Value& right_value,
+                                             const std::shared_ptr<plan::PlanNode>& plan) {
+    const auto& spec = plan->join();
+    if (spec.on.empty()) {
+        return absl::InvalidArgumentError("local hash join requires at least one key");
+    }
+    const TableValue& left_table = left_value.as_table();
+    const TableValue& right_table = right_value.as_table();
+    const auto left_columns = all_visible_columns_in_order(left_table);
+    const auto right_columns = all_visible_columns_in_order(right_table);
+    auto left_null = null_row_for_columns(left_columns);
+    auto right_null = null_row_for_columns(right_columns);
+
+    std::unordered_map<std::string, std::vector<size_t>> right_rows_by_key;
+    right_rows_by_key.reserve(right_table.rows.size());
+    for (size_t row_index = 0; row_index < right_table.rows.size(); ++row_index) {
+        const auto& row = right_table.rows[row_index];
+        if (row == nullptr) {
+            continue;
+        }
+        auto key = local_join_key(*row, spec.on);
+        if (key.has_value()) {
+            right_rows_by_key[*key].push_back(row_index);
+        }
+    }
+
+    std::vector<bool> matched_right(right_table.rows.size(), false);
+    TableChunk chunk;
+    for (const auto& left_row : left_table.rows) {
+        if (left_row == nullptr) {
+            continue;
+        }
+        bool matched = false;
+        auto key = local_join_key(*left_row, spec.on);
+        if (key.has_value()) {
+            auto it = right_rows_by_key.find(*key);
+            if (it != right_rows_by_key.end()) {
+                matched = true;
+                for (size_t right_index : it->second) {
+                    matched_right[right_index] = true;
+                    chunk.rows.push_back(local_join_row(left_row.get(), left_columns,
+                                                        right_table.rows[right_index].get(),
+                                                        right_columns, spec));
+                }
+            }
+        }
+        if (!matched &&
+            (spec.method == plan::JoinMethod::Left || spec.method == plan::JoinMethod::Full)) {
+            chunk.rows.push_back(local_join_row(left_row.get(), left_columns, right_null.get(),
+                                                right_columns, spec));
+        }
+    }
+    if (spec.method == plan::JoinMethod::Right || spec.method == plan::JoinMethod::Full) {
+        for (size_t right_index = 0; right_index < right_table.rows.size(); ++right_index) {
+            if (matched_right[right_index] || right_table.rows[right_index] == nullptr) {
+                continue;
+            }
+            chunk.rows.push_back(local_join_row(left_null.get(), left_columns,
+                                                right_table.rows[right_index].get(),
+                                                right_columns, spec));
+        }
+    }
+
+    std::vector<TableChunk> chunks;
+    chunks.push_back(std::move(chunk));
+    Value value = Value::table_stream(
+        left_table.bucket.empty() ? right_table.bucket : left_table.bucket, std::move(chunks),
+        left_table.range_start.has_value() ? left_table.range_start : right_table.range_start,
+        left_table.range_stop.has_value() ? left_table.range_stop : right_table.range_stop);
+    value.as_table_mut().plan = plan;
+    value.as_table_mut().materialized = true;
+    return value;
+}
+
 absl::StatusOr<std::optional<Page>> next_input_page(Operator* input) {
     if (input == nullptr) {
         return absl::InvalidArgumentError("operator has no input");
@@ -621,6 +767,17 @@ private:
     }
 };
 
+class ExchangeOperator final : public PageUnaryOperator {
+public:
+    using PageUnaryOperator::PageUnaryOperator;
+    [[nodiscard]] std::string name() const override { return "ExchangeOperator"; }
+
+private:
+    absl::StatusOr<Page> Apply(Page input) const override {
+        return exchange_page(std::move(input), plan());
+    }
+};
+
 class LimitOperator final : public Operator {
 public:
     LimitOperator(std::shared_ptr<plan::PlanNode> plan, std::unique_ptr<Operator> input)
@@ -725,6 +882,42 @@ private:
     }
 };
 
+class LocalHashJoinOperator final : public Operator {
+public:
+    LocalHashJoinOperator(std::shared_ptr<plan::PlanNode> plan,
+                          std::unique_ptr<Operator> left,
+                          std::unique_ptr<Operator> right)
+        : plan_(std::move(plan)), left_(std::move(left)), right_(std::move(right)) {}
+
+    [[nodiscard]] std::string name() const override { return "LocalHashJoinOperator"; }
+
+    absl::StatusOr<std::optional<Page>> NextPage() override {
+        if (emitted_) {
+            return std::nullopt;
+        }
+        emitted_ = true;
+        auto left_or = collect_input_value(left_.get());
+        if (!left_or.ok()) {
+            return left_or.status();
+        }
+        auto right_or = collect_input_value(right_.get());
+        if (!right_or.ok()) {
+            return right_or.status();
+        }
+        auto value_or = local_hash_join_values(*left_or, *right_or, plan_);
+        if (!value_or.ok()) {
+            return value_or.status();
+        }
+        return page_from_value(*value_or);
+    }
+
+private:
+    std::shared_ptr<plan::PlanNode> plan_;
+    std::unique_ptr<Operator> left_;
+    std::unique_ptr<Operator> right_;
+    bool emitted_ = false;
+};
+
 class MaterializeOperator final : public PageUnaryOperator {
 public:
     using PageUnaryOperator::PageUnaryOperator;
@@ -785,6 +978,28 @@ absl::StatusOr<PlannedOperator> BuildOperator(const std::shared_ptr<plan::PlanNo
         return planned;
     }
     const auto& optimized_plan = optimized.plan;
+    if (optimized_plan->kind == plan::PlanNodeKind::Join) {
+        if (optimized_plan->inputs.size() != 2 || optimized_plan->inputs[0] == nullptr ||
+            optimized_plan->inputs[1] == nullptr) {
+            return absl::InvalidArgumentError("join plan requires two inputs");
+        }
+        auto left_or = BuildOperator(optimized_plan->inputs[0]);
+        if (!left_or.ok()) {
+            return left_or.status();
+        }
+        auto right_or = BuildOperator(optimized_plan->inputs[1]);
+        if (!right_or.ok()) {
+            return right_or.status();
+        }
+        PlannedOperator planned;
+        planned.operators = std::move(left_or->operators);
+        planned.operators.insert(planned.operators.end(), right_or->operators.begin(),
+                                 right_or->operators.end());
+        planned.root = std::unique_ptr<Operator>(new LocalHashJoinOperator(
+            optimized_plan, std::move(left_or->root), std::move(right_or->root)));
+        planned.operators.push_back(planned.root->name());
+        return planned;
+    }
     if (optimized_plan->inputs.size() != 1 || optimized_plan->inputs[0] == nullptr) {
         return absl::InvalidArgumentError("plan is not executable");
     }
@@ -808,6 +1023,9 @@ absl::StatusOr<PlannedOperator> BuildOperator(const std::shared_ptr<plan::PlanNo
     } else if (optimized_plan->kind == plan::PlanNodeKind::Rename) {
         current = std::unique_ptr<Operator>(
             new RenameOperator(optimized_plan, std::move(planned_or->root)));
+    } else if (optimized_plan->kind == plan::PlanNodeKind::Exchange) {
+        current = std::unique_ptr<Operator>(
+            new ExchangeOperator(optimized_plan, std::move(planned_or->root)));
     } else if (optimized_plan->kind == plan::PlanNodeKind::Limit) {
         current = std::unique_ptr<Operator>(
             new LimitOperator(optimized_plan, std::move(planned_or->root)));

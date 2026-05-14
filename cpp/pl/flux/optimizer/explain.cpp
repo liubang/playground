@@ -92,6 +92,15 @@ void FormatLogicalNodeDetail(const plan::PlanNode& node, std::ostringstream* out
             *out << "builtin=\"" << node.materialize().builtin << "\"";
         }
         *out << ")";
+    } else if (node.kind == plan::PlanNodeKind::Join) {
+        *out << "(method=\"" << plan::JoinMethodName(node.join().method) << "\", on="
+             << plan::StringList(node.join().on) << ")";
+    } else if (node.kind == plan::PlanNodeKind::Exchange) {
+        *out << "(kind=\"" << plan::ExchangeKindName(node.exchange().kind) << "\"";
+        if (!node.exchange().partition_keys.empty()) {
+            *out << ", keys=" << plan::StringList(node.exchange().partition_keys);
+        }
+        *out << ")";
     }
 }
 
@@ -218,6 +227,10 @@ std::string OperatorNameForPlanNode(plan::PlanNodeKind kind) {
             return "AggregateOperator";
         case plan::PlanNodeKind::Distinct:
             return "DistinctOperator";
+        case plan::PlanNodeKind::Join:
+            return "LocalHashJoinOperator";
+        case plan::PlanNodeKind::Exchange:
+            return "ExchangeOperator";
         case plan::PlanNodeKind::Materialize:
             return "MaterializeOperator";
         default:
@@ -238,9 +251,15 @@ std::shared_ptr<plan::PhysicalPlanNode> BuildPhysicalPlan(
     }
 
     auto physical = std::make_shared<plan::PhysicalPlanNode>();
-    physical->kind = node->kind == plan::PlanNodeKind::Materialize
-                         ? plan::PhysicalNodeKind::Materialize
-                         : plan::PhysicalNodeKind::MemoryOperator;
+    if (node->kind == plan::PlanNodeKind::Materialize) {
+        physical->kind = plan::PhysicalNodeKind::Materialize;
+    } else if (node->kind == plan::PlanNodeKind::Join) {
+        physical->kind = plan::PhysicalNodeKind::LocalHashJoin;
+    } else if (node->kind == plan::PlanNodeKind::Exchange) {
+        physical->kind = plan::PhysicalNodeKind::Exchange;
+    } else {
+        physical->kind = plan::PhysicalNodeKind::MemoryOperator;
+    }
     physical->name = plan::PlanNodeKindName(node->kind);
     physical->operator_name = OperatorNameForPlanNode(node->kind);
     physical->lazy = false;

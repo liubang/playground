@@ -33,6 +33,8 @@ constexpr double kFilterSelectivity = 0.5;
 constexpr double kProjectCpuPerRow = 0.05;
 constexpr double kMemoryCpuPerRow = 1.0;
 constexpr double kConnectorCpuPerRow = 0.05;
+constexpr double kJoinBuildCpuPerRow = 1.25;
+constexpr double kJoinProbeCpuPerRow = 0.75;
 
 bool has_rows(const plan::CostEstimate& cost) { return cost.rows.has_value(); }
 
@@ -84,6 +86,7 @@ public:
         return PlanStatistics{
             .row_count = statistics_or->row_count,
             .size_bytes = statistics_or->size_bytes,
+            .columns = statistics_or->columns,
         };
     }
 
@@ -115,6 +118,33 @@ private:
                 .rows = rows,
                 .cpu = rows * kConnectorCpuPerRow,
                 .io = stats_or->size_bytes.value_or(rows),
+            };
+        }
+
+        if (node->kind == plan::PlanNodeKind::Join) {
+            if (node->inputs.size() != 2 || node->inputs[0] == nullptr ||
+                node->inputs[1] == nullptr) {
+                return unknown_cost();
+            }
+            auto left_or = estimate(node->inputs[0], stats_provider);
+            if (!left_or.ok()) {
+                return left_or.status();
+            }
+            auto right_or = estimate(node->inputs[1], stats_provider);
+            if (!right_or.ok()) {
+                return right_or.status();
+            }
+            if (!left_or->rows.has_value() || !right_or->rows.has_value()) {
+                return unknown_cost();
+            }
+            const double left_rows = *left_or->rows;
+            const double right_rows = *right_or->rows;
+            const double output_rows = std::max(1.0, std::min(left_rows, right_rows));
+            return plan::CostEstimate{
+                .rows = output_rows,
+                .cpu = left_or->cpu.value_or(0.0) + right_or->cpu.value_or(0.0) +
+                       right_rows * kJoinBuildCpuPerRow + left_rows * kJoinProbeCpuPerRow,
+                .io = left_or->io.value_or(0.0) + right_or->io.value_or(0.0),
             };
         }
 
@@ -163,6 +193,9 @@ private:
             case plan::PlanNodeKind::Materialize:
                 extra_cpu = input_rows * 0.1;
                 break;
+            case plan::PlanNodeKind::Exchange:
+                extra_cpu = input_rows * 0.2;
+                break;
             default:
                 return unknown_cost();
         }
@@ -173,6 +206,12 @@ private:
 PhysicalShape physical_shape_for(const PlanOptimizerResult& rbo_result) {
     if (rbo_result.pushdown_plan.has_value() && CanExecutePushdownPlan(*rbo_result.pushdown_plan)) {
         return PhysicalShape::ConnectorScan;
+    }
+    if (rbo_result.plan != nullptr && rbo_result.plan->kind == plan::PlanNodeKind::Join) {
+        return PhysicalShape::LocalHashJoin;
+    }
+    if (rbo_result.plan != nullptr && rbo_result.plan->kind == plan::PlanNodeKind::Exchange) {
+        return PhysicalShape::Exchange;
     }
     if (rbo_result.plan != nullptr && rbo_result.plan->inputs.size() == 1) {
         return PhysicalShape::ConnectorPrefixMemorySuffix;
@@ -186,6 +225,10 @@ std::string alternative_name(PhysicalShape shape) {
             return "connector_scan";
         case PhysicalShape::ConnectorPrefixMemorySuffix:
             return "connector_prefix_memory_suffix";
+        case PhysicalShape::LocalHashJoin:
+            return "local_hash_join";
+        case PhysicalShape::Exchange:
+            return "exchange";
         case PhysicalShape::MemoryScan:
             return "memory_scan";
     }
@@ -231,6 +274,31 @@ absl::StatusOr<CboPlanResult> CostBasedOptimizer::OptimizeWithTrace(
     result.decision = cbo_decision(options_, *cost_or);
     result.cost = *cost_or;
     result.alternatives.push_back(std::move(chosen));
+    if (shape == PhysicalShape::ConnectorScan) {
+        result.alternatives.push_back(PlanAlternative{
+            .name = alternative_name(PhysicalShape::ConnectorPrefixMemorySuffix),
+            .shape = PhysicalShape::ConnectorPrefixMemorySuffix,
+            .cost = *cost_or,
+            .chosen = false,
+            .reason = "dominated-by-full-connector-pushdown",
+        });
+    } else if (shape == PhysicalShape::LocalHashJoin) {
+        result.alternatives.push_back(PlanAlternative{
+            .name = "local_hash_join_build_left",
+            .shape = PhysicalShape::LocalHashJoin,
+            .cost = *cost_or,
+            .chosen = false,
+            .reason = "build-right-is-default-until-side-costing-is-enabled",
+        });
+    } else if (shape == PhysicalShape::ConnectorPrefixMemorySuffix) {
+        result.alternatives.push_back(PlanAlternative{
+            .name = alternative_name(PhysicalShape::MemoryScan),
+            .shape = PhysicalShape::MemoryScan,
+            .cost = unknown_cost(),
+            .chosen = false,
+            .reason = "fallback-candidate",
+        });
+    }
     result.has_statistics = result.cost.rows.has_value();
     return result;
 }

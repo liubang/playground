@@ -485,8 +485,10 @@ absl::StatusOr<TableStatistics> SQLiteSource::Statistics() const {
     if (schema_or.ok()) {
         statistics.columns.reserve(schema_or->columns.size());
         for (const auto& column : schema_or->columns) {
-            statistics.columns.push_back(
-                {.name = column.name, .distinct_values = {}, .null_fraction = {}});
+            statistics.columns.push_back({.name = column.name,
+                                          .distinct_values = {},
+                                          .null_fraction = {},
+                                          .average_width_bytes = {}});
         }
     }
 
