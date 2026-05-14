@@ -44,6 +44,7 @@ struct CostEstimate {
 
 struct OptimizerTrace {
     std::vector<std::string> rbo_rules;
+    std::vector<std::string> cbo_alternatives;
     std::string cbo_decision = "not-run";
     CostEstimate cost;
 };
@@ -137,6 +138,9 @@ inline void FormatPhysicalNodeDetail(const PhysicalPlanNode& node, std::ostrings
     }
     if (!node.optimizer.rbo_rules.empty()) {
         *out << ", rbo=" << StringList(node.optimizer.rbo_rules);
+    }
+    if (!node.optimizer.cbo_alternatives.empty()) {
+        *out << ", alternatives=" << StringList(node.optimizer.cbo_alternatives);
     }
     *out << ", cbo=\"" << node.optimizer.cbo_decision << "\"";
     *out << ", cost=" << CostString(node.optimizer.cost);

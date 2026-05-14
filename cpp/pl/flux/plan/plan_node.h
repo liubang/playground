@@ -155,11 +155,17 @@ enum class JoinMethod {
     Full,
 };
 
+enum class JoinBuildSide {
+    Left,
+    Right,
+};
+
 struct JoinSpec {
     std::vector<std::string> on;
     std::string left_name = "left";
     std::string right_name = "right";
     JoinMethod method = JoinMethod::Inner;
+    JoinBuildSide build_side = JoinBuildSide::Right;
 };
 
 enum class ExchangeKind {
@@ -402,6 +408,7 @@ inline std::shared_ptr<PlanNode> MakeJoin(std::shared_ptr<PlanNode> left,
         .left_name = std::move(left_name),
         .right_name = std::move(right_name),
         .method = method,
+        .build_side = JoinBuildSide::Right,
     };
     return node;
 }
@@ -429,6 +436,16 @@ inline std::string JoinMethodName(JoinMethod method) {
             return "full";
     }
     return "inner";
+}
+
+inline std::string JoinBuildSideName(JoinBuildSide side) {
+    switch (side) {
+        case JoinBuildSide::Left:
+            return "left";
+        case JoinBuildSide::Right:
+            return "right";
+    }
+    return "right";
 }
 
 inline std::string ExchangeKindName(ExchangeKind kind) {
@@ -560,7 +577,8 @@ inline void FormatNodeDetail(const PlanNode& node, std::ostringstream* out) {
     } else if (node.kind == PlanNodeKind::Join) {
         const auto& join = node.join();
         *out << "(method=\"" << JoinMethodName(join.method) << "\", on="
-             << StringList(join.on) << ")";
+             << StringList(join.on) << ", build=\"" << JoinBuildSideName(join.build_side)
+             << "\")";
     } else if (node.kind == PlanNodeKind::Exchange) {
         const auto& exchange = node.exchange();
         *out << "(kind=\"" << ExchangeKindName(exchange.kind) << "\"";
