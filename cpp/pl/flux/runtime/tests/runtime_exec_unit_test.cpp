@@ -17,6 +17,7 @@
 
 #include "cpp/pl/flux/execution/materializer.h"
 #include "cpp/pl/flux/execution/physical_executor.h"
+#include "cpp/pl/flux/optimizer/explain.h"
 #include "cpp/pl/flux/runtime/runtime_builtin.h"
 #include "cpp/pl/flux/runtime/runtime_exec.h"
 #include "cpp/pl/flux/syntax/parser.h"
@@ -742,21 +743,28 @@ TEST(RuntimeExecTest, PhysicalPlannerBuildsMultiInputJoinPipeline) {
     auto task_or = execution::PhysicalPlanner().Plan(join);
 
     ASSERT_TRUE(task_or.ok()) << task_or.status();
-    ASSERT_EQ(1, task_or->pipelines.size());
+    ASSERT_EQ(3, task_or->pipelines.size());
+    EXPECT_EQ("join-left", task_or->pipelines[0].id);
+    EXPECT_EQ("input", task_or->pipelines[0].role);
+    EXPECT_EQ(nullptr, task_or->pipelines[0].root);
+    EXPECT_EQ("join-right", task_or->pipelines[1].id);
+    EXPECT_EQ("input", task_or->pipelines[1].role);
+    EXPECT_EQ(nullptr, task_or->pipelines[1].root);
+    EXPECT_EQ("main", task_or->pipelines[2].id);
+    EXPECT_EQ((std::vector<std::string>{"join-left", "join-right"}),
+              task_or->pipelines[2].dependencies);
     EXPECT_EQ((std::vector<std::string>{
                   "ConnectorScanOperator",
                   "ConnectorScanOperator",
                   "LocalHashJoinOperator",
                   "OutputOperator",
               }),
-              task_or->pipelines[0].operators);
+              task_or->pipelines[2].operators);
 }
 
-TEST(RuntimeExecTest, PhysicalExecutorRunsExchangePlaceholderAsPageBoundary) {
-    auto plan = plan::MakeLimit(
-        plan::MakeExchange(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
-                           plan::ExchangeKind::Gather),
-        1, 0);
+TEST(RuntimeExecTest, PhysicalExecutorRunsExchangeGatherAsPageBoundary) {
+    auto plan = plan::MakeExchange(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                                   plan::ExchangeKind::Gather);
 
     auto result_or = execution::PhysicalExecutor().Execute(plan);
 
@@ -764,8 +772,46 @@ TEST(RuntimeExecTest, PhysicalExecutorRunsExchangePlaceholderAsPageBoundary) {
     ASSERT_EQ(Value::Type::Table, result_or->type());
     const auto& table = result_or->as_table();
     EXPECT_TRUE(table.materialized);
-    ASSERT_EQ(1, table.rows.size());
+    ASSERT_EQ(4, table.rows.size());
+    ASSERT_EQ(1, table.tables.size());
     EXPECT_NE(nullptr, table.rows[0]->lookup("host"));
+}
+
+TEST(RuntimeExecTest, PhysicalExecutorRunsExchangeRepartitionByKeys) {
+    auto plan = plan::MakeExchange(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                                   plan::ExchangeKind::Repartition, {"host"});
+
+    auto result_or = execution::PhysicalExecutor().Execute(plan);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_EQ(Value::Type::Table, result_or->type());
+    const auto& table = result_or->as_table();
+    EXPECT_TRUE(table.materialized);
+    ASSERT_EQ(4, table.rows.size());
+    ASSERT_EQ(3, table.tables.size());
+    for (const auto& chunk : table.tables) {
+        ASSERT_FALSE(chunk.rows.empty());
+        ASSERT_NE(nullptr, chunk.rows[0]);
+        const Value* host = chunk.rows[0]->lookup("host");
+        ASSERT_NE(nullptr, host);
+        for (const auto& row : chunk.rows) {
+            ASSERT_NE(nullptr, row);
+            const Value* row_host = row->lookup("host");
+            ASSERT_NE(nullptr, row_host);
+            EXPECT_EQ(host->string(), row_host->string());
+        }
+    }
+}
+
+TEST(RuntimeExecTest, PhysicalExplainShowsCboAlternatives) {
+    auto plan = plan::MakeJoin(
+        plan::MakeLimit(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}), 1, 0),
+        plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}), {"host"});
+
+    const auto physical = optimizer::FormatPhysicalPlan(plan);
+
+    EXPECT_NE(std::string::npos, physical.find("alternatives=[local_hash_join_build_left*"));
+    EXPECT_NE(std::string::npos, physical.find("local_hash_join_build_right"));
 }
 
 TEST(RuntimeExecTest, ContinuousSqliteFiltersAccumulatePushdownPredicates) {

@@ -485,10 +485,44 @@ absl::StatusOr<TableStatistics> SQLiteSource::Statistics() const {
     if (schema_or.ok()) {
         statistics.columns.reserve(schema_or->columns.size());
         for (const auto& column : schema_or->columns) {
+            auto column_stats_or = prepare_statement(
+                db_or->get(),
+                absl::StrCat("SELECT COUNT(DISTINCT ", quote_identifier(column.name),
+                             "), SUM(CASE WHEN ", quote_identifier(column.name),
+                             " IS NULL THEN 1 ELSE 0 END), AVG(LENGTH(CAST(",
+                             quote_identifier(column.name), " AS TEXT))) FROM (", query_,
+                             ") AS flux_source"));
+            if (!column_stats_or.ok()) {
+                statistics.columns.push_back({.name = column.name});
+                continue;
+            }
+            std::optional<double> distinct_values;
+            std::optional<double> null_fraction;
+            std::optional<double> average_width_bytes;
+            const int column_step_rc = sqlite3_step(column_stats_or->get());
+            if (column_step_rc == SQLITE_ROW) {
+                if (sqlite3_column_type(column_stats_or->get(), 0) != SQLITE_NULL) {
+                    distinct_values =
+                        static_cast<double>(sqlite3_column_int64(column_stats_or->get(), 0));
+                }
+                if (statistics.row_count.has_value() && *statistics.row_count > 0.0 &&
+                    sqlite3_column_type(column_stats_or->get(), 1) != SQLITE_NULL) {
+                    null_fraction =
+                        static_cast<double>(sqlite3_column_int64(column_stats_or->get(), 1)) /
+                        *statistics.row_count;
+                } else if (statistics.row_count.has_value() && *statistics.row_count == 0.0) {
+                    null_fraction = 0.0;
+                }
+                if (sqlite3_column_type(column_stats_or->get(), 2) != SQLITE_NULL) {
+                    average_width_bytes = sqlite3_column_double(column_stats_or->get(), 2);
+                } else {
+                    average_width_bytes = 0.0;
+                }
+            }
             statistics.columns.push_back({.name = column.name,
-                                          .distinct_values = {},
-                                          .null_fraction = {},
-                                          .average_width_bytes = {}});
+                                          .distinct_values = distinct_values,
+                                          .null_fraction = null_fraction,
+                                          .average_width_bytes = average_width_bytes});
         }
     }
 
