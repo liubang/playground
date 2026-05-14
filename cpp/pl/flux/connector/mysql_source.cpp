@@ -755,12 +755,14 @@ struct MySQLPageSource::Impl {
 MySQLPageSource::MySQLPageSource(std::string dsn,
                                  std::string table,
                                  ScanRequest request,
-                                 size_t rows_per_page)
+                                 size_t rows_per_page,
+                                 int64_t split_id)
     : impl_(std::make_unique<Impl>()),
       dsn_(std::move(dsn)),
       table_(std::move(table)),
       rows_per_page_(std::max<size_t>(1, rows_per_page)) {
     impl_->request = std::move(request);
+    stats_.split_id = split_id;
 }
 
 absl::Status MySQLPageSource::Initialize() {
@@ -803,8 +805,11 @@ absl::StatusOr<std::optional<Page>> MySQLPageSource::NextPage() {
     if (impl_->state.complete()) {
         if (!impl_->emitted_empty && !impl_->emitted_any_row) {
             impl_->emitted_empty = true;
-            return PageFromRows("mysql", {});
+            Page page = PageFromRows("mysql", {});
+            ++stats_.pages_produced;
+            return page;
         }
+        stats_.finished = true;
         return std::nullopt;
     }
 
@@ -838,12 +843,16 @@ absl::StatusOr<std::optional<Page>> MySQLPageSource::NextPage() {
     if (rows.empty()) {
         if (!impl_->emitted_empty && !impl_->emitted_any_row) {
             impl_->emitted_empty = true;
-            return PageFromRows("mysql", {});
+            Page page = PageFromRows("mysql", {});
+            ++stats_.pages_produced;
+            return page;
         }
+        stats_.finished = true;
         return std::nullopt;
     }
 
     impl_->emitted_any_row = true;
+    Page page;
     if (impl_->request.aggregate.has_value()) {
         std::vector<TableChunk> chunks;
         chunks.reserve(rows.size());
@@ -852,15 +861,24 @@ absl::StatusOr<std::optional<Page>> MySQLPageSource::NextPage() {
             chunk.rows.push_back(std::move(row));
             chunks.push_back(std::move(chunk));
         }
-        return PageFromTableChunks("mysql", std::move(chunks));
+        page = PageFromTableChunks("mysql", std::move(chunks));
+    } else {
+        page = PageFromRows("mysql", std::move(rows));
     }
-    return PageFromRows("mysql", std::move(rows));
+    ++stats_.pages_produced;
+    stats_.rows_produced += page.row_count();
+    return page;
 }
+
+ConnectorSplitStats MySQLPageSource::Stats() const { return stats_; }
+
+bool MySQLPageSource::Finished() const { return stats_.finished; }
 
 absl::StatusOr<std::unique_ptr<ConnectorPageSource>> MySQLPageSourceProvider::CreatePageSource(
     const ConnectorSplit& split) const {
     auto page_source = std::make_unique<MySQLPageSource>(split.table.dsn, split.table.table,
-                                                         split.request, rows_per_page_);
+                                                         split.request, rows_per_page_,
+                                                         split.split_id);
     auto status = page_source->Initialize();
     if (!status.ok()) {
         return status;

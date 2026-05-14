@@ -82,10 +82,16 @@ private:
 
 class MySQLPageSource final : public ConnectorPageSource {
 public:
-    MySQLPageSource(std::string dsn, std::string table, ScanRequest request, size_t rows_per_page);
+    MySQLPageSource(std::string dsn,
+                    std::string table,
+                    ScanRequest request,
+                    size_t rows_per_page,
+                    int64_t split_id = 0);
 
     absl::Status Initialize();
     absl::StatusOr<std::optional<Page>> NextPage() override;
+    [[nodiscard]] ConnectorSplitStats Stats() const override;
+    [[nodiscard]] bool Finished() const override;
 
 private:
     struct Impl;
@@ -93,6 +99,7 @@ private:
     std::string dsn_;
     std::string table_;
     size_t rows_per_page_ = 1024;
+    ConnectorSplitStats stats_;
 };
 
 std::unique_ptr<ConnectorRuntime> MakeMySQLConnectorRuntime(const SourceSpec& spec);

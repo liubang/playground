@@ -597,12 +597,14 @@ struct SQLitePageSource::Impl {
 SQLitePageSource::SQLitePageSource(std::string dsn,
                                    std::string table,
                                    ScanRequest request,
-                                   size_t rows_per_page)
+                                   size_t rows_per_page,
+                                   int64_t split_id)
     : impl_(std::make_unique<Impl>()),
       dsn_(std::move(dsn)),
       table_(std::move(table)),
       rows_per_page_(std::max<size_t>(1, rows_per_page)) {
     impl_->request = std::move(request);
+    stats_.split_id = split_id;
 }
 
 absl::Status SQLitePageSource::Initialize() {
@@ -639,8 +641,11 @@ absl::StatusOr<std::optional<Page>> SQLitePageSource::NextPage() {
     if (impl_->done) {
         if (!impl_->emitted_empty && !impl_->emitted_any_row) {
             impl_->emitted_empty = true;
-            return PageFromRows("sqlite", {});
+            Page page = PageFromRows("sqlite", {});
+            ++stats_.pages_produced;
+            return page;
         }
+        stats_.finished = true;
         return std::nullopt;
     }
 
@@ -666,12 +671,16 @@ absl::StatusOr<std::optional<Page>> SQLitePageSource::NextPage() {
     if (rows.empty()) {
         if (!impl_->emitted_empty && !impl_->emitted_any_row) {
             impl_->emitted_empty = true;
-            return PageFromRows("sqlite", {});
+            Page page = PageFromRows("sqlite", {});
+            ++stats_.pages_produced;
+            return page;
         }
+        stats_.finished = true;
         return std::nullopt;
     }
 
     impl_->emitted_any_row = true;
+    Page page;
     if (impl_->request.aggregate.has_value()) {
         std::vector<TableChunk> chunks;
         chunks.reserve(rows.size());
@@ -680,10 +689,18 @@ absl::StatusOr<std::optional<Page>> SQLitePageSource::NextPage() {
             chunk.rows.push_back(std::move(row));
             chunks.push_back(std::move(chunk));
         }
-        return PageFromTableChunks("sqlite", std::move(chunks));
+        page = PageFromTableChunks("sqlite", std::move(chunks));
+    } else {
+        page = PageFromRows("sqlite", std::move(rows));
     }
-    return PageFromRows("sqlite", std::move(rows));
+    ++stats_.pages_produced;
+    stats_.rows_produced += page.row_count();
+    return page;
 }
+
+ConnectorSplitStats SQLitePageSource::Stats() const { return stats_; }
+
+bool SQLitePageSource::Finished() const { return stats_.finished; }
 
 SQLitePageSourceProvider::SQLitePageSourceProvider(size_t rows_per_page)
     : rows_per_page_(std::max<size_t>(1, rows_per_page)) {}
@@ -691,7 +708,8 @@ SQLitePageSourceProvider::SQLitePageSourceProvider(size_t rows_per_page)
 absl::StatusOr<std::unique_ptr<ConnectorPageSource>> SQLitePageSourceProvider::CreatePageSource(
     const ConnectorSplit& split) const {
     auto page_source = std::make_unique<SQLitePageSource>(split.table.dsn, split.table.table,
-                                                          split.request, rows_per_page_);
+                                                          split.request, rows_per_page_,
+                                                          split.split_id);
     auto status = page_source->Initialize();
     if (!status.ok()) {
         return status;
