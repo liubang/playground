@@ -21,6 +21,7 @@
 #include "cpp/pl/flux/plan/plan_node.h"
 #include "cpp/pl/flux/runtime/runtime_page.h"
 #include "cpp/pl/flux/runtime/runtime_value.h"
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <string>
@@ -36,12 +37,21 @@ public:
 };
 
 struct Pipeline {
+    struct Stats {
+        size_t pages = 0;
+        size_t rows = 0;
+        bool blocked = false;
+        bool finished = false;
+        std::string error;
+    };
+
     std::string id;
     std::string name;
     std::string role;
     std::vector<std::string> dependencies;
     std::vector<std::string> operators;
     std::unique_ptr<Operator> root;
+    std::shared_ptr<Stats> stats = std::make_shared<Stats>();
 };
 
 struct ExecutionTask {
