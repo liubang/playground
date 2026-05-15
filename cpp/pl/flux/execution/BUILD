@@ -29,10 +29,12 @@ cc_library(
     srcs = [
         "materializer.cpp",
         "physical_executor.cpp",
+        "task_executor.cpp",
     ],
     hdrs = [
         "materializer.h",
         "physical_executor.h",
+        "task_executor.h",
     ],
     copts = COPTS,
     linkopts = LINKOPTS,
