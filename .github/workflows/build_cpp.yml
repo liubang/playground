@@ -99,7 +99,7 @@ jobs:
             --config=release \
             ${{ matrix.compiler.flag }} \
             --test_env=FLUX_MYSQL_TEST_DSN=mysql://flux:flux@127.0.0.1:3306/flux_test \
-            //cpp/...
+            -- //cpp/... -//cpp/pl/recall/embedding_server/...
   coverage:
     name: coverage
     runs-on: ubuntu-24.04
@@ -149,7 +149,7 @@ jobs:
             --verbose_failures \
             --combined_report=lcov \
             --instrumentation_filter="//cpp/pl[/:]" \
-            //cpp/...
+            -- //cpp/... -//cpp/pl/recall/embedding_server/...
           ls -lh ./bazel-out/_coverage/_coverage_report.dat
           genhtml --ignore-errors negative --output coverage ./bazel-out/_coverage/_coverage_report.dat
           cp -r ./registry ./coverage/

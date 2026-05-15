@@ -24,6 +24,10 @@ py_binary(
     name = "embedding_server",
     srcs = ["server.py"],
     main = "server.py",
+    target_compatible_with = [
+        "@platforms//os:macos",
+        "@platforms//cpu:aarch64",
+    ],
     visibility = ["//visibility:public"],
     deps = [
         requirement("mlx"),
