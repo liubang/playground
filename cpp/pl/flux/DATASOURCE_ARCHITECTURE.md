@@ -933,6 +933,9 @@ local hash join；exchange 明确是单机 materializing boundary，不伪装成
 读取 buffer 后继续执行。`Scheduler` 按 pipeline dependency DAG 分批调度，同一 ready wave
 使用本地 async driver 并发执行，并把 producer 输出从最终 result 中隔离掉。
 
+Phase 13 后，调度实现已从 ready-wave `std::async` 过渡到 `TaskExecutor` + `DriverTask`
+模型；本节保留 Phase 11 的 DAG 拆分语义记录，当前 runtime 形态见 Phase 13。
+
 目标：让 `ExecutionTask -> Pipeline DAG -> Driver -> ExchangeBuffer -> Operator` 成为真实执行路径，
 为后续 remote exchange、backpressure 和多 driver 并行留出正确边界。
 
@@ -969,10 +972,9 @@ operator 列表、dependency、pages、rows、blocked、finished 和 error。
 - 新增 `PipelineProfile`、`ExecutionProfile`、`SchedulerResult`，profile 不再只能从测试内部拿。
 - 新增 `execution::FormatPipelinePlan` 和 `execution::FormatExecutionProfile`，展示 pipeline DAG
   和 runtime stats。
-- `ExchangeBuffer` 补生命周期状态：bounded capacity、blocked、closed、finished、error；
-  producer error 会写入 buffer，consumer 读取时会传播。
-- `ExchangeSinkOperator` 在 buffer 满时返回 blocked/unavailable，`Driver` 会把 unavailable 标记为
-  blocked stats。
+- `ExchangeBuffer` 补生命周期状态：bounded capacity、closed、finished、error；producer error
+  会写入 buffer，consumer 读取时会传播。Phase 13 后 buffer 已升级为 blocking queue，
+  backpressure 通过 condition_variable 阻塞/唤醒生产者和消费者。
 - `Scheduler` 的 missing dependency / dependency cycle 错误被显式测试覆盖。
 - pipeline breaker 不再只处理顶层 join：nested join 会递归拆成 producer DAG，root exchange 会拆成
   producer + consumer DAG。
@@ -985,6 +987,39 @@ operator 列表、dependency、pages、rows、blocked、finished 和 error。
   五段 DAG，并能正确执行。
 - root exchange planner 能生成 `exchange-input -> main` DAG，并保持 gather/repartition 语义。
 - blocked operator 会在 shared pipeline stats 中留下 blocked/error/finished 状态。
+
+### Phase 13: TaskExecutor, DriverTask, and Streaming Exchange Foundation
+
+状态：已完成单机 driver scheduler 骨架版。`Scheduler` 不再直接用 `std::async` 按 wave
+执行 pipeline，而是先校验 pipeline dependency DAG，再通过独立 `TaskExecutor` 提交
+`DriverTask`。`Pipeline` 现在可以承载多个 driver root，开始从“一个 pipeline 等于一个
+driver 实例”演进为“pipeline 是执行模板，driver task 是运行实例”。
+
+目标：把 runtime scheduler 推向最终形态的不可返工骨架：固定 worker pool、driver factory、
+split-level driver roots、streaming exchange，以及线程安全 runtime stats。
+
+已落地：
+
+- 新增独立 `execution/task_executor.h|cpp`，提供固定 worker pool、`Submit()` future、
+  shutdown/drain 语义；线程池实现不堆在 `physical_executor` 中。
+- 新增 `DriverTask` / `DriverFactory`，`Pipeline` 支持 `driver_roots`，同一 pipeline 可以
+  展开成多个 driver 实例并共享 pipeline stats。
+- `Scheduler` 先做 missing dependency / cycle 校验，再把所有 driver task 交给
+  `TaskExecutor`；producer/consumer 不再靠 scheduler wave 顺序串行等待。
+- `ExchangeBuffer` 改成 mutex + condition_variable 的 streaming queue；producer 写 page，
+  consumer 可同时阻塞式读取 page，finish/error 会唤醒等待方。
+- connector full-pushdown pipeline 已能在 split 数大于 1 时生成多个
+  `ConnectorScanOperator` driver roots；SQLite 当前仍是 single split，但 runtime 边界已可承接
+  多 split connector。
+- pipeline stats 写入加锁，多个 driver 会聚合同一 pipeline 的 pages/rows/error/finish 状态。
+
+验收：
+
+- `TaskExecutor` 能并发执行提交任务并返回 future 结果。
+- 一个 pipeline 下多个 driver root 的输出会被 scheduler 聚合为最终 root 结果。
+- join / nested join / root exchange 仍能通过 streaming `ExchangeBuffer` 正确执行。
+- missing dependency / dependency cycle 仍在运行前被确定性拒绝。
+- 全量 `bazel test //cpp/pl/flux/...` 通过。
 
 ## Test Plan
 
