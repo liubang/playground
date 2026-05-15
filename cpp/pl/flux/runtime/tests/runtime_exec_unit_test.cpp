@@ -48,6 +48,15 @@ std::shared_ptr<plan::PlanNode> SqliteCpuScanPlan() {
                                 "cpu");
 }
 
+class BlockingTestOperator final : public execution::Operator {
+public:
+    [[nodiscard]] std::string name() const override { return "BlockingTestOperator"; }
+
+    absl::StatusOr<std::optional<Page>> NextPage() override {
+        return absl::UnavailableError("test operator is blocked");
+    }
+};
+
 TEST(RuntimeExecTest, ExecutesVariableAndExpressionStatements) {
     auto file = ParseFile(R"(
         value = 1 + 2
@@ -804,6 +813,44 @@ TEST(RuntimeExecTest, SchedulerRunsJoinPipelineDagAndRecordsStats) {
     EXPECT_TRUE(root_stats->error.empty());
 }
 
+TEST(RuntimeExecTest, PhysicalPlannerBuildsNestedJoinPipelineDag) {
+    auto nested = plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                                 plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
+                                 {"host"});
+    auto join = plan::MakeJoin(std::move(nested),
+                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                               {"host"});
+
+    auto task_or = execution::PhysicalPlanner().Plan(join);
+
+    ASSERT_TRUE(task_or.ok()) << task_or.status();
+    ASSERT_EQ(5, task_or->pipelines.size());
+    EXPECT_EQ("join-left-left", task_or->pipelines[0].id);
+    EXPECT_EQ("join-left-right", task_or->pipelines[1].id);
+    EXPECT_EQ("join-left", task_or->pipelines[2].id);
+    EXPECT_EQ((std::vector<std::string>{"join-left-left", "join-left-right"}),
+              task_or->pipelines[2].dependencies);
+    EXPECT_EQ("join-right", task_or->pipelines[3].id);
+    EXPECT_EQ("main", task_or->pipelines[4].id);
+    EXPECT_EQ((std::vector<std::string>{"join-left", "join-right"}),
+              task_or->pipelines[4].dependencies);
+}
+
+TEST(RuntimeExecTest, PhysicalExecutorRunsNestedJoinPipelineDag) {
+    auto nested = plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                                 plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
+                                 {"host"});
+    auto join = plan::MakeJoin(std::move(nested),
+                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                               {"host"});
+
+    auto result_or = execution::PhysicalExecutor().Execute(join);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_EQ(Value::Type::Table, result_or->type());
+    EXPECT_EQ(10, result_or->as_table().rows.size());
+}
+
 TEST(RuntimeExecTest, PhysicalExecutorRunsExchangeGatherAsPageBoundary) {
     auto plan = plan::MakeExchange(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
                                    plan::ExchangeKind::Gather);
@@ -817,6 +864,31 @@ TEST(RuntimeExecTest, PhysicalExecutorRunsExchangeGatherAsPageBoundary) {
     ASSERT_EQ(4, table.rows.size());
     ASSERT_EQ(1, table.tables.size());
     EXPECT_NE(nullptr, table.rows[0]->lookup("host"));
+}
+
+TEST(RuntimeExecTest, PhysicalPlannerBuildsExchangeRootPipelineDag) {
+    auto plan = plan::MakeExchange(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                                   plan::ExchangeKind::Gather);
+
+    auto task_or = execution::PhysicalPlanner().Plan(plan);
+
+    ASSERT_TRUE(task_or.ok()) << task_or.status();
+    ASSERT_EQ(2, task_or->pipelines.size());
+    EXPECT_EQ("exchange-input", task_or->pipelines[0].id);
+    EXPECT_EQ("source", task_or->pipelines[0].role);
+    EXPECT_EQ((std::vector<std::string>{
+                  "ConnectorScanOperator",
+                  "ExchangeSinkOperator",
+              }),
+              task_or->pipelines[0].operators);
+    EXPECT_EQ("main", task_or->pipelines[1].id);
+    EXPECT_EQ((std::vector<std::string>{"exchange-input"}), task_or->pipelines[1].dependencies);
+    EXPECT_EQ((std::vector<std::string>{
+                  "ExchangeSourceOperator",
+                  "ExchangeOperator",
+                  "OutputOperator",
+              }),
+              task_or->pipelines[1].operators);
 }
 
 TEST(RuntimeExecTest, PhysicalExecutorRunsExchangeRepartitionByKeys) {
@@ -845,6 +917,53 @@ TEST(RuntimeExecTest, PhysicalExecutorRunsExchangeRepartitionByKeys) {
     }
 }
 
+TEST(RuntimeExecTest, SchedulerRejectsMissingPipelineDependency) {
+    execution::ExecutionTask task;
+    execution::Pipeline pipeline;
+    pipeline.id = "main";
+    pipeline.role = "root";
+    pipeline.dependencies = {"missing"};
+    task.pipelines.push_back(std::move(pipeline));
+
+    auto result_or = execution::Scheduler().RunWithProfile(std::move(task));
+
+    ASSERT_FALSE(result_or.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, result_or.status().code());
+}
+
+TEST(RuntimeExecTest, SchedulerRejectsPipelineDependencyCycle) {
+    execution::ExecutionTask task;
+    execution::Pipeline left;
+    left.id = "left";
+    left.dependencies = {"right"};
+    task.pipelines.push_back(std::move(left));
+    execution::Pipeline right;
+    right.id = "right";
+    right.dependencies = {"left"};
+    task.pipelines.push_back(std::move(right));
+
+    auto result_or = execution::Scheduler().RunWithProfile(std::move(task));
+
+    ASSERT_FALSE(result_or.ok());
+    EXPECT_EQ(absl::StatusCode::kFailedPrecondition, result_or.status().code());
+}
+
+TEST(RuntimeExecTest, DriverRecordsBlockedStatusInSharedPipelineStats) {
+    execution::Pipeline pipeline;
+    pipeline.id = "blocked";
+    pipeline.role = "root";
+    pipeline.root = std::unique_ptr<execution::Operator>(new BlockingTestOperator());
+    auto stats = pipeline.stats;
+
+    auto result_or = execution::Driver(std::move(pipeline)).Run();
+
+    ASSERT_FALSE(result_or.ok());
+    ASSERT_NE(nullptr, stats);
+    EXPECT_TRUE(stats->blocked);
+    EXPECT_TRUE(stats->finished);
+    EXPECT_NE(std::string::npos, stats->error.find("blocked"));
+}
+
 TEST(RuntimeExecTest, PhysicalExplainShowsCboAlternatives) {
     auto plan = plan::MakeJoin(
         plan::MakeLimit(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}), 1, 0),
@@ -854,6 +973,36 @@ TEST(RuntimeExecTest, PhysicalExplainShowsCboAlternatives) {
 
     EXPECT_NE(std::string::npos, physical.find("alternatives=[local_hash_join_build_left*"));
     EXPECT_NE(std::string::npos, physical.find("local_hash_join_build_right"));
+}
+
+TEST(RuntimeExecTest, PipelineExplainShowsPipelineDag) {
+    auto join = plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
+                               {"host"});
+
+    const auto pipeline = execution::FormatPipelinePlan(join);
+
+    EXPECT_NE(std::string::npos, pipeline.find("PipelinePlan"));
+    EXPECT_NE(std::string::npos, pipeline.find("Pipeline(id=\"join-left\""));
+    EXPECT_NE(std::string::npos, pipeline.find("Pipeline(id=\"main\""));
+    EXPECT_NE(std::string::npos, pipeline.find("depends_on=[join-left, join-right]"));
+    EXPECT_NE(std::string::npos, pipeline.find("ExchangeSourceOperator"));
+}
+
+TEST(RuntimeExecTest, ExecutionProfileFormatterShowsRuntimeStats) {
+    auto join = plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
+                               {"host"});
+
+    auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(join);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto profile = execution::FormatExecutionProfile(result_or->profile);
+    EXPECT_NE(std::string::npos, profile.find("ExecutionProfile"));
+    EXPECT_NE(std::string::npos, profile.find("Pipeline(id=\"join-left\""));
+    EXPECT_NE(std::string::npos, profile.find("pages=1, rows=4"));
+    EXPECT_NE(std::string::npos, profile.find("Pipeline(id=\"main\""));
+    EXPECT_NE(std::string::npos, profile.find("pages=1, rows=6"));
 }
 
 TEST(RuntimeExecTest, ContinuousSqliteFiltersAccumulatePushdownPredicates) {
