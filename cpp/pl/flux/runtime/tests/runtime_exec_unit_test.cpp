@@ -15,6 +15,8 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/15 00:47
 
+#include "cpp/pl/flux/connector/connector_registry.h"
+#include "cpp/pl/flux/connector/memory_source.h"
 #include "cpp/pl/flux/execution/materializer.h"
 #include "cpp/pl/flux/execution/physical_executor.h"
 #include "cpp/pl/flux/optimizer/explain.h"
@@ -22,8 +24,10 @@
 #include "cpp/pl/flux/runtime/runtime_exec.h"
 #include "cpp/pl/flux/syntax/parser.h"
 #include <atomic>
+#include <chrono>
 #include <cstdlib>
 #include <gtest/gtest.h>
+#include <iostream>
 #include <optional>
 
 namespace pl::flux {
@@ -502,16 +506,14 @@ TEST(RuntimeExecTest, ExplainFormatsPhysicalPlan) {
     EXPECT_NE(std::string::npos, plan_or->as_string().find("  name: \"output\""));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("operator: \"OutputOperator\""));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("ConnectorScan [lazy]"));
-    EXPECT_NE(std::string::npos,
-              plan_or->as_string().find("operator: \"ConnectorScanOperator\""));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("operator: \"ConnectorScanOperator\""));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("table: \"cpu\""));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("handle: \"sqlite:sqlite:cpu\""));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("splits: 1"));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("logical_prefix:\n"));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("- Limit"));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("rbo:\n"));
-    EXPECT_NE(std::string::npos,
-              plan_or->as_string().find("- PushPredicateIntoConnectorScan"));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("- PushPredicateIntoConnectorScan"));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("cbo: \"chosen\""));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("cost: {"));
 }
@@ -627,13 +629,11 @@ TEST(RuntimeExecTest, PhysicalExecutionFallsBackToMemoryOperatorAfterConnectorSc
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
     ASSERT_EQ(Value::Type::String, plan_or->type());
     EXPECT_NE(std::string::npos, plan_or->as_string().find("OutputSink [eager]\n"));
-    EXPECT_NE(std::string::npos,
-              plan_or->as_string().find("MemoryOperator [eager]\n"));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("MemoryOperator [eager]\n"));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("name: \"Group\""));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("operator: \"GroupOperator\""));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("ConnectorScan [lazy]"));
-    EXPECT_EQ(std::string::npos,
-              plan_or->as_string().find("- PushAggregateIntoConnectorScan"));
+    EXPECT_EQ(std::string::npos, plan_or->as_string().find("- PushAggregateIntoConnectorScan"));
 }
 
 TEST(RuntimeExecTest, PhysicalExecutorRunsMemorySuffixAfterConnectorScan) {
@@ -783,9 +783,9 @@ TEST(RuntimeExecTest, PhysicalExecutorRunsLocalHashJoinAcrossConnectorInputs) {
 }
 
 TEST(RuntimeExecTest, PhysicalPlannerBuildsMultiInputJoinPipeline) {
-    auto join = plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
-                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
-                               {"host"});
+    auto join =
+        plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                       plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}), {"host"});
 
     auto task_or = execution::PhysicalPlanner().Plan(join);
 
@@ -820,9 +820,9 @@ TEST(RuntimeExecTest, PhysicalPlannerBuildsMultiInputJoinPipeline) {
 }
 
 TEST(RuntimeExecTest, SchedulerRunsJoinPipelineDagAndRecordsStats) {
-    auto join = plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
-                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
-                               {"host"});
+    auto join =
+        plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                       plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}), {"host"});
 
     auto task_or = execution::PhysicalPlanner().Plan(join);
     ASSERT_TRUE(task_or.ok()) << task_or.status();
@@ -852,12 +852,11 @@ TEST(RuntimeExecTest, SchedulerRunsJoinPipelineDagAndRecordsStats) {
 }
 
 TEST(RuntimeExecTest, PhysicalPlannerBuildsNestedJoinPipelineDag) {
-    auto nested = plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
-                                 plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
-                                 {"host"});
+    auto nested =
+        plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                       plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}), {"host"});
     auto join = plan::MakeJoin(std::move(nested),
-                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
-                               {"host"});
+                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}), {"host"});
 
     auto task_or = execution::PhysicalPlanner().Plan(join);
 
@@ -875,12 +874,11 @@ TEST(RuntimeExecTest, PhysicalPlannerBuildsNestedJoinPipelineDag) {
 }
 
 TEST(RuntimeExecTest, PhysicalExecutorRunsNestedJoinPipelineDag) {
-    auto nested = plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
-                                 plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
-                                 {"host"});
+    auto nested =
+        plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                       plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}), {"host"});
     auto join = plan::MakeJoin(std::move(nested),
-                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
-                               {"host"});
+                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}), {"host"});
 
     auto result_or = execution::PhysicalExecutor().Execute(join);
 
@@ -1028,6 +1026,60 @@ TEST(RuntimeExecTest, SchedulerAggregatesMultipleDriversForOnePipeline) {
     EXPECT_EQ(2, result_or->profile.pipelines[0].rows);
 }
 
+TEST(RuntimeExecTest, ParallelMemoryScanBenchmarkRunsLargeStreamingQuery) {
+    constexpr size_t kRows = 200000;
+    constexpr size_t kSplits = 8;
+    constexpr size_t kRowsPerPage = 4096;
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve(kRows);
+    for (size_t index = 0; index < kRows; ++index) {
+        rows.push_back(TestRow({{"host", Value::string("edge-" + std::to_string(index % 32))},
+                                {"usage", Value::floating(static_cast<double>(index % 100))},
+                                {"seq", Value::integer(static_cast<int64_t>(index))}}));
+    }
+
+    connector::SourceSpec spec{
+        .source = "bench_memory",
+        .driver = "bench_memory",
+        .dsn = "memory://large",
+        .table = "large",
+    };
+    connector::ConnectorRegistry::Global().Register(
+        spec.source, [rows](const connector::SourceSpec& requested) {
+            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
+                                                         kRowsPerPage, kSplits);
+        });
+
+    auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
+    plan::PredicateSpec predicate;
+    predicate.op = plan::PredicateOp::Gte;
+    predicate.column = "usage";
+    predicate.literal = plan::PredicateLiteral{
+        .kind = plan::PredicateLiteralKind::Float,
+        .float_value = 50.0,
+    };
+    auto filtered = plan::MakeFilter(scan, {predicate});
+    auto projected = plan::MakeProject(filtered, {"host", "usage"});
+
+    auto started = std::chrono::steady_clock::now();
+    auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(projected);
+    auto elapsed = std::chrono::steady_clock::now() - started;
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto& table = result_or->value.as_table();
+    ASSERT_EQ(kRows / 2, table.rows.size());
+    ASSERT_EQ(1, result_or->profile.pipelines.size());
+    EXPECT_EQ(kRows / 2, result_or->profile.pipelines[0].rows);
+    EXPECT_GE(result_or->profile.pipelines[0].pages, kSplits);
+    EXPECT_FALSE(result_or->profile.pipelines[0].blocking);
+
+    const double seconds = std::chrono::duration<double>(elapsed).count();
+    const double rows_per_second = static_cast<double>(kRows) / std::max(seconds, 0.000001);
+    std::cout << "parallel memory scan benchmark: rows=" << kRows << " splits=" << kSplits
+              << " output_rows=" << table.rows.size() << " seconds=" << seconds
+              << " rows_per_second=" << rows_per_second << "\n";
+}
+
 TEST(RuntimeExecTest, DriverRecordsBlockedStatusInSharedPipelineStats) {
     execution::Pipeline pipeline;
     pipeline.id = "blocked";
@@ -1057,9 +1109,9 @@ TEST(RuntimeExecTest, PhysicalExplainShowsCboAlternatives) {
 }
 
 TEST(RuntimeExecTest, PipelineExplainShowsPipelineDag) {
-    auto join = plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
-                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
-                               {"host"});
+    auto join =
+        plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                       plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}), {"host"});
 
     const auto pipeline = execution::FormatPipelinePlan(join);
 
@@ -1071,9 +1123,9 @@ TEST(RuntimeExecTest, PipelineExplainShowsPipelineDag) {
 }
 
 TEST(RuntimeExecTest, ExecutionProfileFormatterShowsRuntimeStats) {
-    auto join = plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
-                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
-                               {"host"});
+    auto join =
+        plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                       plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}), {"host"});
 
     auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(join);
 
