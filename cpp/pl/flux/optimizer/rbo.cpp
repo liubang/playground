@@ -395,15 +395,22 @@ std::string projection_summary(const connector::ScanRequest& request) {
     return out.str();
 }
 
-void append_pushdown_summary_field(std::ostringstream* out,
-                                   bool* needs_separator,
-                                   const std::string& name,
-                                   const std::string& value) {
-    if (*needs_separator) {
-        *out << ", ";
+void append_pushdown_scalar_field(std::ostringstream* out,
+                                  const std::string& name,
+                                  const std::string& value) {
+    *out << "    " << name << ": " << value << "\n";
+}
+
+void append_pushdown_list_field(std::ostringstream* out,
+                                const std::string& name,
+                                const std::vector<std::string>& values) {
+    if (values.empty()) {
+        return;
     }
-    *out << name << "=" << value;
-    *needs_separator = true;
+    *out << "    " << name << ":\n";
+    for (const auto& value : values) {
+        *out << "      - " << value << "\n";
+    }
 }
 
 class PushdownDetectionRule final : public Rule {
@@ -638,11 +645,10 @@ bool CanExecutePushdownPlan(const PushdownPlan& plan) {
 
 std::string FormatPushdownRequest(const connector::ScanRequest& request) {
     std::ostringstream out;
-    out << "SourcePushdown(request: ";
-    bool needs_separator = false;
+    out << "SourcePushdown\n";
+    out << "  request:\n";
 
-    append_pushdown_summary_field(&out, &needs_separator, "projection",
-                                  projection_summary(request));
+    append_pushdown_scalar_field(&out, "projection", projection_summary(request));
 
     if (request.time_range.has_value()) {
         std::ostringstream range;
@@ -659,32 +665,30 @@ std::string FormatPushdownRequest(const connector::ScanRequest& request) {
             range << "stop=" << *request.time_range->stop;
         }
         range << "}";
-        append_pushdown_summary_field(&out, &needs_separator, "time_range", range.str());
+        append_pushdown_scalar_field(&out, "time_range", range.str());
     }
 
     if (!request.predicates.empty()) {
-        std::ostringstream predicates;
-        predicates << "[";
+        std::vector<std::string> predicates;
+        predicates.reserve(request.predicates.size());
         for (size_t i = 0; i < request.predicates.size(); ++i) {
-            if (i != 0) {
-                predicates << ", ";
-            }
             const auto& predicate = request.predicates[i];
-            predicates << predicate.column << " " << connector_predicate_op_string(predicate.op)
-                       << " " << predicate.literal.string();
+            std::ostringstream predicate_out;
+            predicate_out << predicate.column << " " << connector_predicate_op_string(predicate.op)
+                          << " " << predicate.literal.string();
+            predicates.push_back(predicate_out.str());
         }
-        predicates << "]";
-        append_pushdown_summary_field(&out, &needs_separator, "predicates", predicates.str());
+        append_pushdown_list_field(&out, "predicates", predicates);
     }
 
     if (request.distinct.has_value()) {
-        append_pushdown_summary_field(&out, &needs_separator, "distinct", *request.distinct);
+        append_pushdown_scalar_field(&out, "distinct", *request.distinct);
     }
 
     if (!request.group_by.empty()) {
         std::ostringstream group_by;
         append_string_list(&group_by, request.group_by);
-        append_pushdown_summary_field(&out, &needs_separator, "group_by", group_by.str());
+        append_pushdown_scalar_field(&out, "group_by", group_by.str());
     }
 
     if (request.aggregate.has_value()) {
@@ -694,32 +698,26 @@ std::string FormatPushdownRequest(const connector::ScanRequest& request) {
         if (!aggregate.alias.empty() && aggregate.alias != aggregate.column) {
             value << " AS " << aggregate.alias;
         }
-        append_pushdown_summary_field(&out, &needs_separator, "aggregate", value.str());
+        append_pushdown_scalar_field(&out, "aggregate", value.str());
     }
 
     if (!request.order_by.empty()) {
-        std::ostringstream order_by;
-        order_by << "[";
+        std::vector<std::string> order_by;
+        order_by.reserve(request.order_by.size());
         for (size_t i = 0; i < request.order_by.size(); ++i) {
-            if (i != 0) {
-                order_by << ", ";
-            }
-            order_by << request.order_by[i].column << (request.order_by[i].desc ? " DESC" : " ASC");
+            order_by.push_back(request.order_by[i].column +
+                               (request.order_by[i].desc ? " DESC" : " ASC"));
         }
-        order_by << "]";
-        append_pushdown_summary_field(&out, &needs_separator, "order_by", order_by.str());
+        append_pushdown_list_field(&out, "order_by", order_by);
     }
 
     if (request.limit.has_value()) {
-        append_pushdown_summary_field(&out, &needs_separator, "limit",
-                                      std::to_string(*request.limit));
+        append_pushdown_scalar_field(&out, "limit", std::to_string(*request.limit));
     }
     if (request.offset.has_value()) {
-        append_pushdown_summary_field(&out, &needs_separator, "offset",
-                                      std::to_string(*request.offset));
+        append_pushdown_scalar_field(&out, "offset", std::to_string(*request.offset));
     }
 
-    out << ")";
     return out.str();
 }
 
