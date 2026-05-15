@@ -915,10 +915,10 @@ local hash join；exchange 明确是单机 materializing boundary，不伪装成
 ### Phase 11: Pipeline DAG and Local Exchange Runtime
 
 状态：已完成单机 DAG 基础版。`PhysicalPlanner` 不再把顶层 join 的左右输入当作空 descriptor：
-它会生成 left/right producer pipelines、root consumer pipeline 和显式 dependency。producer 通过
-`ExchangeSinkOperator` 写入本地 `ExchangeBuffer`，root pipeline 通过 `ExchangeSourceOperator`
-读取 buffer 后执行 `LocalHashJoinOperator`。`Scheduler` 按 pipeline dependency DAG 分批调度，
-同一 ready wave 使用本地 async driver 并发执行，并把 producer 输出从最终 result 中隔离掉。
+它会生成 producer pipelines、root consumer pipeline 和显式 dependency。producer 通过
+`ExchangeSinkOperator` 写入本地 `ExchangeBuffer`，consumer 通过 `ExchangeSourceOperator`
+读取 buffer 后继续执行。`Scheduler` 按 pipeline dependency DAG 分批调度，同一 ready wave
+使用本地 async driver 并发执行，并把 producer 输出从最终 result 中隔离掉。
 
 目标：让 `ExecutionTask -> Pipeline DAG -> Driver -> ExchangeBuffer -> Operator` 成为真实执行路径，
 为后续 remote exchange、backpressure 和多 driver 并行留出正确边界。
@@ -928,8 +928,9 @@ local hash join；exchange 明确是单机 materializing boundary，不伪装成
 - `Pipeline` 新增 shared runtime stats：pages、rows、blocked、finished、error。
 - `Driver` 记录每个 pipeline 的 page/row 产出和 error/finish 状态。
 - `Scheduler` 校验 missing dependency 和 dependency cycle，按 DAG wave 调度 runnable pipelines。
-- 顶层 local hash join 被拆为 producer/consumer pipelines：left/right 写 exchange buffer，main
-  依赖 producer 完成后读取 buffer。
+- local hash join 被拆为 producer/consumer pipelines：left/right 写 exchange buffer，main
+  依赖 producer 完成后读取 buffer；nested join 会递归生成 producer DAG。
+- root `Exchange` 也会拆成 source producer + exchange consumer，而不是继续单 pipeline 特判。
 - `ExchangeSourceOperator` 在 producer 未完成时返回 blocked/unavailable 状态；当前 scheduler
   通过 dependency 保证 consumer 不会提前运行。
 
@@ -939,6 +940,38 @@ local hash join；exchange 明确是单机 materializing boundary，不伪装成
 - scheduler 执行 join pipeline DAG 后只返回 root pipeline 输出，不把 producer scan 输出混入结果。
 - producer/root pipeline stats 能反映各自处理的 pages 和 rows。
 - 非 join 查询仍走原本单 main pipeline，不为普通 scan/filter/project 额外收集 connector stats。
+
+### Phase 12: Runtime Profile and Observable Exchange Core
+
+状态：已完成单机可观测版。执行结果现在可以通过 `Scheduler::RunWithProfile` 或
+`PhysicalExecutor::ExecuteWithProfile` 返回 `SchedulerResult`，其中包含最终 `Value` 和
+`ExecutionProfile`。pipeline graph 和 runtime profile 有独立 formatter，可直接诊断 pipeline DAG、
+operator 列表、dependency、pages、rows、blocked、finished 和 error。
+
+目标：把 runtime stats / exchange / scheduler 做成可解释、可诊断、能承载后续远端 exchange
+和更细粒度 backpressure 的执行内核。
+
+已落地：
+
+- 新增 `PipelineProfile`、`ExecutionProfile`、`SchedulerResult`，profile 不再只能从测试内部拿。
+- 新增 `execution::FormatPipelinePlan` 和 `execution::FormatExecutionProfile`，展示 pipeline DAG
+  和 runtime stats。
+- `ExchangeBuffer` 补生命周期状态：bounded capacity、blocked、closed、finished、error；
+  producer error 会写入 buffer，consumer 读取时会传播。
+- `ExchangeSinkOperator` 在 buffer 满时返回 blocked/unavailable，`Driver` 会把 unavailable 标记为
+  blocked stats。
+- `Scheduler` 的 missing dependency / dependency cycle 错误被显式测试覆盖。
+- pipeline breaker 不再只处理顶层 join：nested join 会递归拆成 producer DAG，root exchange 会拆成
+  producer + consumer DAG。
+
+验收：
+
+- `ExecuteWithProfile(join)` 能返回最终 join 结果和三段 pipeline stats。
+- `FormatPipelinePlan(join)` 能展示 `join-left`、`join-right`、`main` 及 dependency。
+- nested join planner 能生成 `join-left-left`、`join-left-right`、`join-left`、`join-right`、`main`
+  五段 DAG，并能正确执行。
+- root exchange planner 能生成 `exchange-input -> main` DAG，并保持 gather/repartition 语义。
+- blocked operator 会在 shared pipeline stats 中留下 blocked/error/finished 状态。
 
 ## Test Plan
 
