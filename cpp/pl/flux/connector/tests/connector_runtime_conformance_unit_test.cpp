@@ -149,6 +149,57 @@ TEST(ConnectorRuntimeConformanceTest, PageSourceReportsSplitLifecycleStats) {
     EXPECT_EQ(3, stats.rows_produced);
 }
 
+TEST(ConnectorRuntimeConformanceTest, MemoryRuntimeSplitsRowsAcrossPageSources) {
+    SourceSpec spec{.source = "array", .driver = "memory", .table = "hosts"};
+    auto runtime = MakeMemoryConnectorRuntime(spec, "hosts", make_rows(), 2, 2);
+    ASSERT_NE(nullptr, runtime);
+
+    auto handle_or = runtime->metadata->GetTableHandle(spec);
+    ASSERT_TRUE(handle_or.ok()) << handle_or.status();
+    auto splits_or = runtime->split_manager->GetSplits(*handle_or, {});
+    ASSERT_TRUE(splits_or.ok()) << splits_or.status();
+    ASSERT_EQ(2, splits_or->size());
+    EXPECT_EQ(0, splits_or->at(0).row_offset);
+    EXPECT_EQ(1, splits_or->at(0).row_limit);
+    EXPECT_EQ(1, splits_or->at(1).row_offset);
+    EXPECT_EQ(2, splits_or->at(1).row_limit);
+
+    auto pages_or = collect_pages(*runtime, spec, {});
+    ASSERT_TRUE(pages_or.ok()) << pages_or.status();
+    ASSERT_EQ(2, pages_or->size());
+    size_t rows = 0;
+    for (const auto& page : *pages_or) {
+        rows += page.row_count();
+    }
+    EXPECT_EQ(3, rows);
+}
+
+TEST(ConnectorRuntimeConformanceTest, MemoryRuntimePushesProjectionFilterAndLimitIntoPages) {
+    SourceSpec spec{.source = "array", .driver = "memory", .table = "hosts"};
+    auto runtime = MakeMemoryConnectorRuntime(spec, "hosts", make_rows(), 2, 4);
+    ASSERT_NE(nullptr, runtime);
+
+    ScanRequest request;
+    request.projection_columns.push_back({.column = "host", .alias = "service"});
+    request.predicates.push_back(
+        {.op = PredicateOp::Gt, .column = "usage", .literal = Value::floating(70.0)});
+    request.limit = 1;
+
+    auto handle_or = runtime->metadata->GetTableHandle(spec);
+    ASSERT_TRUE(handle_or.ok()) << handle_or.status();
+    auto splits_or = runtime->split_manager->GetSplits(*handle_or, request);
+    ASSERT_TRUE(splits_or.ok()) << splits_or.status();
+    EXPECT_EQ(1, splits_or->size()) << "global limit pushdown remains single split";
+
+    auto pages_or = collect_pages(*runtime, spec, request);
+    ASSERT_TRUE(pages_or.ok()) << pages_or.status();
+    ASSERT_EQ(1, pages_or->size());
+    TableValue table = TableValueFromPage(pages_or->front());
+    ASSERT_EQ(1, table.rows.size());
+    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("service")->string());
+    EXPECT_EQ(nullptr, table.rows[0]->lookup("host"));
+}
+
 TEST(ConnectorRuntimeConformanceTest, MemoryRuntimeEmitsSingleEmptyPage) {
     SourceSpec spec{.source = "array", .driver = "memory", .table = "hosts"};
     auto runtime = MakeMemoryConnectorRuntime(spec, "hosts", {}, 2);
