@@ -21,6 +21,7 @@
 #include "cpp/pl/flux/runtime/runtime_builtin.h"
 #include "cpp/pl/flux/runtime/runtime_exec.h"
 #include "cpp/pl/flux/syntax/parser.h"
+#include <atomic>
 #include <cstdlib>
 #include <gtest/gtest.h>
 #include <optional>
@@ -55,6 +56,29 @@ public:
     absl::StatusOr<std::optional<Page>> NextPage() override {
         return absl::UnavailableError("test operator is blocked");
     }
+};
+
+std::shared_ptr<ObjectValue> TestRow(std::vector<std::pair<std::string, Value>> props) {
+    return std::make_shared<ObjectValue>(std::move(props));
+}
+
+class SinglePageTestOperator final : public execution::Operator {
+public:
+    explicit SinglePageTestOperator(int64_t value) : value_(value) {}
+
+    [[nodiscard]] std::string name() const override { return "SinglePageTestOperator"; }
+
+    absl::StatusOr<std::optional<Page>> NextPage() override {
+        if (emitted_) {
+            return std::nullopt;
+        }
+        emitted_ = true;
+        return PageFromRows("test", {TestRow({{"value", Value::integer(value_)}})});
+    }
+
+private:
+    int64_t value_ = 0;
+    bool emitted_ = false;
 };
 
 TEST(RuntimeExecTest, ExecutesVariableAndExpressionStatements) {
@@ -960,6 +984,48 @@ TEST(RuntimeExecTest, SchedulerRejectsPipelineDependencyCycle) {
 
     ASSERT_FALSE(result_or.ok());
     EXPECT_EQ(absl::StatusCode::kFailedPrecondition, result_or.status().code());
+}
+
+TEST(RuntimeExecTest, TaskExecutorRunsSubmittedTasksOnWorkerPool) {
+    execution::TaskExecutor executor(2);
+    std::atomic<int> completed = 0;
+
+    auto left = executor.Submit([&completed]() {
+        ++completed;
+        return 1;
+    });
+    auto right = executor.Submit([&completed]() {
+        ++completed;
+        return 2;
+    });
+
+    EXPECT_EQ(1, left.get());
+    EXPECT_EQ(2, right.get());
+    EXPECT_EQ(2, completed.load());
+}
+
+TEST(RuntimeExecTest, SchedulerAggregatesMultipleDriversForOnePipeline) {
+    execution::ExecutionTask task;
+    execution::Pipeline pipeline;
+    pipeline.id = "main";
+    pipeline.role = "root";
+    pipeline.operators = {"SinglePageTestOperator"};
+    pipeline.driver_roots.push_back(
+        std::unique_ptr<execution::Operator>(new SinglePageTestOperator(1)));
+    pipeline.driver_roots.push_back(
+        std::unique_ptr<execution::Operator>(new SinglePageTestOperator(2)));
+    task.pipelines.push_back(std::move(pipeline));
+
+    auto result_or = execution::Scheduler().RunWithProfile(std::move(task));
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto& table = result_or->value.as_table();
+    ASSERT_EQ(2, table.rows.size());
+    EXPECT_EQ("1", table.rows[0]->lookup("value")->string());
+    EXPECT_EQ("2", table.rows[1]->lookup("value")->string());
+    ASSERT_EQ(1, result_or->profile.pipelines.size());
+    EXPECT_EQ(2, result_or->profile.pipelines[0].pages);
+    EXPECT_EQ(2, result_or->profile.pipelines[0].rows);
 }
 
 TEST(RuntimeExecTest, DriverRecordsBlockedStatusInSharedPipelineStats) {
