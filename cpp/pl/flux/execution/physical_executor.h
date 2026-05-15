@@ -18,11 +18,13 @@
 #pragma once
 
 #include "absl/status/statusor.h"
+#include "cpp/pl/flux/execution/task_executor.h"
 #include "cpp/pl/flux/plan/plan_node.h"
 #include "cpp/pl/flux/runtime/runtime_page.h"
 #include "cpp/pl/flux/runtime/runtime_value.h"
 #include <cstddef>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -38,6 +40,7 @@ public:
 
 struct Pipeline {
     struct Stats {
+        mutable std::mutex mu;
         size_t pages = 0;
         size_t rows = 0;
         bool blocked = false;
@@ -51,6 +54,7 @@ struct Pipeline {
     std::vector<std::string> dependencies;
     std::vector<std::string> operators;
     std::unique_ptr<Operator> root;
+    std::vector<std::unique_ptr<Operator>> driver_roots;
     std::shared_ptr<Stats> stats = std::make_shared<Stats>();
 };
 
@@ -94,6 +98,20 @@ public:
 
 private:
     Pipeline pipeline_;
+};
+
+struct DriverTask {
+    size_t pipeline_index = 0;
+    size_t driver_id = 0;
+    std::string pipeline_id;
+    std::string role;
+    Pipeline pipeline;
+};
+
+class DriverFactory {
+public:
+    [[nodiscard]] static std::vector<DriverTask> CreateTasks(size_t pipeline_index,
+                                                             Pipeline pipeline);
 };
 
 class Scheduler {
