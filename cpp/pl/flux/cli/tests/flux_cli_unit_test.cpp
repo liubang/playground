@@ -280,9 +280,10 @@ TEST(FluxCliTest, RendersExplainPlanInsideObjectAsMultilineText) {
     EXPECT_NE(std::string::npos, result.output.find("plan: |\n"));
     EXPECT_NE(std::string::npos, result.output.find("    Limit [sqlite pushdown]\n"));
     EXPECT_NE(std::string::npos, result.output.find("    `- Sort [sqlite pushdown]\n"));
-    EXPECT_NE(std::string::npos, result.output.find("    SourcePushdown(request: "));
+    EXPECT_NE(std::string::npos, result.output.find("    SourcePushdown\n"));
+    EXPECT_NE(std::string::npos, result.output.find("      request:\n"));
     EXPECT_NE(std::string::npos, result.output.find("distinctPlan: |\n"));
-    EXPECT_NE(std::string::npos, result.output.find("distinct=host"));
+    EXPECT_NE(std::string::npos, result.output.find("      distinct: host"));
     EXPECT_EQ(std::string::npos, result.output.find("\\n"));
 }
 
