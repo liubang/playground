@@ -73,6 +73,18 @@ private:
     std::vector<std::shared_ptr<ObjectValue>> rows_;
 };
 
+class MemorySplitManager final : public ConnectorSplitManager {
+public:
+    MemorySplitManager(size_t row_count, size_t split_count);
+
+    [[nodiscard]] absl::StatusOr<std::vector<ConnectorSplit>> GetSplits(
+        const TableHandle& table, const ScanRequest& request) const override;
+
+private:
+    size_t row_count_ = 0;
+    size_t split_count_ = 1;
+};
+
 class MemoryPageSourceProvider final : public ConnectorPageSourceProvider {
 public:
     MemoryPageSourceProvider(std::string bucket,
@@ -92,6 +104,7 @@ std::unique_ptr<ConnectorRuntime> MakeMemoryConnectorRuntime(
     const SourceSpec& spec,
     std::string bucket,
     std::vector<std::shared_ptr<ObjectValue>> rows,
-    size_t rows_per_page = 1024);
+    size_t rows_per_page = 1024,
+    size_t split_count = 1);
 
 } // namespace pl::flux::connector

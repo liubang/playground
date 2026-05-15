@@ -1021,6 +1021,41 @@ split-level driver roots、streaming exchange，以及线程安全 runtime stats
 - missing dependency / dependency cycle 仍在运行前被确定性拒绝。
 - 全量 `bazel test //cpp/pl/flux/...` 通过。
 
+### Phase 14: Parallel Scan and Streaming Query Fast Path
+
+状态：已完成内存 connector 的并行 scan fast path。执行路径不再只证明“pipeline 能并发”，而是
+真正让 connector split 展开为多个 `ConnectorScanOperator` driver root，并让 page source 直接
+产出列式 `PageChunk`。SQLite 仍保持 single split，memory connector 作为可控 fixture 承担
+多 split、projection/filter/limit pushdown 和大规模扫描压测。
+
+目标：优先把高效查询扫描链路做扎实：`ConnectorSplitManager -> ConnectorPageSourceProvider ->
+ConnectorScanOperator -> DriverTask -> TaskExecutor` 全链路 streaming page，不回退到整表
+`TableValue` 物化后再切 page。
+
+已落地：
+
+- `ConnectorSplit` 增加 row range metadata：`row_offset` 和 `row_limit`，用于 split-level
+  page source 定位扫描区间。
+- `MemorySplitManager` 支持按目标 split 数拆分 row range；含全局 `limit` 的请求保持 single
+  split，以避免跨 split limit 语义漂移。
+- `MemoryPageSource` 直接构造列式 `PageChunk`，在 page source 内执行 projection、简单
+  predicate、offset/limit，并保留 empty page 行为。
+- memory connector capabilities 明确声明 projection/filter/limit，可作为后续高效 scan
+  路径的 conformance fixture。
+- physical profile 增加 `blocking=true|false`，把 sort/group/aggregate/distinct/join/exchange/
+  materialize 这类 pipeline breaker 和纯 streaming scan/filter/project 区分开。
+- 新增真实规模 scan 压测 fixture：20 万行内存数据、8 split、filter + project，验证输出
+  row count、profile row count、page 数和非 blocking 属性，并打印 rows/s。
+
+验收：
+
+- connector conformance 覆盖 memory runtime 多 split、split row range、pushdown projection/
+  filter/limit。
+- runtime 覆盖大规模 streaming scan benchmark，当前本机结果约为 20 万输入行、10 万输出行、
+  8 split、约 5.0M rows/s。
+- `ExecutionProfile` 能显示 pipeline 是否 blocking，后续可直接定位是否进入高吞吐 streaming
+  路径。
+
 ## Test Plan
 
 测试分层：
