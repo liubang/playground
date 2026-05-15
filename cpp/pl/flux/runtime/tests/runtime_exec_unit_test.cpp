@@ -745,21 +745,63 @@ TEST(RuntimeExecTest, PhysicalPlannerBuildsMultiInputJoinPipeline) {
     ASSERT_TRUE(task_or.ok()) << task_or.status();
     ASSERT_EQ(3, task_or->pipelines.size());
     EXPECT_EQ("join-left", task_or->pipelines[0].id);
-    EXPECT_EQ("input", task_or->pipelines[0].role);
-    EXPECT_EQ(nullptr, task_or->pipelines[0].root);
+    EXPECT_EQ("probe", task_or->pipelines[0].role);
+    EXPECT_NE(nullptr, task_or->pipelines[0].root);
+    EXPECT_EQ((std::vector<std::string>{
+                  "ConnectorScanOperator",
+                  "ExchangeSinkOperator",
+              }),
+              task_or->pipelines[0].operators);
     EXPECT_EQ("join-right", task_or->pipelines[1].id);
-    EXPECT_EQ("input", task_or->pipelines[1].role);
-    EXPECT_EQ(nullptr, task_or->pipelines[1].root);
+    EXPECT_EQ("build", task_or->pipelines[1].role);
+    EXPECT_NE(nullptr, task_or->pipelines[1].root);
+    EXPECT_EQ((std::vector<std::string>{
+                  "ConnectorScanOperator",
+                  "ExchangeSinkOperator",
+              }),
+              task_or->pipelines[1].operators);
     EXPECT_EQ("main", task_or->pipelines[2].id);
     EXPECT_EQ((std::vector<std::string>{"join-left", "join-right"}),
               task_or->pipelines[2].dependencies);
     EXPECT_EQ((std::vector<std::string>{
-                  "ConnectorScanOperator",
-                  "ConnectorScanOperator",
+                  "ExchangeSourceOperator",
+                  "ExchangeSourceOperator",
                   "LocalHashJoinOperator",
                   "OutputOperator",
               }),
               task_or->pipelines[2].operators);
+}
+
+TEST(RuntimeExecTest, SchedulerRunsJoinPipelineDagAndRecordsStats) {
+    auto join = plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
+                               {"host"});
+
+    auto task_or = execution::PhysicalPlanner().Plan(join);
+    ASSERT_TRUE(task_or.ok()) << task_or.status();
+    ASSERT_EQ(3, task_or->pipelines.size());
+    auto left_stats = task_or->pipelines[0].stats;
+    auto right_stats = task_or->pipelines[1].stats;
+    auto root_stats = task_or->pipelines[2].stats;
+
+    auto result_or = execution::Scheduler().Run(std::move(*task_or));
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_EQ(Value::Type::Table, result_or->type());
+    EXPECT_EQ(6, result_or->as_table().rows.size());
+    ASSERT_NE(nullptr, left_stats);
+    ASSERT_NE(nullptr, right_stats);
+    ASSERT_NE(nullptr, root_stats);
+    EXPECT_TRUE(left_stats->finished);
+    EXPECT_EQ(1, left_stats->pages);
+    EXPECT_EQ(4, left_stats->rows);
+    EXPECT_TRUE(right_stats->finished);
+    EXPECT_EQ(1, right_stats->pages);
+    EXPECT_EQ(4, right_stats->rows);
+    EXPECT_TRUE(root_stats->finished);
+    EXPECT_EQ(1, root_stats->pages);
+    EXPECT_EQ(6, root_stats->rows);
+    EXPECT_TRUE(root_stats->error.empty());
 }
 
 TEST(RuntimeExecTest, PhysicalExecutorRunsExchangeGatherAsPageBoundary) {
