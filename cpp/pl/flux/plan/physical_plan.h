@@ -111,40 +111,67 @@ inline std::string CostString(const CostEstimate& cost) {
     return out.str();
 }
 
-inline void FormatPhysicalNodeDetail(const PhysicalPlanNode& node, std::ostringstream* out) {
+inline void FormatPhysicalNodeHeader(const PhysicalPlanNode& node, std::ostringstream* out) {
     *out << PhysicalNodeKindName(node.kind);
     *out << (node.lazy ? " [lazy]" : " [eager]");
-    *out << "(name=\"" << node.name << "\"";
+}
+
+inline void FormatPhysicalScalarProperty(const std::string& indent,
+                                         const std::string& name,
+                                         const std::string& value,
+                                         std::ostringstream* out) {
+    *out << indent << name << ": " << value << "\n";
+}
+
+inline void FormatPhysicalStringProperty(const std::string& indent,
+                                         const std::string& name,
+                                         const std::string& value,
+                                         std::ostringstream* out) {
+    *out << indent << name << ": \"" << value << "\"\n";
+}
+
+inline void FormatPhysicalListProperty(const std::string& indent,
+                                       const std::string& name,
+                                       const std::vector<std::string>& values,
+                                       std::ostringstream* out) {
+    if (values.empty()) {
+        return;
+    }
+    *out << indent << name << ":\n";
+    for (const auto& value : values) {
+        *out << indent << "  - " << value << "\n";
+    }
+}
+
+inline void FormatPhysicalNodeProperties(const PhysicalPlanNode& node,
+                                         const std::string& indent,
+                                         std::ostringstream* out) {
+    if (!node.name.empty()) {
+        FormatPhysicalStringProperty(indent, "name", node.name, out);
+    }
     if (!node.operator_name.empty()) {
-        *out << ", operator=\"" << node.operator_name << "\"";
+        FormatPhysicalStringProperty(indent, "operator", node.operator_name, out);
     }
     if (!node.source.empty()) {
-        *out << ", source=\"" << node.source << "\"";
+        FormatPhysicalStringProperty(indent, "source", node.source, out);
     }
     if (!node.driver.empty()) {
-        *out << ", driver=\"" << node.driver << "\"";
+        FormatPhysicalStringProperty(indent, "driver", node.driver, out);
     }
     if (!node.table.empty()) {
-        *out << ", table=\"" << node.table << "\"";
+        FormatPhysicalStringProperty(indent, "table", node.table, out);
     }
     if (!node.connector_handle.empty()) {
-        *out << ", handle=\"" << node.connector_handle << "\"";
+        FormatPhysicalStringProperty(indent, "handle", node.connector_handle, out);
     }
     if (node.split_count.has_value()) {
-        *out << ", splits=" << *node.split_count;
+        FormatPhysicalScalarProperty(indent, "splits", std::to_string(*node.split_count), out);
     }
-    if (!node.logical_prefix.empty()) {
-        *out << ", logical_prefix=" << StringList(node.logical_prefix);
-    }
-    if (!node.optimizer.rbo_rules.empty()) {
-        *out << ", rbo=" << StringList(node.optimizer.rbo_rules);
-    }
-    if (!node.optimizer.cbo_alternatives.empty()) {
-        *out << ", alternatives=" << StringList(node.optimizer.cbo_alternatives);
-    }
-    *out << ", cbo=\"" << node.optimizer.cbo_decision << "\"";
-    *out << ", cost=" << CostString(node.optimizer.cost);
-    *out << ")";
+    FormatPhysicalListProperty(indent, "logical_prefix", node.logical_prefix, out);
+    FormatPhysicalListProperty(indent, "rbo", node.optimizer.rbo_rules, out);
+    FormatPhysicalStringProperty(indent, "cbo", node.optimizer.cbo_decision, out);
+    FormatPhysicalScalarProperty(indent, "cost", CostString(node.optimizer.cost), out);
+    FormatPhysicalListProperty(indent, "alternatives", node.optimizer.cbo_alternatives, out);
 }
 
 inline void FormatPhysicalPlanTree(const PhysicalPlanNode& node,
@@ -153,14 +180,16 @@ inline void FormatPhysicalPlanTree(const PhysicalPlanNode& node,
                                    bool is_root,
                                    std::ostringstream* out) {
     if (is_root) {
-        FormatPhysicalNodeDetail(node, out);
+        FormatPhysicalNodeHeader(node, out);
     } else {
         *out << prefix << (is_last ? "`- " : "|- ");
-        FormatPhysicalNodeDetail(node, out);
+        FormatPhysicalNodeHeader(node, out);
     }
     *out << "\n";
 
     const std::string child_prefix = is_root ? "" : prefix + (is_last ? "   " : "|  ");
+    const std::string property_indent = child_prefix + "  ";
+    FormatPhysicalNodeProperties(node, property_indent, out);
     for (size_t i = 0; i < node.inputs.size(); ++i) {
         if (node.inputs[i] != nullptr) {
             FormatPhysicalPlanTree(*node.inputs[i], child_prefix, i + 1 == node.inputs.size(),

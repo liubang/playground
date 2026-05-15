@@ -439,7 +439,12 @@ TEST(RuntimeExecTest, ExplainFormatsLogicalPlan) {
         "Limit [sqlite pushdown]\n"
         "`- Filter [sqlite pushdown: host == \"edge-1\"]\n"
         "   `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
-        "SourcePushdown(request: projection=[*], predicates=[host == \"edge-1\"], limit=1)\n",
+        "SourcePushdown\n"
+        "  request:\n"
+        "    projection: [*]\n"
+        "    predicates:\n"
+        "      - host == \"edge-1\"\n"
+        "    limit: 1\n",
         plan_or->as_string());
 }
 
@@ -469,19 +474,22 @@ TEST(RuntimeExecTest, ExplainFormatsPhysicalPlan) {
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
     ASSERT_EQ(Value::Type::String, plan_or->type());
     EXPECT_NE(std::string::npos, plan_or->as_string().find("PhysicalPlan\n"));
-    EXPECT_NE(std::string::npos, plan_or->as_string().find("OutputSink [eager](name=\"output\""));
-    EXPECT_NE(std::string::npos, plan_or->as_string().find("operator=\"OutputOperator\""));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("OutputSink [eager]\n"));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("  name: \"output\""));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("operator: \"OutputOperator\""));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("ConnectorScan [lazy]"));
-    EXPECT_NE(std::string::npos, plan_or->as_string().find("operator=\"ConnectorScanOperator\""));
-    EXPECT_NE(std::string::npos, plan_or->as_string().find("table=\"cpu\""));
-    EXPECT_NE(std::string::npos, plan_or->as_string().find("handle=\"sqlite:sqlite:cpu\""));
-    EXPECT_NE(std::string::npos, plan_or->as_string().find("splits=1"));
     EXPECT_NE(std::string::npos,
-              plan_or->as_string().find("logical_prefix=[Limit, Filter, SourceScan]"));
-    EXPECT_NE(std::string::npos, plan_or->as_string().find("rbo=[PushLimitIntoConnectorScan, "
-                                                           "PushPredicateIntoConnectorScan]"));
-    EXPECT_NE(std::string::npos, plan_or->as_string().find("cbo=\"chosen\""));
-    EXPECT_NE(std::string::npos, plan_or->as_string().find("cost={"));
+              plan_or->as_string().find("operator: \"ConnectorScanOperator\""));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("table: \"cpu\""));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("handle: \"sqlite:sqlite:cpu\""));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("splits: 1"));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("logical_prefix:\n"));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("- Limit"));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("rbo:\n"));
+    EXPECT_NE(std::string::npos,
+              plan_or->as_string().find("- PushPredicateIntoConnectorScan"));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("cbo: \"chosen\""));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("cost: {"));
 }
 
 TEST(RuntimeExecTest, ExplainFormatsOptimizedLogicalPlan) {
@@ -515,8 +523,12 @@ TEST(RuntimeExecTest, ExplainFormatsOptimizedLogicalPlan) {
               "   `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", "
               "table=\"cpu\")\n"
               "RBO(rules=[PushLimitIntoConnectorScan, PushPredicateIntoConnectorScan])\n"
-              "SourcePushdown(request: projection=[*], predicates=[host == \"edge-1\"], "
-              "limit=1)\n",
+              "SourcePushdown\n"
+              "  request:\n"
+              "    projection: [*]\n"
+              "    predicates:\n"
+              "      - host == \"edge-1\"\n"
+              "    limit: 1\n",
               plan_or->as_string());
 }
 
@@ -590,12 +602,14 @@ TEST(RuntimeExecTest, PhysicalExecutionFallsBackToMemoryOperatorAfterConnectorSc
     const auto plan_or = env.lookup("plan");
     ASSERT_TRUE(plan_or.ok()) << plan_or.status();
     ASSERT_EQ(Value::Type::String, plan_or->type());
-    EXPECT_NE(std::string::npos, plan_or->as_string().find("OutputSink [eager](name=\"output\""));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("OutputSink [eager]\n"));
     EXPECT_NE(std::string::npos,
-              plan_or->as_string().find("MemoryOperator [eager](name=\"Group\""));
-    EXPECT_NE(std::string::npos, plan_or->as_string().find("operator=\"GroupOperator\""));
+              plan_or->as_string().find("MemoryOperator [eager]\n"));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("name: \"Group\""));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find("operator: \"GroupOperator\""));
     EXPECT_NE(std::string::npos, plan_or->as_string().find("ConnectorScan [lazy]"));
-    EXPECT_EQ(std::string::npos, plan_or->as_string().find("rbo=[PushAggregateIntoConnectorScan]"));
+    EXPECT_EQ(std::string::npos,
+              plan_or->as_string().find("- PushAggregateIntoConnectorScan"));
 }
 
 TEST(RuntimeExecTest, PhysicalExecutorRunsMemorySuffixAfterConnectorScan) {
@@ -971,7 +985,8 @@ TEST(RuntimeExecTest, PhysicalExplainShowsCboAlternatives) {
 
     const auto physical = optimizer::FormatPhysicalPlan(plan);
 
-    EXPECT_NE(std::string::npos, physical.find("alternatives=[local_hash_join_build_left*"));
+    EXPECT_NE(std::string::npos, physical.find("alternatives:\n"));
+    EXPECT_NE(std::string::npos, physical.find("- local_hash_join_build_left*"));
     EXPECT_NE(std::string::npos, physical.find("local_hash_join_build_right"));
 }
 
@@ -1046,8 +1061,13 @@ TEST(RuntimeExecTest, ContinuousSqliteFiltersAccumulatePushdownPredicates) {
         "`- Filter [sqlite pushdown: usage > 80]\n"
         "   `- Filter [sqlite pushdown: host == \"edge-1\"]\n"
         "      `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
-        "SourcePushdown(request: projection=[*], predicates=[host == \"edge-1\", usage > "
-        "80], limit=10)\n",
+        "SourcePushdown\n"
+        "  request:\n"
+        "    projection: [*]\n"
+        "    predicates:\n"
+        "      - host == \"edge-1\"\n"
+        "      - usage > 80\n"
+        "    limit: 10\n",
         plan_or->as_string());
 }
 
@@ -1097,8 +1117,12 @@ TEST(RuntimeExecTest, SqliteDropColumnsPushesDownAsProjection) {
         "`- Filter [sqlite pushdown: host == \"edge-1\"]\n"
         "   `- Project [sqlite pushdown]\n"
         "      `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
-        "SourcePushdown(request: projection=[_time, host, usage], predicates=[host == "
-        "\"edge-1\"], limit=10)\n",
+        "SourcePushdown\n"
+        "  request:\n"
+        "    projection: [_time, host, usage]\n"
+        "    predicates:\n"
+        "      - host == \"edge-1\"\n"
+        "    limit: 10\n",
         plan_or->as_string());
 }
 
@@ -1179,8 +1203,14 @@ TEST(RuntimeExecTest, SqliteRenamePushesDownProjectionAliasAndColumnMapping) {
               "         `- Rename [sqlite pushdown]\n"
               "            `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", "
               "table=\"cpu\")\n"
-              "SourcePushdown(request: projection=[host, usage AS value], predicates=[usage > "
-              "80], order_by=[usage DESC], limit=1)\n",
+              "SourcePushdown\n"
+              "  request:\n"
+              "    projection: [host, usage AS value]\n"
+              "    predicates:\n"
+              "      - usage > 80\n"
+              "    order_by:\n"
+              "      - usage DESC\n"
+              "    limit: 1\n",
               plan_or->as_string());
 }
 
@@ -1257,8 +1287,13 @@ TEST(RuntimeExecTest, SqliteGroupCountPushesDownAggregate) {
         "`- Group [sqlite pushdown]\n"
         "   `- Filter [sqlite pushdown: region == \"west\"]\n"
         "      `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
-        "SourcePushdown(request: projection=[*], predicates=[region == \"west\"], "
-        "group_by=[host], aggregate=COUNT(usage))\n",
+        "SourcePushdown\n"
+        "  request:\n"
+        "    projection: [*]\n"
+        "    predicates:\n"
+        "      - region == \"west\"\n"
+        "    group_by: [host]\n"
+        "    aggregate: COUNT(usage)\n",
         plan_or->as_string());
 }
 
@@ -1345,8 +1380,12 @@ TEST(RuntimeExecTest, SqliteDistinctAfterRenamePushesDownColumnMapping) {
               "      `- Rename [sqlite pushdown]\n"
               "         `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", "
               "table=\"cpu\")\n"
-              "SourcePushdown(request: projection=[host AS service], distinct=host, "
-              "order_by=[host ASC])\n",
+              "SourcePushdown\n"
+              "  request:\n"
+              "    projection: [host AS service]\n"
+              "    distinct: host\n"
+              "    order_by:\n"
+              "      - host ASC\n",
               plan_or->as_string());
 }
 

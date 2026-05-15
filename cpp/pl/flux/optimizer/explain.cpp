@@ -320,7 +320,6 @@ std::string FormatLogicalPlan(const std::shared_ptr<plan::PlanNode>& plan) {
             return out;
         }
         out += *summary;
-        out += "\n";
     }
     return out;
 }
@@ -341,7 +340,7 @@ std::string FormatOptimizedLogicalPlan(const std::shared_ptr<plan::PlanNode>& pl
         out << "RBO(rules=" << plan::StringList(rules) << ")\n";
     }
     if (auto summary = SourcePushdownSummary(*optimized_or); summary.has_value()) {
-        out << *summary << "\n";
+        out << *summary;
     }
     return out.str();
 }
