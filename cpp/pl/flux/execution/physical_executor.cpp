@@ -309,8 +309,8 @@ absl::StatusOr<Page> apply_range_page(Page input, const std::shared_ptr<plan::Pl
         chunk.row_count = 0;
         chunk.columns.reserve(source.columns.size());
         for (const auto& source_column : source.columns) {
-            chunk.columns.push_back(ColumnVector{.name = source_column.name,
-                                                 .type = source_column.type});
+            chunk.columns.push_back(
+                ColumnVector{.name = source_column.name, .type = source_column.type});
         }
         for (size_t row_index = 0; row_index < source.row_count; ++row_index) {
             auto row = RowFromPageChunk(source, row_index);
@@ -341,8 +341,8 @@ absl::StatusOr<Page> apply_filter_page(Page input, const std::shared_ptr<plan::P
         chunk.row_count = 0;
         chunk.columns.reserve(source.columns.size());
         for (const auto& source_column : source.columns) {
-            chunk.columns.push_back(ColumnVector{.name = source_column.name,
-                                                 .type = source_column.type});
+            chunk.columns.push_back(
+                ColumnVector{.name = source_column.name, .type = source_column.type});
         }
         for (size_t row_index = 0; row_index < source.row_count; ++row_index) {
             auto row = RowFromPageChunk(source, row_index);
@@ -411,8 +411,8 @@ absl::StatusOr<Page> apply_rename_page(Page input, const std::shared_ptr<plan::P
     }
     for (auto& chunk : input.chunks) {
         for (auto& column : chunk.columns) {
-            column.name = mapped_column_name(plan->rename().columns, column.name).value_or(
-                column.name);
+            column.name =
+                mapped_column_name(plan->rename().columns, column.name).value_or(column.name);
         }
     }
     return page_with_plan(std::move(input), plan);
@@ -535,8 +535,7 @@ std::shared_ptr<ObjectValue> local_join_row(const ObjectValue* left,
                                             : absl::StrCat(column, "_", spec.left_name);
         append(output_name, left == nullptr ? nullptr : left->lookup(column));
     }
-    const std::unordered_set<std::string> left_column_set(left_columns.begin(),
-                                                          left_columns.end());
+    const std::unordered_set<std::string> left_column_set(left_columns.begin(), left_columns.end());
     for (const auto& column : right_columns) {
         if (column == "_group" || on_columns.count(column) != 0) {
             continue;
@@ -608,9 +607,8 @@ absl::StatusOr<Value> local_hash_join_values(const Value& left_value,
                 if (matched_left[left_index] || left_table.rows[left_index] == nullptr) {
                     continue;
                 }
-                chunk.rows.push_back(local_join_row(left_table.rows[left_index].get(),
-                                                    left_columns, right_null.get(), right_columns,
-                                                    spec));
+                chunk.rows.push_back(local_join_row(left_table.rows[left_index].get(), left_columns,
+                                                    right_null.get(), right_columns, spec));
             }
         }
     } else {
@@ -782,14 +780,15 @@ private:
 
 class ConnectorSplitScanOperator final : public Operator {
 public:
-    explicit ConnectorSplitScanOperator(connector::ConnectorSplit split) : split_(std::move(split)) {}
+    explicit ConnectorSplitScanOperator(connector::ConnectorSplit split)
+        : split_(std::move(split)) {}
 
     [[nodiscard]] std::string name() const override { return "ConnectorScanOperator"; }
 
     absl::StatusOr<std::optional<Page>> NextPage() override {
         if (!initialized_) {
-            auto runtime_or =
-                connector::ConnectorRegistry::Global().CreateRuntime(source_spec_from_split(split_));
+            auto runtime_or = connector::ConnectorRegistry::Global().CreateRuntime(
+                source_spec_from_split(split_));
             if (!runtime_or.ok()) {
                 return runtime_or.status();
             }
@@ -857,7 +856,9 @@ public:
 
     absl::StatusOr<std::optional<Page>> PopPage() {
         std::unique_lock<std::mutex> lock(mu_);
-        cv_.wait(lock, [this]() { return !pages_.empty() || finished_ || error_.has_value(); });
+        cv_.wait(lock, [this]() {
+            return !pages_.empty() || finished_ || error_.has_value();
+        });
         if (error_.has_value()) {
             return absl::FailedPreconditionError(*error_);
         }
@@ -1163,8 +1164,8 @@ public:
                 }
                 const size_t start = static_cast<size_t>(remaining_offset_);
                 remaining_offset_ = 0;
-                const size_t take = std::min<size_t>(
-                    source.row_count - start, static_cast<size_t>(remaining_limit_));
+                const size_t take = std::min<size_t>(source.row_count - start,
+                                                     static_cast<size_t>(remaining_limit_));
                 PageChunk chunk = SlicePageChunkRows(source, start, take);
                 remaining_limit_ -= static_cast<int64_t>(chunk.row_count);
                 chunks.push_back(std::move(chunk));
@@ -1485,12 +1486,12 @@ absl::StatusOr<ProducedPipeline> AddJoinProducerPipeline(
 
     const bool build_left = join_plan->join().build_side == plan::JoinBuildSide::Left;
     auto left_or = AddProducerPipelineForPlan(join_plan->inputs[0], ChildPipelineId(id, "left"),
-                                             build_left ? "build" : "probe", task);
+                                              build_left ? "build" : "probe", task);
     if (!left_or.ok()) {
         return left_or.status();
     }
     auto right_or = AddProducerPipelineForPlan(join_plan->inputs[1], ChildPipelineId(id, "right"),
-                                              build_left ? "probe" : "build", task);
+                                               build_left ? "probe" : "build", task);
     if (!right_or.ok()) {
         return right_or.status();
     }
@@ -1499,8 +1500,8 @@ absl::StatusOr<ProducedPipeline> AddJoinProducerPipeline(
     std::unique_ptr<Operator> left_source(new ExchangeSourceOperator(left_or->buffer));
     std::unique_ptr<Operator> right_source(new ExchangeSourceOperator(right_or->buffer));
     std::vector<std::string> root_operators = {left_source->name(), right_source->name()};
-    std::unique_ptr<Operator> join(new LocalHashJoinOperator(
-        join_plan, std::move(left_source), std::move(right_source)));
+    std::unique_ptr<Operator> join(
+        new LocalHashJoinOperator(join_plan, std::move(left_source), std::move(right_source)));
     root_operators.push_back(join->name());
     std::unique_ptr<Operator> sink(new ExchangeSinkOperator(std::move(join), output_buffer));
     root_operators.push_back(sink->name());
@@ -1560,12 +1561,12 @@ absl::StatusOr<ExecutionTask> BuildJoinExecutionTask(
     ExecutionTask task;
     const bool build_left = join_plan->join().build_side == plan::JoinBuildSide::Left;
     auto left_or = AddProducerPipelineForPlan(join_plan->inputs[0], "join-left",
-                                             build_left ? "build" : "probe", &task);
+                                              build_left ? "build" : "probe", &task);
     if (!left_or.ok()) {
         return left_or.status();
     }
     auto right_or = AddProducerPipelineForPlan(join_plan->inputs[1], "join-right",
-                                              build_left ? "probe" : "build", &task);
+                                               build_left ? "probe" : "build", &task);
     if (!right_or.ok()) {
         return right_or.status();
     }
@@ -1573,8 +1574,8 @@ absl::StatusOr<ExecutionTask> BuildJoinExecutionTask(
     std::unique_ptr<Operator> left_source(new ExchangeSourceOperator(left_or->buffer));
     std::unique_ptr<Operator> right_source(new ExchangeSourceOperator(right_or->buffer));
     std::vector<std::string> root_operators = {left_source->name(), right_source->name()};
-    std::unique_ptr<Operator> join(new LocalHashJoinOperator(
-        join_plan, std::move(left_source), std::move(right_source)));
+    std::unique_ptr<Operator> join(
+        new LocalHashJoinOperator(join_plan, std::move(left_source), std::move(right_source)));
     root_operators.push_back(join->name());
     std::unique_ptr<Operator> output(new OutputOperator(std::move(join)));
     root_operators.push_back(output->name());
@@ -1761,9 +1762,8 @@ std::vector<DriverTask> DriverFactory::CreateTasks(size_t pipeline_index, Pipeli
     return tasks;
 }
 
-ExecutionProfile BuildExecutionProfile(
-    const std::vector<PipelineProfile>& pipeline_templates,
-    const std::vector<std::shared_ptr<Pipeline::Stats>>& stats) {
+ExecutionProfile BuildExecutionProfile(const std::vector<PipelineProfile>& pipeline_templates,
+                                       const std::vector<std::shared_ptr<Pipeline::Stats>>& stats) {
     ExecutionProfile profile;
     profile.pipelines = pipeline_templates;
     for (size_t index = 0; index < profile.pipelines.size() && index < stats.size(); ++index) {
@@ -1778,6 +1778,21 @@ ExecutionProfile BuildExecutionProfile(
         profile.pipelines[index].error = stats[index]->error;
     }
     return profile;
+}
+
+bool IsBlockingOperatorName(const std::string& name) {
+    return name == "SortOperator" || name == "GroupOperator" || name == "AggregateOperator" ||
+           name == "DistinctOperator" || name == "LocalHashJoinOperator" ||
+           name == "ExchangeOperator" || name == "MaterializeOperator";
+}
+
+bool HasBlockingOperator(const std::vector<std::string>& operators) {
+    for (const auto& name : operators) {
+        if (IsBlockingOperatorName(name)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) const {
@@ -1795,6 +1810,7 @@ absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) co
             .role = pipeline.role,
             .dependencies = pipeline.dependencies,
             .operators = pipeline.operators,
+            .blocking = HasBlockingOperator(pipeline.operators),
         });
         pipeline_stats.push_back(pipeline.stats);
     }
@@ -1954,7 +1970,8 @@ std::string FormatPipelinePlan(const std::shared_ptr<plan::PlanNode>& logical_pl
         if (!pipeline.dependencies.empty()) {
             out << ", depends_on=" << plan::StringList(pipeline.dependencies);
         }
-        out << ", operators=" << plan::StringList(pipeline.operators) << ")\n";
+        out << ", blocking=" << (HasBlockingOperator(pipeline.operators) ? "true" : "false")
+            << ", operators=" << plan::StringList(pipeline.operators) << ")\n";
     }
     return out.str();
 }
@@ -1967,7 +1984,8 @@ std::string FormatExecutionProfile(const ExecutionProfile& profile) {
         if (!pipeline.dependencies.empty()) {
             out << ", depends_on=" << plan::StringList(pipeline.dependencies);
         }
-        out << ", pages=" << pipeline.pages << ", rows=" << pipeline.rows
+        out << ", blocking=" << (pipeline.blocking ? "true" : "false")
+            << ", pages=" << pipeline.pages << ", rows=" << pipeline.rows
             << ", blocked=" << (pipeline.blocked ? "true" : "false")
             << ", finished=" << (pipeline.finished ? "true" : "false");
         if (!pipeline.error.empty()) {

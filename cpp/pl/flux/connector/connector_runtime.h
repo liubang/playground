@@ -51,6 +51,8 @@ struct ConnectorSplit {
     ScanRequest request;
     int64_t split_id = 0;
     std::optional<std::string> partition;
+    size_t row_offset = 0;
+    std::optional<size_t> row_limit;
     bool finished = false;
 };
 

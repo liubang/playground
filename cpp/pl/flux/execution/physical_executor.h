@@ -68,6 +68,7 @@ struct PipelineProfile {
     std::string role;
     std::vector<std::string> dependencies;
     std::vector<std::string> operators;
+    bool blocking = false;
     size_t pages = 0;
     size_t rows = 0;
     bool blocked = false;

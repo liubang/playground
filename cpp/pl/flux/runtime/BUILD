@@ -241,6 +241,7 @@ cc_test(
     linkopts = LINKOPTS,
     deps = [
         ":runtime_exec",
+        "//cpp/pl/flux/connector",
         "//cpp/pl/flux/execution",
         "@abseil-cpp//absl/status",
         "@googletest//:gtest_main",
