@@ -720,12 +720,25 @@ data |> explain(physical: true)
 
 ```text
 PhysicalPlan
-`- OutputSink [eager](name="output", operator="OutputOperator", cbo="not-run", cost=unknown)
-   `- ConnectorScan [lazy](name="connector scan", operator="ConnectorScanOperator",
-      source="sqlite", driver="sqlite",
-      logical_prefix=[Limit, Filter, SourceScan],
-      rbo=[PushLimitIntoConnectorScan, PushPredicateIntoConnectorScan],
-      cbo="chosen", cost={rows=1, cpu=..., io=...})
+`- OutputSink [eager]
+     name: "output"
+     operator: "OutputOperator"
+     cbo: "not-run"
+     cost: unknown
+   `- ConnectorScan [lazy]
+        name: "connector scan"
+        operator: "ConnectorScanOperator"
+        source: "sqlite"
+        driver: "sqlite"
+        logical_prefix:
+          - Limit
+          - Filter
+          - SourceScan
+        rbo:
+          - PushLimitIntoConnectorScan
+          - PushPredicateIntoConnectorScan
+        cbo: "chosen"
+        cost: {rows=1, cpu=..., io=...}
 ```
 
 这里的 `OutputSink` 是用户可观察输出边界；`[lazy]` 表示 connector scan 本身已经按延迟
@@ -733,7 +746,7 @@ scan 建模。输出边界现在会通过 `PhysicalExecutor` 触发 connector sc
 memory operator fallback。
 执行路径使用 fast CBO，只消费 RBO 形态决策，不会为了执行预先读取 connector 统计；physical
 explain 使用完整 CBO，会在 connector 支持时读取统计并展示真实 cost，缺统计时明确显示
-`cbo="no-stats", cost=unknown`。
+`cbo: "no-stats"` 和 `cost: unknown`。
 
 目标：把当前 eager interpreter 演进成明确的 logical -> optimized logical -> physical -> execute
 流程，同时保持现有内存执行器作为 fallback。
