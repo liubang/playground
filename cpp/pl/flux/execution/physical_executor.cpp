@@ -26,6 +26,7 @@
 #include "cpp/pl/flux/runtime/runtime_builtin_table_helpers.h"
 #include <algorithm>
 #include <cstddef>
+#include <future>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -767,6 +768,85 @@ private:
     bool initialized_ = false;
 };
 
+class ExchangeBuffer {
+public:
+    void AddPage(Page page) {
+        rows_ += page.row_count();
+        pages_.push_back(std::move(page));
+    }
+
+    [[nodiscard]] const std::vector<Page>& pages() const { return pages_; }
+    [[nodiscard]] size_t page_count() const { return pages_.size(); }
+    [[nodiscard]] size_t row_count() const { return rows_; }
+    [[nodiscard]] bool finished() const { return finished_; }
+    void Finish() { finished_ = true; }
+
+private:
+    std::vector<Page> pages_;
+    size_t rows_ = 0;
+    bool finished_ = false;
+};
+
+class ExchangeSinkOperator final : public Operator {
+public:
+    ExchangeSinkOperator(std::unique_ptr<Operator> input, std::shared_ptr<ExchangeBuffer> buffer)
+        : input_(std::move(input)), buffer_(std::move(buffer)) {}
+
+    [[nodiscard]] std::string name() const override { return "ExchangeSinkOperator"; }
+
+    absl::StatusOr<std::optional<Page>> NextPage() override {
+        if (finished_) {
+            return std::nullopt;
+        }
+        if (buffer_ == nullptr) {
+            return absl::InvalidArgumentError("exchange sink has no buffer");
+        }
+        auto page_or = next_input_page(input_.get());
+        if (!page_or.ok()) {
+            return page_or.status();
+        }
+        if (!page_or->has_value()) {
+            buffer_->Finish();
+            finished_ = true;
+            return std::nullopt;
+        }
+        Page output = std::move(**page_or);
+        Page buffered = output;
+        buffer_->AddPage(std::move(buffered));
+        return output;
+    }
+
+private:
+    std::unique_ptr<Operator> input_;
+    std::shared_ptr<ExchangeBuffer> buffer_;
+    bool finished_ = false;
+};
+
+class ExchangeSourceOperator final : public Operator {
+public:
+    explicit ExchangeSourceOperator(std::shared_ptr<ExchangeBuffer> buffer)
+        : buffer_(std::move(buffer)) {}
+
+    [[nodiscard]] std::string name() const override { return "ExchangeSourceOperator"; }
+
+    absl::StatusOr<std::optional<Page>> NextPage() override {
+        if (buffer_ == nullptr) {
+            return absl::InvalidArgumentError("exchange source has no buffer");
+        }
+        if (!buffer_->finished()) {
+            return absl::UnavailableError("exchange source is blocked on producer");
+        }
+        if (next_page_ >= buffer_->pages().size()) {
+            return std::nullopt;
+        }
+        return buffer_->pages()[next_page_++];
+    }
+
+private:
+    std::shared_ptr<ExchangeBuffer> buffer_;
+    size_t next_page_ = 0;
+};
+
 class PageUnaryOperator : public Operator {
 public:
     PageUnaryOperator(std::shared_ptr<plan::PlanNode> plan, std::unique_ptr<Operator> input)
@@ -1169,33 +1249,92 @@ absl::StatusOr<PlannedOperator> BuildOperator(const std::shared_ptr<plan::PlanNo
     return std::move(*planned_or);
 }
 
-std::vector<std::string> operator_names_for_plan(const std::shared_ptr<plan::PlanNode>& node) {
-    if (node == nullptr) {
-        return {};
-    }
-    auto planned_or = BuildOperator(node);
-    if (!planned_or.ok()) {
-        return {plan::PlanNodeKindName(node->kind)};
-    }
-    return planned_or->operators;
-}
-
-void AddInputPipelineDescriptor(const std::shared_ptr<plan::PlanNode>& node,
-                                std::string id,
-                                std::string name,
-                                std::vector<Pipeline>* pipelines) {
+Pipeline MakePipeline(std::string id,
+                      std::string name,
+                      std::string role,
+                      std::vector<std::string> dependencies,
+                      std::vector<std::string> operators,
+                      std::unique_ptr<Operator> root) {
     Pipeline pipeline;
     pipeline.id = std::move(id);
     pipeline.name = std::move(name);
-    pipeline.role = "input";
-    pipeline.operators = operator_names_for_plan(node);
-    pipelines->push_back(std::move(pipeline));
+    pipeline.role = std::move(role);
+    pipeline.dependencies = std::move(dependencies);
+    pipeline.operators = std::move(operators);
+    pipeline.root = std::move(root);
+    return pipeline;
+}
+
+absl::StatusOr<ExecutionTask> BuildJoinExecutionTask(
+    const std::shared_ptr<plan::PlanNode>& join_plan) {
+    if (join_plan == nullptr || join_plan->kind != plan::PlanNodeKind::Join ||
+        join_plan->inputs.size() != 2 || join_plan->inputs[0] == nullptr ||
+        join_plan->inputs[1] == nullptr) {
+        return absl::InvalidArgumentError("join execution task requires two inputs");
+    }
+
+    auto left_or = BuildOperator(join_plan->inputs[0]);
+    if (!left_or.ok()) {
+        return left_or.status();
+    }
+    auto right_or = BuildOperator(join_plan->inputs[1]);
+    if (!right_or.ok()) {
+        return right_or.status();
+    }
+
+    auto left_buffer = std::make_shared<ExchangeBuffer>();
+    auto right_buffer = std::make_shared<ExchangeBuffer>();
+
+    std::vector<std::string> left_operators = std::move(left_or->operators);
+    std::unique_ptr<Operator> left_sink(
+        new ExchangeSinkOperator(std::move(left_or->root), left_buffer));
+    left_operators.push_back(left_sink->name());
+
+    std::vector<std::string> right_operators = std::move(right_or->operators);
+    std::unique_ptr<Operator> right_sink(
+        new ExchangeSinkOperator(std::move(right_or->root), right_buffer));
+    right_operators.push_back(right_sink->name());
+
+    std::unique_ptr<Operator> left_source(new ExchangeSourceOperator(left_buffer));
+    std::unique_ptr<Operator> right_source(new ExchangeSourceOperator(right_buffer));
+    std::vector<std::string> root_operators = {left_source->name(), right_source->name()};
+    std::unique_ptr<Operator> join(new LocalHashJoinOperator(
+        join_plan, std::move(left_source), std::move(right_source)));
+    root_operators.push_back(join->name());
+    std::unique_ptr<Operator> output(new OutputOperator(std::move(join)));
+    root_operators.push_back(output->name());
+
+    const bool build_left = join_plan->join().build_side == plan::JoinBuildSide::Left;
+    ExecutionTask task;
+    task.pipelines.push_back(MakePipeline("join-left", "join left input",
+                                          build_left ? "build" : "probe", {},
+                                          std::move(left_operators), std::move(left_sink)));
+    task.pipelines.push_back(MakePipeline("join-right", "join right input",
+                                          build_left ? "probe" : "build", {},
+                                          std::move(right_operators), std::move(right_sink)));
+    task.pipelines.push_back(MakePipeline("main", "main", "root",
+                                          {"join-left", "join-right"},
+                                          std::move(root_operators), std::move(output)));
+    return task;
 }
 
 } // namespace
 
 absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
     const std::shared_ptr<plan::PlanNode>& logical_plan) const {
+    auto fast_or = optimizer::FastCostBasedOptimizer().OptimizeWithTrace(logical_plan);
+    if (!fast_or.ok()) {
+        return fast_or.status();
+    }
+    if (fast_or->rbo_result.plan != nullptr &&
+        fast_or->rbo_result.plan->kind == plan::PlanNodeKind::Join) {
+        auto cbo_or = optimizer::DefaultCostBasedOptimizer().OptimizeWithTrace(logical_plan);
+        if (!cbo_or.ok()) {
+            return cbo_or.status();
+        }
+        return BuildJoinExecutionTask(cbo_or->rbo_result.plan);
+    }
+
     auto planned_or = BuildOperator(logical_plan);
     if (!planned_or.ok()) {
         return planned_or.status();
@@ -1204,22 +1343,10 @@ absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
     planned_or->operators.push_back(output->name());
 
     ExecutionTask task;
-    auto optimized_or = optimizer::FastCostBasedOptimizer().OptimizeWithTrace(logical_plan);
-    if (optimized_or.ok() && optimized_or->rbo_result.plan != nullptr &&
-        optimized_or->rbo_result.plan->kind == plan::PlanNodeKind::Join &&
-        optimized_or->rbo_result.plan->inputs.size() == 2) {
-        AddInputPipelineDescriptor(optimized_or->rbo_result.plan->inputs[0], "join-left",
-                                   "join left input", &task.pipelines);
-        AddInputPipelineDescriptor(optimized_or->rbo_result.plan->inputs[1], "join-right",
-                                   "join right input", &task.pipelines);
-    }
     Pipeline pipeline;
     pipeline.id = "main";
     pipeline.name = "main";
     pipeline.role = "root";
-    if (!task.pipelines.empty()) {
-        pipeline.dependencies = {"join-left", "join-right"};
-    }
     pipeline.operators = std::move(planned_or->operators);
     pipeline.root = std::move(output);
     task.pipelines.push_back(std::move(pipeline));
@@ -1232,20 +1359,34 @@ absl::StatusOr<Value> Driver::Run() const {
     if (pipeline_.root == nullptr) {
         return absl::InvalidArgumentError("pipeline has no root operator");
     }
+    if (pipeline_.stats != nullptr) {
+        *pipeline_.stats = Pipeline::Stats{};
+    }
     std::optional<Page> output;
     while (true) {
         auto page_or = pipeline_.root->NextPage();
         if (!page_or.ok()) {
+            if (pipeline_.stats != nullptr) {
+                pipeline_.stats->error = page_or.status().ToString();
+                pipeline_.stats->finished = true;
+            }
             return page_or.status();
         }
         if (!page_or->has_value()) {
             break;
+        }
+        if (pipeline_.stats != nullptr) {
+            ++pipeline_.stats->pages;
+            pipeline_.stats->rows += page_or->value().row_count();
         }
         if (!output.has_value()) {
             output = std::move(page_or->value());
             continue;
         }
         AppendPage(&*output, std::move(page_or->value()));
+    }
+    if (pipeline_.stats != nullptr) {
+        pipeline_.stats->finished = true;
     }
     if (!output.has_value()) {
         return Value::table_stream("", {});
@@ -1259,24 +1400,95 @@ absl::StatusOr<Value> Scheduler::Run(ExecutionTask task) const {
     if (task.pipelines.empty()) {
         return absl::InvalidArgumentError("execution task has no pipelines");
     }
+    std::unordered_map<std::string, size_t> pipeline_indexes;
+    for (size_t index = 0; index < task.pipelines.size(); ++index) {
+        if (!task.pipelines[index].id.empty()) {
+            pipeline_indexes.emplace(task.pipelines[index].id, index);
+        }
+    }
+
     std::optional<TableValue> output;
+    std::vector<bool> started(task.pipelines.size(), false);
+    std::vector<bool> finished(task.pipelines.size(), false);
+    size_t remaining = task.pipelines.size();
     bool ran_pipeline = false;
-    for (auto& pipeline : task.pipelines) {
-        if (pipeline.root == nullptr) {
-            continue;
+
+    struct RunningPipeline {
+        size_t index = 0;
+        std::string id;
+        std::string role;
+        std::future<absl::StatusOr<Value>> value;
+    };
+
+    while (remaining > 0) {
+        std::vector<size_t> ready;
+        for (size_t index = 0; index < task.pipelines.size(); ++index) {
+            if (started[index]) {
+                continue;
+            }
+            bool dependencies_finished = true;
+            for (const auto& dependency : task.pipelines[index].dependencies) {
+                auto it = pipeline_indexes.find(dependency);
+                if (it == pipeline_indexes.end()) {
+                    return absl::InvalidArgumentError(
+                        absl::StrCat("pipeline depends on missing pipeline: ", dependency));
+                }
+                if (!finished[it->second]) {
+                    dependencies_finished = false;
+                    break;
+                }
+            }
+            if (dependencies_finished) {
+                ready.push_back(index);
+            }
         }
-        ran_pipeline = true;
-        auto value_or = Driver(std::move(pipeline)).Run();
-        if (!value_or.ok()) {
-            return value_or.status();
+        if (ready.empty()) {
+            return absl::FailedPreconditionError("execution task pipeline dependency cycle");
         }
-        const auto& table = value_or->as_table();
-        if (!output.has_value()) {
-            output = table;
-            continue;
+
+        std::vector<RunningPipeline> running;
+        for (size_t index : ready) {
+            started[index] = true;
+            if (task.pipelines[index].root == nullptr) {
+                if (task.pipelines[index].stats != nullptr) {
+                    task.pipelines[index].stats->finished = true;
+                }
+                finished[index] = true;
+                --remaining;
+                continue;
+            }
+            ran_pipeline = true;
+            RunningPipeline running_pipeline;
+            running_pipeline.index = index;
+            running_pipeline.id = task.pipelines[index].id;
+            running_pipeline.role = task.pipelines[index].role;
+            running_pipeline.value = std::async(
+                std::launch::async,
+                [pipeline = std::move(task.pipelines[index])]() mutable {
+                    return Driver(std::move(pipeline)).Run();
+                });
+            running.push_back(std::move(running_pipeline));
         }
-        output->tables.insert(output->tables.end(), table.tables.begin(), table.tables.end());
-        output->rows.insert(output->rows.end(), table.rows.begin(), table.rows.end());
+
+        for (auto& running_pipeline : running) {
+            auto value_or = running_pipeline.value.get();
+            finished[running_pipeline.index] = true;
+            --remaining;
+            if (!value_or.ok()) {
+                return value_or.status();
+            }
+            if (running_pipeline.role != "root" && running_pipeline.id != "main" &&
+                task.pipelines.size() != 1) {
+                continue;
+            }
+            const auto& table = value_or->as_table();
+            if (!output.has_value()) {
+                output = table;
+                continue;
+            }
+            output->tables.insert(output->tables.end(), table.tables.begin(), table.tables.end());
+            output->rows.insert(output->rows.end(), table.rows.begin(), table.rows.end());
+        }
     }
     if (!ran_pipeline) {
         return absl::InvalidArgumentError("execution task has no runnable pipelines");
