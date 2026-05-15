@@ -894,8 +894,8 @@ local hash join；exchange 明确是单机 materializing boundary，不伪装成
 - `PlanNode` 新增 `MakeJoin`、`MakeExchange`、`JoinMethod`、`JoinBuildSide`、`ExchangeKind`。
 - `PhysicalExecutor` 新增 `LocalHashJoinOperator`，按 `JoinSpec.build_side` 选择 build 表，
   保持逻辑 left/right 输出列顺序，并支持 inner/left/right/full 的基础行补齐语义。
-- `PhysicalPlanner` 已能构造多输入 operator tree；join task 会暴露 left/right input pipeline
-  descriptors 和 root pipeline dependency，当前由单机同步 scheduler 运行 root pipeline。
+- `PhysicalPlanner` 已能构造多输入 operator tree；Phase 11 后 join task 已进一步拆成真实
+  producer/consumer pipeline DAG。
 - `ExchangeOperator` 已实现本地 gather/repartition；作为 materializing boundary 在
   plan/explain 中显式出现。
 - `CostModel` 能估算 local hash join 和 exchange 的启发式成本；stats 可用时会自动选择更小
@@ -911,6 +911,34 @@ local hash join；exchange 明确是单机 materializing boundary，不伪装成
   位于同一个本地 chunk。
 - CBO 未启用或 stats unknown 时，explain 明确显示 fallback 到 RBO。
 - stats 可用时自动选择 join build side；stats unknown 时不因为不可靠 cost 改变 join side。
+
+### Phase 11: Pipeline DAG and Local Exchange Runtime
+
+状态：已完成单机 DAG 基础版。`PhysicalPlanner` 不再把顶层 join 的左右输入当作空 descriptor：
+它会生成 left/right producer pipelines、root consumer pipeline 和显式 dependency。producer 通过
+`ExchangeSinkOperator` 写入本地 `ExchangeBuffer`，root pipeline 通过 `ExchangeSourceOperator`
+读取 buffer 后执行 `LocalHashJoinOperator`。`Scheduler` 按 pipeline dependency DAG 分批调度，
+同一 ready wave 使用本地 async driver 并发执行，并把 producer 输出从最终 result 中隔离掉。
+
+目标：让 `ExecutionTask -> Pipeline DAG -> Driver -> ExchangeBuffer -> Operator` 成为真实执行路径，
+为后续 remote exchange、backpressure 和多 driver 并行留出正确边界。
+
+已落地：
+
+- `Pipeline` 新增 shared runtime stats：pages、rows、blocked、finished、error。
+- `Driver` 记录每个 pipeline 的 page/row 产出和 error/finish 状态。
+- `Scheduler` 校验 missing dependency 和 dependency cycle，按 DAG wave 调度 runnable pipelines。
+- 顶层 local hash join 被拆为 producer/consumer pipelines：left/right 写 exchange buffer，main
+  依赖 producer 完成后读取 buffer。
+- `ExchangeSourceOperator` 在 producer 未完成时返回 blocked/unavailable 状态；当前 scheduler
+  通过 dependency 保证 consumer 不会提前运行。
+
+验收：
+
+- physical planner 返回真实可运行的 join-left/join-right/main 三段 pipeline。
+- scheduler 执行 join pipeline DAG 后只返回 root pipeline 输出，不把 producer scan 输出混入结果。
+- producer/root pipeline stats 能反映各自处理的 pages 和 rows。
+- 非 join 查询仍走原本单 main pipeline，不为普通 scan/filter/project 额外收集 connector stats。
 
 ## Test Plan
 
