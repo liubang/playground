@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-16 16:45:24</td>
+            <td class="headerValue">2026-05-16 17:10:52</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -93,7 +93,7 @@
 <span id="L31"><span class="lineNum">      31</span>              : </span>
 <span id="L32"><span class="lineNum">      32</span>              : namespace pl::flux {</span>
 <span id="L33"><span class="lineNum">      33</span>              : </span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC tlaBgGNC">        3279 : struct ColumnVector {</span></span>
+<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC tlaBgGNC">        3295 : struct ColumnVector {</span></span>
 <span id="L35"><span class="lineNum">      35</span>              :     std::string name;</span>
 <span id="L36"><span class="lineNum">      36</span>              :     Value::Type type = Value::Type::Null;</span>
 <span id="L37"><span class="lineNum">      37</span>              :     std::vector&lt;Value&gt; values;</span>
@@ -118,7 +118,7 @@
 <span id="L56"><span class="lineNum">      56</span>              :     }</span>
 <span id="L57"><span class="lineNum">      57</span>              : };</span>
 <span id="L58"><span class="lineNum">      58</span>              : </span>
-<span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC">         352 : struct PageChunk {</span></span>
+<span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC">         353 : struct PageChunk {</span></span>
 <span id="L60"><span class="lineNum">      60</span>              :     std::vector&lt;ColumnVector&gt; columns;</span>
 <span id="L61"><span class="lineNum">      61</span>              :     std::shared_ptr&lt;ObjectValue&gt; group_key;</span>
 <span id="L62"><span class="lineNum">      62</span>              :     size_t row_count = 0;</span>
@@ -135,8 +135,8 @@
 <span id="L73"><span class="lineNum">      73</span>              : </span>
 <span id="L74"><span class="lineNum">      74</span>              :     [[nodiscard]] size_t row_count() const {</span>
 <span id="L75"><span class="lineNum">      75</span>              :         size_t count = 0;</span>
-<span id="L76"><span class="lineNum">      76</span> <span class="tlaGNC">        1577 :         for (const auto&amp; chunk : chunks) {</span></span>
-<span id="L77"><span class="lineNum">      77</span> <span class="tlaGNC">         824 :             count += chunk.row_count;</span></span>
+<span id="L76"><span class="lineNum">      76</span> <span class="tlaGNC">        1580 :         for (const auto&amp; chunk : chunks) {</span></span>
+<span id="L77"><span class="lineNum">      77</span> <span class="tlaGNC">         826 :             count += chunk.row_count;</span></span>
 <span id="L78"><span class="lineNum">      78</span>              :         }</span>
 <span id="L79"><span class="lineNum">      79</span>              :         return count;</span>
 <span id="L80"><span class="lineNum">      80</span>              :     }</span>
@@ -194,8 +194,8 @@
 <span id="L132"><span class="lineNum">     132</span>              : }</span>
 <span id="L133"><span class="lineNum">     133</span>              : </span>
 <span id="L134"><span class="lineNum">     134</span> <span class="tlaGNC">         344 : inline absl::Status ValidatePageChunk(const PageChunk&amp; chunk) {</span></span>
-<span id="L135"><span class="lineNum">     135</span> <span class="tlaGNC">        1267 :     for (const auto&amp; column : chunk.columns) {</span></span>
-<span id="L136"><span class="lineNum">     136</span> <span class="tlaGNC">         924 :         if (column.values.size() != chunk.row_count) {</span></span>
+<span id="L135"><span class="lineNum">     135</span> <span class="tlaGNC">        1275 :     for (const auto&amp; column : chunk.columns) {</span></span>
+<span id="L136"><span class="lineNum">     136</span> <span class="tlaGNC">         932 :         if (column.values.size() != chunk.row_count) {</span></span>
 <span id="L137"><span class="lineNum">     137</span> <span class="tlaGNC">           2 :             return absl::InvalidArgumentError(absl::StrCat(</span></span>
 <span id="L138"><span class="lineNum">     138</span>              :                 &quot;page column &quot;, column.name, &quot; has &quot;, column.values.size(),</span>
 <span id="L139"><span class="lineNum">     139</span> <span class="tlaGNC">           2 :                 &quot; values but chunk has &quot;, chunk.row_count, &quot; rows&quot;));</span></span>
@@ -206,12 +206,12 @@
 <span id="L144"><span class="lineNum">     144</span>              : </span>
 <span id="L145"><span class="lineNum">     145</span> <span class="tlaGNC">         318 : inline absl::Status ValidatePage(const Page&amp; page) {</span></span>
 <span id="L146"><span class="lineNum">     146</span> <span class="tlaGNC">         661 :     for (const auto&amp; chunk : page.chunks) {</span></span>
-<span id="L147"><span class="lineNum">     147</span> <span class="tlaGNC">         346 :         auto status = ValidatePageChunk(chunk);</span></span>
+<span id="L147"><span class="lineNum">     147</span> <span class="tlaGNC">         344 :         auto status = ValidatePageChunk(chunk);</span></span>
 <span id="L148"><span class="lineNum">     148</span> <span class="tlaGNC">         344 :         if (!status.ok()) {</span></span>
 <span id="L149"><span class="lineNum">     149</span>              :             return status;</span>
 <span id="L150"><span class="lineNum">     150</span>              :         }</span>
 <span id="L151"><span class="lineNum">     151</span>              :     }</span>
-<span id="L152"><span class="lineNum">     152</span> <span class="tlaGNC">         315 :     return absl::OkStatus();</span></span>
+<span id="L152"><span class="lineNum">     152</span> <span class="tlaGNC">         317 :     return absl::OkStatus();</span></span>
 <span id="L153"><span class="lineNum">     153</span>              : }</span>
 <span id="L154"><span class="lineNum">     154</span>              : </span>
 <span id="L155"><span class="lineNum">     155</span> <span class="tlaGNC">           4 : inline const Value* PageChunkValueAt(const PageChunk&amp; chunk,</span></span>
@@ -386,33 +386,33 @@
 <span id="L324"><span class="lineNum">     324</span> <span class="tlaGNC">         395 :         chunk.columns.push_back(column.name);</span></span>
 <span id="L325"><span class="lineNum">     325</span>              :     }</span>
 <span id="L326"><span class="lineNum">     326</span> <span class="tlaGNC">         150 :     chunk.rows.reserve(page_chunk.row_count);</span></span>
-<span id="L327"><span class="lineNum">     327</span> <span class="tlaGNC">       98444 :     for (size_t row_index = 0; row_index &lt; page_chunk.row_count; ++row_index) {</span></span>
-<span id="L328"><span class="lineNum">     328</span> <span class="tlaGNC">       98295 :         std::vector&lt;std::pair&lt;std::string, Value&gt;&gt; props;</span></span>
-<span id="L329"><span class="lineNum">     329</span> <span class="tlaGNC">       98295 :         props.reserve(page_chunk.columns.size());</span></span>
-<span id="L330"><span class="lineNum">     330</span> <span class="tlaGNC">      295217 :         for (const auto&amp; column : page_chunk.columns) {</span></span>
-<span id="L331"><span class="lineNum">     331</span> <span class="tlaGNC">      196681 :             if (row_index &lt; column.values.size()) {</span></span>
-<span id="L332"><span class="lineNum">     332</span> <span class="tlaGNC">      196681 :                 props.emplace_back(column.name, column.values[row_index]);</span></span>
+<span id="L327"><span class="lineNum">     327</span> <span class="tlaGNC">       99278 :     for (size_t row_index = 0; row_index &lt; page_chunk.row_count; ++row_index) {</span></span>
+<span id="L328"><span class="lineNum">     328</span> <span class="tlaGNC">       99128 :         std::vector&lt;std::pair&lt;std::string, Value&gt;&gt; props;</span></span>
+<span id="L329"><span class="lineNum">     329</span> <span class="tlaGNC">       99128 :         props.reserve(page_chunk.columns.size());</span></span>
+<span id="L330"><span class="lineNum">     330</span> <span class="tlaGNC">      296714 :         for (const auto&amp; column : page_chunk.columns) {</span></span>
+<span id="L331"><span class="lineNum">     331</span> <span class="tlaGNC">      197708 :             if (row_index &lt; column.values.size()) {</span></span>
+<span id="L332"><span class="lineNum">     332</span> <span class="tlaGNC">      197708 :                 props.emplace_back(column.name, column.values[row_index]);</span></span>
 <span id="L333"><span class="lineNum">     333</span>              :             } else {</span>
 <span id="L334"><span class="lineNum">     334</span> <span class="tlaUNC tlaBgUNC">           0 :                 props.emplace_back(column.name, Value::null());</span></span>
 <span id="L335"><span class="lineNum">     335</span>              :             }</span>
 <span id="L336"><span class="lineNum">     336</span>              :         }</span>
-<span id="L337"><span class="lineNum">     337</span> <span class="tlaGNC tlaBgGNC">       98477 :         chunk.rows.push_back(std::make_shared&lt;ObjectValue&gt;(std::move(props)));</span></span>
-<span id="L338"><span class="lineNum">     338</span> <span class="tlaGNC">       98477 :     }</span></span>
-<span id="L339"><span class="lineNum">     339</span> <span class="tlaGNC">         149 :     return chunk;</span></span>
+<span id="L337"><span class="lineNum">     337</span> <span class="tlaGNC tlaBgGNC">       99270 :         chunk.rows.push_back(std::make_shared&lt;ObjectValue&gt;(std::move(props)));</span></span>
+<span id="L338"><span class="lineNum">     338</span> <span class="tlaGNC">       99270 :     }</span></span>
+<span id="L339"><span class="lineNum">     339</span> <span class="tlaGNC">         150 :     return chunk;</span></span>
 <span id="L340"><span class="lineNum">     340</span> <span class="tlaUNC tlaBgUNC">           0 : }</span></span>
 <span id="L341"><span class="lineNum">     341</span>              : </span>
 <span id="L342"><span class="lineNum">     342</span> <span class="tlaGNC tlaBgGNC">         109 : inline TableValue TableValueFromPage(const Page&amp; page) {</span></span>
 <span id="L343"><span class="lineNum">     343</span> <span class="tlaGNC">         109 :     std::vector&lt;TableChunk&gt; chunks;</span></span>
 <span id="L344"><span class="lineNum">     344</span> <span class="tlaGNC">         109 :     chunks.reserve(page.chunks.size());</span></span>
-<span id="L345"><span class="lineNum">     345</span> <span class="tlaGNC">         258 :     for (const auto&amp; chunk : page.chunks) {</span></span>
+<span id="L345"><span class="lineNum">     345</span> <span class="tlaGNC">         259 :     for (const auto&amp; chunk : page.chunks) {</span></span>
 <span id="L346"><span class="lineNum">     346</span> <span class="tlaGNC">         300 :         chunks.push_back(TableChunkFromPageChunk(chunk));</span></span>
 <span id="L347"><span class="lineNum">     347</span>              :     }</span>
-<span id="L348"><span class="lineNum">     348</span> <span class="tlaGNC">         216 :     Value value = Value::table_stream(page.bucket, std::move(chunks), page.range_start,</span></span>
-<span id="L349"><span class="lineNum">     349</span> <span class="tlaGNC">         108 :                                       page.range_stop, page.result_name);</span></span>
-<span id="L350"><span class="lineNum">     350</span> <span class="tlaGNC">         108 :     value.as_table_mut().plan = page.plan;</span></span>
+<span id="L348"><span class="lineNum">     348</span> <span class="tlaGNC">         218 :     Value value = Value::table_stream(page.bucket, std::move(chunks), page.range_start,</span></span>
+<span id="L349"><span class="lineNum">     349</span> <span class="tlaGNC">         109 :                                       page.range_stop, page.result_name);</span></span>
+<span id="L350"><span class="lineNum">     350</span> <span class="tlaGNC">         109 :     value.as_table_mut().plan = page.plan;</span></span>
 <span id="L351"><span class="lineNum">     351</span> <span class="tlaGNC">         109 :     value.as_table_mut().materialized = page.materialized;</span></span>
 <span id="L352"><span class="lineNum">     352</span> <span class="tlaGNC">         218 :     return value.as_table();</span></span>
-<span id="L353"><span class="lineNum">     353</span> <span class="tlaGNC">         108 : }</span></span>
+<span id="L353"><span class="lineNum">     353</span> <span class="tlaGNC">         109 : }</span></span>
 <span id="L354"><span class="lineNum">     354</span>              : </span>
 <span id="L355"><span class="lineNum">     355</span> <span class="tlaGNC">          71 : inline void AppendPage(Page* output, Page page) {</span></span>
 <span id="L356"><span class="lineNum">     356</span> <span class="tlaGNC">          71 :     if (output == nullptr) {</span></span>

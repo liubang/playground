@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-16 16:45:24</td>
+            <td class="headerValue">2026-05-16 17:10:52</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">94.7&nbsp;%</td>
@@ -154,8 +154,8 @@
 <span id="L92"><span class="lineNum">      92</span> <span class="tlaGNC">         140 :                                  .table = plan.source-&gt;table};</span></span>
 <span id="L93"><span class="lineNum">      93</span>              : }</span>
 <span id="L94"><span class="lineNum">      94</span>              : </span>
-<span id="L95"><span class="lineNum">      95</span> <span class="tlaGNC">         129 : connector::SourceSpec source_spec_from_split(const connector::ConnectorSplit&amp; split) {</span></span>
-<span id="L96"><span class="lineNum">      96</span> <span class="tlaGNC">         129 :     return connector::SourceSpec{.source = split.table.source,</span></span>
+<span id="L95"><span class="lineNum">      95</span> <span class="tlaGNC">         130 : connector::SourceSpec source_spec_from_split(const connector::ConnectorSplit&amp; split) {</span></span>
+<span id="L96"><span class="lineNum">      96</span> <span class="tlaGNC">         130 :     return connector::SourceSpec{.source = split.table.source,</span></span>
 <span id="L97"><span class="lineNum">      97</span> <span class="tlaGNC">         130 :                                  .driver = split.table.driver,</span></span>
 <span id="L98"><span class="lineNum">      98</span> <span class="tlaGNC">         130 :                                  .dsn = split.table.dsn,</span></span>
 <span id="L99"><span class="lineNum">      99</span> <span class="tlaGNC">         130 :                                  .table = split.table.table};</span></span>
@@ -227,16 +227,16 @@
 <span id="L165"><span class="lineNum">     165</span> <span class="tlaGNC">         332 :     stats-&gt;page_build_time_ms = source.page_build_time_ms;</span></span>
 <span id="L166"><span class="lineNum">     166</span>              : }</span>
 <span id="L167"><span class="lineNum">     167</span>              : </span>
-<span id="L168"><span class="lineNum">     168</span> <span class="tlaGNC">          20 : bool page_row_less(const std::shared_ptr&lt;ObjectValue&gt;&amp; lhs,</span></span>
+<span id="L168"><span class="lineNum">     168</span> <span class="tlaGNC">          19 : bool page_row_less(const std::shared_ptr&lt;ObjectValue&gt;&amp; lhs,</span></span>
 <span id="L169"><span class="lineNum">     169</span>              :                    const std::shared_ptr&lt;ObjectValue&gt;&amp; rhs,</span>
 <span id="L170"><span class="lineNum">     170</span>              :                    const std::vector&lt;plan::SortKey&gt;&amp; keys) {</span>
-<span id="L171"><span class="lineNum">     171</span> <span class="tlaGNC">          20 :     if (lhs == nullptr || rhs == nullptr) {</span></span>
+<span id="L171"><span class="lineNum">     171</span> <span class="tlaGNC">          19 :     if (lhs == nullptr || rhs == nullptr) {</span></span>
 <span id="L172"><span class="lineNum">     172</span> <span class="tlaUNC tlaBgUNC">           0 :         return lhs != nullptr;</span></span>
 <span id="L173"><span class="lineNum">     173</span>              :     }</span>
-<span id="L174"><span class="lineNum">     174</span> <span class="tlaGNC tlaBgGNC">          20 :     for (const auto&amp; key : keys) {</span></span>
-<span id="L175"><span class="lineNum">     175</span> <span class="tlaGNC">          20 :         const int cmp = compare_values(lhs-&gt;lookup(key.column), rhs-&gt;lookup(key.column));</span></span>
-<span id="L176"><span class="lineNum">     176</span> <span class="tlaGNC">          20 :         if (cmp != 0) {</span></span>
-<span id="L177"><span class="lineNum">     177</span> <span class="tlaGNC">          20 :             return key.desc ? cmp &gt; 0 : cmp &lt; 0;</span></span>
+<span id="L174"><span class="lineNum">     174</span> <span class="tlaGNC tlaBgGNC">          19 :     for (const auto&amp; key : keys) {</span></span>
+<span id="L175"><span class="lineNum">     175</span> <span class="tlaGNC">          19 :         const int cmp = compare_values(lhs-&gt;lookup(key.column), rhs-&gt;lookup(key.column));</span></span>
+<span id="L176"><span class="lineNum">     176</span> <span class="tlaGNC">          19 :         if (cmp != 0) {</span></span>
+<span id="L177"><span class="lineNum">     177</span> <span class="tlaGNC">          19 :             return key.desc ? cmp &gt; 0 : cmp &lt; 0;</span></span>
 <span id="L178"><span class="lineNum">     178</span>              :         }</span>
 <span id="L179"><span class="lineNum">     179</span>              :     }</span>
 <span id="L180"><span class="lineNum">     180</span>              :     return false;</span>
@@ -257,7 +257,7 @@
 <span id="L195"><span class="lineNum">     195</span>              :                                      const std::shared_ptr&lt;plan::PlanNode&gt;&amp; plan) {</span>
 <span id="L196"><span class="lineNum">     196</span> <span class="tlaGNC">           4 :     auto rows = rows_from_page(input);</span></span>
 <span id="L197"><span class="lineNum">     197</span> <span class="tlaGNC">           4 :     std::stable_sort(rows.begin(), rows.end(), [&amp;](const auto&amp; lhs, const auto&amp; rhs) {</span></span>
-<span id="L198"><span class="lineNum">     198</span> <span class="tlaGNC">          13 :         return page_row_less(lhs, rhs, plan-&gt;sort().keys);</span></span>
+<span id="L198"><span class="lineNum">     198</span> <span class="tlaGNC">          12 :         return page_row_less(lhs, rhs, plan-&gt;sort().keys);</span></span>
 <span id="L199"><span class="lineNum">     199</span>              :     });</span>
 <span id="L200"><span class="lineNum">     200</span> <span class="tlaGNC">           8 :     Page output = PageFromRows(input.bucket, std::move(rows));</span></span>
 <span id="L201"><span class="lineNum">     201</span>              :     output.range_start = input.range_start;</span>
@@ -1047,13 +1047,13 @@
 <span id="L985"><span class="lineNum">     985</span> <span class="tlaGNC">         304 :     absl::StatusOr&lt;std::optional&lt;Page&gt;&gt; NextPage() override {</span></span>
 <span id="L986"><span class="lineNum">     986</span> <span class="tlaGNC">         304 :         if (!initialized_) {</span></span>
 <span id="L987"><span class="lineNum">     987</span> <span class="tlaGNC">         130 :             auto runtime_or = connector::ConnectorRegistry::Global().CreateRuntime(</span></span>
-<span id="L988"><span class="lineNum">     988</span> <span class="tlaGNC">         129 :                 source_spec_from_split(split_));</span></span>
-<span id="L989"><span class="lineNum">     989</span> <span class="tlaGNC">         127 :             if (!runtime_or.ok()) {</span></span>
+<span id="L988"><span class="lineNum">     988</span> <span class="tlaGNC">         130 :                 source_spec_from_split(split_));</span></span>
+<span id="L989"><span class="lineNum">     989</span> <span class="tlaGNC">         129 :             if (!runtime_or.ok()) {</span></span>
 <span id="L990"><span class="lineNum">     990</span>              :                 return runtime_or.status();</span>
 <span id="L991"><span class="lineNum">     991</span>              :             }</span>
 <span id="L992"><span class="lineNum">     992</span>              :             runtime_ = std::move(*runtime_or);</span>
-<span id="L993"><span class="lineNum">     993</span> <span class="tlaGNC">         125 :             auto page_source_or = runtime_-&gt;page_source_provider-&gt;CreatePageSource(split_);</span></span>
-<span id="L994"><span class="lineNum">     994</span> <span class="tlaGNC">         130 :             if (!page_source_or.ok()) {</span></span>
+<span id="L993"><span class="lineNum">     993</span> <span class="tlaGNC">         126 :             auto page_source_or = runtime_-&gt;page_source_provider-&gt;CreatePageSource(split_);</span></span>
+<span id="L994"><span class="lineNum">     994</span> <span class="tlaGNC">         129 :             if (!page_source_or.ok()) {</span></span>
 <span id="L995"><span class="lineNum">     995</span>              :                 return page_source_or.status();</span>
 <span id="L996"><span class="lineNum">     996</span>              :             }</span>
 <span id="L997"><span class="lineNum">     997</span>              :             page_source_ = std::move(*page_source_or);</span>
@@ -1065,7 +1065,7 @@
 <span id="L1003"><span class="lineNum">    1003</span> <span class="tlaGNC">         130 :             current_split_started_ = Clock::now();</span></span>
 <span id="L1004"><span class="lineNum">    1004</span> <span class="tlaGNC">         130 :             initialized_ = true;</span></span>
 <span id="L1005"><span class="lineNum">    1005</span>              :         }</span>
-<span id="L1006"><span class="lineNum">    1006</span> <span class="tlaGNC">         301 :         auto page_or = page_source_-&gt;NextPage();</span></span>
+<span id="L1006"><span class="lineNum">    1006</span> <span class="tlaGNC">         304 :         auto page_or = page_source_-&gt;NextPage();</span></span>
 <span id="L1007"><span class="lineNum">    1007</span> <span class="tlaGNC">         304 :         if (!page_or.ok()) {</span></span>
 <span id="L1008"><span class="lineNum">    1008</span>              :             return page_or.status();</span>
 <span id="L1009"><span class="lineNum">    1009</span>              :         }</span>
@@ -1081,10 +1081,10 @@
 <span id="L1019"><span class="lineNum">    1019</span>              :             return std::nullopt;</span>
 <span id="L1020"><span class="lineNum">    1020</span>              :         }</span>
 <span id="L1021"><span class="lineNum">    1021</span> <span class="tlaGNC">         174 :         auto status = ValidatePage(page_or-&gt;value());</span></span>
-<span id="L1022"><span class="lineNum">    1022</span> <span class="tlaGNC">         173 :         if (!status.ok()) {</span></span>
+<span id="L1022"><span class="lineNum">    1022</span> <span class="tlaGNC">         174 :         if (!status.ok()) {</span></span>
 <span id="L1023"><span class="lineNum">    1023</span>              :             return status;</span>
 <span id="L1024"><span class="lineNum">    1024</span>              :         }</span>
-<span id="L1025"><span class="lineNum">    1025</span> <span class="tlaGNC">         173 :         copy_source_profile(&amp;*current_split_stats_, page_source_-&gt;Stats());</span></span>
+<span id="L1025"><span class="lineNum">    1025</span> <span class="tlaGNC">         174 :         copy_source_profile(&amp;*current_split_stats_, page_source_-&gt;Stats());</span></span>
 <span id="L1026"><span class="lineNum">    1026</span> <span class="tlaGNC">         174 :         add_page_to_split_stats(&amp;*current_split_stats_, page_or-&gt;value());</span></span>
 <span id="L1027"><span class="lineNum">    1027</span>              :         return page_or;</span>
 <span id="L1028"><span class="lineNum">    1028</span>              :     }</span>
@@ -1110,13 +1110,13 @@
 <span id="L1048"><span class="lineNum">    1048</span> <span class="tlaGNC">          36 :         producer_count_ = std::max&lt;size_t&gt;(1, producer_count);</span></span>
 <span id="L1049"><span class="lineNum">    1049</span> <span class="tlaGNC">          36 :     }</span></span>
 <span id="L1050"><span class="lineNum">    1050</span>              : </span>
-<span id="L1051"><span class="lineNum">    1051</span> <span class="tlaGNC">         101 :     absl::Status AddPage(Page page) {</span></span>
-<span id="L1052"><span class="lineNum">    1052</span> <span class="tlaGNC">         101 :         const size_t page_bytes = EstimatePageBytes(page);</span></span>
-<span id="L1053"><span class="lineNum">    1053</span> <span class="tlaGNC">         102 :         std::unique_lock&lt;std::mutex&gt; lock(mu_);</span></span>
+<span id="L1051"><span class="lineNum">    1051</span> <span class="tlaGNC">         103 :     absl::Status AddPage(Page page) {</span></span>
+<span id="L1052"><span class="lineNum">    1052</span> <span class="tlaGNC">         103 :         const size_t page_bytes = EstimatePageBytes(page);</span></span>
+<span id="L1053"><span class="lineNum">    1053</span> <span class="tlaGNC">         103 :         std::unique_lock&lt;std::mutex&gt; lock(mu_);</span></span>
 <span id="L1054"><span class="lineNum">    1054</span> <span class="tlaGNC">         103 :         cv_.wait(lock, [this, page_bytes]() {</span></span>
 <span id="L1055"><span class="lineNum">    1055</span> <span class="tlaGNC">         103 :             return closed_ || finished_ || error_.has_value() ||</span></span>
 <span id="L1056"><span class="lineNum">    1056</span> <span class="tlaGNC">         103 :                    (pages_.size() &lt; max_pages_ &amp;&amp;</span></span>
-<span id="L1057"><span class="lineNum">    1057</span> <span class="tlaGNC">          24 :                     (pages_.empty() || buffered_bytes_ + page_bytes &lt;= max_buffered_bytes_));</span></span>
+<span id="L1057"><span class="lineNum">    1057</span> <span class="tlaGNC">          22 :                     (pages_.empty() || buffered_bytes_ + page_bytes &lt;= max_buffered_bytes_));</span></span>
 <span id="L1058"><span class="lineNum">    1058</span>              :         });</span>
 <span id="L1059"><span class="lineNum">    1059</span> <span class="tlaGNC">         103 :         if (closed_) {</span></span>
 <span id="L1060"><span class="lineNum">    1060</span> <span class="tlaUNC tlaBgUNC">           0 :             return absl::FailedPreconditionError(&quot;exchange buffer is closed&quot;);</span></span>
@@ -1138,7 +1138,7 @@
 <span id="L1076"><span class="lineNum">    1076</span> <span class="tlaGNC">         129 :     absl::StatusOr&lt;std::optional&lt;Page&gt;&gt; PopPage() {</span></span>
 <span id="L1077"><span class="lineNum">    1077</span> <span class="tlaGNC">         129 :         std::unique_lock&lt;std::mutex&gt; lock(mu_);</span></span>
 <span id="L1078"><span class="lineNum">    1078</span> <span class="tlaGNC">         129 :         cv_.wait(lock, [this]() {</span></span>
-<span id="L1079"><span class="lineNum">    1079</span> <span class="tlaGNC">         206 :             return !pages_.empty() || finished_ || error_.has_value();</span></span>
+<span id="L1079"><span class="lineNum">    1079</span> <span class="tlaGNC">         200 :             return !pages_.empty() || finished_ || error_.has_value();</span></span>
 <span id="L1080"><span class="lineNum">    1080</span>              :         });</span>
 <span id="L1081"><span class="lineNum">    1081</span> <span class="tlaGNC">         129 :         if (error_.has_value()) {</span></span>
 <span id="L1082"><span class="lineNum">    1082</span> <span class="tlaUNC tlaBgUNC">           0 :             return absl::FailedPreconditionError(*error_);</span></span>
@@ -1228,16 +1228,16 @@
 <span id="L1166"><span class="lineNum">    1166</span> <span class="tlaGNC">         103 :         if (input_ != nullptr) {</span></span>
 <span id="L1167"><span class="lineNum">    1167</span> <span class="tlaGNC">         103 :             input_-&gt;CollectSplitStats(out);</span></span>
 <span id="L1168"><span class="lineNum">    1168</span>              :         }</span>
-<span id="L1169"><span class="lineNum">    1169</span> <span class="tlaGNC">         102 :     }</span></span>
+<span id="L1169"><span class="lineNum">    1169</span> <span class="tlaGNC">         103 :     }</span></span>
 <span id="L1170"><span class="lineNum">    1170</span>              : </span>
-<span id="L1171"><span class="lineNum">    1171</span> <span class="tlaGNC">         205 :     absl::StatusOr&lt;std::optional&lt;Page&gt;&gt; NextPage() override {</span></span>
-<span id="L1172"><span class="lineNum">    1172</span> <span class="tlaGNC">         205 :         if (finished_) {</span></span>
+<span id="L1171"><span class="lineNum">    1171</span> <span class="tlaGNC">         206 :     absl::StatusOr&lt;std::optional&lt;Page&gt;&gt; NextPage() override {</span></span>
+<span id="L1172"><span class="lineNum">    1172</span> <span class="tlaGNC">         206 :         if (finished_) {</span></span>
 <span id="L1173"><span class="lineNum">    1173</span>              :             return std::nullopt;</span>
 <span id="L1174"><span class="lineNum">    1174</span>              :         }</span>
-<span id="L1175"><span class="lineNum">    1175</span> <span class="tlaGNC">         205 :         if (buffer_ == nullptr) {</span></span>
+<span id="L1175"><span class="lineNum">    1175</span> <span class="tlaGNC">         206 :         if (buffer_ == nullptr) {</span></span>
 <span id="L1176"><span class="lineNum">    1176</span> <span class="tlaUNC tlaBgUNC">           0 :             return absl::InvalidArgumentError(&quot;exchange sink has no buffer&quot;);</span></span>
 <span id="L1177"><span class="lineNum">    1177</span>              :         }</span>
-<span id="L1178"><span class="lineNum">    1178</span> <span class="tlaGNC tlaBgGNC">         205 :         auto page_or = next_input_page(input_.get());</span></span>
+<span id="L1178"><span class="lineNum">    1178</span> <span class="tlaGNC tlaBgGNC">         206 :         auto page_or = next_input_page(input_.get());</span></span>
 <span id="L1179"><span class="lineNum">    1179</span> <span class="tlaGNC">         206 :         if (!page_or.ok()) {</span></span>
 <span id="L1180"><span class="lineNum">    1180</span> <span class="tlaUNC tlaBgUNC">           0 :             buffer_-&gt;MarkError(page_or.status());</span></span>
 <span id="L1181"><span class="lineNum">    1181</span>              :             return page_or.status();</span>
@@ -1255,7 +1255,7 @@
 <span id="L1193"><span class="lineNum">    1193</span>              :         }</span>
 <span id="L1194"><span class="lineNum">    1194</span> <span class="tlaGNC tlaBgGNC">         103 :         Page output = std::move(**page_or);</span></span>
 <span id="L1195"><span class="lineNum">    1195</span> <span class="tlaGNC">         103 :         Page buffered = output;</span></span>
-<span id="L1196"><span class="lineNum">    1196</span> <span class="tlaGNC">         102 :         auto status = buffer_-&gt;AddPage(std::move(buffered));</span></span>
+<span id="L1196"><span class="lineNum">    1196</span> <span class="tlaGNC">         103 :         auto status = buffer_-&gt;AddPage(std::move(buffered));</span></span>
 <span id="L1197"><span class="lineNum">    1197</span> <span class="tlaGNC">         103 :         if (!status.ok()) {</span></span>
 <span id="L1198"><span class="lineNum">    1198</span>              :             return status;</span>
 <span id="L1199"><span class="lineNum">    1199</span>              :         }</span>
@@ -2211,12 +2211,12 @@
 <span id="L2149"><span class="lineNum">    2149</span> <span class="tlaGNC">         166 :     stats-&gt;finished = true;</span></span>
 <span id="L2150"><span class="lineNum">    2150</span>              : }</span>
 <span id="L2151"><span class="lineNum">    2151</span>              : </span>
-<span id="L2152"><span class="lineNum">    2152</span> <span class="tlaGNC">         165 : void AddPipelineSplitStats(const std::shared_ptr&lt;Pipeline::Stats&gt;&amp; stats,</span></span>
+<span id="L2152"><span class="lineNum">    2152</span> <span class="tlaGNC">         166 : void AddPipelineSplitStats(const std::shared_ptr&lt;Pipeline::Stats&gt;&amp; stats,</span></span>
 <span id="L2153"><span class="lineNum">    2153</span>              :                            const std::vector&lt;connector::ConnectorSplitStats&gt;&amp; split_stats) {</span>
-<span id="L2154"><span class="lineNum">    2154</span> <span class="tlaGNC">         165 :     if (stats == nullptr || split_stats.empty()) {</span></span>
+<span id="L2154"><span class="lineNum">    2154</span> <span class="tlaGNC">         166 :     if (stats == nullptr || split_stats.empty()) {</span></span>
 <span id="L2155"><span class="lineNum">    2155</span>              :         return;</span>
 <span id="L2156"><span class="lineNum">    2156</span>              :     }</span>
-<span id="L2157"><span class="lineNum">    2157</span> <span class="tlaGNC">         142 :     std::lock_guard&lt;std::mutex&gt; lock(stats-&gt;mu);</span></span>
+<span id="L2157"><span class="lineNum">    2157</span> <span class="tlaGNC">         143 :     std::lock_guard&lt;std::mutex&gt; lock(stats-&gt;mu);</span></span>
 <span id="L2158"><span class="lineNum">    2158</span> <span class="tlaGNC">         143 :     stats-&gt;split_stats.insert(stats-&gt;split_stats.end(), split_stats.begin(), split_stats.end());</span></span>
 <span id="L2159"><span class="lineNum">    2159</span>              : }</span>
 <span id="L2160"><span class="lineNum">    2160</span>              : </span>
@@ -2232,12 +2232,12 @@
 <span id="L2170"><span class="lineNum">    2170</span>              : </span>
 <span id="L2171"><span class="lineNum">    2171</span> <span class="tlaGNC">         169 : Driver::Driver(Pipeline pipeline) : pipeline_(std::move(pipeline)) {}</span></span>
 <span id="L2172"><span class="lineNum">    2172</span>              : </span>
-<span id="L2173"><span class="lineNum">    2173</span> <span class="tlaGNC">         167 : absl::Status Driver::RunToSink(const PageSink&amp; sink) const {</span></span>
-<span id="L2174"><span class="lineNum">    2174</span> <span class="tlaGNC">         167 :     if (pipeline_.root == nullptr) {</span></span>
+<span id="L2173"><span class="lineNum">    2173</span> <span class="tlaGNC">         169 : absl::Status Driver::RunToSink(const PageSink&amp; sink) const {</span></span>
+<span id="L2174"><span class="lineNum">    2174</span> <span class="tlaGNC">         169 :     if (pipeline_.root == nullptr) {</span></span>
 <span id="L2175"><span class="lineNum">    2175</span> <span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;pipeline has no root operator&quot;);</span></span>
 <span id="L2176"><span class="lineNum">    2176</span>              :     }</span>
 <span id="L2177"><span class="lineNum">    2177</span>              :     while (true) {</span>
-<span id="L2178"><span class="lineNum">    2178</span> <span class="tlaGNC tlaBgGNC">         383 :         auto page_or = pipeline_.root-&gt;NextPage();</span></span>
+<span id="L2178"><span class="lineNum">    2178</span> <span class="tlaGNC tlaBgGNC">         385 :         auto page_or = pipeline_.root-&gt;NextPage();</span></span>
 <span id="L2179"><span class="lineNum">    2179</span> <span class="tlaGNC">         385 :         if (!page_or.ok()) {</span></span>
 <span id="L2180"><span class="lineNum">    2180</span> <span class="tlaGNC">           3 :             FailPipelineStats(pipeline_.stats, page_or.status());</span></span>
 <span id="L2181"><span class="lineNum">    2181</span>              :             return page_or.status();</span>
@@ -2247,14 +2247,14 @@
 <span id="L2185"><span class="lineNum">    2185</span>              :         }</span>
 <span id="L2186"><span class="lineNum">    2186</span> <span class="tlaGNC">         216 :         AddPipelineStatsPage(pipeline_.stats, page_or-&gt;value());</span></span>
 <span id="L2187"><span class="lineNum">    2187</span> <span class="tlaGNC">         216 :         auto status = sink(std::move(page_or-&gt;value()));</span></span>
-<span id="L2188"><span class="lineNum">    2188</span> <span class="tlaGNC">         215 :         if (!status.ok()) {</span></span>
+<span id="L2188"><span class="lineNum">    2188</span> <span class="tlaGNC">         216 :         if (!status.ok()) {</span></span>
 <span id="L2189"><span class="lineNum">    2189</span> <span class="tlaUNC tlaBgUNC">           0 :             FailPipelineStats(pipeline_.stats, status);</span></span>
 <span id="L2190"><span class="lineNum">    2190</span>              :             return status;</span>
 <span id="L2191"><span class="lineNum">    2191</span>              :         }</span>
 <span id="L2192"><span class="lineNum">    2192</span>              :     }</span>
 <span id="L2193"><span class="lineNum">    2193</span> <span class="tlaGNC tlaBgGNC">         166 :     std::vector&lt;connector::ConnectorSplitStats&gt; split_stats;</span></span>
 <span id="L2194"><span class="lineNum">    2194</span> <span class="tlaGNC">         166 :     pipeline_.root-&gt;CollectSplitStats(&amp;split_stats);</span></span>
-<span id="L2195"><span class="lineNum">    2195</span> <span class="tlaGNC">         165 :     AddPipelineSplitStats(pipeline_.stats, split_stats);</span></span>
+<span id="L2195"><span class="lineNum">    2195</span> <span class="tlaGNC">         166 :     AddPipelineSplitStats(pipeline_.stats, split_stats);</span></span>
 <span id="L2196"><span class="lineNum">    2196</span> <span class="tlaGNC">         166 :     FinishPipelineStats(pipeline_.stats);</span></span>
 <span id="L2197"><span class="lineNum">    2197</span>              :     return absl::OkStatus();</span>
 <span id="L2198"><span class="lineNum">    2198</span>              : }</span>
@@ -2468,7 +2468,7 @@
 <span id="L2406"><span class="lineNum">    2406</span>              :                                           std::make_move_iterator(next.rows.end()));</span>
 <span id="L2407"><span class="lineNum">    2407</span> <span class="tlaGNC">          89 :                         table.plan = next.plan;</span></span>
 <span id="L2408"><span class="lineNum">    2408</span>              :                         return absl::OkStatus();</span>
-<span id="L2409"><span class="lineNum">    2409</span> <span class="tlaGNC">         251 :                     });</span></span>
+<span id="L2409"><span class="lineNum">    2409</span> <span class="tlaGNC">         253 :                     });</span></span>
 <span id="L2410"><span class="lineNum">    2410</span> <span class="tlaGNC">         164 :                 if (!status.ok()) {</span></span>
 <span id="L2411"><span class="lineNum">    2411</span>              :                     return status;</span>
 <span id="L2412"><span class="lineNum">    2412</span>              :                 }</span>
