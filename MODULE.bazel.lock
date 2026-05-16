@@ -55,8 +55,6 @@
     "https://bcr.bazel.build/modules/bazel_skylib/1.8.2/MODULE.bazel": "69ad6927098316848b34a9142bcc975e018ba27f08c4ff403f50c1b6e646ca67",
     "https://bcr.bazel.build/modules/bazel_skylib/1.9.0/MODULE.bazel": "72997b29dfd95c3fa0d0c48322d05590418edef451f8db8db5509c57875fb4b7",
     "https://bcr.bazel.build/modules/bazel_skylib/1.9.0/source.json": "7ad77c1e8c1b84222d9b3f3cae016a76639435744c19330b0b37c0a3c9da7dc0",
-    "https://bcr.bazel.build/modules/blaze-math/3.8.2/MODULE.bazel": "d24536e5a752a794977a2eedc0419080553eb24cbe291bb5dd84ba6284cc3987",
-    "https://bcr.bazel.build/modules/blaze-math/3.8.2/source.json": "3c81c18951a79352e2a8e35c5995fcce7e33fe2d16b15f918681ab11e1877922",
     "https://bcr.bazel.build/modules/boost.algorithm/1.90.0.bcr.1/MODULE.bazel": "2f3447a25fe67ddefa26d39f1eae65d3035fb6faaa77d39cf7742a8f952ceedb",
     "https://bcr.bazel.build/modules/boost.algorithm/1.90.0.bcr.1/source.json": "f9c995cf5dc0663827484065fb1e76ec4c7091f84476c1a98fa9a4bcf87bcb8f",
     "https://bcr.bazel.build/modules/boost.align/1.89.0.bcr.2/MODULE.bazel": "81ceb2549f6338a7f07d09702d0ceccb26091354720ef63300cd3096aad1d2d9",

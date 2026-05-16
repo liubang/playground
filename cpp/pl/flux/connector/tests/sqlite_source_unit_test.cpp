@@ -261,5 +261,40 @@ TEST(SQLiteSourceTest, RejectsUnknownPushdownColumn) {
     EXPECT_NE(std::string::npos, value_or.status().message().find("unknown column"));
 }
 
+TEST(SQLiteSourceTest, RejectsInvalidPushdownContractBeforeBuildingSql) {
+    SQLiteSource source(kMetricsDb, "cpu");
+
+    ScanRequest mixed_projection;
+    mixed_projection.columns = {"host"};
+    mixed_projection.projection_columns.push_back({
+        .column = "usage",
+        .alias = "usage",
+    });
+    auto mixed_or = source.Scan(mixed_projection);
+    ASSERT_FALSE(mixed_or.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, mixed_or.status().code());
+    EXPECT_NE(std::string::npos,
+              mixed_or.status().message().find("both columns and projection_columns"));
+
+    ScanRequest group_without_aggregate;
+    group_without_aggregate.group_by = {"host"};
+    auto group_or = source.Scan(group_without_aggregate);
+    ASSERT_FALSE(group_or.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, group_or.status().code());
+    EXPECT_NE(std::string::npos, group_or.status().message().find("group_by requires aggregate"));
+
+    ScanRequest invalid_distinct_projection;
+    invalid_distinct_projection.distinct = "host";
+    invalid_distinct_projection.projection_columns.push_back({
+        .column = "usage",
+        .alias = "value",
+    });
+    auto distinct_or = source.Scan(invalid_distinct_projection);
+    ASSERT_FALSE(distinct_or.ok());
+    EXPECT_EQ(absl::StatusCode::kInvalidArgument, distinct_or.status().code());
+    EXPECT_NE(std::string::npos,
+              distinct_or.status().message().find("distinct projection must use distinct column"));
+}
+
 } // namespace
 } // namespace pl::flux::connector
