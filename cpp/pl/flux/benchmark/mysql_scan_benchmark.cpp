@@ -48,6 +48,15 @@ pl::flux::plan::PredicateSpec usage_predicate(double threshold) {
 struct SplitTotals {
     size_t bytes = 0;
     double wall_time_ms = 0.0;
+    double metadata_time_ms = 0.0;
+    double split_discovery_time_ms = 0.0;
+    double connect_time_ms = 0.0;
+    double schema_time_ms = 0.0;
+    double sql_build_time_ms = 0.0;
+    double execute_time_ms = 0.0;
+    double read_time_ms = 0.0;
+    double decode_time_ms = 0.0;
+    double page_build_time_ms = 0.0;
 };
 
 SplitTotals split_totals(const pl::flux::execution::ExecutionProfile& profile) {
@@ -56,6 +65,15 @@ SplitTotals split_totals(const pl::flux::execution::ExecutionProfile& profile) {
         for (const auto& split : pipeline.split_stats) {
             totals.bytes += split.bytes_produced;
             totals.wall_time_ms += split.wall_time_ms;
+            totals.metadata_time_ms += split.metadata_time_ms;
+            totals.split_discovery_time_ms += split.split_discovery_time_ms;
+            totals.connect_time_ms += split.connect_time_ms;
+            totals.schema_time_ms += split.schema_time_ms;
+            totals.sql_build_time_ms += split.sql_build_time_ms;
+            totals.execute_time_ms += split.execute_time_ms;
+            totals.read_time_ms += split.read_time_ms;
+            totals.decode_time_ms += split.decode_time_ms;
+            totals.page_build_time_ms += split.page_build_time_ms;
         }
     }
     return totals;
@@ -126,6 +144,15 @@ int main(int argc, char** argv) {
               << R"("output_pages":)" << output_pages << ","
               << R"("split_bytes":)" << splits.bytes << ","
               << R"("split_wall_time_ms":)" << splits.wall_time_ms << ","
+              << R"("split_metadata_time_ms":)" << splits.metadata_time_ms << ","
+              << R"("split_discovery_time_ms":)" << splits.split_discovery_time_ms << ","
+              << R"("split_connect_time_ms":)" << splits.connect_time_ms << ","
+              << R"("split_schema_time_ms":)" << splits.schema_time_ms << ","
+              << R"("split_sql_build_time_ms":)" << splits.sql_build_time_ms << ","
+              << R"("split_execute_time_ms":)" << splits.execute_time_ms << ","
+              << R"("split_read_time_ms":)" << splits.read_time_ms << ","
+              << R"("split_decode_time_ms":)" << splits.decode_time_ms << ","
+              << R"("split_page_build_time_ms":)" << splits.page_build_time_ms << ","
               << R"("seconds":)" << seconds << ","
               << R"("output_rows_per_second":)"
               << static_cast<double>(output_rows) / std::max(seconds, 0.000001) << "}\n";
