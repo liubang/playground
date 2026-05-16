@@ -301,6 +301,59 @@ absl::Status BuildWhereClause(std::string* sql,
     return absl::OkStatus();
 }
 
+absl::Status BuildParameterizedWhereClause(std::string* sql,
+                                           const ScanRequest& request,
+                                           const std::unordered_set<std::string>& schema_columns,
+                                           const SqlDialect& dialect,
+                                           std::vector<SqlParam>* params) {
+    const std::string source_name = dialect.SourceName();
+    std::vector<std::string> where_clauses;
+
+    if (request.time_range.has_value()) {
+        auto status = ValidateColumn(schema_columns, "_time", source_name, "time range");
+        if (!status.ok()) {
+            return status;
+        }
+        if (request.time_range->start.has_value()) {
+            where_clauses.push_back(dialect.QuoteIdentifier("_time") + " >= ?");
+            params->push_back(SqlParam{
+                .value = Value::string(*request.time_range->start),
+                .normalize_time = true,
+            });
+        }
+        if (request.time_range->stop.has_value()) {
+            where_clauses.push_back(dialect.QuoteIdentifier("_time") + " < ?");
+            params->push_back(SqlParam{
+                .value = Value::string(*request.time_range->stop),
+                .normalize_time = true,
+            });
+        }
+    }
+    for (const auto& predicate : request.predicates) {
+        auto status = ValidateColumn(schema_columns, predicate.column, source_name, "predicate");
+        if (!status.ok()) {
+            return status;
+        }
+        where_clauses.push_back(dialect.QuoteIdentifier(predicate.column) + " " +
+                                PredicateOpSql(predicate.op) + " ?");
+        params->push_back(SqlParam{
+            .value = predicate.literal,
+            .normalize_time = predicate.column == "_time",
+        });
+    }
+
+    if (!where_clauses.empty()) {
+        *sql += " WHERE ";
+        for (size_t i = 0; i < where_clauses.size(); ++i) {
+            if (i != 0) {
+                *sql += " AND ";
+            }
+            *sql += where_clauses[i];
+        }
+    }
+    return absl::OkStatus();
+}
+
 void BuildGroupByClause(std::string* sql, const ScanRequest& request, const SqlDialect& dialect) {
     if (request.aggregate.has_value() && !request.group_by.empty()) {
         *sql += " GROUP BY ";
@@ -380,6 +433,59 @@ absl::StatusOr<std::string> BuildScanSql(const std::string& base_query,
     sql += dialect.FormatLimit(request.limit, request.offset);
 
     return sql;
+}
+
+absl::StatusOr<ParameterizedSql> BuildParameterizedScanSql(const std::string& base_query,
+                                                           const ScanRequest& request,
+                                                           const TableSchema& schema,
+                                                           const SqlDialect& dialect) {
+    auto status = ValidateScanRequestAgainstSchema(request, schema, dialect.SourceName());
+    if (!status.ok()) {
+        return status;
+    }
+
+    std::unordered_set<std::string> schema_columns;
+    schema_columns.reserve(schema.columns.size());
+    for (const auto& column : schema.columns) {
+        schema_columns.insert(column.name);
+    }
+
+    ParameterizedSql out;
+    status = BuildSelectClause(&out.sql, request, schema_columns, dialect);
+    if (!status.ok()) {
+        return status;
+    }
+
+    out.sql += " FROM (";
+    out.sql += base_query;
+    out.sql += ") AS flux_source";
+
+    status = BuildParameterizedWhereClause(&out.sql, request, schema_columns, dialect, &out.params);
+    if (!status.ok()) {
+        return status;
+    }
+
+    BuildGroupByClause(&out.sql, request, dialect);
+
+    status = BuildOrderByClause(&out.sql, request, schema_columns, dialect);
+    if (!status.ok()) {
+        return status;
+    }
+
+    if (request.limit.has_value()) {
+        out.sql += " LIMIT ?";
+        out.params.push_back(SqlParam{.value = Value::integer(*request.limit)});
+    }
+    if (request.offset.has_value()) {
+        if (!request.limit.has_value()) {
+            out.sql += " ";
+            out.sql += dialect.UnboundedLimit();
+        }
+        out.sql += " OFFSET ?";
+        out.params.push_back(SqlParam{.value = Value::integer(*request.offset)});
+    }
+
+    return out;
 }
 
 } // namespace pl::flux::connector

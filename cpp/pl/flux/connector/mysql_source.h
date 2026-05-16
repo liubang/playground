@@ -49,6 +49,8 @@ struct MySQLRuntimeOptions {
     size_t max_idle_connections = 8;
     size_t split_cache_max_entries = 1024;
     int64_t split_cache_ttl_ms = 300000;
+    bool use_prepared_statements = true;
+    size_t prepared_cache_max_entries = 128;
 };
 
 class MySQLSource final {
@@ -122,7 +124,8 @@ public:
                     std::optional<int64_t> split_lower = std::nullopt,
                     std::optional<int64_t> split_upper = std::nullopt,
                     int64_t split_id = 0,
-                    std::shared_ptr<MySQLConnectionPool> pool = nullptr);
+                    std::shared_ptr<MySQLConnectionPool> pool = nullptr,
+                    MySQLRuntimeOptions options = {});
 
     absl::Status Initialize();
     absl::StatusOr<std::optional<Page>> NextPage() override;
@@ -135,6 +138,7 @@ private:
     std::string dsn_;
     std::string table_;
     size_t rows_per_page_ = 1024;
+    MySQLRuntimeOptions options_;
     std::shared_ptr<MySQLConnectionPool> pool_;
     ConnectorSplitStats stats_;
 };
