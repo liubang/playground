@@ -43,7 +43,12 @@ java_binary(
 
 # Test dependencies
 test_deps = [
+    "@maven//:org_junit_jupiter_junit_jupiter_api",
     "@maven//:org_springframework_boot_spring_boot_starter_test",
+    "@maven//:org_springframework_boot_spring_boot_test",
+    "@maven//:org_springframework_boot_spring_boot_test_autoconfigure",
+    "@maven//:org_springframework_spring_beans",
+    "@maven//:org_springframework_spring_test",
 ]
 
 # Unit tests
