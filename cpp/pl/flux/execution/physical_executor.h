@@ -23,6 +23,7 @@
 #include "cpp/pl/flux/runtime/runtime_page.h"
 #include "cpp/pl/flux/runtime/runtime_value.h"
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -95,6 +96,9 @@ class Driver {
 public:
     explicit Driver(Pipeline pipeline);
 
+    using PageSink = std::function<absl::Status(Page)>;
+
+    [[nodiscard]] absl::Status RunToSink(const PageSink& sink) const;
     [[nodiscard]] absl::StatusOr<Value> Run() const;
 
 private:

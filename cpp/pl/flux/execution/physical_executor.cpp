@@ -30,6 +30,7 @@
 #include <cstddef>
 #include <deque>
 #include <future>
+#include <iterator>
 #include <mutex>
 #include <optional>
 #include <queue>
@@ -162,22 +163,28 @@ absl::StatusOr<std::vector<connector::ConnectorSplit>> create_connector_splits(
 
 absl::StatusOr<Value> apply_sort(const Value& input, const std::shared_ptr<plan::PlanNode>& plan) {
     const auto& table = input.as_table();
-    auto chunks = clone_table_chunks(table);
-    for (auto& chunk : chunks) {
-        std::stable_sort(
-            chunk.rows.begin(), chunk.rows.end(), [&](const auto& lhs, const auto& rhs) {
-                if (lhs == nullptr || rhs == nullptr) {
-                    return lhs != nullptr;
+    TableChunk sorted;
+    if (!table.tables.empty()) {
+        sorted.group_key = table.tables.front().group_key;
+        sorted.columns = table.tables.front().columns;
+    }
+    sorted.rows = table.rows;
+    std::stable_sort(
+        sorted.rows.begin(), sorted.rows.end(), [&](const auto& lhs, const auto& rhs) {
+            if (lhs == nullptr || rhs == nullptr) {
+                return lhs != nullptr;
+            }
+            for (const auto& key : plan->sort().keys) {
+                const int cmp = compare_values(lhs->lookup(key.column), rhs->lookup(key.column));
+                if (cmp != 0) {
+                    return key.desc ? cmp > 0 : cmp < 0;
                 }
-                for (const auto& key : plan->sort().keys) {
-                    const int cmp =
-                        compare_values(lhs->lookup(key.column), rhs->lookup(key.column));
-                    if (cmp != 0) {
-                        return key.desc ? cmp > 0 : cmp < 0;
-                    }
-                }
-                return false;
-            });
+            }
+            return false;
+        });
+    std::vector<TableChunk> chunks;
+    if (!sorted.rows.empty() || table.tables.empty()) {
+        chunks.push_back(std::move(sorted));
     }
     return table_with_plan(table_with_chunks_like(table, std::move(chunks)), plan);
 }
@@ -1312,6 +1319,54 @@ private:
     std::unique_ptr<Operator> input_;
 };
 
+bool IsPipelineBreakerKind(plan::PlanNodeKind kind) {
+    return kind == plan::PlanNodeKind::Sort || kind == plan::PlanNodeKind::Group ||
+           kind == plan::PlanNodeKind::Aggregate || kind == plan::PlanNodeKind::Distinct ||
+           kind == plan::PlanNodeKind::Exchange || kind == plan::PlanNodeKind::Materialize;
+}
+
+absl::StatusOr<std::unique_ptr<Operator>> WrapUnaryOperator(
+    const std::shared_ptr<plan::PlanNode>& node, std::unique_ptr<Operator> input) {
+    if (node == nullptr) {
+        return absl::InvalidArgumentError("missing unary operator plan");
+    }
+    if (node->kind == plan::PlanNodeKind::Materialize) {
+        return std::unique_ptr<Operator>(new MaterializeOperator(node, std::move(input)));
+    }
+    if (node->kind == plan::PlanNodeKind::Range) {
+        return std::unique_ptr<Operator>(new RangeOperator(node, std::move(input)));
+    }
+    if (node->kind == plan::PlanNodeKind::Filter) {
+        return std::unique_ptr<Operator>(new FilterOperator(node, std::move(input)));
+    }
+    if (node->kind == plan::PlanNodeKind::Project) {
+        return std::unique_ptr<Operator>(new ProjectOperator(node, std::move(input)));
+    }
+    if (node->kind == plan::PlanNodeKind::Rename) {
+        return std::unique_ptr<Operator>(new RenameOperator(node, std::move(input)));
+    }
+    if (node->kind == plan::PlanNodeKind::Exchange) {
+        return std::unique_ptr<Operator>(new ExchangeOperator(node, std::move(input)));
+    }
+    if (node->kind == plan::PlanNodeKind::Limit) {
+        return std::unique_ptr<Operator>(new LimitOperator(node, std::move(input)));
+    }
+    if (node->kind == plan::PlanNodeKind::Sort) {
+        return std::unique_ptr<Operator>(new SortOperator(node, std::move(input)));
+    }
+    if (node->kind == plan::PlanNodeKind::Group) {
+        return std::unique_ptr<Operator>(new GroupOperator(node, std::move(input)));
+    }
+    if (node->kind == plan::PlanNodeKind::Distinct) {
+        return std::unique_ptr<Operator>(new DistinctOperator(node, std::move(input)));
+    }
+    if (node->kind == plan::PlanNodeKind::Aggregate) {
+        return std::unique_ptr<Operator>(new AggregateOperator(node, std::move(input)));
+    }
+    return absl::InvalidArgumentError(
+        absl::StrCat("unsupported physical operator: ", plan::PlanNodeKindName(node->kind)));
+}
+
 struct PlannedOperator {
     std::unique_ptr<Operator> root;
     std::vector<std::unique_ptr<Operator>> driver_roots;
@@ -1620,6 +1675,50 @@ absl::StatusOr<ExecutionTask> BuildExchangeExecutionTask(
     return task;
 }
 
+absl::StatusOr<std::optional<ExecutionTask>> BuildUnaryBreakerExecutionTask(
+    const std::shared_ptr<plan::PlanNode>& root_plan) {
+    if (root_plan == nullptr) {
+        return std::nullopt;
+    }
+    std::vector<std::shared_ptr<plan::PlanNode>> chain;
+    std::shared_ptr<plan::PlanNode> cursor = root_plan;
+    std::optional<size_t> breaker_index;
+    while (cursor != nullptr && cursor->inputs.size() == 1 && cursor->inputs[0] != nullptr) {
+        chain.push_back(cursor);
+        if (IsPipelineBreakerKind(cursor->kind)) {
+            breaker_index = chain.size() - 1;
+        }
+        cursor = cursor->inputs[0];
+    }
+    if (!breaker_index.has_value()) {
+        return std::nullopt;
+    }
+
+    const auto& breaker = chain[*breaker_index];
+    ExecutionTask task;
+    auto input_or =
+        AddProducerPipelineForPlan(breaker->inputs[0], "breaker-input", "source", &task);
+    if (!input_or.ok()) {
+        return input_or.status();
+    }
+
+    std::unique_ptr<Operator> current(new ExchangeSourceOperator(input_or->buffer));
+    std::vector<std::string> operators = {current->name()};
+    for (size_t index = *breaker_index + 1; index > 0; --index) {
+        auto wrapped_or = WrapUnaryOperator(chain[index - 1], std::move(current));
+        if (!wrapped_or.ok()) {
+            return wrapped_or.status();
+        }
+        current = std::move(*wrapped_or);
+        operators.push_back(current->name());
+    }
+    std::unique_ptr<Operator> output(new OutputOperator(std::move(current)));
+    operators.push_back(output->name());
+    task.pipelines.push_back(MakePipeline("main", "main", "root", {input_or->pipeline_id},
+                                          std::move(operators), std::move(output)));
+    return task;
+}
+
 } // namespace
 
 absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
@@ -1639,6 +1738,16 @@ absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
     if (fast_or->rbo_result.plan != nullptr &&
         fast_or->rbo_result.plan->kind == plan::PlanNodeKind::Exchange) {
         return BuildExchangeExecutionTask(fast_or->rbo_result.plan);
+    }
+    if (!fast_or->rbo_result.pushdown_plan.has_value() ||
+        !optimizer::CanExecutePushdownPlan(*fast_or->rbo_result.pushdown_plan)) {
+        auto breaker_task_or = BuildUnaryBreakerExecutionTask(fast_or->rbo_result.plan);
+        if (!breaker_task_or.ok()) {
+            return breaker_task_or.status();
+        }
+        if (breaker_task_or->has_value()) {
+            return std::move(**breaker_task_or);
+        }
     }
 
     auto planned_or = BuildOperator(logical_plan);
@@ -1709,11 +1818,10 @@ void FailPipelineStats(const std::shared_ptr<Pipeline::Stats>& stats, const absl
 
 Driver::Driver(Pipeline pipeline) : pipeline_(std::move(pipeline)) {}
 
-absl::StatusOr<Value> Driver::Run() const {
+absl::Status Driver::RunToSink(const PageSink& sink) const {
     if (pipeline_.root == nullptr) {
         return absl::InvalidArgumentError("pipeline has no root operator");
     }
-    std::optional<Page> output;
     while (true) {
         auto page_or = pipeline_.root->NextPage();
         if (!page_or.ok()) {
@@ -1724,13 +1832,29 @@ absl::StatusOr<Value> Driver::Run() const {
             break;
         }
         AddPipelineStatsPage(pipeline_.stats, page_or->value());
-        if (!output.has_value()) {
-            output = std::move(page_or->value());
-            continue;
+        auto status = sink(std::move(page_or->value()));
+        if (!status.ok()) {
+            FailPipelineStats(pipeline_.stats, status);
+            return status;
         }
-        AppendPage(&*output, std::move(page_or->value()));
     }
     FinishPipelineStats(pipeline_.stats);
+    return absl::OkStatus();
+}
+
+absl::StatusOr<Value> Driver::Run() const {
+    std::optional<Page> output;
+    auto status = RunToSink([&](Page page) {
+        if (!output.has_value()) {
+            output = std::move(page);
+            return absl::OkStatus();
+        }
+        AppendPage(&*output, std::move(page));
+        return absl::OkStatus();
+    });
+    if (!status.ok()) {
+        return status;
+    }
     if (!output.has_value()) {
         return Value::table_stream("", {});
     }
@@ -1875,7 +1999,8 @@ absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) co
         std::string id;
         std::string role;
         size_t driver_id = 0;
-        std::future<absl::StatusOr<Value>> value;
+        bool collect_output = false;
+        std::future<absl::StatusOr<TableValue>> value;
     };
 
     std::vector<DriverTask> driver_tasks;
@@ -1900,28 +2025,53 @@ absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) co
         running_pipeline.id = item.pipeline_id;
         running_pipeline.role = item.role;
         running_pipeline.driver_id = item.driver_id;
-        running_pipeline.value = executor.Submit([driver_task = std::move(item)]() mutable {
-            return Driver(std::move(driver_task.pipeline)).Run();
+        running_pipeline.collect_output =
+            item.role == "root" || item.pipeline_id == "main" || task.pipelines.size() == 1;
+        const bool collect_output = running_pipeline.collect_output;
+        running_pipeline.value = executor.Submit([driver_task = std::move(item),
+                                                  collect_output]() mutable
+                                                     -> absl::StatusOr<TableValue> {
+            TableValue table;
+            auto status = Driver(std::move(driver_task.pipeline)).RunToSink([&](Page page) {
+                if (!collect_output) {
+                    return absl::OkStatus();
+                }
+                TableValue next = TableValueFromPage(page);
+                if (table.bucket.empty()) {
+                    table.bucket = next.bucket;
+                }
+                table.tables.insert(table.tables.end(), std::make_move_iterator(next.tables.begin()),
+                                    std::make_move_iterator(next.tables.end()));
+                table.rows.insert(table.rows.end(), std::make_move_iterator(next.rows.begin()),
+                                  std::make_move_iterator(next.rows.end()));
+                table.plan = next.plan;
+                return absl::OkStatus();
+            });
+            if (!status.ok()) {
+                return status;
+            }
+            return table;
         });
         running.push_back(std::move(running_pipeline));
     }
 
     for (auto& running_pipeline : running) {
-        auto value_or = running_pipeline.value.get();
-        if (!value_or.ok()) {
-            return value_or.status();
+        auto table_or = running_pipeline.value.get();
+        if (!table_or.ok()) {
+            return table_or.status();
         }
-        if (running_pipeline.role != "root" && running_pipeline.id != "main" &&
-            task.pipelines.size() != 1) {
+        if (!running_pipeline.collect_output) {
             continue;
         }
-        const auto& table = value_or->as_table();
         if (!output.has_value()) {
-            output = table;
+            output = std::move(*table_or);
             continue;
         }
-        output->tables.insert(output->tables.end(), table.tables.begin(), table.tables.end());
-        output->rows.insert(output->rows.end(), table.rows.begin(), table.rows.end());
+        output->tables.insert(output->tables.end(),
+                              std::make_move_iterator(table_or->tables.begin()),
+                              std::make_move_iterator(table_or->tables.end()));
+        output->rows.insert(output->rows.end(), std::make_move_iterator(table_or->rows.begin()),
+                            std::make_move_iterator(table_or->rows.end()));
     }
     if (!ran_pipeline) {
         return absl::InvalidArgumentError("execution task has no runnable pipelines");
