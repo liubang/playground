@@ -58,6 +58,8 @@ struct ConnectorSplit {
     std::optional<std::string> split_column;
     std::optional<int64_t> split_lower;
     std::optional<int64_t> split_upper;
+    double metadata_time_ms = 0.0;
+    double split_discovery_time_ms = 0.0;
     bool finished = false;
 };
 
@@ -67,6 +69,15 @@ struct ConnectorSplitStats {
     size_t rows_produced = 0;
     size_t bytes_produced = 0;
     double wall_time_ms = 0.0;
+    double metadata_time_ms = 0.0;
+    double split_discovery_time_ms = 0.0;
+    double connect_time_ms = 0.0;
+    double schema_time_ms = 0.0;
+    double sql_build_time_ms = 0.0;
+    double execute_time_ms = 0.0;
+    double read_time_ms = 0.0;
+    double decode_time_ms = 0.0;
+    double page_build_time_ms = 0.0;
     bool finished = false;
 };
 

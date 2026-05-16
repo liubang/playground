@@ -151,6 +151,20 @@ void add_page_to_split_stats(connector::ConnectorSplitStats* stats, const Page& 
     stats->bytes_produced += EstimatePageBytes(page);
 }
 
+void copy_source_profile(connector::ConnectorSplitStats* stats,
+                         const connector::ConnectorSplitStats& source) {
+    if (stats == nullptr) {
+        return;
+    }
+    stats->connect_time_ms = source.connect_time_ms;
+    stats->schema_time_ms = source.schema_time_ms;
+    stats->sql_build_time_ms = source.sql_build_time_ms;
+    stats->execute_time_ms = source.execute_time_ms;
+    stats->read_time_ms = source.read_time_ms;
+    stats->decode_time_ms = source.decode_time_ms;
+    stats->page_build_time_ms = source.page_build_time_ms;
+}
+
 bool page_row_less(const std::shared_ptr<ObjectValue>& lhs,
                    const std::shared_ptr<ObjectValue>& rhs,
                    const std::vector<plan::SortKey>& keys) {
@@ -886,6 +900,8 @@ public:
                 page_source_ = std::move(*page_source_or);
                 current_split_stats_ = connector::ConnectorSplitStats{
                     .split_id = splits_[next_split_].split_id,
+                    .metadata_time_ms = splits_[next_split_].metadata_time_ms,
+                    .split_discovery_time_ms = splits_[next_split_].split_discovery_time_ms,
                 };
                 current_split_started_ = Clock::now();
                 ++next_split_;
@@ -899,6 +915,7 @@ public:
                 if (next_split_ > 0) {
                     splits_[next_split_ - 1].finished = page_source_->Finished();
                     if (current_split_stats_.has_value()) {
+                        copy_source_profile(&*current_split_stats_, page_source_->Stats());
                         current_split_stats_->finished = page_source_->Finished();
                         current_split_stats_->wall_time_ms = elapsed_ms(current_split_started_);
                         split_stats_.push_back(*current_split_stats_);
@@ -912,6 +929,7 @@ public:
             if (!status.ok()) {
                 return status;
             }
+            copy_source_profile(&*current_split_stats_, page_source_->Stats());
             add_page_to_split_stats(&*current_split_stats_, page_or->value());
             return page_or;
         }
@@ -979,6 +997,8 @@ public:
             page_source_ = std::move(*page_source_or);
             current_split_stats_ = connector::ConnectorSplitStats{
                 .split_id = split_.split_id,
+                .metadata_time_ms = split_.metadata_time_ms,
+                .split_discovery_time_ms = split_.split_discovery_time_ms,
             };
             current_split_started_ = Clock::now();
             initialized_ = true;
@@ -990,6 +1010,7 @@ public:
         if (!page_or->has_value()) {
             split_.finished = page_source_->Finished();
             if (current_split_stats_.has_value()) {
+                copy_source_profile(&*current_split_stats_, page_source_->Stats());
                 current_split_stats_->finished = page_source_->Finished();
                 current_split_stats_->wall_time_ms = elapsed_ms(current_split_started_);
                 split_stats_ = *current_split_stats_;
@@ -1001,6 +1022,7 @@ public:
         if (!status.ok()) {
             return status;
         }
+        copy_source_profile(&*current_split_stats_, page_source_->Stats());
         add_page_to_split_stats(&*current_split_stats_, page_or->value());
         return page_or;
     }
@@ -2614,6 +2636,15 @@ std::string FormatSplitStats(const std::vector<connector::ConnectorSplitStats>& 
         out << "{id=" << stats[i].split_id << ", pages=" << stats[i].pages_produced
             << ", rows=" << stats[i].rows_produced << ", bytes=" << stats[i].bytes_produced
             << ", wall_ms=" << stats[i].wall_time_ms
+            << ", metadata_ms=" << stats[i].metadata_time_ms
+            << ", split_ms=" << stats[i].split_discovery_time_ms
+            << ", connect_ms=" << stats[i].connect_time_ms
+            << ", schema_ms=" << stats[i].schema_time_ms
+            << ", sql_ms=" << stats[i].sql_build_time_ms
+            << ", execute_ms=" << stats[i].execute_time_ms
+            << ", read_ms=" << stats[i].read_time_ms
+            << ", decode_ms=" << stats[i].decode_time_ms
+            << ", page_ms=" << stats[i].page_build_time_ms
             << ", finished=" << (stats[i].finished ? "true" : "false") << "}";
     }
     out << "]";

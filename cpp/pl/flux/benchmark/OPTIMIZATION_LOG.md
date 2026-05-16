@@ -276,3 +276,22 @@ connector split、page source 或 scheduler 时，都能用相同 DSN 和 scenar
 
 具体命令、表结构、采样数字和复现方式统一记录在
 [benchmark/README.md](/Volumes/workspace/liubang/playground/cpp/pl/flux/benchmark/README.md)。
+
+## 2026-05-16：MySQL scan 热路径 profile 与 fixture 自动化
+
+这一轮把上次留下的 MySQL scan 性能工作继续做厚：
+
+- MySQL connector metadata/statistics、primary key discovery、range split extent 增加进程内缓存，
+  避免同一进程内重复 schema/count/min/max 固定开销。
+- MySQL page source 的非 aggregate 路径直接解码到 `PageChunk` / `ColumnVector`，不再先构造整页
+  `ObjectValue` rows。
+- split profile 从 bytes/wall time 扩展为 metadata、split discovery、connect、schema、
+  SQL build、execute、read、decode、page build 分段耗时。
+- `sqlite_scan_benchmark` / `mysql_scan_benchmark` 输出同一组 profile 字段，方便横向看 SQLite
+  本地文件扫描与远程 MySQL 协议扫描的差异。
+- `run_connector_benchmarks.py` 支持 `--prepare-mysql-benchmark-table`，可以按 DSN 自动 drop/create
+  同结构 MySQL 压测表，不再依赖手写 SQL fixture。
+
+这轮的目标不是把 MySQL 和本地 SQLite 跑成同一个数字，而是让我们能定位慢在哪里。下一轮如果继续
+优化 scan，优先看连接复用、prepared statement 缓存、page size/read batch 参数化，以及更大规模
+数据下 split count 与远程服务吞吐之间的平衡。
