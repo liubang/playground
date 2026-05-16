@@ -26,6 +26,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace pl::flux::connector {
 
@@ -69,6 +70,17 @@ private:
     SourceSpec spec_;
 };
 
+class MySQLSplitManager final : public ConnectorSplitManager {
+public:
+    explicit MySQLSplitManager(size_t target_split_count = 0);
+
+    [[nodiscard]] absl::StatusOr<std::vector<ConnectorSplit>> GetSplits(
+        const TableHandle& table, const ScanRequest& request) const override;
+
+private:
+    size_t target_split_count_ = 8;
+};
+
 class MySQLPageSourceProvider final : public ConnectorPageSourceProvider {
 public:
     explicit MySQLPageSourceProvider(size_t rows_per_page = 1024);
@@ -86,6 +98,9 @@ public:
                     std::string table,
                     ScanRequest request,
                     size_t rows_per_page,
+                    std::optional<std::string> split_column = std::nullopt,
+                    std::optional<int64_t> split_lower = std::nullopt,
+                    std::optional<int64_t> split_upper = std::nullopt,
                     int64_t split_id = 0);
 
     absl::Status Initialize();

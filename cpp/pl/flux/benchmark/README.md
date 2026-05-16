@@ -90,12 +90,15 @@ python3 cpp/pl/flux/benchmark/run_benchmarks.py \
 ```
 
 SQLite connector 有独立的真实 scan benchmark target。它会在 `/tmp` 构造 SQLite 数据库，
-插入指定行数，执行 `sqlite scan -> filter(usage >= 50) -> project(host, usage)`，并输出
-drivers、pages、blocking 和吞吐：
+插入指定行数，执行真实 connector query，并输出 scenario、drivers、pages、blocking 和吞吐。
+默认 scenario 是 `filter_project`，也可以显式跑 `scan`、`wide_filter`、`topn`：
 
 ```bash
 bazel build //cpp/pl/flux/benchmark:sqlite_scan_benchmark
 bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000
+bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_scan.db scan
+bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_wide.db wide_filter 80
+bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_topn.db topn
 ```
 
 ## 数据形态
@@ -180,8 +183,8 @@ SQLite multi-split scan 当前实测：
 
 | Case | 输入规模 | Drivers | 输出行数 | Pages | 时间 | 吞吐 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `sqlite_scan_benchmark` | 500k rows | 8 | 250k | 248 | 0.157s | 3.18M rows/s |
-| `sqlite_scan_benchmark` | 1M rows | 8 | 500k | 496 | 0.311s | 3.21M rows/s |
+| `sqlite_scan_benchmark filter_project` | 500k rows | 8 | 250k | 248 | 0.157s | 3.18M rows/s |
+| `sqlite_scan_benchmark filter_project` | 1M rows | 8 | 500k | 496 | 0.311s | 3.21M rows/s |
 
 ## 如何使用
 

@@ -55,6 +55,9 @@ struct ConnectorSplit {
     std::optional<size_t> row_limit;
     std::optional<int64_t> rowid_lower;
     std::optional<int64_t> rowid_upper;
+    std::optional<std::string> split_column;
+    std::optional<int64_t> split_lower;
+    std::optional<int64_t> split_upper;
     bool finished = false;
 };
 
