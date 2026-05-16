@@ -6,6 +6,9 @@ on:
       - main
     paths:
       - "MODULE.bazel"
+      - "MODULE.bazel.lock"
+      - ".bazelrc"
+      - "bazel/**"
       - "cpp/**"
       - ".github/workflows/build_cpp.yml"
   workflow_dispatch:
@@ -20,8 +23,6 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
       - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
@@ -37,25 +38,16 @@ jobs:
           key: ${{ runner.os }}-brew-llvm-libomp-${{ hashFiles('.github/workflows/build_cpp.yml') }}
           restore-keys: |
             ${{ runner.os }}-brew-llvm-libomp-
-      - run: |
-          brew install llvm libomp pkg-config
+      - run: brew install llvm libomp pkg-config
       - name: run test
         run: |
           bazel test \
             --config=release \
+            --config=ci \
             //cpp/...
-  test-linux:
-    strategy:
-      matrix:
-        compiler:
-          [
-            { name: gcc, flag: --action_env=CC=gcc-14 --linkopt=-fuse-ld=gold },
-            {
-              name: clang,
-              flag: --action_env=CC=clang-18 --cxxopt=-stdlib=libstdc++ --cxxopt=-Wno-error=unused-but-set-variable --cxxopt=-Wno-error=unused-but-set-parameter --linkopt=-stdlib=libstdc++,
-            },
-          ]
-    name: test-linux
+
+  test-linux-clang:
+    name: test-linux-clang
     runs-on: ubuntu-24.04
     services:
       mysql:
@@ -74,16 +66,14 @@ jobs:
           --health-retries=10
     steps:
       - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
       - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
           repository-cache: true
-          disk-cache: ${{ github.workflow }}-${{ runner.os }}-${{ matrix.compiler.name }}
+          disk-cache: ${{ github.workflow }}-${{ runner.os }}-clang
       - run: |
           sudo apt-get update
-          sudo apt-get install -y nasm libomp-dev lcov default-mysql-client
+          sudo apt-get install -y nasm libomp-dev default-mysql-client
       - name: seed MySQL fixture
         run: |
           mysql \
@@ -97,13 +87,19 @@ jobs:
         run: |
           bazel test \
             --config=release \
-            ${{ matrix.compiler.flag }} \
+            --config=ci \
+            --action_env=CC=clang-18 \
+            --cxxopt=-stdlib=libstdc++ \
+            --cxxopt=-Wno-error=unused-but-set-variable \
+            --cxxopt=-Wno-error=unused-but-set-parameter \
+            --linkopt=-stdlib=libstdc++ \
             --test_env=FLUX_MYSQL_TEST_DSN=mysql://flux:flux@127.0.0.1:3306/flux_test \
             -- //cpp/... -//cpp/pl/recall/embedding_server/...
-  coverage:
-    name: coverage
+
+  # gcc job: run coverage (which also executes all tests), then deploy report
+  coverage-linux-gcc:
+    name: coverage-linux-gcc
     runs-on: ubuntu-24.04
-    needs: [test-macos, test-linux]
     services:
       mysql:
         image: mysql:8.4
@@ -121,13 +117,11 @@ jobs:
           --health-retries=10
     steps:
       - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
       - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
           repository-cache: true
-          disk-cache: ${{ github.workflow }}-${{ runner.os }}-gcc-coverage
+          disk-cache: ${{ github.workflow }}-${{ runner.os }}-gcc
       - run: |
           sudo apt-get update
           sudo apt-get install -y nasm libomp-dev lcov default-mysql-client
@@ -144,27 +138,27 @@ jobs:
         run: |
           bazel coverage \
             --config=release \
+            --config=ci \
             --action_env=CC=gcc-14 \
+            --linkopt=-fuse-ld=gold \
             --test_env=FLUX_MYSQL_TEST_DSN=mysql://flux:flux@127.0.0.1:3306/flux_test \
-            --verbose_failures \
             --combined_report=lcov \
             --instrumentation_filter="//cpp/pl[/:]" \
             -- //cpp/... -//cpp/pl/recall/embedding_server/...
-          ls -lh ./bazel-out/_coverage/_coverage_report.dat
-          genhtml --ignore-errors negative --output coverage-cpp ./bazel-out/_coverage/_coverage_report.dat
-          cp -r ./registry ./coverage-cpp/
-      - name: generate coverage badge
+      - name: generate html report
         run: |
-          COVERAGE=$(lcov --summary ./bazel-out/_coverage/_coverage_report.dat 2>&1 | grep "lines" | awk '{print $2}' | tr -d '%')
-          if [ "$(echo "$COVERAGE >= 80" | bc)" -eq 1 ]; then
-            COLOR="brightgreen"
-          elif [ "$(echo "$COVERAGE >= 60" | bc)" -eq 1 ]; then
-            COLOR="yellow"
-          else
-            COLOR="red"
-          fi
-          echo "{\"schemaVersion\":1,\"label\":\"coverage-cpp\",\"message\":\"${COVERAGE}%\",\"color\":\"${COLOR}\"}" > coverage-cpp/badge.json
-      - name: Deploy 🚀
+          lcov --remove ./bazel-out/_coverage/_coverage_report.dat \
+            'external/*' \
+            --output-file ./bazel-out/_coverage/_coverage_report.dat \
+            --ignore-errors unused
+          genhtml --ignore-errors negative --output coverage-cpp ./bazel-out/_coverage/_coverage_report.dat
+      - name: generate coverage badge
+        uses: ./.github/actions/coverage-badge
+        with:
+          lcov-file: ./bazel-out/_coverage/_coverage_report.dat
+          output-dir: coverage-cpp
+          label: coverage-cpp
+      - name: Deploy
         uses: peaceiris/actions-gh-pages@v4
         if: ${{ github.ref == 'refs/heads/main' }}
         with:
