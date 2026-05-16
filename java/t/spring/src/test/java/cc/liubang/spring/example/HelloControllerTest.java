@@ -1,4 +1,4 @@
-// Copyright (c) 2024 The Authors. All rights reserved.
+// Copyright (c) 2026 The Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
+// Created: 2026/05/16 21:43
 
 package cc.liubang.spring.example;
 
@@ -37,13 +38,16 @@ class HelloControllerTest {
     void testHello() throws Exception {
         mockMvc.perform(get("/api/hello"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.message").value("Hello, Spring Boot with Bazel!"));
+            .andExpect(jsonPath("$.code").value(200))
+            .andExpect(jsonPath("$.data.message").value("Hello, Spring Boot with Bazel!"))
+            .andExpect(jsonPath("$.timestamp").exists());
     }
 
     @Test
     void testHelloName() throws Exception {
         mockMvc.perform(get("/api/hello/Bazel"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.message").value("Hello, Bazel!"));
+            .andExpect(jsonPath("$.code").value(200))
+            .andExpect(jsonPath("$.data.message").value("Hello, Bazel!"));
     }
 }
