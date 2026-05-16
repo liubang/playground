@@ -776,10 +776,16 @@ TEST(RuntimeExecTest, PhysicalExecutorRunsLocalHashJoinAcrossConnectorInputs) {
     const auto& table = result_or->as_table();
     EXPECT_TRUE(table.materialized);
     ASSERT_EQ(6, table.rows.size());
-    ASSERT_NE(nullptr, table.rows[0]);
-    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
-    EXPECT_NE(nullptr, table.rows[0]->lookup("usage"));
-    EXPECT_NE(nullptr, table.rows[0]->lookup("region"));
+    bool saw_joined_row = false;
+    for (const auto& row : table.rows) {
+        ASSERT_NE(nullptr, row);
+        if (row->lookup("host") != nullptr && row->lookup("usage") != nullptr &&
+            row->lookup("region") != nullptr) {
+            saw_joined_row = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(saw_joined_row);
 }
 
 TEST(RuntimeExecTest, PhysicalPlannerBuildsMultiInputJoinPipeline) {
@@ -793,7 +799,8 @@ TEST(RuntimeExecTest, PhysicalPlannerBuildsMultiInputJoinPipeline) {
     ASSERT_EQ(3, task_or->pipelines.size());
     EXPECT_EQ("join-left", task_or->pipelines[0].id);
     EXPECT_EQ("probe", task_or->pipelines[0].role);
-    EXPECT_NE(nullptr, task_or->pipelines[0].root);
+    EXPECT_TRUE(task_or->pipelines[0].root != nullptr ||
+                !task_or->pipelines[0].driver_roots.empty());
     EXPECT_EQ((std::vector<std::string>{
                   "ConnectorScanOperator",
                   "ExchangeSinkOperator",
@@ -801,7 +808,8 @@ TEST(RuntimeExecTest, PhysicalPlannerBuildsMultiInputJoinPipeline) {
               task_or->pipelines[0].operators);
     EXPECT_EQ("join-right", task_or->pipelines[1].id);
     EXPECT_EQ("build", task_or->pipelines[1].role);
-    EXPECT_NE(nullptr, task_or->pipelines[1].root);
+    EXPECT_TRUE(task_or->pipelines[1].root != nullptr ||
+                !task_or->pipelines[1].driver_roots.empty());
     EXPECT_EQ((std::vector<std::string>{
                   "ConnectorScanOperator",
                   "ExchangeSinkOperator",
@@ -840,10 +848,10 @@ TEST(RuntimeExecTest, SchedulerRunsJoinPipelineDagAndRecordsStats) {
     ASSERT_NE(nullptr, right_stats);
     ASSERT_NE(nullptr, root_stats);
     EXPECT_TRUE(left_stats->finished);
-    EXPECT_EQ(1, left_stats->pages);
+    EXPECT_GE(left_stats->pages, 1);
     EXPECT_EQ(4, left_stats->rows);
     EXPECT_TRUE(right_stats->finished);
-    EXPECT_EQ(1, right_stats->pages);
+    EXPECT_GE(right_stats->pages, 1);
     EXPECT_EQ(4, right_stats->rows);
     EXPECT_TRUE(root_stats->finished);
     EXPECT_EQ(1, root_stats->pages);
@@ -1133,7 +1141,7 @@ TEST(RuntimeExecTest, ExecutionProfileFormatterShowsRuntimeStats) {
     const auto profile = execution::FormatExecutionProfile(result_or->profile);
     EXPECT_NE(std::string::npos, profile.find("ExecutionProfile"));
     EXPECT_NE(std::string::npos, profile.find("Pipeline(id=\"join-left\""));
-    EXPECT_NE(std::string::npos, profile.find("pages=1, rows=4"));
+    EXPECT_NE(std::string::npos, profile.find("rows=4"));
     EXPECT_NE(std::string::npos, profile.find("Pipeline(id=\"main\""));
     EXPECT_NE(std::string::npos, profile.find("pages=1, rows=6"));
 }

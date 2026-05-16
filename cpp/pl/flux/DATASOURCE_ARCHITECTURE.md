@@ -1009,8 +1009,7 @@ split-level driver roots、streaming exchange，以及线程安全 runtime stats
 - `ExchangeBuffer` 改成 mutex + condition_variable 的 streaming queue；producer 写 page，
   consumer 可同时阻塞式读取 page，finish/error 会唤醒等待方。
 - connector full-pushdown pipeline 已能在 split 数大于 1 时生成多个
-  `ConnectorScanOperator` driver roots；SQLite 当前仍是 single split，但 runtime 边界已可承接
-  多 split connector。
+  `ConnectorScanOperator` driver roots；Phase 15 后 SQLite streaming scan 也已接入 multi split。
 - pipeline stats 写入加锁，多个 driver 会聚合同一 pipeline 的 pages/rows/error/finish 状态。
 
 验收：
@@ -1055,6 +1054,39 @@ ConnectorScanOperator -> DriverTask -> TaskExecutor` 全链路 streaming page，
   8 split、约 5.0M rows/s。
 - `ExecutionProfile` 能显示 pipeline 是否 blocking，后续可直接定位是否进入高吞吐 streaming
   路径。
+
+### Phase 15: SQLite Multi-Split Scan and Query Throughput Baseline
+
+状态：已完成 SQLite 真实 connector 的并行 streaming scan。SQLite 不再只作为 single split
+SQL page source：在不含全局 order/limit/offset/aggregate/distinct/group 的 scan/filter/project/range
+路径上，split manager 会按 SQLite `rowid` 区间拆成多个 split，并展开为多个
+`ConnectorScanOperator` driver root。含全局语义的查询保持 single split，避免跨 split 后改变
+排序、限制或聚合语义。
+
+目标：把高效查询扫描从 fixture 推进到真实本地数据库：SQLite page source 直接产列式
+`PageChunk`，执行层常见 `range/filter/project` 保持列式处理，exchange queue 有 page/byte
+预算背压，benchmark 有单独 target 能构造真实大表并输出吞吐。
+
+已落地：
+
+- `SQLiteSplitManager` 基于 `MIN(rowid), MAX(rowid), COUNT(*)` 做保守 split discovery；
+  不支持 rowid 的表或需要全局 SQL 语义的请求自动回退 single split。
+- `SQLitePageSource` 支持 split rowid range，并在非 aggregate 路径直接填充列式
+  `PageChunk`，不再先构造整页 `ObjectValue` rows。
+- 执行层 `range/filter` 直接从 `PageChunk` 读取列值判断，避免 hot path 上逐行
+  `RowFromPageChunk`。
+- `ExchangeBuffer` 增加 buffered page/byte budget，producer 在 queue 满或预算不足时阻塞，
+  单个超大 page 允许通过，避免死锁。
+- 新增 `//cpp/pl/flux/benchmark:sqlite_scan_benchmark`，可构造真实 SQLite 数据库并执行
+  `sqlite scan -> filter -> project`，输出 rows、drivers、pages、blocking、seconds 和 rows/s。
+
+验收：
+
+- SQLite connector 单测覆盖 rowid multi-split 和 page source 汇总行数。
+- runtime join/profile 测试已适配 multi-driver producer pipeline，不再假设 SQLite scan 单页单 root。
+- 本机真实 SQLite scan benchmark：
+  - 500k rows：8 drivers，250k output rows，248 pages，non-blocking，约 3.18M rows/s。
+  - 1M rows：8 drivers，500k output rows，496 pages，non-blocking，约 3.21M rows/s。
 
 ## Test Plan
 
