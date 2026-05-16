@@ -72,8 +72,13 @@ build --tool_java_runtime_version=21
 # test in Release mode
 test -c opt
 # gtest
-test --test_output=all 
-test --action_env="GTEST_COLOR=1" 
+test --test_output=all
+test --action_env="GTEST_COLOR=1"
 test --action_env="GTEST_BREAK_ON_FAILURE=1"
+test --nojava_header_compilation
+
+# CI config: allow test caching for faster builds
+test:ci --cache_test_results
+
+# local dev: always re-run tests (override in .bazelrc.user if needed)
 test --nocache_test_results
-test --nojava_header_compilation 
