@@ -321,3 +321,34 @@ allocation 优化。
 - MySQL 5M profile 中 `read_ms=6300.0`、`decode_ms=853.7`、`connect_ms=255.1`、
   `page_ms=1.64`。大表下 Page 构造已经不是主因，后续优化应更多看远程读取、协议 decode 和
   split discovery。
+
+## 2026-05-17：MySQL prepared scan 与 split discovery 收口
+
+这一轮把上次明确留下的 prepared statement 工作补完，继续只围绕高效 scan 主干：
+
+- 通用 SQL builder 增加 `ParameterizedSql` 输出，where/time range/predicate/limit/offset 都生成
+  placeholder + bind vector；literal SQL builder 仍保留给已有 SQLite 参数化实现和兼容入口。
+- MySQL page source 默认走 server-side prepared statement，并把 statement cache 放在单个 pooled
+  connection 维度，保证 statement 生命周期和 MySQL server session 对齐。
+- MySQL runtime pool 边界收窄到 page source 数据面；metadata / split discovery 继续依靠进程内
+  schema/statistics/extent cache 和短连接，避免控制面短查询污染 streaming page source 的连接状态。
+- prepared statement cache 支持容量上限，驱逐时主动 close server-side statement，避免长期压测时
+  积累服务端 statement handle。
+- MySQL split discovery 不再为每次规划先查 `INFORMATION_SCHEMA.KEY_COLUMN_USAGE`；它优先使用
+  schema 里的 `id` / `seq` / integer columns，再查 split extent。对 benchmark 表这类
+  `seq primary key` 形态，少掉一次远程 metadata query。
+- benchmark runner 增加 prepared on/off 和 prepared cache size 参数，用同一张大表可以直接跑
+  literal SQL、prepared no-cache、prepared cached 的对比矩阵。
+
+这轮之后，MySQL scan 主干已经具备：connection pool、split extent cache、parameterized SQL、
+prepared statement cache、page source streaming、profile 分段耗时。下一步性能判断应以 benchmark
+矩阵为准：如果 prepared 降低 `execute_ms/sql_build_ms` 但总耗时仍被 `read_ms/decode_ms` 主导，就继续
+看协议读取批量、Value/string 分配和下游 operator 的列式路径。
+
+本轮确认 benchmark：
+
+- 5M `filter_project`，8 splits，rows/page=2048，prepared on：samples
+  `1.1746s / 1.4447s / 1.2069s`，median `1.2069s`，输出 `2.5M` rows。
+- 同表同查询 prepared off：samples `1.2397s / 1.2799s / 1.4307s`，median `1.2799s`。
+- 结论：prepared on 在这组远程 MySQL 测试里略好，但总耗时仍主要由远程 `read_ms` 和 decode 主导；
+  prepared 不是主要瓶颈，下一步更值得看 read batch / protocol decode / Value allocation。

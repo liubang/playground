@@ -1117,11 +1117,17 @@ single split，避免跨 split 后改变排序、限制或聚合语义。
 - `MySQLPageSource` 支持 split column range，把 split predicate 合入 page source SQL，
   对 executor 暴露的仍是标准 `ConnectorPageSource`；非 aggregate 路径直接填充列式
   `PageChunk`，避免先构造整页 `ObjectValue` rows。
-- MySQL metadata/statistics、primary key discovery 和 split extent 有进程内缓存；多次 benchmark
+- MySQL metadata/statistics 和 split extent 有进程内缓存；多次 benchmark
   或同一进程重复规划时不再反复打 schema/count/min/max 固定开销。
 - SQL connector pushdown 有统一 contract：在 SQL 生成前集中校验 projection、predicate、
-  time range、sort、distinct、group/aggregate、limit/offset 和 schema column，SQLite 的
-  参数化 SQL 与 MySQL 的 dialect SQL 共用同一套语义边界。
+  time range、sort、distinct、group/aggregate、limit/offset 和 schema column；通用 SQL builder
+  同时支持 literal SQL 和 `ParameterizedSql`，MySQL page source 默认走 server-side prepared
+  statement，SQLite 继续使用已有的本地参数绑定。
+- MySQL prepared statement cache 绑定在 pooled connection 上，容量可控且驱逐时会 close server-side
+  statement；split discovery 优先使用 schema 中的 `id` / `seq` / integer columns，避免 benchmark
+  热路径每次先查 `INFORMATION_SCHEMA`。
+- MySQL runtime pool 当前只服务 page source 数据面；metadata / split discovery 走短连接和进程内
+  cache，避免短查询连接状态污染 streaming read 和 prepared statement cache。
 - 执行层 `range/filter/project` 直接从 `PageChunk` 读取列值，filter 会预解析列索引和 literal，
   避免 hot path 上逐行 `RowFromPageChunk`。
 - root `ExchangeOperator` 不再 collect 完整输入后一次性输出；gather/repartition 都逐页消费
@@ -1136,6 +1142,8 @@ single split，避免跨 split 后改变排序、限制或聚合语义。
   pages、split bytes、split wall time、profile 分段耗时、blocking、seconds 和 rows/s。
 - `run_connector_benchmarks.py --prepare-mysql-benchmark-table` 可按 MySQL DSN 自动重建
   `flux_bench_cpu` 这类同结构大表，避免手写 SQL 准备 benchmark fixture。
+- `run_connector_benchmarks.py` 可切换 MySQL prepared on/off、prepared cache size、target splits、
+  rows per page 和 connection pool size，用同一张大表沉淀 scan 性能矩阵。
 
 验收：
 
@@ -1156,6 +1164,11 @@ single split，避免跨 split 后改变排序、限制或聚合语义。
   - 结论：同样 `filter_project` 查询下，远程 MySQL 端到端仍明显慢于本地 SQLite；新的分段 profile
     显示主要成本在远程 read、协议 decode、execution start 和 split discovery，Page build 不再是
     首要瓶颈。
+- MySQL prepared statement 矩阵：
+  - 5M rows，8 drivers，rows/page=2048，prepared on median `1.2069s`。
+  - 同表同查询，prepared off median `1.2799s`。
+  - 结论：prepared 默认开启是合理的，但这组远程查询的主瓶颈仍是 read/decode，而不是 SQL build 或
+    prepare/execute。
 
 ## Test Plan
 

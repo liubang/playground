@@ -54,6 +54,19 @@ public:
     [[nodiscard]] virtual std::string UnboundedLimit() const = 0;
 };
 
+/// A bound SQL parameter plus whether string/time values should be normalized to
+/// the backend's timestamp representation before binding.
+struct SqlParam {
+    Value value;
+    bool normalize_time = false;
+};
+
+/// Parameterized SQL text and the values to bind to each placeholder.
+struct ParameterizedSql {
+    std::string sql;
+    std::vector<SqlParam> params;
+};
+
 /// Common helper: convert a PredicateOp to its SQL operator string.
 std::string PredicateOpSql(PredicateOp op);
 
@@ -85,6 +98,14 @@ absl::Status BuildWhereClause(std::string* sql,
                               const std::unordered_set<std::string>& schema_columns,
                               const SqlDialect& dialect);
 
+/// Build a parameterized WHERE clause. Literal values are appended to `params`
+/// in placeholder order.
+absl::Status BuildParameterizedWhereClause(std::string* sql,
+                                           const ScanRequest& request,
+                                           const std::unordered_set<std::string>& schema_columns,
+                                           const SqlDialect& dialect,
+                                           std::vector<SqlParam>* params);
+
 /// Build the GROUP BY clause based on the scan request.
 /// Appends to `sql`.
 void BuildGroupByClause(std::string* sql, const ScanRequest& request, const SqlDialect& dialect);
@@ -102,5 +123,13 @@ absl::StatusOr<std::string> BuildScanSql(const std::string& base_query,
                                          const ScanRequest& request,
                                          const TableSchema& schema,
                                          const SqlDialect& dialect);
+
+/// Build a complete parameterized scan SQL from a base query and request.
+/// Connectors should prefer this path for physical execution when the backend
+/// supports prepared statements.
+absl::StatusOr<ParameterizedSql> BuildParameterizedScanSql(const std::string& base_query,
+                                                           const ScanRequest& request,
+                                                           const TableSchema& schema,
+                                                           const SqlDialect& dialect);
 
 } // namespace pl::flux::connector
