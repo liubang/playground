@@ -295,3 +295,29 @@ connector split、page source 或 scheduler 时，都能用相同 DSN 和 scenar
 这轮的目标不是把 MySQL 和本地 SQLite 跑成同一个数字，而是让我们能定位慢在哪里。下一轮如果继续
 优化 scan，优先看连接复用、prepared statement 缓存、page size/read batch 参数化，以及更大规模
 数据下 split count 与远程服务吞吐之间的平衡。
+
+## 2026-05-17：MySQL connection pool 与 scan 参数化
+
+这一轮继续补 MySQL scan 主干的固定成本：
+
+- 新增 `MySQLConnectionPool` 独立模块；runtime 创建 pool 后，metadata、split manager 和 page source
+  共用同一组 lease。page source 在 result stream 完成后归还连接，读失败时标记连接不可复用。
+- MySQL runtime 参数化：`target_split_count`、`rows_per_page`、`max_idle_connections`、
+  `split_cache_max_entries`、`split_cache_ttl_ms` 都可以通过 benchmark runner 参数或环境变量控制。
+- split extent cache 从无限 map 改为带 TTL/容量策略；TTL 为 `0` 时只按容量失效。
+- benchmark runner 暴露 MySQL 调优参数，方便在 100k/1M/5M/10M 数据集上固定口径复验。
+- prepared statement 暂不进入实现：当前 SQL builder 输出的是带 literal 的 dialect SQL，每个 split
+  range 都会改变 SQL text。真正要做 statement cache，应先把 SQL builder 升级为 SQL text + bind
+  vector，再在 connection pool 的单连接维度缓存 prepared statement。
+
+这轮之后，MySQL scan 的下一层瓶颈应继续通过 profile 看：如果 `connect_ms` 降下来而 `read_ms` /
+`execute_ms` 仍高，优先看 server/network/read batch；如果 `decode_ms` 抬头，再继续做 Value/string
+allocation 优化。
+
+本轮确认 benchmark：
+
+- 1M `filter_project`：SQLite median `0.0620s`；MySQL remote samples `0.2068s / 0.2394s / 0.3377s`。
+- 5M `filter_project`：SQLite `0.2712s`；MySQL remote `1.2079s`。
+- MySQL 5M profile 中 `read_ms=6300.0`、`decode_ms=853.7`、`connect_ms=255.1`、
+  `page_ms=1.64`。大表下 Page 构造已经不是主因，后续优化应更多看远程读取、协议 decode 和
+  split discovery。
