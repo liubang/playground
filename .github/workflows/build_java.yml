@@ -47,7 +47,7 @@ jobs:
           lcov --remove ./bazel-out/_coverage/_coverage_report.dat \
             'external/*' \
             --output-file /tmp/coverage_filtered.dat \
-            --ignore-errors unused
+            --ignore-errors unused,negative
           genhtml --ignore-errors negative --output coverage-java /tmp/coverage_filtered.dat
 
       - name: generate coverage badge
