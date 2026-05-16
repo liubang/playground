@@ -26,6 +26,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace pl::flux::connector {
 
@@ -60,12 +61,25 @@ private:
     SourceSpec spec_;
 };
 
+class SQLiteSplitManager final : public ConnectorSplitManager {
+public:
+    explicit SQLiteSplitManager(size_t target_split_count = 0);
+
+    [[nodiscard]] absl::StatusOr<std::vector<ConnectorSplit>> GetSplits(
+        const TableHandle& table, const ScanRequest& request) const override;
+
+private:
+    size_t target_split_count_ = 0;
+};
+
 class SQLitePageSource final : public ConnectorPageSource {
 public:
     SQLitePageSource(std::string dsn,
                      std::string table,
                      ScanRequest request,
                      size_t rows_per_page,
+                     std::optional<int64_t> rowid_lower = std::nullopt,
+                     std::optional<int64_t> rowid_upper = std::nullopt,
                      int64_t split_id = 0);
 
     absl::Status Initialize();

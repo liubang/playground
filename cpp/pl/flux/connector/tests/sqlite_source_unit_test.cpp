@@ -109,6 +109,38 @@ TEST(SQLiteSourceTest, RuntimeMetadataSplitAndPageSourceScansTable) {
     EXPECT_FALSE(done_or->has_value());
 }
 
+TEST(SQLiteSourceTest, RuntimeSplitManagerUsesRowidRangesForStreamingScan) {
+    SourceSpec spec{.source = "sqlite", .driver = "sqlite", .dsn = kMetricsDb, .table = "cpu"};
+    SQLiteConnectorMetadata metadata(spec);
+    auto handle_or = metadata.GetTableHandle(spec);
+    ASSERT_TRUE(handle_or.ok()) << handle_or.status();
+
+    SQLiteSplitManager split_manager(4);
+    ScanRequest request;
+    request.columns = {"host", "usage"};
+    auto splits_or = split_manager.GetSplits(*handle_or, request);
+    ASSERT_TRUE(splits_or.ok()) << splits_or.status();
+    ASSERT_GT(splits_or->size(), 1);
+    EXPECT_TRUE(splits_or->front().rowid_lower.has_value());
+    EXPECT_TRUE(splits_or->front().rowid_upper.has_value());
+
+    SQLitePageSourceProvider provider(2);
+    size_t rows = 0;
+    for (const auto& split : *splits_or) {
+        auto source_or = provider.CreatePageSource(split);
+        ASSERT_TRUE(source_or.ok()) << source_or.status();
+        while (true) {
+            auto page_or = (*source_or)->NextPage();
+            ASSERT_TRUE(page_or.ok()) << page_or.status();
+            if (!page_or->has_value()) {
+                break;
+            }
+            rows += page_or->value().row_count();
+        }
+    }
+    EXPECT_EQ(4, rows);
+}
+
 TEST(SQLiteSourceTest, RuntimePageSourceEmitsSingleEmptyPage) {
     SourceSpec spec{.source = "sqlite", .driver = "sqlite", .dsn = kMetricsDb, .table = "cpu"};
     SQLiteConnectorMetadata metadata(spec);
