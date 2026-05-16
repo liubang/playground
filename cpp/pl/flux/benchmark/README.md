@@ -101,6 +101,32 @@ bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_wide.db 
 bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_topn.db topn
 ```
 
+MySQL connector 也有独立 scan benchmark target，用真实 MySQL 表验证 range split、
+streaming page sink 和两阶段 Top-N。它默认读取 `FLUX_MYSQL_TEST_DSN`，表名默认 `cpu`，
+scenario 默认 `filter_project`，也可以显式跑 `scan`、`wide_filter`、`topn`：
+
+```bash
+bazel build //cpp/pl/flux/benchmark:mysql_scan_benchmark
+FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
+  bazel-bin/cpp/pl/flux/benchmark/mysql_scan_benchmark
+bazel-bin/cpp/pl/flux/benchmark/mysql_scan_benchmark \
+  'mysql://flux:flux@192.168.50.31:3306/testdb' cpu topn
+```
+
+如果要做同机多轮对比，用 connector benchmark runner 统一跑 repeat samples。它会输出
+每个 scenario 的 `samples_s`、`median_s`、`mean_s`、`min_s`、`max_s`，并保留最后一轮的
+drivers/output rows：
+
+```bash
+bazel build //cpp/pl/flux/benchmark:sqlite_scan_benchmark \
+  //cpp/pl/flux/benchmark:mysql_scan_benchmark
+python3 cpp/pl/flux/benchmark/run_connector_benchmarks.py \
+  --connector sqlite --sqlite-rows 1000000 --repeat 3
+FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
+  python3 cpp/pl/flux/benchmark/run_connector_benchmarks.py \
+    --connector mysql --repeat 3
+```
+
 ## 数据形态
 
 生成的基准输入默认位于 `/tmp/flux_bench`：

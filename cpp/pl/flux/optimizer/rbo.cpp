@@ -628,8 +628,7 @@ absl::StatusOr<std::vector<std::string>> VisibleColumnsForPlan(
     if (node->kind == plan::PlanNodeKind::Range || node->kind == plan::PlanNodeKind::Filter ||
         node->kind == plan::PlanNodeKind::Limit || node->kind == plan::PlanNodeKind::Sort ||
         node->kind == plan::PlanNodeKind::Group || node->kind == plan::PlanNodeKind::Aggregate ||
-        node->kind == plan::PlanNodeKind::Distinct ||
-        node->kind == plan::PlanNodeKind::Exchange ||
+        node->kind == plan::PlanNodeKind::Distinct || node->kind == plan::PlanNodeKind::Exchange ||
         node->kind == plan::PlanNodeKind::Materialize) {
         return columns_or;
     }
@@ -716,6 +715,9 @@ std::string FormatPushdownRequest(const connector::ScanRequest& request) {
     }
     if (request.offset.has_value()) {
         append_pushdown_scalar_field(&out, "offset", std::to_string(*request.offset));
+    }
+    if (request.partitioned_topn) {
+        append_pushdown_scalar_field(&out, "partitioned_topn", "true");
     }
 
     return out.str();
