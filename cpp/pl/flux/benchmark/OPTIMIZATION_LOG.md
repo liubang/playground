@@ -240,3 +240,39 @@
 
 这轮仍然不把单次 benchmark 数字写成跨环境性能承诺；新增 target 的价值是让后续每次改
 connector split、page source 或 scheduler 时，都能用相同 DSN 和 scenario 复验行为与趋势。
+
+## 2026-05-16：query scan 主干继续收口
+
+这一轮只补查询主干，不提前进入 join/exchange 优化：
+
+- `ExchangeOperator` 从整表 collect 边界改成逐 Page 的 gather/repartition，root exchange 不再把
+  输入先物化成完整 `TableValue`。
+- 内存侧 `filter/project` 的 Page 执行继续列式化，filter 预先解析列索引和 literal，避免每个
+  predicate 都反复构造行对象。
+- connector split profile 增加 `bytes` 和 `wall_ms`，profile formatter 与 SQLite/MySQL scan
+  benchmark 都会输出 split bytes / split wall time。
+- SQL connector pushdown 增加统一入口 contract，SQLite 参数化 SQL 和 MySQL dialect SQL 在生成
+  SQL 前都先校验 projection、predicate、distinct、group/aggregate、sort、limit/offset 和 schema。
+
+下一步仍然优先把高效 scan / pipeline 主干做厚；join 和更激进的 CBO alternative 等主干稳定后再动。
+
+## 2026-05-16：SQLite / MySQL 同数据集 scan 对比
+
+为了判断 MySQL connector 是否只是被小表固定开销拖慢，这轮构造了与 SQLite benchmark 同结构、
+同生成逻辑、同查询形状的数据集：
+
+- 表：`_time, host, region, usage, seq`。
+- 生成逻辑：`host=edge-{seq % 64}`、`region=west/east`、`usage=seq % 100`。
+- 查询：`filter_project`，也就是 `usage >= 50` 后投影 `host, usage`。
+- MySQL 表名：`flux_bench_cpu`，`seq` 是 primary key，用于 range split。
+
+结论：
+
+- 同样数据和查询下，远程 MySQL 当前约比本地 SQLite 慢 `3.5x - 4.5x`。
+- MySQL 路径仍然能稳定进入 range split + page sink 主干，输出行数和 split bytes 与 SQLite
+  对齐，说明慢点主要在固定成本和 connector/page source 热路径，而不是 planner 走错。
+- 下一步性能工作应优先看 MySQL 连接复用、metadata/statistics 缓存、split discovery 缓存、
+  Boost.MySQL row decode 到 `ColumnVector` 的批量化，以及 page size / batch size 参数。
+
+具体命令、表结构、采样数字和复现方式统一记录在
+[benchmark/README.md](/Volumes/workspace/liubang/playground/cpp/pl/flux/benchmark/README.md)。
