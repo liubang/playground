@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-16 14:20:44</td>
+            <td class="headerValue">2026-05-16 16:45:24</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">85.7&nbsp;%</td>
@@ -89,21 +89,21 @@
 <span id="L27"><span class="lineNum">      27</span> <span class="tlaGNC">          12 :     factories_[std::move(source)] = std::move(factory);</span></span>
 <span id="L28"><span class="lineNum">      28</span> <span class="tlaGNC">          12 : }</span></span>
 <span id="L29"><span class="lineNum">      29</span>              : </span>
-<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">         472 : absl::StatusOr&lt;std::unique_ptr&lt;ConnectorRuntime&gt;&gt; ConnectorRegistry::CreateRuntime(</span></span>
+<span id="L30"><span class="lineNum">      30</span> <span class="tlaGNC">         473 : absl::StatusOr&lt;std::unique_ptr&lt;ConnectorRuntime&gt;&gt; ConnectorRegistry::CreateRuntime(</span></span>
 <span id="L31"><span class="lineNum">      31</span>              :     const SourceSpec&amp; spec) const {</span>
-<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">         472 :     auto it = factories_.find(spec.source);</span></span>
+<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">         473 :     auto it = factories_.find(spec.source);</span></span>
 <span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">         473 :     if (it == factories_.end()) {</span></span>
 <span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">           1 :         return absl::InvalidArgumentError(</span></span>
 <span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">           2 :             absl::StrCat(&quot;no connector registered for source: &quot;, spec.source));</span></span>
 <span id="L36"><span class="lineNum">      36</span>              :     }</span>
 <span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">         472 :     auto runtime = it-&gt;second(spec);</span></span>
-<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">         472 :     if (runtime == nullptr || runtime-&gt;metadata == nullptr || runtime-&gt;split_manager == nullptr ||</span></span>
+<span id="L38"><span class="lineNum">      38</span> <span class="tlaGNC">         471 :     if (runtime == nullptr || runtime-&gt;metadata == nullptr || runtime-&gt;split_manager == nullptr ||</span></span>
 <span id="L39"><span class="lineNum">      39</span>              :         runtime-&gt;page_source_provider == nullptr) {</span>
 <span id="L40"><span class="lineNum">      40</span> <span class="tlaUNC tlaBgUNC">           0 :         return absl::InternalError(absl::StrCat(</span></span>
 <span id="L41"><span class="lineNum">      41</span>              :             &quot;connector runtime factory returned incomplete runtime for source: &quot;, spec.source));</span>
 <span id="L42"><span class="lineNum">      42</span>              :     }</span>
 <span id="L43"><span class="lineNum">      43</span>              :     return runtime;</span>
-<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC tlaBgGNC">         472 : }</span></span>
+<span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC tlaBgGNC">         471 : }</span></span>
 <span id="L45"><span class="lineNum">      45</span>              : </span>
 <span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">         278 : bool ConnectorRegistry::HasConnector(const std::string&amp; source) const {</span></span>
 <span id="L47"><span class="lineNum">      47</span> <span class="tlaGNC">         278 :     return factories_.find(source) != factories_.end();</span></span>
