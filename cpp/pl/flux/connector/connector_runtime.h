@@ -53,6 +53,8 @@ struct ConnectorSplit {
     std::optional<std::string> partition;
     size_t row_offset = 0;
     std::optional<size_t> row_limit;
+    std::optional<int64_t> rowid_lower;
+    std::optional<int64_t> rowid_upper;
     bool finished = false;
 };
 
