@@ -149,13 +149,13 @@ jobs:
         run: |
           lcov --remove ./bazel-out/_coverage/_coverage_report.dat \
             'external/*' \
-            --output-file ./bazel-out/_coverage/_coverage_report.dat \
+            --output-file /tmp/coverage_filtered.dat \
             --ignore-errors unused
-          genhtml --ignore-errors negative --output coverage-cpp ./bazel-out/_coverage/_coverage_report.dat
+          genhtml --ignore-errors negative --output coverage-cpp /tmp/coverage_filtered.dat
       - name: generate coverage badge
         uses: ./.github/actions/coverage-badge
         with:
-          lcov-file: ./bazel-out/_coverage/_coverage_report.dat
+          lcov-file: /tmp/coverage_filtered.dat
           output-dir: coverage-cpp
           label: coverage-cpp
       - name: Deploy
