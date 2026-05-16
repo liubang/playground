@@ -2,33 +2,33 @@
 
 <p align="center">
   <a href="https://github.com/liubang/playground/actions/workflows/build_cpp.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_cpp.yml?branch=main&style=flat-square&logo=cplusplus&logoColor=white&label=C%2B%2B" alt="C++" />
+    <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_cpp.yml?branch=main&style=for-the-badge&logo=cplusplus&logoColor=white&label=C%2B%2B" alt="C++" />
   </a>
   &nbsp;
   <a href="https://github.com/liubang/playground/actions/workflows/build_java.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_java.yml?branch=main&style=flat-square&logo=openjdk&logoColor=white&label=Java" alt="Java" />
+    <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_java.yml?branch=main&style=for-the-badge&logo=openjdk&logoColor=white&label=Java" alt="Java" />
   </a>
   &nbsp;
   <a href="https://github.com/liubang/playground/actions/workflows/build_go.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_go.yml?branch=main&style=flat-square&logo=go&logoColor=white&label=Go" alt="Go" />
+    <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_go.yml?branch=main&style=for-the-badge&logo=go&logoColor=white&label=Go" alt="Go" />
   </a>
   &nbsp;
   <a href="https://github.com/liubang/playground/actions/workflows/build_python.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_python.yml?branch=main&style=flat-square&logo=python&logoColor=white&label=Python" alt="Python" />
+    <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_python.yml?branch=main&style=for-the-badge&logo=python&logoColor=white&label=Python" alt="Python" />
   </a>
 </p>
 
 <p align="center">
   <a href="https://liubang.github.io/playground/cpp/">
-    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/liubang/playground/coverage/cpp/badge.json&style=flat-square&logo=cplusplus&logoColor=white" alt="coverage-cpp" />
+    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/liubang/playground/coverage/cpp/badge.json&style=for-the-badge&logo=cplusplus&logoColor=white" alt="coverage-cpp" />
   </a>
   &nbsp;
   <a href="https://liubang.github.io/playground/java/">
-    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/liubang/playground/coverage/java/badge.json&style=flat-square&logo=openjdk&logoColor=white" alt="coverage-java" />
+    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/liubang/playground/coverage/java/badge.json&style=for-the-badge&logo=openjdk&logoColor=white" alt="coverage-java" />
   </a>
   &nbsp;
   <a href="https://liubang.github.io/playground/go/">
-    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/liubang/playground/coverage/go/badge.json&style=flat-square&logo=go&logoColor=white" alt="coverage-go" />
+    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/liubang/playground/coverage/go/badge.json&style=for-the-badge&logo=go&logoColor=white" alt="coverage-go" />
   </a>
 </p>
 
