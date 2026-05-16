@@ -37,6 +37,10 @@
     "junit:junit": -744267592,
     "org.apache.tomcat:annotations-api": 1366882333,
     "org.codehaus.mojo:animal-sniffer-annotations": 1980219573,
+    "org.junit.jupiter:junit-jupiter-api": -95082348,
+    "org.junit.jupiter:junit-jupiter-engine": 776916472,
+    "org.junit.platform:junit-platform-launcher": 386394958,
+    "org.junit.platform:junit-platform-reporting": 1068569596,
     "org.springframework.boot:spring-boot-starter-actuator": 485942115,
     "org.springframework.boot:spring-boot-starter-test": 915350634,
     "org.springframework.boot:spring-boot-starter-web": -754838224,
@@ -137,10 +141,13 @@
     "org.junit.jupiter:junit-jupiter-params": 218629575,
     "org.junit.platform:junit-platform-commons": -381654750,
     "org.junit.platform:junit-platform-engine": 500708226,
+    "org.junit.platform:junit-platform-launcher": 1879428872,
+    "org.junit.platform:junit-platform-reporting": 1906341214,
     "org.latencyutils:LatencyUtils": 130996999,
     "org.mockito:mockito-core": 1268234443,
     "org.mockito:mockito-junit-jupiter": 13070551,
     "org.objenesis:objenesis": 1798216877,
+    "org.opentest4j.reporting:open-test-reporting-tooling-spi": -1856542869,
     "org.opentest4j:opentest4j": -1711174392,
     "org.ow2.asm:asm": -1101379267,
     "org.skyscreamer:jsonassert": -852848867,
@@ -715,6 +722,18 @@
       },
       "version": "1.12.2"
     },
+    "org.junit.platform:junit-platform-launcher": {
+      "shasums": {
+        "jar": "dccf2c1fa0a977c53ad094ad859bfdddd524d97594b76307ad787de71985757f"
+      },
+      "version": "1.12.2"
+    },
+    "org.junit.platform:junit-platform-reporting": {
+      "shasums": {
+        "jar": "5d0964d0fba027a39cc0123b8521e72a1371157239d56dadcf929529074b8cb3"
+      },
+      "version": "1.12.2"
+    },
     "org.latencyutils:LatencyUtils": {
       "shasums": {
         "jar": "a32a9ffa06b2f4e01c5360f8f9df7bc5d9454a5d373cd8f361347fa5a57165ec"
@@ -738,6 +757,12 @@
         "jar": "02dfd0b0439a5591e35b708ed2f5474eb0948f53abf74637e959b8e4ef69bfeb"
       },
       "version": "3.3"
+    },
+    "org.opentest4j.reporting:open-test-reporting-tooling-spi": {
+      "shasums": {
+        "jar": "772c9f9a09173bcfc29210257a1eb5e873561b5e931832ebf2d29c1ca5bf1af3"
+      },
+      "version": "0.2.0"
     },
     "org.opentest4j:opentest4j": {
       "shasums": {
@@ -1192,6 +1217,15 @@
       "org.junit.platform:junit-platform-commons",
       "org.opentest4j:opentest4j"
     ],
+    "org.junit.platform:junit-platform-launcher": [
+      "org.apiguardian:apiguardian-api",
+      "org.junit.platform:junit-platform-engine"
+    ],
+    "org.junit.platform:junit-platform-reporting": [
+      "org.apiguardian:apiguardian-api",
+      "org.junit.platform:junit-platform-launcher",
+      "org.opentest4j.reporting:open-test-reporting-tooling-spi"
+    ],
     "org.mockito:mockito-core": [
       "net.bytebuddy:byte-buddy",
       "net.bytebuddy:byte-buddy-agent",
@@ -1200,6 +1234,9 @@
     "org.mockito:mockito-junit-jupiter": [
       "org.junit.jupiter:junit-jupiter-api",
       "org.mockito:mockito-core"
+    ],
+    "org.opentest4j.reporting:open-test-reporting-tooling-spi": [
+      "org.apiguardian:apiguardian-api"
     ],
     "org.skyscreamer:jsonassert": [
       "com.vaadin.external.google:android-json"
@@ -2301,6 +2338,25 @@
       "org.junit.platform.engine.support.hierarchical",
       "org.junit.platform.engine.support.store"
     ],
+    "org.junit.platform:junit-platform-launcher": [
+      "org.junit.platform.launcher",
+      "org.junit.platform.launcher.core",
+      "org.junit.platform.launcher.listeners",
+      "org.junit.platform.launcher.listeners.discovery",
+      "org.junit.platform.launcher.listeners.session",
+      "org.junit.platform.launcher.tagexpression"
+    ],
+    "org.junit.platform:junit-platform-reporting": [
+      "org.junit.platform.reporting.legacy",
+      "org.junit.platform.reporting.legacy.xml",
+      "org.junit.platform.reporting.open.xml",
+      "org.junit.platform.reporting.shadow.org.opentest4j.reporting.events.api",
+      "org.junit.platform.reporting.shadow.org.opentest4j.reporting.events.core",
+      "org.junit.platform.reporting.shadow.org.opentest4j.reporting.events.git",
+      "org.junit.platform.reporting.shadow.org.opentest4j.reporting.events.java",
+      "org.junit.platform.reporting.shadow.org.opentest4j.reporting.events.root",
+      "org.junit.platform.reporting.shadow.org.opentest4j.reporting.schema"
+    ],
     "org.latencyutils:LatencyUtils": [
       "org.LatencyUtils"
     ],
@@ -2386,6 +2442,9 @@
       "org.objenesis.instantiator.sun",
       "org.objenesis.instantiator.util",
       "org.objenesis.strategy"
+    ],
+    "org.opentest4j.reporting:open-test-reporting-tooling-spi": [
+      "org.opentest4j.reporting.tooling.spi.htmlreport"
     ],
     "org.opentest4j:opentest4j": [
       "org.opentest4j"
@@ -3282,10 +3341,13 @@
       "org.junit.jupiter:junit-jupiter-params",
       "org.junit.platform:junit-platform-commons",
       "org.junit.platform:junit-platform-engine",
+      "org.junit.platform:junit-platform-launcher",
+      "org.junit.platform:junit-platform-reporting",
       "org.latencyutils:LatencyUtils",
       "org.mockito:mockito-core",
       "org.mockito:mockito-junit-jupiter",
       "org.objenesis:objenesis",
+      "org.opentest4j.reporting:open-test-reporting-tooling-spi",
       "org.opentest4j:opentest4j",
       "org.ow2.asm:asm",
       "org.skyscreamer:jsonassert",
@@ -3411,10 +3473,13 @@
       "org.junit.jupiter:junit-jupiter-params",
       "org.junit.platform:junit-platform-commons",
       "org.junit.platform:junit-platform-engine",
+      "org.junit.platform:junit-platform-launcher",
+      "org.junit.platform:junit-platform-reporting",
       "org.latencyutils:LatencyUtils",
       "org.mockito:mockito-core",
       "org.mockito:mockito-junit-jupiter",
       "org.objenesis:objenesis",
+      "org.opentest4j.reporting:open-test-reporting-tooling-spi",
       "org.opentest4j:opentest4j",
       "org.ow2.asm:asm",
       "org.skyscreamer:jsonassert",
@@ -3558,6 +3623,19 @@
         "org.junit.platform.engine.discovery.PackageSelector$IdentifierParser",
         "org.junit.platform.engine.discovery.UniqueIdSelector$IdentifierParser",
         "org.junit.platform.engine.discovery.UriSelector$IdentifierParser"
+      ]
+    },
+    "org.junit.platform:junit-platform-launcher": {
+      "org.junit.platform.launcher.TestExecutionListener": [
+        "org.junit.platform.launcher.listeners.UniqueIdTrackingListener"
+      ]
+    },
+    "org.junit.platform:junit-platform-reporting": {
+      "org.junit.platform.launcher.TestExecutionListener": [
+        "org.junit.platform.reporting.open.xml.OpenTestReportGeneratingListener"
+      ],
+      "org.opentest4j.reporting.tooling.spi.htmlreport.Contributor": [
+        "org.junit.platform.reporting.open.xml.JUnitContributor"
       ]
     },
     "org.springframework.boot:spring-boot": {
