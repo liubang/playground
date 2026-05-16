@@ -160,6 +160,10 @@ MySQL runtime 可调参数：
 - `--mysql-split-cache-max-entries` / `FLUX_MYSQL_SPLIT_CACHE_MAX_ENTRIES`：split extent 缓存容量。
 - `--mysql-split-cache-ttl-ms` / `FLUX_MYSQL_SPLIT_CACHE_TTL_MS`：split extent 缓存 TTL；设为 `0`
   表示不按时间过期。
+- `--mysql-disable-prepared-statements` / `FLUX_MYSQL_USE_PREPARED_STATEMENTS=0`：关闭
+  MySQL page source 的 server-side prepared statement 路径，用于和 literal SQL 回退路径对比。
+- `--mysql-prepared-cache-max-entries` / `FLUX_MYSQL_PREPARED_CACHE_MAX_ENTRIES`：每个 pooled
+  MySQL connection 保留的 prepared statement 数量；设为 `0` 表示每次 prepare 后不缓存。
 
 MySQL benchmark fixture 可以由 runner 自动重建。它会用和 SQLite benchmark 相同的数据形态创建
 表，并把 `seq` 设为 primary key，便于 MySQL connector 做 range split。这个步骤会先 drop 目标表：
@@ -177,6 +181,41 @@ FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
     --scenario filter_project \
     --repeat 3
 ```
+
+prepared statement / pool / page size 矩阵建议保持同一张 `flux_bench_cpu` 表反复跑，避免把建表成本
+混进 scan 数字：
+
+```bash
+FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
+  python3 cpp/pl/flux/benchmark/run_connector_benchmarks.py \
+    --connector mysql \
+    --mysql-table flux_bench_cpu \
+    --mysql-target-splits 8 \
+    --mysql-rows-per-page 2048 \
+    --mysql-max-idle-connections 8 \
+    --mysql-prepared-cache-max-entries 128 \
+    --scenario filter_project \
+    --repeat 5
+
+FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
+  python3 cpp/pl/flux/benchmark/run_connector_benchmarks.py \
+    --connector mysql \
+    --mysql-table flux_bench_cpu \
+    --mysql-target-splits 8 \
+    --mysql-rows-per-page 2048 \
+    --mysql-max-idle-connections 8 \
+    --mysql-disable-prepared-statements \
+    --scenario filter_project \
+    --repeat 5
+```
+
+当前记录的一组 5M 行 `filter_project` 结果：
+
+- prepared on，8 splits，rows/page=2048：`1.1746s / 1.4447s / 1.2069s`，median `1.2069s`。
+- prepared off，同表同查询：`1.2397s / 1.2799s / 1.4307s`，median `1.2799s`。
+
+这说明 prepared 默认开启有收益，但远程 MySQL 大表 scan 的主成本仍在 `split_read_time_ms` 和
+`split_decode_time_ms`。
 
 profile 字段含义：
 
