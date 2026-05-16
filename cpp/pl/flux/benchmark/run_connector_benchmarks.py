@@ -185,6 +185,11 @@ def run_mysql(args):
     scenarios = args.scenarios or ["scan", "filter_project", "wide_filter", "topn"]
     env = os.environ.copy()
     env["FLUX_MYSQL_TEST_DSN"] = args.mysql_dsn
+    env["FLUX_MYSQL_TARGET_SPLITS"] = str(args.mysql_target_splits)
+    env["FLUX_MYSQL_ROWS_PER_PAGE"] = str(args.mysql_rows_per_page)
+    env["FLUX_MYSQL_MAX_IDLE_CONNECTIONS"] = str(args.mysql_max_idle_connections)
+    env["FLUX_MYSQL_SPLIT_CACHE_MAX_ENTRIES"] = str(args.mysql_split_cache_max_entries)
+    env["FLUX_MYSQL_SPLIT_CACHE_TTL_MS"] = str(args.mysql_split_cache_ttl_ms)
     results = []
     for scenario in scenarios:
         samples = []
@@ -205,6 +210,11 @@ def main():
     parser.add_argument("--mysql-dsn", default=os.environ.get("FLUX_MYSQL_TEST_DSN", ""))
     parser.add_argument("--mysql-table", default="cpu")
     parser.add_argument("--mysql-rows", type=int, default=1_000_000)
+    parser.add_argument("--mysql-target-splits", type=int, default=8)
+    parser.add_argument("--mysql-rows-per-page", type=int, default=1024)
+    parser.add_argument("--mysql-max-idle-connections", type=int, default=8)
+    parser.add_argument("--mysql-split-cache-max-entries", type=int, default=1024)
+    parser.add_argument("--mysql-split-cache-ttl-ms", type=int, default=300000)
     parser.add_argument("--prepare-mysql-benchmark-table", action="store_true")
     parser.add_argument("--threshold", type=float, default=50.0)
     parser.add_argument("--scenario", dest="scenarios", action="append")
