@@ -335,6 +335,7 @@ maven.install(
         "org.springframework.boot:spring-boot-starter-web:3.5.0",
         "org.springframework.boot:spring-boot-starter-test:3.5.0",
         "org.springframework.boot:spring-boot-starter-actuator:3.5.0",
+        "org.springframework.boot:spring-boot-starter-validation:3.5.0",
         "org.junit.jupiter:junit-jupiter-api:5.12.2",
         "org.junit.jupiter:junit-jupiter-engine:5.12.2",
         "org.junit.platform:junit-platform-launcher:1.12.2",

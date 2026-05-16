@@ -43,6 +43,7 @@
     "org.junit.platform:junit-platform-reporting": 1068569596,
     "org.springframework.boot:spring-boot-starter-actuator": 485942115,
     "org.springframework.boot:spring-boot-starter-test": 915350634,
+    "org.springframework.boot:spring-boot-starter-validation": -510394909,
     "org.springframework.boot:spring-boot-starter-web": -754838224,
     "repositories": 703431869
   },
@@ -55,6 +56,7 @@
     "com.fasterxml.jackson.datatype:jackson-datatype-jdk8": -1254787351,
     "com.fasterxml.jackson.datatype:jackson-datatype-jsr310": 2025769032,
     "com.fasterxml.jackson.module:jackson-module-parameter-names": -346990,
+    "com.fasterxml:classmate": -345855123,
     "com.google.android:annotations": 2096496032,
     "com.google.api.grpc:proto-google-common-protos": -639005349,
     "com.google.auth:google-auth-library-credentials": -1401751759,
@@ -110,6 +112,7 @@
     "io.perfmark:perfmark-api": -1795841558,
     "jakarta.activation:jakarta.activation-api": 1331945546,
     "jakarta.annotation:jakarta.annotation-api": -174911330,
+    "jakarta.validation:jakarta.validation-api": -8664225,
     "jakarta.xml.bind:jakarta.xml.bind-api": -904326670,
     "junit:junit": -1256429642,
     "net.bytebuddy:byte-buddy": 1533370805,
@@ -132,6 +135,8 @@
     "org.hamcrest:hamcrest": 1282317766,
     "org.hamcrest:hamcrest-core": 649657847,
     "org.hdrhistogram:HdrHistogram": 310945399,
+    "org.hibernate.validator:hibernate-validator": 1132683689,
+    "org.jboss.logging:jboss-logging": 1920281336,
     "org.jetbrains.kotlin:kotlin-stdlib": 1521647863,
     "org.jetbrains.kotlin:kotlin-stdlib-common": 1443260454,
     "org.jetbrains:annotations": 554168982,
@@ -163,6 +168,7 @@
     "org.springframework.boot:spring-boot-starter-logging": -360365675,
     "org.springframework.boot:spring-boot-starter-test": -585763659,
     "org.springframework.boot:spring-boot-starter-tomcat": 1262923704,
+    "org.springframework.boot:spring-boot-starter-validation": 186352400,
     "org.springframework.boot:spring-boot-starter-web": 1041535200,
     "org.springframework.boot:spring-boot-test": -706507277,
     "org.springframework.boot:spring-boot-test-autoconfigure": 1486176772,
@@ -230,6 +236,12 @@
         "jar": "a2ad4f099694b4a7a4a9daaf737e6289cd3d310a438460acaa79bbe4d45bb4bb"
       },
       "version": "2.19.0"
+    },
+    "com.fasterxml:classmate": {
+      "shasums": {
+        "jar": "aab4de3006808c09d25dd4ff4a3611cfb63c95463cfd99e73d2e1680d229a33b"
+      },
+      "version": "1.5.1"
     },
     "com.google.android:annotations": {
       "shasums": {
@@ -536,6 +548,12 @@
       },
       "version": "2.1.1"
     },
+    "jakarta.validation:jakarta.validation-api": {
+      "shasums": {
+        "jar": "291c25e6910cc6a7ebd96d4c6baebf6d7c37676c5482c2d96146e901b62c1fc9"
+      },
+      "version": "3.0.2"
+    },
     "jakarta.xml.bind:jakarta.xml.bind-api": {
       "shasums": {
         "jar": "0d6bcfe47763e85047acf7c398336dc84ff85ebcad0a7cb6f3b9d3e981245406"
@@ -667,6 +685,18 @@
         "jar": "22d1d4316c4ec13a68b559e98c8256d69071593731da96136640f864fa14fad8"
       },
       "version": "2.2.2"
+    },
+    "org.hibernate.validator:hibernate-validator": {
+      "shasums": {
+        "jar": "2f2224a5a19bdcfa73540e9ff5c971b6c425ad80415876f305259fe873a15b2f"
+      },
+      "version": "8.0.2.Final"
+    },
+    "org.jboss.logging:jboss-logging": {
+      "shasums": {
+        "jar": "0b324cca4d550060e51e70cc0045a6cce62f264278ec1f5082aafeb670fcac49"
+      },
+      "version": "3.4.3.Final"
     },
     "org.jetbrains.kotlin:kotlin-stdlib": {
       "shasums": {
@@ -851,6 +881,12 @@
     "org.springframework.boot:spring-boot-starter-tomcat": {
       "shasums": {
         "jar": "9b9ef4dc3b3b1d6c9f4c072f135641cad8ab658002d12b2f0f485fab952e5cd3"
+      },
+      "version": "3.5.0"
+    },
+    "org.springframework.boot:spring-boot-starter-validation": {
+      "shasums": {
+        "jar": "c5406278f4f81a1c5c87ec9c6f2a3b30adad7f8c1d1540d8d0e8d688c2f1cd4d"
       },
       "version": "3.5.0"
     },
@@ -1186,6 +1222,11 @@
     "org.awaitility:awaitility": [
       "org.hamcrest:hamcrest"
     ],
+    "org.hibernate.validator:hibernate-validator": [
+      "com.fasterxml:classmate",
+      "jakarta.validation:jakarta.validation-api",
+      "org.jboss.logging:jboss-logging"
+    ],
     "org.jetbrains.kotlin:kotlin-stdlib": [
       "org.jetbrains.kotlin:kotlin-stdlib-common",
       "org.jetbrains:annotations"
@@ -1311,6 +1352,11 @@
       "org.apache.tomcat.embed:tomcat-embed-core",
       "org.apache.tomcat.embed:tomcat-embed-el",
       "org.apache.tomcat.embed:tomcat-embed-websocket"
+    ],
+    "org.springframework.boot:spring-boot-starter-validation": [
+      "org.apache.tomcat.embed:tomcat-embed-el",
+      "org.hibernate.validator:hibernate-validator",
+      "org.springframework.boot:spring-boot-starter"
     ],
     "org.springframework.boot:spring-boot-starter-web": [
       "org.springframework.boot:spring-boot-starter",
@@ -1498,6 +1544,12 @@
     ],
     "com.fasterxml.jackson.module:jackson-module-parameter-names": [
       "com.fasterxml.jackson.module.paramnames"
+    ],
+    "com.fasterxml:classmate": [
+      "com.fasterxml.classmate",
+      "com.fasterxml.classmate.members",
+      "com.fasterxml.classmate.types",
+      "com.fasterxml.classmate.util"
     ],
     "com.google.android:annotations": [
       "android.annotation"
@@ -1881,6 +1933,17 @@
       "jakarta.annotation.security",
       "jakarta.annotation.sql"
     ],
+    "jakarta.validation:jakarta.validation-api": [
+      "jakarta.validation",
+      "jakarta.validation.bootstrap",
+      "jakarta.validation.constraints",
+      "jakarta.validation.constraintvalidation",
+      "jakarta.validation.executable",
+      "jakarta.validation.groups",
+      "jakarta.validation.metadata",
+      "jakarta.validation.spi",
+      "jakarta.validation.valueextraction"
+    ],
     "jakarta.xml.bind:jakarta.xml.bind-api": [
       "jakarta.xml.bind",
       "jakarta.xml.bind.annotation",
@@ -2238,6 +2301,95 @@
     "org.hdrhistogram:HdrHistogram": [
       "org.HdrHistogram",
       "org.HdrHistogram.packedarray"
+    ],
+    "org.hibernate.validator:hibernate-validator": [
+      "org.hibernate.validator",
+      "org.hibernate.validator.cfg",
+      "org.hibernate.validator.cfg.context",
+      "org.hibernate.validator.cfg.defs",
+      "org.hibernate.validator.cfg.defs.br",
+      "org.hibernate.validator.cfg.defs.pl",
+      "org.hibernate.validator.cfg.defs.ru",
+      "org.hibernate.validator.constraints",
+      "org.hibernate.validator.constraints.br",
+      "org.hibernate.validator.constraints.pl",
+      "org.hibernate.validator.constraints.ru",
+      "org.hibernate.validator.constraints.time",
+      "org.hibernate.validator.constraintvalidation",
+      "org.hibernate.validator.constraintvalidators",
+      "org.hibernate.validator.engine",
+      "org.hibernate.validator.group",
+      "org.hibernate.validator.internal",
+      "org.hibernate.validator.internal.cfg.context",
+      "org.hibernate.validator.internal.constraintvalidators",
+      "org.hibernate.validator.internal.constraintvalidators.bv",
+      "org.hibernate.validator.internal.constraintvalidators.bv.money",
+      "org.hibernate.validator.internal.constraintvalidators.bv.notempty",
+      "org.hibernate.validator.internal.constraintvalidators.bv.number",
+      "org.hibernate.validator.internal.constraintvalidators.bv.number.bound",
+      "org.hibernate.validator.internal.constraintvalidators.bv.number.bound.decimal",
+      "org.hibernate.validator.internal.constraintvalidators.bv.number.sign",
+      "org.hibernate.validator.internal.constraintvalidators.bv.size",
+      "org.hibernate.validator.internal.constraintvalidators.bv.time",
+      "org.hibernate.validator.internal.constraintvalidators.bv.time.future",
+      "org.hibernate.validator.internal.constraintvalidators.bv.time.futureorpresent",
+      "org.hibernate.validator.internal.constraintvalidators.bv.time.past",
+      "org.hibernate.validator.internal.constraintvalidators.bv.time.pastorpresent",
+      "org.hibernate.validator.internal.constraintvalidators.hv",
+      "org.hibernate.validator.internal.constraintvalidators.hv.br",
+      "org.hibernate.validator.internal.constraintvalidators.hv.pl",
+      "org.hibernate.validator.internal.constraintvalidators.hv.ru",
+      "org.hibernate.validator.internal.constraintvalidators.hv.time",
+      "org.hibernate.validator.internal.engine",
+      "org.hibernate.validator.internal.engine.constraintdefinition",
+      "org.hibernate.validator.internal.engine.constraintvalidation",
+      "org.hibernate.validator.internal.engine.groups",
+      "org.hibernate.validator.internal.engine.messageinterpolation",
+      "org.hibernate.validator.internal.engine.messageinterpolation.el",
+      "org.hibernate.validator.internal.engine.messageinterpolation.parser",
+      "org.hibernate.validator.internal.engine.messageinterpolation.util",
+      "org.hibernate.validator.internal.engine.path",
+      "org.hibernate.validator.internal.engine.resolver",
+      "org.hibernate.validator.internal.engine.scripting",
+      "org.hibernate.validator.internal.engine.validationcontext",
+      "org.hibernate.validator.internal.engine.valuecontext",
+      "org.hibernate.validator.internal.engine.valueextraction",
+      "org.hibernate.validator.internal.metadata",
+      "org.hibernate.validator.internal.metadata.aggregated",
+      "org.hibernate.validator.internal.metadata.aggregated.rule",
+      "org.hibernate.validator.internal.metadata.core",
+      "org.hibernate.validator.internal.metadata.descriptor",
+      "org.hibernate.validator.internal.metadata.facets",
+      "org.hibernate.validator.internal.metadata.location",
+      "org.hibernate.validator.internal.metadata.provider",
+      "org.hibernate.validator.internal.metadata.raw",
+      "org.hibernate.validator.internal.properties",
+      "org.hibernate.validator.internal.properties.javabean",
+      "org.hibernate.validator.internal.util",
+      "org.hibernate.validator.internal.util.annotation",
+      "org.hibernate.validator.internal.util.classhierarchy",
+      "org.hibernate.validator.internal.util.logging",
+      "org.hibernate.validator.internal.util.logging.formatter",
+      "org.hibernate.validator.internal.util.privilegedactions",
+      "org.hibernate.validator.internal.util.stereotypes",
+      "org.hibernate.validator.internal.xml",
+      "org.hibernate.validator.internal.xml.config",
+      "org.hibernate.validator.internal.xml.mapping",
+      "org.hibernate.validator.messageinterpolation",
+      "org.hibernate.validator.metadata",
+      "org.hibernate.validator.parameternameprovider",
+      "org.hibernate.validator.path",
+      "org.hibernate.validator.resourceloading",
+      "org.hibernate.validator.spi.cfg",
+      "org.hibernate.validator.spi.group",
+      "org.hibernate.validator.spi.messageinterpolation",
+      "org.hibernate.validator.spi.nodenameprovider",
+      "org.hibernate.validator.spi.properties",
+      "org.hibernate.validator.spi.resourceloading",
+      "org.hibernate.validator.spi.scripting"
+    ],
+    "org.jboss.logging:jboss-logging": [
+      "org.jboss.logging"
     ],
     "org.jetbrains.kotlin:kotlin-stdlib": [
       "kotlin",
@@ -3255,6 +3407,7 @@
       "com.fasterxml.jackson.datatype:jackson-datatype-jdk8",
       "com.fasterxml.jackson.datatype:jackson-datatype-jsr310",
       "com.fasterxml.jackson.module:jackson-module-parameter-names",
+      "com.fasterxml:classmate",
       "com.google.android:annotations",
       "com.google.api.grpc:proto-google-common-protos",
       "com.google.auth:google-auth-library-credentials",
@@ -3310,6 +3463,7 @@
       "io.perfmark:perfmark-api",
       "jakarta.activation:jakarta.activation-api",
       "jakarta.annotation:jakarta.annotation-api",
+      "jakarta.validation:jakarta.validation-api",
       "jakarta.xml.bind:jakarta.xml.bind-api",
       "junit:junit",
       "net.bytebuddy:byte-buddy",
@@ -3332,6 +3486,8 @@
       "org.hamcrest:hamcrest",
       "org.hamcrest:hamcrest-core",
       "org.hdrhistogram:HdrHistogram",
+      "org.hibernate.validator:hibernate-validator",
+      "org.jboss.logging:jboss-logging",
       "org.jetbrains.kotlin:kotlin-stdlib",
       "org.jetbrains.kotlin:kotlin-stdlib-common",
       "org.jetbrains:annotations",
@@ -3363,6 +3519,7 @@
       "org.springframework.boot:spring-boot-starter-logging",
       "org.springframework.boot:spring-boot-starter-test",
       "org.springframework.boot:spring-boot-starter-tomcat",
+      "org.springframework.boot:spring-boot-starter-validation",
       "org.springframework.boot:spring-boot-starter-web",
       "org.springframework.boot:spring-boot-test",
       "org.springframework.boot:spring-boot-test-autoconfigure",
@@ -3387,6 +3544,7 @@
       "com.fasterxml.jackson.datatype:jackson-datatype-jdk8",
       "com.fasterxml.jackson.datatype:jackson-datatype-jsr310",
       "com.fasterxml.jackson.module:jackson-module-parameter-names",
+      "com.fasterxml:classmate",
       "com.google.android:annotations",
       "com.google.api.grpc:proto-google-common-protos",
       "com.google.auth:google-auth-library-credentials",
@@ -3442,6 +3600,7 @@
       "io.perfmark:perfmark-api",
       "jakarta.activation:jakarta.activation-api",
       "jakarta.annotation:jakarta.annotation-api",
+      "jakarta.validation:jakarta.validation-api",
       "jakarta.xml.bind:jakarta.xml.bind-api",
       "junit:junit",
       "net.bytebuddy:byte-buddy",
@@ -3464,6 +3623,8 @@
       "org.hamcrest:hamcrest",
       "org.hamcrest:hamcrest-core",
       "org.hdrhistogram:HdrHistogram",
+      "org.hibernate.validator:hibernate-validator",
+      "org.jboss.logging:jboss-logging",
       "org.jetbrains.kotlin:kotlin-stdlib",
       "org.jetbrains.kotlin:kotlin-stdlib-common",
       "org.jetbrains:annotations",
@@ -3495,6 +3656,7 @@
       "org.springframework.boot:spring-boot-starter-logging",
       "org.springframework.boot:spring-boot-starter-test",
       "org.springframework.boot:spring-boot-starter-tomcat",
+      "org.springframework.boot:spring-boot-starter-validation",
       "org.springframework.boot:spring-boot-starter-web",
       "org.springframework.boot:spring-boot-test",
       "org.springframework.boot:spring-boot-test-autoconfigure",
@@ -3601,6 +3763,11 @@
       ],
       "jakarta.websocket.server.ServerEndpointConfig$Configurator": [
         "org.apache.tomcat.websocket.server.DefaultServerEndpointConfigurator"
+      ]
+    },
+    "org.hibernate.validator:hibernate-validator": {
+      "jakarta.validation.spi.ValidationProvider": [
+        "org.hibernate.validator.HibernateValidator"
       ]
     },
     "org.junit.jupiter:junit-jupiter-engine": {
