@@ -19,6 +19,7 @@
 #include "cpp/pl/flux/connector/memory_source.h"
 #include "cpp/pl/flux/execution/materializer.h"
 #include "cpp/pl/flux/execution/physical_executor.h"
+#include "cpp/pl/flux/execution/task_executor.h"
 #include "cpp/pl/flux/optimizer/explain.h"
 #include "cpp/pl/flux/runtime/runtime_builtin.h"
 #include "cpp/pl/flux/runtime/runtime_exec.h"
@@ -1053,6 +1054,83 @@ TEST(RuntimeExecTest, SchedulerAggregatesMultipleDriversForOnePipeline) {
     EXPECT_EQ(2, result_or->profile.pipelines[0].rows);
 }
 
+TEST(RuntimeExecTest, PhysicalExecutorStreamsRowsToSinkWithoutMaterializingResult) {
+    constexpr size_t kRows = 12000;
+    constexpr size_t kSplits = 4;
+    constexpr size_t kRowsPerPage = 256;
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve(kRows);
+    for (size_t index = 0; index < kRows; ++index) {
+        rows.push_back(TestRow({{"host", Value::string("edge-" + std::to_string(index % 16))},
+                                {"usage", Value::floating(static_cast<double>(index % 100))},
+                                {"seq", Value::integer(static_cast<int64_t>(index))}}));
+    }
+
+    connector::SourceSpec spec{
+        .source = "stream_memory",
+        .driver = "stream_memory",
+        .dsn = "memory://stream",
+        .table = "large",
+    };
+    connector::ConnectorRegistry::Global().Register(
+        spec.source, [rows](const connector::SourceSpec& requested) {
+            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
+                                                         kRowsPerPage, kSplits);
+        });
+
+    auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
+    plan::PredicateSpec predicate;
+    predicate.op = plan::PredicateOp::Gte;
+    predicate.column = "usage";
+    predicate.literal = plan::PredicateLiteral{
+        .kind = plan::PredicateLiteralKind::Float,
+        .float_value = 50.0,
+        .string_value = {},
+    };
+    auto query = plan::MakeProject(plan::MakeFilter(scan, {predicate}), {"host", "usage"});
+
+    size_t pages = 0;
+    size_t streamed_rows = 0;
+    auto result_or = execution::PhysicalExecutor().ExecuteToSink(query, [&](const Page& page) {
+        ++pages;
+        streamed_rows += page.row_count();
+        return absl::OkStatus();
+    });
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    EXPECT_EQ(kRows / 2, streamed_rows);
+    EXPECT_GT(pages, 1);
+    ASSERT_EQ(1, result_or->profile.pipelines.size());
+    EXPECT_EQ(kSplits, result_or->profile.pipelines[0].drivers);
+    EXPECT_EQ(kRows / 2, result_or->profile.pipelines[0].rows);
+    EXPECT_EQ(kSplits, result_or->profile.pipelines[0].split_stats.size());
+}
+
+TEST(RuntimeExecTest, SqliteTopNUsesTwoStageSplitPipeline) {
+    plan::SortKey key{.column = "usage", .desc = true};
+    auto query = plan::MakeLimit(plan::MakeSort(SqliteCpuScanPlan(), {key}), 2, 0);
+
+    const auto pipeline = execution::FormatPipelinePlan(query);
+
+    EXPECT_NE(std::string::npos, pipeline.find("Pipeline(id=\"topn-partial\""));
+    EXPECT_NE(std::string::npos, pipeline.find("Pipeline(id=\"main\""));
+    EXPECT_NE(std::string::npos, pipeline.find("depends_on: [topn-partial]"));
+    EXPECT_NE(std::string::npos, pipeline.find("drivers: "));
+    EXPECT_NE(std::string::npos, pipeline.find("TopNOperator"));
+
+    auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(query);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto& rows = result_or->value.as_table().rows;
+    ASSERT_EQ(2, rows.size());
+    EXPECT_EQ("93.25", rows[0]->lookup("usage")->string());
+    EXPECT_EQ("88", rows[1]->lookup("usage")->string());
+    ASSERT_EQ(2, result_or->profile.pipelines.size());
+    EXPECT_EQ("topn-partial", result_or->profile.pipelines[0].id);
+    EXPECT_GT(result_or->profile.pipelines[0].drivers, 1);
+    EXPECT_TRUE(result_or->profile.pipelines[1].blocking);
+}
+
 TEST(RuntimeExecTest, ParallelMemoryScanBenchmarkRunsLargeStreamingQuery) {
     constexpr size_t kRows = 200000;
     constexpr size_t kSplits = 8;
@@ -1084,6 +1162,7 @@ TEST(RuntimeExecTest, ParallelMemoryScanBenchmarkRunsLargeStreamingQuery) {
     predicate.literal = plan::PredicateLiteral{
         .kind = plan::PredicateLiteralKind::Float,
         .float_value = 50.0,
+        .string_value = {},
     };
     auto filtered = plan::MakeFilter(scan, {predicate});
     auto projected = plan::MakeProject(filtered, {"host", "usage"});
@@ -1145,7 +1224,7 @@ TEST(RuntimeExecTest, PipelineExplainShowsPipelineDag) {
     EXPECT_NE(std::string::npos, pipeline.find("PipelinePlan"));
     EXPECT_NE(std::string::npos, pipeline.find("Pipeline(id=\"join-left\""));
     EXPECT_NE(std::string::npos, pipeline.find("Pipeline(id=\"main\""));
-    EXPECT_NE(std::string::npos, pipeline.find("depends_on=[join-left, join-right]"));
+    EXPECT_NE(std::string::npos, pipeline.find("depends_on: [join-left, join-right]"));
     EXPECT_NE(std::string::npos, pipeline.find("ExchangeSourceOperator"));
 }
 
@@ -1162,7 +1241,8 @@ TEST(RuntimeExecTest, ExecutionProfileFormatterShowsRuntimeStats) {
     EXPECT_NE(std::string::npos, profile.find("Pipeline(id=\"join-left\""));
     EXPECT_NE(std::string::npos, profile.find("rows=4"));
     EXPECT_NE(std::string::npos, profile.find("Pipeline(id=\"main\""));
-    EXPECT_NE(std::string::npos, profile.find("pages=1, rows=6"));
+    EXPECT_NE(std::string::npos, profile.find("stats: pages=1, rows=6"));
+    EXPECT_NE(std::string::npos, profile.find("splits: "));
 }
 
 TEST(RuntimeExecTest, ContinuousSqliteFiltersAccumulatePushdownPredicates) {

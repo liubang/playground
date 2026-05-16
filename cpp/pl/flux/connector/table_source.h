@@ -114,6 +114,7 @@ struct ScanRequest {
     std::optional<std::string> distinct;
     std::optional<int64_t> limit;
     std::optional<int64_t> offset;
+    bool partitioned_topn = false;
 };
 
 } // namespace pl::flux::connector
