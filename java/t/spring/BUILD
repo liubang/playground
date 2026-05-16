@@ -23,7 +23,11 @@ springboot_deps = [
     "@maven//:org_springframework_boot_spring_boot_autoconfigure",
     "@maven//:org_springframework_boot_spring_boot_starter_web",
     "@maven//:org_springframework_boot_spring_boot_starter_actuator",
+    "@maven//:org_springframework_boot_spring_boot_starter_validation",
     "@maven//:org_springframework_spring_web",
+    "@maven//:org_springframework_spring_webmvc",
+    "@maven//:org_springframework_spring_context",
+    "@maven//:jakarta_validation_jakarta_validation_api",
 ]
 
 # Application library
@@ -53,6 +57,8 @@ test_deps = [
     "@maven//:org_springframework_boot_spring_boot_test_autoconfigure",
     "@maven//:org_springframework_spring_beans",
     "@maven//:org_springframework_spring_test",
+    "@maven//:org_springframework_spring_web",
+    "@maven//:com_fasterxml_jackson_core_jackson_databind",
 ]
 
 # Unit tests
@@ -69,6 +75,42 @@ java_junit5_test(
     name = "HelloControllerTest",
     srcs = ["src/test/java/cc/liubang/spring/example/HelloControllerTest.java"],
     test_class = "cc.liubang.spring.example.HelloControllerTest",
+    deps = [
+        ":demo_lib",
+    ] + test_deps,
+)
+
+java_junit5_test(
+    name = "UserServiceTest",
+    srcs = ["src/test/java/cc/liubang/spring/example/UserServiceTest.java"],
+    test_class = "cc.liubang.spring.example.UserServiceTest",
+    deps = [
+        ":demo_lib",
+    ] + test_deps,
+)
+
+java_junit5_test(
+    name = "UserControllerTest",
+    srcs = ["src/test/java/cc/liubang/spring/example/UserControllerTest.java"],
+    test_class = "cc.liubang.spring.example.UserControllerTest",
+    deps = [
+        ":demo_lib",
+    ] + test_deps,
+)
+
+java_junit5_test(
+    name = "StreamControllerTest",
+    srcs = ["src/test/java/cc/liubang/spring/example/StreamControllerTest.java"],
+    test_class = "cc.liubang.spring.example.StreamControllerTest",
+    deps = [
+        ":demo_lib",
+    ] + test_deps,
+)
+
+java_junit5_test(
+    name = "GlobalExceptionHandlerTest",
+    srcs = ["src/test/java/cc/liubang/spring/example/GlobalExceptionHandlerTest.java"],
+    test_class = "cc.liubang.spring.example.GlobalExceptionHandlerTest",
     deps = [
         ":demo_lib",
     ] + test_deps,

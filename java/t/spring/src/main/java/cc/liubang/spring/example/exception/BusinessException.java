@@ -15,15 +15,18 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/16 21:43
 
-package cc.liubang.spring.example;
+package cc.liubang.spring.example.exception;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
+public class BusinessException extends RuntimeException {
 
-@SpringBootTest
-class DemoApplicationTest {
+    private final int code;
 
-    @Test
-    void contextLoads() {
+    public BusinessException(int code, String message) {
+        super(message);
+        this.code = code;
+    }
+
+    public int getCode() {
+        return code;
     }
 }
