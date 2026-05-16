@@ -323,6 +323,31 @@ use_repo(flex, "flex")
 register_toolchains("@flex//:toolchain")
 
 ###################################################################################################
+# for java
+###################################################################################################
+bazel_dep(name = "rules_java", version = "9.6.1")
+bazel_dep(name = "rules_jvm_external", version = "7.0")
+
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+maven.install(
+    artifacts = [
+        "org.springframework.boot:spring-boot-starter-web:3.5.0",
+        "org.springframework.boot:spring-boot-starter-test:3.5.0",
+        "org.springframework.boot:spring-boot-starter-actuator:3.5.0",
+    ],
+    known_contributing_modules = [
+        "grpc-java",
+        "protobuf",
+    ],
+    repositories = [
+        "https://repo1.maven.org/maven2",
+        "https://maven.aliyun.com/repository/public",
+    ],
+    lock_file = "//:maven_install.json",
+)
+use_repo(maven, "maven")
+
+###################################################################################################
 # for go
 ###################################################################################################
 bazel_dep(name = "rules_go", version = "0.60.0")
