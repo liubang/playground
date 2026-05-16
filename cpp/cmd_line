@@ -1,0 +1,1 @@
+genhtml --ignore-errors negative --output coverage-cpp /tmp/coverage_filtered.dat
