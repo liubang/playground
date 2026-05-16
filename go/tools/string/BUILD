@@ -15,7 +15,7 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2025/11/19 17:20
 
-load("@rules_go//go:def.bzl", "go_binary", "go_library")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "string_lib",
@@ -27,5 +27,11 @@ go_library(
     deps = [
         "@com_github_mattn_go_runewidth//:go-runewidth",
         "@com_github_rivo_uniseg//:uniseg",
-    ]
+    ],
+)
+
+go_test(
+    name = "string_test",
+    srcs = ["string_test.go"],
+    embed = [":string_lib"],
 )
