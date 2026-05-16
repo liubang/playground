@@ -15,11 +15,17 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2023/12/23 19:40
 
-load("@rules_go//go:def.bzl", "go_binary", "go_library")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "command_lib",
     srcs = ["command.go"],
     importpath = "github.com/playground/go/tools/command",
     visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "command_test",
+    srcs = ["command_test.go"],
+    embed = [":command_lib"],
 )
