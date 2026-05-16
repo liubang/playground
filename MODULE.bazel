@@ -73,6 +73,7 @@ bazel_dep(name = "grpc", version = "1.74.1")
 ### grpc && protobuf
 
 ## math
+bazel_dep(name = "openblas", version = "0.3.28")
 bazel_dep(name = "eigen", version = "5.0.1.bcr.1")
 
 bazel_dep(name = "openssl", version = "3.3.1.bcr.1")
