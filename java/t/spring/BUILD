@@ -14,7 +14,8 @@
 
 # Authors: liubang (it.liubang@gmail.com)
 
-load("@rules_java//java:defs.bzl", "java_binary", "java_library", "java_test")
+load("@rules_java//java:defs.bzl", "java_binary", "java_library")
+load("@contrib_rules_jvm//java:defs.bzl", "java_junit5_test")
 
 # Spring Boot dependencies
 springboot_deps = [
@@ -44,6 +45,9 @@ java_binary(
 # Test dependencies
 test_deps = [
     "@maven//:org_junit_jupiter_junit_jupiter_api",
+    "@maven//:org_junit_jupiter_junit_jupiter_engine",
+    "@maven//:org_junit_platform_junit_platform_launcher",
+    "@maven//:org_junit_platform_junit_platform_reporting",
     "@maven//:org_springframework_boot_spring_boot_starter_test",
     "@maven//:org_springframework_boot_spring_boot_test",
     "@maven//:org_springframework_boot_spring_boot_test_autoconfigure",
@@ -52,7 +56,7 @@ test_deps = [
 ]
 
 # Unit tests
-java_test(
+java_junit5_test(
     name = "DemoApplicationTest",
     srcs = ["src/test/java/cc/liubang/spring/example/DemoApplicationTest.java"],
     test_class = "cc.liubang.spring.example.DemoApplicationTest",
@@ -61,7 +65,7 @@ java_test(
     ] + test_deps,
 )
 
-java_test(
+java_junit5_test(
     name = "HelloControllerTest",
     srcs = ["src/test/java/cc/liubang/spring/example/HelloControllerTest.java"],
     test_class = "cc.liubang.spring.example.HelloControllerTest",
