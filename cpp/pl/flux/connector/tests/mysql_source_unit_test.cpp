@@ -15,6 +15,7 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/09
 
+#include "cpp/pl/flux/connector/mysql_connection_pool.h"
 #include "cpp/pl/flux/connector/mysql_source.h"
 #include "gtest/gtest.h"
 #include <cstdlib>
@@ -149,6 +150,48 @@ TEST(MySQLSourceTest, SplitManagerBuildsNumericRangeSplitsForFixture) {
         ASSERT_TRUE(split.split_column.has_value());
         ASSERT_TRUE(split.split_lower.has_value());
         ASSERT_TRUE(split.split_upper.has_value());
+        auto source_or = provider.CreatePageSource(split);
+        ASSERT_TRUE(source_or.ok()) << source_or.status();
+        while (true) {
+            auto page_or = (*source_or)->NextPage();
+            ASSERT_TRUE(page_or.ok()) << page_or.status();
+            if (!page_or->has_value()) {
+                break;
+            }
+            total_rows += page_or->value().row_count();
+        }
+    }
+    EXPECT_EQ(6, total_rows);
+}
+
+TEST(MySQLSourceTest, RuntimeConnectionPoolSupportsMetadataSplitsAndPages) {
+    auto dsn = mysql_test_dsn();
+    if (!dsn.has_value()) {
+        GTEST_SKIP() << "set FLUX_MYSQL_TEST_DSN and import "
+                        "cpp/pl/flux/examples/cross_source/mysql_metrics.sql to run MySQL "
+                        "integration tests";
+    }
+    auto pool_or = MakeMySQLConnectionPool(*dsn, 2);
+    ASSERT_TRUE(pool_or.ok()) << pool_or.status();
+    MySQLRuntimeOptions options;
+    options.target_split_count = 3;
+    options.rows_per_page = 2;
+    options.max_idle_connections = 2;
+    TableHandle table{.source = "mysql", .driver = "mysql", .dsn = *dsn, .table = "cpu"};
+
+    MySQLConnectorMetadata metadata({.source = "mysql", .driver = "mysql"}, *pool_or);
+    auto schema_or = metadata.Schema(table);
+    ASSERT_TRUE(schema_or.ok()) << schema_or.status();
+    EXPECT_EQ(7, schema_or->columns.size());
+
+    MySQLSplitManager split_manager(options, *pool_or);
+    auto splits_or = split_manager.GetSplits(table, {});
+    ASSERT_TRUE(splits_or.ok()) << splits_or.status();
+    ASSERT_GT(splits_or->size(), 1);
+
+    MySQLPageSourceProvider provider(options, *pool_or);
+    size_t total_rows = 0;
+    for (const auto& split : *splits_or) {
         auto source_or = provider.CreatePageSource(split);
         ASSERT_TRUE(source_or.ok()) << source_or.status();
         while (true) {
