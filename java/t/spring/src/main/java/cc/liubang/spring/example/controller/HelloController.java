@@ -1,4 +1,4 @@
-// Copyright (c) 2024 The Authors. All rights reserved.
+// Copyright (c) 2026 The Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,9 +13,11 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
+// Created: 2026/05/16 21:43
 
 package cc.liubang.spring.example.controller;
 
+import cc.liubang.spring.example.dto.ApiResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -29,18 +31,18 @@ import java.util.Map;
 public class HelloController {
 
     @GetMapping("/hello")
-    public Map<String, Object> hello() {
-        return Map.of(
+    public ApiResponse<Map<String, Object>> hello() {
+        return ApiResponse.success(Map.of(
             "message", "Hello, Spring Boot with Bazel!",
             "timestamp", LocalDateTime.now().toString()
-        );
+        ));
     }
 
     @GetMapping("/hello/{name}")
-    public Map<String, Object> helloName(@PathVariable String name) {
-        return Map.of(
+    public ApiResponse<Map<String, Object>> helloName(@PathVariable String name) {
+        return ApiResponse.success(Map.of(
             "message", String.format("Hello, %s!", name),
             "timestamp", LocalDateTime.now().toString()
-        );
+        ));
     }
 }

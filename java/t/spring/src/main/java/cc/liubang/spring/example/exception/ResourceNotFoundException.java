@@ -15,15 +15,19 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/16 21:43
 
-package cc.liubang.spring.example;
+package cc.liubang.spring.example.exception;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
+public class ResourceNotFoundException extends RuntimeException {
 
-@SpringBootTest
-class DemoApplicationTest {
+    private final String resource;
+    private final String id;
 
-    @Test
-    void contextLoads() {
+    public ResourceNotFoundException(String resource, String id) {
+        super(String.format("%s not found with id: %s", resource, id));
+        this.resource = resource;
+        this.id = id;
     }
+
+    public String getResource() { return resource; }
+    public String getId() { return id; }
 }
