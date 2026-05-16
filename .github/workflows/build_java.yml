@@ -1,0 +1,70 @@
+---
+name: build-java
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "MODULE.bazel"
+      - "java/**"
+      - ".github/workflows/build_java.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-java:
+    name: java playground
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          bazelisk-cache: true
+          repository-cache: true
+          disk-cache: ${{ github.workflow }}-${{ runner.os }}
+
+      - name: build
+        run: |
+          bazel build //java/...
+
+      - name: coverage
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lcov
+          bazel coverage \
+            --combined_report=lcov \
+            --instrumentation_filter="//java[/:]" \
+            //java/...
+          ls -lh ./bazel-out/_coverage/_coverage_report.dat
+          genhtml --ignore-errors negative --output coverage-java ./bazel-out/_coverage/_coverage_report.dat
+
+      - name: generate coverage badge
+        run: |
+          COVERAGE=$(lcov --summary ./bazel-out/_coverage/_coverage_report.dat 2>&1 | grep "lines" | awk '{print $2}' | tr -d '%')
+          if [ "$(echo "$COVERAGE >= 80" | bc)" -eq 1 ]; then
+            COLOR="brightgreen"
+          elif [ "$(echo "$COVERAGE >= 60" | bc)" -eq 1 ]; then
+            COLOR="yellow"
+          else
+            COLOR="red"
+          fi
+          echo "{\"schemaVersion\":1,\"label\":\"coverage-java\",\"message\":\"${COVERAGE}%\",\"color\":\"${COLOR}\"}" > coverage-java/badge.json
+
+      - name: Deploy 🚀
+        uses: peaceiris/actions-gh-pages@v4
+        if: ${{ github.ref == 'refs/heads/main' }}
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./coverage-java
+          publish_branch: coverage
+          destination_dir: java
+          keep_files: true
+          user_name: "liubang"
+          user_email: "it.liubang@gmail.com"

@@ -151,8 +151,8 @@ jobs:
             --instrumentation_filter="//cpp/pl[/:]" \
             -- //cpp/... -//cpp/pl/recall/embedding_server/...
           ls -lh ./bazel-out/_coverage/_coverage_report.dat
-          genhtml --ignore-errors negative --output coverage ./bazel-out/_coverage/_coverage_report.dat
-          cp -r ./registry ./coverage/
+          genhtml --ignore-errors negative --output coverage-cpp ./bazel-out/_coverage/_coverage_report.dat
+          cp -r ./registry ./coverage-cpp/
       - name: generate coverage badge
         run: |
           COVERAGE=$(lcov --summary ./bazel-out/_coverage/_coverage_report.dat 2>&1 | grep "lines" | awk '{print $2}' | tr -d '%')
@@ -163,13 +163,15 @@ jobs:
           else
             COLOR="red"
           fi
-          echo "{\"schemaVersion\":1,\"label\":\"coverage-cpp\",\"message\":\"${COVERAGE}%\",\"color\":\"${COLOR}\"}" > coverage/badge.json
+          echo "{\"schemaVersion\":1,\"label\":\"coverage-cpp\",\"message\":\"${COVERAGE}%\",\"color\":\"${COLOR}\"}" > coverage-cpp/badge.json
       - name: Deploy 🚀
         uses: peaceiris/actions-gh-pages@v4
         if: ${{ github.ref == 'refs/heads/main' }}
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./coverage
+          publish_dir: ./coverage-cpp
           publish_branch: coverage
+          destination_dir: cpp
+          keep_files: true
           user_name: "liubang"
           user_email: "it.liubang@gmail.com"
