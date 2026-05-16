@@ -206,6 +206,11 @@ size_t default_sqlite_split_count() {
 absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
                                         const ScanRequest& request,
                                         const TableSchema& schema) {
+    auto contract_status = ValidateScanRequestAgainstSchema(request, schema, "sqlite");
+    if (!contract_status.ok()) {
+        return contract_status;
+    }
+
     std::unordered_set<std::string> schema_columns;
     schema_columns.reserve(schema.columns.size());
     for (const auto& column : schema.columns) {

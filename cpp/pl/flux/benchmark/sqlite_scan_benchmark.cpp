@@ -90,6 +90,22 @@ bool create_database(const std::string& path, int64_t rows) {
     return ok;
 }
 
+struct SplitTotals {
+    size_t bytes = 0;
+    double wall_time_ms = 0.0;
+};
+
+SplitTotals split_totals(const pl::flux::execution::ExecutionProfile& profile) {
+    SplitTotals totals;
+    for (const auto& pipeline : profile.pipelines) {
+        for (const auto& split : pipeline.split_stats) {
+            totals.bytes += split.bytes_produced;
+            totals.wall_time_ms += split.wall_time_ms;
+        }
+    }
+    return totals;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -150,6 +166,7 @@ int main(int argc, char** argv) {
     const double seconds = std::chrono::duration<double>(elapsed).count();
     const size_t output_rows = result_or->value.as_table().rows.size();
     const auto& profile = result_or->profile.pipelines.front();
+    const SplitTotals splits = split_totals(result_or->profile);
     std::cout << "{"
               << "\"scenario\":\"" << scenario << "\","
               << "\"rows\":" << rows << ","
@@ -157,6 +174,8 @@ int main(int argc, char** argv) {
               << "\"drivers\":" << drivers << ","
               << "\"output_rows\":" << output_rows << ","
               << "\"pages\":" << profile.pages << ","
+              << "\"split_bytes\":" << splits.bytes << ","
+              << "\"split_wall_time_ms\":" << splits.wall_time_ms << ","
               << "\"blocking\":" << (profile.blocking ? "true" : "false") << ","
               << "\"seconds\":" << seconds << ","
               << "\"rows_per_second\":" << static_cast<double>(rows) / std::max(seconds, 0.000001)

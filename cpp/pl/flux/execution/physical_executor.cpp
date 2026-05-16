@@ -27,6 +27,7 @@
 #include "cpp/pl/flux/runtime/runtime_builtin_aggregate_helpers.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_table_helpers.h"
 #include <algorithm>
+#include <chrono>
 #include <condition_variable>
 #include <cstddef>
 #include <deque>
@@ -37,14 +38,15 @@
 #include <queue>
 #include <sstream>
 #include <string>
-#include <vector>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 namespace pl::flux::execution {
 namespace {
 using namespace detail;
+using Clock = std::chrono::steady_clock;
 
 Value literal_value(const plan::PredicateLiteral& literal) {
     switch (literal.kind) {
@@ -62,33 +64,6 @@ Value literal_value(const plan::PredicateLiteral& literal) {
             return Value::time(literal.string_value);
     }
     return Value::null();
-}
-
-absl::StatusOr<bool> predicate_matches_page_row(const PageChunk& chunk,
-                                                size_t row_index,
-                                                const plan::PredicateSpec& predicate) {
-    const Value* lhs = PageChunkValueAt(chunk, row_index, predicate.column);
-    if (lhs == nullptr) {
-        return absl::InvalidArgumentError(
-            absl::StrCat("memory filter references unavailable column: ", predicate.column));
-    }
-    const Value rhs = literal_value(predicate.literal);
-    const int cmp = compare_values(lhs, &rhs);
-    switch (predicate.op) {
-        case plan::PredicateOp::Eq:
-            return cmp == 0;
-        case plan::PredicateOp::NotEq:
-            return cmp != 0;
-        case plan::PredicateOp::Lt:
-            return cmp < 0;
-        case plan::PredicateOp::Lte:
-            return cmp <= 0;
-        case plan::PredicateOp::Gt:
-            return cmp > 0;
-        case plan::PredicateOp::Gte:
-            return cmp >= 0;
-    }
-    return false;
 }
 
 bool page_row_time_in_range(const PageChunk& chunk, size_t row_index, const plan::RangeSpec& spec) {
@@ -163,6 +138,19 @@ absl::StatusOr<std::vector<connector::ConnectorSplit>> create_connector_splits(
     return *splits_or;
 }
 
+double elapsed_ms(Clock::time_point start) {
+    return std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+}
+
+void add_page_to_split_stats(connector::ConnectorSplitStats* stats, const Page& page) {
+    if (stats == nullptr) {
+        return;
+    }
+    ++stats->pages_produced;
+    stats->rows_produced += page.row_count();
+    stats->bytes_produced += EstimatePageBytes(page);
+}
+
 bool page_row_less(const std::shared_ptr<ObjectValue>& lhs,
                    const std::shared_ptr<ObjectValue>& rhs,
                    const std::vector<plan::SortKey>& keys) {
@@ -212,8 +200,7 @@ absl::StatusOr<Page> apply_topn_page(const Page& input,
     auto worse_first = [&](const auto& lhs, const auto& rhs) {
         return page_row_less(lhs, rhs, keys);
     };
-    std::priority_queue<std::shared_ptr<ObjectValue>,
-                        std::vector<std::shared_ptr<ObjectValue>>,
+    std::priority_queue<std::shared_ptr<ObjectValue>, std::vector<std::shared_ptr<ObjectValue>>,
                         decltype(worse_first)>
         heap(worse_first);
     for (const auto& row : rows_from_page(input)) {
@@ -259,8 +246,7 @@ absl::StatusOr<Page> apply_group_page(const Page& input,
             chunks.emplace_back();
             const Value* group_value = grouped_row->lookup("_group");
             if (group_value != nullptr && group_value->type() == Value::Type::Object) {
-                chunks.back().group_key =
-                    std::make_shared<ObjectValue>(group_value->as_object());
+                chunks.back().group_key = std::make_shared<ObjectValue>(group_value->as_object());
             }
         }
         chunks[it->second].rows.push_back(std::move(grouped_row));
@@ -420,6 +406,27 @@ absl::StatusOr<Page> apply_filter_page(const Page& input,
     std::vector<PageChunk> chunks;
     chunks.reserve(input.chunks.size());
     for (const auto& source : input.chunks) {
+        PageSchema schema = SchemaFromPageChunk(source);
+        struct IndexedPredicate {
+            const plan::PredicateSpec* predicate = nullptr;
+            size_t column_index = 0;
+            Value literal;
+        };
+        std::vector<IndexedPredicate> predicates;
+        predicates.reserve(plan->filter().predicates.size());
+        for (const auto& predicate : plan->filter().predicates) {
+            auto source_index = schema.FindColumn(predicate.column);
+            if (!source_index.has_value()) {
+                return absl::InvalidArgumentError(absl::StrCat(
+                    "memory filter references unavailable column: ", predicate.column));
+            }
+            predicates.push_back(IndexedPredicate{
+                .predicate = &predicate,
+                .column_index = *source_index,
+                .literal = literal_value(predicate.literal),
+            });
+        }
+
         PageChunk chunk;
         chunk.group_key = source.group_key;
         chunk.row_count = 0;
@@ -427,15 +434,39 @@ absl::StatusOr<Page> apply_filter_page(const Page& input,
         for (const auto& source_column : source.columns) {
             chunk.columns.push_back(
                 ColumnVector{.name = source_column.name, .type = source_column.type, .values = {}});
+            chunk.columns.back().values.reserve(source_column.values.size());
         }
         for (size_t row_index = 0; row_index < source.row_count; ++row_index) {
             bool keep = true;
-            for (const auto& predicate : plan->filter().predicates) {
-                auto matches_or = predicate_matches_page_row(source, row_index, predicate);
-                if (!matches_or.ok()) {
-                    return matches_or.status();
+            for (const auto& item : predicates) {
+                const auto& column = source.columns[item.column_index];
+                if (row_index >= column.values.size()) {
+                    keep = false;
+                    break;
                 }
-                if (!*matches_or) {
+                const int cmp = compare_values(&column.values[row_index], &item.literal);
+                bool matches = false;
+                switch (item.predicate->op) {
+                    case plan::PredicateOp::Eq:
+                        matches = cmp == 0;
+                        break;
+                    case plan::PredicateOp::NotEq:
+                        matches = cmp != 0;
+                        break;
+                    case plan::PredicateOp::Lt:
+                        matches = cmp < 0;
+                        break;
+                    case plan::PredicateOp::Lte:
+                        matches = cmp <= 0;
+                        break;
+                    case plan::PredicateOp::Gt:
+                        matches = cmp > 0;
+                        break;
+                    case plan::PredicateOp::Gte:
+                        matches = cmp >= 0;
+                        break;
+                }
+                if (!matches) {
                     keep = false;
                     break;
                 }
@@ -525,22 +556,28 @@ std::optional<std::string> exchange_partition_key(const ObjectValue& row,
     return key;
 }
 
-Value apply_exchange_value(const Value& input_value, const std::shared_ptr<plan::PlanNode>& plan) {
-    const auto& input = input_value.as_table();
-    std::vector<TableChunk> chunks;
+absl::StatusOr<Page> apply_exchange_page(const Page& input,
+                                         const std::shared_ptr<plan::PlanNode>& plan) {
+    auto status = ValidatePage(input);
+    if (!status.ok()) {
+        return status;
+    }
     if (plan->exchange().kind == plan::ExchangeKind::Gather ||
         plan->exchange().partition_keys.empty()) {
-        TableChunk chunk;
-        chunk.rows = input.rows;
-        chunk.columns = all_visible_columns_in_order(input);
-        chunks.push_back(std::move(chunk));
-    } else {
-        std::unordered_map<std::string, size_t> partition_index;
-        std::vector<std::string> partition_order;
-        for (const auto& row : input.rows) {
-            if (row == nullptr) {
-                continue;
-            }
+        return page_with_plan(input, plan);
+    }
+
+    std::vector<TableChunk> chunks;
+    std::unordered_map<std::string, size_t> partition_index;
+    std::vector<std::string> partition_order;
+    for (const auto& page_chunk : input.chunks) {
+        std::vector<std::string> columns;
+        columns.reserve(page_chunk.columns.size());
+        for (const auto& column : page_chunk.columns) {
+            columns.push_back(column.name);
+        }
+        for (size_t row_index = 0; row_index < page_chunk.row_count; ++row_index) {
+            auto row = RowFromPageChunk(page_chunk, row_index);
             auto key = exchange_partition_key(*row, plan->exchange().partition_keys);
             if (!key.has_value()) {
                 continue;
@@ -550,21 +587,17 @@ Value apply_exchange_value(const Value& input_value, const std::shared_ptr<plan:
                 const size_t index = chunks.size();
                 partition_index.emplace(*key, index);
                 partition_order.push_back(*key);
-                chunks.emplace_back();
+                TableChunk chunk;
+                chunk.columns = columns;
+                chunks.push_back(std::move(chunk));
                 it = partition_index.find(partition_order.back());
             }
-            chunks[it->second].rows.push_back(row);
-        }
-        const auto columns = all_visible_columns_in_order(input);
-        for (auto& chunk : chunks) {
-            chunk.columns = columns;
+            chunks[it->second].rows.push_back(std::move(row));
         }
     }
-    Value value = Value::table_stream(input.bucket, std::move(chunks), input.range_start,
-                                      input.range_stop, input.result_name);
-    value.as_table_mut().plan = plan;
-    value.as_table_mut().materialized = true;
-    return value;
+    Page output = PageFromTableChunks(input.bucket, chunks, input.range_start, input.range_stop,
+                                      input.result_name);
+    return page_with_plan(std::move(output), plan);
 }
 
 std::optional<std::string> local_join_key(const ObjectValue& row,
@@ -825,8 +858,10 @@ public:
             return;
         }
         out->insert(out->end(), split_stats_.begin(), split_stats_.end());
-        if (page_source_ != nullptr) {
-            out->push_back(page_source_->Stats());
+        if (current_split_stats_.has_value()) {
+            connector::ConnectorSplitStats current = *current_split_stats_;
+            current.wall_time_ms = elapsed_ms(current_split_started_);
+            out->push_back(current);
         }
     }
 
@@ -849,6 +884,10 @@ public:
                     return page_source_or.status();
                 }
                 page_source_ = std::move(*page_source_or);
+                current_split_stats_ = connector::ConnectorSplitStats{
+                    .split_id = splits_[next_split_].split_id,
+                };
+                current_split_started_ = Clock::now();
                 ++next_split_;
             }
 
@@ -859,7 +898,12 @@ public:
             if (!page_or->has_value()) {
                 if (next_split_ > 0) {
                     splits_[next_split_ - 1].finished = page_source_->Finished();
-                    split_stats_.push_back(page_source_->Stats());
+                    if (current_split_stats_.has_value()) {
+                        current_split_stats_->finished = page_source_->Finished();
+                        current_split_stats_->wall_time_ms = elapsed_ms(current_split_started_);
+                        split_stats_.push_back(*current_split_stats_);
+                        current_split_stats_.reset();
+                    }
                 }
                 page_source_.reset();
                 continue;
@@ -868,6 +912,7 @@ public:
             if (!status.ok()) {
                 return status;
             }
+            add_page_to_split_stats(&*current_split_stats_, page_or->value());
             return page_or;
         }
     }
@@ -892,6 +937,8 @@ private:
     std::unique_ptr<connector::ConnectorRuntime> runtime_;
     std::vector<connector::ConnectorSplit> splits_;
     std::vector<connector::ConnectorSplitStats> split_stats_;
+    std::optional<connector::ConnectorSplitStats> current_split_stats_;
+    Clock::time_point current_split_started_;
     std::unique_ptr<connector::ConnectorPageSource> page_source_;
     size_t next_split_ = 0;
     bool initialized_ = false;
@@ -908,8 +955,10 @@ public:
         if (out == nullptr) {
             return;
         }
-        if (page_source_ != nullptr) {
-            out->push_back(page_source_->Stats());
+        if (page_source_ != nullptr && current_split_stats_.has_value()) {
+            connector::ConnectorSplitStats current = *current_split_stats_;
+            current.wall_time_ms = elapsed_ms(current_split_started_);
+            out->push_back(current);
         } else if (split_stats_.finished) {
             out->push_back(split_stats_);
         }
@@ -928,6 +977,10 @@ public:
                 return page_source_or.status();
             }
             page_source_ = std::move(*page_source_or);
+            current_split_stats_ = connector::ConnectorSplitStats{
+                .split_id = split_.split_id,
+            };
+            current_split_started_ = Clock::now();
             initialized_ = true;
         }
         auto page_or = page_source_->NextPage();
@@ -936,19 +989,27 @@ public:
         }
         if (!page_or->has_value()) {
             split_.finished = page_source_->Finished();
-            split_stats_ = page_source_->Stats();
+            if (current_split_stats_.has_value()) {
+                current_split_stats_->finished = page_source_->Finished();
+                current_split_stats_->wall_time_ms = elapsed_ms(current_split_started_);
+                split_stats_ = *current_split_stats_;
+                current_split_stats_.reset();
+            }
             return std::nullopt;
         }
         auto status = ValidatePage(page_or->value());
         if (!status.ok()) {
             return status;
         }
+        add_page_to_split_stats(&*current_split_stats_, page_or->value());
         return page_or;
     }
 
 private:
     connector::ConnectorSplit split_;
     connector::ConnectorSplitStats split_stats_;
+    std::optional<connector::ConnectorSplitStats> current_split_stats_;
+    Clock::time_point current_split_started_;
     std::unique_ptr<connector::ConnectorRuntime> runtime_;
     std::unique_ptr<connector::ConnectorPageSource> page_source_;
     bool initialized_ = false;
@@ -1272,21 +1333,23 @@ public:
     }
 
     absl::StatusOr<std::optional<Page>> NextPage() override {
-        if (emitted_) {
-            return std::nullopt;
-        }
-        emitted_ = true;
-        auto input_or = collect_input_value(input_.get());
+        auto input_or = next_input_page(input_.get());
         if (!input_or.ok()) {
             return input_or.status();
         }
-        return page_from_value(apply_exchange_value(*input_or, plan_));
+        if (!input_or->has_value()) {
+            return std::nullopt;
+        }
+        auto page_or = apply_exchange_page(input_or->value(), plan_);
+        if (!page_or.ok()) {
+            return page_or.status();
+        }
+        return std::move(*page_or);
     }
 
 private:
     std::shared_ptr<plan::PlanNode> plan_;
     std::unique_ptr<Operator> input_;
-    bool emitted_ = false;
 };
 
 class LimitOperator final : public Operator {
@@ -2188,8 +2251,7 @@ ExecutionProfile BuildExecutionProfile(const std::vector<PipelineProfile>& pipel
 bool IsBlockingOperatorName(const std::string& name) {
     return name == "SortOperator" || name == "GroupOperator" || name == "AggregateOperator" ||
            name == "DistinctOperator" || name == "LocalHashJoinOperator" ||
-           name == "ExchangeOperator" || name == "MaterializeOperator" ||
-           name == "TopNOperator";
+           name == "ExchangeOperator" || name == "MaterializeOperator" || name == "TopNOperator";
 }
 
 bool HasBlockingOperator(const std::vector<std::string>& operators) {
@@ -2530,8 +2592,7 @@ std::string FormatPipelinePlan(const std::shared_ptr<plan::PlanNode>& logical_pl
     out << "PipelinePlan\n";
     for (const auto& pipeline : task_or->pipelines) {
         const size_t drivers = pipeline.driver_roots.empty() ? 1 : pipeline.driver_roots.size();
-        out << R"(- Pipeline(id=")" << pipeline.id << R"(", role=")" << pipeline.role
-            << "\")\n";
+        out << R"(- Pipeline(id=")" << pipeline.id << R"(", role=")" << pipeline.role << "\")\n";
         out << "  drivers: " << drivers << "\n";
         if (!pipeline.dependencies.empty()) {
             out << "  depends_on: " << plan::StringList(pipeline.dependencies) << "\n";
@@ -2551,7 +2612,8 @@ std::string FormatSplitStats(const std::vector<connector::ConnectorSplitStats>& 
             out << ", ";
         }
         out << "{id=" << stats[i].split_id << ", pages=" << stats[i].pages_produced
-            << ", rows=" << stats[i].rows_produced
+            << ", rows=" << stats[i].rows_produced << ", bytes=" << stats[i].bytes_produced
+            << ", wall_ms=" << stats[i].wall_time_ms
             << ", finished=" << (stats[i].finished ? "true" : "false") << "}";
     }
     out << "]";
@@ -2562,8 +2624,7 @@ std::string FormatExecutionProfile(const ExecutionProfile& profile) {
     std::ostringstream out;
     out << "ExecutionProfile\n";
     for (const auto& pipeline : profile.pipelines) {
-        out << R"(- Pipeline(id=")" << pipeline.id << R"(", role=")" << pipeline.role
-            << "\")\n";
+        out << R"(- Pipeline(id=")" << pipeline.id << R"(", role=")" << pipeline.role << "\")\n";
         if (!pipeline.dependencies.empty()) {
             out << "  depends_on: " << plan::StringList(pipeline.dependencies) << "\n";
         }
