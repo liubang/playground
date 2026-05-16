@@ -23,6 +23,7 @@
 #include "cpp/pl/flux/runtime/runtime_builtin.h"
 #include "cpp/pl/flux/runtime/runtime_exec.h"
 #include "cpp/pl/flux/syntax/parser.h"
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
@@ -690,16 +691,23 @@ TEST(RuntimeExecTest, PhysicalPlannerBuildsOperatorPipeline) {
     auto task_or = execution::PhysicalPlanner().Plan(plan);
 
     ASSERT_TRUE(task_or.ok()) << task_or.status();
-    ASSERT_EQ(1, task_or->pipelines.size());
-    EXPECT_EQ("main", task_or->pipelines[0].name);
+    ASSERT_EQ(2, task_or->pipelines.size());
+    EXPECT_EQ("producer", task_or->pipelines[0].name);
     EXPECT_EQ((std::vector<std::string>{
                   "ConnectorScanOperator",
+                  "ExchangeSinkOperator",
+              }),
+              task_or->pipelines[0].operators);
+    EXPECT_EQ("main", task_or->pipelines[1].name);
+    EXPECT_EQ((std::vector<std::string>{"breaker-input"}), task_or->pipelines[1].dependencies);
+    EXPECT_EQ((std::vector<std::string>{
+                  "ExchangeSourceOperator",
                   "GroupOperator",
                   "FilterOperator",
                   "LimitOperator",
                   "OutputOperator",
               }),
-              task_or->pipelines[0].operators);
+              task_or->pipelines[1].operators);
 }
 
 TEST(RuntimeExecTest, PhysicalPlannerPreservesMaterializeOperatorInPipeline) {
@@ -711,15 +719,20 @@ TEST(RuntimeExecTest, PhysicalPlannerPreservesMaterializeOperatorInPipeline) {
     auto task_or = execution::PhysicalPlanner().Plan(plan);
 
     ASSERT_TRUE(task_or.ok()) << task_or.status();
-    ASSERT_EQ(1, task_or->pipelines.size());
+    ASSERT_EQ(2, task_or->pipelines.size());
     EXPECT_EQ((std::vector<std::string>{
                   "ConnectorScanOperator",
+                  "ExchangeSinkOperator",
+              }),
+              task_or->pipelines[0].operators);
+    EXPECT_EQ((std::vector<std::string>{
+                  "ExchangeSourceOperator",
                   "GroupOperator",
                   "MaterializeOperator",
                   "AggregateOperator",
                   "OutputOperator",
               }),
-              task_or->pipelines[0].operators);
+              task_or->pipelines[1].operators);
 }
 
 TEST(RuntimeExecTest, PhysicalExecutorRunsMemoryAggregateAcrossMaterializeBarrier) {
@@ -735,15 +748,19 @@ TEST(RuntimeExecTest, PhysicalExecutorRunsMemoryAggregateAcrossMaterializeBarrie
     const auto& table = result_or->as_table();
     EXPECT_TRUE(table.materialized);
     ASSERT_EQ(3, table.rows.size());
-    ASSERT_NE(nullptr, table.rows[0]);
-    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
-    EXPECT_EQ("82.375", table.rows[0]->lookup("usage")->string());
-    ASSERT_NE(nullptr, table.rows[1]);
-    EXPECT_EQ("\"edge-2\"", table.rows[1]->lookup("host")->string());
-    EXPECT_EQ("88", table.rows[1]->lookup("usage")->string());
-    ASSERT_NE(nullptr, table.rows[2]);
-    EXPECT_EQ("\"edge-3\"", table.rows[2]->lookup("host")->string());
-    EXPECT_EQ("64.25", table.rows[2]->lookup("usage")->string());
+    std::vector<std::pair<std::string, std::string>> rows;
+    rows.reserve(table.rows.size());
+    for (const auto& row : table.rows) {
+        ASSERT_NE(nullptr, row);
+        rows.emplace_back(row->lookup("host")->string(), row->lookup("usage")->string());
+    }
+    std::sort(rows.begin(), rows.end());
+    EXPECT_EQ((std::vector<std::pair<std::string, std::string>>{
+                  {"\"edge-1\"", "82.375"},
+                  {"\"edge-2\"", "88"},
+                  {"\"edge-3\"", "64.25"},
+              }),
+              rows);
 }
 
 TEST(RuntimeExecTest, PhysicalExecutorRunsMemoryDistinctAfterConnectorScan) {
@@ -756,12 +773,14 @@ TEST(RuntimeExecTest, PhysicalExecutorRunsMemoryDistinctAfterConnectorScan) {
     const auto& table = result_or->as_table();
     EXPECT_TRUE(table.materialized);
     ASSERT_EQ(3, table.rows.size());
-    ASSERT_NE(nullptr, table.rows[0]);
-    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
-    ASSERT_NE(nullptr, table.rows[1]);
-    EXPECT_EQ("\"edge-2\"", table.rows[1]->lookup("host")->string());
-    ASSERT_NE(nullptr, table.rows[2]);
-    EXPECT_EQ("\"edge-3\"", table.rows[2]->lookup("host")->string());
+    std::vector<std::string> hosts;
+    hosts.reserve(table.rows.size());
+    for (const auto& row : table.rows) {
+        ASSERT_NE(nullptr, row);
+        hosts.push_back(row->lookup("host")->string());
+    }
+    std::sort(hosts.begin(), hosts.end());
+    EXPECT_EQ((std::vector<std::string>{"\"edge-1\"", "\"edge-2\"", "\"edge-3\""}), hosts);
 }
 
 TEST(RuntimeExecTest, PhysicalExecutorRunsLocalHashJoinAcrossConnectorInputs) {
