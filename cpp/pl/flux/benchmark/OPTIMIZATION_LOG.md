@@ -222,3 +222,21 @@
 - 给 benchmark 增加冷热分离或重复采样。
 - 继续优化 `pivot()` 的 row identity / 列名构造，尽量减少字符串分配。
 - 继续观察 `join()` 在更大 `on` 列集合和更宽 schema 下的行为，再决定是否值得做更大改造。
+
+## 2026-05-16：connector page pipeline 继续补齐
+
+这一轮围绕大表查询路径继续把执行主干做实：
+
+- Top-N 从 single split 全局 SQL order 退化，推进为 split 内 partial Top-N + root pipeline 全局
+  sort/limit。
+- `PhysicalExecutor::ExecuteToSink` 补成真实 Page sink API，benchmark 可以不先物化完整
+  `TableValue`。
+- `sort/group/distinct/aggregate` 这类 blocking unary operator 直接收集 Page，`aggregate` 的
+  count/sum/mean/min/max 已经消掉执行器内的 `TableValue` 聚合转换。
+- `explain(physical: true)` 的 pipeline/profile 输出改成多行，并增加 drivers/split stats 信息，
+  更容易看出 split 和 breaker pipeline。
+- 新增 `mysql_scan_benchmark` 和 `run_connector_benchmarks.py`，用真实 MySQL 表或 SQLite
+  生成表覆盖 scan/filter/topn 的 connector pipeline，并输出 repeat samples 的 median/mean。
+
+这轮仍然不把单次 benchmark 数字写成跨环境性能承诺；新增 target 的价值是让后续每次改
+connector split、page source 或 scheduler 时，都能用相同 DSN 和 scenario 复验行为与趋势。
