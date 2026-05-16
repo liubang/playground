@@ -21,6 +21,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
+#include "cpp/pl/flux/connector/mysql_connection_pool.h"
 #include "cpp/pl/flux/connector/sql_builder.h"
 #include <algorithm>
 #include <boost/asio/io_context.hpp>
@@ -39,6 +40,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <exception>
 #include <iomanip>
 #include <limits>
@@ -69,16 +71,63 @@ std::string cache_key(const std::string& dsn, const std::string& table) {
 }
 
 struct MySQLMetadataCache {
+    struct SplitExtent {
+        int64_t lower = 0;
+        int64_t upper = 0;
+        int64_t count = 0;
+        Clock::time_point refreshed_at;
+    };
+
     std::mutex mu;
     std::unordered_map<std::string, TableSchema> schemas;
     std::unordered_map<std::string, TableStatistics> statistics;
     std::unordered_map<std::string, std::optional<std::string>> primary_keys;
-    std::unordered_map<std::string, std::tuple<int64_t, int64_t, int64_t>> split_extents;
+    std::unordered_map<std::string, SplitExtent> split_extents;
 };
 
 MySQLMetadataCache& metadata_cache() {
     static MySQLMetadataCache* cache = new MySQLMetadataCache();
     return *cache;
+}
+
+size_t read_size_option(const char* name, size_t fallback) {
+    const char* value = std::getenv(name);
+    if (value == nullptr || *value == '\0') {
+        return fallback;
+    }
+    char* end = nullptr;
+    const auto parsed = std::strtoull(value, &end, 10);
+    if (end == value || *end != '\0' || parsed == 0) {
+        return fallback;
+    }
+    return static_cast<size_t>(parsed);
+}
+
+int64_t read_i64_option(const char* name, int64_t fallback) {
+    const char* value = std::getenv(name);
+    if (value == nullptr || *value == '\0') {
+        return fallback;
+    }
+    char* end = nullptr;
+    const auto parsed = std::strtoll(value, &end, 10);
+    if (end == value || *end != '\0' || parsed < 0) {
+        return fallback;
+    }
+    return parsed;
+}
+
+MySQLRuntimeOptions mysql_runtime_options_from_env() {
+    MySQLRuntimeOptions options;
+    options.target_split_count =
+        read_size_option("FLUX_MYSQL_TARGET_SPLITS", options.target_split_count);
+    options.rows_per_page = read_size_option("FLUX_MYSQL_ROWS_PER_PAGE", options.rows_per_page);
+    options.max_idle_connections =
+        read_size_option("FLUX_MYSQL_MAX_IDLE_CONNECTIONS", options.max_idle_connections);
+    options.split_cache_max_entries =
+        read_size_option("FLUX_MYSQL_SPLIT_CACHE_MAX_ENTRIES", options.split_cache_max_entries);
+    options.split_cache_ttl_ms =
+        read_i64_option("FLUX_MYSQL_SPLIT_CACHE_TTL_MS", options.split_cache_ttl_ms);
+    return options;
 }
 
 bool parse_port(std::string_view text, uint16_t* port) {
@@ -302,6 +351,39 @@ absl::StatusOr<mysql::results> execute_query(mysql::any_connection* conn,
     } catch (const std::exception& err) {
         return absl::InvalidArgumentError(absl::StrCat("mysql ", context, " failed: ", err.what()));
     }
+}
+
+struct MySQLConnectionLeaseHolder {
+    std::unique_ptr<asio::io_context> ctx;
+    std::optional<mysql::any_connection> direct_conn;
+    std::optional<MySQLConnectionPool::Lease> lease;
+
+    [[nodiscard]] mysql::any_connection* connection() {
+        if (lease.has_value()) {
+            return lease->connection();
+        }
+        return direct_conn.has_value() ? &*direct_conn : nullptr;
+    }
+};
+
+absl::StatusOr<MySQLConnectionLeaseHolder> acquire_mysql_connection(
+    const std::string& dsn, const std::shared_ptr<MySQLConnectionPool>& pool) {
+    MySQLConnectionLeaseHolder holder;
+    if (pool != nullptr) {
+        auto lease_or = pool->Acquire();
+        if (!lease_or.ok()) {
+            return lease_or.status();
+        }
+        holder.lease.emplace(std::move(*lease_or));
+        return holder;
+    }
+    holder.ctx = std::make_unique<asio::io_context>();
+    auto conn_or = open_connection(holder.ctx.get(), dsn);
+    if (!conn_or.ok()) {
+        return conn_or.status();
+    }
+    holder.direct_conn.emplace(std::move(*conn_or));
+    return holder;
 }
 
 std::string quote_identifier(const std::string& identifier) {
@@ -669,6 +751,14 @@ MySQLSource::MySQLSource(std::string dsn, std::string table)
       table_(std::move(table)),
       query_(absl::StrCat("SELECT * FROM ", quote_table_identifier(table_))) {}
 
+MySQLSource::MySQLSource(std::string dsn,
+                         std::string table,
+                         std::shared_ptr<MySQLConnectionPool> pool)
+    : dsn_(std::move(dsn)),
+      table_(std::move(table)),
+      query_(absl::StrCat("SELECT * FROM ", quote_table_identifier(table_))),
+      pool_(std::move(pool)) {}
+
 absl::StatusOr<TableSchema> MySQLSource::Schema() const {
     const std::string key = cache_key(dsn_, table_);
     {
@@ -680,13 +770,15 @@ absl::StatusOr<TableSchema> MySQLSource::Schema() const {
         }
     }
 
-    asio::io_context ctx;
-    auto conn_or = open_connection(&ctx, dsn_);
+    auto conn_or = acquire_mysql_connection(dsn_, pool_);
     if (!conn_or.ok()) {
         return conn_or.status();
     }
-    auto result_or = execute_query(&*conn_or, query_ + " LIMIT 0", "schema query");
+    auto result_or = execute_query(conn_or->connection(), query_ + " LIMIT 0", "schema query");
     if (!result_or.ok()) {
+        if (conn_or->lease.has_value()) {
+            conn_or->lease->MarkBroken();
+        }
         return result_or.status();
     }
     auto schema_or = schema_from_result(*result_or);
@@ -724,15 +816,18 @@ absl::StatusOr<TableStatistics> MySQLSource::Statistics() const {
         }
     }
 
-    asio::io_context ctx;
-    auto conn_or = open_connection(&ctx, dsn_);
+    auto conn_or = acquire_mysql_connection(dsn_, pool_);
     if (!conn_or.ok()) {
         return conn_or.status();
     }
     auto result_or = execute_query(
-        &*conn_or, absl::StrCat("SELECT COUNT(*) AS row_count FROM (", query_, ") AS flux_source"),
+        conn_or->connection(),
+        absl::StrCat("SELECT COUNT(*) AS row_count FROM (", query_, ") AS flux_source"),
         "statistics query");
     if (!result_or.ok()) {
+        if (conn_or->lease.has_value()) {
+            conn_or->lease->MarkBroken();
+        }
         return result_or.status();
     }
 
@@ -751,7 +846,7 @@ absl::StatusOr<TableStatistics> MySQLSource::Statistics() const {
         statistics.columns.reserve(schema_or->columns.size());
         for (const auto& column : schema_or->columns) {
             auto column_stats_or =
-                execute_query(&*conn_or,
+                execute_query(conn_or->connection(),
                               absl::StrCat("SELECT COUNT(DISTINCT ", quote_identifier(column.name),
                                            "), SUM(CASE WHEN ", quote_identifier(column.name),
                                            " IS NULL THEN 1 ELSE 0 END), AVG(CHAR_LENGTH(CAST(",
@@ -792,8 +887,7 @@ absl::StatusOr<TableStatistics> MySQLSource::Statistics() const {
 }
 
 absl::StatusOr<Value> MySQLSource::Scan(const ScanRequest& request) {
-    asio::io_context ctx;
-    auto conn_or = open_connection(&ctx, dsn_);
+    auto conn_or = acquire_mysql_connection(dsn_, pool_);
     if (!conn_or.ok()) {
         return conn_or.status();
     }
@@ -801,8 +895,11 @@ absl::StatusOr<Value> MySQLSource::Scan(const ScanRequest& request) {
     if (!schema_or.ok()) {
         return schema_or.status();
     }
-    const auto opts_or = conn_or->format_opts();
+    const auto opts_or = conn_or->connection()->format_opts();
     if (opts_or.has_error()) {
+        if (conn_or->lease.has_value()) {
+            conn_or->lease->MarkBroken();
+        }
         return absl::InvalidArgumentError(
             absl::StrCat("mysql format options failed: ", opts_or.error().message()));
     }
@@ -811,8 +908,11 @@ absl::StatusOr<Value> MySQLSource::Scan(const ScanRequest& request) {
     if (!sql_or.ok()) {
         return sql_or.status();
     }
-    auto result_or = execute_query(&*conn_or, *sql_or, "scan query");
+    auto result_or = execute_query(conn_or->connection(), *sql_or, "scan query");
     if (!result_or.ok()) {
+        if (conn_or->lease.has_value()) {
+            conn_or->lease->MarkBroken();
+        }
         return result_or.status();
     }
 
@@ -841,6 +941,10 @@ absl::StatusOr<Value> MySQLSource::Scan(const ScanRequest& request) {
 
 MySQLConnectorMetadata::MySQLConnectorMetadata(SourceSpec spec) : spec_(std::move(spec)) {}
 
+MySQLConnectorMetadata::MySQLConnectorMetadata(SourceSpec spec,
+                                               std::shared_ptr<MySQLConnectionPool> pool)
+    : spec_(std::move(spec)), pool_(std::move(pool)) {}
+
 absl::StatusOr<TableHandle> MySQLConnectorMetadata::GetTableHandle(const SourceSpec& spec) const {
     if (spec.source != "mysql" && spec.driver != "mysql") {
         return absl::InvalidArgumentError(
@@ -861,19 +965,28 @@ absl::StatusOr<TableHandle> MySQLConnectorMetadata::GetTableHandle(const SourceS
 }
 
 absl::StatusOr<TableSchema> MySQLConnectorMetadata::Schema(const TableHandle& table) const {
-    return MySQLSource(table.dsn, table.table).Schema();
+    return MySQLSource(table.dsn, table.table, pool_).Schema();
 }
 
 SourceCapabilities MySQLConnectorMetadata::Capabilities(const TableHandle& table) const {
-    return MySQLSource(table.dsn, table.table).Capabilities();
+    return MySQLSource(table.dsn, table.table, pool_).Capabilities();
 }
 
 absl::StatusOr<TableStatistics> MySQLConnectorMetadata::Statistics(const TableHandle& table) const {
-    return MySQLSource(table.dsn, table.table).Statistics();
+    return MySQLSource(table.dsn, table.table, pool_).Statistics();
 }
 
-MySQLSplitManager::MySQLSplitManager(size_t target_split_count)
-    : target_split_count_(target_split_count == 0 ? 8 : target_split_count) {}
+MySQLSplitManager::MySQLSplitManager(size_t target_split_count) {
+    options_.target_split_count =
+        target_split_count == 0 ? options_.target_split_count : target_split_count;
+    target_split_count_ = options_.target_split_count;
+}
+
+MySQLSplitManager::MySQLSplitManager(MySQLRuntimeOptions options,
+                                     std::shared_ptr<MySQLConnectionPool> pool)
+    : options_(options),
+      pool_(std::move(pool)),
+      target_split_count_(options_.target_split_count == 0 ? 8 : options_.target_split_count) {}
 
 absl::StatusOr<std::vector<ConnectorSplit>> MySQLSplitManager::GetSplits(
     const TableHandle& table, const ScanRequest& request) const {
@@ -893,7 +1006,7 @@ absl::StatusOr<std::vector<ConnectorSplit>> MySQLSplitManager::GetSplits(
     }
 
     const auto schema_started = Clock::now();
-    auto schema_or = MySQLSource(table.dsn, table.table).Schema();
+    auto schema_or = MySQLSource(table.dsn, table.table, pool_).Schema();
     if (!schema_or.ok()) {
         return schema_or.status();
     }
@@ -902,12 +1015,29 @@ absl::StatusOr<std::vector<ConnectorSplit>> MySQLSplitManager::GetSplits(
     split_candidates.reserve(schema_or->columns.size());
 
     asio::io_context ctx;
-    auto conn_or = open_connection(&ctx, table.dsn);
-    if (!conn_or.ok()) {
-        return conn_or.status();
+    std::optional<mysql::any_connection> direct_conn;
+    std::optional<MySQLConnectionPool::Lease> lease;
+    mysql::any_connection* conn = nullptr;
+    if (pool_ != nullptr) {
+        auto lease_or = pool_->Acquire();
+        if (!lease_or.ok()) {
+            return lease_or.status();
+        }
+        lease.emplace(std::move(*lease_or));
+        conn = lease->connection();
+    } else {
+        auto conn_or = open_connection(&ctx, table.dsn);
+        if (!conn_or.ok()) {
+            return conn_or.status();
+        }
+        direct_conn.emplace(std::move(*conn_or));
+        conn = &*direct_conn;
     }
-    const auto opts_or = conn_or->format_opts();
+    const auto opts_or = conn->format_opts();
     if (opts_or.has_error()) {
+        if (lease.has_value()) {
+            lease->MarkBroken();
+        }
         return absl::InvalidArgumentError(
             absl::StrCat("mysql format options failed: ", opts_or.error().message()));
     }
@@ -929,7 +1059,7 @@ absl::StatusOr<std::vector<ConnectorSplit>> MySQLSplitManager::GetSplits(
             return table_literal_or.status();
         }
         auto primary_or = execute_query(
-            &*conn_or,
+            conn,
             absl::StrCat("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE "
                          "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ",
                          *table_literal_or,
@@ -967,25 +1097,32 @@ absl::StatusOr<std::vector<ConnectorSplit>> MySQLSplitManager::GetSplits(
             continue;
         }
         const std::string extent_key = absl::StrCat(key, "\n", candidate);
-        std::optional<std::tuple<int64_t, int64_t, int64_t>> cached_extent;
+        std::optional<MySQLMetadataCache::SplitExtent> cached_extent;
         {
             auto& cache = metadata_cache();
             std::lock_guard<std::mutex> lock(cache.mu);
             auto it = cache.split_extents.find(extent_key);
             if (it != cache.split_extents.end()) {
-                cached_extent = it->second;
+                const bool fresh = options_.split_cache_ttl_ms == 0 ||
+                                   elapsed_ms(it->second.refreshed_at) <=
+                                       static_cast<double>(options_.split_cache_ttl_ms);
+                if (fresh) {
+                    cached_extent = it->second;
+                } else {
+                    cache.split_extents.erase(it);
+                }
             }
         }
         std::optional<int64_t> lower;
         std::optional<int64_t> upper;
         std::optional<int64_t> count;
         if (cached_extent.has_value()) {
-            lower = std::get<0>(*cached_extent);
-            upper = std::get<1>(*cached_extent);
-            count = std::get<2>(*cached_extent);
+            lower = cached_extent->lower;
+            upper = cached_extent->upper;
+            count = cached_extent->count;
         } else {
             auto extent_or =
-                execute_query(&*conn_or,
+                execute_query(conn,
                               absl::StrCat("SELECT MIN(", quote_identifier(candidate), "), MAX(",
                                            quote_identifier(candidate), "), COUNT(*) FROM ",
                                            quote_table_identifier(table.table)),
@@ -1000,7 +1137,16 @@ absl::StatusOr<std::vector<ConnectorSplit>> MySQLSplitManager::GetSplits(
             if (lower.has_value() && upper.has_value() && count.has_value()) {
                 auto& cache = metadata_cache();
                 std::lock_guard<std::mutex> lock(cache.mu);
-                cache.split_extents[extent_key] = std::make_tuple(*lower, *upper, *count);
+                if (options_.split_cache_max_entries > 0 &&
+                    cache.split_extents.size() >= options_.split_cache_max_entries) {
+                    cache.split_extents.clear();
+                }
+                cache.split_extents[extent_key] = MySQLMetadataCache::SplitExtent{
+                    .lower = *lower,
+                    .upper = *upper,
+                    .count = *count,
+                    .refreshed_at = Clock::now(),
+                };
             }
         }
         if (!lower.has_value() || !upper.has_value() || !count.has_value() || *count <= 0 ||
@@ -1042,12 +1188,21 @@ absl::StatusOr<std::vector<ConnectorSplit>> MySQLSplitManager::GetSplits(
     return single_split();
 }
 
-MySQLPageSourceProvider::MySQLPageSourceProvider(size_t rows_per_page)
-    : rows_per_page_(std::max<size_t>(1, rows_per_page)) {}
+MySQLPageSourceProvider::MySQLPageSourceProvider(size_t rows_per_page) {
+    options_.rows_per_page = std::max<size_t>(1, rows_per_page);
+    rows_per_page_ = options_.rows_per_page;
+}
+
+MySQLPageSourceProvider::MySQLPageSourceProvider(MySQLRuntimeOptions options,
+                                                 std::shared_ptr<MySQLConnectionPool> pool)
+    : options_(options),
+      pool_(std::move(pool)),
+      rows_per_page_(std::max<size_t>(1, options_.rows_per_page)) {}
 
 struct MySQLPageSource::Impl {
     asio::io_context ctx;
-    mysql::any_connection conn;
+    std::optional<mysql::any_connection> direct_conn;
+    std::optional<MySQLConnectionPool::Lease> lease;
     mysql::execution_state state;
     ScanRequest request;
     std::optional<std::string> split_column;
@@ -1057,7 +1212,12 @@ struct MySQLPageSource::Impl {
     bool emitted_empty = false;
     bool emitted_any_row = false;
 
-    Impl() : conn(ctx) {}
+    [[nodiscard]] mysql::any_connection* connection() {
+        if (lease.has_value()) {
+            return lease->connection();
+        }
+        return direct_conn.has_value() ? &*direct_conn : nullptr;
+    }
 };
 
 MySQLPageSource::MySQLPageSource(std::string dsn,
@@ -1067,11 +1227,13 @@ MySQLPageSource::MySQLPageSource(std::string dsn,
                                  std::optional<std::string> split_column,
                                  std::optional<int64_t> split_lower,
                                  std::optional<int64_t> split_upper,
-                                 int64_t split_id)
+                                 int64_t split_id,
+                                 std::shared_ptr<MySQLConnectionPool> pool)
     : impl_(std::make_unique<Impl>()),
       dsn_(std::move(dsn)),
       table_(std::move(table)),
-      rows_per_page_(std::max<size_t>(1, rows_per_page)) {
+      rows_per_page_(std::max<size_t>(1, rows_per_page)),
+      pool_(std::move(pool)) {
     impl_->request = std::move(request);
     impl_->split_column = std::move(split_column);
     impl_->split_lower = split_lower;
@@ -1081,20 +1243,35 @@ MySQLPageSource::MySQLPageSource(std::string dsn,
 
 absl::Status MySQLPageSource::Initialize() {
     const auto connect_started = Clock::now();
-    auto conn_or = open_connection(&impl_->ctx, dsn_);
-    stats_.connect_time_ms += elapsed_ms(connect_started);
-    if (!conn_or.ok()) {
-        return conn_or.status();
+    mysql::any_connection* conn = nullptr;
+    if (pool_ != nullptr) {
+        auto lease_or = pool_->Acquire();
+        stats_.connect_time_ms += elapsed_ms(connect_started);
+        if (!lease_or.ok()) {
+            return lease_or.status();
+        }
+        impl_->lease.emplace(std::move(*lease_or));
+        conn = impl_->connection();
+    } else {
+        auto conn_or = open_connection(&impl_->ctx, dsn_);
+        stats_.connect_time_ms += elapsed_ms(connect_started);
+        if (!conn_or.ok()) {
+            return conn_or.status();
+        }
+        impl_->direct_conn.emplace(std::move(*conn_or));
+        conn = impl_->connection();
     }
-    impl_->conn = std::move(*conn_or);
     const auto schema_started = Clock::now();
-    auto schema_or = MySQLSource(dsn_, table_).Schema();
+    auto schema_or = MySQLSource(dsn_, table_, pool_).Schema();
     stats_.schema_time_ms += elapsed_ms(schema_started);
     if (!schema_or.ok()) {
         return schema_or.status();
     }
-    const auto opts_or = impl_->conn.format_opts();
+    const auto opts_or = conn->format_opts();
     if (opts_or.has_error()) {
+        if (impl_->lease.has_value()) {
+            impl_->lease->MarkBroken();
+        }
         return absl::InvalidArgumentError(
             absl::StrCat("mysql format options failed: ", opts_or.error().message()));
     }
@@ -1122,13 +1299,19 @@ absl::Status MySQLPageSource::Initialize() {
     }
     try {
         const auto execute_started = Clock::now();
-        impl_->conn.start_execution(*sql_or, impl_->state);
+        conn->start_execution(*sql_or, impl_->state);
         stats_.execute_time_ms += elapsed_ms(execute_started);
         impl_->column_names = mysql_column_names(impl_->state.meta());
     } catch (const mysql::error_with_diagnostics& err) {
+        if (impl_->lease.has_value()) {
+            impl_->lease->MarkBroken();
+        }
         return absl::InvalidArgumentError(
             absl::StrCat("mysql scan start failed: ", mysql_error_message(err)));
     } catch (const std::exception& err) {
+        if (impl_->lease.has_value()) {
+            impl_->lease->MarkBroken();
+        }
         return absl::InvalidArgumentError(absl::StrCat("mysql scan start failed: ", err.what()));
     }
     return absl::OkStatus();
@@ -1138,6 +1321,10 @@ absl::StatusOr<std::optional<Page>> MySQLPageSource::NextPage() {
     if (impl_ == nullptr || impl_->state.should_start_op()) {
         return absl::InvalidArgumentError("mysql page source is not initialized");
     }
+    mysql::any_connection* conn = impl_->connection();
+    if (conn == nullptr) {
+        return absl::InvalidArgumentError("mysql page source has no connection");
+    }
     if (impl_->state.complete()) {
         if (!impl_->emitted_empty && !impl_->emitted_any_row) {
             impl_->emitted_empty = true;
@@ -1146,6 +1333,9 @@ absl::StatusOr<std::optional<Page>> MySQLPageSource::NextPage() {
             return page;
         }
         stats_.finished = true;
+        if (impl_->lease.has_value()) {
+            impl_->lease->Release();
+        }
         return std::nullopt;
     }
 
@@ -1169,7 +1359,7 @@ absl::StatusOr<std::optional<Page>> MySQLPageSource::NextPage() {
         while ((aggregate ? rows.size() : direct_chunk.row_count) < rows_per_page_ &&
                impl_->state.should_read_rows()) {
             const auto read_started = Clock::now();
-            mysql::rows_view batch = impl_->conn.read_some_rows(impl_->state);
+            mysql::rows_view batch = conn->read_some_rows(impl_->state);
             stats_.read_time_ms += elapsed_ms(read_started);
             if (batch.empty()) {
                 if (impl_->state.complete()) {
@@ -1194,9 +1384,15 @@ absl::StatusOr<std::optional<Page>> MySQLPageSource::NextPage() {
             stats_.decode_time_ms += elapsed_ms(decode_started);
         }
     } catch (const mysql::error_with_diagnostics& err) {
+        if (impl_->lease.has_value()) {
+            impl_->lease->MarkBroken();
+        }
         return absl::InvalidArgumentError(
             absl::StrCat("mysql scan read failed: ", mysql_error_message(err)));
     } catch (const std::exception& err) {
+        if (impl_->lease.has_value()) {
+            impl_->lease->MarkBroken();
+        }
         return absl::InvalidArgumentError(absl::StrCat("mysql scan read failed: ", err.what()));
     }
 
@@ -1209,6 +1405,9 @@ absl::StatusOr<std::optional<Page>> MySQLPageSource::NextPage() {
             return page;
         }
         stats_.finished = true;
+        if (impl_->lease.has_value()) {
+            impl_->lease->Release();
+        }
         return std::nullopt;
     }
 
@@ -1242,7 +1441,7 @@ absl::StatusOr<std::unique_ptr<ConnectorPageSource>> MySQLPageSourceProvider::Cr
     const ConnectorSplit& split) const {
     auto page_source = std::make_unique<MySQLPageSource>(
         split.table.dsn, split.table.table, split.request, rows_per_page_, split.split_column,
-        split.split_lower, split.split_upper, split.split_id);
+        split.split_lower, split.split_upper, split.split_id, pool_);
     auto status = page_source->Initialize();
     if (!status.ok()) {
         return status;
@@ -1251,10 +1450,18 @@ absl::StatusOr<std::unique_ptr<ConnectorPageSource>> MySQLPageSourceProvider::Cr
 }
 
 std::unique_ptr<ConnectorRuntime> MakeMySQLConnectorRuntime(const SourceSpec& spec) {
+    MySQLRuntimeOptions options = mysql_runtime_options_from_env();
+    std::shared_ptr<MySQLConnectionPool> pool;
+    if (!spec.dsn.empty() && options.max_idle_connections > 0) {
+        auto pool_or = MakeMySQLConnectionPool(spec.dsn, options.max_idle_connections);
+        if (pool_or.ok()) {
+            pool = std::move(*pool_or);
+        }
+    }
     auto runtime = std::make_unique<ConnectorRuntime>();
-    runtime->metadata = std::make_unique<MySQLConnectorMetadata>(spec);
-    runtime->split_manager = std::make_unique<MySQLSplitManager>();
-    runtime->page_source_provider = std::make_unique<MySQLPageSourceProvider>();
+    runtime->metadata = std::make_unique<MySQLConnectorMetadata>(spec, pool);
+    runtime->split_manager = std::make_unique<MySQLSplitManager>(options, pool);
+    runtime->page_source_provider = std::make_unique<MySQLPageSourceProvider>(options, pool);
     return runtime;
 }
 

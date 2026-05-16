@@ -41,9 +41,20 @@ struct MySQLConnectionConfig {
 
 absl::StatusOr<MySQLConnectionConfig> ParseMySQLDsn(const std::string& dsn);
 
+class MySQLConnectionPool;
+
+struct MySQLRuntimeOptions {
+    size_t target_split_count = 8;
+    size_t rows_per_page = 1024;
+    size_t max_idle_connections = 8;
+    size_t split_cache_max_entries = 1024;
+    int64_t split_cache_ttl_ms = 300000;
+};
+
 class MySQLSource final {
 public:
     MySQLSource(std::string dsn, std::string table);
+    MySQLSource(std::string dsn, std::string table, std::shared_ptr<MySQLConnectionPool> pool);
 
     [[nodiscard]] absl::StatusOr<TableSchema> Schema() const;
     [[nodiscard]] SourceCapabilities Capabilities() const;
@@ -54,11 +65,13 @@ private:
     std::string dsn_;
     std::string table_;
     std::string query_;
+    std::shared_ptr<MySQLConnectionPool> pool_;
 };
 
 class MySQLConnectorMetadata final : public ConnectorMetadata {
 public:
     explicit MySQLConnectorMetadata(SourceSpec spec);
+    MySQLConnectorMetadata(SourceSpec spec, std::shared_ptr<MySQLConnectionPool> pool);
 
     [[nodiscard]] absl::StatusOr<TableHandle> GetTableHandle(const SourceSpec& spec) const override;
     [[nodiscard]] absl::StatusOr<TableSchema> Schema(const TableHandle& table) const override;
@@ -68,27 +81,34 @@ public:
 
 private:
     SourceSpec spec_;
+    std::shared_ptr<MySQLConnectionPool> pool_;
 };
 
 class MySQLSplitManager final : public ConnectorSplitManager {
 public:
     explicit MySQLSplitManager(size_t target_split_count = 0);
+    MySQLSplitManager(MySQLRuntimeOptions options, std::shared_ptr<MySQLConnectionPool> pool);
 
     [[nodiscard]] absl::StatusOr<std::vector<ConnectorSplit>> GetSplits(
         const TableHandle& table, const ScanRequest& request) const override;
 
 private:
+    MySQLRuntimeOptions options_;
+    std::shared_ptr<MySQLConnectionPool> pool_;
     size_t target_split_count_ = 8;
 };
 
 class MySQLPageSourceProvider final : public ConnectorPageSourceProvider {
 public:
     explicit MySQLPageSourceProvider(size_t rows_per_page = 1024);
+    MySQLPageSourceProvider(MySQLRuntimeOptions options, std::shared_ptr<MySQLConnectionPool> pool);
 
     [[nodiscard]] absl::StatusOr<std::unique_ptr<ConnectorPageSource>> CreatePageSource(
         const ConnectorSplit& split) const override;
 
 private:
+    MySQLRuntimeOptions options_;
+    std::shared_ptr<MySQLConnectionPool> pool_;
     size_t rows_per_page_ = 1024;
 };
 
@@ -101,7 +121,8 @@ public:
                     std::optional<std::string> split_column = std::nullopt,
                     std::optional<int64_t> split_lower = std::nullopt,
                     std::optional<int64_t> split_upper = std::nullopt,
-                    int64_t split_id = 0);
+                    int64_t split_id = 0,
+                    std::shared_ptr<MySQLConnectionPool> pool = nullptr);
 
     absl::Status Initialize();
     absl::StatusOr<std::optional<Page>> NextPage() override;
@@ -114,6 +135,7 @@ private:
     std::string dsn_;
     std::string table_;
     size_t rows_per_page_ = 1024;
+    std::shared_ptr<MySQLConnectionPool> pool_;
     ConnectorSplitStats stats_;
 };
 
