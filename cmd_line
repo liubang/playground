@@ -1,1 +1,0 @@
-genhtml --ignore-errors negative --output coverage ./bazel-out/_coverage/_coverage_report.dat
