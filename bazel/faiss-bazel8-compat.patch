@@ -2,7 +2,7 @@ diff --git a/MODULE.bazel b/MODULE.bazel
 new file mode 100644
 --- /dev/null
 +++ b/MODULE.bazel
-@@ -0,0 +1,8 @@
+@@ -0,0 +1,9 @@
 +module(
 +    name = "faiss",
 +    version = "1.14.1",
@@ -11,6 +11,7 @@ new file mode 100644
 +
 +bazel_dep(name = "rules_cc", version = "0.2.18")
 +bazel_dep(name = "platforms", version = "1.0.0")
++bazel_dep(name = "openblas", version = "0.3.28")
 diff --git a/BUILD.bazel b/BUILD.bazel
 new file mode 100644
 --- /dev/null
@@ -76,7 +77,7 @@ diff --git a/faiss/BUILD.bazel b/faiss/BUILD.bazel
 new file mode 100644
 --- /dev/null
 +++ b/faiss/BUILD.bazel
-@@ -0,0 +1,266 @@
+@@ -0,0 +1,268 @@
 +load("@rules_cc//cc:defs.bzl", "cc_library")
 +
 +package(default_visibility = ["//visibility:public"])
@@ -305,9 +306,9 @@ new file mode 100644
 +)
 +
 +# =========================================================================
-+# 主库: CPU-only, 链接系统 BLAS/LAPACK
++# 主库: CPU-only, BLAS/LAPACK 通过依赖提供
 +# macOS: Accelerate framework + OMP stub (单线程)
-+# Linux: OpenBLAS + OpenMP (多线程)
++# Linux: OpenBLAS (源码构建) + OpenMP (多线程)
 +# =========================================================================
 +cc_library(
 +    name = "faiss",
@@ -328,10 +329,12 @@ new file mode 100644
 +        ],
 +        "//conditions:default": [
 +            "-fopenmp",
-+            "-lopenblas",
 +        ],
 +    }),
-+    deps = ["//bazel/omp_stub"] + select({
++    deps = select({
++        "@platforms//os:macos": [],
++        "//conditions:default": ["@openblas"],
++    }) + ["//bazel/omp_stub"] + select({
 +        "@platforms//cpu:aarch64": [
 +            ":faiss_simd_neon",
 +            ":faiss_simd_sve",

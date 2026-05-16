@@ -1,0 +1,9 @@
+{
+  "url": "https://github.com/OpenMathLib/OpenBLAS/archive/refs/tags/v0.3.28.tar.gz",
+  "strip_prefix": "OpenBLAS-0.3.28",
+  "integrity": "sha256-8QA0Zq0HTpsMjUIaIEEhEAsHUclvxvzz0UVr0S+KAKE=",
+  "patch_strip": 1,
+  "patches": {
+    "add-build.patch": "sha256-2UNDis32Og2mkOH1AtOJ5i6cge9BasVQ3ZgERmRvKlo="
+  }
+}
