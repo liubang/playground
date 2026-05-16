@@ -129,6 +129,40 @@ TEST(MySQLSourceTest, ReportsFixtureTableStatistics) {
     EXPECT_EQ("_time", statistics_or->columns[0].name);
 }
 
+TEST(MySQLSourceTest, SplitManagerBuildsNumericRangeSplitsForFixture) {
+    auto dsn = mysql_test_dsn();
+    if (!dsn.has_value()) {
+        GTEST_SKIP() << "set FLUX_MYSQL_TEST_DSN and import "
+                        "cpp/pl/flux/examples/cross_source/mysql_metrics.sql to run MySQL "
+                        "integration tests";
+    }
+    TableHandle table{.source = "mysql", .driver = "mysql", .dsn = *dsn, .table = "cpu"};
+    MySQLSplitManager split_manager(3);
+
+    auto splits_or = split_manager.GetSplits(table, {});
+
+    ASSERT_TRUE(splits_or.ok()) << splits_or.status();
+    ASSERT_GT(splits_or->size(), 1);
+    size_t total_rows = 0;
+    MySQLPageSourceProvider provider(2);
+    for (const auto& split : *splits_or) {
+        ASSERT_TRUE(split.split_column.has_value());
+        ASSERT_TRUE(split.split_lower.has_value());
+        ASSERT_TRUE(split.split_upper.has_value());
+        auto source_or = provider.CreatePageSource(split);
+        ASSERT_TRUE(source_or.ok()) << source_or.status();
+        while (true) {
+            auto page_or = (*source_or)->NextPage();
+            ASSERT_TRUE(page_or.ok()) << page_or.status();
+            if (!page_or->has_value()) {
+                break;
+            }
+            total_rows += page_or->value().row_count();
+        }
+    }
+    EXPECT_EQ(6, total_rows);
+}
+
 TEST(MySQLSourceTest, PushesDownProjectionTimeRangePredicateSortAndLimit) {
     auto dsn = mysql_test_dsn();
     if (!dsn.has_value()) {
