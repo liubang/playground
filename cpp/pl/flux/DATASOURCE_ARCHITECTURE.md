@@ -131,7 +131,17 @@ Flux AST
 - connector 能处理的前缀在 source 执行；不能处理的后缀通过 memory operator 执行。
 
 截至目前，connector、logical plan skeleton、SQLite/MySQL 保守下推和简单聚合下推已经落地。
-接下来优先级不再是继续扩展更多数据源，而是把执行链路补成更接近完整查询引擎的形态：
+物理执行已经进入 `ExecutionTask -> Pipeline -> Scheduler -> Driver -> Operator -> Page`
+主干：connector scan 走 metadata / split manager / page source provider，scan/filter/project/range
+可以保持 page streaming，多 split 会展开为多个 driver，本地 exchange 会把 producer pipeline
+接到 root pipeline。全局 Top-N 已经使用两阶段执行：split 内先做 partial Top-N，root pipeline
+再做全局 heap Top-N。`sort/group/distinct/aggregate` 这类 blocking unary operator 现在直接收集
+Page，其中 aggregate 的 count/sum/mean/min/max 也在 Page-native accumulator 路径完成，而不是
+先通过 `TableValue` 作为跨层主接口。profile 会汇总 connector split 的 pages/rows/finished
+状态，physical explain/profile 输出按多行展示 pipeline 的 drivers、依赖、blocking、operators
+和 split stats。
+
+接下来优先级不再是继续扩展更多数据源，而是继续把执行链路补成更接近完整查询引擎的形态：
 
 - 数据源入口返回真正 lazy 的 table plan，而不是先物化再附加 plan metadata。
 - logical plan 先进入 RBO，做确定性的下推、barrier、projection pruning 等规则优化。

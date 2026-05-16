@@ -710,7 +710,7 @@ absl::StatusOr<std::vector<ConnectorSplit>> SQLiteSplitManager::GetSplits(
             ConnectorSplit{.table = table, .request = request, .split_id = 0, .partition = "0"}};
     };
 
-    if (request_requires_global_sql_order(request)) {
+    if (request_requires_global_sql_order(request) && !request.partitioned_topn) {
         return single_split();
     }
 

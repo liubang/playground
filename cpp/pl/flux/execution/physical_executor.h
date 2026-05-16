@@ -18,7 +18,7 @@
 #pragma once
 
 #include "absl/status/statusor.h"
-#include "cpp/pl/flux/execution/task_executor.h"
+#include "cpp/pl/flux/connector/connector_runtime.h"
 #include "cpp/pl/flux/plan/plan_node.h"
 #include "cpp/pl/flux/runtime/runtime_page.h"
 #include "cpp/pl/flux/runtime/runtime_value.h"
@@ -37,6 +37,7 @@ public:
     virtual ~Operator() = default;
     [[nodiscard]] virtual std::string name() const = 0;
     virtual absl::StatusOr<std::optional<Page>> NextPage() = 0;
+    virtual void CollectSplitStats(std::vector<connector::ConnectorSplitStats>*) const {}
 };
 
 struct Pipeline {
@@ -44,6 +45,7 @@ struct Pipeline {
         mutable std::mutex mu;
         size_t pages = 0;
         size_t rows = 0;
+        std::vector<connector::ConnectorSplitStats> split_stats;
         bool blocked = false;
         bool finished = false;
         std::string error;
@@ -70,8 +72,10 @@ struct PipelineProfile {
     std::vector<std::string> dependencies;
     std::vector<std::string> operators;
     bool blocking = false;
+    size_t drivers = 1;
     size_t pages = 0;
     size_t rows = 0;
+    std::vector<connector::ConnectorSplitStats> split_stats;
     bool blocked = false;
     bool finished = false;
     std::string error;
@@ -83,6 +87,10 @@ struct ExecutionProfile {
 
 struct SchedulerResult {
     Value value;
+    ExecutionProfile profile;
+};
+
+struct SchedulerStreamResult {
     ExecutionProfile profile;
 };
 
@@ -121,7 +129,11 @@ public:
 
 class Scheduler {
 public:
+    using PageSink = Driver::PageSink;
+
     [[nodiscard]] absl::StatusOr<SchedulerResult> RunWithProfile(ExecutionTask task) const;
+    [[nodiscard]] absl::StatusOr<SchedulerStreamResult> RunToSink(ExecutionTask task,
+                                                                  const PageSink& sink) const;
     [[nodiscard]] absl::StatusOr<Value> Run(ExecutionTask task) const;
 };
 
@@ -129,6 +141,8 @@ class PhysicalExecutor {
 public:
     [[nodiscard]] absl::StatusOr<SchedulerResult> ExecuteWithProfile(
         const std::shared_ptr<plan::PlanNode>& logical_plan) const;
+    [[nodiscard]] absl::StatusOr<SchedulerStreamResult> ExecuteToSink(
+        const std::shared_ptr<plan::PlanNode>& logical_plan, const Scheduler::PageSink& sink) const;
     [[nodiscard]] absl::StatusOr<Value> Execute(
         const std::shared_ptr<plan::PlanNode>& logical_plan) const;
 };
