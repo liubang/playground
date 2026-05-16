@@ -19,6 +19,9 @@
   <a href="https://liubang.github.io/playground/java/">
     <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/liubang/playground/coverage/java/badge.json&style=flat-square" alt="coverage-java" />
   </a>
+  <a href="https://liubang.github.io/playground/go/">
+    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/liubang/playground/coverage/go/badge.json&style=flat-square" alt="coverage-go" />
+  </a>
 </p>
 
 个人多语言实验项目，使用 [Bazel](https://bazel.build/) 统一构建，用于学习、原型验证和小型方案探索。涵盖 C++、Java、Go、Python 等多个技术方向，所有语言共享同一个构建系统和 CI 流水线。
@@ -144,10 +147,11 @@ cd python/manim/manimations && uv run manim -pqh hello.py HelloWorld
 
 ## 覆盖率
 
-CI 自动生成 C++ 和 Java 的测试覆盖率报告，发布在 GitHub Pages 上：
+CI 自动生成 C++、Java、Go 的测试覆盖率报告，发布在 GitHub Pages 上：
 
 - C++ 覆盖率详情：https://liubang.github.io/playground/cpp/
 - Java 覆盖率详情：https://liubang.github.io/playground/java/
+- Go 覆盖率详情：https://liubang.github.io/playground/go/
 
 ## clangd 配置
 
