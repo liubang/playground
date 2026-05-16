@@ -190,6 +190,12 @@ def run_mysql(args):
     env["FLUX_MYSQL_MAX_IDLE_CONNECTIONS"] = str(args.mysql_max_idle_connections)
     env["FLUX_MYSQL_SPLIT_CACHE_MAX_ENTRIES"] = str(args.mysql_split_cache_max_entries)
     env["FLUX_MYSQL_SPLIT_CACHE_TTL_MS"] = str(args.mysql_split_cache_ttl_ms)
+    env["FLUX_MYSQL_USE_PREPARED_STATEMENTS"] = (
+        "0" if args.mysql_disable_prepared_statements else "1"
+    )
+    env["FLUX_MYSQL_PREPARED_CACHE_MAX_ENTRIES"] = str(
+        args.mysql_prepared_cache_max_entries
+    )
     results = []
     for scenario in scenarios:
         samples = []
@@ -215,6 +221,8 @@ def main():
     parser.add_argument("--mysql-max-idle-connections", type=int, default=8)
     parser.add_argument("--mysql-split-cache-max-entries", type=int, default=1024)
     parser.add_argument("--mysql-split-cache-ttl-ms", type=int, default=300000)
+    parser.add_argument("--mysql-disable-prepared-statements", action="store_true")
+    parser.add_argument("--mysql-prepared-cache-max-entries", type=int, default=128)
     parser.add_argument("--prepare-mysql-benchmark-table", action="store_true")
     parser.add_argument("--threshold", type=float, default=50.0)
     parser.add_argument("--scenario", dest="scenarios", action="append")
