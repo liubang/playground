@@ -1,0 +1,30 @@
+name: "Generate Coverage Badge"
+description: "Generate a shields.io-compatible badge JSON from an lcov report"
+
+inputs:
+  lcov-file:
+    description: "Path to the lcov coverage report file"
+    required: true
+  output-dir:
+    description: "Directory to write badge.json into"
+    required: true
+  label:
+    description: "Badge label text"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: generate badge
+      shell: bash
+      run: |
+        COVERAGE=$(lcov --summary "${{ inputs.lcov-file }}" 2>&1 | grep "lines" | awk '{print $2}' | tr -d '%')
+        if [ "$(echo "$COVERAGE >= 80" | bc)" -eq 1 ]; then
+          COLOR="brightgreen"
+        elif [ "$(echo "$COVERAGE >= 60" | bc)" -eq 1 ]; then
+          COLOR="yellow"
+        else
+          COLOR="red"
+        fi
+        echo "{\"schemaVersion\":1,\"label\":\"${{ inputs.label }}\",\"message\":\"${COVERAGE}%\",\"color\":\"${COLOR}\"}" > "${{ inputs.output-dir }}/badge.json"
+        echo "Coverage: ${COVERAGE}% (${COLOR})"

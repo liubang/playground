@@ -6,24 +6,28 @@ on:
       - main
     paths:
       - "MODULE.bazel"
+      - "MODULE.bazel.lock"
+      - ".bazelrc"
+      - "bazel/**"
       - "python/**"
       - ".github/workflows/build_python.yml"
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build-go:
-    name: go playground
+  build-python:
+    name: python playground
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
       - uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-cache: true
-          disk-cache: ${{ github.workflow }}-${{ runner.os }}
           repository-cache: true
+          disk-cache: ${{ github.workflow }}-${{ runner.os }}
       - name: build and test
         run: |
-          bazel build --disk_cache=${{ github.workflow }}-${{ runner.os }} //python/...
-          bazel test --disk_cache=${{ github.workflow }}-${{ runner.os }} //python/...
+          bazel test --config=ci //python/...
