@@ -13,3 +13,5 @@
 **/*.toolbox/**
 **/*.old
 
+# Maven build output
+**/target/
