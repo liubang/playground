@@ -21,6 +21,7 @@
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/connector/connector_registry.h"
 #include "cpp/pl/flux/connector/connector_runtime.h"
+#include "cpp/pl/flux/execution/page_budget.h"
 #include "cpp/pl/flux/optimizer/cbo.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_aggregate_helpers.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_table_helpers.h"
@@ -60,9 +61,10 @@ Value literal_value(const plan::PredicateLiteral& literal) {
     return Value::null();
 }
 
-absl::StatusOr<bool> predicate_matches(const ObjectValue& row,
-                                       const plan::PredicateSpec& predicate) {
-    const Value* lhs = row.lookup(predicate.column);
+absl::StatusOr<bool> predicate_matches_page_row(const PageChunk& chunk,
+                                                size_t row_index,
+                                                const plan::PredicateSpec& predicate) {
+    const Value* lhs = PageChunkValueAt(chunk, row_index, predicate.column);
     if (lhs == nullptr) {
         return absl::InvalidArgumentError(
             absl::StrCat("memory filter references unavailable column: ", predicate.column));
@@ -86,17 +88,17 @@ absl::StatusOr<bool> predicate_matches(const ObjectValue& row,
     return false;
 }
 
-bool time_in_range(const ObjectValue& row, const plan::RangeSpec& range_spec) {
-    const Value* value = row.lookup("_time");
+bool page_row_time_in_range(const PageChunk& chunk, size_t row_index, const plan::RangeSpec& spec) {
+    const Value* value = PageChunkValueAt(chunk, row_index, "_time");
     if (value == nullptr) {
         return false;
     }
     const std::string literal =
         value->type() == Value::Type::Time ? value->as_time().literal : value->string();
-    if (!range_spec.start.empty() && literal < range_spec.start) {
+    if (!spec.start.empty() && literal < spec.start) {
         return false;
     }
-    return !range_spec.stop.has_value() || literal < *range_spec.stop;
+    return !spec.stop.has_value() || literal < *spec.stop;
 }
 
 Value table_with_plan(Value value, const std::shared_ptr<plan::PlanNode>& plan) {
@@ -313,8 +315,7 @@ absl::StatusOr<Page> apply_range_page(Page input, const std::shared_ptr<plan::Pl
                 ColumnVector{.name = source_column.name, .type = source_column.type});
         }
         for (size_t row_index = 0; row_index < source.row_count; ++row_index) {
-            auto row = RowFromPageChunk(source, row_index);
-            if (!time_in_range(*row, plan->range())) {
+            if (!page_row_time_in_range(source, row_index, plan->range())) {
                 continue;
             }
             for (size_t column_index = 0; column_index < source.columns.size(); ++column_index) {
@@ -345,10 +346,9 @@ absl::StatusOr<Page> apply_filter_page(Page input, const std::shared_ptr<plan::P
                 ColumnVector{.name = source_column.name, .type = source_column.type});
         }
         for (size_t row_index = 0; row_index < source.row_count; ++row_index) {
-            auto row = RowFromPageChunk(source, row_index);
             bool keep = true;
             for (const auto& predicate : plan->filter().predicates) {
-                auto matches_or = predicate_matches(*row, predicate);
+                auto matches_or = predicate_matches_page_row(source, row_index, predicate);
                 if (!matches_or.ok()) {
                     return matches_or.status();
                 }
@@ -826,7 +826,9 @@ private:
 
 class ExchangeBuffer {
 public:
-    explicit ExchangeBuffer(size_t max_pages = 1024) : max_pages_(std::max<size_t>(1, max_pages)) {}
+    explicit ExchangeBuffer(size_t max_pages = 1024, size_t max_buffered_bytes = 64 * 1024 * 1024)
+        : max_pages_(std::max<size_t>(1, max_pages)),
+          max_buffered_bytes_(std::max<size_t>(1, max_buffered_bytes)) {}
 
     void SetProducerCount(size_t producer_count) {
         std::lock_guard<std::mutex> lock(mu_);
@@ -834,9 +836,12 @@ public:
     }
 
     absl::Status AddPage(Page page) {
+        const size_t page_bytes = EstimatePageBytes(page);
         std::unique_lock<std::mutex> lock(mu_);
-        cv_.wait(lock, [this]() {
-            return closed_ || finished_ || error_.has_value() || pages_.size() < max_pages_;
+        cv_.wait(lock, [this, page_bytes]() {
+            return closed_ || finished_ || error_.has_value() ||
+                   (pages_.size() < max_pages_ &&
+                    (pages_.empty() || buffered_bytes_ + page_bytes <= max_buffered_bytes_));
         });
         if (closed_) {
             return absl::FailedPreconditionError("exchange buffer is closed");
@@ -848,6 +853,7 @@ public:
             return absl::FailedPreconditionError(*error_);
         }
         rows_ += page.row_count();
+        buffered_bytes_ += page_bytes;
         pages_.push_back(std::move(page));
         lock.unlock();
         cv_.notify_all();
@@ -867,6 +873,8 @@ public:
         }
         Page page = std::move(pages_.front());
         pages_.pop_front();
+        const size_t page_bytes = EstimatePageBytes(page);
+        buffered_bytes_ = page_bytes > buffered_bytes_ ? 0 : buffered_bytes_ - page_bytes;
         lock.unlock();
         cv_.notify_all();
         return page;
@@ -924,6 +932,8 @@ private:
     std::condition_variable cv_;
     std::deque<Page> pages_;
     size_t max_pages_ = 1024;
+    size_t max_buffered_bytes_ = 64 * 1024 * 1024;
+    size_t buffered_bytes_ = 0;
     size_t producer_count_ = 1;
     size_t finished_producers_ = 0;
     size_t rows_ = 0;

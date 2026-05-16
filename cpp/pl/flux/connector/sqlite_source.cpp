@@ -28,6 +28,7 @@
 #include <optional>
 #include <sqlite3.h>
 #include <string>
+#include <thread>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -94,6 +95,11 @@ std::string query_for_table(const std::string& table) {
     return absl::StrCat("SELECT * FROM ", quote_identifier(table));
 }
 
+std::string query_for_table_rowid_range(const std::string& table, int64_t lower, int64_t upper) {
+    return absl::StrCat("SELECT * FROM ", quote_identifier(table), " WHERE rowid >= ", lower,
+                        " AND rowid <= ", upper);
+}
+
 // predicate_op_sql / aggregate_fn_sql / validate_column are now shared via
 // sql_builder.h as PredicateOpSql / AggregateFnSql / ValidateColumn.
 
@@ -154,6 +160,48 @@ struct BuiltSql {
     std::optional<int64_t> limit;
     std::optional<int64_t> offset;
 };
+
+bool request_requires_global_sql_order(const ScanRequest& request) {
+    return !request.order_by.empty() || request.limit.has_value() || request.offset.has_value() ||
+           !request.group_by.empty() || request.aggregate.has_value() ||
+           request.distinct.has_value();
+}
+
+struct RowidExtent {
+    int64_t min_rowid = 0;
+    int64_t max_rowid = -1;
+    size_t row_count = 0;
+};
+
+absl::StatusOr<RowidExtent> load_rowid_extent(sqlite3* db, const std::string& table) {
+    auto stmt_or = prepare_statement(
+        db, absl::StrCat("SELECT MIN(rowid), MAX(rowid), COUNT(*) FROM ", quote_identifier(table)));
+    if (!stmt_or.ok()) {
+        return stmt_or.status();
+    }
+    const int step_rc = sqlite3_step(stmt_or->get());
+    if (step_rc != SQLITE_ROW) {
+        return absl::InvalidArgumentError(
+            absl::StrCat("sqlite rowid split discovery failed: ", sqlite3_errmsg(db)));
+    }
+    if (sqlite3_column_type(stmt_or->get(), 0) == SQLITE_NULL ||
+        sqlite3_column_type(stmt_or->get(), 1) == SQLITE_NULL) {
+        return RowidExtent{};
+    }
+    return RowidExtent{
+        .min_rowid = sqlite3_column_int64(stmt_or->get(), 0),
+        .max_rowid = sqlite3_column_int64(stmt_or->get(), 1),
+        .row_count = static_cast<size_t>(sqlite3_column_int64(stmt_or->get(), 2)),
+    };
+}
+
+size_t default_sqlite_split_count() {
+    const unsigned int workers = std::thread::hardware_concurrency();
+    if (workers == 0) {
+        return 4;
+    }
+    return std::min<size_t>(8, std::max<size_t>(1, workers));
+}
 
 absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
                                         const ScanRequest& request,
@@ -392,6 +440,38 @@ std::shared_ptr<ObjectValue> row_from_sqlite_stmt(sqlite3_stmt* stmt,
     return std::make_shared<ObjectValue>(std::move(properties));
 }
 
+PageChunk empty_page_chunk_for_columns(const std::vector<std::string>& column_names) {
+    PageChunk chunk;
+    chunk.columns.reserve(column_names.size());
+    for (const auto& name : column_names) {
+        chunk.columns.push_back(ColumnVector{.name = name});
+    }
+    return chunk;
+}
+
+void append_sqlite_stmt_to_page_chunk(sqlite3_stmt* stmt, PageChunk* chunk) {
+    if (chunk == nullptr) {
+        return;
+    }
+    if (chunk->columns.empty()) {
+        const int column_count = sqlite3_column_count(stmt);
+        chunk->columns.reserve(static_cast<size_t>(column_count));
+        for (int i = 0; i < column_count; ++i) {
+            const char* name = sqlite3_column_name(stmt, i);
+            chunk->columns.push_back(ColumnVector{.name = name == nullptr ? "" : name});
+        }
+    }
+    for (int i = 0; i < static_cast<int>(chunk->columns.size()); ++i) {
+        Value value = value_from_sqlite_column(stmt, i);
+        auto& column = chunk->columns[static_cast<size_t>(i)];
+        if (column.type == Value::Type::Null && !value.is_null()) {
+            column.type = value.type();
+        }
+        column.values.push_back(std::move(value));
+    }
+    ++chunk->row_count;
+}
+
 std::shared_ptr<ObjectValue> row_with_group(const std::shared_ptr<ObjectValue>& row,
                                             const std::vector<std::string>& group_by) {
     if (row == nullptr) {
@@ -486,12 +566,11 @@ absl::StatusOr<TableStatistics> SQLiteSource::Statistics() const {
         statistics.columns.reserve(schema_or->columns.size());
         for (const auto& column : schema_or->columns) {
             auto column_stats_or = prepare_statement(
-                db_or->get(),
-                absl::StrCat("SELECT COUNT(DISTINCT ", quote_identifier(column.name),
-                             "), SUM(CASE WHEN ", quote_identifier(column.name),
-                             " IS NULL THEN 1 ELSE 0 END), AVG(LENGTH(CAST(",
-                             quote_identifier(column.name), " AS TEXT))) FROM (", query_,
-                             ") AS flux_source"));
+                db_or->get(), absl::StrCat("SELECT COUNT(DISTINCT ", quote_identifier(column.name),
+                                           "), SUM(CASE WHEN ", quote_identifier(column.name),
+                                           " IS NULL THEN 1 ELSE 0 END), AVG(LENGTH(CAST(",
+                                           quote_identifier(column.name), " AS TEXT))) FROM (",
+                                           query_, ") AS flux_source"));
             if (!column_stats_or.ok()) {
                 statistics.columns.push_back({.name = column.name});
                 continue;
@@ -620,10 +699,73 @@ absl::StatusOr<TableStatistics> SQLiteConnectorMetadata::Statistics(
     return SQLiteSource(table.dsn, table.table).Statistics();
 }
 
+SQLiteSplitManager::SQLiteSplitManager(size_t target_split_count)
+    : target_split_count_(target_split_count == 0 ? default_sqlite_split_count()
+                                                  : target_split_count) {}
+
+absl::StatusOr<std::vector<ConnectorSplit>> SQLiteSplitManager::GetSplits(
+    const TableHandle& table, const ScanRequest& request) const {
+    auto single_split = [&]() {
+        return std::vector<ConnectorSplit>{
+            ConnectorSplit{.table = table, .request = request, .split_id = 0, .partition = "0"}};
+    };
+
+    if (request_requires_global_sql_order(request)) {
+        return single_split();
+    }
+
+    auto db_or = open_readonly_db(table.dsn);
+    if (!db_or.ok()) {
+        return db_or.status();
+    }
+    auto extent_or = load_rowid_extent(db_or->get(), table.table);
+    if (!extent_or.ok()) {
+        return single_split();
+    }
+    const RowidExtent extent = *extent_or;
+    if (extent.row_count == 0 || extent.max_rowid < extent.min_rowid) {
+        return single_split();
+    }
+
+    const uint64_t rowid_span =
+        static_cast<uint64_t>(extent.max_rowid - extent.min_rowid) + static_cast<uint64_t>(1);
+    const size_t split_count =
+        std::min<size_t>(target_split_count_, std::max<size_t>(1, extent.row_count));
+    if (split_count <= 1) {
+        return single_split();
+    }
+
+    std::vector<ConnectorSplit> splits;
+    splits.reserve(split_count);
+    for (size_t index = 0; index < split_count; ++index) {
+        const uint64_t start_delta = rowid_span * index / split_count;
+        const uint64_t end_delta = rowid_span * (index + 1) / split_count;
+        const int64_t lower = extent.min_rowid + static_cast<int64_t>(start_delta);
+        const int64_t upper = extent.min_rowid + static_cast<int64_t>(end_delta) - 1;
+        if (upper < lower) {
+            continue;
+        }
+        splits.push_back(ConnectorSplit{
+            .table = table,
+            .request = request,
+            .split_id = static_cast<int64_t>(splits.size()),
+            .partition = absl::StrCat(lower, "-", upper),
+            .rowid_lower = lower,
+            .rowid_upper = upper,
+        });
+    }
+    if (splits.empty()) {
+        return single_split();
+    }
+    return splits;
+}
+
 struct SQLitePageSource::Impl {
     SqliteDb db;
     SqliteStmt stmt;
     ScanRequest request;
+    std::optional<int64_t> rowid_lower;
+    std::optional<int64_t> rowid_upper;
     std::vector<std::string> column_names;
     bool done = false;
     bool emitted_empty = false;
@@ -634,12 +776,16 @@ SQLitePageSource::SQLitePageSource(std::string dsn,
                                    std::string table,
                                    ScanRequest request,
                                    size_t rows_per_page,
+                                   std::optional<int64_t> rowid_lower,
+                                   std::optional<int64_t> rowid_upper,
                                    int64_t split_id)
     : impl_(std::make_unique<Impl>()),
       dsn_(std::move(dsn)),
       table_(std::move(table)),
       rows_per_page_(std::max<size_t>(1, rows_per_page)) {
     impl_->request = std::move(request);
+    impl_->rowid_lower = rowid_lower;
+    impl_->rowid_upper = rowid_upper;
     stats_.split_id = split_id;
 }
 
@@ -653,7 +799,11 @@ absl::Status SQLitePageSource::Initialize() {
     if (!schema_or.ok()) {
         return schema_or.status();
     }
-    auto sql_or = build_scan_sql(query_for_table(table_), impl_->request, *schema_or);
+    const std::string query =
+        impl_->rowid_lower.has_value() && impl_->rowid_upper.has_value()
+            ? query_for_table_rowid_range(table_, *impl_->rowid_lower, *impl_->rowid_upper)
+            : query_for_table(table_);
+    auto sql_or = build_scan_sql(query, impl_->request, *schema_or);
     if (!sql_or.ok()) {
         return sql_or.status();
     }
@@ -677,7 +827,9 @@ absl::StatusOr<std::optional<Page>> SQLitePageSource::NextPage() {
     if (impl_->done) {
         if (!impl_->emitted_empty && !impl_->emitted_any_row) {
             impl_->emitted_empty = true;
-            Page page = PageFromRows("sqlite", {});
+            Page page;
+            page.bucket = "sqlite";
+            page.chunks.push_back(empty_page_chunk_for_columns(impl_->column_names));
             ++stats_.pages_produced;
             return page;
         }
@@ -685,9 +837,12 @@ absl::StatusOr<std::optional<Page>> SQLitePageSource::NextPage() {
         return std::nullopt;
     }
 
-    std::vector<std::shared_ptr<ObjectValue>> rows;
-    rows.reserve(rows_per_page_);
-    while (rows.size() < rows_per_page_) {
+    PageChunk chunk = empty_page_chunk_for_columns(impl_->column_names);
+    std::vector<std::shared_ptr<ObjectValue>> aggregate_rows;
+    if (impl_->request.aggregate.has_value()) {
+        aggregate_rows.reserve(rows_per_page_);
+    }
+    while (chunk.row_count < rows_per_page_ && aggregate_rows.size() < rows_per_page_) {
         const int step_rc = sqlite3_step(impl_->stmt.get());
         if (step_rc == SQLITE_DONE) {
             impl_->done = true;
@@ -697,17 +852,23 @@ absl::StatusOr<std::optional<Page>> SQLitePageSource::NextPage() {
             return absl::InvalidArgumentError(
                 absl::StrCat("sqlite step failed: ", sqlite3_errmsg(impl_->db.get())));
         }
-        auto row = row_from_sqlite_stmt(impl_->stmt.get(), impl_->column_names);
         if (impl_->request.aggregate.has_value()) {
+            auto row = row_from_sqlite_stmt(impl_->stmt.get(), impl_->column_names);
             row = row_with_group(row, impl_->request.group_by);
+            aggregate_rows.push_back(std::move(row));
+        } else {
+            append_sqlite_stmt_to_page_chunk(impl_->stmt.get(), &chunk);
         }
-        rows.push_back(std::move(row));
     }
 
-    if (rows.empty()) {
+    const bool empty =
+        impl_->request.aggregate.has_value() ? aggregate_rows.empty() : chunk.row_count == 0;
+    if (empty) {
         if (!impl_->emitted_empty && !impl_->emitted_any_row) {
             impl_->emitted_empty = true;
-            Page page = PageFromRows("sqlite", {});
+            Page page;
+            page.bucket = "sqlite";
+            page.chunks.push_back(std::move(chunk));
             ++stats_.pages_produced;
             return page;
         }
@@ -719,15 +880,16 @@ absl::StatusOr<std::optional<Page>> SQLitePageSource::NextPage() {
     Page page;
     if (impl_->request.aggregate.has_value()) {
         std::vector<TableChunk> chunks;
-        chunks.reserve(rows.size());
-        for (auto& row : rows) {
-            TableChunk chunk;
-            chunk.rows.push_back(std::move(row));
-            chunks.push_back(std::move(chunk));
+        chunks.reserve(aggregate_rows.size());
+        for (auto& row : aggregate_rows) {
+            TableChunk aggregate_chunk;
+            aggregate_chunk.rows.push_back(std::move(row));
+            chunks.push_back(std::move(aggregate_chunk));
         }
         page = PageFromTableChunks("sqlite", std::move(chunks));
     } else {
-        page = PageFromRows("sqlite", std::move(rows));
+        page.bucket = "sqlite";
+        page.chunks.push_back(std::move(chunk));
     }
     ++stats_.pages_produced;
     stats_.rows_produced += page.row_count();
@@ -743,9 +905,9 @@ SQLitePageSourceProvider::SQLitePageSourceProvider(size_t rows_per_page)
 
 absl::StatusOr<std::unique_ptr<ConnectorPageSource>> SQLitePageSourceProvider::CreatePageSource(
     const ConnectorSplit& split) const {
-    auto page_source = std::make_unique<SQLitePageSource>(split.table.dsn, split.table.table,
-                                                          split.request, rows_per_page_,
-                                                          split.split_id);
+    auto page_source = std::make_unique<SQLitePageSource>(
+        split.table.dsn, split.table.table, split.request, rows_per_page_, split.rowid_lower,
+        split.rowid_upper, split.split_id);
     auto status = page_source->Initialize();
     if (!status.ok()) {
         return status;
@@ -756,7 +918,7 @@ absl::StatusOr<std::unique_ptr<ConnectorPageSource>> SQLitePageSourceProvider::C
 std::unique_ptr<ConnectorRuntime> MakeSQLiteConnectorRuntime(const SourceSpec& spec) {
     auto runtime = std::make_unique<ConnectorRuntime>();
     runtime->metadata = std::make_unique<SQLiteConnectorMetadata>(spec);
-    runtime->split_manager = std::make_unique<SingleSplitManager>();
+    runtime->split_manager = std::make_unique<SQLiteSplitManager>();
     runtime->page_source_provider = std::make_unique<SQLitePageSourceProvider>();
     return runtime;
 }
