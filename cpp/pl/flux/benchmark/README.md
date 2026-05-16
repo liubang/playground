@@ -1,8 +1,22 @@
 # Flux 基准测试
 
-这个目录保存了当前内存内 Flux 运行时的本地合成基准测试。目标不是做完全隔离的微基准，而是给我们一个可重复的比较方法，用来观察引擎优化前后的变化。
+这个目录保存 Flux 运行时和 connector scan 的本地基准测试。目标不是做完全隔离的微基准，
+而是给我们一个可重复的比较方法，用来观察引擎优化前后的变化。
 
 如果想看这轮优化是怎么一步步做出来的，可以配合阅读 [OPTIMIZATION_LOG.md](/Volumes/workspace/liubang/playground/cpp/pl/flux/benchmark/OPTIMIZATION_LOG.md)。
+
+## Benchmark 层次
+
+当前基准分三类：
+
+- 内存执行基准：`run_benchmarks.py` 生成 annotated CSV，覆盖 table builtin、window、pivot、
+  join 等内存执行路径。
+- SQLite connector scan：`sqlite_scan_benchmark` 临时构造真实 SQLite 表，覆盖 multi-split
+  page source、Page sink、Top-N 等 query pipeline。
+- MySQL connector scan：`mysql_scan_benchmark` 读取真实 MySQL 表，覆盖 range split、
+  Boost.MySQL page source、远程服务和协议解码成本。
+
+数字默认用于同机同口径前后对比；跨机器、冷/热缓存、远程数据库网络条件不同，不能直接比较。
 
 ## 覆盖内容
 
@@ -40,6 +54,7 @@
 - outer join 路径
 - `pivot` / `join` 在多 logical table 语义下的热点路径
 - SQLite connector 的真实多 split streaming scan 路径
+- connector split profile 的 bytes / wall time 指标
 
 ## 运行方式
 
@@ -90,7 +105,8 @@ python3 cpp/pl/flux/benchmark/run_benchmarks.py \
 ```
 
 SQLite connector 有独立的真实 scan benchmark target。它会在 `/tmp` 构造 SQLite 数据库，
-插入指定行数，执行真实 connector query，并输出 scenario、drivers、pages、blocking 和吞吐。
+插入指定行数，执行真实 connector query，并输出 scenario、drivers、pages、split bytes、
+split wall time、blocking 和吞吐。
 默认 scenario 是 `filter_project`，也可以显式跑 `scan`、`wide_filter`、`topn`：
 
 ```bash
@@ -103,7 +119,8 @@ bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_topn.db 
 
 MySQL connector 也有独立 scan benchmark target，用真实 MySQL 表验证 range split、
 streaming page sink 和两阶段 Top-N。它默认读取 `FLUX_MYSQL_TEST_DSN`，表名默认 `cpu`，
-scenario 默认 `filter_project`，也可以显式跑 `scan`、`wide_filter`、`topn`：
+scenario 默认 `filter_project`，也可以显式跑 `scan`、`wide_filter`、`topn`。如果参数里的
+dsn 传空字符串，benchmark 会回退读取 `FLUX_MYSQL_TEST_DSN`，便于只替换表名：
 
 ```bash
 bazel build //cpp/pl/flux/benchmark:mysql_scan_benchmark
@@ -111,6 +128,8 @@ FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
   bazel-bin/cpp/pl/flux/benchmark/mysql_scan_benchmark
 bazel-bin/cpp/pl/flux/benchmark/mysql_scan_benchmark \
   'mysql://flux:flux@192.168.50.31:3306/testdb' cpu topn
+FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
+  bazel-bin/cpp/pl/flux/benchmark/mysql_scan_benchmark '' flux_bench_cpu filter_project 50
 ```
 
 如果要做同机多轮对比，用 connector benchmark runner 统一跑 repeat samples。它会输出
@@ -155,6 +174,59 @@ FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
 - `_value`
 
 ## 当前基线
+
+### Connector Scan：SQLite vs MySQL 同数据集
+
+2026-05-16 用同结构、同数据生成逻辑、同查询形状做了一轮 SQLite/MySQL 对比。
+
+表结构：
+
+```text
+_time  string/varchar
+host   string/varchar
+region string/varchar
+usage  double
+seq    integer/bigint
+```
+
+数据生成逻辑：
+
+- `_time = 2024-07-01T10:{seq % 60}:00Z`
+- `host = edge-{seq % 64}`
+- `region = west/east`
+- `usage = seq % 100`
+- `seq` 为单调整数；MySQL 表上 `seq` 是 primary key，方便 range split。
+
+查询形状：
+
+```text
+scan |> filter(usage >= 50) |> project(host, usage)
+```
+
+100k 行结果：
+
+| Connector | 输入行 | 输出行 | Drivers | Pages | Split bytes | Split wall time | 端到端时间 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| SQLite | 100k | 50k | 8 | 56 | 6.38 MB | 39.4 ms | 0.0087s |
+| MySQL remote | 100k | 50k | 8 | 52 | 6.36 MB | 200.8 ms | 0.1210s |
+
+1M 行结果：
+
+| Connector | 输入行 | 输出行 | Drivers | Pages | Split bytes | Split wall time | 端到端时间 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| SQLite | 1M | 500k | 8 | 496 | 63.61 MB | 305.6 ms / 421.8 ms / 420.2 ms | 0.0566s / 0.0719s / 0.0710s |
+| MySQL remote | 1M | 500k | 8 | 488 | 63.59 MB | 991.2 ms / 1048.5 ms / 997.9 ms | 0.2555s / 0.2588s / 0.2565s |
+
+解读：
+
+- 同样 `filter_project` 查询下，远程 MySQL 端到端约慢 `3.5x - 4.5x`。
+- MySQL 慢的主要来源不是输出行数不同，而是远程服务、网络、连接/metadata、range split
+  discovery、协议解码和 row-to-Page 转换成本。
+- SQLite 是本机文件，且 benchmark 进程内创建数据库后立即查询，缓存条件更有利。
+- 这组数据说明 MySQL connector 主干能稳定 multi-split 扫描 1M 行级别数据，但后续优化应优先
+  盯 MySQL page source 热路径和固定开销。
+
+### Legacy In-Memory Baseline
 
 下面这组基线会随着运行时实现变化持续更新。当前这版是在 2026-04-22 本地采集的，包含：
 
@@ -204,13 +276,6 @@ FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
 | `join_grouped` | 2000 x 2000 rows | 0.013s |
 
 这组数字主要用来证明新 case 和 runner 口径都正常，不直接替换上面的完整基线表。
-
-SQLite multi-split scan 当前实测：
-
-| Case | 输入规模 | Drivers | 输出行数 | Pages | 时间 | 吞吐 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `sqlite_scan_benchmark filter_project` | 500k rows | 8 | 250k | 248 | 0.157s | 3.18M rows/s |
-| `sqlite_scan_benchmark filter_project` | 1M rows | 8 | 500k | 496 | 0.311s | 3.21M rows/s |
 
 ## 如何使用
 

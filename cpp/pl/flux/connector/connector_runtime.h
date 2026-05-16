@@ -65,6 +65,8 @@ struct ConnectorSplitStats {
     int64_t split_id = 0;
     size_t pages_produced = 0;
     size_t rows_produced = 0;
+    size_t bytes_produced = 0;
+    double wall_time_ms = 0.0;
     bool finished = false;
 };
 
