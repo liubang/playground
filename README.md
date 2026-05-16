@@ -4,118 +4,160 @@
   <a href="https://github.com/liubang/playground/actions/workflows/build_cpp.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_cpp.yml?label=build-cpp&style=flat-square&branch=main" alt="build-cpp" />
   </a>
+  <a href="https://github.com/liubang/playground/actions/workflows/build_java.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_java.yml?label=build-java&style=flat-square&branch=main" alt="build-java" />
+  </a>
   <a href="https://github.com/liubang/playground/actions/workflows/build_go.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_go.yml?label=build-go&style=flat-square&branch=main" alt="build-go" />
   </a>
   <a href="https://github.com/liubang/playground/actions/workflows/build_python.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/liubang/playground/build_python.yml?label=build-python&style=flat-square&branch=main" alt="build-python" />
   </a>
-  <a href="https://liubang.github.io/playground/">
-    <img src="https://img.shields.io/endpoint?url=https://liubang.github.io/playground/badge.json&style=flat-square" alt="coverage-cpp" />
+  <a href="https://liubang.github.io/playground/cpp/">
+    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/liubang/playground/coverage/cpp/badge.json&style=flat-square" alt="coverage-cpp" />
+  </a>
+  <a href="https://liubang.github.io/playground/java/">
+    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/liubang/playground/coverage/java/badge.json&style=flat-square" alt="coverage-java" />
   </a>
 </p>
 
-个人多语言实验项目，用于学习、原型验证和小型方案探索。涵盖 C++、Go、Python、PHP、TLA+、LaTeX 等多个技术方向。
+个人多语言实验项目，使用 [Bazel](https://bazel.build/) 统一构建，用于学习、原型验证和小型方案探索。涵盖 C++、Java、Go、Python 等多个技术方向，所有语言共享同一个构建系统和 CI 流水线。
 
 ## 目录结构
 
 ```text
 .
-├── cpp/        C++ 实验、工具库、测试与笔记
+├── cpp/        C++ 实验、工具库与测试（C++20，gRPC/brpc/Faiss/RocksDB 等）
+├── java/       Java 实验（Spring Boot 3.5，Bazel 原生构建）
 ├── go/         Go 示例、小工具与 cgo 示范
-├── python/     Python 示例、Bazel targets 与 uv 管理的项目
-├── php/        简易 PHP 路由实现
+├── python/     Python 示例与 Bazel targets
 ├── proto/      共享 protobuf 定义
-├── tla/        TLA+ 规约与生成产物
+├── registry/   Bazel 本地 registry（OpenBLAS、ISA-L 等自定义模块）
+├── bazel/      Bazel 辅助 patch 文件
+├── php/        简易 PHP 路由实现
+├── tla/        TLA+ 规约
 ├── latex/      LaTeX/TikZ 示例
-├── registry/   Bazel registry 与 patch 实验
-├── bazel/      Bazel 辅助工具与本地 patch
 └── bash/       Shell 脚本
 ```
 
 ## 环境依赖
 
-### 基础要求
+所有语言的工具链和第三方库均由 Bazel 自动管理，本地只需安装 Bazel 本身和 C++ 编译器。Java SDK、Go SDK、Python 解释器、Maven 依赖等都由 Bazel 在首次构建时自动下载，无需手动安装。
 
-| 依赖 | 最低版本 | 说明 |
-|------|---------|------|
-| Bazel | 8.6.0 | 通过 `.bazelversion` 锁定，建议使用 [Bazelisk](https://github.com/bazelbuild/bazelisk) 管理 |
-| C++ 标准 | C++20 | 编译标准由 `.bazelrc` 中 `--cxxopt=-std=c++20` 指定 |
-| Clang | ≥ 18 | macOS 推荐 Homebrew LLVM；Linux 可用系统 Clang 或 GCC |
-| GCC | ≥ 13 | Linux 默认编译器（需支持 C++20） |
-| Go | ≥ 1.21 | 由 Bazel rules_go 管理，本地开发需 Go 环境 |
-| Python | ≥ 3.11 | 非 Bazel 工作流使用 [uv](https://github.com/astral-sh/uv) 管理 |
-
-### macOS 环境安装
+### macOS
 
 ```bash
-# Bazelisk
-brew install bazelisk
-
-# LLVM 工具链（clang、clangd、lld 等）
-brew install llvm
-
-# Go
-brew install go
-
-# Python (uv)
-brew install uv
+brew install bazelisk llvm libomp
 ```
 
-安装 LLVM 后，确认 `/opt/homebrew/opt/llvm/bin/clang++` 可用。项目 `.bazelrc` 中 `build:macos` 配置已引用此路径。
+安装后确认 `/opt/homebrew/opt/llvm/bin/clang++` 可用，`.bazelrc` 中 `build:macos` 已引用此路径。
 
-### Linux 环境安装（Debian/Ubuntu）
+### Linux（Debian/Ubuntu）
 
 ```bash
 # Bazelisk
-wget -qO /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64
+wget -qO /usr/local/bin/bazel \
+  https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64
 chmod +x /usr/local/bin/bazel
 
-# GCC（默认编译器）
-sudo apt install gcc-13 g++-13
+# GCC（默认编译器，需支持 C++20）
+sudo apt install gcc-14 g++-14
 
-# 或使用 LLVM（可选，对应 .bazelrc 中 build:llvm 配置）
-# 安装后需将 clang/clang++/lld 放置于 /opt/app/llvm/bin/
-wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh && sudo ./llvm.sh 18
-
-# Go
-sudo apt install golang-go
-
-# Python (uv)
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# 构建 C++ 项目所需的系统依赖
+sudo apt install nasm libomp-dev
 ```
+
+如需使用 LLVM 替代 GCC，安装 Clang 18+ 后以 `--config=llvm` 构建即可。
 
 ## 构建与测试
 
+Bazel 版本通过 `.bazelversion` 锁定为 8.6.0，Bazelisk 会自动下载对应版本。
+
+### 全量构建
+
 ```bash
-# 全量构建与测试
 bazel build //...
 bazel test //...
-
-# 按语言构建
-bazel build //cpp/...
-bazel build //go/...
-bazel build //python/...
-
-# 生成 compile_commands.json（供 clangd 使用）
-bazel run @hedron_compile_commands//:refresh_all
 ```
 
-macOS 下默认使用 Homebrew LLVM 工具链；Linux 下默认使用 GCC，如需切换至 LLVM：
+### C++
+
+C++ 标准为 C++20，macOS 默认使用 Homebrew LLVM，Linux 默认使用 GCC。
 
 ```bash
+bazel build //cpp/...
+bazel test //cpp/...
+
+# Linux 切换至 LLVM 工具链
 bazel build //cpp/... --config=llvm
+
+# Release 模式（关闭 ASan）
+bazel build //cpp/... --config=release
 ```
+
+### Java
+
+Java 语言版本和运行时均为 21，由 Bazel 通过 `rules_java` 自动下载远程 JDK，无需本地安装。Maven 依赖通过 `rules_jvm_external` 管理，依赖声明在 `MODULE.bazel` 中，解析结果锁定在 `maven_install.json`。
+
+```bash
+bazel build //java/...
+bazel test //java/...
+
+# 构建 Spring Boot fat jar（可通过 java -jar 直接运行）
+bazel build //java/t/spring:demo_deploy.jar
+
+# 直接启动 Spring Boot 应用
+bazel run //java/t/spring:demo
+```
+
+修改 `MODULE.bazel` 中的 Maven 依赖后，需要重新生成锁文件：
+
+```bash
+REPIN=1 bazel run @maven//:pin
+```
+
+### Go
+
+Go SDK 由 `rules_go` 自动下载（当前版本 1.24.12），第三方依赖通过 Gazelle 从 `go/go.mod` 解析，无需本地安装 Go。
+
+```bash
+bazel build //go/...
+bazel test //go/...
+```
+
+如需在 Bazel 之外使用 Go 工具链（如 `go mod tidy`），需本地安装 Go：macOS 上 `brew install go`，Linux 上 `sudo apt install golang-go` 或从官网下载。
+
+### Python
+
+Python 解释器由 `rules_python` 自动下载（当前版本 3.13），pip 依赖从 `requirements_lock.txt` 解析。
+
+```bash
+bazel build //python/...
+bazel test //python/...
+```
+
+`python/manim/manimations` 目录下的 Manim 动画不走 Bazel，通过 [uv](https://github.com/astral-sh/uv) 运行：
+
+```bash
+cd python/manim/manimations && uv run manim -pqh hello.py HelloWorld
+```
+
+## 覆盖率
+
+CI 自动生成 C++ 和 Java 的测试覆盖率报告，发布在 GitHub Pages 上：
+
+- C++ 覆盖率详情：https://liubang.github.io/playground/cpp/
+- Java 覆盖率详情：https://liubang.github.io/playground/java/
 
 ## clangd 配置
 
-项目使用 [Hedron Compile Commands Extractor](https://github.com/hedronvision/bazel-compile-commands-extractor) 生成 `compile_commands.json`，配合项目根目录的 `.clangd` 文件为 clangd 提供正确的编译参数。
+项目使用 [Hedron Compile Commands Extractor](https://github.com/hedronvision/bazel-compile-commands-extractor) 生成 `compile_commands.json`，配合根目录的 `.clangd` 文件为 clangd 提供编译参数：
 
-### macOS 额外配置
+```bash
+bazel run @hedron_compile_commands//:refresh_all
+```
 
-macOS 上若使用 Mason（Neovim）或独立安装的 clangd，其内置的 `resource-dir` 和 libc++ 头文件可能与 Homebrew LLVM 版本不匹配，导致模板实例化错误（如 `no type named 'difference_type' in 'std::allocator_traits'`）。
-
-解决方法：创建 clangd 用户级配置文件 `~/Library/Preferences/clangd/config.yaml`：
+macOS 上若 clangd 的 libc++ 头文件与 Homebrew LLVM 版本不匹配，创建 `~/Library/Preferences/clangd/config.yaml`：
 
 ```yaml
 CompileFlags:
@@ -124,19 +166,9 @@ CompileFlags:
     - -resource-dir=/opt/homebrew/opt/llvm/lib/clang/22
 ```
 
-该配置使 clangd 通过 Homebrew 的 clang++ 驱动推导 libc++ 头文件路径，并使用与之匹配的 `resource-dir`，确保标准库头文件版本一致。
+> 注意：Neovim 的 clangd 启动参数中若包含 `--query-driver`，会与上述 `Compiler` 指令冲突，macOS 上应移除。
 
-> 注意：若 Neovim 的 clangd 启动参数中包含 `--query-driver`，该参数会与上述 `Compiler` 指令冲突，导致多版本头文件混用。macOS 上应移除 `--query-driver`。
-
-### Linux 配置
-
-Linux 上 clangd 通常与系统标准库版本一致，一般无需额外的用户级配置。若使用独立安装的 clangd 且版本与系统 libstdc++ 不匹配，可创建 `~/.config/clangd/config.yaml` 并参照上述 macOS 配置格式指定正确的 `Compiler` 和 `resource-dir` 路径。
-
-## 其他说明
-
-- `python/manim/manimations` 目录下的 Manim 动画通过 uv 运行：`cd python/manim/manimations && uv run manim -pqh hello.py HelloWorld`
-- CI 通过 GitHub Actions 验证 C++、Go、Python 三个方向的构建
-- 代码按主题组织，侧重实验性和可读性
+Linux 上 clangd 通常与系统标准库版本一致，一般无需额外配置。
 
 ## 许可证
 
