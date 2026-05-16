@@ -22,6 +22,7 @@
 #include "cpp/pl/flux/connector/connector_registry.h"
 #include "cpp/pl/flux/connector/connector_runtime.h"
 #include "cpp/pl/flux/execution/page_budget.h"
+#include "cpp/pl/flux/execution/task_executor.h"
 #include "cpp/pl/flux/optimizer/cbo.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_aggregate_helpers.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_table_helpers.h"
@@ -36,6 +37,7 @@
 #include <queue>
 #include <sstream>
 #include <string>
+#include <vector>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -102,10 +104,10 @@ bool page_row_time_in_range(const PageChunk& chunk, size_t row_index, const plan
     return !spec.stop.has_value() || literal < *spec.stop;
 }
 
-Value table_with_plan(Value value, const std::shared_ptr<plan::PlanNode>& plan) {
-    value.as_table_mut().plan = plan;
-    value.as_table_mut().materialized = true;
-    return value;
+Page page_with_plan(Page page, const std::shared_ptr<plan::PlanNode>& plan) {
+    page.plan = plan;
+    page.materialized = true;
+    return page;
 }
 
 connector::SourceSpec source_spec_from_plan(const optimizer::PushdownPlan& plan) {
@@ -161,39 +163,93 @@ absl::StatusOr<std::vector<connector::ConnectorSplit>> create_connector_splits(
     return *splits_or;
 }
 
-absl::StatusOr<Value> apply_sort(const Value& input, const std::shared_ptr<plan::PlanNode>& plan) {
-    const auto& table = input.as_table();
-    TableChunk sorted;
-    if (!table.tables.empty()) {
-        sorted.group_key = table.tables.front().group_key;
-        sorted.columns = table.tables.front().columns;
+bool page_row_less(const std::shared_ptr<ObjectValue>& lhs,
+                   const std::shared_ptr<ObjectValue>& rhs,
+                   const std::vector<plan::SortKey>& keys) {
+    if (lhs == nullptr || rhs == nullptr) {
+        return lhs != nullptr;
     }
-    sorted.rows = table.rows;
-    std::stable_sort(
-        sorted.rows.begin(), sorted.rows.end(), [&](const auto& lhs, const auto& rhs) {
-            if (lhs == nullptr || rhs == nullptr) {
-                return lhs != nullptr;
-            }
-            for (const auto& key : plan->sort().keys) {
-                const int cmp = compare_values(lhs->lookup(key.column), rhs->lookup(key.column));
-                if (cmp != 0) {
-                    return key.desc ? cmp > 0 : cmp < 0;
-                }
-            }
-            return false;
-        });
-    std::vector<TableChunk> chunks;
-    if (!sorted.rows.empty() || table.tables.empty()) {
-        chunks.push_back(std::move(sorted));
+    for (const auto& key : keys) {
+        const int cmp = compare_values(lhs->lookup(key.column), rhs->lookup(key.column));
+        if (cmp != 0) {
+            return key.desc ? cmp > 0 : cmp < 0;
+        }
     }
-    return table_with_plan(table_with_chunks_like(table, std::move(chunks)), plan);
+    return false;
 }
 
-absl::StatusOr<Value> apply_group(const Value& input, const std::shared_ptr<plan::PlanNode>& plan) {
-    const auto& table = input.as_table();
+std::vector<std::shared_ptr<ObjectValue>> rows_from_page(const Page& page) {
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve(page.row_count());
+    for (const auto& chunk : page.chunks) {
+        for (size_t row_index = 0; row_index < chunk.row_count; ++row_index) {
+            rows.push_back(RowFromPageChunk(chunk, row_index));
+        }
+    }
+    return rows;
+}
+
+absl::StatusOr<Page> apply_sort_page(const Page& input,
+                                     const std::shared_ptr<plan::PlanNode>& plan) {
+    auto rows = rows_from_page(input);
+    std::stable_sort(rows.begin(), rows.end(), [&](const auto& lhs, const auto& rhs) {
+        return page_row_less(lhs, rhs, plan->sort().keys);
+    });
+    Page output = PageFromRows(input.bucket, std::move(rows));
+    output.range_start = input.range_start;
+    output.range_stop = input.range_stop;
+    output.result_name = input.result_name;
+    return page_with_plan(std::move(output), plan);
+}
+
+absl::StatusOr<Page> apply_topn_page(const Page& input,
+                                     const std::shared_ptr<plan::PlanNode>& sort_plan,
+                                     size_t limit) {
+    if (limit == 0) {
+        return page_with_plan(PageFromRows(input.bucket, {}), sort_plan);
+    }
+    const auto& keys = sort_plan->sort().keys;
+    auto worse_first = [&](const auto& lhs, const auto& rhs) {
+        return page_row_less(lhs, rhs, keys);
+    };
+    std::priority_queue<std::shared_ptr<ObjectValue>,
+                        std::vector<std::shared_ptr<ObjectValue>>,
+                        decltype(worse_first)>
+        heap(worse_first);
+    for (const auto& row : rows_from_page(input)) {
+        if (row == nullptr) {
+            continue;
+        }
+        if (heap.size() < limit) {
+            heap.push(row);
+            continue;
+        }
+        if (page_row_less(row, heap.top(), keys)) {
+            heap.pop();
+            heap.push(row);
+        }
+    }
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve(heap.size());
+    while (!heap.empty()) {
+        rows.push_back(heap.top());
+        heap.pop();
+    }
+    std::stable_sort(rows.begin(), rows.end(), [&](const auto& lhs, const auto& rhs) {
+        return page_row_less(lhs, rhs, keys);
+    });
+    Page output = PageFromRows(input.bucket, std::move(rows));
+    output.range_start = input.range_start;
+    output.range_stop = input.range_stop;
+    output.result_name = input.result_name;
+    return page_with_plan(std::move(output), sort_plan);
+}
+
+absl::StatusOr<Page> apply_group_page(const Page& input,
+                                      const std::shared_ptr<plan::PlanNode>& plan) {
     std::vector<TableChunk> chunks;
     std::unordered_map<std::string, size_t> chunk_indexes;
-    for (const auto& row : table.rows) {
+    for (const auto& row : rows_from_page(input)) {
         if (row == nullptr) {
             continue;
         }
@@ -201,62 +257,94 @@ absl::StatusOr<Value> apply_group(const Value& input, const std::shared_ptr<plan
         auto [it, inserted] = chunk_indexes.emplace(key, chunks.size());
         if (inserted) {
             chunks.emplace_back();
+            const Value* group_value = grouped_row->lookup("_group");
+            if (group_value != nullptr && group_value->type() == Value::Type::Object) {
+                chunks.back().group_key =
+                    std::make_shared<ObjectValue>(group_value->as_object());
+            }
         }
         chunks[it->second].rows.push_back(std::move(grouped_row));
     }
     if (chunks.empty()) {
         chunks.emplace_back();
     }
-    return table_with_plan(table_with_chunks_like(table, std::move(chunks)), plan);
+    Page output = PageFromTableChunks(input.bucket, chunks, input.range_start, input.range_stop,
+                                      input.result_name);
+    return page_with_plan(std::move(output), plan);
 }
 
-absl::StatusOr<Value> apply_distinct(const Value& input,
-                                     const std::shared_ptr<plan::PlanNode>& plan) {
-    const auto& table = input.as_table();
+absl::StatusOr<Page> apply_distinct_page(const Page& input,
+                                         const std::shared_ptr<plan::PlanNode>& plan) {
     std::vector<TableChunk> chunks;
-    chunks.reserve(table.table_count());
-    for (const auto& chunk : table.tables) {
+    chunks.reserve(input.chunks.size());
+    for (const auto& page_chunk : input.chunks) {
         std::unordered_set<std::string> seen;
         TableChunk next;
-        next.group_key = chunk.group_key;
-        next.columns = chunk.columns;
-        for (const auto& row : chunk.rows) {
-            if (row == nullptr) {
-                continue;
-            }
-            const Value* value = row->lookup(plan->distinct().column);
+        next.group_key = page_chunk.group_key;
+        for (const auto& column : page_chunk.columns) {
+            next.columns.push_back(column.name);
+        }
+        for (size_t row_index = 0; row_index < page_chunk.row_count; ++row_index) {
+            const Value* value = PageChunkValueAt(page_chunk, row_index, plan->distinct().column);
             const std::string key = value == nullptr ? "<missing>" : value->string();
             if (seen.insert(key).second) {
-                next.rows.push_back(row);
+                next.rows.push_back(RowFromPageChunk(page_chunk, row_index));
             }
         }
         chunks.push_back(std::move(next));
     }
-    return table_with_plan(table_with_chunks_like(table, std::move(chunks)), plan);
+    Page output = PageFromTableChunks(input.bucket, chunks, input.range_start, input.range_stop,
+                                      input.result_name);
+    return page_with_plan(std::move(output), plan);
 }
 
-absl::StatusOr<Value> apply_aggregate(const Value& input,
-                                      const std::shared_ptr<plan::PlanNode>& plan) {
-    const auto& table = input.as_table();
+Value value_from_page(const Page& page) {
+    TableValue table = TableValueFromPage(page);
+    Value value = Value::table_stream(table.bucket, std::move(table.tables), table.range_start,
+                                      table.range_stop, table.result_name);
+    value.as_table_mut().plan = table.plan;
+    value.as_table_mut().materialized = table.materialized;
+    return value;
+}
+
+Page page_from_value(const Value& value) { return PageFromTableValue(value.as_table()); }
+
+absl::StatusOr<Page> apply_aggregate_page(const Page& input,
+                                          const std::shared_ptr<plan::PlanNode>& plan) {
     std::vector<TableChunk> chunks;
-    chunks.reserve(table.table_count());
-    for (const auto& chunk : table.tables) {
+    chunks.reserve(input.chunks.size());
+    for (const auto& page_chunk : input.chunks) {
+        TableChunk source;
+        source.group_key = page_chunk.group_key;
+        source.columns.reserve(page_chunk.columns.size());
+        for (const auto& column : page_chunk.columns) {
+            source.columns.push_back(column.name);
+        }
+        source.rows.reserve(page_chunk.row_count);
+        for (size_t row_index = 0; row_index < page_chunk.row_count; ++row_index) {
+            source.rows.push_back(RowFromPageChunk(page_chunk, row_index));
+        }
+
         TableChunk next;
+        next.group_key = source.group_key;
+        next.columns = source.columns;
         if (plan->aggregate().fn == plan::AggregateFunction::Count) {
             int64_t count = 0;
-            for (const auto& row : chunk.rows) {
+            for (const auto& row : source.rows) {
                 if (row != nullptr && row->lookup(plan->aggregate().column) != nullptr) {
                     ++count;
                 }
             }
             next.rows.push_back(
-                materialize_group_count_row(chunk, plan->aggregate().column, count));
+                materialize_group_count_row(source, plan->aggregate().column, count));
         } else {
-            auto values_or = numeric_values_for_chunk(chunk, "aggregate", plan->aggregate().column);
+            auto values_or =
+                numeric_values_for_chunk(source, "aggregate", plan->aggregate().column);
             if (!values_or.ok()) {
                 return values_or.status();
             }
             if (values_or->empty()) {
+                chunks.push_back(std::move(next));
                 continue;
             }
             double value = 0.0;
@@ -281,31 +369,18 @@ absl::StatusOr<Value> apply_aggregate(const Value& input,
                 case plan::AggregateFunction::Count:
                     break;
             }
-            next.rows.push_back(materialize_group_value_row(chunk, plan->aggregate().column,
+            next.rows.push_back(materialize_group_value_row(source, plan->aggregate().column,
                                                             Value::floating(value)));
         }
         chunks.push_back(std::move(next));
     }
-    return table_with_plan(table_with_chunks_like(table, std::move(chunks)), plan);
+    Page output = PageFromTableChunks(input.bucket, chunks, input.range_start, input.range_stop,
+                                      input.result_name);
+    return page_with_plan(std::move(output), plan);
 }
 
-Value value_from_page(const Page& page) {
-    TableValue table = TableValueFromPage(page);
-    Value value = Value::table_stream(table.bucket, std::move(table.tables), table.range_start,
-                                      table.range_stop, table.result_name);
-    value.as_table_mut().plan = table.plan;
-    value.as_table_mut().materialized = table.materialized;
-    return value;
-}
-
-Page page_from_value(const Value& value) { return PageFromTableValue(value.as_table()); }
-
-Page page_with_plan(Page page, const std::shared_ptr<plan::PlanNode>& plan) {
-    page.plan = plan;
-    return page;
-}
-
-absl::StatusOr<Page> apply_range_page(Page input, const std::shared_ptr<plan::PlanNode>& plan) {
+absl::StatusOr<Page> apply_range_page(const Page& input,
+                                      const std::shared_ptr<plan::PlanNode>& plan) {
     auto status = ValidatePage(input);
     if (!status.ok()) {
         return status;
@@ -319,7 +394,7 @@ absl::StatusOr<Page> apply_range_page(Page input, const std::shared_ptr<plan::Pl
         chunk.columns.reserve(source.columns.size());
         for (const auto& source_column : source.columns) {
             chunk.columns.push_back(
-                ColumnVector{.name = source_column.name, .type = source_column.type});
+                ColumnVector{.name = source_column.name, .type = source_column.type, .values = {}});
         }
         for (size_t row_index = 0; row_index < source.row_count; ++row_index) {
             if (!page_row_time_in_range(source, row_index, plan->range())) {
@@ -336,7 +411,8 @@ absl::StatusOr<Page> apply_range_page(Page input, const std::shared_ptr<plan::Pl
     return page_with_plan(PageLike(input, std::move(chunks)), plan);
 }
 
-absl::StatusOr<Page> apply_filter_page(Page input, const std::shared_ptr<plan::PlanNode>& plan) {
+absl::StatusOr<Page> apply_filter_page(const Page& input,
+                                       const std::shared_ptr<plan::PlanNode>& plan) {
     auto status = ValidatePage(input);
     if (!status.ok()) {
         return status;
@@ -350,7 +426,7 @@ absl::StatusOr<Page> apply_filter_page(Page input, const std::shared_ptr<plan::P
         chunk.columns.reserve(source.columns.size());
         for (const auto& source_column : source.columns) {
             chunk.columns.push_back(
-                ColumnVector{.name = source_column.name, .type = source_column.type});
+                ColumnVector{.name = source_column.name, .type = source_column.type, .values = {}});
         }
         for (size_t row_index = 0; row_index < source.row_count; ++row_index) {
             bool keep = true;
@@ -378,7 +454,8 @@ absl::StatusOr<Page> apply_filter_page(Page input, const std::shared_ptr<plan::P
     return page_with_plan(PageLike(input, std::move(chunks)), plan);
 }
 
-absl::StatusOr<Page> apply_project_page(Page input, const std::shared_ptr<plan::PlanNode>& plan) {
+absl::StatusOr<Page> apply_project_page(const Page& input,
+                                        const std::shared_ptr<plan::PlanNode>& plan) {
     auto status = ValidatePage(input);
     if (!status.ok()) {
         return status;
@@ -473,7 +550,7 @@ Value apply_exchange_value(const Value& input_value, const std::shared_ptr<plan:
                 const size_t index = chunks.size();
                 partition_index.emplace(*key, index);
                 partition_order.push_back(*key);
-                chunks.push_back(TableChunk{});
+                chunks.emplace_back();
                 it = partition_index.find(partition_order.back());
             }
             chunks[it->second].rows.push_back(row);
@@ -712,11 +789,46 @@ absl::StatusOr<Value> collect_input_value(Operator* input) {
     return value_from_page(*output);
 }
 
+absl::StatusOr<Page> collect_input_page(Operator* input) {
+    if (input == nullptr) {
+        return absl::InvalidArgumentError("operator has no input");
+    }
+    std::optional<Page> output;
+    while (true) {
+        auto page_or = input->NextPage();
+        if (!page_or.ok()) {
+            return page_or.status();
+        }
+        if (!page_or->has_value()) {
+            break;
+        }
+        if (!output.has_value()) {
+            output = std::move(page_or->value());
+            continue;
+        }
+        AppendPage(&*output, std::move(page_or->value()));
+    }
+    if (!output.has_value()) {
+        return Page{};
+    }
+    return std::move(*output);
+}
+
 class ConnectorScanOperator final : public Operator {
 public:
     explicit ConnectorScanOperator(optimizer::PushdownPlan plan) : plan_(std::move(plan)) {}
 
     [[nodiscard]] std::string name() const override { return "ConnectorScanOperator"; }
+
+    void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
+        if (out == nullptr) {
+            return;
+        }
+        out->insert(out->end(), split_stats_.begin(), split_stats_.end());
+        if (page_source_ != nullptr) {
+            out->push_back(page_source_->Stats());
+        }
+    }
 
     absl::StatusOr<std::optional<Page>> NextPage() override {
         if (!initialized_) {
@@ -791,6 +903,17 @@ public:
         : split_(std::move(split)) {}
 
     [[nodiscard]] std::string name() const override { return "ConnectorScanOperator"; }
+
+    void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
+        if (out == nullptr) {
+            return;
+        }
+        if (page_source_ != nullptr) {
+            out->push_back(page_source_->Stats());
+        } else if (split_stats_.finished) {
+            out->push_back(split_stats_);
+        }
+    }
 
     absl::StatusOr<std::optional<Page>> NextPage() override {
         if (!initialized_) {
@@ -956,6 +1079,12 @@ public:
 
     [[nodiscard]] std::string name() const override { return "ExchangeSinkOperator"; }
 
+    void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
+        if (input_ != nullptr) {
+            input_->CollectSplitStats(out);
+        }
+    }
+
     absl::StatusOr<std::optional<Page>> NextPage() override {
         if (finished_) {
             return std::nullopt;
@@ -1032,6 +1161,12 @@ public:
         return std::move(*page_or);
     }
 
+    void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
+        if (input_ != nullptr) {
+            input_->CollectSplitStats(out);
+        }
+    }
+
 protected:
     [[nodiscard]] const std::shared_ptr<plan::PlanNode>& plan() const { return plan_; }
     [[nodiscard]] Operator* input() const { return input_.get(); }
@@ -1042,9 +1177,9 @@ private:
     std::unique_ptr<Operator> input_;
 };
 
-class BlockingUnaryOperator : public Operator {
+class BlockingPageUnaryOperator : public Operator {
 public:
-    BlockingUnaryOperator(std::shared_ptr<plan::PlanNode> plan, std::unique_ptr<Operator> input)
+    BlockingPageUnaryOperator(std::shared_ptr<plan::PlanNode> plan, std::unique_ptr<Operator> input)
         : plan_(std::move(plan)), input_(std::move(input)) {}
 
     absl::StatusOr<std::optional<Page>> NextPage() override {
@@ -1052,20 +1187,26 @@ public:
             return std::nullopt;
         }
         emitted_ = true;
-        auto input_or = collect_input_value(input_.get());
+        auto input_or = collect_input_page(input_.get());
         if (!input_or.ok()) {
             return input_or.status();
         }
-        auto value_or = Apply(*input_or);
-        if (!value_or.ok()) {
-            return value_or.status();
+        auto page_or = Apply(std::move(*input_or));
+        if (!page_or.ok()) {
+            return page_or.status();
         }
-        return page_from_value(*value_or);
+        return std::move(*page_or);
+    }
+
+    void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
+        if (input_ != nullptr) {
+            input_->CollectSplitStats(out);
+        }
     }
 
 protected:
     [[nodiscard]] const std::shared_ptr<plan::PlanNode>& plan() const { return plan_; }
-    virtual absl::StatusOr<Value> Apply(const Value& input) const = 0;
+    virtual absl::StatusOr<Page> Apply(Page input) const = 0;
 
 private:
     std::shared_ptr<plan::PlanNode> plan_;
@@ -1080,7 +1221,7 @@ public:
 
 private:
     absl::StatusOr<Page> Apply(Page input) const override {
-        return apply_range_page(std::move(input), plan());
+        return apply_range_page(input, plan());
     }
 };
 
@@ -1091,7 +1232,7 @@ public:
 
 private:
     absl::StatusOr<Page> Apply(Page input) const override {
-        return apply_filter_page(std::move(input), plan());
+        return apply_filter_page(input, plan());
     }
 };
 
@@ -1102,7 +1243,7 @@ public:
 
 private:
     absl::StatusOr<Page> Apply(Page input) const override {
-        return apply_project_page(std::move(input), plan());
+        return apply_project_page(input, plan());
     }
 };
 
@@ -1123,6 +1264,12 @@ public:
         : plan_(std::move(plan)), input_(std::move(input)) {}
 
     [[nodiscard]] std::string name() const override { return "ExchangeOperator"; }
+
+    void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
+        if (input_ != nullptr) {
+            input_->CollectSplitStats(out);
+        }
+    }
 
     absl::StatusOr<std::optional<Page>> NextPage() override {
         if (emitted_) {
@@ -1150,6 +1297,12 @@ public:
           remaining_offset_(std::max<int64_t>(0, plan_->limit().offset)),
           remaining_limit_(std::max<int64_t>(0, plan_->limit().n)) {}
     [[nodiscard]] std::string name() const override { return "LimitOperator"; }
+
+    void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
+        if (input_ != nullptr) {
+            input_->CollectSplitStats(out);
+        }
+    }
 
     absl::StatusOr<std::optional<Page>> NextPage() override {
         if (remaining_limit_ == 0) {
@@ -1179,7 +1332,7 @@ public:
                     remaining_offset_ -= static_cast<int64_t>(source.row_count);
                     continue;
                 }
-                const size_t start = static_cast<size_t>(remaining_offset_);
+                const auto start = static_cast<size_t>(remaining_offset_);
                 remaining_offset_ = 0;
                 const size_t take = std::min<size_t>(source.row_count - start,
                                                      static_cast<size_t>(remaining_limit_));
@@ -1202,48 +1355,63 @@ private:
     int64_t remaining_limit_ = 0;
 };
 
-class SortOperator final : public BlockingUnaryOperator {
+class SortOperator final : public BlockingPageUnaryOperator {
 public:
-    using BlockingUnaryOperator::BlockingUnaryOperator;
+    using BlockingPageUnaryOperator::BlockingPageUnaryOperator;
     [[nodiscard]] std::string name() const override { return "SortOperator"; }
 
 private:
-    absl::StatusOr<Value> Apply(const Value& input) const override {
-        return apply_sort(input, plan());
-    }
+    absl::StatusOr<Page> Apply(Page input) const override { return apply_sort_page(input, plan()); }
 };
 
-class GroupOperator final : public BlockingUnaryOperator {
+class GroupOperator final : public BlockingPageUnaryOperator {
 public:
-    using BlockingUnaryOperator::BlockingUnaryOperator;
+    using BlockingPageUnaryOperator::BlockingPageUnaryOperator;
     [[nodiscard]] std::string name() const override { return "GroupOperator"; }
 
 private:
-    absl::StatusOr<Value> Apply(const Value& input) const override {
-        return apply_group(input, plan());
+    absl::StatusOr<Page> Apply(Page input) const override {
+        return apply_group_page(input, plan());
     }
 };
 
-class DistinctOperator final : public BlockingUnaryOperator {
+class DistinctOperator final : public BlockingPageUnaryOperator {
 public:
-    using BlockingUnaryOperator::BlockingUnaryOperator;
+    using BlockingPageUnaryOperator::BlockingPageUnaryOperator;
     [[nodiscard]] std::string name() const override { return "DistinctOperator"; }
 
 private:
-    absl::StatusOr<Value> Apply(const Value& input) const override {
-        return apply_distinct(input, plan());
+    absl::StatusOr<Page> Apply(Page input) const override {
+        return apply_distinct_page(input, plan());
     }
 };
 
-class AggregateOperator final : public BlockingUnaryOperator {
+class AggregateOperator final : public BlockingPageUnaryOperator {
 public:
-    using BlockingUnaryOperator::BlockingUnaryOperator;
+    using BlockingPageUnaryOperator::BlockingPageUnaryOperator;
     [[nodiscard]] std::string name() const override { return "AggregateOperator"; }
 
 private:
-    absl::StatusOr<Value> Apply(const Value& input) const override {
-        return apply_aggregate(input, plan());
+    absl::StatusOr<Page> Apply(Page input) const override {
+        return apply_aggregate_page(input, plan());
     }
+};
+
+class TopNOperator final : public BlockingPageUnaryOperator {
+public:
+    TopNOperator(std::shared_ptr<plan::PlanNode> sort_plan,
+                 size_t limit,
+                 std::unique_ptr<Operator> input)
+        : BlockingPageUnaryOperator(std::move(sort_plan), std::move(input)), limit_(limit) {}
+
+    [[nodiscard]] std::string name() const override { return "TopNOperator"; }
+
+private:
+    absl::StatusOr<Page> Apply(Page input) const override {
+        return apply_topn_page(input, plan(), limit_);
+    }
+
+    size_t limit_ = 0;
 };
 
 class LocalHashJoinOperator final : public Operator {
@@ -1254,6 +1422,15 @@ public:
         : plan_(std::move(plan)), left_(std::move(left)), right_(std::move(right)) {}
 
     [[nodiscard]] std::string name() const override { return "LocalHashJoinOperator"; }
+
+    void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
+        if (left_ != nullptr) {
+            left_->CollectSplitStats(out);
+        }
+        if (right_ != nullptr) {
+            right_->CollectSplitStats(out);
+        }
+    }
 
     absl::StatusOr<std::optional<Page>> NextPage() override {
         if (emitted_) {
@@ -1298,6 +1475,12 @@ public:
     explicit OutputOperator(std::unique_ptr<Operator> input) : input_(std::move(input)) {}
 
     [[nodiscard]] std::string name() const override { return "OutputOperator"; }
+
+    void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
+        if (input_ != nullptr) {
+            input_->CollectSplitStats(out);
+        }
+    }
 
     absl::StatusOr<std::optional<Page>> NextPage() override {
         auto input_or = next_input_page(input_.get());
@@ -1401,7 +1584,7 @@ absl::StatusOr<PlannedOperator> BuildOperator(const std::shared_ptr<plan::PlanNo
                     planned.driver_roots.push_back(std::unique_ptr<Operator>(
                         new ConnectorSplitScanOperator(std::move(split))));
                 }
-                planned.operators.push_back("ConnectorScanOperator");
+                planned.operators.emplace_back("ConnectorScanOperator");
                 return planned;
             }
         }
@@ -1600,7 +1783,7 @@ absl::StatusOr<ProducedPipeline> AddProducerPipelineForPlan(
         output_buffer->SetProducerCount(planned_or->driver_roots.size());
         auto sinks =
             WrapDriverRootsWithExchangeSinks(std::move(planned_or->driver_roots), output_buffer);
-        operators.push_back("ExchangeSinkOperator");
+        operators.emplace_back("ExchangeSinkOperator");
         task->pipelines.push_back(MakePipeline(std::move(id), "producer", std::move(role), {},
                                                std::move(operators), nullptr, std::move(sinks)));
         return ProducedPipeline{.buffer = std::move(output_buffer),
@@ -1675,6 +1858,69 @@ absl::StatusOr<ExecutionTask> BuildExchangeExecutionTask(
     return task;
 }
 
+bool IsTwoStageTopNPlan(const std::shared_ptr<plan::PlanNode>& root_plan,
+                        const optimizer::PushdownPlan& pushdown) {
+    if (root_plan == nullptr || root_plan->kind != plan::PlanNodeKind::Limit ||
+        root_plan->inputs.size() != 1 || root_plan->inputs[0] == nullptr ||
+        root_plan->inputs[0]->kind != plan::PlanNodeKind::Sort) {
+        return false;
+    }
+    if (root_plan->limit().offset != 0 || root_plan->limit().n <= 0) {
+        return false;
+    }
+    const auto& request = pushdown.request;
+    return !request.order_by.empty() && request.limit.has_value() && !request.offset.has_value() &&
+           request.group_by.empty() && !request.aggregate.has_value() &&
+           !request.distinct.has_value();
+}
+
+absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageTopNExecutionTask(
+    const std::shared_ptr<plan::PlanNode>& root_plan, const optimizer::PushdownPlan& pushdown) {
+    if (!IsTwoStageTopNPlan(root_plan, pushdown)) {
+        return std::nullopt;
+    }
+
+    optimizer::PushdownPlan partial = pushdown;
+    partial.request.partitioned_topn = true;
+    auto runtime_or = create_connector_runtime(partial);
+    if (!runtime_or.ok()) {
+        return runtime_or.status();
+    }
+    auto splits_or = create_connector_splits(runtime_or->get(), partial);
+    if (!splits_or.ok()) {
+        return splits_or.status();
+    }
+    if (splits_or->size() <= 1) {
+        return std::nullopt;
+    }
+
+    auto buffer = std::make_shared<ExchangeBuffer>();
+    buffer->SetProducerCount(splits_or->size());
+    std::vector<std::unique_ptr<Operator>> split_roots;
+    split_roots.reserve(splits_or->size());
+    for (auto& split : *splits_or) {
+        split_roots.push_back(
+            std::unique_ptr<Operator>(new ConnectorSplitScanOperator(std::move(split))));
+    }
+    auto producer_roots = WrapDriverRootsWithExchangeSinks(std::move(split_roots), buffer);
+
+    ExecutionTask task;
+    task.pipelines.push_back(MakePipeline("topn-partial", "topn partial", "source", {},
+                                          {"ConnectorScanOperator", "ExchangeSinkOperator"},
+                                          nullptr, std::move(producer_roots)));
+
+    std::unique_ptr<Operator> current(new ExchangeSourceOperator(buffer));
+    std::vector<std::string> operators = {current->name()};
+    current = std::unique_ptr<Operator>(new TopNOperator(
+        root_plan->inputs[0], static_cast<size_t>(root_plan->limit().n), std::move(current)));
+    operators.push_back(current->name());
+    std::unique_ptr<Operator> output(new OutputOperator(std::move(current)));
+    operators.push_back(output->name());
+    task.pipelines.push_back(MakePipeline("main", "main", "root", {"topn-partial"},
+                                          std::move(operators), std::move(output)));
+    return task;
+}
+
 absl::StatusOr<std::optional<ExecutionTask>> BuildUnaryBreakerExecutionTask(
     const std::shared_ptr<plan::PlanNode>& root_plan) {
     if (root_plan == nullptr) {
@@ -1739,6 +1985,17 @@ absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
         fast_or->rbo_result.plan->kind == plan::PlanNodeKind::Exchange) {
         return BuildExchangeExecutionTask(fast_or->rbo_result.plan);
     }
+    if (fast_or->rbo_result.pushdown_plan.has_value() &&
+        optimizer::CanExecutePushdownPlan(*fast_or->rbo_result.pushdown_plan)) {
+        auto topn_task_or = BuildTwoStageTopNExecutionTask(fast_or->rbo_result.plan,
+                                                           *fast_or->rbo_result.pushdown_plan);
+        if (!topn_task_or.ok()) {
+            return topn_task_or.status();
+        }
+        if (topn_task_or->has_value()) {
+            return std::move(**topn_task_or);
+        }
+    }
     if (!fast_or->rbo_result.pushdown_plan.has_value() ||
         !optimizer::CanExecutePushdownPlan(*fast_or->rbo_result.pushdown_plan)) {
         auto breaker_task_or = BuildUnaryBreakerExecutionTask(fast_or->rbo_result.plan);
@@ -1757,7 +2014,7 @@ absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
     if (!planned_or->driver_roots.empty()) {
         std::vector<std::string> operators = std::move(planned_or->operators);
         auto outputs = WrapDriverRootsWithOutput(std::move(planned_or->driver_roots));
-        operators.push_back("OutputOperator");
+        operators.emplace_back("OutputOperator");
         ExecutionTask task;
         task.pipelines.push_back(MakePipeline("main", "main", "root", {}, std::move(operators),
                                               nullptr, std::move(outputs)));
@@ -1784,6 +2041,7 @@ void ResetPipelineStats(const std::shared_ptr<Pipeline::Stats>& stats) {
     std::lock_guard<std::mutex> lock(stats->mu);
     stats->pages = 0;
     stats->rows = 0;
+    stats->split_stats.clear();
     stats->blocked = false;
     stats->finished = false;
     stats->error.clear();
@@ -1804,6 +2062,15 @@ void FinishPipelineStats(const std::shared_ptr<Pipeline::Stats>& stats) {
     }
     std::lock_guard<std::mutex> lock(stats->mu);
     stats->finished = true;
+}
+
+void AddPipelineSplitStats(const std::shared_ptr<Pipeline::Stats>& stats,
+                           const std::vector<connector::ConnectorSplitStats>& split_stats) {
+    if (stats == nullptr || split_stats.empty()) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(stats->mu);
+    stats->split_stats.insert(stats->split_stats.end(), split_stats.begin(), split_stats.end());
 }
 
 void FailPipelineStats(const std::shared_ptr<Pipeline::Stats>& stats, const absl::Status& status) {
@@ -1838,6 +2105,9 @@ absl::Status Driver::RunToSink(const PageSink& sink) const {
             return status;
         }
     }
+    std::vector<connector::ConnectorSplitStats> split_stats;
+    pipeline_.root->CollectSplitStats(&split_stats);
+    AddPipelineSplitStats(pipeline_.stats, split_stats);
     FinishPipelineStats(pipeline_.stats);
     return absl::OkStatus();
 }
@@ -1907,6 +2177,7 @@ ExecutionProfile BuildExecutionProfile(const std::vector<PipelineProfile>& pipel
         std::lock_guard<std::mutex> lock(stats[index]->mu);
         profile.pipelines[index].pages = stats[index]->pages;
         profile.pipelines[index].rows = stats[index]->rows;
+        profile.pipelines[index].split_stats = stats[index]->split_stats;
         profile.pipelines[index].blocked = stats[index]->blocked;
         profile.pipelines[index].finished = stats[index]->finished;
         profile.pipelines[index].error = stats[index]->error;
@@ -1917,7 +2188,8 @@ ExecutionProfile BuildExecutionProfile(const std::vector<PipelineProfile>& pipel
 bool IsBlockingOperatorName(const std::string& name) {
     return name == "SortOperator" || name == "GroupOperator" || name == "AggregateOperator" ||
            name == "DistinctOperator" || name == "LocalHashJoinOperator" ||
-           name == "ExchangeOperator" || name == "MaterializeOperator";
+           name == "ExchangeOperator" || name == "MaterializeOperator" ||
+           name == "TopNOperator";
 }
 
 bool HasBlockingOperator(const std::vector<std::string>& operators) {
@@ -1945,7 +2217,8 @@ absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) co
             .dependencies = pipeline.dependencies,
             .operators = pipeline.operators,
             .blocking = HasBlockingOperator(pipeline.operators),
-        });
+            .drivers = pipeline.driver_roots.empty() ? 1 : pipeline.driver_roots.size(),
+            .error = {}});
         pipeline_stats.push_back(pipeline.stats);
     }
 
@@ -2028,30 +2301,33 @@ absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) co
         running_pipeline.collect_output =
             item.role == "root" || item.pipeline_id == "main" || task.pipelines.size() == 1;
         const bool collect_output = running_pipeline.collect_output;
-        running_pipeline.value = executor.Submit([driver_task = std::move(item),
-                                                  collect_output]() mutable
-                                                     -> absl::StatusOr<TableValue> {
-            TableValue table;
-            auto status = Driver(std::move(driver_task.pipeline)).RunToSink([&](Page page) {
-                if (!collect_output) {
-                    return absl::OkStatus();
+        running_pipeline.value =
+            executor.Submit([driver_task = std::move(item),
+                             collect_output]() mutable -> absl::StatusOr<TableValue> {
+                TableValue table;
+                auto status =
+                    Driver(std::move(driver_task.pipeline)).RunToSink([&](const Page& page) {
+                        if (!collect_output) {
+                            return absl::OkStatus();
+                        }
+                        TableValue next = TableValueFromPage(page);
+                        if (table.bucket.empty()) {
+                            table.bucket = next.bucket;
+                        }
+                        table.tables.insert(table.tables.end(),
+                                            std::make_move_iterator(next.tables.begin()),
+                                            std::make_move_iterator(next.tables.end()));
+                        table.rows.insert(table.rows.end(),
+                                          std::make_move_iterator(next.rows.begin()),
+                                          std::make_move_iterator(next.rows.end()));
+                        table.plan = next.plan;
+                        return absl::OkStatus();
+                    });
+                if (!status.ok()) {
+                    return status;
                 }
-                TableValue next = TableValueFromPage(page);
-                if (table.bucket.empty()) {
-                    table.bucket = next.bucket;
-                }
-                table.tables.insert(table.tables.end(), std::make_move_iterator(next.tables.begin()),
-                                    std::make_move_iterator(next.tables.end()));
-                table.rows.insert(table.rows.end(), std::make_move_iterator(next.rows.begin()),
-                                  std::make_move_iterator(next.rows.end()));
-                table.plan = next.plan;
-                return absl::OkStatus();
+                return table;
             });
-            if (!status.ok()) {
-                return status;
-            }
-            return table;
-        });
         running.push_back(std::move(running_pipeline));
     }
 
@@ -2100,6 +2376,124 @@ absl::StatusOr<Value> Scheduler::Run(ExecutionTask task) const {
     return std::move(result_or->value);
 }
 
+absl::StatusOr<SchedulerStreamResult> Scheduler::RunToSink(ExecutionTask task,
+                                                           const PageSink& sink) const {
+    if (task.pipelines.empty()) {
+        return absl::InvalidArgumentError("execution task has no pipelines");
+    }
+    if (sink == nullptr) {
+        return absl::InvalidArgumentError("scheduler sink is missing");
+    }
+
+    std::vector<PipelineProfile> pipeline_profiles;
+    std::vector<std::shared_ptr<Pipeline::Stats>> pipeline_stats;
+    pipeline_profiles.reserve(task.pipelines.size());
+    pipeline_stats.reserve(task.pipelines.size());
+    for (const auto& pipeline : task.pipelines) {
+        pipeline_profiles.push_back(PipelineProfile{
+            .id = pipeline.id,
+            .name = pipeline.name,
+            .role = pipeline.role,
+            .dependencies = pipeline.dependencies,
+            .operators = pipeline.operators,
+            .blocking = HasBlockingOperator(pipeline.operators),
+            .drivers = pipeline.driver_roots.empty() ? 1 : pipeline.driver_roots.size(),
+            .error = {}});
+        pipeline_stats.push_back(pipeline.stats);
+    }
+
+    std::unordered_map<std::string, size_t> pipeline_indexes;
+    for (size_t index = 0; index < task.pipelines.size(); ++index) {
+        if (!task.pipelines[index].id.empty()) {
+            pipeline_indexes.emplace(task.pipelines[index].id, index);
+        }
+    }
+    std::vector<size_t> indegree(task.pipelines.size(), 0);
+    std::vector<std::vector<size_t>> dependents(task.pipelines.size());
+    for (size_t index = 0; index < task.pipelines.size(); ++index) {
+        for (const auto& dependency : task.pipelines[index].dependencies) {
+            auto it = pipeline_indexes.find(dependency);
+            if (it == pipeline_indexes.end()) {
+                return absl::InvalidArgumentError(
+                    absl::StrCat("pipeline depends on missing pipeline: ", dependency));
+            }
+            ++indegree[index];
+            dependents[it->second].push_back(index);
+        }
+    }
+    std::queue<size_t> ready;
+    for (size_t index = 0; index < indegree.size(); ++index) {
+        if (indegree[index] == 0) {
+            ready.push(index);
+        }
+    }
+    size_t visited = 0;
+    while (!ready.empty()) {
+        const size_t index = ready.front();
+        ready.pop();
+        ++visited;
+        for (size_t dependent : dependents[index]) {
+            --indegree[dependent];
+            if (indegree[dependent] == 0) {
+                ready.push(dependent);
+            }
+        }
+    }
+    if (visited != task.pipelines.size()) {
+        return absl::FailedPreconditionError("execution task pipeline dependency cycle");
+    }
+
+    std::vector<DriverTask> driver_tasks;
+    for (size_t index = 0; index < task.pipelines.size(); ++index) {
+        ResetPipelineStats(task.pipelines[index].stats);
+        if (task.pipelines[index].root == nullptr && task.pipelines[index].driver_roots.empty()) {
+            FinishPipelineStats(task.pipelines[index].stats);
+            continue;
+        }
+        auto tasks = DriverFactory::CreateTasks(index, std::move(task.pipelines[index]));
+        driver_tasks.insert(driver_tasks.end(), std::make_move_iterator(tasks.begin()),
+                            std::make_move_iterator(tasks.end()));
+    }
+    if (driver_tasks.empty()) {
+        return absl::InvalidArgumentError("execution task has no runnable pipelines");
+    }
+
+    struct RunningPipeline {
+        bool stream_output = false;
+        std::future<absl::Status> status;
+    };
+    std::mutex sink_mu;
+    std::vector<RunningPipeline> running;
+    running.reserve(driver_tasks.size());
+    TaskExecutor executor(std::max<size_t>(1, driver_tasks.size()));
+    for (auto& item : driver_tasks) {
+        RunningPipeline running_pipeline;
+        running_pipeline.stream_output =
+            item.role == "root" || item.pipeline_id == "main" || task.pipelines.size() == 1;
+        const bool stream_output = running_pipeline.stream_output;
+        running_pipeline.status = executor.Submit(
+            [driver_task = std::move(item), stream_output, &sink, &sink_mu]() mutable {
+                return Driver(std::move(driver_task.pipeline)).RunToSink([&](Page page) {
+                    if (!stream_output) {
+                        return absl::OkStatus();
+                    }
+                    std::lock_guard<std::mutex> lock(sink_mu);
+                    return sink(std::move(page));
+                });
+            });
+        running.push_back(std::move(running_pipeline));
+    }
+    for (auto& running_pipeline : running) {
+        auto status = running_pipeline.status.get();
+        if (!status.ok()) {
+            return status;
+        }
+    }
+    SchedulerStreamResult result;
+    result.profile = BuildExecutionProfile(pipeline_profiles, pipeline_stats);
+    return result;
+}
+
 absl::StatusOr<SchedulerResult> PhysicalExecutor::ExecuteWithProfile(
     const std::shared_ptr<plan::PlanNode>& logical_plan) const {
     auto operator_or = PhysicalPlanner().Plan(logical_plan);
@@ -2107,6 +2501,15 @@ absl::StatusOr<SchedulerResult> PhysicalExecutor::ExecuteWithProfile(
         return operator_or.status();
     }
     return Scheduler().RunWithProfile(std::move(*operator_or));
+}
+
+absl::StatusOr<SchedulerStreamResult> PhysicalExecutor::ExecuteToSink(
+    const std::shared_ptr<plan::PlanNode>& logical_plan, const Scheduler::PageSink& sink) const {
+    auto task_or = PhysicalPlanner().Plan(logical_plan);
+    if (!task_or.ok()) {
+        return task_or.status();
+    }
+    return Scheduler().RunToSink(std::move(*task_or), sink);
 }
 
 absl::StatusOr<Value> PhysicalExecutor::Execute(
@@ -2126,13 +2529,32 @@ std::string FormatPipelinePlan(const std::shared_ptr<plan::PlanNode>& logical_pl
     std::ostringstream out;
     out << "PipelinePlan\n";
     for (const auto& pipeline : task_or->pipelines) {
-        out << "- Pipeline(id=\"" << pipeline.id << "\", role=\"" << pipeline.role << "\"";
+        const size_t drivers = pipeline.driver_roots.empty() ? 1 : pipeline.driver_roots.size();
+        out << R"(- Pipeline(id=")" << pipeline.id << R"(", role=")" << pipeline.role
+            << "\")\n";
+        out << "  drivers: " << drivers << "\n";
         if (!pipeline.dependencies.empty()) {
-            out << ", depends_on=" << plan::StringList(pipeline.dependencies);
+            out << "  depends_on: " << plan::StringList(pipeline.dependencies) << "\n";
         }
-        out << ", blocking=" << (HasBlockingOperator(pipeline.operators) ? "true" : "false")
-            << ", operators=" << plan::StringList(pipeline.operators) << ")\n";
+        out << "  blocking: " << (HasBlockingOperator(pipeline.operators) ? "true" : "false")
+            << "\n";
+        out << "  operators: " << plan::StringList(pipeline.operators) << "\n";
     }
+    return out.str();
+}
+
+std::string FormatSplitStats(const std::vector<connector::ConnectorSplitStats>& stats) {
+    std::ostringstream out;
+    out << "[";
+    for (size_t i = 0; i < stats.size(); ++i) {
+        if (i != 0) {
+            out << ", ";
+        }
+        out << "{id=" << stats[i].split_id << ", pages=" << stats[i].pages_produced
+            << ", rows=" << stats[i].rows_produced
+            << ", finished=" << (stats[i].finished ? "true" : "false") << "}";
+    }
+    out << "]";
     return out.str();
 }
 
@@ -2140,18 +2562,22 @@ std::string FormatExecutionProfile(const ExecutionProfile& profile) {
     std::ostringstream out;
     out << "ExecutionProfile\n";
     for (const auto& pipeline : profile.pipelines) {
-        out << "- Pipeline(id=\"" << pipeline.id << "\", role=\"" << pipeline.role << "\"";
+        out << R"(- Pipeline(id=")" << pipeline.id << R"(", role=")" << pipeline.role
+            << "\")\n";
         if (!pipeline.dependencies.empty()) {
-            out << ", depends_on=" << plan::StringList(pipeline.dependencies);
+            out << "  depends_on: " << plan::StringList(pipeline.dependencies) << "\n";
         }
-        out << ", blocking=" << (pipeline.blocking ? "true" : "false")
-            << ", pages=" << pipeline.pages << ", rows=" << pipeline.rows
+        out << "  drivers: " << pipeline.drivers << "\n";
+        out << "  blocking: " << (pipeline.blocking ? "true" : "false") << "\n";
+        out << "  stats: pages=" << pipeline.pages << ", rows=" << pipeline.rows
             << ", blocked=" << (pipeline.blocked ? "true" : "false")
-            << ", finished=" << (pipeline.finished ? "true" : "false");
-        if (!pipeline.error.empty()) {
-            out << ", error=\"" << pipeline.error << "\"";
+            << ", finished=" << (pipeline.finished ? "true" : "false") << "\n";
+        if (!pipeline.split_stats.empty()) {
+            out << "  splits: " << FormatSplitStats(pipeline.split_stats) << "\n";
         }
-        out << ")\n";
+        if (!pipeline.error.empty()) {
+            out << "  error: " << pipeline.error << "\n";
+        }
     }
     return out.str();
 }

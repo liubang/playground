@@ -35,3 +35,17 @@ cc_binary(
         "@sqlite3",
     ],
 )
+
+cc_binary(
+    name = "mysql_scan_benchmark",
+    srcs = [
+        "mysql_scan_benchmark.cpp",
+    ],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        "//cpp/pl/flux/execution",
+        "//cpp/pl/flux/plan",
+        "@abseil-cpp//absl/status",
+    ],
+)
