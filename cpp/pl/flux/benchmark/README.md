@@ -54,7 +54,8 @@
 - outer join 路径
 - `pivot` / `join` 在多 logical table 语义下的热点路径
 - SQLite connector 的真实多 split streaming scan 路径
-- connector split profile 的 bytes / wall time 指标
+- connector split profile 的 bytes / wall time 和 metadata/split/connect/schema/sql/execute/read/decode/
+  page-build 分段指标
 
 ## 运行方式
 
@@ -134,7 +135,7 @@ FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
 
 如果要做同机多轮对比，用 connector benchmark runner 统一跑 repeat samples。它会输出
 每个 scenario 的 `samples_s`、`median_s`、`mean_s`、`min_s`、`max_s`，并保留最后一轮的
-drivers/output rows：
+drivers/output rows 和 split profile 分段耗时：
 
 ```bash
 bazel build //cpp/pl/flux/benchmark:sqlite_scan_benchmark \
@@ -145,6 +146,32 @@ FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
   python3 cpp/pl/flux/benchmark/run_connector_benchmarks.py \
     --connector mysql --repeat 3
 ```
+
+MySQL benchmark fixture 可以由 runner 自动重建。它会用和 SQLite benchmark 相同的数据形态创建
+表，并把 `seq` 设为 primary key，便于 MySQL connector 做 range split。这个步骤会先 drop 目标表：
+
+```bash
+FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
+  python3 cpp/pl/flux/benchmark/run_connector_benchmarks.py \
+    --connector mysql \
+    --mysql-table flux_bench_cpu \
+    --mysql-rows 1000000 \
+    --prepare-mysql-benchmark-table \
+    --scenario filter_project \
+    --repeat 3
+```
+
+profile 字段含义：
+
+- `split_metadata_time_ms`：split manager 读取 schema/capability/statistics 等 metadata 的耗时。
+- `split_discovery_time_ms`：split manager 生成 split 列表的总耗时。
+- `split_connect_time_ms`：page source 建立 MySQL 连接的耗时。
+- `split_schema_time_ms`：page source 初始化时读取 schema 的耗时；命中进程内 cache 时应很低。
+- `split_sql_build_time_ms`：把 `ScanRequest` 编译成 SQL 的耗时。
+- `split_execute_time_ms`：MySQL start execution 的耗时。
+- `split_read_time_ms`：从 MySQL 协议读取 rows batch 的累计耗时。
+- `split_decode_time_ms`：Boost.MySQL field 到 Flux `Value` / `ColumnVector` 的累计耗时。
+- `split_page_build_time_ms`：把解码结果封装成 `Page` 的累计耗时。
 
 ## 数据形态
 
@@ -207,24 +234,29 @@ scan |> filter(usage >= 50) |> project(host, usage)
 
 | Connector | 输入行 | 输出行 | Drivers | Pages | Split bytes | Split wall time | 端到端时间 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| SQLite | 100k | 50k | 8 | 56 | 6.38 MB | 39.4 ms | 0.0087s |
-| MySQL remote | 100k | 50k | 8 | 52 | 6.36 MB | 200.8 ms | 0.1210s |
+| SQLite | 100k | 50k | 8 | 56 | 6.38 MB | 39.2 ms | 0.0088s median |
+| MySQL remote | 100k | 50k | 8 | 53-55 | 10.39-10.80 MB | 182.8 ms | 0.0693s median |
 
 1M 行结果：
 
 | Connector | 输入行 | 输出行 | Drivers | Pages | Split bytes | Split wall time | 端到端时间 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| SQLite | 1M | 500k | 8 | 496 | 63.61 MB | 305.6 ms / 421.8 ms / 420.2 ms | 0.0566s / 0.0719s / 0.0710s |
-| MySQL remote | 1M | 500k | 8 | 488 | 63.59 MB | 991.2 ms / 1048.5 ms / 997.9 ms | 0.2555s / 0.2588s / 0.2565s |
+| SQLite | 1M | 500k | 8 | 496 | 63.61 MB | 301.5 / 308.7 / 317.2 ms | 0.0548 / 0.0560 / 0.0576s |
+| MySQL remote | 1M | 500k | 8 | 483-488 | 101.82-102.72 MB | 897.0 / 1657.4 / 3939.1 ms | 0.1952 / 0.2798 / 0.6702s |
+
+MySQL 1M 行单次 fixture 重建后的确认结果：`0.1868s`，488 pages，`split_read_time_ms=779.6`，
+`split_decode_time_ms=140.3`，`split_connect_time_ms=254.4`，`split_execute_time_ms=106.5`。
+这说明当前最大热区已经从 row-to-Page 构造转移到远端读取、连接和执行启动。
 
 解读：
 
-- 同样 `filter_project` 查询下，远程 MySQL 端到端约慢 `3.5x - 4.5x`。
-- MySQL 慢的主要来源不是输出行数不同，而是远程服务、网络、连接/metadata、range split
-  discovery、协议解码和 row-to-Page 转换成本。
+- 同样 `filter_project` 查询下，远程 MySQL 端到端仍明显慢于本地 SQLite；本轮优化后小表固定开销
+  下降明显，但远程读耗时抖动会拉大 1M 行尾部延迟。
+- MySQL 慢的主要来源不是输出行数不同，而是远程服务、网络、连接、range split discovery、
+  MySQL execution/read 和协议解码成本；Page build 已经低到亚毫秒级。
 - SQLite 是本机文件，且 benchmark 进程内创建数据库后立即查询，缓存条件更有利。
 - 这组数据说明 MySQL connector 主干能稳定 multi-split 扫描 1M 行级别数据，但后续优化应优先
-  盯 MySQL page source 热路径和固定开销。
+  盯连接复用、split discovery 固定开销、read batch/page size 参数，以及远程服务吞吐稳定性。
 
 ### Legacy In-Memory Baseline
 
