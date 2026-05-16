@@ -24,6 +24,7 @@
 #include <sqlite3.h>
 #include <string>
 #include <unistd.h>
+#include <vector>
 
 namespace {
 
@@ -95,22 +96,42 @@ int main(int argc, char** argv) {
     const int64_t rows = argc > 1 ? std::stoll(argv[1]) : 500000;
     const std::string db_path =
         argc > 2 ? argv[2] : "/tmp/flux_sqlite_scan_" + std::to_string(getpid()) + ".db";
+    const std::string scenario = argc > 3 ? argv[3] : "filter_project";
+    const double threshold = argc > 4 ? std::stod(argv[4]) : 50.0;
     if (!create_database(db_path, rows)) {
         return 1;
     }
 
     auto scan = pl::flux::plan::MakeSourceScan("sqlite", "sqlite", db_path, "cpu");
-    pl::flux::plan::PredicateSpec predicate;
-    predicate.op = pl::flux::plan::PredicateOp::Gte;
-    predicate.column = "usage";
-    predicate.literal =
-        pl::flux::plan::PredicateLiteral{.kind = pl::flux::plan::PredicateLiteralKind::Float,
-                                         .float_value = 50.0,
-                                         .string_value = {}};
-    auto filtered = pl::flux::plan::MakeFilter(scan, {predicate});
-    auto projected = pl::flux::plan::MakeProject(filtered, {"host", "usage"});
+    std::shared_ptr<pl::flux::plan::PlanNode> query = scan;
+    if (scenario == "scan") {
+        query = scan;
+    } else if (scenario == "wide_filter") {
+        pl::flux::plan::PredicateSpec predicate;
+        predicate.op = pl::flux::plan::PredicateOp::Gte;
+        predicate.column = "usage";
+        predicate.literal =
+            pl::flux::plan::PredicateLiteral{.kind = pl::flux::plan::PredicateLiteralKind::Float,
+                                             .float_value = threshold,
+                                             .string_value = {}};
+        query = pl::flux::plan::MakeProject(pl::flux::plan::MakeFilter(scan, {predicate}),
+                                            {"_time", "host", "region", "usage", "seq"});
+    } else if (scenario == "topn") {
+        pl::flux::plan::SortKey key{.column = "usage", .desc = true};
+        query = pl::flux::plan::MakeLimit(pl::flux::plan::MakeSort(scan, {key}), 100, 0);
+    } else {
+        pl::flux::plan::PredicateSpec predicate;
+        predicate.op = pl::flux::plan::PredicateOp::Gte;
+        predicate.column = "usage";
+        predicate.literal =
+            pl::flux::plan::PredicateLiteral{.kind = pl::flux::plan::PredicateLiteralKind::Float,
+                                             .float_value = threshold,
+                                             .string_value = {}};
+        query = pl::flux::plan::MakeProject(pl::flux::plan::MakeFilter(scan, {predicate}),
+                                            {"host", "usage"});
+    }
 
-    auto task_or = pl::flux::execution::PhysicalPlanner().Plan(projected);
+    auto task_or = pl::flux::execution::PhysicalPlanner().Plan(query);
     if (!task_or.ok()) {
         std::cerr << task_or.status() << "\n";
         return 1;
@@ -130,7 +151,9 @@ int main(int argc, char** argv) {
     const size_t output_rows = result_or->value.as_table().rows.size();
     const auto& profile = result_or->profile.pipelines.front();
     std::cout << "{"
+              << "\"scenario\":\"" << scenario << "\","
               << "\"rows\":" << rows << ","
+              << "\"threshold\":" << threshold << ","
               << "\"drivers\":" << drivers << ","
               << "\"output_rows\":" << output_rows << ","
               << "\"pages\":" << profile.pages << ","
