@@ -10,6 +10,10 @@ on:
       - ".github/workflows/build_go.yml"
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-go:
     name: go playground
@@ -26,7 +30,41 @@ jobs:
           repository-cache: true
           disk-cache: ${{ github.workflow }}-${{ runner.os }}
 
-      - name: build and test
+      - name: build
         run: |
-          bazel build --disk_cache=${{ github.workflow }}-${{ runner.os }} //go/...
-          bazel test --disk_cache=${{ github.workflow }}-${{ runner.os }} //go/...
+          bazel build //go/...
+
+      - name: coverage
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lcov
+          bazel coverage \
+            --combined_report=lcov \
+            --instrumentation_filter="//go[/:]" \
+            //go/...
+          ls -lh ./bazel-out/_coverage/_coverage_report.dat
+          genhtml --ignore-errors negative --output coverage-go ./bazel-out/_coverage/_coverage_report.dat
+
+      - name: generate coverage badge
+        run: |
+          COVERAGE=$(lcov --summary ./bazel-out/_coverage/_coverage_report.dat 2>&1 | grep "lines" | awk '{print $2}' | tr -d '%')
+          if [ "$(echo "$COVERAGE >= 80" | bc)" -eq 1 ]; then
+            COLOR="brightgreen"
+          elif [ "$(echo "$COVERAGE >= 60" | bc)" -eq 1 ]; then
+            COLOR="yellow"
+          else
+            COLOR="red"
+          fi
+          echo "{\"schemaVersion\":1,\"label\":\"coverage-go\",\"message\":\"${COVERAGE}%\",\"color\":\"${COLOR}\"}" > coverage-go/badge.json
+
+      - name: Deploy 🚀
+        uses: peaceiris/actions-gh-pages@v4
+        if: ${{ github.ref == 'refs/heads/main' }}
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./coverage-go
+          publish_branch: coverage
+          destination_dir: go
+          keep_files: true
+          user_name: "liubang"
+          user_email: "it.liubang@gmail.com"
