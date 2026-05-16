@@ -77,6 +77,102 @@ absl::Status ValidateColumn(const std::unordered_set<std::string>& schema_column
                      available.empty() ? "" : absl::StrCat("; available columns: ", available)));
 }
 
+absl::Status ValidateLimitOffset(const ScanRequest& request, const std::string& source_name) {
+    if (request.limit.has_value() && *request.limit < 0) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(source_name, " source limit must be non-negative"));
+    }
+    if (request.offset.has_value() && *request.offset < 0) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(source_name, " source offset must be non-negative"));
+    }
+    return absl::OkStatus();
+}
+
+absl::Status ValidateScanRequestAgainstSchema(const ScanRequest& request,
+                                              const TableSchema& schema,
+                                              const std::string& source_name) {
+    std::unordered_set<std::string> schema_columns;
+    schema_columns.reserve(schema.columns.size());
+    for (const auto& column : schema.columns) {
+        schema_columns.insert(column.name);
+    }
+
+    if (!request.columns.empty() && !request.projection_columns.empty()) {
+        return absl::InvalidArgumentError(absl::StrCat(
+            source_name, " source scan request cannot set both columns and projection_columns"));
+    }
+    if (request.aggregate.has_value() && request.distinct.has_value()) {
+        return absl::InvalidArgumentError(absl::StrCat(
+            source_name, " source scan request cannot combine aggregate and distinct"));
+    }
+    if (!request.group_by.empty() && !request.aggregate.has_value()) {
+        return absl::InvalidArgumentError(
+            absl::StrCat(source_name, " source group_by requires aggregate pushdown"));
+    }
+
+    for (const auto& column : request.columns) {
+        auto status = ValidateColumn(schema_columns, column, source_name, "projection");
+        if (!status.ok()) {
+            return status;
+        }
+        if (request.distinct.has_value() && column != *request.distinct) {
+            return absl::InvalidArgumentError(absl::StrCat(
+                source_name,
+                " source distinct projection must use distinct column: ", *request.distinct));
+        }
+    }
+    for (const auto& projection : request.projection_columns) {
+        auto status = ValidateColumn(schema_columns, projection.column, source_name, "projection");
+        if (!status.ok()) {
+            return status;
+        }
+        if (request.distinct.has_value() && projection.column != *request.distinct) {
+            return absl::InvalidArgumentError(absl::StrCat(
+                source_name,
+                " source distinct projection must use distinct column: ", *request.distinct));
+        }
+    }
+    if (request.time_range.has_value()) {
+        auto status = ValidateColumn(schema_columns, "_time", source_name, "time range");
+        if (!status.ok()) {
+            return status;
+        }
+    }
+    for (const auto& predicate : request.predicates) {
+        auto status = ValidateColumn(schema_columns, predicate.column, source_name, "predicate");
+        if (!status.ok()) {
+            return status;
+        }
+    }
+    for (const auto& column : request.group_by) {
+        auto status = ValidateColumn(schema_columns, column, source_name, "group");
+        if (!status.ok()) {
+            return status;
+        }
+    }
+    if (request.aggregate.has_value()) {
+        auto status =
+            ValidateColumn(schema_columns, request.aggregate->column, source_name, "aggregate");
+        if (!status.ok()) {
+            return status;
+        }
+    }
+    if (request.distinct.has_value()) {
+        auto status = ValidateColumn(schema_columns, *request.distinct, source_name, "distinct");
+        if (!status.ok()) {
+            return status;
+        }
+    }
+    for (const auto& order_by : request.order_by) {
+        auto status = ValidateColumn(schema_columns, order_by.column, source_name, "sort");
+        if (!status.ok()) {
+            return status;
+        }
+    }
+    return ValidateLimitOffset(request, source_name);
+}
+
 absl::Status BuildSelectClause(std::string* sql,
                                const ScanRequest& request,
                                const std::unordered_set<std::string>& schema_columns,
@@ -244,23 +340,15 @@ absl::Status BuildOrderByClause(std::string* sql,
     return absl::OkStatus();
 }
 
-absl::Status ValidateLimitOffset(const ScanRequest& request, const SqlDialect& dialect) {
-    const std::string source_name = dialect.SourceName();
-    if (request.limit.has_value() && *request.limit < 0) {
-        return absl::InvalidArgumentError(
-            absl::StrCat(source_name, " source limit must be non-negative"));
-    }
-    if (request.offset.has_value() && *request.offset < 0) {
-        return absl::InvalidArgumentError(
-            absl::StrCat(source_name, " source offset must be non-negative"));
-    }
-    return absl::OkStatus();
-}
-
 absl::StatusOr<std::string> BuildScanSql(const std::string& base_query,
                                          const ScanRequest& request,
                                          const TableSchema& schema,
                                          const SqlDialect& dialect) {
+    auto status = ValidateScanRequestAgainstSchema(request, schema, dialect.SourceName());
+    if (!status.ok()) {
+        return status;
+    }
+
     std::unordered_set<std::string> schema_columns;
     schema_columns.reserve(schema.columns.size());
     for (const auto& column : schema.columns) {
@@ -268,7 +356,7 @@ absl::StatusOr<std::string> BuildScanSql(const std::string& base_query,
     }
 
     std::string sql;
-    auto status = BuildSelectClause(&sql, request, schema_columns, dialect);
+    status = BuildSelectClause(&sql, request, schema_columns, dialect);
     if (!status.ok()) {
         return status;
     }
@@ -289,10 +377,6 @@ absl::StatusOr<std::string> BuildScanSql(const std::string& base_query,
         return status;
     }
 
-    status = ValidateLimitOffset(request, dialect);
-    if (!status.ok()) {
-        return status;
-    }
     sql += dialect.FormatLimit(request.limit, request.offset);
 
     return sql;

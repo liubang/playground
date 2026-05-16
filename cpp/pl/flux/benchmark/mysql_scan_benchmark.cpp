@@ -45,6 +45,22 @@ pl::flux::plan::PredicateSpec usage_predicate(double threshold) {
     return predicate;
 }
 
+struct SplitTotals {
+    size_t bytes = 0;
+    double wall_time_ms = 0.0;
+};
+
+SplitTotals split_totals(const pl::flux::execution::ExecutionProfile& profile) {
+    SplitTotals totals;
+    for (const auto& pipeline : profile.pipelines) {
+        for (const auto& split : pipeline.split_stats) {
+            totals.bytes += split.bytes_produced;
+            totals.wall_time_ms += split.wall_time_ms;
+        }
+    }
+    return totals;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -100,6 +116,7 @@ int main(int argc, char** argv) {
     }
 
     const double seconds = std::chrono::duration<double>(elapsed).count();
+    const SplitTotals splits = split_totals(result_or->profile);
     std::cout << "{"
               << R"("scenario":")" << scenario << R"(",)"
               << R"("table":")" << table << R"(",)"
@@ -107,6 +124,8 @@ int main(int argc, char** argv) {
               << R"("drivers":)" << drivers << ","
               << R"("output_rows":)" << output_rows << ","
               << R"("output_pages":)" << output_pages << ","
+              << R"("split_bytes":)" << splits.bytes << ","
+              << R"("split_wall_time_ms":)" << splits.wall_time_ms << ","
               << R"("seconds":)" << seconds << ","
               << R"("output_rows_per_second":)"
               << static_cast<double>(output_rows) / std::max(seconds, 0.000001) << "}\n";

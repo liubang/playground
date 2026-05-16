@@ -17,6 +17,14 @@
 多数据源、connector、查询计划和算子下推的后续设计见
 [DATASOURCE_ARCHITECTURE.md](./DATASOURCE_ARCHITECTURE.md)。
 
+文档职责大致这样划分：
+
+- 本 README：用户入口、构建运行方式和高层导航。
+- [SUPPORT_MATRIX.md](./SUPPORT_MATRIX.md)：当前支持状态，不解释架构演进过程。
+- [DATASOURCE_ARCHITECTURE.md](./DATASOURCE_ARCHITECTURE.md)：connector / optimizer / execution 架构和 roadmap。
+- [benchmark/README.md](./benchmark/README.md)：benchmark 复现方法、数据形态和当前基线。
+- [benchmark/OPTIMIZATION_LOG.md](./benchmark/OPTIMIZATION_LOG.md)：优化过程、取舍和性能结论解释。
+
 ## 编译依赖
 
 项目通过 Bazel/Bzlmod 构建。Flux 子项目本身主要依赖：
@@ -254,7 +262,9 @@ Universe builtin 默认注入，无需 `import`。
 | --------------------------------- | ------------------------- |
 | `sqlite.from(path:, table:)`      | 从外部表扫描物化为 Flux 表流 |
 
-`sqlite.from` 通过 SQLite C API 扫描 `path` 指向的数据库表，并将 `null`、integer、float、text、blob-as-string 映射到 Flux 运行时值。用户入口不提供 `query` 模式，SQL 只作为 SQLite connector 内部 physical plan。connector 层已有保守 `ScanRequest` 下推能力；runtime pipeline 已能下推 SQLite 源之上的 `range/filter(simple)/keep/drop/rename/sort/limit/distinct` 线性前缀，以及 `group(columns:) |> count/sum/mean/min/max(column:)`，连续简单 `filter()` 会累积到同一个 `ScanRequest.predicates`，`drop(columns:)` 会基于当前可见 schema 反算为 projection，简单 `rename(columns:)` 会下推为 SQLite projection alias，并让后续 predicate/sort/projection/distinct/aggregate 使用重命名后的列语义，复杂 `filter(fn:)` 和其他算子会回退到内存执行。可 streaming 的 scan/filter/project/range 路径会按 SQLite `rowid` 做 multi-split，展开为多个 `ConnectorScanOperator` driver 并行读取；全局 Top-N 会拆成 split 内 partial Top-N 加 root pipeline heap Top-N，其他含全局 order/offset/aggregate/distinct/group 语义的请求保持 single split。blocking unary operator 会在其输入侧形成 producer/root pipeline DAG，并直接消费 Page，因此内存侧 `group/distinct/sort/aggregate/materialize` 能接住并行 connector scan 的 page stream。`explain()` 会标注 `[sqlite pushdown]`、`[sqlite scan]`、`[barrier: ...]` 和 `[memory]`，并在可完整编译时追加 `SourcePushdown(request: ...)` 摘要；`explain(physical: true)` 会展示 `OutputSink`、lazy connector scan、typed memory operator、materialize operator、具体 operator 名，以及 RBO/CBO 决策、drivers、split stats 和 cost 信息。输出边界由 `ExecutionTask -> Pipeline -> Scheduler -> Driver -> Operator -> Page` 主干执行，`PhysicalExecutor::ExecuteToSink` 可直接按 Page 流式输出。后续 planner 和下推路线见 [DATASOURCE_ARCHITECTURE.md](./DATASOURCE_ARCHITECTURE.md)。
+`sqlite.from` 通过 SQLite C API 扫描 `path` 指向的数据库表，并将 `null`、integer、float、text、blob-as-string 映射到 Flux 运行时值。用户入口不提供 `query` 模式，SQL 只作为 SQLite connector 内部 physical plan。
+
+支持状态见 [SUPPORT_MATRIX.md](./SUPPORT_MATRIX.md)，connector / planner / execution 设计见 [DATASOURCE_ARCHITECTURE.md](./DATASOURCE_ARCHITECTURE.md)。
 
 当前没有顶层 `from(bucket:)` 或其他 universe 数据源占位。新增数据源时优先补 provider package，例如 `mysql.from`，而不是恢复顶层 `from`。
 
@@ -265,7 +275,9 @@ Universe builtin 默认注入，无需 `import`。
 | `mysql.from(dsn:, table:)` | 从 MySQL 表扫描物化为 Flux 表流 |
 | `mysql.from(host:, user:, password:, database:, table:, ?port:)` | 同上，使用显式连接字段 |
 
-`mysql.from` 使用 Boost.MySQL 连接外部 MySQL，支持 `mysql://user:password@host[:port]/database` 和 `user:password@tcp(host[:port])/database` 两类 `dsn`，也支持显式 `host/user/password/database/port` 字段；`port` 默认 3306。connector 会扫描 `table` 指向的表，并将 null、signed/unsigned integer、float/double、string/blob、date/datetime/time 映射到 Flux 运行时值。和 `sqlite.from` 一样，用户入口不提供 raw `query` 模式，SQL 只作为 connector 内部 physical plan。runtime pipeline 会把 MySQL 源之上的 `range/filter(simple)/keep/drop/rename/sort/limit/distinct` 线性前缀，以及简单 `group(columns:) |> count/sum/mean/min/max(column:)` 聚合编译为 `ScanRequest` 并重新扫描下推；复杂 `filter(fn:)` 和其他算子会回退到内存执行。没有全局 SQL 语义的 streaming scan 会通过 MySQL 主键或整型列拆 range split，split predicate 在 page source SQL 内追加，无法安全拆分时回退 single split；Top-N 和 SQLite 一样可走 split 内 partial Top-N 加 root 全局 sort/limit。`explain()` 会标注 `[mysql pushdown]` / `[mysql scan]`，并在可完整编译时追加 `SourcePushdown(request: ...)` 摘要；`explain(physical: true)` 会和 SQLite 路径一样展示 `OutputSink` 根节点、connector scan / typed memory fallback 边界、operator 名、drivers 和 optimizer trace。
+`mysql.from` 使用 Boost.MySQL 连接外部 MySQL，支持 `mysql://user:password@host[:port]/database` 和 `user:password@tcp(host[:port])/database` 两类 `dsn`，也支持显式 `host/user/password/database/port` 字段；`port` 默认 3306。用户入口不提供 raw `query` 模式，SQL 只作为 connector 内部 physical plan。
+
+支持状态见 [SUPPORT_MATRIX.md](./SUPPORT_MATRIX.md)。性能对比和复现方式见 [benchmark/README.md](./benchmark/README.md)。
 
 ### `date`
 

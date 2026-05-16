@@ -66,6 +66,11 @@ absl::Status ValidateColumn(const std::unordered_set<std::string>& schema_column
                             const std::string& source_name,
                             const std::string& context);
 
+/// Validate the connector pushdown contract for a SQL scan request before SQL generation.
+absl::Status ValidateScanRequestAgainstSchema(const ScanRequest& request,
+                                              const TableSchema& schema,
+                                              const std::string& source_name);
+
 /// Build the SELECT clause based on the scan request.
 /// Appends to `sql`. Returns error if column validation fails.
 absl::Status BuildSelectClause(std::string* sql,
