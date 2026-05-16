@@ -22,6 +22,7 @@
 - `join`：双表 `join(..., on: ["_time", "host"]) |> limit`
 - `join_grouped`：两侧先 `group(columns: ["host"])` 再 `join(..., on: ["_time"])`
 - `join_full`：双表 `join(method: "full") |> limit`
+- `sqlite_scan_benchmark`：构造真实 SQLite 表，走 connector multi-split `filter + project`
 
 这些 case 组合起来主要覆盖：
 
@@ -38,6 +39,7 @@
 - 更重的多表 `join` 路径，目前已经由哈希索引支撑
 - outer join 路径
 - `pivot` / `join` 在多 logical table 语义下的热点路径
+- SQLite connector 的真实多 split streaming scan 路径
 
 ## 运行方式
 
@@ -85,6 +87,15 @@ python3 cpp/pl/flux/benchmark/run_benchmarks.py \
   --cases agg,agg_create_empty,agg_calendar,window,ranking,pivot,pivot_wide,join,join_grouped,join_full \
   --metric-rows 100000 \
   --join-rows 2000
+```
+
+SQLite connector 有独立的真实 scan benchmark target。它会在 `/tmp` 构造 SQLite 数据库，
+插入指定行数，执行 `sqlite scan -> filter(usage >= 50) -> project(host, usage)`，并输出
+drivers、pages、blocking 和吞吐：
+
+```bash
+bazel build //cpp/pl/flux/benchmark:sqlite_scan_benchmark
+bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000
 ```
 
 ## 数据形态
@@ -164,6 +175,13 @@ python3 cpp/pl/flux/benchmark/run_benchmarks.py \
 | `join_grouped` | 2000 x 2000 rows | 0.013s |
 
 这组数字主要用来证明新 case 和 runner 口径都正常，不直接替换上面的完整基线表。
+
+SQLite multi-split scan 当前实测：
+
+| Case | 输入规模 | Drivers | 输出行数 | Pages | 时间 | 吞吐 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `sqlite_scan_benchmark` | 500k rows | 8 | 250k | 248 | 0.157s | 3.18M rows/s |
+| `sqlite_scan_benchmark` | 1M rows | 8 | 500k | 496 | 0.311s | 3.21M rows/s |
 
 ## 如何使用
 

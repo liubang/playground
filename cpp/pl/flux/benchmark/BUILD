@@ -12,10 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Authors: liubang (it.liubang@gmail.com)
-# Created: 2026/05/10 23:13
-
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
 load(
     "//cpp:copts/configure_copts.bzl",
     "COPTS",
@@ -24,29 +21,17 @@ load(
 
 package(default_visibility = ["//cpp/pl/flux:__subpackages__"])
 
-cc_library(
-    name = "execution",
+cc_binary(
+    name = "sqlite_scan_benchmark",
     srcs = [
-        "materializer.cpp",
-        "physical_executor.cpp",
-        "task_executor.cpp",
-    ],
-    hdrs = [
-        "materializer.h",
-        "page_budget.h",
-        "physical_executor.h",
-        "task_executor.h",
+        "sqlite_scan_benchmark.cpp",
     ],
     copts = COPTS,
     linkopts = LINKOPTS,
     deps = [
-        "//cpp/pl/flux/connector",
-        "//cpp/pl/flux/optimizer",
-        "//cpp/pl/flux/runtime:runtime_builtin_aggregate_helpers",
-        "//cpp/pl/flux/runtime:runtime_builtin_table_helpers",
-        "//cpp/pl/flux/runtime:runtime_value",
+        "//cpp/pl/flux/execution",
+        "//cpp/pl/flux/plan",
         "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
+        "@sqlite3",
     ],
 )
