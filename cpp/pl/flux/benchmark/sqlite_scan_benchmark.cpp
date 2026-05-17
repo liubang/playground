@@ -114,10 +114,14 @@ struct AccumulatorTotals {
     size_t input_rows = 0;
     size_t output_rows = 0;
     size_t groups = 0;
+    size_t partial_input_rows = 0;
+    size_t final_input_rows = 0;
     double key_time_ms = 0.0;
     double hash_time_ms = 0.0;
     double update_time_ms = 0.0;
     double result_time_ms = 0.0;
+    double partial_time_ms = 0.0;
+    double final_time_ms = 0.0;
 };
 
 SplitTotals split_totals(const pl::flux::execution::ExecutionProfile& profile) {
@@ -151,6 +155,15 @@ AccumulatorTotals accumulator_totals(const pl::flux::execution::ExecutionProfile
             totals.hash_time_ms += accumulator.hash_time_ms;
             totals.update_time_ms += accumulator.update_time_ms;
             totals.result_time_ms += accumulator.result_time_ms;
+            const double total_time_ms = accumulator.key_time_ms + accumulator.hash_time_ms +
+                                         accumulator.update_time_ms + accumulator.result_time_ms;
+            if (accumulator.phase == "partial") {
+                totals.partial_input_rows += accumulator.input_rows;
+                totals.partial_time_ms += total_time_ms;
+            } else if (accumulator.phase == "final") {
+                totals.final_input_rows += accumulator.input_rows;
+                totals.final_time_ms += total_time_ms;
+            }
         }
     }
     return totals;
@@ -268,10 +281,14 @@ int run_benchmark(int argc, char** argv) {
               << "\"accumulator_input_rows\":" << accumulators.input_rows << ","
               << "\"accumulator_output_rows\":" << accumulators.output_rows << ","
               << "\"accumulator_groups\":" << accumulators.groups << ","
+              << "\"accumulator_partial_input_rows\":" << accumulators.partial_input_rows << ","
+              << "\"accumulator_final_input_rows\":" << accumulators.final_input_rows << ","
               << "\"accumulator_key_time_ms\":" << accumulators.key_time_ms << ","
               << "\"accumulator_hash_time_ms\":" << accumulators.hash_time_ms << ","
               << "\"accumulator_update_time_ms\":" << accumulators.update_time_ms << ","
               << "\"accumulator_result_time_ms\":" << accumulators.result_time_ms << ","
+              << "\"accumulator_partial_time_ms\":" << accumulators.partial_time_ms << ","
+              << "\"accumulator_final_time_ms\":" << accumulators.final_time_ms << ","
               << "\"blocking\":" << (pipelines.blocking ? "true" : "false") << ","
               << "\"seconds\":" << seconds << ","
               << "\"rows_per_second\":" << static_cast<double>(rows) / std::max(seconds, 0.000001)

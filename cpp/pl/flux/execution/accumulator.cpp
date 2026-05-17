@@ -34,6 +34,7 @@
 namespace pl::flux::execution {
 namespace {
 using Clock = std::chrono::steady_clock;
+constexpr const char* kPartialAggregateCountColumn = "_flux_acc_count";
 
 double elapsed_ms(Clock::time_point start) {
     return std::chrono::duration<double, std::milli>(Clock::now() - start).count();
@@ -131,23 +132,69 @@ struct GroupKeyPart {
 };
 
 struct GroupKey {
+    enum class Kind {
+        Empty,
+        Single,
+        Multi,
+    };
+
+    Kind kind = Kind::Empty;
+    GroupKeyPart single;
     std::vector<GroupKeyPart> parts;
 
-    bool operator==(const GroupKey& other) const { return parts == other.parts; }
+    bool operator==(const GroupKey& other) const {
+        if (kind != other.kind) {
+            return false;
+        }
+        switch (kind) {
+            case Kind::Empty:
+                return true;
+            case Kind::Single:
+                return single == other.single;
+            case Kind::Multi:
+                return parts == other.parts;
+        }
+        return false;
+    }
 };
 
 struct GroupKeyHash {
     size_t operator()(const GroupKey& key) const {
-        size_t seed = key.parts.size();
-        for (const auto& part : key.parts) {
-            seed = hash_combine(seed, std::hash<bool>{}(part.missing));
+        size_t seed = std::hash<int>{}(static_cast<int>(key.kind));
+        auto hash_part = [](size_t current, const GroupKeyPart& part) {
+            current = hash_combine(current, std::hash<bool>{}(part.missing));
             if (!part.missing) {
-                seed = hash_combine(seed, value_hash(part.value));
+                current = hash_combine(current, value_hash(part.value));
             }
+            return current;
+        };
+        switch (key.kind) {
+            case GroupKey::Kind::Empty:
+                return seed;
+            case GroupKey::Kind::Single:
+                return hash_part(seed, key.single);
+            case GroupKey::Kind::Multi:
+                seed = hash_combine(seed, key.parts.size());
+                for (const auto& part : key.parts) {
+                    seed = hash_part(seed, part);
+                }
+                return seed;
         }
         return seed;
     }
 };
+
+const char* aggregate_phase_name(AggregatePhase phase) {
+    switch (phase) {
+        case AggregatePhase::Single:
+            return "single";
+        case AggregatePhase::Partial:
+            return "partial";
+        case AggregatePhase::Final:
+            return "final";
+    }
+    return "single";
+}
 
 struct PageMetadata {
     std::string bucket;
@@ -192,12 +239,7 @@ Page page_from_accumulated_page_chunks(PageMetadata metadata,
 }
 
 std::optional<size_t> find_page_chunk_column(const PageChunk& chunk, const std::string& name) {
-    for (size_t index = 0; index < chunk.columns.size(); ++index) {
-        if (chunk.columns[index].name == name) {
-            return index;
-        }
-    }
-    return std::nullopt;
+    return chunk.FindColumn(name);
 }
 
 std::vector<std::optional<size_t>> group_column_indexes(const PageChunk& chunk,
@@ -228,6 +270,18 @@ GroupKey group_key_for_row(const PageChunk& chunk,
                            size_t row_index,
                            const std::vector<std::optional<size_t>>& column_indexes) {
     GroupKey key;
+    if (column_indexes.empty()) {
+        key.kind = GroupKey::Kind::Empty;
+        return key;
+    }
+    if (column_indexes.size() == 1) {
+        key.kind = GroupKey::Kind::Single;
+        const Value* value = page_chunk_value_at_index(chunk, row_index, column_indexes[0]);
+        key.single = value == nullptr ? GroupKeyPart{.missing = true}
+                                      : GroupKeyPart{.missing = false, .value = *value};
+        return key;
+    }
+    key.kind = GroupKey::Kind::Multi;
     key.parts.reserve(column_indexes.size());
     for (const auto& column_index : column_indexes) {
         const Value* value = page_chunk_value_at_index(chunk, row_index, column_index);
@@ -255,9 +309,16 @@ std::shared_ptr<ObjectValue> group_key_object_for_row(
 
 GroupKey group_key_from_object(const std::shared_ptr<ObjectValue>& object) {
     GroupKey key;
-    if (object == nullptr) {
+    if (object == nullptr || object->properties.empty()) {
+        key.kind = GroupKey::Kind::Empty;
         return key;
     }
+    if (object->properties.size() == 1) {
+        key.kind = GroupKey::Kind::Single;
+        key.single = GroupKeyPart{.missing = false, .value = object->properties[0].second};
+        return key;
+    }
+    key.kind = GroupKey::Kind::Multi;
     key.parts.reserve(object->properties.size());
     for (const auto& [_, value] : object->properties) {
         key.parts.push_back(GroupKeyPart{.missing = false, .value = value});
@@ -334,7 +395,8 @@ void append_result_column(PageChunk* chunk, std::string name, Value value) {
 
 PageChunk aggregate_result_chunk(const std::shared_ptr<ObjectValue>& group_key,
                                  const std::string& column_name,
-                                 std::optional<Value> aggregate_value) {
+                                 std::optional<Value> aggregate_value,
+                                 std::optional<int64_t> partial_count = std::nullopt) {
     PageChunk chunk;
     chunk.group_key = group_key;
     if (!aggregate_value.has_value()) {
@@ -350,22 +412,74 @@ PageChunk aggregate_result_chunk(const std::shared_ptr<ObjectValue>& group_key,
                              Value::object(std::make_shared<ObjectValue>(*group_key)));
     }
     append_result_column(&chunk, column_name, std::move(*aggregate_value));
+    if (partial_count.has_value()) {
+        append_result_column(&chunk, kPartialAggregateCountColumn, Value::integer(*partial_count));
+    }
     return chunk;
 }
 
 absl::Status update_aggregate_state(AggregateState* state,
                                     const plan::AggregateSpec& aggregate,
-                                    const Value* value) {
+                                    const Value* value,
+                                    const Value* partial_count = nullptr,
+                                    AggregatePhase phase = AggregatePhase::Single) {
     if (state == nullptr) {
         return absl::InvalidArgumentError("aggregate state is missing");
     }
     if (aggregate.fn == plan::AggregateFunction::Count) {
+        if (phase == AggregatePhase::Final) {
+            if (value == nullptr || value->is_null()) {
+                return absl::OkStatus();
+            }
+            if (value->type() == Value::Type::Int) {
+                state->count += value->as_int();
+                return absl::OkStatus();
+            }
+            if (value->type() == Value::Type::UInt) {
+                state->count += static_cast<int64_t>(value->as_uint());
+                return absl::OkStatus();
+            }
+            return absl::InvalidArgumentError(
+                absl::StrCat("partial count `", aggregate.column, "` must be integral"));
+        }
         if (value != nullptr) {
             ++state->count;
         }
         return absl::OkStatus();
     }
     if (value == nullptr || value->is_null()) {
+        return absl::OkStatus();
+    }
+    if (aggregate.fn == plan::AggregateFunction::Mean && phase == AggregatePhase::Final) {
+        if (!is_numeric_value(*value)) {
+            return absl::InvalidArgumentError(
+                absl::StrCat("partial mean sum `", aggregate.column, "` must be numeric"));
+        }
+        if (partial_count == nullptr || partial_count->is_null()) {
+            return absl::OkStatus();
+        }
+        int64_t count = 0;
+        if (partial_count->type() == Value::Type::Int) {
+            count = partial_count->as_int();
+        } else if (partial_count->type() == Value::Type::UInt) {
+            count = static_cast<int64_t>(partial_count->as_uint());
+        } else {
+            return absl::InvalidArgumentError("partial mean count must be integral");
+        }
+        if (count <= 0) {
+            return absl::OkStatus();
+        }
+        const double item = numeric_value(*value);
+        state->sum += item;
+        state->numeric_count += static_cast<size_t>(count);
+        if (!state->has_numeric) {
+            state->min = item;
+            state->max = item;
+            state->has_numeric = true;
+        } else {
+            state->min = std::min(state->min, item);
+            state->max = std::max(state->max, item);
+        }
         return absl::OkStatus();
     }
     if (!is_numeric_value(*value)) {
@@ -408,7 +522,8 @@ absl::Status update_aggregate_state_from_column(AggregateState* state,
 }
 
 std::optional<Value> aggregate_value_from_state(const AggregateState& state,
-                                                const plan::AggregateSpec& aggregate) {
+                                                const plan::AggregateSpec& aggregate,
+                                                AggregatePhase phase = AggregatePhase::Single) {
     if (aggregate.fn == plan::AggregateFunction::Count) {
         return Value::integer(state.count);
     }
@@ -421,7 +536,9 @@ std::optional<Value> aggregate_value_from_state(const AggregateState& state,
             value = state.sum;
             break;
         case plan::AggregateFunction::Mean:
-            value = state.sum / static_cast<double>(state.numeric_count);
+            value = phase == AggregatePhase::Partial
+                        ? state.sum
+                        : state.sum / static_cast<double>(state.numeric_count);
             break;
         case plan::AggregateFunction::Min:
             value = state.min;
@@ -463,6 +580,9 @@ StreamingGroupOperator::StreamingGroupOperator(std::shared_ptr<plan::PlanNode> p
     : plan_(std::move(plan)), input_(std::move(input)) {
     stats_.operator_name = name();
     stats_.mode = "group";
+    stats_.phase = "single";
+    stats_.key_strategy =
+        plan_ != nullptr && plan_->group().columns.size() == 1 ? "single" : "generic";
 }
 
 std::string StreamingGroupOperator::name() const { return "GroupOperator"; }
@@ -528,7 +648,8 @@ absl::StatusOr<std::optional<Page>> StreamingGroupOperator::NextPage() {
                 {
                     ScopedAccumulatorTimer timer(&stats_.update_time_ms);
                     append_source_row_to_chunk(&chunks[insertion.first->second], page_chunk,
-                                               row_index, chunks[insertion.first->second].group_key);
+                                               row_index,
+                                               chunks[insertion.first->second].group_key);
                 }
             }
         }
@@ -550,6 +671,8 @@ StreamingDistinctOperator::StreamingDistinctOperator(std::shared_ptr<plan::PlanN
     : plan_(std::move(plan)), input_(std::move(input)) {
     stats_.operator_name = name();
     stats_.mode = "distinct";
+    stats_.phase = "single";
+    stats_.key_strategy = "single";
 }
 
 std::string StreamingDistinctOperator::name() const { return "DistinctOperator"; }
@@ -606,7 +729,8 @@ absl::StatusOr<std::optional<Page>> StreamingDistinctOperator::NextPage() {
                 groups.push_back(std::move(state));
             }
             DistinctState& state = groups[it->second];
-            const auto distinct_column = find_page_chunk_column(page_chunk, plan_->distinct().column);
+            const auto distinct_column =
+                find_page_chunk_column(page_chunk, plan_->distinct().column);
             for (size_t row_index = 0; row_index < page_chunk.row_count; ++row_index) {
                 ++stats_.input_rows;
                 GroupKey value_key;
@@ -614,9 +738,10 @@ absl::StatusOr<std::optional<Page>> StreamingDistinctOperator::NextPage() {
                     ScopedAccumulatorTimer timer(&stats_.key_time_ms);
                     const Value* value =
                         page_chunk_value_at_index(page_chunk, row_index, distinct_column);
-                    value_key.parts.push_back(value == nullptr
-                                                  ? GroupKeyPart{.missing = true}
-                                                  : GroupKeyPart{.missing = false, .value = *value});
+                    value_key.kind = GroupKey::Kind::Single;
+                    value_key.single = value == nullptr
+                                           ? GroupKeyPart{.missing = true}
+                                           : GroupKeyPart{.missing = false, .value = *value};
                 }
                 bool keep = false;
                 {
@@ -654,6 +779,8 @@ StreamingAggregateOperator::StreamingAggregateOperator(std::shared_ptr<plan::Pla
     : plan_(std::move(plan)), input_(std::move(input)) {
     stats_.operator_name = name();
     stats_.mode = "aggregate";
+    stats_.phase = "single";
+    stats_.key_strategy = "group_object";
 }
 
 std::string StreamingAggregateOperator::name() const { return "AggregateOperator"; }
@@ -728,9 +855,9 @@ absl::StatusOr<std::optional<Page>> StreamingAggregateOperator::NextPage() {
     {
         ScopedAccumulatorTimer timer(&stats_.result_time_ms);
         for (const auto& state : groups) {
-            chunks.push_back(aggregate_result_chunk(
-                state.group_key, plan_->aggregate().column,
-                aggregate_value_from_state(state, plan_->aggregate())));
+            chunks.push_back(
+                aggregate_result_chunk(state.group_key, plan_->aggregate().column,
+                                       aggregate_value_from_state(state, plan_->aggregate())));
         }
     }
     stats_.groups = groups.size();
@@ -744,12 +871,16 @@ absl::StatusOr<std::optional<Page>> StreamingAggregateOperator::NextPage() {
 StreamingGroupedAggregateOperator::StreamingGroupedAggregateOperator(
     std::shared_ptr<plan::PlanNode> aggregate_plan,
     std::vector<std::string> group_columns,
-    std::unique_ptr<Operator> input)
+    std::unique_ptr<Operator> input,
+    AggregatePhase phase)
     : aggregate_plan_(std::move(aggregate_plan)),
       group_columns_(std::move(group_columns)),
-      input_(std::move(input)) {
+      input_(std::move(input)),
+      phase_(phase) {
     stats_.operator_name = name();
     stats_.mode = "grouped_aggregate";
+    stats_.phase = aggregate_phase_name(phase_);
+    stats_.key_strategy = group_columns_.size() == 1 ? "single" : "generic";
 }
 
 std::string StreamingGroupedAggregateOperator::name() const { return "AggregateOperator"; }
@@ -797,6 +928,8 @@ absl::StatusOr<std::optional<Page>> StreamingGroupedAggregateOperator::NextPage(
             const auto group_indexes_in_chunk = group_column_indexes(page_chunk, group_columns_);
             const auto aggregate_column =
                 find_page_chunk_column(page_chunk, aggregate_plan_->aggregate().column);
+            const auto partial_count_column =
+                find_page_chunk_column(page_chunk, kPartialAggregateCountColumn);
             for (size_t row_index = 0; row_index < page_chunk.row_count; ++row_index) {
                 ++stats_.input_rows;
                 GroupKey group_key;
@@ -812,9 +945,8 @@ absl::StatusOr<std::optional<Page>> StreamingGroupedAggregateOperator::NextPage(
                 }
                 if (insertion.second) {
                     AggregateState state;
-                    state.group_key = group_key_object_for_row(page_chunk, row_index,
-                                                               group_columns_,
-                                                               group_indexes_in_chunk);
+                    state.group_key = group_key_object_for_row(
+                        page_chunk, row_index, group_columns_, group_indexes_in_chunk);
                     groups.push_back(std::move(state));
                 }
                 AggregateState& state = groups[insertion.first->second];
@@ -822,7 +954,9 @@ absl::StatusOr<std::optional<Page>> StreamingGroupedAggregateOperator::NextPage(
                     ScopedAccumulatorTimer timer(&stats_.update_time_ms);
                     auto update_status = update_aggregate_state(
                         &state, aggregate_plan_->aggregate(),
-                        page_chunk_value_at_index(page_chunk, row_index, aggregate_column));
+                        page_chunk_value_at_index(page_chunk, row_index, aggregate_column),
+                        page_chunk_value_at_index(page_chunk, row_index, partial_count_column),
+                        phase_);
                     if (!update_status.ok()) {
                         return update_status;
                     }
@@ -832,6 +966,11 @@ absl::StatusOr<std::optional<Page>> StreamingGroupedAggregateOperator::NextPage(
     }
 
     if (groups.empty()) {
+        if (!group_columns_.empty()) {
+            stats_.groups = 0;
+            stats_.output_rows = 0;
+            return page_from_accumulated_page_chunks(std::move(metadata), {}, aggregate_plan_);
+        }
         AggregateState state;
         groups.push_back(std::move(state));
     }
@@ -840,9 +979,15 @@ absl::StatusOr<std::optional<Page>> StreamingGroupedAggregateOperator::NextPage(
     {
         ScopedAccumulatorTimer timer(&stats_.result_time_ms);
         for (const auto& state : groups) {
+            std::optional<int64_t> partial_count;
+            if (phase_ == AggregatePhase::Partial &&
+                aggregate_plan_->aggregate().fn == plan::AggregateFunction::Mean) {
+                partial_count = static_cast<int64_t>(state.numeric_count);
+            }
             chunks.push_back(aggregate_result_chunk(
                 state.group_key, aggregate_plan_->aggregate().column,
-                aggregate_value_from_state(state, aggregate_plan_->aggregate())));
+                aggregate_value_from_state(state, aggregate_plan_->aggregate(), phase_),
+                partial_count));
         }
     }
     stats_.groups = groups.size();
