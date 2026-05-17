@@ -20,12 +20,11 @@
 #include "absl/status/statusor.h"
 #include <boost/asio/io_context.hpp>
 #include <boost/mysql/any_connection.hpp>
-#include <boost/mysql/statement.hpp>
 #include <cstddef>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace pl::flux::connector {
@@ -34,11 +33,8 @@ class MySQLConnectionPool final {
 public:
     struct Entry {
         boost::asio::io_context ctx;
-        boost::mysql::any_connection conn;
-        std::unordered_map<std::string, boost::mysql::statement> statement_cache;
+        std::optional<boost::mysql::any_connection> conn;
         bool healthy = true;
-
-        Entry() : conn(ctx) {}
     };
 
     class Lease final {
@@ -52,8 +48,6 @@ public:
         ~Lease();
 
         [[nodiscard]] boost::mysql::any_connection* connection() const;
-        [[nodiscard]] absl::StatusOr<boost::mysql::statement> PrepareStatement(
-            const std::string& sql, size_t max_cache_entries);
         void MarkBroken();
         void Release();
 

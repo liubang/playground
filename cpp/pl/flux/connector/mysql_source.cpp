@@ -150,8 +150,6 @@ MySQLRuntimeOptions mysql_runtime_options_from_env() {
         read_i64_option("FLUX_MYSQL_SPLIT_CACHE_TTL_MS", options.split_cache_ttl_ms);
     options.use_prepared_statements =
         read_bool_option("FLUX_MYSQL_USE_PREPARED_STATEMENTS", options.use_prepared_statements);
-    options.prepared_cache_max_entries = read_size_option("FLUX_MYSQL_PREPARED_CACHE_MAX_ENTRIES",
-                                                          options.prepared_cache_max_entries);
     return options;
 }
 
@@ -1352,17 +1350,7 @@ absl::Status MySQLPageSource::Initialize() {
                 return fields_or.status();
             }
             mysql::statement stmt;
-            if (impl_->lease.has_value()) {
-                auto stmt_or = impl_->lease->PrepareStatement(prepared_sql_or->sql,
-                                                              options_.prepared_cache_max_entries);
-                if (!stmt_or.ok()) {
-                    impl_->lease->MarkBroken();
-                    return stmt_or.status();
-                }
-                stmt = *stmt_or;
-            } else {
-                stmt = conn->prepare_statement(prepared_sql_or->sql);
-            }
+            stmt = conn->prepare_statement(prepared_sql_or->sql);
             conn->start_execution(stmt.bind(fields_or->begin(), fields_or->end()), impl_->state);
         } else {
             conn->start_execution(*literal_sql_or, impl_->state);
@@ -1514,7 +1502,7 @@ absl::StatusOr<std::unique_ptr<ConnectorPageSource>> MySQLPageSourceProvider::Cr
     const ConnectorSplit& split) const {
     auto page_source = std::make_unique<MySQLPageSource>(
         split.table.dsn, split.table.table, split.request, rows_per_page_, split.split_column,
-        split.split_lower, split.split_upper, split.split_id, pool_, options_);
+        split.split_lower, split.split_upper, split.split_id, nullptr, options_);
     auto status = page_source->Initialize();
     if (!status.ok()) {
         return status;

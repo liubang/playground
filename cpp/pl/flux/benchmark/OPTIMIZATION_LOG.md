@@ -328,22 +328,21 @@ allocation 优化。
 
 - 通用 SQL builder 增加 `ParameterizedSql` 输出，where/time range/predicate/limit/offset 都生成
   placeholder + bind vector；literal SQL builder 仍保留给已有 SQLite 参数化实现和兼容入口。
-- MySQL page source 默认走 server-side prepared statement，并把 statement cache 放在单个 pooled
-  connection 维度，保证 statement 生命周期和 MySQL server session 对齐。
-- MySQL runtime pool 边界收窄到 page source 数据面；metadata / split discovery 继续依靠进程内
-  schema/statistics/extent cache 和短连接，避免控制面短查询污染 streaming page source 的连接状态。
-- prepared statement cache 支持容量上限，驱逐时主动 close server-side statement，避免长期压测时
-  积累服务端 statement handle。
+- MySQL page source 默认走 server-side prepared statement，但每个 streaming page source 独立连接；
+  pooled streaming connection 在 ASAN 下触发 Boost.MySQL dynamic row buffer 的 container-overflow，
+  已撤掉测试级 ASAN override，并暂不把 pool 接回 streaming 主干。
+- MySQL metadata / split discovery 继续依靠进程内 schema/statistics/extent cache 和短连接，避免控制面
+  短查询污染 streaming page source 的连接状态。
 - MySQL split discovery 不再为每次规划先查 `INFORMATION_SCHEMA.KEY_COLUMN_USAGE`；它优先使用
   schema 里的 `id` / `seq` / integer columns，再查 split extent。对 benchmark 表这类
   `seq primary key` 形态，少掉一次远程 metadata query。
-- benchmark runner 增加 prepared on/off 和 prepared cache size 参数，用同一张大表可以直接跑
-  literal SQL、prepared no-cache、prepared cached 的对比矩阵。
+- benchmark runner 增加 prepared on/off 参数，用同一张大表可以直接跑 literal SQL 与 prepared SQL
+  的对比矩阵。
 
-这轮之后，MySQL scan 主干已经具备：connection pool、split extent cache、parameterized SQL、
-prepared statement cache、page source streaming、profile 分段耗时。下一步性能判断应以 benchmark
-矩阵为准：如果 prepared 降低 `execute_ms/sql_build_ms` 但总耗时仍被 `read_ms/decode_ms` 主导，就继续
-看协议读取批量、Value/string 分配和下游 operator 的列式路径。
+这轮之后，MySQL scan 主干已经具备：split extent cache、parameterized SQL、server-side prepared
+execution、page source streaming、profile 分段耗时。连接池和 prepared statement cache 不再作为已
+接入能力记录；后续要重新启用，必须先用更小复现或 owning/static read path 证明 streaming read
+生命周期安全。
 
 本轮确认 benchmark：
 
