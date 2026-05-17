@@ -32,6 +32,18 @@
 
 namespace pl::flux::execution {
 
+struct AccumulatorStats {
+    std::string operator_name;
+    std::string mode;
+    size_t input_rows = 0;
+    size_t output_rows = 0;
+    size_t groups = 0;
+    double key_time_ms = 0.0;
+    double hash_time_ms = 0.0;
+    double update_time_ms = 0.0;
+    double result_time_ms = 0.0;
+};
+
 class Operator {
 public:
     virtual ~Operator() = default;
@@ -39,6 +51,7 @@ public:
     virtual absl::StatusOr<std::optional<Page>> NextPage() = 0;
     virtual void Cancel() {}
     virtual void CollectSplitStats(std::vector<connector::ConnectorSplitStats>*) const {}
+    virtual void CollectAccumulatorStats(std::vector<AccumulatorStats>*) const {}
 };
 
 struct Pipeline {
@@ -47,6 +60,7 @@ struct Pipeline {
         size_t pages = 0;
         size_t rows = 0;
         std::vector<connector::ConnectorSplitStats> split_stats;
+        std::vector<AccumulatorStats> accumulator_stats;
         bool blocked = false;
         bool finished = false;
         std::string error;
@@ -77,6 +91,7 @@ struct PipelineProfile {
     size_t pages = 0;
     size_t rows = 0;
     std::vector<connector::ConnectorSplitStats> split_stats;
+    std::vector<AccumulatorStats> accumulator_stats;
     bool blocked = false;
     bool finished = false;
     std::string error;

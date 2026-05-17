@@ -107,8 +107,8 @@ python3 cpp/pl/flux/benchmark/run_benchmarks.py \
 
 SQLite connector 有独立的真实 scan benchmark target。它会在 `/tmp` 构造 SQLite 数据库，
 插入指定行数，执行真实 connector query，并输出 scenario、drivers、pages、split bytes、
-split wall time、blocking 和吞吐。
-默认 scenario 是 `filter_project`，也可以显式跑 `scan`、`wide_filter`、`topn`、
+split wall time、blocking、accumulator 分段耗时和吞吐。
+benchmark binary 默认 scenario 是 `filter_project`，也可以显式跑 `scan`、`wide_filter`、`topn`、
 `group_count`、`group_sum`、`group_mean`、`distinct_host`。其中 group/distinct 场景会用
 materialize barrier 固定走本地 Page-native accumulator，避免被 SQLite 聚合下推掩盖：
 
@@ -124,21 +124,36 @@ bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_group_me
 bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_distinct.db distinct_host
 ```
 
-2026-05-17 复验的本机真实 SQLite 结果：
+2026-05-17 复验的本机真实 SQLite 结果，1M rows，8 drivers，runner 使用
+`--repeat 1 --warmup 0` 采样；做正式对比时建议 `--repeat 3` 或更高：
 
 | scenario | rows | drivers | output rows | pages | blocking | seconds | input rows/s |
 | --- | ---: | ---: | ---: | ---: | :---: | ---: | ---: |
-| `scan` | 1,000,000 | 8 | 1,000,000 | 984 | false | 1.1252 | 888,715 |
-| `filter_project` | 1,000,000 | 8 | 500,000 | 496 | false | 0.0577 | 17,316,700 |
-| `distinct_host` | 1,000,000 | 8 | 64 | 985 | true | 0.0867 | 11,540,100 |
-| `group_count` | 1,000,000 | 8 | 64 | 985 | true | 0.3851 | 2,596,790 |
-| `group_sum` | 1,000,000 | 8 | 64 | 985 | true | 0.3820 | 2,617,550 |
-| `group_mean` | 1,000,000 | 8 | 64 | 985 | true | 0.3947 | 2,533,510 |
+| `scan` | 1,000,000 | 8 | 1,000,000 | 984 | false | 0.1467 | 6,816,610 |
+| `filter_project` | 1,000,000 | 8 | 500,000 | 496 | false | 0.0557 | 17,969,500 |
+| `wide_filter` | 1,000,000 | 8 | 500,000 | 496 | false | 0.0819 | 12,202,800 |
+| `topn` | 1,000,000 | 8 | 100 | 9 | true | 0.0228 | 43,886,500 |
+| `distinct_host` | 1,000,000 | 8 | 64 | 985 | true | 0.2576 | 3,882,260 |
+| `group_count` | 1,000,000 | 8 | 64 | 985 | true | 0.3244 | 3,082,750 |
+| `group_sum` | 1,000,000 | 8 | 64 | 985 | true | 0.3224 | 3,101,320 |
+| `group_mean` | 1,000,000 | 8 | 64 | 985 | true | 0.3218 | 3,107,850 |
+
+Accumulator 分段 profile 会输出输入行数、输出行数、group 数、key/hash/update/result build
+耗时。上面同一轮里，1M rows 的本地 grouped aggregate 主要成本仍在 typed group key 构造和
+hash lookup：
+
+| scenario | accumulator input rows | groups | key ms | hash ms | update ms | result ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `distinct_host` | 1,000,000 | 1 | 85.35 | 30.98 | 0.07 | 0.00 |
+| `group_count` | 1,000,000 | 64 | 118.45 | 33.31 | 16.34 | 0.09 |
+| `group_sum` | 1,000,000 | 64 | 117.76 | 32.73 | 18.11 | 0.09 |
+| `group_mean` | 1,000,000 | 64 | 117.31 | 32.92 | 18.23 | 0.09 |
 
 `group_count` 当前刻意绕开 SQLite SQL aggregate pushdown，用来压本地 accumulator 主线。本轮把
-`group |> aggregate` 融合成直接从输入 Page 更新 aggregate state 的执行路径后，1M
-`group_count` 从上一版 `23.8288s` 降到顺序复跑的 `0.3851s`。剩余成本主要集中在 group key 构造、哈希和
-SQLite page 读入，不再是整表 row-object 中间态。
+`group |> aggregate` 融合成直接从输入 Page 更新 aggregate state 的执行路径，并把 string
+canonical key 改成 typed key/hash state。1M `group_count` 从上一版 `23.8288s` 降到当前
+`0.3244s`；剩余成本主要集中在 group key 构造、哈希和 SQLite page 读入，不再是整表 row-object
+中间态。
 
 MySQL connector 也有独立 scan benchmark target，用真实 MySQL 表验证 range split、
 streaming page sink 和两阶段 Top-N。它默认读取 `FLUX_MYSQL_TEST_DSN`，表名默认 `cpu`，
@@ -163,13 +178,14 @@ drivers/output rows 和 split profile 分段耗时：
 bazel build //cpp/pl/flux/benchmark:sqlite_scan_benchmark \
   //cpp/pl/flux/benchmark:mysql_scan_benchmark
 python3 cpp/pl/flux/benchmark/run_connector_benchmarks.py \
-  --connector sqlite --sqlite-rows 1000000 --repeat 3
+  --connector sqlite --sqlite-rows 1000000 --warmup 1 --repeat 3
 FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
   python3 cpp/pl/flux/benchmark/run_connector_benchmarks.py \
     --connector mysql \
     --mysql-target-splits 8 \
     --mysql-rows-per-page 1024 \
     --mysql-max-pool-size 8 \
+    --warmup 1 \
     --repeat 3
 ```
 
