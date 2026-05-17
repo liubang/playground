@@ -113,7 +113,7 @@ benchmark binary 默认 scenario 是 `filter_project`，也可以显式跑 `scan
 materialize barrier 固定走本地 Page-native accumulator，避免被 SQLite 聚合下推掩盖：
 
 ```bash
-bazel build //cpp/pl/flux/benchmark:sqlite_scan_benchmark
+bazel build --config=release //cpp/pl/flux/benchmark:sqlite_scan_benchmark
 bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000
 bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_scan.db scan
 bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_wide.db wide_filter 80
@@ -124,35 +124,52 @@ bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_group_me
 bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_distinct.db distinct_host
 ```
 
-2026-05-17 复验的本机真实 SQLite 结果，1M rows，8 drivers，runner 使用
-`--repeat 1 --warmup 0` 采样；做正式对比时建议 `--repeat 3` 或更高：
+稳定 baseline 推荐直接用 runner 重建 release binary、跑固定场景并写 JSON：
+
+```bash
+python3 cpp/pl/flux/benchmark/run_connector_benchmarks.py \
+  --build \
+  --bazel-config release \
+  --connector sqlite \
+  --sqlite-rows 1000000 \
+  --repeat 1 \
+  --warmup 0 \
+  --output /tmp/flux_sqlite_two_stage_release_baseline.json
+```
+
+2026-05-17 复验的本机真实 SQLite 结果，1M rows，8 drivers，release build，runner 使用
+`--repeat 1 --warmup 0` 采样；做正式对比时建议 `--repeat 3` 或更高。`group_*`
+场景已经走 partial/global two-stage grouped accumulator，因此最终输出前只向下游交换 8 个
+partial pages 加 1 个 final page：
 
 | scenario | rows | drivers | output rows | pages | blocking | seconds | input rows/s |
 | --- | ---: | ---: | ---: | ---: | :---: | ---: | ---: |
-| `scan` | 1,000,000 | 8 | 1,000,000 | 984 | false | 0.1467 | 6,816,610 |
-| `filter_project` | 1,000,000 | 8 | 500,000 | 496 | false | 0.0557 | 17,969,500 |
-| `wide_filter` | 1,000,000 | 8 | 500,000 | 496 | false | 0.0819 | 12,202,800 |
-| `topn` | 1,000,000 | 8 | 100 | 9 | true | 0.0228 | 43,886,500 |
-| `distinct_host` | 1,000,000 | 8 | 64 | 985 | true | 0.2576 | 3,882,260 |
-| `group_count` | 1,000,000 | 8 | 64 | 985 | true | 0.3244 | 3,082,750 |
-| `group_sum` | 1,000,000 | 8 | 64 | 985 | true | 0.3224 | 3,101,320 |
-| `group_mean` | 1,000,000 | 8 | 64 | 985 | true | 0.3218 | 3,107,850 |
+| `scan` | 1,000,000 | 8 | 1,000,000 | 984 | false | 0.1511 | 6,618,870 |
+| `filter_project` | 1,000,000 | 8 | 500,000 | 496 | false | 0.0390 | 25,672,100 |
+| `wide_filter` | 1,000,000 | 8 | 500,000 | 496 | false | 0.0541 | 18,482,300 |
+| `topn` | 1,000,000 | 8 | 100 | 9 | true | 0.0165 | 60,549,200 |
+| `distinct_host` | 1,000,000 | 8 | 64 | 985 | true | 0.1005 | 9,945,500 |
+| `group_count` | 1,000,000 | 8 | 64 | 9 | true | 0.0940 | 10,633,100 |
+| `group_sum` | 1,000,000 | 8 | 64 | 9 | true | 0.0761 | 13,145,000 |
+| `group_mean` | 1,000,000 | 8 | 64 | 9 | true | 0.1119 | 8,933,770 |
 
 Accumulator 分段 profile 会输出输入行数、输出行数、group 数、key/hash/update/result build
-耗时。上面同一轮里，1M rows 的本地 grouped aggregate 主要成本仍在 typed group key 构造和
-hash lookup：
+耗时，并对 two-stage grouped aggregate 额外拆出 partial/final 输入行数和耗时。上面同一轮里，
+1M rows 的本地 grouped aggregate 主要成本仍在 partial 阶段，final 只合并 512 行 partial
+结果：
 
-| scenario | accumulator input rows | groups | key ms | hash ms | update ms | result ms |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `distinct_host` | 1,000,000 | 1 | 85.35 | 30.98 | 0.07 | 0.00 |
-| `group_count` | 1,000,000 | 64 | 118.45 | 33.31 | 16.34 | 0.09 |
-| `group_sum` | 1,000,000 | 64 | 117.76 | 32.73 | 18.11 | 0.09 |
-| `group_mean` | 1,000,000 | 64 | 117.31 | 32.92 | 18.23 | 0.09 |
+| scenario | accumulator input rows | partial rows | final rows | groups | key ms | hash ms | update ms | partial ms | final ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `distinct_host` | 1,000,000 | 0 | 0 | 1 | 17.80 | 19.90 | 0.01 | 0.00 | 0.00 |
+| `group_count` | 1,000,512 | 1,000,000 | 512 | 576 | 20.91 | 20.09 | 15.94 | 57.00 | 0.05 |
+| `group_sum` | 1,000,512 | 1,000,000 | 512 | 576 | 20.56 | 19.83 | 16.08 | 56.54 | 0.05 |
+| `group_mean` | 1,000,512 | 1,000,000 | 512 | 576 | 20.67 | 19.96 | 16.58 | 57.29 | 0.05 |
 
 `group_count` 当前刻意绕开 SQLite SQL aggregate pushdown，用来压本地 accumulator 主线。本轮把
-`group |> aggregate` 融合成直接从输入 Page 更新 aggregate state 的执行路径，并把 string
-canonical key 改成 typed key/hash state。1M `group_count` 从上一版 `23.8288s` 降到当前
-`0.3244s`；剩余成本主要集中在 group key 构造、哈希和 SQLite page 读入，不再是整表 row-object
+`group |> aggregate` 融合成直接从输入 Page 更新 aggregate state 的执行路径，把 string
+canonical key 改成 typed key/hash state，并进一步拆成 partial/global 两阶段。1M `group_count`
+从上一版 `23.8288s` 降到当前 release baseline 的 `0.0940s`；剩余成本主要集中在 partial
+阶段的 group key 构造、哈希和 SQLite page 读入，不再是整表 row-object
 中间态。
 
 MySQL connector 也有独立 scan benchmark target，用真实 MySQL 表验证 range split、
@@ -161,7 +178,7 @@ scenario 默认 `filter_project`，也可以显式跑 `scan`、`wide_filter`、`
 dsn 传空字符串，benchmark 会回退读取 `FLUX_MYSQL_TEST_DSN`，便于只替换表名：
 
 ```bash
-bazel build //cpp/pl/flux/benchmark:mysql_scan_benchmark
+bazel build --config=release //cpp/pl/flux/benchmark:mysql_scan_benchmark
 FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
   bazel-bin/cpp/pl/flux/benchmark/mysql_scan_benchmark
 bazel-bin/cpp/pl/flux/benchmark/mysql_scan_benchmark \
@@ -266,6 +283,15 @@ profile 字段含义：
 - `split_read_time_ms`：从 MySQL 协议读取 rows batch 的累计耗时。
 - `split_decode_time_ms`：Boost.MySQL field 到 Flux `Value` / `ColumnVector` 的累计耗时。
 - `split_page_build_time_ms`：把解码结果封装成 `Page` 的累计耗时。
+- `accumulator_input_rows`：所有本地 accumulator 消费的总行数；two-stage grouped aggregate
+  会包含 partial 输入行数和 final 合并行数。
+- `accumulator_partial_input_rows` / `accumulator_final_input_rows`：partial/global 两阶段分别消费
+  的行数。
+- `accumulator_key_time_ms` / `accumulator_hash_time_ms` / `accumulator_update_time_ms` /
+  `accumulator_result_time_ms`：本地 accumulator 的 key 构造、hash lookup、state update 和
+  result page 构建耗时。
+- `accumulator_partial_time_ms` / `accumulator_final_time_ms`：partial/global grouped accumulator
+  各阶段 wall time，用来判断成本在 driver-local 聚合还是 final merge。
 
 ## 数据形态
 

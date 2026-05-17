@@ -1289,13 +1289,118 @@ TEST(RuntimeExecTest, StreamingGroupAggregateRunsLargeMemoryFallback) {
     EXPECT_TRUE(result_or->profile.pipelines.back().blocking);
     const auto profile = execution::FormatExecutionProfile(result_or->profile);
     EXPECT_NE(std::string::npos, profile.find("mode=grouped_aggregate"));
-    EXPECT_NE(std::string::npos, profile.find("input_rows=200000"));
+    EXPECT_NE(std::string::npos, profile.find("phase=partial"));
+    EXPECT_NE(std::string::npos, profile.find("phase=final"));
+    EXPECT_NE(std::string::npos, profile.find("key=single"));
     EXPECT_NE(std::string::npos, profile.find("groups=32"));
 
     const double seconds = std::chrono::duration<double>(elapsed).count();
     const double rows_per_second = static_cast<double>(kRows) / std::max(seconds, 0.000001);
     std::cout << "streaming group aggregate benchmark: rows=" << kRows << " groups=" << kHosts
               << " seconds=" << seconds << " rows_per_second=" << rows_per_second << "\n";
+}
+
+TEST(RuntimeExecTest, TwoStageGroupedAggregateMergesPartialMean) {
+    constexpr size_t kRows = 12000;
+    constexpr size_t kSplits = 4;
+    constexpr size_t kRowsPerPage = 512;
+    constexpr size_t kHosts = 4;
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve(kRows);
+    std::unordered_map<std::string, std::pair<double, size_t>> expected;
+    for (size_t index = 0; index < kRows; ++index) {
+        const auto host_name = "edge-" + std::to_string(index % kHosts);
+        const double usage = static_cast<double>((index * 7) % 100);
+        rows.push_back(TestRow({{"host", Value::string(host_name)},
+                                {"usage", Value::floating(usage)},
+                                {"seq", Value::integer(static_cast<int64_t>(index))}}));
+        auto& bucket = expected[host_name];
+        bucket.first += usage;
+        ++bucket.second;
+    }
+
+    connector::SourceSpec spec{
+        .source = "mean_two_stage_memory",
+        .driver = "mean_two_stage_memory",
+        .dsn = "memory://mean-two-stage",
+        .table = "large",
+    };
+    connector::ConnectorRegistry::Global().Register(
+        spec.source, [rows](const connector::SourceSpec& requested) {
+            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
+                                                         kRowsPerPage, kSplits);
+        });
+
+    auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
+    auto materialized = plan::MakeMaterializeBarrier(scan, "benchmark memory fallback", "test");
+    auto grouped = plan::MakeGroup(materialized, {"host"});
+    auto aggregate = plan::MakeAggregate(grouped, plan::AggregateFunction::Mean, "usage");
+    auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(aggregate);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto& table = result_or->value.as_table();
+    ASSERT_EQ(kHosts, table.rows.size());
+    for (const auto& row : table.rows) {
+        ASSERT_NE(nullptr, row);
+        const Value* host = row->lookup("host");
+        const Value* usage = row->lookup("usage");
+        ASSERT_NE(nullptr, host);
+        ASSERT_NE(nullptr, usage);
+        const auto found = expected.find(host->as_string());
+        ASSERT_NE(expected.end(), found);
+        const double mean = found->second.first / static_cast<double>(found->second.second);
+        EXPECT_DOUBLE_EQ(mean, usage->as_float());
+    }
+
+    const auto profile = execution::FormatExecutionProfile(result_or->profile);
+    EXPECT_NE(std::string::npos, profile.find("PartialAggregateOperator"));
+    EXPECT_NE(std::string::npos, profile.find("FinalAggregateOperator"));
+    EXPECT_NE(std::string::npos, profile.find("phase=partial"));
+    EXPECT_NE(std::string::npos, profile.find("phase=final"));
+}
+
+TEST(RuntimeExecTest, TwoStageGroupedAggregateSkipsEmptyPartialGroups) {
+    constexpr size_t kRowsPerPage = 2;
+    constexpr size_t kSplits = 8;
+    std::vector<std::shared_ptr<ObjectValue>> rows{
+        TestRow({{"host", Value::string("edge-0")}, {"usage", Value::floating(1.0)}}),
+        TestRow({{"host", Value::string("edge-1")}, {"usage", Value::floating(2.0)}}),
+        TestRow({{"host", Value::string("edge-0")}, {"usage", Value::floating(3.0)}}),
+    };
+
+    connector::SourceSpec spec{
+        .source = "empty_partial_group_memory",
+        .driver = "empty_partial_group_memory",
+        .dsn = "memory://empty-partial-group",
+        .table = "small",
+    };
+    connector::ConnectorRegistry::Global().Register(
+        spec.source, [rows](const connector::SourceSpec& requested) {
+            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
+                                                         kRowsPerPage, kSplits);
+        });
+
+    auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
+    auto materialized = plan::MakeMaterializeBarrier(scan, "small memory fallback", "test");
+    auto grouped = plan::MakeGroup(materialized, {"host"});
+    auto aggregate = plan::MakeAggregate(grouped, plan::AggregateFunction::Count, "usage");
+    auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(aggregate);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto& table = result_or->value.as_table();
+    ASSERT_EQ(2, table.rows.size());
+    std::unordered_map<std::string, int64_t> counts;
+    for (const auto& row : table.rows) {
+        ASSERT_NE(nullptr, row);
+        const Value* host = row->lookup("host");
+        const Value* usage = row->lookup("usage");
+        ASSERT_NE(nullptr, host);
+        ASSERT_NE(nullptr, usage);
+        counts.emplace(host->as_string(), usage->as_int());
+    }
+    EXPECT_EQ(2, counts["edge-0"]);
+    EXPECT_EQ(1, counts["edge-1"]);
+    EXPECT_FALSE(counts.contains(""));
 }
 
 TEST(RuntimeExecTest, StreamingDistinctRunsLargeMemoryFallback) {
@@ -1394,7 +1499,10 @@ TEST(RuntimeExecTest, PipelineExplainMarksStreamingAccumulators) {
     const auto pipeline = execution::FormatPipelinePlan(aggregate);
 
     EXPECT_NE(std::string::npos, pipeline.find("blocking: true"));
-    EXPECT_NE(std::string::npos, pipeline.find("accumulators: [GroupOperator, AggregateOperator]"));
+    EXPECT_NE(std::string::npos,
+              pipeline.find("accumulators: [GroupOperator, PartialAggregateOperator"));
+    EXPECT_NE(std::string::npos,
+              pipeline.find("accumulators: [GroupOperator, FinalAggregateOperator]"));
 }
 
 TEST(RuntimeExecTest, ExecutionProfileFormatterShowsRuntimeStats) {
