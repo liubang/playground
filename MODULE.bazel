@@ -44,7 +44,7 @@ bazel_dep(name = "apple_support", version = "2.5.4", repo_name = "build_bazel_ap
 bazel_dep(name = "rules_cc", version = "0.2.18")
 bazel_dep(name = "rules_foreign_cc", version = "0.15.1")
 
-# dpes for c/cpp
+# deps for c/cpp
 bazel_dep(name = "abseil-cpp", version = "20250127.1")
 single_version_override(
     module_name = "abseil-cpp",
@@ -57,12 +57,6 @@ git_override(
     commit = "0fb1b8a1474f3137c8b44a7861e31f8efd1370e2",
     remote = "https://github.com/google/s2geometry",
     strip_prefix = "src",
-)
-
-bazel_dep(name = "boringssl", version = "0.20241024.0")
-single_version_override(
-    module_name = "boringssl",
-    version = "0.20241024.0",
 )
 
 ### grpc && protobuf
@@ -81,10 +75,8 @@ bazel_dep(name = "fmt", version = "12.1.0")
 bazel_dep(name = "bzip2", version = "1.0.8")
 bazel_dep(name = "zlib", version = "1.3.1.bcr.8")
 bazel_dep(name = "zstd", version = "1.5.6")
-bazel_dep(name = "libuv", version = "1.48.0")
 bazel_dep(name = "curl", version = "8.8.0")
 bazel_dep(name = "onetbb", version = "2022.3.0")
-bazel_dep(name = "liburing", version = "2.14")
 bazel_dep(name = "crc32c", version = "1.1.0")
 bazel_dep(name = "snappy", version = "1.2.1")
 bazel_dep(name = "lemon", version = "3.42.0")
@@ -93,9 +85,6 @@ bazel_dep(name = "simdjson", version = "4.6.0")
 bazel_dep(name = "spdlog", version = "1.17.0")
 bazel_dep(name = "gflags", version = "2.2.2")
 bazel_dep(name = "glog", version = "0.5.0")
-bazel_dep(name = "leveldb", version = "1.23")
-bazel_dep(name = "asio", version = "1.34.2")
-
 # Apache bRPC
 bazel_dep(name = "brpc", version = "1.16.0")
 archive_override(
@@ -139,148 +128,33 @@ bazel_dep(name = "xxhash", version = "0.8.3")
 bazel_dep(name = "magic_enum", version = "0.9.7")
 bazel_dep(name = "proxygen", version = "2025.02.10.00.bcr.1")
 bazel_dep(name = "folly", version = "2025.01.13.00.bcr.6")
-bazel_dep(name = "rocksdb", version = "9.11.2")
 bazel_dep(name = "pybind11_bazel", version = "3.0.1")
 
 # boost
 
 bazel_dep(name = "boost.crc", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.crc",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.scope", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.scope",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.date_time", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.date_time",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.mpl", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.mpl",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.parameter", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.parameter",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.utility", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.utility",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.algorithm", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.algorithm",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.container", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.container",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.conversion", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.conversion",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.filesystem", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.filesystem",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.thread", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.thread",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.variant", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.variant",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.lexical_cast", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.lexical_cast",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.optional", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.optional",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.bind", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.bind",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.assert", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.assert",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.config", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.config",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.core", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.core",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.detail", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.detail",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.function", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.function",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.integer", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.integer",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.iterator", version = "1.90.0.bcr.1")
-single_version_override(
-    module_name = "boost.iterator",
-    version = "1.90.0.bcr.1",
-)
-
 bazel_dep(name = "boost.iostreams", version = "1.90.0.bcr.2")
-single_version_override(
-    module_name = "boost.iostreams",
-    version = "1.90.0.bcr.2",
-)
 
 bazel_dep(name = "boost.asio", version = "1.90.0.bcr.1")
 bazel_dep(name = "boost.mysql", version = "1.90.0.bcr.1")
