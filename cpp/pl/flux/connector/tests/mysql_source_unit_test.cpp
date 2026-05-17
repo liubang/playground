@@ -164,19 +164,19 @@ TEST(MySQLSourceTest, SplitManagerBuildsNumericRangeSplitsForFixture) {
     EXPECT_EQ(6, total_rows);
 }
 
-TEST(MySQLSourceTest, RuntimeConnectionPoolSupportsMetadataSplitsAndPages) {
+TEST(MySQLSourceTest, RuntimeBoostPoolSupportsMetadataSplitsAndDirectStreamingPages) {
     auto dsn = mysql_test_dsn();
     if (!dsn.has_value()) {
         GTEST_SKIP() << "set FLUX_MYSQL_TEST_DSN and import "
                         "cpp/pl/flux/examples/cross_source/mysql_metrics.sql to run MySQL "
                         "integration tests";
     }
-    auto pool_or = MakeMySQLConnectionPool(*dsn, 2);
+    auto pool_or = MakeMySQLBoostConnectionPool(*dsn, 2);
     ASSERT_TRUE(pool_or.ok()) << pool_or.status();
     MySQLRuntimeOptions options;
     options.target_split_count = 3;
     options.rows_per_page = 2;
-    options.max_idle_connections = 2;
+    options.max_pool_size = 2;
     TableHandle table{.source = "mysql", .driver = "mysql", .dsn = *dsn, .table = "cpu"};
 
     MySQLConnectorMetadata metadata({.source = "mysql", .driver = "mysql"}, *pool_or);
