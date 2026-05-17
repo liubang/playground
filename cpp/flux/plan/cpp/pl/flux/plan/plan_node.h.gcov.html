@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-16 17:39:20</td>
+            <td class="headerValue">2026-05-17 03:21:55</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">91.7&nbsp;%</td>
@@ -235,12 +235,12 @@
 <span id="L173"><span class="lineNum">     173</span>              :     Repartition,</span>
 <span id="L174"><span class="lineNum">     174</span>              : };</span>
 <span id="L175"><span class="lineNum">     175</span>              : </span>
-<span id="L176"><span class="lineNum">     176</span> <span class="tlaGNC">           6 : struct ExchangeSpec {</span></span>
+<span id="L176"><span class="lineNum">     176</span> <span class="tlaGNC">           8 : struct ExchangeSpec {</span></span>
 <span id="L177"><span class="lineNum">     177</span>              :     ExchangeKind kind = ExchangeKind::Gather;</span>
 <span id="L178"><span class="lineNum">     178</span>              :     std::vector&lt;std::string&gt; partition_keys;</span>
 <span id="L179"><span class="lineNum">     179</span>              : };</span>
 <span id="L180"><span class="lineNum">     180</span>              : </span>
-<span id="L181"><span class="lineNum">     181</span> <span class="tlaGNC">         268 : struct MaterializeSpec {</span></span>
+<span id="L181"><span class="lineNum">     181</span> <span class="tlaGNC">         270 : struct MaterializeSpec {</span></span>
 <span id="L182"><span class="lineNum">     182</span>              :     std::string reason;</span>
 <span id="L183"><span class="lineNum">     183</span>              :     std::string builtin;</span>
 <span id="L184"><span class="lineNum">     184</span>              : };</span>
@@ -270,7 +270,7 @@
 <span id="L208"><span class="lineNum">     208</span>              : // PlanNode — the core logical plan tree node.</span>
 <span id="L209"><span class="lineNum">     209</span>              : // ---------------------------------------------------------------------------</span>
 <span id="L210"><span class="lineNum">     210</span>              : </span>
-<span id="L211"><span class="lineNum">     211</span> <span class="tlaGNC">         271 : struct PlanNode {</span></span>
+<span id="L211"><span class="lineNum">     211</span> <span class="tlaGNC">         273 : struct PlanNode {</span></span>
 <span id="L212"><span class="lineNum">     212</span>              :     PlanNodeKind kind = PlanNodeKind::Materialize;</span>
 <span id="L213"><span class="lineNum">     213</span>              :     std::vector&lt;std::shared_ptr&lt;PlanNode&gt;&gt; inputs;</span>
 <span id="L214"><span class="lineNum">     214</span>              :     NodeSpec spec = MaterializeSpec{};</span>
@@ -370,24 +370,24 @@
 <span id="L308"><span class="lineNum">     308</span>              : // Factory functions</span>
 <span id="L309"><span class="lineNum">     309</span>              : // ---------------------------------------------------------------------------</span>
 <span id="L310"><span class="lineNum">     310</span>              : </span>
-<span id="L311"><span class="lineNum">     311</span> <span class="tlaGNC tlaBgGNC">          72 : inline std::shared_ptr&lt;PlanNode&gt; MakeSourceScan(std::string source,</span></span>
+<span id="L311"><span class="lineNum">     311</span> <span class="tlaGNC tlaBgGNC">          73 : inline std::shared_ptr&lt;PlanNode&gt; MakeSourceScan(std::string source,</span></span>
 <span id="L312"><span class="lineNum">     312</span>              :                                                 std::string driver,</span>
 <span id="L313"><span class="lineNum">     313</span>              :                                                 std::string dsn,</span>
 <span id="L314"><span class="lineNum">     314</span>              :                                                 std::string table) {</span>
 <span id="L315"><span class="lineNum">     315</span>              :     auto node = std::make_shared&lt;PlanNode&gt;();</span>
-<span id="L316"><span class="lineNum">     316</span> <span class="tlaGNC">          72 :     node-&gt;kind = PlanNodeKind::SourceScan;</span></span>
-<span id="L317"><span class="lineNum">     317</span> <span class="tlaGNC">         144 :     node-&gt;spec = SourceScanSpec{.source = std::move(source),</span></span>
+<span id="L316"><span class="lineNum">     316</span> <span class="tlaGNC">          73 :     node-&gt;kind = PlanNodeKind::SourceScan;</span></span>
+<span id="L317"><span class="lineNum">     317</span> <span class="tlaGNC">         146 :     node-&gt;spec = SourceScanSpec{.source = std::move(source),</span></span>
 <span id="L318"><span class="lineNum">     318</span>              :                                 .driver = std::move(driver),</span>
 <span id="L319"><span class="lineNum">     319</span>              :                                 .dsn = std::move(dsn),</span>
-<span id="L320"><span class="lineNum">     320</span> <span class="tlaGNC">          72 :                                 .table = std::move(table)};</span></span>
-<span id="L321"><span class="lineNum">     321</span> <span class="tlaGNC">          72 :     return node;</span></span>
+<span id="L320"><span class="lineNum">     320</span> <span class="tlaGNC">          73 :                                 .table = std::move(table)};</span></span>
+<span id="L321"><span class="lineNum">     321</span> <span class="tlaGNC">          73 :     return node;</span></span>
 <span id="L322"><span class="lineNum">     322</span>              : }</span>
 <span id="L323"><span class="lineNum">     323</span>              : </span>
-<span id="L324"><span class="lineNum">     324</span> <span class="tlaGNC">         176 : inline std::shared_ptr&lt;PlanNode&gt; MakeUnaryNode(PlanNodeKind kind, std::shared_ptr&lt;PlanNode&gt; input) {</span></span>
+<span id="L324"><span class="lineNum">     324</span> <span class="tlaGNC">         177 : inline std::shared_ptr&lt;PlanNode&gt; MakeUnaryNode(PlanNodeKind kind, std::shared_ptr&lt;PlanNode&gt; input) {</span></span>
 <span id="L325"><span class="lineNum">     325</span>              :     auto node = std::make_shared&lt;PlanNode&gt;();</span>
-<span id="L326"><span class="lineNum">     326</span> <span class="tlaGNC">         176 :     node-&gt;kind = kind;</span></span>
-<span id="L327"><span class="lineNum">     327</span> <span class="tlaGNC">         176 :     node-&gt;inputs.push_back(std::move(input));</span></span>
-<span id="L328"><span class="lineNum">     328</span> <span class="tlaGNC">         176 :     return node;</span></span>
+<span id="L326"><span class="lineNum">     326</span> <span class="tlaGNC">         177 :     node-&gt;kind = kind;</span></span>
+<span id="L327"><span class="lineNum">     327</span> <span class="tlaGNC">         177 :     node-&gt;inputs.push_back(std::move(input));</span></span>
+<span id="L328"><span class="lineNum">     328</span> <span class="tlaGNC">         177 :     return node;</span></span>
 <span id="L329"><span class="lineNum">     329</span>              : }</span>
 <span id="L330"><span class="lineNum">     330</span>              : </span>
 <span id="L331"><span class="lineNum">     331</span> <span class="tlaGNC">           9 : inline std::shared_ptr&lt;PlanNode&gt; MakeRange(std::shared_ptr&lt;PlanNode&gt; input,</span></span>
@@ -475,15 +475,15 @@
 <span id="L413"><span class="lineNum">     413</span> <span class="tlaGNC">          12 :     return node;</span></span>
 <span id="L414"><span class="lineNum">     414</span>              : }</span>
 <span id="L415"><span class="lineNum">     415</span>              : </span>
-<span id="L416"><span class="lineNum">     416</span> <span class="tlaGNC">           3 : inline std::shared_ptr&lt;PlanNode&gt; MakeExchange(std::shared_ptr&lt;PlanNode&gt; input,</span></span>
+<span id="L416"><span class="lineNum">     416</span> <span class="tlaGNC">           4 : inline std::shared_ptr&lt;PlanNode&gt; MakeExchange(std::shared_ptr&lt;PlanNode&gt; input,</span></span>
 <span id="L417"><span class="lineNum">     417</span>              :                                               ExchangeKind kind,</span>
 <span id="L418"><span class="lineNum">     418</span>              :                                               std::vector&lt;std::string&gt; partition_keys = {}) {</span>
-<span id="L419"><span class="lineNum">     419</span> <span class="tlaGNC">           3 :     auto node = MakeUnaryNode(PlanNodeKind::Exchange, std::move(input));</span></span>
-<span id="L420"><span class="lineNum">     420</span> <span class="tlaGNC">           3 :     node-&gt;spec = ExchangeSpec{</span></span>
+<span id="L419"><span class="lineNum">     419</span> <span class="tlaGNC">           4 :     auto node = MakeUnaryNode(PlanNodeKind::Exchange, std::move(input));</span></span>
+<span id="L420"><span class="lineNum">     420</span> <span class="tlaGNC">           4 :     node-&gt;spec = ExchangeSpec{</span></span>
 <span id="L421"><span class="lineNum">     421</span>              :         .kind = kind,</span>
 <span id="L422"><span class="lineNum">     422</span>              :         .partition_keys = std::move(partition_keys),</span>
-<span id="L423"><span class="lineNum">     423</span> <span class="tlaGNC">           3 :     };</span></span>
-<span id="L424"><span class="lineNum">     424</span> <span class="tlaGNC">           3 :     return node;</span></span>
+<span id="L423"><span class="lineNum">     423</span> <span class="tlaGNC">           4 :     };</span></span>
+<span id="L424"><span class="lineNum">     424</span> <span class="tlaGNC">           4 :     return node;</span></span>
 <span id="L425"><span class="lineNum">     425</span>              : }</span>
 <span id="L426"><span class="lineNum">     426</span>              : </span>
 <span id="L427"><span class="lineNum">     427</span> <span class="tlaUNC tlaBgUNC">           0 : inline std::string JoinMethodName(JoinMethod method) {</span></span>

@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-16 17:39:20</td>
+            <td class="headerValue">2026-05-17 03:21:55</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">86.7&nbsp;%</td>
@@ -101,7 +101,7 @@
 <span id="L39"><span class="lineNum">      39</span>              : </span>
 <span id="L40"><span class="lineNum">      40</span>              : bool has_rows(const plan::CostEstimate&amp; cost) { return cost.rows.has_value(); }</span>
 <span id="L41"><span class="lineNum">      41</span>              : </span>
-<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC tlaBgGNC">         485 : plan::CostEstimate unknown_cost() { return {}; }</span></span>
+<span id="L42"><span class="lineNum">      42</span> <span class="tlaGNC tlaBgGNC">         488 : plan::CostEstimate unknown_cost() { return {}; }</span></span>
 <span id="L43"><span class="lineNum">      43</span>              : </span>
 <span id="L44"><span class="lineNum">      44</span> <span class="tlaGNC">          20 : double safe_non_negative(int64_t value) { return static_cast&lt;double&gt;(std::max&lt;int64_t&gt;(0, value)); }</span></span>
 <span id="L45"><span class="lineNum">      45</span>              : </span>
@@ -116,17 +116,17 @@
 <span id="L54"><span class="lineNum">      54</span>              :     return cost;</span>
 <span id="L55"><span class="lineNum">      55</span>              : }</span>
 <span id="L56"><span class="lineNum">      56</span>              : </span>
-<span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">         132 : class ConnectorStatsProvider final : public StatsProvider {</span></span>
+<span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">         134 : class ConnectorStatsProvider final : public StatsProvider {</span></span>
 <span id="L58"><span class="lineNum">      58</span>              : public:</span>
-<span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC">         132 :     explicit ConnectorStatsProvider(CboOptions options) : options_(options) {}</span></span>
+<span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC">         134 :     explicit ConnectorStatsProvider(CboOptions options) : options_(options) {}</span></span>
 <span id="L60"><span class="lineNum">      60</span>              : </span>
-<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">         274 :     [[nodiscard]] absl::StatusOr&lt;PlanStatistics&gt; Estimate(</span></span>
+<span id="L61"><span class="lineNum">      61</span> <span class="tlaGNC">         276 :     [[nodiscard]] absl::StatusOr&lt;PlanStatistics&gt; Estimate(</span></span>
 <span id="L62"><span class="lineNum">      62</span>              :         const std::shared_ptr&lt;plan::PlanNode&gt;&amp; node) const override {</span>
-<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">         274 :         if (node == nullptr) {</span></span>
+<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC">         276 :         if (node == nullptr) {</span></span>
 <span id="L64"><span class="lineNum">      64</span> <span class="tlaUNC tlaBgUNC">           0 :             return absl::InvalidArgumentError(&quot;missing plan&quot;);</span></span>
 <span id="L65"><span class="lineNum">      65</span>              :         }</span>
-<span id="L66"><span class="lineNum">      66</span> <span class="tlaGNC tlaBgGNC">         274 :         if (node-&gt;kind != plan::PlanNodeKind::SourceScan || !options_.collect_connector_stats) {</span></span>
-<span id="L67"><span class="lineNum">      67</span> <span class="tlaGNC">         160 :             return PlanStatistics{};</span></span>
+<span id="L66"><span class="lineNum">      66</span> <span class="tlaGNC tlaBgGNC">         276 :         if (node-&gt;kind != plan::PlanNodeKind::SourceScan || !options_.collect_connector_stats) {</span></span>
+<span id="L67"><span class="lineNum">      67</span> <span class="tlaGNC">         162 :             return PlanStatistics{};</span></span>
 <span id="L68"><span class="lineNum">      68</span>              :         }</span>
 <span id="L69"><span class="lineNum">      69</span>              : </span>
 <span id="L70"><span class="lineNum">      70</span>              :         const auto&amp; source = node-&gt;source_scan();</span>
@@ -157,24 +157,24 @@
 <span id="L95"><span class="lineNum">      95</span>              :     CboOptions options_;</span>
 <span id="L96"><span class="lineNum">      96</span>              : };</span>
 <span id="L97"><span class="lineNum">      97</span>              : </span>
-<span id="L98"><span class="lineNum">      98</span> <span class="tlaGNC">         132 : class HeuristicCostModel final : public CostModel {</span></span>
+<span id="L98"><span class="lineNum">      98</span> <span class="tlaGNC">         134 : class HeuristicCostModel final : public CostModel {</span></span>
 <span id="L99"><span class="lineNum">      99</span>              : public:</span>
-<span id="L100"><span class="lineNum">     100</span> <span class="tlaGNC">         186 :     [[nodiscard]] absl::StatusOr&lt;plan::CostEstimate&gt; EstimateCost(</span></span>
+<span id="L100"><span class="lineNum">     100</span> <span class="tlaGNC">         188 :     [[nodiscard]] absl::StatusOr&lt;plan::CostEstimate&gt; EstimateCost(</span></span>
 <span id="L101"><span class="lineNum">     101</span>              :         const std::shared_ptr&lt;plan::PlanNode&gt;&amp; node,</span>
 <span id="L102"><span class="lineNum">     102</span>              :         const StatsProvider&amp; stats_provider) const override {</span>
-<span id="L103"><span class="lineNum">     103</span> <span class="tlaGNC">         186 :         if (node == nullptr) {</span></span>
+<span id="L103"><span class="lineNum">     103</span> <span class="tlaGNC">         188 :         if (node == nullptr) {</span></span>
 <span id="L104"><span class="lineNum">     104</span> <span class="tlaUNC tlaBgUNC">           0 :             return absl::InvalidArgumentError(&quot;missing plan&quot;);</span></span>
 <span id="L105"><span class="lineNum">     105</span>              :         }</span>
-<span id="L106"><span class="lineNum">     106</span> <span class="tlaGNC tlaBgGNC">         186 :         return estimate(node, stats_provider);</span></span>
+<span id="L106"><span class="lineNum">     106</span> <span class="tlaGNC tlaBgGNC">         188 :         return estimate(node, stats_provider);</span></span>
 <span id="L107"><span class="lineNum">     107</span>              :     }</span>
 <span id="L108"><span class="lineNum">     108</span>              : </span>
 <span id="L109"><span class="lineNum">     109</span>              : private:</span>
-<span id="L110"><span class="lineNum">     110</span> <span class="tlaGNC">         818 :     [[nodiscard]] absl::StatusOr&lt;plan::CostEstimate&gt; estimate(</span></span>
+<span id="L110"><span class="lineNum">     110</span> <span class="tlaGNC">         821 :     [[nodiscard]] absl::StatusOr&lt;plan::CostEstimate&gt; estimate(</span></span>
 <span id="L111"><span class="lineNum">     111</span>              :         const std::shared_ptr&lt;plan::PlanNode&gt;&amp; node, const StatsProvider&amp; stats_provider) const {</span>
-<span id="L112"><span class="lineNum">     112</span> <span class="tlaGNC">         818 :         if (node-&gt;kind == plan::PlanNodeKind::SourceScan) {</span></span>
-<span id="L113"><span class="lineNum">     113</span> <span class="tlaGNC">         274 :             auto stats_or = stats_provider.Estimate(node);</span></span>
-<span id="L114"><span class="lineNum">     114</span> <span class="tlaGNC">         274 :             if (!stats_or.ok() || !stats_or-&gt;row_count.has_value()) {</span></span>
-<span id="L115"><span class="lineNum">     115</span> <span class="tlaGNC">         161 :                 return unknown_cost();</span></span>
+<span id="L112"><span class="lineNum">     112</span> <span class="tlaGNC">         821 :         if (node-&gt;kind == plan::PlanNodeKind::SourceScan) {</span></span>
+<span id="L113"><span class="lineNum">     113</span> <span class="tlaGNC">         276 :             auto stats_or = stats_provider.Estimate(node);</span></span>
+<span id="L114"><span class="lineNum">     114</span> <span class="tlaGNC">         276 :             if (!stats_or.ok() || !stats_or-&gt;row_count.has_value()) {</span></span>
+<span id="L115"><span class="lineNum">     115</span> <span class="tlaGNC">         163 :                 return unknown_cost();</span></span>
 <span id="L116"><span class="lineNum">     116</span>              :             }</span>
 <span id="L117"><span class="lineNum">     117</span> <span class="tlaGNC">         113 :             const double rows = *stats_or-&gt;row_count;</span></span>
 <span id="L118"><span class="lineNum">     118</span>              :             return plan::CostEstimate{</span>
@@ -184,7 +184,7 @@
 <span id="L122"><span class="lineNum">     122</span>              :             };</span>
 <span id="L123"><span class="lineNum">     123</span>              :         }</span>
 <span id="L124"><span class="lineNum">     124</span>              : </span>
-<span id="L125"><span class="lineNum">     125</span> <span class="tlaGNC">         544 :         if (node-&gt;kind == plan::PlanNodeKind::Join) {</span></span>
+<span id="L125"><span class="lineNum">     125</span> <span class="tlaGNC">         545 :         if (node-&gt;kind == plan::PlanNodeKind::Join) {</span></span>
 <span id="L126"><span class="lineNum">     126</span> <span class="tlaGNC">          88 :             if (node-&gt;inputs.size() != 2 || node-&gt;inputs[0] == nullptr ||</span></span>
 <span id="L127"><span class="lineNum">     127</span>              :                 node-&gt;inputs[1] == nullptr) {</span>
 <span id="L128"><span class="lineNum">     128</span> <span class="tlaUNC tlaBgUNC">           0 :                 return unknown_cost();</span></span>
@@ -214,15 +214,15 @@
 <span id="L152"><span class="lineNum">     152</span>              :             };</span>
 <span id="L153"><span class="lineNum">     153</span>              :         }</span>
 <span id="L154"><span class="lineNum">     154</span>              : </span>
-<span id="L155"><span class="lineNum">     155</span> <span class="tlaGNC">         456 :         if (node-&gt;inputs.size() != 1 || node-&gt;inputs[0] == nullptr) {</span></span>
+<span id="L155"><span class="lineNum">     155</span> <span class="tlaGNC">         457 :         if (node-&gt;inputs.size() != 1 || node-&gt;inputs[0] == nullptr) {</span></span>
 <span id="L156"><span class="lineNum">     156</span> <span class="tlaUNC tlaBgUNC">           0 :             return unknown_cost();</span></span>
 <span id="L157"><span class="lineNum">     157</span>              :         }</span>
-<span id="L158"><span class="lineNum">     158</span> <span class="tlaGNC tlaBgGNC">         456 :         auto input_or = estimate(node-&gt;inputs[0], stats_provider);</span></span>
-<span id="L159"><span class="lineNum">     159</span> <span class="tlaGNC">         456 :         if (!input_or.ok()) {</span></span>
+<span id="L158"><span class="lineNum">     158</span> <span class="tlaGNC tlaBgGNC">         457 :         auto input_or = estimate(node-&gt;inputs[0], stats_provider);</span></span>
+<span id="L159"><span class="lineNum">     159</span> <span class="tlaGNC">         457 :         if (!input_or.ok()) {</span></span>
 <span id="L160"><span class="lineNum">     160</span>              :             return input_or.status();</span>
 <span id="L161"><span class="lineNum">     161</span>              :         }</span>
-<span id="L162"><span class="lineNum">     162</span> <span class="tlaGNC">         456 :         if (!has_rows(*input_or)) {</span></span>
-<span id="L163"><span class="lineNum">     163</span> <span class="tlaGNC">         288 :             return unknown_cost();</span></span>
+<span id="L162"><span class="lineNum">     162</span> <span class="tlaGNC">         457 :         if (!has_rows(*input_or)) {</span></span>
+<span id="L163"><span class="lineNum">     163</span> <span class="tlaGNC">         289 :             return unknown_cost();</span></span>
 <span id="L164"><span class="lineNum">     164</span>              :         }</span>
 <span id="L165"><span class="lineNum">     165</span>              : </span>
 <span id="L166"><span class="lineNum">     166</span> <span class="tlaGNC">         168 :         const double input_rows = *input_or-&gt;rows;</span></span>
@@ -269,14 +269,14 @@
 <span id="L207"><span class="lineNum">     207</span>              :     }</span>
 <span id="L208"><span class="lineNum">     208</span>              : };</span>
 <span id="L209"><span class="lineNum">     209</span>              : </span>
-<span id="L210"><span class="lineNum">     210</span> <span class="tlaGNC">         132 : PhysicalShape physical_shape_for(const PlanOptimizerResult&amp; rbo_result) {</span></span>
-<span id="L211"><span class="lineNum">     211</span> <span class="tlaGNC">         132 :     if (rbo_result.pushdown_plan.has_value() &amp;&amp; CanExecutePushdownPlan(*rbo_result.pushdown_plan)) {</span></span>
+<span id="L210"><span class="lineNum">     210</span> <span class="tlaGNC">         134 : PhysicalShape physical_shape_for(const PlanOptimizerResult&amp; rbo_result) {</span></span>
+<span id="L211"><span class="lineNum">     211</span> <span class="tlaGNC">         134 :     if (rbo_result.pushdown_plan.has_value() &amp;&amp; CanExecutePushdownPlan(*rbo_result.pushdown_plan)) {</span></span>
 <span id="L212"><span class="lineNum">     212</span>              :         return PhysicalShape::ConnectorScan;</span>
 <span id="L213"><span class="lineNum">     213</span>              :     }</span>
-<span id="L214"><span class="lineNum">     214</span> <span class="tlaGNC">          41 :     if (rbo_result.plan != nullptr &amp;&amp; rbo_result.plan-&gt;kind == plan::PlanNodeKind::Join) {</span></span>
+<span id="L214"><span class="lineNum">     214</span> <span class="tlaGNC">          42 :     if (rbo_result.plan != nullptr &amp;&amp; rbo_result.plan-&gt;kind == plan::PlanNodeKind::Join) {</span></span>
 <span id="L215"><span class="lineNum">     215</span>              :         return PhysicalShape::LocalHashJoin;</span>
 <span id="L216"><span class="lineNum">     216</span>              :     }</span>
-<span id="L217"><span class="lineNum">     217</span> <span class="tlaGNC">          23 :     if (rbo_result.plan != nullptr &amp;&amp; rbo_result.plan-&gt;kind == plan::PlanNodeKind::Exchange) {</span></span>
+<span id="L217"><span class="lineNum">     217</span> <span class="tlaGNC">          24 :     if (rbo_result.plan != nullptr &amp;&amp; rbo_result.plan-&gt;kind == plan::PlanNodeKind::Exchange) {</span></span>
 <span id="L218"><span class="lineNum">     218</span>              :         return PhysicalShape::Exchange;</span>
 <span id="L219"><span class="lineNum">     219</span>              :     }</span>
 <span id="L220"><span class="lineNum">     220</span> <span class="tlaGNC">          20 :     if (rbo_result.plan != nullptr &amp;&amp; rbo_result.plan-&gt;inputs.size() == 1) {</span></span>
@@ -285,27 +285,27 @@
 <span id="L223"><span class="lineNum">     223</span>              :     return PhysicalShape::MemoryScan;</span>
 <span id="L224"><span class="lineNum">     224</span>              : }</span>
 <span id="L225"><span class="lineNum">     225</span>              : </span>
-<span id="L226"><span class="lineNum">     226</span> <span class="tlaGNC">         132 : std::string alternative_name(PhysicalShape shape) {</span></span>
-<span id="L227"><span class="lineNum">     227</span> <span class="tlaGNC">         132 :     switch (shape) {</span></span>
+<span id="L226"><span class="lineNum">     226</span> <span class="tlaGNC">         134 : std::string alternative_name(PhysicalShape shape) {</span></span>
+<span id="L227"><span class="lineNum">     227</span> <span class="tlaGNC">         134 :     switch (shape) {</span></span>
 <span id="L228"><span class="lineNum">     228</span>              :         case PhysicalShape::ConnectorScan:</span>
-<span id="L229"><span class="lineNum">     229</span> <span class="tlaGNC">          91 :             return &quot;connector_scan&quot;;</span></span>
+<span id="L229"><span class="lineNum">     229</span> <span class="tlaGNC">          92 :             return &quot;connector_scan&quot;;</span></span>
 <span id="L230"><span class="lineNum">     230</span>              :         case PhysicalShape::ConnectorPrefixMemorySuffix:</span>
-<span id="L231"><span class="lineNum">     231</span> <span class="tlaGNC">         109 :             return &quot;connector_prefix_memory_suffix&quot;;</span></span>
+<span id="L231"><span class="lineNum">     231</span> <span class="tlaGNC">         110 :             return &quot;connector_prefix_memory_suffix&quot;;</span></span>
 <span id="L232"><span class="lineNum">     232</span>              :         case PhysicalShape::LocalHashJoin:</span>
 <span id="L233"><span class="lineNum">     233</span> <span class="tlaGNC">          18 :             return &quot;local_hash_join&quot;;</span></span>
 <span id="L234"><span class="lineNum">     234</span>              :         case PhysicalShape::Exchange:</span>
-<span id="L235"><span class="lineNum">     235</span> <span class="tlaGNC">           3 :             return &quot;exchange&quot;;</span></span>
+<span id="L235"><span class="lineNum">     235</span> <span class="tlaGNC">           4 :             return &quot;exchange&quot;;</span></span>
 <span id="L236"><span class="lineNum">     236</span>              :         case PhysicalShape::MemoryScan:</span>
 <span id="L237"><span class="lineNum">     237</span> <span class="tlaGNC">           2 :             return &quot;memory_scan&quot;;</span></span>
 <span id="L238"><span class="lineNum">     238</span>              :     }</span>
 <span id="L239"><span class="lineNum">     239</span> <span class="tlaUNC tlaBgUNC">           0 :     return &quot;memory_scan&quot;;</span></span>
 <span id="L240"><span class="lineNum">     240</span>              : }</span>
 <span id="L241"><span class="lineNum">     241</span>              : </span>
-<span id="L242"><span class="lineNum">     242</span> <span class="tlaGNC tlaBgGNC">         132 : std::string cbo_decision(const CboOptions&amp; options, const plan::CostEstimate&amp; cost) {</span></span>
-<span id="L243"><span class="lineNum">     243</span> <span class="tlaGNC">         132 :     if (cost.rows.has_value()) {</span></span>
+<span id="L242"><span class="lineNum">     242</span> <span class="tlaGNC tlaBgGNC">         134 : std::string cbo_decision(const CboOptions&amp; options, const plan::CostEstimate&amp; cost) {</span></span>
+<span id="L243"><span class="lineNum">     243</span> <span class="tlaGNC">         134 :     if (cost.rows.has_value()) {</span></span>
 <span id="L244"><span class="lineNum">     244</span> <span class="tlaGNC">          28 :         return &quot;chosen&quot;;</span></span>
 <span id="L245"><span class="lineNum">     245</span>              :     }</span>
-<span id="L246"><span class="lineNum">     246</span> <span class="tlaGNC">         207 :     return options.collect_connector_stats ? &quot;no-stats&quot; : &quot;fallback-rbo&quot;;</span></span>
+<span id="L246"><span class="lineNum">     246</span> <span class="tlaGNC">         211 :     return options.collect_connector_stats ? &quot;no-stats&quot; : &quot;fallback-rbo&quot;;</span></span>
 <span id="L247"><span class="lineNum">     247</span>              : }</span>
 <span id="L248"><span class="lineNum">     248</span>              : </span>
 <span id="L249"><span class="lineNum">     249</span> <span class="tlaGNC">          36 : std::string join_alternative_name(plan::JoinBuildSide side) {</span></span>
@@ -327,10 +327,10 @@
 <span id="L265"><span class="lineNum">     265</span>              :     return cost_or;</span>
 <span id="L266"><span class="lineNum">     266</span>              : }</span>
 <span id="L267"><span class="lineNum">     267</span>              : </span>
-<span id="L268"><span class="lineNum">     268</span> <span class="tlaGNC">         132 : absl::Status ChooseJoinBuildSide(const std::shared_ptr&lt;plan::PlanNode&gt;&amp; node,</span></span>
+<span id="L268"><span class="lineNum">     268</span> <span class="tlaGNC">         134 : absl::Status ChooseJoinBuildSide(const std::shared_ptr&lt;plan::PlanNode&gt;&amp; node,</span></span>
 <span id="L269"><span class="lineNum">     269</span>              :                                  const HeuristicCostModel&amp; cost_model,</span>
 <span id="L270"><span class="lineNum">     270</span>              :                                  const ConnectorStatsProvider&amp; stats_provider) {</span>
-<span id="L271"><span class="lineNum">     271</span> <span class="tlaGNC">         132 :     if (node == nullptr || node-&gt;kind != plan::PlanNodeKind::Join) {</span></span>
+<span id="L271"><span class="lineNum">     271</span> <span class="tlaGNC">         134 :     if (node == nullptr || node-&gt;kind != plan::PlanNodeKind::Join) {</span></span>
 <span id="L272"><span class="lineNum">     272</span>              :         return absl::OkStatus();</span>
 <span id="L273"><span class="lineNum">     273</span>              :     }</span>
 <span id="L274"><span class="lineNum">     274</span>              :     auto left_cost_or =</span>
@@ -354,49 +354,49 @@
 <span id="L292"><span class="lineNum">     292</span>              : </span>
 <span id="L293"><span class="lineNum">     293</span>              : } // namespace</span>
 <span id="L294"><span class="lineNum">     294</span>              : </span>
-<span id="L295"><span class="lineNum">     295</span> <span class="tlaGNC">         132 : CostBasedOptimizer::CostBasedOptimizer(CboOptions options) : options_(options) {}</span></span>
+<span id="L295"><span class="lineNum">     295</span> <span class="tlaGNC">         134 : CostBasedOptimizer::CostBasedOptimizer(CboOptions options) : options_(options) {}</span></span>
 <span id="L296"><span class="lineNum">     296</span>              : </span>
-<span id="L297"><span class="lineNum">     297</span> <span class="tlaGNC">         132 : absl::StatusOr&lt;CboPlanResult&gt; CostBasedOptimizer::OptimizeWithTrace(</span></span>
+<span id="L297"><span class="lineNum">     297</span> <span class="tlaGNC">         134 : absl::StatusOr&lt;CboPlanResult&gt; CostBasedOptimizer::OptimizeWithTrace(</span></span>
 <span id="L298"><span class="lineNum">     298</span>              :     std::shared_ptr&lt;plan::PlanNode&gt; plan) const {</span>
-<span id="L299"><span class="lineNum">     299</span> <span class="tlaGNC">         264 :     auto rbo_or = DefaultRuleBasedOptimizer().Optimize(std::move(plan));</span></span>
-<span id="L300"><span class="lineNum">     300</span> <span class="tlaGNC">         132 :     if (!rbo_or.ok()) {</span></span>
+<span id="L299"><span class="lineNum">     299</span> <span class="tlaGNC">         268 :     auto rbo_or = DefaultRuleBasedOptimizer().Optimize(std::move(plan));</span></span>
+<span id="L300"><span class="lineNum">     300</span> <span class="tlaGNC">         134 :     if (!rbo_or.ok()) {</span></span>
 <span id="L301"><span class="lineNum">     301</span>              :         return rbo_or.status();</span>
 <span id="L302"><span class="lineNum">     302</span>              :     }</span>
 <span id="L303"><span class="lineNum">     303</span>              : </span>
 <span id="L304"><span class="lineNum">     304</span>              :     ConnectorStatsProvider stats_provider(options_);</span>
-<span id="L305"><span class="lineNum">     305</span> <span class="tlaGNC">         132 :     HeuristicCostModel cost_model;</span></span>
-<span id="L306"><span class="lineNum">     306</span> <span class="tlaGNC">         132 :     auto choose_status = ChooseJoinBuildSide(rbo_or-&gt;plan, cost_model, stats_provider);</span></span>
-<span id="L307"><span class="lineNum">     307</span> <span class="tlaGNC">         132 :     if (!choose_status.ok()) {</span></span>
+<span id="L305"><span class="lineNum">     305</span> <span class="tlaGNC">         134 :     HeuristicCostModel cost_model;</span></span>
+<span id="L306"><span class="lineNum">     306</span> <span class="tlaGNC">         134 :     auto choose_status = ChooseJoinBuildSide(rbo_or-&gt;plan, cost_model, stats_provider);</span></span>
+<span id="L307"><span class="lineNum">     307</span> <span class="tlaGNC">         134 :     if (!choose_status.ok()) {</span></span>
 <span id="L308"><span class="lineNum">     308</span>              :         return choose_status;</span>
 <span id="L309"><span class="lineNum">     309</span>              :     }</span>
-<span id="L310"><span class="lineNum">     310</span> <span class="tlaGNC">         132 :     auto cost_or = cost_model.EstimateCost(rbo_or-&gt;plan, stats_provider);</span></span>
-<span id="L311"><span class="lineNum">     311</span> <span class="tlaGNC">         132 :     if (!cost_or.ok()) {</span></span>
+<span id="L310"><span class="lineNum">     310</span> <span class="tlaGNC">         134 :     auto cost_or = cost_model.EstimateCost(rbo_or-&gt;plan, stats_provider);</span></span>
+<span id="L311"><span class="lineNum">     311</span> <span class="tlaGNC">         134 :     if (!cost_or.ok()) {</span></span>
 <span id="L312"><span class="lineNum">     312</span>              :         return cost_or.status();</span>
 <span id="L313"><span class="lineNum">     313</span>              :     }</span>
 <span id="L314"><span class="lineNum">     314</span>              : </span>
-<span id="L315"><span class="lineNum">     315</span> <span class="tlaGNC">         132 :     const PhysicalShape shape = physical_shape_for(*rbo_or);</span></span>
-<span id="L316"><span class="lineNum">     316</span> <span class="tlaGNC">         132 :     PlanAlternative chosen{</span></span>
+<span id="L315"><span class="lineNum">     315</span> <span class="tlaGNC">         134 :     const PhysicalShape shape = physical_shape_for(*rbo_or);</span></span>
+<span id="L316"><span class="lineNum">     316</span> <span class="tlaGNC">         134 :     PlanAlternative chosen{</span></span>
 <span id="L317"><span class="lineNum">     317</span>              :         .name = alternative_name(shape),</span>
 <span id="L318"><span class="lineNum">     318</span>              :         .shape = shape,</span>
 <span id="L319"><span class="lineNum">     319</span>              :         .cost = *cost_or,</span>
 <span id="L320"><span class="lineNum">     320</span>              :         .chosen = true,</span>
-<span id="L321"><span class="lineNum">     321</span> <span class="tlaGNC">         132 :         .reason = cost_or-&gt;rows.has_value() ? &quot;lowest-known-cost&quot; : &quot;rbo-fallback&quot;,</span></span>
-<span id="L322"><span class="lineNum">     322</span> <span class="tlaGNC">         236 :     };</span></span>
+<span id="L321"><span class="lineNum">     321</span> <span class="tlaGNC">         134 :         .reason = cost_or-&gt;rows.has_value() ? &quot;lowest-known-cost&quot; : &quot;rbo-fallback&quot;,</span></span>
+<span id="L322"><span class="lineNum">     322</span> <span class="tlaGNC">         240 :     };</span></span>
 <span id="L323"><span class="lineNum">     323</span>              : </span>
 <span id="L324"><span class="lineNum">     324</span>              :     CboPlanResult result;</span>
-<span id="L325"><span class="lineNum">     325</span> <span class="tlaGNC">         132 :     result.rbo_result = std::move(*rbo_or);</span></span>
-<span id="L326"><span class="lineNum">     326</span> <span class="tlaGNC">         264 :     result.decision = cbo_decision(options_, *cost_or);</span></span>
-<span id="L327"><span class="lineNum">     327</span> <span class="tlaGNC">         132 :     result.cost = *cost_or;</span></span>
+<span id="L325"><span class="lineNum">     325</span> <span class="tlaGNC">         134 :     result.rbo_result = std::move(*rbo_or);</span></span>
+<span id="L326"><span class="lineNum">     326</span> <span class="tlaGNC">         268 :     result.decision = cbo_decision(options_, *cost_or);</span></span>
+<span id="L327"><span class="lineNum">     327</span> <span class="tlaGNC">         134 :     result.cost = *cost_or;</span></span>
 <span id="L328"><span class="lineNum">     328</span>              :     result.alternatives.push_back(std::move(chosen));</span>
-<span id="L329"><span class="lineNum">     329</span> <span class="tlaGNC">         132 :     if (shape == PhysicalShape::ConnectorScan) {</span></span>
-<span id="L330"><span class="lineNum">     330</span> <span class="tlaGNC">         182 :         result.alternatives.push_back(PlanAlternative{</span></span>
+<span id="L329"><span class="lineNum">     329</span> <span class="tlaGNC">         134 :     if (shape == PhysicalShape::ConnectorScan) {</span></span>
+<span id="L330"><span class="lineNum">     330</span> <span class="tlaGNC">         184 :         result.alternatives.push_back(PlanAlternative{</span></span>
 <span id="L331"><span class="lineNum">     331</span>              :             .name = alternative_name(PhysicalShape::ConnectorPrefixMemorySuffix),</span>
 <span id="L332"><span class="lineNum">     332</span>              :             .shape = PhysicalShape::ConnectorPrefixMemorySuffix,</span>
 <span id="L333"><span class="lineNum">     333</span>              :             .cost = *cost_or,</span>
 <span id="L334"><span class="lineNum">     334</span>              :             .chosen = false,</span>
-<span id="L335"><span class="lineNum">     335</span> <span class="tlaGNC">          91 :             .reason = &quot;dominated-by-full-connector-pushdown&quot;,</span></span>
+<span id="L335"><span class="lineNum">     335</span> <span class="tlaGNC">          92 :             .reason = &quot;dominated-by-full-connector-pushdown&quot;,</span></span>
 <span id="L336"><span class="lineNum">     336</span>              :         });</span>
-<span id="L337"><span class="lineNum">     337</span> <span class="tlaGNC">          41 :     } else if (shape == PhysicalShape::LocalHashJoin) {</span></span>
+<span id="L337"><span class="lineNum">     337</span> <span class="tlaGNC">          42 :     } else if (shape == PhysicalShape::LocalHashJoin) {</span></span>
 <span id="L338"><span class="lineNum">     338</span> <span class="tlaGNC">          18 :         const auto chosen_side = result.rbo_result.plan-&gt;join().build_side;</span></span>
 <span id="L339"><span class="lineNum">     339</span>              :         const auto other_side = chosen_side == plan::JoinBuildSide::Left</span>
 <span id="L340"><span class="lineNum">     340</span> <span class="tlaGNC">          18 :                                     ? plan::JoinBuildSide::Right</span></span>
@@ -411,7 +411,7 @@
 <span id="L349"><span class="lineNum">     349</span>              :             .chosen = false,</span>
 <span id="L350"><span class="lineNum">     350</span> <span class="tlaGNC">          18 :             .reason = &quot;higher-build-probe-cost&quot;,</span></span>
 <span id="L351"><span class="lineNum">     351</span>              :         });</span>
-<span id="L352"><span class="lineNum">     352</span> <span class="tlaGNC">          23 :     } else if (shape == PhysicalShape::ConnectorPrefixMemorySuffix) {</span></span>
+<span id="L352"><span class="lineNum">     352</span> <span class="tlaGNC">          24 :     } else if (shape == PhysicalShape::ConnectorPrefixMemorySuffix) {</span></span>
 <span id="L353"><span class="lineNum">     353</span> <span class="tlaGNC">          18 :         result.alternatives.push_back(PlanAlternative{</span></span>
 <span id="L354"><span class="lineNum">     354</span>              :             .name = alternative_name(PhysicalShape::MemoryScan),</span>
 <span id="L355"><span class="lineNum">     355</span>              :             .shape = PhysicalShape::MemoryScan,</span>
@@ -420,9 +420,9 @@
 <span id="L358"><span class="lineNum">     358</span> <span class="tlaGNC">          18 :             .reason = &quot;fallback-candidate&quot;,</span></span>
 <span id="L359"><span class="lineNum">     359</span>              :         });</span>
 <span id="L360"><span class="lineNum">     360</span>              :     }</span>
-<span id="L361"><span class="lineNum">     361</span> <span class="tlaGNC">         132 :     result.has_statistics = result.cost.rows.has_value();</span></span>
+<span id="L361"><span class="lineNum">     361</span> <span class="tlaGNC">         134 :     result.has_statistics = result.cost.rows.has_value();</span></span>
 <span id="L362"><span class="lineNum">     362</span>              :     return result;</span>
-<span id="L363"><span class="lineNum">     363</span> <span class="tlaGNC">         132 : }</span></span>
+<span id="L363"><span class="lineNum">     363</span> <span class="tlaGNC">         134 : }</span></span>
 <span id="L364"><span class="lineNum">     364</span>              : </span>
 <span id="L365"><span class="lineNum">     365</span> <span class="tlaUNC tlaBgUNC">           0 : absl::StatusOr&lt;PlanOptimizerResult&gt; CostBasedOptimizer::Optimize(</span></span>
 <span id="L366"><span class="lineNum">     366</span>              :     std::shared_ptr&lt;plan::PlanNode&gt; plan) const {</span>
@@ -437,8 +437,8 @@
 <span id="L375"><span class="lineNum">     375</span> <span class="tlaGNC">          29 :     return CostBasedOptimizer(CboOptions{.collect_connector_stats = true});</span></span>
 <span id="L376"><span class="lineNum">     376</span>              : }</span>
 <span id="L377"><span class="lineNum">     377</span>              : </span>
-<span id="L378"><span class="lineNum">     378</span> <span class="tlaGNC">         103 : CostBasedOptimizer FastCostBasedOptimizer() {</span></span>
-<span id="L379"><span class="lineNum">     379</span> <span class="tlaGNC">         103 :     return CostBasedOptimizer(CboOptions{.collect_connector_stats = false});</span></span>
+<span id="L378"><span class="lineNum">     378</span> <span class="tlaGNC">         105 : CostBasedOptimizer FastCostBasedOptimizer() {</span></span>
+<span id="L379"><span class="lineNum">     379</span> <span class="tlaGNC">         105 :     return CostBasedOptimizer(CboOptions{.collect_connector_stats = false});</span></span>
 <span id="L380"><span class="lineNum">     380</span>              : }</span>
 <span id="L381"><span class="lineNum">     381</span>              : </span>
 <span id="L382"><span class="lineNum">     382</span> <span class="tlaUNC tlaBgUNC">           0 : std::string PhysicalShapeName(PhysicalShape shape) { return alternative_name(shape); }</span></span>
