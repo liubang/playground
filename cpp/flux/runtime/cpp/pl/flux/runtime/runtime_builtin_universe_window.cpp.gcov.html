@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-17 21:45:51</td>
+            <td class="headerValue">2026-05-17 23:08:25</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -1193,24 +1193,24 @@
 <span id="L1058"><span class="lineNum">    1058</span>                 :             :         &quot;tables&quot;);</span>
 <span id="L1059"><span class="lineNum">    1059</span>                 :<span class="tlaGNC">         179 : }</span></span>
 <span id="L1060"><span class="lineNum">    1060</span>                 :             : </span>
-<span id="L1061"><span class="lineNum">    1061</span>                 :<span class="tlaGNC">          30 : bool InstallKnownUniverseWindowBuiltin(Environment&amp; env, const std::string&amp; name) {</span></span>
-<span id="L1062"><span class="lineNum">    1062</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 29 times"> + </span>]:<span class="tlaGNC">          30 :     if (name == &quot;elapsed&quot;) {</span></span>
+<span id="L1061"><span class="lineNum">    1061</span>                 :<span class="tlaGNC">          31 : bool InstallKnownUniverseWindowBuiltin(Environment&amp; env, const std::string&amp; name) {</span></span>
+<span id="L1062"><span class="lineNum">    1062</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 30 times"> + </span>]:<span class="tlaGNC">          31 :     if (name == &quot;elapsed&quot;) {</span></span>
 <span id="L1063"><span class="lineNum">    1063</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           2 :         install_builtin(env, &quot;elapsed&quot;, builtin_elapsed, &quot;tables&quot;);</span></span>
 <span id="L1064"><span class="lineNum">    1064</span>                 :<span class="tlaGNC">           1 :         return true;</span></span>
 <span id="L1065"><span class="lineNum">    1065</span>                 :             :     }</span>
-<span id="L1066"><span class="lineNum">    1066</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 27 times"> + </span>]:<span class="tlaGNC">          29 :     if (name == &quot;difference&quot;) {</span></span>
+<span id="L1066"><span class="lineNum">    1066</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 28 times"> + </span>]:<span class="tlaGNC">          30 :     if (name == &quot;difference&quot;) {</span></span>
 <span id="L1067"><span class="lineNum">    1067</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           4 :         install_builtin(env, &quot;difference&quot;, builtin_difference, &quot;tables&quot;);</span></span>
 <span id="L1068"><span class="lineNum">    1068</span>                 :<span class="tlaGNC">           2 :         return true;</span></span>
 <span id="L1069"><span class="lineNum">    1069</span>                 :             :     }</span>
-<span id="L1070"><span class="lineNum">    1070</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 25 times"> + </span>]:<span class="tlaGNC">          27 :     if (name == &quot;derivative&quot;) {</span></span>
+<span id="L1070"><span class="lineNum">    1070</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 26 times"> + </span>]:<span class="tlaGNC">          28 :     if (name == &quot;derivative&quot;) {</span></span>
 <span id="L1071"><span class="lineNum">    1071</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           4 :         install_builtin(env, &quot;derivative&quot;, builtin_derivative, &quot;tables&quot;);</span></span>
 <span id="L1072"><span class="lineNum">    1072</span>                 :<span class="tlaGNC">           2 :         return true;</span></span>
 <span id="L1073"><span class="lineNum">    1073</span>                 :             :     }</span>
-<span id="L1074"><span class="lineNum">    1074</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 24 times"> + </span>]:<span class="tlaGNC">          25 :     if (name == &quot;window&quot;) {</span></span>
+<span id="L1074"><span class="lineNum">    1074</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 25 times"> + </span>]:<span class="tlaGNC">          26 :     if (name == &quot;window&quot;) {</span></span>
 <span id="L1075"><span class="lineNum">    1075</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           2 :         install_builtin(env, &quot;window&quot;, builtin_window, &quot;tables&quot;);</span></span>
 <span id="L1076"><span class="lineNum">    1076</span>                 :<span class="tlaGNC">           1 :         return true;</span></span>
 <span id="L1077"><span class="lineNum">    1077</span>                 :             :     }</span>
-<span id="L1078"><span class="lineNum">    1078</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 18 times"> + </span>]:<span class="tlaGNC">          24 :     if (name == &quot;aggregateWindow&quot;) {</span></span>
+<span id="L1078"><span class="lineNum">    1078</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 19 times"> + </span>]:<span class="tlaGNC">          25 :     if (name == &quot;aggregateWindow&quot;) {</span></span>
 <span id="L1079"><span class="lineNum">    1079</span>   [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          12 :         install_builtin(</span></span>
 <span id="L1080"><span class="lineNum">    1080</span>                 :             :             env, &quot;aggregateWindow&quot;,</span>
 <span id="L1081"><span class="lineNum">    1081</span>                 :<span class="tlaGNC">           9 :             [&amp;env](const std::vector&lt;Value&gt;&amp; args) -&gt; absl::StatusOr&lt;Value&gt; {</span></span>

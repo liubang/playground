@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-17 21:45:51</td>
+            <td class="headerValue">2026-05-17 23:08:25</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">83.3&nbsp;%</td>
@@ -248,12 +248,12 @@
 <span id="L177"><span class="lineNum">     177</span>                 :             : </span>
 <span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">        1001 :     static bool hash_may_match(uint32_t h, uint32_t total_bits, int num_probes, const char* data) {</span></span>
 <span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">        1001 :         const uint32_t delta = (h &gt;&gt; 17) | (h &lt;&lt; 15); // Rotate right 17 bits</span></span>
-<span id="L180"><span class="lineNum">     180</span>         [<span class="tlaGBC" title="Branch 0 was taken 3015 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 336 times"> + </span>]:<span class="tlaGNC">        3351 :         for (int i = 0; i &lt; num_probes; ++i) {</span></span>
-<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">        3015 :             const uint32_t bitpos = h % total_bits;</span></span>
-<span id="L182"><span class="lineNum">     182</span>         [<span class="tlaGBC" title="Branch 0 was taken 2350 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 665 times"> + </span>]:<span class="tlaGNC">        3015 :             if ((data[bitpos &gt;&gt; 3] &amp; (uint8_t{1} &lt;&lt; (bitpos &amp; 7))) == 0) {</span></span>
+<span id="L180"><span class="lineNum">     180</span>         [<span class="tlaGBC" title="Branch 0 was taken 2951 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 335 times"> + </span>]:<span class="tlaGNC">        3286 :         for (int i = 0; i &lt; num_probes; ++i) {</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">        2951 :             const uint32_t bitpos = h % total_bits;</span></span>
+<span id="L182"><span class="lineNum">     182</span>         [<span class="tlaGBC" title="Branch 0 was taken 2285 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 666 times"> + </span>]:<span class="tlaGNC">        2951 :             if ((data[bitpos &gt;&gt; 3] &amp; (uint8_t{1} &lt;&lt; (bitpos &amp; 7))) == 0) {</span></span>
 <span id="L183"><span class="lineNum">     183</span>                 :             :                 return false;</span>
 <span id="L184"><span class="lineNum">     184</span>                 :             :             }</span>
-<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">        2350 :             h += delta;</span></span>
+<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">        2285 :             h += delta;</span></span>
 <span id="L186"><span class="lineNum">     186</span>                 :             :         }</span>
 <span id="L187"><span class="lineNum">     187</span>                 :             :         return true;</span>
 <span id="L188"><span class="lineNum">     188</span>                 :             :     }</span>
