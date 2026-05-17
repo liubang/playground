@@ -416,3 +416,40 @@ execution、page source streaming、profile 分段耗时。连接池和 prepared
 `0.3851s`；
 后续如果继续优化性能，优先看 group key canonicalization、hash state 和 aggregate hot path，而不是
 再扩大功能面。
+
+## 2026-05-17：Typed accumulator key/profile 拆分
+
+这轮继续把 accumulator 主线收口，目标是让本地 blocking result boundary 既独立成模块，又能被
+profile/benchmark 拆开观察：
+
+- 新增 `execution/accumulator.{h,cpp}`，`group/distinct/aggregate/grouped aggregate` 的状态、
+  typed key、hash 和 result chunk 构建从 `physical_executor.cpp` 拆出。
+- group/distinct 不再用 `Value::string()` 拼接 canonical key；改成 typed `GroupKey` +
+  `GroupKeyHash`，missing/null/value 类型语义分开，避免 hot path 上大规模字符串拼接。
+- ungrouped aggregate 对整列走 column fast path；grouped aggregate 仍按 row 建 key，但 aggregate
+  update 直接读列索引定位后的 `Value*`。
+- `PipelineProfile` 增加 `accumulator_stats`，Driver 从 root operator 向下收集 accumulator
+  input/output rows、group buckets、key/hash/update/result build 分段耗时；`FormatExecutionProfile`
+  会输出 `accumulator_stats` 行。
+- `run_connector_benchmarks.py` 增加 `--warmup`，SQLite 默认场景扩到
+  `scan/filter_project/wide_filter/topn/distinct_host/group_count/group_sum/group_mean`，并把
+  accumulator 分段字段纳入 JSON summary。
+
+本轮确认：
+
+- `bazel test //cpp/pl/flux/...`：17/17 test targets passed；MySQL 集成项在未设置 DSN 时按预期
+  skipped。
+- `clang-tidy`：当前环境没有安装 `clang-tidy` 命令，未能执行；已用 `sh format.sh ...` 格式化改动。
+- 真实 SQLite 1M rows，8 drivers，`--repeat 1 --warmup 0`：
+  - `scan`：`0.1467s`，约 `6.82M` input rows/s。
+  - `filter_project`：`0.0557s`，约 `17.97M` input rows/s。
+  - `wide_filter`：`0.0819s`，约 `12.20M` input rows/s。
+  - `topn`：`0.0228s`，约 `43.89M` input rows/s。
+  - `distinct_host`：`0.2576s`；accumulator `key=85.35ms/hash=30.98ms/update=0.07ms`。
+  - `group_count`：`0.3244s`；accumulator `key=118.45ms/hash=33.31ms/update=16.34ms`。
+  - `group_sum`：`0.3224s`；accumulator `key=117.76ms/hash=32.73ms/update=18.11ms`。
+  - `group_mean`：`0.3218s`；accumulator `key=117.31ms/hash=32.92ms/update=18.23ms`。
+
+结论：相对上一轮 string canonical key 的 `0.3851s` group_count，typed key/hash state 把 1M
+group_count 进一步压到 `0.3244s`。profile 也确认后续若继续提速，优先方向是减少 per-row key
+对象构造和 hash lookup 成本，而不是再碰 aggregate update 本身。
