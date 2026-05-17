@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-17 18:47:55</td>
+            <td class="headerValue">2026-05-17 19:17:41</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -97,13 +97,13 @@
 <span id="L26"><span class="lineNum">      26</span>                 :             : </span>
 <span id="L27"><span class="lineNum">      27</span>                 :             : namespace pl::flux::connector {</span>
 <span id="L28"><span class="lineNum">      28</span>                 :             : </span>
-<span id="L29"><span class="lineNum">      29</span>   [<span class="tlaGBC" title="Branch 0 was taken 1901 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaGNC tlaBgGNC">        7431 : struct ColumnSchema {</span></span>
+<span id="L29"><span class="lineNum">      29</span>   [<span class="tlaGBC" title="Branch 0 was taken 1906 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaGNC tlaBgGNC">        7426 : struct ColumnSchema {</span></span>
 <span id="L30"><span class="lineNum">      30</span>                 :             :     std::string name;</span>
 <span id="L31"><span class="lineNum">      31</span>                 :             :     Value::Type type = Value::Type::Null;</span>
 <span id="L32"><span class="lineNum">      32</span>                 :             :     bool nullable = true;</span>
 <span id="L33"><span class="lineNum">      33</span>                 :             : };</span>
 <span id="L34"><span class="lineNum">      34</span>                 :             : </span>
-<span id="L35"><span class="lineNum">      35</span>   [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">        1770 : struct TableSchema {</span></span>
+<span id="L35"><span class="lineNum">      35</span>   [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">        1772 : struct TableSchema {</span></span>
 <span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L36"><span class="lineNum">      36</span>                 :             :     std::vector&lt;ColumnSchema&gt; columns;</span>
 <span id="L37"><span class="lineNum">      37</span>                 :             : };</span>
@@ -131,7 +131,7 @@
 <span id="L59"><span class="lineNum">      59</span>                 :             :     bool distinct = false;</span>
 <span id="L60"><span class="lineNum">      60</span>                 :             : };</span>
 <span id="L61"><span class="lineNum">      61</span>                 :             : </span>
-<span id="L62"><span class="lineNum">      62</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         578 : struct TimeRange {</span></span>
+<span id="L62"><span class="lineNum">      62</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         577 : struct TimeRange {</span></span>
 <span id="L63"><span class="lineNum">      63</span>                 :             :     std::optional&lt;std::string&gt; start;</span>
 <span id="L64"><span class="lineNum">      64</span>                 :             :     std::optional&lt;std::string&gt; stop;</span>
 <span id="L65"><span class="lineNum">      65</span>                 :             : };</span>
@@ -151,12 +151,12 @@
 <span id="L79"><span class="lineNum">      79</span>                 :             :     Value literal;</span>
 <span id="L80"><span class="lineNum">      80</span>                 :             : };</span>
 <span id="L81"><span class="lineNum">      81</span>                 :             : </span>
-<span id="L82"><span class="lineNum">      82</span>         [<span class="tlaGBC" title="Branch 0 was taken 157 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         410 : struct OrderBy {</span></span>
+<span id="L82"><span class="lineNum">      82</span>         [<span class="tlaGBC" title="Branch 0 was taken 158 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         411 : struct OrderBy {</span></span>
 <span id="L83"><span class="lineNum">      83</span>                 :             :     std::string column;</span>
 <span id="L84"><span class="lineNum">      84</span>                 :             :     bool desc = false;</span>
 <span id="L85"><span class="lineNum">      85</span>                 :             : };</span>
 <span id="L86"><span class="lineNum">      86</span>                 :             : </span>
-<span id="L87"><span class="lineNum">      87</span>   [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">        1760 : struct ProjectionColumn {</span></span>
+<span id="L87"><span class="lineNum">      87</span>   [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">        1757 : struct ProjectionColumn {</span></span>
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaUNC" title="Branch 8 was not taken"> - </span> 
 <span class="lineNum">        </span>             <span class="tlaGBC" title="Branch 9 was taken 1 time"> + </span>]
 <span id="L88"><span class="lineNum">      88</span>                 :             :     std::string column;</span>
