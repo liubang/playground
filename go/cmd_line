@@ -1,1 +1,1 @@
-genhtml --ignore-errors negative --output coverage-go /tmp/coverage_filtered.dat
+genhtml --branch-coverage --ignore-errors negative --output coverage-go /tmp/coverage_filtered.dat
