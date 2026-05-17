@@ -19,6 +19,7 @@
 
 #include "cpp/pl/utility/utility.h"
 
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -41,7 +42,10 @@ public:
 
         if (current_block_ids_ < blocks_.size()) {
             auto& current_block = blocks_[current_block_ids_];
-            std::size_t aligned_used = align_up(current_block.used, alignment);
+            // Compute alignment based on the absolute address, not just the offset
+            auto base_addr = reinterpret_cast<std::uintptr_t>(current_block.data.get());
+            std::size_t aligned_used = align_up_addr(base_addr + current_block.used, alignment) -
+                                       base_addr;
             if (aligned_used + size <= current_block.size) {
                 void* ptr = current_block.data.get() + aligned_used;
                 current_block.used = aligned_used + size;
@@ -49,10 +53,15 @@ public:
             }
         }
 
-        allocate_new_block(size);
+        // Allocate a new block large enough to satisfy alignment + size.
+        // Worst case padding for alignment is (alignment - 1) bytes.
+        std::size_t extra = (alignment > alignof(std::max_align_t)) ? (alignment - 1) : 0;
+        allocate_new_block(size + extra);
         auto& new_block = blocks_[current_block_ids_];
-        void* ptr = new_block.data.get();
-        new_block.used = size;
+        auto base_addr = reinterpret_cast<std::uintptr_t>(new_block.data.get());
+        std::size_t aligned_offset = align_up_addr(base_addr, alignment) - base_addr;
+        void* ptr = new_block.data.get() + aligned_offset;
+        new_block.used = aligned_offset + size;
         return ptr;
     }
 
@@ -115,6 +124,10 @@ public:
 private:
     static constexpr std::size_t align_up(std::size_t size, std::size_t alignment) noexcept {
         return (size + alignment - 1) & ~(alignment - 1);
+    }
+
+    static std::uintptr_t align_up_addr(std::uintptr_t addr, std::size_t alignment) noexcept {
+        return (addr + alignment - 1) & ~(static_cast<std::uintptr_t>(alignment) - 1);
     }
 
     void allocate_new_block(std::size_t min_size) {
