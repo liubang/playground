@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2025-01-01T00:00:00.000Z" agent="draw.io" version="24.0.0" type="device">
+  <diagram id="minidfs-arch-v2" name="MiniDFS Architecture">
+    <mxGraphModel dx="1600" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <!-- CONTROL PLANE background -->
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <mxCell id="ctrl-plane" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8F9FA;strokeColor=#DEE2E6;strokeWidth=1;dashed=1;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="240" y="170" width="680" height="380" as="geometry" />
+        </mxCell>
+        <mxCell id="ctrl-label" value="Control Plane" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontColor=#868E96;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="255" y="175" width="90" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <!-- DATA PLANE background -->
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <mxCell id="data-plane" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8F9FA;strokeColor=#DEE2E6;strokeWidth=1;dashed=1;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="240" y="640" width="680" height="280" as="geometry" />
+        </mxCell>
+        <mxCell id="data-label" value="Data Plane" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontColor=#868E96;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="255" y="645" width="80" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <!-- CLIENT -->
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <mxCell id="client" value="&lt;b style='font-size:14px'&gt;Client&lt;/b&gt;&lt;br&gt;&lt;span style='font-size:11px;color:#495057'&gt;CLI · SDK · Library&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#4263EB;fontColor=#FFFFFF;strokeColor=#3B5BDB;fontSize=12;shadow=0;arcSize=20;" vertex="1" parent="1">
+          <mxGeometry x="480" y="50" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <!-- NAMENODE -->
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <mxCell id="nn-box" value="&lt;b style='font-size:14px'&gt;NameNode&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF9DB;strokeColor=#F59F00;strokeWidth=2;fontSize=12;verticalAlign=top;spacingTop=10;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="310" y="200" width="540" height="175" as="geometry" />
+        </mxCell>
+
+        <!-- NameNode sub-modules: row 1 -->
+        <mxCell id="nn-ns" value="&lt;b&gt;Namespace&lt;br&gt;Manager&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#F59F00;fontSize=10;shadow=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="330" y="240" width="110" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="nn-bm" value="&lt;b&gt;Block&lt;br&gt;Manager&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#F59F00;fontSize=10;shadow=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="455" y="240" width="110" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="nn-dnm" value="&lt;b&gt;DataNode&lt;br&gt;Manager&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#F59F00;fontSize=10;shadow=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="580" y="240" width="110" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="nn-lease" value="&lt;b&gt;Lease&lt;br&gt;Manager&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#F59F00;fontSize=10;shadow=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="705" y="240" width="110" height="46" as="geometry" />
+        </mxCell>
+
+        <!-- NameNode sub-modules: row 2 -->
+        <mxCell id="nn-place" value="&lt;b&gt;Placement&lt;br&gt;Manager&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#F59F00;fontSize=10;shadow=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="390" y="310" width="110" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="nn-repl" value="&lt;b&gt;Replication&lt;br&gt;Manager&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#F59F00;fontSize=10;shadow=0;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="650" y="310" width="110" height="46" as="geometry" />
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <!-- CLIENT → NAMENODE edge -->
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <mxCell id="e-c-nn" value="&lt;span style='background:#fff;padding:2px 6px;border-radius:3px;font-size:10px;color:#4263EB'&gt;brpc · Metadata RPC&lt;/span&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#4263EB;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="client" target="nn-box" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <!-- METADATA STORE (MySQL) -->
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <mxCell id="meta-iface" value="&lt;i style='color:#868E96;font-size:10px'&gt;«interface»&lt;/i&gt;&lt;br&gt;&lt;b style='font-size:12px'&gt;MetadataStore&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#868E96;strokeWidth=1;dashed=1;fontSize=11;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="460" y="420" width="140" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="mysql" value="&lt;b style='font-size:12px'&gt;MySQL&lt;/b&gt;&lt;br&gt;&lt;span style='font-size:10px;color:#495057'&gt;Boost.MySQL async&lt;/span&gt;" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=10;fillColor=#E8D5F5;strokeColor=#862E9C;fontSize=11;shadow=0;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="475" y="490" width="160" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- NameNode → MetadataStore -->
+        <mxCell id="e-nn-meta" style="rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#868E96;dashed=1;dashPattern=4 4;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="nn-box" target="meta-iface" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- MetadataStore → MySQL -->
+        <mxCell id="e-meta-mysql" style="rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#862E9C;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="meta-iface" target="mysql" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <!-- DATANODES -->
+        <!-- ═══════════════════════════════════════════════════════════ -->
+
+        <!-- DataNode 1 -->
+        <mxCell id="dn1-box" value="&lt;b&gt;DataNode 1&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EBFBEE;strokeColor=#2B8A3E;strokeWidth=2;fontSize=12;verticalAlign=top;spacingTop=8;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="260" y="680" width="175" height="210" as="geometry" />
+        </mxCell>
+        <mxCell id="dn1-lbs" value="LocalBlockStore" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#2B8A3E;fontSize=10;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="275" y="718" width="145" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="dn1-pipe" value="PipelineReceiver" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#2B8A3E;fontSize=10;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="275" y="758" width="145" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="dn1-hb" value="HeartbeatSender" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#2B8A3E;fontSize=10;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="275" y="798" width="145" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="dn1-br" value="BlockReporter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#2B8A3E;fontSize=10;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="275" y="838" width="145" height="32" as="geometry" />
+        </mxCell>
+
+        <!-- DataNode 2 -->
+        <mxCell id="dn2-box" value="&lt;b&gt;DataNode 2&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EBFBEE;strokeColor=#2B8A3E;strokeWidth=2;fontSize=12;verticalAlign=top;spacingTop=8;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="493" y="680" width="175" height="210" as="geometry" />
+        </mxCell>
+        <mxCell id="dn2-lbs" value="LocalBlockStore" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#2B8A3E;fontSize=10;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="508" y="718" width="145" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="dn2-pipe" value="PipelineReceiver" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#2B8A3E;fontSize=10;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="508" y="758" width="145" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="dn2-hb" value="HeartbeatSender" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#2B8A3E;fontSize=10;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="508" y="798" width="145" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="dn2-br" value="BlockReporter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#2B8A3E;fontSize=10;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="508" y="838" width="145" height="32" as="geometry" />
+        </mxCell>
+
+        <!-- DataNode 3 -->
+        <mxCell id="dn3-box" value="&lt;b&gt;DataNode 3&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EBFBEE;strokeColor=#2B8A3E;strokeWidth=2;fontSize=12;verticalAlign=top;spacingTop=8;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="726" y="680" width="175" height="210" as="geometry" />
+        </mxCell>
+        <mxCell id="dn3-lbs" value="LocalBlockStore" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#2B8A3E;fontSize=10;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="741" y="718" width="145" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="dn3-pipe" value="PipelineReceiver" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#2B8A3E;fontSize=10;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="741" y="758" width="145" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="dn3-hb" value="HeartbeatSender" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#2B8A3E;fontSize=10;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="741" y="798" width="145" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="dn3-br" value="BlockReporter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#2B8A3E;fontSize=10;arcSize=14;" vertex="1" parent="1">
+          <mxGeometry x="741" y="838" width="145" height="32" as="geometry" />
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <!-- CLIENT → DATANODES (data path) -->
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <mxCell id="e-c-dn1" value="&lt;span style='background:#fff;padding:2px 6px;border-radius:3px;font-size:10px;color:#2B8A3E'&gt;brpc · Block Transfer (Pipeline)&lt;/span&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#2B8A3E;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="client" target="dn1-box" parent="1">
+          <mxGeometry x="-0.6" y="-15" relative="1" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="200" y="85" />
+              <mxPoint x="200" y="660" />
+              <mxPoint x="348" y="660" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <!-- DATANODE → NAMENODE (heartbeat / block report) -->
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <mxCell id="e-dn-nn" value="&lt;span style='background:#fff;padding:2px 6px;border-radius:3px;font-size:10px;color:#E67700'&gt;Heartbeat · BlockReport&lt;/span&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#E67700;dashed=1;dashPattern=6 3;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.8;entryY=1;entryDx=0;entryDy=0;" edge="1" source="dn2-box" target="nn-box" parent="1">
+          <mxGeometry x="0.2" y="10" relative="1" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="581" y="620" />
+              <mxPoint x="742" y="620" />
+              <mxPoint x="742" y="395" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <!-- Pipeline forwarding between DataNodes -->
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <mxCell id="e-dn1-dn2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#2B8A3E;dashed=1;dashPattern=4 3;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="dn1-box" target="dn2-box" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e-dn2-dn3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#2B8A3E;dashed=1;dashPattern=4 3;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="dn2-box" target="dn3-box" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="pipeline-label" value="&lt;span style='font-size:10px;color:#2B8A3E'&gt;pipeline forward&lt;/span&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="445" y="770" width="100" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <!-- LEGEND -->
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <mxCell id="legend-box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#DEE2E6;strokeWidth=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="50" width="220" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-title" value="&lt;b&gt;Legend&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1010" y="55" width="55" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="leg1" value="" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#4263EB;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1020" y="95" as="sourcePoint" />
+            <mxPoint x="1070" y="95" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg1-t" value="&lt;span style='font-size:10px'&gt;Metadata path (Client↔NN)&lt;/span&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="1075" y="83" width="145" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="leg2" value="" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#2B8A3E;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1020" y="120" as="sourcePoint" />
+            <mxPoint x="1070" y="120" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg2-t" value="&lt;span style='font-size:10px'&gt;Data path (Client↔DN)&lt;/span&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="1075" y="108" width="130" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="leg3" value="" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#E67700;dashed=1;dashPattern=6 3;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1020" y="148" as="sourcePoint" />
+            <mxPoint x="1070" y="148" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg3-t" value="&lt;span style='font-size:10px'&gt;Heartbeat / Report (DN→NN)&lt;/span&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="1075" y="136" width="155" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <!-- TECH STACK annotations -->
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <mxCell id="tech-cpp" value="&lt;span style='font-size:10px;color:#495057;background:#E9ECEF;padding:2px 8px;border-radius:10px'&gt;C++20 · Bazel · brpc · protobuf&lt;/span&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="425" y="950" width="210" height="25" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

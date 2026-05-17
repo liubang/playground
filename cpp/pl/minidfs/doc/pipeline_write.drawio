@@ -1,0 +1,278 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2025-01-01T00:00:00.000Z" agent="draw.io" version="24.0.0" type="device">
+  <diagram id="minidfs-pipeline-v2" name="Pipeline Write Sequence">
+    <mxGraphModel dx="1400" dy="2400" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="2200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- PARTICIPANTS -->
+        <mxCell id="p-client" value="&lt;b&gt;Client&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#4263EB;fontColor=#FFFFFF;strokeColor=#3B5BDB;fontSize=12;arcSize=20;" vertex="1" parent="1">
+          <mxGeometry x="80" y="40" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="p-nn" value="&lt;b&gt;NameNode&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F59F00;fontColor=#FFFFFF;strokeColor=#E67700;fontSize=12;arcSize=20;" vertex="1" parent="1">
+          <mxGeometry x="320" y="40" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="p-dn1" value="&lt;b&gt;DataNode 1&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2B8A3E;fontColor=#FFFFFF;strokeColor=#1B7A2E;fontSize=12;arcSize=20;" vertex="1" parent="1">
+          <mxGeometry x="560" y="40" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="p-dn2" value="&lt;b&gt;DataNode 2&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2B8A3E;fontColor=#FFFFFF;strokeColor=#1B7A2E;fontSize=12;arcSize=20;" vertex="1" parent="1">
+          <mxGeometry x="800" y="40" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="p-dn3" value="&lt;b&gt;DataNode 3&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2B8A3E;fontColor=#FFFFFF;strokeColor=#1B7A2E;fontSize=12;arcSize=20;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="40" width="120" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Lifelines -->
+        <mxCell id="ll-client" value="" style="endArrow=none;dashed=1;html=1;dashPattern=4 4;strokeWidth=1;strokeColor=#ADB5BD;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="140" y="80" as="sourcePoint" />
+            <mxPoint x="140" y="2050" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ll-nn" value="" style="endArrow=none;dashed=1;html=1;dashPattern=4 4;strokeWidth=1;strokeColor=#ADB5BD;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="380" y="80" as="sourcePoint" />
+            <mxPoint x="380" y="2050" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ll-dn1" value="" style="endArrow=none;dashed=1;html=1;dashPattern=4 4;strokeWidth=1;strokeColor=#ADB5BD;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="620" y="80" as="sourcePoint" />
+            <mxPoint x="620" y="2050" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ll-dn2" value="" style="endArrow=none;dashed=1;html=1;dashPattern=4 4;strokeWidth=1;strokeColor=#ADB5BD;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="860" y="80" as="sourcePoint" />
+            <mxPoint x="860" y="2050" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ll-dn3" value="" style="endArrow=none;dashed=1;html=1;dashPattern=4 4;strokeWidth=1;strokeColor=#ADB5BD;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1100" y="80" as="sourcePoint" />
+            <mxPoint x="1100" y="2050" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- PHASE 1: Block Allocation -->
+        <mxCell id="phase1-bg" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F4FD;strokeColor=#74C0FC;strokeWidth=1;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="50" y="110" width="430" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="phase1-title" value="&lt;b style='color:#1971C2;font-size:11px'&gt;1. Block Allocation&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="60" y="112" width="130" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="msg1" value="AllocateBlock(inode_id, block_index)" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#1971C2;fontSize=10;align=center;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="140" y="155" as="sourcePoint" />
+            <mxPoint x="380" y="155" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="msg2" value="block_id, locations=[DN1, DN2, DN3]" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#1971C2;dashed=1;dashPattern=4 3;fontSize=10;align=center;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="380" y="195" as="sourcePoint" />
+            <mxPoint x="140" y="195" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Pipeline note -->
+        <mxCell id="pipeline-note" value="&lt;span style='font-size:11px;color:#495057'&gt;Pipeline: Client -&gt; DN1 -&gt; DN2 -&gt; DN3&lt;/span&gt;" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;size=14;fillColor=#FFF3BF;strokeColor=#E67700;fontSize=11;align=center;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="400" y="255" width="260" height="35" as="geometry" />
+        </mxCell>
+
+        <!-- PHASE 2: First Chunk -->
+        <mxCell id="phase2-bg" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EBFBEE;strokeColor=#69DB7C;strokeWidth=1;arcSize=3;" vertex="1" parent="1">
+          <mxGeometry x="50" y="310" width="1140" height="520" as="geometry" />
+        </mxCell>
+        <mxCell id="phase2-title" value="&lt;b style='color:#2B8A3E;font-size:11px'&gt;2. Chunk 0 (create block file)&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="60" y="312" width="185" height="25" as="geometry" />
+        </mxCell>
+
+        <mxCell id="msg3" value="WriteBlock(chunk_0, pipeline=[DN2,DN3], index=0)" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#2B8A3E;fontSize=10;align=center;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="140" y="365" as="sourcePoint" />
+            <mxPoint x="620" y="365" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="dn1-self1" value="&lt;span style='font-size:9px;color:#495057'&gt;CRC32C verify&lt;br&gt;create_block(tmp/)&lt;br&gt;append_chunk&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#ADB5BD;fontSize=9;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="630" y="380" width="120" height="48" as="geometry" />
+        </mxCell>
+
+        <mxCell id="msg4" value="WriteBlock(chunk_0, pipeline=[DN3], index=0)" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#2B8A3E;fontSize=10;align=center;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="620" y="450" as="sourcePoint" />
+            <mxPoint x="860" y="450" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="dn2-self1" value="&lt;span style='font-size:9px;color:#495057'&gt;CRC32C verify&lt;br&gt;create_block(tmp/)&lt;br&gt;append_chunk&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#ADB5BD;fontSize=9;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="870" y="465" width="120" height="48" as="geometry" />
+        </mxCell>
+
+        <mxCell id="msg5" value="WriteBlock(chunk_0, pipeline=[], index=0)" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#2B8A3E;fontSize=10;align=center;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="860" y="535" as="sourcePoint" />
+            <mxPoint x="1100" y="535" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="dn3-self1" value="&lt;span style='font-size:9px;color:#495057'&gt;CRC32C verify&lt;br&gt;create_block(tmp/)&lt;br&gt;append_chunk&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#ADB5BD;fontSize=9;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1110" y="550" width="120" height="48" as="geometry" />
+        </mxCell>
+
+        <!-- ACK bubbling -->
+        <mxCell id="ack3-1" value="ACK(Success)" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#E03131;dashed=1;dashPattern=4 3;fontSize=10;align=center;verticalAlign=top;fontColor=#E03131;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1100" y="625" as="sourcePoint" />
+            <mxPoint x="860" y="625" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ack3-2" value="ACK(Success)" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#E03131;dashed=1;dashPattern=4 3;fontSize=10;align=center;verticalAlign=top;fontColor=#E03131;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="860" y="675" as="sourcePoint" />
+            <mxPoint x="620" y="675" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ack3-3" value="ACK(Success)" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#E03131;dashed=1;dashPattern=4 3;fontSize=10;align=center;verticalAlign=top;fontColor=#E03131;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="620" y="725" as="sourcePoint" />
+            <mxPoint x="140" y="725" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="ack-note" value="&lt;span style='font-size:9px;color:#E03131'&gt;ACK bubbles tail-to-head&lt;/span&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="1110" y="640" width="140" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- PHASE 3: Middle Chunks -->
+        <mxCell id="phase3-bg" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8F9FA;strokeColor=#CED4DA;strokeWidth=1;arcSize=3;" vertex="1" parent="1">
+          <mxGeometry x="50" y="860" width="1140" height="230" as="geometry" />
+        </mxCell>
+        <mxCell id="phase3-title" value="&lt;b style='color:#495057;font-size:11px'&gt;3. Chunk 1 ... Chunk N-1 (repeat)&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="60" y="862" width="210" height="25" as="geometry" />
+        </mxCell>
+
+        <mxCell id="msg-mid1" value="WriteBlock(chunk_i, pipeline=[DN2,DN3])" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#495057;fontSize=10;align=center;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="140" y="920" as="sourcePoint" />
+            <mxPoint x="620" y="920" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="msg-mid2" value="forward: DN1 -&gt; DN2 -&gt; DN3" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#495057;dashed=1;fontSize=10;align=center;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="620" y="960" as="sourcePoint" />
+            <mxPoint x="1100" y="960" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="msg-mid-ack" value="ACK bubbles back (DN3 -&gt; DN2 -&gt; DN1 -&gt; Client)" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#E03131;dashed=1;dashPattern=4 3;fontSize=10;align=center;verticalAlign=top;fontColor=#E03131;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1100" y="1010" as="sourcePoint" />
+            <mxPoint x="140" y="1010" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="repeat-note" value="&lt;span style='font-size:10px;color:#868E96'&gt;Each chunk (default 1MB) = one complete WriteBlock request-response cycle&lt;/span&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="360" y="1040" width="420" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- PHASE 4: Last Chunk -->
+        <mxCell id="phase4-bg" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4E6;strokeColor=#FFA94D;strokeWidth=1;arcSize=3;" vertex="1" parent="1">
+          <mxGeometry x="50" y="1120" width="1140" height="550" as="geometry" />
+        </mxCell>
+        <mxCell id="phase4-title" value="&lt;b style='color:#D9480F;font-size:11px'&gt;4. Last Chunk (is_last_chunk=true, triggers finalize)&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="60" y="1122" width="320" height="25" as="geometry" />
+        </mxCell>
+
+        <mxCell id="msg-last1" value="WriteBlock(last_chunk, is_last=true, pipeline=[DN2,DN3])" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#D9480F;fontSize=10;align=center;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="140" y="1180" as="sourcePoint" />
+            <mxPoint x="620" y="1180" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="dn1-fin" value="&lt;span style='font-size:9px;color:#D9480F'&gt;append_chunk&lt;br&gt;&lt;b&gt;finalize_block&lt;/b&gt;&lt;br&gt;tmp/ -&gt; current/&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4E6;strokeColor=#D9480F;fontSize=9;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="630" y="1195" width="120" height="52" as="geometry" />
+        </mxCell>
+
+        <mxCell id="msg-last2" value="forward(last_chunk, is_last=true, pipeline=[DN3])" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#D9480F;fontSize=10;align=center;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="620" y="1275" as="sourcePoint" />
+            <mxPoint x="860" y="1275" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="dn2-fin" value="&lt;span style='font-size:9px;color:#D9480F'&gt;append_chunk&lt;br&gt;&lt;b&gt;finalize_block&lt;/b&gt;&lt;br&gt;tmp/ -&gt; current/&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4E6;strokeColor=#D9480F;fontSize=9;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="870" y="1290" width="120" height="52" as="geometry" />
+        </mxCell>
+
+        <mxCell id="msg-last3" value="forward(last_chunk, is_last=true, pipeline=[])" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#D9480F;fontSize=10;align=center;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="860" y="1370" as="sourcePoint" />
+            <mxPoint x="1100" y="1370" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="dn3-fin" value="&lt;span style='font-size:9px;color:#D9480F'&gt;append_chunk&lt;br&gt;&lt;b&gt;finalize_block&lt;/b&gt;&lt;br&gt;tmp/ -&gt; current/&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4E6;strokeColor=#D9480F;fontSize=9;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1110" y="1385" width="120" height="52" as="geometry" />
+        </mxCell>
+
+        <!-- ACK last chunk -->
+        <mxCell id="ack-last1" value="ACK(Success)" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#E03131;dashed=1;dashPattern=4 3;fontSize=10;align=center;verticalAlign=top;fontColor=#E03131;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1100" y="1465" as="sourcePoint" />
+            <mxPoint x="860" y="1465" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ack-last2" value="ACK(Success)" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#E03131;dashed=1;dashPattern=4 3;fontSize=10;align=center;verticalAlign=top;fontColor=#E03131;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="860" y="1515" as="sourcePoint" />
+            <mxPoint x="620" y="1515" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ack-last3" value="ACK(Success)" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#E03131;dashed=1;dashPattern=4 3;fontSize=10;align=center;verticalAlign=top;fontColor=#E03131;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="620" y="1565" as="sourcePoint" />
+            <mxPoint x="140" y="1565" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- PHASE 5: Commit -->
+        <mxCell id="phase5-bg" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F4FD;strokeColor=#74C0FC;strokeWidth=1;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="50" y="1710" width="430" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="phase5-title" value="&lt;b style='color:#1971C2;font-size:11px'&gt;5. Commit Block&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="60" y="1712" width="110" height="25" as="geometry" />
+        </mxCell>
+
+        <mxCell id="msg-commit" value="CommitBlock(block_id, length, generation_stamp)" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#1971C2;fontSize=10;align=center;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="140" y="1770" as="sourcePoint" />
+            <mxPoint x="380" y="1770" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="msg-commit-ok" value="OK (state -&gt; COMMITTED)" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#1971C2;dashed=1;dashPattern=4 3;fontSize=10;align=center;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="380" y="1810" as="sourcePoint" />
+            <mxPoint x="140" y="1810" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Design Points box -->
+        <mxCell id="design-box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8F9FA;strokeColor=#DEE2E6;strokeWidth=1;dashed=1;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="50" y="1880" width="520" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="design-title" value="&lt;b style='font-size:11px'&gt;Key Design Points&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=top;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="1885" width="120" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="design-text" value="&lt;span style='font-size:10px;color:#495057'&gt;1. Pipeline shortens at each hop: [DN2,DN3] -&gt; [DN3] -&gt; []&lt;br&gt;2. ACK bubbles from tail to head, Client gets ACK only after all replicas written&lt;br&gt;3. Each chunk = one brpc request-response (no streaming)&lt;br&gt;4. Client egress bandwidth = 1x data; replication bandwidth distributed across DataNodes&lt;/span&gt;" style="text;html=1;align=left;verticalAlign=top;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="60" y="1910" width="500" height="70" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
