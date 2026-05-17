@@ -21,6 +21,8 @@ jobs:
   coverage:
     name: go coverage
     runs-on: ubuntu-24.04
+    env:
+      TZ: Asia/Shanghai
 
     steps:
       - uses: actions/checkout@v5
@@ -43,11 +45,12 @@ jobs:
             --combined_report=lcov \
             --instrumentation_filter="//go[/:]" \
             //go/...
-          lcov --remove ./bazel-out/_coverage/_coverage_report.dat \
+          lcov --rc branch_coverage=1 \
+            --remove ./bazel-out/_coverage/_coverage_report.dat \
             'external/*' \
             --output-file /tmp/coverage_filtered.dat \
             --ignore-errors unused,negative
-          genhtml --ignore-errors negative --output coverage-go /tmp/coverage_filtered.dat
+          genhtml --branch-coverage --ignore-errors negative --output coverage-go /tmp/coverage_filtered.dat
 
       - name: generate coverage badge
         uses: ./.github/actions/coverage-badge
