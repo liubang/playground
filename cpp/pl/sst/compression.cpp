@@ -23,7 +23,11 @@
 namespace pl {
 
 Result<Void> SnappyCompressionAdapter::compress(std::string_view input, std::string* output) {
-    // TODO(liubang): implement
+    size_t max_len = snappy::MaxCompressedLength(input.size());
+    output->resize(max_len);
+    size_t output_len = 0;
+    snappy::RawCompress(input.data(), input.size(), output->data(), &output_len);
+    output->resize(output_len);
     RETURN_VOID;
 }
 
@@ -39,6 +43,41 @@ Result<Void> SnappyCompressionAdapter::uncompress(std::string_view input, std::s
     output->assign(ubuf.release(), ulen);
 
     RETURN_VOID;
+}
+
+Result<Void> ZstdCompressionAdapter::compress(std::string_view input, std::string* output) {
+    size_t max_len = ZSTD_compressBound(input.size());
+    output->resize(max_len);
+    size_t compressed_size =
+        ZSTD_compress(output->data(), max_len, input.data(), input.size(), 1 /* level */);
+    if (ZSTD_isError(compressed_size) != 0u) {
+        return makeError(StatusCode::kDataCorruption, "zstd compress error");
+    }
+    output->resize(compressed_size);
+    RETURN_VOID;
+}
+
+Result<Void> ZstdCompressionAdapter::uncompress(std::string_view input, std::string* output) {
+    size_t ulen = ZSTD_getFrameContentSize(input.data(), input.size());
+    if (ulen == ZSTD_CONTENTSIZE_UNKNOWN || ulen == ZSTD_CONTENTSIZE_ERROR) {
+        return makeError(StatusCode::kDataCorruption, "zstd: cannot determine uncompressed size");
+    }
+    output->resize(ulen);
+    size_t decompressed_size = ZSTD_decompress(output->data(), ulen, input.data(), input.size());
+    if (ZSTD_isError(decompressed_size) != 0u) {
+        return makeError(StatusCode::kDataCorruption, "zstd decompress error");
+    }
+    output->resize(decompressed_size);
+    RETURN_VOID;
+}
+
+Result<Void> IsalCompressionAdapter::compress(std::string_view /*input*/, std::string* /*output*/) {
+    return makeError(StatusCode::kNotImplemented, "ISAL compression not implemented");
+}
+
+Result<Void> IsalCompressionAdapter::uncompress(std::string_view /*input*/,
+                                                std::string* /*output*/) {
+    return makeError(StatusCode::kNotImplemented, "ISAL decompression not implemented");
 }
 
 } // namespace pl
