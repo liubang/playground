@@ -118,6 +118,13 @@ bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_wide.db 
 bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_topn.db topn
 ```
 
+2026-05-17 复验的本机真实 SQLite 结果：
+
+| scenario | rows | drivers | output rows | pages | seconds | input rows/s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `scan` | 1,000,000 | 8 | 1,000,000 | 984 | 1.1252 | 888,715 |
+| `filter_project` | 1,000,000 | 8 | 500,000 | 496 | 0.2749 | 3,637,710 |
+
 MySQL connector 也有独立 scan benchmark target，用真实 MySQL 表验证 range split、
 streaming page sink 和两阶段 Top-N。它默认读取 `FLUX_MYSQL_TEST_DSN`，表名默认 `cpu`，
 scenario 默认 `filter_project`，也可以显式跑 `scan`、`wide_filter`、`topn`。如果参数里的
