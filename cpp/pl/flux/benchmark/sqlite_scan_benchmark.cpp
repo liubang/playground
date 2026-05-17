@@ -20,6 +20,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
+#include <exception>
 #include <iostream>
 #include <sqlite3.h>
 #include <string>
@@ -138,9 +139,7 @@ PipelineTotals pipeline_totals(const pl::flux::execution::ExecutionProfile& prof
     return totals;
 }
 
-} // namespace
-
-int main(int argc, char** argv) {
+int run_benchmark(int argc, char** argv) {
     const int64_t rows = argc > 1 ? std::stoll(argv[1]) : 500000;
     const std::string db_path =
         argc > 2 ? argv[2] : "/tmp/flux_sqlite_scan_" + std::to_string(getpid()) + ".db";
@@ -172,6 +171,18 @@ int main(int argc, char** argv) {
             pl::flux::plan::MakeMaterializeBarrier(scan, "benchmark memory fallback", "benchmark");
         auto grouped = pl::flux::plan::MakeGroup(materialized, {"host"});
         query = pl::flux::plan::MakeAggregate(grouped, pl::flux::plan::AggregateFunction::Count,
+                                              "usage");
+    } else if (scenario == "group_sum") {
+        auto materialized =
+            pl::flux::plan::MakeMaterializeBarrier(scan, "benchmark memory fallback", "benchmark");
+        auto grouped = pl::flux::plan::MakeGroup(materialized, {"host"});
+        query =
+            pl::flux::plan::MakeAggregate(grouped, pl::flux::plan::AggregateFunction::Sum, "usage");
+    } else if (scenario == "group_mean") {
+        auto materialized =
+            pl::flux::plan::MakeMaterializeBarrier(scan, "benchmark memory fallback", "benchmark");
+        auto grouped = pl::flux::plan::MakeGroup(materialized, {"host"});
+        query = pl::flux::plan::MakeAggregate(grouped, pl::flux::plan::AggregateFunction::Mean,
                                               "usage");
     } else if (scenario == "distinct_host") {
         auto materialized =
@@ -233,4 +244,15 @@ int main(int argc, char** argv) {
               << "}\n";
     std::remove(db_path.c_str());
     return 0;
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+    try {
+        return run_benchmark(argc, argv);
+    } catch (const std::exception& error) {
+        std::cerr << "sqlite benchmark failed: " << error.what() << "\n";
+        return 1;
+    }
 }
