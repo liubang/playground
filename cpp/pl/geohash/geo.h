@@ -16,14 +16,13 @@
 // Created: 2024/04/21 19:28
 
 #include "geohash.h"
-
 #include <cmath>
 #include <set>
 
 namespace pl {
 
-class GeoHashBitsComparator {
-    bool comparator(const GeoHash::HashBits& a, const GeoHash::HashBits& b) {
+struct GeoHashBitsComparator {
+    bool operator()(const GeoHash::HashBits& a, const GeoHash::HashBits& b) const {
         if (a.step < b.step) {
             return true;
         }

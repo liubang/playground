@@ -58,8 +58,8 @@ public:
 
         [[nodiscard]] constexpr Point center() const {
             return {
-                (sw.lng + ne.lng) / 2,
-                (sw.lat + ne.lat) / 2,
+                .lng = (sw.lng + ne.lng) / 2,
+                .lat = (sw.lat + ne.lat) / 2,
             };
         };
 
