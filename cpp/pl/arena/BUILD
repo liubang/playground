@@ -25,12 +25,8 @@ load(
 
 cc_library(
     name = "arena",
-    srcs = [
-        "arena_old.cpp",
-    ],
     hdrs = [
         "arena.h",
-        "arena_old.h",
     ],
     copts = [
     ] + COPTS,
@@ -45,20 +41,6 @@ cc_test(
     name = "arena_test",
     srcs = [
         "arena_test.cpp",
-    ],
-    copts = [
-    ] + TEST_COPTS,
-    linkopts = LINKOPTS,
-    deps = [
-        "//cpp/pl/arena",
-        "@googletest//:gtest_main",
-    ],
-)
-
-cc_test(
-    name = "arena_old_test",
-    srcs = [
-        "arena_old_test.cpp",
     ],
     copts = [
     ] + TEST_COPTS,
