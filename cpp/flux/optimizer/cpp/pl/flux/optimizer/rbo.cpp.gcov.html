@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-17 20:10:09</td>
+            <td class="headerValue">2026-05-17 21:04:55</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -676,8 +676,8 @@
 <span id="L589"><span class="lineNum">     589</span>                 :             :     }</span>
 <span id="L590"><span class="lineNum">     590</span>         [<span class="tlaGBC" title="Branch 0 was taken 157 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         157 :     std::vector&lt;std::string&gt; columns;</span></span>
 <span id="L591"><span class="lineNum">     591</span>         [<span class="tlaGBC" title="Branch 0 was taken 157 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         157 :     columns.reserve(schema_or-&gt;columns.size());</span></span>
-<span id="L592"><span class="lineNum">     592</span>         [<span class="tlaGBC" title="Branch 0 was taken 621 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 157 times"> + </span>]:<span class="tlaGNC">         778 :     for (const auto&amp; column : schema_or-&gt;columns) {</span></span>
-<span id="L593"><span class="lineNum">     593</span>         [<span class="tlaGBC" title="Branch 0 was taken 621 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         621 :         columns.push_back(column.name);</span></span>
+<span id="L592"><span class="lineNum">     592</span>         [<span class="tlaGBC" title="Branch 0 was taken 617 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 157 times"> + </span>]:<span class="tlaGNC">         774 :     for (const auto&amp; column : schema_or-&gt;columns) {</span></span>
+<span id="L593"><span class="lineNum">     593</span>         [<span class="tlaGBC" title="Branch 0 was taken 617 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         617 :         columns.push_back(column.name);</span></span>
 <span id="L594"><span class="lineNum">     594</span>                 :             :     }</span>
 <span id="L595"><span class="lineNum">     595</span>                 :             :     return columns;</span>
 <span id="L596"><span class="lineNum">     596</span>                 :<span class="tlaGNC">         318 : }</span></span>
@@ -726,8 +726,8 @@
 <span id="L638"><span class="lineNum">     638</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     return absl::InvalidArgumentError(&quot;plan node has no stable visible columns&quot;);</span></span>
 <span id="L639"><span class="lineNum">     639</span>                 :             : }</span>
 <span id="L640"><span class="lineNum">     640</span>                 :             : </span>
-<span id="L641"><span class="lineNum">     641</span>         [<span class="tlaGBC" title="Branch 0 was taken 61 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 246 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         307 : bool CanExecutePushdownPlan(const PushdownPlan&amp; plan) {</span></span>
-<span id="L642"><span class="lineNum">     642</span>   [<span class="tlaGBC" title="Branch 0 was taken 61 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 240 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 6 times"> + </span>]:<span class="tlaGNC">         307 :     return plan.request.group_by.empty() || plan.request.aggregate.has_value();</span></span>
+<span id="L641"><span class="lineNum">     641</span>         [<span class="tlaGBC" title="Branch 0 was taken 61 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 247 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         308 : bool CanExecutePushdownPlan(const PushdownPlan&amp; plan) {</span></span>
+<span id="L642"><span class="lineNum">     642</span>   [<span class="tlaGBC" title="Branch 0 was taken 61 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 241 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 6 times"> + </span>]:<span class="tlaGNC">         308 :     return plan.request.group_by.empty() || plan.request.aggregate.has_value();</span></span>
 <span id="L643"><span class="lineNum">     643</span>                 :             : }</span>
 <span id="L644"><span class="lineNum">     644</span>                 :             : </span>
 <span id="L645"><span class="lineNum">     645</span>                 :<span class="tlaGNC">          11 : std::string FormatPushdownRequest(const connector::ScanRequest&amp; request) {</span></span>

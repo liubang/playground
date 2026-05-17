@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-17 20:10:09</td>
+            <td class="headerValue">2026-05-17 21:04:55</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -94,10 +94,10 @@
 <span id="L23"><span class="lineNum">      23</span>                 :             : </span>
 <span id="L24"><span class="lineNum">      24</span>                 :             : namespace pl::flux::execution {</span>
 <span id="L25"><span class="lineNum">      25</span>                 :             : </span>
-<span id="L26"><span class="lineNum">      26</span>   [<span class="tlaGBC" title="Branch 0 was taken 1283335 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 11 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 2463759 times"> + </span>]:<span class="tlaGNC tlaBgGNC">     3747105 : inline size_t EstimateValueBytes(const Value&amp; value) {</span></span>
-<span id="L27"><span class="lineNum">      27</span>   [<span class="tlaGBC" title="Branch 0 was taken 1283335 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 11 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 2463759 times"> + </span>]:<span class="tlaGNC">     3747105 :     switch (value.type()) {</span></span>
-<span id="L28"><span class="lineNum">      28</span>                 :<span class="tlaGNC">     1283335 :         case Value::Type::String:</span></span>
-<span id="L29"><span class="lineNum">      29</span>                 :<span class="tlaGNC">     1283335 :             return value.as_string().size();</span></span>
+<span id="L26"><span class="lineNum">      26</span>   [<span class="tlaGBC" title="Branch 0 was taken 1291245 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 11 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 2467032 times"> + </span>]:<span class="tlaGNC tlaBgGNC">     3758288 : inline size_t EstimateValueBytes(const Value&amp; value) {</span></span>
+<span id="L27"><span class="lineNum">      27</span>   [<span class="tlaGBC" title="Branch 0 was taken 1291245 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 11 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 2467032 times"> + </span>]:<span class="tlaGNC">     3758288 :     switch (value.type()) {</span></span>
+<span id="L28"><span class="lineNum">      28</span>                 :<span class="tlaGNC">     1291245 :         case Value::Type::String:</span></span>
+<span id="L29"><span class="lineNum">      29</span>                 :<span class="tlaGNC">     1291245 :             return value.as_string().size();</span></span>
 <span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         case Value::Type::Time:</span></span>
 <span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaUNC">           0 :             return value.as_time().literal.size();</span></span>
 <span id="L32"><span class="lineNum">      32</span>                 :<span class="tlaGNC tlaBgGNC">          11 :         case Value::Type::Array:</span></span>
@@ -110,20 +110,20 @@
 <span id="L39"><span class="lineNum">      39</span>                 :             :     }</span>
 <span id="L40"><span class="lineNum">      40</span>                 :             : }</span>
 <span id="L41"><span class="lineNum">      41</span>                 :             : </span>
-<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">        1613 : inline size_t EstimatePageBytes(const Page&amp; page) {</span></span>
-<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">        1613 :     size_t bytes = sizeof(Page);</span></span>
-<span id="L44"><span class="lineNum">      44</span>         [<span class="tlaGBC" title="Branch 0 was taken 1619 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1613 times"> + </span>]:<span class="tlaGNC">        3232 :     for (const auto&amp; chunk : page.chunks) {</span></span>
-<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">        1619 :         bytes += sizeof(PageChunk);</span></span>
-<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">        1619 :         bytes += chunk.columns.size() * sizeof(ColumnVector);</span></span>
-<span id="L47"><span class="lineNum">      47</span>         [<span class="tlaGBC" title="Branch 0 was taken 4729 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1619 times"> + </span>]:<span class="tlaGNC">        6348 :         for (const auto&amp; column : chunk.columns) {</span></span>
-<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">        4729 :             bytes += column.name.size();</span></span>
-<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">        4729 :             bytes += column.values.capacity() * sizeof(Value);</span></span>
-<span id="L50"><span class="lineNum">      50</span>         [<span class="tlaGBC" title="Branch 0 was taken 3700956 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 4729 times"> + </span>]:<span class="tlaGNC">     3705685 :             for (const auto&amp; value : column.values) {</span></span>
-<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">     3700956 :                 bytes += EstimateValueBytes(value);</span></span>
+<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">        3290 : inline size_t EstimatePageBytes(const Page&amp; page) {</span></span>
+<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">        3290 :     size_t bytes = sizeof(Page);</span></span>
+<span id="L44"><span class="lineNum">      44</span>         [<span class="tlaGBC" title="Branch 0 was taken 3296 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3292 times"> + </span>]:<span class="tlaGNC">        6588 :     for (const auto&amp; chunk : page.chunks) {</span></span>
+<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">        3296 :         bytes += sizeof(PageChunk);</span></span>
+<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">        3296 :         bytes += chunk.columns.size() * sizeof(ColumnVector);</span></span>
+<span id="L47"><span class="lineNum">      47</span>         [<span class="tlaGBC" title="Branch 0 was taken 9745 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3298 times"> + </span>]:<span class="tlaGNC">       13043 :         for (const auto&amp; column : chunk.columns) {</span></span>
+<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">        9745 :             bytes += column.name.size();</span></span>
+<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">        9745 :             bytes += column.values.capacity() * sizeof(Value);</span></span>
+<span id="L50"><span class="lineNum">      50</span>         [<span class="tlaGBC" title="Branch 0 was taken 3718415 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 9747 times"> + </span>]:<span class="tlaGNC">     3728162 :             for (const auto&amp; value : column.values) {</span></span>
+<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">     3718415 :                 bytes += EstimateValueBytes(value);</span></span>
 <span id="L52"><span class="lineNum">      52</span>                 :             :             }</span>
 <span id="L53"><span class="lineNum">      53</span>                 :             :         }</span>
 <span id="L54"><span class="lineNum">      54</span>                 :             :     }</span>
-<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">        1613 :     return std::max&lt;size_t&gt;(bytes, 1);</span></span>
+<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">        3292 :     return std::max&lt;size_t&gt;(bytes, 1);</span></span>
 <span id="L56"><span class="lineNum">      56</span>                 :             : }</span>
 <span id="L57"><span class="lineNum">      57</span>                 :             : </span>
 <span id="L58"><span class="lineNum">      58</span>                 :             : } // namespace pl::flux::execution</span>
