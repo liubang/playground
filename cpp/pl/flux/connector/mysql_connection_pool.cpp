@@ -25,7 +25,6 @@
 #include <boost/mysql/metadata_mode.hpp>
 #include <boost/mysql/results.hpp>
 #include <boost/mysql/ssl_mode.hpp>
-#include <boost/mysql/statement.hpp>
 #include <exception>
 #include <utility>
 
@@ -42,19 +41,6 @@ std::string mysql_error_message(const mysql::error_with_diagnostics& err) {
     return absl::StrCat(err.what(), ": ", std::string(server_message));
 }
 
-void close_statement_cache(MySQLConnectionPool::Entry* entry) {
-    for (const auto& [_, stmt] : entry->statement_cache) {
-        try {
-            if (stmt.valid()) {
-                entry->conn.close_statement(stmt);
-            }
-        } catch (...) {
-            entry->healthy = false;
-        }
-    }
-    entry->statement_cache.clear();
-}
-
 absl::Status connect_entry(MySQLConnectionPool::Entry* entry, const std::string& dsn) {
     auto config_or = ParseMySQLDsn(dsn);
     if (!config_or.ok()) {
@@ -69,12 +55,12 @@ absl::Status connect_entry(MySQLConnectionPool::Entry* entry, const std::string&
     params.ssl = config_or->ssl ? mysql::ssl_mode::enable : mysql::ssl_mode::disable;
 
     try {
-        mysql::any_connection conn(entry->ctx);
-        conn.connect(params);
-        conn.set_meta_mode(mysql::metadata_mode::full);
+        entry->conn.emplace(entry->ctx);
+        entry->conn->connect(params);
+        entry->conn->set_meta_mode(mysql::metadata_mode::full);
         mysql::results result;
-        conn.execute("SET time_zone = '+00:00'", result);
-        entry->conn = std::move(conn);
+        entry->conn->execute("SET time_zone = '+00:00'", result);
+        entry->ctx.restart();
         entry->healthy = true;
         return absl::OkStatus();
     } catch (const mysql::error_with_diagnostics& err) {
@@ -120,42 +106,15 @@ MySQLConnectionPool::Lease& MySQLConnectionPool::Lease::operator=(Lease&& other)
 MySQLConnectionPool::Lease::~Lease() { Release(); }
 
 mysql::any_connection* MySQLConnectionPool::Lease::connection() const {
-    return entry_ == nullptr ? nullptr : &entry_->conn;
-}
-
-absl::StatusOr<mysql::statement> MySQLConnectionPool::Lease::PrepareStatement(
-    const std::string& sql, size_t max_cache_entries) {
-    if (entry_ == nullptr) {
-        return absl::InvalidArgumentError("mysql connection lease is empty");
+    if (entry_ == nullptr || !entry_->conn.has_value()) {
+        return nullptr;
     }
-    if (max_cache_entries > 0) {
-        auto it = entry_->statement_cache.find(sql);
-        if (it != entry_->statement_cache.end()) {
-            return it->second;
-        }
-    }
-    try {
-        mysql::statement stmt = entry_->conn.prepare_statement(sql);
-        if (max_cache_entries > 0) {
-            if (entry_->statement_cache.size() >= max_cache_entries) {
-                close_statement_cache(entry_.get());
-            }
-            entry_->statement_cache.emplace(sql, stmt);
-        }
-        return stmt;
-    } catch (const mysql::error_with_diagnostics& err) {
-        return absl::InvalidArgumentError(
-            absl::StrCat("mysql prepare statement failed: ", mysql_error_message(err)));
-    } catch (const std::exception& err) {
-        return absl::InvalidArgumentError(
-            absl::StrCat("mysql prepare statement failed: ", err.what()));
-    }
+    return &*entry_->conn;
 }
 
 void MySQLConnectionPool::Lease::MarkBroken() {
     if (entry_ != nullptr) {
         entry_->healthy = false;
-        entry_->statement_cache.clear();
     }
 }
 

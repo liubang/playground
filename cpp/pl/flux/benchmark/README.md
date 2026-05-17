@@ -156,14 +156,13 @@ MySQL runtime 可调参数：
 - `--mysql-target-splits` / `FLUX_MYSQL_TARGET_SPLITS`：可拆分 scan 的目标 split 数。
 - `--mysql-rows-per-page` / `FLUX_MYSQL_ROWS_PER_PAGE`：page source 每页目标行数。
 - `--mysql-max-idle-connections` / `FLUX_MYSQL_MAX_IDLE_CONNECTIONS`：runtime connection pool
-  保留的最大空闲连接数；设为 `0` 可回到每次新建连接。
+  保留的最大空闲连接数。当前 MySQL streaming page source 暂不复用 pooled connection，
+  这个参数保留给后续安全接回连接复用时使用。
 - `--mysql-split-cache-max-entries` / `FLUX_MYSQL_SPLIT_CACHE_MAX_ENTRIES`：split extent 缓存容量。
 - `--mysql-split-cache-ttl-ms` / `FLUX_MYSQL_SPLIT_CACHE_TTL_MS`：split extent 缓存 TTL；设为 `0`
   表示不按时间过期。
 - `--mysql-disable-prepared-statements` / `FLUX_MYSQL_USE_PREPARED_STATEMENTS=0`：关闭
   MySQL page source 的 server-side prepared statement 路径，用于和 literal SQL 回退路径对比。
-- `--mysql-prepared-cache-max-entries` / `FLUX_MYSQL_PREPARED_CACHE_MAX_ENTRIES`：每个 pooled
-  MySQL connection 保留的 prepared statement 数量；设为 `0` 表示每次 prepare 后不缓存。
 
 MySQL benchmark fixture 可以由 runner 自动重建。它会用和 SQLite benchmark 相同的数据形态创建
 表，并把 `seq` 设为 primary key，便于 MySQL connector 做 range split。这个步骤会先 drop 目标表：
@@ -182,8 +181,8 @@ FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
     --repeat 3
 ```
 
-prepared statement / pool / page size 矩阵建议保持同一张 `flux_bench_cpu` 表反复跑，避免把建表成本
-混进 scan 数字：
+prepared statement / page size 矩阵建议保持同一张 `flux_bench_cpu` 表反复跑，避免把建表成本混进
+scan 数字：
 
 ```bash
 FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
@@ -193,7 +192,6 @@ FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
     --mysql-target-splits 8 \
     --mysql-rows-per-page 2048 \
     --mysql-max-idle-connections 8 \
-    --mysql-prepared-cache-max-entries 128 \
     --scenario filter_project \
     --repeat 5
 
