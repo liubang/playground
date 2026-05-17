@@ -293,22 +293,24 @@ connector split、page source 或 scheduler 时，都能用相同 DSN 和 scenar
   同结构 MySQL 压测表，不再依赖手写 SQL fixture。
 
 这轮的目标不是把 MySQL 和本地 SQLite 跑成同一个数字，而是让我们能定位慢在哪里。下一轮如果继续
-优化 scan，优先看连接复用、prepared statement 缓存、page size/read batch 参数化，以及更大规模
-数据下 split count 与远程服务吞吐之间的平衡。
+优化 scan，优先看 direct streaming read batch、page size、协议 decode，以及更大规模数据下
+split count 与远程服务吞吐之间的平衡。
 
 ## 2026-05-17：MySQL connection pool 与 scan 参数化
 
 这一轮继续补 MySQL scan 主干的固定成本：
 
-- 新增 `MySQLConnectionPool` 独立模块；runtime 创建 pool 后，metadata、split manager 和 page source
-  共用同一组 lease。page source 在 result stream 完成后归还连接，读失败时标记连接不可复用。
-- MySQL runtime 参数化：`target_split_count`、`rows_per_page`、`max_idle_connections`、
+- 新增 MySQL runtime 级连接复用模块。后续验证发现自研 pool 和 Boost.MySQL 官方 pool 在
+  pooled dynamic streaming read 下都会触发相同 ASAN container-overflow，因此自研 pool 已撤掉；
+  当前只保留 Boost.MySQL 官方 `connection_pool` 的薄适配器，并限定在 metadata/statistics/split
+  discovery 这类非 streaming 路径。
+- MySQL runtime 参数化：`target_split_count`、`rows_per_page`、`max_pool_size`、
   `split_cache_max_entries`、`split_cache_ttl_ms` 都可以通过 benchmark runner 参数或环境变量控制。
 - split extent cache 从无限 map 改为带 TTL/容量策略；TTL 为 `0` 时只按容量失效。
 - benchmark runner 暴露 MySQL 调优参数，方便在 100k/1M/5M/10M 数据集上固定口径复验。
-- prepared statement 暂不进入实现：当前 SQL builder 输出的是带 literal 的 dialect SQL，每个 split
-  range 都会改变 SQL text。真正要做 statement cache，应先把 SQL builder 升级为 SQL text + bind
-  vector，再在 connection pool 的单连接维度缓存 prepared statement。
+- prepared statement cache 暂不进入实现。当前 page source 已支持 server-side prepared scan，但
+  streaming 使用独立直连；若后续重新评估 pooled streaming，必须先解决 Boost.MySQL dynamic
+  `read_some_rows` 的 ASAN 问题。
 
 这轮之后，MySQL scan 的下一层瓶颈应继续通过 profile 看：如果 `connect_ms` 降下来而 `read_ms` /
 `execute_ms` 仍高，优先看 server/network/read batch；如果 `decode_ms` 抬头，再继续做 Value/string
@@ -329,10 +331,11 @@ allocation 优化。
 - 通用 SQL builder 增加 `ParameterizedSql` 输出，where/time range/predicate/limit/offset 都生成
   placeholder + bind vector；literal SQL builder 仍保留给已有 SQLite 参数化实现和兼容入口。
 - MySQL page source 默认走 server-side prepared statement，但每个 streaming page source 独立连接；
-  pooled streaming connection 在 ASAN 下触发 Boost.MySQL dynamic row buffer 的 container-overflow，
-  已撤掉测试级 ASAN override，并暂不把 pool 接回 streaming 主干。
-- MySQL metadata / split discovery 继续依靠进程内 schema/statistics/extent cache 和短连接，避免控制面
-  短查询污染 streaming page source 的连接状态。
+  自研 pool 已移除，Boost.MySQL 官方 `connection_pool` 只服务 metadata/statistics/split discovery。
+  官方 pooled streaming connection 在 ASAN 下同样触发 Boost.MySQL dynamic row buffer 的
+  container-overflow，已撤掉测试级 ASAN override，也不提供 pooled streaming 构造入口。
+- MySQL metadata / split discovery 依靠进程内 schema/statistics/extent cache 和 Boost.MySQL 官方
+  pool，避免控制面短查询污染 streaming page source 的连接状态。
 - MySQL split discovery 不再为每次规划先查 `INFORMATION_SCHEMA.KEY_COLUMN_USAGE`；它优先使用
   schema 里的 `id` / `seq` / integer columns，再查 split extent。对 benchmark 表这类
   `seq primary key` 形态，少掉一次远程 metadata query。
