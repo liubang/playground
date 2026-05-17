@@ -100,6 +100,8 @@ jobs:
   coverage-linux-gcc:
     name: coverage-linux-gcc
     runs-on: ubuntu-24.04
+    env:
+      TZ: Asia/Shanghai
     services:
       mysql:
         image: mysql:8.4
@@ -147,17 +149,18 @@ jobs:
             -- //cpp/... -//cpp/pl/recall/embedding_server/...
       - name: generate html report
         run: |
-          lcov --remove ./bazel-out/_coverage/_coverage_report.dat \
+          lcov --rc branch_coverage=1 \
+            --remove ./bazel-out/_coverage/_coverage_report.dat \
             'external/*' \
             --output-file /tmp/coverage_filtered.dat \
             --ignore-errors unused,negative
-          genhtml --ignore-errors negative --output coverage-cpp /tmp/coverage_filtered.dat
+          genhtml --branch-coverage --ignore-errors negative --output coverage-cpp /tmp/coverage_filtered.dat
       - name: generate coverage badge
         uses: ./.github/actions/coverage-badge
         with:
           lcov-file: /tmp/coverage_filtered.dat
           output-dir: coverage-cpp
-          label: coverage-cpp
+          label: coverage-c++
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v4
         if: ${{ github.ref == 'refs/heads/main' }}
