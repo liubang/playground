@@ -167,6 +167,7 @@
 - 执行流或更高层行为放在 `runtime/tests/runtime_exec_unit_test.cpp`
 - CLI/example 约束放在 `cli/tests/flux_cli_unit_test.cpp`
 - 解析器行为放在 `syntax/tests/parser_unit_test.cpp`
+- LSP/formatter 相关放在 `contrib/lsp/tests/` 子目录
 - connector/optimizer 模块单测放在各自的 `tests/` 子目录，避免模块根目录继续堆测试文件。
 
 ## 10. 文档规则

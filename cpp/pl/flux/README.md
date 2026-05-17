@@ -390,6 +390,91 @@ Universe builtin 默认注入，无需 `import`。
 
 这里没有严格照搬官方 `types` 包的最小 API，而是按当前 runtime 值模型扩展了一批直接可用的 `isXxx` helper，方便样例和后续包实现做类型分派。
 
+## Language Server (LSP)
+
+`contrib/lsp/` 提供了一个基于 stdio JSON-RPC 2.0 的 Flux 语言服务器 `flux-ls`，可以集成到 neovim、VS Code 等编辑器中。
+
+构建：
+
+```bash
+bazel build //cpp/pl/flux/contrib/lsp:flux-ls
+```
+
+### 支持的 LSP 能力
+
+| 能力 | 说明 |
+| ---- | ---- |
+| `textDocument/publishDiagnostics` | 实时语法诊断，基于 parser 错误推送 |
+| `textDocument/completion` | 关键字、内置包和函数补全 |
+| `textDocument/hover` | 标识符悬浮提示 |
+| `textDocument/formatting` | 全文档格式化 |
+
+### Formatter 规则
+
+格式化器遍历 AST 输出规范化 Flux 源码，主要规则如下：
+
+- **Pipe chain 展开**：`a |> b() |> c()` 扁平化为同一缩进层级，每个 `|>` 独占一行。
+- **行宽感知**：调用表达式 inline 后超过 `max_line_width`（默认 120）时自动展开为多行，每个参数独占一行。
+- **复杂度驱动**：参数包含 pipe 表达式、block 函数体或深层嵌套对象时强制展开，不依赖宽度。
+- **ObjectExpr 透明解包**：Flux 将 `foo(a: 1, b: 2)` 解析为 `CallExpr(foo, [ObjectExpr({a:1, b:2})])`，格式化时透明地将 ObjectExpr 属性展开为直接的命名参数。
+- **Trailing comma**：多行展开模式下所有参数（包括最后一个）都保留尾逗号，方便 diff。
+- **语句间距**：连续的简单变量赋值紧凑排列不加空行；复杂赋值（多行 call、pipe chain）与相邻语句之间自动插入空行。
+
+### 配置
+
+flux-ls 支持三层配置，优先级从低到高：
+
+1. **命令行参数**（启动时指定）
+2. **LSP initializationOptions**（客户端在 `initialize` 请求中传入）
+3. **每次格式化请求的 `options`**（仅 `tabSize` / `insertSpaces`）
+
+#### 命令行参数
+
+```
+flux-ls [OPTIONS]
+
+Options:
+  --max-line-width=N   格式化行宽阈值 (默认: 120)
+  --indent-width=N     缩进空格数 (默认: 4)
+  --use-tabs           使用 Tab 缩进
+  --help, -h           显示帮助
+  --version, -v        显示版本
+```
+
+#### LSP initializationOptions
+
+客户端可在 `initialize` 请求的 `initializationOptions` 中传入以下字段：
+
+| 字段 | 类型 | 默认值 | 说明 |
+| ---- | ---- | ------ | ---- |
+| `maxLineWidth` | int | 120 | 行宽阈值，超出时展开为多行 |
+| `indentWidth` | int | 4 | 缩进空格数 |
+| `useTabs` | bool | false | 是否使用 Tab 缩进 |
+
+`initializationOptions` 会覆盖命令行参数。编辑器每次格式化请求中的 `tabSize` / `insertSpaces` 会进一步覆盖 `indentWidth` / `useTabs`（但不影响 `maxLineWidth`）。
+
+### Neovim 配置示例
+
+在 `~/.config/nvim/lua/plugins/lsp/servers/` 下新建 `flux_ls.lua`：
+
+```lua
+return {
+  cmd = {
+    vim.fn.expand("~/workspace/liubang/playground/bazel-bin/cpp/pl/flux/contrib/lsp/flux-ls"),
+    "--max-line-width=120",
+  },
+  filetypes = { "flux" },
+  root_markers = { ".git" },
+  init_options = {
+    maxLineWidth = 120,
+    indentWidth = 4,
+    useTabs = false,
+  },
+}
+```
+
+并在 LSP 初始化列表中加入 `flux_ls`。命令行参数和 `init_options` 二选一即可，`init_options` 优先级更高。
+
 ## 代码结构
 
 | 文件/模块                          | 职责                       |
@@ -408,6 +493,7 @@ Universe builtin 默认注入，无需 `import`。
 | `runtime/runtime_builtin_scalar.cpp` | 标量类 stdlib 包          |
 | `runtime/runtime_builtin_package.*` | 包注册与导入              |
 | `connector/`、`optimizer/`、`execution/`、`plan/` | datasource、优化、物理执行与计划 IR |
+| `contrib/lsp/`                     | Language Server（诊断、补全、悬浮、格式化） |
 | `cli/flux_cli.*`、`cli/flux.cpp`   | CLI、REPL、输出格式        |
 | `*/tests/`                         | 各模块单测和脚本测试       |
 
