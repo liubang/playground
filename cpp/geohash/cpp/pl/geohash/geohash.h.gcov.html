@@ -31,27 +31,27 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryLo">0.0&nbsp;%</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
             <td class="headerCovTableEntry">16</td>
-            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">16</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-17 21:45:51</td>
+            <td class="headerValue">2026-05-17 23:08:25</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntryLo">0.0&nbsp;%</td>
+            <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
             <td class="headerCovTableEntry">1</td>
-            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">1</td>
           </tr>
           <tr>
             <td></td>
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">0.0&nbsp;%</td>
-            <td class="headerCovTableEntry">24</td>
-            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntryLo">58.9&nbsp;%</td>
+            <td class="headerCovTableEntry">56</td>
+            <td class="headerCovTableEntry">33</td>
           </tr>
                   <tr><td><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -107,8 +107,8 @@
 <span id="L36"><span class="lineNum">      36</span>                 :             :         double lng; // 经度</span>
 <span id="L37"><span class="lineNum">      37</span>                 :             :         double lat; // 纬度</span>
 <span id="L38"><span class="lineNum">      38</span>                 :             : </span>
-<span id="L39"><span class="lineNum">      39</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC tlaBgUNC">           0 :         [[nodiscard]] constexpr bool is_zero() const { return lng == 0 &amp;&amp; lat == 0; }</span></span>
-<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span>]
+<span id="L39"><span class="lineNum">      39</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 41 times"> + </span> :<span class="tlaGNC tlaBgGNC">          42 :         [[nodiscard]] constexpr bool is_zero() const { return lng == 0 &amp;&amp; lat == 0; }</span></span>
+<span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L40"><span class="lineNum">      40</span>                 :             : </span>
 <span id="L41"><span class="lineNum">      41</span>                 :             :         friend std::ostream&amp; operator&lt;&lt;(std::ostream&amp; os, const Point&amp; point) {</span>
 <span id="L42"><span class="lineNum">      42</span>                 :             :             os &lt;&lt; &quot;{lng: &quot; &lt;&lt; point.lng &lt;&lt; &quot;, lat: &quot; &lt;&lt; point.lat &lt;&lt; &quot;}&quot;;</span>
@@ -120,38 +120,45 @@
 <span id="L48"><span class="lineNum">      48</span>                 :             :         Point sw; // 西南</span>
 <span id="L49"><span class="lineNum">      49</span>                 :             :         Point ne; // 东北</span>
 <span id="L50"><span class="lineNum">      50</span>                 :             : </span>
-<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaUNC">           0 :         void set_min_lat(double lat) { sw.lat = lat; }</span></span>
+<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">          18 :         void set_min_lat(double lat) { sw.lat = lat; }</span></span>
 <span id="L52"><span class="lineNum">      52</span>                 :             : </span>
-<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaUNC">           0 :         void set_max_lat(double lat) { ne.lat = lat; }</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">          18 :         void set_max_lat(double lat) { ne.lat = lat; }</span></span>
 <span id="L54"><span class="lineNum">      54</span>                 :             : </span>
-<span id="L55"><span class="lineNum">      55</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         void set_min_lng(double lng) { sw.lng = lng; }</span></span>
+<span id="L55"><span class="lineNum">      55</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">          18 :         void set_min_lng(double lng) { sw.lng = lng; }</span></span>
 <span id="L56"><span class="lineNum">      56</span>                 :             : </span>
-<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaUNC">           0 :         void set_max_lng(double lng) { ne.lng = lng; }</span></span>
+<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">          18 :         void set_max_lng(double lng) { ne.lng = lng; }</span></span>
 <span id="L58"><span class="lineNum">      58</span>                 :             : </span>
 <span id="L59"><span class="lineNum">      59</span>                 :             :         [[nodiscard]] constexpr Point center() const {</span>
 <span id="L60"><span class="lineNum">      60</span>                 :             :             return {</span>
-<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaUNC">           0 :                 (sw.lng + ne.lng) / 2,</span></span>
-<span id="L62"><span class="lineNum">      62</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :                 (sw.lat + ne.lat) / 2,</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">           8 :                 .lng = (sw.lng + ne.lng) / 2,</span></span>
+<span id="L62"><span class="lineNum">      62</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           8 :                 .lat = (sw.lat + ne.lat) / 2,</span></span>
 <span id="L63"><span class="lineNum">      63</span>                 :             :             };</span>
 <span id="L64"><span class="lineNum">      64</span>                 :             :         };</span>
 <span id="L65"><span class="lineNum">      65</span>                 :             : </span>
-<span id="L66"><span class="lineNum">      66</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         [[nodiscard]] constexpr bool is_zero() const { return sw.is_zero() || ne.is_zero(); }</span></span>
+<span id="L66"><span class="lineNum">      66</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 41 times"> + </span>]:<span class="tlaGNC">          42 :         [[nodiscard]] constexpr bool is_zero() const { return sw.is_zero() || ne.is_zero(); }</span></span>
 <span id="L67"><span class="lineNum">      67</span>                 :             : </span>
-<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaUNC">           0 :         [[nodiscard]] double min_lat() const { return sw.lat; }</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">          15 :         [[nodiscard]] double min_lat() const { return sw.lat; }</span></span>
 <span id="L69"><span class="lineNum">      69</span>                 :             : </span>
-<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaUNC">           0 :         [[nodiscard]] double max_lat() const { return ne.lat; }</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">          18 :         [[nodiscard]] double max_lat() const { return ne.lat; }</span></span>
 <span id="L71"><span class="lineNum">      71</span>                 :             : </span>
-<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaUNC">           0 :         [[nodiscard]] double min_lng() const { return sw.lng; }</span></span>
+<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">          15 :         [[nodiscard]] double min_lng() const { return sw.lng; }</span></span>
 <span id="L73"><span class="lineNum">      73</span>                 :             : </span>
-<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaUNC">           0 :         [[nodiscard]] double max_lng() const { return ne.lng; }</span></span>
+<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">          18 :         [[nodiscard]] double max_lng() const { return ne.lng; }</span></span>
 <span id="L75"><span class="lineNum">      75</span>                 :             : </span>
-<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaUNC">           0 :         [[nodiscard]] double lat_scale() const { return ne.lat - sw.lat; }</span></span>
+<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">          33 :         [[nodiscard]] double lat_scale() const { return ne.lat - sw.lat; }</span></span>
 <span id="L77"><span class="lineNum">      77</span>                 :             : </span>
-<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaUNC">           0 :         [[nodiscard]] double lng_scale() const { return ne.lng - sw.lng; }</span></span>
+<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC">          33 :         [[nodiscard]] double lng_scale() const { return ne.lng - sw.lng; }</span></span>
 <span id="L79"><span class="lineNum">      79</span>                 :             : </span>
 <span id="L80"><span class="lineNum">      80</span>                 :             :         [[nodiscard]] bool contains(double lng, double lat) const {</span>
-<span id="L81"><span class="lineNum">      81</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaUNC">           0 :             return lng &gt;= min_lng() &amp;&amp; lng &lt;= max_lng() &amp;&amp; lat &gt;= min_lat() &amp;&amp; lat &lt;= max_lat();</span></span>
-<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span><span class="tlaUNC" title="Branch 6 was not executed"> # </span><span class="tlaUNC" title="Branch 7 was not executed"> # </span>]
+<span id="L81"><span class="lineNum">      81</span>   [<span class="tlaGBC" title="Branch 0 was taken 17 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 2 was taken 16 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span> :<span class="tlaGNC">          22 :             return lng &gt;= min_lng() &amp;&amp; lng &lt;= max_lng() &amp;&amp; lat &gt;= min_lat() &amp;&amp; lat &lt;= max_lat();</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 16 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 6 was taken 16 times"> + </span><span class="tlaGBC" title="Branch 7 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaUNC" title="Branch 10 was not taken"> - </span><span class="tlaGBC" title="Branch 11 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 12 was not taken"> - </span><span class="tlaGBC" title="Branch 13 was taken 1 time"> + </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 14 was not taken"> - </span><span class="tlaGBC" title="Branch 15 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 16 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 17 was not taken"> - </span><span class="tlaUNC" title="Branch 18 was not taken"> - </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 19 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 20 was not taken"> - </span><span class="tlaGBC" title="Branch 21 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 22 was not taken"> - </span><span class="tlaGBC" title="Branch 23 was taken 1 time"> + </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 24 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 25 was not taken"> - </span><span class="tlaUNC" title="Branch 26 was not taken"> - </span><span class="tlaGBC" title="Branch 27 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 28 was not taken"> - </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 29 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 30 was not taken"> - </span><span class="tlaGBC" title="Branch 31 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 32 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 33 was not taken"> - </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 34 was not taken"> - </span><span class="tlaGBC" title="Branch 35 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 36 was not taken"> - </span><span class="tlaGBC" title="Branch 37 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 38 was not taken"> - </span> 
+<span class="lineNum">        </span>             <span class="tlaGBC" title="Branch 39 was taken 1 time"> + </span>]
 <span id="L82"><span class="lineNum">      82</span>                 :             :         }</span>
 <span id="L83"><span class="lineNum">      83</span>                 :             : </span>
 <span id="L84"><span class="lineNum">      84</span>                 :             :         friend std::ostream&amp; operator&lt;&lt;(std::ostream&amp; os, const Area&amp; rectangle) {</span>
@@ -164,7 +171,7 @@
 <span id="L91"><span class="lineNum">      91</span>                 :             :         uint64_t bits;</span>
 <span id="L92"><span class="lineNum">      92</span>                 :             :         uint8_t step;</span>
 <span id="L93"><span class="lineNum">      93</span>                 :             : </span>
-<span id="L94"><span class="lineNum">      94</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :         [[nodiscard]] constexpr bool is_zero() const { return bits == 0 &amp;&amp; step == 0; }</span></span>
+<span id="L94"><span class="lineNum">      94</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">          16 :         [[nodiscard]] constexpr bool is_zero() const { return bits == 0 &amp;&amp; step == 0; }</span></span>
 <span id="L95"><span class="lineNum">      95</span>                 :             :     };</span>
 <span id="L96"><span class="lineNum">      96</span>                 :             : </span>
 <span id="L97"><span class="lineNum">      97</span>                 :             :     struct Neighbors {</span>

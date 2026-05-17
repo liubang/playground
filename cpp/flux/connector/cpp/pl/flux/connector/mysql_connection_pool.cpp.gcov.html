@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-17 21:45:51</td>
+            <td class="headerValue">2026-05-17 23:08:25</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">80.0&nbsp;%</td>
@@ -234,7 +234,7 @@
 <span id="L163"><span class="lineNum">     163</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">          10 :     if (!params_or.ok()) {</span></span>
 <span id="L164"><span class="lineNum">     164</span>                 :             :         return params_or.status();</span>
 <span id="L165"><span class="lineNum">     165</span>                 :             :     }</span>
-<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">          10 :     return std::make_shared&lt;MySQLBoostConnectionPool&gt;(std::move(dsn), max_pool_size);</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">           9 :     return std::make_shared&lt;MySQLBoostConnectionPool&gt;(std::move(dsn), max_pool_size);</span></span>
 <span id="L167"><span class="lineNum">     167</span>                 :             : }</span>
 <span id="L168"><span class="lineNum">     168</span>                 :             : </span>
 <span id="L169"><span class="lineNum">     169</span>                 :             : } // namespace pl::flux::connector</span>

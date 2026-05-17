@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">96.4&nbsp;%</td>
+            <td class="headerCovTableEntryHi">96.6&nbsp;%</td>
+            <td class="headerCovTableEntry">58</td>
             <td class="headerCovTableEntry">56</td>
-            <td class="headerCovTableEntry">54</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-17 21:45:51</td>
+            <td class="headerValue">2026-05-17 23:08:25</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -50,8 +50,8 @@
             <td></td>
             <td class="headerItem">Branches:</td>
             <td class="headerCovTableEntryLo">50.0&nbsp;%</td>
-            <td class="headerCovTableEntry">132</td>
-            <td class="headerCovTableEntry">66</td>
+            <td class="headerCovTableEntry">208</td>
+            <td class="headerCovTableEntry">104</td>
           </tr>
                   <tr><td><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -192,19 +192,27 @@
 <span id="L120"><span class="lineNum">     120</span>                 :             : public:</span>
 <span id="L121"><span class="lineNum">     121</span>                 :             :     static constexpr uint64_t INVALID_VALUE = UINT64_MAX;</span>
 <span id="L122"><span class="lineNum">     122</span>                 :             : </span>
-<span id="L123"><span class="lineNum">     123</span>   [<span class="tlaGBC" title="Branch 0 was taken 1005 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">        6709 :     BlockHandle() {}</span></span>
+<span id="L123"><span class="lineNum">     123</span>   [<span class="tlaGBC" title="Branch 0 was taken 1006 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">        6501 :     BlockHandle() {}</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaGBC" title="Branch 12 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
+<span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 14 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 15 was not taken"> - </span><span class="tlaGBC" title="Branch 16 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 17 was not taken"> - </span>]
 <span id="L124"><span class="lineNum">     124</span>                 :             : </span>
-<span id="L125"><span class="lineNum">     125</span>         [<span class="tlaGBC" title="Branch 0 was taken 5717 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        5717 :     [[nodiscard]] uint64_t offset() const { return offset_; }</span></span>
+<span id="L125"><span class="lineNum">     125</span>   [<span class="tlaGBC" title="Branch 0 was taken 5501 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">        5506 :     [[nodiscard]] uint64_t offset() const { return offset_; }</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
+<span class="lineNum">        </span>       <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span>]
 <span id="L126"><span class="lineNum">     126</span>                 :             : </span>
-<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">        5717 :     [[nodiscard]] uint64_t size() const { return size_; }</span></span>
+<span id="L127"><span class="lineNum">     127</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">        5506 :     [[nodiscard]] uint64_t size() const { return size_; }</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
+<span class="lineNum">        </span>       <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span>]
 <span id="L128"><span class="lineNum">     128</span>                 :             : </span>
 <span id="L129"><span class="lineNum">     129</span>                 :             :     [[nodiscard]] bool isValid() const noexcept {</span>
 <span id="L130"><span class="lineNum">     130</span>                 :             :         return offset_ != INVALID_VALUE &amp;&amp; size_ != INVALID_VALUE;</span>
 <span id="L131"><span class="lineNum">     131</span>                 :             :     }</span>
 <span id="L132"><span class="lineNum">     132</span>                 :             : </span>
-<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">        3102 :     void setOffset(uint64_t offset) { offset_ = offset; }</span></span>
+<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">        3105 :     void setOffset(uint64_t offset) { offset_ = offset; }</span></span>
 <span id="L134"><span class="lineNum">     134</span>                 :             : </span>
-<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">        3102 :     void setSize(uint64_t size) { size_ = size; }</span></span>
+<span id="L135"><span class="lineNum">     135</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">        3105 :     void setSize(uint64_t size) { size_ = size; }</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L136"><span class="lineNum">     136</span>                 :             : </span>
 <span id="L137"><span class="lineNum">     137</span>                 :             :     void reset() noexcept { offset_ = size_ = INVALID_VALUE; }</span>
 <span id="L138"><span class="lineNum">     138</span>                 :             : </span>
@@ -221,9 +229,13 @@
 <span id="L149"><span class="lineNum">     149</span>                 :             :  * @class FileMeta</span>
 <span id="L150"><span class="lineNum">     150</span>                 :             :  * @brief record sst file meta data</span>
 <span id="L151"><span class="lineNum">     151</span>                 :             :  */</span>
-<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">          19 : class FileMeta {</span></span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">          33 : class FileMeta {</span></span>
 <span id="L153"><span class="lineNum">     153</span>                 :             : public:</span>
-<span id="L154"><span class="lineNum">     154</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     FileMeta() = default;</span></span>
+<span id="L154"><span class="lineNum">     154</span>   [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          19 :     FileMeta() = default;</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaGBC" title="Branch 12 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 14 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 15 was not taken"> - </span><span class="tlaGBC" title="Branch 16 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 17 was not taken"> - </span><span class="tlaGBC" title="Branch 18 was taken 1 time"> + </span> 
+<span class="lineNum">        </span>       <span class="tlaUNC" title="Branch 19 was not taken"> - </span><span class="tlaGBC" title="Branch 20 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 21 was not taken"> - </span>]
 <span id="L155"><span class="lineNum">     155</span>                 :             : </span>
 <span id="L156"><span class="lineNum">     156</span>                 :             :     // 移动构造和赋值</span>
 <span id="L157"><span class="lineNum">     157</span>                 :             :     FileMeta(FileMeta&amp;&amp;) = default;</span>
@@ -233,56 +245,57 @@
 <span id="L161"><span class="lineNum">     161</span>                 :             :     FileMeta(const FileMeta&amp;) = delete;</span>
 <span id="L162"><span class="lineNum">     162</span>                 :             :     FileMeta&amp; operator=(const FileMeta&amp;) = delete;</span>
 <span id="L163"><span class="lineNum">     163</span>                 :             : </span>
-<span id="L164"><span class="lineNum">     164</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setSSTType(SSTType type) { sst_type_ = type; }</span></span>
+<span id="L164"><span class="lineNum">     164</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 :     void setSSTType(SSTType type) { sst_type_ = type; }</span></span>
 <span id="L165"><span class="lineNum">     165</span>                 :             : </span>
-<span id="L166"><span class="lineNum">     166</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setSSTVersion(SSTVersion version) { sst_version_ = version; }</span></span>
+<span id="L166"><span class="lineNum">     166</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 :     void setSSTVersion(SSTVersion version) { sst_version_ = version; }</span></span>
 <span id="L167"><span class="lineNum">     167</span>                 :             : </span>
-<span id="L168"><span class="lineNum">     168</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setPatchId(PatchId patch_id) { patch_id_ = patch_id; }</span></span>
+<span id="L168"><span class="lineNum">     168</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 :     void setPatchId(PatchId patch_id) { patch_id_ = patch_id; }</span></span>
 <span id="L169"><span class="lineNum">     169</span>                 :             : </span>
-<span id="L170"><span class="lineNum">     170</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setSSTId(SSTId sst_id) { sst_id_ = sst_id; }</span></span>
+<span id="L170"><span class="lineNum">     170</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :     void setSSTId(SSTId sst_id) { sst_id_ = sst_id; }</span></span>
 <span id="L171"><span class="lineNum">     171</span>                 :             : </span>
-<span id="L172"><span class="lineNum">     172</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setFilterPolicyType(FilterPolicyType type) { filter_type_ = type; }</span></span>
+<span id="L172"><span class="lineNum">     172</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          11 :     void setFilterPolicyType(FilterPolicyType type) { filter_type_ = type; }</span></span>
 <span id="L173"><span class="lineNum">     173</span>                 :             : </span>
-<span id="L174"><span class="lineNum">     174</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setCellNum(uint64_t cell_number) { cell_number_ = cell_number; }</span></span>
+<span id="L174"><span class="lineNum">     174</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          11 :     void setCellNum(uint64_t cell_number) { cell_number_ = cell_number; }</span></span>
 <span id="L175"><span class="lineNum">     175</span>                 :             : </span>
-<span id="L176"><span class="lineNum">     176</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setRowNum(uint64_t row_number) { row_number_ = row_number; }</span></span>
+<span id="L176"><span class="lineNum">     176</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          11 :     void setRowNum(uint64_t row_number) { row_number_ = row_number; }</span></span>
 <span id="L177"><span class="lineNum">     177</span>                 :             : </span>
-<span id="L178"><span class="lineNum">     178</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setMinTimestamp(uint64_t min_timestamp) { min_timestamp_ = min_timestamp; }</span></span>
+<span id="L178"><span class="lineNum">     178</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          11 :     void setMinTimestamp(uint64_t min_timestamp) { min_timestamp_ = min_timestamp; }</span></span>
 <span id="L179"><span class="lineNum">     179</span>                 :             : </span>
-<span id="L180"><span class="lineNum">     180</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setMaxTimestamp(uint64_t max_timestamp) { max_timestamp_ = max_timestamp; }</span></span>
+<span id="L180"><span class="lineNum">     180</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          11 :     void setMaxTimestamp(uint64_t max_timestamp) { max_timestamp_ = max_timestamp; }</span></span>
 <span id="L181"><span class="lineNum">     181</span>                 :             : </span>
-<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">           8 :     void setMinKey(const std::string&amp; key) { min_key_ = key; }</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">          12 :     void setMinKey(const std::string&amp; key) { min_key_ = key; }</span></span>
 <span id="L183"><span class="lineNum">     183</span>                 :             : </span>
-<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">           8 :     void setMaxKey(const std::string&amp; key) { max_key_ = key; }</span></span>
+<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">          12 :     void setMaxKey(const std::string&amp; key) { max_key_ = key; }</span></span>
 <span id="L185"><span class="lineNum">     185</span>                 :             : </span>
-<span id="L186"><span class="lineNum">     186</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setBitsPerKey(uint32_t bpk) { bits_per_key_ = bpk; }</span></span>
+<span id="L186"><span class="lineNum">     186</span>   [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          11 :     void setBitsPerKey(uint32_t bpk) { bits_per_key_ = bpk; }</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L187"><span class="lineNum">     187</span>                 :             : </span>
-<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">           6 :     [[nodiscard]] SSTType sstType() const { return sst_type_; }</span></span>
+<span id="L188"><span class="lineNum">     188</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :     [[nodiscard]] SSTType sstType() const { return sst_type_; }</span></span>
 <span id="L189"><span class="lineNum">     189</span>                 :             : </span>
-<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaGNC">           6 :     [[nodiscard]] SSTVersion sstVersion() const { return sst_version_; }</span></span>
+<span id="L190"><span class="lineNum">     190</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :     [[nodiscard]] SSTVersion sstVersion() const { return sst_version_; }</span></span>
 <span id="L191"><span class="lineNum">     191</span>                 :             : </span>
-<span id="L192"><span class="lineNum">     192</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           9 :     [[nodiscard]] PatchId patchId() const { return patch_id_; }</span></span>
+<span id="L192"><span class="lineNum">     192</span>   [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          10 :     [[nodiscard]] PatchId patchId() const { return patch_id_; }</span></span>
 <span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L193"><span class="lineNum">     193</span>                 :             : </span>
-<span id="L194"><span class="lineNum">     194</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          10 :     [[nodiscard]] SSTId sstId() const { return sst_id_; }</span></span>
+<span id="L194"><span class="lineNum">     194</span>   [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          11 :     [[nodiscard]] SSTId sstId() const { return sst_id_; }</span></span>
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
 <span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 9 was not taken"> - </span>]
 <span id="L195"><span class="lineNum">     195</span>                 :             : </span>
-<span id="L196"><span class="lineNum">     196</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">          11 :     [[nodiscard]] FilterPolicyType filterPolicyType() const { return filter_type_; }</span></span>
+<span id="L196"><span class="lineNum">     196</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">          12 :     [[nodiscard]] FilterPolicyType filterPolicyType() const { return filter_type_; }</span></span>
 <span id="L197"><span class="lineNum">     197</span>                 :             : </span>
-<span id="L198"><span class="lineNum">     198</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :     [[nodiscard]] uint64_t cellNum() const { return cell_number_; }</span></span>
+<span id="L198"><span class="lineNum">     198</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     [[nodiscard]] uint64_t cellNum() const { return cell_number_; }</span></span>
 <span id="L199"><span class="lineNum">     199</span>                 :             : </span>
-<span id="L200"><span class="lineNum">     200</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     [[nodiscard]] uint64_t rowNum() const { return row_number_; }</span></span>
+<span id="L200"><span class="lineNum">     200</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :     [[nodiscard]] uint64_t rowNum() const { return row_number_; }</span></span>
 <span id="L201"><span class="lineNum">     201</span>                 :             : </span>
-<span id="L202"><span class="lineNum">     202</span>                 :             :     [[nodiscard]] uint64_t minTimestamp() const { return min_timestamp_; }</span>
+<span id="L202"><span class="lineNum">     202</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     [[nodiscard]] uint64_t minTimestamp() const { return min_timestamp_; }</span></span>
 <span id="L203"><span class="lineNum">     203</span>                 :             : </span>
-<span id="L204"><span class="lineNum">     204</span>                 :             :     [[nodiscard]] uint64_t maxTimestamp() const { return max_timestamp_; }</span>
+<span id="L204"><span class="lineNum">     204</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     [[nodiscard]] uint64_t maxTimestamp() const { return max_timestamp_; }</span></span>
 <span id="L205"><span class="lineNum">     205</span>                 :             : </span>
 <span id="L206"><span class="lineNum">     206</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     [[nodiscard]] const std::string&amp; minKey() const { return min_key_; }</span></span>
 <span id="L207"><span class="lineNum">     207</span>                 :             : </span>
 <span id="L208"><span class="lineNum">     208</span>                 :             :     [[nodiscard]] const std::string&amp; maxKey() const { return max_key_; }</span>
 <span id="L209"><span class="lineNum">     209</span>                 :             : </span>
-<span id="L210"><span class="lineNum">     210</span>                 :<span class="tlaGNC">           6 :     [[nodiscard]] uint32_t bitsPerKey() const { return bits_per_key_; }</span></span>
+<span id="L210"><span class="lineNum">     210</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :     [[nodiscard]] uint32_t bitsPerKey() const { return bits_per_key_; }</span></span>
 <span id="L211"><span class="lineNum">     211</span>                 :             : </span>
 <span id="L212"><span class="lineNum">     212</span>                 :             :     void encodeTo(std::string* dst) const;</span>
 <span id="L213"><span class="lineNum">     213</span>                 :             : </span>
@@ -338,9 +351,9 @@
 <span id="L252"><span class="lineNum">     252</span>                 :             : public:</span>
 <span id="L253"><span class="lineNum">     253</span>                 :             :     Footer() = default;</span>
 <span id="L254"><span class="lineNum">     254</span>                 :             : </span>
-<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaGNC">           8 :     void setFilterHandle(const BlockHandle&amp; block_handle) { filter_handle_ = block_handle; }</span></span>
-<span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaGNC">           8 :     void setIndexHandle(const BlockHandle&amp; block_handle) { index_handle_ = block_handle; }</span></span>
-<span id="L257"><span class="lineNum">     257</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setFileMetaHandle(const BlockHandle&amp; block_handle) { file_meta_handle_ = block_handle; }</span></span>
+<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaGNC">           9 :     void setFilterHandle(const BlockHandle&amp; block_handle) { filter_handle_ = block_handle; }</span></span>
+<span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaGNC">           9 :     void setIndexHandle(const BlockHandle&amp; block_handle) { index_handle_ = block_handle; }</span></span>
+<span id="L257"><span class="lineNum">     257</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :     void setFileMetaHandle(const BlockHandle&amp; block_handle) { file_meta_handle_ = block_handle; }</span></span>
 <span id="L258"><span class="lineNum">     258</span>                 :             : </span>
 <span id="L259"><span class="lineNum">     259</span>                 :             :     [[nodiscard]] const BlockHandle&amp; metaIndexHandle() const { return filter_handle_; }</span>
 <span id="L260"><span class="lineNum">     260</span>                 :             :     [[nodiscard]] const BlockHandle&amp; filterHandle() const { return filter_handle_; }</span>

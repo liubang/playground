@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-17 21:45:51</td>
+            <td class="headerValue">2026-05-17 23:08:25</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -4815,7 +4815,7 @@
 <span id="L4744"><span class="lineNum">    4744</span>                 :             :         </span>
 <span id="L4745"><span class="lineNum">    4745</span>                 :             :         </span>
 <span id="L4746"><span class="lineNum">    4746</span>                 :             :         </span>
-<span id="L4747"><span class="lineNum">    4747</span>                 :<span class="tlaGNC tlaBgGNC">       36830 :         uint32_t real_scan(</span></span>
+<span id="L4747"><span class="lineNum">    4747</span>                 :<span class="tlaGNC tlaBgGNC">       36884 :         uint32_t real_scan(</span></span>
 <span id="L4748"><span class="lineNum">    4748</span>                 :             :         int32_t mode,</span>
 <span id="L4749"><span class="lineNum">    4749</span>                 :             :         const char** pp,</span>
 <span id="L4750"><span class="lineNum">    4750</span>                 :             :         const char* _data,</span>
@@ -4832,13 +4832,13 @@
 <span id="L4761"><span class="lineNum">    4761</span>                 :             :         int32_t&amp; token_end_col)</span>
 <span id="L4762"><span class="lineNum">    4762</span>                 :             :         {</span>
 <span id="L4763"><span class="lineNum">    4763</span>                 :             :                 int cs = flux_start;</span>
-<span id="L4764"><span class="lineNum">    4764</span>      [<span class="tlaGBC" title="Branch 0 was taken 742 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 22 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 36066 times"> + </span>]:<span class="tlaGNC">       36830 :                 switch (mode) {</span></span>
+<span id="L4764"><span class="lineNum">    4764</span>      [<span class="tlaGBC" title="Branch 0 was taken 744 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 22 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 36118 times"> + </span>]:<span class="tlaGNC">       36884 :                 switch (mode) {</span></span>
 <span id="L4765"><span class="lineNum">    4765</span>                 :             :                         case 0:</span>
 <span id="L4766"><span class="lineNum">    4766</span>                 :             :                         cs = flux_en_main;</span>
 <span id="L4767"><span class="lineNum">    4767</span>                 :             :                         break;</span>
-<span id="L4768"><span class="lineNum">    4768</span>                 :<span class="tlaGNC">         742 :                         case 1:</span></span>
+<span id="L4768"><span class="lineNum">    4768</span>                 :<span class="tlaGNC">         744 :                         case 1:</span></span>
 <span id="L4769"><span class="lineNum">    4769</span>                 :             :                         cs = flux_en_main_with_regex;</span>
-<span id="L4770"><span class="lineNum">    4770</span>                 :<span class="tlaGNC">         742 :                         break;</span></span>
+<span id="L4770"><span class="lineNum">    4770</span>                 :<span class="tlaGNC">         744 :                         break;</span></span>
 <span id="L4771"><span class="lineNum">    4771</span>                 :<span class="tlaGNC">          22 :                         case 2:</span></span>
 <span id="L4772"><span class="lineNum">    4772</span>                 :             :                         cs = flux_en_string_expr;</span>
 <span id="L4773"><span class="lineNum">    4773</span>                 :<span class="tlaGNC">          22 :                         break;</span></span>
@@ -4846,7 +4846,7 @@
 <span id="L4775"><span class="lineNum">    4775</span>                 :             :                         break;</span>
 <span id="L4776"><span class="lineNum">    4776</span>                 :             :                 }</span>
 <span id="L4777"><span class="lineNum">    4777</span>                 :             :                 </span>
-<span id="L4778"><span class="lineNum">    4778</span>                 :<span class="tlaGNC">       36830 :                 const char* p = *pp;</span></span>
+<span id="L4778"><span class="lineNum">    4778</span>                 :<span class="tlaGNC">       36884 :                 const char* p = *pp;</span></span>
 <span id="L4779"><span class="lineNum">    4779</span>                 :             :                 </span>
 <span id="L4780"><span class="lineNum">    4780</span>                 :             :                 int32_t act=0;</span>
 <span id="L4781"><span class="lineNum">    4781</span>                 :             :                 const char* ts=0;</span>
@@ -4854,8 +4854,8 @@
 <span id="L4783"><span class="lineNum">    4783</span>                 :             :                 </span>
 <span id="L4784"><span class="lineNum">    4784</span>                 :             :                 TokenType tok = TokenType::Illegal;</span>
 <span id="L4785"><span class="lineNum">    4785</span>                 :             :                 </span>
-<span id="L4786"><span class="lineNum">    4786</span>                 :<span class="tlaGNC">       36830 :                 const char* last_newline_before_token = *last_newline;</span></span>
-<span id="L4787"><span class="lineNum">    4787</span>                 :<span class="tlaGNC">       36830 :                 uint32_t cur_line_token_start = cur_line;</span></span>
+<span id="L4786"><span class="lineNum">    4786</span>                 :<span class="tlaGNC">       36884 :                 const char* last_newline_before_token = *last_newline;</span></span>
+<span id="L4787"><span class="lineNum">    4787</span>                 :<span class="tlaGNC">       36884 :                 uint32_t cur_line_token_start = cur_line;</span></span>
 <span id="L4788"><span class="lineNum">    4788</span>                 :             :                 </span>
 <span id="L4789"><span class="lineNum">    4789</span>                 :             :                 // alskdfj</span>
 <span id="L4790"><span class="lineNum">    4790</span>                 :             : </span>
@@ -4869,17 +4869,17 @@
 <span id="L4798"><span class="lineNum">    4798</span>                 :             :                 {</span>
 <span id="L4799"><span class="lineNum">    4799</span>                 :             :                         int _cpc;</span>
 <span id="L4800"><span class="lineNum">    4800</span>                 :             :                         int _klen;const char * _cekeys;unsigned int _trans = 0;const unsigned char * _keys;const char * _acts;unsigned int _nacts;       {</span>
-<span id="L4801"><span class="lineNum">    4801</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 36830 times"> + </span>]:<span class="tlaGNC">       36830 :                                 if ( p == pe )</span></span>
+<span id="L4801"><span class="lineNum">    4801</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 36884 times"> + </span>]:<span class="tlaGNC">       36884 :                                 if ( p == pe )</span></span>
 <span id="L4802"><span class="lineNum">    4802</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                                 goto _test_eof;</span></span>
 <span id="L4803"><span class="lineNum">    4803</span>                 :             :                                 if ( cs == 0 )</span>
 <span id="L4804"><span class="lineNum">    4804</span>                 :             :                                 goto _out;</span>
-<span id="L4805"><span class="lineNum">    4805</span>                 :<span class="tlaGNC tlaBgGNC">      199793 :                                 _resume:  {</span></span>
-<span id="L4806"><span class="lineNum">    4806</span>                 :<span class="tlaGNC">      199793 :                                         _acts = ( _flux_actions + (_flux_from_state_actions[cs]));</span></span>
-<span id="L4807"><span class="lineNum">    4807</span>                 :<span class="tlaGNC">      199793 :                                         _nacts = (unsigned int)(*( _acts));</span></span>
-<span id="L4808"><span class="lineNum">    4808</span>                 :<span class="tlaGNC">      199793 :                                         _acts += 1;</span></span>
-<span id="L4809"><span class="lineNum">    4809</span>         [<span class="tlaGBC" title="Branch 0 was taken 58018 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 199793 times"> + </span>]:<span class="tlaGNC">      257811 :                                         while ( _nacts &gt; 0 ) {</span></span>
-<span id="L4810"><span class="lineNum">    4810</span>         [<span class="tlaGBC" title="Branch 0 was taken 58018 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       58018 :                                                 switch ( (*( _acts)) ) {</span></span>
-<span id="L4811"><span class="lineNum">    4811</span>                 :<span class="tlaGNC">       58018 :                                                         case 3:  {</span></span>
+<span id="L4805"><span class="lineNum">    4805</span>                 :<span class="tlaGNC tlaBgGNC">      200156 :                                 _resume:  {</span></span>
+<span id="L4806"><span class="lineNum">    4806</span>                 :<span class="tlaGNC">      200156 :                                         _acts = ( _flux_actions + (_flux_from_state_actions[cs]));</span></span>
+<span id="L4807"><span class="lineNum">    4807</span>                 :<span class="tlaGNC">      200156 :                                         _nacts = (unsigned int)(*( _acts));</span></span>
+<span id="L4808"><span class="lineNum">    4808</span>                 :<span class="tlaGNC">      200156 :                                         _acts += 1;</span></span>
+<span id="L4809"><span class="lineNum">    4809</span>         [<span class="tlaGBC" title="Branch 0 was taken 58113 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 200156 times"> + </span>]:<span class="tlaGNC">      258269 :                                         while ( _nacts &gt; 0 ) {</span></span>
+<span id="L4810"><span class="lineNum">    4810</span>         [<span class="tlaGBC" title="Branch 0 was taken 58113 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       58113 :                                                 switch ( (*( _acts)) ) {</span></span>
+<span id="L4811"><span class="lineNum">    4811</span>                 :<span class="tlaGNC">       58113 :                                                         case 3:  {</span></span>
 <span id="L4812"><span class="lineNum">    4812</span>                 :             :                                                                         {</span>
 <span id="L4813"><span class="lineNum">    4813</span>                 :             :                                                                         #line 1 &quot;NONE&quot;</span>
 <span id="L4814"><span class="lineNum">    4814</span>                 :             :                                                                         {ts = p;}}</span>
