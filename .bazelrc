@@ -16,20 +16,28 @@
 
 # 自动启用基于平台的特定配置
 common --enable_platform_specific_config
-
 common --registry=file://%workspace%/registry
 common --registry=https://bcr.bazel.build
-
 common --verbose_failures
 common --noincompatible_disallow_empty_glob
 common --color=yes
 common --experimental_ui_max_stdouterr_bytes=1073741819
 
-build --jobs=8
+# PyPI mirror: use Aliyun by default, CI overrides to official source
+common --repo_env=PYPI_INDEX_URL=https://mirrors.aliyun.com/pypi/simple
+
+build --jobs=HOST_CPUS*.75
 build --cxxopt=-std=c++20
 build --host_cxxopt=-std=c++20
 build --@boost.asio//:ssl=openssl
 build --@boost.mysql//:ssl=openssl
+
+# for java
+build --nojava_header_compilation
+build --java_runtime_version=21
+build --java_language_version=21
+build --tool_java_language_version=21
+build --tool_java_runtime_version=21
 
 # asan default on for dev/test
 build --//cpp:asan=True
@@ -44,7 +52,7 @@ build:llvm --action_env=LD=/opt/app/llvm/bin/lld
 build:llvm --action_env=LD_LIBRARY_PATH=/opt/app/llvm/lib:/opt/app/llvm/lib/x86_64-unknown-linux-gnu
 build:llvm --linkopt=-fuse-ld=lld
 build:llvm --linkopt=-stdlib=libc++
-build:llvm --cxxopt=-stdlib=libc++ 
+build:llvm --cxxopt=-stdlib=libc++
 build:llvm --cxxopt=-Wno-error=unused-but-set-variable
 build:llvm --cxxopt=-Wno-error=unused-but-set-parameter
 
@@ -62,27 +70,17 @@ build:macos --macos_minimum_os=13.3
 build:macos --cxxopt=-Wno-error=unused-but-set-variable
 build:macos --cxxopt=-Wno-error=unused-but-set-parameter
 
-# for java
-build --nojava_header_compilation
-build --java_runtime_version=21
-build --java_language_version=21
-build --tool_java_language_version=21
-build --tool_java_runtime_version=21
-
 # test in Release mode
 test -c opt
 # gtest
 test --test_output=all
 test --action_env="GTEST_COLOR=1"
 test --action_env="GTEST_BREAK_ON_FAILURE=1"
-test --nojava_header_compilation
-
-# PyPI mirror: use Aliyun by default, CI overrides to official source
-common --repo_env=PYPI_INDEX_URL=https://mirrors.aliyun.com/pypi/simple
-common:ci --repo_env=PYPI_INDEX_URL=
-
-# CI config: allow test caching for faster builds
-test:ci --cache_test_results
-
 # local dev: always re-run tests (override in .bazelrc.user if needed)
 test --nocache_test_results
+
+# CI config: allow test caching for faster builds
+common:ci --repo_env=PYPI_INDEX_URL=
+build:ci --jobs=auto
+test:ci --cache_test_results
+test:ci --test_output=errors
