@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-18 00:24:25</td>
+            <td class="headerValue">2026-05-18 01:28:48</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">75.0&nbsp;%</td>
@@ -117,16 +117,16 @@
 <span id="L45"><span class="lineNum">      45</span>                 :             : </span>
 <span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaUNC tlaBgUNC">           0 :     [[nodiscard]] const char* name() const override { return &quot;BytewiseComparator&quot;; };</span></span>
 <span id="L47"><span class="lineNum">      47</span>                 :             : </span>
-<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC tlaBgGNC">     3784103 :     [[nodiscard]] int compare(std::string_view a, std::string_view b) const override {</span></span>
-<span id="L49"><span class="lineNum">      49</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">     3784104 :         return a.compare(b);</span></span>
+<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC tlaBgGNC">     3783379 :     [[nodiscard]] int compare(std::string_view a, std::string_view b) const override {</span></span>
+<span id="L49"><span class="lineNum">      49</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">     3783380 :         return a.compare(b);</span></span>
 <span id="L50"><span class="lineNum">      50</span>                 :             :     }</span>
 <span id="L51"><span class="lineNum">      51</span>                 :             : </span>
 <span id="L52"><span class="lineNum">      52</span>                 :             :     // TODO(liubang): use these method to reduce internal structure space usage</span>
 <span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">        3078 :     void findShortestSeparator(std::string* start, std::string_view limit) const override {</span></span>
 <span id="L54"><span class="lineNum">      54</span>                 :             :         size_t min_length = std::min(start-&gt;size(), limit.size());</span>
 <span id="L55"><span class="lineNum">      55</span>                 :             :         size_t diff_index = 0;</span>
-<span id="L56"><span class="lineNum">      56</span>   [<span class="tlaGBC" title="Branch 0 was taken 7354 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 4278 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 3076 times"> + </span>]:<span class="tlaGNC">        7356 :         while ((diff_index &lt; min_length) &amp;&amp; ((*start)[diff_index] == limit[diff_index])) {</span></span>
-<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">        4278 :             ++diff_index;</span></span>
+<span id="L56"><span class="lineNum">      56</span>   [<span class="tlaGBC" title="Branch 0 was taken 7318 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 4242 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 3076 times"> + </span>]:<span class="tlaGNC">        7320 :         while ((diff_index &lt; min_length) &amp;&amp; ((*start)[diff_index] == limit[diff_index])) {</span></span>
+<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">        4242 :             ++diff_index;</span></span>
 <span id="L58"><span class="lineNum">      58</span>                 :             :         }</span>
 <span id="L59"><span class="lineNum">      59</span>         [<span class="tlaGBC" title="Branch 0 was taken 3076 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">        3078 :         if (diff_index == min_length) {</span></span>
 <span id="L60"><span class="lineNum">      60</span>                 :             :             // do nothing</span>
@@ -134,10 +134,10 @@
 <span id="L62"><span class="lineNum">      62</span>                 :             :         }</span>
 <span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC">        3076 :         auto diff_byte = static_cast&lt;uint8_t&gt;((*start)[diff_index]);</span></span>
 <span id="L64"><span class="lineNum">      64</span>                 :             :         // start: hello , limit: heln =&gt; helm</span>
-<span id="L65"><span class="lineNum">      65</span>   [<span class="tlaGBC" title="Branch 0 was taken 3076 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1802 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1274 times"> + </span>]:<span class="tlaGNC">        3076 :         if (diff_byte &lt; static_cast&lt;uint8_t&gt;(0xff) &amp;&amp;</span></span>
-<span id="L66"><span class="lineNum">      66</span>         [<span class="tlaGBC" title="Branch 0 was taken 1802 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1274 times"> + </span>]:<span class="tlaGNC">        3076 :             diff_byte + 1 &lt; static_cast&lt;uint8_t&gt;(limit[diff_index])) {</span></span>
-<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">        1802 :             (*start)[diff_index]++;</span></span>
-<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">        1802 :             start-&gt;resize(diff_index + 1);</span></span>
+<span id="L65"><span class="lineNum">      65</span>   [<span class="tlaGBC" title="Branch 0 was taken 3076 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1815 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1261 times"> + </span>]:<span class="tlaGNC">        3076 :         if (diff_byte &lt; static_cast&lt;uint8_t&gt;(0xff) &amp;&amp;</span></span>
+<span id="L66"><span class="lineNum">      66</span>         [<span class="tlaGBC" title="Branch 0 was taken 1815 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1261 times"> + </span>]:<span class="tlaGNC">        3076 :             diff_byte + 1 &lt; static_cast&lt;uint8_t&gt;(limit[diff_index])) {</span></span>
+<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">        1815 :             (*start)[diff_index]++;</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">        1815 :             start-&gt;resize(diff_index + 1);</span></span>
 <span id="L69"><span class="lineNum">      69</span>                 :             :         }</span>
 <span id="L70"><span class="lineNum">      70</span>                 :             :     }</span>
 <span id="L71"><span class="lineNum">      71</span>                 :             : </span>
