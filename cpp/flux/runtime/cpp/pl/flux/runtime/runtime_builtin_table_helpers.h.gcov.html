@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-17 03:21:55</td>
+            <td class="headerValue">2026-05-17 10:34:27</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -384,33 +384,33 @@
 <span id="L322"><span class="lineNum">     322</span>              :     return std::make_shared&lt;ObjectValue&gt;(row);</span>
 <span id="L323"><span class="lineNum">     323</span>              : }</span>
 <span id="L324"><span class="lineNum">     324</span>              : </span>
-<span id="L325"><span class="lineNum">     325</span> <span class="tlaGNC">         785 : inline Value object_with_upserted_property(const ObjectValue&amp; object,</span></span>
+<span id="L325"><span class="lineNum">     325</span> <span class="tlaGNC">         763 : inline Value object_with_upserted_property(const ObjectValue&amp; object,</span></span>
 <span id="L326"><span class="lineNum">     326</span>              :                                            const std::string&amp; key,</span>
 <span id="L327"><span class="lineNum">     327</span>              :                                            Value value) {</span>
-<span id="L328"><span class="lineNum">     328</span> <span class="tlaGNC">         785 :     auto props = object.properties;</span></span>
-<span id="L329"><span class="lineNum">     329</span> <span class="tlaGNC">        5002 :     for (auto&amp; [name, current] : props) {</span></span>
-<span id="L330"><span class="lineNum">     330</span> <span class="tlaGNC">        4468 :         if (name == key) {</span></span>
+<span id="L328"><span class="lineNum">     328</span> <span class="tlaGNC">         763 :     auto props = object.properties;</span></span>
+<span id="L329"><span class="lineNum">     329</span> <span class="tlaGNC">        4892 :     for (auto&amp; [name, current] : props) {</span></span>
+<span id="L330"><span class="lineNum">     330</span> <span class="tlaGNC">        4380 :         if (name == key) {</span></span>
 <span id="L331"><span class="lineNum">     331</span>              :             current = std::move(value);</span>
 <span id="L332"><span class="lineNum">     332</span> <span class="tlaGNC">         251 :             return Value::object(std::move(props));</span></span>
 <span id="L333"><span class="lineNum">     333</span>              :         }</span>
 <span id="L334"><span class="lineNum">     334</span>              :     }</span>
-<span id="L335"><span class="lineNum">     335</span> <span class="tlaGNC">         534 :     props.emplace_back(key, std::move(value));</span></span>
-<span id="L336"><span class="lineNum">     336</span> <span class="tlaGNC">         534 :     return Value::object(std::move(props));</span></span>
-<span id="L337"><span class="lineNum">     337</span> <span class="tlaGNC">         785 : }</span></span>
+<span id="L335"><span class="lineNum">     335</span> <span class="tlaGNC">         512 :     props.emplace_back(key, std::move(value));</span></span>
+<span id="L336"><span class="lineNum">     336</span> <span class="tlaGNC">         512 :     return Value::object(std::move(props));</span></span>
+<span id="L337"><span class="lineNum">     337</span> <span class="tlaGNC">         763 : }</span></span>
 <span id="L338"><span class="lineNum">     338</span>              : </span>
-<span id="L339"><span class="lineNum">     339</span> <span class="tlaGNC">         471 : inline std::pair&lt;std::shared_ptr&lt;ObjectValue&gt;, std::string&gt; clone_row_with_group_and_key(</span></span>
+<span id="L339"><span class="lineNum">     339</span> <span class="tlaGNC">         449 : inline std::pair&lt;std::shared_ptr&lt;ObjectValue&gt;, std::string&gt; clone_row_with_group_and_key(</span></span>
 <span id="L340"><span class="lineNum">     340</span>              :     const ObjectValue&amp; row, const std::vector&lt;std::string&gt;&amp; columns) {</span>
-<span id="L341"><span class="lineNum">     341</span> <span class="tlaGNC">         471 :     std::vector&lt;std::pair&lt;std::string, Value&gt;&gt; group_props;</span></span>
-<span id="L342"><span class="lineNum">     342</span> <span class="tlaGNC">         471 :     group_props.reserve(columns.size());</span></span>
+<span id="L341"><span class="lineNum">     341</span> <span class="tlaGNC">         449 :     std::vector&lt;std::pair&lt;std::string, Value&gt;&gt; group_props;</span></span>
+<span id="L342"><span class="lineNum">     342</span> <span class="tlaGNC">         449 :     group_props.reserve(columns.size());</span></span>
 <span id="L343"><span class="lineNum">     343</span>              :     std::string key;</span>
-<span id="L344"><span class="lineNum">     344</span> <span class="tlaGNC">         471 :     key.reserve(columns.size() * 16);</span></span>
-<span id="L345"><span class="lineNum">     345</span> <span class="tlaGNC">        1181 :     for (const auto&amp; column : columns) {</span></span>
-<span id="L346"><span class="lineNum">     346</span> <span class="tlaGNC">         710 :         const Value* value = row.lookup(column);</span></span>
-<span id="L347"><span class="lineNum">     347</span> <span class="tlaGNC">         710 :         if (value != nullptr) {</span></span>
-<span id="L348"><span class="lineNum">     348</span> <span class="tlaGNC">         710 :             group_props.emplace_back(column, *value);</span></span>
-<span id="L349"><span class="lineNum">     349</span> <span class="tlaGNC">         710 :             absl::StrAppend(&amp;key, column, &quot;=&quot;);</span></span>
-<span id="L350"><span class="lineNum">     350</span> <span class="tlaGNC">         710 :             if (value-&gt;type() == Value::Type::String) {</span></span>
-<span id="L351"><span class="lineNum">     351</span> <span class="tlaGNC">         698 :                 absl::StrAppend(&amp;key, value-&gt;as_string());</span></span>
+<span id="L344"><span class="lineNum">     344</span> <span class="tlaGNC">         449 :     key.reserve(columns.size() * 16);</span></span>
+<span id="L345"><span class="lineNum">     345</span> <span class="tlaGNC">        1137 :     for (const auto&amp; column : columns) {</span></span>
+<span id="L346"><span class="lineNum">     346</span> <span class="tlaGNC">         688 :         const Value* value = row.lookup(column);</span></span>
+<span id="L347"><span class="lineNum">     347</span> <span class="tlaGNC">         688 :         if (value != nullptr) {</span></span>
+<span id="L348"><span class="lineNum">     348</span> <span class="tlaGNC">         688 :             group_props.emplace_back(column, *value);</span></span>
+<span id="L349"><span class="lineNum">     349</span> <span class="tlaGNC">         688 :             absl::StrAppend(&amp;key, column, &quot;=&quot;);</span></span>
+<span id="L350"><span class="lineNum">     350</span> <span class="tlaGNC">         688 :             if (value-&gt;type() == Value::Type::String) {</span></span>
+<span id="L351"><span class="lineNum">     351</span> <span class="tlaGNC">         676 :                 absl::StrAppend(&amp;key, value-&gt;as_string());</span></span>
 <span id="L352"><span class="lineNum">     352</span> <span class="tlaGNC">          12 :             } else if (value-&gt;type() == Value::Type::Time) {</span></span>
 <span id="L353"><span class="lineNum">     353</span> <span class="tlaUNC tlaBgUNC">           0 :                 absl::StrAppend(&amp;key, value-&gt;as_time().literal);</span></span>
 <span id="L354"><span class="lineNum">     354</span>              :             } else {</span>
@@ -419,12 +419,12 @@
 <span id="L357"><span class="lineNum">     357</span>              :         } else {</span>
 <span id="L358"><span class="lineNum">     358</span> <span class="tlaUNC tlaBgUNC">           0 :             absl::StrAppend(&amp;key, column, &quot;=&lt;missing&gt;&quot;);</span></span>
 <span id="L359"><span class="lineNum">     359</span>              :         }</span>
-<span id="L360"><span class="lineNum">     360</span> <span class="tlaGNC tlaBgGNC">         710 :         key.push_back('\n');</span></span>
+<span id="L360"><span class="lineNum">     360</span> <span class="tlaGNC tlaBgGNC">         688 :         key.push_back('\n');</span></span>
 <span id="L361"><span class="lineNum">     361</span>              :     }</span>
-<span id="L362"><span class="lineNum">     362</span> <span class="tlaGNC">         471 :     Value group_value = Value::object(std::move(group_props));</span></span>
-<span id="L363"><span class="lineNum">     363</span> <span class="tlaGNC">         942 :     auto grouped = object_with_upserted_property(row, &quot;_group&quot;, group_value);</span></span>
-<span id="L364"><span class="lineNum">     364</span> <span class="tlaGNC">        1413 :     return {std::make_shared&lt;ObjectValue&gt;(grouped.as_object()), std::move(key)};</span></span>
-<span id="L365"><span class="lineNum">     365</span> <span class="tlaGNC">         471 : }</span></span>
+<span id="L362"><span class="lineNum">     362</span> <span class="tlaGNC">         449 :     Value group_value = Value::object(std::move(group_props));</span></span>
+<span id="L363"><span class="lineNum">     363</span> <span class="tlaGNC">         898 :     auto grouped = object_with_upserted_property(row, &quot;_group&quot;, group_value);</span></span>
+<span id="L364"><span class="lineNum">     364</span> <span class="tlaGNC">        1347 :     return {std::make_shared&lt;ObjectValue&gt;(grouped.as_object()), std::move(key)};</span></span>
+<span id="L365"><span class="lineNum">     365</span> <span class="tlaGNC">         449 : }</span></span>
 <span id="L366"><span class="lineNum">     366</span>              : </span>
 <span id="L367"><span class="lineNum">     367</span> <span class="tlaGNC">         111 : inline std::vector&lt;std::string&gt; all_visible_columns_in_order(const TableValue&amp; table) {</span></span>
 <span id="L368"><span class="lineNum">     368</span> <span class="tlaGNC">         111 :     std::vector&lt;std::string&gt; columns;</span></span>

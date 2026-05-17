@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-17 03:21:55</td>
+            <td class="headerValue">2026-05-17 10:34:27</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -206,32 +206,32 @@
 <span id="L144"><span class="lineNum">     144</span>              :     }</span>
 <span id="L145"><span class="lineNum">     145</span> <span class="tlaGNC">         476 : }</span></span>
 <span id="L146"><span class="lineNum">     146</span>              : </span>
-<span id="L147"><span class="lineNum">     147</span> <span class="tlaGNC">         536 : absl::StatusOr&lt;PushdownPlan&gt; build_pushdown_plan(const std::shared_ptr&lt;plan::PlanNode&gt;&amp; node) {</span></span>
-<span id="L148"><span class="lineNum">     148</span> <span class="tlaGNC">         536 :     if (node == nullptr) {</span></span>
+<span id="L147"><span class="lineNum">     147</span> <span class="tlaGNC">         555 : absl::StatusOr&lt;PushdownPlan&gt; build_pushdown_plan(const std::shared_ptr&lt;plan::PlanNode&gt;&amp; node) {</span></span>
+<span id="L148"><span class="lineNum">     148</span> <span class="tlaGNC">         555 :     if (node == nullptr) {</span></span>
 <span id="L149"><span class="lineNum">     149</span> <span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;missing plan&quot;);</span></span>
 <span id="L150"><span class="lineNum">     150</span>              :     }</span>
-<span id="L151"><span class="lineNum">     151</span> <span class="tlaGNC tlaBgGNC">         536 :     if (node-&gt;kind == plan::PlanNodeKind::SourceScan) {</span></span>
-<span id="L152"><span class="lineNum">     152</span> <span class="tlaGNC">         142 :         if (!IsPushdownSourceScan(*node)) {</span></span>
+<span id="L151"><span class="lineNum">     151</span> <span class="tlaGNC tlaBgGNC">         555 :     if (node-&gt;kind == plan::PlanNodeKind::SourceScan) {</span></span>
+<span id="L152"><span class="lineNum">     152</span> <span class="tlaGNC">         150 :         if (!IsPushdownSourceScan(*node)) {</span></span>
 <span id="L153"><span class="lineNum">     153</span> <span class="tlaGNC">           2 :             return absl::InvalidArgumentError(&quot;unsupported pushdown source&quot;);</span></span>
 <span id="L154"><span class="lineNum">     154</span>              :         }</span>
-<span id="L155"><span class="lineNum">     155</span> <span class="tlaGNC">         141 :         PushdownPlan plan;</span></span>
-<span id="L156"><span class="lineNum">     156</span> <span class="tlaGNC">         141 :         plan.source = &amp;node-&gt;source_scan();</span></span>
-<span id="L157"><span class="lineNum">     157</span> <span class="tlaGNC">         141 :         auto columns_or = SourceScanColumns(node-&gt;source_scan());</span></span>
-<span id="L158"><span class="lineNum">     158</span> <span class="tlaGNC">         141 :         if (!columns_or.ok()) {</span></span>
+<span id="L155"><span class="lineNum">     155</span> <span class="tlaGNC">         149 :         PushdownPlan plan;</span></span>
+<span id="L156"><span class="lineNum">     156</span> <span class="tlaGNC">         149 :         plan.source = &amp;node-&gt;source_scan();</span></span>
+<span id="L157"><span class="lineNum">     157</span> <span class="tlaGNC">         149 :         auto columns_or = SourceScanColumns(node-&gt;source_scan());</span></span>
+<span id="L158"><span class="lineNum">     158</span> <span class="tlaGNC">         149 :         if (!columns_or.ok()) {</span></span>
 <span id="L159"><span class="lineNum">     159</span>              :             return columns_or.status();</span>
 <span id="L160"><span class="lineNum">     160</span>              :         }</span>
 <span id="L161"><span class="lineNum">     161</span>              :         plan.visible_columns = std::move(*columns_or);</span>
-<span id="L162"><span class="lineNum">     162</span> <span class="tlaGNC">         137 :         plan.source_columns = plan.visible_columns;</span></span>
+<span id="L162"><span class="lineNum">     162</span> <span class="tlaGNC">         145 :         plan.source_columns = plan.visible_columns;</span></span>
 <span id="L163"><span class="lineNum">     163</span>              :         return plan;</span>
-<span id="L164"><span class="lineNum">     164</span> <span class="tlaGNC">         141 :     }</span></span>
-<span id="L165"><span class="lineNum">     165</span> <span class="tlaGNC">         394 :     if (node-&gt;inputs.size() != 1) {</span></span>
+<span id="L164"><span class="lineNum">     164</span> <span class="tlaGNC">         149 :     }</span></span>
+<span id="L165"><span class="lineNum">     165</span> <span class="tlaGNC">         405 :     if (node-&gt;inputs.size() != 1) {</span></span>
 <span id="L166"><span class="lineNum">     166</span> <span class="tlaGNC">          36 :         return absl::InvalidArgumentError(&quot;non-linear plan is not pushable&quot;);</span></span>
 <span id="L167"><span class="lineNum">     167</span>              :     }</span>
-<span id="L168"><span class="lineNum">     168</span> <span class="tlaGNC">         376 :     auto plan_or = build_pushdown_plan(node-&gt;inputs[0]);</span></span>
-<span id="L169"><span class="lineNum">     169</span> <span class="tlaGNC">         376 :     if (!plan_or.ok()) {</span></span>
+<span id="L168"><span class="lineNum">     168</span> <span class="tlaGNC">         387 :     auto plan_or = build_pushdown_plan(node-&gt;inputs[0]);</span></span>
+<span id="L169"><span class="lineNum">     169</span> <span class="tlaGNC">         387 :     if (!plan_or.ok()) {</span></span>
 <span id="L170"><span class="lineNum">     170</span>              :         return plan_or.status();</span>
 <span id="L171"><span class="lineNum">     171</span>              :     }</span>
-<span id="L172"><span class="lineNum">     172</span> <span class="tlaGNC">         369 :     switch (node-&gt;kind) {</span></span>
+<span id="L172"><span class="lineNum">     172</span> <span class="tlaGNC">         373 :     switch (node-&gt;kind) {</span></span>
 <span id="L173"><span class="lineNum">     173</span>              :         case plan::PlanNodeKind::Range: {</span>
 <span id="L174"><span class="lineNum">     174</span> <span class="tlaGNC">          52 :             auto source_column_or = source_column_for_visible(</span></span>
 <span id="L175"><span class="lineNum">     175</span> <span class="tlaGNC">          26 :                 plan_or-&gt;visible_columns, plan_or-&gt;source_columns, &quot;_time&quot;, &quot;range&quot;);</span></span>
@@ -359,29 +359,29 @@
 <span id="L297"><span class="lineNum">     297</span>              :             }</span>
 <span id="L298"><span class="lineNum">     298</span>              :             return plan_or;</span>
 <span id="L299"><span class="lineNum">     299</span>              :         default:</span>
-<span id="L300"><span class="lineNum">     300</span> <span class="tlaGNC">          20 :             return absl::InvalidArgumentError(&quot;plan node is not pushable&quot;);</span></span>
+<span id="L300"><span class="lineNum">     300</span> <span class="tlaGNC">          28 :             return absl::InvalidArgumentError(&quot;plan node is not pushable&quot;);</span></span>
 <span id="L301"><span class="lineNum">     301</span>              :     }</span>
 <span id="L302"><span class="lineNum">     302</span> <span class="tlaGNC">         103 : }</span></span>
 <span id="L303"><span class="lineNum">     303</span>              : </span>
-<span id="L304"><span class="lineNum">     304</span> <span class="tlaGNC">        1336 : bool prefix_contains_node_kind(const std::shared_ptr&lt;plan::PlanNode&gt;&amp; node,</span></span>
+<span id="L304"><span class="lineNum">     304</span> <span class="tlaGNC">        1405 : bool prefix_contains_node_kind(const std::shared_ptr&lt;plan::PlanNode&gt;&amp; node,</span></span>
 <span id="L305"><span class="lineNum">     305</span>              :                                plan::PlanNodeKind kind) {</span>
-<span id="L306"><span class="lineNum">     306</span> <span class="tlaGNC">        3460 :     if (node == nullptr) {</span></span>
+<span id="L306"><span class="lineNum">     306</span> <span class="tlaGNC">        3582 :     if (node == nullptr) {</span></span>
 <span id="L307"><span class="lineNum">     307</span>              :         return false;</span>
 <span id="L308"><span class="lineNum">     308</span>              :     }</span>
-<span id="L309"><span class="lineNum">     309</span> <span class="tlaGNC">        3460 :     if (node-&gt;kind == kind) {</span></span>
+<span id="L309"><span class="lineNum">     309</span> <span class="tlaGNC">        3582 :     if (node-&gt;kind == kind) {</span></span>
 <span id="L310"><span class="lineNum">     310</span>              :         return true;</span>
 <span id="L311"><span class="lineNum">     311</span>              :     }</span>
-<span id="L312"><span class="lineNum">     312</span> <span class="tlaGNC">        3166 :     if (!IsPushableUnaryNode(*node) || node-&gt;inputs.size() != 1) {</span></span>
+<span id="L312"><span class="lineNum">     312</span> <span class="tlaGNC">        3284 :     if (!IsPushableUnaryNode(*node) || node-&gt;inputs.size() != 1) {</span></span>
 <span id="L313"><span class="lineNum">     313</span>              :         return false;</span>
 <span id="L314"><span class="lineNum">     314</span>              :     }</span>
 <span id="L315"><span class="lineNum">     315</span>              :     return prefix_contains_node_kind(node-&gt;inputs[0], kind);</span>
 <span id="L316"><span class="lineNum">     316</span>              : }</span>
 <span id="L317"><span class="lineNum">     317</span>              : </span>
-<span id="L318"><span class="lineNum">     318</span> <span class="tlaGNC">        1120 : bool prefix_contains_any_node_kind(const std::shared_ptr&lt;plan::PlanNode&gt;&amp; node,</span></span>
+<span id="L318"><span class="lineNum">     318</span> <span class="tlaGNC">        1176 : bool prefix_contains_any_node_kind(const std::shared_ptr&lt;plan::PlanNode&gt;&amp; node,</span></span>
 <span id="L319"><span class="lineNum">     319</span>              :                                    const std::vector&lt;plan::PlanNodeKind&gt;&amp; kinds) {</span>
-<span id="L320"><span class="lineNum">     320</span> <span class="tlaGNC">        1120 :     return std::any_of(kinds.begin(), kinds.end(), [&amp;](plan::PlanNodeKind kind) {</span></span>
-<span id="L321"><span class="lineNum">     321</span> <span class="tlaGNC">        1336 :         return prefix_contains_node_kind(node, kind);</span></span>
-<span id="L322"><span class="lineNum">     322</span> <span class="tlaGNC">        1120 :     });</span></span>
+<span id="L320"><span class="lineNum">     320</span> <span class="tlaGNC">        1176 :     return std::any_of(kinds.begin(), kinds.end(), [&amp;](plan::PlanNodeKind kind) {</span></span>
+<span id="L321"><span class="lineNum">     321</span> <span class="tlaGNC">        1405 :         return prefix_contains_node_kind(node, kind);</span></span>
+<span id="L322"><span class="lineNum">     322</span> <span class="tlaGNC">        1176 :     });</span></span>
 <span id="L323"><span class="lineNum">     323</span>              : }</span>
 <span id="L324"><span class="lineNum">     324</span>              : </span>
 <span id="L325"><span class="lineNum">     325</span> <span class="tlaGNC">          11 : std::string connector_predicate_op_string(connector::PredicateOp op) {</span></span>
@@ -477,20 +477,20 @@
 <span id="L415"><span class="lineNum">     415</span>              : </span>
 <span id="L416"><span class="lineNum">     416</span>              : class PushdownDetectionRule final : public Rule {</span>
 <span id="L417"><span class="lineNum">     417</span>              : public:</span>
-<span id="L418"><span class="lineNum">     418</span> <span class="tlaGNC">        1134 :     PushdownDetectionRule(std::string name, std::vector&lt;plan::PlanNodeKind&gt; kinds)</span></span>
-<span id="L419"><span class="lineNum">     419</span> <span class="tlaGNC">        1134 :         : name_(std::move(name)), kinds_(std::move(kinds)) {}</span></span>
+<span id="L418"><span class="lineNum">     418</span> <span class="tlaGNC">        1190 :     PushdownDetectionRule(std::string name, std::vector&lt;plan::PlanNodeKind&gt; kinds)</span></span>
+<span id="L419"><span class="lineNum">     419</span> <span class="tlaGNC">        1190 :         : name_(std::move(name)), kinds_(std::move(kinds)) {}</span></span>
 <span id="L420"><span class="lineNum">     420</span>              : </span>
-<span id="L421"><span class="lineNum">     421</span> <span class="tlaGNC">        1120 :     [[nodiscard]] std::string Name() const override { return name_; }</span></span>
+<span id="L421"><span class="lineNum">     421</span> <span class="tlaGNC">        1176 :     [[nodiscard]] std::string Name() const override { return name_; }</span></span>
 <span id="L422"><span class="lineNum">     422</span>              : </span>
-<span id="L423"><span class="lineNum">     423</span> <span class="tlaGNC">        1120 :     [[nodiscard]] absl::StatusOr&lt;RuleApplication&gt; Apply(</span></span>
+<span id="L423"><span class="lineNum">     423</span> <span class="tlaGNC">        1176 :     [[nodiscard]] absl::StatusOr&lt;RuleApplication&gt; Apply(</span></span>
 <span id="L424"><span class="lineNum">     424</span>              :         const std::shared_ptr&lt;plan::PlanNode&gt;&amp; node) const override {</span>
-<span id="L425"><span class="lineNum">     425</span> <span class="tlaGNC">        1120 :         if (node == nullptr) {</span></span>
+<span id="L425"><span class="lineNum">     425</span> <span class="tlaGNC">        1176 :         if (node == nullptr) {</span></span>
 <span id="L426"><span class="lineNum">     426</span> <span class="tlaUNC tlaBgUNC">           0 :             return absl::InvalidArgumentError(&quot;missing plan&quot;);</span></span>
 <span id="L427"><span class="lineNum">     427</span>              :         }</span>
-<span id="L428"><span class="lineNum">     428</span> <span class="tlaGNC tlaBgGNC">        2240 :         return RuleApplication{</span></span>
+<span id="L428"><span class="lineNum">     428</span> <span class="tlaGNC tlaBgGNC">        2352 :         return RuleApplication{</span></span>
 <span id="L429"><span class="lineNum">     429</span>              :             .plan = node,</span>
-<span id="L430"><span class="lineNum">     430</span> <span class="tlaGNC">        1120 :             .applied = prefix_contains_any_node_kind(node, kinds_),</span></span>
-<span id="L431"><span class="lineNum">     431</span> <span class="tlaGNC">        1120 :             .detail = &quot;&quot;,</span></span>
+<span id="L430"><span class="lineNum">     430</span> <span class="tlaGNC">        1176 :             .applied = prefix_contains_any_node_kind(node, kinds_),</span></span>
+<span id="L431"><span class="lineNum">     431</span> <span class="tlaGNC">        1176 :             .detail = &quot;&quot;,</span></span>
 <span id="L432"><span class="lineNum">     432</span>              :         };</span>
 <span id="L433"><span class="lineNum">     433</span>              :     }</span>
 <span id="L434"><span class="lineNum">     434</span>              : </span>
@@ -499,36 +499,36 @@
 <span id="L437"><span class="lineNum">     437</span>              :     std::vector&lt;plan::PlanNodeKind&gt; kinds_;</span>
 <span id="L438"><span class="lineNum">     438</span>              : };</span>
 <span id="L439"><span class="lineNum">     439</span>              : </span>
-<span id="L440"><span class="lineNum">     440</span> <span class="tlaGNC">         622 : bool insert_materialization_barriers(const std::shared_ptr&lt;plan::PlanNode&gt;&amp; node,</span></span>
+<span id="L440"><span class="lineNum">     440</span> <span class="tlaGNC">         641 : bool insert_materialization_barriers(const std::shared_ptr&lt;plan::PlanNode&gt;&amp; node,</span></span>
 <span id="L441"><span class="lineNum">     441</span>              :                                      std::shared_ptr&lt;plan::PlanNode&gt;* rewritten) {</span>
-<span id="L442"><span class="lineNum">     442</span> <span class="tlaGNC">         622 :     if (node == nullptr) {</span></span>
+<span id="L442"><span class="lineNum">     442</span> <span class="tlaGNC">         641 :     if (node == nullptr) {</span></span>
 <span id="L443"><span class="lineNum">     443</span>              :         *rewritten = node;</span>
 <span id="L444"><span class="lineNum">     444</span> <span class="tlaUNC tlaBgUNC">           0 :         return false;</span></span>
 <span id="L445"><span class="lineNum">     445</span>              :     }</span>
-<span id="L446"><span class="lineNum">     446</span> <span class="tlaGNC tlaBgGNC">         622 :     if (node-&gt;kind == plan::PlanNodeKind::SourceScan) {</span></span>
+<span id="L446"><span class="lineNum">     446</span> <span class="tlaGNC tlaBgGNC">         641 :     if (node-&gt;kind == plan::PlanNodeKind::SourceScan) {</span></span>
 <span id="L447"><span class="lineNum">     447</span>              :         *rewritten = node;</span>
-<span id="L448"><span class="lineNum">     448</span> <span class="tlaGNC">         182 :         return false;</span></span>
+<span id="L448"><span class="lineNum">     448</span> <span class="tlaGNC">         190 :         return false;</span></span>
 <span id="L449"><span class="lineNum">     449</span>              :     }</span>
 <span id="L450"><span class="lineNum">     450</span>              : </span>
 <span id="L451"><span class="lineNum">     451</span>              :     bool changed = false;</span>
-<span id="L452"><span class="lineNum">     452</span> <span class="tlaGNC">         440 :     std::vector&lt;std::shared_ptr&lt;plan::PlanNode&gt;&gt; rewritten_inputs;</span></span>
-<span id="L453"><span class="lineNum">     453</span> <span class="tlaGNC">         440 :     rewritten_inputs.reserve(node-&gt;inputs.size());</span></span>
-<span id="L454"><span class="lineNum">     454</span> <span class="tlaGNC">         902 :     for (const auto&amp; input : node-&gt;inputs) {</span></span>
-<span id="L455"><span class="lineNum">     455</span> <span class="tlaGNC">         462 :         std::shared_ptr&lt;plan::PlanNode&gt; next_input;</span></span>
-<span id="L456"><span class="lineNum">     456</span> <span class="tlaGNC">         462 :         changed = insert_materialization_barriers(input, &amp;next_input) || changed;</span></span>
+<span id="L452"><span class="lineNum">     452</span> <span class="tlaGNC">         451 :     std::vector&lt;std::shared_ptr&lt;plan::PlanNode&gt;&gt; rewritten_inputs;</span></span>
+<span id="L453"><span class="lineNum">     453</span> <span class="tlaGNC">         451 :     rewritten_inputs.reserve(node-&gt;inputs.size());</span></span>
+<span id="L454"><span class="lineNum">     454</span> <span class="tlaGNC">         924 :     for (const auto&amp; input : node-&gt;inputs) {</span></span>
+<span id="L455"><span class="lineNum">     455</span> <span class="tlaGNC">         473 :         std::shared_ptr&lt;plan::PlanNode&gt; next_input;</span></span>
+<span id="L456"><span class="lineNum">     456</span> <span class="tlaGNC">         473 :         changed = insert_materialization_barriers(input, &amp;next_input) || changed;</span></span>
 <span id="L457"><span class="lineNum">     457</span>              :         rewritten_inputs.push_back(std::move(next_input));</span>
 <span id="L458"><span class="lineNum">     458</span>              :     }</span>
 <span id="L459"><span class="lineNum">     459</span>              : </span>
-<span id="L460"><span class="lineNum">     460</span> <span class="tlaGNC">         440 :     auto next = changed ? std::make_shared&lt;plan::PlanNode&gt;(*node) : node;</span></span>
-<span id="L461"><span class="lineNum">     461</span> <span class="tlaGNC">         440 :     if (changed) {</span></span>
-<span id="L462"><span class="lineNum">     462</span> <span class="tlaGNC">           3 :         next-&gt;inputs = std::move(rewritten_inputs);</span></span>
+<span id="L460"><span class="lineNum">     460</span> <span class="tlaGNC">         451 :     auto next = changed ? std::make_shared&lt;plan::PlanNode&gt;(*node) : node;</span></span>
+<span id="L461"><span class="lineNum">     461</span> <span class="tlaGNC">         451 :     if (changed) {</span></span>
+<span id="L462"><span class="lineNum">     462</span> <span class="tlaGNC">          10 :         next-&gt;inputs = std::move(rewritten_inputs);</span></span>
 <span id="L463"><span class="lineNum">     463</span>              :     }</span>
 <span id="L464"><span class="lineNum">     464</span>              : </span>
-<span id="L465"><span class="lineNum">     465</span> <span class="tlaGNC">         440 :     if (node-&gt;kind == plan::PlanNodeKind::Materialize) {</span></span>
+<span id="L465"><span class="lineNum">     465</span> <span class="tlaGNC">         451 :     if (node-&gt;kind == plan::PlanNodeKind::Materialize) {</span></span>
 <span id="L466"><span class="lineNum">     466</span>              :         *rewritten = next;</span>
-<span id="L467"><span class="lineNum">     467</span> <span class="tlaGNC">           5 :         return true;</span></span>
+<span id="L467"><span class="lineNum">     467</span> <span class="tlaGNC">           9 :         return true;</span></span>
 <span id="L468"><span class="lineNum">     468</span>              :     }</span>
-<span id="L469"><span class="lineNum">     469</span> <span class="tlaGNC">         435 :     if (node-&gt;inputs.size() == 1 &amp;&amp; node-&gt;inputs[0] != nullptr &amp;&amp; !IsPushableUnaryNode(*node)) {</span></span>
+<span id="L469"><span class="lineNum">     469</span> <span class="tlaGNC">         442 :     if (node-&gt;inputs.size() == 1 &amp;&amp; node-&gt;inputs[0] != nullptr &amp;&amp; !IsPushableUnaryNode(*node)) {</span></span>
 <span id="L470"><span class="lineNum">     470</span> <span class="tlaGNC">           1 :         const PushdownState input_state = AnalyzePushdownState(*node-&gt;inputs[0]);</span></span>
 <span id="L471"><span class="lineNum">     471</span> <span class="tlaGNC">           1 :         if (input_state == PushdownState::SourceScan ||</span></span>
 <span id="L472"><span class="lineNum">     472</span>              :             input_state == PushdownState::SourcePushdown) {</span>
@@ -543,86 +543,86 @@
 <span id="L481"><span class="lineNum">     481</span>              :     }</span>
 <span id="L482"><span class="lineNum">     482</span>              : </span>
 <span id="L483"><span class="lineNum">     483</span>              :     *rewritten = std::move(next);</span>
-<span id="L484"><span class="lineNum">     484</span> <span class="tlaGNC">         434 :     return changed;</span></span>
-<span id="L485"><span class="lineNum">     485</span> <span class="tlaGNC">         440 : }</span></span>
+<span id="L484"><span class="lineNum">     484</span> <span class="tlaGNC">         441 :     return changed;</span></span>
+<span id="L485"><span class="lineNum">     485</span> <span class="tlaGNC">         451 : }</span></span>
 <span id="L486"><span class="lineNum">     486</span>              : </span>
-<span id="L487"><span class="lineNum">     487</span> <span class="tlaGNC">         162 : class InsertMaterializationBarrierRule final : public Rule {</span></span>
+<span id="L487"><span class="lineNum">     487</span> <span class="tlaGNC">         170 : class InsertMaterializationBarrierRule final : public Rule {</span></span>
 <span id="L488"><span class="lineNum">     488</span>              : public:</span>
-<span id="L489"><span class="lineNum">     489</span> <span class="tlaGNC">         160 :     [[nodiscard]] std::string Name() const override { return &quot;InsertMaterializationBarrier&quot;; }</span></span>
+<span id="L489"><span class="lineNum">     489</span> <span class="tlaGNC">         168 :     [[nodiscard]] std::string Name() const override { return &quot;InsertMaterializationBarrier&quot;; }</span></span>
 <span id="L490"><span class="lineNum">     490</span>              : </span>
-<span id="L491"><span class="lineNum">     491</span> <span class="tlaGNC">         160 :     [[nodiscard]] absl::StatusOr&lt;RuleApplication&gt; Apply(</span></span>
+<span id="L491"><span class="lineNum">     491</span> <span class="tlaGNC">         168 :     [[nodiscard]] absl::StatusOr&lt;RuleApplication&gt; Apply(</span></span>
 <span id="L492"><span class="lineNum">     492</span>              :         const std::shared_ptr&lt;plan::PlanNode&gt;&amp; node) const override {</span>
-<span id="L493"><span class="lineNum">     493</span> <span class="tlaGNC">         160 :         if (node == nullptr) {</span></span>
+<span id="L493"><span class="lineNum">     493</span> <span class="tlaGNC">         168 :         if (node == nullptr) {</span></span>
 <span id="L494"><span class="lineNum">     494</span> <span class="tlaUNC tlaBgUNC">           0 :             return absl::InvalidArgumentError(&quot;missing plan&quot;);</span></span>
 <span id="L495"><span class="lineNum">     495</span>              :         }</span>
-<span id="L496"><span class="lineNum">     496</span> <span class="tlaGNC tlaBgGNC">         160 :         std::shared_ptr&lt;plan::PlanNode&gt; rewritten;</span></span>
-<span id="L497"><span class="lineNum">     497</span> <span class="tlaGNC">         160 :         const bool applied = insert_materialization_barriers(node, &amp;rewritten);</span></span>
-<span id="L498"><span class="lineNum">     498</span> <span class="tlaGNC">         320 :         return RuleApplication{</span></span>
+<span id="L496"><span class="lineNum">     496</span> <span class="tlaGNC tlaBgGNC">         168 :         std::shared_ptr&lt;plan::PlanNode&gt; rewritten;</span></span>
+<span id="L497"><span class="lineNum">     497</span> <span class="tlaGNC">         168 :         const bool applied = insert_materialization_barriers(node, &amp;rewritten);</span></span>
+<span id="L498"><span class="lineNum">     498</span> <span class="tlaGNC">         336 :         return RuleApplication{</span></span>
 <span id="L499"><span class="lineNum">     499</span>              :             .plan = std::move(rewritten),</span>
 <span id="L500"><span class="lineNum">     500</span>              :             .applied = applied,</span>
-<span id="L501"><span class="lineNum">     501</span> <span class="tlaGNC">         160 :             .detail = &quot;&quot;,</span></span>
+<span id="L501"><span class="lineNum">     501</span> <span class="tlaGNC">         168 :             .detail = &quot;&quot;,</span></span>
 <span id="L502"><span class="lineNum">     502</span>              :         };</span>
 <span id="L503"><span class="lineNum">     503</span>              :     }</span>
 <span id="L504"><span class="lineNum">     504</span>              : };</span>
 <span id="L505"><span class="lineNum">     505</span>              : </span>
-<span id="L506"><span class="lineNum">     506</span> <span class="tlaGNC">        1134 : std::unique_ptr&lt;Rule&gt; MakePushdownDetectionRule(std::string name,</span></span>
+<span id="L506"><span class="lineNum">     506</span> <span class="tlaGNC">        1190 : std::unique_ptr&lt;Rule&gt; MakePushdownDetectionRule(std::string name,</span></span>
 <span id="L507"><span class="lineNum">     507</span>              :                                                 std::vector&lt;plan::PlanNodeKind&gt; kinds) {</span>
-<span id="L508"><span class="lineNum">     508</span> <span class="tlaGNC">        2268 :     return std::unique_ptr&lt;Rule&gt;(new PushdownDetectionRule(std::move(name), std::move(kinds)));</span></span>
+<span id="L508"><span class="lineNum">     508</span> <span class="tlaGNC">        2380 :     return std::unique_ptr&lt;Rule&gt;(new PushdownDetectionRule(std::move(name), std::move(kinds)));</span></span>
 <span id="L509"><span class="lineNum">     509</span>              : }</span>
 <span id="L510"><span class="lineNum">     510</span>              : </span>
 <span id="L511"><span class="lineNum">     511</span>              : } // namespace</span>
 <span id="L512"><span class="lineNum">     512</span>              : </span>
-<span id="L513"><span class="lineNum">     513</span> <span class="tlaGNC">         159 : RuleBasedOptimizer::RuleBasedOptimizer(std::vector&lt;std::unique_ptr&lt;Rule&gt;&gt; rules)</span></span>
-<span id="L514"><span class="lineNum">     514</span> <span class="tlaGNC">         162 :     : rules_(std::move(rules)) {}</span></span>
+<span id="L513"><span class="lineNum">     513</span> <span class="tlaGNC">         167 : RuleBasedOptimizer::RuleBasedOptimizer(std::vector&lt;std::unique_ptr&lt;Rule&gt;&gt; rules)</span></span>
+<span id="L514"><span class="lineNum">     514</span> <span class="tlaGNC">         170 :     : rules_(std::move(rules)) {}</span></span>
 <span id="L515"><span class="lineNum">     515</span>              : </span>
-<span id="L516"><span class="lineNum">     516</span> <span class="tlaGNC">         162 : absl::StatusOr&lt;PlanOptimizerResult&gt; RuleBasedOptimizer::Optimize(</span></span>
+<span id="L516"><span class="lineNum">     516</span> <span class="tlaGNC">         170 : absl::StatusOr&lt;PlanOptimizerResult&gt; RuleBasedOptimizer::Optimize(</span></span>
 <span id="L517"><span class="lineNum">     517</span>              :     std::shared_ptr&lt;plan::PlanNode&gt; plan) const {</span>
-<span id="L518"><span class="lineNum">     518</span> <span class="tlaGNC">         162 :     if (plan == nullptr) {</span></span>
+<span id="L518"><span class="lineNum">     518</span> <span class="tlaGNC">         170 :     if (plan == nullptr) {</span></span>
 <span id="L519"><span class="lineNum">     519</span> <span class="tlaGNC">           4 :         return absl::InvalidArgumentError(&quot;missing plan&quot;);</span></span>
 <span id="L520"><span class="lineNum">     520</span>              :     }</span>
-<span id="L521"><span class="lineNum">     521</span> <span class="tlaGNC">         160 :     PlanOptimizerResult result;</span></span>
+<span id="L521"><span class="lineNum">     521</span> <span class="tlaGNC">         168 :     PlanOptimizerResult result;</span></span>
 <span id="L522"><span class="lineNum">     522</span>              :     result.plan = std::move(plan);</span>
-<span id="L523"><span class="lineNum">     523</span> <span class="tlaGNC">         160 :     result.trace.reserve(rules_.size());</span></span>
-<span id="L524"><span class="lineNum">     524</span> <span class="tlaGNC">        1440 :     for (const auto&amp; rule : rules_) {</span></span>
-<span id="L525"><span class="lineNum">     525</span> <span class="tlaGNC">        1280 :         auto application_or = rule-&gt;Apply(result.plan);</span></span>
-<span id="L526"><span class="lineNum">     526</span> <span class="tlaGNC">        1280 :         if (!application_or.ok()) {</span></span>
+<span id="L523"><span class="lineNum">     523</span> <span class="tlaGNC">         168 :     result.trace.reserve(rules_.size());</span></span>
+<span id="L524"><span class="lineNum">     524</span> <span class="tlaGNC">        1512 :     for (const auto&amp; rule : rules_) {</span></span>
+<span id="L525"><span class="lineNum">     525</span> <span class="tlaGNC">        1344 :         auto application_or = rule-&gt;Apply(result.plan);</span></span>
+<span id="L526"><span class="lineNum">     526</span> <span class="tlaGNC">        1344 :         if (!application_or.ok()) {</span></span>
 <span id="L527"><span class="lineNum">     527</span>              :             return application_or.status();</span>
 <span id="L528"><span class="lineNum">     528</span>              :         }</span>
 <span id="L529"><span class="lineNum">     529</span>              :         result.plan = std::move(application_or-&gt;plan);</span>
-<span id="L530"><span class="lineNum">     530</span> <span class="tlaGNC">        1280 :         result.trace.push_back({</span></span>
-<span id="L531"><span class="lineNum">     531</span> <span class="tlaGNC">        1280 :             .rule = rule-&gt;Name(),</span></span>
-<span id="L532"><span class="lineNum">     532</span> <span class="tlaGNC">        1280 :             .applied = application_or-&gt;applied,</span></span>
+<span id="L530"><span class="lineNum">     530</span> <span class="tlaGNC">        1344 :         result.trace.push_back({</span></span>
+<span id="L531"><span class="lineNum">     531</span> <span class="tlaGNC">        1344 :             .rule = rule-&gt;Name(),</span></span>
+<span id="L532"><span class="lineNum">     532</span> <span class="tlaGNC">        1344 :             .applied = application_or-&gt;applied,</span></span>
 <span id="L533"><span class="lineNum">     533</span>              :             .detail = std::move(application_or-&gt;detail),</span>
 <span id="L534"><span class="lineNum">     534</span>              :         });</span>
 <span id="L535"><span class="lineNum">     535</span>              :     }</span>
-<span id="L536"><span class="lineNum">     536</span> <span class="tlaGNC">         160 :     auto pushdown_or = build_pushdown_plan(result.plan);</span></span>
-<span id="L537"><span class="lineNum">     537</span> <span class="tlaGNC">         160 :     if (pushdown_or.ok()) {</span></span>
-<span id="L538"><span class="lineNum">     538</span> <span class="tlaGNC">         123 :         result.pushdown_plan = std::move(*pushdown_or);</span></span>
+<span id="L536"><span class="lineNum">     536</span> <span class="tlaGNC">         168 :     auto pushdown_or = build_pushdown_plan(result.plan);</span></span>
+<span id="L537"><span class="lineNum">     537</span> <span class="tlaGNC">         168 :     if (pushdown_or.ok()) {</span></span>
+<span id="L538"><span class="lineNum">     538</span> <span class="tlaGNC">         127 :         result.pushdown_plan = std::move(*pushdown_or);</span></span>
 <span id="L539"><span class="lineNum">     539</span>              :     }</span>
 <span id="L540"><span class="lineNum">     540</span>              :     return result;</span>
-<span id="L541"><span class="lineNum">     541</span> <span class="tlaGNC">        2720 : }</span></span>
+<span id="L541"><span class="lineNum">     541</span> <span class="tlaGNC">        2856 : }</span></span>
 <span id="L542"><span class="lineNum">     542</span>              : </span>
-<span id="L543"><span class="lineNum">     543</span> <span class="tlaGNC">         162 : RuleBasedOptimizer DefaultRuleBasedOptimizer() {</span></span>
-<span id="L544"><span class="lineNum">     544</span> <span class="tlaGNC">         162 :     std::vector&lt;std::unique_ptr&lt;Rule&gt;&gt; rules;</span></span>
+<span id="L543"><span class="lineNum">     543</span> <span class="tlaGNC">         170 : RuleBasedOptimizer DefaultRuleBasedOptimizer() {</span></span>
+<span id="L544"><span class="lineNum">     544</span> <span class="tlaGNC">         170 :     std::vector&lt;std::unique_ptr&lt;Rule&gt;&gt; rules;</span></span>
 <span id="L545"><span class="lineNum">     545</span>              :     rules.push_back(</span>
-<span id="L546"><span class="lineNum">     546</span> <span class="tlaGNC">         486 :         MakePushdownDetectionRule(&quot;PushLimitIntoConnectorScan&quot;, {plan::PlanNodeKind::Limit}));</span></span>
+<span id="L546"><span class="lineNum">     546</span> <span class="tlaGNC">         510 :         MakePushdownDetectionRule(&quot;PushLimitIntoConnectorScan&quot;, {plan::PlanNodeKind::Limit}));</span></span>
 <span id="L547"><span class="lineNum">     547</span>              :     rules.push_back(</span>
-<span id="L548"><span class="lineNum">     548</span> <span class="tlaGNC">         486 :         MakePushdownDetectionRule(&quot;PushSortIntoConnectorScan&quot;, {plan::PlanNodeKind::Sort}));</span></span>
+<span id="L548"><span class="lineNum">     548</span> <span class="tlaGNC">         510 :         MakePushdownDetectionRule(&quot;PushSortIntoConnectorScan&quot;, {plan::PlanNodeKind::Sort}));</span></span>
 <span id="L549"><span class="lineNum">     549</span>              :     rules.push_back(</span>
-<span id="L550"><span class="lineNum">     550</span> <span class="tlaGNC">         486 :         MakePushdownDetectionRule(&quot;PushProjectionIntoConnectorScan&quot;,</span></span>
+<span id="L550"><span class="lineNum">     550</span> <span class="tlaGNC">         510 :         MakePushdownDetectionRule(&quot;PushProjectionIntoConnectorScan&quot;,</span></span>
 <span id="L551"><span class="lineNum">     551</span>              :                                   {plan::PlanNodeKind::Project, plan::PlanNodeKind::Rename}));</span>
 <span id="L552"><span class="lineNum">     552</span>              :     rules.push_back(</span>
-<span id="L553"><span class="lineNum">     553</span> <span class="tlaGNC">         486 :         MakePushdownDetectionRule(&quot;PushPredicateIntoConnectorScan&quot;, {plan::PlanNodeKind::Filter}));</span></span>
+<span id="L553"><span class="lineNum">     553</span> <span class="tlaGNC">         510 :         MakePushdownDetectionRule(&quot;PushPredicateIntoConnectorScan&quot;, {plan::PlanNodeKind::Filter}));</span></span>
 <span id="L554"><span class="lineNum">     554</span>              :     rules.push_back(</span>
-<span id="L555"><span class="lineNum">     555</span> <span class="tlaGNC">         486 :         MakePushdownDetectionRule(&quot;PushTimeRangeIntoConnectorScan&quot;, {plan::PlanNodeKind::Range}));</span></span>
+<span id="L555"><span class="lineNum">     555</span> <span class="tlaGNC">         510 :         MakePushdownDetectionRule(&quot;PushTimeRangeIntoConnectorScan&quot;, {plan::PlanNodeKind::Range}));</span></span>
 <span id="L556"><span class="lineNum">     556</span>              :     rules.push_back(</span>
-<span id="L557"><span class="lineNum">     557</span> <span class="tlaGNC">         486 :         MakePushdownDetectionRule(&quot;PushDistinctIntoConnectorScan&quot;, {plan::PlanNodeKind::Distinct}));</span></span>
+<span id="L557"><span class="lineNum">     557</span> <span class="tlaGNC">         510 :         MakePushdownDetectionRule(&quot;PushDistinctIntoConnectorScan&quot;, {plan::PlanNodeKind::Distinct}));</span></span>
 <span id="L558"><span class="lineNum">     558</span>              :     rules.push_back(</span>
-<span id="L559"><span class="lineNum">     559</span> <span class="tlaGNC">         486 :         MakePushdownDetectionRule(&quot;PushAggregateIntoConnectorScan&quot;,</span></span>
+<span id="L559"><span class="lineNum">     559</span> <span class="tlaGNC">         510 :         MakePushdownDetectionRule(&quot;PushAggregateIntoConnectorScan&quot;,</span></span>
 <span id="L560"><span class="lineNum">     560</span>              :                                   {plan::PlanNodeKind::Group, plan::PlanNodeKind::Aggregate}));</span>
-<span id="L561"><span class="lineNum">     561</span> <span class="tlaGNC">         324 :     rules.push_back(std::unique_ptr&lt;Rule&gt;(new InsertMaterializationBarrierRule()));</span></span>
-<span id="L562"><span class="lineNum">     562</span> <span class="tlaGNC">         324 :     return RuleBasedOptimizer(std::move(rules));</span></span>
-<span id="L563"><span class="lineNum">     563</span> <span class="tlaGNC">         162 : }</span></span>
+<span id="L561"><span class="lineNum">     561</span> <span class="tlaGNC">         340 :     rules.push_back(std::unique_ptr&lt;Rule&gt;(new InsertMaterializationBarrierRule()));</span></span>
+<span id="L562"><span class="lineNum">     562</span> <span class="tlaGNC">         340 :     return RuleBasedOptimizer(std::move(rules));</span></span>
+<span id="L563"><span class="lineNum">     563</span> <span class="tlaGNC">         170 : }</span></span>
 <span id="L564"><span class="lineNum">     564</span>              : </span>
 <span id="L565"><span class="lineNum">     565</span> <span class="tlaGNC">          14 : std::vector&lt;std::string&gt; AppliedRuleNames(const PlanOptimizerResult&amp; result) {</span></span>
 <span id="L566"><span class="lineNum">     566</span> <span class="tlaGNC">          14 :     std::vector&lt;std::string&gt; rules;</span></span>
@@ -634,28 +634,28 @@
 <span id="L572"><span class="lineNum">     572</span> <span class="tlaGNC">          14 :     return rules;</span></span>
 <span id="L573"><span class="lineNum">     573</span> <span class="tlaUNC tlaBgUNC">           0 : }</span></span>
 <span id="L574"><span class="lineNum">     574</span>              : </span>
-<span id="L575"><span class="lineNum">     575</span> <span class="tlaGNC tlaBgGNC">         153 : absl::StatusOr&lt;std::vector&lt;std::string&gt;&gt; SourceScanColumns(const plan::SourceScanSpec&amp; source) {</span></span>
+<span id="L575"><span class="lineNum">     575</span> <span class="tlaGNC tlaBgGNC">         161 : absl::StatusOr&lt;std::vector&lt;std::string&gt;&gt; SourceScanColumns(const plan::SourceScanSpec&amp; source) {</span></span>
 <span id="L576"><span class="lineNum">     576</span>              :     connector::SourceSpec spec{</span>
-<span id="L577"><span class="lineNum">     577</span> <span class="tlaGNC">         153 :         .source = source.source, .driver = source.driver, .dsn = source.dsn, .table = source.table};</span></span>
-<span id="L578"><span class="lineNum">     578</span> <span class="tlaGNC">         153 :     auto runtime_or = connector::ConnectorRegistry::Global().CreateRuntime(spec);</span></span>
-<span id="L579"><span class="lineNum">     579</span> <span class="tlaGNC">         153 :     if (!runtime_or.ok()) {</span></span>
+<span id="L577"><span class="lineNum">     577</span> <span class="tlaGNC">         161 :         .source = source.source, .driver = source.driver, .dsn = source.dsn, .table = source.table};</span></span>
+<span id="L578"><span class="lineNum">     578</span> <span class="tlaGNC">         161 :     auto runtime_or = connector::ConnectorRegistry::Global().CreateRuntime(spec);</span></span>
+<span id="L579"><span class="lineNum">     579</span> <span class="tlaGNC">         161 :     if (!runtime_or.ok()) {</span></span>
 <span id="L580"><span class="lineNum">     580</span>              :         return runtime_or.status();</span>
 <span id="L581"><span class="lineNum">     581</span>              :     }</span>
-<span id="L582"><span class="lineNum">     582</span> <span class="tlaGNC">         153 :     auto handle_or = (*runtime_or)-&gt;metadata-&gt;GetTableHandle(spec);</span></span>
-<span id="L583"><span class="lineNum">     583</span> <span class="tlaGNC">         153 :     if (!handle_or.ok()) {</span></span>
+<span id="L582"><span class="lineNum">     582</span> <span class="tlaGNC">         161 :     auto handle_or = (*runtime_or)-&gt;metadata-&gt;GetTableHandle(spec);</span></span>
+<span id="L583"><span class="lineNum">     583</span> <span class="tlaGNC">         161 :     if (!handle_or.ok()) {</span></span>
 <span id="L584"><span class="lineNum">     584</span>              :         return handle_or.status();</span>
 <span id="L585"><span class="lineNum">     585</span>              :     }</span>
-<span id="L586"><span class="lineNum">     586</span> <span class="tlaGNC">         153 :     auto schema_or = (*runtime_or)-&gt;metadata-&gt;Schema(*handle_or);</span></span>
-<span id="L587"><span class="lineNum">     587</span> <span class="tlaGNC">         153 :     if (!schema_or.ok()) {</span></span>
+<span id="L586"><span class="lineNum">     586</span> <span class="tlaGNC">         161 :     auto schema_or = (*runtime_or)-&gt;metadata-&gt;Schema(*handle_or);</span></span>
+<span id="L587"><span class="lineNum">     587</span> <span class="tlaGNC">         161 :     if (!schema_or.ok()) {</span></span>
 <span id="L588"><span class="lineNum">     588</span>              :         return schema_or.status();</span>
 <span id="L589"><span class="lineNum">     589</span>              :     }</span>
-<span id="L590"><span class="lineNum">     590</span> <span class="tlaGNC">         149 :     std::vector&lt;std::string&gt; columns;</span></span>
-<span id="L591"><span class="lineNum">     591</span> <span class="tlaGNC">         149 :     columns.reserve(schema_or-&gt;columns.size());</span></span>
-<span id="L592"><span class="lineNum">     592</span> <span class="tlaGNC">         742 :     for (const auto&amp; column : schema_or-&gt;columns) {</span></span>
-<span id="L593"><span class="lineNum">     593</span> <span class="tlaGNC">         593 :         columns.push_back(column.name);</span></span>
+<span id="L590"><span class="lineNum">     590</span> <span class="tlaGNC">         157 :     std::vector&lt;std::string&gt; columns;</span></span>
+<span id="L591"><span class="lineNum">     591</span> <span class="tlaGNC">         157 :     columns.reserve(schema_or-&gt;columns.size());</span></span>
+<span id="L592"><span class="lineNum">     592</span> <span class="tlaGNC">         778 :     for (const auto&amp; column : schema_or-&gt;columns) {</span></span>
+<span id="L593"><span class="lineNum">     593</span> <span class="tlaGNC">         621 :         columns.push_back(column.name);</span></span>
 <span id="L594"><span class="lineNum">     594</span>              :     }</span>
 <span id="L595"><span class="lineNum">     595</span>              :     return columns;</span>
-<span id="L596"><span class="lineNum">     596</span> <span class="tlaGNC">         302 : }</span></span>
+<span id="L596"><span class="lineNum">     596</span> <span class="tlaGNC">         318 : }</span></span>
 <span id="L597"><span class="lineNum">     597</span>              : </span>
 <span id="L598"><span class="lineNum">     598</span> <span class="tlaGNC">          34 : absl::StatusOr&lt;std::vector&lt;std::string&gt;&gt; VisibleColumnsForPlan(</span></span>
 <span id="L599"><span class="lineNum">     599</span>              :     const std::shared_ptr&lt;plan::PlanNode&gt;&amp; node) {</span>
@@ -700,8 +700,8 @@
 <span id="L638"><span class="lineNum">     638</span> <span class="tlaUNC">           0 :     return absl::InvalidArgumentError(&quot;plan node has no stable visible columns&quot;);</span></span>
 <span id="L639"><span class="lineNum">     639</span>              : }</span>
 <span id="L640"><span class="lineNum">     640</span>              : </span>
-<span id="L641"><span class="lineNum">     641</span> <span class="tlaGNC tlaBgGNC">         295 : bool CanExecutePushdownPlan(const PushdownPlan&amp; plan) {</span></span>
-<span id="L642"><span class="lineNum">     642</span> <span class="tlaGNC">         295 :     return plan.request.group_by.empty() || plan.request.aggregate.has_value();</span></span>
+<span id="L641"><span class="lineNum">     641</span> <span class="tlaGNC tlaBgGNC">         307 : bool CanExecutePushdownPlan(const PushdownPlan&amp; plan) {</span></span>
+<span id="L642"><span class="lineNum">     642</span> <span class="tlaGNC">         307 :     return plan.request.group_by.empty() || plan.request.aggregate.has_value();</span></span>
 <span id="L643"><span class="lineNum">     643</span>              : }</span>
 <span id="L644"><span class="lineNum">     644</span>              : </span>
 <span id="L645"><span class="lineNum">     645</span> <span class="tlaGNC">          11 : std::string FormatPushdownRequest(const connector::ScanRequest&amp; request) {</span></span>
@@ -792,15 +792,15 @@
 <span id="L730"><span class="lineNum">     730</span> <span class="tlaGNC">          22 :     return FormatPushdownRequest(result.pushdown_plan-&gt;request);</span></span>
 <span id="L731"><span class="lineNum">     731</span>              : }</span>
 <span id="L732"><span class="lineNum">     732</span>              : </span>
-<span id="L733"><span class="lineNum">     733</span> <span class="tlaGNC">         630 : bool IsPushdownSourceScan(const plan::PlanNode&amp; node) {</span></span>
-<span id="L734"><span class="lineNum">     734</span> <span class="tlaGNC">         630 :     if (node.kind != plan::PlanNodeKind::SourceScan) {</span></span>
+<span id="L733"><span class="lineNum">     733</span> <span class="tlaGNC">         638 : bool IsPushdownSourceScan(const plan::PlanNode&amp; node) {</span></span>
+<span id="L734"><span class="lineNum">     734</span> <span class="tlaGNC">         638 :     if (node.kind != plan::PlanNodeKind::SourceScan) {</span></span>
 <span id="L735"><span class="lineNum">     735</span>              :         return false;</span>
 <span id="L736"><span class="lineNum">     736</span>              :     }</span>
-<span id="L737"><span class="lineNum">     737</span> <span class="tlaGNC">         282 :     return connector::IsSqlPushdownConnector(node.source_scan().source, node.source_scan().driver);</span></span>
+<span id="L737"><span class="lineNum">     737</span> <span class="tlaGNC">         290 :     return connector::IsSqlPushdownConnector(node.source_scan().source, node.source_scan().driver);</span></span>
 <span id="L738"><span class="lineNum">     738</span>              : }</span>
 <span id="L739"><span class="lineNum">     739</span>              : </span>
-<span id="L740"><span class="lineNum">     740</span> <span class="tlaGNC">        3953 : bool IsPushableUnaryNode(const plan::PlanNode&amp; node) {</span></span>
-<span id="L741"><span class="lineNum">     741</span> <span class="tlaGNC">        3953 :     switch (node.kind) {</span></span>
+<span id="L740"><span class="lineNum">     740</span> <span class="tlaGNC">        4078 : bool IsPushableUnaryNode(const plan::PlanNode&amp; node) {</span></span>
+<span id="L741"><span class="lineNum">     741</span> <span class="tlaGNC">        4078 :     switch (node.kind) {</span></span>
 <span id="L742"><span class="lineNum">     742</span>              :         case plan::PlanNodeKind::Range:</span>
 <span id="L743"><span class="lineNum">     743</span>              :         case plan::PlanNodeKind::Project:</span>
 <span id="L744"><span class="lineNum">     744</span>              :         case plan::PlanNodeKind::Rename:</span>
@@ -813,8 +813,8 @@
 <span id="L751"><span class="lineNum">     751</span>              :             return true;</span>
 <span id="L752"><span class="lineNum">     752</span>              :         case plan::PlanNodeKind::Filter:</span>
 <span id="L753"><span class="lineNum">     753</span> <span class="tlaGNC">         531 :             return !node.filter().predicates.empty();</span></span>
-<span id="L754"><span class="lineNum">     754</span> <span class="tlaGNC">        1044 :         default:</span></span>
-<span id="L755"><span class="lineNum">     755</span> <span class="tlaGNC">        1044 :             return false;</span></span>
+<span id="L754"><span class="lineNum">     754</span> <span class="tlaGNC">        1109 :         default:</span></span>
+<span id="L755"><span class="lineNum">     755</span> <span class="tlaGNC">        1109 :             return false;</span></span>
 <span id="L756"><span class="lineNum">     756</span>              :     }</span>
 <span id="L757"><span class="lineNum">     757</span>              : }</span>
 <span id="L758"><span class="lineNum">     758</span>              : </span>
