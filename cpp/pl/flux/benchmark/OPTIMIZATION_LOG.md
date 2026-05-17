@@ -377,3 +377,34 @@ execution、page source streaming、profile 分段耗时。连接池和 prepared
   - 1M `scan`：8 drivers，100 万 output rows，984 pages，`1.1252s`，约 `888,715` input rows/s。
   - 1M `filter_project`：8 drivers，50 万 output rows，496 pages，`0.2749s`，约 `3.64M`
     input rows/s，非 blocking。
+
+## 2026-05-17：Page-native accumulator 主线收紧
+
+这一轮没有继续扩功能，而是把 blocking 结果边界里最容易拖垮大规模 scan 的
+`group/distinct/aggregate` 改成真正的 Page-native accumulator：
+
+- 移除本地 `group/distinct/aggregate` 对整表 `TableValue` 中间态的依赖。operator 现在逐 Page
+  消费输入，维护 group/distinct/aggregate state，最终只产出结果 Page。
+- `count/sum/mean/min/max` 的本地 aggregate state 直接从 `PageChunk` 读取列值，保留 group key
+  和空输入语义；`distinct` 按 group key 分桶维护 seen set。
+- physical plan/profile formatter 增加 `accumulators` 行，把 `blocking=true` 里的
+  `GroupOperator` / `DistinctOperator` / `AggregateOperator` 单独标出来，避免 explain 只显示笼统
+  blocking。
+- `sqlite_scan_benchmark` 增加 `group_count`、`distinct_host` 场景，并修正 benchmark 输出里的
+  `pages` / `blocking` 为全 pipeline 汇总，避免只看第一个 scan pipeline。
+
+本轮确认 benchmark：
+
+- `bazel test //cpp/pl/flux/runtime:runtime_exec_unit_test`：101 tests，100 passed，1 skipped
+  MySQL integration。
+- 真实 SQLite benchmark，1M rows，8 drivers：
+  - `filter_project`：50 万 output rows，496 pages，`0.7381s`，约 `1.35M` input rows/s，
+    非 blocking。
+  - `distinct_host`：64 output rows，985 pages，`1.5425s`，约 `648k` input rows/s，
+    blocking accumulator。
+  - `group_count`：64 output rows，985 pages，`23.8288s`，约 `42k` input rows/s，
+    blocking accumulator。
+
+结论：主线语义已经干净，`Page` 不再只是 `TableValue` 外壳；本地 aggregate 的 CPU 成本现在也被
+真实大表 benchmark 暴露出来。后续如果继续优化性能，优先看 group key canonicalization、
+row materialization、hash state 和 aggregate hot path，而不是再扩大功能面。

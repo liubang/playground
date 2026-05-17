@@ -108,7 +108,9 @@ python3 cpp/pl/flux/benchmark/run_benchmarks.py \
 SQLite connector 有独立的真实 scan benchmark target。它会在 `/tmp` 构造 SQLite 数据库，
 插入指定行数，执行真实 connector query，并输出 scenario、drivers、pages、split bytes、
 split wall time、blocking 和吞吐。
-默认 scenario 是 `filter_project`，也可以显式跑 `scan`、`wide_filter`、`topn`：
+默认 scenario 是 `filter_project`，也可以显式跑 `scan`、`wide_filter`、`topn`、
+`group_count`、`distinct_host`。其中 `group_count` / `distinct_host` 会用 materialize barrier
+固定走本地 Page-native accumulator，避免被 SQLite 聚合下推掩盖：
 
 ```bash
 bazel build //cpp/pl/flux/benchmark:sqlite_scan_benchmark
@@ -116,14 +118,22 @@ bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000
 bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_scan.db scan
 bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_wide.db wide_filter 80
 bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_topn.db topn
+bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_group.db group_count
+bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_distinct.db distinct_host
 ```
 
 2026-05-17 复验的本机真实 SQLite 结果：
 
-| scenario | rows | drivers | output rows | pages | seconds | input rows/s |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `scan` | 1,000,000 | 8 | 1,000,000 | 984 | 1.1252 | 888,715 |
-| `filter_project` | 1,000,000 | 8 | 500,000 | 496 | 0.2749 | 3,637,710 |
+| scenario | rows | drivers | output rows | pages | blocking | seconds | input rows/s |
+| --- | ---: | ---: | ---: | ---: | :---: | ---: | ---: |
+| `scan` | 1,000,000 | 8 | 1,000,000 | 984 | false | 1.1252 | 888,715 |
+| `filter_project` | 1,000,000 | 8 | 500,000 | 496 | false | 0.7381 | 1,354,780 |
+| `distinct_host` | 1,000,000 | 8 | 64 | 985 | true | 1.5425 | 648,284 |
+| `group_count` | 1,000,000 | 8 | 64 | 985 | true | 23.8288 | 41,966 |
+
+`group_count` 当前刻意绕开 SQLite SQL aggregate pushdown，用来压本地 accumulator 主线；它能完成
+百万行真实扫描，但 CPU 成本明显高于纯 scan/filter 和 distinct，后续优化应优先看 group key
+构造、row materialization 和 aggregate state 更新的 hot path。
 
 MySQL connector 也有独立 scan benchmark target，用真实 MySQL 表验证 range split、
 streaming page sink 和两阶段 Top-N。它默认读取 `FLUX_MYSQL_TEST_DSN`，表名默认 `cpu`，

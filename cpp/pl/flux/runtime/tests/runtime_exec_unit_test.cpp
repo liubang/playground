@@ -31,6 +31,8 @@
 #include <gtest/gtest.h>
 #include <iostream>
 #include <optional>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace pl::flux {
 namespace {
@@ -1234,6 +1236,109 @@ TEST(RuntimeExecTest, ParallelMemoryScanBenchmarkRunsLargeStreamingQuery) {
               << " rows_per_second=" << rows_per_second << "\n";
 }
 
+TEST(RuntimeExecTest, StreamingGroupAggregateRunsLargeMemoryFallback) {
+    constexpr size_t kRows = 200000;
+    constexpr size_t kSplits = 8;
+    constexpr size_t kRowsPerPage = 1024;
+    constexpr size_t kHosts = 32;
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve(kRows);
+    for (size_t index = 0; index < kRows; ++index) {
+        rows.push_back(TestRow({{"host", Value::string("edge-" + std::to_string(index % kHosts))},
+                                {"usage", Value::floating(static_cast<double>(index % 100))},
+                                {"seq", Value::integer(static_cast<int64_t>(index))}}));
+    }
+
+    connector::SourceSpec spec{
+        .source = "agg_memory",
+        .driver = "agg_memory",
+        .dsn = "memory://aggregate",
+        .table = "large",
+    };
+    connector::ConnectorRegistry::Global().Register(
+        spec.source, [rows](const connector::SourceSpec& requested) {
+            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
+                                                         kRowsPerPage, kSplits);
+        });
+
+    auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
+    auto materialized = plan::MakeMaterializeBarrier(scan, "benchmark memory fallback", "test");
+    auto grouped = plan::MakeGroup(materialized, {"host"});
+    auto aggregate = plan::MakeAggregate(grouped, plan::AggregateFunction::Count, "usage");
+    auto started = std::chrono::steady_clock::now();
+    auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(aggregate);
+    auto elapsed = std::chrono::steady_clock::now() - started;
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto& table = result_or->value.as_table();
+    ASSERT_EQ(kHosts, table.rows.size());
+    std::unordered_map<std::string, int64_t> counts;
+    for (const auto& row : table.rows) {
+        ASSERT_NE(nullptr, row);
+        const Value* host = row->lookup("host");
+        const Value* usage = row->lookup("usage");
+        ASSERT_NE(nullptr, host);
+        ASSERT_NE(nullptr, usage);
+        counts.emplace(host->as_string(), usage->as_int());
+    }
+    ASSERT_EQ(kHosts, counts.size());
+    for (size_t index = 0; index < kHosts; ++index) {
+        EXPECT_EQ(static_cast<int64_t>(kRows / kHosts), counts["edge-" + std::to_string(index)]);
+    }
+    ASSERT_FALSE(result_or->profile.pipelines.empty());
+    EXPECT_TRUE(result_or->profile.pipelines.back().blocking);
+
+    const double seconds = std::chrono::duration<double>(elapsed).count();
+    const double rows_per_second = static_cast<double>(kRows) / std::max(seconds, 0.000001);
+    std::cout << "streaming group aggregate benchmark: rows=" << kRows << " groups=" << kHosts
+              << " seconds=" << seconds << " rows_per_second=" << rows_per_second << "\n";
+}
+
+TEST(RuntimeExecTest, StreamingDistinctRunsLargeMemoryFallback) {
+    constexpr size_t kRows = 200000;
+    constexpr size_t kSplits = 8;
+    constexpr size_t kRowsPerPage = 1024;
+    constexpr size_t kHosts = 32;
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve(kRows);
+    for (size_t index = 0; index < kRows; ++index) {
+        rows.push_back(TestRow({{"host", Value::string("edge-" + std::to_string(index % kHosts))},
+                                {"usage", Value::floating(static_cast<double>(index % 100))},
+                                {"seq", Value::integer(static_cast<int64_t>(index))}}));
+    }
+
+    connector::SourceSpec spec{
+        .source = "distinct_memory",
+        .driver = "distinct_memory",
+        .dsn = "memory://distinct",
+        .table = "large",
+    };
+    connector::ConnectorRegistry::Global().Register(
+        spec.source, [rows](const connector::SourceSpec& requested) {
+            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
+                                                         kRowsPerPage, kSplits);
+        });
+
+    auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
+    auto materialized = plan::MakeMaterializeBarrier(scan, "benchmark memory fallback", "test");
+    auto distinct = plan::MakeDistinct(materialized, "host");
+    auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(distinct);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto& table = result_or->value.as_table();
+    ASSERT_EQ(kHosts, table.rows.size());
+    std::unordered_set<std::string> hosts;
+    for (const auto& row : table.rows) {
+        ASSERT_NE(nullptr, row);
+        const Value* host = row->lookup("host");
+        ASSERT_NE(nullptr, host);
+        hosts.insert(host->as_string());
+    }
+    EXPECT_EQ(kHosts, hosts.size());
+    ASSERT_FALSE(result_or->profile.pipelines.empty());
+    EXPECT_TRUE(result_or->profile.pipelines.back().blocking);
+}
+
 TEST(RuntimeExecTest, DriverRecordsBlockedStatusInSharedPipelineStats) {
     execution::Pipeline pipeline;
     pipeline.id = "blocked";
@@ -1276,6 +1381,18 @@ TEST(RuntimeExecTest, PipelineExplainShowsPipelineDag) {
     EXPECT_NE(std::string::npos, pipeline.find("ExchangeSourceOperator"));
 }
 
+TEST(RuntimeExecTest, PipelineExplainMarksStreamingAccumulators) {
+    auto scan = SqliteCpuScanPlan();
+    auto materialized = plan::MakeMaterializeBarrier(scan, "test memory fallback", "test");
+    auto grouped = plan::MakeGroup(materialized, {"host"});
+    auto aggregate = plan::MakeAggregate(grouped, plan::AggregateFunction::Count, "usage");
+
+    const auto pipeline = execution::FormatPipelinePlan(aggregate);
+
+    EXPECT_NE(std::string::npos, pipeline.find("blocking: true"));
+    EXPECT_NE(std::string::npos, pipeline.find("accumulators: [GroupOperator, AggregateOperator]"));
+}
+
 TEST(RuntimeExecTest, ExecutionProfileFormatterShowsRuntimeStats) {
     auto join =
         plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
@@ -1293,6 +1410,19 @@ TEST(RuntimeExecTest, ExecutionProfileFormatterShowsRuntimeStats) {
     EXPECT_NE(std::string::npos, profile.find("splits: "));
     EXPECT_NE(std::string::npos, profile.find("bytes="));
     EXPECT_NE(std::string::npos, profile.find("wall_ms="));
+}
+
+TEST(RuntimeExecTest, ExecutionProfileFormatterMarksStreamingAccumulators) {
+    auto scan = SqliteCpuScanPlan();
+    auto materialized = plan::MakeMaterializeBarrier(scan, "test memory fallback", "test");
+    auto grouped = plan::MakeGroup(materialized, {"host"});
+    auto aggregate = plan::MakeAggregate(grouped, plan::AggregateFunction::Count, "usage");
+
+    auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(aggregate);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto profile = execution::FormatExecutionProfile(result_or->profile);
+    EXPECT_NE(std::string::npos, profile.find("accumulators: [GroupOperator, AggregateOperator]"));
 }
 
 TEST(RuntimeExecTest, ContinuousSqliteFiltersAccumulatePushdownPredicates) {
