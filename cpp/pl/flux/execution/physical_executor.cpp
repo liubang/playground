@@ -21,6 +21,7 @@
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/connector/connector_registry.h"
 #include "cpp/pl/flux/connector/connector_runtime.h"
+#include "cpp/pl/flux/execution/accumulator.h"
 #include "cpp/pl/flux/execution/page_budget.h"
 #include "cpp/pl/flux/execution/task_executor.h"
 #include "cpp/pl/flux/optimizer/cbo.h"
@@ -1065,6 +1066,12 @@ public:
         }
     }
 
+    void CollectAccumulatorStats(std::vector<AccumulatorStats>* out) const override {
+        if (input_ != nullptr) {
+            input_->CollectAccumulatorStats(out);
+        }
+    }
+
     absl::StatusOr<std::optional<Page>> NextPage() override {
         if (finished_) {
             return std::nullopt;
@@ -1159,6 +1166,12 @@ public:
         }
     }
 
+    void CollectAccumulatorStats(std::vector<AccumulatorStats>* out) const override {
+        if (input_ != nullptr) {
+            input_->CollectAccumulatorStats(out);
+        }
+    }
+
 protected:
     [[nodiscard]] const std::shared_ptr<plan::PlanNode>& plan() const { return plan_; }
     [[nodiscard]] Operator* input() const { return input_.get(); }
@@ -1199,6 +1212,12 @@ public:
     void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
         if (input_ != nullptr) {
             input_->CollectSplitStats(out);
+        }
+    }
+
+    void CollectAccumulatorStats(std::vector<AccumulatorStats>* out) const override {
+        if (input_ != nullptr) {
+            input_->CollectAccumulatorStats(out);
         }
     }
 
@@ -1275,6 +1294,12 @@ public:
         }
     }
 
+    void CollectAccumulatorStats(std::vector<AccumulatorStats>* out) const override {
+        if (input_ != nullptr) {
+            input_->CollectAccumulatorStats(out);
+        }
+    }
+
     absl::StatusOr<std::optional<Page>> NextPage() override {
         auto input_or = next_input_page(input_.get());
         if (!input_or.ok()) {
@@ -1313,6 +1338,12 @@ public:
     void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
         if (input_ != nullptr) {
             input_->CollectSplitStats(out);
+        }
+    }
+
+    void CollectAccumulatorStats(std::vector<AccumulatorStats>* out) const override {
+        if (input_ != nullptr) {
+            input_->CollectAccumulatorStats(out);
         }
     }
 
@@ -1374,646 +1405,6 @@ public:
 
 private:
     absl::StatusOr<Page> Apply(Page input) const override { return apply_sort_page(input, plan()); }
-};
-
-struct PageMetadata {
-    std::string bucket;
-    std::optional<std::string> range_start;
-    std::optional<std::string> range_stop;
-    std::optional<std::string> result_name;
-    bool initialized = false;
-};
-
-void capture_page_metadata(PageMetadata* metadata, const Page& page) {
-    if (metadata == nullptr || metadata->initialized) {
-        return;
-    }
-    metadata->bucket = page.bucket;
-    metadata->range_start = page.range_start;
-    metadata->range_stop = page.range_stop;
-    metadata->result_name = page.result_name;
-    metadata->initialized = true;
-}
-
-Page page_from_accumulated_page_chunks(PageMetadata metadata,
-                                       std::vector<PageChunk> chunks,
-                                       const std::shared_ptr<plan::PlanNode>& plan) {
-    Page output;
-    output.bucket = std::move(metadata.bucket);
-    output.chunks = std::move(chunks);
-    output.range_start = std::move(metadata.range_start);
-    output.range_stop = std::move(metadata.range_stop);
-    output.result_name = std::move(metadata.result_name);
-    output.materialized = false;
-    return page_with_plan(std::move(output), plan);
-}
-
-std::optional<size_t> find_page_chunk_column(const PageChunk& chunk, const std::string& name) {
-    for (size_t index = 0; index < chunk.columns.size(); ++index) {
-        if (chunk.columns[index].name == name) {
-            return index;
-        }
-    }
-    return std::nullopt;
-}
-
-std::vector<std::optional<size_t>> group_column_indexes(const PageChunk& chunk,
-                                                        const std::vector<std::string>& columns) {
-    std::vector<std::optional<size_t>> indexes;
-    indexes.reserve(columns.size());
-    for (const auto& column : columns) {
-        indexes.push_back(find_page_chunk_column(chunk, column));
-    }
-    return indexes;
-}
-
-const Value* page_chunk_value_at_index(const PageChunk& chunk,
-                                       size_t row_index,
-                                       std::optional<size_t> column_index) {
-    if (!column_index.has_value() || *column_index >= chunk.columns.size() ||
-        row_index >= chunk.row_count) {
-        return nullptr;
-    }
-    const auto& column = chunk.columns[*column_index];
-    if (row_index >= column.values.size()) {
-        return nullptr;
-    }
-    return &column.values[row_index];
-}
-
-struct GroupKeyState {
-    std::shared_ptr<ObjectValue> object;
-    std::string identity;
-};
-
-void append_group_key_fragment(std::string* key, const std::string& column, const Value* value) {
-    absl::StrAppend(key, column, "=");
-    if (value == nullptr) {
-        absl::StrAppend(key, "<missing>");
-    } else if (value->type() == Value::Type::String) {
-        absl::StrAppend(key, value->as_string());
-    } else if (value->type() == Value::Type::Time) {
-        absl::StrAppend(key, value->as_time().literal);
-    } else {
-        absl::StrAppend(key, value->string());
-    }
-    key->push_back('\n');
-}
-
-GroupKeyState group_key_for_row(const PageChunk& chunk,
-                                size_t row_index,
-                                const std::vector<std::string>& columns,
-                                const std::vector<std::optional<size_t>>& column_indexes) {
-    std::vector<std::pair<std::string, Value>> group_props;
-    group_props.reserve(columns.size());
-    std::string key;
-    key.reserve(columns.size() * 16);
-    for (size_t index = 0; index < columns.size(); ++index) {
-        const Value* value = page_chunk_value_at_index(chunk, row_index, column_indexes[index]);
-        append_group_key_fragment(&key, columns[index], value);
-        if (value != nullptr) {
-            group_props.emplace_back(columns[index], *value);
-        }
-    }
-    return GroupKeyState{
-        .object = std::make_shared<ObjectValue>(std::move(group_props)),
-        .identity = std::move(key),
-    };
-}
-
-ColumnVector make_empty_column_like(const ColumnVector& source, size_t row_count) {
-    ColumnVector column;
-    column.name = source.name;
-    column.type = source.type;
-    column.values.resize(row_count, Value::null());
-    return column;
-}
-
-ColumnVector make_empty_column(std::string name, Value::Type type, size_t row_count) {
-    ColumnVector column;
-    column.name = std::move(name);
-    column.type = type;
-    column.values.resize(row_count, Value::null());
-    return column;
-}
-
-void ensure_column(PageChunk* target, const ColumnVector& source) {
-    if (target == nullptr || find_page_chunk_column(*target, source.name).has_value()) {
-        return;
-    }
-    target->columns.push_back(make_empty_column_like(source, target->row_count));
-}
-
-void append_source_row_to_chunk(PageChunk* target,
-                                const PageChunk& source,
-                                size_t row_index,
-                                const std::shared_ptr<ObjectValue>& group_key) {
-    if (target == nullptr) {
-        return;
-    }
-    for (const auto& source_column : source.columns) {
-        if (source_column.name != "_group") {
-            ensure_column(target, source_column);
-        }
-    }
-    if (group_key != nullptr) {
-        ColumnVector group_column =
-            make_empty_column("_group", Value::Type::Object, target->row_count);
-        ensure_column(target, group_column);
-    }
-
-    for (auto& target_column : target->columns) {
-        if (target_column.name == "_group") {
-            target_column.values.push_back(Value::object(group_key));
-            continue;
-        }
-        const auto source_index = find_page_chunk_column(source, target_column.name);
-        const Value* value = page_chunk_value_at_index(source, row_index, source_index);
-        target_column.values.push_back(value == nullptr ? Value::null() : *value);
-        if (target_column.type == Value::Type::Null && value != nullptr && !value->is_null()) {
-            target_column.type = value->type();
-        }
-    }
-    ++target->row_count;
-}
-
-void append_result_column(PageChunk* chunk, std::string name, Value value) {
-    if (chunk == nullptr) {
-        return;
-    }
-    ColumnVector column;
-    column.name = std::move(name);
-    column.type = value.type();
-    column.values.push_back(std::move(value));
-    chunk->columns.push_back(std::move(column));
-}
-
-PageChunk aggregate_result_chunk(const std::shared_ptr<ObjectValue>& group_key,
-                                 const std::string& column_name,
-                                 std::optional<Value> aggregate_value) {
-    PageChunk chunk;
-    chunk.group_key = group_key;
-    if (!aggregate_value.has_value()) {
-        chunk.row_count = 0;
-        return chunk;
-    }
-    chunk.row_count = 1;
-    if (group_key != nullptr) {
-        for (const auto& [name, value] : group_key->properties) {
-            append_result_column(&chunk, name, value);
-        }
-        append_result_column(&chunk, "_group",
-                             Value::object(std::make_shared<ObjectValue>(*group_key)));
-    }
-    append_result_column(&chunk, column_name, std::move(*aggregate_value));
-    return chunk;
-}
-
-std::string chunk_group_identity(const std::shared_ptr<ObjectValue>& group_key) {
-    return group_key == nullptr ? std::string() : group_key->string();
-}
-
-class StreamingGroupOperator final : public Operator {
-public:
-    StreamingGroupOperator(std::shared_ptr<plan::PlanNode> plan, std::unique_ptr<Operator> input)
-        : plan_(std::move(plan)), input_(std::move(input)) {}
-
-    [[nodiscard]] std::string name() const override { return "GroupOperator"; }
-
-    void Cancel() override {
-        if (input_ != nullptr) {
-            input_->Cancel();
-        }
-    }
-
-    void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
-        if (input_ != nullptr) {
-            input_->CollectSplitStats(out);
-        }
-    }
-
-    absl::StatusOr<std::optional<Page>> NextPage() override {
-        if (emitted_) {
-            return std::nullopt;
-        }
-        emitted_ = true;
-
-        PageMetadata metadata;
-        std::vector<PageChunk> chunks;
-        std::unordered_map<std::string, size_t> chunk_indexes;
-        while (true) {
-            auto page_or = next_input_page(input_.get());
-            if (!page_or.ok()) {
-                return page_or.status();
-            }
-            if (!page_or->has_value()) {
-                break;
-            }
-            const Page& page = **page_or;
-            auto status = ValidatePage(page);
-            if (!status.ok()) {
-                return status;
-            }
-            capture_page_metadata(&metadata, page);
-            for (const auto& page_chunk : page.chunks) {
-                const auto group_indexes = group_column_indexes(page_chunk, plan_->group().columns);
-                for (size_t row_index = 0; row_index < page_chunk.row_count; ++row_index) {
-                    GroupKeyState group_key = group_key_for_row(
-                        page_chunk, row_index, plan_->group().columns, group_indexes);
-                    auto [it, inserted] = chunk_indexes.emplace(group_key.identity, chunks.size());
-                    if (inserted) {
-                        chunks.emplace_back();
-                        chunks.back().group_key = std::move(group_key.object);
-                    }
-                    append_source_row_to_chunk(&chunks[it->second], page_chunk, row_index,
-                                               chunks[it->second].group_key);
-                }
-            }
-        }
-        if (chunks.empty()) {
-            chunks.emplace_back();
-        }
-        return page_from_accumulated_page_chunks(std::move(metadata), std::move(chunks), plan_);
-    }
-
-private:
-    std::shared_ptr<plan::PlanNode> plan_;
-    std::unique_ptr<Operator> input_;
-    bool emitted_ = false;
-};
-
-class StreamingDistinctOperator final : public Operator {
-public:
-    StreamingDistinctOperator(std::shared_ptr<plan::PlanNode> plan, std::unique_ptr<Operator> input)
-        : plan_(std::move(plan)), input_(std::move(input)) {}
-
-    [[nodiscard]] std::string name() const override { return "DistinctOperator"; }
-
-    void Cancel() override {
-        if (input_ != nullptr) {
-            input_->Cancel();
-        }
-    }
-
-    void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
-        if (input_ != nullptr) {
-            input_->CollectSplitStats(out);
-        }
-    }
-
-    absl::StatusOr<std::optional<Page>> NextPage() override {
-        if (emitted_) {
-            return std::nullopt;
-        }
-        emitted_ = true;
-
-        struct DistinctState {
-            PageChunk chunk;
-            std::unordered_set<std::string> seen;
-        };
-
-        PageMetadata metadata;
-        std::vector<DistinctState> groups;
-        std::unordered_map<std::string, size_t> group_indexes;
-        while (true) {
-            auto page_or = next_input_page(input_.get());
-            if (!page_or.ok()) {
-                return page_or.status();
-            }
-            if (!page_or->has_value()) {
-                break;
-            }
-            const Page& page = **page_or;
-            auto status = ValidatePage(page);
-            if (!status.ok()) {
-                return status;
-            }
-            capture_page_metadata(&metadata, page);
-            for (const auto& page_chunk : page.chunks) {
-                const std::string group_key = chunk_group_identity(page_chunk.group_key);
-                auto [it, inserted] = group_indexes.emplace(group_key, groups.size());
-                if (inserted) {
-                    DistinctState state;
-                    state.chunk.group_key = page_chunk.group_key;
-                    groups.push_back(std::move(state));
-                }
-                DistinctState& state = groups[it->second];
-                for (size_t row_index = 0; row_index < page_chunk.row_count; ++row_index) {
-                    const Value* value =
-                        PageChunkValueAt(page_chunk, row_index, plan_->distinct().column);
-                    const std::string key = value == nullptr ? "<missing>" : value->string();
-                    if (state.seen.insert(key).second) {
-                        append_source_row_to_chunk(&state.chunk, page_chunk, row_index,
-                                                   page_chunk.group_key);
-                    }
-                }
-            }
-        }
-
-        std::vector<PageChunk> chunks;
-        chunks.reserve(groups.size());
-        for (auto& group : groups) {
-            chunks.push_back(std::move(group.chunk));
-        }
-        if (chunks.empty()) {
-            chunks.emplace_back();
-        }
-        return page_from_accumulated_page_chunks(std::move(metadata), std::move(chunks), plan_);
-    }
-
-private:
-    std::shared_ptr<plan::PlanNode> plan_;
-    std::unique_ptr<Operator> input_;
-    bool emitted_ = false;
-};
-
-class StreamingAggregateOperator final : public Operator {
-public:
-    StreamingAggregateOperator(std::shared_ptr<plan::PlanNode> plan,
-                               std::unique_ptr<Operator> input)
-        : plan_(std::move(plan)), input_(std::move(input)) {}
-
-    [[nodiscard]] std::string name() const override { return "AggregateOperator"; }
-
-    void Cancel() override {
-        if (input_ != nullptr) {
-            input_->Cancel();
-        }
-    }
-
-    void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
-        if (input_ != nullptr) {
-            input_->CollectSplitStats(out);
-        }
-    }
-
-    absl::StatusOr<std::optional<Page>> NextPage() override {
-        if (emitted_) {
-            return std::nullopt;
-        }
-        emitted_ = true;
-
-        struct AggregateState {
-            std::shared_ptr<ObjectValue> group_key;
-            int64_t count = 0;
-            size_t numeric_count = 0;
-            double sum = 0.0;
-            double min = 0.0;
-            double max = 0.0;
-            bool has_numeric = false;
-        };
-
-        PageMetadata metadata;
-        std::vector<AggregateState> groups;
-        std::unordered_map<std::string, size_t> group_indexes;
-        while (true) {
-            auto page_or = next_input_page(input_.get());
-            if (!page_or.ok()) {
-                return page_or.status();
-            }
-            if (!page_or->has_value()) {
-                break;
-            }
-            const Page& page = **page_or;
-            auto status = ValidatePage(page);
-            if (!status.ok()) {
-                return status;
-            }
-            capture_page_metadata(&metadata, page);
-            for (const auto& page_chunk : page.chunks) {
-                const std::string group_key = chunk_group_identity(page_chunk.group_key);
-                auto [it, inserted] = group_indexes.emplace(group_key, groups.size());
-                if (inserted) {
-                    AggregateState state;
-                    state.group_key = page_chunk.group_key;
-                    groups.push_back(std::move(state));
-                }
-                AggregateState& state = groups[it->second];
-                for (size_t row_index = 0; row_index < page_chunk.row_count; ++row_index) {
-                    const Value* value =
-                        PageChunkValueAt(page_chunk, row_index, plan_->aggregate().column);
-                    if (plan_->aggregate().fn == plan::AggregateFunction::Count) {
-                        if (value != nullptr) {
-                            ++state.count;
-                        }
-                        continue;
-                    }
-                    if (value == nullptr || value->is_null()) {
-                        continue;
-                    }
-                    if (!is_numeric_value(*value)) {
-                        return absl::InvalidArgumentError(absl::StrCat(
-                            "aggregate `", plan_->aggregate().column, "` must be numeric"));
-                    }
-                    const double item = numeric_value(*value);
-                    state.sum += item;
-                    if (!state.has_numeric) {
-                        state.min = item;
-                        state.max = item;
-                        state.has_numeric = true;
-                    } else {
-                        state.min = std::min(state.min, item);
-                        state.max = std::max(state.max, item);
-                    }
-                    ++state.numeric_count;
-                }
-            }
-        }
-
-        std::vector<PageChunk> chunks;
-        chunks.reserve(groups.empty() ? 1 : groups.size());
-        if (groups.empty()) {
-            groups.emplace_back();
-        }
-        for (const auto& state : groups) {
-            if (plan_->aggregate().fn == plan::AggregateFunction::Count) {
-                chunks.push_back(aggregate_result_chunk(state.group_key, plan_->aggregate().column,
-                                                        Value::integer(state.count)));
-                continue;
-            }
-            if (!state.has_numeric) {
-                chunks.push_back(aggregate_result_chunk(state.group_key, plan_->aggregate().column,
-                                                        std::nullopt));
-                continue;
-            }
-            double value = 0.0;
-            switch (plan_->aggregate().fn) {
-                case plan::AggregateFunction::Sum:
-                    value = state.sum;
-                    break;
-                case plan::AggregateFunction::Mean:
-                    value = state.sum / static_cast<double>(state.numeric_count);
-                    break;
-                case plan::AggregateFunction::Min:
-                    value = state.min;
-                    break;
-                case plan::AggregateFunction::Max:
-                    value = state.max;
-                    break;
-                case plan::AggregateFunction::Count:
-                    break;
-            }
-            chunks.push_back(aggregate_result_chunk(state.group_key, plan_->aggregate().column,
-                                                    Value::floating(value)));
-        }
-        return page_from_accumulated_page_chunks(std::move(metadata), std::move(chunks), plan_);
-    }
-
-private:
-    std::shared_ptr<plan::PlanNode> plan_;
-    std::unique_ptr<Operator> input_;
-    bool emitted_ = false;
-};
-
-class StreamingGroupedAggregateOperator final : public Operator {
-public:
-    StreamingGroupedAggregateOperator(std::shared_ptr<plan::PlanNode> aggregate_plan,
-                                      std::vector<std::string> group_columns,
-                                      std::unique_ptr<Operator> input)
-        : aggregate_plan_(std::move(aggregate_plan)),
-          group_columns_(std::move(group_columns)),
-          input_(std::move(input)) {}
-
-    [[nodiscard]] std::string name() const override { return "AggregateOperator"; }
-
-    void Cancel() override {
-        if (input_ != nullptr) {
-            input_->Cancel();
-        }
-    }
-
-    void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
-        if (input_ != nullptr) {
-            input_->CollectSplitStats(out);
-        }
-    }
-
-    absl::StatusOr<std::optional<Page>> NextPage() override {
-        if (emitted_) {
-            return std::nullopt;
-        }
-        emitted_ = true;
-
-        struct AggregateState {
-            std::shared_ptr<ObjectValue> group_key;
-            int64_t count = 0;
-            size_t numeric_count = 0;
-            double sum = 0.0;
-            double min = 0.0;
-            double max = 0.0;
-            bool has_numeric = false;
-        };
-
-        PageMetadata metadata;
-        std::vector<AggregateState> groups;
-        std::unordered_map<std::string, size_t> group_indexes;
-        while (true) {
-            auto page_or = next_input_page(input_.get());
-            if (!page_or.ok()) {
-                return page_or.status();
-            }
-            if (!page_or->has_value()) {
-                break;
-            }
-            const Page& page = **page_or;
-            auto status = ValidatePage(page);
-            if (!status.ok()) {
-                return status;
-            }
-            capture_page_metadata(&metadata, page);
-            for (const auto& page_chunk : page.chunks) {
-                const auto group_indexes_in_chunk =
-                    group_column_indexes(page_chunk, group_columns_);
-                const auto aggregate_column =
-                    find_page_chunk_column(page_chunk, aggregate_plan_->aggregate().column);
-                for (size_t row_index = 0; row_index < page_chunk.row_count; ++row_index) {
-                    GroupKeyState group_key = group_key_for_row(
-                        page_chunk, row_index, group_columns_, group_indexes_in_chunk);
-                    auto [it, inserted] = group_indexes.emplace(group_key.identity, groups.size());
-                    if (inserted) {
-                        AggregateState state;
-                        state.group_key = std::move(group_key.object);
-                        groups.push_back(std::move(state));
-                    }
-                    AggregateState& state = groups[it->second];
-                    const Value* value =
-                        page_chunk_value_at_index(page_chunk, row_index, aggregate_column);
-                    if (aggregate_plan_->aggregate().fn == plan::AggregateFunction::Count) {
-                        if (value != nullptr) {
-                            ++state.count;
-                        }
-                        continue;
-                    }
-                    if (value == nullptr || value->is_null()) {
-                        continue;
-                    }
-                    if (!is_numeric_value(*value)) {
-                        return absl::InvalidArgumentError(
-                            absl::StrCat("aggregate `", aggregate_plan_->aggregate().column,
-                                         "` must be numeric"));
-                    }
-                    const double item = numeric_value(*value);
-                    state.sum += item;
-                    if (!state.has_numeric) {
-                        state.min = item;
-                        state.max = item;
-                        state.has_numeric = true;
-                    } else {
-                        state.min = std::min(state.min, item);
-                        state.max = std::max(state.max, item);
-                    }
-                    ++state.numeric_count;
-                }
-            }
-        }
-
-        if (groups.empty()) {
-            AggregateState state;
-            groups.push_back(std::move(state));
-        }
-        std::vector<PageChunk> chunks;
-        chunks.reserve(groups.size());
-        for (const auto& state : groups) {
-            if (aggregate_plan_->aggregate().fn == plan::AggregateFunction::Count) {
-                chunks.push_back(aggregate_result_chunk(state.group_key,
-                                                        aggregate_plan_->aggregate().column,
-                                                        Value::integer(state.count)));
-                continue;
-            }
-            if (!state.has_numeric) {
-                chunks.push_back(aggregate_result_chunk(
-                    state.group_key, aggregate_plan_->aggregate().column, std::nullopt));
-                continue;
-            }
-            double value = 0.0;
-            switch (aggregate_plan_->aggregate().fn) {
-                case plan::AggregateFunction::Sum:
-                    value = state.sum;
-                    break;
-                case plan::AggregateFunction::Mean:
-                    value = state.sum / static_cast<double>(state.numeric_count);
-                    break;
-                case plan::AggregateFunction::Min:
-                    value = state.min;
-                    break;
-                case plan::AggregateFunction::Max:
-                    value = state.max;
-                    break;
-                case plan::AggregateFunction::Count:
-                    break;
-            }
-            chunks.push_back(aggregate_result_chunk(
-                state.group_key, aggregate_plan_->aggregate().column, Value::floating(value)));
-        }
-        return page_from_accumulated_page_chunks(std::move(metadata), std::move(chunks),
-                                                 aggregate_plan_);
-    }
-
-private:
-    std::shared_ptr<plan::PlanNode> aggregate_plan_;
-    std::vector<std::string> group_columns_;
-    std::unique_ptr<Operator> input_;
-    bool emitted_ = false;
 };
 
 class TopNOperator final : public BlockingPageUnaryOperator {
@@ -2113,6 +1504,12 @@ public:
     void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
         if (input_ != nullptr) {
             input_->CollectSplitStats(out);
+        }
+    }
+
+    void CollectAccumulatorStats(std::vector<AccumulatorStats>* out) const override {
+        if (input_ != nullptr) {
+            input_->CollectAccumulatorStats(out);
         }
     }
 
@@ -2705,6 +2102,7 @@ void ResetPipelineStats(const std::shared_ptr<Pipeline::Stats>& stats) {
     stats->pages = 0;
     stats->rows = 0;
     stats->split_stats.clear();
+    stats->accumulator_stats.clear();
     stats->blocked = false;
     stats->finished = false;
     stats->error.clear();
@@ -2734,6 +2132,16 @@ void AddPipelineSplitStats(const std::shared_ptr<Pipeline::Stats>& stats,
     }
     std::lock_guard<std::mutex> lock(stats->mu);
     stats->split_stats.insert(stats->split_stats.end(), split_stats.begin(), split_stats.end());
+}
+
+void AddPipelineAccumulatorStats(const std::shared_ptr<Pipeline::Stats>& stats,
+                                 const std::vector<AccumulatorStats>& accumulator_stats) {
+    if (stats == nullptr || accumulator_stats.empty()) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(stats->mu);
+    stats->accumulator_stats.insert(stats->accumulator_stats.end(), accumulator_stats.begin(),
+                                    accumulator_stats.end());
 }
 
 void FailPipelineStats(const std::shared_ptr<Pipeline::Stats>& stats, const absl::Status& status) {
@@ -2773,6 +2181,9 @@ absl::Status Driver::RunToSink(const PageSink& sink) const {
     std::vector<connector::ConnectorSplitStats> split_stats;
     pipeline_.root->CollectSplitStats(&split_stats);
     AddPipelineSplitStats(pipeline_.stats, split_stats);
+    std::vector<AccumulatorStats> accumulator_stats;
+    pipeline_.root->CollectAccumulatorStats(&accumulator_stats);
+    AddPipelineAccumulatorStats(pipeline_.stats, accumulator_stats);
     FinishPipelineStats(pipeline_.stats);
     return absl::OkStatus();
 }
@@ -2843,6 +2254,7 @@ ExecutionProfile BuildExecutionProfile(const std::vector<PipelineProfile>& pipel
         profile.pipelines[index].pages = stats[index]->pages;
         profile.pipelines[index].rows = stats[index]->rows;
         profile.pipelines[index].split_stats = stats[index]->split_stats;
+        profile.pipelines[index].accumulator_stats = stats[index]->accumulator_stats;
         profile.pipelines[index].blocked = stats[index]->blocked;
         profile.pipelines[index].finished = stats[index]->finished;
         profile.pipelines[index].error = stats[index]->error;
@@ -3279,6 +2691,24 @@ std::string FormatSplitStats(const std::vector<connector::ConnectorSplitStats>& 
     return out.str();
 }
 
+std::string FormatAccumulatorStats(const std::vector<AccumulatorStats>& stats) {
+    std::ostringstream out;
+    out << "[";
+    for (size_t i = 0; i < stats.size(); ++i) {
+        if (i != 0) {
+            out << ", ";
+        }
+        out << "{operator=" << stats[i].operator_name << ", mode=" << stats[i].mode
+            << ", input_rows=" << stats[i].input_rows
+            << ", output_rows=" << stats[i].output_rows << ", groups=" << stats[i].groups
+            << ", key_ms=" << stats[i].key_time_ms << ", hash_ms=" << stats[i].hash_time_ms
+            << ", update_ms=" << stats[i].update_time_ms
+            << ", result_ms=" << stats[i].result_time_ms << "}";
+    }
+    out << "]";
+    return out.str();
+}
+
 std::string FormatExecutionProfile(const ExecutionProfile& profile) {
     std::ostringstream out;
     out << "ExecutionProfile\n";
@@ -3298,6 +2728,10 @@ std::string FormatExecutionProfile(const ExecutionProfile& profile) {
             << ", finished=" << (pipeline.finished ? "true" : "false") << "\n";
         if (!pipeline.split_stats.empty()) {
             out << "  splits: " << FormatSplitStats(pipeline.split_stats) << "\n";
+        }
+        if (!pipeline.accumulator_stats.empty()) {
+            out << "  accumulator_stats: "
+                << FormatAccumulatorStats(pipeline.accumulator_stats) << "\n";
         }
         if (!pipeline.error.empty()) {
             out << "  error: " << pipeline.error << "\n";
