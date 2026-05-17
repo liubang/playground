@@ -45,42 +45,9 @@ format -> start cluster -> mkdir -> put file -> get file -> ls -> stat -> rm
 
 # 3. 架构总览
 
-```text
-                      +----------------------+
-                      |        Client        |
-                      | CLI / SDK / Library  |
-                      +----------+-----------+
-                                 |
-                                 | brpc (Metadata RPC)
-                                 |
-                      +----------v-----------+
-                      |       NameNode       |
-                      |----------------------|
-                      | NamespaceManager     |
-                      | BlockManager         |
-                      | DataNodeManager      |
-                      | LeaseManager         |
-                      | PlacementManager     |
-                      | ReplicationManager   |
-                      +----------+-----------+
-                                 |
-                                 | MetadataStore (abstract)
-                                 |
-                      +----------v-----------+
-                      |        MySQL         |
-                      | (Boost.MySQL async)  |
-                      +----------------------+
+> 📐 原始图表文件: [doc/architecture_overview.drawio](doc/architecture_overview.drawio)
 
-      brpc (Data RPC / Block Transfer)
-+------------------+  +------------------+  +------------------+
-|    DataNode 1    |  |    DataNode 2    |  |    DataNode 3    |
-|------------------|  |------------------|  |------------------|
-| LocalBlockStore  |  | LocalBlockStore  |  | LocalBlockStore  |
-| HeartbeatSender  |  | HeartbeatSender  |  | HeartbeatSender  |
-| BlockReporter    |  | BlockReporter    |  | BlockReporter    |
-| ReplicationWorker|  | ReplicationWorker|  | ReplicationWorker|
-+------------------+  +------------------+  +------------------+
-```
+![MiniDFS 架构总览](doc/architecture_overview.drawio.png)
 
 ---
 
@@ -732,58 +699,9 @@ minidfs put ./a.log /warehouse/a.log
 
 以 3 副本（DN1 → DN2 → DN3）写入一个 Block 为例：
 
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant NN as NameNode
-    participant DN1 as DataNode 1
-    participant DN2 as DataNode 2
-    participant DN3 as DataNode 3
+> 📐 原始图表文件: [doc/pipeline_write.drawio](doc/pipeline_write.drawio)
 
-    C->>NN: AllocateBlock(inode_id, block_index)
-    NN-->>C: block_id, locations=[DN1, DN2, DN3]
-
-    Note over C,DN3: Pipeline 建立：Client → DN1 → DN2 → DN3
-
-    rect rgb(235, 245, 255)
-    Note over C,DN3: Chunk 0（pipeline=[DN2,DN3]）
-    C->>DN1: WriteBlock(chunk_0, pipeline=[DN2,DN3], chunk_index=0)
-    DN1->>DN1: CRC32C 校验 → create_block(tmp/) → append_chunk
-    DN1->>DN2: WriteBlock(chunk_0, pipeline=[DN3], chunk_index=0)
-    DN2->>DN2: CRC32C 校验 → create_block(tmp/) → append_chunk
-    DN2->>DN3: WriteBlock(chunk_0, pipeline=[], chunk_index=0)
-    DN3->>DN3: CRC32C 校验 → create_block(tmp/) → append_chunk
-    DN3-->>DN2: ACK(Success)
-    DN2-->>DN1: ACK(Success)
-    DN1-->>C: ACK(Success)
-    end
-
-    rect rgb(235, 245, 255)
-    Note over C,DN3: Chunk 1 ... Chunk N-1（中间 chunk，同上流程）
-    C->>DN1: WriteBlock(chunk_i, pipeline=[DN2,DN3])
-    DN1->>DN2: forward(chunk_i, pipeline=[DN3])
-    DN2->>DN3: forward(chunk_i, pipeline=[])
-    DN3-->>DN2: ACK
-    DN2-->>DN1: ACK
-    DN1-->>C: ACK
-    end
-
-    rect rgb(255, 245, 235)
-    Note over C,DN3: 最后一个 Chunk（is_last_chunk=true）
-    C->>DN1: WriteBlock(last_chunk, is_last=true)
-    DN1->>DN1: append_chunk → finalize_block(tmp/ → current/)
-    DN1->>DN2: forward(last_chunk, is_last=true)
-    DN2->>DN2: append_chunk → finalize_block(tmp/ → current/)
-    DN2->>DN3: forward(last_chunk, is_last=true)
-    DN3->>DN3: append_chunk → finalize_block(tmp/ → current/)
-    DN3-->>DN2: ACK(Success)
-    DN2-->>DN1: ACK(Success)
-    DN1-->>C: ACK(Success)
-    end
-
-    C->>NN: CommitBlock(block_id, length, generation_stamp)
-    NN-->>C: OK
-```
+![Pipeline 写入时序](doc/pipeline_write.drawio.png)
 
 **单个 DataNode 处理 WriteBlock 的逻辑：**
 
