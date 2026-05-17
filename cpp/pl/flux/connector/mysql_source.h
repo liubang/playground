@@ -50,7 +50,6 @@ struct MySQLRuntimeOptions {
     size_t split_cache_max_entries = 1024;
     int64_t split_cache_ttl_ms = 300000;
     bool use_prepared_statements = true;
-    size_t prepared_cache_max_entries = 128;
 };
 
 class MySQLSource final {

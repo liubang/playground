@@ -1123,11 +1123,11 @@ single split，避免跨 split 后改变排序、限制或聚合语义。
   time range、sort、distinct、group/aggregate、limit/offset 和 schema column；通用 SQL builder
   同时支持 literal SQL 和 `ParameterizedSql`，MySQL page source 默认走 server-side prepared
   statement，SQLite 继续使用已有的本地参数绑定。
-- MySQL prepared statement cache 绑定在 pooled connection 上，容量可控且驱逐时会 close server-side
-  statement；split discovery 优先使用 schema 中的 `id` / `seq` / integer columns，避免 benchmark
-  热路径每次先查 `INFORMATION_SCHEMA`。
-- MySQL runtime pool 当前只服务 page source 数据面；metadata / split discovery 走短连接和进程内
-  cache，避免短查询连接状态污染 streaming read 和 prepared statement cache。
+- MySQL page source 默认使用 server-side prepared statement，但 streaming read 当前使用独立连接；
+  pooled streaming connection 在 ASAN 下触发 Boost.MySQL dynamic row buffer 的 container-overflow，
+  因此没有保留测试级 `ASAN_OPTIONS` override，也没有把 pool 接回 streaming 主干。
+- MySQL split discovery 优先使用 schema 中的 `id` / `seq` / integer columns，避免 benchmark
+  热路径每次先查 `INFORMATION_SCHEMA`；metadata / split discovery 走短连接和进程内 cache。
 - 执行层 `range/filter/project` 直接从 `PageChunk` 读取列值，filter 会预解析列索引和 literal，
   避免 hot path 上逐行 `RowFromPageChunk`。
 - root `ExchangeOperator` 不再 collect 完整输入后一次性输出；gather/repartition 都逐页消费
@@ -1142,8 +1142,8 @@ single split，避免跨 split 后改变排序、限制或聚合语义。
   pages、split bytes、split wall time、profile 分段耗时、blocking、seconds 和 rows/s。
 - `run_connector_benchmarks.py --prepare-mysql-benchmark-table` 可按 MySQL DSN 自动重建
   `flux_bench_cpu` 这类同结构大表，避免手写 SQL 准备 benchmark fixture。
-- `run_connector_benchmarks.py` 可切换 MySQL prepared on/off、prepared cache size、target splits、
-  rows per page 和 connection pool size，用同一张大表沉淀 scan 性能矩阵。
+- `run_connector_benchmarks.py` 可切换 MySQL prepared on/off、target splits 和 rows per page，
+  用同一张大表沉淀 scan 性能矩阵。
 
 验收：
 
