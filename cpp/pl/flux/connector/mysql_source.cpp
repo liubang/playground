@@ -142,8 +142,8 @@ MySQLRuntimeOptions mysql_runtime_options_from_env() {
     options.target_split_count =
         read_size_option("FLUX_MYSQL_TARGET_SPLITS", options.target_split_count);
     options.rows_per_page = read_size_option("FLUX_MYSQL_ROWS_PER_PAGE", options.rows_per_page);
-    options.max_idle_connections =
-        read_size_option("FLUX_MYSQL_MAX_IDLE_CONNECTIONS", options.max_idle_connections);
+    options.max_pool_size =
+        read_size_option("FLUX_MYSQL_MAX_POOL_SIZE", options.max_pool_size);
     options.split_cache_max_entries =
         read_size_option("FLUX_MYSQL_SPLIT_CACHE_MAX_ENTRIES", options.split_cache_max_entries);
     options.split_cache_ttl_ms =
@@ -379,7 +379,7 @@ absl::StatusOr<mysql::results> execute_query(mysql::any_connection* conn,
 struct MySQLConnectionLeaseHolder {
     std::unique_ptr<asio::io_context> ctx;
     std::optional<mysql::any_connection> direct_conn;
-    std::optional<MySQLConnectionPool::Lease> lease;
+    std::optional<MySQLBoostConnectionPool::Lease> lease;
 
     [[nodiscard]] mysql::any_connection* connection() {
         if (lease.has_value()) {
@@ -390,7 +390,7 @@ struct MySQLConnectionLeaseHolder {
 };
 
 absl::StatusOr<MySQLConnectionLeaseHolder> acquire_mysql_connection(
-    const std::string& dsn, const std::shared_ptr<MySQLConnectionPool>& pool) {
+    const std::string& dsn, const std::shared_ptr<MySQLBoostConnectionPool>& pool) {
     MySQLConnectionLeaseHolder holder;
     if (pool != nullptr) {
         auto lease_or = pool->Acquire();
@@ -824,7 +824,7 @@ MySQLSource::MySQLSource(std::string dsn, std::string table)
 
 MySQLSource::MySQLSource(std::string dsn,
                          std::string table,
-                         std::shared_ptr<MySQLConnectionPool> pool)
+                         std::shared_ptr<MySQLBoostConnectionPool> pool)
     : dsn_(std::move(dsn)),
       table_(std::move(table)),
       query_(absl::StrCat("SELECT * FROM ", quote_table_identifier(table_))),
@@ -1013,7 +1013,7 @@ absl::StatusOr<Value> MySQLSource::Scan(const ScanRequest& request) {
 MySQLConnectorMetadata::MySQLConnectorMetadata(SourceSpec spec) : spec_(std::move(spec)) {}
 
 MySQLConnectorMetadata::MySQLConnectorMetadata(SourceSpec spec,
-                                               std::shared_ptr<MySQLConnectionPool> pool)
+                                               std::shared_ptr<MySQLBoostConnectionPool> pool)
     : spec_(std::move(spec)), pool_(std::move(pool)) {}
 
 absl::StatusOr<TableHandle> MySQLConnectorMetadata::GetTableHandle(const SourceSpec& spec) const {
@@ -1036,15 +1036,15 @@ absl::StatusOr<TableHandle> MySQLConnectorMetadata::GetTableHandle(const SourceS
 }
 
 absl::StatusOr<TableSchema> MySQLConnectorMetadata::Schema(const TableHandle& table) const {
-    return MySQLSource(table.dsn, table.table).Schema();
+    return MySQLSource(table.dsn, table.table, pool_).Schema();
 }
 
 SourceCapabilities MySQLConnectorMetadata::Capabilities(const TableHandle& table) const {
-    return MySQLSource(table.dsn, table.table).Capabilities();
+    return MySQLSource(table.dsn, table.table, pool_).Capabilities();
 }
 
 absl::StatusOr<TableStatistics> MySQLConnectorMetadata::Statistics(const TableHandle& table) const {
-    return MySQLSource(table.dsn, table.table).Statistics();
+    return MySQLSource(table.dsn, table.table, pool_).Statistics();
 }
 
 MySQLSplitManager::MySQLSplitManager(size_t target_split_count) {
@@ -1054,7 +1054,7 @@ MySQLSplitManager::MySQLSplitManager(size_t target_split_count) {
 }
 
 MySQLSplitManager::MySQLSplitManager(MySQLRuntimeOptions options,
-                                     std::shared_ptr<MySQLConnectionPool> pool)
+                                     std::shared_ptr<MySQLBoostConnectionPool> pool)
     : options_(options),
       pool_(std::move(pool)),
       target_split_count_(options_.target_split_count == 0 ? 8 : options_.target_split_count) {}
@@ -1077,7 +1077,7 @@ absl::StatusOr<std::vector<ConnectorSplit>> MySQLSplitManager::GetSplits(
     }
 
     const auto schema_started = Clock::now();
-    auto schema_or = MySQLSource(table.dsn, table.table).Schema();
+    auto schema_or = MySQLSource(table.dsn, table.table, pool_).Schema();
     if (!schema_or.ok()) {
         return schema_or.status();
     }
@@ -1091,15 +1091,14 @@ absl::StatusOr<std::vector<ConnectorSplit>> MySQLSplitManager::GetSplits(
         }
     };
 
-    asio::io_context ctx;
-    std::optional<mysql::any_connection> direct_conn;
-    mysql::any_connection* conn = nullptr;
-    auto conn_or = open_connection(&ctx, table.dsn);
+    auto conn_or = acquire_mysql_connection(table.dsn, pool_);
     if (!conn_or.ok()) {
         return conn_or.status();
     }
-    direct_conn.emplace(std::move(*conn_or));
-    conn = &*direct_conn;
+    mysql::any_connection* conn = conn_or->connection();
+    if (conn == nullptr) {
+        return absl::InvalidArgumentError("mysql split manager has no connection");
+    }
     const std::string key = cache_key(table.dsn, table.table);
     {
         auto& cache = metadata_cache();
@@ -1226,15 +1225,13 @@ MySQLPageSourceProvider::MySQLPageSourceProvider(size_t rows_per_page) {
 }
 
 MySQLPageSourceProvider::MySQLPageSourceProvider(MySQLRuntimeOptions options,
-                                                 std::shared_ptr<MySQLConnectionPool> pool)
+                                                 std::shared_ptr<MySQLBoostConnectionPool> /*pool*/)
     : options_(options),
-      pool_(std::move(pool)),
       rows_per_page_(std::max<size_t>(1, options_.rows_per_page)) {}
 
 struct MySQLPageSource::Impl {
     asio::io_context ctx;
     std::optional<mysql::any_connection> direct_conn;
-    std::optional<MySQLConnectionPool::Lease> lease;
     mysql::execution_state state;
     ScanRequest request;
     std::optional<std::string> split_column;
@@ -1246,9 +1243,6 @@ struct MySQLPageSource::Impl {
     bool emitted_any_row = false;
 
     [[nodiscard]] mysql::any_connection* connection() {
-        if (lease.has_value()) {
-            return lease->connection();
-        }
         return direct_conn.has_value() ? &*direct_conn : nullptr;
     }
 };
@@ -1261,14 +1255,12 @@ MySQLPageSource::MySQLPageSource(std::string dsn,
                                  std::optional<int64_t> split_lower,
                                  std::optional<int64_t> split_upper,
                                  int64_t split_id,
-                                 std::shared_ptr<MySQLConnectionPool> pool,
                                  MySQLRuntimeOptions options)
     : impl_(std::make_unique<Impl>()),
       dsn_(std::move(dsn)),
       table_(std::move(table)),
       rows_per_page_(std::max<size_t>(1, rows_per_page)),
-      options_(std::move(options)),
-      pool_(std::move(pool)) {
+      options_(std::move(options)) {
     impl_->request = std::move(request);
     impl_->split_column = std::move(split_column);
     impl_->split_lower = split_lower;
@@ -1278,35 +1270,21 @@ MySQLPageSource::MySQLPageSource(std::string dsn,
 
 absl::Status MySQLPageSource::Initialize() {
     const auto connect_started = Clock::now();
-    mysql::any_connection* conn = nullptr;
-    if (pool_ != nullptr) {
-        auto lease_or = pool_->Acquire();
-        stats_.connect_time_ms += elapsed_ms(connect_started);
-        if (!lease_or.ok()) {
-            return lease_or.status();
-        }
-        impl_->lease.emplace(std::move(*lease_or));
-        conn = impl_->connection();
-    } else {
-        auto conn_or = open_connection(&impl_->ctx, dsn_);
-        stats_.connect_time_ms += elapsed_ms(connect_started);
-        if (!conn_or.ok()) {
-            return conn_or.status();
-        }
-        impl_->direct_conn.emplace(std::move(*conn_or));
-        conn = impl_->connection();
+    auto conn_or = open_connection(&impl_->ctx, dsn_);
+    stats_.connect_time_ms += elapsed_ms(connect_started);
+    if (!conn_or.ok()) {
+        return conn_or.status();
     }
+    impl_->direct_conn.emplace(std::move(*conn_or));
+    mysql::any_connection* conn = impl_->connection();
     const auto schema_started = Clock::now();
-    auto schema_or = MySQLSource(dsn_, table_, pool_).Schema();
+    auto schema_or = MySQLSource(dsn_, table_).Schema();
     stats_.schema_time_ms += elapsed_ms(schema_started);
     if (!schema_or.ok()) {
         return schema_or.status();
     }
     const auto opts_or = conn->format_opts();
     if (opts_or.has_error()) {
-        if (impl_->lease.has_value()) {
-            impl_->lease->MarkBroken();
-        }
         return absl::InvalidArgumentError(
             absl::StrCat("mysql format options failed: ", opts_or.error().message()));
     }
@@ -1349,8 +1327,7 @@ absl::Status MySQLPageSource::Initialize() {
             if (!fields_or.ok()) {
                 return fields_or.status();
             }
-            mysql::statement stmt;
-            stmt = conn->prepare_statement(prepared_sql_or->sql);
+            mysql::statement stmt = conn->prepare_statement(prepared_sql_or->sql);
             conn->start_execution(stmt.bind(fields_or->begin(), fields_or->end()), impl_->state);
         } else {
             conn->start_execution(*literal_sql_or, impl_->state);
@@ -1364,15 +1341,9 @@ absl::Status MySQLPageSource::Initialize() {
             impl_->column_types.push_back(value_type_from_metadata(column));
         }
     } catch (const mysql::error_with_diagnostics& err) {
-        if (impl_->lease.has_value()) {
-            impl_->lease->MarkBroken();
-        }
         return absl::InvalidArgumentError(
             absl::StrCat("mysql scan start failed: ", mysql_error_message(err)));
     } catch (const std::exception& err) {
-        if (impl_->lease.has_value()) {
-            impl_->lease->MarkBroken();
-        }
         return absl::InvalidArgumentError(absl::StrCat("mysql scan start failed: ", err.what()));
     }
     return absl::OkStatus();
@@ -1394,9 +1365,6 @@ absl::StatusOr<std::optional<Page>> MySQLPageSource::NextPage() {
             return page;
         }
         stats_.finished = true;
-        if (impl_->lease.has_value()) {
-            impl_->lease->Release();
-        }
         return std::nullopt;
     }
 
@@ -1445,15 +1413,9 @@ absl::StatusOr<std::optional<Page>> MySQLPageSource::NextPage() {
             stats_.decode_time_ms += elapsed_ms(decode_started);
         }
     } catch (const mysql::error_with_diagnostics& err) {
-        if (impl_->lease.has_value()) {
-            impl_->lease->MarkBroken();
-        }
         return absl::InvalidArgumentError(
             absl::StrCat("mysql scan read failed: ", mysql_error_message(err)));
     } catch (const std::exception& err) {
-        if (impl_->lease.has_value()) {
-            impl_->lease->MarkBroken();
-        }
         return absl::InvalidArgumentError(absl::StrCat("mysql scan read failed: ", err.what()));
     }
 
@@ -1466,9 +1428,6 @@ absl::StatusOr<std::optional<Page>> MySQLPageSource::NextPage() {
             return page;
         }
         stats_.finished = true;
-        if (impl_->lease.has_value()) {
-            impl_->lease->Release();
-        }
         return std::nullopt;
     }
 
@@ -1500,9 +1459,13 @@ bool MySQLPageSource::Finished() const { return stats_.finished; }
 
 absl::StatusOr<std::unique_ptr<ConnectorPageSource>> MySQLPageSourceProvider::CreatePageSource(
     const ConnectorSplit& split) const {
+    // TODO: Re-enable pooled streaming once Boost.MySQL pooled_connection with
+    // dynamic execution_state/read_some_rows is ASAN-clean. Metadata and split
+    // discovery already use the official Boost.MySQL pool; scans stay direct to
+    // avoid reintroducing the reproduced container-overflow path.
     auto page_source = std::make_unique<MySQLPageSource>(
         split.table.dsn, split.table.table, split.request, rows_per_page_, split.split_column,
-        split.split_lower, split.split_upper, split.split_id, nullptr, options_);
+        split.split_lower, split.split_upper, split.split_id, options_);
     auto status = page_source->Initialize();
     if (!status.ok()) {
         return status;
@@ -1512,9 +1475,9 @@ absl::StatusOr<std::unique_ptr<ConnectorPageSource>> MySQLPageSourceProvider::Cr
 
 std::unique_ptr<ConnectorRuntime> MakeMySQLConnectorRuntime(const SourceSpec& spec) {
     MySQLRuntimeOptions options = mysql_runtime_options_from_env();
-    std::shared_ptr<MySQLConnectionPool> pool;
-    if (!spec.dsn.empty() && options.max_idle_connections > 0) {
-        auto pool_or = MakeMySQLConnectionPool(spec.dsn, options.max_idle_connections);
+    std::shared_ptr<MySQLBoostConnectionPool> pool;
+    if (!spec.dsn.empty() && options.max_pool_size > 0) {
+        auto pool_or = MakeMySQLBoostConnectionPool(spec.dsn, options.max_pool_size);
         if (pool_or.ok()) {
             pool = std::move(*pool_or);
         }

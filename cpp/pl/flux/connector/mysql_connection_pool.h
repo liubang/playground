@@ -18,64 +18,48 @@
 #pragma once
 
 #include "absl/status/statusor.h"
-#include <boost/asio/io_context.hpp>
-#include <boost/mysql/any_connection.hpp>
+#include <boost/mysql/connection_pool.hpp>
 #include <cstddef>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <string>
-#include <vector>
 
 namespace pl::flux::connector {
 
-class MySQLConnectionPool final {
+class MySQLBoostConnectionPool final {
 public:
-    struct Entry {
-        boost::asio::io_context ctx;
-        std::optional<boost::mysql::any_connection> conn;
-        bool healthy = true;
-    };
-
     class Lease final {
     public:
         Lease() = default;
-        Lease(MySQLConnectionPool* pool, std::shared_ptr<Entry> entry, bool pooled);
+        explicit Lease(boost::mysql::pooled_connection conn);
         Lease(const Lease&) = delete;
         Lease& operator=(const Lease&) = delete;
         Lease(Lease&& other) noexcept;
         Lease& operator=(Lease&& other) noexcept;
         ~Lease();
 
-        [[nodiscard]] boost::mysql::any_connection* connection() const;
+        [[nodiscard]] boost::mysql::any_connection* connection();
         void MarkBroken();
         void Release();
 
     private:
-        MySQLConnectionPool* pool_ = nullptr;
-        std::shared_ptr<Entry> entry_;
-        bool pooled_ = false;
-        bool released_ = true;
+        std::optional<boost::mysql::pooled_connection> conn_;
     };
 
-    MySQLConnectionPool(std::string dsn, size_t max_idle_connections);
-    ~MySQLConnectionPool();
+    MySQLBoostConnectionPool(std::string dsn, size_t max_pool_size);
+    ~MySQLBoostConnectionPool();
 
     [[nodiscard]] absl::StatusOr<Lease> Acquire();
-    [[nodiscard]] size_t max_idle_connections() const { return max_idle_connections_; }
+    [[nodiscard]] size_t max_pool_size() const { return max_pool_size_; }
 
 private:
-    friend class Lease;
-
-    void Return(std::shared_ptr<Entry> entry, bool pooled);
-
+    struct Impl;
     std::string dsn_;
-    size_t max_idle_connections_ = 0;
-    mutable std::mutex mu_;
-    std::vector<std::shared_ptr<Entry>> idle_;
+    size_t max_pool_size_ = 0;
+    std::unique_ptr<Impl> impl_;
 };
 
-absl::StatusOr<std::shared_ptr<MySQLConnectionPool>> MakeMySQLConnectionPool(
-    std::string dsn, size_t max_idle_connections);
+absl::StatusOr<std::shared_ptr<MySQLBoostConnectionPool>> MakeMySQLBoostConnectionPool(
+    std::string dsn, size_t max_pool_size);
 
 } // namespace pl::flux::connector
