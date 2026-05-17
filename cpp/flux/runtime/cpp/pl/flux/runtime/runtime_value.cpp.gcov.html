@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-16 17:39:20</td>
+            <td class="headerValue">2026-05-17 03:21:55</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">96.8&nbsp;%</td>
@@ -90,13 +90,13 @@
 <span id="L28"><span class="lineNum">      28</span>              : namespace {</span>
 <span id="L29"><span class="lineNum">      29</span>              : </span>
 <span id="L30"><span class="lineNum">      30</span>              : template &lt;typename T&gt;</span>
-<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC tlaBgGNC">      538883 : const T&amp; checked_get(const Value::Storage&amp; storage, Value::Type actual, Value::Type expected) {</span></span>
-<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">      538883 :     if (actual != expected) {</span></span>
+<span id="L31"><span class="lineNum">      31</span> <span class="tlaGNC tlaBgGNC">      533213 : const T&amp; checked_get(const Value::Storage&amp; storage, Value::Type actual, Value::Type expected) {</span></span>
+<span id="L32"><span class="lineNum">      32</span> <span class="tlaGNC">      533213 :     if (actual != expected) {</span></span>
 <span id="L33"><span class="lineNum">      33</span> <span class="tlaGNC">           1 :         std::stringstream ss;</span></span>
 <span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC">           1 :         ss &lt;&lt; &quot;unexpected value type&quot;;</span></span>
 <span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC">           3 :         throw std::logic_error(ss.str());</span></span>
 <span id="L36"><span class="lineNum">      36</span> <span class="tlaGNC">           1 :     }</span></span>
-<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">      538882 :     return std::get&lt;T&gt;(storage);</span></span>
+<span id="L37"><span class="lineNum">      37</span> <span class="tlaGNC">      533212 :     return std::get&lt;T&gt;(storage);</span></span>
 <span id="L38"><span class="lineNum">      38</span>              : }</span>
 <span id="L39"><span class="lineNum">      39</span>              : </span>
 <span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">        3939 : std::string quote_string(const std::string&amp; value) {</span></span>
@@ -176,19 +176,19 @@
 <span id="L114"><span class="lineNum">     114</span>              : </span>
 <span id="L115"><span class="lineNum">     115</span> <span class="tlaGNC">       13239 : Value::Value() : type_(Type::Null), storage_(std::monostate{}) {}</span></span>
 <span id="L116"><span class="lineNum">     116</span>              : </span>
-<span id="L117"><span class="lineNum">     117</span> <span class="tlaGNC">      668603 : Value::Value(Type type, Storage storage) : type_(type), storage_(std::move(storage)) {}</span></span>
+<span id="L117"><span class="lineNum">     117</span> <span class="tlaGNC">      686603 : Value::Value(Type type, Storage storage) : type_(type), storage_(std::move(storage)) {}</span></span>
 <span id="L118"><span class="lineNum">     118</span>              : </span>
 <span id="L119"><span class="lineNum">     119</span> <span class="tlaGNC">         853 : Value Value::null() { return {}; }</span></span>
 <span id="L120"><span class="lineNum">     120</span>              : </span>
 <span id="L121"><span class="lineNum">     121</span> <span class="tlaGNC">        3826 : Value Value::boolean(bool value) { return Value(Type::Bool, value); }</span></span>
 <span id="L122"><span class="lineNum">     122</span>              : </span>
-<span id="L123"><span class="lineNum">     123</span> <span class="tlaGNC">      426388 : Value Value::integer(int64_t value) { return Value(Type::Int, value); }</span></span>
+<span id="L123"><span class="lineNum">     123</span> <span class="tlaGNC">      438388 : Value Value::integer(int64_t value) { return Value(Type::Int, value); }</span></span>
 <span id="L124"><span class="lineNum">     124</span>              : </span>
 <span id="L125"><span class="lineNum">     125</span> <span class="tlaGNC">          57 : Value Value::uinteger(uint64_t value) { return Value(Type::UInt, value); }</span></span>
 <span id="L126"><span class="lineNum">     126</span>              : </span>
-<span id="L127"><span class="lineNum">     127</span> <span class="tlaGNC">      427452 : Value Value::floating(double value) { return Value(Type::Float, value); }</span></span>
+<span id="L127"><span class="lineNum">     127</span> <span class="tlaGNC">      439453 : Value Value::floating(double value) { return Value(Type::Float, value); }</span></span>
 <span id="L128"><span class="lineNum">     128</span>              : </span>
-<span id="L129"><span class="lineNum">     129</span> <span class="tlaGNC">      438714 : Value Value::string(std::string value) { return Value(Type::String, std::move(value)); }</span></span>
+<span id="L129"><span class="lineNum">     129</span> <span class="tlaGNC">      450714 : Value Value::string(std::string value) { return Value(Type::String, std::move(value)); }</span></span>
 <span id="L130"><span class="lineNum">     130</span>              : </span>
 <span id="L131"><span class="lineNum">     131</span> <span class="tlaGNC">         183 : Value Value::duration(std::string literal) {</span></span>
 <span id="L132"><span class="lineNum">     132</span> <span class="tlaGNC">         531 :     return Value(Type::Duration, DurationValue{std::move(literal)});</span></span>
@@ -273,10 +273,10 @@
 <span id="L211"><span class="lineNum">     211</span> <span class="tlaGNC">           9 :     return checked_get&lt;uint64_t&gt;(storage_, type_, Type::UInt);</span></span>
 <span id="L212"><span class="lineNum">     212</span>              : }</span>
 <span id="L213"><span class="lineNum">     213</span>              : </span>
-<span id="L214"><span class="lineNum">     214</span> <span class="tlaGNC">      400986 : const double&amp; Value::as_float() const { return checked_get&lt;double&gt;(storage_, type_, Type::Float); }</span></span>
+<span id="L214"><span class="lineNum">     214</span> <span class="tlaGNC">      395292 : const double&amp; Value::as_float() const { return checked_get&lt;double&gt;(storage_, type_, Type::Float); }</span></span>
 <span id="L215"><span class="lineNum">     215</span>              : </span>
-<span id="L216"><span class="lineNum">     216</span> <span class="tlaGNC">      116502 : const std::string&amp; Value::as_string() const {</span></span>
-<span id="L217"><span class="lineNum">     217</span> <span class="tlaGNC">      116580 :     return checked_get&lt;std::string&gt;(storage_, type_, Type::String);</span></span>
+<span id="L216"><span class="lineNum">     216</span> <span class="tlaGNC">      116206 : const std::string&amp; Value::as_string() const {</span></span>
+<span id="L217"><span class="lineNum">     217</span> <span class="tlaGNC">      116284 :     return checked_get&lt;std::string&gt;(storage_, type_, Type::String);</span></span>
 <span id="L218"><span class="lineNum">     218</span>              : }</span>
 <span id="L219"><span class="lineNum">     219</span>              : </span>
 <span id="L220"><span class="lineNum">     220</span> <span class="tlaGNC">         191 : const DurationValue&amp; Value::as_duration() const {</span></span>
@@ -413,9 +413,9 @@
 <span id="L351"><span class="lineNum">     351</span> <span class="tlaGNC">           2 :     return properties == other.properties;</span></span>
 <span id="L352"><span class="lineNum">     352</span>              : }</span>
 <span id="L353"><span class="lineNum">     353</span>              : </span>
-<span id="L354"><span class="lineNum">     354</span> <span class="tlaGNC">      415377 : const Value* ObjectValue::lookup(const std::string&amp; key) const {</span></span>
-<span id="L355"><span class="lineNum">     355</span> <span class="tlaGNC">      775950 :     for (const auto&amp; [name, value] : properties) {</span></span>
-<span id="L356"><span class="lineNum">     356</span> <span class="tlaGNC">      769460 :         if (name == key) {</span></span>
+<span id="L354"><span class="lineNum">     354</span> <span class="tlaGNC">      411216 : const Value* ObjectValue::lookup(const std::string&amp; key) const {</span></span>
+<span id="L355"><span class="lineNum">     355</span> <span class="tlaGNC">      768961 :     for (const auto&amp; [name, value] : properties) {</span></span>
+<span id="L356"><span class="lineNum">     356</span> <span class="tlaGNC">      762081 :         if (name == key) {</span></span>
 <span id="L357"><span class="lineNum">     357</span>              :             return &amp;value;</span>
 <span id="L358"><span class="lineNum">     358</span>              :         }</span>
 <span id="L359"><span class="lineNum">     359</span>              :     }</span>
