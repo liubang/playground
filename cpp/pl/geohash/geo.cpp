@@ -112,7 +112,26 @@ bool Geo::geohash_bouding_box(const GeoHash::GeoShape& shape, GeoHash::Area* bou
 }
 
 void Geo::geohash_cal_area_by_shape(const GeoHash::GeoShape& shape,
-                                    GeoHash::GeoHashRadius* radius) {}
+                                    GeoHash::GeoHashRadius* radius) {
+    GeoHash::Area bounds;
+    geohash_bouding_box(shape, &bounds);
+
+    // Estimate precision step based on shape dimensions
+    double radius_m = shape.type == GeoHash::GeoShape::CIRCULAR_TYPE
+                          ? shape.t.radius * shape.conversion
+                          : std::max(shape.t.r.width, shape.t.r.height) / 2 * shape.conversion;
+
+    uint8_t step = estimate_steps_by_radius(radius_m, shape.center.lat);
+
+    // Encode the center point
+    GeoHash::encode_wgs84(shape.center.lng, shape.center.lat, step, &radius->hash);
+
+    // Decode to get the area covered by the center hash cell
+    GeoHash::decode_wgs84(radius->hash, &radius->area);
+
+    // Calculate all 8 neighbors
+    GeoHash::neighbors(&radius->hash, &radius->neighbors);
+}
 
 uint64_t Geo::geohash_align52bits(const GeoHash::HashBits& hash) {
     uint64_t bits = hash.bits;
