@@ -25,6 +25,12 @@
 
 namespace pl::flux::execution {
 
+enum class AggregatePhase {
+    Single,
+    Partial,
+    Final,
+};
+
 class StreamingGroupOperator final : public Operator {
 public:
     StreamingGroupOperator(std::shared_ptr<plan::PlanNode> plan, std::unique_ptr<Operator> input);
@@ -82,7 +88,8 @@ class StreamingGroupedAggregateOperator final : public Operator {
 public:
     StreamingGroupedAggregateOperator(std::shared_ptr<plan::PlanNode> aggregate_plan,
                                       std::vector<std::string> group_columns,
-                                      std::unique_ptr<Operator> input);
+                                      std::unique_ptr<Operator> input,
+                                      AggregatePhase phase = AggregatePhase::Single);
 
     [[nodiscard]] std::string name() const override;
     void Cancel() override;
@@ -94,6 +101,7 @@ private:
     std::shared_ptr<plan::PlanNode> aggregate_plan_;
     std::vector<std::string> group_columns_;
     std::unique_ptr<Operator> input_;
+    AggregatePhase phase_ = AggregatePhase::Single;
     AccumulatorStats stats_;
     bool emitted_ = false;
 };

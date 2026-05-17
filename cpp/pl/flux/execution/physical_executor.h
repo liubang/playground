@@ -35,6 +35,8 @@ namespace pl::flux::execution {
 struct AccumulatorStats {
     std::string operator_name;
     std::string mode;
+    std::string phase;
+    std::string key_strategy;
     size_t input_rows = 0;
     size_t output_rows = 0;
     size_t groups = 0;
