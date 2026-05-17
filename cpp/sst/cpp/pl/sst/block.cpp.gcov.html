@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-17 23:08:25</td>
+            <td class="headerValue">2026-05-18 00:24:25</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">90.9&nbsp;%</td>
@@ -95,18 +95,18 @@
 <span id="L24"><span class="lineNum">      24</span>                 :             : </span>
 <span id="L25"><span class="lineNum">      25</span>                 :             : namespace pl {</span>
 <span id="L26"><span class="lineNum">      26</span>                 :             : </span>
-<span id="L27"><span class="lineNum">      27</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 5496 times"> + </span>]:<span class="tlaGNC tlaBgGNC">        5497 : Block::Block(const BlockContents&amp; content)</span></span>
-<span id="L28"><span class="lineNum">      28</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 5496 times"> + </span>]:<span class="tlaGNC">        5497 :     : data_(content.data.data()), size_(content.data.size()), owned_(content.heap_allocated) {</span></span>
-<span id="L29"><span class="lineNum">      29</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 5496 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 5496 times"> + </span>]:<span class="tlaGNC">       10994 :     num_restarts_ = decodeInt&lt;uint32_t&gt;(data_ + size_ - 4);</span></span>
-<span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC">        5497 :     std::size_t max_num_restarts = (size_ - 4) / 4;</span></span>
-<span id="L31"><span class="lineNum">      31</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 5496 times"> + </span>]:<span class="tlaGNC">        5497 :     if (num_restarts_ &gt; max_num_restarts) {</span></span>
+<span id="L27"><span class="lineNum">      27</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 5849 times"> + </span>]:<span class="tlaGNC tlaBgGNC">        5850 : Block::Block(const BlockContents&amp; content)</span></span>
+<span id="L28"><span class="lineNum">      28</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 5849 times"> + </span>]:<span class="tlaGNC">        5850 :     : data_(content.data.data()), size_(content.data.size()), owned_(content.heap_allocated) {</span></span>
+<span id="L29"><span class="lineNum">      29</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 5849 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 5849 times"> + </span>]:<span class="tlaGNC">       11700 :     num_restarts_ = decodeInt&lt;uint32_t&gt;(data_ + size_ - 4);</span></span>
+<span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC">        5850 :     std::size_t max_num_restarts = (size_ - 4) / 4;</span></span>
+<span id="L31"><span class="lineNum">      31</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 5849 times"> + </span>]:<span class="tlaGNC">        5850 :     if (num_restarts_ &gt; max_num_restarts) {</span></span>
 <span id="L32"><span class="lineNum">      32</span>                 :             :         // invalid block</span>
 <span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC">           1 :         size_ = 0;</span></span>
 <span id="L34"><span class="lineNum">      34</span>                 :             :     } else {</span>
 <span id="L35"><span class="lineNum">      35</span>                 :             :         // 计算restart的起始地址偏移</span>
-<span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaGNC">        5496 :         restart_offset_ = static_cast&lt;uint32_t&gt;(size_ - (1 + num_restarts_) * 4);</span></span>
+<span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaGNC">        5849 :         restart_offset_ = static_cast&lt;uint32_t&gt;(size_ - (1 + num_restarts_) * 4);</span></span>
 <span id="L37"><span class="lineNum">      37</span>                 :             :     }</span>
-<span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC">        5497 : }</span></span>
+<span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC">        5850 : }</span></span>
 <span id="L39"><span class="lineNum">      39</span>                 :             : </span>
 <span id="L40"><span class="lineNum">      40</span>                 :<span class="tlaGNC">           1 : Block::Block(Block&amp;&amp; other) noexcept</span></span>
 <span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">           1 :     : data_(std::exchange(other.data_, nullptr)),</span></span>
@@ -127,66 +127,66 @@
 <span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaUNC">           0 :     return *this;</span></span>
 <span id="L57"><span class="lineNum">      57</span>                 :             : }</span>
 <span id="L58"><span class="lineNum">      58</span>                 :             : </span>
-<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC tlaBgGNC">        5498 : void Block::cleanup() noexcept {</span></span>
-<span id="L60"><span class="lineNum">      60</span>   [<span class="tlaGBC" title="Branch 0 was taken 5483 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 5483 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">        5498 :     if (owned_ &amp;&amp; (data_ != nullptr)) {</span></span>
-<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">        5483 :         delete[] data_;</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC tlaBgGNC">        5851 : void Block::cleanup() noexcept {</span></span>
+<span id="L60"><span class="lineNum">      60</span>   [<span class="tlaGBC" title="Branch 0 was taken 5836 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 5836 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">        5851 :     if (owned_ &amp;&amp; (data_ != nullptr)) {</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">        5836 :         delete[] data_;</span></span>
 <span id="L62"><span class="lineNum">      62</span>                 :             :     }</span>
-<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC">        5498 :     data_ = nullptr;</span></span>
-<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">        5498 :     size_ = 0;</span></span>
-<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">        5498 :     num_restarts_ = 0;</span></span>
-<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">        5498 :     restart_offset_ = 0;</span></span>
-<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">        5498 :     owned_ = false;</span></span>
-<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">        5498 : }</span></span>
+<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC">        5851 :     data_ = nullptr;</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">        5851 :     size_ = 0;</span></span>
+<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">        5851 :     num_restarts_ = 0;</span></span>
+<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">        5851 :     restart_offset_ = 0;</span></span>
+<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">        5851 :     owned_ = false;</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">        5851 : }</span></span>
 <span id="L69"><span class="lineNum">      69</span>                 :             : </span>
-<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">        5498 : Block::~Block() { cleanup(); }</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">        5851 : Block::~Block() { cleanup(); }</span></span>
 <span id="L71"><span class="lineNum">      71</span>                 :             : </span>
 <span id="L72"><span class="lineNum">      72</span>                 :             : class Block::BlockIterator : public Iterator {</span>
 <span id="L73"><span class="lineNum">      73</span>                 :             : public:</span>
-<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">        6491 :     BlockIterator(ComparatorRef comparator,</span></span>
+<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">        6844 :     BlockIterator(ComparatorRef comparator,</span></span>
 <span id="L75"><span class="lineNum">      75</span>                 :             :                   BlockRef block,</span>
 <span id="L76"><span class="lineNum">      76</span>                 :             :                   const char* data,</span>
 <span id="L77"><span class="lineNum">      77</span>                 :             :                   uint32_t restarts,</span>
 <span id="L78"><span class="lineNum">      78</span>                 :             :                   uint32_t num_restarts)</span>
-<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaGNC">        6491 :         : comparator_(std::move(comparator)),</span></span>
+<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaGNC">        6844 :         : comparator_(std::move(comparator)),</span></span>
 <span id="L80"><span class="lineNum">      80</span>                 :             :           block_(std::move(block)),</span>
-<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">        6491 :           data_(data),</span></span>
-<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">        6491 :           restarts_(restarts),</span></span>
-<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">        6491 :           num_restarts_(num_restarts),</span></span>
-<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">        6491 :           current_(restarts_),</span></span>
-<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC">        6491 :           current_restart_(num_restarts) {</span></span>
+<span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC">        6844 :           data_(data),</span></span>
+<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">        6844 :           restarts_(restarts),</span></span>
+<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">        6844 :           num_restarts_(num_restarts),</span></span>
+<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">        6844 :           current_(restarts_),</span></span>
+<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC">        6844 :           current_restart_(num_restarts) {</span></span>
 <span id="L86"><span class="lineNum">      86</span>                 :             :         // 预分配 key 缓冲区，减少重分配</span>
-<span id="L87"><span class="lineNum">      87</span>         [<span class="tlaGBC" title="Branch 0 was taken 6491 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        6491 :         cell_key_.reserve(256);</span></span>
-<span id="L88"><span class="lineNum">      88</span>                 :<span class="tlaGNC">        6491 :     }</span></span>
+<span id="L87"><span class="lineNum">      87</span>         [<span class="tlaGBC" title="Branch 0 was taken 6844 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        6844 :         cell_key_.reserve(256);</span></span>
+<span id="L88"><span class="lineNum">      88</span>                 :<span class="tlaGNC">        6844 :     }</span></span>
 <span id="L89"><span class="lineNum">      89</span>                 :             : </span>
-<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">     1399625 :     [[nodiscard]] bool valid() const override { return current_ &lt; restarts_; }</span></span>
+<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">     1468955 :     [[nodiscard]] bool valid() const override { return current_ &lt; restarts_; }</span></span>
 <span id="L91"><span class="lineNum">      91</span>                 :             : </span>
-<span id="L92"><span class="lineNum">      92</span>                 :<span class="tlaGNC">      533590 :     [[nodiscard]] CellRef cell() const override {</span></span>
-<span id="L93"><span class="lineNum">      93</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 533590 times"> + </span>]:<span class="tlaGNC">      533590 :         if (!valid()) {</span></span>
+<span id="L92"><span class="lineNum">      92</span>                 :<span class="tlaGNC">      556579 :     [[nodiscard]] CellRef cell() const override {</span></span>
+<span id="L93"><span class="lineNum">      93</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 556579 times"> + </span>]:<span class="tlaGNC">      556579 :         if (!valid()) {</span></span>
 <span id="L94"><span class="lineNum">      94</span>                 :             :             return nullptr;</span>
 <span id="L95"><span class="lineNum">      95</span>                 :             :         }</span>
 <span id="L96"><span class="lineNum">      96</span>                 :             :         return cell_;</span>
 <span id="L97"><span class="lineNum">      97</span>                 :             :     }</span>
 <span id="L98"><span class="lineNum">      98</span>                 :             : </span>
-<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">        6194 :     [[nodiscard]] Status status() const override { return status_; }</span></span>
+<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC">        7256 :     [[nodiscard]] Status status() const override { return status_; }</span></span>
 <span id="L100"><span class="lineNum">     100</span>                 :             : </span>
 <span id="L101"><span class="lineNum">     101</span>                 :             :     // return the first key that &gt;= target</span>
-<span id="L102"><span class="lineNum">     102</span>                 :<span class="tlaGNC">      394567 :     void seek(std::string_view target) override {</span></span>
-<span id="L103"><span class="lineNum">     103</span>                 :<span class="tlaGNC">      394567 :         uint32_t left = 0;</span></span>
-<span id="L104"><span class="lineNum">     104</span>         [<span class="tlaGBC" title="Branch 0 was taken 394567 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">      394567 :         if (!binarySearchIndex(target, &amp;left)) {</span></span>
-<span id="L105"><span class="lineNum">     105</span>                 :<span class="tlaGNC">      394566 :             return;</span></span>
+<span id="L102"><span class="lineNum">     102</span>                 :<span class="tlaGNC">      394566 :     void seek(std::string_view target) override {</span></span>
+<span id="L103"><span class="lineNum">     103</span>                 :<span class="tlaGNC">      394566 :         uint32_t left = 0;</span></span>
+<span id="L104"><span class="lineNum">     104</span>         [<span class="tlaGBC" title="Branch 0 was taken 394566 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">      394566 :         if (!binarySearchIndex(target, &amp;left)) {</span></span>
+<span id="L105"><span class="lineNum">     105</span>                 :<span class="tlaGNC">      394565 :             return;</span></span>
 <span id="L106"><span class="lineNum">     106</span>                 :             :         }</span>
-<span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">      394567 :         seekToRestartPoint(left);</span></span>
-<span id="L108"><span class="lineNum">     108</span>         [<span class="tlaGBC" title="Branch 0 was taken 2049038 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">     2049039 :         while (parseNextCell()) {</span></span>
-<span id="L109"><span class="lineNum">     109</span>         [<span class="tlaGBC" title="Branch 0 was taken 1654472 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 394566 times"> + </span>]:<span class="tlaGNC">     2049038 :             if (compare(cell_-&gt;rowkey(), target) &gt;= 0) {</span></span>
+<span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">      394566 :         seekToRestartPoint(left);</span></span>
+<span id="L108"><span class="lineNum">     108</span>         [<span class="tlaGBC" title="Branch 0 was taken 2052554 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">     2052555 :         while (parseNextCell()) {</span></span>
+<span id="L109"><span class="lineNum">     109</span>         [<span class="tlaGBC" title="Branch 0 was taken 1657989 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 394565 times"> + </span>]:<span class="tlaGNC">     2052554 :             if (compare(cell_-&gt;rowkey(), target) &gt;= 0) {</span></span>
 <span id="L110"><span class="lineNum">     110</span>                 :             :                 return;</span>
 <span id="L111"><span class="lineNum">     111</span>                 :             :             }</span>
 <span id="L112"><span class="lineNum">     112</span>                 :             :         }</span>
 <span id="L113"><span class="lineNum">     113</span>                 :             :     }</span>
 <span id="L114"><span class="lineNum">     114</span>                 :             : </span>
-<span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaGNC">        2068 :     void first() override {</span></span>
+<span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaGNC">        2422 :     void first() override {</span></span>
 <span id="L116"><span class="lineNum">     116</span>                 :             :         seekToRestartPoint(0);</span>
-<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">        2068 :         parseNextCell();</span></span>
-<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">        2068 :     }</span></span>
+<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">        2422 :         parseNextCell();</span></span>
+<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">        2422 :     }</span></span>
 <span id="L119"><span class="lineNum">     119</span>                 :             : </span>
 <span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC">           2 :     void last() override {</span></span>
 <span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">           2 :         seekToRestartPoint(num_restarts_ - 1);</span></span>
@@ -213,25 +213,25 @@
 <span id="L142"><span class="lineNum">     142</span>   [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 6 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 4 times"> + </span>]:<span class="tlaGNC">          14 :         } while (parseNextCell() &amp;&amp; nextEntryOffset() &lt; old);</span></span>
 <span id="L143"><span class="lineNum">     143</span>                 :             :     }</span>
 <span id="L144"><span class="lineNum">     144</span>                 :             : </span>
-<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">      139078 :     void next() override {</span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">      162072 :     void next() override {</span></span>
 <span id="L146"><span class="lineNum">     146</span>                 :             :         assert(valid());</span>
-<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">      139078 :         parseNextCell();</span></span>
-<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">      139078 :     }</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">      162072 :         parseNextCell();</span></span>
+<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">      162072 :     }</span></span>
 <span id="L149"><span class="lineNum">     149</span>                 :             : </span>
-<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">       19473 :     ~BlockIterator() override = default;</span></span>
+<span id="L150"><span class="lineNum">     150</span>                 :<span class="tlaGNC">       20532 :     ~BlockIterator() override = default;</span></span>
 <span id="L151"><span class="lineNum">     151</span>                 :             : </span>
 <span id="L152"><span class="lineNum">     152</span>                 :             : private:</span>
-<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">      394567 :     bool binarySearchIndex(std::string_view target, uint32_t* idx) {</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">      394566 :     bool binarySearchIndex(std::string_view target, uint32_t* idx) {</span></span>
 <span id="L154"><span class="lineNum">     154</span>                 :             :         uint32_t left = 0;</span>
-<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">      394567 :         uint32_t right = num_restarts_ - 1;</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">      394566 :         uint32_t right = num_restarts_ - 1;</span></span>
 <span id="L156"><span class="lineNum">     156</span>                 :             :         uint32_t offset = 0;</span>
-<span id="L157"><span class="lineNum">     157</span>         [<span class="tlaGBC" title="Branch 0 was taken 1529009 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 245493 times"> + </span>]:<span class="tlaGNC">     1774502 :         while (left &lt; right) {</span></span>
-<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">     1529009 :             const auto mid = (left + right + 1) / 2;</span></span>
+<span id="L157"><span class="lineNum">     157</span>         [<span class="tlaGBC" title="Branch 0 was taken 1529355 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 245679 times"> + </span>]:<span class="tlaGNC">     1775034 :         while (left &lt; right) {</span></span>
+<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">     1529355 :             const auto mid = (left + right + 1) / 2;</span></span>
 <span id="L159"><span class="lineNum">     159</span>                 :             :             offset = getRestartOffset(mid);</span>
 <span id="L160"><span class="lineNum">     160</span>                 :             :             EntryInfo entry;</span>
-<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">     1529009 :             const char* key_ptr = parseEntryAt(offset, &amp;entry);</span></span>
-<span id="L162"><span class="lineNum">     162</span>   [<span class="tlaGBC" title="Branch 0 was taken 1529009 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1529009 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">     1529009 :             if (key_ptr == nullptr || (entry.shared != 0) ||</span></span>
-<span id="L163"><span class="lineNum">     163</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1529009 times"> + </span>]:<span class="tlaGNC">     1529009 :                 (entry.rowkey_size &gt;= entry.non_shared)) {</span></span>
+<span id="L161"><span class="lineNum">     161</span>                 :<span class="tlaGNC">     1529355 :             const char* key_ptr = parseEntryAt(offset, &amp;entry);</span></span>
+<span id="L162"><span class="lineNum">     162</span>   [<span class="tlaGBC" title="Branch 0 was taken 1529355 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1529355 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">     1529355 :             if (key_ptr == nullptr || (entry.shared != 0) ||</span></span>
+<span id="L163"><span class="lineNum">     163</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1529355 times"> + </span>]:<span class="tlaGNC">     1529355 :                 (entry.rowkey_size &gt;= entry.non_shared)) {</span></span>
 <span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 status_ = Status(StatusCode::kDataCorruption, &quot;invalid entry in block&quot;);</span></span>
 <span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaUNC">           0 :                 current_ = restarts_;</span></span>
 <span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaUNC">           0 :                 current_restart_ = num_restarts_;</span></span>
@@ -240,64 +240,64 @@
 <span id="L169"><span class="lineNum">     169</span>                 :<span class="tlaUNC">           0 :                 return false;</span></span>
 <span id="L170"><span class="lineNum">     170</span>                 :             :             }</span>
 <span id="L171"><span class="lineNum">     171</span>                 :             : </span>
-<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC tlaBgGNC">     1529009 :             std::string_view mid_key(key_ptr, entry.rowkey_size);</span></span>
-<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">     1529009 :             int cmp = compare(mid_key, target);</span></span>
+<span id="L172"><span class="lineNum">     172</span>                 :<span class="tlaGNC tlaBgGNC">     1529355 :             std::string_view mid_key(key_ptr, entry.rowkey_size);</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">     1529355 :             int cmp = compare(mid_key, target);</span></span>
 <span id="L174"><span class="lineNum">     174</span>                 :             : </span>
-<span id="L175"><span class="lineNum">     175</span>         [<span class="tlaGBC" title="Branch 0 was taken 149074 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1379935 times"> + </span>]:<span class="tlaGNC">     1529009 :             if (cmp == 0) {</span></span>
+<span id="L175"><span class="lineNum">     175</span>         [<span class="tlaGBC" title="Branch 0 was taken 148887 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1380468 times"> + </span>]:<span class="tlaGNC">     1529355 :             if (cmp == 0) {</span></span>
 <span id="L176"><span class="lineNum">     176</span>                 :             :                 left = mid;</span>
-<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">      149074 :                 break;</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :<span class="tlaGNC">      148887 :                 break;</span></span>
 <span id="L178"><span class="lineNum">     178</span>                 :             :             }</span>
-<span id="L179"><span class="lineNum">     179</span>         [<span class="tlaGBC" title="Branch 0 was taken 740312 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 639623 times"> + </span>]:<span class="tlaGNC">     1379935 :             if (cmp &lt; 0) {</span></span>
+<span id="L179"><span class="lineNum">     179</span>         [<span class="tlaGBC" title="Branch 0 was taken 740537 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 639931 times"> + </span>]:<span class="tlaGNC">     1380468 :             if (cmp &lt; 0) {</span></span>
 <span id="L180"><span class="lineNum">     180</span>                 :             :                 left = mid;</span>
 <span id="L181"><span class="lineNum">     181</span>                 :             :             } else {</span>
-<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">      740312 :                 right = mid - 1;</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">      740537 :                 right = mid - 1;</span></span>
 <span id="L183"><span class="lineNum">     183</span>                 :             :             }</span>
 <span id="L184"><span class="lineNum">     184</span>                 :             :         }</span>
 <span id="L185"><span class="lineNum">     185</span>                 :             : </span>
-<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">      394567 :         *idx = left;</span></span>
-<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">      394567 :         return true;</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">      394566 :         *idx = left;</span></span>
+<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">      394566 :         return true;</span></span>
 <span id="L188"><span class="lineNum">     188</span>                 :             :     }</span>
 <span id="L189"><span class="lineNum">     189</span>                 :             : </span>
 <span id="L190"><span class="lineNum">     190</span>                 :             :     uint32_t getRestartOffset(uint32_t idx) {</span>
 <span id="L191"><span class="lineNum">     191</span>                 :             :         assert(idx &lt; num_restarts_);</span>
-<span id="L192"><span class="lineNum">     192</span>   [<span class="tlaGBC" title="Branch 0 was taken 199707 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2020271 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 4 times"> + </span>]:<span class="tlaGNC">     3748996 :         return decodeInt&lt;uint32_t&gt;(data_ + restarts_ + (idx * sizeof(uint32_t)));</span></span>
+<span id="L192"><span class="lineNum">     192</span>   [<span class="tlaGBC" title="Branch 0 was taken 200978 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2035432 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 4 times"> + </span>]:<span class="tlaGNC">     3765774 :         return decodeInt&lt;uint32_t&gt;(data_ + restarts_ + (idx * sizeof(uint32_t)));</span></span>
 <span id="L193"><span class="lineNum">     193</span>                 :             :     }</span>
 <span id="L194"><span class="lineNum">     194</span>                 :             : </span>
-<span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaGNC">      394573 :     void seekToRestartPoint(uint32_t idx) {</span></span>
+<span id="L195"><span class="lineNum">     195</span>                 :<span class="tlaGNC">      394572 :     void seekToRestartPoint(uint32_t idx) {</span></span>
 <span id="L196"><span class="lineNum">     196</span>                 :             :         cell_key_.clear();</span>
-<span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC">        2068 :         current_restart_ = idx;</span></span>
+<span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC">        2422 :         current_restart_ = idx;</span></span>
 <span id="L198"><span class="lineNum">     198</span>                 :             :         uint32_t offset = getRestartOffset(idx);</span>
-<span id="L199"><span class="lineNum">     199</span>                 :<span class="tlaGNC">        2068 :         val_ = std::string_view(data_ + offset, 0);</span></span>
-<span id="L200"><span class="lineNum">     200</span>                 :<span class="tlaGNC">      394573 :     }</span></span>
+<span id="L199"><span class="lineNum">     199</span>                 :<span class="tlaGNC">        2422 :         val_ = std::string_view(data_ + offset, 0);</span></span>
+<span id="L200"><span class="lineNum">     200</span>                 :<span class="tlaGNC">      394572 :     }</span></span>
 <span id="L201"><span class="lineNum">     201</span>                 :             : </span>
 <span id="L202"><span class="lineNum">     202</span>                 :             :     [[nodiscard]] inline uint32_t nextEntryOffset() const {</span>
 <span id="L203"><span class="lineNum">     203</span>   [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">          13 :         return static_cast&lt;uint32_t&gt;((val_.data() + val_.size()) - data_);</span></span>
 <span id="L204"><span class="lineNum">     204</span>                 :             :     }</span>
 <span id="L205"><span class="lineNum">     205</span>                 :             : </span>
-<span id="L206"><span class="lineNum">     206</span>         [<span class="tlaGBC" title="Branch 0 was taken 2161 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2188037 times"> + </span>]:<span class="tlaGNC">     2190198 :     bool parseNextCell() {</span></span>
-<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaGNC">     2190198 :         current_ = nextEntryOffset();</span></span>
-<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC">     2190198 :         const char* p = data_ + current_;</span></span>
-<span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaGNC">     2190198 :         const char* limit = data_ + restarts_;</span></span>
-<span id="L210"><span class="lineNum">     210</span>         [<span class="tlaGBC" title="Branch 0 was taken 2161 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2188037 times"> + </span>]:<span class="tlaGNC">     2190198 :         if (p &gt;= limit) {</span></span>
-<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC">        2161 :             current_ = restarts_;</span></span>
-<span id="L212"><span class="lineNum">     212</span>                 :<span class="tlaGNC">        2161 :             current_restart_ = num_restarts_;</span></span>
-<span id="L213"><span class="lineNum">     213</span>                 :<span class="tlaGNC">        2161 :             status_ = Status(StatusCode::kKVStoreNotFound);</span></span>
-<span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaGNC">        2161 :             return false;</span></span>
+<span id="L206"><span class="lineNum">     206</span>         [<span class="tlaGBC" title="Branch 0 was taken 2519 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2214543 times"> + </span>]:<span class="tlaGNC">     2217062 :     bool parseNextCell() {</span></span>
+<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaGNC">     2217062 :         current_ = nextEntryOffset();</span></span>
+<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC">     2217062 :         const char* p = data_ + current_;</span></span>
+<span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaGNC">     2217062 :         const char* limit = data_ + restarts_;</span></span>
+<span id="L210"><span class="lineNum">     210</span>         [<span class="tlaGBC" title="Branch 0 was taken 2519 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2214543 times"> + </span>]:<span class="tlaGNC">     2217062 :         if (p &gt;= limit) {</span></span>
+<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC">        2519 :             current_ = restarts_;</span></span>
+<span id="L212"><span class="lineNum">     212</span>                 :<span class="tlaGNC">        2519 :             current_restart_ = num_restarts_;</span></span>
+<span id="L213"><span class="lineNum">     213</span>                 :<span class="tlaGNC">        2519 :             status_ = Status(StatusCode::kKVStoreNotFound);</span></span>
+<span id="L214"><span class="lineNum">     214</span>                 :<span class="tlaGNC">        2519 :             return false;</span></span>
 <span id="L215"><span class="lineNum">     215</span>                 :             :         }</span>
 <span id="L216"><span class="lineNum">     216</span>                 :             :         EntryInfo entry;</span>
-<span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaGNC">     2188037 :         p = parseEntryAt(current_, &amp;entry);</span></span>
+<span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaGNC">     2214543 :         p = parseEntryAt(current_, &amp;entry);</span></span>
 <span id="L218"><span class="lineNum">     218</span>                 :             :         // 第一次Seek的时候，key 为空，那么shared必定为0</span>
-<span id="L219"><span class="lineNum">     219</span>   [<span class="tlaGBC" title="Branch 0 was taken 2188037 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 2188037 times"> + </span>]:<span class="tlaGNC">     2188037 :         if (p == nullptr || cell_key_.size() &lt; entry.shared) {</span></span>
+<span id="L219"><span class="lineNum">     219</span>   [<span class="tlaGBC" title="Branch 0 was taken 2214543 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 2214543 times"> + </span>]:<span class="tlaGNC">     2214543 :         if (p == nullptr || cell_key_.size() &lt; entry.shared) {</span></span>
 <span id="L220"><span class="lineNum">     220</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             status_ = Status(StatusCode::kDataCorruption, &quot;invalid block&quot;);</span></span>
 <span id="L221"><span class="lineNum">     221</span>                 :<span class="tlaUNC">           0 :             return false;</span></span>
 <span id="L222"><span class="lineNum">     222</span>                 :             :         }</span>
-<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaGNC tlaBgGNC">     2188037 :         cell_key_.resize(entry.shared);</span></span>
-<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaGNC">     2188037 :         cell_key_.append(p, entry.non_shared);</span></span>
-<span id="L225"><span class="lineNum">     225</span>                 :<span class="tlaGNC">     2188037 :         val_ = std::string_view(p + entry.non_shared, entry.value_size);</span></span>
-<span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaGNC">     2188037 :         cell_ = std::make_shared&lt;Cell&gt;(cell_key_, entry.rowkey_size, val_);</span></span>
-<span id="L227"><span class="lineNum">     227</span>         [<span class="tlaGBC" title="Branch 0 was taken 2219978 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 167766 times"> + </span>]:<span class="tlaGNC">     2387744 :         while (current_restart_ + 1 &lt; num_restarts_ &amp;&amp;</span></span>
-<span id="L228"><span class="lineNum">     228</span>         [<span class="tlaGBC" title="Branch 0 was taken 199707 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2020271 times"> + </span>]:<span class="tlaGNC">     2219978 :                getRestartOffset(current_restart_) &lt; current_) {</span></span>
-<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">      199707 :             ++current_restart_;</span></span>
+<span id="L223"><span class="lineNum">     223</span>                 :<span class="tlaGNC tlaBgGNC">     2214543 :         cell_key_.resize(entry.shared);</span></span>
+<span id="L224"><span class="lineNum">     224</span>                 :<span class="tlaGNC">     2214543 :         cell_key_.append(p, entry.non_shared);</span></span>
+<span id="L225"><span class="lineNum">     225</span>                 :<span class="tlaGNC">     2214543 :         val_ = std::string_view(p + entry.non_shared, entry.value_size);</span></span>
+<span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaGNC">     2214543 :         cell_ = std::make_shared&lt;Cell&gt;(cell_key_, entry.rowkey_size, val_);</span></span>
+<span id="L227"><span class="lineNum">     227</span>         [<span class="tlaGBC" title="Branch 0 was taken 2236410 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 179111 times"> + </span>]:<span class="tlaGNC">     2415521 :         while (current_restart_ + 1 &lt; num_restarts_ &amp;&amp;</span></span>
+<span id="L228"><span class="lineNum">     228</span>         [<span class="tlaGBC" title="Branch 0 was taken 200978 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2035432 times"> + </span>]:<span class="tlaGNC">     2236410 :                getRestartOffset(current_restart_) &lt; current_) {</span></span>
+<span id="L229"><span class="lineNum">     229</span>                 :<span class="tlaGNC">      200978 :             ++current_restart_;</span></span>
 <span id="L230"><span class="lineNum">     230</span>                 :             :         }</span>
 <span id="L231"><span class="lineNum">     231</span>                 :             : </span>
 <span id="L232"><span class="lineNum">     232</span>                 :             :         return true;</span>
@@ -313,21 +313,21 @@
 <span id="L242"><span class="lineNum">     242</span>                 :             :         const char* value_data;</span>
 <span id="L243"><span class="lineNum">     243</span>                 :             :     };</span>
 <span id="L244"><span class="lineNum">     244</span>                 :             : </span>
-<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC">     3717046 :     const char* parseEntryAt(uint32_t offset, EntryInfo* info) {</span></span>
-<span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaGNC">     3717046 :         const char* p = data_ + offset;</span></span>
-<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC">     3717046 :         const char* limit = data_ + restarts_;</span></span>
+<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC">     3743898 :     const char* parseEntryAt(uint32_t offset, EntryInfo* info) {</span></span>
+<span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaGNC">     3743898 :         const char* p = data_ + offset;</span></span>
+<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC">     3743898 :         const char* limit = data_ + restarts_;</span></span>
 <span id="L248"><span class="lineNum">     248</span>                 :             :         constexpr std::size_t s = sizeof(uint32_t);</span>
-<span id="L249"><span class="lineNum">     249</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3717046 times"> + </span>]:<span class="tlaGNC">     3717046 :         if (static_cast&lt;uint32_t&gt;(limit - p) &lt; (s * 4)) {</span></span>
+<span id="L249"><span class="lineNum">     249</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3743898 times"> + </span>]:<span class="tlaGNC">     3743898 :         if (static_cast&lt;uint32_t&gt;(limit - p) &lt; (s * 4)) {</span></span>
 <span id="L250"><span class="lineNum">     250</span>                 :             :             return nullptr;</span>
 <span id="L251"><span class="lineNum">     251</span>                 :             :         }</span>
-<span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC">     3717046 :         info-&gt;shared = pl::decodeInt&lt;uint32_t&gt;(p);</span></span>
-<span id="L253"><span class="lineNum">     253</span>                 :<span class="tlaGNC">     3717046 :         info-&gt;non_shared = pl::decodeInt&lt;uint32_t&gt;(p + s);</span></span>
-<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaGNC">     3717046 :         info-&gt;rowkey_size = pl::decodeInt&lt;uint32_t&gt;(p + s * 2);</span></span>
-<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaGNC">     3717046 :         info-&gt;value_size = pl::decodeInt&lt;uint32_t&gt;(p + s * 3);</span></span>
-<span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaGNC">     3717046 :         p += s * 4;</span></span>
+<span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC">     3743898 :         info-&gt;shared = pl::decodeInt&lt;uint32_t&gt;(p);</span></span>
+<span id="L253"><span class="lineNum">     253</span>                 :<span class="tlaGNC">     3743898 :         info-&gt;non_shared = pl::decodeInt&lt;uint32_t&gt;(p + s);</span></span>
+<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaGNC">     3743898 :         info-&gt;rowkey_size = pl::decodeInt&lt;uint32_t&gt;(p + s * 2);</span></span>
+<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaGNC">     3743898 :         info-&gt;value_size = pl::decodeInt&lt;uint32_t&gt;(p + s * 3);</span></span>
+<span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaGNC">     3743898 :         p += s * 4;</span></span>
 <span id="L257"><span class="lineNum">     257</span>                 :             : </span>
-<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC">     3717046 :         const size_t data_size = info-&gt;non_shared + info-&gt;value_size;</span></span>
-<span id="L259"><span class="lineNum">     259</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3717046 times"> + </span>]:<span class="tlaGNC">     3717046 :         if (static_cast&lt;uint32_t&gt;(limit - p) &lt; data_size) {</span></span>
+<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC">     3743898 :         const size_t data_size = info-&gt;non_shared + info-&gt;value_size;</span></span>
+<span id="L259"><span class="lineNum">     259</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3743898 times"> + </span>]:<span class="tlaGNC">     3743898 :         if (static_cast&lt;uint32_t&gt;(limit - p) &lt; data_size) {</span></span>
 <span id="L260"><span class="lineNum">     260</span>                 :             :             return nullptr;</span>
 <span id="L261"><span class="lineNum">     261</span>                 :             :         }</span>
 <span id="L262"><span class="lineNum">     262</span>                 :             : </span>
@@ -335,7 +335,7 @@
 <span id="L264"><span class="lineNum">     264</span>                 :             :     }</span>
 <span id="L265"><span class="lineNum">     265</span>                 :             : </span>
 <span id="L266"><span class="lineNum">     266</span>                 :             :     [[nodiscard]] inline int compare(std::string_view a, std::string_view b) const {</span>
-<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC">     3578047 :         return comparator_-&gt;compare(a, b);</span></span>
+<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC">     3581909 :         return comparator_-&gt;compare(a, b);</span></span>
 <span id="L268"><span class="lineNum">     268</span>                 :             :     }</span>
 <span id="L269"><span class="lineNum">     269</span>                 :             : </span>
 <span id="L270"><span class="lineNum">     270</span>                 :             : private:</span>
@@ -352,9 +352,9 @@
 <span id="L281"><span class="lineNum">     281</span>                 :             :     Status status_{StatusCode::kOK};</span>
 <span id="L282"><span class="lineNum">     282</span>                 :             : };</span>
 <span id="L283"><span class="lineNum">     283</span>                 :             : </span>
-<span id="L284"><span class="lineNum">     284</span>                 :<span class="tlaGNC">        6491 : IteratorPtr Block::iterator(const ComparatorRef&amp; comparator) {</span></span>
-<span id="L285"><span class="lineNum">     285</span>         [<span class="tlaGBC" title="Branch 0 was taken 6491 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        6491 :     return std::make_unique&lt;BlockIterator&gt;(comparator, shared_from_this(), data_, restart_offset_,</span></span>
-<span id="L286"><span class="lineNum">     286</span>                 :<span class="tlaGNC">       12982 :                                            num_restarts_);</span></span>
+<span id="L284"><span class="lineNum">     284</span>                 :<span class="tlaGNC">        6844 : IteratorPtr Block::iterator(const ComparatorRef&amp; comparator) {</span></span>
+<span id="L285"><span class="lineNum">     285</span>         [<span class="tlaGBC" title="Branch 0 was taken 6844 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        6844 :     return std::make_unique&lt;BlockIterator&gt;(comparator, shared_from_this(), data_, restart_offset_,</span></span>
+<span id="L286"><span class="lineNum">     286</span>                 :<span class="tlaGNC">       13688 :                                            num_restarts_);</span></span>
 <span id="L287"><span class="lineNum">     287</span>                 :             : }</span>
 <span id="L288"><span class="lineNum">     288</span>                 :             : </span>
 <span id="L289"><span class="lineNum">     289</span>                 :             : } // namespace pl</span>
