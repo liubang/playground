@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2025-01-01T00:00:00.000Z" agent="draw.io" version="24.0.0" type="device">
+  <diagram id="apple-silicon-arch" name="Apple Silicon 计算层次">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <!-- 外框: Apple M4 Max -->
+        <mxCell id="2" value="Apple M4 Max (示例)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;strokeWidth=2;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=5;dashed=1;dashPattern=5 5;" vertex="1" parent="1">
+          <mxGeometry x="100" y="80" width="900" height="320" as="geometry" />
+        </mxCell>
+        <!-- CPU -->
+        <mxCell id="3" value="&lt;b&gt;CPU&lt;/b&gt;&lt;br&gt;16 核 (12P+4E)&lt;br&gt;AMX 协处理器" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="160" y="150" width="180" height="90" as="geometry" />
+        </mxCell>
+        <!-- GPU -->
+        <mxCell id="4" value="&lt;b&gt;GPU&lt;/b&gt;&lt;br&gt;40 核&lt;br&gt;Metal 3.1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="420" y="150" width="180" height="90" as="geometry" />
+        </mxCell>
+        <!-- Neural Engine -->
+        <mxCell id="5" value="&lt;b&gt;Neural Engine&lt;/b&gt;&lt;br&gt;16 核" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="680" y="150" width="180" height="90" as="geometry" />
+        </mxCell>
+        <!-- 统一内存 -->
+        <mxCell id="6" value="&lt;b&gt;统一内存 (Unified Memory)&lt;/b&gt;&lt;br&gt;128GB&lt;br&gt;546 GB/s 带宽" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;shadow=1;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="250" y="310" width="520" height="70" as="geometry" />
+        </mxCell>
+        <!-- 连接线: CPU -> 统一内存 -->
+        <mxCell id="7" value="546 GB/s" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.2;entryY=0;entryDx=0;entryDy=0;strokeWidth=3;strokeColor=#6c8ebf;fontSize=10;fontColor=#6c8ebf;" edge="1" source="3" target="6" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- 连接线: GPU -> 统一内存 -->
+        <mxCell id="8" value="546 GB/s" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeWidth=3;strokeColor=#82b366;fontSize=10;fontColor=#82b366;" edge="1" source="4" target="6" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- 连接线: NE -> 统一内存 -->
+        <mxCell id="9" value="546 GB/s" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.8;entryY=0;entryDx=0;entryDy=0;strokeWidth=3;strokeColor=#d6b656;fontSize=10;fontColor=#d6b656;" edge="1" source="5" target="6" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
