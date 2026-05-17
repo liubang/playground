@@ -77,6 +77,10 @@ test --action_env="GTEST_COLOR=1"
 test --action_env="GTEST_BREAK_ON_FAILURE=1"
 test --nojava_header_compilation
 
+# PyPI mirror: use Aliyun by default, CI overrides to official source
+common --repo_env=PYPI_INDEX_URL=https://mirrors.aliyun.com/pypi/simple
+common:ci --repo_env=PYPI_INDEX_URL=
+
 # CI config: allow test caching for faster builds
 test:ci --cache_test_results
 
