@@ -28,7 +28,6 @@ common --repo_env=PYPI_INDEX_URL=https://mirrors.aliyun.com/pypi/simple
 
 build --jobs=HOST_CPUS*.75
 build --cxxopt=-std=c++20
-build --host_cxxopt=-std=c++20
 build --@boost.asio//:ssl=openssl
 build --@boost.mysql//:ssl=openssl
 
