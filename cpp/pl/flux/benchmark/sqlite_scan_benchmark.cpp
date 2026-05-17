@@ -104,6 +104,11 @@ struct SplitTotals {
     double page_build_time_ms = 0.0;
 };
 
+struct PipelineTotals {
+    size_t pages = 0;
+    bool blocking = false;
+};
+
 SplitTotals split_totals(const pl::flux::execution::ExecutionProfile& profile) {
     SplitTotals totals;
     for (const auto& pipeline : profile.pipelines) {
@@ -120,6 +125,15 @@ SplitTotals split_totals(const pl::flux::execution::ExecutionProfile& profile) {
             totals.decode_time_ms += split.decode_time_ms;
             totals.page_build_time_ms += split.page_build_time_ms;
         }
+    }
+    return totals;
+}
+
+PipelineTotals pipeline_totals(const pl::flux::execution::ExecutionProfile& profile) {
+    PipelineTotals totals;
+    for (const auto& pipeline : profile.pipelines) {
+        totals.pages += pipeline.pages;
+        totals.blocking = totals.blocking || pipeline.blocking;
     }
     return totals;
 }
@@ -153,6 +167,16 @@ int main(int argc, char** argv) {
     } else if (scenario == "topn") {
         pl::flux::plan::SortKey key{.column = "usage", .desc = true};
         query = pl::flux::plan::MakeLimit(pl::flux::plan::MakeSort(scan, {key}), 100, 0);
+    } else if (scenario == "group_count") {
+        auto materialized =
+            pl::flux::plan::MakeMaterializeBarrier(scan, "benchmark memory fallback", "benchmark");
+        auto grouped = pl::flux::plan::MakeGroup(materialized, {"host"});
+        query = pl::flux::plan::MakeAggregate(grouped, pl::flux::plan::AggregateFunction::Count,
+                                              "usage");
+    } else if (scenario == "distinct_host") {
+        auto materialized =
+            pl::flux::plan::MakeMaterializeBarrier(scan, "benchmark memory fallback", "benchmark");
+        query = pl::flux::plan::MakeDistinct(materialized, "host");
     } else {
         pl::flux::plan::PredicateSpec predicate;
         predicate.op = pl::flux::plan::PredicateOp::Gte;
@@ -183,7 +207,7 @@ int main(int argc, char** argv) {
 
     const double seconds = std::chrono::duration<double>(elapsed).count();
     const size_t output_rows = result_or->value.as_table().rows.size();
-    const auto& profile = result_or->profile.pipelines.front();
+    const PipelineTotals pipelines = pipeline_totals(result_or->profile);
     const SplitTotals splits = split_totals(result_or->profile);
     std::cout << "{"
               << "\"scenario\":\"" << scenario << "\","
@@ -191,7 +215,7 @@ int main(int argc, char** argv) {
               << "\"threshold\":" << threshold << ","
               << "\"drivers\":" << drivers << ","
               << "\"output_rows\":" << output_rows << ","
-              << "\"pages\":" << profile.pages << ","
+              << "\"pages\":" << pipelines.pages << ","
               << "\"split_bytes\":" << splits.bytes << ","
               << "\"split_wall_time_ms\":" << splits.wall_time_ms << ","
               << "\"split_metadata_time_ms\":" << splits.metadata_time_ms << ","
@@ -203,7 +227,7 @@ int main(int argc, char** argv) {
               << "\"split_read_time_ms\":" << splits.read_time_ms << ","
               << "\"split_decode_time_ms\":" << splits.decode_time_ms << ","
               << "\"split_page_build_time_ms\":" << splits.page_build_time_ms << ","
-              << "\"blocking\":" << (profile.blocking ? "true" : "false") << ","
+              << "\"blocking\":" << (pipelines.blocking ? "true" : "false") << ","
               << "\"seconds\":" << seconds << ","
               << "\"rows_per_second\":" << static_cast<double>(rows) / std::max(seconds, 0.000001)
               << "}\n";
