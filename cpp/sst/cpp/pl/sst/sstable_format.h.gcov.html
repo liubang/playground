@@ -37,12 +37,21 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-17 10:34:27</td>
+            <td class="headerValue">2026-05-17 18:47:55</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
             <td class="headerCovTableEntry">2</td>
             <td class="headerCovTableEntry">2</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryLo">50.0&nbsp;%</td>
+            <td class="headerCovTableEntry">132</td>
+            <td class="headerCovTableEntry">66</td>
           </tr>
                   <tr><td><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -58,296 +67,311 @@
             </tr>
             <tr>
               <td>
-<pre class="sourceHeading">            Line data    Source code</pre>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
 <pre class="source">
-<span id="L1"><span class="lineNum">       1</span>              : // Copyright (c) 2023 The Authors. All rights reserved.</span>
-<span id="L2"><span class="lineNum">       2</span>              : //</span>
-<span id="L3"><span class="lineNum">       3</span>              : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
-<span id="L4"><span class="lineNum">       4</span>              : // you may not use this file except in compliance with the License.</span>
-<span id="L5"><span class="lineNum">       5</span>              : // You may obtain a copy of the License at</span>
-<span id="L6"><span class="lineNum">       6</span>              : //</span>
-<span id="L7"><span class="lineNum">       7</span>              : //      https://www.apache.org/licenses/LICENSE-2.0</span>
-<span id="L8"><span class="lineNum">       8</span>              : //</span>
-<span id="L9"><span class="lineNum">       9</span>              : // Unless required by applicable law or agreed to in writing, software</span>
-<span id="L10"><span class="lineNum">      10</span>              : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
-<span id="L11"><span class="lineNum">      11</span>              : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
-<span id="L12"><span class="lineNum">      12</span>              : // See the License for the specific language governing permissions and</span>
-<span id="L13"><span class="lineNum">      13</span>              : // limitations under the License.</span>
-<span id="L14"><span class="lineNum">      14</span>              : </span>
-<span id="L15"><span class="lineNum">      15</span>              : // Authors: liubang (it.liubang@gmail.com)</span>
-<span id="L16"><span class="lineNum">      16</span>              : // Created: 2023/05/31 21:04</span>
-<span id="L17"><span class="lineNum">      17</span>              : </span>
-<span id="L18"><span class="lineNum">      18</span>              : #pragma once</span>
-<span id="L19"><span class="lineNum">      19</span>              : </span>
-<span id="L20"><span class="lineNum">      20</span>              : #include &quot;cpp/pl/fs/fs.h&quot;</span>
-<span id="L21"><span class="lineNum">      21</span>              : #include &quot;cpp/pl/lang/assume.h&quot;</span>
-<span id="L22"><span class="lineNum">      22</span>              : #include &quot;cpp/pl/status/result.h&quot;</span>
-<span id="L23"><span class="lineNum">      23</span>              : #include &lt;cstdint&gt;</span>
-<span id="L24"><span class="lineNum">      24</span>              : #include &lt;sstream&gt;</span>
-<span id="L25"><span class="lineNum">      25</span>              : #include &lt;string&gt;</span>
-<span id="L26"><span class="lineNum">      26</span>              : #include &lt;string_view&gt;</span>
-<span id="L27"><span class="lineNum">      27</span>              : </span>
-<span id="L28"><span class="lineNum">      28</span>              : namespace pl {</span>
-<span id="L29"><span class="lineNum">      29</span>              : </span>
-<span id="L30"><span class="lineNum">      30</span>              : inline constexpr std::size_t FOOTER_LEN = 60;</span>
-<span id="L31"><span class="lineNum">      31</span>              : inline constexpr uint32_t SST_MAGIC_NUMBER = 0x00545353;       // the hex of 'SST'</span>
-<span id="L32"><span class="lineNum">      32</span>              : inline constexpr uint32_t BLOCK_TRAILER_LEN = 5;               // compression type (1B) + crc (4B)</span>
-<span id="L33"><span class="lineNum">      33</span>              : inline constexpr uint32_t FILE_META_MAGIC_NUMBER = 0x4154454d; // the hex of 'META'</span>
-<span id="L34"><span class="lineNum">      34</span>              : inline constexpr uint32_t FILE_META_MIN_LEN = 67;</span>
-<span id="L35"><span class="lineNum">      35</span>              : </span>
-<span id="L36"><span class="lineNum">      36</span>              : // clang-format off</span>
-<span id="L37"><span class="lineNum">      37</span>              : #define PL_ENUM_TO_STRING_CASE(t, v) case t::v: return #v</span>
-<span id="L38"><span class="lineNum">      38</span>              : // clang-format on</span>
-<span id="L39"><span class="lineNum">      39</span>              : </span>
-<span id="L40"><span class="lineNum">      40</span>              : // clang-format off</span>
-<span id="L41"><span class="lineNum">      41</span>              : enum class SSTType : uint8_t {</span>
-<span id="L42"><span class="lineNum">      42</span>              :     NONE   = 0,   // invalid sst type</span>
-<span id="L43"><span class="lineNum">      43</span>              :     MEMORY = 1,   // the sst file is generated by memory dump</span>
-<span id="L44"><span class="lineNum">      44</span>              :     MINOR  = 2,   // the sst file is generaged by minor compaction</span>
-<span id="L45"><span class="lineNum">      45</span>              :     MAJOR  = 3,   // the sst file is generated by major compaction</span>
-<span id="L46"><span class="lineNum">      46</span>              : };</span>
-<span id="L47"><span class="lineNum">      47</span>              : // clang-format on</span>
-<span id="L48"><span class="lineNum">      48</span>              : </span>
-<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC tlaBgGNC">          15 : [[nodiscard]] constexpr const char* toString(SSTType t) noexcept {</span></span>
-<span id="L50"><span class="lineNum">      50</span> <span class="tlaGNC">          15 :     switch (t) {</span></span>
-<span id="L51"><span class="lineNum">      51</span>              :         PL_ENUM_TO_STRING_CASE(SSTType, NONE);</span>
-<span id="L52"><span class="lineNum">      52</span> <span class="tlaUNC tlaBgUNC">           0 :         PL_ENUM_TO_STRING_CASE(SSTType, MEMORY);</span></span>
-<span id="L53"><span class="lineNum">      53</span> <span class="tlaUNC">           0 :         PL_ENUM_TO_STRING_CASE(SSTType, MINOR);</span></span>
-<span id="L54"><span class="lineNum">      54</span> <span class="tlaGNC tlaBgGNC">          15 :         PL_ENUM_TO_STRING_CASE(SSTType, MAJOR);</span></span>
-<span id="L55"><span class="lineNum">      55</span>              :     }</span>
-<span id="L56"><span class="lineNum">      56</span>              :     pl::assume_unreachable();</span>
-<span id="L57"><span class="lineNum">      57</span>              : }</span>
-<span id="L58"><span class="lineNum">      58</span>              : </span>
-<span id="L59"><span class="lineNum">      59</span>              : enum class SSTVersion : uint8_t {</span>
-<span id="L60"><span class="lineNum">      60</span>              :     NONE = 0,</span>
-<span id="L61"><span class="lineNum">      61</span>              :     V1 = 1, // current sst version is V1</span>
-<span id="L62"><span class="lineNum">      62</span>              : };</span>
-<span id="L63"><span class="lineNum">      63</span>              : </span>
-<span id="L64"><span class="lineNum">      64</span>              : [[nodiscard]] constexpr const char* toString(SSTVersion t) noexcept {</span>
-<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC">           6 :     switch (t) {</span></span>
-<span id="L66"><span class="lineNum">      66</span>              :         PL_ENUM_TO_STRING_CASE(SSTVersion, NONE);</span>
-<span id="L67"><span class="lineNum">      67</span> <span class="tlaGNC">           6 :         PL_ENUM_TO_STRING_CASE(SSTVersion, V1);</span></span>
-<span id="L68"><span class="lineNum">      68</span>              :     }</span>
-<span id="L69"><span class="lineNum">      69</span>              :     pl::assume_unreachable();</span>
-<span id="L70"><span class="lineNum">      70</span>              : }</span>
-<span id="L71"><span class="lineNum">      71</span>              : </span>
-<span id="L72"><span class="lineNum">      72</span>              : // clang-format off</span>
-<span id="L73"><span class="lineNum">      73</span>              : enum class FilterPolicyType : uint8_t {</span>
-<span id="L74"><span class="lineNum">      74</span>              :     NONE                  = 0,</span>
-<span id="L75"><span class="lineNum">      75</span>              :     STANDARD_BLOOM_FILTER = 1,</span>
-<span id="L76"><span class="lineNum">      76</span>              :     BLOCKED_BLOOM_FILTER  = 2,</span>
-<span id="L77"><span class="lineNum">      77</span>              :     END                   = 2,</span>
-<span id="L78"><span class="lineNum">      78</span>              : };</span>
-<span id="L79"><span class="lineNum">      79</span>              : // clang-format on</span>
-<span id="L80"><span class="lineNum">      80</span>              : </span>
-<span id="L81"><span class="lineNum">      81</span>              : [[nodiscard]] constexpr const char* toString(FilterPolicyType t) noexcept {</span>
-<span id="L82"><span class="lineNum">      82</span> <span class="tlaGNC">           6 :     switch (t) {</span></span>
-<span id="L83"><span class="lineNum">      83</span>              :         PL_ENUM_TO_STRING_CASE(FilterPolicyType, NONE);</span>
-<span id="L84"><span class="lineNum">      84</span> <span class="tlaGNC">           5 :         PL_ENUM_TO_STRING_CASE(FilterPolicyType, STANDARD_BLOOM_FILTER);</span></span>
-<span id="L85"><span class="lineNum">      85</span> <span class="tlaGNC">           1 :         PL_ENUM_TO_STRING_CASE(FilterPolicyType, BLOCKED_BLOOM_FILTER);</span></span>
-<span id="L86"><span class="lineNum">      86</span>              :     }</span>
-<span id="L87"><span class="lineNum">      87</span>              :     pl::assume_unreachable();</span>
-<span id="L88"><span class="lineNum">      88</span>              : }</span>
-<span id="L89"><span class="lineNum">      89</span>              : </span>
-<span id="L90"><span class="lineNum">      90</span>              : // clang-format off</span>
-<span id="L91"><span class="lineNum">      91</span>              : enum class CompressionType : uint8_t {</span>
-<span id="L92"><span class="lineNum">      92</span>              :     NONE   = 0,</span>
-<span id="L93"><span class="lineNum">      93</span>              :     SNAPPY = 1,</span>
-<span id="L94"><span class="lineNum">      94</span>              :     ZSTD   = 2,</span>
-<span id="L95"><span class="lineNum">      95</span>              :     ISAL   = 3,</span>
-<span id="L96"><span class="lineNum">      96</span>              : };</span>
-<span id="L97"><span class="lineNum">      97</span>              : // clang-format on</span>
-<span id="L98"><span class="lineNum">      98</span>              : </span>
-<span id="L99"><span class="lineNum">      99</span>              : [[nodiscard]] constexpr const char* toString(CompressionType t) noexcept {</span>
-<span id="L100"><span class="lineNum">     100</span>              :     switch (t) {</span>
-<span id="L101"><span class="lineNum">     101</span>              :         PL_ENUM_TO_STRING_CASE(CompressionType, NONE);</span>
-<span id="L102"><span class="lineNum">     102</span>              :         PL_ENUM_TO_STRING_CASE(CompressionType, SNAPPY);</span>
-<span id="L103"><span class="lineNum">     103</span>              :         PL_ENUM_TO_STRING_CASE(CompressionType, ZSTD);</span>
-<span id="L104"><span class="lineNum">     104</span>              :         PL_ENUM_TO_STRING_CASE(CompressionType, ISAL);</span>
-<span id="L105"><span class="lineNum">     105</span>              :     }</span>
-<span id="L106"><span class="lineNum">     106</span>              :     pl::assume_unreachable();</span>
-<span id="L107"><span class="lineNum">     107</span>              : }</span>
-<span id="L108"><span class="lineNum">     108</span>              : </span>
-<span id="L109"><span class="lineNum">     109</span>              : #undef PL_ENUM_TO_STRING_CASE</span>
-<span id="L110"><span class="lineNum">     110</span>              : </span>
-<span id="L111"><span class="lineNum">     111</span>              : // patch id 单调递增</span>
-<span id="L112"><span class="lineNum">     112</span>              : using PatchId = uint64_t;</span>
-<span id="L113"><span class="lineNum">     113</span>              : using SSTId = uint64_t;</span>
-<span id="L114"><span class="lineNum">     114</span>              : </span>
-<span id="L115"><span class="lineNum">     115</span>              : /**</span>
-<span id="L116"><span class="lineNum">     116</span>              :  * @class BlockHandle</span>
-<span id="L117"><span class="lineNum">     117</span>              :  * @brief 主要是用来构造索引的</span>
-<span id="L118"><span class="lineNum">     118</span>              :  */</span>
-<span id="L119"><span class="lineNum">     119</span>              : class BlockHandle {</span>
-<span id="L120"><span class="lineNum">     120</span>              : public:</span>
-<span id="L121"><span class="lineNum">     121</span>              :     static constexpr uint64_t INVALID_VALUE = UINT64_MAX;</span>
-<span id="L122"><span class="lineNum">     122</span>              : </span>
-<span id="L123"><span class="lineNum">     123</span> <span class="tlaGNC">        6709 :     BlockHandle() {}</span></span>
-<span id="L124"><span class="lineNum">     124</span>              : </span>
-<span id="L125"><span class="lineNum">     125</span> <span class="tlaGNC">        5717 :     [[nodiscard]] uint64_t offset() const { return offset_; }</span></span>
-<span id="L126"><span class="lineNum">     126</span>              : </span>
-<span id="L127"><span class="lineNum">     127</span> <span class="tlaGNC">        5717 :     [[nodiscard]] uint64_t size() const { return size_; }</span></span>
-<span id="L128"><span class="lineNum">     128</span>              : </span>
-<span id="L129"><span class="lineNum">     129</span>              :     [[nodiscard]] bool isValid() const noexcept {</span>
-<span id="L130"><span class="lineNum">     130</span>              :         return offset_ != INVALID_VALUE &amp;&amp; size_ != INVALID_VALUE;</span>
-<span id="L131"><span class="lineNum">     131</span>              :     }</span>
-<span id="L132"><span class="lineNum">     132</span>              : </span>
-<span id="L133"><span class="lineNum">     133</span> <span class="tlaGNC">        3102 :     void setOffset(uint64_t offset) { offset_ = offset; }</span></span>
-<span id="L134"><span class="lineNum">     134</span>              : </span>
-<span id="L135"><span class="lineNum">     135</span> <span class="tlaGNC">        3102 :     void setSize(uint64_t size) { size_ = size; }</span></span>
-<span id="L136"><span class="lineNum">     136</span>              : </span>
-<span id="L137"><span class="lineNum">     137</span>              :     void reset() noexcept { offset_ = size_ = INVALID_VALUE; }</span>
-<span id="L138"><span class="lineNum">     138</span>              : </span>
-<span id="L139"><span class="lineNum">     139</span>              :     void encodeTo(std::string* dst) const;</span>
-<span id="L140"><span class="lineNum">     140</span>              : </span>
-<span id="L141"><span class="lineNum">     141</span>              :     [[nodiscard]] Result&lt;Void&gt; decodeFrom(std::string_view input);</span>
-<span id="L142"><span class="lineNum">     142</span>              : </span>
-<span id="L143"><span class="lineNum">     143</span>              : private:</span>
-<span id="L144"><span class="lineNum">     144</span>              :     uint64_t offset_{INVALID_VALUE};</span>
-<span id="L145"><span class="lineNum">     145</span>              :     uint64_t size_{INVALID_VALUE};</span>
-<span id="L146"><span class="lineNum">     146</span>              : };</span>
-<span id="L147"><span class="lineNum">     147</span>              : </span>
-<span id="L148"><span class="lineNum">     148</span>              : /**</span>
-<span id="L149"><span class="lineNum">     149</span>              :  * @class FileMeta</span>
-<span id="L150"><span class="lineNum">     150</span>              :  * @brief record sst file meta data</span>
-<span id="L151"><span class="lineNum">     151</span>              :  */</span>
-<span id="L152"><span class="lineNum">     152</span> <span class="tlaGNC">          19 : class FileMeta {</span></span>
-<span id="L153"><span class="lineNum">     153</span>              : public:</span>
-<span id="L154"><span class="lineNum">     154</span> <span class="tlaGNC">           8 :     FileMeta() = default;</span></span>
-<span id="L155"><span class="lineNum">     155</span>              : </span>
-<span id="L156"><span class="lineNum">     156</span>              :     // 移动构造和赋值</span>
-<span id="L157"><span class="lineNum">     157</span>              :     FileMeta(FileMeta&amp;&amp;) = default;</span>
-<span id="L158"><span class="lineNum">     158</span>              :     FileMeta&amp; operator=(FileMeta&amp;&amp;) = default;</span>
-<span id="L159"><span class="lineNum">     159</span>              : </span>
-<span id="L160"><span class="lineNum">     160</span>              :     // 禁用拷贝构造和赋值</span>
-<span id="L161"><span class="lineNum">     161</span>              :     FileMeta(const FileMeta&amp;) = delete;</span>
-<span id="L162"><span class="lineNum">     162</span>              :     FileMeta&amp; operator=(const FileMeta&amp;) = delete;</span>
-<span id="L163"><span class="lineNum">     163</span>              : </span>
-<span id="L164"><span class="lineNum">     164</span> <span class="tlaGNC">           8 :     void setSSTType(SSTType type) { sst_type_ = type; }</span></span>
-<span id="L165"><span class="lineNum">     165</span>              : </span>
-<span id="L166"><span class="lineNum">     166</span> <span class="tlaGNC">           8 :     void setSSTVersion(SSTVersion version) { sst_version_ = version; }</span></span>
-<span id="L167"><span class="lineNum">     167</span>              : </span>
-<span id="L168"><span class="lineNum">     168</span> <span class="tlaGNC">           8 :     void setPatchId(PatchId patch_id) { patch_id_ = patch_id; }</span></span>
-<span id="L169"><span class="lineNum">     169</span>              : </span>
-<span id="L170"><span class="lineNum">     170</span> <span class="tlaGNC">           8 :     void setSSTId(SSTId sst_id) { sst_id_ = sst_id; }</span></span>
-<span id="L171"><span class="lineNum">     171</span>              : </span>
-<span id="L172"><span class="lineNum">     172</span> <span class="tlaGNC">           8 :     void setFilterPolicyType(FilterPolicyType type) { filter_type_ = type; }</span></span>
-<span id="L173"><span class="lineNum">     173</span>              : </span>
-<span id="L174"><span class="lineNum">     174</span> <span class="tlaGNC">           8 :     void setCellNum(uint64_t cell_number) { cell_number_ = cell_number; }</span></span>
-<span id="L175"><span class="lineNum">     175</span>              : </span>
-<span id="L176"><span class="lineNum">     176</span> <span class="tlaGNC">           8 :     void setRowNum(uint64_t row_number) { row_number_ = row_number; }</span></span>
-<span id="L177"><span class="lineNum">     177</span>              : </span>
-<span id="L178"><span class="lineNum">     178</span> <span class="tlaGNC">           8 :     void setMinTimestamp(uint64_t min_timestamp) { min_timestamp_ = min_timestamp; }</span></span>
-<span id="L179"><span class="lineNum">     179</span>              : </span>
-<span id="L180"><span class="lineNum">     180</span> <span class="tlaGNC">           8 :     void setMaxTimestamp(uint64_t max_timestamp) { max_timestamp_ = max_timestamp; }</span></span>
-<span id="L181"><span class="lineNum">     181</span>              : </span>
-<span id="L182"><span class="lineNum">     182</span> <span class="tlaGNC">           8 :     void setMinKey(const std::string&amp; key) { min_key_ = key; }</span></span>
-<span id="L183"><span class="lineNum">     183</span>              : </span>
-<span id="L184"><span class="lineNum">     184</span> <span class="tlaGNC">           8 :     void setMaxKey(const std::string&amp; key) { max_key_ = key; }</span></span>
-<span id="L185"><span class="lineNum">     185</span>              : </span>
-<span id="L186"><span class="lineNum">     186</span> <span class="tlaGNC">           8 :     void setBitsPerKey(uint32_t bpk) { bits_per_key_ = bpk; }</span></span>
-<span id="L187"><span class="lineNum">     187</span>              : </span>
-<span id="L188"><span class="lineNum">     188</span> <span class="tlaGNC">           6 :     [[nodiscard]] SSTType sstType() const { return sst_type_; }</span></span>
-<span id="L189"><span class="lineNum">     189</span>              : </span>
-<span id="L190"><span class="lineNum">     190</span> <span class="tlaGNC">           6 :     [[nodiscard]] SSTVersion sstVersion() const { return sst_version_; }</span></span>
-<span id="L191"><span class="lineNum">     191</span>              : </span>
-<span id="L192"><span class="lineNum">     192</span> <span class="tlaGNC">           9 :     [[nodiscard]] PatchId patchId() const { return patch_id_; }</span></span>
-<span id="L193"><span class="lineNum">     193</span>              : </span>
-<span id="L194"><span class="lineNum">     194</span> <span class="tlaGNC">          10 :     [[nodiscard]] SSTId sstId() const { return sst_id_; }</span></span>
-<span id="L195"><span class="lineNum">     195</span>              : </span>
-<span id="L196"><span class="lineNum">     196</span> <span class="tlaGNC">          11 :     [[nodiscard]] FilterPolicyType filterPolicyType() const { return filter_type_; }</span></span>
-<span id="L197"><span class="lineNum">     197</span>              : </span>
-<span id="L198"><span class="lineNum">     198</span> <span class="tlaGNC">           7 :     [[nodiscard]] uint64_t cellNum() const { return cell_number_; }</span></span>
-<span id="L199"><span class="lineNum">     199</span>              : </span>
-<span id="L200"><span class="lineNum">     200</span> <span class="tlaGNC">           1 :     [[nodiscard]] uint64_t rowNum() const { return row_number_; }</span></span>
-<span id="L201"><span class="lineNum">     201</span>              : </span>
-<span id="L202"><span class="lineNum">     202</span>              :     [[nodiscard]] uint64_t minTimestamp() const { return min_timestamp_; }</span>
-<span id="L203"><span class="lineNum">     203</span>              : </span>
-<span id="L204"><span class="lineNum">     204</span>              :     [[nodiscard]] uint64_t maxTimestamp() const { return max_timestamp_; }</span>
-<span id="L205"><span class="lineNum">     205</span>              : </span>
-<span id="L206"><span class="lineNum">     206</span> <span class="tlaGNC">           1 :     [[nodiscard]] const std::string&amp; minKey() const { return min_key_; }</span></span>
-<span id="L207"><span class="lineNum">     207</span>              : </span>
-<span id="L208"><span class="lineNum">     208</span>              :     [[nodiscard]] const std::string&amp; maxKey() const { return max_key_; }</span>
-<span id="L209"><span class="lineNum">     209</span>              : </span>
-<span id="L210"><span class="lineNum">     210</span> <span class="tlaGNC">           6 :     [[nodiscard]] uint32_t bitsPerKey() const { return bits_per_key_; }</span></span>
-<span id="L211"><span class="lineNum">     211</span>              : </span>
-<span id="L212"><span class="lineNum">     212</span>              :     void encodeTo(std::string* dst) const;</span>
-<span id="L213"><span class="lineNum">     213</span>              : </span>
-<span id="L214"><span class="lineNum">     214</span>              :     Result&lt;Void&gt; decodeFrom(std::string_view input);</span>
-<span id="L215"><span class="lineNum">     215</span>              : </span>
-<span id="L216"><span class="lineNum">     216</span> <span class="tlaGNC">           6 :     [[nodiscard]] std::string toString() const {</span></span>
-<span id="L217"><span class="lineNum">     217</span> <span class="tlaGNC">           6 :         std::stringstream ss;</span></span>
-<span id="L218"><span class="lineNum">     218</span> <span class="tlaGNC">           6 :         ss &lt;&lt; &quot;SST Type: &quot; &lt;&lt; pl::toString(sst_type_) &lt;&lt; '\n'</span></span>
-<span id="L219"><span class="lineNum">     219</span> <span class="tlaGNC">           6 :            &lt;&lt; &quot;SST Version: &quot; &lt;&lt; pl::toString(sst_version_) &lt;&lt; '\n'</span></span>
-<span id="L220"><span class="lineNum">     220</span> <span class="tlaGNC">          12 :            &lt;&lt; &quot;Patch ID: &quot; &lt;&lt; patch_id_ &lt;&lt; '\n'</span></span>
-<span id="L221"><span class="lineNum">     221</span> <span class="tlaGNC">           6 :            &lt;&lt; &quot;SST ID: &quot; &lt;&lt; sst_id_ &lt;&lt; '\n'</span></span>
-<span id="L222"><span class="lineNum">     222</span> <span class="tlaGNC">           6 :            &lt;&lt; &quot;Filter Type: &quot; &lt;&lt; pl::toString(filter_type_) &lt;&lt; '\n'</span></span>
-<span id="L223"><span class="lineNum">     223</span> <span class="tlaGNC">          12 :            &lt;&lt; &quot;Bits Per Key: &quot; &lt;&lt; bits_per_key_ &lt;&lt; '\n'</span></span>
-<span id="L224"><span class="lineNum">     224</span> <span class="tlaGNC">           6 :            &lt;&lt; &quot;Cell Number: &quot; &lt;&lt; cell_number_ &lt;&lt; '\n'</span></span>
-<span id="L225"><span class="lineNum">     225</span> <span class="tlaGNC">           6 :            &lt;&lt; &quot;Row Number: &quot; &lt;&lt; row_number_ &lt;&lt; '\n'</span></span>
-<span id="L226"><span class="lineNum">     226</span> <span class="tlaGNC">           6 :            &lt;&lt; &quot;Min Timestamp: &quot; &lt;&lt; min_timestamp_ &lt;&lt; '\n'</span></span>
-<span id="L227"><span class="lineNum">     227</span> <span class="tlaGNC">           6 :            &lt;&lt; &quot;Max Timestamp: &quot; &lt;&lt; max_timestamp_ &lt;&lt; '\n'</span></span>
-<span id="L228"><span class="lineNum">     228</span>              :            &lt;&lt; &quot;Min Key: &quot; &lt;&lt; min_key_ &lt;&lt; '\n'</span>
-<span id="L229"><span class="lineNum">     229</span> <span class="tlaGNC">          12 :            &lt;&lt; &quot;Max Key: &quot; &lt;&lt; max_key_;</span></span>
-<span id="L230"><span class="lineNum">     230</span> <span class="tlaGNC">           6 :         return ss.str();</span></span>
-<span id="L231"><span class="lineNum">     231</span> <span class="tlaGNC">           6 :     }</span></span>
-<span id="L232"><span class="lineNum">     232</span>              : </span>
-<span id="L233"><span class="lineNum">     233</span>              : private:</span>
-<span id="L234"><span class="lineNum">     234</span>              :     SSTType sst_type_{SSTType::NONE};</span>
-<span id="L235"><span class="lineNum">     235</span>              :     SSTVersion sst_version_{SSTVersion::NONE};</span>
-<span id="L236"><span class="lineNum">     236</span>              :     PatchId patch_id_{0};</span>
-<span id="L237"><span class="lineNum">     237</span>              :     SSTId sst_id_{0};</span>
-<span id="L238"><span class="lineNum">     238</span>              :     FilterPolicyType filter_type_{FilterPolicyType::NONE};</span>
-<span id="L239"><span class="lineNum">     239</span>              :     uint32_t bits_per_key_{0};</span>
-<span id="L240"><span class="lineNum">     240</span>              :     uint64_t cell_number_{0};</span>
-<span id="L241"><span class="lineNum">     241</span>              :     uint64_t row_number_{0};</span>
-<span id="L242"><span class="lineNum">     242</span>              :     uint64_t min_timestamp_{0};</span>
-<span id="L243"><span class="lineNum">     243</span>              :     uint64_t max_timestamp_{0};</span>
-<span id="L244"><span class="lineNum">     244</span>              :     std::string min_key_;</span>
-<span id="L245"><span class="lineNum">     245</span>              :     std::string max_key_;</span>
-<span id="L246"><span class="lineNum">     246</span>              : };</span>
-<span id="L247"><span class="lineNum">     247</span>              : </span>
-<span id="L248"><span class="lineNum">     248</span>              : using FileMetaPtr = std::unique_ptr&lt;FileMeta&gt;;</span>
-<span id="L249"><span class="lineNum">     249</span>              : using FileMetaRef = std::shared_ptr&lt;FileMeta&gt;;</span>
-<span id="L250"><span class="lineNum">     250</span>              : </span>
-<span id="L251"><span class="lineNum">     251</span>              : class Footer {</span>
-<span id="L252"><span class="lineNum">     252</span>              : public:</span>
-<span id="L253"><span class="lineNum">     253</span>              :     Footer() = default;</span>
-<span id="L254"><span class="lineNum">     254</span>              : </span>
-<span id="L255"><span class="lineNum">     255</span> <span class="tlaGNC">           8 :     void setFilterHandle(const BlockHandle&amp; block_handle) { filter_handle_ = block_handle; }</span></span>
-<span id="L256"><span class="lineNum">     256</span> <span class="tlaGNC">           8 :     void setIndexHandle(const BlockHandle&amp; block_handle) { index_handle_ = block_handle; }</span></span>
-<span id="L257"><span class="lineNum">     257</span> <span class="tlaGNC">           8 :     void setFileMetaHandle(const BlockHandle&amp; block_handle) { file_meta_handle_ = block_handle; }</span></span>
-<span id="L258"><span class="lineNum">     258</span>              : </span>
-<span id="L259"><span class="lineNum">     259</span>              :     [[nodiscard]] const BlockHandle&amp; metaIndexHandle() const { return filter_handle_; }</span>
-<span id="L260"><span class="lineNum">     260</span>              :     [[nodiscard]] const BlockHandle&amp; filterHandle() const { return filter_handle_; }</span>
-<span id="L261"><span class="lineNum">     261</span>              :     [[nodiscard]] const BlockHandle&amp; indexHandle() const { return index_handle_; }</span>
-<span id="L262"><span class="lineNum">     262</span>              :     [[nodiscard]] const BlockHandle&amp; fileMetaHandle() const { return file_meta_handle_; }</span>
-<span id="L263"><span class="lineNum">     263</span>              : </span>
-<span id="L264"><span class="lineNum">     264</span>              :     void encodeTo(std::string* dst) const;</span>
-<span id="L265"><span class="lineNum">     265</span>              :     [[nodiscard]] Result&lt;Void&gt; decodeFrom(std::string_view input);</span>
-<span id="L266"><span class="lineNum">     266</span>              : </span>
-<span id="L267"><span class="lineNum">     267</span>              : private:</span>
-<span id="L268"><span class="lineNum">     268</span>              :     BlockHandle filter_handle_;</span>
-<span id="L269"><span class="lineNum">     269</span>              :     BlockHandle index_handle_;</span>
-<span id="L270"><span class="lineNum">     270</span>              :     BlockHandle file_meta_handle_;</span>
-<span id="L271"><span class="lineNum">     271</span>              : };</span>
-<span id="L272"><span class="lineNum">     272</span>              : </span>
-<span id="L273"><span class="lineNum">     273</span>              : struct BlockContents {</span>
-<span id="L274"><span class="lineNum">     274</span>              :     std::string_view data;</span>
-<span id="L275"><span class="lineNum">     275</span>              :     bool cachable;</span>
-<span id="L276"><span class="lineNum">     276</span>              :     bool heap_allocated;</span>
-<span id="L277"><span class="lineNum">     277</span>              : };</span>
-<span id="L278"><span class="lineNum">     278</span>              : </span>
-<span id="L279"><span class="lineNum">     279</span>              : class BlockReader {</span>
-<span id="L280"><span class="lineNum">     280</span>              : public:</span>
-<span id="L281"><span class="lineNum">     281</span>              :     BlockReader() = delete; // 静态类，禁止实例化</span>
-<span id="L282"><span class="lineNum">     282</span>              : </span>
-<span id="L283"><span class="lineNum">     283</span>              :     static Result&lt;BlockContents&gt; readBlock(const FileSystemRef&amp; reader,</span>
-<span id="L284"><span class="lineNum">     284</span>              :                                            const FileDescriptorRef&amp; fd,</span>
-<span id="L285"><span class="lineNum">     285</span>              :                                            const BlockHandle&amp; handle);</span>
-<span id="L286"><span class="lineNum">     286</span>              : };</span>
-<span id="L287"><span class="lineNum">     287</span>              : </span>
-<span id="L288"><span class="lineNum">     288</span>              : } // namespace pl</span>
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2023 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2023/05/31 21:04</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : #pragma once</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : </span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : #include &quot;cpp/pl/fs/fs.h&quot;</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : #include &quot;cpp/pl/lang/assume.h&quot;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : #include &quot;cpp/pl/status/result.h&quot;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : #include &lt;cstdint&gt;</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : #include &lt;sstream&gt;</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : #include &lt;string&gt;</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : #include &lt;string_view&gt;</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : </span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : namespace pl {</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : </span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : inline constexpr std::size_t FOOTER_LEN = 60;</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : inline constexpr uint32_t SST_MAGIC_NUMBER = 0x00545353;       // the hex of 'SST'</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : inline constexpr uint32_t BLOCK_TRAILER_LEN = 5;               // compression type (1B) + crc (4B)</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : inline constexpr uint32_t FILE_META_MAGIC_NUMBER = 0x4154454d; // the hex of 'META'</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             : inline constexpr uint32_t FILE_META_MIN_LEN = 67;</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             : </span>
+<span id="L36"><span class="lineNum">      36</span>                 :             : // clang-format off</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             : #define PL_ENUM_TO_STRING_CASE(t, v) case t::v: return #v</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             : // clang-format on</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             : </span>
+<span id="L40"><span class="lineNum">      40</span>                 :             : // clang-format off</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             : enum class SSTType : uint8_t {</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             :     NONE   = 0,   // invalid sst type</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             :     MEMORY = 1,   // the sst file is generated by memory dump</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             :     MINOR  = 2,   // the sst file is generaged by minor compaction</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             :     MAJOR  = 3,   // the sst file is generated by major compaction</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             : };</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             : // clang-format on</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             : </span>
+<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC tlaBgGNC">          15 : [[nodiscard]] constexpr const char* toString(SSTType t) noexcept {</span></span>
+<span id="L50"><span class="lineNum">      50</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          15 :     switch (t) {</span></span>
+<span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 4 was not taken"> - </span>]
+<span id="L51"><span class="lineNum">      51</span>                 :             :         PL_ENUM_TO_STRING_CASE(SSTType, NONE);</span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         PL_ENUM_TO_STRING_CASE(SSTType, MEMORY);</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaUNC">           0 :         PL_ENUM_TO_STRING_CASE(SSTType, MINOR);</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC tlaBgGNC">          15 :         PL_ENUM_TO_STRING_CASE(SSTType, MAJOR);</span></span>
+<span id="L55"><span class="lineNum">      55</span>                 :             :     }</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             :     pl::assume_unreachable();</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             : }</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             : </span>
+<span id="L59"><span class="lineNum">      59</span>                 :             : enum class SSTVersion : uint8_t {</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             :     NONE = 0,</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             :     V1 = 1, // current sst version is V1</span>
+<span id="L62"><span class="lineNum">      62</span>                 :             : };</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             : </span>
+<span id="L64"><span class="lineNum">      64</span>                 :             : [[nodiscard]] constexpr const char* toString(SSTVersion t) noexcept {</span>
+<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">           6 :     switch (t) {</span></span>
+<span id="L66"><span class="lineNum">      66</span>                 :             :         PL_ENUM_TO_STRING_CASE(SSTVersion, NONE);</span>
+<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">           6 :         PL_ENUM_TO_STRING_CASE(SSTVersion, V1);</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :             :     }</span>
+<span id="L69"><span class="lineNum">      69</span>                 :             :     pl::assume_unreachable();</span>
+<span id="L70"><span class="lineNum">      70</span>                 :             : }</span>
+<span id="L71"><span class="lineNum">      71</span>                 :             : </span>
+<span id="L72"><span class="lineNum">      72</span>                 :             : // clang-format off</span>
+<span id="L73"><span class="lineNum">      73</span>                 :             : enum class FilterPolicyType : uint8_t {</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             :     NONE                  = 0,</span>
+<span id="L75"><span class="lineNum">      75</span>                 :             :     STANDARD_BLOOM_FILTER = 1,</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             :     BLOCKED_BLOOM_FILTER  = 2,</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             :     END                   = 2,</span>
+<span id="L78"><span class="lineNum">      78</span>                 :             : };</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             : // clang-format on</span>
+<span id="L80"><span class="lineNum">      80</span>                 :             : </span>
+<span id="L81"><span class="lineNum">      81</span>                 :             : [[nodiscard]] constexpr const char* toString(FilterPolicyType t) noexcept {</span>
+<span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">           6 :     switch (t) {</span></span>
+<span id="L83"><span class="lineNum">      83</span>                 :             :         PL_ENUM_TO_STRING_CASE(FilterPolicyType, NONE);</span>
+<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">           5 :         PL_ENUM_TO_STRING_CASE(FilterPolicyType, STANDARD_BLOOM_FILTER);</span></span>
+<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC">           1 :         PL_ENUM_TO_STRING_CASE(FilterPolicyType, BLOCKED_BLOOM_FILTER);</span></span>
+<span id="L86"><span class="lineNum">      86</span>                 :             :     }</span>
+<span id="L87"><span class="lineNum">      87</span>                 :             :     pl::assume_unreachable();</span>
+<span id="L88"><span class="lineNum">      88</span>                 :             : }</span>
+<span id="L89"><span class="lineNum">      89</span>                 :             : </span>
+<span id="L90"><span class="lineNum">      90</span>                 :             : // clang-format off</span>
+<span id="L91"><span class="lineNum">      91</span>                 :             : enum class CompressionType : uint8_t {</span>
+<span id="L92"><span class="lineNum">      92</span>                 :             :     NONE   = 0,</span>
+<span id="L93"><span class="lineNum">      93</span>                 :             :     SNAPPY = 1,</span>
+<span id="L94"><span class="lineNum">      94</span>                 :             :     ZSTD   = 2,</span>
+<span id="L95"><span class="lineNum">      95</span>                 :             :     ISAL   = 3,</span>
+<span id="L96"><span class="lineNum">      96</span>                 :             : };</span>
+<span id="L97"><span class="lineNum">      97</span>                 :             : // clang-format on</span>
+<span id="L98"><span class="lineNum">      98</span>                 :             : </span>
+<span id="L99"><span class="lineNum">      99</span>                 :             : [[nodiscard]] constexpr const char* toString(CompressionType t) noexcept {</span>
+<span id="L100"><span class="lineNum">     100</span>                 :             :     switch (t) {</span>
+<span id="L101"><span class="lineNum">     101</span>                 :             :         PL_ENUM_TO_STRING_CASE(CompressionType, NONE);</span>
+<span id="L102"><span class="lineNum">     102</span>                 :             :         PL_ENUM_TO_STRING_CASE(CompressionType, SNAPPY);</span>
+<span id="L103"><span class="lineNum">     103</span>                 :             :         PL_ENUM_TO_STRING_CASE(CompressionType, ZSTD);</span>
+<span id="L104"><span class="lineNum">     104</span>                 :             :         PL_ENUM_TO_STRING_CASE(CompressionType, ISAL);</span>
+<span id="L105"><span class="lineNum">     105</span>                 :             :     }</span>
+<span id="L106"><span class="lineNum">     106</span>                 :             :     pl::assume_unreachable();</span>
+<span id="L107"><span class="lineNum">     107</span>                 :             : }</span>
+<span id="L108"><span class="lineNum">     108</span>                 :             : </span>
+<span id="L109"><span class="lineNum">     109</span>                 :             : #undef PL_ENUM_TO_STRING_CASE</span>
+<span id="L110"><span class="lineNum">     110</span>                 :             : </span>
+<span id="L111"><span class="lineNum">     111</span>                 :             : // patch id 单调递增</span>
+<span id="L112"><span class="lineNum">     112</span>                 :             : using PatchId = uint64_t;</span>
+<span id="L113"><span class="lineNum">     113</span>                 :             : using SSTId = uint64_t;</span>
+<span id="L114"><span class="lineNum">     114</span>                 :             : </span>
+<span id="L115"><span class="lineNum">     115</span>                 :             : /**</span>
+<span id="L116"><span class="lineNum">     116</span>                 :             :  * @class BlockHandle</span>
+<span id="L117"><span class="lineNum">     117</span>                 :             :  * @brief 主要是用来构造索引的</span>
+<span id="L118"><span class="lineNum">     118</span>                 :             :  */</span>
+<span id="L119"><span class="lineNum">     119</span>                 :             : class BlockHandle {</span>
+<span id="L120"><span class="lineNum">     120</span>                 :             : public:</span>
+<span id="L121"><span class="lineNum">     121</span>                 :             :     static constexpr uint64_t INVALID_VALUE = UINT64_MAX;</span>
+<span id="L122"><span class="lineNum">     122</span>                 :             : </span>
+<span id="L123"><span class="lineNum">     123</span>   [<span class="tlaGBC" title="Branch 0 was taken 1005 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">        6709 :     BlockHandle() {}</span></span>
+<span id="L124"><span class="lineNum">     124</span>                 :             : </span>
+<span id="L125"><span class="lineNum">     125</span>         [<span class="tlaGBC" title="Branch 0 was taken 5717 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        5717 :     [[nodiscard]] uint64_t offset() const { return offset_; }</span></span>
+<span id="L126"><span class="lineNum">     126</span>                 :             : </span>
+<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">        5717 :     [[nodiscard]] uint64_t size() const { return size_; }</span></span>
+<span id="L128"><span class="lineNum">     128</span>                 :             : </span>
+<span id="L129"><span class="lineNum">     129</span>                 :             :     [[nodiscard]] bool isValid() const noexcept {</span>
+<span id="L130"><span class="lineNum">     130</span>                 :             :         return offset_ != INVALID_VALUE &amp;&amp; size_ != INVALID_VALUE;</span>
+<span id="L131"><span class="lineNum">     131</span>                 :             :     }</span>
+<span id="L132"><span class="lineNum">     132</span>                 :             : </span>
+<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">        3102 :     void setOffset(uint64_t offset) { offset_ = offset; }</span></span>
+<span id="L134"><span class="lineNum">     134</span>                 :             : </span>
+<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">        3102 :     void setSize(uint64_t size) { size_ = size; }</span></span>
+<span id="L136"><span class="lineNum">     136</span>                 :             : </span>
+<span id="L137"><span class="lineNum">     137</span>                 :             :     void reset() noexcept { offset_ = size_ = INVALID_VALUE; }</span>
+<span id="L138"><span class="lineNum">     138</span>                 :             : </span>
+<span id="L139"><span class="lineNum">     139</span>                 :             :     void encodeTo(std::string* dst) const;</span>
+<span id="L140"><span class="lineNum">     140</span>                 :             : </span>
+<span id="L141"><span class="lineNum">     141</span>                 :             :     [[nodiscard]] Result&lt;Void&gt; decodeFrom(std::string_view input);</span>
+<span id="L142"><span class="lineNum">     142</span>                 :             : </span>
+<span id="L143"><span class="lineNum">     143</span>                 :             : private:</span>
+<span id="L144"><span class="lineNum">     144</span>                 :             :     uint64_t offset_{INVALID_VALUE};</span>
+<span id="L145"><span class="lineNum">     145</span>                 :             :     uint64_t size_{INVALID_VALUE};</span>
+<span id="L146"><span class="lineNum">     146</span>                 :             : };</span>
+<span id="L147"><span class="lineNum">     147</span>                 :             : </span>
+<span id="L148"><span class="lineNum">     148</span>                 :             : /**</span>
+<span id="L149"><span class="lineNum">     149</span>                 :             :  * @class FileMeta</span>
+<span id="L150"><span class="lineNum">     150</span>                 :             :  * @brief record sst file meta data</span>
+<span id="L151"><span class="lineNum">     151</span>                 :             :  */</span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">          19 : class FileMeta {</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :             : public:</span>
+<span id="L154"><span class="lineNum">     154</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     FileMeta() = default;</span></span>
+<span id="L155"><span class="lineNum">     155</span>                 :             : </span>
+<span id="L156"><span class="lineNum">     156</span>                 :             :     // 移动构造和赋值</span>
+<span id="L157"><span class="lineNum">     157</span>                 :             :     FileMeta(FileMeta&amp;&amp;) = default;</span>
+<span id="L158"><span class="lineNum">     158</span>                 :             :     FileMeta&amp; operator=(FileMeta&amp;&amp;) = default;</span>
+<span id="L159"><span class="lineNum">     159</span>                 :             : </span>
+<span id="L160"><span class="lineNum">     160</span>                 :             :     // 禁用拷贝构造和赋值</span>
+<span id="L161"><span class="lineNum">     161</span>                 :             :     FileMeta(const FileMeta&amp;) = delete;</span>
+<span id="L162"><span class="lineNum">     162</span>                 :             :     FileMeta&amp; operator=(const FileMeta&amp;) = delete;</span>
+<span id="L163"><span class="lineNum">     163</span>                 :             : </span>
+<span id="L164"><span class="lineNum">     164</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setSSTType(SSTType type) { sst_type_ = type; }</span></span>
+<span id="L165"><span class="lineNum">     165</span>                 :             : </span>
+<span id="L166"><span class="lineNum">     166</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setSSTVersion(SSTVersion version) { sst_version_ = version; }</span></span>
+<span id="L167"><span class="lineNum">     167</span>                 :             : </span>
+<span id="L168"><span class="lineNum">     168</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setPatchId(PatchId patch_id) { patch_id_ = patch_id; }</span></span>
+<span id="L169"><span class="lineNum">     169</span>                 :             : </span>
+<span id="L170"><span class="lineNum">     170</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setSSTId(SSTId sst_id) { sst_id_ = sst_id; }</span></span>
+<span id="L171"><span class="lineNum">     171</span>                 :             : </span>
+<span id="L172"><span class="lineNum">     172</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setFilterPolicyType(FilterPolicyType type) { filter_type_ = type; }</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :             : </span>
+<span id="L174"><span class="lineNum">     174</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setCellNum(uint64_t cell_number) { cell_number_ = cell_number; }</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :             : </span>
+<span id="L176"><span class="lineNum">     176</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setRowNum(uint64_t row_number) { row_number_ = row_number; }</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :             : </span>
+<span id="L178"><span class="lineNum">     178</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setMinTimestamp(uint64_t min_timestamp) { min_timestamp_ = min_timestamp; }</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :             : </span>
+<span id="L180"><span class="lineNum">     180</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setMaxTimestamp(uint64_t max_timestamp) { max_timestamp_ = max_timestamp; }</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :             : </span>
+<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">           8 :     void setMinKey(const std::string&amp; key) { min_key_ = key; }</span></span>
+<span id="L183"><span class="lineNum">     183</span>                 :             : </span>
+<span id="L184"><span class="lineNum">     184</span>                 :<span class="tlaGNC">           8 :     void setMaxKey(const std::string&amp; key) { max_key_ = key; }</span></span>
+<span id="L185"><span class="lineNum">     185</span>                 :             : </span>
+<span id="L186"><span class="lineNum">     186</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setBitsPerKey(uint32_t bpk) { bits_per_key_ = bpk; }</span></span>
+<span id="L187"><span class="lineNum">     187</span>                 :             : </span>
+<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">           6 :     [[nodiscard]] SSTType sstType() const { return sst_type_; }</span></span>
+<span id="L189"><span class="lineNum">     189</span>                 :             : </span>
+<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaGNC">           6 :     [[nodiscard]] SSTVersion sstVersion() const { return sst_version_; }</span></span>
+<span id="L191"><span class="lineNum">     191</span>                 :             : </span>
+<span id="L192"><span class="lineNum">     192</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           9 :     [[nodiscard]] PatchId patchId() const { return patch_id_; }</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
+<span id="L193"><span class="lineNum">     193</span>                 :             : </span>
+<span id="L194"><span class="lineNum">     194</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          10 :     [[nodiscard]] SSTId sstId() const { return sst_id_; }</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
+<span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 9 was not taken"> - </span>]
+<span id="L195"><span class="lineNum">     195</span>                 :             : </span>
+<span id="L196"><span class="lineNum">     196</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">          11 :     [[nodiscard]] FilterPolicyType filterPolicyType() const { return filter_type_; }</span></span>
+<span id="L197"><span class="lineNum">     197</span>                 :             : </span>
+<span id="L198"><span class="lineNum">     198</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :     [[nodiscard]] uint64_t cellNum() const { return cell_number_; }</span></span>
+<span id="L199"><span class="lineNum">     199</span>                 :             : </span>
+<span id="L200"><span class="lineNum">     200</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     [[nodiscard]] uint64_t rowNum() const { return row_number_; }</span></span>
+<span id="L201"><span class="lineNum">     201</span>                 :             : </span>
+<span id="L202"><span class="lineNum">     202</span>                 :             :     [[nodiscard]] uint64_t minTimestamp() const { return min_timestamp_; }</span>
+<span id="L203"><span class="lineNum">     203</span>                 :             : </span>
+<span id="L204"><span class="lineNum">     204</span>                 :             :     [[nodiscard]] uint64_t maxTimestamp() const { return max_timestamp_; }</span>
+<span id="L205"><span class="lineNum">     205</span>                 :             : </span>
+<span id="L206"><span class="lineNum">     206</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :     [[nodiscard]] const std::string&amp; minKey() const { return min_key_; }</span></span>
+<span id="L207"><span class="lineNum">     207</span>                 :             : </span>
+<span id="L208"><span class="lineNum">     208</span>                 :             :     [[nodiscard]] const std::string&amp; maxKey() const { return max_key_; }</span>
+<span id="L209"><span class="lineNum">     209</span>                 :             : </span>
+<span id="L210"><span class="lineNum">     210</span>                 :<span class="tlaGNC">           6 :     [[nodiscard]] uint32_t bitsPerKey() const { return bits_per_key_; }</span></span>
+<span id="L211"><span class="lineNum">     211</span>                 :             : </span>
+<span id="L212"><span class="lineNum">     212</span>                 :             :     void encodeTo(std::string* dst) const;</span>
+<span id="L213"><span class="lineNum">     213</span>                 :             : </span>
+<span id="L214"><span class="lineNum">     214</span>                 :             :     Result&lt;Void&gt; decodeFrom(std::string_view input);</span>
+<span id="L215"><span class="lineNum">     215</span>                 :             : </span>
+<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaGNC">           6 :     [[nodiscard]] std::string toString() const {</span></span>
+<span id="L217"><span class="lineNum">     217</span>                 :<span class="tlaGNC">           6 :         std::stringstream ss;</span></span>
+<span id="L218"><span class="lineNum">     218</span>                 :<span class="tlaGNC">           6 :         ss &lt;&lt; &quot;SST Type: &quot; &lt;&lt; pl::toString(sst_type_) &lt;&lt; '\n'</span></span>
+<span id="L219"><span class="lineNum">     219</span>      [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span>]:<span class="tlaGNC">           6 :            &lt;&lt; &quot;SST Version: &quot; &lt;&lt; pl::toString(sst_version_) &lt;&lt; '\n'</span></span>
+<span id="L220"><span class="lineNum">     220</span>   [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          12 :            &lt;&lt; &quot;Patch ID: &quot; &lt;&lt; patch_id_ &lt;&lt; '\n'</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 6 times"> + </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaGBC" title="Branch 12 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 14 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 15 was not taken"> - </span>]
+<span id="L221"><span class="lineNum">     221</span>   [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           6 :            &lt;&lt; &quot;SST ID: &quot; &lt;&lt; sst_id_ &lt;&lt; '\n'</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
+<span id="L222"><span class="lineNum">     222</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           6 :            &lt;&lt; &quot;Filter Type: &quot; &lt;&lt; pl::toString(filter_type_) &lt;&lt; '\n'</span></span>
+<span id="L223"><span class="lineNum">     223</span>   [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          12 :            &lt;&lt; &quot;Bits Per Key: &quot; &lt;&lt; bits_per_key_ &lt;&lt; '\n'</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 6 times"> + </span> 
+<span class="lineNum">        </span>       <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span>]
+<span id="L224"><span class="lineNum">     224</span>   [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           6 :            &lt;&lt; &quot;Cell Number: &quot; &lt;&lt; cell_number_ &lt;&lt; '\n'</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
+<span id="L225"><span class="lineNum">     225</span>   [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           6 :            &lt;&lt; &quot;Row Number: &quot; &lt;&lt; row_number_ &lt;&lt; '\n'</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
+<span id="L226"><span class="lineNum">     226</span>   [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           6 :            &lt;&lt; &quot;Min Timestamp: &quot; &lt;&lt; min_timestamp_ &lt;&lt; '\n'</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
+<span id="L227"><span class="lineNum">     227</span>   [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">           6 :            &lt;&lt; &quot;Max Timestamp: &quot; &lt;&lt; max_timestamp_ &lt;&lt; '\n'</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
+<span id="L228"><span class="lineNum">     228</span>                 :             :            &lt;&lt; &quot;Min Key: &quot; &lt;&lt; min_key_ &lt;&lt; '\n'</span>
+<span id="L229"><span class="lineNum">     229</span>   [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          12 :            &lt;&lt; &quot;Max Key: &quot; &lt;&lt; max_key_;</span></span>
+<span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
+<span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaGNC">           6 :         return ss.str();</span></span>
+<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">           6 :     }</span></span>
+<span id="L232"><span class="lineNum">     232</span>                 :             : </span>
+<span id="L233"><span class="lineNum">     233</span>                 :             : private:</span>
+<span id="L234"><span class="lineNum">     234</span>                 :             :     SSTType sst_type_{SSTType::NONE};</span>
+<span id="L235"><span class="lineNum">     235</span>                 :             :     SSTVersion sst_version_{SSTVersion::NONE};</span>
+<span id="L236"><span class="lineNum">     236</span>                 :             :     PatchId patch_id_{0};</span>
+<span id="L237"><span class="lineNum">     237</span>                 :             :     SSTId sst_id_{0};</span>
+<span id="L238"><span class="lineNum">     238</span>                 :             :     FilterPolicyType filter_type_{FilterPolicyType::NONE};</span>
+<span id="L239"><span class="lineNum">     239</span>                 :             :     uint32_t bits_per_key_{0};</span>
+<span id="L240"><span class="lineNum">     240</span>                 :             :     uint64_t cell_number_{0};</span>
+<span id="L241"><span class="lineNum">     241</span>                 :             :     uint64_t row_number_{0};</span>
+<span id="L242"><span class="lineNum">     242</span>                 :             :     uint64_t min_timestamp_{0};</span>
+<span id="L243"><span class="lineNum">     243</span>                 :             :     uint64_t max_timestamp_{0};</span>
+<span id="L244"><span class="lineNum">     244</span>                 :             :     std::string min_key_;</span>
+<span id="L245"><span class="lineNum">     245</span>                 :             :     std::string max_key_;</span>
+<span id="L246"><span class="lineNum">     246</span>                 :             : };</span>
+<span id="L247"><span class="lineNum">     247</span>                 :             : </span>
+<span id="L248"><span class="lineNum">     248</span>                 :             : using FileMetaPtr = std::unique_ptr&lt;FileMeta&gt;;</span>
+<span id="L249"><span class="lineNum">     249</span>                 :             : using FileMetaRef = std::shared_ptr&lt;FileMeta&gt;;</span>
+<span id="L250"><span class="lineNum">     250</span>                 :             : </span>
+<span id="L251"><span class="lineNum">     251</span>                 :             : class Footer {</span>
+<span id="L252"><span class="lineNum">     252</span>                 :             : public:</span>
+<span id="L253"><span class="lineNum">     253</span>                 :             :     Footer() = default;</span>
+<span id="L254"><span class="lineNum">     254</span>                 :             : </span>
+<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaGNC">           8 :     void setFilterHandle(const BlockHandle&amp; block_handle) { filter_handle_ = block_handle; }</span></span>
+<span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaGNC">           8 :     void setIndexHandle(const BlockHandle&amp; block_handle) { index_handle_ = block_handle; }</span></span>
+<span id="L257"><span class="lineNum">     257</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     void setFileMetaHandle(const BlockHandle&amp; block_handle) { file_meta_handle_ = block_handle; }</span></span>
+<span id="L258"><span class="lineNum">     258</span>                 :             : </span>
+<span id="L259"><span class="lineNum">     259</span>                 :             :     [[nodiscard]] const BlockHandle&amp; metaIndexHandle() const { return filter_handle_; }</span>
+<span id="L260"><span class="lineNum">     260</span>                 :             :     [[nodiscard]] const BlockHandle&amp; filterHandle() const { return filter_handle_; }</span>
+<span id="L261"><span class="lineNum">     261</span>                 :             :     [[nodiscard]] const BlockHandle&amp; indexHandle() const { return index_handle_; }</span>
+<span id="L262"><span class="lineNum">     262</span>                 :             :     [[nodiscard]] const BlockHandle&amp; fileMetaHandle() const { return file_meta_handle_; }</span>
+<span id="L263"><span class="lineNum">     263</span>                 :             : </span>
+<span id="L264"><span class="lineNum">     264</span>                 :             :     void encodeTo(std::string* dst) const;</span>
+<span id="L265"><span class="lineNum">     265</span>                 :             :     [[nodiscard]] Result&lt;Void&gt; decodeFrom(std::string_view input);</span>
+<span id="L266"><span class="lineNum">     266</span>                 :             : </span>
+<span id="L267"><span class="lineNum">     267</span>                 :             : private:</span>
+<span id="L268"><span class="lineNum">     268</span>                 :             :     BlockHandle filter_handle_;</span>
+<span id="L269"><span class="lineNum">     269</span>                 :             :     BlockHandle index_handle_;</span>
+<span id="L270"><span class="lineNum">     270</span>                 :             :     BlockHandle file_meta_handle_;</span>
+<span id="L271"><span class="lineNum">     271</span>                 :             : };</span>
+<span id="L272"><span class="lineNum">     272</span>                 :             : </span>
+<span id="L273"><span class="lineNum">     273</span>                 :             : struct BlockContents {</span>
+<span id="L274"><span class="lineNum">     274</span>                 :             :     std::string_view data;</span>
+<span id="L275"><span class="lineNum">     275</span>                 :             :     bool cachable;</span>
+<span id="L276"><span class="lineNum">     276</span>                 :             :     bool heap_allocated;</span>
+<span id="L277"><span class="lineNum">     277</span>                 :             : };</span>
+<span id="L278"><span class="lineNum">     278</span>                 :             : </span>
+<span id="L279"><span class="lineNum">     279</span>                 :             : class BlockReader {</span>
+<span id="L280"><span class="lineNum">     280</span>                 :             : public:</span>
+<span id="L281"><span class="lineNum">     281</span>                 :             :     BlockReader() = delete; // 静态类，禁止实例化</span>
+<span id="L282"><span class="lineNum">     282</span>                 :             : </span>
+<span id="L283"><span class="lineNum">     283</span>                 :             :     static Result&lt;BlockContents&gt; readBlock(const FileSystemRef&amp; reader,</span>
+<span id="L284"><span class="lineNum">     284</span>                 :             :                                            const FileDescriptorRef&amp; fd,</span>
+<span id="L285"><span class="lineNum">     285</span>                 :             :                                            const BlockHandle&amp; handle);</span>
+<span id="L286"><span class="lineNum">     286</span>                 :             : };</span>
+<span id="L287"><span class="lineNum">     287</span>                 :             : </span>
+<span id="L288"><span class="lineNum">     288</span>                 :             : } // namespace pl</span>
         </pre>
               </td>
             </tr>

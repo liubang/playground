@@ -37,12 +37,21 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-17 10:34:27</td>
+            <td class="headerValue">2026-05-17 18:47:55</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
             <td class="headerCovTableEntry">17</td>
             <td class="headerCovTableEntry">17</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryLo">61.6&nbsp;%</td>
+            <td class="headerCovTableEntry">258</td>
+            <td class="headerCovTableEntry">159</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -58,386 +67,393 @@
             </tr>
             <tr>
               <td>
-<pre class="sourceHeading">            Line data    Source code</pre>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
 <pre class="source">
-<span id="L1"><span class="lineNum">       1</span>              : // Copyright (c) 2026 The Authors. All rights reserved.</span>
-<span id="L2"><span class="lineNum">       2</span>              : //</span>
-<span id="L3"><span class="lineNum">       3</span>              : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
-<span id="L4"><span class="lineNum">       4</span>              : // you may not use this file except in compliance with the License.</span>
-<span id="L5"><span class="lineNum">       5</span>              : // You may obtain a copy of the License at</span>
-<span id="L6"><span class="lineNum">       6</span>              : //</span>
-<span id="L7"><span class="lineNum">       7</span>              : //      https://www.apache.org/licenses/LICENSE-2.0</span>
-<span id="L8"><span class="lineNum">       8</span>              : //</span>
-<span id="L9"><span class="lineNum">       9</span>              : // Unless required by applicable law or agreed to in writing, software</span>
-<span id="L10"><span class="lineNum">      10</span>              : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
-<span id="L11"><span class="lineNum">      11</span>              : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
-<span id="L12"><span class="lineNum">      12</span>              : // See the License for the specific language governing permissions and</span>
-<span id="L13"><span class="lineNum">      13</span>              : // limitations under the License.</span>
-<span id="L14"><span class="lineNum">      14</span>              : </span>
-<span id="L15"><span class="lineNum">      15</span>              : // Authors: liubang (it.liubang@gmail.com)</span>
-<span id="L16"><span class="lineNum">      16</span>              : // Created: 2026/05/15 00:31</span>
-<span id="L17"><span class="lineNum">      17</span>              : </span>
-<span id="L18"><span class="lineNum">      18</span>              : #pragma once</span>
-<span id="L19"><span class="lineNum">      19</span>              : </span>
-<span id="L20"><span class="lineNum">      20</span>              : #include &quot;absl/status/status.h&quot;</span>
-<span id="L21"><span class="lineNum">      21</span>              : #include &quot;absl/status/statusor.h&quot;</span>
-<span id="L22"><span class="lineNum">      22</span>              : #include &quot;absl/strings/str_cat.h&quot;</span>
-<span id="L23"><span class="lineNum">      23</span>              : #include &quot;cpp/pl/flux/runtime/runtime_value.h&quot;</span>
-<span id="L24"><span class="lineNum">      24</span>              : #include &lt;cstddef&gt;</span>
-<span id="L25"><span class="lineNum">      25</span>              : #include &lt;cstdint&gt;</span>
-<span id="L26"><span class="lineNum">      26</span>              : #include &lt;memory&gt;</span>
-<span id="L27"><span class="lineNum">      27</span>              : #include &lt;optional&gt;</span>
-<span id="L28"><span class="lineNum">      28</span>              : #include &lt;string&gt;</span>
-<span id="L29"><span class="lineNum">      29</span>              : #include &lt;utility&gt;</span>
-<span id="L30"><span class="lineNum">      30</span>              : #include &lt;vector&gt;</span>
-<span id="L31"><span class="lineNum">      31</span>              : </span>
-<span id="L32"><span class="lineNum">      32</span>              : namespace pl::flux {</span>
-<span id="L33"><span class="lineNum">      33</span>              : </span>
-<span id="L34"><span class="lineNum">      34</span> <span class="tlaGNC tlaBgGNC">        9116 : struct ColumnVector {</span></span>
-<span id="L35"><span class="lineNum">      35</span>              :     std::string name;</span>
-<span id="L36"><span class="lineNum">      36</span>              :     Value::Type type = Value::Type::Null;</span>
-<span id="L37"><span class="lineNum">      37</span>              :     std::vector&lt;Value&gt; values;</span>
-<span id="L38"><span class="lineNum">      38</span>              : };</span>
-<span id="L39"><span class="lineNum">      39</span>              : </span>
-<span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC">          83 : struct PageColumnSchema {</span></span>
-<span id="L41"><span class="lineNum">      41</span>              :     std::string name;</span>
-<span id="L42"><span class="lineNum">      42</span>              :     Value::Type type = Value::Type::Null;</span>
-<span id="L43"><span class="lineNum">      43</span>              :     bool nullable = false;</span>
-<span id="L44"><span class="lineNum">      44</span>              : };</span>
-<span id="L45"><span class="lineNum">      45</span>              : </span>
-<span id="L46"><span class="lineNum">      46</span> <span class="tlaGNC">          10 : struct PageSchema {</span></span>
-<span id="L47"><span class="lineNum">      47</span>              :     std::vector&lt;PageColumnSchema&gt; columns;</span>
-<span id="L48"><span class="lineNum">      48</span>              : </span>
-<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">          13 :     [[nodiscard]] std::optional&lt;size_t&gt; FindColumn(const std::string&amp; name) const {</span></span>
-<span id="L50"><span class="lineNum">      50</span> <span class="tlaGNC">          39 :         for (size_t index = 0; index &lt; columns.size(); ++index) {</span></span>
-<span id="L51"><span class="lineNum">      51</span> <span class="tlaGNC">          35 :             if (columns[index].name == name) {</span></span>
-<span id="L52"><span class="lineNum">      52</span> <span class="tlaGNC">           9 :                 return index;</span></span>
-<span id="L53"><span class="lineNum">      53</span>              :             }</span>
-<span id="L54"><span class="lineNum">      54</span>              :         }</span>
-<span id="L55"><span class="lineNum">      55</span> <span class="tlaGNC">           4 :         return std::nullopt;</span></span>
-<span id="L56"><span class="lineNum">      56</span>              :     }</span>
-<span id="L57"><span class="lineNum">      57</span>              : };</span>
-<span id="L58"><span class="lineNum">      58</span>              : </span>
-<span id="L59"><span class="lineNum">      59</span> <span class="tlaGNC">         792 : struct PageChunk {</span></span>
-<span id="L60"><span class="lineNum">      60</span>              :     std::vector&lt;ColumnVector&gt; columns;</span>
-<span id="L61"><span class="lineNum">      61</span>              :     std::shared_ptr&lt;ObjectValue&gt; group_key;</span>
-<span id="L62"><span class="lineNum">      62</span>              :     size_t row_count = 0;</span>
-<span id="L63"><span class="lineNum">      63</span>              : };</span>
-<span id="L64"><span class="lineNum">      64</span>              : </span>
-<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC">         655 : struct Page {</span></span>
-<span id="L66"><span class="lineNum">      66</span>              :     std::string bucket;</span>
-<span id="L67"><span class="lineNum">      67</span>              :     std::vector&lt;PageChunk&gt; chunks;</span>
-<span id="L68"><span class="lineNum">      68</span>              :     std::optional&lt;std::string&gt; range_start;</span>
-<span id="L69"><span class="lineNum">      69</span>              :     std::optional&lt;std::string&gt; range_stop;</span>
-<span id="L70"><span class="lineNum">      70</span>              :     std::optional&lt;std::string&gt; result_name;</span>
-<span id="L71"><span class="lineNum">      71</span>              :     std::shared_ptr&lt;plan::PlanNode&gt; plan;</span>
-<span id="L72"><span class="lineNum">      72</span>              :     bool materialized = false;</span>
-<span id="L73"><span class="lineNum">      73</span>              : </span>
-<span id="L74"><span class="lineNum">      74</span>              :     [[nodiscard]] size_t row_count() const {</span>
-<span id="L75"><span class="lineNum">      75</span>              :         size_t count = 0;</span>
-<span id="L76"><span class="lineNum">      76</span> <span class="tlaGNC">        4907 :         for (const auto&amp; chunk : chunks) {</span></span>
-<span id="L77"><span class="lineNum">      77</span> <span class="tlaGNC">        2500 :             count += chunk.row_count;</span></span>
-<span id="L78"><span class="lineNum">      78</span>              :         }</span>
-<span id="L79"><span class="lineNum">      79</span>              :         return count;</span>
-<span id="L80"><span class="lineNum">      80</span>              :     }</span>
-<span id="L81"><span class="lineNum">      81</span>              : </span>
-<span id="L82"><span class="lineNum">      82</span> <span class="tlaGNC">           4 :     [[nodiscard]] bool empty() const { return row_count() == 0; }</span></span>
-<span id="L83"><span class="lineNum">      83</span>              : };</span>
-<span id="L84"><span class="lineNum">      84</span>              : </span>
-<span id="L85"><span class="lineNum">      85</span>              : inline Value::Type merge_page_type(Value::Type current, const Value&amp; value) {</span>
-<span id="L86"><span class="lineNum">      86</span> <span class="tlaGNC">          46 :     if (value.is_null()) {</span></span>
-<span id="L87"><span class="lineNum">      87</span>              :         return current;</span>
-<span id="L88"><span class="lineNum">      88</span>              :     }</span>
-<span id="L89"><span class="lineNum">      89</span> <span class="tlaGNC">          45 :     if (current == Value::Type::Null) {</span></span>
-<span id="L90"><span class="lineNum">      90</span>              :         return value.type();</span>
-<span id="L91"><span class="lineNum">      91</span>              :     }</span>
-<span id="L92"><span class="lineNum">      92</span>              :     return current;</span>
-<span id="L93"><span class="lineNum">      93</span>              : }</span>
-<span id="L94"><span class="lineNum">      94</span>              : </span>
-<span id="L95"><span class="lineNum">      95</span> <span class="tlaGNC">           9 : inline PageSchema SchemaFromPageChunk(const PageChunk&amp; chunk) {</span></span>
-<span id="L96"><span class="lineNum">      96</span> <span class="tlaGNC">           9 :     PageSchema schema;</span></span>
-<span id="L97"><span class="lineNum">      97</span> <span class="tlaGNC">           9 :     schema.columns.reserve(chunk.columns.size());</span></span>
-<span id="L98"><span class="lineNum">      98</span> <span class="tlaGNC">          48 :     for (const auto&amp; column : chunk.columns) {</span></span>
-<span id="L99"><span class="lineNum">      99</span>              :         PageColumnSchema item;</span>
-<span id="L100"><span class="lineNum">     100</span> <span class="tlaGNC">          39 :         item.name = column.name;</span></span>
-<span id="L101"><span class="lineNum">     101</span> <span class="tlaGNC">          39 :         item.type = column.type;</span></span>
-<span id="L102"><span class="lineNum">     102</span> <span class="tlaGNC">          39 :         item.nullable = false;</span></span>
-<span id="L103"><span class="lineNum">     103</span> <span class="tlaGNC">          85 :         for (const auto&amp; value : column.values) {</span></span>
-<span id="L104"><span class="lineNum">     104</span> <span class="tlaGNC">          92 :             item.type = merge_page_type(item.type, value);</span></span>
-<span id="L105"><span class="lineNum">     105</span> <span class="tlaGNC">          46 :             if (value.is_null()) {</span></span>
-<span id="L106"><span class="lineNum">     106</span> <span class="tlaGNC">           1 :                 item.nullable = true;</span></span>
-<span id="L107"><span class="lineNum">     107</span>              :             }</span>
-<span id="L108"><span class="lineNum">     108</span>              :         }</span>
-<span id="L109"><span class="lineNum">     109</span>              :         schema.columns.push_back(std::move(item));</span>
-<span id="L110"><span class="lineNum">     110</span>              :     }</span>
-<span id="L111"><span class="lineNum">     111</span> <span class="tlaGNC">           9 :     return schema;</span></span>
-<span id="L112"><span class="lineNum">     112</span>              : }</span>
-<span id="L113"><span class="lineNum">     113</span>              : </span>
-<span id="L114"><span class="lineNum">     114</span> <span class="tlaGNC">           1 : inline PageSchema SchemaFromPage(const Page&amp; page) {</span></span>
-<span id="L115"><span class="lineNum">     115</span> <span class="tlaGNC">           1 :     PageSchema schema;</span></span>
-<span id="L116"><span class="lineNum">     116</span> <span class="tlaGNC">           2 :     for (const auto&amp; chunk : page.chunks) {</span></span>
-<span id="L117"><span class="lineNum">     117</span> <span class="tlaGNC">           1 :         PageSchema chunk_schema = SchemaFromPageChunk(chunk);</span></span>
-<span id="L118"><span class="lineNum">     118</span> <span class="tlaGNC">           3 :         for (const auto&amp; column : chunk_schema.columns) {</span></span>
-<span id="L119"><span class="lineNum">     119</span> <span class="tlaGNC">           2 :             auto index = schema.FindColumn(column.name);</span></span>
-<span id="L120"><span class="lineNum">     120</span> <span class="tlaGNC">           2 :             if (!index.has_value()) {</span></span>
-<span id="L121"><span class="lineNum">     121</span> <span class="tlaGNC">           2 :                 schema.columns.push_back(column);</span></span>
-<span id="L122"><span class="lineNum">     122</span> <span class="tlaGNC">           2 :                 continue;</span></span>
-<span id="L123"><span class="lineNum">     123</span>              :             }</span>
-<span id="L124"><span class="lineNum">     124</span> <span class="tlaUNC tlaBgUNC">           0 :             auto&amp; existing = schema.columns[*index];</span></span>
-<span id="L125"><span class="lineNum">     125</span> <span class="tlaUNC">           0 :             if (existing.type == Value::Type::Null) {</span></span>
-<span id="L126"><span class="lineNum">     126</span> <span class="tlaUNC">           0 :                 existing.type = column.type;</span></span>
-<span id="L127"><span class="lineNum">     127</span>              :             }</span>
-<span id="L128"><span class="lineNum">     128</span> <span class="tlaUNC">           0 :             existing.nullable = existing.nullable || column.nullable;</span></span>
-<span id="L129"><span class="lineNum">     129</span>              :         }</span>
-<span id="L130"><span class="lineNum">     130</span>              :     }</span>
-<span id="L131"><span class="lineNum">     131</span> <span class="tlaGNC tlaBgGNC">           1 :     return schema;</span></span>
-<span id="L132"><span class="lineNum">     132</span>              : }</span>
-<span id="L133"><span class="lineNum">     133</span>              : </span>
-<span id="L134"><span class="lineNum">     134</span> <span class="tlaGNC">        1225 : inline absl::Status ValidatePageChunk(const PageChunk&amp; chunk) {</span></span>
-<span id="L135"><span class="lineNum">     135</span> <span class="tlaGNC">        4819 :     for (const auto&amp; column : chunk.columns) {</span></span>
-<span id="L136"><span class="lineNum">     136</span> <span class="tlaGNC">        3595 :         if (column.values.size() != chunk.row_count) {</span></span>
-<span id="L137"><span class="lineNum">     137</span> <span class="tlaGNC">           2 :             return absl::InvalidArgumentError(absl::StrCat(</span></span>
-<span id="L138"><span class="lineNum">     138</span>              :                 &quot;page column &quot;, column.name, &quot; has &quot;, column.values.size(),</span>
-<span id="L139"><span class="lineNum">     139</span> <span class="tlaGNC">           2 :                 &quot; values but chunk has &quot;, chunk.row_count, &quot; rows&quot;));</span></span>
-<span id="L140"><span class="lineNum">     140</span>              :         }</span>
-<span id="L141"><span class="lineNum">     141</span>              :     }</span>
-<span id="L142"><span class="lineNum">     142</span>              :     return absl::OkStatus();</span>
-<span id="L143"><span class="lineNum">     143</span>              : }</span>
-<span id="L144"><span class="lineNum">     144</span>              : </span>
-<span id="L145"><span class="lineNum">     145</span> <span class="tlaGNC">        1163 : inline absl::Status ValidatePage(const Page&amp; page) {</span></span>
-<span id="L146"><span class="lineNum">     146</span> <span class="tlaGNC">        2385 :     for (const auto&amp; chunk : page.chunks) {</span></span>
-<span id="L147"><span class="lineNum">     147</span> <span class="tlaGNC">        1225 :         auto status = ValidatePageChunk(chunk);</span></span>
-<span id="L148"><span class="lineNum">     148</span> <span class="tlaGNC">        1223 :         if (!status.ok()) {</span></span>
-<span id="L149"><span class="lineNum">     149</span>              :             return status;</span>
-<span id="L150"><span class="lineNum">     150</span>              :         }</span>
-<span id="L151"><span class="lineNum">     151</span>              :     }</span>
-<span id="L152"><span class="lineNum">     152</span> <span class="tlaGNC">        1160 :     return absl::OkStatus();</span></span>
-<span id="L153"><span class="lineNum">     153</span>              : }</span>
-<span id="L154"><span class="lineNum">     154</span>              : </span>
-<span id="L155"><span class="lineNum">     155</span> <span class="tlaGNC">      200008 : inline const Value* PageChunkValueAt(const PageChunk&amp; chunk,</span></span>
-<span id="L156"><span class="lineNum">     156</span>              :                                      size_t row_index,</span>
-<span id="L157"><span class="lineNum">     157</span>              :                                      const std::string&amp; column_name) {</span>
-<span id="L158"><span class="lineNum">     158</span> <span class="tlaGNC">      200008 :     if (row_index &gt;= chunk.row_count) {</span></span>
-<span id="L159"><span class="lineNum">     159</span>              :         return nullptr;</span>
-<span id="L160"><span class="lineNum">     160</span>              :     }</span>
-<span id="L161"><span class="lineNum">     161</span> <span class="tlaGNC">      200024 :     for (const auto&amp; column : chunk.columns) {</span></span>
-<span id="L162"><span class="lineNum">     162</span> <span class="tlaGNC">      200024 :         if (column.name != column_name) {</span></span>
-<span id="L163"><span class="lineNum">     163</span>              :             continue;</span>
-<span id="L164"><span class="lineNum">     164</span>              :         }</span>
-<span id="L165"><span class="lineNum">     165</span> <span class="tlaGNC">      200008 :         if (row_index &gt;= column.values.size()) {</span></span>
-<span id="L166"><span class="lineNum">     166</span>              :             return nullptr;</span>
-<span id="L167"><span class="lineNum">     167</span>              :         }</span>
-<span id="L168"><span class="lineNum">     168</span> <span class="tlaGNC">      200008 :         return &amp;column.values[row_index];</span></span>
-<span id="L169"><span class="lineNum">     169</span>              :     }</span>
-<span id="L170"><span class="lineNum">     170</span>              :     return nullptr;</span>
-<span id="L171"><span class="lineNum">     171</span>              : }</span>
-<span id="L172"><span class="lineNum">     172</span>              : </span>
-<span id="L173"><span class="lineNum">     173</span> <span class="tlaGNC">          28 : inline std::shared_ptr&lt;ObjectValue&gt; RowFromPageChunk(const PageChunk&amp; chunk, size_t row_index) {</span></span>
-<span id="L174"><span class="lineNum">     174</span> <span class="tlaGNC">          28 :     std::vector&lt;std::pair&lt;std::string, Value&gt;&gt; props;</span></span>
-<span id="L175"><span class="lineNum">     175</span> <span class="tlaGNC">          28 :     props.reserve(chunk.columns.size());</span></span>
-<span id="L176"><span class="lineNum">     176</span> <span class="tlaGNC">          28 :     if (row_index &gt;= chunk.row_count) {</span></span>
-<span id="L177"><span class="lineNum">     177</span>              :         return std::make_shared&lt;ObjectValue&gt;(std::move(props));</span>
-<span id="L178"><span class="lineNum">     178</span>              :     }</span>
-<span id="L179"><span class="lineNum">     179</span> <span class="tlaGNC">         114 :     for (const auto&amp; column : chunk.columns) {</span></span>
-<span id="L180"><span class="lineNum">     180</span> <span class="tlaGNC">          86 :         props.emplace_back(column.name,</span></span>
-<span id="L181"><span class="lineNum">     181</span> <span class="tlaGNC">         172 :                            row_index &lt; column.values.size() ? column.values[row_index]</span></span>
-<span id="L182"><span class="lineNum">     182</span>              :                                                             : Value::null());</span>
-<span id="L183"><span class="lineNum">     183</span>              :     }</span>
-<span id="L184"><span class="lineNum">     184</span>              :     return std::make_shared&lt;ObjectValue&gt;(std::move(props));</span>
-<span id="L185"><span class="lineNum">     185</span> <span class="tlaGNC">          28 : }</span></span>
-<span id="L186"><span class="lineNum">     186</span>              : </span>
-<span id="L187"><span class="lineNum">     187</span> <span class="tlaGNC">           5 : inline PageChunk SlicePageChunkRows(const PageChunk&amp; source, size_t start, size_t count) {</span></span>
-<span id="L188"><span class="lineNum">     188</span> <span class="tlaGNC">           5 :     PageChunk chunk;</span></span>
-<span id="L189"><span class="lineNum">     189</span>              :     chunk.group_key = source.group_key;</span>
-<span id="L190"><span class="lineNum">     190</span> <span class="tlaGNC">           5 :     if (start &gt;= source.row_count || count == 0) {</span></span>
-<span id="L191"><span class="lineNum">     191</span> <span class="tlaUNC tlaBgUNC">           0 :         chunk.row_count = 0;</span></span>
-<span id="L192"><span class="lineNum">     192</span> <span class="tlaUNC">           0 :         chunk.columns.reserve(source.columns.size());</span></span>
-<span id="L193"><span class="lineNum">     193</span> <span class="tlaUNC">           0 :         for (const auto&amp; column : source.columns) {</span></span>
-<span id="L194"><span class="lineNum">     194</span> <span class="tlaUNC">           0 :             chunk.columns.push_back(ColumnVector{</span></span>
-<span id="L195"><span class="lineNum">     195</span> <span class="tlaUNC">           0 :                 .name = column.name,</span></span>
-<span id="L196"><span class="lineNum">     196</span> <span class="tlaUNC">           0 :                 .type = column.type,</span></span>
-<span id="L197"><span class="lineNum">     197</span>              :             });</span>
-<span id="L198"><span class="lineNum">     198</span>              :         }</span>
-<span id="L199"><span class="lineNum">     199</span>              :         return chunk;</span>
-<span id="L200"><span class="lineNum">     200</span>              :     }</span>
-<span id="L201"><span class="lineNum">     201</span>              : </span>
-<span id="L202"><span class="lineNum">     202</span> <span class="tlaGNC tlaBgGNC">           5 :     const size_t end = std::min(source.row_count, start + count);</span></span>
-<span id="L203"><span class="lineNum">     203</span> <span class="tlaGNC">           5 :     chunk.row_count = end - start;</span></span>
-<span id="L204"><span class="lineNum">     204</span> <span class="tlaGNC">           5 :     chunk.columns.reserve(source.columns.size());</span></span>
-<span id="L205"><span class="lineNum">     205</span> <span class="tlaGNC">          21 :     for (const auto&amp; source_column : source.columns) {</span></span>
-<span id="L206"><span class="lineNum">     206</span>              :         ColumnVector column;</span>
-<span id="L207"><span class="lineNum">     207</span> <span class="tlaGNC">          16 :         column.name = source_column.name;</span></span>
-<span id="L208"><span class="lineNum">     208</span> <span class="tlaGNC">          16 :         column.type = source_column.type;</span></span>
-<span id="L209"><span class="lineNum">     209</span> <span class="tlaGNC">          16 :         column.values.reserve(chunk.row_count);</span></span>
-<span id="L210"><span class="lineNum">     210</span> <span class="tlaGNC">          16 :         column.values.insert(column.values.end(),</span></span>
-<span id="L211"><span class="lineNum">     211</span>              :                              source_column.values.begin() + static_cast&lt;std::ptrdiff_t&gt;(start),</span>
-<span id="L212"><span class="lineNum">     212</span>              :                              source_column.values.begin() + static_cast&lt;std::ptrdiff_t&gt;(end));</span>
-<span id="L213"><span class="lineNum">     213</span>              :         chunk.columns.push_back(std::move(column));</span>
-<span id="L214"><span class="lineNum">     214</span>              :     }</span>
-<span id="L215"><span class="lineNum">     215</span>              :     return chunk;</span>
-<span id="L216"><span class="lineNum">     216</span> <span class="tlaUNC tlaBgUNC">           0 : }</span></span>
-<span id="L217"><span class="lineNum">     217</span>              : </span>
-<span id="L218"><span class="lineNum">     218</span> <span class="tlaGNC tlaBgGNC">           6 : inline Page PageLike(const Page&amp; source, std::vector&lt;PageChunk&gt; chunks) {</span></span>
-<span id="L219"><span class="lineNum">     219</span>              :     Page page;</span>
-<span id="L220"><span class="lineNum">     220</span> <span class="tlaGNC">           6 :     page.bucket = source.bucket;</span></span>
-<span id="L221"><span class="lineNum">     221</span> <span class="tlaGNC">           6 :     page.chunks = std::move(chunks);</span></span>
-<span id="L222"><span class="lineNum">     222</span>              :     page.range_start = source.range_start;</span>
-<span id="L223"><span class="lineNum">     223</span>              :     page.range_stop = source.range_stop;</span>
-<span id="L224"><span class="lineNum">     224</span>              :     page.result_name = source.result_name;</span>
-<span id="L225"><span class="lineNum">     225</span>              :     page.plan = source.plan;</span>
-<span id="L226"><span class="lineNum">     226</span> <span class="tlaGNC">           6 :     page.materialized = source.materialized;</span></span>
-<span id="L227"><span class="lineNum">     227</span> <span class="tlaGNC">           6 :     return page;</span></span>
-<span id="L228"><span class="lineNum">     228</span> <span class="tlaUNC tlaBgUNC">           0 : }</span></span>
-<span id="L229"><span class="lineNum">     229</span>              : </span>
-<span id="L230"><span class="lineNum">     230</span> <span class="tlaGNC tlaBgGNC">          43 : inline std::vector&lt;std::string&gt; infer_page_columns(const TableChunk&amp; chunk) {</span></span>
-<span id="L231"><span class="lineNum">     231</span> <span class="tlaGNC">          43 :     if (!chunk.columns.empty()) {</span></span>
-<span id="L232"><span class="lineNum">     232</span> <span class="tlaGNC">          10 :         return chunk.columns;</span></span>
-<span id="L233"><span class="lineNum">     233</span>              :     }</span>
-<span id="L234"><span class="lineNum">     234</span> <span class="tlaGNC">          33 :     std::vector&lt;std::string&gt; columns;</span></span>
-<span id="L235"><span class="lineNum">     235</span> <span class="tlaGNC">          73 :     for (const auto&amp; row : chunk.rows) {</span></span>
-<span id="L236"><span class="lineNum">     236</span> <span class="tlaGNC">          40 :         if (row == nullptr) {</span></span>
-<span id="L237"><span class="lineNum">     237</span> <span class="tlaUNC tlaBgUNC">           0 :             continue;</span></span>
-<span id="L238"><span class="lineNum">     238</span>              :         }</span>
-<span id="L239"><span class="lineNum">     239</span> <span class="tlaGNC tlaBgGNC">         155 :         for (const auto&amp; [key, _] : row-&gt;properties) {</span></span>
-<span id="L240"><span class="lineNum">     240</span>              :             bool seen = false;</span>
-<span id="L241"><span class="lineNum">     241</span> <span class="tlaGNC">         238 :             for (const auto&amp; column : columns) {</span></span>
-<span id="L242"><span class="lineNum">     242</span> <span class="tlaGNC">         163 :                 if (column == key) {</span></span>
-<span id="L243"><span class="lineNum">     243</span>              :                     seen = true;</span>
-<span id="L244"><span class="lineNum">     244</span>              :                     break;</span>
-<span id="L245"><span class="lineNum">     245</span>              :                 }</span>
-<span id="L246"><span class="lineNum">     246</span>              :             }</span>
-<span id="L247"><span class="lineNum">     247</span> <span class="tlaGNC">         115 :             if (!seen) {</span></span>
-<span id="L248"><span class="lineNum">     248</span> <span class="tlaGNC">          75 :                 columns.push_back(key);</span></span>
-<span id="L249"><span class="lineNum">     249</span>              :             }</span>
-<span id="L250"><span class="lineNum">     250</span>              :         }</span>
-<span id="L251"><span class="lineNum">     251</span>              :     }</span>
-<span id="L252"><span class="lineNum">     252</span>              :     return columns;</span>
-<span id="L253"><span class="lineNum">     253</span> <span class="tlaGNC">          33 : }</span></span>
-<span id="L254"><span class="lineNum">     254</span>              : </span>
-<span id="L255"><span class="lineNum">     255</span> <span class="tlaGNC">          43 : inline PageChunk PageChunkFromTableChunk(const TableChunk&amp; chunk) {</span></span>
-<span id="L256"><span class="lineNum">     256</span> <span class="tlaGNC">          43 :     PageChunk page_chunk;</span></span>
-<span id="L257"><span class="lineNum">     257</span>              :     page_chunk.group_key = chunk.group_key;</span>
-<span id="L258"><span class="lineNum">     258</span> <span class="tlaGNC">          43 :     page_chunk.row_count = chunk.rows.size();</span></span>
-<span id="L259"><span class="lineNum">     259</span>              : </span>
-<span id="L260"><span class="lineNum">     260</span> <span class="tlaGNC">          43 :     const std::vector&lt;std::string&gt; column_names = infer_page_columns(chunk);</span></span>
-<span id="L261"><span class="lineNum">     261</span> <span class="tlaGNC">          43 :     page_chunk.columns.reserve(column_names.size());</span></span>
-<span id="L262"><span class="lineNum">     262</span> <span class="tlaGNC">         144 :     for (const auto&amp; name : column_names) {</span></span>
-<span id="L263"><span class="lineNum">     263</span>              :         ColumnVector column;</span>
-<span id="L264"><span class="lineNum">     264</span>              :         column.name = name;</span>
-<span id="L265"><span class="lineNum">     265</span> <span class="tlaGNC">         101 :         column.values.reserve(chunk.rows.size());</span></span>
-<span id="L266"><span class="lineNum">     266</span> <span class="tlaGNC">         340 :         for (const auto&amp; row : chunk.rows) {</span></span>
-<span id="L267"><span class="lineNum">     267</span> <span class="tlaGNC">         239 :             const Value* value = row == nullptr ? nullptr : row-&gt;lookup(name);</span></span>
-<span id="L268"><span class="lineNum">     268</span> <span class="tlaGNC">         477 :             column.values.push_back(value == nullptr ? Value::null() : *value);</span></span>
-<span id="L269"><span class="lineNum">     269</span> <span class="tlaGNC">         239 :             if (column.type == Value::Type::Null &amp;&amp; value != nullptr &amp;&amp; !value-&gt;is_null()) {</span></span>
-<span id="L270"><span class="lineNum">     270</span> <span class="tlaGNC">         101 :                 column.type = value-&gt;type();</span></span>
-<span id="L271"><span class="lineNum">     271</span>              :             }</span>
-<span id="L272"><span class="lineNum">     272</span>              :         }</span>
-<span id="L273"><span class="lineNum">     273</span>              :         page_chunk.columns.push_back(std::move(column));</span>
-<span id="L274"><span class="lineNum">     274</span>              :     }</span>
-<span id="L275"><span class="lineNum">     275</span> <span class="tlaGNC">          43 :     return page_chunk;</span></span>
-<span id="L276"><span class="lineNum">     276</span> <span class="tlaGNC">          43 : }</span></span>
-<span id="L277"><span class="lineNum">     277</span>              : </span>
-<span id="L278"><span class="lineNum">     278</span> <span class="tlaGNC">           5 : inline Page PageFromTableValue(const TableValue&amp; table) {</span></span>
-<span id="L279"><span class="lineNum">     279</span>              :     Page page;</span>
-<span id="L280"><span class="lineNum">     280</span> <span class="tlaGNC">           5 :     page.bucket = table.bucket;</span></span>
-<span id="L281"><span class="lineNum">     281</span>              :     page.range_start = table.range_start;</span>
-<span id="L282"><span class="lineNum">     282</span>              :     page.range_stop = table.range_stop;</span>
-<span id="L283"><span class="lineNum">     283</span>              :     page.result_name = table.result_name;</span>
-<span id="L284"><span class="lineNum">     284</span>              :     page.plan = table.plan;</span>
-<span id="L285"><span class="lineNum">     285</span> <span class="tlaGNC">           5 :     page.materialized = table.materialized;</span></span>
-<span id="L286"><span class="lineNum">     286</span> <span class="tlaGNC">           5 :     page.chunks.reserve(table.tables.size());</span></span>
-<span id="L287"><span class="lineNum">     287</span> <span class="tlaGNC">          10 :     for (const auto&amp; chunk : table.tables) {</span></span>
-<span id="L288"><span class="lineNum">     288</span> <span class="tlaGNC">          10 :         page.chunks.push_back(PageChunkFromTableChunk(chunk));</span></span>
-<span id="L289"><span class="lineNum">     289</span>              :     }</span>
-<span id="L290"><span class="lineNum">     290</span> <span class="tlaGNC">           5 :     return page;</span></span>
-<span id="L291"><span class="lineNum">     291</span> <span class="tlaUNC tlaBgUNC">           0 : }</span></span>
-<span id="L292"><span class="lineNum">     292</span>              : </span>
-<span id="L293"><span class="lineNum">     293</span> <span class="tlaGNC tlaBgGNC">          32 : inline Page PageFromTableChunks(std::string bucket,</span></span>
-<span id="L294"><span class="lineNum">     294</span>              :                                 const std::vector&lt;TableChunk&gt;&amp; chunks,</span>
-<span id="L295"><span class="lineNum">     295</span>              :                                 std::optional&lt;std::string&gt; range_start = std::nullopt,</span>
-<span id="L296"><span class="lineNum">     296</span>              :                                 std::optional&lt;std::string&gt; range_stop = std::nullopt,</span>
-<span id="L297"><span class="lineNum">     297</span>              :                                 std::optional&lt;std::string&gt; result_name = std::nullopt) {</span>
-<span id="L298"><span class="lineNum">     298</span>              :     Page page;</span>
-<span id="L299"><span class="lineNum">     299</span> <span class="tlaGNC">          32 :     page.bucket = std::move(bucket);</span></span>
-<span id="L300"><span class="lineNum">     300</span>              :     page.range_start = std::move(range_start);</span>
-<span id="L301"><span class="lineNum">     301</span>              :     page.range_stop = std::move(range_stop);</span>
-<span id="L302"><span class="lineNum">     302</span>              :     page.result_name = std::move(result_name);</span>
-<span id="L303"><span class="lineNum">     303</span> <span class="tlaGNC">          32 :     page.materialized = false;</span></span>
-<span id="L304"><span class="lineNum">     304</span> <span class="tlaGNC">          32 :     page.chunks.reserve(chunks.size());</span></span>
-<span id="L305"><span class="lineNum">     305</span> <span class="tlaGNC">          70 :     for (const auto&amp; chunk : chunks) {</span></span>
-<span id="L306"><span class="lineNum">     306</span> <span class="tlaGNC">          76 :         page.chunks.push_back(PageChunkFromTableChunk(chunk));</span></span>
-<span id="L307"><span class="lineNum">     307</span>              :     }</span>
-<span id="L308"><span class="lineNum">     308</span> <span class="tlaGNC">          32 :     return page;</span></span>
-<span id="L309"><span class="lineNum">     309</span> <span class="tlaUNC tlaBgUNC">           0 : }</span></span>
-<span id="L310"><span class="lineNum">     310</span>              : </span>
-<span id="L311"><span class="lineNum">     311</span> <span class="tlaGNC tlaBgGNC">          22 : inline Page PageFromRows(std::string bucket, std::vector&lt;std::shared_ptr&lt;ObjectValue&gt;&gt; rows) {</span></span>
-<span id="L312"><span class="lineNum">     312</span> <span class="tlaGNC">          22 :     TableChunk chunk;</span></span>
-<span id="L313"><span class="lineNum">     313</span>              :     chunk.rows = std::move(rows);</span>
-<span id="L314"><span class="lineNum">     314</span> <span class="tlaGNC">          22 :     std::vector&lt;TableChunk&gt; chunks;</span></span>
-<span id="L315"><span class="lineNum">     315</span>              :     chunks.push_back(std::move(chunk));</span>
-<span id="L316"><span class="lineNum">     316</span> <span class="tlaGNC">          66 :     return PageFromTableChunks(std::move(bucket), chunks);</span></span>
-<span id="L317"><span class="lineNum">     317</span> <span class="tlaGNC">          22 : }</span></span>
-<span id="L318"><span class="lineNum">     318</span>              : </span>
-<span id="L319"><span class="lineNum">     319</span> <span class="tlaGNC">         186 : inline TableChunk TableChunkFromPageChunk(const PageChunk&amp; page_chunk) {</span></span>
-<span id="L320"><span class="lineNum">     320</span> <span class="tlaGNC">         186 :     TableChunk chunk;</span></span>
-<span id="L321"><span class="lineNum">     321</span>              :     chunk.group_key = page_chunk.group_key;</span>
-<span id="L322"><span class="lineNum">     322</span> <span class="tlaGNC">         186 :     chunk.columns.reserve(page_chunk.columns.size());</span></span>
-<span id="L323"><span class="lineNum">     323</span> <span class="tlaGNC">         683 :     for (const auto&amp; column : page_chunk.columns) {</span></span>
-<span id="L324"><span class="lineNum">     324</span> <span class="tlaGNC">         497 :         chunk.columns.push_back(column.name);</span></span>
-<span id="L325"><span class="lineNum">     325</span>              :     }</span>
-<span id="L326"><span class="lineNum">     326</span> <span class="tlaGNC">         186 :     chunk.rows.reserve(page_chunk.row_count);</span></span>
-<span id="L327"><span class="lineNum">     327</span> <span class="tlaGNC">       99553 :     for (size_t row_index = 0; row_index &lt; page_chunk.row_count; ++row_index) {</span></span>
-<span id="L328"><span class="lineNum">     328</span> <span class="tlaGNC">       99367 :         std::vector&lt;std::pair&lt;std::string, Value&gt;&gt; props;</span></span>
-<span id="L329"><span class="lineNum">     329</span> <span class="tlaGNC">       99367 :         props.reserve(page_chunk.columns.size());</span></span>
-<span id="L330"><span class="lineNum">     330</span> <span class="tlaGNC">      298552 :         for (const auto&amp; column : page_chunk.columns) {</span></span>
-<span id="L331"><span class="lineNum">     331</span> <span class="tlaGNC">      198955 :             if (row_index &lt; column.values.size()) {</span></span>
-<span id="L332"><span class="lineNum">     332</span> <span class="tlaGNC">      198955 :                 props.emplace_back(column.name, column.values[row_index]);</span></span>
-<span id="L333"><span class="lineNum">     333</span>              :             } else {</span>
-<span id="L334"><span class="lineNum">     334</span> <span class="tlaUNC tlaBgUNC">           0 :                 props.emplace_back(column.name, Value::null());</span></span>
-<span id="L335"><span class="lineNum">     335</span>              :             }</span>
-<span id="L336"><span class="lineNum">     336</span>              :         }</span>
-<span id="L337"><span class="lineNum">     337</span> <span class="tlaGNC tlaBgGNC">       99537 :         chunk.rows.push_back(std::make_shared&lt;ObjectValue&gt;(std::move(props)));</span></span>
-<span id="L338"><span class="lineNum">     338</span> <span class="tlaGNC">       99537 :     }</span></span>
-<span id="L339"><span class="lineNum">     339</span> <span class="tlaGNC">         186 :     return chunk;</span></span>
-<span id="L340"><span class="lineNum">     340</span> <span class="tlaUNC tlaBgUNC">           0 : }</span></span>
-<span id="L341"><span class="lineNum">     341</span>              : </span>
-<span id="L342"><span class="lineNum">     342</span> <span class="tlaGNC tlaBgGNC">         112 : inline TableValue TableValueFromPage(const Page&amp; page) {</span></span>
-<span id="L343"><span class="lineNum">     343</span> <span class="tlaGNC">         112 :     std::vector&lt;TableChunk&gt; chunks;</span></span>
-<span id="L344"><span class="lineNum">     344</span> <span class="tlaGNC">         112 :     chunks.reserve(page.chunks.size());</span></span>
-<span id="L345"><span class="lineNum">     345</span> <span class="tlaGNC">         297 :     for (const auto&amp; chunk : page.chunks) {</span></span>
-<span id="L346"><span class="lineNum">     346</span> <span class="tlaGNC">         371 :         chunks.push_back(TableChunkFromPageChunk(chunk));</span></span>
-<span id="L347"><span class="lineNum">     347</span>              :     }</span>
-<span id="L348"><span class="lineNum">     348</span> <span class="tlaGNC">         222 :     Value value = Value::table_stream(page.bucket, std::move(chunks), page.range_start,</span></span>
-<span id="L349"><span class="lineNum">     349</span> <span class="tlaGNC">         112 :                                       page.range_stop, page.result_name);</span></span>
-<span id="L350"><span class="lineNum">     350</span> <span class="tlaGNC">         111 :     value.as_table_mut().plan = page.plan;</span></span>
-<span id="L351"><span class="lineNum">     351</span> <span class="tlaGNC">         111 :     value.as_table_mut().materialized = page.materialized;</span></span>
-<span id="L352"><span class="lineNum">     352</span> <span class="tlaGNC">         222 :     return value.as_table();</span></span>
-<span id="L353"><span class="lineNum">     353</span> <span class="tlaGNC">         112 : }</span></span>
-<span id="L354"><span class="lineNum">     354</span>              : </span>
-<span id="L355"><span class="lineNum">     355</span> <span class="tlaGNC">          59 : inline void AppendPage(Page* output, Page page) {</span></span>
-<span id="L356"><span class="lineNum">     356</span> <span class="tlaGNC">          59 :     if (output == nullptr) {</span></span>
-<span id="L357"><span class="lineNum">     357</span>              :         return;</span>
-<span id="L358"><span class="lineNum">     358</span>              :     }</span>
-<span id="L359"><span class="lineNum">     359</span> <span class="tlaGNC">          59 :     if (output-&gt;bucket.empty()) {</span></span>
-<span id="L360"><span class="lineNum">     360</span> <span class="tlaUNC tlaBgUNC">           0 :         output-&gt;bucket = page.bucket;</span></span>
-<span id="L361"><span class="lineNum">     361</span>              :     }</span>
-<span id="L362"><span class="lineNum">     362</span> <span class="tlaGNC tlaBgGNC">          59 :     if (!output-&gt;range_start.has_value()) {</span></span>
-<span id="L363"><span class="lineNum">     363</span>              :         output-&gt;range_start = page.range_start;</span>
-<span id="L364"><span class="lineNum">     364</span>              :     }</span>
-<span id="L365"><span class="lineNum">     365</span> <span class="tlaGNC">          59 :     if (!output-&gt;range_stop.has_value()) {</span></span>
-<span id="L366"><span class="lineNum">     366</span>              :         output-&gt;range_stop = page.range_stop;</span>
-<span id="L367"><span class="lineNum">     367</span>              :     }</span>
-<span id="L368"><span class="lineNum">     368</span> <span class="tlaGNC">          59 :     if (!output-&gt;result_name.has_value()) {</span></span>
-<span id="L369"><span class="lineNum">     369</span>              :         output-&gt;result_name = page.result_name;</span>
-<span id="L370"><span class="lineNum">     370</span>              :     }</span>
-<span id="L371"><span class="lineNum">     371</span> <span class="tlaGNC">          59 :     if (output-&gt;plan == nullptr) {</span></span>
-<span id="L372"><span class="lineNum">     372</span>              :         output-&gt;plan = page.plan;</span>
-<span id="L373"><span class="lineNum">     373</span>              :     }</span>
-<span id="L374"><span class="lineNum">     374</span> <span class="tlaGNC">          59 :     output-&gt;materialized = output-&gt;materialized || page.materialized;</span></span>
-<span id="L375"><span class="lineNum">     375</span> <span class="tlaGNC">          59 :     output-&gt;chunks.insert(output-&gt;chunks.end(), page.chunks.begin(), page.chunks.end());</span></span>
-<span id="L376"><span class="lineNum">     376</span>              : }</span>
-<span id="L377"><span class="lineNum">     377</span>              : </span>
-<span id="L378"><span class="lineNum">     378</span>              : } // namespace pl::flux</span>
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2026 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2026/05/15 00:31</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : #pragma once</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : </span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : #include &quot;absl/status/status.h&quot;</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : #include &quot;absl/status/statusor.h&quot;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : #include &quot;absl/strings/str_cat.h&quot;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : #include &quot;cpp/pl/flux/runtime/runtime_value.h&quot;</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : #include &lt;cstddef&gt;</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : #include &lt;cstdint&gt;</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : #include &lt;memory&gt;</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : #include &lt;optional&gt;</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : #include &lt;string&gt;</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : #include &lt;utility&gt;</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : #include &lt;vector&gt;</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : </span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : namespace pl::flux {</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : </span>
+<span id="L34"><span class="lineNum">      34</span>   [<span class="tlaGBC" title="Branch 0 was taken 216 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC tlaBgGNC">        9036 : struct ColumnVector {</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 39 times"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 14 times"> + </span> 
+<span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 9 was not taken"> - </span>]
+<span id="L35"><span class="lineNum">      35</span>                 :             :     std::string name;</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             :     Value::Type type = Value::Type::Null;</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             :     std::vector&lt;Value&gt; values;</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             : };</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             : </span>
+<span id="L40"><span class="lineNum">      40</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          83 : struct PageColumnSchema {</span></span>
+<span id="L41"><span class="lineNum">      41</span>                 :             :     std::string name;</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             :     Value::Type type = Value::Type::Null;</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             :     bool nullable = false;</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             : };</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             : </span>
+<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">          10 : struct PageSchema {</span></span>
+<span id="L47"><span class="lineNum">      47</span>                 :             :     std::vector&lt;PageColumnSchema&gt; columns;</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             : </span>
+<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">          13 :     [[nodiscard]] std::optional&lt;size_t&gt; FindColumn(const std::string&amp; name) const {</span></span>
+<span id="L50"><span class="lineNum">      50</span>         [<span class="tlaGBC" title="Branch 0 was taken 35 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">          39 :         for (size_t index = 0; index &lt; columns.size(); ++index) {</span></span>
+<span id="L51"><span class="lineNum">      51</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 26 times"> + </span>]:<span class="tlaGNC">          35 :             if (columns[index].name == name) {</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">           9 :                 return index;</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :             :             }</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             :         }</span>
+<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">           4 :         return std::nullopt;</span></span>
+<span id="L56"><span class="lineNum">      56</span>                 :             :     }</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             : };</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             : </span>
+<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">         785 : struct PageChunk {</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :             :     std::vector&lt;ColumnVector&gt; columns;</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             :     std::shared_ptr&lt;ObjectValue&gt; group_key;</span>
+<span id="L62"><span class="lineNum">      62</span>                 :             :     size_t row_count = 0;</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             : };</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             : </span>
+<span id="L65"><span class="lineNum">      65</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 493 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         649 : struct Page {</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 111 times"> + </span>]
+<span id="L66"><span class="lineNum">      66</span>                 :             :     std::string bucket;</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             :     std::vector&lt;PageChunk&gt; chunks;</span>
+<span id="L68"><span class="lineNum">      68</span>                 :             :     std::optional&lt;std::string&gt; range_start;</span>
+<span id="L69"><span class="lineNum">      69</span>                 :             :     std::optional&lt;std::string&gt; range_stop;</span>
+<span id="L70"><span class="lineNum">      70</span>                 :             :     std::optional&lt;std::string&gt; result_name;</span>
+<span id="L71"><span class="lineNum">      71</span>                 :             :     std::shared_ptr&lt;plan::PlanNode&gt; plan;</span>
+<span id="L72"><span class="lineNum">      72</span>                 :             :     bool materialized = false;</span>
+<span id="L73"><span class="lineNum">      73</span>                 :             : </span>
+<span id="L74"><span class="lineNum">      74</span>                 :             :     [[nodiscard]] size_t row_count() const {</span>
+<span id="L75"><span class="lineNum">      75</span>                 :             :         size_t count = 0;</span>
+<span id="L76"><span class="lineNum">      76</span>   [<span class="tlaGBC" title="Branch 0 was taken 1301 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1248 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 12 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 12 times"> + </span> :<span class="tlaGNC">        4849 :         for (const auto&amp; chunk : chunks) {</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 510 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 510 times"> + </span><span class="tlaGBC" title="Branch 6 was taken 45 times"> + </span><span class="tlaGBC" title="Branch 7 was taken 11 times"> + </span><span class="tlaGBC" title="Branch 8 was taken 603 times"> + </span> 
+<span class="lineNum">        </span>       <span class="tlaGBC" title="Branch 9 was taken 597 times"> + </span><span class="tlaUNC" title="Branch 10 was not taken"> - </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span>]
+<span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC">        2471 :             count += chunk.row_count;</span></span>
+<span id="L78"><span class="lineNum">      78</span>                 :             :         }</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             :         return count;</span>
+<span id="L80"><span class="lineNum">      80</span>                 :             :     }</span>
+<span id="L81"><span class="lineNum">      81</span>                 :             : </span>
+<span id="L82"><span class="lineNum">      82</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">           4 :     [[nodiscard]] bool empty() const { return row_count() == 0; }</span></span>
+<span id="L83"><span class="lineNum">      83</span>                 :             : };</span>
+<span id="L84"><span class="lineNum">      84</span>                 :             : </span>
+<span id="L85"><span class="lineNum">      85</span>                 :             : inline Value::Type merge_page_type(Value::Type current, const Value&amp; value) {</span>
+<span id="L86"><span class="lineNum">      86</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 45 times"> + </span>]:<span class="tlaGNC">          46 :     if (value.is_null()) {</span></span>
+<span id="L87"><span class="lineNum">      87</span>                 :             :         return current;</span>
+<span id="L88"><span class="lineNum">      88</span>                 :             :     }</span>
+<span id="L89"><span class="lineNum">      89</span>         [<span class="tlaGBC" title="Branch 0 was taken 45 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          45 :     if (current == Value::Type::Null) {</span></span>
+<span id="L90"><span class="lineNum">      90</span>                 :             :         return value.type();</span>
+<span id="L91"><span class="lineNum">      91</span>                 :             :     }</span>
+<span id="L92"><span class="lineNum">      92</span>                 :             :     return current;</span>
+<span id="L93"><span class="lineNum">      93</span>                 :             : }</span>
+<span id="L94"><span class="lineNum">      94</span>                 :             : </span>
+<span id="L95"><span class="lineNum">      95</span>                 :<span class="tlaGNC">           9 : inline PageSchema SchemaFromPageChunk(const PageChunk&amp; chunk) {</span></span>
+<span id="L96"><span class="lineNum">      96</span>                 :<span class="tlaGNC">           9 :     PageSchema schema;</span></span>
+<span id="L97"><span class="lineNum">      97</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :     schema.columns.reserve(chunk.columns.size());</span></span>
+<span id="L98"><span class="lineNum">      98</span>         [<span class="tlaGBC" title="Branch 0 was taken 39 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 9 times"> + </span>]:<span class="tlaGNC">          48 :     for (const auto&amp; column : chunk.columns) {</span></span>
+<span id="L99"><span class="lineNum">      99</span>                 :             :         PageColumnSchema item;</span>
+<span id="L100"><span class="lineNum">     100</span>         [<span class="tlaGBC" title="Branch 0 was taken 39 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          39 :         item.name = column.name;</span></span>
+<span id="L101"><span class="lineNum">     101</span>                 :<span class="tlaGNC">          39 :         item.type = column.type;</span></span>
+<span id="L102"><span class="lineNum">     102</span>                 :<span class="tlaGNC">          39 :         item.nullable = false;</span></span>
+<span id="L103"><span class="lineNum">     103</span>         [<span class="tlaGBC" title="Branch 0 was taken 46 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 39 times"> + </span>]:<span class="tlaGNC">          85 :         for (const auto&amp; value : column.values) {</span></span>
+<span id="L104"><span class="lineNum">     104</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 45 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 45 times"> + </span>]:<span class="tlaGNC">          92 :             item.type = merge_page_type(item.type, value);</span></span>
+<span id="L105"><span class="lineNum">     105</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 45 times"> + </span>]:<span class="tlaGNC">          46 :             if (value.is_null()) {</span></span>
+<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaGNC">           1 :                 item.nullable = true;</span></span>
+<span id="L107"><span class="lineNum">     107</span>                 :             :             }</span>
+<span id="L108"><span class="lineNum">     108</span>                 :             :         }</span>
+<span id="L109"><span class="lineNum">     109</span>                 :             :         schema.columns.push_back(std::move(item));</span>
+<span id="L110"><span class="lineNum">     110</span>                 :             :     }</span>
+<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">           9 :     return schema;</span></span>
+<span id="L112"><span class="lineNum">     112</span>                 :             : }</span>
+<span id="L113"><span class="lineNum">     113</span>                 :             : </span>
+<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">           1 : inline PageSchema SchemaFromPage(const Page&amp; page) {</span></span>
+<span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaGNC">           1 :     PageSchema schema;</span></span>
+<span id="L116"><span class="lineNum">     116</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           2 :     for (const auto&amp; chunk : page.chunks) {</span></span>
+<span id="L117"><span class="lineNum">     117</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         PageSchema chunk_schema = SchemaFromPageChunk(chunk);</span></span>
+<span id="L118"><span class="lineNum">     118</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           3 :         for (const auto&amp; column : chunk_schema.columns) {</span></span>
+<span id="L119"><span class="lineNum">     119</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :             auto index = schema.FindColumn(column.name);</span></span>
+<span id="L120"><span class="lineNum">     120</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :             if (!index.has_value()) {</span></span>
+<span id="L121"><span class="lineNum">     121</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :                 schema.columns.push_back(column);</span></span>
+<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC">           2 :                 continue;</span></span>
+<span id="L123"><span class="lineNum">     123</span>                 :             :             }</span>
+<span id="L124"><span class="lineNum">     124</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             auto&amp; existing = schema.columns[*index];</span></span>
+<span id="L125"><span class="lineNum">     125</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             if (existing.type == Value::Type::Null) {</span></span>
+<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaUNC">           0 :                 existing.type = column.type;</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :             :             }</span>
+<span id="L128"><span class="lineNum">     128</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             existing.nullable = existing.nullable || column.nullable;</span></span>
+<span id="L129"><span class="lineNum">     129</span>                 :             :         }</span>
+<span id="L130"><span class="lineNum">     130</span>                 :             :     }</span>
+<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC tlaBgGNC">           1 :     return schema;</span></span>
+<span id="L132"><span class="lineNum">     132</span>                 :             : }</span>
+<span id="L133"><span class="lineNum">     133</span>                 :             : </span>
+<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">        1218 : inline absl::Status ValidatePageChunk(const PageChunk&amp; chunk) {</span></span>
+<span id="L135"><span class="lineNum">     135</span>         [<span class="tlaGBC" title="Branch 0 was taken 3584 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1217 times"> + </span>]:<span class="tlaGNC">        4801 :     for (const auto&amp; column : chunk.columns) {</span></span>
+<span id="L136"><span class="lineNum">     136</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 3583 times"> + </span>]:<span class="tlaGNC">        3584 :         if (column.values.size() != chunk.row_count) {</span></span>
+<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">           2 :             return absl::InvalidArgumentError(absl::StrCat(</span></span>
+<span id="L138"><span class="lineNum">     138</span>                 :             :                 &quot;page column &quot;, column.name, &quot; has &quot;, column.values.size(),</span>
+<span id="L139"><span class="lineNum">     139</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :                 &quot; values but chunk has &quot;, chunk.row_count, &quot; rows&quot;));</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :             :         }</span>
+<span id="L141"><span class="lineNum">     141</span>                 :             :     }</span>
+<span id="L142"><span class="lineNum">     142</span>                 :             :     return absl::OkStatus();</span>
+<span id="L143"><span class="lineNum">     143</span>                 :             : }</span>
+<span id="L144"><span class="lineNum">     144</span>                 :             : </span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">        1156 : inline absl::Status ValidatePage(const Page&amp; page) {</span></span>
+<span id="L146"><span class="lineNum">     146</span>         [<span class="tlaGBC" title="Branch 0 was taken 1218 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1155 times"> + </span>]:<span class="tlaGNC">        2373 :     for (const auto&amp; chunk : page.chunks) {</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">        1218 :         auto status = ValidatePageChunk(chunk);</span></span>
+<span id="L148"><span class="lineNum">     148</span>         [<span class="tlaGBC" title="Branch 0 was taken 1217 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">        1218 :         if (!status.ok()) {</span></span>
+<span id="L149"><span class="lineNum">     149</span>                 :             :             return status;</span>
+<span id="L150"><span class="lineNum">     150</span>                 :             :         }</span>
+<span id="L151"><span class="lineNum">     151</span>                 :             :     }</span>
+<span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">        1155 :     return absl::OkStatus();</span></span>
+<span id="L153"><span class="lineNum">     153</span>                 :             : }</span>
+<span id="L154"><span class="lineNum">     154</span>                 :             : </span>
+<span id="L155"><span class="lineNum">     155</span>                 :<span class="tlaGNC">      200008 : inline const Value* PageChunkValueAt(const PageChunk&amp; chunk,</span></span>
+<span id="L156"><span class="lineNum">     156</span>                 :             :                                      size_t row_index,</span>
+<span id="L157"><span class="lineNum">     157</span>                 :             :                                      const std::string&amp; column_name) {</span>
+<span id="L158"><span class="lineNum">     158</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 200008 times"> + </span>]:<span class="tlaGNC">      200008 :     if (row_index &gt;= chunk.row_count) {</span></span>
+<span id="L159"><span class="lineNum">     159</span>                 :             :         return nullptr;</span>
+<span id="L160"><span class="lineNum">     160</span>                 :             :     }</span>
+<span id="L161"><span class="lineNum">     161</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 200024 times"> + </span>]:<span class="tlaGNC">      200024 :     for (const auto&amp; column : chunk.columns) {</span></span>
+<span id="L162"><span class="lineNum">     162</span>         [<span class="tlaGBC" title="Branch 0 was taken 16 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 200008 times"> + </span>]:<span class="tlaGNC">      200024 :         if (column.name != column_name) {</span></span>
+<span id="L163"><span class="lineNum">     163</span>                 :             :             continue;</span>
+<span id="L164"><span class="lineNum">     164</span>                 :             :         }</span>
+<span id="L165"><span class="lineNum">     165</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 200008 times"> + </span>]:<span class="tlaGNC">      200008 :         if (row_index &gt;= column.values.size()) {</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :             :             return nullptr;</span>
+<span id="L167"><span class="lineNum">     167</span>                 :             :         }</span>
+<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">      200008 :         return &amp;column.values[row_index];</span></span>
+<span id="L169"><span class="lineNum">     169</span>                 :             :     }</span>
+<span id="L170"><span class="lineNum">     170</span>                 :             :     return nullptr;</span>
+<span id="L171"><span class="lineNum">     171</span>                 :             : }</span>
+<span id="L172"><span class="lineNum">     172</span>                 :             : </span>
+<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">          28 : inline std::shared_ptr&lt;ObjectValue&gt; RowFromPageChunk(const PageChunk&amp; chunk, size_t row_index) {</span></span>
+<span id="L174"><span class="lineNum">     174</span>         [<span class="tlaGBC" title="Branch 0 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          28 :     std::vector&lt;std::pair&lt;std::string, Value&gt;&gt; props;</span></span>
+<span id="L175"><span class="lineNum">     175</span>         [<span class="tlaGBC" title="Branch 0 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          28 :     props.reserve(chunk.columns.size());</span></span>
+<span id="L176"><span class="lineNum">     176</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 28 times"> + </span>]:<span class="tlaGNC">          28 :     if (row_index &gt;= chunk.row_count) {</span></span>
+<span id="L177"><span class="lineNum">     177</span>                 :             :         return std::make_shared&lt;ObjectValue&gt;(std::move(props));</span>
+<span id="L178"><span class="lineNum">     178</span>                 :             :     }</span>
+<span id="L179"><span class="lineNum">     179</span>         [<span class="tlaGBC" title="Branch 0 was taken 86 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 28 times"> + </span>]:<span class="tlaGNC">         114 :     for (const auto&amp; column : chunk.columns) {</span></span>
+<span id="L180"><span class="lineNum">     180</span>         [<span class="tlaGBC" title="Branch 0 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          86 :         props.emplace_back(column.name,</span></span>
+<span id="L181"><span class="lineNum">     181</span>   [<span class="tlaGBC" title="Branch 0 was taken 86 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         172 :                            row_index &lt; column.values.size() ? column.values[row_index]</span></span>
+<span id="L182"><span class="lineNum">     182</span>                 :             :                                                             : Value::null());</span>
+<span id="L183"><span class="lineNum">     183</span>                 :             :     }</span>
+<span id="L184"><span class="lineNum">     184</span>                 :             :     return std::make_shared&lt;ObjectValue&gt;(std::move(props));</span>
+<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">          28 : }</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :             : </span>
+<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">           5 : inline PageChunk SlicePageChunkRows(const PageChunk&amp; source, size_t start, size_t count) {</span></span>
+<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">           5 :     PageChunk chunk;</span></span>
+<span id="L189"><span class="lineNum">     189</span>                 :             :     chunk.group_key = source.group_key;</span>
+<span id="L190"><span class="lineNum">     190</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 5 times"> + </span>]:<span class="tlaGNC">           5 :     if (start &gt;= source.row_count || count == 0) {</span></span>
+<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         chunk.row_count = 0;</span></span>
+<span id="L192"><span class="lineNum">     192</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         chunk.columns.reserve(source.columns.size());</span></span>
+<span id="L193"><span class="lineNum">     193</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         for (const auto&amp; column : source.columns) {</span></span>
+<span id="L194"><span class="lineNum">     194</span>                 :<span class="tlaUNC">           0 :             chunk.columns.push_back(ColumnVector{</span></span>
+<span id="L195"><span class="lineNum">     195</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :                 .name = column.name,</span></span>
+<span id="L196"><span class="lineNum">     196</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :                 .type = column.type,</span></span>
+<span id="L197"><span class="lineNum">     197</span>                 :             :             });</span>
+<span id="L198"><span class="lineNum">     198</span>                 :             :         }</span>
+<span id="L199"><span class="lineNum">     199</span>                 :             :         return chunk;</span>
+<span id="L200"><span class="lineNum">     200</span>                 :             :     }</span>
+<span id="L201"><span class="lineNum">     201</span>                 :             : </span>
+<span id="L202"><span class="lineNum">     202</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           5 :     const size_t end = std::min(source.row_count, start + count);</span></span>
+<span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">           5 :     chunk.row_count = end - start;</span></span>
+<span id="L204"><span class="lineNum">     204</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :     chunk.columns.reserve(source.columns.size());</span></span>
+<span id="L205"><span class="lineNum">     205</span>         [<span class="tlaGBC" title="Branch 0 was taken 16 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">          21 :     for (const auto&amp; source_column : source.columns) {</span></span>
+<span id="L206"><span class="lineNum">     206</span>                 :             :         ColumnVector column;</span>
+<span id="L207"><span class="lineNum">     207</span>         [<span class="tlaGBC" title="Branch 0 was taken 16 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          16 :         column.name = source_column.name;</span></span>
+<span id="L208"><span class="lineNum">     208</span>                 :<span class="tlaGNC">          16 :         column.type = source_column.type;</span></span>
+<span id="L209"><span class="lineNum">     209</span>         [<span class="tlaGBC" title="Branch 0 was taken 16 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          16 :         column.values.reserve(chunk.row_count);</span></span>
+<span id="L210"><span class="lineNum">     210</span>   [<span class="tlaGBC" title="Branch 0 was taken 16 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 16 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          16 :         column.values.insert(column.values.end(),</span></span>
+<span id="L211"><span class="lineNum">     211</span>                 :             :                              source_column.values.begin() + static_cast&lt;std::ptrdiff_t&gt;(start),</span>
+<span id="L212"><span class="lineNum">     212</span>                 :             :                              source_column.values.begin() + static_cast&lt;std::ptrdiff_t&gt;(end));</span>
+<span id="L213"><span class="lineNum">     213</span>                 :             :         chunk.columns.push_back(std::move(column));</span>
+<span id="L214"><span class="lineNum">     214</span>                 :             :     }</span>
+<span id="L215"><span class="lineNum">     215</span>                 :             :     return chunk;</span>
+<span id="L216"><span class="lineNum">     216</span>                 :<span class="tlaUNC tlaBgUNC">           0 : }</span></span>
+<span id="L217"><span class="lineNum">     217</span>                 :             : </span>
+<span id="L218"><span class="lineNum">     218</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           6 : inline Page PageLike(const Page&amp; source, std::vector&lt;PageChunk&gt; chunks) {</span></span>
+<span id="L219"><span class="lineNum">     219</span>                 :             :     Page page;</span>
+<span id="L220"><span class="lineNum">     220</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           6 :     page.bucket = source.bucket;</span></span>
+<span id="L221"><span class="lineNum">     221</span>                 :<span class="tlaGNC">           6 :     page.chunks = std::move(chunks);</span></span>
+<span id="L222"><span class="lineNum">     222</span>                 :             :     page.range_start = source.range_start;</span>
+<span id="L223"><span class="lineNum">     223</span>                 :             :     page.range_stop = source.range_stop;</span>
+<span id="L224"><span class="lineNum">     224</span>                 :             :     page.result_name = source.result_name;</span>
+<span id="L225"><span class="lineNum">     225</span>                 :             :     page.plan = source.plan;</span>
+<span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaGNC">           6 :     page.materialized = source.materialized;</span></span>
+<span id="L227"><span class="lineNum">     227</span>                 :<span class="tlaGNC">           6 :     return page;</span></span>
+<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaUNC tlaBgUNC">           0 : }</span></span>
+<span id="L229"><span class="lineNum">     229</span>                 :             : </span>
+<span id="L230"><span class="lineNum">     230</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 33 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          43 : inline std::vector&lt;std::string&gt; infer_page_columns(const TableChunk&amp; chunk) {</span></span>
+<span id="L231"><span class="lineNum">     231</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 33 times"> + </span>]:<span class="tlaGNC">          43 :     if (!chunk.columns.empty()) {</span></span>
+<span id="L232"><span class="lineNum">     232</span>                 :<span class="tlaGNC">          10 :         return chunk.columns;</span></span>
+<span id="L233"><span class="lineNum">     233</span>                 :             :     }</span>
+<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC">          33 :     std::vector&lt;std::string&gt; columns;</span></span>
+<span id="L235"><span class="lineNum">     235</span>         [<span class="tlaGBC" title="Branch 0 was taken 40 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 33 times"> + </span>]:<span class="tlaGNC">          73 :     for (const auto&amp; row : chunk.rows) {</span></span>
+<span id="L236"><span class="lineNum">     236</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 40 times"> + </span>]:<span class="tlaGNC">          40 :         if (row == nullptr) {</span></span>
+<span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             continue;</span></span>
+<span id="L238"><span class="lineNum">     238</span>                 :             :         }</span>
+<span id="L239"><span class="lineNum">     239</span>         [<span class="tlaGBC" title="Branch 0 was taken 115 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 40 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         155 :         for (const auto&amp; [key, _] : row-&gt;properties) {</span></span>
+<span id="L240"><span class="lineNum">     240</span>                 :             :             bool seen = false;</span>
+<span id="L241"><span class="lineNum">     241</span>         [<span class="tlaGBC" title="Branch 0 was taken 163 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 75 times"> + </span>]:<span class="tlaGNC">         238 :             for (const auto&amp; column : columns) {</span></span>
+<span id="L242"><span class="lineNum">     242</span>         [<span class="tlaGBC" title="Branch 0 was taken 123 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 40 times"> + </span>]:<span class="tlaGNC">         163 :                 if (column == key) {</span></span>
+<span id="L243"><span class="lineNum">     243</span>                 :             :                     seen = true;</span>
+<span id="L244"><span class="lineNum">     244</span>                 :             :                     break;</span>
+<span id="L245"><span class="lineNum">     245</span>                 :             :                 }</span>
+<span id="L246"><span class="lineNum">     246</span>                 :             :             }</span>
+<span id="L247"><span class="lineNum">     247</span>         [<span class="tlaGBC" title="Branch 0 was taken 75 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 40 times"> + </span>]:<span class="tlaGNC">         115 :             if (!seen) {</span></span>
+<span id="L248"><span class="lineNum">     248</span>         [<span class="tlaGBC" title="Branch 0 was taken 75 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          75 :                 columns.push_back(key);</span></span>
+<span id="L249"><span class="lineNum">     249</span>                 :             :             }</span>
+<span id="L250"><span class="lineNum">     250</span>                 :             :         }</span>
+<span id="L251"><span class="lineNum">     251</span>                 :             :     }</span>
+<span id="L252"><span class="lineNum">     252</span>                 :             :     return columns;</span>
+<span id="L253"><span class="lineNum">     253</span>                 :<span class="tlaGNC">          33 : }</span></span>
+<span id="L254"><span class="lineNum">     254</span>                 :             : </span>
+<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaGNC">          43 : inline PageChunk PageChunkFromTableChunk(const TableChunk&amp; chunk) {</span></span>
+<span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaGNC">          43 :     PageChunk page_chunk;</span></span>
+<span id="L257"><span class="lineNum">     257</span>                 :             :     page_chunk.group_key = chunk.group_key;</span>
+<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC">          43 :     page_chunk.row_count = chunk.rows.size();</span></span>
+<span id="L259"><span class="lineNum">     259</span>                 :             : </span>
+<span id="L260"><span class="lineNum">     260</span>         [<span class="tlaGBC" title="Branch 0 was taken 43 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          43 :     const std::vector&lt;std::string&gt; column_names = infer_page_columns(chunk);</span></span>
+<span id="L261"><span class="lineNum">     261</span>         [<span class="tlaGBC" title="Branch 0 was taken 43 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          43 :     page_chunk.columns.reserve(column_names.size());</span></span>
+<span id="L262"><span class="lineNum">     262</span>         [<span class="tlaGBC" title="Branch 0 was taken 101 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 43 times"> + </span>]:<span class="tlaGNC">         144 :     for (const auto&amp; name : column_names) {</span></span>
+<span id="L263"><span class="lineNum">     263</span>                 :             :         ColumnVector column;</span>
+<span id="L264"><span class="lineNum">     264</span>                 :             :         column.name = name;</span>
+<span id="L265"><span class="lineNum">     265</span>         [<span class="tlaGBC" title="Branch 0 was taken 101 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         101 :         column.values.reserve(chunk.rows.size());</span></span>
+<span id="L266"><span class="lineNum">     266</span>         [<span class="tlaGBC" title="Branch 0 was taken 239 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 101 times"> + </span>]:<span class="tlaGNC">         340 :         for (const auto&amp; row : chunk.rows) {</span></span>
+<span id="L267"><span class="lineNum">     267</span>   [<span class="tlaGBC" title="Branch 0 was taken 239 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 239 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         239 :             const Value* value = row == nullptr ? nullptr : row-&gt;lookup(name);</span></span>
+<span id="L268"><span class="lineNum">     268</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 238 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         477 :             column.values.push_back(value == nullptr ? Value::null() : *value);</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 239 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
+<span id="L269"><span class="lineNum">     269</span>   [<span class="tlaGBC" title="Branch 0 was taken 101 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 138 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 101 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         239 :             if (column.type == Value::Type::Null &amp;&amp; value != nullptr &amp;&amp; !value-&gt;is_null()) {</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 101 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
+<span id="L270"><span class="lineNum">     270</span>                 :<span class="tlaGNC">         101 :                 column.type = value-&gt;type();</span></span>
+<span id="L271"><span class="lineNum">     271</span>                 :             :             }</span>
+<span id="L272"><span class="lineNum">     272</span>                 :             :         }</span>
+<span id="L273"><span class="lineNum">     273</span>                 :             :         page_chunk.columns.push_back(std::move(column));</span>
+<span id="L274"><span class="lineNum">     274</span>                 :             :     }</span>
+<span id="L275"><span class="lineNum">     275</span>                 :<span class="tlaGNC">          43 :     return page_chunk;</span></span>
+<span id="L276"><span class="lineNum">     276</span>                 :<span class="tlaGNC">          43 : }</span></span>
+<span id="L277"><span class="lineNum">     277</span>                 :             : </span>
+<span id="L278"><span class="lineNum">     278</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 : inline Page PageFromTableValue(const TableValue&amp; table) {</span></span>
+<span id="L279"><span class="lineNum">     279</span>                 :             :     Page page;</span>
+<span id="L280"><span class="lineNum">     280</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :     page.bucket = table.bucket;</span></span>
+<span id="L281"><span class="lineNum">     281</span>                 :             :     page.range_start = table.range_start;</span>
+<span id="L282"><span class="lineNum">     282</span>                 :             :     page.range_stop = table.range_stop;</span>
+<span id="L283"><span class="lineNum">     283</span>                 :             :     page.result_name = table.result_name;</span>
+<span id="L284"><span class="lineNum">     284</span>                 :             :     page.plan = table.plan;</span>
+<span id="L285"><span class="lineNum">     285</span>                 :<span class="tlaGNC">           5 :     page.materialized = table.materialized;</span></span>
+<span id="L286"><span class="lineNum">     286</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :     page.chunks.reserve(table.tables.size());</span></span>
+<span id="L287"><span class="lineNum">     287</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">          10 :     for (const auto&amp; chunk : table.tables) {</span></span>
+<span id="L288"><span class="lineNum">     288</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :         page.chunks.push_back(PageChunkFromTableChunk(chunk));</span></span>
+<span id="L289"><span class="lineNum">     289</span>                 :             :     }</span>
+<span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaGNC">           5 :     return page;</span></span>
+<span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaUNC tlaBgUNC">           0 : }</span></span>
+<span id="L292"><span class="lineNum">     292</span>                 :             : </span>
+<span id="L293"><span class="lineNum">     293</span>                 :<span class="tlaGNC tlaBgGNC">          32 : inline Page PageFromTableChunks(std::string bucket,</span></span>
+<span id="L294"><span class="lineNum">     294</span>                 :             :                                 const std::vector&lt;TableChunk&gt;&amp; chunks,</span>
+<span id="L295"><span class="lineNum">     295</span>                 :             :                                 std::optional&lt;std::string&gt; range_start = std::nullopt,</span>
+<span id="L296"><span class="lineNum">     296</span>                 :             :                                 std::optional&lt;std::string&gt; range_stop = std::nullopt,</span>
+<span id="L297"><span class="lineNum">     297</span>                 :             :                                 std::optional&lt;std::string&gt; result_name = std::nullopt) {</span>
+<span id="L298"><span class="lineNum">     298</span>                 :             :     Page page;</span>
+<span id="L299"><span class="lineNum">     299</span>                 :<span class="tlaGNC">          32 :     page.bucket = std::move(bucket);</span></span>
+<span id="L300"><span class="lineNum">     300</span>                 :             :     page.range_start = std::move(range_start);</span>
+<span id="L301"><span class="lineNum">     301</span>                 :             :     page.range_stop = std::move(range_stop);</span>
+<span id="L302"><span class="lineNum">     302</span>                 :             :     page.result_name = std::move(result_name);</span>
+<span id="L303"><span class="lineNum">     303</span>                 :<span class="tlaGNC">          32 :     page.materialized = false;</span></span>
+<span id="L304"><span class="lineNum">     304</span>         [<span class="tlaGBC" title="Branch 0 was taken 32 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          32 :     page.chunks.reserve(chunks.size());</span></span>
+<span id="L305"><span class="lineNum">     305</span>         [<span class="tlaGBC" title="Branch 0 was taken 38 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 32 times"> + </span>]:<span class="tlaGNC">          70 :     for (const auto&amp; chunk : chunks) {</span></span>
+<span id="L306"><span class="lineNum">     306</span>         [<span class="tlaGBC" title="Branch 0 was taken 38 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          76 :         page.chunks.push_back(PageChunkFromTableChunk(chunk));</span></span>
+<span id="L307"><span class="lineNum">     307</span>                 :             :     }</span>
+<span id="L308"><span class="lineNum">     308</span>                 :<span class="tlaGNC">          32 :     return page;</span></span>
+<span id="L309"><span class="lineNum">     309</span>                 :<span class="tlaUNC tlaBgUNC">           0 : }</span></span>
+<span id="L310"><span class="lineNum">     310</span>                 :             : </span>
+<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC tlaBgGNC">          22 : inline Page PageFromRows(std::string bucket, std::vector&lt;std::shared_ptr&lt;ObjectValue&gt;&gt; rows) {</span></span>
+<span id="L312"><span class="lineNum">     312</span>                 :<span class="tlaGNC">          22 :     TableChunk chunk;</span></span>
+<span id="L313"><span class="lineNum">     313</span>                 :             :     chunk.rows = std::move(rows);</span>
+<span id="L314"><span class="lineNum">     314</span>         [<span class="tlaGBC" title="Branch 0 was taken 22 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          22 :     std::vector&lt;TableChunk&gt; chunks;</span></span>
+<span id="L315"><span class="lineNum">     315</span>                 :             :     chunks.push_back(std::move(chunk));</span>
+<span id="L316"><span class="lineNum">     316</span>         [<span class="tlaGBC" title="Branch 0 was taken 22 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          66 :     return PageFromTableChunks(std::move(bucket), chunks);</span></span>
+<span id="L317"><span class="lineNum">     317</span>                 :<span class="tlaGNC">          22 : }</span></span>
+<span id="L318"><span class="lineNum">     318</span>                 :             : </span>
+<span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaGNC">         186 : inline TableChunk TableChunkFromPageChunk(const PageChunk&amp; page_chunk) {</span></span>
+<span id="L320"><span class="lineNum">     320</span>                 :<span class="tlaGNC">         186 :     TableChunk chunk;</span></span>
+<span id="L321"><span class="lineNum">     321</span>                 :             :     chunk.group_key = page_chunk.group_key;</span>
+<span id="L322"><span class="lineNum">     322</span>         [<span class="tlaGBC" title="Branch 0 was taken 186 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         186 :     chunk.columns.reserve(page_chunk.columns.size());</span></span>
+<span id="L323"><span class="lineNum">     323</span>         [<span class="tlaGBC" title="Branch 0 was taken 497 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 186 times"> + </span>]:<span class="tlaGNC">         683 :     for (const auto&amp; column : page_chunk.columns) {</span></span>
+<span id="L324"><span class="lineNum">     324</span>         [<span class="tlaGBC" title="Branch 0 was taken 497 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         497 :         chunk.columns.push_back(column.name);</span></span>
+<span id="L325"><span class="lineNum">     325</span>                 :             :     }</span>
+<span id="L326"><span class="lineNum">     326</span>         [<span class="tlaGBC" title="Branch 0 was taken 186 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         186 :     chunk.rows.reserve(page_chunk.row_count);</span></span>
+<span id="L327"><span class="lineNum">     327</span>         [<span class="tlaGBC" title="Branch 0 was taken 98850 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 186 times"> + </span>]:<span class="tlaGNC">       99036 :     for (size_t row_index = 0; row_index &lt; page_chunk.row_count; ++row_index) {</span></span>
+<span id="L328"><span class="lineNum">     328</span>         [<span class="tlaGBC" title="Branch 0 was taken 99699 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       98850 :         std::vector&lt;std::pair&lt;std::string, Value&gt;&gt; props;</span></span>
+<span id="L329"><span class="lineNum">     329</span>         [<span class="tlaGBC" title="Branch 0 was taken 99699 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       98850 :         props.reserve(page_chunk.columns.size());</span></span>
+<span id="L330"><span class="lineNum">     330</span>         [<span class="tlaGBC" title="Branch 0 was taken 198220 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 99255 times"> + </span>]:<span class="tlaGNC">      297475 :         for (const auto&amp; column : page_chunk.columns) {</span></span>
+<span id="L331"><span class="lineNum">     331</span>         [<span class="tlaGBC" title="Branch 0 was taken 198220 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">      198220 :             if (row_index &lt; column.values.size()) {</span></span>
+<span id="L332"><span class="lineNum">     332</span>         [<span class="tlaGBC" title="Branch 0 was taken 197776 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">      198220 :                 props.emplace_back(column.name, column.values[row_index]);</span></span>
+<span id="L333"><span class="lineNum">     333</span>                 :             :             } else {</span>
+<span id="L334"><span class="lineNum">     334</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :                 props.emplace_back(column.name, Value::null());</span></span>
+<span id="L335"><span class="lineNum">     335</span>                 :             :             }</span>
+<span id="L336"><span class="lineNum">     336</span>                 :             :         }</span>
+<span id="L337"><span class="lineNum">     337</span>                 :<span class="tlaGNC tlaBgGNC">       98996 :         chunk.rows.push_back(std::make_shared&lt;ObjectValue&gt;(std::move(props)));</span></span>
+<span id="L338"><span class="lineNum">     338</span>                 :<span class="tlaGNC">       98996 :     }</span></span>
+<span id="L339"><span class="lineNum">     339</span>                 :<span class="tlaGNC">         186 :     return chunk;</span></span>
+<span id="L340"><span class="lineNum">     340</span>                 :<span class="tlaUNC tlaBgUNC">           0 : }</span></span>
+<span id="L341"><span class="lineNum">     341</span>                 :             : </span>
+<span id="L342"><span class="lineNum">     342</span>                 :<span class="tlaGNC tlaBgGNC">         112 : inline TableValue TableValueFromPage(const Page&amp; page) {</span></span>
+<span id="L343"><span class="lineNum">     343</span>         [<span class="tlaGBC" title="Branch 0 was taken 112 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         112 :     std::vector&lt;TableChunk&gt; chunks;</span></span>
+<span id="L344"><span class="lineNum">     344</span>         [<span class="tlaGBC" title="Branch 0 was taken 112 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         112 :     chunks.reserve(page.chunks.size());</span></span>
+<span id="L345"><span class="lineNum">     345</span>         [<span class="tlaGBC" title="Branch 0 was taken 186 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 112 times"> + </span>]:<span class="tlaGNC">         298 :     for (const auto&amp; chunk : page.chunks) {</span></span>
+<span id="L346"><span class="lineNum">     346</span>         [<span class="tlaGBC" title="Branch 0 was taken 186 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         372 :         chunks.push_back(TableChunkFromPageChunk(chunk));</span></span>
+<span id="L347"><span class="lineNum">     347</span>                 :             :     }</span>
+<span id="L348"><span class="lineNum">     348</span>         [<span class="tlaGBC" title="Branch 0 was taken 112 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         224 :     Value value = Value::table_stream(page.bucket, std::move(chunks), page.range_start,</span></span>
+<span id="L349"><span class="lineNum">     349</span>         [<span class="tlaGBC" title="Branch 0 was taken 112 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         112 :                                       page.range_stop, page.result_name);</span></span>
+<span id="L350"><span class="lineNum">     350</span>         [<span class="tlaGBC" title="Branch 0 was taken 112 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         112 :     value.as_table_mut().plan = page.plan;</span></span>
+<span id="L351"><span class="lineNum">     351</span>         [<span class="tlaGBC" title="Branch 0 was taken 112 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         112 :     value.as_table_mut().materialized = page.materialized;</span></span>
+<span id="L352"><span class="lineNum">     352</span>   [<span class="tlaGBC" title="Branch 0 was taken 112 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 112 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         224 :     return value.as_table();</span></span>
+<span id="L353"><span class="lineNum">     353</span>                 :<span class="tlaGNC">         112 : }</span></span>
+<span id="L354"><span class="lineNum">     354</span>                 :             : </span>
+<span id="L355"><span class="lineNum">     355</span>                 :<span class="tlaGNC">          59 : inline void AppendPage(Page* output, Page page) {</span></span>
+<span id="L356"><span class="lineNum">     356</span>         [<span class="tlaGBC" title="Branch 0 was taken 59 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          59 :     if (output == nullptr) {</span></span>
+<span id="L357"><span class="lineNum">     357</span>                 :             :         return;</span>
+<span id="L358"><span class="lineNum">     358</span>                 :             :     }</span>
+<span id="L359"><span class="lineNum">     359</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 59 times"> + </span>]:<span class="tlaGNC">          59 :     if (output-&gt;bucket.empty()) {</span></span>
+<span id="L360"><span class="lineNum">     360</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         output-&gt;bucket = page.bucket;</span></span>
+<span id="L361"><span class="lineNum">     361</span>                 :             :     }</span>
+<span id="L362"><span class="lineNum">     362</span>         [<span class="tlaGBC" title="Branch 0 was taken 59 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          59 :     if (!output-&gt;range_start.has_value()) {</span></span>
+<span id="L363"><span class="lineNum">     363</span>                 :             :         output-&gt;range_start = page.range_start;</span>
+<span id="L364"><span class="lineNum">     364</span>                 :             :     }</span>
+<span id="L365"><span class="lineNum">     365</span>         [<span class="tlaGBC" title="Branch 0 was taken 59 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          59 :     if (!output-&gt;range_stop.has_value()) {</span></span>
+<span id="L366"><span class="lineNum">     366</span>                 :             :         output-&gt;range_stop = page.range_stop;</span>
+<span id="L367"><span class="lineNum">     367</span>                 :             :     }</span>
+<span id="L368"><span class="lineNum">     368</span>         [<span class="tlaGBC" title="Branch 0 was taken 59 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          59 :     if (!output-&gt;result_name.has_value()) {</span></span>
+<span id="L369"><span class="lineNum">     369</span>                 :             :         output-&gt;result_name = page.result_name;</span>
+<span id="L370"><span class="lineNum">     370</span>                 :             :     }</span>
+<span id="L371"><span class="lineNum">     371</span>         [<span class="tlaGBC" title="Branch 0 was taken 59 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          59 :     if (output-&gt;plan == nullptr) {</span></span>
+<span id="L372"><span class="lineNum">     372</span>                 :             :         output-&gt;plan = page.plan;</span>
+<span id="L373"><span class="lineNum">     373</span>                 :             :     }</span>
+<span id="L374"><span class="lineNum">     374</span>         [<span class="tlaGBC" title="Branch 0 was taken 59 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          59 :     output-&gt;materialized = output-&gt;materialized || page.materialized;</span></span>
+<span id="L375"><span class="lineNum">     375</span>                 :<span class="tlaGNC">          59 :     output-&gt;chunks.insert(output-&gt;chunks.end(), page.chunks.begin(), page.chunks.end());</span></span>
+<span id="L376"><span class="lineNum">     376</span>                 :             : }</span>
+<span id="L377"><span class="lineNum">     377</span>                 :             : </span>
+<span id="L378"><span class="lineNum">     378</span>                 :             : } // namespace pl::flux</span>
         </pre>
               </td>
             </tr>
