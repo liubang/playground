@@ -1215,6 +1215,40 @@ single split，避免跨 split 后改变排序、限制或聚合语义。
   - 结论：prepared 默认开启是合理的，但这组远程查询的主瓶颈仍是 read/decode，而不是 SQL build 或
     prepare/execute。
 
+### Phase 16: Cost-aware Partitioned Accumulator and Structured Runtime Explain
+
+状态：已完成本地 grouped aggregate 的 cost-aware 执行形态。planner 不再只要多 split 就固定生成
+partial/global gather，而是结合 CBO 行数估算、group 基数估算和 root wrapper 约束，在
+single-stage、two-stage gather、two-stage partitioned final 之间选择。高基数 root
+`group |> aggregate` 会把 partial 结果按 group key 分发到多个 final driver，低行数查询仍保持
+single-stage，避免小查询为并行框架付固定成本。
+
+目标：把高效查询主干从“多 split scan + 单 final accumulator”推进到“scan/partial/final 都能并行”，
+同时补齐内存 guard、结构化 profile 和 benchmark regression gate，让性能结论可以被机器化复验。
+
+已落地：
+
+- grouped aggregate planner 使用 CBO statistics 判断输入行数和 group 后行数：小输入回到
+  single-stage，高基数 root aggregate 生成 partitioned final，带 `sort/limit` 等 root wrapper
+  的查询仍走 gather final，保证全局语义不漂移。
+- 新增 `PartitionedExchangeSinkOperator`，partial driver 根据 group key 写入多个
+  `ExchangeBuffer`；main pipeline 展开为多个 final driver root，并通过 `OutputOperator`
+  汇总输出。
+- accumulator 增加估算内存统计和 guard：`FLUX_ACCUMULATOR_MAX_BYTES` 控制单 accumulator
+  预算，profile 暴露 `memory_bytes`、`memory_limit_bytes`、`memory_limited`。
+- `FormatPipelinePlanJson` 和 `FormatExecutionProfileJson` 提供结构化 JSON；`explain(pipeline: true,
+  json: true)` 可以直接返回 pipeline DAG JSON，便于 UI 或自动化工具消费。
+- connector benchmark runner 增加 `--compare-baseline` 和 `--regression-threshold`，会按
+  connector/scenario 比较 `median_s`，超过阈值时在 JSON 中写入 `regressions` 并返回非 0。
+
+验收：
+
+- runtime 覆盖小输入 grouped aggregate 不生成 partial/final，避免小查询退化。
+- runtime 覆盖高基数 grouped aggregate 生成 partitioned final，并验证结果正确。
+- runtime 覆盖 accumulator memory guard 的 `ResourceExhausted` 错误。
+- runtime 覆盖 pipeline/profile JSON formatter，以及 `explain(pipeline: true, json: true)`。
+- benchmark runner 可用保存的 JSON baseline 做回归比较，默认没有 baseline 时仍只产出 summary。
+
 ## Test Plan
 
 测试分层：
