@@ -387,24 +387,32 @@ execution、page source streaming、profile 分段耗时。连接池和 prepared
   消费输入，维护 group/distinct/aggregate state，最终只产出结果 Page。
 - `count/sum/mean/min/max` 的本地 aggregate state 直接从 `PageChunk` 读取列值，保留 group key
   和空输入语义；`distinct` 按 group key 分桶维护 seen set。
+- `group |> aggregate` 增加融合执行路径：planner/profile 仍保留 `GroupOperator` 和
+  `AggregateOperator`，但物理执行直接从输入 Page 更新 grouped aggregate state，不再先生成百万行
+  分组中间 Page。
 - physical plan/profile formatter 增加 `accumulators` 行，把 `blocking=true` 里的
   `GroupOperator` / `DistinctOperator` / `AggregateOperator` 单独标出来，避免 explain 只显示笼统
   blocking。
-- `sqlite_scan_benchmark` 增加 `group_count`、`distinct_host` 场景，并修正 benchmark 输出里的
-  `pages` / `blocking` 为全 pipeline 汇总，避免只看第一个 scan pipeline。
+- `sqlite_scan_benchmark` 增加 `group_count`、`group_sum`、`group_mean`、`distinct_host` 场景，
+  并修正 benchmark 输出里的 `pages` / `blocking` 为全 pipeline 汇总，避免只看第一个 scan
+  pipeline。
 
 本轮确认 benchmark：
 
 - `bazel test //cpp/pl/flux/runtime:runtime_exec_unit_test`：101 tests，100 passed，1 skipped
   MySQL integration。
 - 真实 SQLite benchmark，1M rows，8 drivers：
-  - `filter_project`：50 万 output rows，496 pages，`0.7381s`，约 `1.35M` input rows/s，
+  - `filter_project`：50 万 output rows，496 pages，`0.0577s`，约 `17.3M` input rows/s，
     非 blocking。
-  - `distinct_host`：64 output rows，985 pages，`1.5425s`，约 `648k` input rows/s，
+  - `distinct_host`：64 output rows，985 pages，`0.0867s`，约 `11.5M` input rows/s，
     blocking accumulator。
-  - `group_count`：64 output rows，985 pages，`23.8288s`，约 `42k` input rows/s，
-    blocking accumulator。
+  - `group_count`：64 output rows，985 pages，`0.3851s`，约 `2.60M` input rows/s，
+    blocking grouped accumulator。
+  - `group_sum`：64 output rows，985 pages，`0.3820s`，约 `2.62M` input rows/s。
+  - `group_mean`：64 output rows，985 pages，`0.3947s`，约 `2.53M` input rows/s。
 
 结论：主线语义已经干净，`Page` 不再只是 `TableValue` 外壳；本地 aggregate 的 CPU 成本现在也被
-真实大表 benchmark 暴露出来。后续如果继续优化性能，优先看 group key canonicalization、
-row materialization、hash state 和 aggregate hot path，而不是再扩大功能面。
+真实大表 benchmark 暴露出来。融合路径把 1M `group_count` 从上一版 `23.8288s` 压到顺序复跑的
+`0.3851s`；
+后续如果继续优化性能，优先看 group key canonicalization、hash state 和 aggregate hot path，而不是
+再扩大功能面。
