@@ -37,9 +37,18 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-17 10:34:27</td>
+            <td class="headerValue">2026-05-17 18:47:55</td>
             <td></td>
             <td class="headerItem">Functions:</td>
+            <td class="headerCovTableEntryHi">-</td>
+            <td class="headerCovTableEntry">0</td>
+            <td class="headerCovTableEntry">0</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
             <td class="headerCovTableEntryHi">-</td>
             <td class="headerCovTableEntry">0</td>
             <td class="headerCovTableEntry">0</td>
@@ -58,91 +67,91 @@
             </tr>
             <tr>
               <td>
-<pre class="sourceHeading">            Line data    Source code</pre>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
 <pre class="source">
-<span id="L1"><span class="lineNum">       1</span>              : /**</span>
-<span id="L2"><span class="lineNum">       2</span>              :  * Fair maps to intervals without division.</span>
-<span id="L3"><span class="lineNum">       3</span>              :  * Reference : http://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction/</span>
-<span id="L4"><span class="lineNum">       4</span>              :  *</span>
-<span id="L5"><span class="lineNum">       5</span>              :  * (c) Daniel Lemire</span>
-<span id="L6"><span class="lineNum">       6</span>              :  * Apache License 2.0</span>
-<span id="L7"><span class="lineNum">       7</span>              :  */</span>
-<span id="L8"><span class="lineNum">       8</span>              : #ifndef INCLUDE_FASTRANGE_H</span>
-<span id="L9"><span class="lineNum">       9</span>              : #define INCLUDE_FASTRANGE_H</span>
-<span id="L10"><span class="lineNum">      10</span>              : #include &lt;iso646.h&gt; // mostly for Microsoft compilers</span>
-<span id="L11"><span class="lineNum">      11</span>              : #include &lt;limits.h&gt; // for size_t in C</span>
-<span id="L12"><span class="lineNum">      12</span>              : #include &lt;stddef.h&gt; // for size_t in C</span>
-<span id="L13"><span class="lineNum">      13</span>              : #include &lt;stdint.h&gt; // part of Visual Studio 2010 and better</span>
-<span id="L14"><span class="lineNum">      14</span>              : </span>
-<span id="L15"><span class="lineNum">      15</span>              : /**</span>
-<span id="L16"><span class="lineNum">      16</span>              :  * Given a value &quot;word&quot;, produces an integer in [0,p) without division.</span>
-<span id="L17"><span class="lineNum">      17</span>              :  * The function is as fair as possible in the sense that if you iterate</span>
-<span id="L18"><span class="lineNum">      18</span>              :  * through all possible values of &quot;word&quot;, then you will generate all</span>
-<span id="L19"><span class="lineNum">      19</span>              :  * possible outputs as uniformly as possible.</span>
-<span id="L20"><span class="lineNum">      20</span>              :  */</span>
-<span id="L21"><span class="lineNum">      21</span>              : static inline uint32_t fastrange32(uint32_t word, uint32_t p) {</span>
-<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC tlaBgGNC">        4096 :     return (uint32_t)(((uint64_t)word * (uint64_t)p) &gt;&gt; 32);</span></span>
-<span id="L23"><span class="lineNum">      23</span>              : }</span>
-<span id="L24"><span class="lineNum">      24</span>              : </span>
-<span id="L25"><span class="lineNum">      25</span>              : #if defined(_MSC_VER) &amp;&amp; defined(_WIN64)</span>
-<span id="L26"><span class="lineNum">      26</span>              : #include &lt;intrin.h&gt; // should be part of all recent Visual Studio</span>
-<span id="L27"><span class="lineNum">      27</span>              : #pragma intrinsic(_umul128)</span>
-<span id="L28"><span class="lineNum">      28</span>              : #endif // defined(_MSC_VER) &amp;&amp; defined (_WIN64)</span>
-<span id="L29"><span class="lineNum">      29</span>              : </span>
-<span id="L30"><span class="lineNum">      30</span>              : /**</span>
-<span id="L31"><span class="lineNum">      31</span>              :  * Given a value &quot;word&quot;, produces an integer in [0,p) without division.</span>
-<span id="L32"><span class="lineNum">      32</span>              :  * The function is as fair as possible in the sense that if you iterate</span>
-<span id="L33"><span class="lineNum">      33</span>              :  * through all possible values of &quot;word&quot;, then you will generate all</span>
-<span id="L34"><span class="lineNum">      34</span>              :  * possible outputs as uniformly as possible.</span>
-<span id="L35"><span class="lineNum">      35</span>              :  */</span>
-<span id="L36"><span class="lineNum">      36</span>              : static inline uint64_t fastrange64(uint64_t word, uint64_t p) {</span>
-<span id="L37"><span class="lineNum">      37</span>              : #ifdef __SIZEOF_INT128__ // then we know we have a 128-bit int</span>
-<span id="L38"><span class="lineNum">      38</span>              :     return (uint64_t)(((__uint128_t)word * (__uint128_t)p) &gt;&gt; 64);</span>
-<span id="L39"><span class="lineNum">      39</span>              : #elif defined(_MSC_VER) &amp;&amp; defined(_WIN64)</span>
-<span id="L40"><span class="lineNum">      40</span>              :     // supported in Visual Studio 2005 and better</span>
-<span id="L41"><span class="lineNum">      41</span>              :     uint64_t highProduct;</span>
-<span id="L42"><span class="lineNum">      42</span>              :     _umul128(word, p, &amp;highProduct); // ignore output</span>
-<span id="L43"><span class="lineNum">      43</span>              :     return highProduct;</span>
-<span id="L44"><span class="lineNum">      44</span>              :     unsigned __int64 _umul128(unsigned __int64 Multiplier, unsigned __int64 Multiplicand,</span>
-<span id="L45"><span class="lineNum">      45</span>              :                               unsigned __int64* HighProduct);</span>
-<span id="L46"><span class="lineNum">      46</span>              : #else</span>
-<span id="L47"><span class="lineNum">      47</span>              :     return word % p; // fallback</span>
-<span id="L48"><span class="lineNum">      48</span>              : #endif // __SIZEOF_INT128__</span>
-<span id="L49"><span class="lineNum">      49</span>              : }</span>
-<span id="L50"><span class="lineNum">      50</span>              : </span>
-<span id="L51"><span class="lineNum">      51</span>              : #ifndef UINT32_MAX</span>
-<span id="L52"><span class="lineNum">      52</span>              : #define UINT32_MAX (0xffffffff)</span>
-<span id="L53"><span class="lineNum">      53</span>              : #endif // UINT32_MAX</span>
-<span id="L54"><span class="lineNum">      54</span>              : </span>
-<span id="L55"><span class="lineNum">      55</span>              : /**</span>
-<span id="L56"><span class="lineNum">      56</span>              :  * Given a value &quot;word&quot;, produces an integer in [0,p) without division.</span>
-<span id="L57"><span class="lineNum">      57</span>              :  * The function is as fair as possible in the sense that if you iterate</span>
-<span id="L58"><span class="lineNum">      58</span>              :  * through all possible values of &quot;word&quot;, then you will generate all</span>
-<span id="L59"><span class="lineNum">      59</span>              :  * possible outputs as uniformly as possible.</span>
-<span id="L60"><span class="lineNum">      60</span>              :  */</span>
-<span id="L61"><span class="lineNum">      61</span>              : static inline size_t fastrangesize(size_t word, size_t p) {</span>
-<span id="L62"><span class="lineNum">      62</span>              : #if (SIZE_MAX == UINT32_MAX)</span>
-<span id="L63"><span class="lineNum">      63</span>              :     return (size_t)fastrange32(word, p);</span>
-<span id="L64"><span class="lineNum">      64</span>              : #else  // assume 64-bit</span>
-<span id="L65"><span class="lineNum">      65</span>              :     return (size_t)fastrange64(word, p);</span>
-<span id="L66"><span class="lineNum">      66</span>              : #endif // SIZE_MAX == UINT32_MAX</span>
-<span id="L67"><span class="lineNum">      67</span>              : }</span>
-<span id="L68"><span class="lineNum">      68</span>              : </span>
-<span id="L69"><span class="lineNum">      69</span>              : /**</span>
-<span id="L70"><span class="lineNum">      70</span>              :  * Given a value &quot;word&quot;, produces an integer in [0,p) without division.</span>
-<span id="L71"><span class="lineNum">      71</span>              :  * The function is as fair as possible in the sense that if you iterate</span>
-<span id="L72"><span class="lineNum">      72</span>              :  * through all possible values of &quot;word&quot;, then you will generate all</span>
-<span id="L73"><span class="lineNum">      73</span>              :  * possible outputs as uniformly as possible.</span>
-<span id="L74"><span class="lineNum">      74</span>              :  */</span>
-<span id="L75"><span class="lineNum">      75</span>              : static inline int fastrangeint(int word, int p) {</span>
-<span id="L76"><span class="lineNum">      76</span>              : #if (SIZE_MAX == UINT32_MAX)</span>
-<span id="L77"><span class="lineNum">      77</span>              :     return (int)fastrange32(word, p);</span>
-<span id="L78"><span class="lineNum">      78</span>              : #else  // assume 64-bit</span>
-<span id="L79"><span class="lineNum">      79</span>              :     return (int)fastrange64(word, p);</span>
-<span id="L80"><span class="lineNum">      80</span>              : #endif // (SIZE_MAX == UINT32_MAX)</span>
-<span id="L81"><span class="lineNum">      81</span>              : }</span>
-<span id="L82"><span class="lineNum">      82</span>              : </span>
-<span id="L83"><span class="lineNum">      83</span>              : #endif // INCLUDE_FASTRANGE_H</span>
+<span id="L1"><span class="lineNum">       1</span>                 :             : /**</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             :  * Fair maps to intervals without division.</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             :  * Reference : http://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction/</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             :  *</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             :  * (c) Daniel Lemire</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             :  * Apache License 2.0</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             :  */</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : #ifndef INCLUDE_FASTRANGE_H</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : #define INCLUDE_FASTRANGE_H</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : #include &lt;iso646.h&gt; // mostly for Microsoft compilers</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : #include &lt;limits.h&gt; // for size_t in C</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : #include &lt;stddef.h&gt; // for size_t in C</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : #include &lt;stdint.h&gt; // part of Visual Studio 2010 and better</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : /**</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             :  * Given a value &quot;word&quot;, produces an integer in [0,p) without division.</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             :  * The function is as fair as possible in the sense that if you iterate</span>
+<span id="L18"><span class="lineNum">      18</span>                 :             :  * through all possible values of &quot;word&quot;, then you will generate all</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             :  * possible outputs as uniformly as possible.</span>
+<span id="L20"><span class="lineNum">      20</span>                 :             :  */</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : static inline uint32_t fastrange32(uint32_t word, uint32_t p) {</span>
+<span id="L22"><span class="lineNum">      22</span>                 :<span class="tlaGNC tlaBgGNC">        4096 :     return (uint32_t)(((uint64_t)word * (uint64_t)p) &gt;&gt; 32);</span></span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : }</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : </span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : #if defined(_MSC_VER) &amp;&amp; defined(_WIN64)</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : #include &lt;intrin.h&gt; // should be part of all recent Visual Studio</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : #pragma intrinsic(_umul128)</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : #endif // defined(_MSC_VER) &amp;&amp; defined (_WIN64)</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : </span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : /**</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             :  * Given a value &quot;word&quot;, produces an integer in [0,p) without division.</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             :  * The function is as fair as possible in the sense that if you iterate</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             :  * through all possible values of &quot;word&quot;, then you will generate all</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             :  * possible outputs as uniformly as possible.</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             :  */</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             : static inline uint64_t fastrange64(uint64_t word, uint64_t p) {</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             : #ifdef __SIZEOF_INT128__ // then we know we have a 128-bit int</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             :     return (uint64_t)(((__uint128_t)word * (__uint128_t)p) &gt;&gt; 64);</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             : #elif defined(_MSC_VER) &amp;&amp; defined(_WIN64)</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             :     // supported in Visual Studio 2005 and better</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             :     uint64_t highProduct;</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             :     _umul128(word, p, &amp;highProduct); // ignore output</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             :     return highProduct;</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             :     unsigned __int64 _umul128(unsigned __int64 Multiplier, unsigned __int64 Multiplicand,</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             :                               unsigned __int64* HighProduct);</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             : #else</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             :     return word % p; // fallback</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             : #endif // __SIZEOF_INT128__</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             : }</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             : </span>
+<span id="L51"><span class="lineNum">      51</span>                 :             : #ifndef UINT32_MAX</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             : #define UINT32_MAX (0xffffffff)</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             : #endif // UINT32_MAX</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             : </span>
+<span id="L55"><span class="lineNum">      55</span>                 :             : /**</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             :  * Given a value &quot;word&quot;, produces an integer in [0,p) without division.</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             :  * The function is as fair as possible in the sense that if you iterate</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             :  * through all possible values of &quot;word&quot;, then you will generate all</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             :  * possible outputs as uniformly as possible.</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             :  */</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             : static inline size_t fastrangesize(size_t word, size_t p) {</span>
+<span id="L62"><span class="lineNum">      62</span>                 :             : #if (SIZE_MAX == UINT32_MAX)</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             :     return (size_t)fastrange32(word, p);</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             : #else  // assume 64-bit</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             :     return (size_t)fastrange64(word, p);</span>
+<span id="L66"><span class="lineNum">      66</span>                 :             : #endif // SIZE_MAX == UINT32_MAX</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             : }</span>
+<span id="L68"><span class="lineNum">      68</span>                 :             : </span>
+<span id="L69"><span class="lineNum">      69</span>                 :             : /**</span>
+<span id="L70"><span class="lineNum">      70</span>                 :             :  * Given a value &quot;word&quot;, produces an integer in [0,p) without division.</span>
+<span id="L71"><span class="lineNum">      71</span>                 :             :  * The function is as fair as possible in the sense that if you iterate</span>
+<span id="L72"><span class="lineNum">      72</span>                 :             :  * through all possible values of &quot;word&quot;, then you will generate all</span>
+<span id="L73"><span class="lineNum">      73</span>                 :             :  * possible outputs as uniformly as possible.</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             :  */</span>
+<span id="L75"><span class="lineNum">      75</span>                 :             : static inline int fastrangeint(int word, int p) {</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             : #if (SIZE_MAX == UINT32_MAX)</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             :     return (int)fastrange32(word, p);</span>
+<span id="L78"><span class="lineNum">      78</span>                 :             : #else  // assume 64-bit</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             :     return (int)fastrange64(word, p);</span>
+<span id="L80"><span class="lineNum">      80</span>                 :             : #endif // (SIZE_MAX == UINT32_MAX)</span>
+<span id="L81"><span class="lineNum">      81</span>                 :             : }</span>
+<span id="L82"><span class="lineNum">      82</span>                 :             : </span>
+<span id="L83"><span class="lineNum">      83</span>                 :             : #endif // INCLUDE_FASTRANGE_H</span>
         </pre>
               </td>
             </tr>

@@ -37,12 +37,21 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-17 10:34:27</td>
+            <td class="headerValue">2026-05-17 18:47:55</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
             <td class="headerCovTableEntry">1</td>
             <td class="headerCovTableEntry">1</td>
+          </tr>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="headerItem">Branches:</td>
+            <td class="headerCovTableEntryLo">50.0&nbsp;%</td>
+            <td class="headerCovTableEntry">6</td>
+            <td class="headerCovTableEntry">3</td>
           </tr>
                   <tr><td><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -58,37 +67,37 @@
             </tr>
             <tr>
               <td>
-<pre class="sourceHeading">            Line data    Source code</pre>
+<pre class="sourceHeading">             Branch data     Line data    Source code</pre>
 <pre class="source">
-<span id="L1"><span class="lineNum">       1</span>              : // Copyright (c) 2024 The Authors. All rights reserved.</span>
-<span id="L2"><span class="lineNum">       2</span>              : //</span>
-<span id="L3"><span class="lineNum">       3</span>              : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
-<span id="L4"><span class="lineNum">       4</span>              : // you may not use this file except in compliance with the License.</span>
-<span id="L5"><span class="lineNum">       5</span>              : // You may obtain a copy of the License at</span>
-<span id="L6"><span class="lineNum">       6</span>              : //</span>
-<span id="L7"><span class="lineNum">       7</span>              : //      https://www.apache.org/licenses/LICENSE-2.0</span>
-<span id="L8"><span class="lineNum">       8</span>              : //</span>
-<span id="L9"><span class="lineNum">       9</span>              : // Unless required by applicable law or agreed to in writing, software</span>
-<span id="L10"><span class="lineNum">      10</span>              : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
-<span id="L11"><span class="lineNum">      11</span>              : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
-<span id="L12"><span class="lineNum">      12</span>              : // See the License for the specific language governing permissions and</span>
-<span id="L13"><span class="lineNum">      13</span>              : // limitations under the License.</span>
-<span id="L14"><span class="lineNum">      14</span>              : </span>
-<span id="L15"><span class="lineNum">      15</span>              : // Authors: liubang (it.liubang@gmail.com)</span>
-<span id="L16"><span class="lineNum">      16</span>              : // Created: 2024/06/24 01:07</span>
-<span id="L17"><span class="lineNum">      17</span>              : </span>
-<span id="L18"><span class="lineNum">      18</span>              : #include &quot;cpp/pl/log/logstream.h&quot;</span>
-<span id="L19"><span class="lineNum">      19</span>              : </span>
-<span id="L20"><span class="lineNum">      20</span>              : namespace pl {</span>
-<span id="L21"><span class="lineNum">      21</span>              : </span>
-<span id="L22"><span class="lineNum">      22</span> <span class="tlaGNC tlaBgGNC">       12586 : void LogStream::write(std::string_view data) {</span></span>
-<span id="L23"><span class="lineNum">      23</span> <span class="tlaGNC">       12586 :     if (buffer_.full() || data.size() == 0) {</span></span>
-<span id="L24"><span class="lineNum">      24</span>              :         return;</span>
-<span id="L25"><span class="lineNum">      25</span>              :     }</span>
-<span id="L26"><span class="lineNum">      26</span> <span class="tlaGNC">       12586 :     buffer_.append(data);</span></span>
-<span id="L27"><span class="lineNum">      27</span>              : }</span>
-<span id="L28"><span class="lineNum">      28</span>              : </span>
-<span id="L29"><span class="lineNum">      29</span>              : } // namespace pl</span>
+<span id="L1"><span class="lineNum">       1</span>                 :             : // Copyright (c) 2024 The Authors. All rights reserved.</span>
+<span id="L2"><span class="lineNum">       2</span>                 :             : //</span>
+<span id="L3"><span class="lineNum">       3</span>                 :             : // Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span id="L4"><span class="lineNum">       4</span>                 :             : // you may not use this file except in compliance with the License.</span>
+<span id="L5"><span class="lineNum">       5</span>                 :             : // You may obtain a copy of the License at</span>
+<span id="L6"><span class="lineNum">       6</span>                 :             : //</span>
+<span id="L7"><span class="lineNum">       7</span>                 :             : //      https://www.apache.org/licenses/LICENSE-2.0</span>
+<span id="L8"><span class="lineNum">       8</span>                 :             : //</span>
+<span id="L9"><span class="lineNum">       9</span>                 :             : // Unless required by applicable law or agreed to in writing, software</span>
+<span id="L10"><span class="lineNum">      10</span>                 :             : // distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span id="L11"><span class="lineNum">      11</span>                 :             : // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span id="L12"><span class="lineNum">      12</span>                 :             : // See the License for the specific language governing permissions and</span>
+<span id="L13"><span class="lineNum">      13</span>                 :             : // limitations under the License.</span>
+<span id="L14"><span class="lineNum">      14</span>                 :             : </span>
+<span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
+<span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2024/06/24 01:07</span>
+<span id="L17"><span class="lineNum">      17</span>                 :             : </span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : #include &quot;cpp/pl/log/logstream.h&quot;</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : </span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : namespace pl {</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : </span>
+<span id="L22"><span class="lineNum">      22</span>         [<span class="tlaGBC" title="Branch 0 was taken 12586 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">       12586 : void LogStream::write(std::string_view data) {</span></span>
+<span id="L23"><span class="lineNum">      23</span>   [<span class="tlaGBC" title="Branch 0 was taken 12586 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 12586 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">       12586 :     if (buffer_.full() || data.size() == 0) {</span></span>
+<span id="L24"><span class="lineNum">      24</span>                 :             :         return;</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             :     }</span>
+<span id="L26"><span class="lineNum">      26</span>                 :<span class="tlaGNC">       12586 :     buffer_.append(data);</span></span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : }</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : </span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : } // namespace pl</span>
         </pre>
               </td>
             </tr>
