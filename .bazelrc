@@ -80,7 +80,7 @@ test --action_env="GTEST_BREAK_ON_FAILURE=1"
 test --nocache_test_results
 
 # CI config: allow test caching for faster builds
-common:ci --repo_env=PYPI_INDEX_URL=
+common:ci --repo_env=PYPI_INDEX_URL=https://pypi.org/simple
 build:ci --jobs=auto
 test:ci --cache_test_results
 test:ci --test_output=errors
