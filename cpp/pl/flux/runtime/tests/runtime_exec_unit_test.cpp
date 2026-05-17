@@ -1287,6 +1287,10 @@ TEST(RuntimeExecTest, StreamingGroupAggregateRunsLargeMemoryFallback) {
     }
     ASSERT_FALSE(result_or->profile.pipelines.empty());
     EXPECT_TRUE(result_or->profile.pipelines.back().blocking);
+    const auto profile = execution::FormatExecutionProfile(result_or->profile);
+    EXPECT_NE(std::string::npos, profile.find("mode=grouped_aggregate"));
+    EXPECT_NE(std::string::npos, profile.find("input_rows=200000"));
+    EXPECT_NE(std::string::npos, profile.find("groups=32"));
 
     const double seconds = std::chrono::duration<double>(elapsed).count();
     const double rows_per_second = static_cast<double>(kRows) / std::max(seconds, 0.000001);
@@ -1413,7 +1417,22 @@ TEST(RuntimeExecTest, ExecutionProfileFormatterShowsRuntimeStats) {
 }
 
 TEST(RuntimeExecTest, ExecutionProfileFormatterMarksStreamingAccumulators) {
-    auto scan = SqliteCpuScanPlan();
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.push_back(TestRow({{"host", Value::string("edge-1")}, {"usage", Value::floating(1.0)}}));
+    rows.push_back(TestRow({{"host", Value::string("edge-1")}, {"usage", Value::floating(2.0)}}));
+    rows.push_back(TestRow({{"host", Value::string("edge-2")}, {"usage", Value::floating(3.0)}}));
+    connector::SourceSpec spec{
+        .source = "profile_acc_memory",
+        .driver = "profile_acc_memory",
+        .dsn = "memory://profile-accumulator",
+        .table = "cpu",
+    };
+    connector::ConnectorRegistry::Global().Register(
+        spec.source, [rows](const connector::SourceSpec& requested) {
+            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows, 2, 1);
+        });
+
+    auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
     auto materialized = plan::MakeMaterializeBarrier(scan, "test memory fallback", "test");
     auto grouped = plan::MakeGroup(materialized, {"host"});
     auto aggregate = plan::MakeAggregate(grouped, plan::AggregateFunction::Count, "usage");
@@ -1423,6 +1442,10 @@ TEST(RuntimeExecTest, ExecutionProfileFormatterMarksStreamingAccumulators) {
     ASSERT_TRUE(result_or.ok()) << result_or.status();
     const auto profile = execution::FormatExecutionProfile(result_or->profile);
     EXPECT_NE(std::string::npos, profile.find("accumulators: [GroupOperator, AggregateOperator]"));
+    EXPECT_NE(std::string::npos, profile.find("accumulator_stats: "));
+    EXPECT_NE(std::string::npos, profile.find("mode=grouped_aggregate"));
+    EXPECT_NE(std::string::npos, profile.find("input_rows="));
+    EXPECT_NE(std::string::npos, profile.find("hash_ms="));
 }
 
 TEST(RuntimeExecTest, ContinuousSqliteFiltersAccumulatePushdownPredicates) {
