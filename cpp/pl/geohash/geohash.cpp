@@ -23,8 +23,8 @@ namespace pl {
 
 namespace {
 constexpr inline GeoHash::Area WGS84_RANGE = {
-    GeoHash::Point{GeoHash::GEO_LNG_MIN, GeoHash::GEO_LAT_MIN},
-    GeoHash::Point{GeoHash::GEO_LNG_MAX, GeoHash::GEO_LAT_MAX},
+    .sw = GeoHash::Point{.lng = GeoHash::GEO_LNG_MIN, .lat = GeoHash::GEO_LAT_MIN},
+    .ne = GeoHash::Point{.lng = GeoHash::GEO_LNG_MAX, .lat = GeoHash::GEO_LAT_MAX},
 };
 
 // Ref: https://graphics.stanford.edu/~seander/bithacks.html#InterleaveBMN
@@ -210,7 +210,7 @@ void GeoHash::move_y(HashBits* hash, int8_t d) {
         y = y - (z + 1);
     }
 
-    y = y & (0xaaaaaaaaaaaaaaaaULL >> (64 - hash->step * 2));
+    y = y & (0x5555555555555555ULL >> (64 - hash->step * 2));
     hash->bits = (x | y);
 }
 
