@@ -21,12 +21,12 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_join.h"
 #include "cpp/pl/ascii_table/pretty.h"
-#include "cpp/pl/flux/syntax/ast_debug.h"
 #include "cpp/pl/flux/common/compat.h"
 #include "cpp/pl/flux/execution/materializer.h"
-#include "cpp/pl/flux/syntax/parser.h"
 #include "cpp/pl/flux/runtime/runtime_builtin.h"
 #include "cpp/pl/flux/runtime/runtime_exec.h"
+#include "cpp/pl/flux/syntax/ast_debug.h"
+#include "cpp/pl/flux/syntax/parser.h"
 #include <algorithm>
 #include <cctype>
 #include <iomanip>
