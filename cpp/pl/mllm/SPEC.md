@@ -53,38 +53,15 @@
 
 ### 2.1 Apple Silicon 计算层次
 
-```mermaid
-graph LR
-    subgraph "Apple M4 Max (示例)"
-        CPU["CPU<br/>16 核 (12P+4E)<br/>AMX 协处理器"]
-        GPU["GPU<br/>40 核<br/>Metal 3.1"]
-        NE["Neural Engine<br/>16 核"]
-        UM["统一内存 128GB<br/>546 GB/s 带宽"]
-    end
-    CPU --- UM
-    GPU --- UM
-    NE --- UM
-```
+> 📐 原始图表文件: [doc/apple_silicon_architecture.drawio](doc/apple_silicon_architecture.drawio)
+
+![Apple Silicon 计算层次](doc/apple_silicon_architecture.drawio.png)
 
 ### 2.2 推理阶段性能模型
 
-```mermaid
-graph TD
-    subgraph "Prefill 阶段 (Compute-Bound)"
-        P1["输入序列 [B, S] tokens"]
-        P2["大矩阵乘: [S, D] × [D, 4D]"]
-        P3["瓶颈: GPU FLOPS"]
-        P4["优化: Metal GEMM tiling<br/>simdgroup_matrix (M3+)"]
-    end
-    subgraph "Decode 阶段 (Memory-Bound)"
-        D1["逐 token 生成"]
-        D2["矩阵向量乘: [1, D] × [D, 4D]"]
-        D3["瓶颈: 内存带宽"]
-        D4["优化: 量化 (4-bit)<br/>权重流式加载<br/>kernel fusion"]
-    end
-    P1 --> P2 --> P3 --> P4
-    D1 --> D2 --> D3 --> D4
-```
+> 📐 原始图表文件: [doc/inference_performance_model.drawio](doc/inference_performance_model.drawio)
+
+![推理阶段性能模型](doc/inference_performance_model.drawio.png)
 
 ### 2.3 Decode 阶段带宽分析
 
@@ -104,90 +81,15 @@ graph TD
 
 ### 3.1 分层架构
 
-```mermaid
-graph TB
-    subgraph "Application Layer"
-        CLI["mllm-cli<br/>交互式对话"]
-        SRV["HTTP Server<br/>OpenAI API 兼容"]
-        API["C++ API<br/>嵌入式集成"]
-    end
+> 📐 原始图表文件: [doc/layered_architecture.drawio](doc/layered_architecture.drawio)
 
-    subgraph "Inference Engine"
-        ENG["Engine<br/>推理编排 · 协程调度"]
-        SCH["BatchScheduler<br/>Continuous Batching"]
-        SAM["Sampler<br/>Temperature/TopK/TopP"]
-    end
-
-    subgraph "Model Runtime"
-        MDL["Model<br/>架构抽象 (CRTP)"]
-        ATT["Attention<br/>GQA / MQA"]
-        FFN["FFN<br/>SwiGLU / MoE"]
-        NRM["Norm<br/>RMSNorm"]
-        KVC["KV Cache<br/>Paged / Ring Buffer"]
-    end
-
-    subgraph "Compute Layer"
-        MTL["Metal Backend<br/>GPU Kernels"]
-        ACC["Accelerate Backend<br/>CPU / AMX / NEON"]
-    end
-
-    subgraph "Foundation Layer"
-        TNS["Tensor<br/>非拥有型视图 · 零拷贝"]
-        ALO["Allocator<br/>Metal Shared Buffer Pool"]
-        QNT["Quantization<br/>Q4/Q8 Dequant Kernels"]
-        LDR["Loader<br/>GGUF mmap"]
-        TOK["Tokenizer<br/>BPE / SentencePiece"]
-    end
-
-    CLI --> ENG
-    SRV --> ENG
-    API --> ENG
-    ENG --> SCH
-    ENG --> SAM
-    ENG --> MDL
-    MDL --> ATT
-    MDL --> FFN
-    MDL --> NRM
-    ATT --> KVC
-    ATT --> MTL
-    FFN --> MTL
-    NRM --> MTL
-    ATT --> ACC
-    FFN --> ACC
-    MTL --> TNS
-    ACC --> TNS
-    TNS --> ALO
-    MDL --> QNT
-    MDL --> LDR
-    ENG --> TOK
-    LDR --> ALO
-```
+![分层架构](doc/layered_architecture.drawio.png)
 
 ### 3.2 数据流（单次 Decode Step）
 
-```mermaid
-sequenceDiagram
-    participant E as Engine
-    participant M as Model (CRTP)
-    participant K as KV Cache
-    participant G as Metal GPU
-    participant Mem as Unified Memory
+> 📐 原始图表文件: [doc/decode_data_flow.drawio](doc/decode_data_flow.drawio)
 
-    E->>M: forward(token_id, pos)
-    M->>Mem: embedding lookup (直接指针偏移)
-    M->>G: RMSNorm kernel dispatch
-    M->>G: Q_proj GEMV (quantized, fused dequant)
-    M->>G: K_proj + V_proj GEMV
-    M->>K: append(k, v) (指针递进, 无拷贝)
-    M->>G: Flash Attention (Q×K^T×V, causal mask)
-    M->>G: O_proj GEMV
-    M->>G: Residual Add (fused with norm)
-    M->>G: Gate+Up GEMV (fused SiLU)
-    M->>G: Down GEMV
-    M->>G: Residual Add
-    G->>Mem: logits 写回 (仅 vocab_size floats)
-    M->>E: return logits view
-```
+![单次 Decode Step 数据流](doc/decode_data_flow.drawio.png)
 
 ---
 
@@ -1201,19 +1103,9 @@ private:
 
 ### 9.2 零拷贝加载路径
 
-```mermaid
-graph LR
-    GGUF["GGUF 文件<br/>(磁盘)"]
-    MMAP["mmap<br/>MAP_PRIVATE"]
-    MTL["MTLBuffer<br/>newBufferWithBytesNoCopy<br/>StorageModeShared"]
-    TNS["Tensor<br/>(视图, 指针+shape)"]
-    GPU["Metal GPU<br/>直接读取"]
+> 📐 原始图表文件: [doc/zero_copy_loading.drawio](doc/zero_copy_loading.drawio)
 
-    GGUF -->|"mmap()"| MMAP
-    MMAP -->|"零拷贝包装"| MTL
-    MTL -->|"Tensor view"| TNS
-    TNS -->|"kernel dispatch"| GPU
-```
+![零拷贝加载路径](doc/zero_copy_loading.drawio.png)
 
 ---
 
