@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-18 00:24:25</td>
+            <td class="headerValue">2026-05-18 01:28:48</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">40.0&nbsp;%</td>
@@ -205,27 +205,27 @@
 <span id="L121"><span class="lineNum">     121</span>                 :             :     RETURN_VOID;</span>
 <span id="L122"><span class="lineNum">     122</span>                 :             : }</span>
 <span id="L123"><span class="lineNum">     123</span>                 :             : </span>
-<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">        5824 : IteratorPtr SSTable::blockReader(std::string_view index_value) {</span></span>
+<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">        5634 : IteratorPtr SSTable::blockReader(std::string_view index_value) {</span></span>
 <span id="L125"><span class="lineNum">     125</span>                 :             :     BlockHandle handle;</span>
-<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">        5824 :     auto s = handle.decodeFrom(index_value);</span></span>
-<span id="L127"><span class="lineNum">     127</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5824 times"> + </span>]:<span class="tlaGNC">        5824 :     if (s.hasError()) {</span></span>
+<span id="L126"><span class="lineNum">     126</span>                 :<span class="tlaGNC">        5634 :     auto s = handle.decodeFrom(index_value);</span></span>
+<span id="L127"><span class="lineNum">     127</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5634 times"> + </span>]:<span class="tlaGNC">        5634 :     if (s.hasError()) {</span></span>
 <span id="L128"><span class="lineNum">     128</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         XLOGF(ERR, &quot;decode block index error: {}&quot;, s.error());</span></span>
 <span id="L129"><span class="lineNum">     129</span>                 :             :         return nullptr;</span>
 <span id="L130"><span class="lineNum">     130</span>                 :             :     }</span>
 <span id="L131"><span class="lineNum">     131</span>                 :             : </span>
-<span id="L132"><span class="lineNum">     132</span>         [<span class="tlaGBC" title="Branch 0 was taken 5824 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">        5824 :     auto block_content_result = BlockReader::readBlock(reader_, fd_, handle);</span></span>
+<span id="L132"><span class="lineNum">     132</span>         [<span class="tlaGBC" title="Branch 0 was taken 5634 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">        5634 :     auto block_content_result = BlockReader::readBlock(reader_, fd_, handle);</span></span>
 <span id="L133"><span class="lineNum">     133</span>                 :             : </span>
-<span id="L134"><span class="lineNum">     134</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5824 times"> + </span>]:<span class="tlaGNC">        5824 :     if (block_content_result.hasError()) {</span></span>
+<span id="L134"><span class="lineNum">     134</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5634 times"> + </span>]:<span class="tlaGNC">        5634 :     if (block_content_result.hasError()) {</span></span>
 <span id="L135"><span class="lineNum">     135</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         XLOGF(ERR, &quot;read block error: {}&quot;, block_content_result.error());</span></span>
 <span id="L136"><span class="lineNum">     136</span>                 :             :         return nullptr;</span>
 <span id="L137"><span class="lineNum">     137</span>                 :             :     }</span>
 <span id="L138"><span class="lineNum">     138</span>                 :             : </span>
-<span id="L139"><span class="lineNum">     139</span>         [<span class="tlaGBC" title="Branch 0 was taken 5824 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">        5824 :     BlockContents contents = block_content_result.value();</span></span>
+<span id="L139"><span class="lineNum">     139</span>         [<span class="tlaGBC" title="Branch 0 was taken 5634 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">        5634 :     BlockContents contents = block_content_result.value();</span></span>
 <span id="L140"><span class="lineNum">     140</span>                 :             :     auto block = std::make_shared&lt;Block&gt;(contents);</span>
-<span id="L141"><span class="lineNum">     141</span>         [<span class="tlaGBC" title="Branch 0 was taken 5824 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        5824 :     auto iter = block-&gt;iterator(options_-&gt;comparator);</span></span>
+<span id="L141"><span class="lineNum">     141</span>         [<span class="tlaGBC" title="Branch 0 was taken 5634 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        5634 :     auto iter = block-&gt;iterator(options_-&gt;comparator);</span></span>
 <span id="L142"><span class="lineNum">     142</span>                 :             : </span>
 <span id="L143"><span class="lineNum">     143</span>                 :             :     return iter;</span>
-<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">        5824 : }</span></span>
+<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">        5634 : }</span></span>
 <span id="L145"><span class="lineNum">     145</span>                 :             : </span>
 <span id="L146"><span class="lineNum">     146</span>                 :             : // 将来会废弃这个接口，在上层统一实现query和scan操作语义</span>
 <span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">        1001 : Result&lt;CellVecRef&gt; SSTable::get(std::string_view rowkey, Arena* buf) {</span></span>
@@ -274,9 +274,9 @@
 <span id="L187"><span class="lineNum">     187</span>                 :             : </span>
 <span id="L188"><span class="lineNum">     188</span>                 :             :     // get all cells of the row</span>
 <span id="L189"><span class="lineNum">     189</span>                 :             :     // TODO(liubang): cell merger</span>
-<span id="L190"><span class="lineNum">     190</span>   [<span class="tlaGBC" title="Branch 0 was taken 5330 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5239 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 91 times"> + </span>]:<span class="tlaGNC">        5330 :     while (data_iter-&gt;valid()) {</span></span>
-<span id="L191"><span class="lineNum">     191</span>   [<span class="tlaGBC" title="Branch 0 was taken 5239 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5239 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">       10478 :         cell = data_iter-&gt;cell();</span></span>
-<span id="L192"><span class="lineNum">     192</span>   [<span class="tlaGBC" title="Branch 0 was taken 5239 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 4996 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 243 times"> + </span>]:<span class="tlaGNC">        5239 :         if (options_-&gt;comparator-&gt;compare(cell-&gt;rowkey(), rowkey) != 0) {</span></span>
+<span id="L190"><span class="lineNum">     190</span>   [<span class="tlaGBC" title="Branch 0 was taken 5330 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5253 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 77 times"> + </span>]:<span class="tlaGNC">        5330 :     while (data_iter-&gt;valid()) {</span></span>
+<span id="L191"><span class="lineNum">     191</span>   [<span class="tlaGBC" title="Branch 0 was taken 5253 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5253 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">       10506 :         cell = data_iter-&gt;cell();</span></span>
+<span id="L192"><span class="lineNum">     192</span>   [<span class="tlaGBC" title="Branch 0 was taken 5253 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 4996 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 257 times"> + </span>]:<span class="tlaGNC">        5253 :         if (options_-&gt;comparator-&gt;compare(cell-&gt;rowkey(), rowkey) != 0) {</span></span>
 <span id="L193"><span class="lineNum">     193</span>                 :             :             break;</span>
 <span id="L194"><span class="lineNum">     194</span>                 :             :         }</span>
 <span id="L195"><span class="lineNum">     195</span>   [<span class="tlaGBC" title="Branch 0 was taken 4996 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 4996 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">        4996 :         cells.emplace_back(cell-&gt;clone(buf));</span></span>
@@ -290,7 +290,7 @@
 <span id="L202"><span class="lineNum">     202</span>                 :<span class="tlaGNC">           6 : IteratorPtr SSTable::iterator() {</span></span>
 <span id="L203"><span class="lineNum">     203</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           6 :     return std::make_unique&lt;SSTableIterator&gt;(index_block_-&gt;iterator(options_-&gt;comparator),</span></span>
 <span id="L204"><span class="lineNum">     204</span>                 :<span class="tlaGNC">           6 :                                              [that = this](std::string_view b) {</span></span>
-<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">        5490 :                                                  return that-&gt;blockReader(b);</span></span>
+<span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">        5300 :                                                  return that-&gt;blockReader(b);</span></span>
 <span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaGNC">           6 :                                              });</span></span>
 <span id="L207"><span class="lineNum">     207</span>                 :             : }</span>
 <span id="L208"><span class="lineNum">     208</span>                 :             : </span>

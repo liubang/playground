@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-18 00:24:25</td>
+            <td class="headerValue">2026-05-18 01:28:48</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">92.5&nbsp;%</td>
@@ -1510,7 +1510,7 @@
 <span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 13 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 2 times"> + </span>]
 <span id="L1388"><span class="lineNum">    1388</span>                 :             :                impl_-&gt;state.should_read_rows()) {</span>
 <span id="L1389"><span class="lineNum">    1389</span>                 :<span class="tlaGNC">          13 :             const auto read_started = Clock::now();</span></span>
-<span id="L1390"><span class="lineNum">    1390</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          13 :             mysql::rows_view batch = conn-&gt;read_some_rows(impl_-&gt;state);</span></span>
+<span id="L1390"><span class="lineNum">    1390</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          13 :             mysql::rows_view batch = conn-&gt;read_some_rows(impl_-&gt;state);</span></span>
 <span id="L1391"><span class="lineNum">    1391</span>                 :<span class="tlaGNC">          13 :             stats_.read_time_ms += elapsed_ms(read_started);</span></span>
 <span id="L1392"><span class="lineNum">    1392</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span>]:<span class="tlaGNC">          13 :             if (batch.empty()) {</span></span>
 <span id="L1393"><span class="lineNum">    1393</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">           5 :                 if (impl_-&gt;state.complete()) {</span></span>
@@ -1547,7 +1547,7 @@
 <span id="L1423"><span class="lineNum">    1423</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span>]:<span class="tlaGNC">          13 :     if (empty) {</span></span>
 <span id="L1424"><span class="lineNum">    1424</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 5 times"> + </span>]:<span class="tlaGNC">           5 :         if (!impl_-&gt;emitted_empty &amp;&amp; !impl_-&gt;emitted_any_row) {</span></span>
 <span id="L1425"><span class="lineNum">    1425</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :             impl_-&gt;emitted_empty = true;</span></span>
-<span id="L1426"><span class="lineNum">    1426</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          10 :             Page page = PageFromRows(&quot;mysql&quot;, {});</span></span>
+<span id="L1426"><span class="lineNum">    1426</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          10 :             Page page = PageFromRows(&quot;mysql&quot;, {});</span></span>
 <span id="L1427"><span class="lineNum">    1427</span>                 :<span class="tlaGNC">           5 :             ++stats_.pages_produced;</span></span>
 <span id="L1428"><span class="lineNum">    1428</span>                 :             :             return page;</span>
 <span id="L1429"><span class="lineNum">    1429</span>                 :<span class="tlaGNC">           5 :         }</span></span>
