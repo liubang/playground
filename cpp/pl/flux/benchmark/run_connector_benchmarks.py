@@ -187,7 +187,7 @@ def run_mysql(args):
     env["FLUX_MYSQL_TEST_DSN"] = args.mysql_dsn
     env["FLUX_MYSQL_TARGET_SPLITS"] = str(args.mysql_target_splits)
     env["FLUX_MYSQL_ROWS_PER_PAGE"] = str(args.mysql_rows_per_page)
-    env["FLUX_MYSQL_MAX_IDLE_CONNECTIONS"] = str(args.mysql_max_idle_connections)
+    env["FLUX_MYSQL_MAX_POOL_SIZE"] = str(args.mysql_max_pool_size)
     env["FLUX_MYSQL_SPLIT_CACHE_MAX_ENTRIES"] = str(args.mysql_split_cache_max_entries)
     env["FLUX_MYSQL_SPLIT_CACHE_TTL_MS"] = str(args.mysql_split_cache_ttl_ms)
     env["FLUX_MYSQL_USE_PREPARED_STATEMENTS"] = (
@@ -215,7 +215,7 @@ def main():
     parser.add_argument("--mysql-rows", type=int, default=1_000_000)
     parser.add_argument("--mysql-target-splits", type=int, default=8)
     parser.add_argument("--mysql-rows-per-page", type=int, default=1024)
-    parser.add_argument("--mysql-max-idle-connections", type=int, default=8)
+    parser.add_argument("--mysql-max-pool-size", type=int, default=8)
     parser.add_argument("--mysql-split-cache-max-entries", type=int, default=1024)
     parser.add_argument("--mysql-split-cache-ttl-ms", type=int, default=300000)
     parser.add_argument("--mysql-disable-prepared-statements", action="store_true")
