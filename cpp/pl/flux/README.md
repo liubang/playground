@@ -230,7 +230,7 @@ Universe builtin 默认注入，无需 `import`。
 | `keys()`                      | 返回 group key 列名                              |
 | `findColumn(fn:, column:)`    | 找到匹配行并返回某列数组                         |
 | `findRecord(fn:, idx:)`       | 找到匹配行并返回指定位置的 record                |
-| `explain()`                   | 返回 logical / optimized logical / physical plan、下推状态和 SQL request 摘要 |
+| `explain()`                   | 返回 logical / optimized logical / physical / pipeline plan；`pipeline: true, json: true` 可返回结构化 DAG |
 | `yield(name:)`                | 设置结果名并输出表流                             |
 
 ## 内置包

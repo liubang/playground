@@ -40,6 +40,9 @@ struct AccumulatorStats {
     size_t input_rows = 0;
     size_t output_rows = 0;
     size_t groups = 0;
+    size_t memory_bytes = 0;
+    size_t memory_limit_bytes = 0;
+    bool memory_limited = false;
     double key_time_ms = 0.0;
     double hash_time_ms = 0.0;
     double update_time_ms = 0.0;
@@ -166,6 +169,8 @@ public:
 };
 
 std::string FormatPipelinePlan(const std::shared_ptr<plan::PlanNode>& logical_plan);
+std::string FormatPipelinePlanJson(const std::shared_ptr<plan::PlanNode>& logical_plan);
 std::string FormatExecutionProfile(const ExecutionProfile& profile);
+std::string FormatExecutionProfileJson(const ExecutionProfile& profile);
 
 } // namespace pl::flux::execution
