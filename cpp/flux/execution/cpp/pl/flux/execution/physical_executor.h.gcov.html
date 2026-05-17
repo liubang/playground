@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-17 03:21:55</td>
+            <td class="headerValue">2026-05-17 10:34:27</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -100,11 +100,11 @@
 <span id="L38"><span class="lineNum">      38</span>              :     [[nodiscard]] virtual std::string name() const = 0;</span>
 <span id="L39"><span class="lineNum">      39</span>              :     virtual absl::StatusOr&lt;std::optional&lt;Page&gt;&gt; NextPage() = 0;</span>
 <span id="L40"><span class="lineNum">      40</span> <span class="tlaGNC tlaBgGNC">           7 :     virtual void Cancel() {}</span></span>
-<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">          28 :     virtual void CollectSplitStats(std::vector&lt;connector::ConnectorSplitStats&gt;*) const {}</span></span>
+<span id="L41"><span class="lineNum">      41</span> <span class="tlaGNC">          31 :     virtual void CollectSplitStats(std::vector&lt;connector::ConnectorSplitStats&gt;*) const {}</span></span>
 <span id="L42"><span class="lineNum">      42</span>              : };</span>
 <span id="L43"><span class="lineNum">      43</span>              : </span>
 <span id="L44"><span class="lineNum">      44</span>              : struct Pipeline {</span>
-<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">         439 :     struct Stats {</span></span>
+<span id="L45"><span class="lineNum">      45</span> <span class="tlaGNC">         493 :     struct Stats {</span></span>
 <span id="L46"><span class="lineNum">      46</span>              :         mutable std::mutex mu;</span>
 <span id="L47"><span class="lineNum">      47</span>              :         size_t pages = 0;</span>
 <span id="L48"><span class="lineNum">      48</span>              :         size_t rows = 0;</span>
@@ -124,7 +124,7 @@
 <span id="L62"><span class="lineNum">      62</span>              :     std::shared_ptr&lt;Stats&gt; stats = std::make_shared&lt;Stats&gt;();</span>
 <span id="L63"><span class="lineNum">      63</span>              : };</span>
 <span id="L64"><span class="lineNum">      64</span>              : </span>
-<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC">         164 : struct ExecutionTask {</span></span>
+<span id="L65"><span class="lineNum">      65</span> <span class="tlaGNC">         179 : struct ExecutionTask {</span></span>
 <span id="L66"><span class="lineNum">      66</span>              :     std::vector&lt;Pipeline&gt; pipelines;</span>
 <span id="L67"><span class="lineNum">      67</span>              : };</span>
 <span id="L68"><span class="lineNum">      68</span>              : </span>
@@ -144,11 +144,11 @@
 <span id="L82"><span class="lineNum">      82</span>              :     std::string error;</span>
 <span id="L83"><span class="lineNum">      83</span>              : };</span>
 <span id="L84"><span class="lineNum">      84</span>              : </span>
-<span id="L85"><span class="lineNum">      85</span> <span class="tlaGNC">          80 : struct ExecutionProfile {</span></span>
+<span id="L85"><span class="lineNum">      85</span> <span class="tlaGNC">          86 : struct ExecutionProfile {</span></span>
 <span id="L86"><span class="lineNum">      86</span>              :     std::vector&lt;PipelineProfile&gt; pipelines;</span>
 <span id="L87"><span class="lineNum">      87</span>              : };</span>
 <span id="L88"><span class="lineNum">      88</span>              : </span>
-<span id="L89"><span class="lineNum">      89</span> <span class="tlaGNC">         117 : struct SchedulerResult {</span></span>
+<span id="L89"><span class="lineNum">      89</span> <span class="tlaGNC">         126 : struct SchedulerResult {</span></span>
 <span id="L90"><span class="lineNum">      90</span>              :     Value value;</span>
 <span id="L91"><span class="lineNum">      91</span>              :     ExecutionProfile profile;</span>
 <span id="L92"><span class="lineNum">      92</span>              : };</span>
@@ -163,7 +163,7 @@
 <span id="L101"><span class="lineNum">     101</span>              :         const std::shared_ptr&lt;plan::PlanNode&gt;&amp; logical_plan) const;</span>
 <span id="L102"><span class="lineNum">     102</span>              : };</span>
 <span id="L103"><span class="lineNum">     103</span>              : </span>
-<span id="L104"><span class="lineNum">     104</span> <span class="tlaGNC">         174 : class Driver {</span></span>
+<span id="L104"><span class="lineNum">     104</span> <span class="tlaGNC">         197 : class Driver {</span></span>
 <span id="L105"><span class="lineNum">     105</span>              : public:</span>
 <span id="L106"><span class="lineNum">     106</span>              :     explicit Driver(Pipeline pipeline);</span>
 <span id="L107"><span class="lineNum">     107</span>              : </span>

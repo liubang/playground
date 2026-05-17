@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-17 03:21:55</td>
+            <td class="headerValue">2026-05-17 10:34:27</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -122,7 +122,7 @@
 <span id="L60"><span class="lineNum">      60</span> <span class="tlaUNC">           0 :     auto operator&lt;=&gt;(const RegexValue&amp;) const = default;</span></span>
 <span id="L61"><span class="lineNum">      61</span>              : };</span>
 <span id="L62"><span class="lineNum">      62</span>              : </span>
-<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC tlaBgGNC">     5214429 : class Value {</span></span>
+<span id="L63"><span class="lineNum">      63</span> <span class="tlaGNC tlaBgGNC">    20218263 : class Value {</span></span>
 <span id="L64"><span class="lineNum">      64</span>              : public:</span>
 <span id="L65"><span class="lineNum">      65</span>              :     enum class Type {</span>
 <span id="L66"><span class="lineNum">      66</span>              :         Null,</span>
@@ -185,8 +185,8 @@
 <span id="L123"><span class="lineNum">     123</span> <span class="tlaGNC">          29 :                             std::optional&lt;std::string&gt; result_name = std::nullopt);</span></span>
 <span id="L124"><span class="lineNum">     124</span>              :     static Value function(std::shared_ptr&lt;FunctionValue&gt; function);</span>
 <span id="L125"><span class="lineNum">     125</span>              : </span>
-<span id="L126"><span class="lineNum">     126</span> <span class="tlaGNC">      633157 :     [[nodiscard]] Type type() const { return type_; }</span></span>
-<span id="L127"><span class="lineNum">     127</span> <span class="tlaGNC">      407951 :     [[nodiscard]] bool is_null() const { return type_ == Type::Null; }</span></span>
+<span id="L126"><span class="lineNum">     126</span> <span class="tlaGNC">     4374714 :     [[nodiscard]] Type type() const { return type_; }</span></span>
+<span id="L127"><span class="lineNum">     127</span> <span class="tlaGNC">      421104 :     [[nodiscard]] bool is_null() const { return type_ == Type::Null; }</span></span>
 <span id="L128"><span class="lineNum">     128</span>              : </span>
 <span id="L129"><span class="lineNum">     129</span>              :     [[nodiscard]] const bool&amp; as_bool() const;</span>
 <span id="L130"><span class="lineNum">     130</span>              :     [[nodiscard]] const int64_t&amp; as_int() const;</span>
@@ -224,7 +224,7 @@
 <span id="L162"><span class="lineNum">     162</span>              :     bool operator==(const ArrayValue&amp; other) const;</span>
 <span id="L163"><span class="lineNum">     163</span>              : };</span>
 <span id="L164"><span class="lineNum">     164</span>              : </span>
-<span id="L165"><span class="lineNum">     165</span> <span class="tlaGNC">      332078 : struct ObjectValue {</span></span>
+<span id="L165"><span class="lineNum">     165</span> <span class="tlaGNC">      932087 : struct ObjectValue {</span></span>
 <span id="L166"><span class="lineNum">     166</span>              :     std::vector&lt;std::pair&lt;std::string, Value&gt;&gt; properties;</span>
 <span id="L167"><span class="lineNum">     167</span>              : </span>
 <span id="L168"><span class="lineNum">     168</span>              :     ObjectValue() = default;</span>
@@ -249,7 +249,7 @@
 <span id="L187"><span class="lineNum">     187</span>              :     bool operator==(const TableChunk&amp; other) const;</span>
 <span id="L188"><span class="lineNum">     188</span>              : };</span>
 <span id="L189"><span class="lineNum">     189</span>              : </span>
-<span id="L190"><span class="lineNum">     190</span> <span class="tlaGNC">        1629 : struct TableValue {</span></span>
+<span id="L190"><span class="lineNum">     190</span> <span class="tlaGNC">        1659 : struct TableValue {</span></span>
 <span id="L191"><span class="lineNum">     191</span>              :     std::string bucket;</span>
 <span id="L192"><span class="lineNum">     192</span>              :     std::vector&lt;std::shared_ptr&lt;ObjectValue&gt;&gt; rows;</span>
 <span id="L193"><span class="lineNum">     193</span>              :     std::vector&lt;TableChunk&gt; tables;</span>

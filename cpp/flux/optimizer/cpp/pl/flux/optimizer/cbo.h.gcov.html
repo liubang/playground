@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-17 03:21:55</td>
+            <td class="headerValue">2026-05-17 10:34:27</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -94,7 +94,7 @@
 <span id="L32"><span class="lineNum">      32</span>              :     bool collect_connector_stats = true;</span>
 <span id="L33"><span class="lineNum">      33</span>              : };</span>
 <span id="L34"><span class="lineNum">      34</span>              : </span>
-<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC tlaBgGNC">         552 : struct PlanStatistics {</span></span>
+<span id="L35"><span class="lineNum">      35</span> <span class="tlaGNC tlaBgGNC">         568 : struct PlanStatistics {</span></span>
 <span id="L36"><span class="lineNum">      36</span>              :     std::optional&lt;double&gt; row_count;</span>
 <span id="L37"><span class="lineNum">      37</span>              :     std::optional&lt;double&gt; size_bytes;</span>
 <span id="L38"><span class="lineNum">      38</span>              :     std::vector&lt;connector::ColumnStatistics&gt; columns;</span>
@@ -108,7 +108,7 @@
 <span id="L46"><span class="lineNum">      46</span>              :     MemoryScan,</span>
 <span id="L47"><span class="lineNum">      47</span>              : };</span>
 <span id="L48"><span class="lineNum">      48</span>              : </span>
-<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">         652 : struct PlanAlternative {</span></span>
+<span id="L49"><span class="lineNum">      49</span> <span class="tlaGNC">         692 : struct PlanAlternative {</span></span>
 <span id="L50"><span class="lineNum">      50</span>              :     std::string name;</span>
 <span id="L51"><span class="lineNum">      51</span>              :     PhysicalShape shape = PhysicalShape::MemoryScan;</span>
 <span id="L52"><span class="lineNum">      52</span>              :     plan::CostEstimate cost;</span>
@@ -116,7 +116,7 @@
 <span id="L54"><span class="lineNum">      54</span>              :     std::string reason;</span>
 <span id="L55"><span class="lineNum">      55</span>              : };</span>
 <span id="L56"><span class="lineNum">      56</span>              : </span>
-<span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">         134 : struct CboPlanResult {</span></span>
+<span id="L57"><span class="lineNum">      57</span> <span class="tlaGNC">         142 : struct CboPlanResult {</span></span>
 <span id="L58"><span class="lineNum">      58</span>              :     PlanOptimizerResult rbo_result;</span>
 <span id="L59"><span class="lineNum">      59</span>              :     std::string decision;</span>
 <span id="L60"><span class="lineNum">      60</span>              :     plan::CostEstimate cost;</span>
