@@ -168,9 +168,11 @@ Flux AST
 接到 root pipeline。全局 Top-N 已经使用两阶段执行：split 内先做 partial Top-N，root pipeline
 再做全局 heap Top-N。`group/distinct/aggregate` 是 Page-native streaming accumulator：输入逐页
 吸收进 group/distinct/aggregate state，最终产出结果页，不再先把整个输入拼成 `TableValue` 作为跨层
-主接口。`sort/topn/join/materialize` 仍是明确 blocking boundary。profile 会汇总 connector split
-的 pages/rows/bytes/time/finished 状态，physical explain/profile 输出按多行展示 pipeline 的
-drivers、依赖、blocking、accumulators、operators 和 split stats。
+主接口。`group |> aggregate` 会进一步融合成 grouped aggregate accumulator，逻辑/profile 仍保留
+`GroupOperator` 与 `AggregateOperator`，物理执行直接从输入 Page 更新 aggregate state。
+`sort/topn/join/materialize` 仍是明确 blocking boundary。profile 会汇总 connector split 的
+pages/rows/bytes/time/finished 状态，physical explain/profile 输出按多行展示 pipeline 的 drivers、
+依赖、blocking、accumulators、operators 和 split stats。
 
 接下来优先级不再是继续扩展更多数据源，而是继续把高吞吐查询主干做厚：减少 SQL connector
 固定开销、缓存 metadata/statistics、优化 MySQL page source 转换路径、完善 streaming
@@ -1173,10 +1175,11 @@ single split，避免跨 split 后改变排序、限制或聚合语义。
     1M `filter_project`，8 drivers，50 万 output rows，496 pages，`0.2749s`，约 `3.64M`
     input rows/s，非 blocking。
   - 2026-05-17 accumulator 复验：1M `filter_project`，8 drivers，50 万 output rows，496 pages，
-    `0.7381s`，约 `1.35M` input rows/s，非 blocking；1M `distinct_host`，8 drivers，64 output
-    rows，985 pages，`1.5425s`，约 `648k` input rows/s，blocking accumulator；1M
-    `group_count`，8 drivers，64 output rows，985 pages，`23.8288s`，约 `42k` input rows/s，
-    blocking accumulator。
+    `0.0577s`，约 `17.3M` input rows/s，非 blocking；1M `distinct_host`，8 drivers，64 output
+    rows，985 pages，`0.0867s`，约 `11.5M` input rows/s，blocking accumulator；1M
+    `group_count`，8 drivers，64 output rows，985 pages，`0.3851s`，约 `2.60M` input rows/s；
+    1M `group_sum`，`0.3820s`，约 `2.62M` input rows/s；1M `group_mean`，`0.3947s`，约
+    `2.53M` input rows/s。
 - 远程 MySQL 同结构 scan benchmark：
   - 表：`flux_bench_cpu(_time, host, region, usage, seq primary key)`，数据生成逻辑与 SQLite
     benchmark 一致。
