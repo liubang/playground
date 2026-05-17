@@ -33,5 +33,5 @@ runs:
         else
           MSG="${COVERAGE}%"
         fi
-        echo "{\"schemaVersion\":1,\"label\":\"${{ inputs.label }}\",\"message\":\"${MSG}\",\"color\":\"${COLOR}\",\"style\":\"flat-square\"}" > "${{ inputs.output-dir }}/badge.json"
+        echo "{\"schemaVersion\":1,\"label\":\"${{ inputs.label }}\",\"message\":\"${MSG}\",\"color\":\"${COLOR}\"}" > "${{ inputs.output-dir }}/badge.json"
         echo "Line Coverage: ${COVERAGE}%, Branch Coverage: ${BRANCH:-N/A}% (${COLOR})"
