@@ -354,3 +354,26 @@ execution、page source streaming、profile 分段耗时。连接池和 prepared
 - 同表同查询 prepared off：samples `1.2397s / 1.2799s / 1.4307s`，median `1.2799s`。
 - 结论：prepared on 在这组远程 MySQL 测试里略好，但总耗时仍主要由远程 `read_ms` 和 decode 主导；
   prepared 不是主要瓶颈，下一步更值得看 read batch / protocol decode / Value allocation。
+
+## 2026-05-17：并行执行取消传播收口
+
+这一轮没有继续堆新算子，而是把高效 scan 主干的失败路径补干净：
+
+- `Operator` 增加 `Cancel()`，`OutputOperator`、unary operator、`ExchangeOperator`、
+  `ExchangeSourceOperator`、`ExchangeSinkOperator` 和 `LocalHashJoinOperator` 都会把 cancel
+  递归传给上游。
+- root sink 或 consumer 侧出错时，相关 `ExchangeBuffer` 会被关闭，producer 即使正在 page/byte
+  budget 背压上等待，也能被唤醒并退出。
+- `Scheduler` 等待所有 driver task 收尾后，优先返回 root/output 侧原始错误，避免 producer 的
+  `buffer closed` 覆盖真正的查询错误。
+- 新增回归测试：6000 个 1-row page、4 splits、root sink 第一页返回 cancel，验证 exchange
+  producer 不会因为 buffer 填满而挂住。
+
+本轮复验：
+
+- `bazel test //cpp/pl/flux/runtime:runtime_exec_unit_test`：97 tests，96 passed，1 skipped
+  MySQL integration。
+- 真实 SQLite benchmark：
+  - 1M `scan`：8 drivers，100 万 output rows，984 pages，`1.1252s`，约 `888,715` input rows/s。
+  - 1M `filter_project`：8 drivers，50 万 output rows，496 pages，`0.2749s`，约 `3.64M`
+    input rows/s，非 blocking。

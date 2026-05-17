@@ -37,6 +37,7 @@ public:
     virtual ~Operator() = default;
     [[nodiscard]] virtual std::string name() const = 0;
     virtual absl::StatusOr<std::optional<Page>> NextPage() = 0;
+    virtual void Cancel() {}
     virtual void CollectSplitStats(std::vector<connector::ConnectorSplitStats>*) const {}
 };
 

@@ -1054,6 +1054,47 @@ TEST(RuntimeExecTest, SchedulerAggregatesMultipleDriversForOnePipeline) {
     EXPECT_EQ(2, result_or->profile.pipelines[0].rows);
 }
 
+TEST(RuntimeExecTest, SchedulerCancelsExchangeProducersWhenRootSinkFails) {
+    constexpr size_t kRows = 6000;
+    constexpr size_t kSplits = 4;
+    constexpr size_t kRowsPerPage = 1;
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve(kRows);
+    for (size_t index = 0; index < kRows; ++index) {
+        rows.push_back(TestRow({{"host", Value::string("edge-" + std::to_string(index % 16))},
+                                {"usage", Value::floating(static_cast<double>(index % 100))},
+                                {"seq", Value::integer(static_cast<int64_t>(index))}}));
+    }
+
+    connector::SourceSpec spec{
+        .source = "cancel_memory",
+        .driver = "cancel_memory",
+        .dsn = "memory://cancel",
+        .table = "large",
+    };
+    connector::ConnectorRegistry::Global().Register(
+        spec.source, [rows](const connector::SourceSpec& requested) {
+            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
+                                                         kRowsPerPage, kSplits);
+        });
+
+    auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
+    auto exchange = plan::MakeExchange(scan, plan::ExchangeKind::Gather);
+    auto started = std::chrono::steady_clock::now();
+    size_t seen_pages = 0;
+    auto result_or = execution::PhysicalExecutor().ExecuteToSink(exchange, [&](Page) {
+        ++seen_pages;
+        return absl::CancelledError("test sink stopped early");
+    });
+    const double elapsed_seconds =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+
+    ASSERT_FALSE(result_or.ok());
+    EXPECT_EQ(absl::StatusCode::kCancelled, result_or.status().code());
+    EXPECT_EQ(1, seen_pages);
+    EXPECT_LT(elapsed_seconds, 5.0);
+}
+
 TEST(RuntimeExecTest, PhysicalExecutorStreamsRowsToSinkWithoutMaterializingResult) {
     constexpr size_t kRows = 12000;
     constexpr size_t kSplits = 4;
