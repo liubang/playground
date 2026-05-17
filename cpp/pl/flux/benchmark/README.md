@@ -147,7 +147,7 @@ FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
     --connector mysql \
     --mysql-target-splits 8 \
     --mysql-rows-per-page 1024 \
-    --mysql-max-idle-connections 8 \
+    --mysql-max-pool-size 8 \
     --repeat 3
 ```
 
@@ -155,9 +155,10 @@ MySQL runtime 可调参数：
 
 - `--mysql-target-splits` / `FLUX_MYSQL_TARGET_SPLITS`：可拆分 scan 的目标 split 数。
 - `--mysql-rows-per-page` / `FLUX_MYSQL_ROWS_PER_PAGE`：page source 每页目标行数。
-- `--mysql-max-idle-connections` / `FLUX_MYSQL_MAX_IDLE_CONNECTIONS`：runtime connection pool
-  保留的最大空闲连接数。当前 MySQL streaming page source 暂不复用 pooled connection，
-  这个参数保留给后续安全接回连接复用时使用。
+- `--mysql-max-pool-size` / `FLUX_MYSQL_MAX_POOL_SIZE`：Boost.MySQL 官方
+  `connection_pool` 的最大连接数。当前用于 metadata/statistics/split discovery；
+  streaming page source 固定使用独立直连，因为官方 `pooled_connection` 搭配 dynamic
+  `read_some_rows` 在 ASAN 下仍会触发 Boost.MySQL 内部 container-overflow。
 - `--mysql-split-cache-max-entries` / `FLUX_MYSQL_SPLIT_CACHE_MAX_ENTRIES`：split extent 缓存容量。
 - `--mysql-split-cache-ttl-ms` / `FLUX_MYSQL_SPLIT_CACHE_TTL_MS`：split extent 缓存 TTL；设为 `0`
   表示不按时间过期。
@@ -175,7 +176,7 @@ FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
     --mysql-rows 1000000 \
     --mysql-target-splits 8 \
     --mysql-rows-per-page 1024 \
-    --mysql-max-idle-connections 8 \
+    --mysql-max-pool-size 8 \
     --prepare-mysql-benchmark-table \
     --scenario filter_project \
     --repeat 3
@@ -191,7 +192,7 @@ FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
     --mysql-table flux_bench_cpu \
     --mysql-target-splits 8 \
     --mysql-rows-per-page 2048 \
-    --mysql-max-idle-connections 8 \
+    --mysql-max-pool-size 8 \
     --scenario filter_project \
     --repeat 5
 
@@ -201,7 +202,7 @@ FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
     --mysql-table flux_bench_cpu \
     --mysql-target-splits 8 \
     --mysql-rows-per-page 2048 \
-    --mysql-max-idle-connections 8 \
+    --mysql-max-pool-size 8 \
     --mysql-disable-prepared-statements \
     --scenario filter_project \
     --repeat 5
@@ -316,9 +317,9 @@ MySQL 5M profile：`split_read_time_ms=6300.0`，`split_decode_time_ms=853.7`，
   下降明显，但远程读耗时抖动会拉大 1M 行尾部延迟。
 - MySQL 慢的主要来源不是输出行数不同，而是远程服务、网络、range split discovery、
   MySQL execution/read 和协议解码成本；Page build 已经低到毫秒级以下或接近毫秒级。
-- connection pool 已接入 runtime，但这个 benchmark 每个 sample 是独立进程；在单次 8 split
-  query 中，pool 主要复用 metadata/split discovery 后归还的一条连接，其余并发 split 仍需要新建
-  连接。因此它降低小查询/连续查询固定成本，不会把首个大并发 scan 的 connect 成本清零。
+- Boost.MySQL 官方 connection pool 已接入 runtime 控制面，但这个 benchmark 每个 sample 是独立进程；
+  pool 主要降低 metadata/statistics/split discovery 的固定成本。streaming page source 仍是独立直连，
+  因此它不会把首个大并发 scan 的 connect 成本清零。
 - SQLite 是本机文件，且 benchmark 进程内创建数据库后立即查询，缓存条件更有利。
 - 这组数据说明 MySQL connector 主干能稳定 multi-split 扫描 1M 行级别数据，但后续优化应优先
   盯连接复用、split discovery 固定开销、read batch/page size 参数，以及远程服务吞吐稳定性。

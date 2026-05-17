@@ -20,12 +20,20 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/connector/mysql_source.h"
-#include <boost/mysql/connect_params.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/thread_pool.hpp>
+#include <boost/asio/use_future.hpp>
+#include <boost/mysql/diagnostics.hpp>
+#include <boost/mysql/error_code.hpp>
 #include <boost/mysql/error_with_diagnostics.hpp>
 #include <boost/mysql/metadata_mode.hpp>
+#include <boost/mysql/pool_params.hpp>
 #include <boost/mysql/results.hpp>
 #include <boost/mysql/ssl_mode.hpp>
+#include <boost/system/system_error.hpp>
+#include <algorithm>
 #include <exception>
+#include <future>
 #include <utility>
 
 namespace pl::flux::connector {
@@ -41,138 +49,121 @@ std::string mysql_error_message(const mysql::error_with_diagnostics& err) {
     return absl::StrCat(err.what(), ": ", std::string(server_message));
 }
 
-absl::Status connect_entry(MySQLConnectionPool::Entry* entry, const std::string& dsn) {
+absl::StatusOr<mysql::pool_params> pool_params_from_dsn(const std::string& dsn,
+                                                        size_t max_pool_size) {
     auto config_or = ParseMySQLDsn(dsn);
     if (!config_or.ok()) {
         return config_or.status();
     }
 
-    mysql::connect_params params;
+    mysql::pool_params params;
     params.server_address.emplace_host_and_port(config_or->host, config_or->port);
     params.username = config_or->user;
     params.password = config_or->password;
     params.database = config_or->database;
     params.ssl = config_or->ssl ? mysql::ssl_mode::enable : mysql::ssl_mode::disable;
-
-    try {
-        entry->conn.emplace(entry->ctx);
-        entry->conn->connect(params);
-        entry->conn->set_meta_mode(mysql::metadata_mode::full);
-        mysql::results result;
-        entry->conn->execute("SET time_zone = '+00:00'", result);
-        entry->ctx.restart();
-        entry->healthy = true;
-        return absl::OkStatus();
-    } catch (const mysql::error_with_diagnostics& err) {
-        return absl::InvalidArgumentError(
-            absl::StrCat("mysql connect failed: ", mysql_error_message(err)));
-    } catch (const std::exception& err) {
-        return absl::InvalidArgumentError(absl::StrCat("mysql connect failed: ", err.what()));
-    }
+    params.initial_size = 0;
+    params.max_size = std::max<size_t>(1, max_pool_size);
+    params.thread_safe = true;
+    return params;
 }
 
 } // namespace
 
-MySQLConnectionPool::Lease::Lease(MySQLConnectionPool* pool,
-                                  std::shared_ptr<Entry> entry,
-                                  bool pooled)
-    : pool_(pool), entry_(std::move(entry)), pooled_(pooled), released_(false) {}
+struct MySQLBoostConnectionPool::Impl {
+    explicit Impl(mysql::pool_params params) : ctx(1), pool(ctx, std::move(params)) {
+        pool.async_run(boost::asio::detached);
+    }
 
-MySQLConnectionPool::Lease::Lease(Lease&& other) noexcept
-    : pool_(other.pool_),
-      entry_(std::move(other.entry_)),
-      pooled_(other.pooled_),
-      released_(other.released_) {
-    other.pool_ = nullptr;
-    other.pooled_ = false;
-    other.released_ = true;
-}
+    ~Impl() {
+        pool.cancel();
+        ctx.stop();
+        ctx.join();
+    }
 
-MySQLConnectionPool::Lease& MySQLConnectionPool::Lease::operator=(Lease&& other) noexcept {
+    boost::asio::thread_pool ctx;
+    mysql::connection_pool pool;
+};
+
+MySQLBoostConnectionPool::Lease::Lease(mysql::pooled_connection conn)
+    : conn_(std::move(conn)) {}
+
+MySQLBoostConnectionPool::Lease::Lease(Lease&& other) noexcept
+    : conn_(std::move(other.conn_)) {}
+
+MySQLBoostConnectionPool::Lease& MySQLBoostConnectionPool::Lease::operator=(
+    Lease&& other) noexcept {
     if (this == &other) {
         return *this;
     }
     Release();
-    pool_ = other.pool_;
-    entry_ = std::move(other.entry_);
-    pooled_ = other.pooled_;
-    released_ = other.released_;
-    other.pool_ = nullptr;
-    other.pooled_ = false;
-    other.released_ = true;
+    conn_ = std::move(other.conn_);
     return *this;
 }
 
-MySQLConnectionPool::Lease::~Lease() { Release(); }
+MySQLBoostConnectionPool::Lease::~Lease() { Release(); }
 
-mysql::any_connection* MySQLConnectionPool::Lease::connection() const {
-    if (entry_ == nullptr || !entry_->conn.has_value()) {
+mysql::any_connection* MySQLBoostConnectionPool::Lease::connection() {
+    if (!conn_.has_value() || !conn_->valid()) {
         return nullptr;
     }
-    return &*entry_->conn;
+    return &conn_->get();
 }
 
-void MySQLConnectionPool::Lease::MarkBroken() {
-    if (entry_ != nullptr) {
-        entry_->healthy = false;
+void MySQLBoostConnectionPool::Lease::MarkBroken() {
+    if (auto* conn = connection(); conn != nullptr) {
+        mysql::error_code err;
+        mysql::diagnostics diag;
+        conn->close(err, diag);
     }
 }
 
-void MySQLConnectionPool::Lease::Release() {
-    if (released_) {
+void MySQLBoostConnectionPool::Lease::Release() {
+    conn_.reset();
+}
+
+MySQLBoostConnectionPool::MySQLBoostConnectionPool(std::string dsn, size_t max_pool_size)
+    : dsn_(std::move(dsn)), max_pool_size_(std::max<size_t>(1, max_pool_size)) {
+    auto params_or = pool_params_from_dsn(dsn_, max_pool_size_);
+    if (!params_or.ok()) {
         return;
     }
-    released_ = true;
-    if (pool_ != nullptr && entry_ != nullptr) {
-        pool_->Return(std::move(entry_), pooled_);
-    }
-    pool_ = nullptr;
-    pooled_ = false;
+    impl_ = std::make_unique<Impl>(std::move(*params_or));
 }
 
-MySQLConnectionPool::MySQLConnectionPool(std::string dsn, size_t max_idle_connections)
-    : dsn_(std::move(dsn)), max_idle_connections_(max_idle_connections) {}
+MySQLBoostConnectionPool::~MySQLBoostConnectionPool() = default;
 
-MySQLConnectionPool::~MySQLConnectionPool() = default;
-
-absl::StatusOr<MySQLConnectionPool::Lease> MySQLConnectionPool::Acquire() {
-    if (max_idle_connections_ > 0) {
-        std::lock_guard<std::mutex> lock(mu_);
-        while (!idle_.empty()) {
-            auto entry = std::move(idle_.back());
-            idle_.pop_back();
-            if (entry != nullptr && entry->healthy) {
-                entry->ctx.restart();
-                return Lease(this, std::move(entry), true);
-            }
-        }
+absl::StatusOr<MySQLBoostConnectionPool::Lease> MySQLBoostConnectionPool::Acquire() {
+    if (impl_ == nullptr) {
+        return absl::InvalidArgumentError("mysql boost connection pool is not initialized");
     }
-
-    auto entry = std::make_shared<Entry>();
-    auto status = connect_entry(entry.get(), dsn_);
-    if (!status.ok()) {
-        return status;
-    }
-    return Lease(this, std::move(entry), max_idle_connections_ > 0);
-}
-
-void MySQLConnectionPool::Return(std::shared_ptr<Entry> entry, bool pooled) {
-    if (!pooled || entry == nullptr || !entry->healthy || max_idle_connections_ == 0) {
-        return;
-    }
-    std::lock_guard<std::mutex> lock(mu_);
-    if (idle_.size() < max_idle_connections_) {
-        idle_.push_back(std::move(entry));
+    try {
+        std::future<mysql::pooled_connection> future =
+            impl_->pool.async_get_connection(boost::asio::use_future);
+        mysql::pooled_connection conn = future.get();
+        conn->set_meta_mode(mysql::metadata_mode::full);
+        mysql::results result;
+        conn->execute("SET time_zone = '+00:00'", result);
+        return Lease(std::move(conn));
+    } catch (const mysql::error_with_diagnostics& err) {
+        return absl::InvalidArgumentError(
+            absl::StrCat("mysql pooled connection failed: ", mysql_error_message(err)));
+    } catch (const boost::system::system_error& err) {
+        return absl::InvalidArgumentError(
+            absl::StrCat("mysql pooled connection failed: ", err.what()));
+    } catch (const std::exception& err) {
+        return absl::InvalidArgumentError(
+            absl::StrCat("mysql pooled connection failed: ", err.what()));
     }
 }
 
-absl::StatusOr<std::shared_ptr<MySQLConnectionPool>> MakeMySQLConnectionPool(
-    std::string dsn, size_t max_idle_connections) {
-    auto config_or = ParseMySQLDsn(dsn);
-    if (!config_or.ok()) {
-        return config_or.status();
+absl::StatusOr<std::shared_ptr<MySQLBoostConnectionPool>> MakeMySQLBoostConnectionPool(
+    std::string dsn, size_t max_pool_size) {
+    auto params_or = pool_params_from_dsn(dsn, max_pool_size);
+    if (!params_or.ok()) {
+        return params_or.status();
     }
-    return std::make_shared<MySQLConnectionPool>(std::move(dsn), max_idle_connections);
+    return std::make_shared<MySQLBoostConnectionPool>(std::move(dsn), max_pool_size);
 }
 
 } // namespace pl::flux::connector
