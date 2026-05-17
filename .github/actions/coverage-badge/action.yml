@@ -18,7 +18,9 @@ runs:
     - name: generate badge
       shell: bash
       run: |
-        COVERAGE=$(lcov --summary "${{ inputs.lcov-file }}" 2>&1 | grep "lines" | awk '{print $2}' | tr -d '%')
+        SUMMARY=$(lcov --rc branch_coverage=1 --summary "${{ inputs.lcov-file }}" 2>&1)
+        COVERAGE=$(echo "$SUMMARY" | grep "lines" | awk '{print $2}' | tr -d '%')
+        BRANCH=$(echo "$SUMMARY" | grep "branches" | awk '{print $2}' | tr -d '%')
         if [ "$(echo "$COVERAGE >= 80" | bc)" -eq 1 ]; then
           COLOR="brightgreen"
         elif [ "$(echo "$COVERAGE >= 60" | bc)" -eq 1 ]; then
@@ -26,5 +28,10 @@ runs:
         else
           COLOR="red"
         fi
-        echo "{\"schemaVersion\":1,\"label\":\"${{ inputs.label }}\",\"message\":\"${COVERAGE}%\",\"color\":\"${COLOR}\"}" > "${{ inputs.output-dir }}/badge.json"
-        echo "Coverage: ${COVERAGE}% (${COLOR})"
+        if [ -n "$BRANCH" ] && [ "$BRANCH" != "" ]; then
+          MSG="${COVERAGE}% (branch: ${BRANCH}%)"
+        else
+          MSG="${COVERAGE}%"
+        fi
+        echo "{\"schemaVersion\":1,\"label\":\"${{ inputs.label }}\",\"message\":\"${MSG}\",\"color\":\"${COLOR}\",\"style\":\"flat-square\"}" > "${{ inputs.output-dir }}/badge.json"
+        echo "Line Coverage: ${COVERAGE}%, Branch Coverage: ${BRANCH:-N/A}% (${COLOR})"
