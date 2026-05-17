@@ -138,11 +138,8 @@ public:
             --current_restart_;
         }
         seekToRestartPoint(current_restart_);
-        for (;;) {
-            if (parseNextCell() && nextEntryOffset() < old) {
-                break;
-            }
-        }
+        do {
+        } while (parseNextCell() && nextEntryOffset() < old);
     }
 
     void next() override {
