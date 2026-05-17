@@ -793,10 +793,11 @@ public:
                 if (next_split_ > 0) {
                     splits_[next_split_ - 1].finished = page_source_->Finished();
                     if (current_split_stats_.has_value()) {
-                        copy_source_profile(&*current_split_stats_, page_source_->Stats());
-                        current_split_stats_->finished = page_source_->Finished();
-                        current_split_stats_->wall_time_ms = elapsed_ms(current_split_started_);
-                        split_stats_.push_back(*current_split_stats_);
+                        auto& stats = current_split_stats_.value();
+                        copy_source_profile(&stats, page_source_->Stats());
+                        stats.finished = page_source_->Finished();
+                        stats.wall_time_ms = elapsed_ms(current_split_started_);
+                        split_stats_.push_back(stats);
                         current_split_stats_.reset();
                     }
                 }
@@ -807,8 +808,12 @@ public:
             if (!status.ok()) {
                 return status;
             }
-            copy_source_profile(&*current_split_stats_, page_source_->Stats());
-            add_page_to_split_stats(&*current_split_stats_, page_or->value());
+            if (!current_split_stats_.has_value()) {
+                return absl::InternalError("connector scan missing split stats");
+            }
+            auto& stats = current_split_stats_.value();
+            copy_source_profile(&stats, page_source_->Stats());
+            add_page_to_split_stats(&stats, page_or->value());
             return page_or;
         }
     }
@@ -888,10 +893,11 @@ public:
         if (!page_or->has_value()) {
             split_.finished = page_source_->Finished();
             if (current_split_stats_.has_value()) {
-                copy_source_profile(&*current_split_stats_, page_source_->Stats());
-                current_split_stats_->finished = page_source_->Finished();
-                current_split_stats_->wall_time_ms = elapsed_ms(current_split_started_);
-                split_stats_ = *current_split_stats_;
+                auto& stats = current_split_stats_.value();
+                copy_source_profile(&stats, page_source_->Stats());
+                stats.finished = page_source_->Finished();
+                stats.wall_time_ms = elapsed_ms(current_split_started_);
+                split_stats_ = stats;
                 current_split_stats_.reset();
             }
             return std::nullopt;
@@ -900,8 +906,12 @@ public:
         if (!status.ok()) {
             return status;
         }
-        copy_source_profile(&*current_split_stats_, page_source_->Stats());
-        add_page_to_split_stats(&*current_split_stats_, page_or->value());
+        if (!current_split_stats_.has_value()) {
+            return absl::InternalError("connector split scan missing split stats");
+        }
+        auto& stats = current_split_stats_.value();
+        copy_source_profile(&stats, page_source_->Stats());
+        add_page_to_split_stats(&stats, page_or->value());
         return page_or;
     }
 
@@ -1023,7 +1033,7 @@ private:
     std::condition_variable cv_;
     std::deque<Page> pages_;
     size_t max_pages_ = 1024;
-    size_t max_buffered_bytes_ = 64 * 1024 * 1024;
+    size_t max_buffered_bytes_ = size_t{64} * 1024 * 1024;
     size_t buffered_bytes_ = 0;
     size_t producer_count_ = 1;
     size_t finished_producers_ = 0;
@@ -1385,13 +1395,178 @@ void capture_page_metadata(PageMetadata* metadata, const Page& page) {
     metadata->initialized = true;
 }
 
-Page page_from_accumulated_chunks(PageMetadata metadata,
-                                  std::vector<TableChunk> chunks,
-                                  const std::shared_ptr<plan::PlanNode>& plan) {
-    Page output =
-        PageFromTableChunks(std::move(metadata.bucket), chunks, std::move(metadata.range_start),
-                            std::move(metadata.range_stop), std::move(metadata.result_name));
+Page page_from_accumulated_page_chunks(PageMetadata metadata,
+                                       std::vector<PageChunk> chunks,
+                                       const std::shared_ptr<plan::PlanNode>& plan) {
+    Page output;
+    output.bucket = std::move(metadata.bucket);
+    output.chunks = std::move(chunks);
+    output.range_start = std::move(metadata.range_start);
+    output.range_stop = std::move(metadata.range_stop);
+    output.result_name = std::move(metadata.result_name);
+    output.materialized = false;
     return page_with_plan(std::move(output), plan);
+}
+
+std::optional<size_t> find_page_chunk_column(const PageChunk& chunk, const std::string& name) {
+    for (size_t index = 0; index < chunk.columns.size(); ++index) {
+        if (chunk.columns[index].name == name) {
+            return index;
+        }
+    }
+    return std::nullopt;
+}
+
+std::vector<std::optional<size_t>> group_column_indexes(const PageChunk& chunk,
+                                                        const std::vector<std::string>& columns) {
+    std::vector<std::optional<size_t>> indexes;
+    indexes.reserve(columns.size());
+    for (const auto& column : columns) {
+        indexes.push_back(find_page_chunk_column(chunk, column));
+    }
+    return indexes;
+}
+
+const Value* page_chunk_value_at_index(const PageChunk& chunk,
+                                       size_t row_index,
+                                       std::optional<size_t> column_index) {
+    if (!column_index.has_value() || *column_index >= chunk.columns.size() ||
+        row_index >= chunk.row_count) {
+        return nullptr;
+    }
+    const auto& column = chunk.columns[*column_index];
+    if (row_index >= column.values.size()) {
+        return nullptr;
+    }
+    return &column.values[row_index];
+}
+
+struct GroupKeyState {
+    std::shared_ptr<ObjectValue> object;
+    std::string identity;
+};
+
+void append_group_key_fragment(std::string* key, const std::string& column, const Value* value) {
+    absl::StrAppend(key, column, "=");
+    if (value == nullptr) {
+        absl::StrAppend(key, "<missing>");
+    } else if (value->type() == Value::Type::String) {
+        absl::StrAppend(key, value->as_string());
+    } else if (value->type() == Value::Type::Time) {
+        absl::StrAppend(key, value->as_time().literal);
+    } else {
+        absl::StrAppend(key, value->string());
+    }
+    key->push_back('\n');
+}
+
+GroupKeyState group_key_for_row(const PageChunk& chunk,
+                                size_t row_index,
+                                const std::vector<std::string>& columns,
+                                const std::vector<std::optional<size_t>>& column_indexes) {
+    std::vector<std::pair<std::string, Value>> group_props;
+    group_props.reserve(columns.size());
+    std::string key;
+    key.reserve(columns.size() * 16);
+    for (size_t index = 0; index < columns.size(); ++index) {
+        const Value* value = page_chunk_value_at_index(chunk, row_index, column_indexes[index]);
+        append_group_key_fragment(&key, columns[index], value);
+        if (value != nullptr) {
+            group_props.emplace_back(columns[index], *value);
+        }
+    }
+    return GroupKeyState{
+        .object = std::make_shared<ObjectValue>(std::move(group_props)),
+        .identity = std::move(key),
+    };
+}
+
+ColumnVector make_empty_column_like(const ColumnVector& source, size_t row_count) {
+    ColumnVector column;
+    column.name = source.name;
+    column.type = source.type;
+    column.values.resize(row_count, Value::null());
+    return column;
+}
+
+ColumnVector make_empty_column(std::string name, Value::Type type, size_t row_count) {
+    ColumnVector column;
+    column.name = std::move(name);
+    column.type = type;
+    column.values.resize(row_count, Value::null());
+    return column;
+}
+
+void ensure_column(PageChunk* target, const ColumnVector& source) {
+    if (target == nullptr || find_page_chunk_column(*target, source.name).has_value()) {
+        return;
+    }
+    target->columns.push_back(make_empty_column_like(source, target->row_count));
+}
+
+void append_source_row_to_chunk(PageChunk* target,
+                                const PageChunk& source,
+                                size_t row_index,
+                                const std::shared_ptr<ObjectValue>& group_key) {
+    if (target == nullptr) {
+        return;
+    }
+    for (const auto& source_column : source.columns) {
+        if (source_column.name != "_group") {
+            ensure_column(target, source_column);
+        }
+    }
+    if (group_key != nullptr) {
+        ColumnVector group_column =
+            make_empty_column("_group", Value::Type::Object, target->row_count);
+        ensure_column(target, group_column);
+    }
+
+    for (auto& target_column : target->columns) {
+        if (target_column.name == "_group") {
+            target_column.values.push_back(Value::object(group_key));
+            continue;
+        }
+        const auto source_index = find_page_chunk_column(source, target_column.name);
+        const Value* value = page_chunk_value_at_index(source, row_index, source_index);
+        target_column.values.push_back(value == nullptr ? Value::null() : *value);
+        if (target_column.type == Value::Type::Null && value != nullptr && !value->is_null()) {
+            target_column.type = value->type();
+        }
+    }
+    ++target->row_count;
+}
+
+void append_result_column(PageChunk* chunk, std::string name, Value value) {
+    if (chunk == nullptr) {
+        return;
+    }
+    ColumnVector column;
+    column.name = std::move(name);
+    column.type = value.type();
+    column.values.push_back(std::move(value));
+    chunk->columns.push_back(std::move(column));
+}
+
+PageChunk aggregate_result_chunk(const std::shared_ptr<ObjectValue>& group_key,
+                                 const std::string& column_name,
+                                 std::optional<Value> aggregate_value) {
+    PageChunk chunk;
+    chunk.group_key = group_key;
+    if (!aggregate_value.has_value()) {
+        chunk.row_count = 0;
+        return chunk;
+    }
+    chunk.row_count = 1;
+    if (group_key != nullptr) {
+        for (const auto& [name, value] : group_key->properties) {
+            append_result_column(&chunk, name, value);
+        }
+        append_result_column(&chunk, "_group",
+                             Value::object(std::make_shared<ObjectValue>(*group_key)));
+    }
+    append_result_column(&chunk, column_name, std::move(*aggregate_value));
+    return chunk;
 }
 
 std::string chunk_group_identity(const std::shared_ptr<ObjectValue>& group_key) {
@@ -1424,7 +1599,7 @@ public:
         emitted_ = true;
 
         PageMetadata metadata;
-        std::vector<TableChunk> chunks;
+        std::vector<PageChunk> chunks;
         std::unordered_map<std::string, size_t> chunk_indexes;
         while (true) {
             auto page_or = next_input_page(input_.get());
@@ -1441,30 +1616,24 @@ public:
             }
             capture_page_metadata(&metadata, page);
             for (const auto& page_chunk : page.chunks) {
+                const auto group_indexes = group_column_indexes(page_chunk, plan_->group().columns);
                 for (size_t row_index = 0; row_index < page_chunk.row_count; ++row_index) {
-                    auto row = RowFromPageChunk(page_chunk, row_index);
-                    if (row == nullptr) {
-                        continue;
-                    }
-                    auto [grouped_row, key] =
-                        clone_row_with_group_and_key(*row, plan_->group().columns);
-                    auto [it, inserted] = chunk_indexes.emplace(key, chunks.size());
+                    GroupKeyState group_key = group_key_for_row(
+                        page_chunk, row_index, plan_->group().columns, group_indexes);
+                    auto [it, inserted] = chunk_indexes.emplace(group_key.identity, chunks.size());
                     if (inserted) {
                         chunks.emplace_back();
-                        const Value* group_value = grouped_row->lookup("_group");
-                        if (group_value != nullptr && group_value->type() == Value::Type::Object) {
-                            chunks.back().group_key =
-                                std::make_shared<ObjectValue>(group_value->as_object());
-                        }
+                        chunks.back().group_key = std::move(group_key.object);
                     }
-                    chunks[it->second].rows.push_back(std::move(grouped_row));
+                    append_source_row_to_chunk(&chunks[it->second], page_chunk, row_index,
+                                               chunks[it->second].group_key);
                 }
             }
         }
         if (chunks.empty()) {
             chunks.emplace_back();
         }
-        return page_from_accumulated_chunks(std::move(metadata), std::move(chunks), plan_);
+        return page_from_accumulated_page_chunks(std::move(metadata), std::move(chunks), plan_);
     }
 
 private:
@@ -1499,7 +1668,7 @@ public:
         emitted_ = true;
 
         struct DistinctState {
-            TableChunk chunk;
+            PageChunk chunk;
             std::unordered_set<std::string> seen;
         };
 
@@ -1526,10 +1695,6 @@ public:
                 if (inserted) {
                     DistinctState state;
                     state.chunk.group_key = page_chunk.group_key;
-                    state.chunk.columns.reserve(page_chunk.columns.size());
-                    for (const auto& column : page_chunk.columns) {
-                        state.chunk.columns.push_back(column.name);
-                    }
                     groups.push_back(std::move(state));
                 }
                 DistinctState& state = groups[it->second];
@@ -1538,13 +1703,14 @@ public:
                         PageChunkValueAt(page_chunk, row_index, plan_->distinct().column);
                     const std::string key = value == nullptr ? "<missing>" : value->string();
                     if (state.seen.insert(key).second) {
-                        state.chunk.rows.push_back(RowFromPageChunk(page_chunk, row_index));
+                        append_source_row_to_chunk(&state.chunk, page_chunk, row_index,
+                                                   page_chunk.group_key);
                     }
                 }
             }
         }
 
-        std::vector<TableChunk> chunks;
+        std::vector<PageChunk> chunks;
         chunks.reserve(groups.size());
         for (auto& group : groups) {
             chunks.push_back(std::move(group.chunk));
@@ -1552,7 +1718,7 @@ public:
         if (chunks.empty()) {
             chunks.emplace_back();
         }
-        return page_from_accumulated_chunks(std::move(metadata), std::move(chunks), plan_);
+        return page_from_accumulated_page_chunks(std::move(metadata), std::move(chunks), plan_);
     }
 
 private:
@@ -1654,24 +1820,20 @@ public:
             }
         }
 
-        std::vector<TableChunk> chunks;
+        std::vector<PageChunk> chunks;
         chunks.reserve(groups.empty() ? 1 : groups.size());
         if (groups.empty()) {
             groups.emplace_back();
         }
         for (const auto& state : groups) {
-            TableChunk source;
-            source.group_key = state.group_key;
-            TableChunk next;
-            next.group_key = state.group_key;
             if (plan_->aggregate().fn == plan::AggregateFunction::Count) {
-                next.rows.push_back(
-                    materialize_group_count_row(source, plan_->aggregate().column, state.count));
-                chunks.push_back(std::move(next));
+                chunks.push_back(aggregate_result_chunk(state.group_key, plan_->aggregate().column,
+                                                        Value::integer(state.count)));
                 continue;
             }
             if (!state.has_numeric) {
-                chunks.push_back(std::move(next));
+                chunks.push_back(aggregate_result_chunk(state.group_key, plan_->aggregate().column,
+                                                        std::nullopt));
                 continue;
             }
             double value = 0.0;
@@ -1691,15 +1853,165 @@ public:
                 case plan::AggregateFunction::Count:
                     break;
             }
-            next.rows.push_back(materialize_group_value_row(source, plan_->aggregate().column,
-                                                            Value::floating(value)));
-            chunks.push_back(std::move(next));
+            chunks.push_back(aggregate_result_chunk(state.group_key, plan_->aggregate().column,
+                                                    Value::floating(value)));
         }
-        return page_from_accumulated_chunks(std::move(metadata), std::move(chunks), plan_);
+        return page_from_accumulated_page_chunks(std::move(metadata), std::move(chunks), plan_);
     }
 
 private:
     std::shared_ptr<plan::PlanNode> plan_;
+    std::unique_ptr<Operator> input_;
+    bool emitted_ = false;
+};
+
+class StreamingGroupedAggregateOperator final : public Operator {
+public:
+    StreamingGroupedAggregateOperator(std::shared_ptr<plan::PlanNode> aggregate_plan,
+                                      std::vector<std::string> group_columns,
+                                      std::unique_ptr<Operator> input)
+        : aggregate_plan_(std::move(aggregate_plan)),
+          group_columns_(std::move(group_columns)),
+          input_(std::move(input)) {}
+
+    [[nodiscard]] std::string name() const override { return "AggregateOperator"; }
+
+    void Cancel() override {
+        if (input_ != nullptr) {
+            input_->Cancel();
+        }
+    }
+
+    void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
+        if (input_ != nullptr) {
+            input_->CollectSplitStats(out);
+        }
+    }
+
+    absl::StatusOr<std::optional<Page>> NextPage() override {
+        if (emitted_) {
+            return std::nullopt;
+        }
+        emitted_ = true;
+
+        struct AggregateState {
+            std::shared_ptr<ObjectValue> group_key;
+            int64_t count = 0;
+            size_t numeric_count = 0;
+            double sum = 0.0;
+            double min = 0.0;
+            double max = 0.0;
+            bool has_numeric = false;
+        };
+
+        PageMetadata metadata;
+        std::vector<AggregateState> groups;
+        std::unordered_map<std::string, size_t> group_indexes;
+        while (true) {
+            auto page_or = next_input_page(input_.get());
+            if (!page_or.ok()) {
+                return page_or.status();
+            }
+            if (!page_or->has_value()) {
+                break;
+            }
+            const Page& page = **page_or;
+            auto status = ValidatePage(page);
+            if (!status.ok()) {
+                return status;
+            }
+            capture_page_metadata(&metadata, page);
+            for (const auto& page_chunk : page.chunks) {
+                const auto group_indexes_in_chunk =
+                    group_column_indexes(page_chunk, group_columns_);
+                const auto aggregate_column =
+                    find_page_chunk_column(page_chunk, aggregate_plan_->aggregate().column);
+                for (size_t row_index = 0; row_index < page_chunk.row_count; ++row_index) {
+                    GroupKeyState group_key = group_key_for_row(
+                        page_chunk, row_index, group_columns_, group_indexes_in_chunk);
+                    auto [it, inserted] = group_indexes.emplace(group_key.identity, groups.size());
+                    if (inserted) {
+                        AggregateState state;
+                        state.group_key = std::move(group_key.object);
+                        groups.push_back(std::move(state));
+                    }
+                    AggregateState& state = groups[it->second];
+                    const Value* value =
+                        page_chunk_value_at_index(page_chunk, row_index, aggregate_column);
+                    if (aggregate_plan_->aggregate().fn == plan::AggregateFunction::Count) {
+                        if (value != nullptr) {
+                            ++state.count;
+                        }
+                        continue;
+                    }
+                    if (value == nullptr || value->is_null()) {
+                        continue;
+                    }
+                    if (!is_numeric_value(*value)) {
+                        return absl::InvalidArgumentError(
+                            absl::StrCat("aggregate `", aggregate_plan_->aggregate().column,
+                                         "` must be numeric"));
+                    }
+                    const double item = numeric_value(*value);
+                    state.sum += item;
+                    if (!state.has_numeric) {
+                        state.min = item;
+                        state.max = item;
+                        state.has_numeric = true;
+                    } else {
+                        state.min = std::min(state.min, item);
+                        state.max = std::max(state.max, item);
+                    }
+                    ++state.numeric_count;
+                }
+            }
+        }
+
+        if (groups.empty()) {
+            AggregateState state;
+            groups.push_back(std::move(state));
+        }
+        std::vector<PageChunk> chunks;
+        chunks.reserve(groups.size());
+        for (const auto& state : groups) {
+            if (aggregate_plan_->aggregate().fn == plan::AggregateFunction::Count) {
+                chunks.push_back(aggregate_result_chunk(state.group_key,
+                                                        aggregate_plan_->aggregate().column,
+                                                        Value::integer(state.count)));
+                continue;
+            }
+            if (!state.has_numeric) {
+                chunks.push_back(aggregate_result_chunk(
+                    state.group_key, aggregate_plan_->aggregate().column, std::nullopt));
+                continue;
+            }
+            double value = 0.0;
+            switch (aggregate_plan_->aggregate().fn) {
+                case plan::AggregateFunction::Sum:
+                    value = state.sum;
+                    break;
+                case plan::AggregateFunction::Mean:
+                    value = state.sum / static_cast<double>(state.numeric_count);
+                    break;
+                case plan::AggregateFunction::Min:
+                    value = state.min;
+                    break;
+                case plan::AggregateFunction::Max:
+                    value = state.max;
+                    break;
+                case plan::AggregateFunction::Count:
+                    break;
+            }
+            chunks.push_back(aggregate_result_chunk(
+                state.group_key, aggregate_plan_->aggregate().column, Value::floating(value)));
+        }
+        return page_from_accumulated_page_chunks(std::move(metadata), std::move(chunks),
+                                                 aggregate_plan_);
+    }
+
+private:
+    std::shared_ptr<plan::PlanNode> aggregate_plan_;
+    std::vector<std::string> group_columns_;
     std::unique_ptr<Operator> input_;
     bool emitted_ = false;
 };
@@ -1937,6 +2249,22 @@ absl::StatusOr<PlannedOperator> BuildOperator(const std::shared_ptr<plan::PlanNo
             optimized_plan, std::move(left_or->root), std::move(right_or->root)));
         planned.operators.push_back(planned.root->name());
         return planned;
+    }
+    if (optimized_plan->kind == plan::PlanNodeKind::Aggregate &&
+        optimized_plan->inputs.size() == 1 && optimized_plan->inputs[0] != nullptr &&
+        optimized_plan->inputs[0]->kind == plan::PlanNodeKind::Group &&
+        optimized_plan->inputs[0]->inputs.size() == 1 &&
+        optimized_plan->inputs[0]->inputs[0] != nullptr) {
+        auto planned_or = BuildOperator(optimized_plan->inputs[0]->inputs[0], false);
+        if (!planned_or.ok()) {
+            return planned_or.status();
+        }
+        planned_or->root = std::unique_ptr<Operator>(new StreamingGroupedAggregateOperator(
+            optimized_plan, optimized_plan->inputs[0]->group().columns,
+            std::move(planned_or->root)));
+        planned_or->operators.push_back("GroupOperator");
+        planned_or->operators.push_back(planned_or->root->name());
+        return std::move(*planned_or);
     }
     if (optimized_plan->inputs.size() != 1 || optimized_plan->inputs[0] == nullptr) {
         return absl::InvalidArgumentError("plan is not executable");
@@ -2272,13 +2600,26 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildUnaryBreakerExecutionTask(
 
     std::unique_ptr<Operator> current(new ExchangeSourceOperator(input_or->buffer));
     std::vector<std::string> operators = {current->name()};
-    for (size_t index = *breaker_index + 1; index > 0; --index) {
-        auto wrapped_or = WrapUnaryOperator(chain[index - 1], std::move(current));
+    size_t index = *breaker_index + 1;
+    while (index > 0) {
+        const auto& node = chain[index - 1];
+        if (node->kind == plan::PlanNodeKind::Group && index >= 2 &&
+            chain[index - 2]->kind == plan::PlanNodeKind::Aggregate) {
+            const auto& aggregate = chain[index - 2];
+            current = std::unique_ptr<Operator>(new StreamingGroupedAggregateOperator(
+                aggregate, node->group().columns, std::move(current)));
+            operators.push_back("GroupOperator");
+            operators.push_back(current->name());
+            index -= 2;
+            continue;
+        }
+        auto wrapped_or = WrapUnaryOperator(node, std::move(current));
         if (!wrapped_or.ok()) {
             return wrapped_or.status();
         }
         current = std::move(*wrapped_or);
         operators.push_back(current->name());
+        --index;
     }
     std::unique_ptr<Operator> output(new OutputOperator(std::move(current)));
     operators.push_back(output->name());
@@ -2541,6 +2882,7 @@ absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) co
             .operators = pipeline.operators,
             .blocking = HasBlockingOperator(pipeline.operators),
             .drivers = pipeline.driver_roots.empty() ? 1 : pipeline.driver_roots.size(),
+            .split_stats = {},
             .error = {}});
         pipeline_stats.push_back(pipeline.stats);
     }
@@ -2736,6 +3078,7 @@ absl::StatusOr<SchedulerStreamResult> Scheduler::RunToSink(ExecutionTask task,
             .operators = pipeline.operators,
             .blocking = HasBlockingOperator(pipeline.operators),
             .drivers = pipeline.driver_roots.empty() ? 1 : pipeline.driver_roots.size(),
+            .split_stats = {},
             .error = {}});
         pipeline_stats.push_back(pipeline.stats);
     }

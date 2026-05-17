@@ -109,8 +109,8 @@ SQLite connector 有独立的真实 scan benchmark target。它会在 `/tmp` 构
 插入指定行数，执行真实 connector query，并输出 scenario、drivers、pages、split bytes、
 split wall time、blocking 和吞吐。
 默认 scenario 是 `filter_project`，也可以显式跑 `scan`、`wide_filter`、`topn`、
-`group_count`、`distinct_host`。其中 `group_count` / `distinct_host` 会用 materialize barrier
-固定走本地 Page-native accumulator，避免被 SQLite 聚合下推掩盖：
+`group_count`、`group_sum`、`group_mean`、`distinct_host`。其中 group/distinct 场景会用
+materialize barrier 固定走本地 Page-native accumulator，避免被 SQLite 聚合下推掩盖：
 
 ```bash
 bazel build //cpp/pl/flux/benchmark:sqlite_scan_benchmark
@@ -119,6 +119,8 @@ bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_scan.db 
 bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_wide.db wide_filter 80
 bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_topn.db topn
 bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_group.db group_count
+bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_group_sum.db group_sum
+bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_group_mean.db group_mean
 bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_distinct.db distinct_host
 ```
 
@@ -127,13 +129,16 @@ bazel-bin/cpp/pl/flux/benchmark/sqlite_scan_benchmark 1000000 /tmp/flux_distinct
 | scenario | rows | drivers | output rows | pages | blocking | seconds | input rows/s |
 | --- | ---: | ---: | ---: | ---: | :---: | ---: | ---: |
 | `scan` | 1,000,000 | 8 | 1,000,000 | 984 | false | 1.1252 | 888,715 |
-| `filter_project` | 1,000,000 | 8 | 500,000 | 496 | false | 0.7381 | 1,354,780 |
-| `distinct_host` | 1,000,000 | 8 | 64 | 985 | true | 1.5425 | 648,284 |
-| `group_count` | 1,000,000 | 8 | 64 | 985 | true | 23.8288 | 41,966 |
+| `filter_project` | 1,000,000 | 8 | 500,000 | 496 | false | 0.0577 | 17,316,700 |
+| `distinct_host` | 1,000,000 | 8 | 64 | 985 | true | 0.0867 | 11,540,100 |
+| `group_count` | 1,000,000 | 8 | 64 | 985 | true | 0.3851 | 2,596,790 |
+| `group_sum` | 1,000,000 | 8 | 64 | 985 | true | 0.3820 | 2,617,550 |
+| `group_mean` | 1,000,000 | 8 | 64 | 985 | true | 0.3947 | 2,533,510 |
 
-`group_count` 当前刻意绕开 SQLite SQL aggregate pushdown，用来压本地 accumulator 主线；它能完成
-百万行真实扫描，但 CPU 成本明显高于纯 scan/filter 和 distinct，后续优化应优先看 group key
-构造、row materialization 和 aggregate state 更新的 hot path。
+`group_count` 当前刻意绕开 SQLite SQL aggregate pushdown，用来压本地 accumulator 主线。本轮把
+`group |> aggregate` 融合成直接从输入 Page 更新 aggregate state 的执行路径后，1M
+`group_count` 从上一版 `23.8288s` 降到顺序复跑的 `0.3851s`。剩余成本主要集中在 group key 构造、哈希和
+SQLite page 读入，不再是整表 row-object 中间态。
 
 MySQL connector 也有独立 scan benchmark target，用真实 MySQL 表验证 range split、
 streaming page sink 和两阶段 Top-N。它默认读取 `FLUX_MYSQL_TEST_DSN`，表名默认 `cpu`，
