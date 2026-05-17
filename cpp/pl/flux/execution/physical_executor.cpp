@@ -1162,6 +1162,15 @@ public:
 
     [[nodiscard]] std::string name() const override { return "ExchangeSinkOperator"; }
 
+    void Cancel() override {
+        if (buffer_ != nullptr) {
+            buffer_->Close();
+        }
+        if (input_ != nullptr) {
+            input_->Cancel();
+        }
+    }
+
     void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
         if (input_ != nullptr) {
             input_->CollectSplitStats(out);
@@ -1213,6 +1222,12 @@ public:
 
     [[nodiscard]] std::string name() const override { return "ExchangeSourceOperator"; }
 
+    void Cancel() override {
+        if (buffer_ != nullptr) {
+            buffer_->Close();
+        }
+    }
+
     absl::StatusOr<std::optional<Page>> NextPage() override {
         if (buffer_ == nullptr) {
             return absl::InvalidArgumentError("exchange source has no buffer");
@@ -1242,6 +1257,12 @@ public:
             return page_or.status();
         }
         return std::move(*page_or);
+    }
+
+    void Cancel() override {
+        if (input_ != nullptr) {
+            input_->Cancel();
+        }
     }
 
     void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
@@ -1279,6 +1300,12 @@ public:
             return page_or.status();
         }
         return std::move(*page_or);
+    }
+
+    void Cancel() override {
+        if (input_ != nullptr) {
+            input_->Cancel();
+        }
     }
 
     void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
@@ -1348,6 +1375,12 @@ public:
 
     [[nodiscard]] std::string name() const override { return "ExchangeOperator"; }
 
+    void Cancel() override {
+        if (input_ != nullptr) {
+            input_->Cancel();
+        }
+    }
+
     void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
         if (input_ != nullptr) {
             input_->CollectSplitStats(out);
@@ -1382,6 +1415,12 @@ public:
           remaining_offset_(std::max<int64_t>(0, plan_->limit().offset)),
           remaining_limit_(std::max<int64_t>(0, plan_->limit().n)) {}
     [[nodiscard]] std::string name() const override { return "LimitOperator"; }
+
+    void Cancel() override {
+        if (input_ != nullptr) {
+            input_->Cancel();
+        }
+    }
 
     void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
         if (input_ != nullptr) {
@@ -1508,6 +1547,15 @@ public:
 
     [[nodiscard]] std::string name() const override { return "LocalHashJoinOperator"; }
 
+    void Cancel() override {
+        if (left_ != nullptr) {
+            left_->Cancel();
+        }
+        if (right_ != nullptr) {
+            right_->Cancel();
+        }
+    }
+
     void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
         if (left_ != nullptr) {
             left_->CollectSplitStats(out);
@@ -1560,6 +1608,12 @@ public:
     explicit OutputOperator(std::unique_ptr<Operator> input) : input_(std::move(input)) {}
 
     [[nodiscard]] std::string name() const override { return "OutputOperator"; }
+
+    void Cancel() override {
+        if (input_ != nullptr) {
+            input_->Cancel();
+        }
+    }
 
     void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
         if (input_ != nullptr) {
@@ -2177,6 +2231,7 @@ absl::Status Driver::RunToSink(const PageSink& sink) const {
     while (true) {
         auto page_or = pipeline_.root->NextPage();
         if (!page_or.ok()) {
+            pipeline_.root->Cancel();
             FailPipelineStats(pipeline_.stats, page_or.status());
             return page_or.status();
         }
@@ -2186,6 +2241,7 @@ absl::Status Driver::RunToSink(const PageSink& sink) const {
         AddPipelineStatsPage(pipeline_.stats, page_or->value());
         auto status = sink(std::move(page_or->value()));
         if (!status.ok()) {
+            pipeline_.root->Cancel();
             FailPipelineStats(pipeline_.stats, status);
             return status;
         }
@@ -2415,10 +2471,19 @@ absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) co
         running.push_back(std::move(running_pipeline));
     }
 
+    std::optional<absl::Status> output_error;
+    std::optional<absl::Status> non_output_error;
     for (auto& running_pipeline : running) {
         auto table_or = running_pipeline.value.get();
         if (!table_or.ok()) {
-            return table_or.status();
+            if (running_pipeline.collect_output) {
+                if (!output_error.has_value()) {
+                    output_error = table_or.status();
+                }
+            } else if (!non_output_error.has_value()) {
+                non_output_error = table_or.status();
+            }
+            continue;
         }
         if (!running_pipeline.collect_output) {
             continue;
@@ -2432,6 +2497,12 @@ absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) co
                               std::make_move_iterator(table_or->tables.end()));
         output->rows.insert(output->rows.end(), std::make_move_iterator(table_or->rows.begin()),
                             std::make_move_iterator(table_or->rows.end()));
+    }
+    if (output_error.has_value()) {
+        return *output_error;
+    }
+    if (non_output_error.has_value()) {
+        return *non_output_error;
     }
     if (!ran_pipeline) {
         return absl::InvalidArgumentError("execution task has no runnable pipelines");
@@ -2567,11 +2638,25 @@ absl::StatusOr<SchedulerStreamResult> Scheduler::RunToSink(ExecutionTask task,
             });
         running.push_back(std::move(running_pipeline));
     }
+    std::optional<absl::Status> output_error;
+    std::optional<absl::Status> non_output_error;
     for (auto& running_pipeline : running) {
         auto status = running_pipeline.status.get();
         if (!status.ok()) {
-            return status;
+            if (running_pipeline.stream_output) {
+                if (!output_error.has_value()) {
+                    output_error = status;
+                }
+            } else if (!non_output_error.has_value()) {
+                non_output_error = status;
+            }
         }
+    }
+    if (output_error.has_value()) {
+        return *output_error;
+    }
+    if (non_output_error.has_value()) {
+        return *non_output_error;
     }
     SchedulerStreamResult result;
     result.profile = BuildExecutionProfile(pipeline_profiles, pipeline_stats);
