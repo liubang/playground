@@ -378,8 +378,7 @@ use_repo(
 ###################################################################################################
 #  python
 ###################################################################################################
-bazel_dep(name = "rules_python", version = "1.8.4")
-bazel_dep(name = "rules_python_gazelle_plugin", version = "1.8.4")
+bazel_dep(name = "rules_python", version = "2.0.1")
 
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
 python.toolchain(
@@ -397,13 +396,15 @@ uv.configure(version = "0.6.2")
 
 pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
 pip.parse(
-    experimental_index_url = "https://mirrors.aliyun.com/pypi/simple",
+    experimental_index_url = "${PYPI_INDEX_URL}",
+    envsubst = ["PYPI_INDEX_URL"],
     hub_name = "pip",
     python_version = "3.13",
     requirements_lock = "//python:requirements_lock.txt",
 )
 pip.parse(
-    experimental_index_url = "https://mirrors.aliyun.com/pypi/simple",
+    experimental_index_url = "${PYPI_INDEX_URL}",
+    envsubst = ["PYPI_INDEX_URL"],
     hub_name = "pip_embedding",
     python_version = "3.13",
     requirements_lock = "//cpp/pl/recall/embedding_server:requirements_lock.txt",
