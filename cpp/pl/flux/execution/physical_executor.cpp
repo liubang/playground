@@ -1110,6 +1110,141 @@ private:
     bool finished_ = false;
 };
 
+size_t partition_index_for_key(const std::string& key, size_t partition_count) {
+    if (partition_count == 0) {
+        return 0;
+    }
+    return std::hash<std::string>{}(key) % partition_count;
+}
+
+std::optional<std::string> partition_key_for_page_row(
+    const PageChunk& chunk,
+    size_t row_index,
+    const std::vector<std::string>& partition_keys) {
+    if (chunk.group_key != nullptr) {
+        return exchange_partition_key(*chunk.group_key, partition_keys);
+    }
+    auto row = RowFromPageChunk(chunk, row_index);
+    return exchange_partition_key(*row, partition_keys);
+}
+
+class PartitionedExchangeSinkOperator final : public Operator {
+public:
+    PartitionedExchangeSinkOperator(std::unique_ptr<Operator> input,
+                                    std::vector<std::shared_ptr<ExchangeBuffer>> buffers,
+                                    std::vector<std::string> partition_keys)
+        : input_(std::move(input)),
+          buffers_(std::move(buffers)),
+          partition_keys_(std::move(partition_keys)) {}
+
+    [[nodiscard]] std::string name() const override { return "PartitionedExchangeSinkOperator"; }
+
+    void Cancel() override {
+        for (const auto& buffer : buffers_) {
+            if (buffer != nullptr) {
+                buffer->Close();
+            }
+        }
+        if (input_ != nullptr) {
+            input_->Cancel();
+        }
+    }
+
+    void CollectSplitStats(std::vector<connector::ConnectorSplitStats>* out) const override {
+        if (input_ != nullptr) {
+            input_->CollectSplitStats(out);
+        }
+    }
+
+    void CollectAccumulatorStats(std::vector<AccumulatorStats>* out) const override {
+        if (input_ != nullptr) {
+            input_->CollectAccumulatorStats(out);
+        }
+    }
+
+    absl::StatusOr<std::optional<Page>> NextPage() override {
+        if (finished_) {
+            return std::nullopt;
+        }
+        if (buffers_.empty()) {
+            return absl::InvalidArgumentError("partitioned exchange sink has no buffers");
+        }
+        auto page_or = next_input_page(input_.get());
+        if (!page_or.ok()) {
+            MarkBuffersError(page_or.status());
+            return page_or.status();
+        }
+        if (!page_or->has_value()) {
+            for (const auto& buffer : buffers_) {
+                auto status = buffer->Finish();
+                if (!status.ok()) {
+                    return status;
+                }
+            }
+            finished_ = true;
+            return std::nullopt;
+        }
+
+        Page output = std::move(**page_or);
+        auto status = ValidatePage(output);
+        if (!status.ok()) {
+            MarkBuffersError(status);
+            return status;
+        }
+
+        std::vector<std::vector<TableChunk>> partitions(buffers_.size());
+        for (const auto& chunk : output.chunks) {
+            std::vector<std::string> columns;
+            columns.reserve(chunk.columns.size());
+            for (const auto& column : chunk.columns) {
+                columns.push_back(column.name);
+            }
+            for (size_t row_index = 0; row_index < chunk.row_count; ++row_index) {
+                auto key = partition_key_for_page_row(chunk, row_index, partition_keys_);
+                if (!key.has_value()) {
+                    continue;
+                }
+                TableChunk partition_chunk;
+                partition_chunk.group_key = chunk.group_key;
+                partition_chunk.columns = columns;
+                partition_chunk.rows.push_back(RowFromPageChunk(chunk, row_index));
+                partitions[partition_index_for_key(*key, buffers_.size())].push_back(
+                    std::move(partition_chunk));
+            }
+        }
+
+        for (size_t index = 0; index < partitions.size(); ++index) {
+            if (partitions[index].empty()) {
+                continue;
+            }
+            Page partitioned = PageFromTableChunks(output.bucket, partitions[index],
+                                                   output.range_start, output.range_stop,
+                                                   output.result_name);
+            partitioned.plan = output.plan;
+            partitioned.materialized = output.materialized;
+            auto add_status = buffers_[index]->AddPage(std::move(partitioned));
+            if (!add_status.ok()) {
+                return add_status;
+            }
+        }
+        return output;
+    }
+
+private:
+    void MarkBuffersError(const absl::Status& status) {
+        for (const auto& buffer : buffers_) {
+            if (buffer != nullptr) {
+                buffer->MarkError(status);
+            }
+        }
+    }
+
+    std::unique_ptr<Operator> input_;
+    std::vector<std::shared_ptr<ExchangeBuffer>> buffers_;
+    std::vector<std::string> partition_keys_;
+    bool finished_ = false;
+};
+
 class ExchangeSourceOperator final : public Operator {
 public:
     explicit ExchangeSourceOperator(std::shared_ptr<ExchangeBuffer> buffer)
@@ -1753,6 +1888,48 @@ std::vector<std::unique_ptr<Operator>> WrapDriverRootsWithOutput(
     return outputs;
 }
 
+enum class GroupedAggregateStrategy {
+    SingleStage,
+    TwoStageGather,
+    TwoStagePartitioned,
+};
+
+std::optional<double> EstimateRowsForPlan(const std::shared_ptr<plan::PlanNode>& plan_node) {
+    auto cbo_or = optimizer::DefaultCostBasedOptimizer().OptimizeWithTrace(plan_node);
+    if (!cbo_or.ok()) {
+        return std::nullopt;
+    }
+    return cbo_or->cost.rows;
+}
+
+GroupedAggregateStrategy ChooseGroupedAggregateStrategy(
+    const std::shared_ptr<plan::PlanNode>& root_plan,
+    size_t aggregate_index,
+    const std::shared_ptr<plan::PlanNode>& group,
+    const std::shared_ptr<plan::PlanNode>& input_plan,
+    size_t driver_count) {
+    constexpr double kSmallInputRows = 4096.0;
+    constexpr double kPartitionedGroupRows = 128.0;
+    if (driver_count <= 1 || group == nullptr || group->group().columns.empty()) {
+        return GroupedAggregateStrategy::SingleStage;
+    }
+
+    const auto input_rows = EstimateRowsForPlan(input_plan);
+    if (input_rows.has_value() && *input_rows < kSmallInputRows) {
+        return GroupedAggregateStrategy::SingleStage;
+    }
+
+    const auto grouped_rows = EstimateRowsForPlan(group);
+    const bool aggregate_is_root = root_plan != nullptr && aggregate_index == 0;
+    if (aggregate_is_root && grouped_rows.has_value() && *grouped_rows >= kPartitionedGroupRows) {
+        return GroupedAggregateStrategy::TwoStagePartitioned;
+    }
+    if (aggregate_is_root && !grouped_rows.has_value() && driver_count >= 4) {
+        return GroupedAggregateStrategy::TwoStagePartitioned;
+    }
+    return GroupedAggregateStrategy::TwoStageGather;
+}
+
 struct ProducedPipeline {
     std::shared_ptr<ExchangeBuffer> buffer;
     std::string pipeline_id;
@@ -2012,6 +2189,64 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecut
     }
     if (planned_or->driver_roots.size() <= 1) {
         return std::nullopt;
+    }
+
+    const GroupedAggregateStrategy strategy =
+        ChooseGroupedAggregateStrategy(root_plan, *aggregate_index, group, input_plan,
+                                       planned_or->driver_roots.size());
+    if (strategy == GroupedAggregateStrategy::SingleStage) {
+        return std::nullopt;
+    }
+
+    if (strategy == GroupedAggregateStrategy::TwoStagePartitioned) {
+        const size_t partition_count = planned_or->driver_roots.size();
+        std::vector<std::shared_ptr<ExchangeBuffer>> buffers;
+        buffers.reserve(partition_count);
+        for (size_t index = 0; index < partition_count; ++index) {
+            auto buffer = std::make_shared<ExchangeBuffer>();
+            buffer->SetProducerCount(planned_or->driver_roots.size());
+            buffers.push_back(std::move(buffer));
+        }
+
+        std::vector<std::unique_ptr<Operator>> partial_roots;
+        partial_roots.reserve(planned_or->driver_roots.size());
+        for (auto& root : planned_or->driver_roots) {
+            std::unique_ptr<Operator> partial(new StreamingGroupedAggregateOperator(
+                aggregate, group->group().columns, std::move(root), AggregatePhase::Partial));
+            partial_roots.push_back(std::unique_ptr<Operator>(
+                new PartitionedExchangeSinkOperator(std::move(partial), buffers,
+                                                    group->group().columns)));
+        }
+
+        std::vector<std::string> partial_operators = std::move(planned_or->operators);
+        partial_operators.push_back("GroupOperator");
+        partial_operators.push_back("PartialAggregateOperator");
+        partial_operators.push_back("PartitionedExchangeSinkOperator");
+
+        ExecutionTask task;
+        task.pipelines.push_back(
+            MakePipeline("aggregate-partial", "aggregate partial partitioned", "source", {},
+                         std::move(partial_operators), nullptr, std::move(partial_roots)));
+
+        std::vector<std::unique_ptr<Operator>> final_roots;
+        final_roots.reserve(buffers.size());
+        for (const auto& buffer : buffers) {
+            std::unique_ptr<Operator> current(new ExchangeSourceOperator(buffer));
+            current = std::unique_ptr<Operator>(new StreamingGroupedAggregateOperator(
+                aggregate, group->group().columns, std::move(current), AggregatePhase::Final));
+            final_roots.push_back(std::move(current));
+        }
+        final_roots = WrapDriverRootsWithOutput(std::move(final_roots));
+        std::vector<std::string> root_operators = {
+            "ExchangeSourceOperator",
+            "GroupOperator",
+            "FinalAggregateOperator",
+            "OutputOperator",
+        };
+        task.pipelines.push_back(MakePipeline("main", "main partitioned final", "root",
+                                              {"aggregate-partial"}, std::move(root_operators),
+                                              nullptr, std::move(final_roots)));
+        return task;
     }
 
     auto buffer = std::make_shared<ExchangeBuffer>();
@@ -2391,6 +2626,7 @@ absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) co
             .blocking = HasBlockingOperator(pipeline.operators),
             .drivers = pipeline.driver_roots.empty() ? 1 : pipeline.driver_roots.size(),
             .split_stats = {},
+            .accumulator_stats = {},
             .error = {}});
         pipeline_stats.push_back(pipeline.stats);
     }
@@ -2587,6 +2823,7 @@ absl::StatusOr<SchedulerStreamResult> Scheduler::RunToSink(ExecutionTask task,
             .blocking = HasBlockingOperator(pipeline.operators),
             .drivers = pipeline.driver_roots.empty() ? 1 : pipeline.driver_roots.size(),
             .split_stats = {},
+            .accumulator_stats = {},
             .error = {}});
         pipeline_stats.push_back(pipeline.stats);
     }
@@ -2739,6 +2976,49 @@ std::vector<std::string> AccumulatingOperators(const std::vector<std::string>& o
     return result;
 }
 
+std::string JsonString(const std::string& value) {
+    std::string out;
+    out.reserve(value.size() + 2);
+    out.push_back('"');
+    for (const char ch : value) {
+        switch (ch) {
+            case '"':
+                out += "\\\"";
+                break;
+            case '\\':
+                out += "\\\\";
+                break;
+            case '\n':
+                out += "\\n";
+                break;
+            case '\r':
+                out += "\\r";
+                break;
+            case '\t':
+                out += "\\t";
+                break;
+            default:
+                out.push_back(ch);
+                break;
+        }
+    }
+    out.push_back('"');
+    return out;
+}
+
+std::string JsonStringArray(const std::vector<std::string>& values) {
+    std::ostringstream out;
+    out << "[";
+    for (size_t index = 0; index < values.size(); ++index) {
+        if (index != 0) {
+            out << ",";
+        }
+        out << JsonString(values[index]);
+    }
+    out << "]";
+    return out.str();
+}
+
 std::string FormatPipelinePlan(const std::shared_ptr<plan::PlanNode>& logical_plan) {
     auto task_or = PhysicalPlanner().Plan(logical_plan);
     if (!task_or.ok()) {
@@ -2748,7 +3028,8 @@ std::string FormatPipelinePlan(const std::shared_ptr<plan::PlanNode>& logical_pl
     out << "PipelinePlan\n";
     for (const auto& pipeline : task_or->pipelines) {
         const size_t drivers = pipeline.driver_roots.empty() ? 1 : pipeline.driver_roots.size();
-        out << R"(- Pipeline(id=")" << pipeline.id << R"(", role=")" << pipeline.role << "\")\n";
+        out << R"(- Pipeline(id=")" << pipeline.id << R"(", name=")" << pipeline.name
+            << R"(", role=")" << pipeline.role << "\")\n";
         out << "  drivers: " << drivers << "\n";
         if (!pipeline.dependencies.empty()) {
             out << "  depends_on: " << plan::StringList(pipeline.dependencies) << "\n";
@@ -2761,6 +3042,34 @@ std::string FormatPipelinePlan(const std::shared_ptr<plan::PlanNode>& logical_pl
         }
         out << "  operators: " << plan::StringList(pipeline.operators) << "\n";
     }
+    return out.str();
+}
+
+std::string FormatPipelinePlanJson(const std::shared_ptr<plan::PlanNode>& logical_plan) {
+    auto task_or = PhysicalPlanner().Plan(logical_plan);
+    if (!task_or.ok()) {
+        return absl::StrCat("{\"error\":", JsonString(task_or.status().ToString()), "}");
+    }
+    std::ostringstream out;
+    out << "{\"pipelines\":[";
+    for (size_t index = 0; index < task_or->pipelines.size(); ++index) {
+        const auto& pipeline = task_or->pipelines[index];
+        const size_t drivers = pipeline.driver_roots.empty() ? 1 : pipeline.driver_roots.size();
+        if (index != 0) {
+            out << ",";
+        }
+        out << "{";
+        out << "\"id\":" << JsonString(pipeline.id);
+        out << ",\"name\":" << JsonString(pipeline.name);
+        out << ",\"role\":" << JsonString(pipeline.role);
+        out << ",\"drivers\":" << drivers;
+        out << ",\"dependencies\":" << JsonStringArray(pipeline.dependencies);
+        out << ",\"blocking\":" << (HasBlockingOperator(pipeline.operators) ? "true" : "false");
+        out << ",\"accumulators\":" << JsonStringArray(AccumulatingOperators(pipeline.operators));
+        out << ",\"operators\":" << JsonStringArray(pipeline.operators);
+        out << "}";
+    }
+    out << "]}";
     return out.str();
 }
 
@@ -2798,7 +3107,10 @@ std::string FormatAccumulatorStats(const std::vector<AccumulatorStats>& stats) {
         out << "{operator=" << stats[i].operator_name << ", mode=" << stats[i].mode
             << ", phase=" << stats[i].phase << ", key=" << stats[i].key_strategy
             << ", input_rows=" << stats[i].input_rows << ", output_rows=" << stats[i].output_rows
-            << ", groups=" << stats[i].groups << ", key_ms=" << stats[i].key_time_ms
+            << ", groups=" << stats[i].groups << ", memory_bytes=" << stats[i].memory_bytes
+            << ", memory_limit_bytes=" << stats[i].memory_limit_bytes
+            << ", memory_limited=" << (stats[i].memory_limited ? "true" : "false")
+            << ", key_ms=" << stats[i].key_time_ms
             << ", hash_ms=" << stats[i].hash_time_ms << ", update_ms=" << stats[i].update_time_ms
             << ", result_ms=" << stats[i].result_time_ms << "}";
     }
@@ -2810,7 +3122,8 @@ std::string FormatExecutionProfile(const ExecutionProfile& profile) {
     std::ostringstream out;
     out << "ExecutionProfile\n";
     for (const auto& pipeline : profile.pipelines) {
-        out << R"(- Pipeline(id=")" << pipeline.id << R"(", role=")" << pipeline.role << "\")\n";
+        out << R"(- Pipeline(id=")" << pipeline.id << R"(", name=")" << pipeline.name
+            << R"(", role=")" << pipeline.role << "\")\n";
         if (!pipeline.dependencies.empty()) {
             out << "  depends_on: " << plan::StringList(pipeline.dependencies) << "\n";
         }
@@ -2834,6 +3147,94 @@ std::string FormatExecutionProfile(const ExecutionProfile& profile) {
             out << "  error: " << pipeline.error << "\n";
         }
     }
+    return out.str();
+}
+
+std::string FormatSplitStatsJson(const std::vector<connector::ConnectorSplitStats>& stats) {
+    std::ostringstream out;
+    out << "[";
+    for (size_t i = 0; i < stats.size(); ++i) {
+        if (i != 0) {
+            out << ",";
+        }
+        out << "{";
+        out << "\"id\":" << stats[i].split_id;
+        out << ",\"pages\":" << stats[i].pages_produced;
+        out << ",\"rows\":" << stats[i].rows_produced;
+        out << ",\"bytes\":" << stats[i].bytes_produced;
+        out << ",\"wallMs\":" << stats[i].wall_time_ms;
+        out << ",\"metadataMs\":" << stats[i].metadata_time_ms;
+        out << ",\"splitMs\":" << stats[i].split_discovery_time_ms;
+        out << ",\"connectMs\":" << stats[i].connect_time_ms;
+        out << ",\"schemaMs\":" << stats[i].schema_time_ms;
+        out << ",\"sqlMs\":" << stats[i].sql_build_time_ms;
+        out << ",\"executeMs\":" << stats[i].execute_time_ms;
+        out << ",\"readMs\":" << stats[i].read_time_ms;
+        out << ",\"decodeMs\":" << stats[i].decode_time_ms;
+        out << ",\"pageMs\":" << stats[i].page_build_time_ms;
+        out << ",\"finished\":" << (stats[i].finished ? "true" : "false");
+        out << "}";
+    }
+    out << "]";
+    return out.str();
+}
+
+std::string FormatAccumulatorStatsJson(const std::vector<AccumulatorStats>& stats) {
+    std::ostringstream out;
+    out << "[";
+    for (size_t i = 0; i < stats.size(); ++i) {
+        if (i != 0) {
+            out << ",";
+        }
+        out << "{";
+        out << "\"operator\":" << JsonString(stats[i].operator_name);
+        out << ",\"mode\":" << JsonString(stats[i].mode);
+        out << ",\"phase\":" << JsonString(stats[i].phase);
+        out << ",\"key\":" << JsonString(stats[i].key_strategy);
+        out << ",\"inputRows\":" << stats[i].input_rows;
+        out << ",\"outputRows\":" << stats[i].output_rows;
+        out << ",\"groups\":" << stats[i].groups;
+        out << ",\"memoryBytes\":" << stats[i].memory_bytes;
+        out << ",\"memoryLimitBytes\":" << stats[i].memory_limit_bytes;
+        out << ",\"memoryLimited\":" << (stats[i].memory_limited ? "true" : "false");
+        out << ",\"keyMs\":" << stats[i].key_time_ms;
+        out << ",\"hashMs\":" << stats[i].hash_time_ms;
+        out << ",\"updateMs\":" << stats[i].update_time_ms;
+        out << ",\"resultMs\":" << stats[i].result_time_ms;
+        out << "}";
+    }
+    out << "]";
+    return out.str();
+}
+
+std::string FormatExecutionProfileJson(const ExecutionProfile& profile) {
+    std::ostringstream out;
+    out << "{\"pipelines\":[";
+    for (size_t index = 0; index < profile.pipelines.size(); ++index) {
+        const auto& pipeline = profile.pipelines[index];
+        if (index != 0) {
+            out << ",";
+        }
+        out << "{";
+        out << "\"id\":" << JsonString(pipeline.id);
+        out << ",\"name\":" << JsonString(pipeline.name);
+        out << ",\"role\":" << JsonString(pipeline.role);
+        out << ",\"dependencies\":" << JsonStringArray(pipeline.dependencies);
+        out << ",\"drivers\":" << pipeline.drivers;
+        out << ",\"blocking\":" << (pipeline.blocking ? "true" : "false");
+        out << ",\"operators\":" << JsonStringArray(pipeline.operators);
+        out << ",\"accumulators\":" << JsonStringArray(AccumulatingOperators(pipeline.operators));
+        out << ",\"pages\":" << pipeline.pages;
+        out << ",\"rows\":" << pipeline.rows;
+        out << ",\"blocked\":" << (pipeline.blocked ? "true" : "false");
+        out << ",\"finished\":" << (pipeline.finished ? "true" : "false");
+        out << ",\"error\":" << JsonString(pipeline.error);
+        out << ",\"splits\":" << FormatSplitStatsJson(pipeline.split_stats);
+        out << ",\"accumulatorStats\":"
+            << FormatAccumulatorStatsJson(pipeline.accumulator_stats);
+        out << "}";
+    }
+    out << "]}";
     return out.str();
 }
 

@@ -114,6 +114,9 @@ struct AccumulatorTotals {
     size_t input_rows = 0;
     size_t output_rows = 0;
     size_t groups = 0;
+    size_t memory_bytes = 0;
+    size_t memory_limit_bytes = 0;
+    bool memory_limited = false;
     size_t partial_input_rows = 0;
     size_t final_input_rows = 0;
     double key_time_ms = 0.0;
@@ -151,6 +154,10 @@ AccumulatorTotals accumulator_totals(const pl::flux::execution::ExecutionProfile
             totals.input_rows += accumulator.input_rows;
             totals.output_rows += accumulator.output_rows;
             totals.groups += accumulator.groups;
+            totals.memory_bytes += accumulator.memory_bytes;
+            totals.memory_limit_bytes = std::max(totals.memory_limit_bytes,
+                                                 accumulator.memory_limit_bytes);
+            totals.memory_limited = totals.memory_limited || accumulator.memory_limited;
             totals.key_time_ms += accumulator.key_time_ms;
             totals.hash_time_ms += accumulator.hash_time_ms;
             totals.update_time_ms += accumulator.update_time_ms;
@@ -281,6 +288,10 @@ int run_benchmark(int argc, char** argv) {
               << "\"accumulator_input_rows\":" << accumulators.input_rows << ","
               << "\"accumulator_output_rows\":" << accumulators.output_rows << ","
               << "\"accumulator_groups\":" << accumulators.groups << ","
+              << "\"accumulator_memory_bytes\":" << accumulators.memory_bytes << ","
+              << "\"accumulator_memory_limit_bytes\":" << accumulators.memory_limit_bytes << ","
+              << "\"accumulator_memory_limited\":"
+              << (accumulators.memory_limited ? "true" : "false") << ","
               << "\"accumulator_partial_input_rows\":" << accumulators.partial_input_rows << ","
               << "\"accumulator_final_input_rows\":" << accumulators.final_input_rows << ","
               << "\"accumulator_key_time_ms\":" << accumulators.key_time_ms << ","

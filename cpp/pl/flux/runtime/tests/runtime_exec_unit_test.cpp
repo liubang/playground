@@ -1499,10 +1499,126 @@ TEST(RuntimeExecTest, PipelineExplainMarksStreamingAccumulators) {
     const auto pipeline = execution::FormatPipelinePlan(aggregate);
 
     EXPECT_NE(std::string::npos, pipeline.find("blocking: true"));
-    EXPECT_NE(std::string::npos,
-              pipeline.find("accumulators: [GroupOperator, PartialAggregateOperator"));
-    EXPECT_NE(std::string::npos,
-              pipeline.find("accumulators: [GroupOperator, FinalAggregateOperator]"));
+    EXPECT_NE(std::string::npos, pipeline.find("accumulators: [GroupOperator, AggregateOperator]"));
+    EXPECT_EQ(std::string::npos, pipeline.find("PartialAggregateOperator"));
+}
+
+TEST(RuntimeExecTest, SmallGroupedAggregateSkipsTwoStagePlan) {
+    constexpr size_t kRows = 128;
+    constexpr size_t kSplits = 8;
+    constexpr size_t kRowsPerPage = 16;
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve(kRows);
+    for (size_t index = 0; index < kRows; ++index) {
+        rows.push_back(TestRow({{"host", Value::string("edge-" + std::to_string(index % 4))},
+                                {"usage", Value::floating(static_cast<double>(index % 100))}}));
+    }
+
+    connector::SourceSpec spec{
+        .source = "small_cost_group_memory",
+        .driver = "small_cost_group_memory",
+        .dsn = "memory://small-cost-group",
+        .table = "cpu",
+    };
+    connector::ConnectorRegistry::Global().Register(
+        spec.source, [rows](const connector::SourceSpec& requested) {
+            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
+                                                         kRowsPerPage, kSplits);
+        });
+
+    auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
+    auto materialized = plan::MakeMaterializeBarrier(scan, "test memory fallback", "test");
+    auto grouped = plan::MakeGroup(materialized, {"host"});
+    auto aggregate = plan::MakeAggregate(grouped, plan::AggregateFunction::Count, "usage");
+
+    const auto pipeline = execution::FormatPipelinePlan(aggregate);
+
+    EXPECT_EQ(std::string::npos, pipeline.find("PartialAggregateOperator"));
+    EXPECT_EQ(std::string::npos, pipeline.find("FinalAggregateOperator"));
+    EXPECT_EQ(std::string::npos, pipeline.find("PartitionedExchangeSinkOperator"));
+    EXPECT_NE(std::string::npos, pipeline.find("AggregateOperator"));
+}
+
+TEST(RuntimeExecTest, HighCardinalityGroupedAggregateUsesPartitionedFinal) {
+    constexpr size_t kRows = 20480;
+    constexpr size_t kSplits = 8;
+    constexpr size_t kRowsPerPage = 512;
+    constexpr size_t kHosts = 512;
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve(kRows);
+    for (size_t index = 0; index < kRows; ++index) {
+        rows.push_back(TestRow({{"host", Value::string("edge-" + std::to_string(index % kHosts))},
+                                {"usage", Value::floating(static_cast<double>(index % 100))}}));
+    }
+
+    connector::SourceSpec spec{
+        .source = "partitioned_group_memory",
+        .driver = "partitioned_group_memory",
+        .dsn = "memory://partitioned-group",
+        .table = "cpu",
+    };
+    connector::ConnectorRegistry::Global().Register(
+        spec.source, [rows](const connector::SourceSpec& requested) {
+            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
+                                                         kRowsPerPage, kSplits);
+        });
+
+    auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
+    auto materialized = plan::MakeMaterializeBarrier(scan, "test memory fallback", "test");
+    auto grouped = plan::MakeGroup(materialized, {"host"});
+    auto aggregate = plan::MakeAggregate(grouped, plan::AggregateFunction::Count, "usage");
+
+    const auto pipeline = execution::FormatPipelinePlan(aggregate);
+    EXPECT_NE(std::string::npos, pipeline.find("PartitionedExchangeSinkOperator"));
+    EXPECT_NE(std::string::npos, pipeline.find("main partitioned final"));
+
+    auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(aggregate);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto& table = result_or->value.as_table();
+    ASSERT_EQ(kHosts, table.rows.size());
+    for (const auto& row : table.rows) {
+        ASSERT_NE(nullptr, row);
+        const Value* usage = row->lookup("usage");
+        ASSERT_NE(nullptr, usage);
+        EXPECT_EQ(static_cast<int64_t>(kRows / kHosts), usage->as_int());
+    }
+    ASSERT_EQ(2, result_or->profile.pipelines.size());
+    EXPECT_EQ(kSplits, result_or->profile.pipelines[1].drivers);
+}
+
+TEST(RuntimeExecTest, AccumulatorMemoryGuardFailsHighCardinalityGroup) {
+    constexpr size_t kRows = 64;
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve(kRows);
+    for (size_t index = 0; index < kRows; ++index) {
+        rows.push_back(TestRow({{"host", Value::string("very-wide-host-key-" +
+                                                       std::to_string(index))},
+                                {"usage", Value::floating(1.0)}}));
+    }
+
+    connector::SourceSpec spec{
+        .source = "memory_guard_group_memory",
+        .driver = "memory_guard_group_memory",
+        .dsn = "memory://memory-guard-group",
+        .table = "cpu",
+    };
+    connector::ConnectorRegistry::Global().Register(
+        spec.source, [rows](const connector::SourceSpec& requested) {
+            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows, 16, 4);
+        });
+
+    setenv("FLUX_ACCUMULATOR_MAX_BYTES", "512", 1);
+    auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
+    auto materialized = plan::MakeMaterializeBarrier(scan, "test memory fallback", "test");
+    auto grouped = plan::MakeGroup(materialized, {"host"});
+    auto aggregate = plan::MakeAggregate(grouped, plan::AggregateFunction::Count, "usage");
+    auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(aggregate);
+    unsetenv("FLUX_ACCUMULATOR_MAX_BYTES");
+
+    ASSERT_FALSE(result_or.ok());
+    EXPECT_EQ(absl::StatusCode::kResourceExhausted, result_or.status().code());
+    EXPECT_NE(std::string::npos, result_or.status().message().find("accumulator memory limit"));
 }
 
 TEST(RuntimeExecTest, ExecutionProfileFormatterShowsRuntimeStats) {
@@ -1522,6 +1638,51 @@ TEST(RuntimeExecTest, ExecutionProfileFormatterShowsRuntimeStats) {
     EXPECT_NE(std::string::npos, profile.find("splits: "));
     EXPECT_NE(std::string::npos, profile.find("bytes="));
     EXPECT_NE(std::string::npos, profile.find("wall_ms="));
+}
+
+TEST(RuntimeExecTest, PipelineAndProfileJsonFormattersExposeStructuredRuntimeFields) {
+    auto scan = SqliteCpuScanPlan();
+    auto materialized = plan::MakeMaterializeBarrier(scan, "test memory fallback", "test");
+    auto grouped = plan::MakeGroup(materialized, {"host"});
+    auto aggregate = plan::MakeAggregate(grouped, plan::AggregateFunction::Count, "usage");
+
+    const auto pipeline_json = execution::FormatPipelinePlanJson(aggregate);
+    EXPECT_NE(std::string::npos, pipeline_json.find(R"("pipelines")"));
+    EXPECT_NE(std::string::npos, pipeline_json.find(R"("operators")"));
+    EXPECT_NE(std::string::npos, pipeline_json.find(R"("accumulators")"));
+
+    auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(aggregate);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto profile_json = execution::FormatExecutionProfileJson(result_or->profile);
+    EXPECT_NE(std::string::npos, profile_json.find(R"("accumulatorStats")"));
+    EXPECT_NE(std::string::npos, profile_json.find(R"("memoryBytes")"));
+    EXPECT_NE(std::string::npos, profile_json.find(R"("splits")"));
+}
+
+TEST(RuntimeExecTest, ExplainCanReturnPipelineJson) {
+    auto file = ParseFile(R"(
+        import "sqlite"
+        builtin explain : (<-tables: stream[A], pipeline: bool, json: bool) => string
+
+        data = sqlite.from(
+            path: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
+        )
+
+        plan = data |> explain(pipeline: true, json: true)
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    auto plan_or = env.lookup("plan");
+    ASSERT_TRUE(plan_or.ok()) << plan_or.status();
+    ASSERT_EQ(Value::Type::String, plan_or->type());
+    EXPECT_NE(std::string::npos, plan_or->as_string().find(R"("pipelines")"));
+    EXPECT_NE(std::string::npos, plan_or->as_string().find(R"("operators")"));
 }
 
 TEST(RuntimeExecTest, ExecutionProfileFormatterMarksStreamingAccumulators) {
