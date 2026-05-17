@@ -154,8 +154,11 @@ partial pages 加 1 个 final page：
 | `group_mean` | 1,000,000 | 8 | 64 | 9 | true | 0.1119 | 8,933,770 |
 
 Accumulator 分段 profile 会输出输入行数、输出行数、group 数、key/hash/update/result build
-耗时，并对 two-stage grouped aggregate 额外拆出 partial/final 输入行数和耗时。上面同一轮里，
-1M rows 的本地 grouped aggregate 主要成本仍在 partial 阶段，final 只合并 512 行 partial
+耗时、估算内存占用和内存预算，并对 two-stage grouped aggregate 额外拆出 partial/final 输入行数
+和耗时。Phase 16 后，高基数 root `group |> aggregate` 会进一步使用 partitioned final；低基数或
+小输入仍可能选择 single-stage / gather final，benchmark 结果应结合 `drivers`、`pages`、
+`accumulator_partial_input_rows` 和 `accumulator_final_input_rows` 一起解释。上面同一轮里，
+1M rows 的低基数本地 grouped aggregate 主要成本仍在 partial 阶段，final 只合并 512 行 partial
 结果：
 
 | scenario | accumulator input rows | partial rows | final rows | groups | key ms | hash ms | update ms | partial ms | final ms |
@@ -189,7 +192,7 @@ FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
 
 如果要做同机多轮对比，用 connector benchmark runner 统一跑 repeat samples。它会输出
 每个 scenario 的 `samples_s`、`median_s`、`mean_s`、`min_s`、`max_s`，并保留最后一轮的
-drivers/output rows 和 split profile 分段耗时：
+drivers/output rows、split profile 和 accumulator profile 分段耗时：
 
 ```bash
 bazel build //cpp/pl/flux/benchmark:sqlite_scan_benchmark \
@@ -204,6 +207,29 @@ FLUX_MYSQL_TEST_DSN='mysql://flux:flux@192.168.50.31:3306/testdb' \
     --mysql-max-pool-size 8 \
     --warmup 1 \
     --repeat 3
+```
+
+如果要把同机 baseline 变成回归门禁，先保存一次 release baseline，再用
+`--compare-baseline` 复验。runner 会按 `(connector, scenario)` 比较 `median_s`，默认超过
+10% 视为 regression，并在发现 regression 时返回非 0：
+
+```bash
+python3 cpp/pl/flux/benchmark/run_connector_benchmarks.py \
+  --build \
+  --bazel-config release \
+  --connector sqlite \
+  --sqlite-rows 1000000 \
+  --warmup 1 \
+  --repeat 3 \
+  --output /tmp/flux_sqlite_baseline.json
+
+python3 cpp/pl/flux/benchmark/run_connector_benchmarks.py \
+  --connector sqlite \
+  --sqlite-rows 1000000 \
+  --warmup 1 \
+  --repeat 3 \
+  --compare-baseline /tmp/flux_sqlite_baseline.json \
+  --regression-threshold 0.10
 ```
 
 MySQL runtime 可调参数：

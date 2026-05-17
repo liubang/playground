@@ -21,6 +21,7 @@
 #include "absl/strings/str_cat.h"
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -35,6 +36,7 @@ namespace pl::flux::execution {
 namespace {
 using Clock = std::chrono::steady_clock;
 constexpr const char* kPartialAggregateCountColumn = "_flux_acc_count";
+constexpr size_t kDefaultAccumulatorMemoryLimitBytes = size_t{256} * 1024 * 1024;
 
 double elapsed_ms(Clock::time_point start) {
     return std::chrono::duration<double, std::milli>(Clock::now() - start).count();
@@ -59,6 +61,79 @@ absl::StatusOr<std::optional<Page>> next_accumulator_input_page(Operator* input)
         return absl::InvalidArgumentError("operator has no input");
     }
     return input->NextPage();
+}
+
+size_t parse_accumulator_memory_limit() {
+    const char* value = std::getenv("FLUX_ACCUMULATOR_MAX_BYTES");
+    if (value == nullptr || *value == '\0') {
+        return kDefaultAccumulatorMemoryLimitBytes;
+    }
+    char* end = nullptr;
+    const unsigned long long parsed = std::strtoull(value, &end, 10);
+    if (end == value || parsed == 0) {
+        return kDefaultAccumulatorMemoryLimitBytes;
+    }
+    return static_cast<size_t>(parsed);
+}
+
+size_t estimate_value_memory_bytes(const Value& value) {
+    switch (value.type()) {
+        case Value::Type::Null:
+        case Value::Type::Bool:
+        case Value::Type::Int:
+        case Value::Type::UInt:
+        case Value::Type::Float:
+        case Value::Type::Time:
+        case Value::Type::Duration:
+        case Value::Type::Regex:
+            return sizeof(Value);
+        case Value::Type::String:
+            return sizeof(Value) + value.as_string().size();
+        case Value::Type::Array: {
+            size_t bytes = sizeof(Value);
+            for (const auto& element : value.as_array().elements) {
+                bytes += estimate_value_memory_bytes(element);
+            }
+            return bytes;
+        }
+        case Value::Type::Object: {
+            size_t bytes = sizeof(Value);
+            for (const auto& [name, property] : value.as_object().properties) {
+                bytes += name.size() + estimate_value_memory_bytes(property);
+            }
+            return bytes;
+        }
+        case Value::Type::Table:
+        case Value::Type::Function:
+            return sizeof(Value);
+    }
+    return sizeof(Value);
+}
+
+size_t estimate_group_key_memory_bytes(const std::shared_ptr<ObjectValue>& group_key) {
+    constexpr size_t kStateOverhead = 128;
+    if (group_key == nullptr) {
+        return kStateOverhead;
+    }
+    size_t bytes = kStateOverhead;
+    for (const auto& [name, value] : group_key->properties) {
+        bytes += name.size() + estimate_value_memory_bytes(value);
+    }
+    return bytes;
+}
+
+absl::Status account_accumulator_memory(AccumulatorStats* stats, size_t bytes) {
+    if (stats == nullptr || bytes == 0) {
+        return absl::OkStatus();
+    }
+    stats->memory_bytes += bytes;
+    if (stats->memory_limit_bytes != 0 && stats->memory_bytes > stats->memory_limit_bytes) {
+        stats->memory_limited = true;
+        return absl::ResourceExhaustedError(absl::StrCat(
+            "accumulator memory limit exceeded: estimated=", stats->memory_bytes,
+            " bytes, limit=", stats->memory_limit_bytes, " bytes"));
+    }
+    return absl::OkStatus();
 }
 
 Page page_with_plan(Page page, const std::shared_ptr<plan::PlanNode>& plan) {
@@ -568,7 +643,8 @@ void collect_child_accumulator_stats(const std::unique_ptr<Operator>& input,
     if (input != nullptr) {
         input->CollectAccumulatorStats(out);
     }
-    if (stats.input_rows != 0 || stats.output_rows != 0 || stats.groups != 0) {
+    if (stats.input_rows != 0 || stats.output_rows != 0 || stats.groups != 0 ||
+        stats.memory_bytes != 0 || stats.memory_limited) {
         out->push_back(stats);
     }
 }
@@ -583,6 +659,7 @@ StreamingGroupOperator::StreamingGroupOperator(std::shared_ptr<plan::PlanNode> p
     stats_.phase = "single";
     stats_.key_strategy =
         plan_ != nullptr && plan_->group().columns.size() == 1 ? "single" : "generic";
+    stats_.memory_limit_bytes = parse_accumulator_memory_limit();
 }
 
 std::string StreamingGroupOperator::name() const { return "GroupOperator"; }
@@ -644,6 +721,11 @@ absl::StatusOr<std::optional<Page>> StreamingGroupOperator::NextPage() {
                     chunks.emplace_back();
                     chunks.back().group_key = group_key_object_for_row(
                         page_chunk, row_index, plan_->group().columns, group_indexes);
+                    auto memory_status = account_accumulator_memory(
+                        &stats_, estimate_group_key_memory_bytes(chunks.back().group_key));
+                    if (!memory_status.ok()) {
+                        return memory_status;
+                    }
                 }
                 {
                     ScopedAccumulatorTimer timer(&stats_.update_time_ms);
@@ -673,6 +755,7 @@ StreamingDistinctOperator::StreamingDistinctOperator(std::shared_ptr<plan::PlanN
     stats_.mode = "distinct";
     stats_.phase = "single";
     stats_.key_strategy = "single";
+    stats_.memory_limit_bytes = parse_accumulator_memory_limit();
 }
 
 std::string StreamingDistinctOperator::name() const { return "DistinctOperator"; }
@@ -727,6 +810,11 @@ absl::StatusOr<std::optional<Page>> StreamingDistinctOperator::NextPage() {
                 DistinctState state;
                 state.chunk.group_key = page_chunk.group_key;
                 groups.push_back(std::move(state));
+                auto memory_status = account_accumulator_memory(
+                    &stats_, estimate_group_key_memory_bytes(groups.back().chunk.group_key));
+                if (!memory_status.ok()) {
+                    return memory_status;
+                }
             }
             DistinctState& state = groups[it->second];
             const auto distinct_column =
@@ -734,6 +822,7 @@ absl::StatusOr<std::optional<Page>> StreamingDistinctOperator::NextPage() {
             for (size_t row_index = 0; row_index < page_chunk.row_count; ++row_index) {
                 ++stats_.input_rows;
                 GroupKey value_key;
+                size_t value_key_memory_bytes = 0;
                 {
                     ScopedAccumulatorTimer timer(&stats_.key_time_ms);
                     const Value* value =
@@ -742,6 +831,8 @@ absl::StatusOr<std::optional<Page>> StreamingDistinctOperator::NextPage() {
                     value_key.single = value == nullptr
                                            ? GroupKeyPart{.missing = true}
                                            : GroupKeyPart{.missing = false, .value = *value};
+                    value_key_memory_bytes =
+                        value == nullptr ? sizeof(Value) : estimate_value_memory_bytes(*value);
                 }
                 bool keep = false;
                 {
@@ -749,6 +840,11 @@ absl::StatusOr<std::optional<Page>> StreamingDistinctOperator::NextPage() {
                     keep = state.seen.insert(std::move(value_key)).second;
                 }
                 if (keep) {
+                    auto memory_status =
+                        account_accumulator_memory(&stats_, value_key_memory_bytes);
+                    if (!memory_status.ok()) {
+                        return memory_status;
+                    }
                     ScopedAccumulatorTimer timer(&stats_.update_time_ms);
                     append_source_row_to_chunk(&state.chunk, page_chunk, row_index,
                                                page_chunk.group_key);
@@ -781,6 +877,7 @@ StreamingAggregateOperator::StreamingAggregateOperator(std::shared_ptr<plan::Pla
     stats_.mode = "aggregate";
     stats_.phase = "single";
     stats_.key_strategy = "group_object";
+    stats_.memory_limit_bytes = parse_accumulator_memory_limit();
 }
 
 std::string StreamingAggregateOperator::name() const { return "AggregateOperator"; }
@@ -831,6 +928,11 @@ absl::StatusOr<std::optional<Page>> StreamingAggregateOperator::NextPage() {
                 AggregateState state;
                 state.group_key = page_chunk.group_key;
                 groups.push_back(std::move(state));
+                auto memory_status = account_accumulator_memory(
+                    &stats_, estimate_group_key_memory_bytes(groups.back().group_key));
+                if (!memory_status.ok()) {
+                    return memory_status;
+                }
             }
             AggregateState& state = groups[it->second];
             const auto aggregate_column_index =
@@ -881,6 +983,7 @@ StreamingGroupedAggregateOperator::StreamingGroupedAggregateOperator(
     stats_.mode = "grouped_aggregate";
     stats_.phase = aggregate_phase_name(phase_);
     stats_.key_strategy = group_columns_.size() == 1 ? "single" : "generic";
+    stats_.memory_limit_bytes = parse_accumulator_memory_limit();
 }
 
 std::string StreamingGroupedAggregateOperator::name() const { return "AggregateOperator"; }
@@ -948,6 +1051,11 @@ absl::StatusOr<std::optional<Page>> StreamingGroupedAggregateOperator::NextPage(
                     state.group_key = group_key_object_for_row(
                         page_chunk, row_index, group_columns_, group_indexes_in_chunk);
                     groups.push_back(std::move(state));
+                    auto memory_status = account_accumulator_memory(
+                        &stats_, estimate_group_key_memory_bytes(groups.back().group_key));
+                    if (!memory_status.ok()) {
+                        return memory_status;
+                    }
                 }
                 AggregateState& state = groups[insertion.first->second];
                 {

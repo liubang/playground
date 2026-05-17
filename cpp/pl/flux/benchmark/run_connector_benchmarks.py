@@ -35,6 +35,9 @@ PROFILE_KEYS = [
     "accumulator_input_rows",
     "accumulator_output_rows",
     "accumulator_groups",
+    "accumulator_memory_bytes",
+    "accumulator_memory_limit_bytes",
+    "accumulator_memory_limited",
     "accumulator_partial_input_rows",
     "accumulator_final_input_rows",
     "accumulator_key_time_ms",
@@ -109,6 +112,48 @@ def summarize(kind, scenario, samples):
         if key in samples[-1]:
             summary[key] = samples[-1][key]
     return summary
+
+
+def result_key(item):
+    return item.get("connector", ""), item.get("scenario", "")
+
+
+def compare_with_baseline(results, baseline_payload, threshold):
+    baseline = {
+        result_key(item): item
+        for item in baseline_payload.get("results", [])
+        if item.get("median_s") is not None
+    }
+    regressions = []
+    comparisons = []
+    for item in results:
+        key = result_key(item)
+        previous = baseline.get(key)
+        if previous is None:
+            continue
+        previous_median = float(previous["median_s"])
+        current_median = float(item["median_s"])
+        if previous_median <= 0:
+            continue
+        delta_s = current_median - previous_median
+        delta_pct = delta_s / previous_median
+        comparison = {
+            "connector": key[0],
+            "scenario": key[1],
+            "baseline_median_s": previous_median,
+            "current_median_s": current_median,
+            "delta_s": delta_s,
+            "delta_pct": delta_pct,
+            "regression": delta_pct > threshold,
+        }
+        item["baseline_median_s"] = previous_median
+        item["delta_s"] = delta_s
+        item["delta_pct"] = delta_pct
+        item["regression"] = comparison["regression"]
+        comparisons.append(comparison)
+        if comparison["regression"]:
+            regressions.append(comparison)
+    return comparisons, regressions
 
 
 def quote_mysql_identifier(name):
@@ -280,6 +325,8 @@ def main():
     parser.add_argument("--build", action="store_true", help="build benchmark targets before running")
     parser.add_argument("--bazel-config", default="release", help="Bazel config used with --build")
     parser.add_argument("--output", help="write the JSON summary to this file as a stable baseline")
+    parser.add_argument("--compare-baseline", help="compare median seconds against a previous JSON")
+    parser.add_argument("--regression-threshold", type=float, default=0.10)
     args = parser.parse_args()
 
     if args.repeat <= 0:
@@ -298,12 +345,25 @@ def main():
     if args.connector in ("mysql", "all"):
         results.extend(run_mysql(args))
 
-    payload = {"results": results}
+    comparisons = []
+    regressions = []
+    if args.compare_baseline:
+        baseline_payload = json.loads(Path(args.compare_baseline).read_text(encoding="utf-8"))
+        comparisons, regressions = compare_with_baseline(
+            results, baseline_payload, args.regression_threshold
+        )
+
+    payload = {
+        "results": results,
+        "comparisons": comparisons,
+        "regressions": regressions,
+        "regression_threshold": args.regression_threshold,
+    }
     text = json.dumps(payload, indent=2, sort_keys=True)
     if args.output:
         Path(args.output).write_text(text + "\n", encoding="utf-8")
     print(text)
-    return 0
+    return 1 if regressions else 0
 
 
 if __name__ == "__main__":

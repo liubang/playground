@@ -496,3 +496,22 @@ global final 的两阶段形态，并把 benchmark baseline 口径固定到 rele
 量从 985 pages 降到 9 pages，并让 final 阶段只处理 512 行 partial 结果。release 口径下，
 1M `group_count` 当前为 `0.0940s`，已经明显快于上一轮 single-stage typed accumulator 的
 `0.3244s`；后续继续优化应看 partial 阶段的 key/hash/update 合计，而不是 final merge。
+
+## 2026-05-17：Cost-aware partitioned final 和 benchmark regression gate
+
+这一轮继续把 grouped accumulator 的执行形态从固定 two-stage gather 推向可长期演进的 planner
+决策：
+
+- grouped aggregate planner 接入 CBO 行数估算：小输入走 single-stage，普通多 split 低基数聚合走
+  two-stage gather，高基数 root 聚合走 partitioned final。
+- 新增 `PartitionedExchangeSinkOperator`，partial driver 按 group key 写多个 `ExchangeBuffer`，
+  main pipeline 展开为多个 final driver，避免 global final 再变成单 driver 瓶颈。
+- accumulator profile 增加估算内存、预算和 memory-limited 标记；`FLUX_ACCUMULATOR_MAX_BYTES`
+  可以直接把高基数 accumulator 的内存超限变成 `ResourceExhausted`。
+- pipeline/profile 增加 JSON formatter，`explain(pipeline: true, json: true)` 可以给 UI 和自动化
+  工具返回结构化 pipeline DAG。
+- `run_connector_benchmarks.py` 增加 `--compare-baseline` / `--regression-threshold`，把 release
+  baseline 从“人工读表”推进到可返回非 0 的 regression gate。
+
+本轮确认重点放在执行形态和门禁能力，不把单次 smoke 数字写成新的性能承诺；真实大表性能仍以
+`benchmark/README.md` 中的 release baseline 与后续 `--compare-baseline` 输出为准。

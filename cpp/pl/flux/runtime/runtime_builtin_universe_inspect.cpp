@@ -16,6 +16,7 @@
 // Created: 2026/04/25 10:40
 
 #include "cpp/pl/flux/execution/materializer.h"
+#include "cpp/pl/flux/execution/physical_executor.h"
 #include "cpp/pl/flux/optimizer/explain.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_table_helpers.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_universe.h"
@@ -197,6 +198,18 @@ absl::StatusOr<Value> builtin_explain(const std::vector<Value>& args) {
     auto physical_or = optional_bool_property(**object_or, "explain", "physical", false);
     if (!physical_or.ok()) {
         return physical_or.status();
+    }
+    auto pipeline_or = optional_bool_property(**object_or, "explain", "pipeline", false);
+    if (!pipeline_or.ok()) {
+        return pipeline_or.status();
+    }
+    auto json_or = optional_bool_property(**object_or, "explain", "json", false);
+    if (!json_or.ok()) {
+        return json_or.status();
+    }
+    if (*pipeline_or) {
+        return Value::string(*json_or ? execution::FormatPipelinePlanJson((*table_or)->plan)
+                                      : execution::FormatPipelinePlan((*table_or)->plan));
     }
     if (*physical_or) {
         return Value::string(optimizer::FormatPhysicalPlan((*table_or)->plan));
