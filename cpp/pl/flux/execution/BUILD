@@ -27,11 +27,13 @@ package(default_visibility = ["//cpp/pl/flux:__subpackages__"])
 cc_library(
     name = "execution",
     srcs = [
+        "accumulator.cpp",
         "materializer.cpp",
         "physical_executor.cpp",
         "task_executor.cpp",
     ],
     hdrs = [
+        "accumulator.h",
         "materializer.h",
         "page_budget.h",
         "physical_executor.h",

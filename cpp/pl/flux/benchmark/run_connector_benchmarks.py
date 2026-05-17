@@ -31,7 +31,26 @@ PROFILE_KEYS = [
     "split_read_time_ms",
     "split_decode_time_ms",
     "split_page_build_time_ms",
+    "accumulator_input_rows",
+    "accumulator_output_rows",
+    "accumulator_groups",
+    "accumulator_key_time_ms",
+    "accumulator_hash_time_ms",
+    "accumulator_update_time_ms",
+    "accumulator_result_time_ms",
 ]
+
+SQLITE_DEFAULT_SCENARIOS = [
+    "scan",
+    "filter_project",
+    "wide_filter",
+    "topn",
+    "distinct_host",
+    "group_count",
+    "group_sum",
+    "group_mean",
+]
+MYSQL_DEFAULT_SCENARIOS = ["scan", "filter_project", "wide_filter", "topn"]
 
 
 def run_json(command, env=None):
@@ -163,10 +182,16 @@ SELECT COUNT(*) AS rows_inserted FROM {quoted_table};
 
 
 def run_sqlite(args):
-    scenarios = args.scenarios or ["scan", "filter_project", "wide_filter", "topn"]
+    scenarios = args.scenarios or SQLITE_DEFAULT_SCENARIOS
     results = []
     for scenario in scenarios:
         samples = []
+        for run in range(args.warmup):
+            db_path = f"/tmp/flux_connector_bench_{scenario}_{os.getpid()}_warmup_{run}.db"
+            command = [str(SQLITE_BIN), str(args.sqlite_rows), db_path, scenario]
+            if scenario == "wide_filter":
+                command.append(str(args.threshold))
+            run_json(command)
         for run in range(args.repeat):
             db_path = f"/tmp/flux_connector_bench_{scenario}_{os.getpid()}_{run}.db"
             command = [str(SQLITE_BIN), str(args.sqlite_rows), db_path, scenario]
@@ -182,7 +207,7 @@ def run_mysql(args):
         return []
     if args.prepare_mysql_benchmark_table:
         prepare_mysql_benchmark_table(args.mysql_dsn, args.mysql_table, args.mysql_rows)
-    scenarios = args.scenarios or ["scan", "filter_project", "wide_filter", "topn"]
+    scenarios = args.scenarios or MYSQL_DEFAULT_SCENARIOS
     env = os.environ.copy()
     env["FLUX_MYSQL_TEST_DSN"] = args.mysql_dsn
     env["FLUX_MYSQL_TARGET_SPLITS"] = str(args.mysql_target_splits)
@@ -196,6 +221,11 @@ def run_mysql(args):
     results = []
     for scenario in scenarios:
         samples = []
+        for _ in range(args.warmup):
+            command = [str(MYSQL_BIN), args.mysql_dsn, args.mysql_table, scenario]
+            if scenario == "wide_filter":
+                command.append(str(args.threshold))
+            run_json(command, env=env)
         for _ in range(args.repeat):
             command = [str(MYSQL_BIN), args.mysql_dsn, args.mysql_table, scenario]
             if scenario == "wide_filter":
@@ -208,6 +238,7 @@ def run_mysql(args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--connector", choices=["sqlite", "mysql", "all"], default="sqlite")
+    parser.add_argument("--warmup", type=int, default=1)
     parser.add_argument("--repeat", type=int, default=3)
     parser.add_argument("--sqlite-rows", type=int, default=1_000_000)
     parser.add_argument("--mysql-dsn", default=os.environ.get("FLUX_MYSQL_TEST_DSN", ""))
@@ -226,6 +257,9 @@ def main():
 
     if args.repeat <= 0:
         print("--repeat must be positive", file=sys.stderr)
+        return 2
+    if args.warmup < 0:
+        print("--warmup must not be negative", file=sys.stderr)
         return 2
 
     results = []

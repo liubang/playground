@@ -1151,8 +1151,15 @@ single split，避免跨 split 后改变排序、限制或聚合语义。
 - connector split profile 增加 bytes、wall time 和 metadata/split/connect/schema/sql/execute/read/
   decode/page-build 分段耗时，profile/explain formatter 与 benchmark 都会输出这些字段，用于判断
   吞吐瓶颈发生在 page source、远程服务还是后续 operator。
+- 本地 blocking accumulator 已从物理执行器主文件拆到 `execution/accumulator.{h,cpp}`。group 和
+  distinct 使用 typed key/hash state，不再在 hot path 上拼接 string canonical key；aggregate
+  对整列走 column fast path，`group |> aggregate` 直接融合成 grouped accumulator。
+- `PipelineProfile` 增加 `accumulator_stats`，覆盖 input/output rows、group buckets、
+  key/hash/update/result build 分段耗时；`FormatExecutionProfile` 和 connector benchmark runner
+  都会暴露这些字段，用来定位本地 accumulator 的 CPU 成本。
 - `//cpp/pl/flux/benchmark:sqlite_scan_benchmark` 可构造真实 SQLite 数据库并执行
-  `scan`、`filter_project`、`wide_filter`、`topn`、`group_count`、`distinct_host` 等 scenario，
+  `scan`、`filter_project`、`wide_filter`、`topn`、`group_count`、`group_sum`、`group_mean`、
+  `distinct_host` 等 scenario，
   输出 rows、scenario、drivers、pages、split bytes、split wall time、profile 分段耗时、
   blocking、seconds 和 rows/s。`group_count` / `distinct_host` 用 materialize barrier 固定走
   本地 accumulator，用来观察 Page-native blocking result boundary 的真实成本。
@@ -1180,6 +1187,9 @@ single split，避免跨 split 后改变排序、限制或聚合语义。
     `group_count`，8 drivers，64 output rows，985 pages，`0.3851s`，约 `2.60M` input rows/s；
     1M `group_sum`，`0.3820s`，约 `2.62M` input rows/s；1M `group_mean`，`0.3947s`，约
     `2.53M` input rows/s。
+  - 2026-05-17 typed accumulator 复验：1M `group_count`，64 output rows，985 pages，
+    `0.3244s`，accumulator `key=118.45ms/hash=33.31ms/update=16.34ms`；1M `group_sum`
+    `0.3224s`；1M `group_mean` `0.3218s`；1M `distinct_host` `0.2576s`。
 - 远程 MySQL 同结构 scan benchmark：
   - 表：`flux_bench_cpu(_time, host, region, usage, seq primary key)`，数据生成逻辑与 SQLite
     benchmark 一致。
