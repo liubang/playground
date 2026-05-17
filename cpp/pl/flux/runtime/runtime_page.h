@@ -60,6 +60,22 @@ struct PageChunk {
     std::vector<ColumnVector> columns;
     std::shared_ptr<ObjectValue> group_key;
     size_t row_count = 0;
+
+    [[nodiscard]] std::optional<size_t> FindColumn(const std::string& name) const {
+        for (size_t index = 0; index < columns.size(); ++index) {
+            if (columns[index].name == name) {
+                return index;
+            }
+        }
+        return std::nullopt;
+    }
+
+    [[nodiscard]] const ColumnVector* ColumnAt(std::optional<size_t> index) const {
+        if (!index.has_value() || *index >= columns.size()) {
+            return nullptr;
+        }
+        return &columns[*index];
+    }
 };
 
 struct Page {
@@ -134,9 +150,9 @@ inline PageSchema SchemaFromPage(const Page& page) {
 inline absl::Status ValidatePageChunk(const PageChunk& chunk) {
     for (const auto& column : chunk.columns) {
         if (column.values.size() != chunk.row_count) {
-            return absl::InvalidArgumentError(absl::StrCat(
-                "page column ", column.name, " has ", column.values.size(),
-                " values but chunk has ", chunk.row_count, " rows"));
+            return absl::InvalidArgumentError(
+                absl::StrCat("page column ", column.name, " has ", column.values.size(),
+                             " values but chunk has ", chunk.row_count, " rows"));
         }
     }
     return absl::OkStatus();
@@ -158,16 +174,11 @@ inline const Value* PageChunkValueAt(const PageChunk& chunk,
     if (row_index >= chunk.row_count) {
         return nullptr;
     }
-    for (const auto& column : chunk.columns) {
-        if (column.name != column_name) {
-            continue;
-        }
-        if (row_index >= column.values.size()) {
-            return nullptr;
-        }
-        return &column.values[row_index];
+    const ColumnVector* column = chunk.ColumnAt(chunk.FindColumn(column_name));
+    if (column == nullptr || row_index >= column->values.size()) {
+        return nullptr;
     }
-    return nullptr;
+    return &column->values[row_index];
 }
 
 inline std::shared_ptr<ObjectValue> RowFromPageChunk(const PageChunk& chunk, size_t row_index) {
@@ -177,9 +188,8 @@ inline std::shared_ptr<ObjectValue> RowFromPageChunk(const PageChunk& chunk, siz
         return std::make_shared<ObjectValue>(std::move(props));
     }
     for (const auto& column : chunk.columns) {
-        props.emplace_back(column.name,
-                           row_index < column.values.size() ? column.values[row_index]
-                                                            : Value::null());
+        props.emplace_back(column.name, row_index < column.values.size() ? column.values[row_index]
+                                                                         : Value::null());
     }
     return std::make_shared<ObjectValue>(std::move(props));
 }

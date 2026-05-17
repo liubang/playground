@@ -1968,6 +1968,93 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageTopNExecutionTask(
     return task;
 }
 
+std::shared_ptr<plan::PlanNode> SkipMaterializeBarrier(
+    const std::shared_ptr<plan::PlanNode>& node) {
+    if (node != nullptr && node->kind == plan::PlanNodeKind::Materialize &&
+        node->inputs.size() == 1 && node->inputs[0] != nullptr) {
+        return node->inputs[0];
+    }
+    return node;
+}
+
+absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecutionTask(
+    const std::shared_ptr<plan::PlanNode>& root_plan) {
+    if (root_plan == nullptr) {
+        return std::nullopt;
+    }
+
+    std::vector<std::shared_ptr<plan::PlanNode>> chain;
+    std::shared_ptr<plan::PlanNode> cursor = root_plan;
+    while (cursor != nullptr && cursor->inputs.size() == 1 && cursor->inputs[0] != nullptr) {
+        chain.push_back(cursor);
+        cursor = cursor->inputs[0];
+    }
+
+    std::optional<size_t> aggregate_index;
+    for (size_t index = 0; index + 1 < chain.size(); ++index) {
+        if (chain[index]->kind == plan::PlanNodeKind::Aggregate &&
+            chain[index + 1]->kind == plan::PlanNodeKind::Group &&
+            chain[index + 1]->inputs.size() == 1 && chain[index + 1]->inputs[0] != nullptr) {
+            aggregate_index = index;
+            break;
+        }
+    }
+    if (!aggregate_index.has_value()) {
+        return std::nullopt;
+    }
+
+    const auto& aggregate = chain[*aggregate_index];
+    const auto& group = chain[*aggregate_index + 1];
+    auto input_plan = SkipMaterializeBarrier(group->inputs[0]);
+    auto planned_or = BuildOperator(input_plan);
+    if (!planned_or.ok()) {
+        return planned_or.status();
+    }
+    if (planned_or->driver_roots.size() <= 1) {
+        return std::nullopt;
+    }
+
+    auto buffer = std::make_shared<ExchangeBuffer>();
+    buffer->SetProducerCount(planned_or->driver_roots.size());
+    std::vector<std::unique_ptr<Operator>> partial_roots;
+    partial_roots.reserve(planned_or->driver_roots.size());
+    for (auto& root : planned_or->driver_roots) {
+        std::unique_ptr<Operator> partial(new StreamingGroupedAggregateOperator(
+            aggregate, group->group().columns, std::move(root), AggregatePhase::Partial));
+        partial_roots.push_back(
+            std::unique_ptr<Operator>(new ExchangeSinkOperator(std::move(partial), buffer)));
+    }
+
+    std::vector<std::string> partial_operators = std::move(planned_or->operators);
+    partial_operators.push_back("GroupOperator");
+    partial_operators.push_back("PartialAggregateOperator");
+    partial_operators.push_back("ExchangeSinkOperator");
+
+    ExecutionTask task;
+    task.pipelines.push_back(MakePipeline("aggregate-partial", "aggregate partial", "source", {},
+                                          std::move(partial_operators), nullptr,
+                                          std::move(partial_roots)));
+
+    std::unique_ptr<Operator> current(new ExchangeSourceOperator(buffer));
+    std::vector<std::string> root_operators = {current->name(), "GroupOperator"};
+    current = std::unique_ptr<Operator>(new StreamingGroupedAggregateOperator(
+        aggregate, group->group().columns, std::move(current), AggregatePhase::Final));
+    root_operators.push_back("FinalAggregateOperator");
+    for (size_t index = *aggregate_index; index > 0; --index) {
+        auto wrapped_or = WrapUnaryOperator(chain[index - 1], std::move(current));
+        if (!wrapped_or.ok()) {
+            return wrapped_or.status();
+        }
+        current = std::move(*wrapped_or);
+        root_operators.push_back(current->name());
+    }
+    std::unique_ptr<Operator> output(new OutputOperator(std::move(current)));
+    root_operators.push_back(output->name());
+    task.pipelines.push_back(MakePipeline("main", "main", "root", {"aggregate-partial"},
+                                          std::move(root_operators), std::move(output)));
+    return task;
+}
+
 absl::StatusOr<std::optional<ExecutionTask>> BuildUnaryBreakerExecutionTask(
     const std::shared_ptr<plan::PlanNode>& root_plan) {
     if (root_plan == nullptr) {
@@ -2058,6 +2145,14 @@ absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
     }
     if (!fast_or->rbo_result.pushdown_plan.has_value() ||
         !optimizer::CanExecutePushdownPlan(*fast_or->rbo_result.pushdown_plan)) {
+        auto aggregate_task_or =
+            BuildTwoStageGroupedAggregateExecutionTask(fast_or->rbo_result.plan);
+        if (!aggregate_task_or.ok()) {
+            return aggregate_task_or.status();
+        }
+        if (aggregate_task_or->has_value()) {
+            return std::move(**aggregate_task_or);
+        }
         auto breaker_task_or = BuildUnaryBreakerExecutionTask(fast_or->rbo_result.plan);
         if (!breaker_task_or.ok()) {
             return breaker_task_or.status();
@@ -2264,6 +2359,7 @@ ExecutionProfile BuildExecutionProfile(const std::vector<PipelineProfile>& pipel
 
 bool IsBlockingOperatorName(const std::string& name) {
     return name == "SortOperator" || name == "GroupOperator" || name == "AggregateOperator" ||
+           name == "PartialAggregateOperator" || name == "FinalAggregateOperator" ||
            name == "DistinctOperator" || name == "LocalHashJoinOperator" ||
            name == "ExchangeOperator" || name == "MaterializeOperator" || name == "TopNOperator";
 }
@@ -2629,7 +2725,8 @@ absl::StatusOr<Value> PhysicalExecutor::Execute(
 }
 
 bool IsAccumulatingOperatorName(const std::string& name) {
-    return name == "GroupOperator" || name == "DistinctOperator" || name == "AggregateOperator";
+    return name == "GroupOperator" || name == "DistinctOperator" || name == "AggregateOperator" ||
+           name == "PartialAggregateOperator" || name == "FinalAggregateOperator";
 }
 
 std::vector<std::string> AccumulatingOperators(const std::vector<std::string>& operators) {
@@ -2699,10 +2796,10 @@ std::string FormatAccumulatorStats(const std::vector<AccumulatorStats>& stats) {
             out << ", ";
         }
         out << "{operator=" << stats[i].operator_name << ", mode=" << stats[i].mode
-            << ", input_rows=" << stats[i].input_rows
-            << ", output_rows=" << stats[i].output_rows << ", groups=" << stats[i].groups
-            << ", key_ms=" << stats[i].key_time_ms << ", hash_ms=" << stats[i].hash_time_ms
-            << ", update_ms=" << stats[i].update_time_ms
+            << ", phase=" << stats[i].phase << ", key=" << stats[i].key_strategy
+            << ", input_rows=" << stats[i].input_rows << ", output_rows=" << stats[i].output_rows
+            << ", groups=" << stats[i].groups << ", key_ms=" << stats[i].key_time_ms
+            << ", hash_ms=" << stats[i].hash_time_ms << ", update_ms=" << stats[i].update_time_ms
             << ", result_ms=" << stats[i].result_time_ms << "}";
     }
     out << "]";
@@ -2730,8 +2827,8 @@ std::string FormatExecutionProfile(const ExecutionProfile& profile) {
             out << "  splits: " << FormatSplitStats(pipeline.split_stats) << "\n";
         }
         if (!pipeline.accumulator_stats.empty()) {
-            out << "  accumulator_stats: "
-                << FormatAccumulatorStats(pipeline.accumulator_stats) << "\n";
+            out << "  accumulator_stats: " << FormatAccumulatorStats(pipeline.accumulator_stats)
+                << "\n";
         }
         if (!pipeline.error.empty()) {
             out << "  error: " << pipeline.error << "\n";

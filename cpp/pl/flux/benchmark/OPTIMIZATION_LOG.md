@@ -453,3 +453,46 @@ profile/benchmark 拆开观察：
 结论：相对上一轮 string canonical key 的 `0.3851s` group_count，typed key/hash state 把 1M
 group_count 进一步压到 `0.3244s`。profile 也确认后续若继续提速，优先方向是减少 per-row key
 对象构造和 hash lookup 成本，而不是再碰 aggregate update 本身。
+
+## 2026-05-17：Two-stage grouped accumulator 和 release baseline
+
+这一轮把 `group |> aggregate` 从单个 blocking accumulator 推进到 driver-local partial +
+global final 的两阶段形态，并把 benchmark baseline 口径固定到 release build：
+
+- `StreamingGroupedAggregateOperator` 增加 `Single` / `Partial` / `Final` phase。`count/sum/min/max`
+  的 final 阶段合并 partial 值；`mean` 的 partial 阶段输出 sum 和隐藏 count，final 阶段再合并成
+  最终均值。
+- planner 对多 driver 的 `Aggregate(Group(input))` 生成独立 partial pipeline，每个 driver 先在本地
+  聚合，再通过 exchange 送入 final pipeline。这样 grouped aggregate 不再把 1M 输入 page 全部推到
+  final operator。
+- 单列 group/distinct key 增加 fast path，`GroupKey` 不再为单列 key 分配 `std::vector`。
+- `PageChunk` 增加列索引 helper，执行热路径可以复用列定位结果，减少重复扫描 schema。
+- explain/profile 输出补充 accumulator `phase` 和 `key`；connector benchmark JSON 增加
+  `accumulator_partial_input_rows`、`accumulator_final_input_rows`、`accumulator_partial_time_ms`、
+  `accumulator_final_time_ms`。
+- `run_connector_benchmarks.py` 增加 `--build` / `--bazel-config` / `--output`，可以一条命令重建
+  release benchmark binary、采样并保存 JSON baseline。
+
+本轮确认：
+
+- `bazel test //cpp/pl/flux/runtime:runtime_exec_unit_test`：102 tests，101 passed，1 skipped
+  MySQL integration。
+- release benchmark build：`bazel build --config=release //cpp/pl/flux/benchmark:sqlite_scan_benchmark
+  //cpp/pl/flux/benchmark:mysql_scan_benchmark` passed。
+- 真实 SQLite 1M rows，8 drivers，release build，`--repeat 1 --warmup 0`：
+  - `scan`：984 pages，`0.1511s`，约 `6.62M` input rows/s。
+  - `filter_project`：496 pages，`0.0390s`，约 `25.67M` input rows/s。
+  - `wide_filter`：496 pages，`0.0541s`，约 `18.48M` input rows/s。
+  - `topn`：9 pages，`0.0165s`，约 `60.55M` input rows/s。
+  - `distinct_host`：985 pages，`0.1005s`，约 `9.95M` input rows/s。
+  - `group_count`：9 pages，`0.0940s`，约 `10.63M` input rows/s；partial rows `1,000,000`，
+    final rows `512`。
+  - `group_sum`：9 pages，`0.0761s`，约 `13.15M` input rows/s；partial rows `1,000,000`，
+    final rows `512`。
+  - `group_mean`：9 pages，`0.1119s`，约 `8.93M` input rows/s；partial rows `1,000,000`，
+    final rows `512`。
+
+结论：two-stage grouped accumulator 的收益不是只看 wall time，它把 grouped aggregate 的下游交换
+量从 985 pages 降到 9 pages，并让 final 阶段只处理 512 行 partial 结果。release 口径下，
+1M `group_count` 当前为 `0.0940s`，已经明显快于上一轮 single-stage typed accumulator 的
+`0.3244s`；后续继续优化应看 partial 阶段的 key/hash/update 合计，而不是 final merge。

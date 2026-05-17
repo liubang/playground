@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Run connector scan benchmarks with repeated samples.
 
-The runner intentionally keeps setup simple: build the two benchmark binaries
-with Bazel first, then execute stable scenario sets and print JSON summaries.
+Use --build to rebuild benchmark binaries before sampling. Release baselines
+should use --build --bazel-config release so the JSON output is not polluted by
+fastbuild instrumentation.
 """
 
 import argparse
@@ -34,10 +35,14 @@ PROFILE_KEYS = [
     "accumulator_input_rows",
     "accumulator_output_rows",
     "accumulator_groups",
+    "accumulator_partial_input_rows",
+    "accumulator_final_input_rows",
     "accumulator_key_time_ms",
     "accumulator_hash_time_ms",
     "accumulator_update_time_ms",
     "accumulator_result_time_ms",
+    "accumulator_partial_time_ms",
+    "accumulator_final_time_ms",
 ]
 
 SQLITE_DEFAULT_SCENARIOS = [
@@ -51,6 +56,25 @@ SQLITE_DEFAULT_SCENARIOS = [
     "group_mean",
 ]
 MYSQL_DEFAULT_SCENARIOS = ["scan", "filter_project", "wide_filter", "topn"]
+
+
+def benchmark_targets(connector):
+    if connector == "sqlite":
+        return ["//cpp/pl/flux/benchmark:sqlite_scan_benchmark"]
+    if connector == "mysql":
+        return ["//cpp/pl/flux/benchmark:mysql_scan_benchmark"]
+    return [
+        "//cpp/pl/flux/benchmark:sqlite_scan_benchmark",
+        "//cpp/pl/flux/benchmark:mysql_scan_benchmark",
+    ]
+
+
+def build_benchmarks(args):
+    command = ["bazel", "build"]
+    if args.bazel_config:
+        command.append(f"--config={args.bazel_config}")
+    command.extend(benchmark_targets(args.connector))
+    subprocess.run(command, cwd=ROOT, check=True)
 
 
 def run_json(command, env=None):
@@ -253,6 +277,9 @@ def main():
     parser.add_argument("--prepare-mysql-benchmark-table", action="store_true")
     parser.add_argument("--threshold", type=float, default=50.0)
     parser.add_argument("--scenario", dest="scenarios", action="append")
+    parser.add_argument("--build", action="store_true", help="build benchmark targets before running")
+    parser.add_argument("--bazel-config", default="release", help="Bazel config used with --build")
+    parser.add_argument("--output", help="write the JSON summary to this file as a stable baseline")
     args = parser.parse_args()
 
     if args.repeat <= 0:
@@ -262,13 +289,20 @@ def main():
         print("--warmup must not be negative", file=sys.stderr)
         return 2
 
+    if args.build:
+        build_benchmarks(args)
+
     results = []
     if args.connector in ("sqlite", "all"):
         results.extend(run_sqlite(args))
     if args.connector in ("mysql", "all"):
         results.extend(run_mysql(args))
 
-    print(json.dumps({"results": results}, indent=2, sort_keys=True))
+    payload = {"results": results}
+    text = json.dumps(payload, indent=2, sort_keys=True)
+    if args.output:
+        Path(args.output).write_text(text + "\n", encoding="utf-8")
+    print(text)
     return 0
 
 
