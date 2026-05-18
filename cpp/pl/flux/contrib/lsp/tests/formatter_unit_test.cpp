@@ -103,7 +103,7 @@ TEST(FormatterTest, FunctionExprWithBlockBody) {
     // 应包含花括号和换行
     EXPECT_NE(result.find("(x) => {"), std::string::npos);
     EXPECT_NE(result.find("return x + 1"), std::string::npos);
-    EXPECT_NE(result.find("}"), std::string::npos);
+    EXPECT_NE(result.find('}'), std::string::npos);
 }
 
 // ==================== 空 Array / Object ====================
