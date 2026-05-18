@@ -17,33 +17,39 @@
 
 #include "cpp/pl/flux/contrib/lsp/transport.h"
 
+#include <array>
 #include <charconv>
 #include <cstring>
 #include <string>
+#include <string_view>
 
 namespace pl::flux::lsp {
 
 StdioTransport::StdioTransport(FILE* in, FILE* out) : in_(in), out_(out) {}
 
 std::optional<std::string> StdioTransport::read_message() {
+    if (!in_) {
+        return std::nullopt;
+    }
+
     // Read headers until we find Content-Length
     int content_length = -1;
-    char line[256];
+    std::array<char, 256> line{};
 
     while (true) {
-        if (!std::fgets(line, sizeof(line), in_)) {
+        if (!std::fgets(line.data(), static_cast<int>(line.size()), in_)) {
             return std::nullopt; // EOF
         }
 
         // Empty line (just \r\n) signals end of headers
-        if (std::strcmp(line, "\r\n") == 0 || std::strcmp(line, "\n") == 0) {
+        if (std::strcmp(line.data(), "\r\n") == 0 || std::strcmp(line.data(), "\n") == 0) {
             break;
         }
 
         // Parse Content-Length header
-        constexpr char kContentLength[] = "Content-Length: ";
-        if (std::strncmp(line, kContentLength, sizeof(kContentLength) - 1) == 0) {
-            const char* value_start = line + sizeof(kContentLength) - 1;
+        constexpr std::string_view kContentLength = "Content-Length: ";
+        if (std::strncmp(line.data(), kContentLength.data(), kContentLength.size()) == 0) {
+            const char* value_start = line.data() + kContentLength.size();
             const char* value_end = value_start + std::strlen(value_start);
             // Trim trailing whitespace / \r\n
             while (value_end > value_start &&
@@ -63,7 +69,7 @@ std::optional<std::string> StdioTransport::read_message() {
 
     // Read body
     std::string body(static_cast<size_t>(content_length), '\0');
-    size_t bytes_read = std::fread(body.data(), 1, static_cast<size_t>(content_length), in_);
+    auto bytes_read = std::fread(body.data(), 1, static_cast<size_t>(content_length), in_);
     if (bytes_read != static_cast<size_t>(content_length)) {
         return std::nullopt;
     }
@@ -72,6 +78,9 @@ std::optional<std::string> StdioTransport::read_message() {
 }
 
 void StdioTransport::write_message(const std::string& json) {
+    if (!out_) {
+        return;
+    }
     std::fprintf(out_, "Content-Length: %zu\r\n\r\n%s", json.size(), json.c_str());
     std::fflush(out_);
 }

@@ -19,7 +19,9 @@
 
 #include "cpp/pl/flux/contrib/lsp/formatter.h"
 #include "cpp/pl/flux/contrib/lsp/jsonrpc.h"
+#include "cpp/pl/flux/contrib/lsp/symbol_table.h"
 #include "cpp/pl/flux/contrib/lsp/transport.h"
+#include "cpp/pl/flux/syntax/ast.h"
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -32,17 +34,23 @@ struct ServerOptions {
     FormatOptions format;
 };
 
-// Per-document state maintained by the server.
+// Per-document state maintained by the server, including cached AST.
 struct Document {
     std::string uri;
     std::string content;
     int version = 0;
+
+    // Cached parse result — invalidated on content change.
+    std::shared_ptr<File> ast;
+    std::vector<std::string> parse_errors;
+    int ast_version = -1; // version at which ast was computed
+
+    // Cached symbol table — rebuilt when AST changes.
+    SymbolTable symbols;
+    int symbols_version = -1;
 };
 
 // Flux Language Server implementation.
-// Supports: initialize, textDocument/didOpen, didChange, didClose,
-//           textDocument/completion, textDocument/hover,
-//           textDocument/publishDiagnostics (push).
 class FluxLanguageServer {
 public:
     explicit FluxLanguageServer(StdioTransport transport, ServerOptions opts = {});
@@ -69,15 +77,32 @@ private:
     void handle_completion(const JsonRpcMessage& msg);
     void handle_hover(const JsonRpcMessage& msg);
     void handle_formatting(const JsonRpcMessage& msg);
+    void handle_document_symbol(const JsonRpcMessage& msg);
+    void handle_folding_range(const JsonRpcMessage& msg);
+    void handle_definition(const JsonRpcMessage& msg);
+    void handle_references(const JsonRpcMessage& msg);
+    void handle_rename(const JsonRpcMessage& msg);
+    void handle_signature_help(const JsonRpcMessage& msg);
+    void handle_document_highlight(const JsonRpcMessage& msg);
+    void handle_semantic_tokens(const JsonRpcMessage& msg);
+    void handle_code_action(const JsonRpcMessage& msg);
+    void handle_inlay_hint(const JsonRpcMessage& msg);
+    void handle_selection_range(const JsonRpcMessage& msg);
+
+    // Ensure cached AST is up-to-date for a document.
+    void ensure_ast(Document& doc);
+
+    // Ensure cached symbol table is up-to-date for a document.
+    void ensure_symbols(Document& doc);
 
     // Publish diagnostics for a document.
     void publish_diagnostics(const std::string& uri);
 
     // Build completion items from current context.
-    std::string build_completion_response(const Document& doc, int line, int character);
+    std::string build_completion_response(Document& doc, int line, int character);
 
     // Build hover response at a position.
-    std::string build_hover_response(const Document& doc, int line, int character);
+    static std::string build_hover_response(const Document& doc, int line, int character);
 
     // Send a response for a request.
     void reply(const JsonRpcMessage& msg, const std::string& result_json);
