@@ -1084,7 +1084,7 @@ TEST(RuntimeExecTest, SchedulerCancelsExchangeProducersWhenRootSinkFails) {
     auto exchange = plan::MakeExchange(scan, plan::ExchangeKind::Gather);
     auto started = std::chrono::steady_clock::now();
     size_t seen_pages = 0;
-    auto result_or = execution::PhysicalExecutor().ExecuteToSink(exchange, [&](Page) {
+    auto result_or = execution::PhysicalExecutor().ExecuteToSink(exchange, [&](const Page&) {
         ++seen_pages;
         return absl::CancelledError("test sink stopped early");
     });
