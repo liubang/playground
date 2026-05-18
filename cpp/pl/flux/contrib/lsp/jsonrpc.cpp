@@ -17,6 +17,7 @@
 
 #include "cpp/pl/flux/contrib/lsp/jsonrpc.h"
 
+#include "cpp/pl/flux/contrib/lsp/json_util.h"
 #include "simdjson.h"
 #include <sstream>
 
@@ -25,64 +26,10 @@ namespace pl::flux::lsp {
 namespace {
 
 std::string id_to_json(const std::variant<int64_t, std::string>& id) {
-    if (auto* n = std::get_if<int64_t>(&id)) {
+    if (const auto* n = std::get_if<int64_t>(&id)) {
         return std::to_string(*n);
     }
-    // String id: escape for JSON
-    const auto& s = std::get<std::string>(id);
-    std::string out = "\"";
-    for (char c : s) {
-        switch (c) {
-            case '"':
-                out += "\\\"";
-                break;
-            case '\\':
-                out += "\\\\";
-                break;
-            case '\n':
-                out += "\\n";
-                break;
-            case '\r':
-                out += "\\r";
-                break;
-            case '\t':
-                out += "\\t";
-                break;
-            default:
-                out += c;
-        }
-    }
-    out += '"';
-    return out;
-}
-
-std::string escape_json_string(const std::string& s) {
-    std::string out;
-    out.reserve(s.size() + 8);
-    out += '"';
-    for (char c : s) {
-        switch (c) {
-            case '"':
-                out += "\\\"";
-                break;
-            case '\\':
-                out += "\\\\";
-                break;
-            case '\n':
-                out += "\\n";
-                break;
-            case '\r':
-                out += "\\r";
-                break;
-            case '\t':
-                out += "\\t";
-                break;
-            default:
-                out += c;
-        }
-    }
-    out += '"';
-    return out;
+    return json_escape(std::get<std::string>(id));
 }
 
 } // namespace
@@ -98,15 +45,14 @@ std::string make_error_response(const std::variant<int64_t, std::string>& id,
                                 const JsonRpcError& error) {
     std::ostringstream os;
     os << R"({"jsonrpc":"2.0","id":)" << id_to_json(id) << R"(,"error":{"code":)"
-       << static_cast<int>(error.code) << R"(,"message":)" << escape_json_string(error.message)
-       << "}}";
+       << static_cast<int>(error.code) << R"(,"message":)" << json_escape(error.message) << "}}";
     return os.str();
 }
 
 std::string make_notification(const std::string& method, const std::string& params_json) {
     std::ostringstream os;
-    os << R"({"jsonrpc":"2.0","method":)" << escape_json_string(method) << R"(,"params":)"
-       << params_json << "}";
+    os << R"({"jsonrpc":"2.0","method":)" << json_escape(method) << R"(,"params":)" << params_json
+       << "}";
     return os.str();
 }
 

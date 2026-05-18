@@ -18,6 +18,7 @@
 #include "cpp/pl/flux/contrib/lsp/formatter.h"
 
 #include <algorithm>
+#include <ranges>
 #include <vector>
 
 namespace pl::flux::lsp {
@@ -185,7 +186,9 @@ void Formatter::format_array_expr(const ArrayExpr& expr) {
     // Try inline first
     std::string inline_str = "[";
     for (size_t i = 0; i < expr.elements.size(); ++i) {
-        if (i > 0) inline_str += ", ";
+        if (i > 0) {
+            inline_str += ", ";
+        }
         inline_str += try_format_inline(*expr.elements[i]->expression);
     }
     inline_str += "]";
@@ -200,10 +203,10 @@ void Formatter::format_array_expr(const ArrayExpr& expr) {
 void Formatter::format_array_expr_multiline(const ArrayExpr& expr) {
     emit("[");
     indent();
-    for (size_t i = 0; i < expr.elements.size(); ++i) {
+    for (const auto& elem : expr.elements) {
         emit_newline();
         emit_indent();
-        format_expr(*expr.elements[i]->expression);
+        format_expr(*elem->expression);
         emit(",");
     }
     dedent();
@@ -288,10 +291,10 @@ void Formatter::format_object_expr_multiline(const ObjectExpr& expr) {
         emit(expr.with->source->string());
         emit(" with");
     }
-    for (size_t i = 0; i < expr.properties.size(); ++i) {
+    for (const auto& prop : expr.properties) {
         emit_newline();
         emit_indent();
-        format_property(*expr.properties[i]);
+        format_property(*prop);
         emit(",");
     }
     dedent();
@@ -343,7 +346,7 @@ void Formatter::format_pipe_expr(const PipeExpr& expr) {
     }
 
     // steps is in reverse order (outermost first collected, innermost last), reverse it
-    std::reverse(steps.begin(), steps.end());
+    std::ranges::reverse(steps);
 
     // Format the base expression (the leftmost non-pipe expr)
     format_expr(*current->argument);
@@ -378,16 +381,19 @@ void Formatter::format_call_expr(const CallExpr& expr) {
     // Inline: unwrap single ObjectExpr argument
     format_expr(*expr.callee);
     emit("(");
-    if (expr.arguments.size() == 1 &&
-        expr.arguments[0]->type == Expression::Type::ObjectExpr) {
+    if (expr.arguments.size() == 1 && expr.arguments[0]->type == Expression::Type::ObjectExpr) {
         const auto& obj = *std::get<std::unique_ptr<ObjectExpr>>(expr.arguments[0]->expr);
         for (size_t i = 0; i < obj.properties.size(); ++i) {
-            if (i > 0) emit(", ");
+            if (i > 0) {
+                emit(", ");
+            }
             format_property(*obj.properties[i]);
         }
     } else {
         for (size_t i = 0; i < expr.arguments.size(); ++i) {
-            if (i > 0) emit(", ");
+            if (i > 0) {
+                emit(", ");
+            }
             format_expr(*expr.arguments[i]);
         }
     }
@@ -405,15 +411,14 @@ void Formatter::format_call_expr_multiline(const CallExpr& expr) {
 
     // For call arguments, which are typically ObjectExpr nodes wrapping named params,
     // we check if there's a single ObjectExpr argument (the common pattern in Flux).
-    if (expr.arguments.size() == 1 &&
-        expr.arguments[0]->type == Expression::Type::ObjectExpr) {
+    if (expr.arguments.size() == 1 && expr.arguments[0]->type == Expression::Type::ObjectExpr) {
         const auto& obj = *std::get<std::unique_ptr<ObjectExpr>>(expr.arguments[0]->expr);
         // Expand the object's properties directly as call arguments
         indent();
-        for (size_t i = 0; i < obj.properties.size(); ++i) {
+        for (const auto& prop : obj.properties) {
             emit_newline();
             emit_indent();
-            format_property(*obj.properties[i]);
+            format_property(*prop);
             emit(",");
         }
         dedent();
@@ -422,10 +427,10 @@ void Formatter::format_call_expr_multiline(const CallExpr& expr) {
         emit(")");
     } else {
         indent();
-        for (size_t i = 0; i < expr.arguments.size(); ++i) {
+        for (const auto& arg : expr.arguments) {
             emit_newline();
             emit_indent();
-            format_expr(*expr.arguments[i]);
+            format_expr(*arg);
             emit(",");
         }
         dedent();
@@ -615,21 +620,26 @@ void Formatter::format_assignment(const Assignment& assgn) {
 // ============================================================
 
 std::string Formatter::try_format_inline(const Expression& expr) {
-    // Create a temporary formatter with same options to produce inline output
     Formatter tmp(opts_);
     tmp.indent_level_ = 0;
+    // 设置预算: 当前行剩余可用宽度
+    tmp.inline_budget_ = opts_.max_line_width;
     tmp.format_expr(expr);
-    // Strip any newlines — if there are newlines, it's already multi-line
-    auto& s = tmp.output_;
-    for (auto& c : s) {
-        if (c == '\n') return s; // contains newline, can't inline
+    if (tmp.budget_exceeded_) {
+        return tmp.output_; // 超限，调用方会检测到长度超宽并 fallback
     }
-    return s;
+    for (auto c : tmp.output_) {
+        if (c == '\n') {
+            return tmp.output_;
+        }
+    }
+    return tmp.output_;
 }
 
 std::string Formatter::try_format_property_inline(const Property& prop) {
     Formatter tmp(opts_);
     tmp.indent_level_ = 0;
+    tmp.inline_budget_ = opts_.max_line_width;
     tmp.format_property(prop);
     return tmp.output_;
 }
@@ -637,49 +647,67 @@ std::string Formatter::try_format_property_inline(const Property& prop) {
 std::string Formatter::try_format_call_inline(const CallExpr& expr) {
     Formatter tmp(opts_);
     tmp.indent_level_ = 0;
+    tmp.inline_budget_ = opts_.max_line_width;
     tmp.format_expr(*expr.callee);
     tmp.emit("(");
 
+    if (tmp.budget_exceeded_) {
+        return tmp.output_;
+    }
+
     // Unwrap single ObjectExpr argument (common Flux pattern: named params)
-    if (expr.arguments.size() == 1 &&
-        expr.arguments[0]->type == Expression::Type::ObjectExpr) {
+    if (expr.arguments.size() == 1 && expr.arguments[0]->type == Expression::Type::ObjectExpr) {
         const auto& obj = *std::get<std::unique_ptr<ObjectExpr>>(expr.arguments[0]->expr);
         for (size_t i = 0; i < obj.properties.size(); ++i) {
-            if (i > 0) tmp.emit(", ");
+            if (tmp.budget_exceeded_) {
+                return tmp.output_;
+            }
+            if (i > 0) {
+                tmp.emit(", ");
+            }
             tmp.format_property(*obj.properties[i]);
         }
     } else {
         for (size_t i = 0; i < expr.arguments.size(); ++i) {
-            if (i > 0) tmp.emit(", ");
+            if (tmp.budget_exceeded_) {
+                return tmp.output_;
+            }
+            if (i > 0) {
+                tmp.emit(", ");
+            }
             tmp.format_expr(*expr.arguments[i]);
         }
     }
 
     tmp.emit(")");
-    // If the tmp output contains newlines, it's not truly inline
     for (auto c : tmp.output_) {
-        if (c == '\n') return tmp.output_;
+        if (c == '\n') {
+            return tmp.output_;
+        }
     }
     return tmp.output_;
 }
 
 std::string Formatter::try_format_object_inline(const ObjectExpr& expr) {
-    std::string result = "{";
+    Formatter tmp(opts_);
+    tmp.indent_level_ = 0;
+    tmp.inline_budget_ = opts_.max_line_width;
+    tmp.emit("{");
     if (expr.with) {
-        result += expr.with->source->string();
-        result += " with ";
+        tmp.emit(expr.with->source->string());
+        tmp.emit(" with ");
     }
     for (size_t i = 0; i < expr.properties.size(); ++i) {
-        if (i > 0) result += ", ";
-        Formatter tmp(opts_);
-        tmp.format_property(*expr.properties[i]);
-        if (tmp.output_.find('\n') != std::string::npos) {
-            return result + "...}"; // signal that it's too complex
+        if (tmp.budget_exceeded_) {
+            return tmp.output_;
         }
-        result += tmp.output_;
+        if (i > 0) {
+            tmp.emit(", ");
+        }
+        tmp.format_property(*expr.properties[i]);
     }
-    result += "}";
-    return result;
+    tmp.emit("}");
+    return tmp.output_;
 }
 
 // ============================================================
@@ -688,23 +716,16 @@ std::string Formatter::try_format_object_inline(const ObjectExpr& expr) {
 
 bool Formatter::is_complex_call(const CallExpr& expr) const {
     // Unwrap single ObjectExpr (Flux named params pattern)
-    if (expr.arguments.size() == 1 &&
-        expr.arguments[0]->type == Expression::Type::ObjectExpr) {
+    if (expr.arguments.size() == 1 && expr.arguments[0]->type == Expression::Type::ObjectExpr) {
         const auto& obj = *std::get<std::unique_ptr<ObjectExpr>>(expr.arguments[0]->expr);
-        for (const auto& prop : obj.properties) {
-            if (prop->value && is_complex_expr(*prop->value)) {
-                return true;
-            }
-        }
-        return false;
+        return std::ranges::any_of(obj.properties, [this](const auto& prop) {
+            return prop->value && is_complex_expr(*prop->value);
+        });
     }
     // A call is complex if any argument is complex
-    for (const auto& arg : expr.arguments) {
-        if (is_complex_expr(*arg)) {
-            return true;
-        }
-    }
-    return false;
+    return std::ranges::any_of(expr.arguments, [this](const auto& arg) {
+        return is_complex_expr(*arg);
+    });
 }
 
 bool Formatter::is_complex_expr(const Expression& expr) const {
@@ -716,7 +737,9 @@ bool Formatter::is_complex_expr(const Expression& expr) const {
             // A nested call with arguments is complex if its args are complex
             if (!call.arguments.empty()) {
                 for (const auto& arg : call.arguments) {
-                    if (is_complex_expr(*arg)) return true;
+                    if (is_complex_expr(*arg)) {
+                        return true;
+                    }
                 }
             }
             return false;
@@ -724,20 +747,18 @@ bool Formatter::is_complex_expr(const Expression& expr) const {
         case Expression::Type::ObjectExpr: {
             const auto& obj = *std::get<std::unique_ptr<ObjectExpr>>(expr.expr);
             // An object with properties that themselves contain pipe/call exprs is complex
-            if (obj.properties.size() > 3) return true;
-            for (const auto& prop : obj.properties) {
-                if (prop->value && is_complex_expr(*prop->value)) return true;
+            if (obj.properties.size() > 3) {
+                return true;
             }
-            return false;
+            return std::ranges::any_of(obj.properties, [this](const auto& prop) {
+                return prop->value && is_complex_expr(*prop->value);
+            });
         }
         case Expression::Type::FunctionExpr: {
             const auto& fn = *std::get<std::unique_ptr<FunctionExpr>>(expr.expr);
             // A function is only complex if it has a block body (multi-statement).
             // Simple arrow functions like `(r) => r.x == "y"` are not complex.
-            if (fn.body && fn.body->type == FunctionBody::Type::Block) {
-                return true;
-            }
-            return false;
+            return fn.body && fn.body->type == FunctionBody::Type::Block;
         }
         default:
             return false;
@@ -765,8 +786,8 @@ bool Formatter::is_simple_variable_assgn(const Statement& stmt) {
         const auto& call = *std::get<std::unique_ptr<CallExpr>>(va.init->expr);
         std::string inline_str = try_format_call_inline(call);
         // Estimate: "name = " prefix + call inline
-        int estimated_width = static_cast<int>(va.id->name.size()) + 3 +
-                              static_cast<int>(inline_str.size());
+        int estimated_width =
+            static_cast<int>(va.id->name.size()) + 3 + static_cast<int>(inline_str.size());
         if (estimated_width > opts_.max_line_width) {
             return false;
         }
@@ -778,7 +799,13 @@ bool Formatter::is_simple_variable_assgn(const Statement& stmt) {
 // Helpers
 // ============================================================
 
-void Formatter::emit(std::string_view s) { output_.append(s); }
+void Formatter::emit(std::string_view s) {
+    output_.append(s);
+    // inline 宽度预算检查: 超出预算时标记终止
+    if (inline_budget_ > 0 && output_.size() > static_cast<size_t>(inline_budget_)) {
+        budget_exceeded_ = true;
+    }
+}
 
 void Formatter::emit_newline() { output_.push_back('\n'); }
 

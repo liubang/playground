@@ -82,6 +82,7 @@ private:
     void format_array_expr_multiline(const ArrayExpr& expr);
 
     // Try to format an expression into a single-line string (for width checking).
+    // 当 inline_budget_ > 0 时启用 early-exit：超出预算即停止输出。
     [[nodiscard]] std::string try_format_inline(const Expression& expr);
     [[nodiscard]] std::string try_format_property_inline(const Property& prop);
     [[nodiscard]] std::string try_format_call_inline(const CallExpr& expr);
@@ -106,6 +107,9 @@ private:
     Options opts_;
     std::string output_;
     int indent_level_ = 0;
+    // inline 宽度预算: >0 时表示正在进行 inline 测量，超出则通过 budget_exceeded_ 提前终止
+    int inline_budget_ = 0;
+    bool budget_exceeded_ = false;
 };
 
 } // namespace pl::flux::lsp
