@@ -49,6 +49,32 @@ struct AccumulatorStats {
     double result_time_ms = 0.0;
 };
 
+struct MemoryProfile {
+    size_t used_bytes = 0;
+    size_t peak_bytes = 0;
+    size_t limit_bytes = 0;
+    bool limited = false;
+};
+
+class QueryMemoryContext {
+public:
+    explicit QueryMemoryContext(size_t limit_bytes);
+
+    [[nodiscard]] static std::shared_ptr<QueryMemoryContext> FromEnvironment();
+
+    [[nodiscard]] absl::Status Reserve(size_t bytes);
+    void Release(size_t bytes);
+    [[nodiscard]] MemoryProfile Snapshot() const;
+    [[nodiscard]] size_t limit_bytes() const;
+
+private:
+    mutable std::mutex mu_;
+    size_t used_bytes_ = 0;
+    size_t peak_bytes_ = 0;
+    size_t limit_bytes_ = 0;
+    bool limited_ = false;
+};
+
 class Operator {
 public:
     virtual ~Operator() = default;
@@ -57,6 +83,13 @@ public:
     virtual void Cancel() {}
     virtual void CollectSplitStats(std::vector<connector::ConnectorSplitStats>*) const {}
     virtual void CollectAccumulatorStats(std::vector<AccumulatorStats>*) const {}
+};
+
+struct ExchangeDistributionProfile {
+    std::string kind;
+    std::vector<std::string> partition_keys;
+    bool include_group_key = false;
+    size_t partitions = 1;
 };
 
 struct Pipeline {
@@ -76,6 +109,7 @@ struct Pipeline {
     std::string role;
     std::vector<std::string> dependencies;
     std::vector<std::string> operators;
+    std::optional<ExchangeDistributionProfile> distribution;
     std::unique_ptr<Operator> root;
     std::vector<std::unique_ptr<Operator>> driver_roots;
     std::shared_ptr<Stats> stats = std::make_shared<Stats>();
@@ -83,6 +117,7 @@ struct Pipeline {
 
 struct ExecutionTask {
     std::vector<Pipeline> pipelines;
+    std::shared_ptr<QueryMemoryContext> memory_context;
 };
 
 struct PipelineProfile {
@@ -91,6 +126,7 @@ struct PipelineProfile {
     std::string role;
     std::vector<std::string> dependencies;
     std::vector<std::string> operators;
+    std::optional<ExchangeDistributionProfile> distribution;
     bool blocking = false;
     size_t drivers = 1;
     size_t pages = 0;
@@ -104,6 +140,7 @@ struct PipelineProfile {
 
 struct ExecutionProfile {
     std::vector<PipelineProfile> pipelines;
+    MemoryProfile memory;
 };
 
 struct SchedulerResult {

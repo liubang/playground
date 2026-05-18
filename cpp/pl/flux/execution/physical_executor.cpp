@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
+#include <cstdlib>
 #include <cstddef>
 #include <deque>
 #include <future>
@@ -48,6 +49,23 @@ namespace pl::flux::execution {
 namespace {
 using namespace detail;
 using Clock = std::chrono::steady_clock;
+constexpr size_t kDefaultQueryMemoryLimitBytes = size_t{256} * 1024 * 1024;
+
+size_t parse_query_memory_limit() {
+    const char* value = std::getenv("FLUX_QUERY_MAX_MEMORY_BYTES");
+    if (value == nullptr || *value == '\0') {
+        value = std::getenv("FLUX_ACCUMULATOR_MAX_BYTES");
+    }
+    if (value == nullptr || *value == '\0') {
+        return kDefaultQueryMemoryLimitBytes;
+    }
+    char* end = nullptr;
+    const unsigned long long parsed = std::strtoull(value, &end, 10);
+    if (end == value || parsed == 0) {
+        return kDefaultQueryMemoryLimitBytes;
+    }
+    return static_cast<size_t>(parsed);
+}
 
 Value literal_value(const plan::PredicateLiteral& literal) {
     switch (literal.kind) {
@@ -1044,6 +1062,26 @@ private:
     std::optional<std::string> error_;
 };
 
+ExchangeDistributionProfile GatherDistribution(size_t partitions = 1) {
+    return ExchangeDistributionProfile{
+        .kind = "gather",
+        .partition_keys = {},
+        .include_group_key = false,
+        .partitions = partitions,
+    };
+}
+
+ExchangeDistributionProfile HashDistribution(std::vector<std::string> partition_keys,
+                                             bool include_group_key,
+                                             size_t partitions) {
+    return ExchangeDistributionProfile{
+        .kind = "hash",
+        .partition_keys = std::move(partition_keys),
+        .include_group_key = include_group_key,
+        .partitions = partitions,
+    };
+}
+
 class ExchangeSinkOperator final : public Operator {
 public:
     ExchangeSinkOperator(std::unique_ptr<Operator> input, std::shared_ptr<ExchangeBuffer> buffer)
@@ -1120,24 +1158,37 @@ size_t partition_index_for_key(const std::string& key, size_t partition_count) {
 std::optional<std::string> partition_key_for_page_row(
     const PageChunk& chunk,
     size_t row_index,
-    const std::vector<std::string>& partition_keys) {
+    const std::vector<std::string>& partition_keys,
+    bool include_group_key) {
+    std::string key;
     if (chunk.group_key != nullptr) {
-        return exchange_partition_key(*chunk.group_key, partition_keys);
+        if (include_group_key) {
+            auto group_key = exchange_partition_key(*chunk.group_key, {});
+            if (group_key.has_value()) {
+                absl::StrAppend(&key, "group:\n", *group_key);
+            }
+        } else {
+            return exchange_partition_key(*chunk.group_key, partition_keys);
+        }
     }
     auto row = RowFromPageChunk(chunk, row_index);
-    return exchange_partition_key(*row, partition_keys);
+    auto row_key = exchange_partition_key(*row, partition_keys);
+    if (row_key.has_value()) {
+        absl::StrAppend(&key, "row:\n", *row_key);
+    }
+    return key.empty() ? std::optional<std::string>("__single_partition__") : key;
 }
 
 class PartitionedExchangeSinkOperator final : public Operator {
 public:
     PartitionedExchangeSinkOperator(std::unique_ptr<Operator> input,
                                     std::vector<std::shared_ptr<ExchangeBuffer>> buffers,
-                                    std::vector<std::string> partition_keys)
+                                    ExchangeDistributionProfile distribution)
         : input_(std::move(input)),
           buffers_(std::move(buffers)),
-          partition_keys_(std::move(partition_keys)) {}
+          distribution_(std::move(distribution)) {}
 
-    [[nodiscard]] std::string name() const override { return "PartitionedExchangeSinkOperator"; }
+    [[nodiscard]] std::string name() const override { return "HashPartitionExchangeSinkOperator"; }
 
     void Cancel() override {
         for (const auto& buffer : buffers_) {
@@ -1200,7 +1251,9 @@ public:
                 columns.push_back(column.name);
             }
             for (size_t row_index = 0; row_index < chunk.row_count; ++row_index) {
-                auto key = partition_key_for_page_row(chunk, row_index, partition_keys_);
+                auto key = partition_key_for_page_row(chunk, row_index,
+                                                      distribution_.partition_keys,
+                                                      distribution_.include_group_key);
                 if (!key.has_value()) {
                     continue;
                 }
@@ -1241,7 +1294,7 @@ private:
 
     std::unique_ptr<Operator> input_;
     std::vector<std::shared_ptr<ExchangeBuffer>> buffers_;
-    std::vector<std::string> partition_keys_;
+    ExchangeDistributionProfile distribution_;
     bool finished_ = false;
 };
 
@@ -1675,7 +1728,9 @@ bool IsPipelineBreakerKind(plan::PlanNodeKind kind) {
 }
 
 absl::StatusOr<std::unique_ptr<Operator>> WrapUnaryOperator(
-    const std::shared_ptr<plan::PlanNode>& node, std::unique_ptr<Operator> input) {
+    const std::shared_ptr<plan::PlanNode>& node,
+    std::unique_ptr<Operator> input,
+    const std::shared_ptr<QueryMemoryContext>& memory_context) {
     if (node == nullptr) {
         return absl::InvalidArgumentError("missing unary operator plan");
     }
@@ -1704,13 +1759,16 @@ absl::StatusOr<std::unique_ptr<Operator>> WrapUnaryOperator(
         return std::unique_ptr<Operator>(new SortOperator(node, std::move(input)));
     }
     if (node->kind == plan::PlanNodeKind::Group) {
-        return std::unique_ptr<Operator>(new StreamingGroupOperator(node, std::move(input)));
+        return std::unique_ptr<Operator>(
+            new StreamingGroupOperator(node, std::move(input), memory_context));
     }
     if (node->kind == plan::PlanNodeKind::Distinct) {
-        return std::unique_ptr<Operator>(new StreamingDistinctOperator(node, std::move(input)));
+        return std::unique_ptr<Operator>(
+            new StreamingDistinctOperator(node, std::move(input), memory_context));
     }
     if (node->kind == plan::PlanNodeKind::Aggregate) {
-        return std::unique_ptr<Operator>(new StreamingAggregateOperator(node, std::move(input)));
+        return std::unique_ptr<Operator>(
+            new StreamingAggregateOperator(node, std::move(input), memory_context));
     }
     return absl::InvalidArgumentError(
         absl::StrCat("unsupported physical operator: ", plan::PlanNodeKindName(node->kind)));
@@ -1723,7 +1781,8 @@ struct PlannedOperator {
 };
 
 absl::StatusOr<PlannedOperator> BuildOperator(const std::shared_ptr<plan::PlanNode>& logical_plan,
-                                              bool allow_multi_driver = true) {
+                                              bool allow_multi_driver,
+                                              const std::shared_ptr<QueryMemoryContext>& memory_context) {
     if (logical_plan == nullptr) {
         return absl::InvalidArgumentError("missing physical plan root");
     }
@@ -1765,11 +1824,11 @@ absl::StatusOr<PlannedOperator> BuildOperator(const std::shared_ptr<plan::PlanNo
             optimized_plan->inputs[1] == nullptr) {
             return absl::InvalidArgumentError("join plan requires two inputs");
         }
-        auto left_or = BuildOperator(optimized_plan->inputs[0], false);
+        auto left_or = BuildOperator(optimized_plan->inputs[0], false, memory_context);
         if (!left_or.ok()) {
             return left_or.status();
         }
-        auto right_or = BuildOperator(optimized_plan->inputs[1], false);
+        auto right_or = BuildOperator(optimized_plan->inputs[1], false, memory_context);
         if (!right_or.ok()) {
             return right_or.status();
         }
@@ -1787,13 +1846,14 @@ absl::StatusOr<PlannedOperator> BuildOperator(const std::shared_ptr<plan::PlanNo
         optimized_plan->inputs[0]->kind == plan::PlanNodeKind::Group &&
         optimized_plan->inputs[0]->inputs.size() == 1 &&
         optimized_plan->inputs[0]->inputs[0] != nullptr) {
-        auto planned_or = BuildOperator(optimized_plan->inputs[0]->inputs[0], false);
+        auto planned_or =
+            BuildOperator(optimized_plan->inputs[0]->inputs[0], false, memory_context);
         if (!planned_or.ok()) {
             return planned_or.status();
         }
         planned_or->root = std::unique_ptr<Operator>(new StreamingGroupedAggregateOperator(
             optimized_plan, optimized_plan->inputs[0]->group().columns,
-            std::move(planned_or->root)));
+            std::move(planned_or->root), memory_context));
         planned_or->operators.push_back("GroupOperator");
         planned_or->operators.push_back(planned_or->root->name());
         return std::move(*planned_or);
@@ -1801,7 +1861,7 @@ absl::StatusOr<PlannedOperator> BuildOperator(const std::shared_ptr<plan::PlanNo
     if (optimized_plan->inputs.size() != 1 || optimized_plan->inputs[0] == nullptr) {
         return absl::InvalidArgumentError("plan is not executable");
     }
-    auto planned_or = BuildOperator(optimized_plan->inputs[0], false);
+    auto planned_or = BuildOperator(optimized_plan->inputs[0], false, memory_context);
     if (!planned_or.ok()) {
         return planned_or.status();
     }
@@ -1832,13 +1892,15 @@ absl::StatusOr<PlannedOperator> BuildOperator(const std::shared_ptr<plan::PlanNo
             new SortOperator(optimized_plan, std::move(planned_or->root)));
     } else if (optimized_plan->kind == plan::PlanNodeKind::Group) {
         current = std::unique_ptr<Operator>(
-            new StreamingGroupOperator(optimized_plan, std::move(planned_or->root)));
+            new StreamingGroupOperator(optimized_plan, std::move(planned_or->root), memory_context));
     } else if (optimized_plan->kind == plan::PlanNodeKind::Distinct) {
         current = std::unique_ptr<Operator>(
-            new StreamingDistinctOperator(optimized_plan, std::move(planned_or->root)));
+            new StreamingDistinctOperator(optimized_plan, std::move(planned_or->root),
+                                          memory_context));
     } else if (optimized_plan->kind == plan::PlanNodeKind::Aggregate) {
         current = std::unique_ptr<Operator>(
-            new StreamingAggregateOperator(optimized_plan, std::move(planned_or->root)));
+            new StreamingAggregateOperator(optimized_plan, std::move(planned_or->root),
+                                           memory_context));
     } else {
         return absl::InvalidArgumentError(absl::StrCat(
             "unsupported physical operator: ", plan::PlanNodeKindName(optimized_plan->kind)));
@@ -1854,13 +1916,15 @@ Pipeline MakePipeline(std::string id,
                       std::vector<std::string> dependencies,
                       std::vector<std::string> operators,
                       std::unique_ptr<Operator> root,
-                      std::vector<std::unique_ptr<Operator>> driver_roots = {}) {
+                      std::vector<std::unique_ptr<Operator>> driver_roots = {},
+                      std::optional<ExchangeDistributionProfile> distribution = std::nullopt) {
     Pipeline pipeline;
     pipeline.id = std::move(id);
     pipeline.name = std::move(name);
     pipeline.role = std::move(role);
     pipeline.dependencies = std::move(dependencies);
     pipeline.operators = std::move(operators);
+    pipeline.distribution = std::move(distribution);
     pipeline.root = std::move(root);
     pipeline.driver_roots = std::move(driver_roots);
     return pipeline;
@@ -1943,7 +2007,8 @@ absl::StatusOr<ProducedPipeline> AddProducerPipelineForPlan(
     const std::shared_ptr<plan::PlanNode>& plan_node,
     std::string id,
     std::string role,
-    ExecutionTask* task);
+    ExecutionTask* task,
+    const std::shared_ptr<QueryMemoryContext>& memory_context);
 
 absl::StatusOr<ProducedPipeline> AddJoinProducerPipeline(
     const std::shared_ptr<plan::PlanNode>& join_plan,
@@ -1957,13 +2022,15 @@ absl::StatusOr<ProducedPipeline> AddJoinProducerPipeline(
     }
 
     const bool build_left = join_plan->join().build_side == plan::JoinBuildSide::Left;
-    auto left_or = AddProducerPipelineForPlan(join_plan->inputs[0], ChildPipelineId(id, "left"),
-                                              build_left ? "build" : "probe", task);
+    auto left_or =
+        AddProducerPipelineForPlan(join_plan->inputs[0], ChildPipelineId(id, "left"),
+                                   build_left ? "build" : "probe", task, task->memory_context);
     if (!left_or.ok()) {
         return left_or.status();
     }
-    auto right_or = AddProducerPipelineForPlan(join_plan->inputs[1], ChildPipelineId(id, "right"),
-                                               build_left ? "probe" : "build", task);
+    auto right_or =
+        AddProducerPipelineForPlan(join_plan->inputs[1], ChildPipelineId(id, "right"),
+                                   build_left ? "probe" : "build", task, task->memory_context);
     if (!right_or.ok()) {
         return right_or.status();
     }
@@ -1980,7 +2047,8 @@ absl::StatusOr<ProducedPipeline> AddJoinProducerPipeline(
 
     task->pipelines.push_back(MakePipeline(std::move(id), "join producer", std::move(role),
                                            {left_or->pipeline_id, right_or->pipeline_id},
-                                           std::move(root_operators), std::move(sink)));
+                                           std::move(root_operators), std::move(sink), {},
+                                           GatherDistribution()));
     return ProducedPipeline{.buffer = std::move(output_buffer),
                             .pipeline_id = task->pipelines.back().id};
 }
@@ -1989,7 +2057,8 @@ absl::StatusOr<ProducedPipeline> AddProducerPipelineForPlan(
     const std::shared_ptr<plan::PlanNode>& plan_node,
     std::string id,
     std::string role,
-    ExecutionTask* task) {
+    ExecutionTask* task,
+    const std::shared_ptr<QueryMemoryContext>& memory_context) {
     if (task == nullptr) {
         return absl::InvalidArgumentError("missing execution task");
     }
@@ -1997,7 +2066,7 @@ absl::StatusOr<ProducedPipeline> AddProducerPipelineForPlan(
         return AddJoinProducerPipeline(plan_node, std::move(id), std::move(role), task);
     }
 
-    auto planned_or = BuildOperator(plan_node);
+    auto planned_or = BuildOperator(plan_node, true, memory_context);
     if (!planned_or.ok()) {
         return planned_or.status();
     }
@@ -2009,7 +2078,8 @@ absl::StatusOr<ProducedPipeline> AddProducerPipelineForPlan(
             WrapDriverRootsWithExchangeSinks(std::move(planned_or->driver_roots), output_buffer);
         operators.emplace_back("ExchangeSinkOperator");
         task->pipelines.push_back(MakePipeline(std::move(id), "producer", std::move(role), {},
-                                               std::move(operators), nullptr, std::move(sinks)));
+                                               std::move(operators), nullptr, std::move(sinks),
+                                               GatherDistribution()));
         return ProducedPipeline{.buffer = std::move(output_buffer),
                                 .pipeline_id = task->pipelines.back().id};
     }
@@ -2017,13 +2087,15 @@ absl::StatusOr<ProducedPipeline> AddProducerPipelineForPlan(
         new ExchangeSinkOperator(std::move(planned_or->root), output_buffer));
     operators.push_back(sink->name());
     task->pipelines.push_back(MakePipeline(std::move(id), "producer", std::move(role), {},
-                                           std::move(operators), std::move(sink)));
+                                           std::move(operators), std::move(sink), {},
+                                           GatherDistribution()));
     return ProducedPipeline{.buffer = std::move(output_buffer),
                             .pipeline_id = task->pipelines.back().id};
 }
 
 absl::StatusOr<ExecutionTask> BuildJoinExecutionTask(
-    const std::shared_ptr<plan::PlanNode>& join_plan) {
+    const std::shared_ptr<plan::PlanNode>& join_plan,
+    const std::shared_ptr<QueryMemoryContext>& memory_context) {
     if (join_plan == nullptr || join_plan->kind != plan::PlanNodeKind::Join ||
         join_plan->inputs.size() != 2 || join_plan->inputs[0] == nullptr ||
         join_plan->inputs[1] == nullptr) {
@@ -2031,14 +2103,17 @@ absl::StatusOr<ExecutionTask> BuildJoinExecutionTask(
     }
 
     ExecutionTask task;
+    task.memory_context = memory_context;
     const bool build_left = join_plan->join().build_side == plan::JoinBuildSide::Left;
     auto left_or = AddProducerPipelineForPlan(join_plan->inputs[0], "join-left",
-                                              build_left ? "build" : "probe", &task);
+                                              build_left ? "build" : "probe", &task,
+                                              task.memory_context);
     if (!left_or.ok()) {
         return left_or.status();
     }
     auto right_or = AddProducerPipelineForPlan(join_plan->inputs[1], "join-right",
-                                               build_left ? "probe" : "build", &task);
+                                               build_left ? "probe" : "build", &task,
+                                               task.memory_context);
     if (!right_or.ok()) {
         return right_or.status();
     }
@@ -2059,15 +2134,18 @@ absl::StatusOr<ExecutionTask> BuildJoinExecutionTask(
 }
 
 absl::StatusOr<ExecutionTask> BuildExchangeExecutionTask(
-    const std::shared_ptr<plan::PlanNode>& exchange_plan) {
+    const std::shared_ptr<plan::PlanNode>& exchange_plan,
+    const std::shared_ptr<QueryMemoryContext>& memory_context) {
     if (exchange_plan == nullptr || exchange_plan->kind != plan::PlanNodeKind::Exchange ||
         exchange_plan->inputs.size() != 1 || exchange_plan->inputs[0] == nullptr) {
         return absl::InvalidArgumentError("exchange execution task requires one input");
     }
 
     ExecutionTask task;
+    task.memory_context = memory_context;
     auto input_or =
-        AddProducerPipelineForPlan(exchange_plan->inputs[0], "exchange-input", "source", &task);
+        AddProducerPipelineForPlan(exchange_plan->inputs[0], "exchange-input", "source", &task,
+                                   task.memory_context);
     if (!input_or.ok()) {
         return input_or.status();
     }
@@ -2099,7 +2177,9 @@ bool IsTwoStageTopNPlan(const std::shared_ptr<plan::PlanNode>& root_plan,
 }
 
 absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageTopNExecutionTask(
-    const std::shared_ptr<plan::PlanNode>& root_plan, const optimizer::PushdownPlan& pushdown) {
+    const std::shared_ptr<plan::PlanNode>& root_plan,
+    const optimizer::PushdownPlan& pushdown,
+    const std::shared_ptr<QueryMemoryContext>& memory_context) {
     if (!IsTwoStageTopNPlan(root_plan, pushdown)) {
         return std::nullopt;
     }
@@ -2129,9 +2209,11 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageTopNExecutionTask(
     auto producer_roots = WrapDriverRootsWithExchangeSinks(std::move(split_roots), buffer);
 
     ExecutionTask task;
+    task.memory_context = memory_context;
     task.pipelines.push_back(MakePipeline("topn-partial", "topn partial", "source", {},
                                           {"ConnectorScanOperator", "ExchangeSinkOperator"},
-                                          nullptr, std::move(producer_roots)));
+                                          nullptr, std::move(producer_roots),
+                                          GatherDistribution()));
 
     std::unique_ptr<Operator> current(new ExchangeSourceOperator(buffer));
     std::vector<std::string> operators = {current->name()};
@@ -2155,7 +2237,8 @@ std::shared_ptr<plan::PlanNode> SkipMaterializeBarrier(
 }
 
 absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecutionTask(
-    const std::shared_ptr<plan::PlanNode>& root_plan) {
+    const std::shared_ptr<plan::PlanNode>& root_plan,
+    const std::shared_ptr<QueryMemoryContext>& memory_context) {
     if (root_plan == nullptr) {
         return std::nullopt;
     }
@@ -2183,7 +2266,7 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecut
     const auto& aggregate = chain[*aggregate_index];
     const auto& group = chain[*aggregate_index + 1];
     auto input_plan = SkipMaterializeBarrier(group->inputs[0]);
-    auto planned_or = BuildOperator(input_plan);
+    auto planned_or = BuildOperator(input_plan, true, memory_context);
     if (!planned_or.ok()) {
         return planned_or.status();
     }
@@ -2212,28 +2295,32 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecut
         partial_roots.reserve(planned_or->driver_roots.size());
         for (auto& root : planned_or->driver_roots) {
             std::unique_ptr<Operator> partial(new StreamingGroupedAggregateOperator(
-                aggregate, group->group().columns, std::move(root), AggregatePhase::Partial));
+                aggregate, group->group().columns, std::move(root), memory_context,
+                AggregatePhase::Partial));
+            auto distribution = HashDistribution({}, true, partition_count);
             partial_roots.push_back(std::unique_ptr<Operator>(
-                new PartitionedExchangeSinkOperator(std::move(partial), buffers,
-                                                    group->group().columns)));
+                new PartitionedExchangeSinkOperator(std::move(partial), buffers, distribution)));
         }
 
         std::vector<std::string> partial_operators = std::move(planned_or->operators);
         partial_operators.push_back("GroupOperator");
         partial_operators.push_back("PartialAggregateOperator");
-        partial_operators.push_back("PartitionedExchangeSinkOperator");
+        partial_operators.push_back("HashPartitionExchangeSinkOperator");
 
         ExecutionTask task;
+        task.memory_context = memory_context;
         task.pipelines.push_back(
             MakePipeline("aggregate-partial", "aggregate partial partitioned", "source", {},
-                         std::move(partial_operators), nullptr, std::move(partial_roots)));
+                         std::move(partial_operators), nullptr, std::move(partial_roots),
+                         HashDistribution(group->group().columns, true, partition_count)));
 
         std::vector<std::unique_ptr<Operator>> final_roots;
         final_roots.reserve(buffers.size());
         for (const auto& buffer : buffers) {
             std::unique_ptr<Operator> current(new ExchangeSourceOperator(buffer));
             current = std::unique_ptr<Operator>(new StreamingGroupedAggregateOperator(
-                aggregate, group->group().columns, std::move(current), AggregatePhase::Final));
+                aggregate, group->group().columns, std::move(current), memory_context,
+                AggregatePhase::Final));
             final_roots.push_back(std::move(current));
         }
         final_roots = WrapDriverRootsWithOutput(std::move(final_roots));
@@ -2245,7 +2332,9 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecut
         };
         task.pipelines.push_back(MakePipeline("main", "main partitioned final", "root",
                                               {"aggregate-partial"}, std::move(root_operators),
-                                              nullptr, std::move(final_roots)));
+                                              nullptr, std::move(final_roots),
+                                              HashDistribution(group->group().columns, true,
+                                                               partition_count)));
         return task;
     }
 
@@ -2255,7 +2344,8 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecut
     partial_roots.reserve(planned_or->driver_roots.size());
     for (auto& root : planned_or->driver_roots) {
         std::unique_ptr<Operator> partial(new StreamingGroupedAggregateOperator(
-            aggregate, group->group().columns, std::move(root), AggregatePhase::Partial));
+            aggregate, group->group().columns, std::move(root), memory_context,
+            AggregatePhase::Partial));
         partial_roots.push_back(
             std::unique_ptr<Operator>(new ExchangeSinkOperator(std::move(partial), buffer)));
     }
@@ -2266,17 +2356,20 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecut
     partial_operators.push_back("ExchangeSinkOperator");
 
     ExecutionTask task;
+    task.memory_context = memory_context;
     task.pipelines.push_back(MakePipeline("aggregate-partial", "aggregate partial", "source", {},
                                           std::move(partial_operators), nullptr,
-                                          std::move(partial_roots)));
+                                          std::move(partial_roots), GatherDistribution()));
 
     std::unique_ptr<Operator> current(new ExchangeSourceOperator(buffer));
     std::vector<std::string> root_operators = {current->name(), "GroupOperator"};
     current = std::unique_ptr<Operator>(new StreamingGroupedAggregateOperator(
-        aggregate, group->group().columns, std::move(current), AggregatePhase::Final));
+        aggregate, group->group().columns, std::move(current), memory_context,
+        AggregatePhase::Final));
     root_operators.push_back("FinalAggregateOperator");
     for (size_t index = *aggregate_index; index > 0; --index) {
-        auto wrapped_or = WrapUnaryOperator(chain[index - 1], std::move(current));
+        auto wrapped_or =
+            WrapUnaryOperator(chain[index - 1], std::move(current), memory_context);
         if (!wrapped_or.ok()) {
             return wrapped_or.status();
         }
@@ -2290,8 +2383,146 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecut
     return task;
 }
 
+bool ShouldPartitionBlockingInput(const std::shared_ptr<plan::PlanNode>& input_plan,
+                                  size_t driver_count) {
+    constexpr double kSmallInputRows = 4096.0;
+    if (driver_count <= 1) {
+        return false;
+    }
+    const auto input_rows = EstimateRowsForPlan(input_plan);
+    return !input_rows.has_value() || *input_rows >= kSmallInputRows;
+}
+
+absl::StatusOr<std::optional<ExecutionTask>> BuildPartitionedGroupExecutionTask(
+    const std::shared_ptr<plan::PlanNode>& root_plan,
+    const std::shared_ptr<QueryMemoryContext>& memory_context) {
+    if (root_plan == nullptr || root_plan->kind != plan::PlanNodeKind::Group ||
+        root_plan->inputs.size() != 1 || root_plan->inputs[0] == nullptr ||
+        root_plan->group().columns.empty()) {
+        return std::nullopt;
+    }
+    auto input_plan = SkipMaterializeBarrier(root_plan->inputs[0]);
+    auto planned_or = BuildOperator(input_plan, true, memory_context);
+    if (!planned_or.ok()) {
+        return planned_or.status();
+    }
+    if (!ShouldPartitionBlockingInput(input_plan, planned_or->driver_roots.size())) {
+        return std::nullopt;
+    }
+
+    const size_t partition_count = planned_or->driver_roots.size();
+    std::vector<std::shared_ptr<ExchangeBuffer>> buffers;
+    buffers.reserve(partition_count);
+    for (size_t index = 0; index < partition_count; ++index) {
+        auto buffer = std::make_shared<ExchangeBuffer>();
+        buffer->SetProducerCount(planned_or->driver_roots.size());
+        buffers.push_back(std::move(buffer));
+    }
+
+    std::vector<std::unique_ptr<Operator>> partial_roots;
+    partial_roots.reserve(planned_or->driver_roots.size());
+    for (auto& root : planned_or->driver_roots) {
+        std::unique_ptr<Operator> partial(new StreamingGroupOperator(
+            root_plan, std::move(root), memory_context, "partial"));
+        partial_roots.push_back(std::unique_ptr<Operator>(new PartitionedExchangeSinkOperator(
+            std::move(partial), buffers, HashDistribution({}, true, partition_count))));
+    }
+
+    std::vector<std::string> partial_operators = std::move(planned_or->operators);
+    partial_operators.push_back("PartialGroupOperator");
+    partial_operators.push_back("HashPartitionExchangeSinkOperator");
+
+    ExecutionTask task;
+    task.memory_context = memory_context;
+    task.pipelines.push_back(MakePipeline(
+        "group-partial", "group partial partitioned", "source", {},
+        std::move(partial_operators), nullptr, std::move(partial_roots),
+        HashDistribution(root_plan->group().columns, true, partition_count)));
+
+    std::vector<std::unique_ptr<Operator>> final_roots;
+    final_roots.reserve(buffers.size());
+    for (const auto& buffer : buffers) {
+        std::unique_ptr<Operator> current(new ExchangeSourceOperator(buffer));
+        current = std::unique_ptr<Operator>(new StreamingGroupOperator(
+            root_plan, std::move(current), memory_context, "final"));
+        final_roots.push_back(std::move(current));
+    }
+    final_roots = WrapDriverRootsWithOutput(std::move(final_roots));
+    task.pipelines.push_back(MakePipeline(
+        "main", "main partitioned group", "root", {"group-partial"},
+        {"ExchangeSourceOperator", "FinalGroupOperator", "OutputOperator"}, nullptr,
+        std::move(final_roots),
+        HashDistribution(root_plan->group().columns, true, partition_count)));
+    return task;
+}
+
+absl::StatusOr<std::optional<ExecutionTask>> BuildPartitionedDistinctExecutionTask(
+    const std::shared_ptr<plan::PlanNode>& root_plan,
+    const std::shared_ptr<QueryMemoryContext>& memory_context) {
+    if (root_plan == nullptr || root_plan->kind != plan::PlanNodeKind::Distinct ||
+        root_plan->inputs.size() != 1 || root_plan->inputs[0] == nullptr ||
+        root_plan->distinct().column.empty()) {
+        return std::nullopt;
+    }
+    auto input_plan = SkipMaterializeBarrier(root_plan->inputs[0]);
+    auto planned_or = BuildOperator(input_plan, true, memory_context);
+    if (!planned_or.ok()) {
+        return planned_or.status();
+    }
+    if (!ShouldPartitionBlockingInput(input_plan, planned_or->driver_roots.size())) {
+        return std::nullopt;
+    }
+
+    const size_t partition_count = planned_or->driver_roots.size();
+    std::vector<std::shared_ptr<ExchangeBuffer>> buffers;
+    buffers.reserve(partition_count);
+    for (size_t index = 0; index < partition_count; ++index) {
+        auto buffer = std::make_shared<ExchangeBuffer>();
+        buffer->SetProducerCount(planned_or->driver_roots.size());
+        buffers.push_back(std::move(buffer));
+    }
+
+    std::vector<std::unique_ptr<Operator>> partial_roots;
+    partial_roots.reserve(planned_or->driver_roots.size());
+    std::vector<std::string> partition_keys = {root_plan->distinct().column};
+    for (auto& root : planned_or->driver_roots) {
+        std::unique_ptr<Operator> partial(new StreamingDistinctOperator(
+            root_plan, std::move(root), memory_context, "partial"));
+        partial_roots.push_back(std::unique_ptr<Operator>(new PartitionedExchangeSinkOperator(
+            std::move(partial), buffers,
+            HashDistribution(partition_keys, true, partition_count))));
+    }
+
+    std::vector<std::string> partial_operators = std::move(planned_or->operators);
+    partial_operators.push_back("PartialDistinctOperator");
+    partial_operators.push_back("HashPartitionExchangeSinkOperator");
+
+    ExecutionTask task;
+    task.memory_context = memory_context;
+    task.pipelines.push_back(MakePipeline(
+        "distinct-partial", "distinct partial partitioned", "source", {},
+        std::move(partial_operators), nullptr, std::move(partial_roots),
+        HashDistribution(partition_keys, true, partition_count)));
+
+    std::vector<std::unique_ptr<Operator>> final_roots;
+    final_roots.reserve(buffers.size());
+    for (const auto& buffer : buffers) {
+        std::unique_ptr<Operator> current(new ExchangeSourceOperator(buffer));
+        current = std::unique_ptr<Operator>(new StreamingDistinctOperator(
+            root_plan, std::move(current), memory_context, "final"));
+        final_roots.push_back(std::move(current));
+    }
+    final_roots = WrapDriverRootsWithOutput(std::move(final_roots));
+    task.pipelines.push_back(MakePipeline(
+        "main", "main partitioned distinct", "root", {"distinct-partial"},
+        {"ExchangeSourceOperator", "FinalDistinctOperator", "OutputOperator"}, nullptr,
+        std::move(final_roots), HashDistribution(partition_keys, true, partition_count)));
+    return task;
+}
+
 absl::StatusOr<std::optional<ExecutionTask>> BuildUnaryBreakerExecutionTask(
-    const std::shared_ptr<plan::PlanNode>& root_plan) {
+    const std::shared_ptr<plan::PlanNode>& root_plan,
+    const std::shared_ptr<QueryMemoryContext>& memory_context) {
     if (root_plan == nullptr) {
         return std::nullopt;
     }
@@ -2311,8 +2542,10 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildUnaryBreakerExecutionTask(
 
     const auto& breaker = chain[*breaker_index];
     ExecutionTask task;
+    task.memory_context = memory_context;
     auto input_or =
-        AddProducerPipelineForPlan(breaker->inputs[0], "breaker-input", "source", &task);
+        AddProducerPipelineForPlan(breaker->inputs[0], "breaker-input", "source", &task,
+                                   memory_context);
     if (!input_or.ok()) {
         return input_or.status();
     }
@@ -2326,13 +2559,13 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildUnaryBreakerExecutionTask(
             chain[index - 2]->kind == plan::PlanNodeKind::Aggregate) {
             const auto& aggregate = chain[index - 2];
             current = std::unique_ptr<Operator>(new StreamingGroupedAggregateOperator(
-                aggregate, node->group().columns, std::move(current)));
+                aggregate, node->group().columns, std::move(current), memory_context));
             operators.push_back("GroupOperator");
             operators.push_back(current->name());
             index -= 2;
             continue;
         }
-        auto wrapped_or = WrapUnaryOperator(node, std::move(current));
+        auto wrapped_or = WrapUnaryOperator(node, std::move(current), memory_context);
         if (!wrapped_or.ok()) {
             return wrapped_or.status();
         }
@@ -2349,8 +2582,54 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildUnaryBreakerExecutionTask(
 
 } // namespace
 
+QueryMemoryContext::QueryMemoryContext(size_t limit_bytes) : limit_bytes_(limit_bytes) {}
+
+std::shared_ptr<QueryMemoryContext> QueryMemoryContext::FromEnvironment() {
+    return std::make_shared<QueryMemoryContext>(parse_query_memory_limit());
+}
+
+absl::Status QueryMemoryContext::Reserve(size_t bytes) {
+    if (bytes == 0) {
+        return absl::OkStatus();
+    }
+    std::lock_guard<std::mutex> lock(mu_);
+    used_bytes_ += bytes;
+    peak_bytes_ = std::max(peak_bytes_, used_bytes_);
+    if (limit_bytes_ != 0 && used_bytes_ > limit_bytes_) {
+        limited_ = true;
+        return absl::ResourceExhaustedError(absl::StrCat(
+            "query memory limit exceeded: estimated=", used_bytes_, " bytes, limit=",
+            limit_bytes_, " bytes"));
+    }
+    return absl::OkStatus();
+}
+
+void QueryMemoryContext::Release(size_t bytes) {
+    if (bytes == 0) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(mu_);
+    used_bytes_ = bytes > used_bytes_ ? 0 : used_bytes_ - bytes;
+}
+
+MemoryProfile QueryMemoryContext::Snapshot() const {
+    std::lock_guard<std::mutex> lock(mu_);
+    return MemoryProfile{
+        .used_bytes = used_bytes_,
+        .peak_bytes = peak_bytes_,
+        .limit_bytes = limit_bytes_,
+        .limited = limited_,
+    };
+}
+
+size_t QueryMemoryContext::limit_bytes() const {
+    std::lock_guard<std::mutex> lock(mu_);
+    return limit_bytes_;
+}
+
 absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
     const std::shared_ptr<plan::PlanNode>& logical_plan) const {
+    auto memory_context = QueryMemoryContext::FromEnvironment();
     auto fast_or = optimizer::FastCostBasedOptimizer().OptimizeWithTrace(logical_plan);
     if (!fast_or.ok()) {
         return fast_or.status();
@@ -2361,16 +2640,17 @@ absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
         if (!cbo_or.ok()) {
             return cbo_or.status();
         }
-        return BuildJoinExecutionTask(cbo_or->rbo_result.plan);
+        return BuildJoinExecutionTask(cbo_or->rbo_result.plan, memory_context);
     }
     if (fast_or->rbo_result.plan != nullptr &&
         fast_or->rbo_result.plan->kind == plan::PlanNodeKind::Exchange) {
-        return BuildExchangeExecutionTask(fast_or->rbo_result.plan);
+        return BuildExchangeExecutionTask(fast_or->rbo_result.plan, memory_context);
     }
     if (fast_or->rbo_result.pushdown_plan.has_value() &&
         optimizer::CanExecutePushdownPlan(*fast_or->rbo_result.pushdown_plan)) {
         auto topn_task_or = BuildTwoStageTopNExecutionTask(fast_or->rbo_result.plan,
-                                                           *fast_or->rbo_result.pushdown_plan);
+                                                           *fast_or->rbo_result.pushdown_plan,
+                                                           memory_context);
         if (!topn_task_or.ok()) {
             return topn_task_or.status();
         }
@@ -2381,14 +2661,31 @@ absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
     if (!fast_or->rbo_result.pushdown_plan.has_value() ||
         !optimizer::CanExecutePushdownPlan(*fast_or->rbo_result.pushdown_plan)) {
         auto aggregate_task_or =
-            BuildTwoStageGroupedAggregateExecutionTask(fast_or->rbo_result.plan);
+            BuildTwoStageGroupedAggregateExecutionTask(fast_or->rbo_result.plan, memory_context);
         if (!aggregate_task_or.ok()) {
             return aggregate_task_or.status();
         }
         if (aggregate_task_or->has_value()) {
             return std::move(**aggregate_task_or);
         }
-        auto breaker_task_or = BuildUnaryBreakerExecutionTask(fast_or->rbo_result.plan);
+        auto group_task_or =
+            BuildPartitionedGroupExecutionTask(fast_or->rbo_result.plan, memory_context);
+        if (!group_task_or.ok()) {
+            return group_task_or.status();
+        }
+        if (group_task_or->has_value()) {
+            return std::move(**group_task_or);
+        }
+        auto distinct_task_or =
+            BuildPartitionedDistinctExecutionTask(fast_or->rbo_result.plan, memory_context);
+        if (!distinct_task_or.ok()) {
+            return distinct_task_or.status();
+        }
+        if (distinct_task_or->has_value()) {
+            return std::move(**distinct_task_or);
+        }
+        auto breaker_task_or =
+            BuildUnaryBreakerExecutionTask(fast_or->rbo_result.plan, memory_context);
         if (!breaker_task_or.ok()) {
             return breaker_task_or.status();
         }
@@ -2397,7 +2694,7 @@ absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
         }
     }
 
-    auto planned_or = BuildOperator(logical_plan);
+    auto planned_or = BuildOperator(logical_plan, true, memory_context);
     if (!planned_or.ok()) {
         return planned_or.status();
     }
@@ -2406,6 +2703,7 @@ absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
         auto outputs = WrapDriverRootsWithOutput(std::move(planned_or->driver_roots));
         operators.emplace_back("OutputOperator");
         ExecutionTask task;
+        task.memory_context = memory_context;
         task.pipelines.push_back(MakePipeline("main", "main", "root", {}, std::move(operators),
                                               nullptr, std::move(outputs)));
         return task;
@@ -2414,6 +2712,7 @@ absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
     planned_or->operators.push_back(output->name());
 
     ExecutionTask task;
+    task.memory_context = memory_context;
     Pipeline pipeline;
     pipeline.id = "main";
     pipeline.name = "main";
@@ -2548,6 +2847,7 @@ std::vector<DriverTask> DriverFactory::CreateTasks(size_t pipeline_index, Pipeli
         driver_pipeline.role = pipeline.role;
         driver_pipeline.dependencies = pipeline.dependencies;
         driver_pipeline.operators = pipeline.operators;
+        driver_pipeline.distribution = pipeline.distribution;
         driver_pipeline.root = std::move(root);
         driver_pipeline.stats = pipeline.stats;
 
@@ -2573,8 +2873,12 @@ std::vector<DriverTask> DriverFactory::CreateTasks(size_t pipeline_index, Pipeli
 }
 
 ExecutionProfile BuildExecutionProfile(const std::vector<PipelineProfile>& pipeline_templates,
-                                       const std::vector<std::shared_ptr<Pipeline::Stats>>& stats) {
+                                       const std::vector<std::shared_ptr<Pipeline::Stats>>& stats,
+                                       const std::shared_ptr<QueryMemoryContext>& memory_context) {
     ExecutionProfile profile;
+    if (memory_context != nullptr) {
+        profile.memory = memory_context->Snapshot();
+    }
     profile.pipelines = pipeline_templates;
     for (size_t index = 0; index < profile.pipelines.size() && index < stats.size(); ++index) {
         if (stats[index] == nullptr) {
@@ -2595,6 +2899,8 @@ ExecutionProfile BuildExecutionProfile(const std::vector<PipelineProfile>& pipel
 bool IsBlockingOperatorName(const std::string& name) {
     return name == "SortOperator" || name == "GroupOperator" || name == "AggregateOperator" ||
            name == "PartialAggregateOperator" || name == "FinalAggregateOperator" ||
+           name == "PartialGroupOperator" || name == "FinalGroupOperator" ||
+           name == "PartialDistinctOperator" || name == "FinalDistinctOperator" ||
            name == "DistinctOperator" || name == "LocalHashJoinOperator" ||
            name == "ExchangeOperator" || name == "MaterializeOperator" || name == "TopNOperator";
 }
@@ -2612,6 +2918,9 @@ absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) co
     if (task.pipelines.empty()) {
         return absl::InvalidArgumentError("execution task has no pipelines");
     }
+    if (task.memory_context == nullptr) {
+        task.memory_context = QueryMemoryContext::FromEnvironment();
+    }
     std::vector<PipelineProfile> pipeline_profiles;
     std::vector<std::shared_ptr<Pipeline::Stats>> pipeline_stats;
     pipeline_profiles.reserve(task.pipelines.size());
@@ -2623,6 +2932,7 @@ absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) co
             .role = pipeline.role,
             .dependencies = pipeline.dependencies,
             .operators = pipeline.operators,
+            .distribution = pipeline.distribution,
             .blocking = HasBlockingOperator(pipeline.operators),
             .drivers = pipeline.driver_roots.empty() ? 1 : pipeline.driver_roots.size(),
             .split_stats = {},
@@ -2779,7 +3089,8 @@ absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) co
     if (!output.has_value()) {
         SchedulerResult result;
         result.value = Value::table_stream("", {});
-        result.profile = BuildExecutionProfile(pipeline_profiles, pipeline_stats);
+        result.profile =
+            BuildExecutionProfile(pipeline_profiles, pipeline_stats, task.memory_context);
         return result;
     }
     Value value = Value::table_stream(output->bucket, output->tables, output->range_start,
@@ -2788,7 +3099,7 @@ absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) co
     value.as_table_mut().materialized = true;
     SchedulerResult result;
     result.value = std::move(value);
-    result.profile = BuildExecutionProfile(pipeline_profiles, pipeline_stats);
+    result.profile = BuildExecutionProfile(pipeline_profiles, pipeline_stats, task.memory_context);
     return result;
 }
 
@@ -2805,6 +3116,9 @@ absl::StatusOr<SchedulerStreamResult> Scheduler::RunToSink(ExecutionTask task,
     if (task.pipelines.empty()) {
         return absl::InvalidArgumentError("execution task has no pipelines");
     }
+    if (task.memory_context == nullptr) {
+        task.memory_context = QueryMemoryContext::FromEnvironment();
+    }
     if (sink == nullptr) {
         return absl::InvalidArgumentError("scheduler sink is missing");
     }
@@ -2820,6 +3134,7 @@ absl::StatusOr<SchedulerStreamResult> Scheduler::RunToSink(ExecutionTask task,
             .role = pipeline.role,
             .dependencies = pipeline.dependencies,
             .operators = pipeline.operators,
+            .distribution = pipeline.distribution,
             .blocking = HasBlockingOperator(pipeline.operators),
             .drivers = pipeline.driver_roots.empty() ? 1 : pipeline.driver_roots.size(),
             .split_stats = {},
@@ -2930,7 +3245,7 @@ absl::StatusOr<SchedulerStreamResult> Scheduler::RunToSink(ExecutionTask task,
         return *non_output_error;
     }
     SchedulerStreamResult result;
-    result.profile = BuildExecutionProfile(pipeline_profiles, pipeline_stats);
+    result.profile = BuildExecutionProfile(pipeline_profiles, pipeline_stats, task.memory_context);
     return result;
 }
 
@@ -2963,7 +3278,9 @@ absl::StatusOr<Value> PhysicalExecutor::Execute(
 
 bool IsAccumulatingOperatorName(const std::string& name) {
     return name == "GroupOperator" || name == "DistinctOperator" || name == "AggregateOperator" ||
-           name == "PartialAggregateOperator" || name == "FinalAggregateOperator";
+           name == "PartialAggregateOperator" || name == "FinalAggregateOperator" ||
+           name == "PartialGroupOperator" || name == "FinalGroupOperator" ||
+           name == "PartialDistinctOperator" || name == "FinalDistinctOperator";
 }
 
 std::vector<std::string> AccumulatingOperators(const std::vector<std::string>& operators) {
@@ -3019,6 +3336,32 @@ std::string JsonStringArray(const std::vector<std::string>& values) {
     return out.str();
 }
 
+std::string FormatDistribution(const ExchangeDistributionProfile& distribution) {
+    std::ostringstream out;
+    out << distribution.kind << "(partitions=" << distribution.partitions;
+    if (!distribution.partition_keys.empty()) {
+        out << ", keys=" << plan::StringList(distribution.partition_keys);
+    }
+    out << ", include_group_key=" << (distribution.include_group_key ? "true" : "false") << ")";
+    return out.str();
+}
+
+std::string FormatDistributionJson(
+    const std::optional<ExchangeDistributionProfile>& distribution) {
+    if (!distribution.has_value()) {
+        return "null";
+    }
+    std::ostringstream out;
+    out << "{";
+    out << "\"kind\":" << JsonString(distribution->kind);
+    out << ",\"partitionKeys\":" << JsonStringArray(distribution->partition_keys);
+    out << ",\"includeGroupKey\":"
+        << (distribution->include_group_key ? "true" : "false");
+    out << ",\"partitions\":" << distribution->partitions;
+    out << "}";
+    return out.str();
+}
+
 std::string FormatPipelinePlan(const std::shared_ptr<plan::PlanNode>& logical_plan) {
     auto task_or = PhysicalPlanner().Plan(logical_plan);
     if (!task_or.ok()) {
@@ -3033,6 +3376,9 @@ std::string FormatPipelinePlan(const std::shared_ptr<plan::PlanNode>& logical_pl
         out << "  drivers: " << drivers << "\n";
         if (!pipeline.dependencies.empty()) {
             out << "  depends_on: " << plan::StringList(pipeline.dependencies) << "\n";
+        }
+        if (pipeline.distribution.has_value()) {
+            out << "  distribution: " << FormatDistribution(*pipeline.distribution) << "\n";
         }
         out << "  blocking: " << (HasBlockingOperator(pipeline.operators) ? "true" : "false")
             << "\n";
@@ -3064,6 +3410,7 @@ std::string FormatPipelinePlanJson(const std::shared_ptr<plan::PlanNode>& logica
         out << ",\"role\":" << JsonString(pipeline.role);
         out << ",\"drivers\":" << drivers;
         out << ",\"dependencies\":" << JsonStringArray(pipeline.dependencies);
+        out << ",\"distribution\":" << FormatDistributionJson(pipeline.distribution);
         out << ",\"blocking\":" << (HasBlockingOperator(pipeline.operators) ? "true" : "false");
         out << ",\"accumulators\":" << JsonStringArray(AccumulatingOperators(pipeline.operators));
         out << ",\"operators\":" << JsonStringArray(pipeline.operators);
@@ -3121,11 +3468,18 @@ std::string FormatAccumulatorStats(const std::vector<AccumulatorStats>& stats) {
 std::string FormatExecutionProfile(const ExecutionProfile& profile) {
     std::ostringstream out;
     out << "ExecutionProfile\n";
+    out << "memory: used_bytes=" << profile.memory.used_bytes
+        << ", peak_bytes=" << profile.memory.peak_bytes
+        << ", limit_bytes=" << profile.memory.limit_bytes
+        << ", limited=" << (profile.memory.limited ? "true" : "false") << "\n";
     for (const auto& pipeline : profile.pipelines) {
         out << R"(- Pipeline(id=")" << pipeline.id << R"(", name=")" << pipeline.name
             << R"(", role=")" << pipeline.role << "\")\n";
         if (!pipeline.dependencies.empty()) {
             out << "  depends_on: " << plan::StringList(pipeline.dependencies) << "\n";
+        }
+        if (pipeline.distribution.has_value()) {
+            out << "  distribution: " << FormatDistribution(*pipeline.distribution) << "\n";
         }
         out << "  drivers: " << pipeline.drivers << "\n";
         out << "  blocking: " << (pipeline.blocking ? "true" : "false") << "\n";
@@ -3209,7 +3563,12 @@ std::string FormatAccumulatorStatsJson(const std::vector<AccumulatorStats>& stat
 
 std::string FormatExecutionProfileJson(const ExecutionProfile& profile) {
     std::ostringstream out;
-    out << "{\"pipelines\":[";
+    out << "{\"memory\":{";
+    out << "\"usedBytes\":" << profile.memory.used_bytes;
+    out << ",\"peakBytes\":" << profile.memory.peak_bytes;
+    out << ",\"limitBytes\":" << profile.memory.limit_bytes;
+    out << ",\"limited\":" << (profile.memory.limited ? "true" : "false");
+    out << "},\"pipelines\":[";
     for (size_t index = 0; index < profile.pipelines.size(); ++index) {
         const auto& pipeline = profile.pipelines[index];
         if (index != 0) {
@@ -3220,6 +3579,7 @@ std::string FormatExecutionProfileJson(const ExecutionProfile& profile) {
         out << ",\"name\":" << JsonString(pipeline.name);
         out << ",\"role\":" << JsonString(pipeline.role);
         out << ",\"dependencies\":" << JsonStringArray(pipeline.dependencies);
+        out << ",\"distribution\":" << FormatDistributionJson(pipeline.distribution);
         out << ",\"drivers\":" << pipeline.drivers;
         out << ",\"blocking\":" << (pipeline.blocking ? "true" : "false");
         out << ",\"operators\":" << JsonStringArray(pipeline.operators);
