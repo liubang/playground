@@ -248,13 +248,13 @@ private:
     std::unique_ptr<MonoType> parse_basic_type();
     std::unique_ptr<MonoType> parse_tvar();
 
-    template <typename T> std::optional<T> depth_guard(std::function<T()> fn) {
+    template <typename T, typename Fn> std::optional<T> depth_guard(Fn&& fn) {
         ++depth_;
         if (depth_ > MAX_DEPTH) {
             errs_.emplace_back("Program is nested too deep");
             return std::nullopt;
         }
-        T ret = fn();
+        T ret = std::forward<Fn>(fn)();
         --depth_;
         return std::move(ret);
     }
