@@ -31,6 +31,23 @@ class StdioTransport {
 public:
     explicit StdioTransport(FILE* in = stdin, FILE* out = stdout);
 
+    StdioTransport(const StdioTransport&) = delete;
+    StdioTransport& operator=(const StdioTransport&) = delete;
+
+    StdioTransport(StdioTransport&& other) noexcept : in_(other.in_), out_(other.out_) {
+        other.in_ = nullptr;
+        other.out_ = nullptr;
+    }
+    StdioTransport& operator=(StdioTransport&& other) noexcept {
+        if (this != &other) {
+            in_ = other.in_;
+            out_ = other.out_;
+            other.in_ = nullptr;
+            other.out_ = nullptr;
+        }
+        return *this;
+    }
+
     // Read a single LSP message body from input.
     // Returns std::nullopt on EOF or read error.
     std::optional<std::string> read_message();
