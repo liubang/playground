@@ -102,7 +102,8 @@ private:
 class MySQLPageSourceProvider final : public ConnectorPageSourceProvider {
 public:
     explicit MySQLPageSourceProvider(size_t rows_per_page = 1024);
-    MySQLPageSourceProvider(MySQLRuntimeOptions options, std::shared_ptr<MySQLBoostConnectionPool> pool);
+    MySQLPageSourceProvider(MySQLRuntimeOptions options,
+                            const std::shared_ptr<MySQLBoostConnectionPool>& pool);
 
     [[nodiscard]] absl::StatusOr<std::unique_ptr<ConnectorPageSource>> CreatePageSource(
         const ConnectorSplit& split) const override;
