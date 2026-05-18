@@ -34,6 +34,10 @@ enum class AggregatePhase {
 class StreamingGroupOperator final : public Operator {
 public:
     StreamingGroupOperator(std::shared_ptr<plan::PlanNode> plan, std::unique_ptr<Operator> input);
+    StreamingGroupOperator(std::shared_ptr<plan::PlanNode> plan,
+                           std::unique_ptr<Operator> input,
+                           std::shared_ptr<QueryMemoryContext> memory_context,
+                           std::string phase = "single");
 
     [[nodiscard]] std::string name() const override;
     void Cancel() override;
@@ -44,6 +48,7 @@ public:
 private:
     std::shared_ptr<plan::PlanNode> plan_;
     std::unique_ptr<Operator> input_;
+    std::shared_ptr<QueryMemoryContext> memory_context_;
     AccumulatorStats stats_;
     bool emitted_ = false;
 };
@@ -52,6 +57,10 @@ class StreamingDistinctOperator final : public Operator {
 public:
     StreamingDistinctOperator(std::shared_ptr<plan::PlanNode> plan,
                               std::unique_ptr<Operator> input);
+    StreamingDistinctOperator(std::shared_ptr<plan::PlanNode> plan,
+                              std::unique_ptr<Operator> input,
+                              std::shared_ptr<QueryMemoryContext> memory_context,
+                              std::string phase = "single");
 
     [[nodiscard]] std::string name() const override;
     void Cancel() override;
@@ -62,6 +71,7 @@ public:
 private:
     std::shared_ptr<plan::PlanNode> plan_;
     std::unique_ptr<Operator> input_;
+    std::shared_ptr<QueryMemoryContext> memory_context_;
     AccumulatorStats stats_;
     bool emitted_ = false;
 };
@@ -70,6 +80,9 @@ class StreamingAggregateOperator final : public Operator {
 public:
     StreamingAggregateOperator(std::shared_ptr<plan::PlanNode> plan,
                                std::unique_ptr<Operator> input);
+    StreamingAggregateOperator(std::shared_ptr<plan::PlanNode> plan,
+                               std::unique_ptr<Operator> input,
+                               std::shared_ptr<QueryMemoryContext> memory_context);
 
     [[nodiscard]] std::string name() const override;
     void Cancel() override;
@@ -80,6 +93,7 @@ public:
 private:
     std::shared_ptr<plan::PlanNode> plan_;
     std::unique_ptr<Operator> input_;
+    std::shared_ptr<QueryMemoryContext> memory_context_;
     AccumulatorStats stats_;
     bool emitted_ = false;
 };
@@ -89,6 +103,11 @@ public:
     StreamingGroupedAggregateOperator(std::shared_ptr<plan::PlanNode> aggregate_plan,
                                       std::vector<std::string> group_columns,
                                       std::unique_ptr<Operator> input,
+                                      AggregatePhase phase = AggregatePhase::Single);
+    StreamingGroupedAggregateOperator(std::shared_ptr<plan::PlanNode> aggregate_plan,
+                                      std::vector<std::string> group_columns,
+                                      std::unique_ptr<Operator> input,
+                                      std::shared_ptr<QueryMemoryContext> memory_context,
                                       AggregatePhase phase = AggregatePhase::Single);
 
     [[nodiscard]] std::string name() const override;
@@ -101,6 +120,7 @@ private:
     std::shared_ptr<plan::PlanNode> aggregate_plan_;
     std::vector<std::string> group_columns_;
     std::unique_ptr<Operator> input_;
+    std::shared_ptr<QueryMemoryContext> memory_context_;
     AggregatePhase phase_ = AggregatePhase::Single;
     AccumulatorStats stats_;
     bool emitted_ = false;

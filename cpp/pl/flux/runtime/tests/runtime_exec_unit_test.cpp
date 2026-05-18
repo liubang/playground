@@ -1535,7 +1535,7 @@ TEST(RuntimeExecTest, SmallGroupedAggregateSkipsTwoStagePlan) {
 
     EXPECT_EQ(std::string::npos, pipeline.find("PartialAggregateOperator"));
     EXPECT_EQ(std::string::npos, pipeline.find("FinalAggregateOperator"));
-    EXPECT_EQ(std::string::npos, pipeline.find("PartitionedExchangeSinkOperator"));
+    EXPECT_EQ(std::string::npos, pipeline.find("HashPartitionExchangeSinkOperator"));
     EXPECT_NE(std::string::npos, pipeline.find("AggregateOperator"));
 }
 
@@ -1569,7 +1569,8 @@ TEST(RuntimeExecTest, HighCardinalityGroupedAggregateUsesPartitionedFinal) {
     auto aggregate = plan::MakeAggregate(grouped, plan::AggregateFunction::Count, "usage");
 
     const auto pipeline = execution::FormatPipelinePlan(aggregate);
-    EXPECT_NE(std::string::npos, pipeline.find("PartitionedExchangeSinkOperator"));
+    EXPECT_NE(std::string::npos, pipeline.find("HashPartitionExchangeSinkOperator"));
+    EXPECT_NE(std::string::npos, pipeline.find("distribution: hash("));
     EXPECT_NE(std::string::npos, pipeline.find("main partitioned final"));
 
     auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(aggregate);
@@ -1585,6 +1586,116 @@ TEST(RuntimeExecTest, HighCardinalityGroupedAggregateUsesPartitionedFinal) {
     }
     ASSERT_EQ(2, result_or->profile.pipelines.size());
     EXPECT_EQ(kSplits, result_or->profile.pipelines[1].drivers);
+}
+
+TEST(RuntimeExecTest, HighCardinalityRootGroupUsesPartitionedFinal) {
+    constexpr size_t kRows = 12288;
+    constexpr size_t kSplits = 6;
+    constexpr size_t kRowsPerPage = 512;
+    constexpr size_t kHosts = 384;
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve(kRows);
+    for (size_t index = 0; index < kRows; ++index) {
+        rows.push_back(TestRow({{"host", Value::string("edge-" + std::to_string(index % kHosts))},
+                                {"usage", Value::floating(static_cast<double>(index % 100))},
+                                {"seq", Value::integer(static_cast<int64_t>(index))}}));
+    }
+
+    connector::SourceSpec spec{
+        .source = "partitioned_root_group_memory",
+        .driver = "partitioned_root_group_memory",
+        .dsn = "memory://partitioned-root-group",
+        .table = "cpu",
+    };
+    connector::ConnectorRegistry::Global().Register(
+        spec.source, [rows](const connector::SourceSpec& requested) {
+            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
+                                                         kRowsPerPage, kSplits);
+        });
+
+    auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
+    auto materialized = plan::MakeMaterializeBarrier(scan, "test memory fallback", "test");
+    auto grouped = plan::MakeGroup(materialized, {"host"});
+
+    const auto pipeline = execution::FormatPipelinePlan(grouped);
+    EXPECT_NE(std::string::npos, pipeline.find("Pipeline(id=\"group-partial\""));
+    EXPECT_NE(std::string::npos, pipeline.find("PartialGroupOperator"));
+    EXPECT_NE(std::string::npos, pipeline.find("FinalGroupOperator"));
+    EXPECT_NE(std::string::npos, pipeline.find("HashPartitionExchangeSinkOperator"));
+    EXPECT_NE(std::string::npos, pipeline.find("distribution: hash("));
+
+    auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(grouped);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto& table = result_or->value.as_table();
+    ASSERT_EQ(kRows, table.rows.size());
+    std::unordered_map<std::string, size_t> counts;
+    for (const auto& row : table.rows) {
+        ASSERT_NE(nullptr, row);
+        const Value* host = row->lookup("host");
+        ASSERT_NE(nullptr, host);
+        ++counts[host->as_string()];
+    }
+    ASSERT_EQ(kHosts, counts.size());
+    for (size_t index = 0; index < kHosts; ++index) {
+        EXPECT_EQ(kRows / kHosts, counts["edge-" + std::to_string(index)]);
+    }
+    ASSERT_EQ(2, result_or->profile.pipelines.size());
+    EXPECT_TRUE(result_or->profile.pipelines[0].distribution.has_value());
+    EXPECT_TRUE(result_or->profile.pipelines[1].distribution.has_value());
+}
+
+TEST(RuntimeExecTest, HighCardinalityRootDistinctUsesPartitionedFinal) {
+    constexpr size_t kRows = 16384;
+    constexpr size_t kSplits = 8;
+    constexpr size_t kRowsPerPage = 512;
+    constexpr size_t kHosts = 512;
+    std::vector<std::shared_ptr<ObjectValue>> rows;
+    rows.reserve(kRows);
+    for (size_t index = 0; index < kRows; ++index) {
+        rows.push_back(TestRow({{"host", Value::string("edge-" + std::to_string(index % kHosts))},
+                                {"usage", Value::floating(static_cast<double>(index % 100))}}));
+    }
+
+    connector::SourceSpec spec{
+        .source = "partitioned_root_distinct_memory",
+        .driver = "partitioned_root_distinct_memory",
+        .dsn = "memory://partitioned-root-distinct",
+        .table = "cpu",
+    };
+    connector::ConnectorRegistry::Global().Register(
+        spec.source, [rows](const connector::SourceSpec& requested) {
+            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
+                                                         kRowsPerPage, kSplits);
+        });
+
+    auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
+    auto materialized = plan::MakeMaterializeBarrier(scan, "test memory fallback", "test");
+    auto distinct = plan::MakeDistinct(materialized, "host");
+
+    const auto pipeline = execution::FormatPipelinePlan(distinct);
+    EXPECT_NE(std::string::npos, pipeline.find("Pipeline(id=\"distinct-partial\""));
+    EXPECT_NE(std::string::npos, pipeline.find("PartialDistinctOperator"));
+    EXPECT_NE(std::string::npos, pipeline.find("FinalDistinctOperator"));
+    EXPECT_NE(std::string::npos, pipeline.find("HashPartitionExchangeSinkOperator"));
+    EXPECT_NE(std::string::npos, pipeline.find("distribution: hash("));
+
+    auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(distinct);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto& table = result_or->value.as_table();
+    ASSERT_EQ(kHosts, table.rows.size());
+    std::unordered_set<std::string> hosts;
+    for (const auto& row : table.rows) {
+        ASSERT_NE(nullptr, row);
+        const Value* host = row->lookup("host");
+        ASSERT_NE(nullptr, host);
+        hosts.insert(host->as_string());
+    }
+    EXPECT_EQ(kHosts, hosts.size());
+    ASSERT_EQ(2, result_or->profile.pipelines.size());
+    EXPECT_TRUE(result_or->profile.pipelines[0].distribution.has_value());
+    EXPECT_TRUE(result_or->profile.pipelines[1].distribution.has_value());
 }
 
 TEST(RuntimeExecTest, AccumulatorMemoryGuardFailsHighCardinalityGroup) {
@@ -1608,17 +1719,17 @@ TEST(RuntimeExecTest, AccumulatorMemoryGuardFailsHighCardinalityGroup) {
             return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows, 16, 4);
         });
 
-    setenv("FLUX_ACCUMULATOR_MAX_BYTES", "512", 1);
+    setenv("FLUX_QUERY_MAX_MEMORY_BYTES", "512", 1);
     auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
     auto materialized = plan::MakeMaterializeBarrier(scan, "test memory fallback", "test");
     auto grouped = plan::MakeGroup(materialized, {"host"});
     auto aggregate = plan::MakeAggregate(grouped, plan::AggregateFunction::Count, "usage");
     auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(aggregate);
-    unsetenv("FLUX_ACCUMULATOR_MAX_BYTES");
+    unsetenv("FLUX_QUERY_MAX_MEMORY_BYTES");
 
     ASSERT_FALSE(result_or.ok());
     EXPECT_EQ(absl::StatusCode::kResourceExhausted, result_or.status().code());
-    EXPECT_NE(std::string::npos, result_or.status().message().find("accumulator memory limit"));
+    EXPECT_NE(std::string::npos, result_or.status().message().find("query memory limit"));
 }
 
 TEST(RuntimeExecTest, ExecutionProfileFormatterShowsRuntimeStats) {
@@ -1631,6 +1742,7 @@ TEST(RuntimeExecTest, ExecutionProfileFormatterShowsRuntimeStats) {
     ASSERT_TRUE(result_or.ok()) << result_or.status();
     const auto profile = execution::FormatExecutionProfile(result_or->profile);
     EXPECT_NE(std::string::npos, profile.find("ExecutionProfile"));
+    EXPECT_NE(std::string::npos, profile.find("memory: used_bytes="));
     EXPECT_NE(std::string::npos, profile.find("Pipeline(id=\"join-left\""));
     EXPECT_NE(std::string::npos, profile.find("rows=4"));
     EXPECT_NE(std::string::npos, profile.find("Pipeline(id=\"main\""));
@@ -1650,11 +1762,17 @@ TEST(RuntimeExecTest, PipelineAndProfileJsonFormattersExposeStructuredRuntimeFie
     EXPECT_NE(std::string::npos, pipeline_json.find(R"("pipelines")"));
     EXPECT_NE(std::string::npos, pipeline_json.find(R"("operators")"));
     EXPECT_NE(std::string::npos, pipeline_json.find(R"("accumulators")"));
+    EXPECT_NE(std::string::npos, pipeline_json.find(R"("distribution")"));
 
     auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(aggregate);
 
     ASSERT_TRUE(result_or.ok()) << result_or.status();
+    EXPECT_GT(result_or->profile.memory.peak_bytes, 0);
+    EXPECT_GT(result_or->profile.memory.limit_bytes, 0);
     const auto profile_json = execution::FormatExecutionProfileJson(result_or->profile);
+    EXPECT_NE(std::string::npos, profile_json.find(R"("memory")"));
+    EXPECT_NE(std::string::npos, profile_json.find(R"("peakBytes")"));
+    EXPECT_NE(std::string::npos, profile_json.find(R"("distribution")"));
     EXPECT_NE(std::string::npos, profile_json.find(R"("accumulatorStats")"));
     EXPECT_NE(std::string::npos, profile_json.find(R"("memoryBytes")"));
     EXPECT_NE(std::string::npos, profile_json.find(R"("splits")"));
