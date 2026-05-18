@@ -515,3 +515,25 @@ global final 的两阶段形态，并把 benchmark baseline 口径固定到 rele
 
 本轮确认重点放在执行形态和门禁能力，不把单次 smoke 数字写成新的性能承诺；真实大表性能仍以
 `benchmark/README.md` 中的 release baseline 与后续 `--compare-baseline` 输出为准。
+
+## 2026-05-19：Partitioned blocking runtime 与 query memory 收口
+
+这一轮把 partitioned accumulator 从 grouped aggregate 专项推进成 blocking runtime 的通用形态：
+
+- exchange profile 抽成 distribution 元数据，pipeline/execution explain 可以看到 gather/hash、
+  partition keys、是否包含 group key 和 partition 数；可见 operator 名称统一为
+  `HashPartitionExchangeSinkOperator`。
+- 高基数 root `group` 和 root `distinct` 接入 partial/final，两端按同一 hash distribution 并行
+  执行，避免 root blocking operator 回到单 driver。
+- accumulator memory guard 上移到 query 级 `QueryMemoryContext`，`FLUX_QUERY_MAX_MEMORY_BYTES`
+  控制整条查询预算，profile 暴露 query memory used/peak/limit/limited，同时保留 accumulator
+  局部估算指标用于定位热点。
+- 当前主线不做 spill；超过预算直接 `ResourceExhausted`，先保证 scan/exchange/accumulator 主干干净。
+- SQLite/MySQL benchmark JSON 增加 query memory 指标，runner 会把这些字段纳入最后一轮 profile
+  summary。
+
+验证补齐 root group/root distinct 的 partitioned final、query memory guard、distribution JSON 和
+profile memory 字段；后续性能数字继续以 release benchmark baseline 和 regression gate 为准。本轮
+smoke benchmark 使用 SQLite 200k rows `group_count` 构造真实临时库，8 drivers，输出 64 rows，
+`query_memory_peak_bytes=91568`、`query_memory_limited=false`，确认 query memory 指标能落到
+benchmark JSON。

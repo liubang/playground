@@ -155,11 +155,16 @@ partial pages 加 1 个 final page：
 
 Accumulator 分段 profile 会输出输入行数、输出行数、group 数、key/hash/update/result build
 耗时、估算内存占用和内存预算，并对 two-stage grouped aggregate 额外拆出 partial/final 输入行数
-和耗时。Phase 16 后，高基数 root `group |> aggregate` 会进一步使用 partitioned final；低基数或
-小输入仍可能选择 single-stage / gather final，benchmark 结果应结合 `drivers`、`pages`、
-`accumulator_partial_input_rows` 和 `accumulator_final_input_rows` 一起解释。上面同一轮里，
-1M rows 的低基数本地 grouped aggregate 主要成本仍在 partial 阶段，final 只合并 512 行 partial
-结果：
+和耗时。runtime 还会输出 query 级 `query_memory_used_bytes`、`query_memory_peak_bytes`、
+`query_memory_limit_bytes`、`query_memory_limited`，默认预算由 `FLUX_QUERY_MAX_MEMORY_BYTES`
+控制，兼容读取旧的 `FLUX_ACCUMULATOR_MAX_BYTES`。当前定位不做 spill；超出预算的 blocking
+query 会直接返回 `ResourceExhausted`。
+
+Phase 16 后，高基数 root `group |> aggregate`、root `group` 和 root `distinct` 会进一步使用
+hash partitioned final；低基数或小输入仍可能选择 single-stage / gather final，benchmark 结果应结合
+`drivers`、`pages`、`accumulator_partial_input_rows`、`accumulator_final_input_rows` 和
+query memory 一起解释。上面同一轮里，1M rows 的低基数本地 grouped aggregate 主要成本仍在
+partial 阶段，final 只合并 512 行 partial 结果：
 
 | scenario | accumulator input rows | partial rows | final rows | groups | key ms | hash ms | update ms | partial ms | final ms |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
