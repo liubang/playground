@@ -16,10 +16,11 @@
 // Created: 2026/05/18 00:32
 
 #include "cpp/pl/flux/contrib/lsp/server.h"
+#include <charconv>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <string>
+#include <system_error>
 
 namespace {
 
@@ -40,13 +41,23 @@ void print_usage(const char* prog) {
 
 void print_version() { std::fprintf(stderr, "flux-ls 0.1.0\n"); }
 
+// 安全解析正整数，失败返回 0
+int parse_positive_int(std::string_view sv) {
+    int value = 0;
+    auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), value);
+    if (ec != std::errc{} || ptr != sv.data() + sv.size()) {
+        return 0;
+    }
+    return value;
+}
+
 } // namespace
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[]) noexcept {
     pl::flux::lsp::ServerOptions opts;
 
     for (int i = 1; i < argc; ++i) {
-        std::string arg = argv[i];
+        std::string_view arg = argv[i];
 
         if (arg == "--help" || arg == "-h") {
             print_usage(argv[0]);
@@ -60,24 +71,22 @@ int main(int argc, char* argv[]) {
             opts.format.use_tabs = true;
             continue;
         }
-        if (arg.rfind("--max-line-width=", 0) == 0) {
-            auto val = arg.substr(17);
-            int n = std::atoi(val.c_str());
+        if (arg.starts_with("--max-line-width=")) {
+            int n = parse_positive_int(arg.substr(17));
             if (n > 0) {
                 opts.format.max_line_width = n;
             }
             continue;
         }
-        if (arg.rfind("--indent-width=", 0) == 0) {
-            auto val = arg.substr(15);
-            int n = std::atoi(val.c_str());
+        if (arg.starts_with("--indent-width=")) {
+            int n = parse_positive_int(arg.substr(15));
             if (n > 0) {
                 opts.format.indent_width = n;
             }
             continue;
         }
 
-        std::fprintf(stderr, "Unknown option: %s\n", arg.c_str());
+        std::fprintf(stderr, "Unknown option: %.*s\n", static_cast<int>(arg.size()), arg.data());
         print_usage(argv[0]);
         return 1;
     }

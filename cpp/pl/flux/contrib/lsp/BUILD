@@ -15,7 +15,7 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2026/05/18 00:33
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
     "COPTS",
@@ -23,6 +23,15 @@ load(
 )
 
 package(default_visibility = ["//cpp/pl/flux:__subpackages__"])
+
+cc_library(
+    name = "json_util",
+    hdrs = [
+        "json_util.h",
+    ],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+)
 
 cc_library(
     name = "jsonrpc",
@@ -35,6 +44,7 @@ cc_library(
     copts = COPTS,
     linkopts = LINKOPTS,
     deps = [
+        ":json_util",
         "@simdjson",
     ],
 )
@@ -67,6 +77,21 @@ cc_library(
 )
 
 cc_library(
+    name = "symbol_table",
+    srcs = [
+        "symbol_table.cpp",
+    ],
+    hdrs = [
+        "symbol_table.h",
+    ],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        "//cpp/pl/flux/syntax:parser",
+    ],
+)
+
+cc_library(
     name = "server",
     srcs = [
         "server.cpp",
@@ -78,7 +103,9 @@ cc_library(
     linkopts = LINKOPTS,
     deps = [
         ":formatter",
+        ":json_util",
         ":jsonrpc",
+        ":symbol_table",
         ":transport",
         "//cpp/pl/flux/syntax:parser",
         "@simdjson",
@@ -97,4 +124,71 @@ cc_binary(
     ],
 )
 
+# ==================== Tests ====================
+
+cc_test(
+    name = "json_util_unit_test",
+    srcs = [
+        "tests/json_util_unit_test.cpp",
+    ],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":json_util",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "jsonrpc_unit_test",
+    srcs = [
+        "tests/jsonrpc_unit_test.cpp",
+    ],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":jsonrpc",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "transport_unit_test",
+    srcs = [
+        "tests/transport_unit_test.cpp",
+    ],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":transport",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "formatter_unit_test",
+    srcs = [
+        "tests/formatter_unit_test.cpp",
+    ],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":formatter",
+        "//cpp/pl/flux/syntax:parser",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "server_unit_test",
+    srcs = [
+        "tests/server_unit_test.cpp",
+    ],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":server",
+        "@googletest//:gtest_main",
+    ],
+)
 
