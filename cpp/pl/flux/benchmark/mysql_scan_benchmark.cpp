@@ -153,6 +153,11 @@ int main(int argc, char** argv) {
               << R"("split_read_time_ms":)" << splits.read_time_ms << ","
               << R"("split_decode_time_ms":)" << splits.decode_time_ms << ","
               << R"("split_page_build_time_ms":)" << splits.page_build_time_ms << ","
+              << R"("query_memory_used_bytes":)" << result_or->profile.memory.used_bytes << ","
+              << R"("query_memory_peak_bytes":)" << result_or->profile.memory.peak_bytes << ","
+              << R"("query_memory_limit_bytes":)" << result_or->profile.memory.limit_bytes << ","
+              << R"("query_memory_limited":)"
+              << (result_or->profile.memory.limited ? "true" : "false") << ","
               << R"("seconds":)" << seconds << ","
               << R"("output_rows_per_second":)"
               << static_cast<double>(output_rows) / std::max(seconds, 0.000001) << "}\n";
