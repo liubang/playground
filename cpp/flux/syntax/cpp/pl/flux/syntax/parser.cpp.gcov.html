@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-19 00:45:56</td>
+            <td class="headerValue">2026-05-19 00:59:10</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">97.6&nbsp;%</td>
@@ -50,8 +50,8 @@
             <td></td>
             <td class="headerItem">Branches:</td>
             <td class="headerCovTableEntryLo">47.9&nbsp;%</td>
-            <td class="headerCovTableEntry">2654</td>
-            <td class="headerCovTableEntry">1272</td>
+            <td class="headerCovTableEntry">2646</td>
+            <td class="headerCovTableEntry">1268</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -207,10 +207,10 @@
 <span id="L131"><span class="lineNum">     131</span>                 :             : </span>
 <span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC tlaBgGNC">        1041 : std::unique_ptr&lt;Statement&gt; Parser::parse_statement(</span></span>
 <span id="L133"><span class="lineNum">     133</span>                 :             :     const std::optional&lt;std::vector&lt;std::shared_ptr&lt;Attribute&gt;&gt;&gt;&amp; attributes) {</span>
-<span id="L134"><span class="lineNum">     134</span>         [<span class="tlaGBC" title="Branch 0 was taken 1041 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1041 :     const Position start = peek()-&gt;start_pos;</span></span>
+<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">        1041 :     const Position start = peek()-&gt;start_pos;</span></span>
 <span id="L135"><span class="lineNum">     135</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1041 times"> + </span>]:<span class="tlaGNC">        1041 :     auto opt = depth_guard&lt;std::unique_ptr&lt;Statement&gt;&gt;([this, &amp;attributes] {</span></span>
 <span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaGNC">        1041 :         return parse_statement_inner(attributes);</span></span>
-<span id="L137"><span class="lineNum">     137</span>         [<span class="tlaGBC" title="Branch 0 was taken 1041 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1041 :     });</span></span>
+<span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaGNC">        1041 :     });</span></span>
 <span id="L138"><span class="lineNum">     138</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1041 times"> + </span>]:<span class="tlaGNC">        1041 :     if (!opt) {</span></span>
 <span id="L139"><span class="lineNum">     139</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         auto t = consume();</span></span>
 <span id="L140"><span class="lineNum">     140</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         auto bad = std::make_unique&lt;BadStmt&gt;(t-&gt;lit);</span></span>
@@ -1905,10 +1905,10 @@
 <span id="L1785"><span class="lineNum">    1785</span>                 :<span class="tlaGNC">         695 : }</span></span>
 <span id="L1786"><span class="lineNum">    1786</span>                 :             : </span>
 <span id="L1787"><span class="lineNum">    1787</span>                 :<span class="tlaGNC">        7159 : std::unique_ptr&lt;Expression&gt; Parser::parse_expression() {</span></span>
-<span id="L1788"><span class="lineNum">    1788</span>         [<span class="tlaGBC" title="Branch 0 was taken 7159 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        7159 :     const Position start = peek_with_regex()-&gt;start_pos;</span></span>
+<span id="L1788"><span class="lineNum">    1788</span>                 :<span class="tlaGNC">        7159 :     const Position start = peek_with_regex()-&gt;start_pos;</span></span>
 <span id="L1789"><span class="lineNum">    1789</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 7159 times"> + </span>]:<span class="tlaGNC">        7159 :     auto expr = depth_guard&lt;std::unique_ptr&lt;Expression&gt;&gt;([this] {</span></span>
 <span id="L1790"><span class="lineNum">    1790</span>                 :<span class="tlaGNC">        7159 :         return parse_conditional_expression();</span></span>
-<span id="L1791"><span class="lineNum">    1791</span>         [<span class="tlaGBC" title="Branch 0 was taken 7159 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        7159 :     });</span></span>
+<span id="L1791"><span class="lineNum">    1791</span>                 :<span class="tlaGNC">        7159 :     });</span></span>
 <span id="L1792"><span class="lineNum">    1792</span>                 :             : </span>
 <span id="L1793"><span class="lineNum">    1793</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 7159 times"> + </span>]:<span class="tlaGNC">        7159 :     if (!expr) {</span></span>
 <span id="L1794"><span class="lineNum">    1794</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         auto t = consume();</span></span>

@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-19 00:45:56</td>
+            <td class="headerValue">2026-05-19 00:59:10</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -175,46 +175,47 @@
 <span id="L102"><span class="lineNum">     102</span>                 :<span class="tlaGNC">           2 : class MySQLPageSourceProvider final : public ConnectorPageSourceProvider {</span></span>
 <span id="L103"><span class="lineNum">     103</span>                 :             : public:</span>
 <span id="L104"><span class="lineNum">     104</span>                 :             :     explicit MySQLPageSourceProvider(size_t rows_per_page = 1024);</span>
-<span id="L105"><span class="lineNum">     105</span>                 :             :     MySQLPageSourceProvider(MySQLRuntimeOptions options, std::shared_ptr&lt;MySQLBoostConnectionPool&gt; pool);</span>
-<span id="L106"><span class="lineNum">     106</span>                 :             : </span>
-<span id="L107"><span class="lineNum">     107</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;std::unique_ptr&lt;ConnectorPageSource&gt;&gt; CreatePageSource(</span>
-<span id="L108"><span class="lineNum">     108</span>                 :             :         const ConnectorSplit&amp; split) const override;</span>
-<span id="L109"><span class="lineNum">     109</span>                 :             : </span>
-<span id="L110"><span class="lineNum">     110</span>                 :             : private:</span>
-<span id="L111"><span class="lineNum">     111</span>                 :             :     MySQLRuntimeOptions options_;</span>
-<span id="L112"><span class="lineNum">     112</span>                 :             :     size_t rows_per_page_ = 1024;</span>
-<span id="L113"><span class="lineNum">     113</span>                 :             : };</span>
-<span id="L114"><span class="lineNum">     114</span>                 :             : </span>
-<span id="L115"><span class="lineNum">     115</span>                 :             : class MySQLPageSource final : public ConnectorPageSource {</span>
-<span id="L116"><span class="lineNum">     116</span>                 :             : public:</span>
-<span id="L117"><span class="lineNum">     117</span>                 :             :     MySQLPageSource(std::string dsn,</span>
-<span id="L118"><span class="lineNum">     118</span>                 :             :                     std::string table,</span>
-<span id="L119"><span class="lineNum">     119</span>                 :             :                     ScanRequest request,</span>
-<span id="L120"><span class="lineNum">     120</span>                 :             :                     size_t rows_per_page,</span>
-<span id="L121"><span class="lineNum">     121</span>                 :             :                     std::optional&lt;std::string&gt; split_column = std::nullopt,</span>
-<span id="L122"><span class="lineNum">     122</span>                 :             :                     std::optional&lt;int64_t&gt; split_lower = std::nullopt,</span>
-<span id="L123"><span class="lineNum">     123</span>                 :             :                     std::optional&lt;int64_t&gt; split_upper = std::nullopt,</span>
-<span id="L124"><span class="lineNum">     124</span>                 :             :                     int64_t split_id = 0,</span>
-<span id="L125"><span class="lineNum">     125</span>                 :             :                     MySQLRuntimeOptions options = {});</span>
-<span id="L126"><span class="lineNum">     126</span>                 :             : </span>
-<span id="L127"><span class="lineNum">     127</span>                 :             :     absl::Status Initialize();</span>
-<span id="L128"><span class="lineNum">     128</span>                 :             :     absl::StatusOr&lt;std::optional&lt;Page&gt;&gt; NextPage() override;</span>
-<span id="L129"><span class="lineNum">     129</span>                 :             :     [[nodiscard]] ConnectorSplitStats Stats() const override;</span>
-<span id="L130"><span class="lineNum">     130</span>                 :             :     [[nodiscard]] bool Finished() const override;</span>
-<span id="L131"><span class="lineNum">     131</span>                 :             : </span>
-<span id="L132"><span class="lineNum">     132</span>                 :             : private:</span>
-<span id="L133"><span class="lineNum">     133</span>                 :             :     struct Impl;</span>
-<span id="L134"><span class="lineNum">     134</span>                 :             :     std::unique_ptr&lt;Impl&gt; impl_;</span>
-<span id="L135"><span class="lineNum">     135</span>                 :             :     std::string dsn_;</span>
-<span id="L136"><span class="lineNum">     136</span>                 :             :     std::string table_;</span>
-<span id="L137"><span class="lineNum">     137</span>                 :             :     size_t rows_per_page_ = 1024;</span>
-<span id="L138"><span class="lineNum">     138</span>                 :             :     MySQLRuntimeOptions options_;</span>
-<span id="L139"><span class="lineNum">     139</span>                 :             :     ConnectorSplitStats stats_;</span>
-<span id="L140"><span class="lineNum">     140</span>                 :             : };</span>
-<span id="L141"><span class="lineNum">     141</span>                 :             : </span>
-<span id="L142"><span class="lineNum">     142</span>                 :             : std::unique_ptr&lt;ConnectorRuntime&gt; MakeMySQLConnectorRuntime(const SourceSpec&amp; spec);</span>
-<span id="L143"><span class="lineNum">     143</span>                 :             : </span>
-<span id="L144"><span class="lineNum">     144</span>                 :             : } // namespace pl::flux::connector</span>
+<span id="L105"><span class="lineNum">     105</span>                 :             :     MySQLPageSourceProvider(MySQLRuntimeOptions options,</span>
+<span id="L106"><span class="lineNum">     106</span>                 :             :                             const std::shared_ptr&lt;MySQLBoostConnectionPool&gt;&amp; pool);</span>
+<span id="L107"><span class="lineNum">     107</span>                 :             : </span>
+<span id="L108"><span class="lineNum">     108</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;std::unique_ptr&lt;ConnectorPageSource&gt;&gt; CreatePageSource(</span>
+<span id="L109"><span class="lineNum">     109</span>                 :             :         const ConnectorSplit&amp; split) const override;</span>
+<span id="L110"><span class="lineNum">     110</span>                 :             : </span>
+<span id="L111"><span class="lineNum">     111</span>                 :             : private:</span>
+<span id="L112"><span class="lineNum">     112</span>                 :             :     MySQLRuntimeOptions options_;</span>
+<span id="L113"><span class="lineNum">     113</span>                 :             :     size_t rows_per_page_ = 1024;</span>
+<span id="L114"><span class="lineNum">     114</span>                 :             : };</span>
+<span id="L115"><span class="lineNum">     115</span>                 :             : </span>
+<span id="L116"><span class="lineNum">     116</span>                 :             : class MySQLPageSource final : public ConnectorPageSource {</span>
+<span id="L117"><span class="lineNum">     117</span>                 :             : public:</span>
+<span id="L118"><span class="lineNum">     118</span>                 :             :     MySQLPageSource(std::string dsn,</span>
+<span id="L119"><span class="lineNum">     119</span>                 :             :                     std::string table,</span>
+<span id="L120"><span class="lineNum">     120</span>                 :             :                     ScanRequest request,</span>
+<span id="L121"><span class="lineNum">     121</span>                 :             :                     size_t rows_per_page,</span>
+<span id="L122"><span class="lineNum">     122</span>                 :             :                     std::optional&lt;std::string&gt; split_column = std::nullopt,</span>
+<span id="L123"><span class="lineNum">     123</span>                 :             :                     std::optional&lt;int64_t&gt; split_lower = std::nullopt,</span>
+<span id="L124"><span class="lineNum">     124</span>                 :             :                     std::optional&lt;int64_t&gt; split_upper = std::nullopt,</span>
+<span id="L125"><span class="lineNum">     125</span>                 :             :                     int64_t split_id = 0,</span>
+<span id="L126"><span class="lineNum">     126</span>                 :             :                     MySQLRuntimeOptions options = {});</span>
+<span id="L127"><span class="lineNum">     127</span>                 :             : </span>
+<span id="L128"><span class="lineNum">     128</span>                 :             :     absl::Status Initialize();</span>
+<span id="L129"><span class="lineNum">     129</span>                 :             :     absl::StatusOr&lt;std::optional&lt;Page&gt;&gt; NextPage() override;</span>
+<span id="L130"><span class="lineNum">     130</span>                 :             :     [[nodiscard]] ConnectorSplitStats Stats() const override;</span>
+<span id="L131"><span class="lineNum">     131</span>                 :             :     [[nodiscard]] bool Finished() const override;</span>
+<span id="L132"><span class="lineNum">     132</span>                 :             : </span>
+<span id="L133"><span class="lineNum">     133</span>                 :             : private:</span>
+<span id="L134"><span class="lineNum">     134</span>                 :             :     struct Impl;</span>
+<span id="L135"><span class="lineNum">     135</span>                 :             :     std::unique_ptr&lt;Impl&gt; impl_;</span>
+<span id="L136"><span class="lineNum">     136</span>                 :             :     std::string dsn_;</span>
+<span id="L137"><span class="lineNum">     137</span>                 :             :     std::string table_;</span>
+<span id="L138"><span class="lineNum">     138</span>                 :             :     size_t rows_per_page_ = 1024;</span>
+<span id="L139"><span class="lineNum">     139</span>                 :             :     MySQLRuntimeOptions options_;</span>
+<span id="L140"><span class="lineNum">     140</span>                 :             :     ConnectorSplitStats stats_;</span>
+<span id="L141"><span class="lineNum">     141</span>                 :             : };</span>
+<span id="L142"><span class="lineNum">     142</span>                 :             : </span>
+<span id="L143"><span class="lineNum">     143</span>                 :             : std::unique_ptr&lt;ConnectorRuntime&gt; MakeMySQLConnectorRuntime(const SourceSpec&amp; spec);</span>
+<span id="L144"><span class="lineNum">     144</span>                 :             : </span>
+<span id="L145"><span class="lineNum">     145</span>                 :             : } // namespace pl::flux::connector</span>
         </pre>
               </td>
             </tr>
