@@ -1225,7 +1225,7 @@ MySQLPageSourceProvider::MySQLPageSourceProvider(size_t rows_per_page) {
 }
 
 MySQLPageSourceProvider::MySQLPageSourceProvider(MySQLRuntimeOptions options,
-                                                 std::shared_ptr<MySQLBoostConnectionPool> /*pool*/)
+                                                 const std::shared_ptr<MySQLBoostConnectionPool>& /*pool*/)
     : options_(options),
       rows_per_page_(std::max<size_t>(1, options_.rows_per_page)) {}
 
@@ -1260,7 +1260,7 @@ MySQLPageSource::MySQLPageSource(std::string dsn,
       dsn_(std::move(dsn)),
       table_(std::move(table)),
       rows_per_page_(std::max<size_t>(1, rows_per_page)),
-      options_(std::move(options)) {
+      options_(options) {
     impl_->request = std::move(request);
     impl_->split_column = std::move(split_column);
     impl_->split_lower = split_lower;
@@ -1442,7 +1442,7 @@ absl::StatusOr<std::optional<Page>> MySQLPageSource::NextPage() {
             chunk.rows.push_back(std::move(row));
             chunks.push_back(std::move(chunk));
         }
-        page = PageFromTableChunks("mysql", std::move(chunks));
+        page = PageFromTableChunks("mysql", chunks);
     } else {
         page.bucket = "mysql";
         page.chunks.push_back(std::move(direct_chunk));
