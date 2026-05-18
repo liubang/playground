@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-18 21:49:28</td>
+            <td class="headerValue">2026-05-19 00:45:56</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">92.5&nbsp;%</td>
@@ -490,11 +490,11 @@
 <span id="L411"><span class="lineNum">     411</span>                 :             : </span>
 <span id="L412"><span class="lineNum">     412</span>                 :<span class="tlaGNC">         172 : std::string quote_identifier(const std::string&amp; identifier) {</span></span>
 <span id="L413"><span class="lineNum">     413</span>                 :<span class="tlaGNC">         172 :     std::string out = &quot;`&quot;;</span></span>
-<span id="L414"><span class="lineNum">     414</span>         [<span class="tlaGBC" title="Branch 0 was taken 767 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 172 times"> + </span>]:<span class="tlaGNC">         939 :     for (const char ch : identifier) {</span></span>
-<span id="L415"><span class="lineNum">     415</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 767 times"> + </span>]:<span class="tlaGNC">         767 :         if (ch == '`') {</span></span>
+<span id="L414"><span class="lineNum">     414</span>         [<span class="tlaGBC" title="Branch 0 was taken 764 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 172 times"> + </span>]:<span class="tlaGNC">         936 :     for (const char ch : identifier) {</span></span>
+<span id="L415"><span class="lineNum">     415</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 764 times"> + </span>]:<span class="tlaGNC">         764 :         if (ch == '`') {</span></span>
 <span id="L416"><span class="lineNum">     416</span>                 :             :             out += &quot;``&quot;;</span>
 <span id="L417"><span class="lineNum">     417</span>                 :             :         } else {</span>
-<span id="L418"><span class="lineNum">     418</span>         [<span class="tlaGBC" title="Branch 0 was taken 767 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         767 :             out.push_back(ch);</span></span>
+<span id="L418"><span class="lineNum">     418</span>         [<span class="tlaGBC" title="Branch 0 was taken 765 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         764 :             out.push_back(ch);</span></span>
 <span id="L419"><span class="lineNum">     419</span>                 :             :         }</span>
 <span id="L420"><span class="lineNum">     420</span>                 :             :     }</span>
 <span id="L421"><span class="lineNum">     421</span>         [<span class="tlaGBC" title="Branch 0 was taken 172 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         172 :     out.push_back('`');</span></span>
@@ -1510,7 +1510,7 @@
 <span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 13 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 2 times"> + </span>]
 <span id="L1388"><span class="lineNum">    1388</span>                 :             :                impl_-&gt;state.should_read_rows()) {</span>
 <span id="L1389"><span class="lineNum">    1389</span>                 :<span class="tlaGNC">          13 :             const auto read_started = Clock::now();</span></span>
-<span id="L1390"><span class="lineNum">    1390</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          13 :             mysql::rows_view batch = conn-&gt;read_some_rows(impl_-&gt;state);</span></span>
+<span id="L1390"><span class="lineNum">    1390</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          13 :             mysql::rows_view batch = conn-&gt;read_some_rows(impl_-&gt;state);</span></span>
 <span id="L1391"><span class="lineNum">    1391</span>                 :<span class="tlaGNC">          13 :             stats_.read_time_ms += elapsed_ms(read_started);</span></span>
 <span id="L1392"><span class="lineNum">    1392</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span>]:<span class="tlaGNC">          13 :             if (batch.empty()) {</span></span>
 <span id="L1393"><span class="lineNum">    1393</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">           5 :                 if (impl_-&gt;state.complete()) {</span></span>
@@ -1547,7 +1547,7 @@
 <span id="L1423"><span class="lineNum">    1423</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span>]:<span class="tlaGNC">          13 :     if (empty) {</span></span>
 <span id="L1424"><span class="lineNum">    1424</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 5 times"> + </span>]:<span class="tlaGNC">           5 :         if (!impl_-&gt;emitted_empty &amp;&amp; !impl_-&gt;emitted_any_row) {</span></span>
 <span id="L1425"><span class="lineNum">    1425</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :             impl_-&gt;emitted_empty = true;</span></span>
-<span id="L1426"><span class="lineNum">    1426</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          10 :             Page page = PageFromRows(&quot;mysql&quot;, {});</span></span>
+<span id="L1426"><span class="lineNum">    1426</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          10 :             Page page = PageFromRows(&quot;mysql&quot;, {});</span></span>
 <span id="L1427"><span class="lineNum">    1427</span>                 :<span class="tlaGNC">           5 :             ++stats_.pages_produced;</span></span>
 <span id="L1428"><span class="lineNum">    1428</span>                 :             :             return page;</span>
 <span id="L1429"><span class="lineNum">    1429</span>                 :<span class="tlaGNC">           5 :         }</span></span>

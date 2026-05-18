@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-18 21:49:28</td>
+            <td class="headerValue">2026-05-19 00:45:56</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">91.7&nbsp;%</td>
@@ -201,7 +201,7 @@
 <span id="L127"><span class="lineNum">     127</span>                 :             :     std::vector&lt;SortKey&gt; keys;</span>
 <span id="L128"><span class="lineNum">     128</span>                 :             : };</span>
 <span id="L129"><span class="lineNum">     129</span>                 :             : </span>
-<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">          82 : struct GroupSpec {</span></span>
+<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">          88 : struct GroupSpec {</span></span>
 <span id="L131"><span class="lineNum">     131</span>                 :             :     std::vector&lt;std::string&gt; columns;</span>
 <span id="L132"><span class="lineNum">     132</span>                 :             : };</span>
 <span id="L133"><span class="lineNum">     133</span>                 :             : </span>
@@ -218,7 +218,7 @@
 <span id="L144"><span class="lineNum">     144</span>                 :             :     std::string column;</span>
 <span id="L145"><span class="lineNum">     145</span>                 :             : };</span>
 <span id="L146"><span class="lineNum">     146</span>                 :             : </span>
-<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">          12 : struct DistinctSpec {</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :<span class="tlaGNC">          18 : struct DistinctSpec {</span></span>
 <span id="L148"><span class="lineNum">     148</span>                 :             :     std::string column;</span>
 <span id="L149"><span class="lineNum">     149</span>                 :             : };</span>
 <span id="L150"><span class="lineNum">     150</span>                 :             : </span>
@@ -252,7 +252,7 @@
 <span id="L178"><span class="lineNum">     178</span>                 :             :     std::vector&lt;std::string&gt; partition_keys;</span>
 <span id="L179"><span class="lineNum">     179</span>                 :             : };</span>
 <span id="L180"><span class="lineNum">     180</span>                 :             : </span>
-<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">         310 : struct MaterializeSpec {</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">         316 : struct MaterializeSpec {</span></span>
 <span id="L182"><span class="lineNum">     182</span>                 :             :     std::string reason;</span>
 <span id="L183"><span class="lineNum">     183</span>                 :             :     std::string builtin;</span>
 <span id="L184"><span class="lineNum">     184</span>                 :             : };</span>
@@ -282,7 +282,7 @@
 <span id="L208"><span class="lineNum">     208</span>                 :             : // PlanNode — the core logical plan tree node.</span>
 <span id="L209"><span class="lineNum">     209</span>                 :             : // ---------------------------------------------------------------------------</span>
 <span id="L210"><span class="lineNum">     210</span>                 :             : </span>
-<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC">         340 : struct PlanNode {</span></span>
+<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC">         350 : struct PlanNode {</span></span>
 <span id="L212"><span class="lineNum">     212</span>                 :             :     PlanNodeKind kind = PlanNodeKind::Materialize;</span>
 <span id="L213"><span class="lineNum">     213</span>                 :             :     std::vector&lt;std::shared_ptr&lt;PlanNode&gt;&gt; inputs;</span>
 <span id="L214"><span class="lineNum">     214</span>                 :             :     NodeSpec spec = MaterializeSpec{};</span>
@@ -385,24 +385,24 @@
 <span id="L308"><span class="lineNum">     308</span>                 :             : // Factory functions</span>
 <span id="L309"><span class="lineNum">     309</span>                 :             : // ---------------------------------------------------------------------------</span>
 <span id="L310"><span class="lineNum">     310</span>                 :             : </span>
-<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC tlaBgGNC">          84 : inline std::shared_ptr&lt;PlanNode&gt; MakeSourceScan(std::string source,</span></span>
+<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC tlaBgGNC">          86 : inline std::shared_ptr&lt;PlanNode&gt; MakeSourceScan(std::string source,</span></span>
 <span id="L312"><span class="lineNum">     312</span>                 :             :                                                 std::string driver,</span>
 <span id="L313"><span class="lineNum">     313</span>                 :             :                                                 std::string dsn,</span>
 <span id="L314"><span class="lineNum">     314</span>                 :             :                                                 std::string table) {</span>
 <span id="L315"><span class="lineNum">     315</span>                 :             :     auto node = std::make_shared&lt;PlanNode&gt;();</span>
-<span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaGNC">          84 :     node-&gt;kind = PlanNodeKind::SourceScan;</span></span>
-<span id="L317"><span class="lineNum">     317</span>                 :<span class="tlaGNC">         168 :     node-&gt;spec = SourceScanSpec{.source = std::move(source),</span></span>
+<span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaGNC">          86 :     node-&gt;kind = PlanNodeKind::SourceScan;</span></span>
+<span id="L317"><span class="lineNum">     317</span>                 :<span class="tlaGNC">         172 :     node-&gt;spec = SourceScanSpec{.source = std::move(source),</span></span>
 <span id="L318"><span class="lineNum">     318</span>                 :             :                                 .driver = std::move(driver),</span>
 <span id="L319"><span class="lineNum">     319</span>                 :             :                                 .dsn = std::move(dsn),</span>
-<span id="L320"><span class="lineNum">     320</span>                 :<span class="tlaGNC">          84 :                                 .table = std::move(table)};</span></span>
-<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC">          84 :     return node;</span></span>
+<span id="L320"><span class="lineNum">     320</span>                 :<span class="tlaGNC">          86 :                                 .table = std::move(table)};</span></span>
+<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC">          86 :     return node;</span></span>
 <span id="L322"><span class="lineNum">     322</span>                 :             : }</span>
 <span id="L323"><span class="lineNum">     323</span>                 :             : </span>
-<span id="L324"><span class="lineNum">     324</span>                 :<span class="tlaGNC">         206 : inline std::shared_ptr&lt;PlanNode&gt; MakeUnaryNode(PlanNodeKind kind, std::shared_ptr&lt;PlanNode&gt; input) {</span></span>
+<span id="L324"><span class="lineNum">     324</span>                 :<span class="tlaGNC">         210 : inline std::shared_ptr&lt;PlanNode&gt; MakeUnaryNode(PlanNodeKind kind, std::shared_ptr&lt;PlanNode&gt; input) {</span></span>
 <span id="L325"><span class="lineNum">     325</span>                 :             :     auto node = std::make_shared&lt;PlanNode&gt;();</span>
-<span id="L326"><span class="lineNum">     326</span>                 :<span class="tlaGNC">         206 :     node-&gt;kind = kind;</span></span>
-<span id="L327"><span class="lineNum">     327</span>         [<span class="tlaGBC" title="Branch 0 was taken 206 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         206 :     node-&gt;inputs.push_back(std::move(input));</span></span>
-<span id="L328"><span class="lineNum">     328</span>                 :<span class="tlaGNC">         206 :     return node;</span></span>
+<span id="L326"><span class="lineNum">     326</span>                 :<span class="tlaGNC">         210 :     node-&gt;kind = kind;</span></span>
+<span id="L327"><span class="lineNum">     327</span>         [<span class="tlaGBC" title="Branch 0 was taken 210 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         210 :     node-&gt;inputs.push_back(std::move(input));</span></span>
+<span id="L328"><span class="lineNum">     328</span>                 :<span class="tlaGNC">         210 :     return node;</span></span>
 <span id="L329"><span class="lineNum">     329</span>                 :             : }</span>
 <span id="L330"><span class="lineNum">     330</span>                 :             : </span>
 <span id="L331"><span class="lineNum">     331</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 : inline std::shared_ptr&lt;PlanNode&gt; MakeRange(std::shared_ptr&lt;PlanNode&gt; input,</span></span>
@@ -449,11 +449,11 @@
 <span id="L372"><span class="lineNum">     372</span>                 :<span class="tlaGNC">          17 :     return node;</span></span>
 <span id="L373"><span class="lineNum">     373</span>                 :             : }</span>
 <span id="L374"><span class="lineNum">     374</span>                 :             : </span>
-<span id="L375"><span class="lineNum">     375</span>         [<span class="tlaGBC" title="Branch 0 was taken 26 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          26 : inline std::shared_ptr&lt;PlanNode&gt; MakeGroup(std::shared_ptr&lt;PlanNode&gt; input,</span></span>
+<span id="L375"><span class="lineNum">     375</span>         [<span class="tlaGBC" title="Branch 0 was taken 27 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          27 : inline std::shared_ptr&lt;PlanNode&gt; MakeGroup(std::shared_ptr&lt;PlanNode&gt; input,</span></span>
 <span id="L376"><span class="lineNum">     376</span>                 :             :                                            std::vector&lt;std::string&gt; columns) {</span>
-<span id="L377"><span class="lineNum">     377</span>         [<span class="tlaGBC" title="Branch 0 was taken 26 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          52 :     auto node = MakeUnaryNode(PlanNodeKind::Group, std::move(input));</span></span>
-<span id="L378"><span class="lineNum">     378</span>                 :<span class="tlaGNC">          26 :     node-&gt;spec = GroupSpec{std::move(columns)};</span></span>
-<span id="L379"><span class="lineNum">     379</span>                 :<span class="tlaGNC">          26 :     return node;</span></span>
+<span id="L377"><span class="lineNum">     377</span>         [<span class="tlaGBC" title="Branch 0 was taken 27 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          54 :     auto node = MakeUnaryNode(PlanNodeKind::Group, std::move(input));</span></span>
+<span id="L378"><span class="lineNum">     378</span>                 :<span class="tlaGNC">          27 :     node-&gt;spec = GroupSpec{std::move(columns)};</span></span>
+<span id="L379"><span class="lineNum">     379</span>                 :<span class="tlaGNC">          27 :     return node;</span></span>
 <span id="L380"><span class="lineNum">     380</span>                 :             : }</span>
 <span id="L381"><span class="lineNum">     381</span>                 :             : </span>
 <span id="L382"><span class="lineNum">     382</span>         [<span class="tlaGBC" title="Branch 0 was taken 16 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          16 : inline std::shared_ptr&lt;PlanNode&gt; MakeAggregate(std::shared_ptr&lt;PlanNode&gt; input,</span></span>
@@ -464,10 +464,10 @@
 <span id="L387"><span class="lineNum">     387</span>                 :<span class="tlaGNC">          16 :     return node;</span></span>
 <span id="L388"><span class="lineNum">     388</span>                 :             : }</span>
 <span id="L389"><span class="lineNum">     389</span>                 :             : </span>
-<span id="L390"><span class="lineNum">     390</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 : inline std::shared_ptr&lt;PlanNode&gt; MakeDistinct(std::shared_ptr&lt;PlanNode&gt; input, std::string column) {</span></span>
-<span id="L391"><span class="lineNum">     391</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :     auto node = MakeUnaryNode(PlanNodeKind::Distinct, std::move(input));</span></span>
-<span id="L392"><span class="lineNum">     392</span>                 :<span class="tlaGNC">           5 :     node-&gt;spec = DistinctSpec{std::move(column)};</span></span>
-<span id="L393"><span class="lineNum">     393</span>                 :<span class="tlaGNC">           5 :     return node;</span></span>
+<span id="L390"><span class="lineNum">     390</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           6 : inline std::shared_ptr&lt;PlanNode&gt; MakeDistinct(std::shared_ptr&lt;PlanNode&gt; input, std::string column) {</span></span>
+<span id="L391"><span class="lineNum">     391</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           6 :     auto node = MakeUnaryNode(PlanNodeKind::Distinct, std::move(input));</span></span>
+<span id="L392"><span class="lineNum">     392</span>                 :<span class="tlaGNC">           6 :     node-&gt;spec = DistinctSpec{std::move(column)};</span></span>
+<span id="L393"><span class="lineNum">     393</span>                 :<span class="tlaGNC">           6 :     return node;</span></span>
 <span id="L394"><span class="lineNum">     394</span>                 :             : }</span>
 <span id="L395"><span class="lineNum">     395</span>                 :             : </span>
 <span id="L396"><span class="lineNum">     396</span>                 :<span class="tlaGNC">          12 : inline std::shared_ptr&lt;PlanNode&gt; MakeJoin(std::shared_ptr&lt;PlanNode&gt; left,</span></span>
@@ -536,12 +536,12 @@
 <span id="L458"><span class="lineNum">     458</span>                 :<span class="tlaUNC">           0 :     return &quot;gather&quot;;</span></span>
 <span id="L459"><span class="lineNum">     459</span>                 :             : }</span>
 <span id="L460"><span class="lineNum">     460</span>                 :             : </span>
-<span id="L461"><span class="lineNum">     461</span>         [<span class="tlaGBC" title="Branch 0 was taken 18 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          18 : inline std::shared_ptr&lt;PlanNode&gt; MakeMaterializeBarrier(std::shared_ptr&lt;PlanNode&gt; input,</span></span>
+<span id="L461"><span class="lineNum">     461</span>         [<span class="tlaGBC" title="Branch 0 was taken 20 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          20 : inline std::shared_ptr&lt;PlanNode&gt; MakeMaterializeBarrier(std::shared_ptr&lt;PlanNode&gt; input,</span></span>
 <span id="L462"><span class="lineNum">     462</span>                 :             :                                                         std::string reason,</span>
 <span id="L463"><span class="lineNum">     463</span>                 :             :                                                         std::string builtin) {</span>
-<span id="L464"><span class="lineNum">     464</span>         [<span class="tlaGBC" title="Branch 0 was taken 18 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          18 :     auto node = MakeUnaryNode(PlanNodeKind::Materialize, std::move(input));</span></span>
-<span id="L465"><span class="lineNum">     465</span>                 :<span class="tlaGNC">          18 :     node-&gt;spec = MaterializeSpec{.reason = std::move(reason), .builtin = std::move(builtin)};</span></span>
-<span id="L466"><span class="lineNum">     466</span>                 :<span class="tlaGNC">          18 :     return node;</span></span>
+<span id="L464"><span class="lineNum">     464</span>         [<span class="tlaGBC" title="Branch 0 was taken 20 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          20 :     auto node = MakeUnaryNode(PlanNodeKind::Materialize, std::move(input));</span></span>
+<span id="L465"><span class="lineNum">     465</span>                 :<span class="tlaGNC">          20 :     node-&gt;spec = MaterializeSpec{.reason = std::move(reason), .builtin = std::move(builtin)};</span></span>
+<span id="L466"><span class="lineNum">     466</span>                 :<span class="tlaGNC">          20 :     return node;</span></span>
 <span id="L467"><span class="lineNum">     467</span>                 :             : }</span>
 <span id="L468"><span class="lineNum">     468</span>                 :             : </span>
 <span id="L469"><span class="lineNum">     469</span>                 :<span class="tlaGNC">           6 : inline std::shared_ptr&lt;PlanNode&gt; MakeMaterializeBarrier(</span></span>
@@ -615,18 +615,18 @@
 <span id="L534"><span class="lineNum">     534</span>                 :<span class="tlaGNC">          11 :     return out.str();</span></span>
 <span id="L535"><span class="lineNum">     535</span>                 :<span class="tlaGNC">          11 : }</span></span>
 <span id="L536"><span class="lineNum">     536</span>                 :             : </span>
-<span id="L537"><span class="lineNum">     537</span>                 :<span class="tlaGNC">          30 : inline std::string StringList(const std::vector&lt;std::string&gt;&amp; items) {</span></span>
-<span id="L538"><span class="lineNum">     538</span>                 :<span class="tlaGNC">          30 :     std::ostringstream out;</span></span>
-<span id="L539"><span class="lineNum">     539</span>         [<span class="tlaGBC" title="Branch 0 was taken 30 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          30 :     out &lt;&lt; &quot;[&quot;;</span></span>
-<span id="L540"><span class="lineNum">     540</span>         [<span class="tlaGBC" title="Branch 0 was taken 66 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 30 times"> + </span>]:<span class="tlaGNC">          96 :     for (size_t i = 0; i &lt; items.size(); ++i) {</span></span>
-<span id="L541"><span class="lineNum">     541</span>         [<span class="tlaGBC" title="Branch 0 was taken 36 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 30 times"> + </span>]:<span class="tlaGNC">          66 :         if (i != 0) {</span></span>
-<span id="L542"><span class="lineNum">     542</span>         [<span class="tlaGBC" title="Branch 0 was taken 36 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          36 :             out &lt;&lt; &quot;, &quot;;</span></span>
+<span id="L537"><span class="lineNum">     537</span>                 :<span class="tlaGNC">          48 : inline std::string StringList(const std::vector&lt;std::string&gt;&amp; items) {</span></span>
+<span id="L538"><span class="lineNum">     538</span>                 :<span class="tlaGNC">          48 :     std::ostringstream out;</span></span>
+<span id="L539"><span class="lineNum">     539</span>         [<span class="tlaGBC" title="Branch 0 was taken 48 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          48 :     out &lt;&lt; &quot;[&quot;;</span></span>
+<span id="L540"><span class="lineNum">     540</span>         [<span class="tlaGBC" title="Branch 0 was taken 92 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 48 times"> + </span>]:<span class="tlaGNC">         140 :     for (size_t i = 0; i &lt; items.size(); ++i) {</span></span>
+<span id="L541"><span class="lineNum">     541</span>         [<span class="tlaGBC" title="Branch 0 was taken 44 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 48 times"> + </span>]:<span class="tlaGNC">          92 :         if (i != 0) {</span></span>
+<span id="L542"><span class="lineNum">     542</span>         [<span class="tlaGBC" title="Branch 0 was taken 44 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          44 :             out &lt;&lt; &quot;, &quot;;</span></span>
 <span id="L543"><span class="lineNum">     543</span>                 :             :         }</span>
 <span id="L544"><span class="lineNum">     544</span>                 :             :         out &lt;&lt; items[i];</span>
 <span id="L545"><span class="lineNum">     545</span>                 :             :     }</span>
-<span id="L546"><span class="lineNum">     546</span>         [<span class="tlaGBC" title="Branch 0 was taken 30 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          30 :     out &lt;&lt; &quot;]&quot;;</span></span>
-<span id="L547"><span class="lineNum">     547</span>                 :<span class="tlaGNC">          30 :     return out.str();</span></span>
-<span id="L548"><span class="lineNum">     548</span>                 :<span class="tlaGNC">          30 : }</span></span>
+<span id="L546"><span class="lineNum">     546</span>         [<span class="tlaGBC" title="Branch 0 was taken 48 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          48 :     out &lt;&lt; &quot;]&quot;;</span></span>
+<span id="L547"><span class="lineNum">     547</span>                 :<span class="tlaGNC">          48 :     return out.str();</span></span>
+<span id="L548"><span class="lineNum">     548</span>                 :<span class="tlaGNC">          48 : }</span></span>
 <span id="L549"><span class="lineNum">     549</span>                 :             : </span>
 <span id="L550"><span class="lineNum">     550</span>                 :             : // ---------------------------------------------------------------------------</span>
 <span id="L551"><span class="lineNum">     551</span>                 :             : // Plan tree formatting</span>
