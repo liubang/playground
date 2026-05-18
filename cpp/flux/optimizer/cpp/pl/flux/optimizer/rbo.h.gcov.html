@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-18 21:49:28</td>
+            <td class="headerValue">2026-05-19 00:45:56</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -112,7 +112,7 @@
 <span id="L41"><span class="lineNum">      41</span>                 :             :     std::vector&lt;std::string&gt; source_columns;</span>
 <span id="L42"><span class="lineNum">      42</span>                 :             : };</span>
 <span id="L43"><span class="lineNum">      43</span>                 :             : </span>
-<span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaGNC tlaBgGNC">        3312 : struct RuleTrace {</span></span>
+<span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaGNC tlaBgGNC">        3632 : struct RuleTrace {</span></span>
 <span id="L45"><span class="lineNum">      45</span>                 :             :     std::string rule;</span>
 <span id="L46"><span class="lineNum">      46</span>                 :             :     bool applied = false;</span>
 <span id="L47"><span class="lineNum">      47</span>                 :             :     std::string detail;</span>
@@ -147,7 +147,7 @@
 <span id="L76"><span class="lineNum">      76</span>                 :             :         std::shared_ptr&lt;plan::PlanNode&gt; plan) const = 0;</span>
 <span id="L77"><span class="lineNum">      77</span>                 :             : };</span>
 <span id="L78"><span class="lineNum">      78</span>                 :             : </span>
-<span id="L79"><span class="lineNum">      79</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 183 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 13 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 3 times"> + </span> :<span class="tlaGNC">         209 : class RuleBasedOptimizer final : public PlanOptimizer {</span></span>
+<span id="L79"><span class="lineNum">      79</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 203 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 13 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 3 times"> + </span> :<span class="tlaGNC">         229 : class RuleBasedOptimizer final : public PlanOptimizer {</span></span>
 <span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaGBC" title="Branch 7 was taken 1 time"> + </span>]
 <span id="L80"><span class="lineNum">      80</span>                 :             : public:</span>
 <span id="L81"><span class="lineNum">      81</span>                 :             :     explicit RuleBasedOptimizer(std::vector&lt;std::unique_ptr&lt;Rule&gt;&gt; rules);</span>
