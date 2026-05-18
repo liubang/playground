@@ -168,7 +168,7 @@ TEST(FluxCliTest, ExecutesFluxFileSourceWithImportsAndPipelines) {
     EXPECT_NE(std::string::npos, result.output.find("\"2024-01-01T00:00:00Z\""));
     EXPECT_NE(std::string::npos, result.output.find("\"cpu\""));
     EXPECT_NE(std::string::npos, result.output.find("\"95.5\""));
-    EXPECT_NE(std::string::npos, result.output.find("+"));
+    EXPECT_NE(std::string::npos, result.output.find('+'));
     EXPECT_TRUE(result.error.empty());
 }
 
@@ -418,7 +418,7 @@ TEST(FluxCliTest, ExecutesStdlibPackagesFeatureGalleryExample) {
     EXPECT_NE(std::string::npos, result.output.find("\"API-edge-1\""));
     EXPECT_NE(std::string::npos, result.output.find("\"critical\""));
     EXPECT_NE(std::string::npos, result.output.find("88"));
-    EXPECT_NE(std::string::npos, result.output.find("8"));
+    EXPECT_NE(std::string::npos, result.output.find('8'));
 }
 
 TEST(FluxCliTest, ExecutesDateCalendarFeatureGalleryExample) {
@@ -437,8 +437,8 @@ TEST(FluxCliTest, ExecutesDateCalendarFeatureGalleryExample) {
     EXPECT_NE(std::string::npos, result.output.find("\"api\""));
     EXPECT_NE(std::string::npos, result.output.find("\"worker\""));
     EXPECT_NE(std::string::npos, result.output.find("2024"));
-    EXPECT_NE(std::string::npos, result.output.find("6"));
-    EXPECT_NE(std::string::npos, result.output.find("9"));
+    EXPECT_NE(std::string::npos, result.output.find('6'));
+    EXPECT_NE(std::string::npos, result.output.find('9'));
 }
 
 TEST(FluxCliTest, ExecutesJoinPackageFeatureGalleryExample) {

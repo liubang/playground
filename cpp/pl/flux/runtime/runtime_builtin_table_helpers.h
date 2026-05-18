@@ -430,7 +430,7 @@ inline absl::StatusOr<Value> transform_rows_preserving_chunks(
 }
 
 inline Value slice_table_like(const TableValue& table,
-                              std::function<std::pair<size_t, size_t>(size_t)> bounds_fn) {
+                              const std::function<std::pair<size_t, size_t>(size_t)>& bounds_fn) {
     std::vector<TableChunk> chunks;
     chunks.reserve(table.table_count());
     for (const auto& chunk : table.tables) {

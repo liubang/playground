@@ -891,7 +891,7 @@ absl::StatusOr<std::optional<Page>> SQLitePageSource::NextPage() {
             aggregate_chunk.rows.push_back(std::move(row));
             chunks.push_back(std::move(aggregate_chunk));
         }
-        page = PageFromTableChunks("sqlite", std::move(chunks));
+        page = PageFromTableChunks("sqlite", chunks);
     } else {
         page.bucket = "sqlite";
         page.chunks.push_back(std::move(chunk));
