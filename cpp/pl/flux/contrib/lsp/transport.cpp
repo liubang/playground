@@ -19,11 +19,29 @@
 
 #include <array>
 #include <charconv>
+#include <cctype>
 #include <cstring>
 #include <string>
 #include <string_view>
 
 namespace pl::flux::lsp {
+
+namespace {
+
+bool iequals(std::string_view lhs, std::string_view rhs) {
+    if (lhs.size() != rhs.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < lhs.size(); ++i) {
+        if (std::tolower(static_cast<unsigned char>(lhs[i])) !=
+            std::tolower(static_cast<unsigned char>(rhs[i]))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace
 
 StdioTransport::StdioTransport(FILE* in, FILE* out) : in_(in), out_(out) {}
 
@@ -46,24 +64,32 @@ std::optional<std::string> StdioTransport::read_message() {
             break;
         }
 
-        // Parse Content-Length header
-        constexpr std::string_view kContentLength = "Content-Length: ";
-        if (std::strncmp(line.data(), kContentLength.data(), kContentLength.size()) == 0) {
-            const char* value_start = line.data() + kContentLength.size();
-            const char* value_end = value_start + std::strlen(value_start);
+        std::string_view header(line.data(), std::strlen(line.data()));
+        const auto colon = header.find(':');
+        if (colon == std::string_view::npos) {
+            continue;
+        }
+
+        if (iequals(header.substr(0, colon), "Content-Length")) {
+            const char* value_start = line.data() + colon + 1;
+            const char* value_end = line.data() + header.size();
+            while (value_start < value_end &&
+                   std::isspace(static_cast<unsigned char>(*value_start))) {
+                ++value_start;
+            }
             // Trim trailing whitespace / \r\n
             while (value_end > value_start &&
-                   (*(value_end - 1) == '\r' || *(value_end - 1) == '\n')) {
+                   std::isspace(static_cast<unsigned char>(*(value_end - 1)))) {
                 --value_end;
             }
             auto result = std::from_chars(value_start, value_end, content_length);
-            if (result.ec != std::errc()) {
+            if (result.ec != std::errc() || result.ptr != value_end) {
                 return std::nullopt;
             }
         }
     }
 
-    if (content_length <= 0) {
+    if (content_length < 0) {
         return std::nullopt;
     }
 
@@ -81,7 +107,8 @@ void StdioTransport::write_message(const std::string& json) {
     if (!out_) {
         return;
     }
-    std::fprintf(out_, "Content-Length: %zu\r\n\r\n%s", json.size(), json.c_str());
+    std::fprintf(out_, "Content-Length: %zu\r\n\r\n", json.size());
+    std::fwrite(json.data(), 1, json.size(), out_);
     std::fflush(out_);
 }
 
