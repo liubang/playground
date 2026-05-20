@@ -46,6 +46,7 @@ enum class SymbolKind {
 
 // A definition of a symbol.
 struct SymbolDef {
+    size_t id = 0;
     std::string name;
     SymbolKind kind;
     Location location;
@@ -57,6 +58,7 @@ struct SymbolDef {
 struct SymbolRef {
     std::string name;
     Location location;
+    size_t definition_id = 0;
 };
 
 // The result of analyzing a single file: definitions and references.
@@ -73,8 +75,19 @@ struct SymbolTable {
     // Find all references of a given symbol name.
     std::vector<const SymbolRef*> references_of(const std::string& name) const;
 
+    // Find all references resolved to a concrete definition.
+    std::vector<const SymbolRef*> references_of(const SymbolDef& def) const;
+
     // Find the definition of a given symbol name.
     const SymbolDef* find_definition(const std::string& name) const;
+
+    // Find the concrete definition for the symbol under a given position.
+    const SymbolDef* definition_for_symbol_at(uint32_t line, uint32_t col) const;
+
+    // Find the concrete definition for a known symbol name near a given position.
+    const SymbolDef* definition_for_symbol_at(const std::string& name,
+                                              uint32_t line,
+                                              uint32_t col) const;
 
     // Find the symbol (def or ref) at a given position.
     // Returns the symbol name, or empty string if nothing found.

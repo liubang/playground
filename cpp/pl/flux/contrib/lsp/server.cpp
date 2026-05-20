@@ -22,7 +22,9 @@
 #include "cpp/pl/flux/syntax/parser.h"
 #include "simdjson.h"
 #include <algorithm>
+#include <cctype>
 #include <sstream>
+#include <utility>
 
 namespace pl::flux::lsp {
 
@@ -60,6 +62,37 @@ int64_t get_int_field(const simdjson::dom::element& elem, std::string_view point
 // Text utilities
 // ============================================================
 
+bool is_ident_char(char c) {
+    const auto uc = static_cast<unsigned char>(c);
+    return std::isalnum(uc) || c == '_';
+}
+
+size_t utf8_codepoint_length(unsigned char c) {
+    if ((c & 0x80) == 0) {
+        return 1;
+    }
+    if ((c & 0xE0) == 0xC0) {
+        return 2;
+    }
+    if ((c & 0xF0) == 0xE0) {
+        return 3;
+    }
+    if ((c & 0xF8) == 0xF0) {
+        return 4;
+    }
+    return 1;
+}
+
+uint32_t utf16_units_for_utf8(std::string_view s, size_t offset) {
+    uint32_t units = 0;
+    for (size_t i = 0; i < offset && i < s.size();) {
+        const auto len = utf8_codepoint_length(static_cast<unsigned char>(s[i]));
+        units += len == 4 ? 2 : 1;
+        i += std::min(len, s.size() - i);
+    }
+    return units;
+}
+
 // Find the byte offset of a given 0-based line in content.
 size_t line_offset(const std::string& content, int line) {
     int current_line = 0;
@@ -73,20 +106,77 @@ size_t line_offset(const std::string& content, int line) {
     return offset;
 }
 
+size_t next_line_offset(const std::string& content, size_t line_start) {
+    const auto nl = content.find('\n', line_start);
+    return nl == std::string::npos ? content.size() : nl;
+}
+
+size_t lsp_position_to_offset(const std::string& content, int line, int character) {
+    const size_t ls = line_offset(content, line);
+    const size_t le = next_line_offset(content, ls);
+    const uint32_t target = character <= 0 ? 0 : static_cast<uint32_t>(character);
+    uint32_t units = 0;
+    size_t i = ls;
+    while (i < le && units < target) {
+        const auto len = utf8_codepoint_length(static_cast<unsigned char>(content[i]));
+        const uint32_t cp_units = len == 4 ? 2 : 1;
+        if (units + cp_units > target) {
+            break;
+        }
+        units += cp_units;
+        i += std::min(len, le - i);
+    }
+    return i;
+}
+
+uint32_t lsp_position_to_byte_column(const std::string& content, int line, int character) {
+    const size_t ls = line_offset(content, line);
+    const size_t pos = lsp_position_to_offset(content, line, character);
+    return static_cast<uint32_t>(pos - ls + 1);
+}
+
+uint32_t byte_column_to_lsp_character(const std::string& content,
+                                      uint32_t line_1based,
+                                      uint32_t byte_col_1based) {
+    if (line_1based == 0 || byte_col_1based == 0) {
+        return 0;
+    }
+    const size_t ls = line_offset(content, static_cast<int>(line_1based - 1));
+    const size_t le = next_line_offset(content, ls);
+    const size_t byte_offset = std::min(ls + static_cast<size_t>(byte_col_1based - 1), le);
+    return utf16_units_for_utf8(std::string_view(content).substr(ls, le - ls), byte_offset - ls);
+}
+
+uint32_t lsp_character_for_byte_offset(const std::string& content,
+                                       size_t line_start,
+                                       size_t byte_offset) {
+    const size_t le = next_line_offset(content, line_start);
+    const size_t end = std::min(byte_offset, le);
+    return utf16_units_for_utf8(std::string_view(content).substr(line_start, le - line_start),
+                                end - line_start);
+}
+
+std::pair<uint32_t, uint32_t> to_lsp_position(const std::string& content,
+                                              uint32_t line_1based,
+                                              uint32_t byte_col_1based) {
+    const uint32_t line = line_1based > 0 ? line_1based - 1 : 0;
+    return {line, byte_column_to_lsp_character(content, line_1based, byte_col_1based)};
+}
+
 // Get the word at a given line/character position in source text.
 std::string word_at_position(const std::string& content, int line, int character) {
     size_t ls = line_offset(content, line);
-    size_t pos = ls + static_cast<size_t>(character);
+    size_t pos = lsp_position_to_offset(content, line, character);
     if (pos >= content.size()) {
         return "";
     }
 
     size_t start = pos;
-    while (start > ls && (std::isalnum(content[start - 1]) || content[start - 1] == '_')) {
+    while (start > ls && is_ident_char(content[start - 1])) {
         --start;
     }
     size_t end = pos;
-    while (end < content.size() && (std::isalnum(content[end]) || content[end] == '_')) {
+    while (end < content.size() && is_ident_char(content[end])) {
         ++end;
     }
 
@@ -98,8 +188,7 @@ std::string word_at_position(const std::string& content, int line, int character
 
 // Check if position is after a pipe operator '|>'
 bool is_after_pipe(const std::string& content, int line, int character) {
-    size_t ls = line_offset(content, line);
-    size_t pos = ls + static_cast<size_t>(character);
+    size_t pos = lsp_position_to_offset(content, line, character);
     if (pos < 2) {
         return false;
     }
@@ -120,20 +209,19 @@ bool is_after_pipe(const std::string& content, int line, int character) {
 // Check if position is after a dot (member access / package qualifier)
 std::string prefix_before_dot(const std::string& content, int line, int character) {
     size_t ls = line_offset(content, line);
-    size_t pos = ls + static_cast<size_t>(character);
+    size_t pos = lsp_position_to_offset(content, line, character);
     if (pos == 0) {
         return "";
     }
 
     size_t i = pos;
-    while (i > ls && (std::isalnum(content[i - 1]) || content[i - 1] == '_')) {
+    while (i > ls && is_ident_char(content[i - 1])) {
         --i;
     }
     if (i > ls && content[i - 1] == '.') {
         size_t dot = i - 1;
         size_t word_start = dot;
-        while (word_start > ls &&
-               (std::isalnum(content[word_start - 1]) || content[word_start - 1] == '_')) {
+        while (word_start > ls && is_ident_char(content[word_start - 1])) {
             --word_start;
         }
         if (word_start < dot) {
@@ -155,31 +243,9 @@ bool apply_incremental_change(std::string& content,
                               int end_line,
                               int end_char,
                               const std::string& new_text) {
-    // Calculate byte offsets for the range
-    size_t start_offset = 0;
-    {
-        int cur_line = 0;
-        for (size_t i = 0; i < content.size() && cur_line < start_line; ++i) {
-            if (content[i] == '\n') {
-                ++cur_line;
-                start_offset = i + 1;
-            }
-        }
-        start_offset += static_cast<size_t>(start_char);
-    }
-
-    size_t end_offset = 0;
-    {
-        int cur_line = 0;
-        size_t line_begin = 0;
-        for (size_t i = 0; i < content.size() && cur_line < end_line; ++i) {
-            if (content[i] == '\n') {
-                ++cur_line;
-                line_begin = i + 1;
-            }
-        }
-        end_offset = line_begin + static_cast<size_t>(end_char);
-    }
+    // LSP character offsets are UTF-16 code units, while the buffer is UTF-8.
+    size_t start_offset = lsp_position_to_offset(content, start_line, start_char);
+    size_t end_offset = lsp_position_to_offset(content, end_line, end_char);
 
     if (start_offset > content.size()) {
         start_offset = content.size();
@@ -337,9 +403,9 @@ const std::vector<std::string>& flux_keywords() {
 
 struct SymbolInfo {
     std::string name;
-    int kind;          // LSP SymbolKind
-    uint32_t sl, sc;   // start line/col (1-based from AST)
-    uint32_t el, ec;   // end line/col
+    int kind;        // LSP SymbolKind
+    uint32_t sl, sc; // start line/col (1-based from AST)
+    uint32_t el, ec; // end line/col
     bool is_function;
 };
 
@@ -349,77 +415,77 @@ std::vector<SymbolInfo> extract_symbols(const File& file) {
 
     for (const auto& stmt : file.body) {
         switch (stmt->type) {
-        case Statement::Type::VariableAssignment: {
-            const auto& va = *std::get<std::unique_ptr<VariableAssgn>>(stmt->stmt);
-            if (!va.id) {
+            case Statement::Type::VariableAssignment: {
+                const auto& va = *std::get<std::unique_ptr<VariableAssgn>>(stmt->stmt);
+                if (!va.id) {
+                    break;
+                }
+                bool is_func = va.init && va.init->type == Expression::Type::FunctionExpr;
+                symbols.push_back({
+                    .name = va.id->name,
+                    .kind = is_func ? 12 : 13, // Function=12, Variable=13
+                    .sl = stmt->loc.start.line,
+                    .sc = stmt->loc.start.column,
+                    .el = stmt->loc.end.line,
+                    .ec = stmt->loc.end.column,
+                    .is_function = is_func,
+                });
                 break;
             }
-            bool is_func = va.init && va.init->type == Expression::Type::FunctionExpr;
-            symbols.push_back({
-                .name = va.id->name,
-                .kind = is_func ? 12 : 13, // Function=12, Variable=13
-                .sl = stmt->loc.start.line,
-                .sc = stmt->loc.start.column,
-                .el = stmt->loc.end.line,
-                .ec = stmt->loc.end.column,
-                .is_function = is_func,
-            });
-            break;
-        }
-        case Statement::Type::OptionStatement: {
-            const auto& opt = *std::get<std::unique_ptr<OptionStmt>>(stmt->stmt);
-            if (!opt.assignment) {
+            case Statement::Type::OptionStatement: {
+                const auto& opt = *std::get<std::unique_ptr<OptionStmt>>(stmt->stmt);
+                if (!opt.assignment) {
+                    break;
+                }
+                if (opt.assignment->type == Assignment::Type::VariableAssignment) {
+                    const auto& va =
+                        *std::get<std::unique_ptr<VariableAssgn>>(opt.assignment->value);
+                    if (va.id) {
+                        symbols.push_back({
+                            .name = "option " + va.id->name,
+                            .kind = 13,
+                            .sl = stmt->loc.start.line,
+                            .sc = stmt->loc.start.column,
+                            .el = stmt->loc.end.line,
+                            .ec = stmt->loc.end.column,
+                            .is_function = false,
+                        });
+                    }
+                }
                 break;
             }
-            if (opt.assignment->type == Assignment::Type::VariableAssignment) {
-                const auto& va =
-                    *std::get<std::unique_ptr<VariableAssgn>>(opt.assignment->value);
-                if (va.id) {
+            case Statement::Type::BuiltinStatement: {
+                const auto& bi = *std::get<std::unique_ptr<BuiltinStmt>>(stmt->stmt);
+                if (bi.id) {
                     symbols.push_back({
-                        .name = "option " + va.id->name,
-                        .kind = 13,
+                        .name = bi.id->name,
+                        .kind = 12,
                         .sl = stmt->loc.start.line,
                         .sc = stmt->loc.start.column,
                         .el = stmt->loc.end.line,
                         .ec = stmt->loc.end.column,
-                        .is_function = false,
+                        .is_function = true,
                     });
                 }
+                break;
             }
-            break;
-        }
-        case Statement::Type::BuiltinStatement: {
-            const auto& bi = *std::get<std::unique_ptr<BuiltinStmt>>(stmt->stmt);
-            if (bi.id) {
-                symbols.push_back({
-                    .name = bi.id->name,
-                    .kind = 12,
-                    .sl = stmt->loc.start.line,
-                    .sc = stmt->loc.start.column,
-                    .el = stmt->loc.end.line,
-                    .ec = stmt->loc.end.column,
-                    .is_function = true,
-                });
+            case Statement::Type::TestCaseStatement: {
+                const auto& tc = *std::get<std::unique_ptr<TestCaseStmt>>(stmt->stmt);
+                if (tc.id) {
+                    symbols.push_back({
+                        .name = tc.id->name,
+                        .kind = 12,
+                        .sl = stmt->loc.start.line,
+                        .sc = stmt->loc.start.column,
+                        .el = stmt->loc.end.line,
+                        .ec = stmt->loc.end.column,
+                        .is_function = true,
+                    });
+                }
+                break;
             }
-            break;
-        }
-        case Statement::Type::TestCaseStatement: {
-            const auto& tc = *std::get<std::unique_ptr<TestCaseStmt>>(stmt->stmt);
-            if (tc.id) {
-                symbols.push_back({
-                    .name = tc.id->name,
-                    .kind = 12,
-                    .sl = stmt->loc.start.line,
-                    .sc = stmt->loc.start.column,
-                    .el = stmt->loc.end.line,
-                    .ec = stmt->loc.end.column,
-                    .is_function = true,
-                });
-            }
-            break;
-        }
-        default:
-            break;
+            default:
+                break;
         }
     }
     return symbols;
@@ -454,30 +520,30 @@ void collect_folding_stmt(const Statement& stmt, std::vector<FoldRange>& ranges)
 
 void collect_folding_expr(const Expression& expr, std::vector<FoldRange>& ranges) {
     switch (expr.type) {
-    case Expression::Type::FunctionExpr: {
-        const auto& fn = *std::get<std::unique_ptr<FunctionExpr>>(expr.expr);
-        if (fn.body && fn.body->type == FunctionBody::Type::Block) {
-            const auto& block = *std::get<std::unique_ptr<Block>>(fn.body->body);
-            if (block.loc.start.line > 0 && block.loc.end.line > block.loc.start.line) {
-                ranges.push_back({block.loc.start.line, block.loc.end.line, "region"});
+        case Expression::Type::FunctionExpr: {
+            const auto& fn = *std::get<std::unique_ptr<FunctionExpr>>(expr.expr);
+            if (fn.body && fn.body->type == FunctionBody::Type::Block) {
+                const auto& block = *std::get<std::unique_ptr<Block>>(fn.body->body);
+                if (block.loc.start.line > 0 && block.loc.end.line > block.loc.start.line) {
+                    ranges.push_back({block.loc.start.line, block.loc.end.line, "region"});
+                }
             }
+            break;
         }
-        break;
-    }
-    case Expression::Type::ObjectExpr: {
-        if (expr.loc.start.line > 0 && expr.loc.end.line > expr.loc.start.line) {
-            ranges.push_back({expr.loc.start.line, expr.loc.end.line, "region"});
+        case Expression::Type::ObjectExpr: {
+            if (expr.loc.start.line > 0 && expr.loc.end.line > expr.loc.start.line) {
+                ranges.push_back({expr.loc.start.line, expr.loc.end.line, "region"});
+            }
+            break;
         }
-        break;
-    }
-    case Expression::Type::ArrayExpr: {
-        if (expr.loc.start.line > 0 && expr.loc.end.line > expr.loc.start.line) {
-            ranges.push_back({expr.loc.start.line, expr.loc.end.line, "region"});
+        case Expression::Type::ArrayExpr: {
+            if (expr.loc.start.line > 0 && expr.loc.end.line > expr.loc.start.line) {
+                ranges.push_back({expr.loc.start.line, expr.loc.end.line, "region"});
+            }
+            break;
         }
-        break;
-    }
-    default:
-        break;
+        default:
+            break;
     }
 }
 
@@ -729,12 +795,9 @@ void FluxLanguageServer::handle_did_change(const JsonRpcMessage& msg) {
             auto el = range_val["end"]["line"].get_int64();
             auto ec = range_val["end"]["character"].get_int64();
             if (!sl.error() && !sc.error() && !el.error() && !ec.error()) {
-                apply_incremental_change(it->second.content,
-                                         static_cast<int>(sl.value()),
-                                         static_cast<int>(sc.value()),
-                                         static_cast<int>(el.value()),
-                                         static_cast<int>(ec.value()),
-                                         new_text);
+                apply_incremental_change(it->second.content, static_cast<int>(sl.value()),
+                                         static_cast<int>(sc.value()), static_cast<int>(el.value()),
+                                         static_cast<int>(ec.value()), new_text);
             }
         } else {
             // Full content replacement
@@ -818,11 +881,9 @@ void FluxLanguageServer::publish_diagnostics(const std::string& uri) {
             os << ",";
         }
         first = false;
-        // LSP Position 是 0-based，AST SourceLocation 是 1-based
-        uint32_t sl = start_line > 0 ? start_line - 1 : 0;
-        uint32_t sc = start_col > 0 ? start_col - 1 : 0;
-        uint32_t el = end_line > 0 ? end_line - 1 : 0;
-        uint32_t ec = end_col > 0 ? end_col - 1 : 0;
+        // LSP Position is 0-based and uses UTF-16 code units.
+        auto [sl, sc] = to_lsp_position(doc.content, start_line, start_col);
+        auto [el, ec] = to_lsp_position(doc.content, end_line, end_col);
         os << R"({"range":{"start":{"line":)" << sl << R"(,"character":)" << sc
            << R"(},"end":{"line":)" << el << R"(,"character":)" << ec << R"(}},"severity":)"
            << severity << R"(,"source":"flux-ls","message":)" << json_escape(message) << "}";
@@ -847,9 +908,8 @@ void FluxLanguageServer::publish_diagnostics(const std::string& uri) {
 
     // Semantic diagnostics from symbol table (undefined references)
     for (const auto& diag : doc.symbols.diagnostics) {
-        emit_diagnostic(diag.location.start_line, diag.location.start_col,
-                        diag.location.end_line, diag.location.end_col,
-                        diag.severity, diag.message);
+        emit_diagnostic(diag.location.start_line, diag.location.start_col, diag.location.end_line,
+                        diag.location.end_col, diag.severity, diag.message);
     }
 
     os << "]}";
@@ -902,9 +962,7 @@ void FluxLanguageServer::handle_hover(const JsonRpcMessage& msg) {
     reply(msg, result);
 }
 
-std::string FluxLanguageServer::build_completion_response(Document& doc,
-                                                          int line,
-                                                          int character) {
+std::string FluxLanguageServer::build_completion_response(Document& doc, int line, int character) {
     std::ostringstream os;
     os << R"({"isIncomplete":false,"items":[)";
 
@@ -973,8 +1031,10 @@ std::string FluxLanguageServer::build_completion_response(Document& doc,
                     }
                 } else if (stmt->type == Statement::Type::OptionStatement) {
                     const auto& opt = *std::get<std::unique_ptr<OptionStmt>>(stmt->stmt);
-                    if (opt.assignment && opt.assignment->type == Assignment::Type::VariableAssignment) {
-                        const auto& va = *std::get<std::unique_ptr<VariableAssgn>>(opt.assignment->value);
+                    if (opt.assignment &&
+                        opt.assignment->type == Assignment::Type::VariableAssignment) {
+                        const auto& va =
+                            *std::get<std::unique_ptr<VariableAssgn>>(opt.assignment->value);
                         if (va.id && !va.id->name.empty()) {
                             add_item(va.id->name, "option", 6 /* Variable */);
                         }
@@ -1084,10 +1144,8 @@ void FluxLanguageServer::handle_document_symbol(const JsonRpcMessage& msg) {
         }
         first = false;
         // SymbolKind: 12=Function, 13=Variable, 14=Constant, 2=Module, 3=Namespace
-        uint32_t sl = loc.start.line > 0 ? loc.start.line - 1 : 0;
-        uint32_t sc = loc.start.column > 0 ? loc.start.column - 1 : 0;
-        uint32_t el = loc.end.line > 0 ? loc.end.line - 1 : 0;
-        uint32_t ec = loc.end.column > 0 ? loc.end.column - 1 : 0;
+        auto [sl, sc] = to_lsp_position(doc.content, loc.start.line, loc.start.column);
+        auto [el, ec] = to_lsp_position(doc.content, loc.end.line, loc.end.column);
         os << R"({"name":)" << json_escape(name) << R"(,"kind":)" << kind
            << R"(,"range":{"start":{"line":)" << sl << R"(,"character":)" << sc
            << R"(},"end":{"line":)" << el << R"(,"character":)" << ec
@@ -1257,14 +1315,16 @@ void FluxLanguageServer::handle_definition(const JsonRpcMessage& msg) {
 
     ensure_symbols(it->second);
     const auto& symbols = it->second.symbols;
+    const auto& content = it->second.content;
 
     // Use word_at_position for precise cursor identification
-    auto name = word_at_position(it->second.content, static_cast<int>(line),
-                                 static_cast<int>(character));
+    auto name =
+        word_at_position(it->second.content, static_cast<int>(line), static_cast<int>(character));
     if (name.empty()) {
         // Fallback to symbol_at with 1-based coordinates
         uint32_t ast_line = static_cast<uint32_t>(line + 1);
-        uint32_t ast_col = static_cast<uint32_t>(character + 1);
+        uint32_t ast_col = lsp_position_to_byte_column(it->second.content, static_cast<int>(line),
+                                                       static_cast<int>(character));
         name = symbols.symbol_at(ast_line, ast_col);
     }
     if (name.empty()) {
@@ -1272,23 +1332,26 @@ void FluxLanguageServer::handle_definition(const JsonRpcMessage& msg) {
         return;
     }
 
-    // Find the definition of this symbol
-    const auto* def = symbols.find_definition(name);
+    const auto* def = symbols.definition_for_symbol_at(
+        name, static_cast<uint32_t>(line + 1),
+        lsp_position_to_byte_column(content, static_cast<int>(line), static_cast<int>(character)));
+    if (!def) {
+        def = symbols.find_definition(name);
+    }
     if (!def) {
         reply(msg, "null");
         return;
     }
 
-    // Convert to LSP Location (0-based)
-    uint32_t sl = def->location.start_line > 0 ? def->location.start_line - 1 : 0;
-    uint32_t sc = def->location.start_col > 0 ? def->location.start_col - 1 : 0;
-    uint32_t el = def->location.end_line > 0 ? def->location.end_line - 1 : 0;
-    uint32_t ec = def->location.end_col > 0 ? def->location.end_col - 1 : 0;
+    auto [sl, sc] =
+        to_lsp_position(it->second.content, def->location.start_line, def->location.start_col);
+    auto [el, ec] =
+        to_lsp_position(it->second.content, def->location.end_line, def->location.end_col);
 
     std::ostringstream os;
-    os << R"({"uri":)" << json_escape(def->location.uri)
-       << R"(,"range":{"start":{"line":)" << sl << R"(,"character":)" << sc
-       << R"(},"end":{"line":)" << el << R"(,"character":)" << ec << "}}})";
+    os << R"({"uri":)" << json_escape(def->location.uri) << R"(,"range":{"start":{"line":)" << sl
+       << R"(,"character":)" << sc << R"(},"end":{"line":)" << el << R"(,"character":)" << ec
+       << "}}})";
     reply(msg, os.str());
 }
 
@@ -1312,13 +1375,15 @@ void FluxLanguageServer::handle_references(const JsonRpcMessage& msg) {
 
     ensure_symbols(it->second);
     const auto& symbols = it->second.symbols;
+    const auto& content = it->second.content;
 
     // Use word_at_position for precise cursor identification
-    auto name = word_at_position(it->second.content, static_cast<int>(line),
-                                 static_cast<int>(character));
+    auto name =
+        word_at_position(it->second.content, static_cast<int>(line), static_cast<int>(character));
     if (name.empty()) {
         uint32_t ast_line = static_cast<uint32_t>(line + 1);
-        uint32_t ast_col = static_cast<uint32_t>(character + 1);
+        uint32_t ast_col = lsp_position_to_byte_column(it->second.content, static_cast<int>(line),
+                                                       static_cast<int>(character));
         name = symbols.symbol_at(ast_line, ast_col);
     }
     if (name.empty()) {
@@ -1326,7 +1391,23 @@ void FluxLanguageServer::handle_references(const JsonRpcMessage& msg) {
         return;
     }
 
-    // Collect all references + the definition itself
+    auto include_decl_val = doc_result.value().at_pointer("/context/includeDeclaration");
+    bool include_declaration = true;
+    if (!include_decl_val.error()) {
+        auto b = include_decl_val.get_bool();
+        if (!b.error()) {
+            include_declaration = b.value();
+        }
+    }
+
+    const SymbolDef* target_def = symbols.definition_for_symbol_at(
+        name, static_cast<uint32_t>(line + 1),
+        lsp_position_to_byte_column(content, static_cast<int>(line), static_cast<int>(character)));
+    if (!target_def) {
+        target_def = symbols.find_definition(name);
+    }
+
+    // Collect all references + optionally the definition itself
     std::ostringstream os;
     os << "[";
     bool first = true;
@@ -1336,23 +1417,19 @@ void FluxLanguageServer::handle_references(const JsonRpcMessage& msg) {
             os << ",";
         }
         first = false;
-        uint32_t sl = loc.start_line > 0 ? loc.start_line - 1 : 0;
-        uint32_t sc = loc.start_col > 0 ? loc.start_col - 1 : 0;
-        uint32_t el = loc.end_line > 0 ? loc.end_line - 1 : 0;
-        uint32_t ec = loc.end_col > 0 ? loc.end_col - 1 : 0;
-        os << R"({"uri":)" << json_escape(loc.uri)
-           << R"(,"range":{"start":{"line":)" << sl << R"(,"character":)" << sc
-           << R"(},"end":{"line":)" << el << R"(,"character":)" << ec << "}}})";
+        auto [sl, sc] = to_lsp_position(content, loc.start_line, loc.start_col);
+        auto [el, ec] = to_lsp_position(content, loc.end_line, loc.end_col);
+        os << R"({"uri":)" << json_escape(loc.uri) << R"(,"range":{"start":{"line":)" << sl
+           << R"(,"character":)" << sc << R"(},"end":{"line":)" << el << R"(,"character":)" << ec
+           << "}}})";
     };
 
-    // Include definition as a reference (includeDeclaration is typically true)
-    const auto* def = symbols.find_definition(name);
-    if (def) {
-        emit_location(def->location);
+    if (include_declaration && target_def) {
+        emit_location(target_def->location);
     }
 
     // All references
-    auto refs = symbols.references_of(name);
+    auto refs = target_def ? symbols.references_of(*target_def) : symbols.references_of(name);
     for (const auto* ref : refs) {
         emit_location(ref->location);
     }
@@ -1387,13 +1464,15 @@ void FluxLanguageServer::handle_rename(const JsonRpcMessage& msg) {
 
     ensure_symbols(it->second);
     const auto& symbols = it->second.symbols;
+    const auto& content = it->second.content;
 
     // Use word_at_position for precise cursor identification
-    auto name = word_at_position(it->second.content, static_cast<int>(line),
-                                 static_cast<int>(character));
+    auto name =
+        word_at_position(it->second.content, static_cast<int>(line), static_cast<int>(character));
     if (name.empty()) {
         uint32_t ast_line = static_cast<uint32_t>(line + 1);
-        uint32_t ast_col = static_cast<uint32_t>(character + 1);
+        uint32_t ast_col = lsp_position_to_byte_column(it->second.content, static_cast<int>(line),
+                                                       static_cast<int>(character));
         name = symbols.symbol_at(ast_line, ast_col);
     }
     if (name.empty()) {
@@ -1404,17 +1483,30 @@ void FluxLanguageServer::handle_rename(const JsonRpcMessage& msg) {
     // Collect all locations that need to be renamed (definition + references)
     std::vector<const Location*> locations;
 
-    const auto* def = symbols.find_definition(name);
+    auto* def = symbols.definition_for_symbol_at(
+        name, static_cast<uint32_t>(line + 1),
+        lsp_position_to_byte_column(content, static_cast<int>(line), static_cast<int>(character)));
+    if (!def) {
+        def = symbols.find_definition(name);
+    }
     if (def) {
         locations.push_back(&def->location);
     }
 
-    auto refs = symbols.references_of(name);
+    auto refs = def ? symbols.references_of(*def) : symbols.references_of(name);
     for (const auto* ref : refs) {
         locations.push_back(&ref->location);
     }
 
-    if (locations.empty()) {
+    bool has_valid_location = false;
+    for (const auto* loc : locations) {
+        if (loc->start_line > 0 && loc->start_col > 0) {
+            has_valid_location = true;
+            break;
+        }
+    }
+
+    if (locations.empty() && !has_valid_location) {
         reply(msg, "null");
         return;
     }
@@ -1423,18 +1515,47 @@ void FluxLanguageServer::handle_rename(const JsonRpcMessage& msg) {
     std::ostringstream os;
     os << R"({"changes":{)" << json_escape(uri) << ":[";
     bool first = true;
-    for (const auto* loc : locations) {
+
+    auto emit_edit = [&](uint32_t edit_line, uint32_t start_character, uint32_t end_character) {
         if (!first) {
             os << ",";
         }
         first = false;
-        uint32_t sl = loc->start_line > 0 ? loc->start_line - 1 : 0;
-        uint32_t sc = loc->start_col > 0 ? loc->start_col - 1 : 0;
-        uint32_t el = loc->end_line > 0 ? loc->end_line - 1 : 0;
-        uint32_t ec = loc->end_col > 0 ? loc->end_col - 1 : 0;
-        os << R"({"range":{"start":{"line":)" << sl << R"(,"character":)" << sc
-           << R"(},"end":{"line":)" << el << R"(,"character":)" << ec
+        os << R"({"range":{"start":{"line":)" << edit_line << R"(,"character":)" << start_character
+           << R"(},"end":{"line":)" << edit_line << R"(,"character":)" << end_character
            << R"(}},"newText":)" << json_escape(new_name) << "}";
+    };
+
+    if (has_valid_location) {
+        for (const auto* loc : locations) {
+            if (loc->start_line == 0 || loc->start_col == 0) {
+                continue;
+            }
+            auto [sl, sc] = to_lsp_position(content, loc->start_line, loc->start_col);
+            auto [el, ec] = to_lsp_position(content, loc->end_line, loc->end_col);
+            if (sl == el) {
+                emit_edit(sl, sc, ec);
+            }
+        }
+    } else {
+        const size_t ls = line_offset(content, static_cast<int>(line));
+        const size_t le = next_line_offset(content, ls);
+        size_t pos = ls;
+        while (pos < le) {
+            pos = content.find(name, pos);
+            if (pos == std::string::npos || pos >= le) {
+                break;
+            }
+            const bool left_ok = pos == ls || !is_ident_char(content[pos - 1]);
+            const size_t end = pos + name.size();
+            const bool right_ok = end >= le || !is_ident_char(content[end]);
+            if (left_ok && right_ok) {
+                emit_edit(static_cast<uint32_t>(line),
+                          lsp_character_for_byte_offset(content, ls, pos),
+                          lsp_character_for_byte_offset(content, ls, end));
+            }
+            pos = end;
+        }
     }
     os << "]}}";
     reply(msg, os.str());
@@ -1460,8 +1581,8 @@ void FluxLanguageServer::handle_signature_help(const JsonRpcMessage& msg) {
 
     // Find the function name being called by scanning backwards for an identifier before '('
     const auto& content = it->second.content;
-    size_t ls = line_offset(content, static_cast<int>(line));
-    size_t pos = ls + static_cast<size_t>(character);
+    size_t pos =
+        lsp_position_to_offset(content, static_cast<int>(line), static_cast<int>(character));
 
     // Count commas to determine active parameter
     int active_param = 0;
@@ -1483,8 +1604,7 @@ void FluxLanguageServer::handle_signature_help(const JsonRpcMessage& msg) {
                 }
                 int name_start = name_end;
                 while (name_start > 0 &&
-                       (std::isalnum(content[static_cast<size_t>(name_start - 1)]) ||
-                        content[static_cast<size_t>(name_start - 1)] == '_')) {
+                       is_ident_char(content[static_cast<size_t>(name_start - 1)])) {
                     --name_start;
                 }
                 if (name_start < name_end) {
@@ -1520,7 +1640,8 @@ void FluxLanguageServer::handle_signature_help(const JsonRpcMessage& msg) {
                 auto paren_end = detail.find(')');
                 if (paren_start != std::string::npos && paren_end != std::string::npos &&
                     paren_end > paren_start + 1) {
-                    std::string param_str = detail.substr(paren_start + 1, paren_end - paren_start - 1);
+                    std::string param_str =
+                        detail.substr(paren_start + 1, paren_end - paren_start - 1);
                     size_t start = 0;
                     while (start < param_str.size()) {
                         auto comma = param_str.find(',', start);
@@ -1553,21 +1674,22 @@ void FluxLanguageServer::handle_signature_help(const JsonRpcMessage& msg) {
 
     // Build SignatureHelp response
     std::ostringstream os;
-    os << R"json({"signatures":[{"label":")json" << func_name << "(";
+    std::string label = func_name + "(";
     for (size_t i = 0; i < params.size(); ++i) {
         if (i > 0) {
-            os << ", ";
+            label += ", ";
         }
-        os << params[i];
+        label += params[i];
     }
-    os << R"json()","parameters":[)json";
+    label += ")";
+    os << R"({"signatures":[{"label":)" << json_escape(label) << R"(,"parameters":[)";
     for (size_t i = 0; i < params.size(); ++i) {
         if (i > 0) {
             os << ",";
         }
-        os << R"json({"label":")json" << params[i] << R"json("})json";
+        os << R"({"label":)" << json_escape(params[i]) << "}";
     }
-    os << R"json(]}],"activeSignature":0,"activeParameter":)json" << active_param << "}";
+    os << R"(]}],"activeSignature":0,"activeParameter":)" << active_param << "}";
     reply(msg, os.str());
 }
 
@@ -1591,13 +1713,15 @@ void FluxLanguageServer::handle_document_highlight(const JsonRpcMessage& msg) {
 
     ensure_symbols(it->second);
     const auto& symbols = it->second.symbols;
+    const auto& content = it->second.content;
 
     // Use word_at_position for precise cursor identification
-    auto name = word_at_position(it->second.content, static_cast<int>(line),
-                                 static_cast<int>(character));
+    auto name =
+        word_at_position(it->second.content, static_cast<int>(line), static_cast<int>(character));
     if (name.empty()) {
         uint32_t ast_line = static_cast<uint32_t>(line + 1);
-        uint32_t ast_col = static_cast<uint32_t>(character + 1);
+        uint32_t ast_col = lsp_position_to_byte_column(it->second.content, static_cast<int>(line),
+                                                       static_cast<int>(character));
         name = symbols.symbol_at(ast_line, ast_col);
     }
     if (name.empty()) {
@@ -1615,23 +1739,26 @@ void FluxLanguageServer::handle_document_highlight(const JsonRpcMessage& msg) {
             os << ",";
         }
         first = false;
-        uint32_t sl = loc.start_line > 0 ? loc.start_line - 1 : 0;
-        uint32_t sc = loc.start_col > 0 ? loc.start_col - 1 : 0;
-        uint32_t el = loc.end_line > 0 ? loc.end_line - 1 : 0;
-        uint32_t ec = loc.end_col > 0 ? loc.end_col - 1 : 0;
+        auto [sl, sc] = to_lsp_position(content, loc.start_line, loc.start_col);
+        auto [el, ec] = to_lsp_position(content, loc.end_line, loc.end_col);
         os << R"({"range":{"start":{"line":)" << sl << R"(,"character":)" << sc
-           << R"(},"end":{"line":)" << el << R"(,"character":)" << ec
-           << R"(}},"kind":)" << kind << "}";
+           << R"(},"end":{"line":)" << el << R"(,"character":)" << ec << R"(}},"kind":)" << kind
+           << "}";
     };
 
     // Definition highlight (Write = 3)
-    const auto* def = symbols.find_definition(name);
+    auto* def = symbols.definition_for_symbol_at(
+        name, static_cast<uint32_t>(line + 1),
+        lsp_position_to_byte_column(content, static_cast<int>(line), static_cast<int>(character)));
+    if (!def) {
+        def = symbols.find_definition(name);
+    }
     if (def) {
         emit_highlight(def->location, 3);
     }
 
     // Reference highlights (Read = 2)
-    auto refs = symbols.references_of(name);
+    auto refs = def ? symbols.references_of(*def) : symbols.references_of(name);
     for (const auto* ref : refs) {
         emit_highlight(ref->location, 2);
     }
@@ -1675,8 +1802,8 @@ void FluxLanguageServer::handle_semantic_tokens(const JsonRpcMessage& msg) {
 
     // Collect tokens: (line, col, length, type, modifiers) all 1-based from AST
     struct SemanticToken {
-        uint32_t line;   // 1-based
-        uint32_t col;    // 1-based
+        uint32_t line; // 1-based
+        uint32_t col;  // 1-based
         uint32_t length;
         uint32_t type;
         uint32_t modifiers;
@@ -1688,26 +1815,26 @@ void FluxLanguageServer::handle_semantic_tokens(const JsonRpcMessage& msg) {
         uint32_t type_idx = 0; // variable
         uint32_t mod = 0b011;  // declaration + definition
         switch (def.kind) {
-        case SymbolKind::Function:
-            type_idx = 1;
-            break;
-        case SymbolKind::Variable:
-            type_idx = 0;
-            break;
-        case SymbolKind::Option:
-            type_idx = 0;
-            mod = 0b111; // declaration + definition + readonly
-            break;
-        case SymbolKind::Builtin:
-            type_idx = 1;
-            mod = 0b101; // declaration + readonly
-            break;
-        case SymbolKind::Import:
-            type_idx = 9; // namespace
-            break;
-        case SymbolKind::Parameter:
-            type_idx = 6;
-            break;
+            case SymbolKind::Function:
+                type_idx = 1;
+                break;
+            case SymbolKind::Variable:
+                type_idx = 0;
+                break;
+            case SymbolKind::Option:
+                type_idx = 0;
+                mod = 0b111; // declaration + definition + readonly
+                break;
+            case SymbolKind::Builtin:
+                type_idx = 1;
+                mod = 0b101; // declaration + readonly
+                break;
+            case SymbolKind::Import:
+                type_idx = 9; // namespace
+                break;
+            case SymbolKind::Parameter:
+                type_idx = 6;
+                break;
         }
         if (def.location.start_line > 0 && def.name.size() > 0) {
             tokens.push_back({
@@ -1727,19 +1854,19 @@ void FluxLanguageServer::handle_semantic_tokens(const JsonRpcMessage& msg) {
         const auto* def = doc.symbols.find_definition(ref.name);
         if (def) {
             switch (def->kind) {
-            case SymbolKind::Function:
-            case SymbolKind::Builtin:
-                type_idx = 1;
-                break;
-            case SymbolKind::Parameter:
-                type_idx = 6;
-                break;
-            case SymbolKind::Import:
-                type_idx = 9;
-                break;
-            default:
-                type_idx = 0;
-                break;
+                case SymbolKind::Function:
+                case SymbolKind::Builtin:
+                    type_idx = 1;
+                    break;
+                case SymbolKind::Parameter:
+                    type_idx = 6;
+                    break;
+                case SymbolKind::Import:
+                    type_idx = 9;
+                    break;
+                default:
+                    type_idx = 0;
+                    break;
             }
         }
         if (ref.location.start_line > 0 && ref.name.size() > 0) {
@@ -1771,7 +1898,7 @@ void FluxLanguageServer::handle_semantic_tokens(const JsonRpcMessage& msg) {
     for (const auto& tok : tokens) {
         // Convert to 0-based for delta encoding
         uint32_t line_0 = tok.line - 1;
-        uint32_t col_0 = tok.col - 1;
+        uint32_t col_0 = byte_column_to_lsp_character(doc.content, tok.line, tok.col);
 
         uint32_t delta_line = line_0 - prev_line;
         uint32_t delta_col = (delta_line == 0) ? (col_0 - prev_col) : col_0;
@@ -1845,8 +1972,8 @@ void FluxLanguageServer::handle_code_action(const JsonRpcMessage& msg) {
                     std::string import_text = "import \\\"" + id_name + "\\\"\\n";
                     // Insert at line 0, character 0 (beginning of file)
                     os << R"({"title":"Add import for ')" << id_name
-                       << R"('","kind":"quickfix","edit":{"changes":{)"
-                       << json_escape(uri) << R"(:[{"range":{"start":{"line":0,"character":0},"end":{"line":0,"character":0}},"newText":)"
+                       << R"('","kind":"quickfix","edit":{"changes":{)" << json_escape(uri)
+                       << R"(:[{"range":{"start":{"line":0,"character":0},"end":{"line":0,"character":0}},"newText":)"
                        << json_escape("import \"" + id_name + "\"\n") << "}]}}})";
                 }
             }
@@ -1897,8 +2024,7 @@ void FluxLanguageServer::handle_inlay_hint(const JsonRpcMessage& msg) {
     // Helper: scan all expression statements and variable assignments for call expressions
     // For each call, if the function has known parameters, show inlay hints for arguments
     auto emit_hint = [&](uint32_t line_1based, uint32_t col_1based, const std::string& label) {
-        uint32_t line_0 = line_1based > 0 ? line_1based - 1 : 0;
-        uint32_t col_0 = col_1based > 0 ? col_1based - 1 : 0;
+        auto [line_0, col_0] = to_lsp_position(doc.content, line_1based, col_1based);
 
         // Only emit if within requested range
         if (static_cast<int64_t>(line_0) < range_start_line ||
@@ -1910,8 +2036,8 @@ void FluxLanguageServer::handle_inlay_hint(const JsonRpcMessage& msg) {
             os << ",";
         }
         first = false;
-        os << R"({"position":{"line":)" << line_0 << R"(,"character":)" << col_0
-           << R"(},"label":)" << json_escape(label + ":") << R"(,"kind":2,"paddingRight":true})";
+        os << R"({"position":{"line":)" << line_0 << R"(,"character":)" << col_0 << R"(},"label":)"
+           << json_escape(label + ":") << R"(,"kind":2,"paddingRight":true})";
     };
 
     // For simplicity, provide inlay hints for function calls where we know the parameter names
@@ -1929,16 +2055,18 @@ void FluxLanguageServer::handle_inlay_hint(const JsonRpcMessage& msg) {
                     if (p->value && p->key) {
                         // Has a default value — show the default as a hint
                         if (p->key->type == PropertyKey::Type::Identifier) {
-                            const auto& id =
-                                *std::get<std::unique_ptr<Identifier>>(p->key->key);
+                            const auto& id = *std::get<std::unique_ptr<Identifier>>(p->key->key);
                             if (p->value->type == Expression::Type::IntegerLit) {
                                 emit_hint(p->loc.end.line, p->loc.end.column,
-                                          " = " + std::to_string(
-                                              std::get<std::unique_ptr<IntegerLit>>(p->value->expr)->value));
+                                          " = " +
+                                              std::to_string(std::get<std::unique_ptr<IntegerLit>>(
+                                                                 p->value->expr)
+                                                                 ->value));
                             } else if (p->value->type == Expression::Type::BooleanLit) {
                                 emit_hint(p->loc.end.line, p->loc.end.column,
                                           std::string(" = ") +
-                                              (std::get<std::unique_ptr<BooleanLit>>(p->value->expr)->value
+                                              (std::get<std::unique_ptr<BooleanLit>>(p->value->expr)
+                                                       ->value
                                                    ? "true"
                                                    : "false"));
                             }
@@ -1999,10 +2127,11 @@ void FluxLanguageServer::handle_selection_range(const JsonRpcMessage& msg) {
             continue;
         }
 
-        int64_t line = line_val.value();        // 0-based
-        int64_t character = char_val.value();   // 0-based
+        int64_t line = line_val.value();      // 0-based
+        int64_t character = char_val.value(); // 0-based
         uint32_t ast_line = static_cast<uint32_t>(line + 1);
-        uint32_t ast_col = static_cast<uint32_t>(character + 1);
+        uint32_t ast_col = lsp_position_to_byte_column(doc.content, static_cast<int>(line),
+                                                       static_cast<int>(character));
 
         if (!first_pos) {
             os << ",";
@@ -2016,20 +2145,21 @@ void FluxLanguageServer::handle_selection_range(const JsonRpcMessage& msg) {
         //   2. The enclosing statement (outer)
 
         // Inner range: the word under cursor
-        auto word = word_at_position(doc.content, static_cast<int>(line),
-                                     static_cast<int>(character));
+        auto word =
+            word_at_position(doc.content, static_cast<int>(line), static_cast<int>(character));
         uint32_t word_start_col = static_cast<uint32_t>(character);
         uint32_t word_end_col = static_cast<uint32_t>(character);
         if (!word.empty()) {
             // Find the actual start of the word
             size_t ls = line_offset(doc.content, static_cast<int>(line));
-            size_t cursor = ls + static_cast<size_t>(character);
+            size_t cursor = lsp_position_to_offset(doc.content, static_cast<int>(line),
+                                                   static_cast<int>(character));
             size_t ws = cursor;
-            while (ws > ls && (std::isalnum(doc.content[ws - 1]) || doc.content[ws - 1] == '_')) {
+            while (ws > ls && is_ident_char(doc.content[ws - 1])) {
                 --ws;
             }
-            word_start_col = static_cast<uint32_t>(ws - ls);
-            word_end_col = static_cast<uint32_t>(ws - ls + word.size());
+            word_start_col = lsp_character_for_byte_offset(doc.content, ls, ws);
+            word_end_col = lsp_character_for_byte_offset(doc.content, ls, ws + word.size());
         }
 
         // Find the enclosing statement
@@ -2046,10 +2176,10 @@ void FluxLanguageServer::handle_selection_range(const JsonRpcMessage& msg) {
 
         // Build selection range: inner (word) -> outer (statement)
         if (stmt_loc) {
-            uint32_t stmt_sl = stmt_loc->start.line > 0 ? stmt_loc->start.line - 1 : 0;
-            uint32_t stmt_sc = stmt_loc->start.column > 0 ? stmt_loc->start.column - 1 : 0;
-            uint32_t stmt_el = stmt_loc->end.line > 0 ? stmt_loc->end.line - 1 : 0;
-            uint32_t stmt_ec = stmt_loc->end.column > 0 ? stmt_loc->end.column - 1 : 0;
+            auto [stmt_sl, stmt_sc] =
+                to_lsp_position(doc.content, stmt_loc->start.line, stmt_loc->start.column);
+            auto [stmt_el, stmt_ec] =
+                to_lsp_position(doc.content, stmt_loc->end.line, stmt_loc->end.column);
 
             os << R"({"range":{"start":{"line":)" << line << R"(,"character":)" << word_start_col
                << R"(},"end":{"line":)" << line << R"(,"character":)" << word_end_col
@@ -2118,15 +2248,16 @@ void FluxLanguageServer::handle_formatting(const JsonRpcMessage& msg) {
 
     // Count lines in original content
     int line_count = 0;
-    int last_line_length = 0;
-    for (char ch : doc.content) {
+    size_t last_line_start = 0;
+    for (size_t i = 0; i < doc.content.size(); ++i) {
+        char ch = doc.content[i];
         if (ch == '\n') {
             ++line_count;
-            last_line_length = 0;
-        } else {
-            ++last_line_length;
+            last_line_start = i + 1;
         }
     }
+    uint32_t last_line_length =
+        lsp_character_for_byte_offset(doc.content, last_line_start, doc.content.size());
 
     // Return a single TextEdit that replaces the entire document
     std::ostringstream os;

@@ -16,6 +16,7 @@
 // Created: 2026/05/18 11:26
 
 #include "cpp/pl/flux/contrib/lsp/server.h"
+#include "cpp/pl/flux/contrib/lsp/json_util.h"
 #include "cpp/pl/flux/contrib/lsp/transport.h"
 
 #include <cstdio>
@@ -76,9 +77,9 @@ static std::string make_exit_notification() {
 
 static std::string make_did_open_notification(const std::string& uri,
                                               const std::string& text) {
-    // 手工拼接避免嵌套转义
-    return R"({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":")" +
-           uri + R"(","languageId":"flux","version":0,"text":")" + text + R"("}}})";
+    return R"({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":)" +
+           json_escape(uri) + R"(,"languageId":"flux","version":0,"text":)" + json_escape(text) +
+           R"(}}})";
 }
 
 static std::string make_completion_request(int id,
@@ -95,6 +96,16 @@ static std::string make_formatting_request(int id, const std::string& uri) {
     return R"({"jsonrpc":"2.0","id":)" + std::to_string(id) +
            R"(,"method":"textDocument/formatting","params":{"textDocument":{"uri":")" + uri +
            R"("},"options":{"tabSize":4,"insertSpaces":true}}})";
+}
+
+static size_t count_occurrences(const std::string& text, const std::string& needle) {
+    size_t count = 0;
+    size_t pos = 0;
+    while ((pos = text.find(needle, pos)) != std::string::npos) {
+        ++count;
+        pos += needle.size();
+    }
+    return count;
 }
 
 // ---------- 测试用例 ----------
@@ -209,7 +220,7 @@ TEST(FluxLanguageServerTest, CompletionReturnsItems) {
 
     write_lsp_message(in_file, make_initialize_request(1));
     write_lsp_message(in_file, make_initialized_notification());
-    write_lsp_message(in_file, make_did_open_notification("file:///comp.flux", "x = 1\\n"));
+    write_lsp_message(in_file, make_did_open_notification("file:///comp.flux", "x = 1\n"));
     // position (1, 0): 第二行开头(空行)，typing_prefix 为空，触发通用补全返回所有候选
     write_lsp_message(in_file, make_completion_request(2, "file:///comp.flux", 1, 0));
     write_lsp_message(in_file, make_shutdown_request(3));
@@ -291,7 +302,7 @@ TEST(FluxLanguageServerTest, IncrementalSync) {
 
     write_lsp_message(in_file, make_initialize_request(1));
     write_lsp_message(in_file, make_initialized_notification());
-    write_lsp_message(in_file, make_did_open_notification("file:///inc.flux", "x = 1\\ny = 2"));
+    write_lsp_message(in_file, make_did_open_notification("file:///inc.flux", "x = 1\ny = 2"));
 
     // Send incremental change: replace "1" with "42" (line 0, char 4-5)
     std::string incremental_change =
@@ -344,7 +355,7 @@ TEST(FluxLanguageServerTest, DocumentSymbol) {
     write_lsp_message(in_file, make_initialized_notification());
     write_lsp_message(
         in_file,
-        make_did_open_notification("file:///sym.flux", "x = 1\\naddOne = (n) => n + 1"));
+        make_did_open_notification("file:///sym.flux", "x = 1\naddOne = (n) => n + 1"));
 
     // Request documentSymbol
     std::string symbol_req =
@@ -390,7 +401,7 @@ TEST(FluxLanguageServerTest, FoldingRange) {
     write_lsp_message(
         in_file,
         make_did_open_notification("file:///fold.flux",
-                                   "compute = (a, b) =>\\n    a + b\\n\\nresult = compute(a: 1, b: 2)"));
+                                   "compute = (a, b) =>\n    a + b\n\nresult = compute(a: 1, b: 2)"));
 
     // Request foldingRange
     std::string fold_req =
@@ -432,7 +443,7 @@ TEST(FluxLanguageServerTest, CompletionIncludesUserSymbols) {
     write_lsp_message(in_file, make_initialized_notification());
     write_lsp_message(
         in_file,
-        make_did_open_notification("file:///user.flux", "myData = 42\\nmyFunc = (x) => x * 2\\n"));
+        make_did_open_notification("file:///user.flux", "myData = 42\nmyFunc = (x) => x * 2\n"));
 
     // General completion at empty line (line 2, char 0)
     write_lsp_message(in_file, make_completion_request(2, "file:///user.flux", 2, 0));
@@ -478,7 +489,7 @@ TEST(FluxLanguageServerTest, GoToDefinition) {
     // Define 'x' on line 0, use it on line 1
     write_lsp_message(
         in_file,
-        make_did_open_notification("file:///def.flux", "x = 42\\ny = x + 1"));
+        make_did_open_notification("file:///def.flux", "x = 42\ny = x + 1"));
 
     // Request definition at the usage of 'x' on line 1, char 4
     std::string def_req =
@@ -510,6 +521,43 @@ TEST(FluxLanguageServerTest, GoToDefinition) {
     fclose(out_file);
 }
 
+// 场景: LSP character 使用 UTF-16 code units，非 ASCII 位于同一行时仍能定位符号
+TEST(FluxLanguageServerTest, GoToDefinitionAfterUtf8Text) {
+    FILE* in_file = tmpfile();
+    FILE* out_file = tmpfile();
+    ASSERT_NE(in_file, nullptr);
+    ASSERT_NE(out_file, nullptr);
+
+    write_lsp_message(in_file, make_initialize_request(1));
+    write_lsp_message(in_file, make_initialized_notification());
+    write_lsp_message(
+        in_file,
+        make_did_open_notification("file:///utf16.flux", "foo = 1\ny = \"你\" + foo"));
+
+    // In UTF-16 coordinates, foo starts at character 10 on the second line.
+    std::string def_req =
+        R"({"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///utf16.flux"},"position":{"line":1,"character":10}}})";
+    write_lsp_message(in_file, def_req);
+    write_lsp_message(in_file, make_shutdown_request(3));
+    write_lsp_message(in_file, make_exit_notification());
+    rewind(in_file);
+
+    StdioTransport transport(in_file, out_file);
+    FluxLanguageServer server(std::move(transport));
+    server.run();
+
+    rewind(out_file);
+    read_lsp_response(out_file);
+    read_lsp_response(out_file);
+
+    auto def_resp = read_lsp_response(out_file);
+    ASSERT_FALSE(def_resp.empty());
+    EXPECT_NE(def_resp.find("\"line\":0"), std::string::npos) << def_resp;
+
+    fclose(in_file);
+    fclose(out_file);
+}
+
 // 场景: textDocument/references 查找所有引用
 TEST(FluxLanguageServerTest, FindReferences) {
     FILE* in_file = tmpfile();
@@ -523,7 +571,7 @@ TEST(FluxLanguageServerTest, FindReferences) {
     write_lsp_message(
         in_file,
         make_did_open_notification("file:///ref.flux",
-                                   "val = 10\\na = val + 1\\nb = val * 2"));
+                                   "val = 10\na = val + 1\nb = val * 2"));
 
     // Request references at 'val' definition on line 0, char 0
     std::string ref_req =
@@ -561,6 +609,43 @@ TEST(FluxLanguageServerTest, FindReferences) {
     fclose(out_file);
 }
 
+// 场景: references 尊重 includeDeclaration=false
+TEST(FluxLanguageServerTest, FindReferencesCanExcludeDeclaration) {
+    FILE* in_file = tmpfile();
+    FILE* out_file = tmpfile();
+    ASSERT_NE(in_file, nullptr);
+    ASSERT_NE(out_file, nullptr);
+
+    write_lsp_message(in_file, make_initialize_request(1));
+    write_lsp_message(in_file, make_initialized_notification());
+    write_lsp_message(
+        in_file,
+        make_did_open_notification("file:///ref-nodecl.flux",
+                                   "val = 10\na = val + 1\nb = val * 2"));
+
+    std::string ref_req =
+        R"({"jsonrpc":"2.0","id":2,"method":"textDocument/references","params":{"textDocument":{"uri":"file:///ref-nodecl.flux"},"position":{"line":0,"character":0},"context":{"includeDeclaration":false}}})";
+    write_lsp_message(in_file, ref_req);
+    write_lsp_message(in_file, make_shutdown_request(3));
+    write_lsp_message(in_file, make_exit_notification());
+    rewind(in_file);
+
+    StdioTransport transport(in_file, out_file);
+    FluxLanguageServer server(std::move(transport));
+    server.run();
+
+    rewind(out_file);
+    read_lsp_response(out_file);
+    read_lsp_response(out_file);
+
+    auto ref_resp = read_lsp_response(out_file);
+    ASSERT_FALSE(ref_resp.empty());
+    EXPECT_EQ(count_occurrences(ref_resp, "\"uri\""), 2u) << ref_resp;
+
+    fclose(in_file);
+    fclose(out_file);
+}
+
 // 场景: textDocument/rename 重命名符号
 TEST(FluxLanguageServerTest, RenameSymbol) {
     FILE* in_file = tmpfile();
@@ -572,7 +657,7 @@ TEST(FluxLanguageServerTest, RenameSymbol) {
     write_lsp_message(in_file, make_initialized_notification());
     write_lsp_message(
         in_file,
-        make_did_open_notification("file:///ren.flux", "foo = 1\\nbar = foo + 2"));
+        make_did_open_notification("file:///ren.flux", "foo = 1\nbar = foo + 2"));
 
     // Rename 'foo' to 'baz' at line 0, char 0
     std::string rename_req =
@@ -604,6 +689,45 @@ TEST(FluxLanguageServerTest, RenameSymbol) {
     fclose(out_file);
 }
 
+// 场景: 同名函数参数按作用域解析，rename 不应改到另一个函数的参数
+TEST(FluxLanguageServerTest, RenameSameNameParameterDoesNotCrossFunctionScope) {
+    FILE* in_file = tmpfile();
+    FILE* out_file = tmpfile();
+    ASSERT_NE(in_file, nullptr);
+    ASSERT_NE(out_file, nullptr);
+
+    write_lsp_message(in_file, make_initialize_request(1));
+    write_lsp_message(in_file, make_initialized_notification());
+    write_lsp_message(
+        in_file,
+        make_did_open_notification("file:///scope.flux",
+                                   "f = (x) => x + 1\ng = (x) => x + 2"));
+
+    std::string rename_req =
+        R"({"jsonrpc":"2.0","id":2,"method":"textDocument/rename","params":{"textDocument":{"uri":"file:///scope.flux"},"position":{"line":1,"character":5},"newName":"y"}})";
+    write_lsp_message(in_file, rename_req);
+    write_lsp_message(in_file, make_shutdown_request(3));
+    write_lsp_message(in_file, make_exit_notification());
+    rewind(in_file);
+
+    StdioTransport transport(in_file, out_file);
+    FluxLanguageServer server(std::move(transport));
+    server.run();
+
+    rewind(out_file);
+    read_lsp_response(out_file);
+    read_lsp_response(out_file);
+
+    auto rename_resp = read_lsp_response(out_file);
+    ASSERT_FALSE(rename_resp.empty());
+    EXPECT_EQ(count_occurrences(rename_resp, R"("newText":"y")"), 2u) << rename_resp;
+    EXPECT_NE(rename_resp.find(R"("line":1)"), std::string::npos) << rename_resp;
+    EXPECT_EQ(rename_resp.find(R"("line":0)"), std::string::npos) << rename_resp;
+
+    fclose(in_file);
+    fclose(out_file);
+}
+
 // 场景: textDocument/signatureHelp 显示函数签名
 TEST(FluxLanguageServerTest, SignatureHelp) {
     FILE* in_file = tmpfile();
@@ -617,7 +741,7 @@ TEST(FluxLanguageServerTest, SignatureHelp) {
     write_lsp_message(
         in_file,
         make_did_open_notification("file:///sig.flux",
-                                   "add = (a, b) => a + b\\nresult = add(a: 1, b: 2)"));
+                                   "add = (a, b) => a + b\nresult = add(a: 1, b: 2)"));
 
     // Request signatureHelp inside the call: add(a: 1, | ) - line 1, char 18 (after first comma)
     std::string sig_req =
@@ -660,7 +784,7 @@ TEST(FluxLanguageServerTest, DocumentHighlight) {
     write_lsp_message(in_file, make_initialized_notification());
     write_lsp_message(
         in_file,
-        make_did_open_notification("file:///hl.flux", "n = 5\\nm = n * n"));
+        make_did_open_notification("file:///hl.flux", "n = 5\nm = n * n"));
 
     // Request documentHighlight at 'n' on line 1, char 4
     std::string hl_req =
@@ -710,7 +834,7 @@ TEST(FluxLanguageServerTest, SemanticTokensFull) {
     write_lsp_message(
         in_file,
         make_did_open_notification("file:///st.flux",
-                                   "x = 1\\nadd = (a, b) => a + b"));
+                                   "x = 1\nadd = (a, b) => a + b"));
 
     // Request semantic tokens
     std::string st_req =
@@ -798,7 +922,7 @@ TEST(FluxLanguageServerTest, SelectionRange) {
     write_lsp_message(in_file, make_initialized_notification());
     write_lsp_message(
         in_file,
-        make_did_open_notification("file:///sr.flux", "x = 42\\ny = x + 1"));
+        make_did_open_notification("file:///sr.flux", "x = 42\ny = x + 1"));
 
     // Request selection range at position (0, 0) — on 'x'
     std::string sr_req =
