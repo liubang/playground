@@ -117,6 +117,23 @@ TEST(StdioTransportTest, ReadMessageReturnsNulloptOnShortBody) {
     std::fclose(in);
 }
 
+TEST(StdioTransportTest, ReadMessageAcceptsHeaderCaseAndWhitespaceVariants) {
+    FILE* in = std::tmpfile();
+    ASSERT_NE(in, nullptr);
+
+    const std::string json_body = R"({"variant":true})";
+    std::fprintf(in, "content-length:\t%zu  \r\n\r\n%s", json_body.size(), json_body.c_str());
+    std::fflush(in);
+    std::rewind(in);
+
+    pl::flux::lsp::StdioTransport transport(in, nullptr);
+    auto result = transport.read_message();
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result.value(), json_body);
+    std::fclose(in);
+}
+
 // ==================== write_message ====================
 
 TEST(StdioTransportTest, WriteMessageFormatsCorrectly) {
