@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-19 00:59:10</td>
+            <td class="headerValue">2026-05-21 23:01:22</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">80.0&nbsp;%</td>
@@ -142,9 +142,9 @@
 <span id="L71"><span class="lineNum">      71</span>                 :             : } // namespace</span>
 <span id="L72"><span class="lineNum">      72</span>                 :             : </span>
 <span id="L73"><span class="lineNum">      73</span>                 :             : struct MySQLBoostConnectionPool::Impl {</span>
-<span id="L74"><span class="lineNum">      74</span>   [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           9 :     explicit Impl(mysql::pool_params params) : ctx(1), pool(ctx, std::move(params)) {</span></span>
-<span id="L75"><span class="lineNum">      75</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :         pool.async_run(boost::asio::detached);</span></span>
-<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">          10 :     }</span></span>
+<span id="L74"><span class="lineNum">      74</span>   [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          10 :     explicit Impl(mysql::pool_params params) : ctx(1), pool(ctx, std::move(params)) {</span></span>
+<span id="L75"><span class="lineNum">      75</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :         pool.async_run(boost::asio::detached);</span></span>
+<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">           9 :     }</span></span>
 <span id="L77"><span class="lineNum">      77</span>                 :             : </span>
 <span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC">          10 :     ~Impl() {</span></span>
 <span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaGNC">          10 :         pool.cancel();</span></span>
@@ -195,7 +195,7 @@
 <span id="L124"><span class="lineNum">     124</span>                 :             : </span>
 <span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">          10 : MySQLBoostConnectionPool::MySQLBoostConnectionPool(std::string dsn, size_t max_pool_size)</span></span>
 <span id="L126"><span class="lineNum">     126</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :     : dsn_(std::move(dsn)), max_pool_size_(std::max&lt;size_t&gt;(1, max_pool_size)) {</span></span>
-<span id="L127"><span class="lineNum">     127</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :     auto params_or = pool_params_from_dsn(dsn_, max_pool_size_);</span></span>
+<span id="L127"><span class="lineNum">     127</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :     auto params_or = pool_params_from_dsn(dsn_, max_pool_size_);</span></span>
 <span id="L128"><span class="lineNum">     128</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">          10 :     if (!params_or.ok()) {</span></span>
 <span id="L129"><span class="lineNum">     129</span>                 :             :         return;</span>
 <span id="L130"><span class="lineNum">     130</span>                 :             :     }</span>
@@ -231,10 +231,10 @@
 <span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC tlaBgGNC">          10 : absl::StatusOr&lt;std::shared_ptr&lt;MySQLBoostConnectionPool&gt;&gt; MakeMySQLBoostConnectionPool(</span></span>
 <span id="L161"><span class="lineNum">     161</span>                 :             :     std::string dsn, size_t max_pool_size) {</span>
 <span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">          10 :     auto params_or = pool_params_from_dsn(dsn, max_pool_size);</span></span>
-<span id="L163"><span class="lineNum">     163</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">          10 :     if (!params_or.ok()) {</span></span>
+<span id="L163"><span class="lineNum">     163</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 9 times"> + </span>]:<span class="tlaGNC">           9 :     if (!params_or.ok()) {</span></span>
 <span id="L164"><span class="lineNum">     164</span>                 :             :         return params_or.status();</span>
 <span id="L165"><span class="lineNum">     165</span>                 :             :     }</span>
-<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">           9 :     return std::make_shared&lt;MySQLBoostConnectionPool&gt;(std::move(dsn), max_pool_size);</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC">          10 :     return std::make_shared&lt;MySQLBoostConnectionPool&gt;(std::move(dsn), max_pool_size);</span></span>
 <span id="L167"><span class="lineNum">     167</span>                 :             : }</span>
 <span id="L168"><span class="lineNum">     168</span>                 :             : </span>
 <span id="L169"><span class="lineNum">     169</span>                 :             : } // namespace pl::flux::connector</span>

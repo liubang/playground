@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-19 00:59:10</td>
+            <td class="headerValue">2026-05-21 23:01:22</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -97,7 +97,7 @@
 <span id="L26"><span class="lineNum">      26</span>                 :             : namespace pl::flux::lsp {</span>
 <span id="L27"><span class="lineNum">      27</span>                 :             : </span>
 <span id="L28"><span class="lineNum">      28</span>                 :             : // A location reference in source code.</span>
-<span id="L29"><span class="lineNum">      29</span>                 :<span class="tlaGNC tlaBgGNC">          47 : struct Location {</span></span>
+<span id="L29"><span class="lineNum">      29</span>                 :<span class="tlaGNC tlaBgGNC">          59 : struct Location {</span></span>
 <span id="L30"><span class="lineNum">      30</span>                 :             :     std::string uri;</span>
 <span id="L31"><span class="lineNum">      31</span>                 :             :     uint32_t start_line = 0; // 1-based (from AST)</span>
 <span id="L32"><span class="lineNum">      32</span>                 :             :     uint32_t start_col = 0;</span>
@@ -117,54 +117,67 @@
 <span id="L46"><span class="lineNum">      46</span>                 :             : </span>
 <span id="L47"><span class="lineNum">      47</span>                 :             : // A definition of a symbol.</span>
 <span id="L48"><span class="lineNum">      48</span>                 :             : struct SymbolDef {</span>
-<span id="L49"><span class="lineNum">      49</span>                 :             :     std::string name;</span>
-<span id="L50"><span class="lineNum">      50</span>                 :             :     SymbolKind kind;</span>
-<span id="L51"><span class="lineNum">      51</span>                 :             :     Location location;</span>
-<span id="L52"><span class="lineNum">      52</span>                 :             :     // For functions: parameter names for signatureHelp</span>
-<span id="L53"><span class="lineNum">      53</span>                 :             :     std::vector&lt;std::string&gt; parameters;</span>
-<span id="L54"><span class="lineNum">      54</span>                 :             : };</span>
-<span id="L55"><span class="lineNum">      55</span>                 :             : </span>
-<span id="L56"><span class="lineNum">      56</span>                 :             : // A reference (usage) of a symbol.</span>
-<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">          45 : struct SymbolRef {</span></span>
-<span id="L58"><span class="lineNum">      58</span>                 :             :     std::string name;</span>
-<span id="L59"><span class="lineNum">      59</span>                 :             :     Location location;</span>
-<span id="L60"><span class="lineNum">      60</span>                 :             : };</span>
-<span id="L61"><span class="lineNum">      61</span>                 :             : </span>
-<span id="L62"><span class="lineNum">      62</span>                 :             : // The result of analyzing a single file: definitions and references.</span>
-<span id="L63"><span class="lineNum">      63</span>                 :             : struct SymbolTable {</span>
-<span id="L64"><span class="lineNum">      64</span>                 :             :     std::vector&lt;SymbolDef&gt; definitions;</span>
-<span id="L65"><span class="lineNum">      65</span>                 :             :     std::vector&lt;SymbolRef&gt; references;</span>
-<span id="L66"><span class="lineNum">      66</span>                 :             :     // Import paths discovered</span>
-<span id="L67"><span class="lineNum">      67</span>                 :             :     std::vector&lt;std::string&gt; imported_packages;</span>
-<span id="L68"><span class="lineNum">      68</span>                 :             : </span>
-<span id="L69"><span class="lineNum">      69</span>                 :             :     // Find the definition for a symbol at the given 1-based position.</span>
-<span id="L70"><span class="lineNum">      70</span>                 :             :     // Returns nullptr if no definition matches.</span>
-<span id="L71"><span class="lineNum">      71</span>                 :             :     const SymbolDef* definition_at(uint32_t line, uint32_t col) const;</span>
-<span id="L72"><span class="lineNum">      72</span>                 :             : </span>
-<span id="L73"><span class="lineNum">      73</span>                 :             :     // Find all references of a given symbol name.</span>
-<span id="L74"><span class="lineNum">      74</span>                 :             :     std::vector&lt;const SymbolRef*&gt; references_of(const std::string&amp; name) const;</span>
-<span id="L75"><span class="lineNum">      75</span>                 :             : </span>
-<span id="L76"><span class="lineNum">      76</span>                 :             :     // Find the definition of a given symbol name.</span>
-<span id="L77"><span class="lineNum">      77</span>                 :             :     const SymbolDef* find_definition(const std::string&amp; name) const;</span>
-<span id="L78"><span class="lineNum">      78</span>                 :             : </span>
-<span id="L79"><span class="lineNum">      79</span>                 :             :     // Find the symbol (def or ref) at a given position.</span>
-<span id="L80"><span class="lineNum">      80</span>                 :             :     // Returns the symbol name, or empty string if nothing found.</span>
-<span id="L81"><span class="lineNum">      81</span>                 :             :     std::string symbol_at(uint32_t line, uint32_t col) const;</span>
-<span id="L82"><span class="lineNum">      82</span>                 :             : </span>
-<span id="L83"><span class="lineNum">      83</span>                 :             :     // Diagnostics: undefined references (references without matching definitions)</span>
-<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">           1 :     struct Diagnostic {</span></span>
-<span id="L85"><span class="lineNum">      85</span>                 :             :         std::string message;</span>
-<span id="L86"><span class="lineNum">      86</span>                 :             :         Location location;</span>
-<span id="L87"><span class="lineNum">      87</span>                 :             :         int severity; // 1=error, 2=warning, 3=info, 4=hint</span>
-<span id="L88"><span class="lineNum">      88</span>                 :             :     };</span>
-<span id="L89"><span class="lineNum">      89</span>                 :             :     std::vector&lt;Diagnostic&gt; diagnostics;</span>
-<span id="L90"><span class="lineNum">      90</span>                 :             : };</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             :     size_t id = 0;</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             :     std::string name;</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             :     SymbolKind kind;</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             :     Location location;</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             :     // For functions: parameter names for signatureHelp</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             :     std::vector&lt;std::string&gt; parameters;</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             : };</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             : </span>
+<span id="L57"><span class="lineNum">      57</span>                 :             : // A reference (usage) of a symbol.</span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">          57 : struct SymbolRef {</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :             :     std::string name;</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             :     Location location;</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             :     size_t definition_id = 0;</span>
+<span id="L62"><span class="lineNum">      62</span>                 :             : };</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             : </span>
+<span id="L64"><span class="lineNum">      64</span>                 :             : // The result of analyzing a single file: definitions and references.</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             : struct SymbolTable {</span>
+<span id="L66"><span class="lineNum">      66</span>                 :             :     std::vector&lt;SymbolDef&gt; definitions;</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             :     std::vector&lt;SymbolRef&gt; references;</span>
+<span id="L68"><span class="lineNum">      68</span>                 :             :     // Import paths discovered</span>
+<span id="L69"><span class="lineNum">      69</span>                 :             :     std::vector&lt;std::string&gt; imported_packages;</span>
+<span id="L70"><span class="lineNum">      70</span>                 :             : </span>
+<span id="L71"><span class="lineNum">      71</span>                 :             :     // Find the definition for a symbol at the given 1-based position.</span>
+<span id="L72"><span class="lineNum">      72</span>                 :             :     // Returns nullptr if no definition matches.</span>
+<span id="L73"><span class="lineNum">      73</span>                 :             :     const SymbolDef* definition_at(uint32_t line, uint32_t col) const;</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             : </span>
+<span id="L75"><span class="lineNum">      75</span>                 :             :     // Find all references of a given symbol name.</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             :     std::vector&lt;const SymbolRef*&gt; references_of(const std::string&amp; name) const;</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             : </span>
+<span id="L78"><span class="lineNum">      78</span>                 :             :     // Find all references resolved to a concrete definition.</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             :     std::vector&lt;const SymbolRef*&gt; references_of(const SymbolDef&amp; def) const;</span>
+<span id="L80"><span class="lineNum">      80</span>                 :             : </span>
+<span id="L81"><span class="lineNum">      81</span>                 :             :     // Find the definition of a given symbol name.</span>
+<span id="L82"><span class="lineNum">      82</span>                 :             :     const SymbolDef* find_definition(const std::string&amp; name) const;</span>
+<span id="L83"><span class="lineNum">      83</span>                 :             : </span>
+<span id="L84"><span class="lineNum">      84</span>                 :             :     // Find the concrete definition for the symbol under a given position.</span>
+<span id="L85"><span class="lineNum">      85</span>                 :             :     const SymbolDef* definition_for_symbol_at(uint32_t line, uint32_t col) const;</span>
+<span id="L86"><span class="lineNum">      86</span>                 :             : </span>
+<span id="L87"><span class="lineNum">      87</span>                 :             :     // Find the concrete definition for a known symbol name near a given position.</span>
+<span id="L88"><span class="lineNum">      88</span>                 :             :     const SymbolDef* definition_for_symbol_at(const std::string&amp; name,</span>
+<span id="L89"><span class="lineNum">      89</span>                 :             :                                               uint32_t line,</span>
+<span id="L90"><span class="lineNum">      90</span>                 :             :                                               uint32_t col) const;</span>
 <span id="L91"><span class="lineNum">      91</span>                 :             : </span>
-<span id="L92"><span class="lineNum">      92</span>                 :             : // Build a symbol table from a parsed File AST.</span>
-<span id="L93"><span class="lineNum">      93</span>                 :             : // The uri is used to tag all locations.</span>
-<span id="L94"><span class="lineNum">      94</span>                 :             : SymbolTable build_symbol_table(const File&amp; file, const std::string&amp; uri);</span>
+<span id="L92"><span class="lineNum">      92</span>                 :             :     // Find the symbol (def or ref) at a given position.</span>
+<span id="L93"><span class="lineNum">      93</span>                 :             :     // Returns the symbol name, or empty string if nothing found.</span>
+<span id="L94"><span class="lineNum">      94</span>                 :             :     std::string symbol_at(uint32_t line, uint32_t col) const;</span>
 <span id="L95"><span class="lineNum">      95</span>                 :             : </span>
-<span id="L96"><span class="lineNum">      96</span>                 :             : } // namespace pl::flux::lsp</span>
+<span id="L96"><span class="lineNum">      96</span>                 :             :     // Diagnostics: undefined references (references without matching definitions)</span>
+<span id="L97"><span class="lineNum">      97</span>                 :<span class="tlaGNC">           1 :     struct Diagnostic {</span></span>
+<span id="L98"><span class="lineNum">      98</span>                 :             :         std::string message;</span>
+<span id="L99"><span class="lineNum">      99</span>                 :             :         Location location;</span>
+<span id="L100"><span class="lineNum">     100</span>                 :             :         int severity; // 1=error, 2=warning, 3=info, 4=hint</span>
+<span id="L101"><span class="lineNum">     101</span>                 :             :     };</span>
+<span id="L102"><span class="lineNum">     102</span>                 :             :     std::vector&lt;Diagnostic&gt; diagnostics;</span>
+<span id="L103"><span class="lineNum">     103</span>                 :             : };</span>
+<span id="L104"><span class="lineNum">     104</span>                 :             : </span>
+<span id="L105"><span class="lineNum">     105</span>                 :             : // Build a symbol table from a parsed File AST.</span>
+<span id="L106"><span class="lineNum">     106</span>                 :             : // The uri is used to tag all locations.</span>
+<span id="L107"><span class="lineNum">     107</span>                 :             : SymbolTable build_symbol_table(const File&amp; file, const std::string&amp; uri);</span>
+<span id="L108"><span class="lineNum">     108</span>                 :             : </span>
+<span id="L109"><span class="lineNum">     109</span>                 :             : } // namespace pl::flux::lsp</span>
         </pre>
               </td>
             </tr>

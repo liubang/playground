@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-19 00:59:10</td>
+            <td class="headerValue">2026-05-21 23:01:22</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">77.1&nbsp;%</td>
@@ -94,14 +94,14 @@
 <span id="L23"><span class="lineNum">      23</span>                 :             : </span>
 <span id="L24"><span class="lineNum">      24</span>                 :             : namespace pl::flux::lsp {</span>
 <span id="L25"><span class="lineNum">      25</span>                 :             : </span>
-<span id="L26"><span class="lineNum">      26</span>                 :<span class="tlaGNC tlaBgGNC">          23 : Formatter::Formatter(Options opts) : opts_(opts) {}</span></span>
+<span id="L26"><span class="lineNum">      26</span>                 :<span class="tlaGNC tlaBgGNC">          24 : Formatter::Formatter(Options opts) : opts_(opts) {}</span></span>
 <span id="L27"><span class="lineNum">      27</span>                 :             : </span>
-<span id="L28"><span class="lineNum">      28</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          16 : std::string Formatter::format(const File&amp; file) {</span></span>
+<span id="L28"><span class="lineNum">      28</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">          17 : std::string Formatter::format(const File&amp; file) {</span></span>
 <span id="L29"><span class="lineNum">      29</span>                 :             :     output_.clear();</span>
-<span id="L30"><span class="lineNum">      30</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          16 :     indent_level_ = 0;</span></span>
+<span id="L30"><span class="lineNum">      30</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">          17 :     indent_level_ = 0;</span></span>
 <span id="L31"><span class="lineNum">      31</span>                 :             : </span>
 <span id="L32"><span class="lineNum">      32</span>                 :             :     // Package clause</span>
-<span id="L33"><span class="lineNum">      33</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          16 :     if (file.package &amp;&amp; file.package-&gt;name) {</span></span>
+<span id="L33"><span class="lineNum">      33</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          17 :     if (file.package &amp;&amp; file.package-&gt;name) {</span></span>
 <span id="L34"><span class="lineNum">      34</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :         if (!file.package-&gt;attributes.empty()) {</span></span>
 <span id="L35"><span class="lineNum">      35</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             for (const auto&amp; attr : file.package-&gt;attributes) {</span></span>
 <span id="L36"><span class="lineNum">      36</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :                 emit(attr-&gt;string());</span></span>
@@ -115,7 +115,7 @@
 <span id="L44"><span class="lineNum">      44</span>                 :             :     }</span>
 <span id="L45"><span class="lineNum">      45</span>                 :             : </span>
 <span id="L46"><span class="lineNum">      46</span>                 :             :     // Imports</span>
-<span id="L47"><span class="lineNum">      47</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          16 :     if (!file.imports.empty()) {</span></span>
+<span id="L47"><span class="lineNum">      47</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">          17 :     if (!file.imports.empty()) {</span></span>
 <span id="L48"><span class="lineNum">      48</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           3 :         for (const auto&amp; imp : file.imports) {</span></span>
 <span id="L49"><span class="lineNum">      49</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :             if (!imp-&gt;attributes.empty()) {</span></span>
 <span id="L50"><span class="lineNum">      50</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :                 for (const auto&amp; attr : imp-&gt;attributes) {</span></span>
@@ -137,33 +137,33 @@
 <span id="L66"><span class="lineNum">      66</span>                 :             :     }</span>
 <span id="L67"><span class="lineNum">      67</span>                 :             : </span>
 <span id="L68"><span class="lineNum">      68</span>                 :             :     // Body statements</span>
-<span id="L69"><span class="lineNum">      69</span>         [<span class="tlaGBC" title="Branch 0 was taken 16 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">          32 :     for (size_t i = 0; i &lt; file.body.size(); ++i) {</span></span>
-<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">          16 :         format_stmt(*file.body[i]);</span></span>
-<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">          16 :         emit_newline();</span></span>
+<span id="L69"><span class="lineNum">      69</span>         [<span class="tlaGBC" title="Branch 0 was taken 18 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 17 times"> + </span>]:<span class="tlaGNC">          35 :     for (size_t i = 0; i &lt; file.body.size(); ++i) {</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">          18 :         format_stmt(*file.body[i]);</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">          18 :         emit_newline();</span></span>
 <span id="L72"><span class="lineNum">      72</span>                 :             :         // Add blank line between top-level statements, but not between</span>
 <span id="L73"><span class="lineNum">      73</span>                 :             :         // consecutive *simple* variable assignments (they form a logical group).</span>
 <span id="L74"><span class="lineNum">      74</span>                 :             :         // A &quot;simple&quot; assignment has a non-complex init expression (stays on one line).</span>
-<span id="L75"><span class="lineNum">      75</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          16 :         if (i + 1 &lt; file.body.size()) {</span></span>
-<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">           1 :             bool current_is_simple_var = is_simple_variable_assgn(*file.body[i]);</span></span>
-<span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC">           1 :             bool next_is_simple_var = is_simple_variable_assgn(*file.body[i + 1]);</span></span>
-<span id="L78"><span class="lineNum">      78</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :             if (!(current_is_simple_var &amp;&amp; next_is_simple_var)) {</span></span>
+<span id="L75"><span class="lineNum">      75</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">          18 :         if (i + 1 &lt; file.body.size()) {</span></span>
+<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">           2 :             bool current_is_simple_var = is_simple_variable_assgn(*file.body[i]);</span></span>
+<span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC">           2 :             bool next_is_simple_var = is_simple_variable_assgn(*file.body[i + 1]);</span></span>
+<span id="L78"><span class="lineNum">      78</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :             if (!(current_is_simple_var &amp;&amp; next_is_simple_var)) {</span></span>
 <span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 emit_newline();</span></span>
 <span id="L80"><span class="lineNum">      80</span>                 :             :             }</span>
 <span id="L81"><span class="lineNum">      81</span>                 :             :         }</span>
 <span id="L82"><span class="lineNum">      82</span>                 :             :     }</span>
 <span id="L83"><span class="lineNum">      83</span>                 :             : </span>
-<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC tlaBgGNC">          16 :     return output_;</span></span>
+<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC tlaBgGNC">          17 :     return output_;</span></span>
 <span id="L85"><span class="lineNum">      85</span>                 :             : }</span>
 <span id="L86"><span class="lineNum">      86</span>                 :             : </span>
 <span id="L87"><span class="lineNum">      87</span>                 :             : // ============================================================</span>
 <span id="L88"><span class="lineNum">      88</span>                 :             : // Expression formatting</span>
 <span id="L89"><span class="lineNum">      89</span>                 :             : // ============================================================</span>
 <span id="L90"><span class="lineNum">      90</span>                 :             : </span>
-<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">          67 : void Formatter::format_expr(const Expression&amp; expr) {</span></span>
-<span id="L92"><span class="lineNum">      92</span>   [<span class="tlaGBC" title="Branch 0 was taken 20 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 5 times"> + </span> :<span class="tlaGNC">          67 :     switch (expr.type) {</span></span>
+<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">          69 : void Formatter::format_expr(const Expression&amp; expr) {</span></span>
+<span id="L92"><span class="lineNum">      92</span>   [<span class="tlaGBC" title="Branch 0 was taken 20 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 5 times"> + </span> :<span class="tlaGNC">          69 :     switch (expr.type) {</span></span>
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaGBC" title="Branch 5 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 6 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 5 times"> + </span> 
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 9 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 10 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 11 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 12 was not taken"> - </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
-<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 14 was not taken"> - </span><span class="tlaGBC" title="Branch 15 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 16 was not taken"> - </span><span class="tlaGBC" title="Branch 17 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 18 was taken 2 times"> + </span> 
+<span class="lineNum">        </span> <span class="tlaUNC" title="Branch 14 was not taken"> - </span><span class="tlaGBC" title="Branch 15 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 16 was not taken"> - </span><span class="tlaGBC" title="Branch 17 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 18 was taken 2 times"> + </span> 
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 19 was not taken"> - </span><span class="tlaUNC" title="Branch 20 was not taken"> - </span><span class="tlaUNC" title="Branch 21 was not taken"> - </span><span class="tlaUNC" title="Branch 22 was not taken"> - </span><span class="tlaUNC" title="Branch 23 was not taken"> - </span> 
 <span class="lineNum">        </span>       <span class="tlaUNC" title="Branch 24 was not taken"> - </span><span class="tlaUNC" title="Branch 25 was not taken"> - </span><span class="tlaUNC" title="Branch 26 was not taken"> - </span>]
 <span id="L93"><span class="lineNum">      93</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 20 times"> + </span>]:<span class="tlaGNC">          20 :         case Expression::Type::Identifier:</span></span>
@@ -211,9 +211,9 @@
 <span id="L135"><span class="lineNum">     135</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         case Expression::Type::ParenExpr:</span></span>
 <span id="L136"><span class="lineNum">     136</span>                 :<span class="tlaUNC">           0 :             format_paren_expr(*std::get&lt;std::unique_ptr&lt;ParenExpr&gt;&gt;(expr.expr));</span></span>
 <span id="L137"><span class="lineNum">     137</span>                 :<span class="tlaUNC">           0 :             break;</span></span>
-<span id="L138"><span class="lineNum">     138</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           7 :         case Expression::Type::IntegerLit:</span></span>
-<span id="L139"><span class="lineNum">     139</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :             emit(std::get&lt;std::unique_ptr&lt;IntegerLit&gt;&gt;(expr.expr)-&gt;string());</span></span>
-<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">           7 :             break;</span></span>
+<span id="L138"><span class="lineNum">     138</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 9 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           9 :         case Expression::Type::IntegerLit:</span></span>
+<span id="L139"><span class="lineNum">     139</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :             emit(std::get&lt;std::unique_ptr&lt;IntegerLit&gt;&gt;(expr.expr)-&gt;string());</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">           9 :             break;</span></span>
 <span id="L141"><span class="lineNum">     141</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         case Expression::Type::FloatLit:</span></span>
 <span id="L142"><span class="lineNum">     142</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             emit(std::get&lt;std::unique_ptr&lt;FloatLit&gt;&gt;(expr.expr)-&gt;string());</span></span>
 <span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaUNC">           0 :             break;</span></span>
@@ -249,7 +249,7 @@
 <span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaUNC">           0 :             emit(std::get&lt;std::unique_ptr&lt;BadExpr&gt;&gt;(expr.expr)-&gt;text);</span></span>
 <span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaUNC">           0 :             break;</span></span>
 <span id="L175"><span class="lineNum">     175</span>                 :             :     }</span>
-<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC tlaBgGNC">          67 : }</span></span>
+<span id="L176"><span class="lineNum">     176</span>                 :<span class="tlaGNC tlaBgGNC">          69 : }</span></span>
 <span id="L177"><span class="lineNum">     177</span>                 :             : </span>
 <span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">          20 : void Formatter::format_identifier(const Identifier&amp; id) { emit(id.name); }</span></span>
 <span id="L179"><span class="lineNum">     179</span>                 :             : </span>
@@ -552,22 +552,22 @@
 <span id="L476"><span class="lineNum">     476</span>                 :             : // Statement formatting</span>
 <span id="L477"><span class="lineNum">     477</span>                 :             : // ============================================================</span>
 <span id="L478"><span class="lineNum">     478</span>                 :             : </span>
-<span id="L479"><span class="lineNum">     479</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 17 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          17 : void Formatter::format_stmt(const Statement&amp; stmt) {</span></span>
-<span id="L480"><span class="lineNum">     480</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 17 times"> + </span>]:<span class="tlaGNC">          17 :     if (!stmt.attributes.empty()) {</span></span>
+<span id="L479"><span class="lineNum">     479</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 19 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          19 : void Formatter::format_stmt(const Statement&amp; stmt) {</span></span>
+<span id="L480"><span class="lineNum">     480</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 19 times"> + </span>]:<span class="tlaGNC">          19 :     if (!stmt.attributes.empty()) {</span></span>
 <span id="L481"><span class="lineNum">     481</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         for (const auto&amp; attr : stmt.attributes) {</span></span>
 <span id="L482"><span class="lineNum">     482</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             emit(attr-&gt;string());</span></span>
 <span id="L483"><span class="lineNum">     483</span>                 :<span class="tlaUNC">           0 :             emit(&quot; &quot;);</span></span>
 <span id="L484"><span class="lineNum">     484</span>                 :             :         }</span>
 <span id="L485"><span class="lineNum">     485</span>                 :             :     }</span>
 <span id="L486"><span class="lineNum">     486</span>                 :             : </span>
-<span id="L487"><span class="lineNum">     487</span>   [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 12 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span> :<span class="tlaGNC tlaBgGNC">          17 :     switch (stmt.type) {</span></span>
+<span id="L487"><span class="lineNum">     487</span>   [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span> :<span class="tlaGNC tlaBgGNC">          19 :     switch (stmt.type) {</span></span>
 <span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
 <span id="L488"><span class="lineNum">     488</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 :         case Statement::Type::ExpressionStatement:</span></span>
 <span id="L489"><span class="lineNum">     489</span>                 :<span class="tlaGNC">           3 :             format_expr_stmt(*std::get&lt;std::unique_ptr&lt;ExprStmt&gt;&gt;(stmt.stmt));</span></span>
 <span id="L490"><span class="lineNum">     490</span>                 :<span class="tlaGNC">           3 :             break;</span></span>
-<span id="L491"><span class="lineNum">     491</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 12 times"> + </span>]:<span class="tlaGNC">          12 :         case Statement::Type::VariableAssignment:</span></span>
-<span id="L492"><span class="lineNum">     492</span>                 :<span class="tlaGNC">          12 :             format_variable_assgn(*std::get&lt;std::unique_ptr&lt;VariableAssgn&gt;&gt;(stmt.stmt));</span></span>
-<span id="L493"><span class="lineNum">     493</span>                 :<span class="tlaGNC">          12 :             break;</span></span>
+<span id="L491"><span class="lineNum">     491</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 14 times"> + </span>]:<span class="tlaGNC">          14 :         case Statement::Type::VariableAssignment:</span></span>
+<span id="L492"><span class="lineNum">     492</span>                 :<span class="tlaGNC">          14 :             format_variable_assgn(*std::get&lt;std::unique_ptr&lt;VariableAssgn&gt;&gt;(stmt.stmt));</span></span>
+<span id="L493"><span class="lineNum">     493</span>                 :<span class="tlaGNC">          14 :             break;</span></span>
 <span id="L494"><span class="lineNum">     494</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :         case Statement::Type::OptionStatement:</span></span>
 <span id="L495"><span class="lineNum">     495</span>                 :<span class="tlaGNC">           1 :             format_option_stmt(*std::get&lt;std::unique_ptr&lt;OptionStmt&gt;&gt;(stmt.stmt));</span></span>
 <span id="L496"><span class="lineNum">     496</span>                 :<span class="tlaGNC">           1 :             break;</span></span>
@@ -584,15 +584,15 @@
 <span id="L507"><span class="lineNum">     507</span>                 :<span class="tlaUNC">           0 :             format_builtin_stmt(*std::get&lt;std::unique_ptr&lt;BuiltinStmt&gt;&gt;(stmt.stmt));</span></span>
 <span id="L508"><span class="lineNum">     508</span>                 :<span class="tlaUNC">           0 :             break;</span></span>
 <span id="L509"><span class="lineNum">     509</span>                 :             :     }</span>
-<span id="L510"><span class="lineNum">     510</span>                 :<span class="tlaGNC tlaBgGNC">          17 : }</span></span>
+<span id="L510"><span class="lineNum">     510</span>                 :<span class="tlaGNC tlaBgGNC">          19 : }</span></span>
 <span id="L511"><span class="lineNum">     511</span>                 :             : </span>
 <span id="L512"><span class="lineNum">     512</span>                 :<span class="tlaGNC">           3 : void Formatter::format_expr_stmt(const ExprStmt&amp; stmt) { format_expr(*stmt.expression); }</span></span>
 <span id="L513"><span class="lineNum">     513</span>                 :             : </span>
-<span id="L514"><span class="lineNum">     514</span>                 :<span class="tlaGNC">          13 : void Formatter::format_variable_assgn(const VariableAssgn&amp; stmt) {</span></span>
-<span id="L515"><span class="lineNum">     515</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          26 :     emit(stmt.id-&gt;string());</span></span>
-<span id="L516"><span class="lineNum">     516</span>                 :<span class="tlaGNC">          13 :     emit(&quot; = &quot;);</span></span>
-<span id="L517"><span class="lineNum">     517</span>                 :<span class="tlaGNC">          13 :     format_expr(*stmt.init);</span></span>
-<span id="L518"><span class="lineNum">     518</span>                 :<span class="tlaGNC">          13 : }</span></span>
+<span id="L514"><span class="lineNum">     514</span>                 :<span class="tlaGNC">          15 : void Formatter::format_variable_assgn(const VariableAssgn&amp; stmt) {</span></span>
+<span id="L515"><span class="lineNum">     515</span>         [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          30 :     emit(stmt.id-&gt;string());</span></span>
+<span id="L516"><span class="lineNum">     516</span>                 :<span class="tlaGNC">          15 :     emit(&quot; = &quot;);</span></span>
+<span id="L517"><span class="lineNum">     517</span>                 :<span class="tlaGNC">          15 :     format_expr(*stmt.init);</span></span>
+<span id="L518"><span class="lineNum">     518</span>                 :<span class="tlaGNC">          15 : }</span></span>
 <span id="L519"><span class="lineNum">     519</span>                 :             : </span>
 <span id="L520"><span class="lineNum">     520</span>                 :<span class="tlaGNC">           1 : void Formatter::format_option_stmt(const OptionStmt&amp; stmt) {</span></span>
 <span id="L521"><span class="lineNum">     521</span>                 :<span class="tlaGNC">           1 :     emit(&quot;option &quot;);</span></span>
@@ -806,8 +806,8 @@
 <span id="L728"><span class="lineNum">     728</span>                 :<span class="tlaGNC tlaBgGNC">           3 :     });</span></span>
 <span id="L729"><span class="lineNum">     729</span>                 :             : }</span>
 <span id="L730"><span class="lineNum">     730</span>                 :             : </span>
-<span id="L731"><span class="lineNum">     731</span>                 :<span class="tlaGNC">          14 : bool Formatter::is_complex_expr(const Expression&amp; expr) const {</span></span>
-<span id="L732"><span class="lineNum">     732</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span> :<span class="tlaGNC">          14 :     switch (expr.type) {</span></span>
+<span id="L731"><span class="lineNum">     731</span>                 :<span class="tlaGNC">          16 : bool Formatter::is_complex_expr(const Expression&amp; expr) const {</span></span>
+<span id="L732"><span class="lineNum">     732</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span> :<span class="tlaGNC">          16 :     switch (expr.type) {</span></span>
 <span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 4 was not taken"> - </span>]
 <span id="L733"><span class="lineNum">     733</span>                 :             :         case Expression::Type::PipeExpr:</span>
 <span id="L734"><span class="lineNum">     734</span>                 :             :             return true;</span>
@@ -848,20 +848,20 @@
 <span id="L769"><span class="lineNum">     769</span>                 :             : // Statement classification</span>
 <span id="L770"><span class="lineNum">     770</span>                 :             : // ============================================================</span>
 <span id="L771"><span class="lineNum">     771</span>                 :             : </span>
-<span id="L772"><span class="lineNum">     772</span>                 :<span class="tlaGNC">           2 : bool Formatter::is_simple_variable_assgn(const Statement&amp; stmt) {</span></span>
-<span id="L773"><span class="lineNum">     773</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :     if (stmt.type != Statement::Type::VariableAssignment) {</span></span>
+<span id="L772"><span class="lineNum">     772</span>                 :<span class="tlaGNC">           4 : bool Formatter::is_simple_variable_assgn(const Statement&amp; stmt) {</span></span>
+<span id="L773"><span class="lineNum">     773</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           4 :     if (stmt.type != Statement::Type::VariableAssignment) {</span></span>
 <span id="L774"><span class="lineNum">     774</span>                 :             :         return false;</span>
 <span id="L775"><span class="lineNum">     775</span>                 :             :     }</span>
 <span id="L776"><span class="lineNum">     776</span>                 :             :     const auto&amp; va = *std::get&lt;std::unique_ptr&lt;VariableAssgn&gt;&gt;(stmt.stmt);</span>
-<span id="L777"><span class="lineNum">     777</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :     if (!va.init) {</span></span>
+<span id="L777"><span class="lineNum">     777</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           4 :     if (!va.init) {</span></span>
 <span id="L778"><span class="lineNum">     778</span>                 :             :         return true;</span>
 <span id="L779"><span class="lineNum">     779</span>                 :             :     }</span>
 <span id="L780"><span class="lineNum">     780</span>                 :             :     // If the init expression is complex (would expand to multi-line), it's not simple.</span>
-<span id="L781"><span class="lineNum">     781</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :     if (is_complex_expr(*va.init)) {</span></span>
+<span id="L781"><span class="lineNum">     781</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           4 :     if (is_complex_expr(*va.init)) {</span></span>
 <span id="L782"><span class="lineNum">     782</span>                 :             :         return false;</span>
 <span id="L783"><span class="lineNum">     783</span>                 :             :     }</span>
 <span id="L784"><span class="lineNum">     784</span>                 :             :     // Also check if it's a call expression that would exceed line width</span>
-<span id="L785"><span class="lineNum">     785</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :     if (va.init-&gt;type == Expression::Type::CallExpr) {</span></span>
+<span id="L785"><span class="lineNum">     785</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :     if (va.init-&gt;type == Expression::Type::CallExpr) {</span></span>
 <span id="L786"><span class="lineNum">     786</span>                 :             :         const auto&amp; call = *std::get&lt;std::unique_ptr&lt;CallExpr&gt;&gt;(va.init-&gt;expr);</span>
 <span id="L787"><span class="lineNum">     787</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         std::string inline_str = try_format_call_inline(call);</span></span>
 <span id="L788"><span class="lineNum">     788</span>                 :             :         // Estimate: &quot;name = &quot; prefix + call inline</span>
@@ -878,15 +878,15 @@
 <span id="L799"><span class="lineNum">     799</span>                 :             : // Helpers</span>
 <span id="L800"><span class="lineNum">     800</span>                 :             : // ============================================================</span>
 <span id="L801"><span class="lineNum">     801</span>                 :             : </span>
-<span id="L802"><span class="lineNum">     802</span>                 :<span class="tlaGNC tlaBgGNC">         235 : void Formatter::emit(std::string_view s) {</span></span>
-<span id="L803"><span class="lineNum">     803</span>                 :<span class="tlaGNC">         235 :     output_.append(s);</span></span>
+<span id="L802"><span class="lineNum">     802</span>                 :<span class="tlaGNC tlaBgGNC">         241 : void Formatter::emit(std::string_view s) {</span></span>
+<span id="L803"><span class="lineNum">     803</span>                 :<span class="tlaGNC">         241 :     output_.append(s);</span></span>
 <span id="L804"><span class="lineNum">     804</span>                 :             :     // inline 宽度预算检查: 超出预算时标记终止</span>
-<span id="L805"><span class="lineNum">     805</span>   [<span class="tlaGBC" title="Branch 0 was taken 63 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 172 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 6 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 57 times"> + </span>]:<span class="tlaGNC">         235 :     if (inline_budget_ &gt; 0 &amp;&amp; output_.size() &gt; static_cast&lt;size_t&gt;(inline_budget_)) {</span></span>
+<span id="L805"><span class="lineNum">     805</span>   [<span class="tlaGBC" title="Branch 0 was taken 63 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 178 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 6 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 57 times"> + </span>]:<span class="tlaGNC">         241 :     if (inline_budget_ &gt; 0 &amp;&amp; output_.size() &gt; static_cast&lt;size_t&gt;(inline_budget_)) {</span></span>
 <span id="L806"><span class="lineNum">     806</span>                 :<span class="tlaGNC">           6 :         budget_exceeded_ = true;</span></span>
 <span id="L807"><span class="lineNum">     807</span>                 :             :     }</span>
-<span id="L808"><span class="lineNum">     808</span>                 :<span class="tlaGNC">         235 : }</span></span>
+<span id="L808"><span class="lineNum">     808</span>                 :<span class="tlaGNC">         241 : }</span></span>
 <span id="L809"><span class="lineNum">     809</span>                 :             : </span>
-<span id="L810"><span class="lineNum">     810</span>                 :<span class="tlaGNC">          37 : void Formatter::emit_newline() { output_.push_back('\n'); }</span></span>
+<span id="L810"><span class="lineNum">     810</span>                 :<span class="tlaGNC">          39 : void Formatter::emit_newline() { output_.push_back('\n'); }</span></span>
 <span id="L811"><span class="lineNum">     811</span>                 :             : </span>
 <span id="L812"><span class="lineNum">     812</span>                 :<span class="tlaGNC">          16 : void Formatter::emit_indent() {</span></span>
 <span id="L813"><span class="lineNum">     813</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">          29 :     for (int i = 0; i &lt; indent_level_; ++i) {</span></span>
