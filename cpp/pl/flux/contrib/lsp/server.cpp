@@ -397,6 +397,79 @@ const std::vector<std::string>& flux_keywords() {
     return kws;
 }
 
+std::string trim_copy(std::string_view s) {
+    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) {
+        s.remove_prefix(1);
+    }
+    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) {
+        s.remove_suffix(1);
+    }
+    return std::string(s);
+}
+
+std::string snippet_escape(std::string_view s) {
+    std::string out;
+    out.reserve(s.size());
+    for (char c : s) {
+        if (c == '$' || c == '}' || c == '\\') {
+            out += '\\';
+        }
+        out += c;
+    }
+    return out;
+}
+
+std::vector<std::string> params_from_detail_signature(const std::string& detail) {
+    const auto lparen = detail.find('(');
+    const auto rparen = detail.find(')', lparen == std::string::npos ? 0 : lparen + 1);
+    if (lparen == std::string::npos || rparen == std::string::npos || rparen <= lparen + 1) {
+        return {};
+    }
+
+    std::vector<std::string> params;
+    std::string_view param_list(detail.data() + lparen + 1, rparen - lparen - 1);
+    while (!param_list.empty()) {
+        const auto comma = param_list.find(',');
+        const auto piece =
+            comma == std::string_view::npos ? param_list : param_list.substr(0, comma);
+        auto param = trim_copy(piece);
+        if (!param.empty()) {
+            params.push_back(std::move(param));
+        }
+        if (comma == std::string_view::npos) {
+            break;
+        }
+        param_list.remove_prefix(comma + 1);
+    }
+    return params;
+}
+
+std::string make_function_snippet(const std::string& label, const std::vector<std::string>& params) {
+    std::string snippet = snippet_escape(label);
+    snippet += '(';
+    for (size_t i = 0; i < params.size(); ++i) {
+        if (i > 0) {
+            snippet += ", ";
+        }
+        const auto param = trim_copy(params[i]);
+        const auto index = std::to_string(i + 1);
+        if (!param.empty() && param.back() == ':') {
+            snippet += snippet_escape(param);
+            snippet += " ${";
+            snippet += index;
+            snippet += ":value}";
+        } else {
+            snippet += "${";
+            snippet += index;
+            snippet += ':';
+            snippet += snippet_escape(param.empty() ? "value" : param);
+            snippet += '}';
+        }
+    }
+    snippet += ")$0";
+    return snippet;
+}
+
 } // namespace
 
 // ============================================================
@@ -800,7 +873,10 @@ std::string FluxLanguageServer::build_completion_response(Document& doc, int lin
     auto typing_prefix = word_at_position(doc.content, line, character);
 
     bool first = true;
-    auto add_item = [&](const std::string& label, const std::string& detail, int kind) {
+    auto add_item = [&](const std::string& label,
+                        const std::string& detail,
+                        int kind,
+                        const std::string& snippet) {
         // prefix 过滤
         if (!typing_prefix.empty() && !label.starts_with(typing_prefix)) {
             return;
@@ -810,7 +886,22 @@ std::string FluxLanguageServer::build_completion_response(Document& doc, int lin
         }
         first = false;
         os << R"({"label":)" << json_escape(label) << R"(,"kind":)" << kind << R"(,"detail":)"
-           << json_escape(detail) << "}";
+           << json_escape(detail);
+        if (!snippet.empty()) {
+            os << R"(,"insertText":)" << json_escape(snippet) << R"(,"insertTextFormat":2)";
+        }
+        os << "}";
+    };
+    auto add_plain_item = [&](const std::string& label, const std::string& detail, int kind) {
+        add_item(label, detail, kind, "");
+    };
+    auto add_function_item = [&](const std::string& label,
+                                 const std::string& detail,
+                                 std::vector<std::string> params) {
+        add_item(label, detail, 3 /* Function */, make_function_snippet(label, params));
+    };
+    auto add_function_item_from_detail = [&](const std::string& label, const std::string& detail) {
+        add_function_item(label, detail, params_from_detail_signature(detail));
     };
 
     // Check context
@@ -822,25 +913,25 @@ std::string FluxLanguageServer::build_completion_response(Document& doc, int lin
         auto pkg_it = pkgs.find(pkg_prefix);
         if (pkg_it != pkgs.end()) {
             for (const auto& [name, detail] : pkg_it->second) {
-                add_item(name, detail, 3 /* Function */);
+                add_function_item_from_detail(name, detail);
             }
         }
     } else if (is_after_pipe(doc.content, line, character)) {
         // After |> : suggest table transforms
         for (const auto& [name, detail] : universe_table_builtins()) {
-            add_item(name, detail, 3 /* Function */);
+            add_function_item_from_detail(name, detail);
         }
     } else {
         // General completion: keywords + universe builtins + known packages
         for (const auto& kw : flux_keywords()) {
-            add_item(kw, "keyword", 14 /* Keyword */);
+            add_plain_item(kw, "keyword", 14 /* Keyword */);
         }
         for (const auto& [name, detail] : universe_table_builtins()) {
-            add_item(name, detail, 3 /* Function */);
+            add_function_item_from_detail(name, detail);
         }
         // Package names
         for (const auto& [pkg_name, _] : known_packages()) {
-            add_item(pkg_name, "package", 9 /* Module */);
+            add_plain_item(pkg_name, "package", 9 /* Module */);
         }
 
         // User-defined symbols from AST
@@ -856,8 +947,19 @@ std::string FluxLanguageServer::build_completion_response(Document& doc, int lin
                         if (va.init && va.init->type == Expression::Type::FunctionExpr) {
                             sym_kind = 3; // Function
                             detail = "function";
+                            const auto& fn =
+                                *std::get<std::unique_ptr<FunctionExpr>>(va.init->expr);
+                            std::vector<std::string> params;
+                            params.reserve(fn.params.size());
+                            for (const auto& param : fn.params) {
+                                if (param && param->key) {
+                                    params.push_back(param->key->string());
+                                }
+                            }
+                            add_function_item(va.id->name, detail, std::move(params));
+                        } else {
+                            add_plain_item(va.id->name, detail, sym_kind);
                         }
-                        add_item(va.id->name, detail, sym_kind);
                     }
                 } else if (stmt->type == Statement::Type::OptionStatement) {
                     const auto& opt = *std::get<std::unique_ptr<OptionStmt>>(stmt->stmt);
@@ -866,13 +968,13 @@ std::string FluxLanguageServer::build_completion_response(Document& doc, int lin
                         const auto& va =
                             *std::get<std::unique_ptr<VariableAssgn>>(opt.assignment->value);
                         if (va.id && !va.id->name.empty()) {
-                            add_item(va.id->name, "option", 6 /* Variable */);
+                            add_plain_item(va.id->name, "option", 6 /* Variable */);
                         }
                     }
                 } else if (stmt->type == Statement::Type::BuiltinStatement) {
                     const auto& bi = *std::get<std::unique_ptr<BuiltinStmt>>(stmt->stmt);
                     if (bi.id && !bi.id->name.empty()) {
-                        add_item(bi.id->name, "builtin", 3 /* Function */);
+                        add_function_item(bi.id->name, "builtin", {});
                     }
                 }
             }
