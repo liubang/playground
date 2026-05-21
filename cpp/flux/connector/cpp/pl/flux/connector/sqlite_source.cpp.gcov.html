@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-19 00:59:10</td>
+            <td class="headerValue">2026-05-21 23:01:22</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">94.9&nbsp;%</td>
@@ -49,9 +49,9 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">50.3&nbsp;%</td>
+            <td class="headerCovTableEntryLo">50.4&nbsp;%</td>
             <td class="headerCovTableEntry">843</td>
-            <td class="headerCovTableEntry">424</td>
+            <td class="headerCovTableEntry">425</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -120,15 +120,15 @@
 <span id="L49"><span class="lineNum">      49</span>                 :             :         if (stmt != nullptr) {</span>
 <span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC">        1084 :             sqlite3_finalize(stmt);</span></span>
 <span id="L51"><span class="lineNum">      51</span>                 :             :         }</span>
-<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">        1083 :     }</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">        1084 :     }</span></span>
 <span id="L53"><span class="lineNum">      53</span>                 :             : };</span>
 <span id="L54"><span class="lineNum">      54</span>                 :             : </span>
 <span id="L55"><span class="lineNum">      55</span>                 :             : using SqliteDb = std::unique_ptr&lt;sqlite3, SqliteDbDeleter&gt;;</span>
 <span id="L56"><span class="lineNum">      56</span>                 :             : using SqliteStmt = std::unique_ptr&lt;sqlite3_stmt, SqliteStmtDeleter&gt;;</span>
 <span id="L57"><span class="lineNum">      57</span>                 :             : </span>
-<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">         755 : absl::StatusOr&lt;SqliteDb&gt; open_readonly_db(const std::string&amp; dsn) {</span></span>
-<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">         755 :     sqlite3* raw_db = nullptr;</span></span>
-<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">         755 :     const int open_rc = sqlite3_open_v2(dsn.c_str(), &amp;raw_db, SQLITE_OPEN_READONLY, nullptr);</span></span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">         756 : absl::StatusOr&lt;SqliteDb&gt; open_readonly_db(const std::string&amp; dsn) {</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">         756 :     sqlite3* raw_db = nullptr;</span></span>
+<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">         756 :     const int open_rc = sqlite3_open_v2(dsn.c_str(), &amp;raw_db, SQLITE_OPEN_READONLY, nullptr);</span></span>
 <span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">         756 :     SqliteDb db(raw_db);</span></span>
 <span id="L62"><span class="lineNum">      62</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 752 times"> + </span>]:<span class="tlaGNC">         756 :     if (open_rc != SQLITE_OK) {</span></span>
 <span id="L63"><span class="lineNum">      63</span>   [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           4 :         const char* message = raw_db == nullptr ? &quot;unknown error&quot; : sqlite3_errmsg(raw_db);</span></span>
@@ -138,10 +138,10 @@
 <span id="L66"><span class="lineNum">      66</span>                 :             :     return db;</span>
 <span id="L67"><span class="lineNum">      67</span>                 :             : }</span>
 <span id="L68"><span class="lineNum">      68</span>                 :             : </span>
-<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC">        1222 : absl::StatusOr&lt;SqliteStmt&gt; prepare_statement(sqlite3* db, const std::string&amp; query) {</span></span>
-<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">        1222 :     sqlite3_stmt* raw_stmt = nullptr;</span></span>
+<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC">        1223 : absl::StatusOr&lt;SqliteStmt&gt; prepare_statement(sqlite3* db, const std::string&amp; query) {</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">        1223 :     sqlite3_stmt* raw_stmt = nullptr;</span></span>
 <span id="L71"><span class="lineNum">      71</span>                 :             :     const int prepare_rc =</span>
-<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">        1222 :         sqlite3_prepare_v2(db, query.c_str(), static_cast&lt;int&gt;(query.size()), &amp;raw_stmt, nullptr);</span></span>
+<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">        1223 :         sqlite3_prepare_v2(db, query.c_str(), static_cast&lt;int&gt;(query.size()), &amp;raw_stmt, nullptr);</span></span>
 <span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">        1223 :     SqliteStmt stmt(raw_stmt);</span></span>
 <span id="L74"><span class="lineNum">      74</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1223 times"> + </span>]:<span class="tlaGNC">        1223 :     if (prepare_rc != SQLITE_OK) {</span></span>
 <span id="L75"><span class="lineNum">      75</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(</span></span>
@@ -153,19 +153,19 @@
 <span id="L80"><span class="lineNum">      80</span>                 :             : </span>
 <span id="L81"><span class="lineNum">      81</span>                 :<span class="tlaGNC tlaBgGNC">        2475 : std::string quote_identifier(const std::string&amp; identifier) {</span></span>
 <span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaGNC">        2475 :     std::string out = &quot;\&quot;&quot;;</span></span>
-<span id="L83"><span class="lineNum">      83</span>         [<span class="tlaGBC" title="Branch 0 was taken 11014 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2474 times"> + </span>]:<span class="tlaGNC">       13488 :     for (const char ch : identifier) {</span></span>
-<span id="L84"><span class="lineNum">      84</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 11014 times"> + </span>]:<span class="tlaGNC">       11014 :         if (ch == '&quot;') {</span></span>
+<span id="L83"><span class="lineNum">      83</span>         [<span class="tlaGBC" title="Branch 0 was taken 11020 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2476 times"> + </span>]:<span class="tlaGNC">       13496 :     for (const char ch : identifier) {</span></span>
+<span id="L84"><span class="lineNum">      84</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 11020 times"> + </span>]:<span class="tlaGNC">       11020 :         if (ch == '&quot;') {</span></span>
 <span id="L85"><span class="lineNum">      85</span>                 :             :             out += &quot;\&quot;\&quot;&quot;;</span>
 <span id="L86"><span class="lineNum">      86</span>                 :             :         } else {</span>
-<span id="L87"><span class="lineNum">      87</span>         [<span class="tlaGBC" title="Branch 0 was taken 11013 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       11014 :             out.push_back(ch);</span></span>
+<span id="L87"><span class="lineNum">      87</span>         [<span class="tlaGBC" title="Branch 0 was taken 11021 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       11020 :             out.push_back(ch);</span></span>
 <span id="L88"><span class="lineNum">      88</span>                 :             :         }</span>
 <span id="L89"><span class="lineNum">      89</span>                 :             :     }</span>
-<span id="L90"><span class="lineNum">      90</span>         [<span class="tlaGBC" title="Branch 0 was taken 2474 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        2474 :     out.push_back('&quot;');</span></span>
-<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">        2474 :     return out;</span></span>
+<span id="L90"><span class="lineNum">      90</span>         [<span class="tlaGBC" title="Branch 0 was taken 2475 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        2476 :     out.push_back('&quot;');</span></span>
+<span id="L91"><span class="lineNum">      91</span>                 :<span class="tlaGNC">        2475 :     return out;</span></span>
 <span id="L92"><span class="lineNum">      92</span>                 :             : }</span>
 <span id="L93"><span class="lineNum">      93</span>                 :             : </span>
-<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC">         452 : std::string query_for_table(const std::string&amp; table) {</span></span>
-<span id="L95"><span class="lineNum">      95</span>         [<span class="tlaGBC" title="Branch 0 was taken 452 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         452 :     return absl::StrCat(&quot;SELECT * FROM &quot;, quote_identifier(table));</span></span>
+<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC">         451 : std::string query_for_table(const std::string&amp; table) {</span></span>
+<span id="L95"><span class="lineNum">      95</span>         [<span class="tlaGBC" title="Branch 0 was taken 451 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         451 :     return absl::StrCat(&quot;SELECT * FROM &quot;, quote_identifier(table));</span></span>
 <span id="L96"><span class="lineNum">      96</span>                 :             : }</span>
 <span id="L97"><span class="lineNum">      97</span>                 :             : </span>
 <span id="L98"><span class="lineNum">      98</span>                 :<span class="tlaGNC">         123 : std::string query_for_table_rowid_range(const std::string&amp; table, int64_t lower, int64_t upper) {</span></span>
@@ -176,7 +176,7 @@
 <span id="L103"><span class="lineNum">     103</span>                 :             : // predicate_op_sql / aggregate_fn_sql / validate_column are now shared via</span>
 <span id="L104"><span class="lineNum">     104</span>                 :             : // sql_builder.h as PredicateOpSql / AggregateFnSql / ValidateColumn.</span>
 <span id="L105"><span class="lineNum">     105</span>                 :             : </span>
-<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaGNC">         254 : struct SqliteParam {</span></span>
+<span id="L106"><span class="lineNum">     106</span>                 :<span class="tlaGNC">         251 : struct SqliteParam {</span></span>
 <span id="L107"><span class="lineNum">     107</span>                 :             :     Value value;</span>
 <span id="L108"><span class="lineNum">     108</span>                 :             : };</span>
 <span id="L109"><span class="lineNum">     109</span>                 :             : </span>
@@ -202,7 +202,7 @@
 <span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaUNC">           0 :             break;</span></span>
 <span id="L128"><span class="lineNum">     128</span>                 :<span class="tlaGNC tlaBgGNC">          21 :         case Value::Type::Float:</span></span>
 <span id="L129"><span class="lineNum">     129</span>                 :<span class="tlaGNC">          21 :             rc = sqlite3_bind_double(stmt, index, value.as_float());</span></span>
-<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">          21 :             break;</span></span>
+<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">          20 :             break;</span></span>
 <span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">          96 :         case Value::Type::String:</span></span>
 <span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">          96 :             rc = sqlite3_bind_text(stmt, index, value.as_string().c_str(),</span></span>
 <span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">          96 :                                    static_cast&lt;int&gt;(value.as_string().size()), SQLITE_TRANSIENT);</span></span>
@@ -215,7 +215,7 @@
 <span id="L140"><span class="lineNum">     140</span>                 :             :         default:</span>
 <span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaUNC">           0 :             return absl::InvalidArgumentError(&quot;sqlite source parameter type is not pushable&quot;);</span></span>
 <span id="L142"><span class="lineNum">     142</span>                 :             :     }</span>
-<span id="L143"><span class="lineNum">     143</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 117 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         117 :     if (rc != SQLITE_OK) {</span></span>
+<span id="L143"><span class="lineNum">     143</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 116 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         116 :     if (rc != SQLITE_OK) {</span></span>
 <span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;sqlite bind failed&quot;);</span></span>
 <span id="L145"><span class="lineNum">     145</span>                 :             :     }</span>
 <span id="L146"><span class="lineNum">     146</span>                 :             :     return absl::OkStatus();</span>
@@ -273,12 +273,12 @@
 <span id="L195"><span class="lineNum">     195</span>                 :             :     };</span>
 <span id="L196"><span class="lineNum">     196</span>                 :             : }</span>
 <span id="L197"><span class="lineNum">     197</span>                 :             : </span>
-<span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaGNC">         488 : size_t default_sqlite_split_count() {</span></span>
-<span id="L199"><span class="lineNum">     199</span>                 :<span class="tlaGNC">         488 :     const unsigned int workers = std::thread::hardware_concurrency();</span></span>
-<span id="L200"><span class="lineNum">     200</span>         [<span class="tlaGBC" title="Branch 0 was taken 488 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         488 :     if (workers == 0) {</span></span>
+<span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaGNC">         489 : size_t default_sqlite_split_count() {</span></span>
+<span id="L199"><span class="lineNum">     199</span>                 :<span class="tlaGNC">         489 :     const unsigned int workers = std::thread::hardware_concurrency();</span></span>
+<span id="L200"><span class="lineNum">     200</span>         [<span class="tlaGBC" title="Branch 0 was taken 484 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         484 :     if (workers == 0) {</span></span>
 <span id="L201"><span class="lineNum">     201</span>                 :             :         return 4;</span>
 <span id="L202"><span class="lineNum">     202</span>                 :             :     }</span>
-<span id="L203"><span class="lineNum">     203</span>   [<span class="tlaGBC" title="Branch 0 was taken 489 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 488 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">        1465 :     return std::min&lt;size_t&gt;(8, std::max&lt;size_t&gt;(1, workers));</span></span>
+<span id="L203"><span class="lineNum">     203</span>   [<span class="tlaGBC" title="Branch 0 was taken 489 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 485 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">        1458 :     return std::min&lt;size_t&gt;(8, std::max&lt;size_t&gt;(1, workers));</span></span>
 <span id="L204"><span class="lineNum">     204</span>                 :             : }</span>
 <span id="L205"><span class="lineNum">     205</span>                 :             : </span>
 <span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaGNC">         148 : absl::StatusOr&lt;BuiltSql&gt; build_scan_sql(const std::string&amp; query,</span></span>
@@ -336,15 +336,15 @@
 <span id="L253"><span class="lineNum">     253</span>         [<span class="tlaGBC" title="Branch 0 was taken 85 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 53 times"> + </span>]:<span class="tlaGNC">         138 :     } else if (!request.projection_columns.empty()) {</span></span>
 <span id="L254"><span class="lineNum">     254</span>         [<span class="tlaGBC" title="Branch 0 was taken 209 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 85 times"> + </span>]:<span class="tlaGNC">         294 :         for (size_t i = 0; i &lt; request.projection_columns.size(); ++i) {</span></span>
 <span id="L255"><span class="lineNum">     255</span>                 :             :             const auto&amp; projection = request.projection_columns[i];</span>
-<span id="L256"><span class="lineNum">     256</span>   [<span class="tlaGBC" title="Branch 0 was taken 209 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 208 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         417 :             auto status = ValidateColumn(schema_columns, projection.column, &quot;sqlite&quot;, &quot;projection&quot;);</span></span>
-<span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 208 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaGBC" title="Branch 7 was taken 208 times"> + </span>]
-<span id="L257"><span class="lineNum">     257</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 208 times"> + </span>]:<span class="tlaGNC">         208 :             if (!status.ok()) {</span></span>
+<span id="L256"><span class="lineNum">     256</span>   [<span class="tlaGBC" title="Branch 0 was taken 209 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 209 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         418 :             auto status = ValidateColumn(schema_columns, projection.column, &quot;sqlite&quot;, &quot;projection&quot;);</span></span>
+<span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 209 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaGBC" title="Branch 7 was taken 209 times"> + </span>]
+<span id="L257"><span class="lineNum">     257</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 209 times"> + </span>]:<span class="tlaGNC">         209 :             if (!status.ok()) {</span></span>
 <span id="L258"><span class="lineNum">     258</span>                 :             :                 return status;</span>
 <span id="L259"><span class="lineNum">     259</span>                 :             :             }</span>
-<span id="L260"><span class="lineNum">     260</span>         [<span class="tlaGBC" title="Branch 0 was taken 124 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 84 times"> + </span>]:<span class="tlaGNC">         208 :             if (i != 0) {</span></span>
+<span id="L260"><span class="lineNum">     260</span>         [<span class="tlaGBC" title="Branch 0 was taken 124 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 85 times"> + </span>]:<span class="tlaGNC">         209 :             if (i != 0) {</span></span>
 <span id="L261"><span class="lineNum">     261</span>                 :             :                 sql += &quot;, &quot;;</span>
 <span id="L262"><span class="lineNum">     262</span>                 :             :             }</span>
-<span id="L263"><span class="lineNum">     263</span>   [<span class="tlaGBC" title="Branch 0 was taken 208 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 209 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         417 :             sql += quote_identifier(projection.column);</span></span>
+<span id="L263"><span class="lineNum">     263</span>   [<span class="tlaGBC" title="Branch 0 was taken 209 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 209 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         418 :             sql += quote_identifier(projection.column);</span></span>
 <span id="L264"><span class="lineNum">     264</span>   [<span class="tlaGBC" title="Branch 0 was taken 209 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 22 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 187 times"> + </span>]:<span class="tlaGNC">         209 :             if (!projection.alias.empty() &amp;&amp; projection.alias != projection.column) {</span></span>
 <span id="L265"><span class="lineNum">     265</span>                 :             :                 sql += &quot; AS &quot;;</span>
 <span id="L266"><span class="lineNum">     266</span>   [<span class="tlaGBC" title="Branch 0 was taken 22 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          44 :                 sql += quote_identifier(projection.alias);</span></span>
@@ -464,15 +464,15 @@
 <span id="L370"><span class="lineNum">     370</span>                 :             :                     .offset = request.offset};</span>
 <span id="L371"><span class="lineNum">     371</span>   [<span class="tlaGBC" title="Branch 0 was taken 32 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 32 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         207 : }</span></span>
 <span id="L372"><span class="lineNum">     372</span>                 :             : </span>
-<span id="L373"><span class="lineNum">     373</span>                 :<span class="tlaGNC">         386 : Value value_from_sqlite_column(sqlite3_stmt* stmt, int column) {</span></span>
-<span id="L374"><span class="lineNum">     374</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 112 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         386 :     switch (sqlite3_column_type(stmt, column)) {</span></span>
+<span id="L373"><span class="lineNum">     373</span>                 :<span class="tlaGNC">         384 : Value value_from_sqlite_column(sqlite3_stmt* stmt, int column) {</span></span>
+<span id="L374"><span class="lineNum">     374</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 111 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         384 :     switch (sqlite3_column_type(stmt, column)) {</span></span>
 <span class="lineNum">        </span>             <span class="tlaGBC" title="Branch 4 was taken 271 times"> + </span>]
 <span id="L375"><span class="lineNum">     375</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         case SQLITE_NULL:</span></span>
 <span id="L376"><span class="lineNum">     376</span>                 :<span class="tlaUNC">           0 :             return Value::null();</span></span>
 <span id="L377"><span class="lineNum">     377</span>                 :<span class="tlaGNC tlaBgGNC">           2 :         case SQLITE_INTEGER:</span></span>
 <span id="L378"><span class="lineNum">     378</span>                 :<span class="tlaGNC">           2 :             return Value::integer(sqlite3_column_int64(stmt, column));</span></span>
-<span id="L379"><span class="lineNum">     379</span>                 :<span class="tlaGNC">         112 :         case SQLITE_FLOAT:</span></span>
-<span id="L380"><span class="lineNum">     380</span>                 :<span class="tlaGNC">         112 :             return Value::floating(sqlite3_column_double(stmt, column));</span></span>
+<span id="L379"><span class="lineNum">     379</span>                 :<span class="tlaGNC">         111 :         case SQLITE_FLOAT:</span></span>
+<span id="L380"><span class="lineNum">     380</span>                 :<span class="tlaGNC">         111 :             return Value::floating(sqlite3_column_double(stmt, column));</span></span>
 <span id="L381"><span class="lineNum">     381</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         case SQLITE_BLOB: {</span></span>
 <span id="L382"><span class="lineNum">     382</span>                 :<span class="tlaUNC">           0 :             const auto* bytes = static_cast&lt;const char*&gt;(sqlite3_column_blob(stmt, column));</span></span>
 <span id="L383"><span class="lineNum">     383</span>                 :<span class="tlaUNC">           0 :             const int size = sqlite3_column_bytes(stmt, column);</span></span>
@@ -484,23 +484,23 @@
 <span id="L389"><span class="lineNum">     389</span>                 :<span class="tlaGNC tlaBgGNC">         271 :         case SQLITE_TEXT:</span></span>
 <span id="L390"><span class="lineNum">     390</span>                 :             :         default: {</span>
 <span id="L391"><span class="lineNum">     391</span>                 :<span class="tlaGNC">         271 :             const auto* text = reinterpret_cast&lt;const char*&gt;(sqlite3_column_text(stmt, column));</span></span>
-<span id="L392"><span class="lineNum">     392</span>                 :<span class="tlaGNC">         272 :             const int size = sqlite3_column_bytes(stmt, column);</span></span>
+<span id="L392"><span class="lineNum">     392</span>                 :<span class="tlaGNC">         271 :             const int size = sqlite3_column_bytes(stmt, column);</span></span>
 <span id="L393"><span class="lineNum">     393</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 271 times"> + </span>]:<span class="tlaGNC">         271 :             if (text == nullptr || size &lt;= 0) {</span></span>
 <span id="L394"><span class="lineNum">     394</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :                 return Value::string(&quot;&quot;);</span></span>
 <span id="L395"><span class="lineNum">     395</span>                 :             :             }</span>
-<span id="L396"><span class="lineNum">     396</span>         [<span class="tlaGBC" title="Branch 0 was taken 270 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">         540 :             return Value::string(std::string(text, static_cast&lt;size_t&gt;(size)));</span></span>
+<span id="L396"><span class="lineNum">     396</span>         [<span class="tlaGBC" title="Branch 0 was taken 268 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">         540 :             return Value::string(std::string(text, static_cast&lt;size_t&gt;(size)));</span></span>
 <span id="L397"><span class="lineNum">     397</span>                 :             :         }</span>
 <span id="L398"><span class="lineNum">     398</span>                 :             :     }</span>
 <span id="L399"><span class="lineNum">     399</span>                 :             : }</span>
 <span id="L400"><span class="lineNum">     400</span>                 :             : </span>
 <span id="L401"><span class="lineNum">     401</span>                 :<span class="tlaGNC">         143 : absl::Status bind_scan_sql(sqlite3_stmt* stmt, const BuiltSql&amp; sql) {</span></span>
 <span id="L402"><span class="lineNum">     402</span>                 :             :     int bind_index = 1;</span>
-<span id="L403"><span class="lineNum">     403</span>         [<span class="tlaGBC" title="Branch 0 was taken 117 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 143 times"> + </span>]:<span class="tlaGNC">         260 :     for (const auto&amp; param : sql.params) {</span></span>
-<span id="L404"><span class="lineNum">     404</span>                 :<span class="tlaGNC">         117 :         auto status = bind_value(stmt, bind_index, param.value);</span></span>
-<span id="L405"><span class="lineNum">     405</span>         [<span class="tlaGBC" title="Branch 0 was taken 117 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         117 :         if (!status.ok()) {</span></span>
+<span id="L403"><span class="lineNum">     403</span>         [<span class="tlaGBC" title="Branch 0 was taken 116 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 143 times"> + </span>]:<span class="tlaGNC">         259 :     for (const auto&amp; param : sql.params) {</span></span>
+<span id="L404"><span class="lineNum">     404</span>                 :<span class="tlaGNC">         116 :         auto status = bind_value(stmt, bind_index, param.value);</span></span>
+<span id="L405"><span class="lineNum">     405</span>         [<span class="tlaGBC" title="Branch 0 was taken 116 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         116 :         if (!status.ok()) {</span></span>
 <span id="L406"><span class="lineNum">     406</span>                 :             :             return status;</span>
 <span id="L407"><span class="lineNum">     407</span>                 :             :         }</span>
-<span id="L408"><span class="lineNum">     408</span>                 :<span class="tlaGNC">         117 :         ++bind_index;</span></span>
+<span id="L408"><span class="lineNum">     408</span>                 :<span class="tlaGNC">         116 :         ++bind_index;</span></span>
 <span id="L409"><span class="lineNum">     409</span>                 :             :     }</span>
 <span id="L410"><span class="lineNum">     410</span>         [<span class="tlaGBC" title="Branch 0 was taken 32 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 111 times"> + </span>]:<span class="tlaGNC">         143 :     if (sql.limit.has_value()) {</span></span>
 <span id="L411"><span class="lineNum">     411</span>                 :<span class="tlaGNC">          32 :         auto status = bind_int64(stmt, bind_index, *sql.limit);</span></span>
@@ -520,13 +520,13 @@
 <span id="L425"><span class="lineNum">     425</span>                 :             : </span>
 <span id="L426"><span class="lineNum">     426</span>                 :<span class="tlaGNC">         143 : std::vector&lt;std::string&gt; sqlite_column_names(sqlite3_stmt* stmt) {</span></span>
 <span id="L427"><span class="lineNum">     427</span>                 :<span class="tlaGNC">         143 :     const int column_count = sqlite3_column_count(stmt);</span></span>
-<span id="L428"><span class="lineNum">     428</span>                 :<span class="tlaGNC">         141 :     std::vector&lt;std::string&gt; column_names;</span></span>
-<span id="L429"><span class="lineNum">     429</span>         [<span class="tlaGBC" title="Branch 0 was taken 142 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         141 :     column_names.reserve(static_cast&lt;size_t&gt;(column_count));</span></span>
-<span id="L430"><span class="lineNum">     430</span>         [<span class="tlaGBC" title="Branch 0 was taken 411 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 142 times"> + </span>]:<span class="tlaGNC">         553 :     for (int i = 0; i &lt; column_count; ++i) {</span></span>
-<span id="L431"><span class="lineNum">     431</span>         [<span class="tlaGBC" title="Branch 0 was taken 414 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         411 :         const char* name = sqlite3_column_name(stmt, i);</span></span>
-<span id="L432"><span class="lineNum">     432</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 414 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 411 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         414 :         column_names.emplace_back(name == nullptr ? &quot;&quot; : name);</span></span>
+<span id="L428"><span class="lineNum">     428</span>                 :<span class="tlaGNC">         142 :     std::vector&lt;std::string&gt; column_names;</span></span>
+<span id="L429"><span class="lineNum">     429</span>         [<span class="tlaGBC" title="Branch 0 was taken 143 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         142 :     column_names.reserve(static_cast&lt;size_t&gt;(column_count));</span></span>
+<span id="L430"><span class="lineNum">     430</span>         [<span class="tlaGBC" title="Branch 0 was taken 416 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 143 times"> + </span>]:<span class="tlaGNC">         559 :     for (int i = 0; i &lt; column_count; ++i) {</span></span>
+<span id="L431"><span class="lineNum">     431</span>         [<span class="tlaGBC" title="Branch 0 was taken 417 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         416 :         const char* name = sqlite3_column_name(stmt, i);</span></span>
+<span id="L432"><span class="lineNum">     432</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 417 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 416 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         417 :         column_names.emplace_back(name == nullptr ? &quot;&quot; : name);</span></span>
 <span id="L433"><span class="lineNum">     433</span>                 :             :     }</span>
-<span id="L434"><span class="lineNum">     434</span>                 :<span class="tlaGNC">         142 :     return column_names;</span></span>
+<span id="L434"><span class="lineNum">     434</span>                 :<span class="tlaGNC">         143 :     return column_names;</span></span>
 <span id="L435"><span class="lineNum">     435</span>                 :<span class="tlaUNC tlaBgUNC">           0 : }</span></span>
 <span id="L436"><span class="lineNum">     436</span>                 :             : </span>
 <span id="L437"><span class="lineNum">     437</span>                 :<span class="tlaGNC tlaBgGNC">          20 : std::shared_ptr&lt;ObjectValue&gt; row_from_sqlite_stmt(sqlite3_stmt* stmt,</span></span>
@@ -542,11 +542,11 @@
 <span id="L447"><span class="lineNum">     447</span>                 :             : </span>
 <span id="L448"><span class="lineNum">     448</span>                 :<span class="tlaGNC">         141 : PageChunk empty_page_chunk_for_columns(const std::vector&lt;std::string&gt;&amp; column_names) {</span></span>
 <span id="L449"><span class="lineNum">     449</span>                 :<span class="tlaGNC">         141 :     PageChunk chunk;</span></span>
-<span id="L450"><span class="lineNum">     450</span>         [<span class="tlaGBC" title="Branch 0 was taken 141 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         141 :     chunk.columns.reserve(column_names.size());</span></span>
-<span id="L451"><span class="lineNum">     451</span>         [<span class="tlaGBC" title="Branch 0 was taken 406 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 141 times"> + </span>]:<span class="tlaGNC">         547 :     for (const auto&amp; name : column_names) {</span></span>
-<span id="L452"><span class="lineNum">     452</span>         [<span class="tlaGBC" title="Branch 0 was taken 403 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         812 :         chunk.columns.push_back(ColumnVector{.name = name});</span></span>
+<span id="L450"><span class="lineNum">     450</span>         [<span class="tlaGBC" title="Branch 0 was taken 140 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         141 :     chunk.columns.reserve(column_names.size());</span></span>
+<span id="L451"><span class="lineNum">     451</span>         [<span class="tlaGBC" title="Branch 0 was taken 411 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 140 times"> + </span>]:<span class="tlaGNC">         551 :     for (const auto&amp; name : column_names) {</span></span>
+<span id="L452"><span class="lineNum">     452</span>         [<span class="tlaGBC" title="Branch 0 was taken 410 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         822 :         chunk.columns.push_back(ColumnVector{.name = name});</span></span>
 <span id="L453"><span class="lineNum">     453</span>                 :             :     }</span>
-<span id="L454"><span class="lineNum">     454</span>                 :<span class="tlaGNC">         141 :     return chunk;</span></span>
+<span id="L454"><span class="lineNum">     454</span>                 :<span class="tlaGNC">         140 :     return chunk;</span></span>
 <span id="L455"><span class="lineNum">     455</span>                 :<span class="tlaUNC tlaBgUNC">           0 : }</span></span>
 <span id="L456"><span class="lineNum">     456</span>                 :             : </span>
 <span id="L457"><span class="lineNum">     457</span>                 :<span class="tlaGNC tlaBgGNC">         125 : void append_sqlite_stmt_to_page_chunk(sqlite3_stmt* stmt, PageChunk* chunk) {</span></span>
@@ -561,15 +561,15 @@
 <span id="L466"><span class="lineNum">     466</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             chunk-&gt;columns.push_back(ColumnVector{.name = name == nullptr ? &quot;&quot; : name});</span></span>
 <span id="L467"><span class="lineNum">     467</span>                 :             :         }</span>
 <span id="L468"><span class="lineNum">     468</span>                 :             :     }</span>
-<span id="L469"><span class="lineNum">     469</span>         [<span class="tlaGBC" title="Branch 0 was taken 342 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 123 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         465 :     for (int i = 0; i &lt; static_cast&lt;int&gt;(chunk-&gt;columns.size()); ++i) {</span></span>
-<span id="L470"><span class="lineNum">     470</span>                 :<span class="tlaGNC">         342 :         Value value = value_from_sqlite_column(stmt, i);</span></span>
-<span id="L471"><span class="lineNum">     471</span>         [<span class="tlaGBC" title="Branch 0 was taken 317 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 21 times"> + </span>]:<span class="tlaGNC">         338 :         auto&amp; column = chunk-&gt;columns[static_cast&lt;size_t&gt;(i)];</span></span>
-<span id="L472"><span class="lineNum">     472</span>   [<span class="tlaGBC" title="Branch 0 was taken 317 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 21 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 317 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         338 :         if (column.type == Value::Type::Null &amp;&amp; !value.is_null()) {</span></span>
-<span id="L473"><span class="lineNum">     473</span>                 :<span class="tlaGNC">         317 :             column.type = value.type();</span></span>
+<span id="L469"><span class="lineNum">     469</span>         [<span class="tlaGBC" title="Branch 0 was taken 341 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 124 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         465 :     for (int i = 0; i &lt; static_cast&lt;int&gt;(chunk-&gt;columns.size()); ++i) {</span></span>
+<span id="L470"><span class="lineNum">     470</span>                 :<span class="tlaGNC">         341 :         Value value = value_from_sqlite_column(stmt, i);</span></span>
+<span id="L471"><span class="lineNum">     471</span>         [<span class="tlaGBC" title="Branch 0 was taken 319 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 19 times"> + </span>]:<span class="tlaGNC">         338 :         auto&amp; column = chunk-&gt;columns[static_cast&lt;size_t&gt;(i)];</span></span>
+<span id="L472"><span class="lineNum">     472</span>   [<span class="tlaGBC" title="Branch 0 was taken 319 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 19 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 318 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">         338 :         if (column.type == Value::Type::Null &amp;&amp; !value.is_null()) {</span></span>
+<span id="L473"><span class="lineNum">     473</span>                 :<span class="tlaGNC">         318 :             column.type = value.type();</span></span>
 <span id="L474"><span class="lineNum">     474</span>                 :             :         }</span>
-<span id="L475"><span class="lineNum">     475</span>         [<span class="tlaGBC" title="Branch 0 was taken 340 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         338 :         column.values.push_back(std::move(value));</span></span>
+<span id="L475"><span class="lineNum">     475</span>         [<span class="tlaGBC" title="Branch 0 was taken 338 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         338 :         column.values.push_back(std::move(value));</span></span>
 <span id="L476"><span class="lineNum">     476</span>                 :             :     }</span>
-<span id="L477"><span class="lineNum">     477</span>                 :<span class="tlaGNC">         123 :     ++chunk-&gt;row_count;</span></span>
+<span id="L477"><span class="lineNum">     477</span>                 :<span class="tlaGNC">         124 :     ++chunk-&gt;row_count;</span></span>
 <span id="L478"><span class="lineNum">     478</span>                 :             : }</span>
 <span id="L479"><span class="lineNum">     479</span>                 :             : </span>
 <span id="L480"><span class="lineNum">     480</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 11 times"> + </span>]:<span class="tlaGNC">          11 : std::shared_ptr&lt;ObjectValue&gt; row_with_group(const std::shared_ptr&lt;ObjectValue&gt;&amp; row,</span></span>
@@ -594,7 +594,7 @@
 <span id="L498"><span class="lineNum">     498</span>                 :             : } // namespace</span>
 <span id="L499"><span class="lineNum">     499</span>                 :             : </span>
 <span id="L500"><span class="lineNum">     500</span>                 :<span class="tlaGNC">         435 : SQLiteSource::SQLiteSource(std::string dsn, std::string table)</span></span>
-<span id="L501"><span class="lineNum">     501</span>         [<span class="tlaGBC" title="Branch 0 was taken 435 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         435 :     : dsn_(std::move(dsn)), table_(std::move(table)), query_(query_for_table(table_)) {}</span></span>
+<span id="L501"><span class="lineNum">     501</span>         [<span class="tlaGBC" title="Branch 0 was taken 434 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         435 :     : dsn_(std::move(dsn)), table_(std::move(table)), query_(query_for_table(table_)) {}</span></span>
 <span id="L502"><span class="lineNum">     502</span>                 :             : </span>
 <span id="L503"><span class="lineNum">     503</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 435 times"> + </span>]:<span class="tlaGNC">         437 : absl::StatusOr&lt;TableSchema&gt; SQLiteSource::Schema() const {</span></span>
 <span id="L504"><span class="lineNum">     504</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 435 times"> + </span>]:<span class="tlaGNC">         437 :     if (cached_schema_.has_value()) {</span></span>
@@ -618,9 +618,9 @@
 <span id="L522"><span class="lineNum">     522</span>                 :<span class="tlaGNC">        1722 :         schema.columns.push_back(</span></span>
 <span id="L523"><span class="lineNum">     523</span>                 :<span class="tlaGNC">        1722 :             {.name = name == nullptr ? &quot;&quot; : name, .type = Value::Type::Null, .nullable = true});</span></span>
 <span id="L524"><span class="lineNum">     524</span>                 :             :     }</span>
-<span id="L525"><span class="lineNum">     525</span>         [<span class="tlaGBC" title="Branch 0 was taken 430 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         430 :     cached_schema_ = schema;</span></span>
+<span id="L525"><span class="lineNum">     525</span>         [<span class="tlaGBC" title="Branch 0 was taken 431 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         430 :     cached_schema_ = schema;</span></span>
 <span id="L526"><span class="lineNum">     526</span>                 :             :     return schema;</span>
-<span id="L527"><span class="lineNum">     527</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1723 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1724 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">        1723 : }</span></span>
+<span id="L527"><span class="lineNum">     527</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1723 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1723 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">        1723 : }</span></span>
 <span id="L528"><span class="lineNum">     528</span>                 :             : </span>
 <span id="L529"><span class="lineNum">     529</span>                 :<span class="tlaUNC tlaBgUNC">           0 : SourceCapabilities SQLiteSource::Capabilities() const {</span></span>
 <span id="L530"><span class="lineNum">     530</span>                 :             :     return SourceCapabilities{</span>
@@ -806,9 +806,9 @@
 <span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 118 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L705"><span class="lineNum">     705</span>                 :             : }</span>
 <span id="L706"><span class="lineNum">     706</span>                 :             : </span>
-<span id="L707"><span class="lineNum">     707</span>                 :<span class="tlaGNC">         489 : SQLiteSplitManager::SQLiteSplitManager(size_t target_split_count)</span></span>
-<span id="L708"><span class="lineNum">     708</span>                 :<span class="tlaGNC">         481 :     : target_split_count_(target_split_count == 0 ? default_sqlite_split_count()</span></span>
-<span id="L709"><span class="lineNum">     709</span>         [<span class="tlaGBC" title="Branch 0 was taken 481 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">         489 :                                                   : target_split_count) {}</span></span>
+<span id="L707"><span class="lineNum">     707</span>                 :<span class="tlaGNC">         490 : SQLiteSplitManager::SQLiteSplitManager(size_t target_split_count)</span></span>
+<span id="L708"><span class="lineNum">     708</span>                 :<span class="tlaGNC">         482 :     : target_split_count_(target_split_count == 0 ? default_sqlite_split_count()</span></span>
+<span id="L709"><span class="lineNum">     709</span>         [<span class="tlaGBC" title="Branch 0 was taken 482 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">         490 :                                                   : target_split_count) {}</span></span>
 <span id="L710"><span class="lineNum">     710</span>                 :             : </span>
 <span id="L711"><span class="lineNum">     711</span>                 :<span class="tlaGNC">          91 : absl::StatusOr&lt;std::vector&lt;ConnectorSplit&gt;&gt; SQLiteSplitManager::GetSplits(</span></span>
 <span id="L712"><span class="lineNum">     712</span>                 :             :     const TableHandle&amp; table, const ScanRequest&amp; request) const {</span>
@@ -889,10 +889,10 @@
 <span id="L785"><span class="lineNum">     785</span>                 :             :                                    std::optional&lt;int64_t&gt; rowid_upper,</span>
 <span id="L786"><span class="lineNum">     786</span>                 :<span class="tlaGNC">         140 :                                    int64_t split_id)</span></span>
 <span id="L787"><span class="lineNum">     787</span>                 :<span class="tlaGNC">         140 :     : impl_(std::make_unique&lt;Impl&gt;()),</span></span>
-<span id="L788"><span class="lineNum">     788</span>                 :<span class="tlaGNC">         137 :       dsn_(std::move(dsn)),</span></span>
+<span id="L788"><span class="lineNum">     788</span>                 :<span class="tlaGNC">         135 :       dsn_(std::move(dsn)),</span></span>
 <span id="L789"><span class="lineNum">     789</span>                 :<span class="tlaGNC">         138 :       table_(std::move(table)),</span></span>
-<span id="L790"><span class="lineNum">     790</span>                 :<span class="tlaGNC">         278 :       rows_per_page_(std::max&lt;size_t&gt;(1, rows_per_page)) {</span></span>
-<span id="L791"><span class="lineNum">     791</span>                 :<span class="tlaGNC">         138 :     impl_-&gt;request = std::move(request);</span></span>
+<span id="L790"><span class="lineNum">     790</span>                 :<span class="tlaGNC">         276 :       rows_per_page_(std::max&lt;size_t&gt;(1, rows_per_page)) {</span></span>
+<span id="L791"><span class="lineNum">     791</span>                 :<span class="tlaGNC">         136 :     impl_-&gt;request = std::move(request);</span></span>
 <span id="L792"><span class="lineNum">     792</span>                 :<span class="tlaGNC">         139 :     impl_-&gt;rowid_lower = rowid_lower;</span></span>
 <span id="L793"><span class="lineNum">     793</span>                 :<span class="tlaGNC">         139 :     impl_-&gt;rowid_upper = rowid_upper;</span></span>
 <span id="L794"><span class="lineNum">     794</span>                 :<span class="tlaGNC">         139 :     stats_.split_id = split_id;</span></span>
@@ -904,8 +904,8 @@
 <span id="L800"><span class="lineNum">     800</span>                 :             :         return db_or.status();</span>
 <span id="L801"><span class="lineNum">     801</span>                 :             :     }</span>
 <span id="L802"><span class="lineNum">     802</span>                 :             :     impl_-&gt;db = std::move(*db_or);</span>
-<span id="L803"><span class="lineNum">     803</span>   [<span class="tlaGBC" title="Branch 0 was taken 140 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 140 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         280 :     auto schema_or = SQLiteSource(dsn_, table_).Schema();</span></span>
-<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 140 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 140 times"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaUNC" title="Branch 8 was not taken"> - </span> 
+<span id="L803"><span class="lineNum">     803</span>   [<span class="tlaGBC" title="Branch 0 was taken 139 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 140 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         280 :     auto schema_or = SQLiteSource(dsn_, table_).Schema();</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 139 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 140 times"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaUNC" title="Branch 8 was not taken"> - </span> 
 <span class="lineNum">        </span>             <span class="tlaGBC" title="Branch 9 was taken 140 times"> + </span>]
 <span id="L804"><span class="lineNum">     804</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 140 times"> + </span>]:<span class="tlaGNC">         140 :     if (!schema_or.ok()) {</span></span>
 <span id="L805"><span class="lineNum">     805</span>                 :             :         return schema_or.status();</span>
@@ -922,21 +922,21 @@
 <span id="L816"><span class="lineNum">     816</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 139 times"> + </span>]:<span class="tlaGNC">         139 :     if (!stmt_or.ok()) {</span></span>
 <span id="L817"><span class="lineNum">     817</span>                 :             :         return stmt_or.status();</span>
 <span id="L818"><span class="lineNum">     818</span>                 :             :     }</span>
-<span id="L819"><span class="lineNum">     819</span>         [<span class="tlaGBC" title="Branch 0 was taken 137 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         139 :     auto bind_status = bind_scan_sql(stmt_or-&gt;get(), *sql_or);</span></span>
-<span id="L820"><span class="lineNum">     820</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 137 times"> + </span>]:<span class="tlaGNC">         137 :     if (!bind_status.ok()) {</span></span>
+<span id="L819"><span class="lineNum">     819</span>         [<span class="tlaGBC" title="Branch 0 was taken 138 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         139 :     auto bind_status = bind_scan_sql(stmt_or-&gt;get(), *sql_or);</span></span>
+<span id="L820"><span class="lineNum">     820</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 138 times"> + </span>]:<span class="tlaGNC">         138 :     if (!bind_status.ok()) {</span></span>
 <span id="L821"><span class="lineNum">     821</span>                 :             :         return bind_status;</span>
 <span id="L822"><span class="lineNum">     822</span>                 :             :     }</span>
 <span id="L823"><span class="lineNum">     823</span>                 :             :     impl_-&gt;stmt = std::move(*stmt_or);</span>
-<span id="L824"><span class="lineNum">     824</span>   [<span class="tlaGBC" title="Branch 0 was taken 138 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         137 :     impl_-&gt;column_names = sqlite_column_names(impl_-&gt;stmt.get());</span></span>
+<span id="L824"><span class="lineNum">     824</span>   [<span class="tlaGBC" title="Branch 0 was taken 139 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         138 :     impl_-&gt;column_names = sqlite_column_names(impl_-&gt;stmt.get());</span></span>
 <span id="L825"><span class="lineNum">     825</span>                 :             :     return absl::OkStatus();</span>
 <span id="L826"><span class="lineNum">     826</span>                 :             : }</span>
 <span id="L827"><span class="lineNum">     827</span>                 :             : </span>
-<span id="L828"><span class="lineNum">     828</span>         [<span class="tlaGBC" title="Branch 0 was taken 275 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         275 : absl::StatusOr&lt;std::optional&lt;Page&gt;&gt; SQLitePageSource::NextPage() {</span></span>
-<span id="L829"><span class="lineNum">     829</span>   [<span class="tlaGBC" title="Branch 0 was taken 275 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 275 times"> + </span>]:<span class="tlaGNC">         275 :     if (impl_ == nullptr || impl_-&gt;stmt == nullptr) {</span></span>
+<span id="L828"><span class="lineNum">     828</span>         [<span class="tlaGBC" title="Branch 0 was taken 274 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         274 : absl::StatusOr&lt;std::optional&lt;Page&gt;&gt; SQLitePageSource::NextPage() {</span></span>
+<span id="L829"><span class="lineNum">     829</span>   [<span class="tlaGBC" title="Branch 0 was taken 274 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 274 times"> + </span>]:<span class="tlaGNC">         274 :     if (impl_ == nullptr || impl_-&gt;stmt == nullptr) {</span></span>
 <span id="L830"><span class="lineNum">     830</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;sqlite page source is not initialized&quot;);</span></span>
 <span id="L831"><span class="lineNum">     831</span>                 :             :     }</span>
-<span id="L832"><span class="lineNum">     832</span>         [<span class="tlaGBC" title="Branch 0 was taken 136 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 139 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         275 :     if (impl_-&gt;done) {</span></span>
-<span id="L833"><span class="lineNum">     833</span>   [<span class="tlaGBC" title="Branch 0 was taken 112 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 24 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 112 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         136 :         if (!impl_-&gt;emitted_empty &amp;&amp; !impl_-&gt;emitted_any_row) {</span></span>
+<span id="L832"><span class="lineNum">     832</span>         [<span class="tlaGBC" title="Branch 0 was taken 135 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 139 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         274 :     if (impl_-&gt;done) {</span></span>
+<span id="L833"><span class="lineNum">     833</span>   [<span class="tlaGBC" title="Branch 0 was taken 111 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 24 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 111 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         135 :         if (!impl_-&gt;emitted_empty &amp;&amp; !impl_-&gt;emitted_any_row) {</span></span>
 <span id="L834"><span class="lineNum">     834</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             impl_-&gt;emitted_empty = true;</span></span>
 <span id="L835"><span class="lineNum">     835</span>                 :             :             Page page;</span>
 <span id="L836"><span class="lineNum">     836</span>                 :             :             page.bucket = &quot;sqlite&quot;;</span>
@@ -944,13 +944,13 @@
 <span id="L838"><span class="lineNum">     838</span>                 :<span class="tlaUNC">           0 :             ++stats_.pages_produced;</span></span>
 <span id="L839"><span class="lineNum">     839</span>                 :             :             return page;</span>
 <span id="L840"><span class="lineNum">     840</span>                 :<span class="tlaUNC">           0 :         }</span></span>
-<span id="L841"><span class="lineNum">     841</span>                 :<span class="tlaGNC tlaBgGNC">         136 :         stats_.finished = true;</span></span>
+<span id="L841"><span class="lineNum">     841</span>                 :<span class="tlaGNC tlaBgGNC">         135 :         stats_.finished = true;</span></span>
 <span id="L842"><span class="lineNum">     842</span>                 :             :         return std::nullopt;</span>
 <span id="L843"><span class="lineNum">     843</span>                 :             :     }</span>
 <span id="L844"><span class="lineNum">     844</span>                 :             : </span>
 <span id="L845"><span class="lineNum">     845</span>                 :<span class="tlaGNC">         139 :     PageChunk chunk = empty_page_chunk_for_columns(impl_-&gt;column_names);</span></span>
-<span id="L846"><span class="lineNum">     846</span>         [<span class="tlaGBC" title="Branch 0 was taken 136 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">         141 :     std::vector&lt;std::shared_ptr&lt;ObjectValue&gt;&gt; aggregate_rows;</span></span>
-<span id="L847"><span class="lineNum">     847</span>         [<span class="tlaGBC" title="Branch 0 was taken 136 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">         141 :     if (impl_-&gt;request.aggregate.has_value()) {</span></span>
+<span id="L846"><span class="lineNum">     846</span>         [<span class="tlaGBC" title="Branch 0 was taken 135 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">         140 :     std::vector&lt;std::shared_ptr&lt;ObjectValue&gt;&gt; aggregate_rows;</span></span>
+<span id="L847"><span class="lineNum">     847</span>         [<span class="tlaGBC" title="Branch 0 was taken 135 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">         140 :     if (impl_-&gt;request.aggregate.has_value()) {</span></span>
 <span id="L848"><span class="lineNum">     848</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :         aggregate_rows.reserve(rows_per_page_);</span></span>
 <span id="L849"><span class="lineNum">     849</span>                 :             :     }</span>
 <span id="L850"><span class="lineNum">     850</span>   [<span class="tlaGBC" title="Branch 0 was taken 274 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 274 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         276 :     while (chunk.row_count &lt; rows_per_page_ &amp;&amp; aggregate_rows.size() &lt; rows_per_page_) {</span></span>
@@ -969,7 +969,7 @@
 <span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L863"><span class="lineNum">     863</span>                 :             :             aggregate_rows.push_back(std::move(row));</span>
 <span id="L864"><span class="lineNum">     864</span>                 :             :         } else {</span>
-<span id="L865"><span class="lineNum">     865</span>         [<span class="tlaGBC" title="Branch 0 was taken 124 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         125 :             append_sqlite_stmt_to_page_chunk(impl_-&gt;stmt.get(), &amp;chunk);</span></span>
+<span id="L865"><span class="lineNum">     865</span>         [<span class="tlaGBC" title="Branch 0 was taken 125 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         125 :             append_sqlite_stmt_to_page_chunk(impl_-&gt;stmt.get(), &amp;chunk);</span></span>
 <span id="L866"><span class="lineNum">     866</span>                 :             :         }</span>
 <span id="L867"><span class="lineNum">     867</span>                 :             :     }</span>
 <span id="L868"><span class="lineNum">     868</span>                 :             : </span>
@@ -1008,31 +1008,31 @@
 <span id="L901"><span class="lineNum">     901</span>                 :             :     return page;</span>
 <span id="L902"><span class="lineNum">     902</span>                 :<span class="tlaGNC">         141 : }</span></span>
 <span id="L903"><span class="lineNum">     903</span>                 :             : </span>
-<span id="L904"><span class="lineNum">     904</span>                 :<span class="tlaGNC">         258 : ConnectorSplitStats SQLitePageSource::Stats() const { return stats_; }</span></span>
+<span id="L904"><span class="lineNum">     904</span>                 :<span class="tlaGNC">         260 : ConnectorSplitStats SQLitePageSource::Stats() const { return stats_; }</span></span>
 <span id="L905"><span class="lineNum">     905</span>                 :             : </span>
 <span id="L906"><span class="lineNum">     906</span>                 :<span class="tlaGNC">         258 : bool SQLitePageSource::Finished() const { return stats_.finished; }</span></span>
 <span id="L907"><span class="lineNum">     907</span>                 :             : </span>
-<span id="L908"><span class="lineNum">     908</span>                 :<span class="tlaGNC">         491 : SQLitePageSourceProvider::SQLitePageSourceProvider(size_t rows_per_page)</span></span>
-<span id="L909"><span class="lineNum">     909</span>                 :<span class="tlaGNC">         491 :     : rows_per_page_(std::max&lt;size_t&gt;(1, rows_per_page)) {}</span></span>
+<span id="L908"><span class="lineNum">     908</span>                 :<span class="tlaGNC">         490 : SQLitePageSourceProvider::SQLitePageSourceProvider(size_t rows_per_page)</span></span>
+<span id="L909"><span class="lineNum">     909</span>                 :<span class="tlaGNC">         490 :     : rows_per_page_(std::max&lt;size_t&gt;(1, rows_per_page)) {}</span></span>
 <span id="L910"><span class="lineNum">     910</span>                 :             : </span>
 <span id="L911"><span class="lineNum">     911</span>                 :<span class="tlaGNC">         140 : absl::StatusOr&lt;std::unique_ptr&lt;ConnectorPageSource&gt;&gt; SQLitePageSourceProvider::CreatePageSource(</span></span>
 <span id="L912"><span class="lineNum">     912</span>                 :             :     const ConnectorSplit&amp; split) const {</span>
 <span id="L913"><span class="lineNum">     913</span>                 :             :     auto page_source = std::make_unique&lt;SQLitePageSource&gt;(</span>
 <span id="L914"><span class="lineNum">     914</span>                 :<span class="tlaGNC">         140 :         split.table.dsn, split.table.table, split.request, rows_per_page_, split.rowid_lower,</span></span>
 <span id="L915"><span class="lineNum">     915</span>                 :<span class="tlaGNC">         140 :         split.rowid_upper, split.split_id);</span></span>
-<span id="L916"><span class="lineNum">     916</span>         [<span class="tlaGBC" title="Branch 0 was taken 139 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         138 :     auto status = page_source-&gt;Initialize();</span></span>
-<span id="L917"><span class="lineNum">     917</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 138 times"> + </span>]:<span class="tlaGNC">         139 :     if (!status.ok()) {</span></span>
+<span id="L916"><span class="lineNum">     916</span>         [<span class="tlaGBC" title="Branch 0 was taken 140 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         137 :     auto status = page_source-&gt;Initialize();</span></span>
+<span id="L917"><span class="lineNum">     917</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 139 times"> + </span>]:<span class="tlaGNC">         140 :     if (!status.ok()) {</span></span>
 <span id="L918"><span class="lineNum">     918</span>                 :             :         return status;</span>
 <span id="L919"><span class="lineNum">     919</span>                 :             :     }</span>
 <span id="L920"><span class="lineNum">     920</span>                 :             :     return page_source;</span>
 <span id="L921"><span class="lineNum">     921</span>                 :             : }</span>
 <span id="L922"><span class="lineNum">     922</span>                 :             : </span>
-<span id="L923"><span class="lineNum">     923</span>                 :<span class="tlaGNC">         489 : std::unique_ptr&lt;ConnectorRuntime&gt; MakeSQLiteConnectorRuntime(const SourceSpec&amp; spec) {</span></span>
-<span id="L924"><span class="lineNum">     924</span>                 :<span class="tlaGNC">         489 :     auto runtime = std::make_unique&lt;ConnectorRuntime&gt;();</span></span>
+<span id="L923"><span class="lineNum">     923</span>                 :<span class="tlaGNC">         488 : std::unique_ptr&lt;ConnectorRuntime&gt; MakeSQLiteConnectorRuntime(const SourceSpec&amp; spec) {</span></span>
+<span id="L924"><span class="lineNum">     924</span>                 :<span class="tlaGNC">         488 :     auto runtime = std::make_unique&lt;ConnectorRuntime&gt;();</span></span>
 <span id="L925"><span class="lineNum">     925</span>         [<span class="tlaGBC" title="Branch 0 was taken 489 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         489 :     runtime-&gt;metadata = std::make_unique&lt;SQLiteConnectorMetadata&gt;(spec);</span></span>
-<span id="L926"><span class="lineNum">     926</span>         [<span class="tlaGBC" title="Branch 0 was taken 487 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         488 :     runtime-&gt;split_manager = std::make_unique&lt;SQLiteSplitManager&gt;();</span></span>
-<span id="L927"><span class="lineNum">     927</span>         [<span class="tlaGBC" title="Branch 0 was taken 488 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         486 :     runtime-&gt;page_source_provider = std::make_unique&lt;SQLitePageSourceProvider&gt;();</span></span>
-<span id="L928"><span class="lineNum">     928</span>                 :<span class="tlaGNC">         488 :     return runtime;</span></span>
+<span id="L926"><span class="lineNum">     926</span>         [<span class="tlaGBC" title="Branch 0 was taken 487 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         489 :     runtime-&gt;split_manager = std::make_unique&lt;SQLiteSplitManager&gt;();</span></span>
+<span id="L927"><span class="lineNum">     927</span>         [<span class="tlaGBC" title="Branch 0 was taken 487 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         485 :     runtime-&gt;page_source_provider = std::make_unique&lt;SQLitePageSourceProvider&gt;();</span></span>
+<span id="L928"><span class="lineNum">     928</span>                 :<span class="tlaGNC">         486 :     return runtime;</span></span>
 <span id="L929"><span class="lineNum">     929</span>                 :<span class="tlaUNC tlaBgUNC">           0 : }</span></span>
 <span id="L930"><span class="lineNum">     930</span>                 :             : </span>
 <span id="L931"><span class="lineNum">     931</span>                 :             : } // namespace pl::flux::connector</span>
