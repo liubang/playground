@@ -606,6 +606,45 @@ TEST(FluxLanguageServerTest, GoToDefinitionAfterUtf8Text) {
     fclose(out_file);
 }
 
+// 场景: inline lambda 参数应跳到参数本身，而不是文档开头
+TEST(FluxLanguageServerTest, GoToDefinitionForInlineLambdaParameter) {
+    FILE* in_file = tmpfile();
+    FILE* out_file = tmpfile();
+    ASSERT_NE(in_file, nullptr);
+    ASSERT_NE(out_file, nullptr);
+
+    write_lsp_message(in_file, make_initialize_request(1));
+    write_lsp_message(in_file, make_initialized_notification());
+    write_lsp_message(
+        in_file,
+        make_did_open_notification("file:///lambda.flux",
+                                   "filter(fn: (r) => r.active == true)"));
+
+    std::string def_req =
+        R"({"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///lambda.flux"},"position":{"line":0,"character":18}}})";
+    write_lsp_message(in_file, def_req);
+    write_lsp_message(in_file, make_shutdown_request(3));
+    write_lsp_message(in_file, make_exit_notification());
+    rewind(in_file);
+
+    StdioTransport transport(in_file, out_file);
+    FluxLanguageServer server(std::move(transport));
+    server.run();
+
+    rewind(out_file);
+    read_lsp_response(out_file);
+    read_lsp_response(out_file);
+
+    auto def_resp = read_lsp_response(out_file);
+    ASSERT_FALSE(def_resp.empty());
+    expect_valid_json(def_resp);
+    EXPECT_NE(def_resp.find(R"("line":0,"character":12)"), std::string::npos) << def_resp;
+    EXPECT_EQ(def_resp.find(R"("line":0,"character":0)"), std::string::npos) << def_resp;
+
+    fclose(in_file);
+    fclose(out_file);
+}
+
 // 场景: textDocument/references 查找所有引用
 TEST(FluxLanguageServerTest, FindReferences) {
     FILE* in_file = tmpfile();
