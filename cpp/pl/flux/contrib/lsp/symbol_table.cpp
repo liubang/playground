@@ -49,6 +49,30 @@ Location make_location(const std::string& uri, const SourceLocation& sloc) {
     };
 }
 
+SourceLocation make_import_name_location(const ImportDeclaration& imp, const std::string& name) {
+    SourceLocation loc = imp.loc;
+    if (name.empty()) {
+        return loc;
+    }
+
+    uint32_t start_col = imp.loc.start.column;
+    if (imp.alias && !imp.alias->name.empty()) {
+        // import alias "path": alias starts right after "import ".
+        start_col += 7;
+    } else if (imp.path) {
+        // import "pkg/path": default package name is the last path segment inside the quotes.
+        const auto& path = imp.path->value;
+        const auto name_offset = path.size() >= name.size() ? path.size() - name.size() : 0;
+        start_col += 8 + static_cast<uint32_t>(name_offset);
+    }
+
+    loc.start.line = imp.loc.start.line;
+    loc.start.column = start_col;
+    loc.end.line = imp.loc.start.line;
+    loc.end.column = start_col + static_cast<uint32_t>(name.size());
+    return loc;
+}
+
 // Forward declarations for recursive traversal
 class SymbolCollector {
 public:
@@ -100,7 +124,7 @@ void SymbolCollector::visit_file(const File& file) {
             pkg_name = (slash != std::string::npos) ? path.substr(slash + 1) : path;
         }
         if (!pkg_name.empty()) {
-            add_definition(pkg_name, SymbolKind::Import, imp->loc);
+            add_definition(pkg_name, SymbolKind::Import, make_import_name_location(*imp, pkg_name));
             table_.imported_packages.push_back(imp->path->value);
         }
     }

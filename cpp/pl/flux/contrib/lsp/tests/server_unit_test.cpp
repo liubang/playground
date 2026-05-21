@@ -915,6 +915,45 @@ TEST(FluxLanguageServerTest, SemanticTokensFull) {
     fclose(out_file);
 }
 
+// 场景: import 的 namespace token 应落在包名上，而不是覆盖 import 关键字
+TEST(FluxLanguageServerTest, SemanticTokensImportUsesPackageNameRange) {
+    FILE* in_file = tmpfile();
+    FILE* out_file = tmpfile();
+    ASSERT_NE(in_file, nullptr);
+    ASSERT_NE(out_file, nullptr);
+
+    write_lsp_message(in_file, make_initialize_request(1));
+    write_lsp_message(in_file, make_initialized_notification());
+    write_lsp_message(in_file,
+                      make_did_open_notification("file:///import_tokens.flux",
+                                                 "import \"mysql\"\nmysql.from()"));
+
+    std::string st_req =
+        R"({"jsonrpc":"2.0","id":2,"method":"textDocument/semanticTokens/full","params":{"textDocument":{"uri":"file:///import_tokens.flux"}}})";
+    write_lsp_message(in_file, st_req);
+    write_lsp_message(in_file, make_shutdown_request(3));
+    write_lsp_message(in_file, make_exit_notification());
+    rewind(in_file);
+
+    StdioTransport transport(in_file, out_file);
+    FluxLanguageServer server(std::move(transport));
+    server.run();
+
+    rewind(out_file);
+    read_lsp_response(out_file);
+    read_lsp_response(out_file);
+
+    auto st_resp = read_lsp_response(out_file);
+    ASSERT_FALSE(st_resp.empty());
+    expect_valid_json(st_resp);
+    // First namespace token: line 0, character 8, length 5, type namespace(9).
+    EXPECT_NE(st_resp.find(R"("data":[0,8,5,9,)"), std::string::npos) << st_resp;
+    EXPECT_EQ(st_resp.find(R"("data":[0,0,5,9,)"), std::string::npos) << st_resp;
+
+    fclose(in_file);
+    fclose(out_file);
+}
+
 // 场景: textDocument/codeAction 返回代码操作
 TEST(FluxLanguageServerTest, CodeAction) {
     FILE* in_file = tmpfile();
