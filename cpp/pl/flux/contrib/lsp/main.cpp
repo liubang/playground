@@ -53,7 +53,7 @@ int parse_positive_int(std::string_view sv) {
 
 } // namespace
 
-int main(int argc, char* argv[]) noexcept {
+int main(int argc, char* argv[]) {
     pl::flux::lsp::ServerOptions opts;
 
     for (int i = 1; i < argc; ++i) {
@@ -72,14 +72,16 @@ int main(int argc, char* argv[]) noexcept {
             continue;
         }
         if (arg.starts_with("--max-line-width=")) {
-            int n = parse_positive_int(arg.substr(17));
+            arg.remove_prefix(17);
+            int n = parse_positive_int(arg);
             if (n > 0) {
                 opts.format.max_line_width = n;
             }
             continue;
         }
         if (arg.starts_with("--indent-width=")) {
-            int n = parse_positive_int(arg.substr(15));
+            arg.remove_prefix(15);
+            int n = parse_positive_int(arg);
             if (n > 0) {
                 opts.format.indent_width = n;
             }
