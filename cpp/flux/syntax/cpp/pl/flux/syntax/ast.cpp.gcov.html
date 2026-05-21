@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-21 23:01:22</td>
+            <td class="headerValue">2026-05-21 23:24:35</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">84.8&nbsp;%</td>
@@ -302,10 +302,10 @@
 <span id="L225"><span class="lineNum">     225</span>   [<span class="tlaGBC" title="Branch 0 was taken 46 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 46 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          46 :     return absl::StrFormat(&quot;%s: ( %s )&quot;, callee-&gt;string(), args);</span></span>
 <span id="L226"><span class="lineNum">     226</span>                 :             : }</span>
 <span id="L227"><span class="lineNum">     227</span>                 :             : </span>
-<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC">         166 : std::string PropertyKey::string() const {</span></span>
-<span id="L229"><span class="lineNum">     229</span>      [<span class="tlaGBC" title="Branch 0 was taken 161 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span>]:<span class="tlaGNC">         166 :     switch (type) {</span></span>
-<span id="L230"><span class="lineNum">     230</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 161 times"> + </span>]:<span class="tlaGNC">         161 :         case Type::Identifier:</span></span>
-<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">         161 :             return std::get&lt;std::unique_ptr&lt;Identifier&gt;&gt;(key)-&gt;string();</span></span>
+<span id="L228"><span class="lineNum">     228</span>                 :<span class="tlaGNC">         169 : std::string PropertyKey::string() const {</span></span>
+<span id="L229"><span class="lineNum">     229</span>      [<span class="tlaGBC" title="Branch 0 was taken 164 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span>]:<span class="tlaGNC">         169 :     switch (type) {</span></span>
+<span id="L230"><span class="lineNum">     230</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 164 times"> + </span>]:<span class="tlaGNC">         164 :         case Type::Identifier:</span></span>
+<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">         164 :             return std::get&lt;std::unique_ptr&lt;Identifier&gt;&gt;(key)-&gt;string();</span></span>
 <span id="L232"><span class="lineNum">     232</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">           5 :         case Type::StringLiteral:</span></span>
 <span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaGNC">           5 :             return std::get&lt;std::unique_ptr&lt;StringLit&gt;&gt;(key)-&gt;string();</span></span>
 <span id="L234"><span class="lineNum">     234</span>                 :             :     }</span>
@@ -528,7 +528,7 @@
 <span id="L442"><span class="lineNum">     442</span>                 :<span class="tlaGNC">         434 :     return ss.str();</span></span>
 <span id="L443"><span class="lineNum">     443</span>                 :<span class="tlaGNC">         434 : }</span></span>
 <span id="L444"><span class="lineNum">     444</span>                 :             : </span>
-<span id="L445"><span class="lineNum">     445</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaGNC">         398 : std::string Identifier::string() const { return name; }</span></span>
+<span id="L445"><span class="lineNum">     445</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaGNC">         401 : std::string Identifier::string() const { return name; }</span></span>
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span><span class="tlaUNC" title="Branch 6 was not executed"> # </span><span class="tlaUNC" title="Branch 7 was not executed"> # </span><span class="tlaUNC" title="Branch 8 was not executed"> # </span> 
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not executed"> # </span><span class="tlaUNC" title="Branch 10 was not executed"> # </span><span class="tlaUNC" title="Branch 11 was not executed"> # </span><span class="tlaUNC" title="Branch 12 was not executed"> # </span><span class="tlaUNC" title="Branch 13 was not executed"> # </span> 
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 14 was not executed"> # </span><span class="tlaUNC" title="Branch 15 was not executed"> # </span><span class="tlaUNC" title="Branch 16 was not executed"> # </span><span class="tlaUNC" title="Branch 17 was not executed"> # </span><span class="tlaUNC" title="Branch 18 was not executed"> # </span> 
