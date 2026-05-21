@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-21 23:24:35</td>
+            <td class="headerValue">2026-05-22 00:08:34</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -108,8 +108,8 @@
 <span id="L37"><span class="lineNum">      37</span>                 :             : </span>
 <span id="L38"><span class="lineNum">      38</span>                 :             : class Parser {</span>
 <span id="L39"><span class="lineNum">      39</span>                 :             : public:</span>
-<span id="L40"><span class="lineNum">      40</span>                 :<span class="tlaGNC">         412 :     Parser(const std::string&amp; input)</span></span>
-<span id="L41"><span class="lineNum">      41</span>         [<span class="tlaGBC" title="Branch 0 was taken 412 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         412 :         : scanner_(std::make_unique&lt;Scanner&gt;(input.data(), input.size())), source_(input) {}</span></span>
+<span id="L40"><span class="lineNum">      40</span>                 :<span class="tlaGNC">         413 :     Parser(const std::string&amp; input)</span></span>
+<span id="L41"><span class="lineNum">      41</span>         [<span class="tlaGBC" title="Branch 0 was taken 413 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         413 :         : scanner_(std::make_unique&lt;Scanner&gt;(input.data(), input.size())), source_(input) {}</span></span>
 <span id="L42"><span class="lineNum">      42</span>                 :             : </span>
 <span id="L43"><span class="lineNum">      43</span>                 :             :     // Parses a file of Flux source code, returning a Package</span>
 <span id="L44"><span class="lineNum">      44</span>                 :             :     std::unique_ptr&lt;Package&gt; parse_single_package(const std::string&amp; pkgpath,</span>
@@ -143,7 +143,7 @@
 <span id="L72"><span class="lineNum">      72</span>                 :             : </span>
 <span id="L73"><span class="lineNum">      73</span>                 :             :     // expect will check if the next token is `exp` and error if it is not in either case the token</span>
 <span id="L74"><span class="lineNum">      74</span>                 :             :     // is consumed and returned</span>
-<span id="L75"><span class="lineNum">      75</span>         [<span class="tlaGBC" title="Branch 0 was taken 11741 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       23482 :     std::unique_ptr&lt;Token&gt; expect(TokenType exp) { return expect_one_of(std::set&lt;TokenType&gt;{exp}); }</span></span>
+<span id="L75"><span class="lineNum">      75</span>         [<span class="tlaGBC" title="Branch 0 was taken 11745 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       23490 :     std::unique_ptr&lt;Token&gt; expect(TokenType exp) { return expect_one_of(std::set&lt;TokenType&gt;{exp}); }</span></span>
 <span id="L76"><span class="lineNum">      76</span>                 :             :     std::unique_ptr&lt;Token&gt; expect_one_of(const std::set&lt;TokenType&gt;&amp; exp);</span>
 <span id="L77"><span class="lineNum">      77</span>                 :             :     // If `exp` is not the next token this will record an error and continue without consuming the</span>
 <span id="L78"><span class="lineNum">      78</span>                 :             :     // token so that the next step in the parse may use it</span>
@@ -244,106 +244,107 @@
 <span id="L173"><span class="lineNum">     173</span>                 :             :         const std::vector&lt;std::shared_ptr&lt;Property&gt;&gt;&amp; params);</span>
 <span id="L174"><span class="lineNum">     174</span>                 :             : </span>
 <span id="L175"><span class="lineNum">     175</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_paren_ident_expression(std::unique_ptr&lt;Token&gt; lparen,</span>
-<span id="L176"><span class="lineNum">     176</span>                 :             :                                                              std::unique_ptr&lt;Identifier&gt; key);</span>
-<span id="L177"><span class="lineNum">     177</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_expression_while_more(std::unique_ptr&lt;Expression&gt; init,</span>
-<span id="L178"><span class="lineNum">     178</span>                 :             :                                                             const std::set&lt;TokenType&gt;&amp; stop_tokens);</span>
-<span id="L179"><span class="lineNum">     179</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_property_value();</span>
-<span id="L180"><span class="lineNum">     180</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_array_or_dict(std::unique_ptr&lt;Token&gt; start);</span>
-<span id="L181"><span class="lineNum">     181</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_array_items_rest(std::unique_ptr&lt;Token&gt; start,</span>
-<span id="L182"><span class="lineNum">     182</span>                 :             :                                                        std::unique_ptr&lt;Expression&gt; init);</span>
-<span id="L183"><span class="lineNum">     183</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_dict_items_rest(std::unique_ptr&lt;Token&gt; start,</span>
-<span id="L184"><span class="lineNum">     184</span>                 :             :                                                       std::unique_ptr&lt;Expression&gt; key,</span>
-<span id="L185"><span class="lineNum">     185</span>                 :             :                                                       std::unique_ptr&lt;Expression&gt; val);</span>
-<span id="L186"><span class="lineNum">     186</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_additive_expression();</span>
-<span id="L187"><span class="lineNum">     187</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_additive_expression_suffix(std::unique_ptr&lt;Expression&gt; expr);</span>
-<span id="L188"><span class="lineNum">     188</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_comparison_expression_suffix(</span>
-<span id="L189"><span class="lineNum">     189</span>                 :             :         std::unique_ptr&lt;Expression&gt; expr);</span>
-<span id="L190"><span class="lineNum">     190</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_logical_and_expression();</span>
-<span id="L191"><span class="lineNum">     191</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_logical_or_expression_suffix(</span>
-<span id="L192"><span class="lineNum">     192</span>                 :             :         std::unique_ptr&lt;Expression&gt; expr);</span>
-<span id="L193"><span class="lineNum">     193</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_logical_or_expression();</span>
-<span id="L194"><span class="lineNum">     194</span>                 :             :     std::unique_ptr&lt;Expression&gt; create_bad_expression(std::unique_ptr&lt;Token&gt; tok);</span>
-<span id="L195"><span class="lineNum">     195</span>                 :             :     std::unique_ptr&lt;Expression&gt; create_bad_expression_with_text(std::unique_ptr&lt;Token&gt; tok,</span>
-<span id="L196"><span class="lineNum">     196</span>                 :             :                                                                 std::string_view text);</span>
-<span id="L197"><span class="lineNum">     197</span>                 :             :     std::unique_ptr&lt;MonoType&gt; create_placeholder_monotype(std::string_view name);</span>
-<span id="L198"><span class="lineNum">     198</span>                 :             :     std::unique_ptr&lt;Property&gt; create_bad_property(std::string_view key,</span>
-<span id="L199"><span class="lineNum">     199</span>                 :             :                                                   std::unique_ptr&lt;Expression&gt; value);</span>
-<span id="L200"><span class="lineNum">     200</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_conditional_expression();</span>
-<span id="L201"><span class="lineNum">     201</span>                 :             :     std::unique_ptr&lt;Expression&gt; create_placeholder_expression(const Token* tok);</span>
-<span id="L202"><span class="lineNum">     202</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_logical_and_expression_suffix(</span>
-<span id="L203"><span class="lineNum">     203</span>                 :             :         std::unique_ptr&lt;Expression&gt; expr);</span>
-<span id="L204"><span class="lineNum">     204</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_logical_unary_expression();</span>
-<span id="L205"><span class="lineNum">     205</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_comparison_expression();</span>
-<span id="L206"><span class="lineNum">     206</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_assign_statement();</span>
-<span id="L207"><span class="lineNum">     207</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_dot_expression(std::unique_ptr&lt;Expression&gt; expr);</span>
-<span id="L208"><span class="lineNum">     208</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_call_expression(std::unique_ptr&lt;Expression&gt; expr);</span>
-<span id="L209"><span class="lineNum">     209</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_index_expression(std::unique_ptr&lt;Expression&gt; expr);</span>
-<span id="L210"><span class="lineNum">     210</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_postfix_operator(std::unique_ptr&lt;Expression&gt; expr, bool* ret);</span>
-<span id="L211"><span class="lineNum">     211</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_postfix_operator_suffix(std::unique_ptr&lt;Expression&gt; expr);</span>
-<span id="L212"><span class="lineNum">     212</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_postfix_expression();</span>
-<span id="L213"><span class="lineNum">     213</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_unary_expression();</span>
-<span id="L214"><span class="lineNum">     214</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_pipe_expression();</span>
-<span id="L215"><span class="lineNum">     215</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_exponent_expression();</span>
-<span id="L216"><span class="lineNum">     216</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_multiplicative_expression();</span>
-<span id="L217"><span class="lineNum">     217</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_pipe_expression_suffix(std::unique_ptr&lt;Expression&gt; expr);</span>
-<span id="L218"><span class="lineNum">     218</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_exponent_expression_suffix(std::unique_ptr&lt;Expression&gt; expr);</span>
-<span id="L219"><span class="lineNum">     219</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_multiplicative_expression_suffix(</span>
-<span id="L220"><span class="lineNum">     220</span>                 :             :         std::unique_ptr&lt;Expression&gt; expr);</span>
-<span id="L221"><span class="lineNum">     221</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_expression_suffix(std::unique_ptr&lt;Expression&gt; expr);</span>
-<span id="L222"><span class="lineNum">     222</span>                 :             : </span>
-<span id="L223"><span class="lineNum">     223</span>                 :             :     //// assign</span>
-<span id="L224"><span class="lineNum">     224</span>                 :             :     std::unique_ptr&lt;Assignment&gt; parse_option_assignment_suffix(std::unique_ptr&lt;Identifier&gt; id);</span>
-<span id="L225"><span class="lineNum">     225</span>                 :             : </span>
-<span id="L226"><span class="lineNum">     226</span>                 :             :     //// statement</span>
-<span id="L227"><span class="lineNum">     227</span>                 :             :     std::unique_ptr&lt;Statement&gt; parse_expression_statement();</span>
-<span id="L228"><span class="lineNum">     228</span>                 :             :     std::unique_ptr&lt;Statement&gt; parse_ident_statement();</span>
-<span id="L229"><span class="lineNum">     229</span>                 :             :     std::unique_ptr&lt;Statement&gt; parse_option_assignment();</span>
-<span id="L230"><span class="lineNum">     230</span>                 :             :     std::unique_ptr&lt;Statement&gt; parse_builtin_statement();</span>
-<span id="L231"><span class="lineNum">     231</span>                 :             :     std::unique_ptr&lt;Statement&gt; parse_testcase_statement();</span>
-<span id="L232"><span class="lineNum">     232</span>                 :             :     std::unique_ptr&lt;Statement&gt; parse_return_statement();</span>
-<span id="L233"><span class="lineNum">     233</span>                 :             :     std::unique_ptr&lt;Statement&gt; parse_statement_inner(</span>
-<span id="L234"><span class="lineNum">     234</span>                 :             :         const std::optional&lt;std::vector&lt;std::shared_ptr&lt;Attribute&gt;&gt;&gt;&amp; attributes);</span>
-<span id="L235"><span class="lineNum">     235</span>                 :             :     std::unique_ptr&lt;Statement&gt; parse_statement(</span>
-<span id="L236"><span class="lineNum">     236</span>                 :             :         const std::optional&lt;std::vector&lt;std::shared_ptr&lt;Attribute&gt;&gt;&gt;&amp; attributes);</span>
-<span id="L237"><span class="lineNum">     237</span>                 :             :     std::vector&lt;std::shared_ptr&lt;Statement&gt;&gt; parse_statement_list(</span>
-<span id="L238"><span class="lineNum">     238</span>                 :             :         const std::optional&lt;std::vector&lt;std::shared_ptr&lt;Attribute&gt;&gt;&gt;&amp; attributes);</span>
-<span id="L239"><span class="lineNum">     239</span>                 :             : </span>
-<span id="L240"><span class="lineNum">     240</span>                 :             :     //// type</span>
-<span id="L241"><span class="lineNum">     241</span>                 :             :     std::unique_ptr&lt;MonoType&gt; parse_monotype();</span>
-<span id="L242"><span class="lineNum">     242</span>                 :             :     std::unique_ptr&lt;TypeExpression&gt; parse_type_expression();</span>
-<span id="L243"><span class="lineNum">     243</span>                 :             :     std::vector&lt;std::shared_ptr&lt;TypeConstraint&gt;&gt; parse_constraints();</span>
-<span id="L244"><span class="lineNum">     244</span>                 :             :     std::unique_ptr&lt;TypeConstraint&gt; parse_constraint();</span>
-<span id="L245"><span class="lineNum">     245</span>                 :             :     std::unique_ptr&lt;MonoType&gt; parse_record_type();</span>
-<span id="L246"><span class="lineNum">     246</span>                 :             :     std::unique_ptr&lt;MonoType&gt; parse_function_type();</span>
-<span id="L247"><span class="lineNum">     247</span>                 :             :     std::unique_ptr&lt;MonoType&gt; parse_dynamic_type();</span>
-<span id="L248"><span class="lineNum">     248</span>                 :             :     std::unique_ptr&lt;MonoType&gt; parse_basic_type();</span>
-<span id="L249"><span class="lineNum">     249</span>                 :             :     std::unique_ptr&lt;MonoType&gt; parse_tvar();</span>
-<span id="L250"><span class="lineNum">     250</span>                 :             : </span>
-<span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaGNC">        8224 :     template &lt;typename T, typename Fn&gt; std::optional&lt;T&gt; depth_guard(Fn&amp;&amp; fn) {</span></span>
-<span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC">        8224 :         ++depth_;</span></span>
-<span id="L253"><span class="lineNum">     253</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 8224 times"> + </span>]:<span class="tlaGNC">        8224 :         if (depth_ &gt; MAX_DEPTH) {</span></span>
-<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             errs_.emplace_back(&quot;Program is nested too deep&quot;);</span></span>
-<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaUNC">           0 :             return std::nullopt;</span></span>
-<span id="L256"><span class="lineNum">     256</span>                 :             :         }</span>
-<span id="L257"><span class="lineNum">     257</span>                 :             :         T ret = std::forward&lt;Fn&gt;(fn)();</span>
-<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC tlaBgGNC">        8224 :         --depth_;</span></span>
-<span id="L259"><span class="lineNum">     259</span>                 :             :         return std::move(ret);</span>
-<span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaGNC">        8224 :     }</span></span>
-<span id="L261"><span class="lineNum">     261</span>                 :             : </span>
-<span id="L262"><span class="lineNum">     262</span>                 :             : private:</span>
-<span id="L263"><span class="lineNum">     263</span>                 :             :     void mark_consumed(const Token&amp; token);</span>
-<span id="L264"><span class="lineNum">     264</span>                 :             :     std::unique_ptr&lt;Scanner&gt; scanner_;</span>
-<span id="L265"><span class="lineNum">     265</span>                 :             :     std::unique_ptr&lt;Token&gt; token_;</span>
-<span id="L266"><span class="lineNum">     266</span>                 :             :     std::unique_ptr&lt;Token&gt; next_token_;</span>
-<span id="L267"><span class="lineNum">     267</span>                 :             :     SourceLocation last_consumed_loc_;</span>
-<span id="L268"><span class="lineNum">     268</span>                 :             :     std::vector&lt;std::string&gt; errs_;</span>
-<span id="L269"><span class="lineNum">     269</span>                 :             :     std::map&lt;TokenType, int32_t&gt; blocks_;</span>
-<span id="L270"><span class="lineNum">     270</span>                 :             :     std::string source_;</span>
-<span id="L271"><span class="lineNum">     271</span>                 :             :     std::string fname_;</span>
-<span id="L272"><span class="lineNum">     272</span>                 :             :     uint32_t depth_{0};</span>
-<span id="L273"><span class="lineNum">     273</span>                 :             : };</span>
-<span id="L274"><span class="lineNum">     274</span>                 :             : </span>
-<span id="L275"><span class="lineNum">     275</span>                 :             : } // namespace pl::flux</span>
+<span id="L176"><span class="lineNum">     176</span>                 :             :                                                              std::unique_ptr&lt;Identifier&gt; key,</span>
+<span id="L177"><span class="lineNum">     177</span>                 :             :                                                              SourceLocation key_loc);</span>
+<span id="L178"><span class="lineNum">     178</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_expression_while_more(std::unique_ptr&lt;Expression&gt; init,</span>
+<span id="L179"><span class="lineNum">     179</span>                 :             :                                                             const std::set&lt;TokenType&gt;&amp; stop_tokens);</span>
+<span id="L180"><span class="lineNum">     180</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_property_value();</span>
+<span id="L181"><span class="lineNum">     181</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_array_or_dict(std::unique_ptr&lt;Token&gt; start);</span>
+<span id="L182"><span class="lineNum">     182</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_array_items_rest(std::unique_ptr&lt;Token&gt; start,</span>
+<span id="L183"><span class="lineNum">     183</span>                 :             :                                                        std::unique_ptr&lt;Expression&gt; init);</span>
+<span id="L184"><span class="lineNum">     184</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_dict_items_rest(std::unique_ptr&lt;Token&gt; start,</span>
+<span id="L185"><span class="lineNum">     185</span>                 :             :                                                       std::unique_ptr&lt;Expression&gt; key,</span>
+<span id="L186"><span class="lineNum">     186</span>                 :             :                                                       std::unique_ptr&lt;Expression&gt; val);</span>
+<span id="L187"><span class="lineNum">     187</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_additive_expression();</span>
+<span id="L188"><span class="lineNum">     188</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_additive_expression_suffix(std::unique_ptr&lt;Expression&gt; expr);</span>
+<span id="L189"><span class="lineNum">     189</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_comparison_expression_suffix(</span>
+<span id="L190"><span class="lineNum">     190</span>                 :             :         std::unique_ptr&lt;Expression&gt; expr);</span>
+<span id="L191"><span class="lineNum">     191</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_logical_and_expression();</span>
+<span id="L192"><span class="lineNum">     192</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_logical_or_expression_suffix(</span>
+<span id="L193"><span class="lineNum">     193</span>                 :             :         std::unique_ptr&lt;Expression&gt; expr);</span>
+<span id="L194"><span class="lineNum">     194</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_logical_or_expression();</span>
+<span id="L195"><span class="lineNum">     195</span>                 :             :     std::unique_ptr&lt;Expression&gt; create_bad_expression(std::unique_ptr&lt;Token&gt; tok);</span>
+<span id="L196"><span class="lineNum">     196</span>                 :             :     std::unique_ptr&lt;Expression&gt; create_bad_expression_with_text(std::unique_ptr&lt;Token&gt; tok,</span>
+<span id="L197"><span class="lineNum">     197</span>                 :             :                                                                 std::string_view text);</span>
+<span id="L198"><span class="lineNum">     198</span>                 :             :     std::unique_ptr&lt;MonoType&gt; create_placeholder_monotype(std::string_view name);</span>
+<span id="L199"><span class="lineNum">     199</span>                 :             :     std::unique_ptr&lt;Property&gt; create_bad_property(std::string_view key,</span>
+<span id="L200"><span class="lineNum">     200</span>                 :             :                                                   std::unique_ptr&lt;Expression&gt; value);</span>
+<span id="L201"><span class="lineNum">     201</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_conditional_expression();</span>
+<span id="L202"><span class="lineNum">     202</span>                 :             :     std::unique_ptr&lt;Expression&gt; create_placeholder_expression(const Token* tok);</span>
+<span id="L203"><span class="lineNum">     203</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_logical_and_expression_suffix(</span>
+<span id="L204"><span class="lineNum">     204</span>                 :             :         std::unique_ptr&lt;Expression&gt; expr);</span>
+<span id="L205"><span class="lineNum">     205</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_logical_unary_expression();</span>
+<span id="L206"><span class="lineNum">     206</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_comparison_expression();</span>
+<span id="L207"><span class="lineNum">     207</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_assign_statement();</span>
+<span id="L208"><span class="lineNum">     208</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_dot_expression(std::unique_ptr&lt;Expression&gt; expr);</span>
+<span id="L209"><span class="lineNum">     209</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_call_expression(std::unique_ptr&lt;Expression&gt; expr);</span>
+<span id="L210"><span class="lineNum">     210</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_index_expression(std::unique_ptr&lt;Expression&gt; expr);</span>
+<span id="L211"><span class="lineNum">     211</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_postfix_operator(std::unique_ptr&lt;Expression&gt; expr, bool* ret);</span>
+<span id="L212"><span class="lineNum">     212</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_postfix_operator_suffix(std::unique_ptr&lt;Expression&gt; expr);</span>
+<span id="L213"><span class="lineNum">     213</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_postfix_expression();</span>
+<span id="L214"><span class="lineNum">     214</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_unary_expression();</span>
+<span id="L215"><span class="lineNum">     215</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_pipe_expression();</span>
+<span id="L216"><span class="lineNum">     216</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_exponent_expression();</span>
+<span id="L217"><span class="lineNum">     217</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_multiplicative_expression();</span>
+<span id="L218"><span class="lineNum">     218</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_pipe_expression_suffix(std::unique_ptr&lt;Expression&gt; expr);</span>
+<span id="L219"><span class="lineNum">     219</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_exponent_expression_suffix(std::unique_ptr&lt;Expression&gt; expr);</span>
+<span id="L220"><span class="lineNum">     220</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_multiplicative_expression_suffix(</span>
+<span id="L221"><span class="lineNum">     221</span>                 :             :         std::unique_ptr&lt;Expression&gt; expr);</span>
+<span id="L222"><span class="lineNum">     222</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_expression_suffix(std::unique_ptr&lt;Expression&gt; expr);</span>
+<span id="L223"><span class="lineNum">     223</span>                 :             : </span>
+<span id="L224"><span class="lineNum">     224</span>                 :             :     //// assign</span>
+<span id="L225"><span class="lineNum">     225</span>                 :             :     std::unique_ptr&lt;Assignment&gt; parse_option_assignment_suffix(std::unique_ptr&lt;Identifier&gt; id);</span>
+<span id="L226"><span class="lineNum">     226</span>                 :             : </span>
+<span id="L227"><span class="lineNum">     227</span>                 :             :     //// statement</span>
+<span id="L228"><span class="lineNum">     228</span>                 :             :     std::unique_ptr&lt;Statement&gt; parse_expression_statement();</span>
+<span id="L229"><span class="lineNum">     229</span>                 :             :     std::unique_ptr&lt;Statement&gt; parse_ident_statement();</span>
+<span id="L230"><span class="lineNum">     230</span>                 :             :     std::unique_ptr&lt;Statement&gt; parse_option_assignment();</span>
+<span id="L231"><span class="lineNum">     231</span>                 :             :     std::unique_ptr&lt;Statement&gt; parse_builtin_statement();</span>
+<span id="L232"><span class="lineNum">     232</span>                 :             :     std::unique_ptr&lt;Statement&gt; parse_testcase_statement();</span>
+<span id="L233"><span class="lineNum">     233</span>                 :             :     std::unique_ptr&lt;Statement&gt; parse_return_statement();</span>
+<span id="L234"><span class="lineNum">     234</span>                 :             :     std::unique_ptr&lt;Statement&gt; parse_statement_inner(</span>
+<span id="L235"><span class="lineNum">     235</span>                 :             :         const std::optional&lt;std::vector&lt;std::shared_ptr&lt;Attribute&gt;&gt;&gt;&amp; attributes);</span>
+<span id="L236"><span class="lineNum">     236</span>                 :             :     std::unique_ptr&lt;Statement&gt; parse_statement(</span>
+<span id="L237"><span class="lineNum">     237</span>                 :             :         const std::optional&lt;std::vector&lt;std::shared_ptr&lt;Attribute&gt;&gt;&gt;&amp; attributes);</span>
+<span id="L238"><span class="lineNum">     238</span>                 :             :     std::vector&lt;std::shared_ptr&lt;Statement&gt;&gt; parse_statement_list(</span>
+<span id="L239"><span class="lineNum">     239</span>                 :             :         const std::optional&lt;std::vector&lt;std::shared_ptr&lt;Attribute&gt;&gt;&gt;&amp; attributes);</span>
+<span id="L240"><span class="lineNum">     240</span>                 :             : </span>
+<span id="L241"><span class="lineNum">     241</span>                 :             :     //// type</span>
+<span id="L242"><span class="lineNum">     242</span>                 :             :     std::unique_ptr&lt;MonoType&gt; parse_monotype();</span>
+<span id="L243"><span class="lineNum">     243</span>                 :             :     std::unique_ptr&lt;TypeExpression&gt; parse_type_expression();</span>
+<span id="L244"><span class="lineNum">     244</span>                 :             :     std::vector&lt;std::shared_ptr&lt;TypeConstraint&gt;&gt; parse_constraints();</span>
+<span id="L245"><span class="lineNum">     245</span>                 :             :     std::unique_ptr&lt;TypeConstraint&gt; parse_constraint();</span>
+<span id="L246"><span class="lineNum">     246</span>                 :             :     std::unique_ptr&lt;MonoType&gt; parse_record_type();</span>
+<span id="L247"><span class="lineNum">     247</span>                 :             :     std::unique_ptr&lt;MonoType&gt; parse_function_type();</span>
+<span id="L248"><span class="lineNum">     248</span>                 :             :     std::unique_ptr&lt;MonoType&gt; parse_dynamic_type();</span>
+<span id="L249"><span class="lineNum">     249</span>                 :             :     std::unique_ptr&lt;MonoType&gt; parse_basic_type();</span>
+<span id="L250"><span class="lineNum">     250</span>                 :             :     std::unique_ptr&lt;MonoType&gt; parse_tvar();</span>
+<span id="L251"><span class="lineNum">     251</span>                 :             : </span>
+<span id="L252"><span class="lineNum">     252</span>                 :<span class="tlaGNC">        8227 :     template &lt;typename T, typename Fn&gt; std::optional&lt;T&gt; depth_guard(Fn&amp;&amp; fn) {</span></span>
+<span id="L253"><span class="lineNum">     253</span>                 :<span class="tlaGNC">        8227 :         ++depth_;</span></span>
+<span id="L254"><span class="lineNum">     254</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 8227 times"> + </span>]:<span class="tlaGNC">        8227 :         if (depth_ &gt; MAX_DEPTH) {</span></span>
+<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             errs_.emplace_back(&quot;Program is nested too deep&quot;);</span></span>
+<span id="L256"><span class="lineNum">     256</span>                 :<span class="tlaUNC">           0 :             return std::nullopt;</span></span>
+<span id="L257"><span class="lineNum">     257</span>                 :             :         }</span>
+<span id="L258"><span class="lineNum">     258</span>                 :             :         T ret = std::forward&lt;Fn&gt;(fn)();</span>
+<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC tlaBgGNC">        8227 :         --depth_;</span></span>
+<span id="L260"><span class="lineNum">     260</span>                 :             :         return std::move(ret);</span>
+<span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaGNC">        8227 :     }</span></span>
+<span id="L262"><span class="lineNum">     262</span>                 :             : </span>
+<span id="L263"><span class="lineNum">     263</span>                 :             : private:</span>
+<span id="L264"><span class="lineNum">     264</span>                 :             :     void mark_consumed(const Token&amp; token);</span>
+<span id="L265"><span class="lineNum">     265</span>                 :             :     std::unique_ptr&lt;Scanner&gt; scanner_;</span>
+<span id="L266"><span class="lineNum">     266</span>                 :             :     std::unique_ptr&lt;Token&gt; token_;</span>
+<span id="L267"><span class="lineNum">     267</span>                 :             :     std::unique_ptr&lt;Token&gt; next_token_;</span>
+<span id="L268"><span class="lineNum">     268</span>                 :             :     SourceLocation last_consumed_loc_;</span>
+<span id="L269"><span class="lineNum">     269</span>                 :             :     std::vector&lt;std::string&gt; errs_;</span>
+<span id="L270"><span class="lineNum">     270</span>                 :             :     std::map&lt;TokenType, int32_t&gt; blocks_;</span>
+<span id="L271"><span class="lineNum">     271</span>                 :             :     std::string source_;</span>
+<span id="L272"><span class="lineNum">     272</span>                 :             :     std::string fname_;</span>
+<span id="L273"><span class="lineNum">     273</span>                 :             :     uint32_t depth_{0};</span>
+<span id="L274"><span class="lineNum">     274</span>                 :             : };</span>
+<span id="L275"><span class="lineNum">     275</span>                 :             : </span>
+<span id="L276"><span class="lineNum">     276</span>                 :             : } // namespace pl::flux</span>
         </pre>
               </td>
             </tr>
