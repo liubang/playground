@@ -397,176 +397,6 @@ const std::vector<std::string>& flux_keywords() {
     return kws;
 }
 
-// ============================================================
-// Symbol extraction from AST (for completion & documentSymbol)
-// ============================================================
-
-struct SymbolInfo {
-    std::string name;
-    int kind;        // LSP SymbolKind
-    uint32_t sl, sc; // start line/col (1-based from AST)
-    uint32_t el, ec; // end line/col
-    bool is_function;
-};
-
-// Extract top-level symbols from a parsed File AST.
-std::vector<SymbolInfo> extract_symbols(const File& file) {
-    std::vector<SymbolInfo> symbols;
-
-    for (const auto& stmt : file.body) {
-        switch (stmt->type) {
-            case Statement::Type::VariableAssignment: {
-                const auto& va = *std::get<std::unique_ptr<VariableAssgn>>(stmt->stmt);
-                if (!va.id) {
-                    break;
-                }
-                bool is_func = va.init && va.init->type == Expression::Type::FunctionExpr;
-                symbols.push_back({
-                    .name = va.id->name,
-                    .kind = is_func ? 12 : 13, // Function=12, Variable=13
-                    .sl = stmt->loc.start.line,
-                    .sc = stmt->loc.start.column,
-                    .el = stmt->loc.end.line,
-                    .ec = stmt->loc.end.column,
-                    .is_function = is_func,
-                });
-                break;
-            }
-            case Statement::Type::OptionStatement: {
-                const auto& opt = *std::get<std::unique_ptr<OptionStmt>>(stmt->stmt);
-                if (!opt.assignment) {
-                    break;
-                }
-                if (opt.assignment->type == Assignment::Type::VariableAssignment) {
-                    const auto& va =
-                        *std::get<std::unique_ptr<VariableAssgn>>(opt.assignment->value);
-                    if (va.id) {
-                        symbols.push_back({
-                            .name = "option " + va.id->name,
-                            .kind = 13,
-                            .sl = stmt->loc.start.line,
-                            .sc = stmt->loc.start.column,
-                            .el = stmt->loc.end.line,
-                            .ec = stmt->loc.end.column,
-                            .is_function = false,
-                        });
-                    }
-                }
-                break;
-            }
-            case Statement::Type::BuiltinStatement: {
-                const auto& bi = *std::get<std::unique_ptr<BuiltinStmt>>(stmt->stmt);
-                if (bi.id) {
-                    symbols.push_back({
-                        .name = bi.id->name,
-                        .kind = 12,
-                        .sl = stmt->loc.start.line,
-                        .sc = stmt->loc.start.column,
-                        .el = stmt->loc.end.line,
-                        .ec = stmt->loc.end.column,
-                        .is_function = true,
-                    });
-                }
-                break;
-            }
-            case Statement::Type::TestCaseStatement: {
-                const auto& tc = *std::get<std::unique_ptr<TestCaseStmt>>(stmt->stmt);
-                if (tc.id) {
-                    symbols.push_back({
-                        .name = tc.id->name,
-                        .kind = 12,
-                        .sl = stmt->loc.start.line,
-                        .sc = stmt->loc.start.column,
-                        .el = stmt->loc.end.line,
-                        .ec = stmt->loc.end.column,
-                        .is_function = true,
-                    });
-                }
-                break;
-            }
-            default:
-                break;
-        }
-    }
-    return symbols;
-}
-
-// ============================================================
-// Folding range extraction from AST
-// ============================================================
-
-struct FoldRange {
-    uint32_t start_line;
-    uint32_t end_line;
-    std::string kind; // "region" or "imports"
-};
-
-void collect_folding_expr(const Expression& expr, std::vector<FoldRange>& ranges);
-
-void collect_folding_stmt(const Statement& stmt, std::vector<FoldRange>& ranges) {
-    // The statement itself might span multiple lines
-    if (stmt.loc.start.line > 0 && stmt.loc.end.line > stmt.loc.start.line) {
-        ranges.push_back({stmt.loc.start.line, stmt.loc.end.line, "region"});
-    }
-
-    // Recurse into function bodies
-    if (stmt.type == Statement::Type::VariableAssignment) {
-        const auto& va = *std::get<std::unique_ptr<VariableAssgn>>(stmt.stmt);
-        if (va.init) {
-            collect_folding_expr(*va.init, ranges);
-        }
-    }
-}
-
-void collect_folding_expr(const Expression& expr, std::vector<FoldRange>& ranges) {
-    switch (expr.type) {
-        case Expression::Type::FunctionExpr: {
-            const auto& fn = *std::get<std::unique_ptr<FunctionExpr>>(expr.expr);
-            if (fn.body && fn.body->type == FunctionBody::Type::Block) {
-                const auto& block = *std::get<std::unique_ptr<Block>>(fn.body->body);
-                if (block.loc.start.line > 0 && block.loc.end.line > block.loc.start.line) {
-                    ranges.push_back({block.loc.start.line, block.loc.end.line, "region"});
-                }
-            }
-            break;
-        }
-        case Expression::Type::ObjectExpr: {
-            if (expr.loc.start.line > 0 && expr.loc.end.line > expr.loc.start.line) {
-                ranges.push_back({expr.loc.start.line, expr.loc.end.line, "region"});
-            }
-            break;
-        }
-        case Expression::Type::ArrayExpr: {
-            if (expr.loc.start.line > 0 && expr.loc.end.line > expr.loc.start.line) {
-                ranges.push_back({expr.loc.start.line, expr.loc.end.line, "region"});
-            }
-            break;
-        }
-        default:
-            break;
-    }
-}
-
-std::vector<FoldRange> extract_folding_ranges(const File& file) {
-    std::vector<FoldRange> ranges;
-
-    // Imports block
-    if (file.imports.size() > 1) {
-        uint32_t first_line = file.imports.front()->loc.start.line;
-        uint32_t last_line = file.imports.back()->loc.end.line;
-        if (last_line > first_line) {
-            ranges.push_back({first_line, last_line, "imports"});
-        }
-    }
-
-    // Body statements
-    for (const auto& stmt : file.body) {
-        collect_folding_stmt(*stmt, ranges);
-    }
-
-    return ranges;
-}
-
 } // namespace
 
 // ============================================================
@@ -1262,20 +1092,17 @@ void FluxLanguageServer::handle_folding_range(const JsonRpcMessage& msg) {
             const auto& va = *std::get<std::unique_ptr<VariableAssgn>>(stmt->stmt);
             // Functions and multi-line expressions are foldable
             if (va.init) {
-                if (va.init->type == Expression::Type::FunctionExpr ||
-                    va.init->type == Expression::Type::ObjectExpr ||
-                    va.init->type == Expression::Type::ArrayExpr ||
-                    va.init->type == Expression::Type::PipeExpr) {
-                    emit_range(loc.start.line, loc.end.line, "region");
-                } else if (loc.end.line > loc.start.line) {
+                const bool is_foldable_expr = va.init->type == Expression::Type::FunctionExpr ||
+                                              va.init->type == Expression::Type::ObjectExpr ||
+                                              va.init->type == Expression::Type::ArrayExpr ||
+                                              va.init->type == Expression::Type::PipeExpr;
+                if (is_foldable_expr || loc.end.line > loc.start.line) {
                     emit_range(loc.start.line, loc.end.line, "region");
                 }
             }
         } else if (stmt->type == Statement::Type::OptionStatement ||
-                   stmt->type == Statement::Type::TestCaseStatement) {
-            emit_range(loc.start.line, loc.end.line, "region");
-        } else if (stmt->type == Statement::Type::ExpressionStatement) {
-            // Pipe chains often span multiple lines
+                   stmt->type == Statement::Type::TestCaseStatement ||
+                   stmt->type == Statement::Type::ExpressionStatement) {
             emit_range(loc.start.line, loc.end.line, "region");
         }
     }
@@ -1968,8 +1795,6 @@ void FluxLanguageServer::handle_code_action(const JsonRpcMessage& msg) {
                     }
                     first = false;
 
-                    // Generate an "Add import" code action
-                    std::string import_text = "import \\\"" + id_name + "\\\"\\n";
                     // Insert at line 0, character 0 (beginning of file)
                     os << R"({"title":"Add import for ')" << id_name
                        << R"('","kind":"quickfix","edit":{"changes":{)" << json_escape(uri)
