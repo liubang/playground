@@ -18,6 +18,7 @@
 #include "cpp/pl/flux/contrib/lsp/server.h"
 #include "cpp/pl/flux/contrib/lsp/json_util.h"
 #include "cpp/pl/flux/contrib/lsp/transport.h"
+#include "simdjson.h"
 
 #include <cstdio>
 #include <cstring>
@@ -106,6 +107,12 @@ static size_t count_occurrences(const std::string& text, const std::string& need
         pos += needle.size();
     }
     return count;
+}
+
+static void expect_valid_json(const std::string& json) {
+    simdjson::dom::parser parser;
+    auto parsed = parser.parse(json);
+    EXPECT_FALSE(parsed.error()) << json;
 }
 
 // ---------- 测试用例 ----------
@@ -513,6 +520,7 @@ TEST(FluxLanguageServerTest, GoToDefinition) {
     // definition response
     auto def_resp = read_lsp_response(out_file);
     ASSERT_FALSE(def_resp.empty());
+    expect_valid_json(def_resp);
     // Should contain the uri and a range pointing to line 0 (definition of x)
     EXPECT_NE(def_resp.find("\"uri\""), std::string::npos) << def_resp;
     EXPECT_NE(def_resp.find("\"line\":0"), std::string::npos) << def_resp;
@@ -552,6 +560,7 @@ TEST(FluxLanguageServerTest, GoToDefinitionAfterUtf8Text) {
 
     auto def_resp = read_lsp_response(out_file);
     ASSERT_FALSE(def_resp.empty());
+    expect_valid_json(def_resp);
     EXPECT_NE(def_resp.find("\"line\":0"), std::string::npos) << def_resp;
 
     fclose(in_file);

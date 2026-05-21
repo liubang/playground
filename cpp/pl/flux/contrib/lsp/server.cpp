@@ -1178,7 +1178,7 @@ void FluxLanguageServer::handle_definition(const JsonRpcMessage& msg) {
     std::ostringstream os;
     os << R"({"uri":)" << json_escape(def->location.uri) << R"(,"range":{"start":{"line":)" << sl
        << R"(,"character":)" << sc << R"(},"end":{"line":)" << el << R"(,"character":)" << ec
-       << "}}})";
+       << "}}}";
     reply(msg, os.str());
 }
 
