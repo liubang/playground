@@ -681,6 +681,7 @@ std::unique_ptr<Expression> Parser::parse_pipe_expression() {
                 std::vector<std::shared_ptr<Comment>>{}, nullptr,
                 std::vector<std::shared_ptr<Comment>>{})
                 .release());
+        prop->loc = expr->loc;
         std::vector<std::shared_ptr<Property>> params = {prop};
         auto lparen = std::make_unique<Token>();
         auto rparen = std::make_unique<Token>();
@@ -1880,8 +1881,9 @@ std::unique_ptr<Expression> Parser::parse_paren_body_expression(std::unique_ptr<
         return parse_function_expression(std::move(lparen), std::move(rparen), params);
     }
     if (t->tok == TokenType::Ident) {
+        const auto key_loc = source_location(t->start_pos, t->end_pos);
         auto ident = parse_identifier();
-        return parse_paren_ident_expression(std::move(lparen), std::move(ident));
+        return parse_paren_ident_expression(std::move(lparen), std::move(ident), key_loc);
     }
     // Save position info before parse_expression_while_more() may advance the scanner and
     // invalidate the t pointer (t == token_.get(), and any scan call can move/reset token_)
@@ -1938,15 +1940,19 @@ std::vector<std::shared_ptr<Property>> Parser::parse_parameter_list() {
 std::unique_ptr<Property> Parser::parse_parameter() {
     if (peek()->tok == TokenType::PipeReceive) {
         auto pipe = consume();
+        const auto key_loc = source_location(peek()->start_pos, peek()->end_pos);
         auto key = parse_identifier();
         auto value =
             std::make_unique<Expression>(Expression::Type::PipeLit, std::make_unique<PipeLit>());
-        return std::make_unique<Property>(
+        auto prop = std::make_unique<Property>(
             std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
             pipe->comments, std::move(value), std::vector<std::shared_ptr<Comment>>{});
+        prop->loc = key_loc;
+        return prop;
     }
     if (peek()->tok == TokenType::QuestionMark) {
         auto question = consume();
+        const auto key_loc = source_location(peek()->start_pos, peek()->end_pos);
         auto key = parse_identifier();
         std::vector<std::shared_ptr<Comment>> separator;
         std::unique_ptr<Expression> value;
@@ -1955,10 +1961,13 @@ std::unique_ptr<Property> Parser::parse_parameter() {
             separator = std::move(assign->comments);
             value = parse_expression();
         }
-        return std::make_unique<Property>(
+        auto prop = std::make_unique<Property>(
             std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
             question->comments, std::move(value), separator);
+        prop->loc = key_loc;
+        return prop;
     }
+    const auto key_loc = source_location(peek()->start_pos, peek()->end_pos);
     auto key = parse_identifier();
     std::vector<std::shared_ptr<Comment>> separator;
     std::unique_ptr<Expression> value;
@@ -1968,9 +1977,11 @@ std::unique_ptr<Property> Parser::parse_parameter() {
         auto v = parse_expression();
         value = std::move(v);
     }
-    return std::make_unique<Property>(
+    auto prop = std::make_unique<Property>(
         std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
         std::vector<std::shared_ptr<Comment>>{}, std::move(value), separator);
+    prop->loc = key_loc;
+    return prop;
 }
 
 std::unique_ptr<Property> Parser::parse_invalid_parameter() {
@@ -1983,7 +1994,8 @@ std::unique_ptr<Property> Parser::parse_invalid_parameter() {
 }
 
 std::unique_ptr<Expression> Parser::parse_paren_ident_expression(std::unique_ptr<Token> lparen,
-                                                                 std::unique_ptr<Identifier> key) {
+                                                                 std::unique_ptr<Identifier> key,
+                                                                 SourceLocation key_loc) {
     const auto* t = peek();
     if (t->tok == TokenType::RParen) {
         // close() calls consume() which moves token_ away, making t dangling. Capture the RParen
@@ -1995,15 +2007,16 @@ std::unique_ptr<Expression> Parser::parse_paren_ident_expression(std::unique_ptr
                 std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
                 std::vector<std::shared_ptr<Comment>>{}, nullptr,
                 std::vector<std::shared_ptr<Comment>>{});
+            prop->loc = key_loc;
             std::vector<std::shared_ptr<Property>> params = {prop};
             return parse_function_expression(std::move(lparen), std::move(tt), params);
         }
+        auto ident_expr = std::make_unique<Expression>(Expression::Type::Identifier,
+                                                       std::move(key));
+        ident_expr->loc = key_loc;
         return std::make_unique<Expression>(
             Expression::Type::ParenExpr,
-            std::make_unique<ParenExpr>(
-                lparen->comments,
-                std::make_unique<Expression>(Expression::Type::Identifier, std::move(key)),
-                tt->comments));
+            std::make_unique<ParenExpr>(lparen->comments, std::move(ident_expr), tt->comments));
     }
     if (t->tok == TokenType::Assign) {
         // consume() moves token_ away, making t dangling; use tt->comments.
@@ -2012,6 +2025,7 @@ std::unique_ptr<Expression> Parser::parse_paren_ident_expression(std::unique_ptr
         auto prop = std::make_shared<Property>(
             std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
             tt->comments, std::move(value), std::vector<std::shared_ptr<Comment>>{});
+        prop->loc = key_loc;
         std::vector<std::shared_ptr<Property>> params = {prop};
         if (peek()->tok == TokenType::Comma) {
             auto comma = scan();
@@ -2028,14 +2042,16 @@ std::unique_ptr<Expression> Parser::parse_paren_ident_expression(std::unique_ptr
         auto prop = std::make_shared<Property>(
             std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
             std::vector<std::shared_ptr<Comment>>{}, nullptr, tt->comments);
+        prop->loc = key_loc;
         std::vector<std::shared_ptr<Property>> params = {prop};
         auto others = parse_parameter_list();
         params.insert(params.end(), others.begin(), others.end());
         auto rparen = close(TokenType::RParen);
         return parse_function_expression(std::move(lparen), std::move(rparen), params);
     }
-    auto expr = parse_expression_suffix(
-        std::make_unique<Expression>(Expression::Type::Identifier, std::move(key)));
+    auto ident_expr = std::make_unique<Expression>(Expression::Type::Identifier, std::move(key));
+    ident_expr->loc = key_loc;
+    auto expr = parse_expression_suffix(std::move(ident_expr));
     while (more()) {
         auto rhs = parse_expression();
         if (rhs->type == Expression::Type::BadExpr) {
@@ -2109,8 +2125,10 @@ std::unique_ptr<Expression> Parser::parse_primary_expression() {
                 ret->type = Expression::Type::BooleanLit;
                 ret->expr = std::make_unique<BooleanLit>(lit->lit == "true");
             } else {
+                const auto loc = source_location(t->start_pos, t->end_pos);
                 ret->type = Expression::Type::Identifier;
                 ret->expr = parse_identifier();
+                ret->loc = loc;
             }
             break;
         }
