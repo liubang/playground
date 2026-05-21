@@ -259,6 +259,45 @@ TEST(FluxLanguageServerTest, CompletionReturnsItems) {
     fclose(out_file);
 }
 
+// 场景: 函数补全返回 snippet，占位参数可被编辑器展开
+TEST(FluxLanguageServerTest, CompletionReturnsFunctionSnippets) {
+    FILE* in_file = tmpfile();
+    FILE* out_file = tmpfile();
+    ASSERT_NE(in_file, nullptr);
+    ASSERT_NE(out_file, nullptr);
+
+    write_lsp_message(in_file, make_initialize_request(1));
+    write_lsp_message(in_file, make_initialized_notification());
+    write_lsp_message(
+        in_file,
+        make_did_open_notification("file:///snip.flux", "myFunc = (x, y) => x + y\n"));
+    write_lsp_message(in_file, make_completion_request(2, "file:///snip.flux", 1, 0));
+    write_lsp_message(in_file, make_shutdown_request(3));
+    write_lsp_message(in_file, make_exit_notification());
+    rewind(in_file);
+
+    StdioTransport transport(in_file, out_file);
+    FluxLanguageServer server(std::move(transport));
+    server.run();
+
+    rewind(out_file);
+    read_lsp_response(out_file);
+    read_lsp_response(out_file);
+
+    auto comp_resp = read_lsp_response(out_file);
+    ASSERT_FALSE(comp_resp.empty());
+    expect_valid_json(comp_resp);
+    EXPECT_NE(comp_resp.find(R"("insertTextFormat":2)"), std::string::npos) << comp_resp;
+    EXPECT_NE(comp_resp.find(R"("insertText":"range(start: ${1:value}, stop: ${2:value})$0")"),
+              std::string::npos)
+        << comp_resp;
+    EXPECT_NE(comp_resp.find(R"("insertText":"myFunc(${1:x}, ${2:y})$0")"), std::string::npos)
+        << comp_resp;
+
+    fclose(in_file);
+    fclose(out_file);
+}
+
 // 场景: 打开文档后请求 formatting，验证返回 TextEdit 数组
 TEST(FluxLanguageServerTest, FormattingReturnsEdits) {
     FILE* in_file = tmpfile();
