@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">98.3&nbsp;%</td>
-            <td class="headerCovTableEntry">58</td>
+            <td class="headerCovTableEntryHi">98.2&nbsp;%</td>
             <td class="headerCovTableEntry">57</td>
+            <td class="headerCovTableEntry">56</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-22 00:08:34</td>
+            <td class="headerValue">2026-05-22 13:10:40</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -88,11 +88,11 @@
 <span id="L17"><span class="lineNum">      17</span>                 :             : </span>
 <span id="L18"><span class="lineNum">      18</span>                 :             : #pragma once</span>
 <span id="L19"><span class="lineNum">      19</span>                 :             : </span>
-<span id="L20"><span class="lineNum">      20</span>                 :             : #include &quot;cpp/pl/utility/utility.h&quot;</span>
-<span id="L21"><span class="lineNum">      21</span>                 :             : </span>
-<span id="L22"><span class="lineNum">      22</span>                 :             : #include &lt;cstdint&gt;</span>
-<span id="L23"><span class="lineNum">      23</span>                 :             : #include &lt;memory&gt;</span>
-<span id="L24"><span class="lineNum">      24</span>                 :             : #include &lt;vector&gt;</span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : #include &lt;cstdint&gt;</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : #include &lt;memory&gt;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : #include &lt;vector&gt;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : </span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : #include &quot;cpp/pl/utility/utility.h&quot;</span>
 <span id="L25"><span class="lineNum">      25</span>                 :             : </span>
 <span id="L26"><span class="lineNum">      26</span>                 :             : namespace pl {</span>
 <span id="L27"><span class="lineNum">      27</span>                 :             : </span>
@@ -115,8 +115,8 @@
 <span id="L44"><span class="lineNum">      44</span>                 :             :             auto&amp; current_block = blocks_[current_block_ids_];</span>
 <span id="L45"><span class="lineNum">      45</span>                 :             :             // Compute alignment based on the absolute address, not just the offset</span>
 <span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">        5350 :             auto base_addr = reinterpret_cast&lt;std::uintptr_t&gt;(current_block.data.get());</span></span>
-<span id="L47"><span class="lineNum">      47</span>                 :<span class="tlaGNC">        5350 :             std::size_t aligned_used = align_up_addr(base_addr + current_block.used, alignment) -</span></span>
-<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">        5350 :                                        base_addr;</span></span>
+<span id="L47"><span class="lineNum">      47</span>                 :             :             std::size_t aligned_used =</span>
+<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">        5350 :                 align_up_addr(base_addr + current_block.used, alignment) - base_addr;</span></span>
 <span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">        5350 :             if (aligned_used + size &lt;= current_block.size) {</span></span>
 <span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC">        5340 :                 void* ptr = current_block.data.get() + aligned_used;</span></span>
 <span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">        5340 :                 current_block.used = aligned_used + size;</span></span>

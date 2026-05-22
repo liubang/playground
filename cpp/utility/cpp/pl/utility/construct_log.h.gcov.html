@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-22 00:08:34</td>
+            <td class="headerValue">2026-05-22 13:10:40</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -88,18 +88,17 @@
 <span id="L17"><span class="lineNum">      17</span>                 :             : </span>
 <span id="L18"><span class="lineNum">      18</span>                 :             : #pragma once</span>
 <span id="L19"><span class="lineNum">      19</span>                 :             : </span>
-<span id="L20"><span class="lineNum">      20</span>                 :             : #include &quot;name.h&quot;</span>
-<span id="L21"><span class="lineNum">      21</span>                 :             : </span>
-<span id="L22"><span class="lineNum">      22</span>                 :             : #include &quot;cpp/pl/log/logger.h&quot;</span>
-<span id="L23"><span class="lineNum">      23</span>                 :             : </span>
-<span id="L24"><span class="lineNum">      24</span>                 :             : namespace pl {</span>
-<span id="L25"><span class="lineNum">      25</span>                 :             : </span>
-<span id="L26"><span class="lineNum">      26</span>                 :             : template &lt;NameWrapper Name&gt; struct ConstructLog {</span>
-<span id="L27"><span class="lineNum">      27</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           4 :     ConstructLog() { LOG(INFO) &lt;&lt; &quot;Construct &quot; &lt;&lt; std::string_view{Name}; }</span></span>
-<span id="L28"><span class="lineNum">      28</span>                 :<span class="tlaGNC">           4 :     ~ConstructLog() { LOG(INFO) &lt;&lt; &quot;Destruct &quot; &lt;&lt; std::string_view{Name}; }</span></span>
-<span id="L29"><span class="lineNum">      29</span>                 :             : };</span>
-<span id="L30"><span class="lineNum">      30</span>                 :             : </span>
-<span id="L31"><span class="lineNum">      31</span>                 :             : } // namespace pl</span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : #include &quot;cpp/pl/log/logger.h&quot;</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : #include &quot;name.h&quot;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : </span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : namespace pl {</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : </span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : template &lt;NameWrapper Name&gt; struct ConstructLog {</span>
+<span id="L26"><span class="lineNum">      26</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           4 :     ConstructLog() { LOG(INFO) &lt;&lt; &quot;Construct &quot; &lt;&lt; std::string_view{Name}; }</span></span>
+<span id="L27"><span class="lineNum">      27</span>                 :<span class="tlaGNC">           4 :     ~ConstructLog() { LOG(INFO) &lt;&lt; &quot;Destruct &quot; &lt;&lt; std::string_view{Name}; }</span></span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : };</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : </span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : } // namespace pl</span>
         </pre>
               </td>
             </tr>

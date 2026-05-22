@@ -32,12 +32,12 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">9</td>
-            <td class="headerCovTableEntry">9</td>
+            <td class="headerCovTableEntry">10</td>
+            <td class="headerCovTableEntry">10</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-22 00:08:34</td>
+            <td class="headerValue">2026-05-22 13:10:40</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -111,27 +111,29 @@
 <span id="L40"><span class="lineNum">      40</span>                 :<span class="tlaGNC">           2 :     return s;</span></span>
 <span id="L41"><span class="lineNum">      41</span>                 :             : }</span>
 <span id="L42"><span class="lineNum">      42</span>                 :             : </span>
-<span id="L43"><span class="lineNum">      43</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 : static std::string demangle(std::type_info const&amp; type) { return demangle(type.name()); }</span></span>
-<span id="L44"><span class="lineNum">      44</span>                 :             : </span>
-<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">           2 : template &lt;typename T&gt; static std::string demangle() {</span></span>
-<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">           2 :     std::string s{demangle(typeid(std::remove_cv_t&lt;std::remove_reference_t&lt;T&gt;&gt;))};</span></span>
-<span id="L47"><span class="lineNum">      47</span>                 :             :     if (std::is_const_v&lt;std::remove_reference_t&lt;T&gt;&gt;) {</span>
-<span id="L48"><span class="lineNum">      48</span>                 :             :         s += &quot; const&quot;;</span>
-<span id="L49"><span class="lineNum">      49</span>                 :             :     }</span>
-<span id="L50"><span class="lineNum">      50</span>                 :             :     if (std::is_volatile_v&lt;std::remove_reference_t&lt;T&gt;&gt;) {</span>
-<span id="L51"><span class="lineNum">      51</span>                 :             :         s += &quot; volatile&quot;;</span>
-<span id="L52"><span class="lineNum">      52</span>                 :             :     }</span>
-<span id="L53"><span class="lineNum">      53</span>                 :             :     if (std::is_rvalue_reference_v&lt;T&gt;) {</span>
-<span id="L54"><span class="lineNum">      54</span>                 :             :         s += &quot; &amp;&amp;&quot;;</span>
-<span id="L55"><span class="lineNum">      55</span>                 :             :     }</span>
-<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC">           2 :     return s;</span></span>
-<span id="L57"><span class="lineNum">      57</span>                 :             : }</span>
-<span id="L58"><span class="lineNum">      58</span>                 :             : </span>
-<span id="L59"><span class="lineNum">      59</span>                 :             : } // namespace detail</span>
+<span id="L43"><span class="lineNum">      43</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 : static std::string demangle(std::type_info const&amp; type) {</span></span>
+<span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaGNC">           2 :     return demangle(type.name());</span></span>
+<span id="L45"><span class="lineNum">      45</span>                 :             : }</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             : </span>
+<span id="L47"><span class="lineNum">      47</span>                 :<span class="tlaGNC">           2 : template &lt;typename T&gt; static std::string demangle() {</span></span>
+<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">           2 :     std::string s{demangle(typeid(std::remove_cv_t&lt;std::remove_reference_t&lt;T&gt;&gt;))};</span></span>
+<span id="L49"><span class="lineNum">      49</span>                 :             :     if (std::is_const_v&lt;std::remove_reference_t&lt;T&gt;&gt;) {</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             :         s += &quot; const&quot;;</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             :     }</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             :     if (std::is_volatile_v&lt;std::remove_reference_t&lt;T&gt;&gt;) {</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             :         s += &quot; volatile&quot;;</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             :     }</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             :     if (std::is_rvalue_reference_v&lt;T&gt;) {</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             :         s += &quot; &amp;&amp;&quot;;</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             :     }</span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">           2 :     return s;</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :             : }</span>
 <span id="L60"><span class="lineNum">      60</span>                 :             : </span>
-<span id="L61"><span class="lineNum">      61</span>                 :             : using detail::demangle;</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             : } // namespace detail</span>
 <span id="L62"><span class="lineNum">      62</span>                 :             : </span>
-<span id="L63"><span class="lineNum">      63</span>                 :             : } // namespace pl</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             : using detail::demangle;</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             : </span>
+<span id="L65"><span class="lineNum">      65</span>                 :             : } // namespace pl</span>
         </pre>
               </td>
             </tr>

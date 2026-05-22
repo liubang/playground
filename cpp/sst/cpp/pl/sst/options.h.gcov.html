@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-22 00:08:34</td>
+            <td class="headerValue">2026-05-22 13:10:40</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -88,44 +88,45 @@
 <span id="L17"><span class="lineNum">      17</span>                 :             : </span>
 <span id="L18"><span class="lineNum">      18</span>                 :             : #pragma once</span>
 <span id="L19"><span class="lineNum">      19</span>                 :             : </span>
-<span id="L20"><span class="lineNum">      20</span>                 :             : #include &quot;cpp/pl/sst/comparator.h&quot;</span>
-<span id="L21"><span class="lineNum">      21</span>                 :             : #include &quot;cpp/pl/sst/sstable_format.h&quot;</span>
-<span id="L22"><span class="lineNum">      22</span>                 :             : #include &lt;cstdint&gt;</span>
-<span id="L23"><span class="lineNum">      23</span>                 :             : #include &lt;filesystem&gt;</span>
-<span id="L24"><span class="lineNum">      24</span>                 :             : #include &lt;memory&gt;</span>
-<span id="L25"><span class="lineNum">      25</span>                 :             : </span>
-<span id="L26"><span class="lineNum">      26</span>                 :             : namespace pl {</span>
-<span id="L27"><span class="lineNum">      27</span>                 :             : </span>
-<span id="L28"><span class="lineNum">      28</span>                 :<span class="tlaGNC tlaBgGNC">          11 : struct ReadOptions {</span></span>
-<span id="L29"><span class="lineNum">      29</span>                 :<span class="tlaGNC">          11 :     ReadOptions() : comparator(std::make_shared&lt;BytewiseComparator&gt;()) {}</span></span>
-<span id="L30"><span class="lineNum">      30</span>                 :             :     const ComparatorRef comparator;</span>
-<span id="L31"><span class="lineNum">      31</span>                 :             : };</span>
-<span id="L32"><span class="lineNum">      32</span>                 :             : </span>
-<span id="L33"><span class="lineNum">      33</span>                 :             : using ReadOptionsPtr = std::unique_ptr&lt;ReadOptions&gt;;</span>
-<span id="L34"><span class="lineNum">      34</span>                 :             : using ReadOptionsRef = std::shared_ptr&lt;ReadOptions&gt;;</span>
-<span id="L35"><span class="lineNum">      35</span>                 :             : </span>
-<span id="L36"><span class="lineNum">      36</span>                 :             : struct BuildOptions {</span>
-<span id="L37"><span class="lineNum">      37</span>         [<span class="tlaGBC" title="Branch 0 was taken 24 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          24 :     BuildOptions() : comparator(std::make_shared&lt;BytewiseComparator&gt;()) {}</span></span>
-<span id="L38"><span class="lineNum">      38</span>                 :             : </span>
-<span id="L39"><span class="lineNum">      39</span>                 :             :     // 4 KB</span>
-<span id="L40"><span class="lineNum">      40</span>                 :             :     std::filesystem::path data_dir;</span>
-<span id="L41"><span class="lineNum">      41</span>                 :             :     std::size_t block_size = 4 * 1024;</span>
-<span id="L42"><span class="lineNum">      42</span>                 :             :     int block_restart_interval = 16;</span>
-<span id="L43"><span class="lineNum">      43</span>                 :             :     uint32_t bits_per_key = 10;</span>
-<span id="L44"><span class="lineNum">      44</span>                 :             :     CompressionType compression_type = CompressionType::NONE;</span>
-<span id="L45"><span class="lineNum">      45</span>                 :             :     int zstd_compress_level = 1;</span>
-<span id="L46"><span class="lineNum">      46</span>                 :             :     const ComparatorRef comparator;</span>
-<span id="L47"><span class="lineNum">      47</span>                 :             :     SSTType sst_type = SSTType::NONE;</span>
-<span id="L48"><span class="lineNum">      48</span>                 :             :     SSTVersion sst_version = SSTVersion::NONE;</span>
-<span id="L49"><span class="lineNum">      49</span>                 :             :     FilterPolicyType filter_type = FilterPolicyType::STANDARD_BLOOM_FILTER;</span>
-<span id="L50"><span class="lineNum">      50</span>                 :             :     PatchId patch_id = 0;</span>
-<span id="L51"><span class="lineNum">      51</span>                 :             :     SSTId sst_id = 0;</span>
-<span id="L52"><span class="lineNum">      52</span>                 :             : };</span>
-<span id="L53"><span class="lineNum">      53</span>                 :             : </span>
-<span id="L54"><span class="lineNum">      54</span>                 :             : using BuildOptionsPtr = std::unique_ptr&lt;BuildOptions&gt;;</span>
-<span id="L55"><span class="lineNum">      55</span>                 :             : using BuildOptionsRef = std::shared_ptr&lt;BuildOptions&gt;;</span>
-<span id="L56"><span class="lineNum">      56</span>                 :             : </span>
-<span id="L57"><span class="lineNum">      57</span>                 :             : } // namespace pl</span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : #include &lt;cstdint&gt;</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : #include &lt;filesystem&gt;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : #include &lt;memory&gt;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : </span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : #include &quot;cpp/pl/sst/comparator.h&quot;</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : #include &quot;cpp/pl/sst/sstable_format.h&quot;</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : </span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : namespace pl {</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : </span>
+<span id="L29"><span class="lineNum">      29</span>                 :<span class="tlaGNC tlaBgGNC">          11 : struct ReadOptions {</span></span>
+<span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC">          11 :     ReadOptions() : comparator(std::make_shared&lt;BytewiseComparator&gt;()) {}</span></span>
+<span id="L31"><span class="lineNum">      31</span>                 :             :     const ComparatorRef comparator;</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             : };</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : </span>
+<span id="L34"><span class="lineNum">      34</span>                 :             : using ReadOptionsPtr = std::unique_ptr&lt;ReadOptions&gt;;</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             : using ReadOptionsRef = std::shared_ptr&lt;ReadOptions&gt;;</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             : </span>
+<span id="L37"><span class="lineNum">      37</span>                 :             : struct BuildOptions {</span>
+<span id="L38"><span class="lineNum">      38</span>         [<span class="tlaGBC" title="Branch 0 was taken 24 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          24 :     BuildOptions() : comparator(std::make_shared&lt;BytewiseComparator&gt;()) {}</span></span>
+<span id="L39"><span class="lineNum">      39</span>                 :             : </span>
+<span id="L40"><span class="lineNum">      40</span>                 :             :     // 4 KB</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             :     std::filesystem::path data_dir;</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             :     std::size_t block_size = 4 * 1024;</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             :     int block_restart_interval = 16;</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             :     uint32_t bits_per_key = 10;</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             :     CompressionType compression_type = CompressionType::NONE;</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             :     int zstd_compress_level = 1;</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             :     const ComparatorRef comparator;</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             :     SSTType sst_type = SSTType::NONE;</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             :     SSTVersion sst_version = SSTVersion::NONE;</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             :     FilterPolicyType filter_type = FilterPolicyType::STANDARD_BLOOM_FILTER;</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             :     PatchId patch_id = 0;</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             :     SSTId sst_id = 0;</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             : };</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             : </span>
+<span id="L55"><span class="lineNum">      55</span>                 :             : using BuildOptionsPtr = std::unique_ptr&lt;BuildOptions&gt;;</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             : using BuildOptionsRef = std::shared_ptr&lt;BuildOptions&gt;;</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             : </span>
+<span id="L58"><span class="lineNum">      58</span>                 :             : } // namespace pl</span>
         </pre>
               </td>
             </tr>

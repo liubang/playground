@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-22 00:08:34</td>
+            <td class="headerValue">2026-05-22 13:10:40</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -88,45 +88,46 @@
 <span id="L17"><span class="lineNum">      17</span>                 :             : </span>
 <span id="L18"><span class="lineNum">      18</span>                 :             : #pragma once</span>
 <span id="L19"><span class="lineNum">      19</span>                 :             : </span>
-<span id="L20"><span class="lineNum">      20</span>                 :             : #include &quot;cpp/pl/sst/comparator.h&quot;</span>
-<span id="L21"><span class="lineNum">      21</span>                 :             : #include &quot;cpp/pl/sst/iterator.h&quot;</span>
-<span id="L22"><span class="lineNum">      22</span>                 :             : #include &quot;cpp/pl/sst/sstable_format.h&quot;</span>
-<span id="L23"><span class="lineNum">      23</span>                 :             : #include &lt;memory&gt;</span>
-<span id="L24"><span class="lineNum">      24</span>                 :             : </span>
-<span id="L25"><span class="lineNum">      25</span>                 :             : namespace pl {</span>
-<span id="L26"><span class="lineNum">      26</span>                 :             : </span>
-<span id="L27"><span class="lineNum">      27</span>                 :             : class Block : public std::enable_shared_from_this&lt;Block&gt; {</span>
-<span id="L28"><span class="lineNum">      28</span>                 :             : public:</span>
-<span id="L29"><span class="lineNum">      29</span>                 :             :     explicit Block(const BlockContents&amp; content);</span>
-<span id="L30"><span class="lineNum">      30</span>                 :             : </span>
-<span id="L31"><span class="lineNum">      31</span>                 :             :     Block(const Block&amp;) = delete;</span>
-<span id="L32"><span class="lineNum">      32</span>                 :             :     Block&amp; operator=(const Block&amp;) = delete;</span>
-<span id="L33"><span class="lineNum">      33</span>                 :             :     Block(Block&amp;&amp; other) noexcept;</span>
-<span id="L34"><span class="lineNum">      34</span>                 :             :     Block&amp; operator=(Block&amp;&amp; other) noexcept;</span>
-<span id="L35"><span class="lineNum">      35</span>                 :             : </span>
-<span id="L36"><span class="lineNum">      36</span>                 :             :     virtual ~Block();</span>
-<span id="L37"><span class="lineNum">      37</span>                 :             : </span>
-<span id="L38"><span class="lineNum">      38</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span> :<span class="tlaGNC tlaBgGNC">           4 :     [[nodiscard]] bool valid() const { return size_ &gt; 0; }</span></span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : #include &lt;memory&gt;</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : </span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : #include &quot;cpp/pl/sst/comparator.h&quot;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : #include &quot;cpp/pl/sst/iterator.h&quot;</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : #include &quot;cpp/pl/sst/sstable_format.h&quot;</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : </span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : namespace pl {</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : </span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : class Block : public std::enable_shared_from_this&lt;Block&gt; {</span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : public:</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             :     explicit Block(const BlockContents&amp; content);</span>
+<span id="L31"><span class="lineNum">      31</span>                 :             : </span>
+<span id="L32"><span class="lineNum">      32</span>                 :             :     Block(const Block&amp;) = delete;</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             :     Block&amp; operator=(const Block&amp;) = delete;</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             :     Block(Block&amp;&amp; other) noexcept;</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             :     Block&amp; operator=(Block&amp;&amp; other) noexcept;</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             : </span>
+<span id="L37"><span class="lineNum">      37</span>                 :             :     virtual ~Block();</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             : </span>
+<span id="L39"><span class="lineNum">      39</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span> :<span class="tlaGNC tlaBgGNC">           4 :     [[nodiscard]] bool valid() const { return size_ &gt; 0; }</span></span>
 <span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaGBC" title="Branch 5 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaGBC" title="Branch 7 was taken 1 time"> + </span>]
-<span id="L39"><span class="lineNum">      39</span>                 :             : </span>
-<span id="L40"><span class="lineNum">      40</span>                 :             :     IteratorPtr iterator(const ComparatorRef&amp; comparator);</span>
-<span id="L41"><span class="lineNum">      41</span>                 :             : </span>
-<span id="L42"><span class="lineNum">      42</span>                 :             : private:</span>
-<span id="L43"><span class="lineNum">      43</span>                 :             :     class BlockIterator;</span>
-<span id="L44"><span class="lineNum">      44</span>                 :             : </span>
-<span id="L45"><span class="lineNum">      45</span>                 :             :     void cleanup() noexcept;</span>
-<span id="L46"><span class="lineNum">      46</span>                 :             : </span>
-<span id="L47"><span class="lineNum">      47</span>                 :             : private:</span>
-<span id="L48"><span class="lineNum">      48</span>                 :             :     const char* data_{nullptr};</span>
-<span id="L49"><span class="lineNum">      49</span>                 :             :     std::size_t size_{0};</span>
-<span id="L50"><span class="lineNum">      50</span>                 :             :     std::size_t num_restarts_{0};</span>
-<span id="L51"><span class="lineNum">      51</span>                 :             :     uint32_t restart_offset_{0};</span>
-<span id="L52"><span class="lineNum">      52</span>                 :             :     bool owned_{false};</span>
-<span id="L53"><span class="lineNum">      53</span>                 :             : };</span>
-<span id="L54"><span class="lineNum">      54</span>                 :             : </span>
-<span id="L55"><span class="lineNum">      55</span>                 :             : using BlockRef = std::shared_ptr&lt;Block&gt;;</span>
-<span id="L56"><span class="lineNum">      56</span>                 :             : </span>
-<span id="L57"><span class="lineNum">      57</span>                 :             : } // namespace pl</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             : </span>
+<span id="L41"><span class="lineNum">      41</span>                 :             :     IteratorPtr iterator(const ComparatorRef&amp; comparator);</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             : </span>
+<span id="L43"><span class="lineNum">      43</span>                 :             : private:</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             :     class BlockIterator;</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             : </span>
+<span id="L46"><span class="lineNum">      46</span>                 :             :     void cleanup() noexcept;</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             : </span>
+<span id="L48"><span class="lineNum">      48</span>                 :             : private:</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             :     const char* data_{nullptr};</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             :     std::size_t size_{0};</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             :     std::size_t num_restarts_{0};</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             :     uint32_t restart_offset_{0};</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             :     bool owned_{false};</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             : };</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             : </span>
+<span id="L56"><span class="lineNum">      56</span>                 :             : using BlockRef = std::shared_ptr&lt;Block&gt;;</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             : </span>
+<span id="L58"><span class="lineNum">      58</span>                 :             : } // namespace pl</span>
         </pre>
               </td>
             </tr>
