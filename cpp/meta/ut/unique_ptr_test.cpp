@@ -15,9 +15,10 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/10/15 01:07
 
-#include "cpp/meta/unique_ptr.h"
 #include <catch2/catch_test_macros.hpp>
 #include <string>
+
+#include "cpp/meta/unique_ptr.h"
 
 TEST_CASE("meta", "[unique_ptr]") {
     auto str_ptr = pl::make_unique<std::string>("hello");

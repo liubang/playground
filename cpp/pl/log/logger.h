@@ -17,10 +17,10 @@
 
 #pragma once
 
-#include "cpp/pl/log/logstream.h"
-
 #include <chrono>
 #include <string_view>
+
+#include "cpp/pl/log/logstream.h"
 
 namespace pl {
 
@@ -39,18 +39,18 @@ public:
 
     static const char* logLevel2String(LogLevel log_level) {
         switch (log_level) {
-        case LogLevel::PL_TRACE:
-            return "TRACE";
-        case LogLevel::PL_DEBUG:
-            return "DEBUG";
-        case LogLevel::PL_INFO:
-            return "INFO";
-        case LogLevel::PL_WARN:
-            return "WARN";
-        case LogLevel::PL_ERROR:
-            return "ERROR";
-        case LogLevel::PL_FATAL:
-            return "FATAL";
+            case LogLevel::PL_TRACE:
+                return "TRACE";
+            case LogLevel::PL_DEBUG:
+                return "DEBUG";
+            case LogLevel::PL_INFO:
+                return "INFO";
+            case LogLevel::PL_WARN:
+                return "WARN";
+            case LogLevel::PL_ERROR:
+                return "ERROR";
+            case LogLevel::PL_FATAL:
+                return "FATAL";
         }
         return "";
     }

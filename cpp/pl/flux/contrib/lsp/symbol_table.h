@@ -17,11 +17,12 @@
 
 #pragma once
 
-#include "cpp/pl/flux/syntax/ast.h"
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#include "cpp/pl/flux/syntax/ast.h"
 
 namespace pl::flux::lsp {
 

@@ -17,6 +17,9 @@
 
 #pragma once
 
+#include <cassert>
+#include <filesystem>
+
 #include "cpp/pl/arena/arena.h"
 #include "cpp/pl/fs/fs.h"
 #include "cpp/pl/sst/block.h"
@@ -24,8 +27,6 @@
 #include "cpp/pl/sst/options.h"
 #include "cpp/pl/sst/sstable_format.h"
 #include "cpp/pl/status/result.h"
-#include <cassert>
-#include <filesystem>
 
 namespace pl {
 

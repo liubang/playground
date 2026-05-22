@@ -17,12 +17,13 @@
 
 #pragma once
 
-#include "cpp/pl/minidfs/common/error_code.h"
-#include "cpp/pl/minidfs/metadata/metadata_store.h"
 #include <algorithm>
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
+
+#include "cpp/pl/minidfs/common/error_code.h"
+#include "cpp/pl/minidfs/metadata/metadata_store.h"
 
 namespace pl::minidfs::testing {
 
@@ -237,11 +238,11 @@ public:
 
     pl::Result<pl::Void> delete_replicas_by_block(uint64_t block_id) override {
         std::lock_guard lock(mu_);
-        replicas_.erase(std::remove_if(replicas_.begin(), replicas_.end(),
-                                       [block_id](const BlockReplica& r) {
-                                           return r.block_id == block_id;
-                                       }),
-                        replicas_.end());
+        replicas_.erase(
+            std::remove_if(replicas_.begin(),
+                           replicas_.end(),
+                           [block_id](const BlockReplica& r) { return r.block_id == block_id; }),
+            replicas_.end());
         return pl::Void{};
     }
 

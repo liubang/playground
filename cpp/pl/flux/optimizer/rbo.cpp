@@ -17,16 +17,17 @@
 
 #include "cpp/pl/flux/optimizer/rbo.h"
 
-#include "absl/status/status.h"
-#include "absl/strings/str_cat.h"
-#include "cpp/pl/flux/connector/connector_registry.h"
-#include "cpp/pl/flux/connector/connector_runtime.h"
-#include "cpp/pl/flux/runtime/runtime_value.h"
 #include <algorithm>
 #include <optional>
 #include <sstream>
 #include <unordered_set>
 #include <utility>
+
+#include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
+#include "cpp/pl/flux/connector/connector_registry.h"
+#include "cpp/pl/flux/connector/connector_runtime.h"
+#include "cpp/pl/flux/runtime/runtime_value.h"
 
 namespace pl::flux::optimizer {
 namespace {
@@ -214,8 +215,8 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
                 }
                 projected_source_columns.push_back(*source_column_or);
             }
-            set_projection_columns(&plan_or->request, projected_source_columns,
-                                   node->project().columns);
+            set_projection_columns(
+                &plan_or->request, projected_source_columns, node->project().columns);
             plan_or->visible_columns = node->project().columns;
             plan_or->source_columns = std::move(projected_source_columns);
             return plan_or;
@@ -230,8 +231,8 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
             if (has_duplicate_columns(plan_or->visible_columns)) {
                 return absl::InvalidArgumentError("rename produces duplicate columns");
             }
-            set_projection_columns(&plan_or->request, plan_or->source_columns,
-                                   plan_or->visible_columns);
+            set_projection_columns(
+                &plan_or->request, plan_or->source_columns, plan_or->visible_columns);
             return plan_or;
         case plan::PlanNodeKind::Group:
             plan_or->request.group_by.clear();
@@ -249,9 +250,10 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
             if (plan_or->request.distinct.has_value()) {
                 return absl::InvalidArgumentError("aggregate after distinct is not pushable");
             }
-            auto source_column_or =
-                source_column_for_visible(plan_or->visible_columns, plan_or->source_columns,
-                                          node->aggregate().column, "aggregate");
+            auto source_column_or = source_column_for_visible(plan_or->visible_columns,
+                                                              plan_or->source_columns,
+                                                              node->aggregate().column,
+                                                              "aggregate");
             if (!source_column_or.ok()) {
                 return source_column_or.status();
             }
@@ -266,9 +268,10 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
             return plan_or;
         }
         case plan::PlanNodeKind::Distinct: {
-            auto source_column_or =
-                source_column_for_visible(plan_or->visible_columns, plan_or->source_columns,
-                                          node->distinct().column, "distinct");
+            auto source_column_or = source_column_for_visible(plan_or->visible_columns,
+                                                              plan_or->source_columns,
+                                                              node->distinct().column,
+                                                              "distinct");
             if (!source_column_or.ok()) {
                 return source_column_or.status();
             }

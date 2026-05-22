@@ -15,16 +15,17 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/10 00:00
 
-#include "cpp/pl/flux/optimizer/cbo.h"
 #include <gtest/gtest.h>
 #include <utility>
+
+#include "cpp/pl/flux/optimizer/cbo.h"
 
 namespace pl::flux::optimizer {
 namespace {
 
 std::shared_ptr<plan::PlanNode> SourceScanPlan() {
-    return plan::MakeSourceScan("sqlite", "sqlite", "cpp/pl/flux/examples/cross_source/metrics.db",
-                                "cpu");
+    return plan::MakeSourceScan(
+        "sqlite", "sqlite", "cpp/pl/flux/examples/cross_source/metrics.db", "cpu");
 }
 
 TEST(CostBasedOptimizerTest, ChoosesConnectorScanWhenStatsAreAvailable) {
@@ -89,9 +90,9 @@ TEST(CostBasedOptimizerTest, CostsMemorySuffixAfterConnectorPrefix) {
 }
 
 TEST(CostBasedOptimizerTest, EnumeratesLocalHashJoinAlternative) {
-    auto logical_plan =
-        plan::MakeJoin(plan::MakeProject(SourceScanPlan(), {"host", "usage"}),
-                       plan::MakeProject(SourceScanPlan(), {"host", "region"}), {"host"});
+    auto logical_plan = plan::MakeJoin(plan::MakeProject(SourceScanPlan(), {"host", "usage"}),
+                                       plan::MakeProject(SourceScanPlan(), {"host", "region"}),
+                                       {"host"});
 
     auto result_or = DefaultCostBasedOptimizer().OptimizeWithTrace(logical_plan);
 
@@ -107,7 +108,8 @@ TEST(CostBasedOptimizerTest, EnumeratesLocalHashJoinAlternative) {
 TEST(CostBasedOptimizerTest, ChoosesSmallerJoinBuildSide) {
     auto logical_plan = plan::MakeJoin(
         plan::MakeLimit(plan::MakeProject(SourceScanPlan(), {"host", "usage"}), 1, 0),
-        plan::MakeProject(SourceScanPlan(), {"host", "region"}), {"host"});
+        plan::MakeProject(SourceScanPlan(), {"host", "region"}),
+        {"host"});
 
     auto result_or = DefaultCostBasedOptimizer().OptimizeWithTrace(logical_plan);
 

@@ -14,12 +14,13 @@
 
 #include "ast_debug.h"
 
-#include "absl/strings/str_join.h"
 #include <functional>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "absl/strings/str_join.h"
 
 namespace pl::flux {
 namespace {
@@ -81,7 +82,8 @@ private:
     void dump_package_clause(const PackageClause& package,
                              const std::string& prefix,
                              bool is_last) {
-        line(prefix, is_last,
+        line(prefix,
+             is_last,
              "PackageClause name=" + package.name->string() +
                  attributes_summary(package.attributes) + location_summary(package.loc));
     }
@@ -111,8 +113,8 @@ private:
             }
             case Statement::Type::VariableAssignment: {
                 const auto& assign = std::get<std::unique_ptr<VariableAssgn>>(stmt.stmt);
-                line(prefix, is_last,
-                     "VariableAssignment id=" + assign->id->string() + attrs + loc);
+                line(
+                    prefix, is_last, "VariableAssignment id=" + assign->id->string() + attrs + loc);
                 dump_expression(*assign->init, child_prefix(prefix, is_last), true);
                 break;
             }
@@ -180,7 +182,8 @@ private:
     }
 
     void dump_property(const Property& property, const std::string& prefix, bool is_last) {
-        line(prefix, is_last,
+        line(prefix,
+             is_last,
              "Property key=" + property.key->string() + location_summary(property.loc));
         if (property.value) {
             dump_expression(*property.value, child_prefix(prefix, is_last), true);
@@ -190,7 +193,8 @@ private:
     void dump_expression(const Expression& expr, const std::string& prefix, bool is_last) {
         switch (expr.type) {
             case Expression::Type::Identifier:
-                line(prefix, is_last,
+                line(prefix,
+                     is_last,
                      "Identifier name=" +
                          std::get<std::unique_ptr<Identifier>>(expr.expr)->string());
                 break;
@@ -201,27 +205,27 @@ private:
                 dump_dict_expr(*std::get<std::unique_ptr<DictExpr>>(expr.expr), prefix, is_last);
                 break;
             case Expression::Type::FunctionExpr:
-                dump_function_expr(*std::get<std::unique_ptr<FunctionExpr>>(expr.expr), prefix,
-                                   is_last);
+                dump_function_expr(
+                    *std::get<std::unique_ptr<FunctionExpr>>(expr.expr), prefix, is_last);
                 break;
             case Expression::Type::LogicalExpr:
-                dump_logical_expr(*std::get<std::unique_ptr<LogicalExpr>>(expr.expr), prefix,
-                                  is_last);
+                dump_logical_expr(
+                    *std::get<std::unique_ptr<LogicalExpr>>(expr.expr), prefix, is_last);
                 break;
             case Expression::Type::ObjectExpr:
-                dump_object_expr(*std::get<std::unique_ptr<ObjectExpr>>(expr.expr), prefix,
-                                 is_last);
+                dump_object_expr(
+                    *std::get<std::unique_ptr<ObjectExpr>>(expr.expr), prefix, is_last);
                 break;
             case Expression::Type::MemberExpr:
-                dump_member_expr(*std::get<std::unique_ptr<MemberExpr>>(expr.expr), prefix,
-                                 is_last);
+                dump_member_expr(
+                    *std::get<std::unique_ptr<MemberExpr>>(expr.expr), prefix, is_last);
                 break;
             case Expression::Type::IndexExpr:
                 dump_index_expr(*std::get<std::unique_ptr<IndexExpr>>(expr.expr), prefix, is_last);
                 break;
             case Expression::Type::BinaryExpr:
-                dump_binary_expr(*std::get<std::unique_ptr<BinaryExpr>>(expr.expr), prefix,
-                                 is_last);
+                dump_binary_expr(
+                    *std::get<std::unique_ptr<BinaryExpr>>(expr.expr), prefix, is_last);
                 break;
             case Expression::Type::UnaryExpr:
                 dump_unary_expr(*std::get<std::unique_ptr<UnaryExpr>>(expr.expr), prefix, is_last);
@@ -233,12 +237,12 @@ private:
                 dump_call_expr(*std::get<std::unique_ptr<CallExpr>>(expr.expr), prefix, is_last);
                 break;
             case Expression::Type::ConditionalExpr:
-                dump_conditional_expr(*std::get<std::unique_ptr<ConditionalExpr>>(expr.expr),
-                                      prefix, is_last);
+                dump_conditional_expr(
+                    *std::get<std::unique_ptr<ConditionalExpr>>(expr.expr), prefix, is_last);
                 break;
             case Expression::Type::StringExpr:
-                dump_string_expr(*std::get<std::unique_ptr<StringExpr>>(expr.expr), prefix,
-                                 is_last);
+                dump_string_expr(
+                    *std::get<std::unique_ptr<StringExpr>>(expr.expr), prefix, is_last);
                 break;
             case Expression::Type::ParenExpr: {
                 const auto& paren = *std::get<std::unique_ptr<ParenExpr>>(expr.expr);
@@ -247,40 +251,48 @@ private:
                 break;
             }
             case Expression::Type::IntegerLit:
-                line(prefix, is_last,
+                line(prefix,
+                     is_last,
                      "IntegerLit value=" +
                          std::get<std::unique_ptr<IntegerLit>>(expr.expr)->string());
                 break;
             case Expression::Type::FloatLit:
-                line(prefix, is_last,
+                line(prefix,
+                     is_last,
                      "FloatLit value=" + std::get<std::unique_ptr<FloatLit>>(expr.expr)->string());
                 break;
             case Expression::Type::StringLit:
-                line(prefix, is_last,
+                line(prefix,
+                     is_last,
                      "StringLit value=\"" + std::get<std::unique_ptr<StringLit>>(expr.expr)->value +
                          "\"");
                 break;
             case Expression::Type::DurationLit:
-                line(prefix, is_last,
+                line(prefix,
+                     is_last,
                      "DurationLit value=" +
                          std::get<std::unique_ptr<DurationLit>>(expr.expr)->string());
                 break;
             case Expression::Type::UnsignedIntegerLit:
-                line(prefix, is_last,
+                line(prefix,
+                     is_last,
                      "UintLit value=" + std::get<std::unique_ptr<UintLit>>(expr.expr)->string());
                 break;
             case Expression::Type::BooleanLit:
-                line(prefix, is_last,
+                line(prefix,
+                     is_last,
                      "BooleanLit value=" +
                          std::get<std::unique_ptr<BooleanLit>>(expr.expr)->string());
                 break;
             case Expression::Type::DateTimeLit:
-                line(prefix, is_last,
+                line(prefix,
+                     is_last,
                      "DateTimeLit value=" +
                          std::get<std::unique_ptr<DateTimeLit>>(expr.expr)->string());
                 break;
             case Expression::Type::RegexpLit:
-                line(prefix, is_last,
+                line(prefix,
+                     is_last,
                      "RegexpLit value=" +
                          std::get<std::unique_ptr<RegexpLit>>(expr.expr)->string());
                 break;
@@ -288,11 +300,13 @@ private:
                 line(prefix, is_last, "PipeLit");
                 break;
             case Expression::Type::LabelLit:
-                line(prefix, is_last,
+                line(prefix,
+                     is_last,
                      "LabelLit value=" + std::get<std::unique_ptr<LabelLit>>(expr.expr)->string());
                 break;
             case Expression::Type::BadExpr:
-                line(prefix, is_last,
+                line(prefix,
+                     is_last,
                      "BadExpr text=\"" + std::get<std::unique_ptr<BadExpr>>(expr.expr)->text +
                          "\"" + location_summary(expr.loc));
                 break;
@@ -303,10 +317,12 @@ private:
         line(prefix, is_last, "ArrayExpr");
         auto next = child_prefix(prefix, is_last);
         for (size_t i = 0; i < expr.elements.size(); ++i) {
-            line(next, i + 1 == expr.elements.size(),
+            line(next,
+                 i + 1 == expr.elements.size(),
                  "ArrayItem" + location_summary(expr.elements[i]->loc));
             dump_expression(*expr.elements[i]->expression,
-                            child_prefix(next, i + 1 == expr.elements.size()), true);
+                            child_prefix(next, i + 1 == expr.elements.size()),
+                            true);
         }
     }
 
@@ -416,7 +432,8 @@ private:
             const auto& part = expr.parts[i];
             switch (part->type) {
                 case StringExprPart::Type::Text:
-                    line(next, i + 1 == expr.parts.size(),
+                    line(next,
+                         i + 1 == expr.parts.size(),
                          "TextPart value=\"" +
                              std::get<std::unique_ptr<TextPart>>(part->part)->value + "\"");
                     break;
@@ -424,7 +441,8 @@ private:
                     line(next, i + 1 == expr.parts.size(), "InterpolatedPart");
                     dump_expression(
                         *std::get<std::unique_ptr<InterpolatedPart>>(part->part)->expression,
-                        child_prefix(next, i + 1 == expr.parts.size()), true);
+                        child_prefix(next, i + 1 == expr.parts.size()),
+                        true);
                     break;
             }
         }
@@ -437,8 +455,8 @@ private:
         auto next = child_prefix(prefix, is_last);
         dump_monotype(*type_expr.monotype, next, type_expr.constraints.empty());
         for (size_t i = 0; i < type_expr.constraints.size(); ++i) {
-            dump_type_constraint(*type_expr.constraints[i], next,
-                                 i + 1 == type_expr.constraints.size());
+            dump_type_constraint(
+                *type_expr.constraints[i], next, i + 1 == type_expr.constraints.size());
         }
     }
 
@@ -462,31 +480,36 @@ private:
     void dump_monotype(const MonoType& mono, const std::string& prefix, bool is_last) {
         switch (mono.type) {
             case MonoType::Type::Tvar:
-                line(prefix, is_last,
+                line(prefix,
+                     is_last,
                      "MonoType Tvar name=" +
                          std::get<std::unique_ptr<TvarType>>(mono.value)->name->string());
                 break;
             case MonoType::Type::Basic:
-                line(prefix, is_last,
+                line(prefix,
+                     is_last,
                      "MonoType Basic name=" +
                          std::get<std::unique_ptr<NamedType>>(mono.value)->name->string());
                 break;
             case MonoType::Type::Array: {
                 line(prefix, is_last, "MonoType Array");
                 dump_monotype(*std::get<std::unique_ptr<ArrayType>>(mono.value)->element,
-                              child_prefix(prefix, is_last), true);
+                              child_prefix(prefix, is_last),
+                              true);
                 break;
             }
             case MonoType::Type::Stream: {
                 line(prefix, is_last, "MonoType Stream");
                 dump_monotype(*std::get<std::unique_ptr<StreamType>>(mono.value)->element,
-                              child_prefix(prefix, is_last), true);
+                              child_prefix(prefix, is_last),
+                              true);
                 break;
             }
             case MonoType::Type::Vector: {
                 line(prefix, is_last, "MonoType Vector");
                 dump_monotype(*std::get<std::unique_ptr<VectorType>>(mono.value)->element,
-                              child_prefix(prefix, is_last), true);
+                              child_prefix(prefix, is_last),
+                              true);
                 break;
             }
             case MonoType::Type::Dict: {
@@ -500,15 +523,16 @@ private:
                 line(prefix, is_last, "MonoType Dynamic");
                 break;
             case MonoType::Type::Record:
-                dump_record_type(*std::get<std::unique_ptr<RecordType>>(mono.value), prefix,
-                                 is_last);
+                dump_record_type(
+                    *std::get<std::unique_ptr<RecordType>>(mono.value), prefix, is_last);
                 break;
             case MonoType::Type::Function:
-                dump_function_type(*std::get<std::unique_ptr<FunctionType>>(mono.value), prefix,
-                                   is_last);
+                dump_function_type(
+                    *std::get<std::unique_ptr<FunctionType>>(mono.value), prefix, is_last);
                 break;
             case MonoType::Type::Label:
-                line(prefix, is_last,
+                line(prefix,
+                     is_last,
                      "MonoType Label value=" +
                          std::get<std::unique_ptr<LabelLit>>(mono.value)->string());
                 break;
@@ -523,11 +547,13 @@ private:
         line(prefix, is_last, label);
         auto next = child_prefix(prefix, is_last);
         for (size_t i = 0; i < record.properties.size(); ++i) {
-            line(next, i + 1 == record.properties.size(),
+            line(next,
+                 i + 1 == record.properties.size(),
                  "PropertyType name=" + record.properties[i]->name->string() +
                      location_summary(record.properties[i]->loc));
             dump_monotype(*record.properties[i]->monotype,
-                          child_prefix(next, i + 1 == record.properties.size()), true);
+                          child_prefix(next, i + 1 == record.properties.size()),
+                          true);
         }
     }
 
@@ -539,7 +565,8 @@ private:
             switch (param->type) {
                 case ParameterType::Type::Required: {
                     const auto& required = std::get<std::shared_ptr<Required>>(param->value);
-                    line(next, false,
+                    line(next,
+                         false,
                          "RequiredParam name=" + required->name->string() +
                              location_summary(required->loc));
                     dump_monotype(*required->monotype, child_prefix(next, false), true);
@@ -547,7 +574,8 @@ private:
                 }
                 case ParameterType::Type::Optional: {
                     const auto& optional = std::get<std::unique_ptr<Optional>>(param->value);
-                    line(next, false,
+                    line(next,
+                         false,
                          "OptionalParam name=" + optional->name->string() +
                              location_summary(optional->loc));
                     dump_monotype(*optional->monotype, child_prefix(next, false), true);
@@ -555,7 +583,8 @@ private:
                 }
                 case ParameterType::Type::Pipe: {
                     const auto& pipe = std::get<std::unique_ptr<Pipe>>(param->value);
-                    line(next, false,
+                    line(next,
+                         false,
                          "PipeParam name=" + pipe->name->string() + location_summary(pipe->loc));
                     dump_monotype(*pipe->monotype, child_prefix(next, false), true);
                     break;
@@ -657,9 +686,9 @@ private:
     }
 
     void dump_package_clause(const PackageClause& package) {
-        leaf("PackageClause", "name=" + package.name->string() +
-                                  attributes_summary(package.attributes) +
-                                  location_summary(package.loc));
+        leaf("PackageClause",
+             "name=" + package.name->string() + attributes_summary(package.attributes) +
+                 location_summary(package.loc));
     }
     void dump_import(const ImportDeclaration& import) {
         std::string summary = "path=\"" + import.path->value + "\"";
@@ -690,16 +719,12 @@ private:
             }
             case Statement::Type::OptionStatement: {
                 const auto& option = std::get<std::unique_ptr<OptionStmt>>(stmt.stmt);
-                node("OptionStatement", attrs + loc, [&] {
-                    dump_assignment(*option->assignment);
-                });
+                node("OptionStatement", attrs + loc, [&] { dump_assignment(*option->assignment); });
                 break;
             }
             case Statement::Type::ReturnStatement: {
                 const auto& ret = std::get<std::unique_ptr<ReturnStmt>>(stmt.stmt);
-                node("ReturnStatement", attrs + loc, [&] {
-                    dump_expression(*ret->argument);
-                });
+                node("ReturnStatement", attrs + loc, [&] { dump_expression(*ret->argument); });
                 break;
             }
             case Statement::Type::BadStatement: {
@@ -713,9 +738,7 @@ private:
                 if (testcase->extends) {
                     summary += ", extends=\"" + testcase->extends->value + "\"";
                 }
-                node("TestCaseStatement", summary, [&] {
-                    dump_block(*testcase->block);
-                });
+                node("TestCaseStatement", summary, [&] { dump_block(*testcase->block); });
                 break;
             }
             case Statement::Type::BuiltinStatement: {
@@ -854,8 +877,9 @@ private:
                      "value=" + std::get<std::unique_ptr<LabelLit>>(expr.expr)->string());
                 break;
             case Expression::Type::BadExpr:
-                leaf("BadExpr", std::get<std::unique_ptr<BadExpr>>(expr.expr)->text +
-                                    location_summary(expr.loc));
+                leaf("BadExpr",
+                     std::get<std::unique_ptr<BadExpr>>(expr.expr)->text +
+                         location_summary(expr.loc));
                 break;
         }
     }
@@ -947,9 +971,7 @@ private:
         });
     }
     void dump_unary_expr(const UnaryExpr& expr) {
-        node("UnaryExpr", "op=" + op_string(expr.op), [&] {
-            dump_expression(*expr.argument);
-        });
+        node("UnaryExpr", "op=" + op_string(expr.op), [&] { dump_expression(*expr.argument); });
     }
     void dump_pipe_expr(const PipeExpr& expr) {
         node("PipeExpr", "", [&] {
@@ -975,17 +997,11 @@ private:
         node("ConditionalExpr", "", [&] {
             bool first = true;
             element_prefix(first);
-            node("Test", "", [&] {
-                dump_expression(*expr.test);
-            });
+            node("Test", "", [&] { dump_expression(*expr.test); });
             element_prefix(first);
-            node("Consequent", "", [&] {
-                dump_expression(*expr.consequent);
-            });
+            node("Consequent", "", [&] { dump_expression(*expr.consequent); });
             element_prefix(first);
-            node("Alternate", "", [&] {
-                dump_expression(*expr.alternate);
-            });
+            node("Alternate", "", [&] { dump_expression(*expr.alternate); });
         });
     }
     void dump_string_expr(const StringExpr& expr) {
@@ -1082,9 +1098,8 @@ private:
                     for (const auto& prop : record.properties) {
                         element_prefix(first);
                         node("PropertyType",
-                             "name=" + prop->name->string() + location_summary(prop->loc), [&] {
-                                 dump_monotype(*prop->monotype);
-                             });
+                             "name=" + prop->name->string() + location_summary(prop->loc),
+                             [&] { dump_monotype(*prop->monotype); });
                     }
                 });
                 break;
@@ -1102,9 +1117,7 @@ private:
                                 node("RequiredParam",
                                      "name=" + required->name->string() +
                                          location_summary(required->loc),
-                                     [&] {
-                                         dump_monotype(*required->monotype);
-                                     });
+                                     [&] { dump_monotype(*required->monotype); });
                                 break;
                             }
                             case ParameterType::Type::Optional: {
@@ -1113,18 +1126,14 @@ private:
                                 node("OptionalParam",
                                      "name=" + optional->name->string() +
                                          location_summary(optional->loc),
-                                     [&] {
-                                         dump_monotype(*optional->monotype);
-                                     });
+                                     [&] { dump_monotype(*optional->monotype); });
                                 break;
                             }
                             case ParameterType::Type::Pipe: {
                                 const auto& pipe = std::get<std::unique_ptr<Pipe>>(param->value);
                                 node("PipeParam",
                                      "name=" + pipe->name->string() + location_summary(pipe->loc),
-                                     [&] {
-                                         dump_monotype(*pipe->monotype);
-                                     });
+                                     [&] { dump_monotype(*pipe->monotype); });
                                 break;
                             }
                         }
@@ -1146,8 +1155,12 @@ private:
 
 } // namespace
 
-std::string dump_ast(const File& file) { return AstDumper().dump(file); }
+std::string dump_ast(const File& file) {
+    return AstDumper().dump(file);
+}
 
-std::string dump_ast_json(const File& file) { return AstJsonDumper().dump(file); }
+std::string dump_ast_json(const File& file) {
+    return AstJsonDumper().dump(file);
+}
 
 } // namespace pl::flux

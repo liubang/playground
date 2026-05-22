@@ -17,13 +17,14 @@
 
 #pragma once
 
-#include "cpp/pl/recall/embedding_client.h"
-#include "cpp/pl/recall/faiss_index.h"
-#include "cpp/pl/recall/proto/recall.pb.h"
 #include <brpc/controller.h>
 #include <mutex>
 #include <string>
 #include <unordered_map>
+
+#include "cpp/pl/recall/embedding_client.h"
+#include "cpp/pl/recall/faiss_index.h"
+#include "cpp/pl/recall/proto/recall.pb.h"
 
 namespace pl::recall {
 

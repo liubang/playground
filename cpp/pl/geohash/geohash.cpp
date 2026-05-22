@@ -29,8 +29,10 @@ constexpr inline GeoHash::Area WGS84_RANGE = {
 
 // Ref: https://graphics.stanford.edu/~seander/bithacks.html#InterleaveBMN
 inline uint64_t interleave64(uint32_t xlo, uint32_t ylo) {
-    constexpr static std::array<uint64_t, 5> B = {0x5555555555555555ULL, 0x3333333333333333ULL,
-                                                  0x0F0F0F0F0F0F0F0FULL, 0x00FF00FF00FF00FFULL,
+    constexpr static std::array<uint64_t, 5> B = {0x5555555555555555ULL,
+                                                  0x3333333333333333ULL,
+                                                  0x0F0F0F0F0F0F0F0FULL,
+                                                  0x00FF00FF00FF00FFULL,
                                                   0x0000FFFF0000FFFFULL};
     constexpr static std::array<int, 5> S = {1, 2, 4, 8, 16};
     uint64_t x = xlo;
@@ -56,9 +58,12 @@ inline uint64_t interleave64(uint32_t xlo, uint32_t ylo) {
 
 // Ref: http://stackoverflow.com/questions/4909263
 inline uint64_t deinterleave64(uint64_t interleaved) {
-    constexpr static std::array<uint64_t, 6> B = {0x5555555555555555ULL, 0x3333333333333333ULL,
-                                                  0x0F0F0F0F0F0F0F0FULL, 0x00FF00FF00FF00FFULL,
-                                                  0x0000FFFF0000FFFFULL, 0x00000000FFFFFFFFULL};
+    constexpr static std::array<uint64_t, 6> B = {0x5555555555555555ULL,
+                                                  0x3333333333333333ULL,
+                                                  0x0F0F0F0F0F0F0F0FULL,
+                                                  0x00FF00FF00FF00FFULL,
+                                                  0x0000FFFF0000FFFFULL,
+                                                  0x00000000FFFFFFFFULL};
     constexpr static std::array<int, 6> S = {0, 1, 2, 4, 8, 16};
 
     uint64_t x = interleaved;

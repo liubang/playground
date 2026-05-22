@@ -14,11 +14,11 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/pl/minidfs/common/checksum.h"
-
 #include <gtest/gtest.h>
 #include <string>
 #include <string_view>
+
+#include "cpp/pl/minidfs/common/checksum.h"
 
 namespace pl::minidfs {
 namespace {

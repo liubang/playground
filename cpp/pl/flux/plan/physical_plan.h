@@ -17,12 +17,13 @@
 
 #pragma once
 
-#include "cpp/pl/flux/plan/plan_node.h"
 #include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
+
+#include "cpp/pl/flux/plan/plan_node.h"
 
 namespace pl::flux::plan {
 
@@ -192,8 +193,8 @@ inline void FormatPhysicalPlanTree(const PhysicalPlanNode& node,
     FormatPhysicalNodeProperties(node, property_indent, out);
     for (size_t i = 0; i < node.inputs.size(); ++i) {
         if (node.inputs[i] != nullptr) {
-            FormatPhysicalPlanTree(*node.inputs[i], child_prefix, i + 1 == node.inputs.size(),
-                                   false, out);
+            FormatPhysicalPlanTree(
+                *node.inputs[i], child_prefix, i + 1 == node.inputs.size(), false, out);
         }
     }
 }

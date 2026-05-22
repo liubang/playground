@@ -15,9 +15,10 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2022/01/05 20:44
 
-#include "cpp/pl/arena/arena.h"
 #include <gtest/gtest.h>
 #include <utility>
+
+#include "cpp/pl/arena/arena.h"
 
 namespace {
 struct TestObject {

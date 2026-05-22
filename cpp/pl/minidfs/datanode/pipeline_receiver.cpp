@@ -17,9 +17,10 @@
 
 #include "cpp/pl/minidfs/datanode/pipeline_receiver.h"
 
+#include <fmt/format.h>
+
 #include "cpp/pl/minidfs/common/checksum.h"
 #include "cpp/pl/minidfs/common/error_code.h"
-#include <fmt/format.h>
 
 namespace pl::minidfs {
 

@@ -17,13 +17,13 @@
 
 #pragma once
 
-#include "zn.h"
-
 #include <bitset>
 #include <cstdint>
 #include <iostream>
 #include <ostream>
 #include <tuple>
+
+#include "zn.h"
 
 namespace pl::curve {
 

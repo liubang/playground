@@ -17,10 +17,11 @@
 
 #pragma once
 
-#include "absl/status/statusor.h"
-#include "cpp/pl/flux/syntax/ast.h"
-#include "cpp/pl/flux/runtime/runtime_env.h"
 #include <vector>
+
+#include "absl/status/statusor.h"
+#include "cpp/pl/flux/runtime/runtime_env.h"
+#include "cpp/pl/flux/syntax/ast.h"
 
 namespace pl::flux {
 

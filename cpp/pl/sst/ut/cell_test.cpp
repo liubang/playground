@@ -15,10 +15,11 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2024/07/01 01:02
 
+#include <gtest/gtest.h>
+
 #include "cpp/pl/arena/arena.h"
 #include "cpp/pl/random/random.h"
 #include "cpp/pl/sst/cell.h"
-#include <gtest/gtest.h>
 
 namespace pl {
 class CellTest : public ::testing::Test {
@@ -55,8 +56,8 @@ TEST_F(CellTest, cell_encode_decode_roundtrip) {
 // ==================== CellKey Decode Error Paths ====================
 
 TEST_F(CellTest, decode_too_short) {
-    // Minimum encoded size: rowkey_len + 2 (null terminators) + 8 (timestamp) + 1 (type) = rowkey_len + 11
-    // With rowkey_len = 5, minimum = 16 bytes. Provide fewer.
+    // Minimum encoded size: rowkey_len + 2 (null terminators) + 8 (timestamp) + 1 (type) =
+    // rowkey_len + 11 With rowkey_len = 5, minimum = 16 bytes. Provide fewer.
     std::string short_data = "hello"; // 5 bytes, rowkey_len = 5, total needed >= 16
     CellKey ck;
     auto result = ck.decode(short_data, 5);
@@ -104,10 +105,10 @@ TEST_F(CellTest, decode_missing_col_null_terminator) {
     // Build data with cf null but no col null
     // rowkey = "abc", cf = "d" + '\0', then fill rest with no '\0'
     std::string data;
-    data.append("abc");     // rowkey (3 bytes)
-    data.append("d");       // cf
-    data.push_back('\0');   // cf null terminator
-    data.append(20, 'x');   // col (no null terminator) + padding
+    data.append("abc");   // rowkey (3 bytes)
+    data.append("d");     // cf
+    data.push_back('\0'); // cf null terminator
+    data.append(20, 'x'); // col (no null terminator) + padding
     CellKey ck;
     auto result = ck.decode(data, 3);
     EXPECT_TRUE(result.hasError());
@@ -117,11 +118,11 @@ TEST_F(CellTest, decode_missing_col_null_terminator) {
 TEST_F(CellTest, decode_insufficient_data_after_col) {
     // Build data with cf and col null terminators but not enough bytes for timestamp+type
     std::string data;
-    data.append("abc");     // rowkey (3 bytes)
-    data.append("d");       // cf
-    data.push_back('\0');   // cf null terminator
-    data.append("e");       // col
-    data.push_back('\0');   // col null terminator
+    data.append("abc");   // rowkey (3 bytes)
+    data.append("d");     // cf
+    data.push_back('\0'); // cf null terminator
+    data.append("e");     // col
+    data.push_back('\0'); // col null terminator
     // Now we need 8 (timestamp) + 1 (type) = 9 more bytes, but provide fewer
     data.append(5, '\x01'); // only 5 bytes
     CellKey ck;

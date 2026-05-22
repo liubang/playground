@@ -17,13 +17,14 @@
 
 #include "cpp/pl/flux/runtime/runtime_eval.h"
 
-#include "absl/status/status.h"
-#include "absl/strings/str_cat.h"
-#include "cpp/pl/flux/common/compat.h"
 #include <optional>
 #include <regex>
 #include <sstream>
 #include <unordered_map>
+
+#include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
+#include "cpp/pl/flux/common/compat.h"
 
 namespace pl::flux {
 namespace {
@@ -304,8 +305,9 @@ absl::Status bind_function_arguments(const FunctionValue& function,
 
     if (use_named_args) {
         if (!named_args.empty()) {
-            return invalid_call(whole_expr, absl::StrCat("unexpected named argument `",
-                                                         named_args.begin()->first, "`"));
+            return invalid_call(
+                whole_expr,
+                absl::StrCat("unexpected named argument `", named_args.begin()->first, "`"));
         }
     } else if (positional_index != positional_args.size()) {
         return invalid_call(whole_expr, "too many positional arguments");
@@ -411,8 +413,8 @@ absl::StatusOr<Value> invoke_function(const FunctionValue& function,
     }
 
     Environment function_env(function.closure);
-    auto bind_status = bind_function_arguments(function, *function.user_function, call, whole_expr,
-                                               env, function_env, pipe_value);
+    auto bind_status = bind_function_arguments(
+        function, *function.user_function, call, whole_expr, env, function_env, pipe_value);
     if (!bind_status.ok()) {
         return bind_status;
     }

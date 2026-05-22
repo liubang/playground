@@ -68,7 +68,9 @@ void SSTableIterator::prev() {
     backwardSkipEmptyData();
 }
 
-bool SSTableIterator::valid() const { return data_iter_ != nullptr && data_iter_->valid(); }
+bool SSTableIterator::valid() const {
+    return data_iter_ != nullptr && data_iter_->valid();
+}
 
 CellRef SSTableIterator::cell() const {
     assert(valid());

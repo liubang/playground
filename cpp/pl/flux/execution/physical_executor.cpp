@@ -17,21 +17,11 @@
 
 #include "cpp/pl/flux/execution/physical_executor.h"
 
-#include "absl/status/status.h"
-#include "absl/strings/str_cat.h"
-#include "cpp/pl/flux/connector/connector_registry.h"
-#include "cpp/pl/flux/connector/connector_runtime.h"
-#include "cpp/pl/flux/execution/accumulator.h"
-#include "cpp/pl/flux/execution/page_budget.h"
-#include "cpp/pl/flux/execution/task_executor.h"
-#include "cpp/pl/flux/optimizer/cbo.h"
-#include "cpp/pl/flux/runtime/runtime_builtin_aggregate_helpers.h"
-#include "cpp/pl/flux/runtime/runtime_builtin_table_helpers.h"
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
-#include <cstdlib>
 #include <cstddef>
+#include <cstdlib>
 #include <deque>
 #include <future>
 #include <iterator>
@@ -44,6 +34,17 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+#include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
+#include "cpp/pl/flux/connector/connector_registry.h"
+#include "cpp/pl/flux/connector/connector_runtime.h"
+#include "cpp/pl/flux/execution/accumulator.h"
+#include "cpp/pl/flux/execution/page_budget.h"
+#include "cpp/pl/flux/execution/task_executor.h"
+#include "cpp/pl/flux/optimizer/cbo.h"
+#include "cpp/pl/flux/runtime/runtime_builtin_aggregate_helpers.h"
+#include "cpp/pl/flux/runtime/runtime_builtin_table_helpers.h"
 
 namespace pl::flux::execution {
 namespace {
@@ -233,7 +234,8 @@ absl::StatusOr<Page> apply_topn_page(const Page& input,
     auto worse_first = [&](const auto& lhs, const auto& rhs) {
         return page_row_less(lhs, rhs, keys);
     };
-    std::priority_queue<std::shared_ptr<ObjectValue>, std::vector<std::shared_ptr<ObjectValue>>,
+    std::priority_queue<std::shared_ptr<ObjectValue>,
+                        std::vector<std::shared_ptr<ObjectValue>>,
                         decltype(worse_first)>
         heap(worse_first);
     for (const auto& row : rows_from_page(input)) {
@@ -267,14 +269,19 @@ absl::StatusOr<Page> apply_topn_page(const Page& input,
 
 Value value_from_page(const Page& page) {
     TableValue table = TableValueFromPage(page);
-    Value value = Value::table_stream(table.bucket, std::move(table.tables), table.range_start,
-                                      table.range_stop, table.result_name);
+    Value value = Value::table_stream(table.bucket,
+                                      std::move(table.tables),
+                                      table.range_start,
+                                      table.range_stop,
+                                      table.result_name);
     value.as_table_mut().plan = table.plan;
     value.as_table_mut().materialized = table.materialized;
     return value;
 }
 
-Page page_from_value(const Value& value) { return PageFromTableValue(value.as_table()); }
+Page page_from_value(const Value& value) {
+    return PageFromTableValue(value.as_table());
+}
 
 absl::StatusOr<Page> apply_range_page(const Page& input,
                                       const std::shared_ptr<plan::PlanNode>& plan) {
@@ -506,8 +513,8 @@ absl::StatusOr<Page> apply_exchange_page(const Page& input,
             chunks[it->second].rows.push_back(std::move(row));
         }
     }
-    Page output = PageFromTableChunks(input.bucket, chunks, input.range_start, input.range_stop,
-                                      input.result_name);
+    Page output = PageFromTableChunks(
+        input.bucket, chunks, input.range_start, input.range_stop, input.result_name);
     return page_with_plan(std::move(output), plan);
 }
 
@@ -619,15 +626,17 @@ absl::StatusOr<Value> local_hash_join_values(const Value& left_value,
                     for (size_t left_index : it->second) {
                         matched_left[left_index] = true;
                         chunk.rows.push_back(local_join_row(left_table.rows[left_index].get(),
-                                                            left_columns, right_row.get(),
-                                                            right_columns, spec));
+                                                            left_columns,
+                                                            right_row.get(),
+                                                            right_columns,
+                                                            spec));
                     }
                 }
             }
             if (!matched &&
                 (spec.method == plan::JoinMethod::Right || spec.method == plan::JoinMethod::Full)) {
-                chunk.rows.push_back(local_join_row(left_null.get(), left_columns, right_row.get(),
-                                                    right_columns, spec));
+                chunk.rows.push_back(local_join_row(
+                    left_null.get(), left_columns, right_row.get(), right_columns, spec));
             }
         }
         if (spec.method == plan::JoinMethod::Left || spec.method == plan::JoinMethod::Full) {
@@ -635,8 +644,11 @@ absl::StatusOr<Value> local_hash_join_values(const Value& left_value,
                 if (matched_left[left_index] || left_table.rows[left_index] == nullptr) {
                     continue;
                 }
-                chunk.rows.push_back(local_join_row(left_table.rows[left_index].get(), left_columns,
-                                                    right_null.get(), right_columns, spec));
+                chunk.rows.push_back(local_join_row(left_table.rows[left_index].get(),
+                                                    left_columns,
+                                                    right_null.get(),
+                                                    right_columns,
+                                                    spec));
             }
         }
     } else {
@@ -666,16 +678,18 @@ absl::StatusOr<Value> local_hash_join_values(const Value& left_value,
                     matched = true;
                     for (size_t right_index : it->second) {
                         matched_right[right_index] = true;
-                        chunk.rows.push_back(local_join_row(left_row.get(), left_columns,
+                        chunk.rows.push_back(local_join_row(left_row.get(),
+                                                            left_columns,
                                                             right_table.rows[right_index].get(),
-                                                            right_columns, spec));
+                                                            right_columns,
+                                                            spec));
                     }
                 }
             }
             if (!matched &&
                 (spec.method == plan::JoinMethod::Left || spec.method == plan::JoinMethod::Full)) {
-                chunk.rows.push_back(local_join_row(left_row.get(), left_columns, right_null.get(),
-                                                    right_columns, spec));
+                chunk.rows.push_back(local_join_row(
+                    left_row.get(), left_columns, right_null.get(), right_columns, spec));
             }
         }
         if (spec.method == plan::JoinMethod::Right || spec.method == plan::JoinMethod::Full) {
@@ -683,9 +697,11 @@ absl::StatusOr<Value> local_hash_join_values(const Value& left_value,
                 if (matched_right[right_index] || right_table.rows[right_index] == nullptr) {
                     continue;
                 }
-                chunk.rows.push_back(local_join_row(left_null.get(), left_columns,
+                chunk.rows.push_back(local_join_row(left_null.get(),
+                                                    left_columns,
                                                     right_table.rows[right_index].get(),
-                                                    right_columns, spec));
+                                                    right_columns,
+                                                    spec));
             }
         }
     }
@@ -693,7 +709,8 @@ absl::StatusOr<Value> local_hash_join_values(const Value& left_value,
     std::vector<TableChunk> chunks;
     chunks.push_back(std::move(chunk));
     Value value = Value::table_stream(
-        left_table.bucket.empty() ? right_table.bucket : left_table.bucket, std::move(chunks),
+        left_table.bucket.empty() ? right_table.bucket : left_table.bucket,
+        std::move(chunks),
         left_table.range_start.has_value() ? left_table.range_start : right_table.range_start,
         left_table.range_stop.has_value() ? left_table.range_stop : right_table.range_stop);
     value.as_table_mut().plan = plan;
@@ -982,9 +999,7 @@ public:
 
     absl::StatusOr<std::optional<Page>> PopPage() {
         std::unique_lock<std::mutex> lock(mu_);
-        cv_.wait(lock, [this]() {
-            return !pages_.empty() || finished_ || error_.has_value();
-        });
+        cv_.wait(lock, [this]() { return !pages_.empty() || finished_ || error_.has_value(); });
         if (error_.has_value()) {
             return absl::FailedPreconditionError(*error_);
         }
@@ -1251,7 +1266,8 @@ public:
                 columns.push_back(column.name);
             }
             for (size_t row_index = 0; row_index < chunk.row_count; ++row_index) {
-                auto key = partition_key_for_page_row(chunk, row_index,
+                auto key = partition_key_for_page_row(chunk,
+                                                      row_index,
                                                       distribution_.partition_keys,
                                                       distribution_.include_group_key);
                 if (!key.has_value()) {
@@ -1270,8 +1286,10 @@ public:
             if (partitions[index].empty()) {
                 continue;
             }
-            Page partitioned = PageFromTableChunks(output.bucket, partitions[index],
-                                                   output.range_start, output.range_stop,
+            Page partitioned = PageFromTableChunks(output.bucket,
+                                                   partitions[index],
+                                                   output.range_start,
+                                                   output.range_stop,
                                                    output.result_name);
             partitioned.plan = output.plan;
             partitioned.materialized = output.materialized;
@@ -1780,9 +1798,10 @@ struct PlannedOperator {
     std::vector<std::string> operators;
 };
 
-absl::StatusOr<PlannedOperator> BuildOperator(const std::shared_ptr<plan::PlanNode>& logical_plan,
-                                              bool allow_multi_driver,
-                                              const std::shared_ptr<QueryMemoryContext>& memory_context) {
+absl::StatusOr<PlannedOperator> BuildOperator(
+    const std::shared_ptr<plan::PlanNode>& logical_plan,
+    bool allow_multi_driver,
+    const std::shared_ptr<QueryMemoryContext>& memory_context) {
     if (logical_plan == nullptr) {
         return absl::InvalidArgumentError("missing physical plan root");
     }
@@ -1834,8 +1853,8 @@ absl::StatusOr<PlannedOperator> BuildOperator(const std::shared_ptr<plan::PlanNo
         }
         PlannedOperator planned;
         planned.operators = std::move(left_or->operators);
-        planned.operators.insert(planned.operators.end(), right_or->operators.begin(),
-                                 right_or->operators.end());
+        planned.operators.insert(
+            planned.operators.end(), right_or->operators.begin(), right_or->operators.end());
         planned.root = std::unique_ptr<Operator>(new LocalHashJoinOperator(
             optimized_plan, std::move(left_or->root), std::move(right_or->root)));
         planned.operators.push_back(planned.root->name());
@@ -1851,9 +1870,11 @@ absl::StatusOr<PlannedOperator> BuildOperator(const std::shared_ptr<plan::PlanNo
         if (!planned_or.ok()) {
             return planned_or.status();
         }
-        planned_or->root = std::unique_ptr<Operator>(new StreamingGroupedAggregateOperator(
-            optimized_plan, optimized_plan->inputs[0]->group().columns,
-            std::move(planned_or->root), memory_context));
+        planned_or->root = std::unique_ptr<Operator>(
+            new StreamingGroupedAggregateOperator(optimized_plan,
+                                                  optimized_plan->inputs[0]->group().columns,
+                                                  std::move(planned_or->root),
+                                                  memory_context));
         planned_or->operators.push_back("GroupOperator");
         planned_or->operators.push_back(planned_or->root->name());
         return std::move(*planned_or);
@@ -1891,16 +1912,14 @@ absl::StatusOr<PlannedOperator> BuildOperator(const std::shared_ptr<plan::PlanNo
         current = std::unique_ptr<Operator>(
             new SortOperator(optimized_plan, std::move(planned_or->root)));
     } else if (optimized_plan->kind == plan::PlanNodeKind::Group) {
-        current = std::unique_ptr<Operator>(
-            new StreamingGroupOperator(optimized_plan, std::move(planned_or->root), memory_context));
+        current = std::unique_ptr<Operator>(new StreamingGroupOperator(
+            optimized_plan, std::move(planned_or->root), memory_context));
     } else if (optimized_plan->kind == plan::PlanNodeKind::Distinct) {
-        current = std::unique_ptr<Operator>(
-            new StreamingDistinctOperator(optimized_plan, std::move(planned_or->root),
-                                          memory_context));
+        current = std::unique_ptr<Operator>(new StreamingDistinctOperator(
+            optimized_plan, std::move(planned_or->root), memory_context));
     } else if (optimized_plan->kind == plan::PlanNodeKind::Aggregate) {
-        current = std::unique_ptr<Operator>(
-            new StreamingAggregateOperator(optimized_plan, std::move(planned_or->root),
-                                           memory_context));
+        current = std::unique_ptr<Operator>(new StreamingAggregateOperator(
+            optimized_plan, std::move(planned_or->root), memory_context));
     } else {
         return absl::InvalidArgumentError(absl::StrCat(
             "unsupported physical operator: ", plan::PlanNodeKindName(optimized_plan->kind)));
@@ -2022,15 +2041,19 @@ absl::StatusOr<ProducedPipeline> AddJoinProducerPipeline(
     }
 
     const bool build_left = join_plan->join().build_side == plan::JoinBuildSide::Left;
-    auto left_or =
-        AddProducerPipelineForPlan(join_plan->inputs[0], ChildPipelineId(id, "left"),
-                                   build_left ? "build" : "probe", task, task->memory_context);
+    auto left_or = AddProducerPipelineForPlan(join_plan->inputs[0],
+                                              ChildPipelineId(id, "left"),
+                                              build_left ? "build" : "probe",
+                                              task,
+                                              task->memory_context);
     if (!left_or.ok()) {
         return left_or.status();
     }
-    auto right_or =
-        AddProducerPipelineForPlan(join_plan->inputs[1], ChildPipelineId(id, "right"),
-                                   build_left ? "probe" : "build", task, task->memory_context);
+    auto right_or = AddProducerPipelineForPlan(join_plan->inputs[1],
+                                               ChildPipelineId(id, "right"),
+                                               build_left ? "probe" : "build",
+                                               task,
+                                               task->memory_context);
     if (!right_or.ok()) {
         return right_or.status();
     }
@@ -2045,9 +2068,13 @@ absl::StatusOr<ProducedPipeline> AddJoinProducerPipeline(
     std::unique_ptr<Operator> sink(new ExchangeSinkOperator(std::move(join), output_buffer));
     root_operators.push_back(sink->name());
 
-    task->pipelines.push_back(MakePipeline(std::move(id), "join producer", std::move(role),
+    task->pipelines.push_back(MakePipeline(std::move(id),
+                                           "join producer",
+                                           std::move(role),
                                            {left_or->pipeline_id, right_or->pipeline_id},
-                                           std::move(root_operators), std::move(sink), {},
+                                           std::move(root_operators),
+                                           std::move(sink),
+                                           {},
                                            GatherDistribution()));
     return ProducedPipeline{.buffer = std::move(output_buffer),
                             .pipeline_id = task->pipelines.back().id};
@@ -2077,8 +2104,13 @@ absl::StatusOr<ProducedPipeline> AddProducerPipelineForPlan(
         auto sinks =
             WrapDriverRootsWithExchangeSinks(std::move(planned_or->driver_roots), output_buffer);
         operators.emplace_back("ExchangeSinkOperator");
-        task->pipelines.push_back(MakePipeline(std::move(id), "producer", std::move(role), {},
-                                               std::move(operators), nullptr, std::move(sinks),
+        task->pipelines.push_back(MakePipeline(std::move(id),
+                                               "producer",
+                                               std::move(role),
+                                               {},
+                                               std::move(operators),
+                                               nullptr,
+                                               std::move(sinks),
                                                GatherDistribution()));
         return ProducedPipeline{.buffer = std::move(output_buffer),
                                 .pipeline_id = task->pipelines.back().id};
@@ -2086,8 +2118,13 @@ absl::StatusOr<ProducedPipeline> AddProducerPipelineForPlan(
     std::unique_ptr<Operator> sink(
         new ExchangeSinkOperator(std::move(planned_or->root), output_buffer));
     operators.push_back(sink->name());
-    task->pipelines.push_back(MakePipeline(std::move(id), "producer", std::move(role), {},
-                                           std::move(operators), std::move(sink), {},
+    task->pipelines.push_back(MakePipeline(std::move(id),
+                                           "producer",
+                                           std::move(role),
+                                           {},
+                                           std::move(operators),
+                                           std::move(sink),
+                                           {},
                                            GatherDistribution()));
     return ProducedPipeline{.buffer = std::move(output_buffer),
                             .pipeline_id = task->pipelines.back().id};
@@ -2105,14 +2142,18 @@ absl::StatusOr<ExecutionTask> BuildJoinExecutionTask(
     ExecutionTask task;
     task.memory_context = memory_context;
     const bool build_left = join_plan->join().build_side == plan::JoinBuildSide::Left;
-    auto left_or = AddProducerPipelineForPlan(join_plan->inputs[0], "join-left",
-                                              build_left ? "build" : "probe", &task,
+    auto left_or = AddProducerPipelineForPlan(join_plan->inputs[0],
+                                              "join-left",
+                                              build_left ? "build" : "probe",
+                                              &task,
                                               task.memory_context);
     if (!left_or.ok()) {
         return left_or.status();
     }
-    auto right_or = AddProducerPipelineForPlan(join_plan->inputs[1], "join-right",
-                                               build_left ? "probe" : "build", &task,
+    auto right_or = AddProducerPipelineForPlan(join_plan->inputs[1],
+                                               "join-right",
+                                               build_left ? "probe" : "build",
+                                               &task,
                                                task.memory_context);
     if (!right_or.ok()) {
         return right_or.status();
@@ -2127,9 +2168,12 @@ absl::StatusOr<ExecutionTask> BuildJoinExecutionTask(
     std::unique_ptr<Operator> output(new OutputOperator(std::move(join)));
     root_operators.push_back(output->name());
 
-    task.pipelines.push_back(MakePipeline("main", "main", "root",
+    task.pipelines.push_back(MakePipeline("main",
+                                          "main",
+                                          "root",
                                           {left_or->pipeline_id, right_or->pipeline_id},
-                                          std::move(root_operators), std::move(output)));
+                                          std::move(root_operators),
+                                          std::move(output)));
     return task;
 }
 
@@ -2143,9 +2187,8 @@ absl::StatusOr<ExecutionTask> BuildExchangeExecutionTask(
 
     ExecutionTask task;
     task.memory_context = memory_context;
-    auto input_or =
-        AddProducerPipelineForPlan(exchange_plan->inputs[0], "exchange-input", "source", &task,
-                                   task.memory_context);
+    auto input_or = AddProducerPipelineForPlan(
+        exchange_plan->inputs[0], "exchange-input", "source", &task, task.memory_context);
     if (!input_or.ok()) {
         return input_or.status();
     }
@@ -2155,8 +2198,8 @@ absl::StatusOr<ExecutionTask> BuildExchangeExecutionTask(
     operators.push_back(exchange->name());
     std::unique_ptr<Operator> output(new OutputOperator(std::move(exchange)));
     operators.push_back(output->name());
-    task.pipelines.push_back(MakePipeline("main", "main", "root", {input_or->pipeline_id},
-                                          std::move(operators), std::move(output)));
+    task.pipelines.push_back(MakePipeline(
+        "main", "main", "root", {input_or->pipeline_id}, std::move(operators), std::move(output)));
     return task;
 }
 
@@ -2210,9 +2253,13 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageTopNExecutionTask(
 
     ExecutionTask task;
     task.memory_context = memory_context;
-    task.pipelines.push_back(MakePipeline("topn-partial", "topn partial", "source", {},
+    task.pipelines.push_back(MakePipeline("topn-partial",
+                                          "topn partial",
+                                          "source",
+                                          {},
                                           {"ConnectorScanOperator", "ExchangeSinkOperator"},
-                                          nullptr, std::move(producer_roots),
+                                          nullptr,
+                                          std::move(producer_roots),
                                           GatherDistribution()));
 
     std::unique_ptr<Operator> current(new ExchangeSourceOperator(buffer));
@@ -2222,8 +2269,8 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageTopNExecutionTask(
     operators.push_back(current->name());
     std::unique_ptr<Operator> output(new OutputOperator(std::move(current)));
     operators.push_back(output->name());
-    task.pipelines.push_back(MakePipeline("main", "main", "root", {"topn-partial"},
-                                          std::move(operators), std::move(output)));
+    task.pipelines.push_back(MakePipeline(
+        "main", "main", "root", {"topn-partial"}, std::move(operators), std::move(output)));
     return task;
 }
 
@@ -2274,9 +2321,8 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecut
         return std::nullopt;
     }
 
-    const GroupedAggregateStrategy strategy =
-        ChooseGroupedAggregateStrategy(root_plan, *aggregate_index, group, input_plan,
-                                       planned_or->driver_roots.size());
+    const GroupedAggregateStrategy strategy = ChooseGroupedAggregateStrategy(
+        root_plan, *aggregate_index, group, input_plan, planned_or->driver_roots.size());
     if (strategy == GroupedAggregateStrategy::SingleStage) {
         return std::nullopt;
     }
@@ -2294,9 +2340,12 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecut
         std::vector<std::unique_ptr<Operator>> partial_roots;
         partial_roots.reserve(planned_or->driver_roots.size());
         for (auto& root : planned_or->driver_roots) {
-            std::unique_ptr<Operator> partial(new StreamingGroupedAggregateOperator(
-                aggregate, group->group().columns, std::move(root), memory_context,
-                AggregatePhase::Partial));
+            std::unique_ptr<Operator> partial(
+                new StreamingGroupedAggregateOperator(aggregate,
+                                                      group->group().columns,
+                                                      std::move(root),
+                                                      memory_context,
+                                                      AggregatePhase::Partial));
             auto distribution = HashDistribution({}, true, partition_count);
             partial_roots.push_back(std::unique_ptr<Operator>(
                 new PartitionedExchangeSinkOperator(std::move(partial), buffers, distribution)));
@@ -2310,17 +2359,25 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecut
         ExecutionTask task;
         task.memory_context = memory_context;
         task.pipelines.push_back(
-            MakePipeline("aggregate-partial", "aggregate partial partitioned", "source", {},
-                         std::move(partial_operators), nullptr, std::move(partial_roots),
+            MakePipeline("aggregate-partial",
+                         "aggregate partial partitioned",
+                         "source",
+                         {},
+                         std::move(partial_operators),
+                         nullptr,
+                         std::move(partial_roots),
                          HashDistribution(group->group().columns, true, partition_count)));
 
         std::vector<std::unique_ptr<Operator>> final_roots;
         final_roots.reserve(buffers.size());
         for (const auto& buffer : buffers) {
             std::unique_ptr<Operator> current(new ExchangeSourceOperator(buffer));
-            current = std::unique_ptr<Operator>(new StreamingGroupedAggregateOperator(
-                aggregate, group->group().columns, std::move(current), memory_context,
-                AggregatePhase::Final));
+            current = std::unique_ptr<Operator>(
+                new StreamingGroupedAggregateOperator(aggregate,
+                                                      group->group().columns,
+                                                      std::move(current),
+                                                      memory_context,
+                                                      AggregatePhase::Final));
             final_roots.push_back(std::move(current));
         }
         final_roots = WrapDriverRootsWithOutput(std::move(final_roots));
@@ -2330,11 +2387,15 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecut
             "FinalAggregateOperator",
             "OutputOperator",
         };
-        task.pipelines.push_back(MakePipeline("main", "main partitioned final", "root",
-                                              {"aggregate-partial"}, std::move(root_operators),
-                                              nullptr, std::move(final_roots),
-                                              HashDistribution(group->group().columns, true,
-                                                               partition_count)));
+        task.pipelines.push_back(
+            MakePipeline("main",
+                         "main partitioned final",
+                         "root",
+                         {"aggregate-partial"},
+                         std::move(root_operators),
+                         nullptr,
+                         std::move(final_roots),
+                         HashDistribution(group->group().columns, true, partition_count)));
         return task;
     }
 
@@ -2343,9 +2404,12 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecut
     std::vector<std::unique_ptr<Operator>> partial_roots;
     partial_roots.reserve(planned_or->driver_roots.size());
     for (auto& root : planned_or->driver_roots) {
-        std::unique_ptr<Operator> partial(new StreamingGroupedAggregateOperator(
-            aggregate, group->group().columns, std::move(root), memory_context,
-            AggregatePhase::Partial));
+        std::unique_ptr<Operator> partial(
+            new StreamingGroupedAggregateOperator(aggregate,
+                                                  group->group().columns,
+                                                  std::move(root),
+                                                  memory_context,
+                                                  AggregatePhase::Partial));
         partial_roots.push_back(
             std::unique_ptr<Operator>(new ExchangeSinkOperator(std::move(partial), buffer)));
     }
@@ -2357,19 +2421,26 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecut
 
     ExecutionTask task;
     task.memory_context = memory_context;
-    task.pipelines.push_back(MakePipeline("aggregate-partial", "aggregate partial", "source", {},
-                                          std::move(partial_operators), nullptr,
-                                          std::move(partial_roots), GatherDistribution()));
+    task.pipelines.push_back(MakePipeline("aggregate-partial",
+                                          "aggregate partial",
+                                          "source",
+                                          {},
+                                          std::move(partial_operators),
+                                          nullptr,
+                                          std::move(partial_roots),
+                                          GatherDistribution()));
 
     std::unique_ptr<Operator> current(new ExchangeSourceOperator(buffer));
     std::vector<std::string> root_operators = {current->name(), "GroupOperator"};
-    current = std::unique_ptr<Operator>(new StreamingGroupedAggregateOperator(
-        aggregate, group->group().columns, std::move(current), memory_context,
-        AggregatePhase::Final));
+    current =
+        std::unique_ptr<Operator>(new StreamingGroupedAggregateOperator(aggregate,
+                                                                        group->group().columns,
+                                                                        std::move(current),
+                                                                        memory_context,
+                                                                        AggregatePhase::Final));
     root_operators.push_back("FinalAggregateOperator");
     for (size_t index = *aggregate_index; index > 0; --index) {
-        auto wrapped_or =
-            WrapUnaryOperator(chain[index - 1], std::move(current), memory_context);
+        auto wrapped_or = WrapUnaryOperator(chain[index - 1], std::move(current), memory_context);
         if (!wrapped_or.ok()) {
             return wrapped_or.status();
         }
@@ -2378,8 +2449,12 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecut
     }
     std::unique_ptr<Operator> output(new OutputOperator(std::move(current)));
     root_operators.push_back(output->name());
-    task.pipelines.push_back(MakePipeline("main", "main", "root", {"aggregate-partial"},
-                                          std::move(root_operators), std::move(output)));
+    task.pipelines.push_back(MakePipeline("main",
+                                          "main",
+                                          "root",
+                                          {"aggregate-partial"},
+                                          std::move(root_operators),
+                                          std::move(output)));
     return task;
 }
 
@@ -2422,8 +2497,8 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildPartitionedGroupExecutionTask(
     std::vector<std::unique_ptr<Operator>> partial_roots;
     partial_roots.reserve(planned_or->driver_roots.size());
     for (auto& root : planned_or->driver_roots) {
-        std::unique_ptr<Operator> partial(new StreamingGroupOperator(
-            root_plan, std::move(root), memory_context, "partial"));
+        std::unique_ptr<Operator> partial(
+            new StreamingGroupOperator(root_plan, std::move(root), memory_context, "partial"));
         partial_roots.push_back(std::unique_ptr<Operator>(new PartitionedExchangeSinkOperator(
             std::move(partial), buffers, HashDistribution({}, true, partition_count))));
     }
@@ -2434,25 +2509,34 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildPartitionedGroupExecutionTask(
 
     ExecutionTask task;
     task.memory_context = memory_context;
-    task.pipelines.push_back(MakePipeline(
-        "group-partial", "group partial partitioned", "source", {},
-        std::move(partial_operators), nullptr, std::move(partial_roots),
-        HashDistribution(root_plan->group().columns, true, partition_count)));
+    task.pipelines.push_back(
+        MakePipeline("group-partial",
+                     "group partial partitioned",
+                     "source",
+                     {},
+                     std::move(partial_operators),
+                     nullptr,
+                     std::move(partial_roots),
+                     HashDistribution(root_plan->group().columns, true, partition_count)));
 
     std::vector<std::unique_ptr<Operator>> final_roots;
     final_roots.reserve(buffers.size());
     for (const auto& buffer : buffers) {
         std::unique_ptr<Operator> current(new ExchangeSourceOperator(buffer));
-        current = std::unique_ptr<Operator>(new StreamingGroupOperator(
-            root_plan, std::move(current), memory_context, "final"));
+        current = std::unique_ptr<Operator>(
+            new StreamingGroupOperator(root_plan, std::move(current), memory_context, "final"));
         final_roots.push_back(std::move(current));
     }
     final_roots = WrapDriverRootsWithOutput(std::move(final_roots));
-    task.pipelines.push_back(MakePipeline(
-        "main", "main partitioned group", "root", {"group-partial"},
-        {"ExchangeSourceOperator", "FinalGroupOperator", "OutputOperator"}, nullptr,
-        std::move(final_roots),
-        HashDistribution(root_plan->group().columns, true, partition_count)));
+    task.pipelines.push_back(
+        MakePipeline("main",
+                     "main partitioned group",
+                     "root",
+                     {"group-partial"},
+                     {"ExchangeSourceOperator", "FinalGroupOperator", "OutputOperator"},
+                     nullptr,
+                     std::move(final_roots),
+                     HashDistribution(root_plan->group().columns, true, partition_count)));
     return task;
 }
 
@@ -2486,11 +2570,10 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildPartitionedDistinctExecutionTa
     partial_roots.reserve(planned_or->driver_roots.size());
     std::vector<std::string> partition_keys = {root_plan->distinct().column};
     for (auto& root : planned_or->driver_roots) {
-        std::unique_ptr<Operator> partial(new StreamingDistinctOperator(
-            root_plan, std::move(root), memory_context, "partial"));
+        std::unique_ptr<Operator> partial(
+            new StreamingDistinctOperator(root_plan, std::move(root), memory_context, "partial"));
         partial_roots.push_back(std::unique_ptr<Operator>(new PartitionedExchangeSinkOperator(
-            std::move(partial), buffers,
-            HashDistribution(partition_keys, true, partition_count))));
+            std::move(partial), buffers, HashDistribution(partition_keys, true, partition_count))));
     }
 
     std::vector<std::string> partial_operators = std::move(planned_or->operators);
@@ -2499,24 +2582,33 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildPartitionedDistinctExecutionTa
 
     ExecutionTask task;
     task.memory_context = memory_context;
-    task.pipelines.push_back(MakePipeline(
-        "distinct-partial", "distinct partial partitioned", "source", {},
-        std::move(partial_operators), nullptr, std::move(partial_roots),
-        HashDistribution(partition_keys, true, partition_count)));
+    task.pipelines.push_back(MakePipeline("distinct-partial",
+                                          "distinct partial partitioned",
+                                          "source",
+                                          {},
+                                          std::move(partial_operators),
+                                          nullptr,
+                                          std::move(partial_roots),
+                                          HashDistribution(partition_keys, true, partition_count)));
 
     std::vector<std::unique_ptr<Operator>> final_roots;
     final_roots.reserve(buffers.size());
     for (const auto& buffer : buffers) {
         std::unique_ptr<Operator> current(new ExchangeSourceOperator(buffer));
-        current = std::unique_ptr<Operator>(new StreamingDistinctOperator(
-            root_plan, std::move(current), memory_context, "final"));
+        current = std::unique_ptr<Operator>(
+            new StreamingDistinctOperator(root_plan, std::move(current), memory_context, "final"));
         final_roots.push_back(std::move(current));
     }
     final_roots = WrapDriverRootsWithOutput(std::move(final_roots));
-    task.pipelines.push_back(MakePipeline(
-        "main", "main partitioned distinct", "root", {"distinct-partial"},
-        {"ExchangeSourceOperator", "FinalDistinctOperator", "OutputOperator"}, nullptr,
-        std::move(final_roots), HashDistribution(partition_keys, true, partition_count)));
+    task.pipelines.push_back(
+        MakePipeline("main",
+                     "main partitioned distinct",
+                     "root",
+                     {"distinct-partial"},
+                     {"ExchangeSourceOperator", "FinalDistinctOperator", "OutputOperator"},
+                     nullptr,
+                     std::move(final_roots),
+                     HashDistribution(partition_keys, true, partition_count)));
     return task;
 }
 
@@ -2543,9 +2635,8 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildUnaryBreakerExecutionTask(
     const auto& breaker = chain[*breaker_index];
     ExecutionTask task;
     task.memory_context = memory_context;
-    auto input_or =
-        AddProducerPipelineForPlan(breaker->inputs[0], "breaker-input", "source", &task,
-                                   memory_context);
+    auto input_or = AddProducerPipelineForPlan(
+        breaker->inputs[0], "breaker-input", "source", &task, memory_context);
     if (!input_or.ok()) {
         return input_or.status();
     }
@@ -2575,8 +2666,8 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildUnaryBreakerExecutionTask(
     }
     std::unique_ptr<Operator> output(new OutputOperator(std::move(current)));
     operators.push_back(output->name());
-    task.pipelines.push_back(MakePipeline("main", "main", "root", {input_or->pipeline_id},
-                                          std::move(operators), std::move(output)));
+    task.pipelines.push_back(MakePipeline(
+        "main", "main", "root", {input_or->pipeline_id}, std::move(operators), std::move(output)));
     return task;
 }
 
@@ -2597,9 +2688,11 @@ absl::Status QueryMemoryContext::Reserve(size_t bytes) {
     peak_bytes_ = std::max(peak_bytes_, used_bytes_);
     if (limit_bytes_ != 0 && used_bytes_ > limit_bytes_) {
         limited_ = true;
-        return absl::ResourceExhaustedError(absl::StrCat(
-            "query memory limit exceeded: estimated=", used_bytes_, " bytes, limit=",
-            limit_bytes_, " bytes"));
+        return absl::ResourceExhaustedError(absl::StrCat("query memory limit exceeded: estimated=",
+                                                         used_bytes_,
+                                                         " bytes, limit=",
+                                                         limit_bytes_,
+                                                         " bytes"));
     }
     return absl::OkStatus();
 }
@@ -2648,9 +2741,8 @@ absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
     }
     if (fast_or->rbo_result.pushdown_plan.has_value() &&
         optimizer::CanExecutePushdownPlan(*fast_or->rbo_result.pushdown_plan)) {
-        auto topn_task_or = BuildTwoStageTopNExecutionTask(fast_or->rbo_result.plan,
-                                                           *fast_or->rbo_result.pushdown_plan,
-                                                           memory_context);
+        auto topn_task_or = BuildTwoStageTopNExecutionTask(
+            fast_or->rbo_result.plan, *fast_or->rbo_result.pushdown_plan, memory_context);
         if (!topn_task_or.ok()) {
             return topn_task_or.status();
         }
@@ -2704,8 +2796,8 @@ absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
         operators.emplace_back("OutputOperator");
         ExecutionTask task;
         task.memory_context = memory_context;
-        task.pipelines.push_back(MakePipeline("main", "main", "root", {}, std::move(operators),
-                                              nullptr, std::move(outputs)));
+        task.pipelines.push_back(MakePipeline(
+            "main", "main", "root", {}, std::move(operators), nullptr, std::move(outputs)));
         return task;
     }
     std::unique_ptr<Operator> output(new OutputOperator(std::move(planned_or->root)));
@@ -2769,8 +2861,8 @@ void AddPipelineAccumulatorStats(const std::shared_ptr<Pipeline::Stats>& stats,
         return;
     }
     std::lock_guard<std::mutex> lock(stats->mu);
-    stats->accumulator_stats.insert(stats->accumulator_stats.end(), accumulator_stats.begin(),
-                                    accumulator_stats.end());
+    stats->accumulator_stats.insert(
+        stats->accumulator_stats.end(), accumulator_stats.begin(), accumulator_stats.end());
 }
 
 void FailPipelineStats(const std::shared_ptr<Pipeline::Stats>& stats, const absl::Status& status) {
@@ -3003,7 +3095,8 @@ absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) co
             continue;
         }
         auto tasks = DriverFactory::CreateTasks(index, std::move(task.pipelines[index]));
-        driver_tasks.insert(driver_tasks.end(), std::make_move_iterator(tasks.begin()),
+        driver_tasks.insert(driver_tasks.end(),
+                            std::make_move_iterator(tasks.begin()),
                             std::make_move_iterator(tasks.end()));
     }
 
@@ -3074,7 +3167,8 @@ absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) co
         output->tables.insert(output->tables.end(),
                               std::make_move_iterator(table_or->tables.begin()),
                               std::make_move_iterator(table_or->tables.end()));
-        output->rows.insert(output->rows.end(), std::make_move_iterator(table_or->rows.begin()),
+        output->rows.insert(output->rows.end(),
+                            std::make_move_iterator(table_or->rows.begin()),
                             std::make_move_iterator(table_or->rows.end()));
     }
     if (output_error.has_value()) {
@@ -3093,8 +3187,11 @@ absl::StatusOr<SchedulerResult> Scheduler::RunWithProfile(ExecutionTask task) co
             BuildExecutionProfile(pipeline_profiles, pipeline_stats, task.memory_context);
         return result;
     }
-    Value value = Value::table_stream(output->bucket, output->tables, output->range_start,
-                                      output->range_stop, output->result_name);
+    Value value = Value::table_stream(output->bucket,
+                                      output->tables,
+                                      output->range_start,
+                                      output->range_stop,
+                                      output->result_name);
     value.as_table_mut().plan = output->plan;
     value.as_table_mut().materialized = true;
     SchedulerResult result;
@@ -3192,7 +3289,8 @@ absl::StatusOr<SchedulerStreamResult> Scheduler::RunToSink(ExecutionTask task,
             continue;
         }
         auto tasks = DriverFactory::CreateTasks(index, std::move(task.pipelines[index]));
-        driver_tasks.insert(driver_tasks.end(), std::make_move_iterator(tasks.begin()),
+        driver_tasks.insert(driver_tasks.end(),
+                            std::make_move_iterator(tasks.begin()),
                             std::make_move_iterator(tasks.end()));
     }
     if (driver_tasks.empty()) {
@@ -3346,8 +3444,7 @@ std::string FormatDistribution(const ExchangeDistributionProfile& distribution) 
     return out.str();
 }
 
-std::string FormatDistributionJson(
-    const std::optional<ExchangeDistributionProfile>& distribution) {
+std::string FormatDistributionJson(const std::optional<ExchangeDistributionProfile>& distribution) {
     if (!distribution.has_value()) {
         return "null";
     }
@@ -3355,8 +3452,7 @@ std::string FormatDistributionJson(
     out << "{";
     out << "\"kind\":" << JsonString(distribution->kind);
     out << ",\"partitionKeys\":" << JsonStringArray(distribution->partition_keys);
-    out << ",\"includeGroupKey\":"
-        << (distribution->include_group_key ? "true" : "false");
+    out << ",\"includeGroupKey\":" << (distribution->include_group_key ? "true" : "false");
     out << ",\"partitions\":" << distribution->partitions;
     out << "}";
     return out.str();
@@ -3457,8 +3553,8 @@ std::string FormatAccumulatorStats(const std::vector<AccumulatorStats>& stats) {
             << ", groups=" << stats[i].groups << ", memory_bytes=" << stats[i].memory_bytes
             << ", memory_limit_bytes=" << stats[i].memory_limit_bytes
             << ", memory_limited=" << (stats[i].memory_limited ? "true" : "false")
-            << ", key_ms=" << stats[i].key_time_ms
-            << ", hash_ms=" << stats[i].hash_time_ms << ", update_ms=" << stats[i].update_time_ms
+            << ", key_ms=" << stats[i].key_time_ms << ", hash_ms=" << stats[i].hash_time_ms
+            << ", update_ms=" << stats[i].update_time_ms
             << ", result_ms=" << stats[i].result_time_ms << "}";
     }
     out << "]";
@@ -3590,8 +3686,7 @@ std::string FormatExecutionProfileJson(const ExecutionProfile& profile) {
         out << ",\"finished\":" << (pipeline.finished ? "true" : "false");
         out << ",\"error\":" << JsonString(pipeline.error);
         out << ",\"splits\":" << FormatSplitStatsJson(pipeline.split_stats);
-        out << ",\"accumulatorStats\":"
-            << FormatAccumulatorStatsJson(pipeline.accumulator_stats);
+        out << ",\"accumulatorStats\":" << FormatAccumulatorStatsJson(pipeline.accumulator_stats);
         out << "}";
     }
     out << "]}";

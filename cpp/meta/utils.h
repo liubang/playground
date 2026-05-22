@@ -17,10 +17,10 @@
 
 #pragma once
 
-#include "cpp/meta/type_list.h"
-
 #include <array>
 #include <iostream>
+
+#include "cpp/meta/type_list.h"
 
 namespace pl {
 

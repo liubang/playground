@@ -17,11 +17,12 @@
 
 #pragma once
 
-#include "cpp/pl/flux/execution/physical_executor.h"
-#include "cpp/pl/flux/plan/plan_node.h"
 #include <memory>
 #include <string>
 #include <vector>
+
+#include "cpp/pl/flux/execution/physical_executor.h"
+#include "cpp/pl/flux/plan/plan_node.h"
 
 namespace pl::flux::execution {
 

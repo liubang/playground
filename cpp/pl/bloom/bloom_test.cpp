@@ -15,7 +15,8 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2024/12/18 22:09
 
-#include "cpp/pl/bloom/bloom.h"
 #include <gtest/gtest.h>
+
+#include "cpp/pl/bloom/bloom.h"
 
 TEST(bloom, blocked_bloom_filter) {}

@@ -25,7 +25,6 @@
 
 namespace pl {
 class Scanner {
-
 public:
     Scanner(const char* data, size_t len)
         : data_(data),

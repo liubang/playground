@@ -17,8 +17,6 @@
 
 #pragma once
 
-#include "cpp/pl/minidfs/datanode/local_block_store.h"
-#include "cpp/pl/status/result.h"
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
@@ -27,6 +25,9 @@
 #include <queue>
 #include <string>
 #include <thread>
+
+#include "cpp/pl/minidfs/datanode/local_block_store.h"
+#include "cpp/pl/status/result.h"
 
 namespace pl::minidfs {
 
