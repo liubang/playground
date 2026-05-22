@@ -17,8 +17,9 @@
 
 #include "cpp/pl/flux/connector/sql_builder.h"
 
-#include "absl/strings/str_cat.h"
 #include <algorithm>
+
+#include "absl/strings/str_cat.h"
 
 namespace pl::flux::connector {
 
@@ -73,7 +74,11 @@ absl::Status ValidateColumn(const std::unordered_set<std::string>& schema_column
         available += sorted[i];
     }
     return absl::InvalidArgumentError(
-        absl::StrCat(source_name, " source ", context, " unknown column: ", column,
+        absl::StrCat(source_name,
+                     " source ",
+                     context,
+                     " unknown column: ",
+                     column,
                      available.empty() ? "" : absl::StrCat("; available columns: ", available)));
 }
 
@@ -117,9 +122,10 @@ absl::Status ValidateScanRequestAgainstSchema(const ScanRequest& request,
             return status;
         }
         if (request.distinct.has_value() && column != *request.distinct) {
-            return absl::InvalidArgumentError(absl::StrCat(
-                source_name,
-                " source distinct projection must use distinct column: ", *request.distinct));
+            return absl::InvalidArgumentError(
+                absl::StrCat(source_name,
+                             " source distinct projection must use distinct column: ",
+                             *request.distinct));
         }
     }
     for (const auto& projection : request.projection_columns) {
@@ -128,9 +134,10 @@ absl::Status ValidateScanRequestAgainstSchema(const ScanRequest& request,
             return status;
         }
         if (request.distinct.has_value() && projection.column != *request.distinct) {
-            return absl::InvalidArgumentError(absl::StrCat(
-                source_name,
-                " source distinct projection must use distinct column: ", *request.distinct));
+            return absl::InvalidArgumentError(
+                absl::StrCat(source_name,
+                             " source distinct projection must use distinct column: ",
+                             *request.distinct));
         }
     }
     if (request.time_range.has_value()) {

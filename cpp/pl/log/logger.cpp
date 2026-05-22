@@ -17,10 +17,11 @@
 
 #include "cpp/pl/log/logger.h"
 
-#include "cpp/pl/thread/thread.h"
 #include <cstdio>
 #include <fmt/chrono.h>
 #include <fmt/format.h>
+
+#include "cpp/pl/thread/thread.h"
 
 namespace pl {
 
@@ -29,7 +30,9 @@ Logger::Logger(Logger::SourceFile source, int line) : impl_(source, line, LogLev
 Logger::Logger(Logger::SourceFile source, int line, Logger::LogLevel log_level)
     : impl_(source, line, log_level) {}
 
-Logger::~Logger() { impl_.flush(); }
+Logger::~Logger() {
+    impl_.flush();
+}
 
 std::string Logger::Impl::fmtTime() {
     auto now_time_t = std::chrono::system_clock::to_time_t(time_);

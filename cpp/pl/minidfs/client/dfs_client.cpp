@@ -17,10 +17,6 @@
 
 #include "cpp/pl/minidfs/client/dfs_client.h"
 
-#include "cpp/pl/minidfs/common/checksum.h"
-#include "cpp/pl/minidfs/common/constants.h"
-#include "cpp/pl/minidfs/common/error_code.h"
-#include "cpp/pl/minidfs/protocol/minidfs.pb.h"
 #include <algorithm>
 #include <brpc/channel.h>
 #include <brpc/controller.h>
@@ -32,6 +28,11 @@
 #include <fstream>
 #include <sys/stat.h>
 #include <unistd.h>
+
+#include "cpp/pl/minidfs/common/checksum.h"
+#include "cpp/pl/minidfs/common/constants.h"
+#include "cpp/pl/minidfs/common/error_code.h"
+#include "cpp/pl/minidfs/protocol/minidfs.pb.h"
 
 namespace pl::minidfs {
 
@@ -109,7 +110,8 @@ Result<Void> DfsClient::mkdir(std::string_view path) {
 
     if (cntl.Failed()) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                            "Mkdir RPC failed: {}", cntl.ErrorText());
+                            "Mkdir RPC failed: {}",
+                            cntl.ErrorText());
     }
     return check_status(response.status());
 }
@@ -126,7 +128,8 @@ Result<FileStatus> DfsClient::stat(std::string_view path) {
 
     if (cntl.Failed()) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                            "GetFileStatus RPC failed: {}", cntl.ErrorText());
+                            "GetFileStatus RPC failed: {}",
+                            cntl.ErrorText());
     }
     if (response.status().code() != 0) {
         return pl::makeError(static_cast<status_code_t>(response.status().code()),
@@ -147,7 +150,8 @@ Result<std::vector<FileStatus>> DfsClient::ls(std::string_view path) {
 
     if (cntl.Failed()) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                            "ListStatus RPC failed: {}", cntl.ErrorText());
+                            "ListStatus RPC failed: {}",
+                            cntl.ErrorText());
     }
     if (response.status().code() != 0) {
         return pl::makeError(static_cast<status_code_t>(response.status().code()),
@@ -175,7 +179,8 @@ Result<Void> DfsClient::rm(std::string_view path, bool recursive) {
 
     if (cntl.Failed()) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                            "Delete RPC failed: {}", cntl.ErrorText());
+                            "Delete RPC failed: {}",
+                            cntl.ErrorText());
     }
     return check_status(response.status());
 }
@@ -193,7 +198,8 @@ Result<Void> DfsClient::mv(std::string_view src, std::string_view dst) {
 
     if (cntl.Failed()) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                            "Rename RPC failed: {}", cntl.ErrorText());
+                            "Rename RPC failed: {}",
+                            cntl.ErrorText());
     }
     return check_status(response.status());
 }
@@ -207,14 +213,16 @@ Result<Void> DfsClient::put(std::string_view local_path, std::string_view dfs_pa
     int fd = ::open(std::string(local_path).c_str(), O_RDONLY);
     if (fd < 0) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kIOError),
-                            "Cannot open local file: {}", local_path);
+                            "Cannot open local file: {}",
+                            local_path);
     }
 
     struct stat st{};
     if (::fstat(fd, &st) != 0) {
         ::close(fd);
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kIOError),
-                            "Cannot stat local file: {}", local_path);
+                            "Cannot stat local file: {}",
+                            local_path);
     }
     const uint64_t file_size = static_cast<uint64_t>(st.st_size);
 
@@ -237,7 +245,8 @@ Result<Void> DfsClient::put(std::string_view local_path, std::string_view dfs_pa
     if (cntl.Failed()) {
         ::close(fd);
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                            "CreateFile RPC failed: {}", cntl.ErrorText());
+                            "CreateFile RPC failed: {}",
+                            cntl.ErrorText());
     }
     if (create_resp.status().code() != 0) {
         ::close(fd);
@@ -289,7 +298,8 @@ Result<Void> DfsClient::put(std::string_view local_path, std::string_view dfs_pa
 
     if (cntl.Failed()) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                            "CompleteFile RPC failed: {}", cntl.ErrorText());
+                            "CompleteFile RPC failed: {}",
+                            cntl.ErrorText());
     }
     return check_status(complete_resp.status());
 }
@@ -312,7 +322,8 @@ Result<uint64_t> DfsClient::write_block(uint64_t inode_id,
 
     if (cntl.Failed()) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                            "AllocateBlock RPC failed: {}", cntl.ErrorText());
+                            "AllocateBlock RPC failed: {}",
+                            cntl.ErrorText());
     }
     if (alloc_resp.status().code() != 0) {
         return pl::makeError(static_cast<status_code_t>(alloc_resp.status().code()),
@@ -322,7 +333,8 @@ Result<uint64_t> DfsClient::write_block(uint64_t inode_id,
     const auto& located_block = alloc_resp.block();
     if (located_block.locations_size() == 0) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kNoAvailableDataNode),
-                            "No DataNode locations for block {}", located_block.block_id());
+                            "No DataNode locations for block {}",
+                            located_block.block_id());
     }
 
     // Connect to first DataNode in the pipeline
@@ -335,7 +347,8 @@ Result<uint64_t> DfsClient::write_block(uint64_t inode_id,
     std::string dn_addr = primary.host() + ":" + std::to_string(primary.data_port());
     if (dn_channel.Init(dn_addr.c_str(), &dn_options) != 0) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCConnectFailed),
-                            "Cannot connect to DataNode {}", dn_addr);
+                            "Cannot connect to DataNode {}",
+                            dn_addr);
     }
 
     protocol::DataTransferService_Stub dn_stub(&dn_channel);
@@ -374,7 +387,8 @@ Result<uint64_t> DfsClient::write_block(uint64_t inode_id,
 
         if (write_cntl.Failed()) {
             return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                                "WriteBlock RPC failed at chunk {}: {}", chunk_index,
+                                "WriteBlock RPC failed at chunk {}: {}",
+                                chunk_index,
                                 write_cntl.ErrorText());
         }
         if (write_resp.status().code() != 0) {
@@ -402,7 +416,8 @@ Result<Void> DfsClient::get(std::string_view dfs_path, std::string_view local_pa
     const auto& fs = stat_result.value();
     if (fs.is_dir) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kIsDirectory),
-                            "Cannot get a directory: {}", dfs_path);
+                            "Cannot get a directory: {}",
+                            dfs_path);
     }
 
     // 2. GetLocatedBlocks
@@ -417,7 +432,8 @@ Result<Void> DfsClient::get(std::string_view dfs_path, std::string_view local_pa
 
     if (cntl.Failed()) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                            "GetLocatedBlocks RPC failed: {}", cntl.ErrorText());
+                            "GetLocatedBlocks RPC failed: {}",
+                            cntl.ErrorText());
     }
     if (resp.status().code() != 0) {
         return pl::makeError(static_cast<status_code_t>(resp.status().code()),
@@ -428,7 +444,8 @@ Result<Void> DfsClient::get(std::string_view dfs_path, std::string_view local_pa
     std::ofstream ofs(std::string(local_path), std::ios::binary | std::ios::trunc);
     if (!ofs.is_open()) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kIOError),
-                            "Cannot open local file for writing: {}", local_path);
+                            "Cannot open local file for writing: {}",
+                            local_path);
     }
 
     // 4. Read each block
@@ -455,7 +472,8 @@ Result<Void> DfsClient::get(std::string_view dfs_path, std::string_view local_pa
                   static_cast<std::streamsize>(data_result.value().size()));
         if (!ofs.good()) {
             return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kIOError),
-                                "Write error on local file: {}", local_path);
+                                "Write error on local file: {}",
+                                local_path);
         }
     }
 
@@ -477,7 +495,8 @@ Result<DfsClient::ClusterInfo> DfsClient::get_cluster_info() {
 
     if (cntl.Failed()) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                            "GetClusterInfo RPC failed: {}", cntl.ErrorText());
+                            "GetClusterInfo RPC failed: {}",
+                            cntl.ErrorText());
     }
     if (response.status().code() != 0) {
         return pl::makeError(static_cast<status_code_t>(response.status().code()),
@@ -509,7 +528,8 @@ Result<std::vector<DfsClient::DataNodeSummary>> DfsClient::list_datanodes(bool i
 
     if (cntl.Failed()) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                            "ListDataNodes RPC failed: {}", cntl.ErrorText());
+                            "ListDataNodes RPC failed: {}",
+                            cntl.ErrorText());
     }
     if (response.status().code() != 0) {
         return pl::makeError(static_cast<status_code_t>(response.status().code()),
@@ -550,7 +570,8 @@ Result<DfsClient::DataNodeSummary> DfsClient::get_datanode_info(uint64_t datanod
 
     if (cntl.Failed()) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                            "GetDataNodeInfo RPC failed: {}", cntl.ErrorText());
+                            "GetDataNodeInfo RPC failed: {}",
+                            cntl.ErrorText());
     }
     if (response.status().code() != 0) {
         return pl::makeError(static_cast<status_code_t>(response.status().code()),
@@ -587,7 +608,8 @@ Result<DfsClient::DataNodeSummary> DfsClient::get_datanode_info_by_uuid(std::str
 
     if (cntl.Failed()) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                            "GetDataNodeInfo RPC failed: {}", cntl.ErrorText());
+                            "GetDataNodeInfo RPC failed: {}",
+                            cntl.ErrorText());
     }
     if (response.status().code() != 0) {
         return pl::makeError(static_cast<status_code_t>(response.status().code()),
@@ -648,7 +670,8 @@ Result<DfsClient::InodeDetail> DfsClient::get_inode_info(uint64_t inode_id) {
 
     if (cntl.Failed()) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                            "GetInodeInfo RPC failed: {}", cntl.ErrorText());
+                            "GetInodeInfo RPC failed: {}",
+                            cntl.ErrorText());
     }
     if (response.status().code() != 0) {
         return pl::makeError(static_cast<status_code_t>(response.status().code()),
@@ -669,7 +692,8 @@ Result<DfsClient::InodeDetail> DfsClient::get_inode_info_by_path(std::string_vie
 
     if (cntl.Failed()) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                            "GetInodeInfo RPC failed: {}", cntl.ErrorText());
+                            "GetInodeInfo RPC failed: {}",
+                            cntl.ErrorText());
     }
     if (response.status().code() != 0) {
         return pl::makeError(static_cast<status_code_t>(response.status().code()),
@@ -720,7 +744,8 @@ Result<std::vector<DfsClient::FileBlockDetail>> DfsClient::get_file_blocks(uint6
 
     if (cntl.Failed()) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                            "GetFileBlocks RPC failed: {}", cntl.ErrorText());
+                            "GetFileBlocks RPC failed: {}",
+                            cntl.ErrorText());
     }
     if (response.status().code() != 0) {
         return pl::makeError(static_cast<status_code_t>(response.status().code()),
@@ -742,7 +767,8 @@ Result<std::vector<DfsClient::FileBlockDetail>> DfsClient::get_file_blocks_by_pa
 
     if (cntl.Failed()) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                            "GetFileBlocks RPC failed: {}", cntl.ErrorText());
+                            "GetFileBlocks RPC failed: {}",
+                            cntl.ErrorText());
     }
     if (response.status().code() != 0) {
         return pl::makeError(static_cast<status_code_t>(response.status().code()),
@@ -763,7 +789,8 @@ Result<DfsClient::BlockDetail> DfsClient::get_block_info(uint64_t block_id) {
 
     if (cntl.Failed()) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
-                            "GetBlockInfo RPC failed: {}", cntl.ErrorText());
+                            "GetBlockInfo RPC failed: {}",
+                            cntl.ErrorText());
     }
     if (response.status().code() != 0) {
         return pl::makeError(static_cast<status_code_t>(response.status().code()),
@@ -822,12 +849,14 @@ Result<std::string> DfsClient::read_block(const LocatedBlock& block) {
         dn_stub.ReadBlock(&cntl, &req, &resp, nullptr);
 
         if (cntl.Failed()) {
-            XLOGF(WARN, "ReadBlock from {} failed: {}, trying next replica", addr,
-                  cntl.ErrorText());
+            XLOGF(
+                WARN, "ReadBlock from {} failed: {}, trying next replica", addr, cntl.ErrorText());
             continue;
         }
         if (resp.status().code() != 0) {
-            XLOGF(WARN, "ReadBlock from {} returned error: {}, trying next replica", addr,
+            XLOGF(WARN,
+                  "ReadBlock from {} returned error: {}, trying next replica",
+                  addr,
                   resp.status().message());
             continue;
         }
@@ -843,7 +872,8 @@ Result<std::string> DfsClient::read_block(const LocatedBlock& block) {
     }
 
     return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kNoAvailableDataNode),
-                        "No reachable DataNode for block {}", block.block_id);
+                        "No reachable DataNode for block {}",
+                        block.block_id);
 }
 
 } // namespace pl::minidfs

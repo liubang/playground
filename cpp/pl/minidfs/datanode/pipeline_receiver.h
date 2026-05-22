@@ -17,12 +17,13 @@
 
 #pragma once
 
-#include "cpp/pl/minidfs/common/types.h"
-#include "cpp/pl/minidfs/datanode/local_block_store.h"
-#include "cpp/pl/status/result.h"
 #include <cstdint>
 #include <string>
 #include <vector>
+
+#include "cpp/pl/minidfs/common/types.h"
+#include "cpp/pl/minidfs/datanode/local_block_store.h"
+#include "cpp/pl/status/result.h"
 
 namespace pl::minidfs {
 

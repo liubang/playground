@@ -15,8 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/05/26 18:23
 
-#include "cpp/pl/status/status.h"
 #include <gtest/gtest.h>
+
+#include "cpp/pl/status/status.h"
 
 TEST(Status, constructor) {
     pl::Status st1(pl::StatusCode::kOK, "OK");

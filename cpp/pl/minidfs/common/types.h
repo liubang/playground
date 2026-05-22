@@ -17,11 +17,12 @@
 
 #pragma once
 
-#include "cpp/pl/minidfs/common/constants.h"
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
+
+#include "cpp/pl/minidfs/common/constants.h"
 
 namespace pl::minidfs {
 

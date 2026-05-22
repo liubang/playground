@@ -17,17 +17,16 @@
 
 #pragma once
 
-#include "cpp/pl/scope/scope.h"
-
 #include <arpa/inet.h>
+#include <cstring>
 #include <ifaddrs.h>
 #include <netinet/in.h>
-#include <unistd.h>
-
-#include <cstring>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unistd.h>
+
+#include "cpp/pl/scope/scope.h"
 
 namespace pl {
 
@@ -44,13 +43,15 @@ inline std::optional<std::string> getLocalIp() {
     remote_server.sin_family = AF_INET;
     remote_server.sin_addr.s_addr = inet_addr(REMOTE_ADDRESS.data());
     remote_server.sin_port = htons(22);
-    int err = ::connect(sock, reinterpret_cast<const struct sockaddr*>(&remote_server),
-                        sizeof(remote_server));
+    int err = ::connect(
+        sock, reinterpret_cast<const struct sockaddr*>(&remote_server), sizeof(remote_server));
     if (err < 0) {
         return std::nullopt;
     }
 
-    SCOPE_EXIT { ::close(sock); };
+    SCOPE_EXIT {
+        ::close(sock);
+    };
     struct sockaddr_in local_addr;
     socklen_t local_addr_len = sizeof(local_addr);
     err = getsockname(sock, reinterpret_cast<struct sockaddr*>(&local_addr), &local_addr_len);

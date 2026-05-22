@@ -15,27 +15,32 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/25 10:40
 
+#include <limits>
+#include <optional>
+#include <unordered_set>
+
 #include "absl/strings/str_cat.h"
-#include "cpp/pl/flux/syntax/ast.h"
 #include "cpp/pl/flux/execution/materializer.h"
 #include "cpp/pl/flux/optimizer/rbo.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_table_helpers.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_time_helpers.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_universe.h"
-#include <limits>
-#include <optional>
-#include <unordered_set>
+#include "cpp/pl/flux/syntax/ast.h"
 
 namespace pl::flux {
 namespace {
 using namespace detail;
 
 absl::StatusOr<Value> materialized_table_value(const TableValue& table) {
-    Value value = table.materialized
-                      ? Value::table_stream(table.bucket, table.tables, table.range_start,
-                                            table.range_stop, table.result_name)
-                      : Value::table_plan(table.bucket, table.plan, table.range_start,
-                                          table.range_stop, table.result_name);
+    Value value =
+        table.materialized
+            ? Value::table_stream(table.bucket,
+                                  table.tables,
+                                  table.range_start,
+                                  table.range_stop,
+                                  table.result_name)
+            : Value::table_plan(
+                  table.bucket, table.plan, table.range_start, table.range_stop, table.result_name);
     value.as_table_mut().plan = table.plan;
     return execution::MaterializeValue(std::move(value));
 }
@@ -244,8 +249,11 @@ Value with_aggregate_plan(Value value,
     if (input.plan != nullptr) {
         auto node = plan::MakeAggregate(input.plan, fn, std::move(column));
         if (!input.materialized) {
-            return Value::table_plan(input.bucket, std::move(node), input.range_start,
-                                     input.range_stop, input.result_name);
+            return Value::table_plan(input.bucket,
+                                     std::move(node),
+                                     input.range_start,
+                                     input.range_stop,
+                                     input.result_name);
         }
         value.as_table_mut().plan = std::move(node);
     }
@@ -256,8 +264,11 @@ Value with_distinct_plan(Value value, const TableValue& input, std::string colum
     if (input.plan != nullptr) {
         auto node = plan::MakeDistinct(input.plan, std::move(column));
         if (!input.materialized) {
-            return Value::table_plan(input.bucket, std::move(node), input.range_start,
-                                     input.range_stop, input.result_name);
+            return Value::table_plan(input.bucket,
+                                     std::move(node),
+                                     input.range_start,
+                                     input.range_stop,
+                                     input.result_name);
         }
         value.as_table_mut().plan = std::move(node);
     }
@@ -383,8 +394,8 @@ Value with_materialization_barrier(Value value,
 }
 
 Value lazy_table_with_plan(const TableValue& input, std::shared_ptr<plan::PlanNode> node) {
-    return Value::table_plan(input.bucket, std::move(node), input.range_start, input.range_stop,
-                             input.result_name);
+    return Value::table_plan(
+        input.bucket, std::move(node), input.range_start, input.range_stop, input.result_name);
 }
 
 absl::StatusOr<Value> builtin_range(const std::vector<Value>& args) {
@@ -423,8 +434,11 @@ absl::StatusOr<Value> builtin_range(const std::vector<Value>& args) {
     auto table = ranged_or->as_table();
     table.range_start = start;
     table.range_stop = stop;
-    auto result = Value::table_stream(table.bucket, std::move(table.tables), table.range_start,
-                                      table.range_stop, table.result_name);
+    auto result = Value::table_stream(table.bucket,
+                                      std::move(table.tables),
+                                      table.range_start,
+                                      table.range_stop,
+                                      table.result_name);
     return with_range_plan(std::move(result), **table_or, start, stop);
 }
 

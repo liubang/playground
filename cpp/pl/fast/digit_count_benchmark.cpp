@@ -15,9 +15,10 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2025/01/13 23:02
 
-#include "cpp/pl/fast/digit_count.h"
 #include <benchmark/benchmark.h>
 #include <random>
+
+#include "cpp/pl/fast/digit_count.h"
 
 // 生成随机数进行测试
 std::vector<int64_t> generate_test_cases(int count) {

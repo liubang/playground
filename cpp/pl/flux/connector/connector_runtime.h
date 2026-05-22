@@ -17,12 +17,6 @@
 
 #pragma once
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "cpp/pl/flux/connector/connector_registry.h"
-#include "cpp/pl/flux/connector/table_source.h"
-#include "cpp/pl/flux/runtime/runtime_page.h"
-#include "cpp/pl/flux/runtime/runtime_value.h"
 #include <algorithm>
 #include <cstdint>
 #include <memory>
@@ -30,6 +24,13 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "cpp/pl/flux/connector/connector_registry.h"
+#include "cpp/pl/flux/connector/table_source.h"
+#include "cpp/pl/flux/runtime/runtime_page.h"
+#include "cpp/pl/flux/runtime/runtime_value.h"
 
 namespace pl::flux::connector {
 

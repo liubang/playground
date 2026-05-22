@@ -17,14 +17,15 @@
 
 #pragma once
 
-#include "absl/status/statusor.h"
-#include "cpp/pl/flux/connector/table_source.h"
-#include "cpp/pl/flux/optimizer/rbo.h"
-#include "cpp/pl/flux/plan/physical_plan.h"
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
+
+#include "absl/status/statusor.h"
+#include "cpp/pl/flux/connector/table_source.h"
+#include "cpp/pl/flux/optimizer/rbo.h"
+#include "cpp/pl/flux/plan/physical_plan.h"
 
 namespace pl::flux::optimizer {
 

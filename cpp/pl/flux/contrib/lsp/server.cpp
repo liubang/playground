@@ -17,14 +17,15 @@
 
 #include "cpp/pl/flux/contrib/lsp/server.h"
 
-#include "cpp/pl/flux/contrib/lsp/formatter.h"
-#include "cpp/pl/flux/contrib/lsp/json_util.h"
-#include "cpp/pl/flux/syntax/parser.h"
-#include "simdjson.h"
 #include <algorithm>
 #include <cctype>
 #include <sstream>
 #include <utility>
+
+#include "cpp/pl/flux/contrib/lsp/formatter.h"
+#include "cpp/pl/flux/contrib/lsp/json_util.h"
+#include "cpp/pl/flux/syntax/parser.h"
+#include "simdjson.h"
 
 namespace pl::flux::lsp {
 
@@ -391,8 +392,23 @@ known_packages() {
 
 const std::vector<std::string>& flux_keywords() {
     static const std::vector<std::string> kws = {
-        "and",     "or",     "not",      "if",     "then", "else",    "import", "package", "option",
-        "builtin", "return", "testcase", "exists", "with", "extends", "true",   "false",
+        "and",
+        "or",
+        "not",
+        "if",
+        "then",
+        "else",
+        "import",
+        "package",
+        "option",
+        "builtin",
+        "return",
+        "testcase",
+        "exists",
+        "with",
+        "extends",
+        "true",
+        "false",
     };
     return kws;
 }
@@ -444,7 +460,8 @@ std::vector<std::string> params_from_detail_signature(const std::string& detail)
     return params;
 }
 
-std::string make_function_snippet(const std::string& label, const std::vector<std::string>& params) {
+std::string make_function_snippet(const std::string& label,
+                                  const std::vector<std::string>& params) {
     std::string snippet = snippet_escape(label);
     snippet += '(';
     for (size_t i = 0; i < params.size(); ++i) {
@@ -627,14 +644,18 @@ void FluxLanguageServer::handle_initialize(const JsonRpcMessage& msg) {
     reply(msg, result);
 }
 
-void FluxLanguageServer::handle_initialized(const JsonRpcMessage& /*msg*/) { initialized_ = true; }
+void FluxLanguageServer::handle_initialized(const JsonRpcMessage& /*msg*/) {
+    initialized_ = true;
+}
 
 void FluxLanguageServer::handle_shutdown(const JsonRpcMessage& msg) {
     shutdown_requested_ = true;
     reply(msg, "null");
 }
 
-void FluxLanguageServer::handle_exit(const JsonRpcMessage& /*msg*/) { shutdown_requested_ = true; }
+void FluxLanguageServer::handle_exit(const JsonRpcMessage& /*msg*/) {
+    shutdown_requested_ = true;
+}
 
 void FluxLanguageServer::handle_did_open(const JsonRpcMessage& msg) {
     simdjson::dom::parser parser;
@@ -698,9 +719,12 @@ void FluxLanguageServer::handle_did_change(const JsonRpcMessage& msg) {
             auto el = range_val["end"]["line"].get_int64();
             auto ec = range_val["end"]["character"].get_int64();
             if (!sl.error() && !sc.error() && !el.error() && !ec.error()) {
-                apply_incremental_change(it->second.content, static_cast<int>(sl.value()),
-                                         static_cast<int>(sc.value()), static_cast<int>(el.value()),
-                                         static_cast<int>(ec.value()), new_text);
+                apply_incremental_change(it->second.content,
+                                         static_cast<int>(sl.value()),
+                                         static_cast<int>(sc.value()),
+                                         static_cast<int>(el.value()),
+                                         static_cast<int>(ec.value()),
+                                         new_text);
             }
         } else {
             // Full content replacement
@@ -778,8 +802,12 @@ void FluxLanguageServer::publish_diagnostics(const std::string& uri) {
     os << R"({"uri":)" << json_escape(uri) << R"(,"diagnostics":[)";
 
     bool first = true;
-    auto emit_diagnostic = [&](uint32_t start_line, uint32_t start_col, uint32_t end_line,
-                               uint32_t end_col, int severity, const std::string& message) {
+    auto emit_diagnostic = [&](uint32_t start_line,
+                               uint32_t start_col,
+                               uint32_t end_line,
+                               uint32_t end_col,
+                               int severity,
+                               const std::string& message) {
         if (!first) {
             os << ",";
         }
@@ -798,7 +826,11 @@ void FluxLanguageServer::publish_diagnostics(const std::string& uri) {
             if (stmt->type == Statement::Type::BadStatement) {
                 const auto& loc = stmt->loc;
                 const auto& bad = *std::get<std::unique_ptr<BadStmt>>(stmt->stmt);
-                emit_diagnostic(loc.start.line, loc.start.column, loc.end.line, loc.end.column, 1,
+                emit_diagnostic(loc.start.line,
+                                loc.start.column,
+                                loc.end.line,
+                                loc.end.column,
+                                1,
                                 "syntax error: " + bad.text);
             }
         }
@@ -811,8 +843,12 @@ void FluxLanguageServer::publish_diagnostics(const std::string& uri) {
 
     // Semantic diagnostics from symbol table (undefined references)
     for (const auto& diag : doc.symbols.diagnostics) {
-        emit_diagnostic(diag.location.start_line, diag.location.start_col, diag.location.end_line,
-                        diag.location.end_col, diag.severity, diag.message);
+        emit_diagnostic(diag.location.start_line,
+                        diag.location.start_col,
+                        diag.location.end_line,
+                        diag.location.end_col,
+                        diag.severity,
+                        diag.message);
     }
 
     os << "]}";
@@ -895,11 +931,10 @@ std::string FluxLanguageServer::build_completion_response(Document& doc, int lin
     auto add_plain_item = [&](const std::string& label, const std::string& detail, int kind) {
         add_item(label, detail, kind, "");
     };
-    auto add_function_item = [&](const std::string& label,
-                                 const std::string& detail,
-                                 std::vector<std::string> params) {
-        add_item(label, detail, 3 /* Function */, make_function_snippet(label, params));
-    };
+    auto add_function_item =
+        [&](const std::string& label, const std::string& detail, std::vector<std::string> params) {
+            add_item(label, detail, 3 /* Function */, make_function_snippet(label, params));
+        };
     auto add_function_item_from_detail = [&](const std::string& label, const std::string& detail) {
         add_function_item(label, detail, params_from_detail_signature(detail));
     };
@@ -1252,8 +1287,8 @@ void FluxLanguageServer::handle_definition(const JsonRpcMessage& msg) {
     if (name.empty()) {
         // Fallback to symbol_at with 1-based coordinates
         uint32_t ast_line = static_cast<uint32_t>(line + 1);
-        uint32_t ast_col = lsp_position_to_byte_column(it->second.content, static_cast<int>(line),
-                                                       static_cast<int>(character));
+        uint32_t ast_col = lsp_position_to_byte_column(
+            it->second.content, static_cast<int>(line), static_cast<int>(character));
         name = symbols.symbol_at(ast_line, ast_col);
     }
     if (name.empty()) {
@@ -1262,7 +1297,8 @@ void FluxLanguageServer::handle_definition(const JsonRpcMessage& msg) {
     }
 
     const auto* def = symbols.definition_for_symbol_at(
-        name, static_cast<uint32_t>(line + 1),
+        name,
+        static_cast<uint32_t>(line + 1),
         lsp_position_to_byte_column(content, static_cast<int>(line), static_cast<int>(character)));
     if (!def) {
         def = symbols.find_definition(name);
@@ -1311,8 +1347,8 @@ void FluxLanguageServer::handle_references(const JsonRpcMessage& msg) {
         word_at_position(it->second.content, static_cast<int>(line), static_cast<int>(character));
     if (name.empty()) {
         uint32_t ast_line = static_cast<uint32_t>(line + 1);
-        uint32_t ast_col = lsp_position_to_byte_column(it->second.content, static_cast<int>(line),
-                                                       static_cast<int>(character));
+        uint32_t ast_col = lsp_position_to_byte_column(
+            it->second.content, static_cast<int>(line), static_cast<int>(character));
         name = symbols.symbol_at(ast_line, ast_col);
     }
     if (name.empty()) {
@@ -1330,7 +1366,8 @@ void FluxLanguageServer::handle_references(const JsonRpcMessage& msg) {
     }
 
     const SymbolDef* target_def = symbols.definition_for_symbol_at(
-        name, static_cast<uint32_t>(line + 1),
+        name,
+        static_cast<uint32_t>(line + 1),
         lsp_position_to_byte_column(content, static_cast<int>(line), static_cast<int>(character)));
     if (!target_def) {
         target_def = symbols.find_definition(name);
@@ -1400,8 +1437,8 @@ void FluxLanguageServer::handle_rename(const JsonRpcMessage& msg) {
         word_at_position(it->second.content, static_cast<int>(line), static_cast<int>(character));
     if (name.empty()) {
         uint32_t ast_line = static_cast<uint32_t>(line + 1);
-        uint32_t ast_col = lsp_position_to_byte_column(it->second.content, static_cast<int>(line),
-                                                       static_cast<int>(character));
+        uint32_t ast_col = lsp_position_to_byte_column(
+            it->second.content, static_cast<int>(line), static_cast<int>(character));
         name = symbols.symbol_at(ast_line, ast_col);
     }
     if (name.empty()) {
@@ -1413,7 +1450,8 @@ void FluxLanguageServer::handle_rename(const JsonRpcMessage& msg) {
     std::vector<const Location*> locations;
 
     auto* def = symbols.definition_for_symbol_at(
-        name, static_cast<uint32_t>(line + 1),
+        name,
+        static_cast<uint32_t>(line + 1),
         lsp_position_to_byte_column(content, static_cast<int>(line), static_cast<int>(character)));
     if (!def) {
         def = symbols.find_definition(name);
@@ -1649,8 +1687,8 @@ void FluxLanguageServer::handle_document_highlight(const JsonRpcMessage& msg) {
         word_at_position(it->second.content, static_cast<int>(line), static_cast<int>(character));
     if (name.empty()) {
         uint32_t ast_line = static_cast<uint32_t>(line + 1);
-        uint32_t ast_col = lsp_position_to_byte_column(it->second.content, static_cast<int>(line),
-                                                       static_cast<int>(character));
+        uint32_t ast_col = lsp_position_to_byte_column(
+            it->second.content, static_cast<int>(line), static_cast<int>(character));
         name = symbols.symbol_at(ast_line, ast_col);
     }
     if (name.empty()) {
@@ -1677,7 +1715,8 @@ void FluxLanguageServer::handle_document_highlight(const JsonRpcMessage& msg) {
 
     // Definition highlight (Write = 3)
     auto* def = symbols.definition_for_symbol_at(
-        name, static_cast<uint32_t>(line + 1),
+        name,
+        static_cast<uint32_t>(line + 1),
         lsp_position_to_byte_column(content, static_cast<int>(line), static_cast<int>(character)));
     if (!def) {
         def = symbols.find_definition(name);
@@ -1984,13 +2023,15 @@ void FluxLanguageServer::handle_inlay_hint(const JsonRpcMessage& msg) {
                         if (p->key->type == PropertyKey::Type::Identifier) {
                             const auto& id = *std::get<std::unique_ptr<Identifier>>(p->key->key);
                             if (p->value->type == Expression::Type::IntegerLit) {
-                                emit_hint(p->loc.end.line, p->loc.end.column,
+                                emit_hint(p->loc.end.line,
+                                          p->loc.end.column,
                                           " = " +
                                               std::to_string(std::get<std::unique_ptr<IntegerLit>>(
                                                                  p->value->expr)
                                                                  ->value));
                             } else if (p->value->type == Expression::Type::BooleanLit) {
-                                emit_hint(p->loc.end.line, p->loc.end.column,
+                                emit_hint(p->loc.end.line,
+                                          p->loc.end.column,
                                           std::string(" = ") +
                                               (std::get<std::unique_ptr<BooleanLit>>(p->value->expr)
                                                        ->value
@@ -2057,8 +2098,8 @@ void FluxLanguageServer::handle_selection_range(const JsonRpcMessage& msg) {
         int64_t line = line_val.value();      // 0-based
         int64_t character = char_val.value(); // 0-based
         uint32_t ast_line = static_cast<uint32_t>(line + 1);
-        uint32_t ast_col = lsp_position_to_byte_column(doc.content, static_cast<int>(line),
-                                                       static_cast<int>(character));
+        uint32_t ast_col = lsp_position_to_byte_column(
+            doc.content, static_cast<int>(line), static_cast<int>(character));
 
         if (!first_pos) {
             os << ",";
@@ -2079,8 +2120,8 @@ void FluxLanguageServer::handle_selection_range(const JsonRpcMessage& msg) {
         if (!word.empty()) {
             // Find the actual start of the word
             size_t ls = line_offset(doc.content, static_cast<int>(line));
-            size_t cursor = lsp_position_to_offset(doc.content, static_cast<int>(line),
-                                                   static_cast<int>(character));
+            size_t cursor = lsp_position_to_offset(
+                doc.content, static_cast<int>(line), static_cast<int>(character));
             size_t ws = cursor;
             while (ws > ls && is_ident_char(doc.content[ws - 1])) {
                 --ws;

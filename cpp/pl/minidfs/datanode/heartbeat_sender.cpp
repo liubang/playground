@@ -35,7 +35,9 @@ HeartbeatSender::HeartbeatSender(Config config,
       heartbeat_func_(std::move(heartbeat_func)),
       command_handler_(std::move(command_handler)) {}
 
-HeartbeatSender::~HeartbeatSender() { stop(); }
+HeartbeatSender::~HeartbeatSender() {
+    stop();
+}
 
 // ============================================================================
 // Lifecycle
@@ -46,9 +48,7 @@ void HeartbeatSender::start() {
     if (!running_.compare_exchange_strong(expected, true)) {
         return; // Already running
     }
-    thread_ = std::thread([this] {
-        run_loop();
-    });
+    thread_ = std::thread([this] { run_loop(); });
 }
 
 void HeartbeatSender::stop() {
@@ -77,7 +77,9 @@ pl::Result<std::vector<HeartbeatCommand>> HeartbeatSender::send_once() {
     // Send heartbeat via the provided RPC function
     auto result = heartbeat_func_(config_.datanode_id, capacity_bytes, used_bytes, free_bytes);
     if (result.hasError()) {
-        XLOGF(WARN, "heartbeat failed for datanode {}: {}", config_.datanode_id,
+        XLOGF(WARN,
+              "heartbeat failed for datanode {}: {}",
+              config_.datanode_id,
               result.error().describe());
         return pl::makeError(std::move(result.error()));
     }

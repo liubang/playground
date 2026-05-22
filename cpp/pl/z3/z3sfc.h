@@ -17,13 +17,13 @@
 
 #pragma once
 
+#include <memory>
+#include <vector>
+
 #include "binned_time.h"
 #include "dimension.h"
 #include "types.h"
 #include "z3.h"
-
-#include <memory>
-#include <vector>
 
 namespace pl::curve {
 

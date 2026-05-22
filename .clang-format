@@ -37,9 +37,9 @@ AllowAllParametersOfDeclarationOnNextLine: true
 AllowShortBlocksOnASingleLine: Never
 AllowShortCaseLabelsOnASingleLine: false
 AllowShortEnumsOnASingleLine: true
-AllowShortFunctionsOnASingleLine: All
+AllowShortFunctionsOnASingleLine: Inline
 AllowShortIfStatementsOnASingleLine: Never
-AllowShortLambdasOnASingleLine: Empty
+AllowShortLambdasOnASingleLine: Inline
 AllowShortLoopsOnASingleLine: false
 AlwaysBreakAfterDefinitionReturnType: None
 AlwaysBreakAfterReturnType: None
@@ -48,7 +48,7 @@ AlwaysBreakTemplateDeclarations: MultiLine
 AttributeMacros:
   - __capability
   - __unused
-BinPackArguments: true
+BinPackArguments: false
 BinPackParameters: false
 BitFieldColonSpacing: Both
 BreakBeforeBraces: Attach
@@ -91,24 +91,12 @@ IfMacros:
   - KJ_IF_MAYBE
 IncludeBlocks: Regroup
 SortIncludes: CaseSensitive
-IncludeCategories:
-  - Regex: ".*"
-    Priority: 1
 IncludeIsMainRegex: "(Test)?$"
-# IncludeCategories:
-#   - Regex: '^"(cpp|playground)/'
-#     Priority: 2
-#     SortPriority: 0
-#     CaseSensitive: false
-#   - Regex: '^(<|"(gtest|gmock|catch2|isl|json)/)'
-#     Priority: 3
-#     SortPriority: 0
-#     CaseSensitive: false
-#   - Regex: ".*"
-#     Priority: 1
-#     SortPriority: 0
-#     CaseSensitive: false
-# IncludeIsMainRegex: "(Test)?$"
+IncludeCategories:
+  - Regex: '^<.*>'
+    Priority: 1
+  - Regex: '.*'
+    Priority: 2
 IncludeIsMainSourceRegex: ""
 IndentAccessModifiers: false
 IndentCaseBlocks: false
@@ -120,7 +108,7 @@ IndentRequiresClause: true
 IndentWidth: 4
 IndentWrappedFunctionNames: false
 InsertBraces: false
-InsertNewlineAtEOF: false
+InsertNewlineAtEOF: true
 InsertTrailingCommas: None
 IntegerLiteralSeparator:
   Binary: 0
@@ -131,18 +119,13 @@ IntegerLiteralSeparator:
   HexMinDigits: 0
 JavaScriptQuotes: Leave
 JavaScriptWrapImports: true
-KeepEmptyLinesAtTheStartOfBlocks: true
+KeepEmptyLinesAtTheStartOfBlocks: false
 LambdaBodyIndentation: Signature
 LineEnding: DeriveLF
 MacroBlockBegin: ""
 MacroBlockEnd: ""
 MaxEmptyLinesToKeep: 1
 NamespaceIndentation: None
-ObjCBinPackProtocolList: Auto
-ObjCBlockIndentWidth: 2
-ObjCBreakBeforeNestedBlockParam: true
-ObjCSpaceAfterProperty: false
-ObjCSpaceBeforeProtocolList: true
 PackConstructorInitializers: NextLine
 PenaltyBreakAssignment: 2
 PenaltyBreakBeforeFirstCallParameter: 19

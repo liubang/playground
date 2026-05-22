@@ -517,7 +517,9 @@ size_t SymbolCollector::resolve_definition_id(const std::string& name) const {
     return 0;
 }
 
-SymbolTable SymbolCollector::take_result() { return std::move(table_); }
+SymbolTable SymbolCollector::take_result() {
+    return std::move(table_);
+}
 
 } // namespace
 

@@ -15,15 +15,14 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2024/08/04 22:21
 
-#include "cpp/pl/defer/defer.h"
 #include <iostream>
+
+#include "cpp/pl/defer/defer.h"
 
 int main(int argc, char* argv[]) {
     std::cout << "start\n";
 
-    pl::Defer defer([] {
-        std::cout << "defer\n";
-    });
+    pl::Defer defer([] { std::cout << "defer\n"; });
 
     std::cout << "shutdown\n";
 

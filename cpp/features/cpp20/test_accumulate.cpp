@@ -49,9 +49,8 @@ TEST_CASE("modern", "[test_accumulate]") {
     REQUIRE("a-b-c-d" == joined);
 
     std::vector<int> a = {1, 2, 3, 4};
-    auto b = std::accumulate(a.begin(), a.end(), 0, [](auto res, const auto& i) {
-        return res |= (1 << i);
-    });
+    auto b = std::accumulate(
+        a.begin(), a.end(), 0, [](auto res, const auto& i) { return res |= (1 << i); });
 
     auto bs = std::bitset<8>(b).to_string();
     REQUIRE("00011110" == bs);

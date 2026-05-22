@@ -14,9 +14,9 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/pl/minidfs/common/constants.h"
-
 #include <gtest/gtest.h>
+
+#include "cpp/pl/minidfs/common/constants.h"
 
 namespace pl::minidfs {
 namespace {

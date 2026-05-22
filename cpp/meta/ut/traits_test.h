@@ -38,7 +38,9 @@ template <typename T> bool numEqImpl(T lhs, T rhs, std::true_type) {
     return ::fabs(lhs - rhs) < std::numeric_limits<T>::epsilon();
 }
 
-template <typename T> bool numEqImpl(T lhs, T rhs, std::false_type) { return lhs == rhs; }
+template <typename T> bool numEqImpl(T lhs, T rhs, std::false_type) {
+    return lhs == rhs;
+}
 
 template <typename T> auto numEqNew(T lhs, T rhs) -> enable_if_t<std::is_arithmetic_v<T>, bool> {
     return numEqImpl(lhs, rhs, is_floating_point<T>{});

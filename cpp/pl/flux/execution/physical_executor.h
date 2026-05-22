@@ -17,11 +17,6 @@
 
 #pragma once
 
-#include "absl/status/statusor.h"
-#include "cpp/pl/flux/connector/connector_runtime.h"
-#include "cpp/pl/flux/plan/plan_node.h"
-#include "cpp/pl/flux/runtime/runtime_page.h"
-#include "cpp/pl/flux/runtime/runtime_value.h"
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -29,6 +24,12 @@
 #include <optional>
 #include <string>
 #include <vector>
+
+#include "absl/status/statusor.h"
+#include "cpp/pl/flux/connector/connector_runtime.h"
+#include "cpp/pl/flux/plan/plan_node.h"
+#include "cpp/pl/flux/runtime/runtime_page.h"
+#include "cpp/pl/flux/runtime/runtime_value.h"
 
 namespace pl::flux::execution {
 

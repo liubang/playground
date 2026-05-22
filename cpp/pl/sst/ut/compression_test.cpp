@@ -15,10 +15,11 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/17 22:41
 
-#include "cpp/pl/random/random.h"
-#include "cpp/pl/sst/compression.h"
 #include <gtest/gtest.h>
 #include <string>
+
+#include "cpp/pl/random/random.h"
+#include "cpp/pl/sst/compression.h"
 
 namespace pl {
 

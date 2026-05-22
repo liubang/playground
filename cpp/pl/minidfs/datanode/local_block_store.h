@@ -17,10 +17,6 @@
 
 #pragma once
 
-#include "cpp/pl/minidfs/common/constants.h"
-#include "cpp/pl/minidfs/common/types.h"
-#include "cpp/pl/minidfs/datanode/block_format.h"
-#include "cpp/pl/status/result.h"
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -28,6 +24,11 @@
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "cpp/pl/minidfs/common/constants.h"
+#include "cpp/pl/minidfs/common/types.h"
+#include "cpp/pl/minidfs/datanode/block_format.h"
+#include "cpp/pl/status/result.h"
 
 namespace pl::minidfs {
 

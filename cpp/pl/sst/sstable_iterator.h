@@ -17,9 +17,10 @@
 
 #pragma once
 
-#include "cpp/pl/sst/iterator.h"
 #include <functional>
 #include <utility>
+
+#include "cpp/pl/sst/iterator.h"
 
 namespace pl {
 

@@ -15,11 +15,12 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/25 10:40
 
+#include <optional>
+
 #include "cpp/pl/flux/common/compat.h"
 #include "cpp/pl/flux/execution/materializer.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_aggregate_helpers.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_universe.h"
-#include <optional>
 
 namespace pl::flux {
 namespace {
@@ -56,8 +57,8 @@ absl::StatusOr<const TableValue*> materialized_table_ref(const TableValue& table
     if (table.materialized) {
         return &table;
     }
-    Value value = Value::table_plan(table.bucket, table.plan, table.range_start, table.range_stop,
-                                    table.result_name);
+    Value value = Value::table_plan(
+        table.bucket, table.plan, table.range_start, table.range_stop, table.result_name);
     auto materialized_or = execution::MaterializeValue(std::move(value));
     if (!materialized_or.ok()) {
         return materialized_or.status();
@@ -295,8 +296,8 @@ absl::StatusOr<Value> builtin_count(const std::vector<Value>& args) {
         chunks.push_back(std::move(next));
     }
     auto result = table_with_chunks_like(**table_or, std::move(chunks));
-    return with_aggregate_plan(std::move(result), **table_or, plan::AggregateFunction::Count,
-                               column);
+    return with_aggregate_plan(
+        std::move(result), **table_or, plan::AggregateFunction::Count, column);
 }
 
 absl::StatusOr<Value> builtin_spread(const std::vector<Value>& args) {
@@ -408,8 +409,8 @@ absl::StatusOr<Value> builtin_median(const std::vector<Value>& args) {
     }
     if (const Value* table_value = (*object_or)->lookup("tables");
         table_value != nullptr && table_value->type() == Value::Type::Table) {
-        return with_materialization_barrier(std::move(*result_or), table_value->as_table(),
-                                            "median");
+        return with_materialization_barrier(
+            std::move(*result_or), table_value->as_table(), "median");
     }
     return result_or;
 }

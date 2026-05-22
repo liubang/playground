@@ -17,6 +17,15 @@
 
 #include "cpp/pl/flux/cli/flux_cli.h"
 
+#include <algorithm>
+#include <cctype>
+#include <iomanip>
+#include <iostream>
+#include <simdjson.h>
+#include <sstream>
+#include <string_view>
+#include <unordered_set>
+
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_join.h"
@@ -27,19 +36,13 @@
 #include "cpp/pl/flux/runtime/runtime_exec.h"
 #include "cpp/pl/flux/syntax/ast_debug.h"
 #include "cpp/pl/flux/syntax/parser.h"
-#include <algorithm>
-#include <cctype>
-#include <iomanip>
-#include <iostream>
-#include <simdjson.h>
-#include <sstream>
-#include <string_view>
-#include <unordered_set>
 
 namespace pl::flux {
 namespace {
 
-std::string status_message(const absl::Status& status) { return std::string(status.message()); }
+std::string status_message(const absl::Status& status) {
+    return std::string(status.message());
+}
 
 std::string parser_error_text(const Parser& parser) {
     std::ostringstream out;
@@ -231,7 +234,9 @@ std::string scalar_cell_text(const Value& value) {
     }
 }
 
-bool contains_newline(std::string_view text) { return text.find('\n') != std::string_view::npos; }
+bool contains_newline(std::string_view text) {
+    return text.find('\n') != std::string_view::npos;
+}
 
 bool prefers_multiline_human_value(const Value& value) {
     if (value.type() == Value::Type::String) {
@@ -615,8 +620,8 @@ size_t append_annotated_csv_result(const NamedResult& result,
     append_csv_row(default_row, out);
     append_csv_row(header_row, out);
 
-    std::vector<std::string> cells = {"", result.name, std::to_string(table_index),
-                                      scalar_cell_text(result.value)};
+    std::vector<std::string> cells = {
+        "", result.name, std::to_string(table_index), scalar_cell_text(result.value)};
     append_csv_row(cells, out);
     return table_index + 1;
 }
@@ -880,10 +885,10 @@ void append_cli_output(const FileExecutionResult& result,
     }
 
     bool multiple_results = result.results.size() > 1;
-    bool has_table = std::any_of(result.results.begin(), result.results.end(),
-                                 [](const NamedResult& named_result) {
-                                     return named_result.value.type() == Value::Type::Table;
-                                 });
+    bool has_table = std::any_of(
+        result.results.begin(), result.results.end(), [](const NamedResult& named_result) {
+            return named_result.value.type() == Value::Type::Table;
+        });
     bool include_headers = multiple_results || has_table;
 
     bool first = true;
@@ -921,7 +926,19 @@ bool line_requires_more_input(std::string_view line) {
         return false;
     }
     constexpr std::string_view kSuffixes[] = {
-        "|>", "=>", "=", ",", ":", "(", "[", "{", "+", "-", "*", "/", "%",
+        "|>",
+        "=>",
+        "=",
+        ",",
+        ":",
+        "(",
+        "[",
+        "{",
+        "+",
+        "-",
+        "*",
+        "/",
+        "%",
     };
     for (const auto suffix : kSuffixes) {
         if (ends_with_token(trimmed, suffix)) {

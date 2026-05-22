@@ -15,8 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/10 23:30
 
-#include "cpp/pl/ascii_table/pretty.h"
-#include "cpp/pl/minidfs/client/dfs_client.h"
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -28,6 +26,9 @@
 #include <sstream>
 #include <string>
 #include <vector>
+
+#include "cpp/pl/ascii_table/pretty.h"
+#include "cpp/pl/minidfs/client/dfs_client.h"
 
 DEFINE_string(namenode, "127.0.0.1:8020", "NameNode address (host:port)");
 DEFINE_int32(rpc_timeout_ms, 5000, "RPC timeout in milliseconds");
@@ -80,7 +81,9 @@ std::string format_size(uint64_t size) {
 }
 
 /// Format permission as octal string.
-std::string format_permission(uint32_t perm) { return fmt::format("{:04o}", perm); }
+std::string format_permission(uint32_t perm) {
+    return fmt::format("{:04o}", perm);
+}
 
 /// Create the DfsClient from flags.
 std::unique_ptr<DfsClient> make_client() {
@@ -109,16 +112,18 @@ int cmd_mkdir(DfsClient* client, int argc, char* argv[]) {
 
 /// Options for ls command, mirroring hdfs dfs -ls behavior.
 struct LsOptions {
-    bool dir_only = false;   // -d: show directory itself, not contents
-    bool human = false;      // -h: human-readable sizes
-    bool recursive = false;  // -R: recursive listing
-    bool sort_time = false;  // -t: sort by modification time (newest first)
-    bool sort_size = false;  // -S: sort by size (largest first)
-    bool reverse = false;    // -r: reverse sort order
+    bool dir_only = false;  // -d: show directory itself, not contents
+    bool human = false;     // -h: human-readable sizes
+    bool recursive = false; // -R: recursive listing
+    bool sort_time = false; // -t: sort by modification time (newest first)
+    bool sort_size = false; // -S: sort by size (largest first)
+    bool reverse = false;   // -r: reverse sort order
 };
 
 /// Format size as raw bytes string.
-std::string format_size_raw(uint64_t size) { return std::to_string(size); }
+std::string format_size_raw(uint64_t size) {
+    return std::to_string(size);
+}
 
 /// Print a listing of entries in hdfs-style format.
 void print_ls_entries(const std::vector<FileStatus>& entries, const LsOptions& opts) {
@@ -215,15 +220,27 @@ int cmd_ls(DfsClient* client, int argc, char* argv[]) {
             // Handle combined flags like -hRt
             for (size_t j = 1; j < arg.size(); ++j) {
                 switch (arg[j]) {
-                case 'd': opts.dir_only = true; break;
-                case 'h': opts.human = true; break;
-                case 'R': opts.recursive = true; break;
-                case 't': opts.sort_time = true; break;
-                case 'S': opts.sort_size = true; break;
-                case 'r': opts.reverse = true; break;
-                default:
-                    std::cerr << "ls: unknown option: -" << arg[j] << "\n";
-                    return 1;
+                    case 'd':
+                        opts.dir_only = true;
+                        break;
+                    case 'h':
+                        opts.human = true;
+                        break;
+                    case 'R':
+                        opts.recursive = true;
+                        break;
+                    case 't':
+                        opts.sort_time = true;
+                        break;
+                    case 'S':
+                        opts.sort_size = true;
+                        break;
+                    case 'r':
+                        opts.reverse = true;
+                        break;
+                    default:
+                        std::cerr << "ls: unknown option: -" << arg[j] << "\n";
+                        return 1;
                 }
             }
         } else {
@@ -404,9 +421,18 @@ int cmd_datanodes(DfsClient* client, int argc, char* argv[]) {
         return 0;
     }
 
-    pl::pretty::Pretty table(
-        {"ID", "Hostname", "IP", "RPC Port", "Data Port", "Rack", "State",
-         "Capacity", "Used", "Free", "Blocks", "Last HB"});
+    pl::pretty::Pretty table({"ID",
+                              "Hostname",
+                              "IP",
+                              "RPC Port",
+                              "Data Port",
+                              "Rack",
+                              "State",
+                              "Capacity",
+                              "Used",
+                              "Free",
+                              "Blocks",
+                              "Last HB"});
     for (const auto& dn : dns) {
         table.add_row({
             std::to_string(dn.datanode_id),
@@ -467,8 +493,8 @@ int cmd_inode(DfsClient* client, int argc, char* argv[]) {
 
     std::string arg = argv[0];
     pl::Result<DfsClient::InodeDetail> result = (arg[0] == '/')
-        ? client->get_inode_info_by_path(arg)
-        : client->get_inode_info(std::stoull(arg));
+                                                    ? client->get_inode_info_by_path(arg)
+                                                    : client->get_inode_info(std::stoull(arg));
 
     if (result.hasError()) {
         std::cerr << "inode failed: " << result.error().describe() << "\n";
@@ -506,9 +532,8 @@ int cmd_blocks(DfsClient* client, int argc, char* argv[]) {
     }
 
     std::string arg = argv[0];
-    auto result = (arg[0] == '/')
-        ? client->get_file_blocks_by_path(arg)
-        : client->get_file_blocks(std::stoull(arg));
+    auto result = (arg[0] == '/') ? client->get_file_blocks_by_path(arg)
+                                  : client->get_file_blocks(std::stoull(arg));
 
     if (result.hasError()) {
         std::cerr << "blocks failed: " << result.error().describe() << "\n";
@@ -526,7 +551,8 @@ int cmd_blocks(DfsClient* client, int argc, char* argv[]) {
     for (const auto& b : blocks) {
         std::string locs;
         for (size_t i = 0; i < b.locations.size(); ++i) {
-            if (i > 0) locs += ", ";
+            if (i > 0)
+                locs += ", ";
             locs += b.locations[i].host + ":" + std::to_string(b.locations[i].data_port);
         }
         table.add_row({
