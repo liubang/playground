@@ -62,9 +62,7 @@ public:
             if (stop_) {
                 throw std::runtime_error("");
             }
-            tasks_.emplace([task = std::move(task)]() {
-                (*task)();
-            });
+            tasks_.emplace([task = std::move(task)]() { (*task)(); });
         }
         condition_.notify_one();
         return future;
@@ -76,9 +74,7 @@ private:
             Task task;
             {
                 std::unique_lock<std::mutex> lk(queue_mutex_);
-                condition_.wait(lk, [that = this] {
-                    return that->stop_ || !that->tasks_.empty();
-                });
+                condition_.wait(lk, [that = this] { return that->stop_ || !that->tasks_.empty(); });
                 if (stop_ && tasks_.empty()) {
                     LOG_DEBUG << "thread stopped";
                     break;

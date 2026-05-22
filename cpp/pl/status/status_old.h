@@ -35,10 +35,14 @@ enum class Code : uint32_t {
 
 #define __PL_CONCAT(a, b) a##b
 #define __PL_ENUM(code)   __PL_CONCAT(Code::ST_, code)
-#define __PL_NEW_STATUS_FUNC(code) \
-    static Status New##code(const std::string& msg = "") { return {__PL_ENUM(code), msg}; }
-#define __PL_IS_STATUS_FUNC(code) \
-    [[nodiscard]] bool is##code() const { return code_ == __PL_ENUM(code); }
+#define __PL_NEW_STATUS_FUNC(code)                         \
+    static Status New##code(const std::string& msg = "") { \
+        return {__PL_ENUM(code), msg};                     \
+    }
+#define __PL_IS_STATUS_FUNC(code)         \
+    [[nodiscard]] bool is##code() const { \
+        return code_ == __PL_ENUM(code);  \
+    }
 
 class Status {
 public:

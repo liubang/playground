@@ -17,12 +17,12 @@
 
 #pragma once
 
-#include "cpp/pl/status/result.h"
-#include "cpp/pl/utility/utility.h"
-
 #include <cstdint>
 #include <ctime>
 #include <memory>
+
+#include "cpp/pl/status/result.h"
+#include "cpp/pl/utility/utility.h"
 
 namespace pl {
 

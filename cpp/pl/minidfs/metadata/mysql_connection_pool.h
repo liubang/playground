@@ -17,7 +17,6 @@
 
 #pragma once
 
-#include "cpp/pl/status/result.h"
 #include <boost/asio/io_context.hpp>
 #include <boost/mysql/any_connection.hpp>
 #include <boost/mysql/connect_params.hpp>
@@ -28,6 +27,8 @@
 #include <mutex>
 #include <queue>
 #include <string>
+
+#include "cpp/pl/status/result.h"
 
 namespace pl::minidfs {
 

@@ -24,7 +24,9 @@
 // https://www.cppstories.com/2022/tuple-iteration-basics/
 namespace pl {
 
-template <typename T> void PrintElem(const T& t) { std::cout << t << ','; }
+template <typename T> void PrintElem(const T& t) {
+    std::cout << t << ',';
+}
 
 template <typename TupleT, std::size_t... Is> void PrintTupleManual(const TupleT& tp) {
     // fold expression

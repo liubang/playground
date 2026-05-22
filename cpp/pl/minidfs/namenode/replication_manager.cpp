@@ -17,8 +17,9 @@
 
 #include "cpp/pl/minidfs/namenode/replication_manager.h"
 
-#include "cpp/pl/minidfs/common/constants.h"
 #include <algorithm>
+
+#include "cpp/pl/minidfs/common/constants.h"
 
 namespace pl::minidfs {
 
@@ -69,8 +70,9 @@ pl::Result<std::vector<ReplicationTask>> ReplicationManager::scan() {
 
             for (const auto& target : targets.value()) {
                 // Don't replicate to a node that already has this block.
-                bool already_has = std::find(existing_dns.begin(), existing_dns.end(),
-                                             target.datanode_id) != existing_dns.end();
+                bool already_has =
+                    std::find(existing_dns.begin(), existing_dns.end(), target.datanode_id) !=
+                    existing_dns.end();
                 if (already_has) {
                     continue;
                 }

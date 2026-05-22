@@ -15,6 +15,12 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/10 18:30
 
+#include <brpc/channel.h>
+#include <brpc/server.h>
+#include <fmt/format.h>
+#include <folly/logging/xlog.h>
+#include <gflags/gflags.h>
+
 #include "cpp/pl/minidfs/common/error_code.h"
 #include "cpp/pl/minidfs/datanode/block_reporter.h"
 #include "cpp/pl/minidfs/datanode/data_transfer_service_impl.h"
@@ -22,11 +28,6 @@
 #include "cpp/pl/minidfs/datanode/local_block_store.h"
 #include "cpp/pl/minidfs/datanode/replication_worker.h"
 #include "cpp/pl/minidfs/protocol/minidfs.pb.h"
-#include <brpc/channel.h>
-#include <brpc/server.h>
-#include <fmt/format.h>
-#include <folly/logging/xlog.h>
-#include <gflags/gflags.h>
 
 DEFINE_int32(port, 9100, "DataNode data transfer service port");
 DEFINE_string(storage_root, "/tmp/minidfs/dn", "Block storage root directory");
@@ -108,7 +109,9 @@ int main(int argc, char* argv[]) {
 
     // Setup heartbeat sender
     pl::minidfs::HeartbeatFunc heartbeat_func =
-        [&nn_stub](uint64_t dn_id, uint64_t capacity, uint64_t used,
+        [&nn_stub](uint64_t dn_id,
+                   uint64_t capacity,
+                   uint64_t used,
                    uint64_t free) -> pl::Result<std::vector<pl::minidfs::HeartbeatCommand>> {
         pl::minidfs::protocol::HeartbeatRequest req;
         req.set_datanode_id(dn_id);
@@ -139,8 +142,10 @@ int main(int argc, char* argv[]) {
     };
 
     // Setup replication worker
-    pl::minidfs::CopyFunc copy_func = [](uint64_t block_id, uint64_t generation_stamp,
-                                         const std::string& data, const std::string& target_host,
+    pl::minidfs::CopyFunc copy_func = [](uint64_t block_id,
+                                         uint64_t generation_stamp,
+                                         const std::string& data,
+                                         const std::string& target_host,
                                          uint32_t target_port) -> pl::Result<pl::Void> {
         // Connect to target DN
         brpc::Channel target_channel;
@@ -268,8 +273,11 @@ int main(int argc, char* argv[]) {
     block_reporter.start();
     replication_worker.start();
 
-    XLOGF(INFO, "MiniDFS DataNode started on port {}, datanode_id={}, storage={}", FLAGS_port,
-          datanode_id, FLAGS_storage_root);
+    XLOGF(INFO,
+          "MiniDFS DataNode started on port {}, datanode_id={}, storage={}",
+          FLAGS_port,
+          datanode_id,
+          FLAGS_storage_root);
 
     server.RunUntilAskedToQuit();
 

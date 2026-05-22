@@ -17,8 +17,6 @@
 
 #include "cpp/pl/flux/execution/accumulator.h"
 
-#include "absl/status/status.h"
-#include "absl/strings/str_cat.h"
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
@@ -31,6 +29,9 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+#include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
 
 namespace pl::flux::execution {
 namespace {
@@ -140,8 +141,11 @@ absl::Status account_accumulator_memory(AccumulatorStats* stats,
     if (stats->memory_limit_bytes != 0 && stats->memory_bytes > stats->memory_limit_bytes) {
         stats->memory_limited = true;
         return absl::ResourceExhaustedError(
-            absl::StrCat("accumulator memory limit exceeded: estimated=", stats->memory_bytes,
-                         " bytes, limit=", stats->memory_limit_bytes, " bytes"));
+            absl::StrCat("accumulator memory limit exceeded: estimated=",
+                         stats->memory_bytes,
+                         " bytes, limit=",
+                         stats->memory_limit_bytes,
+                         " bytes"));
     }
     return absl::OkStatus();
 }
@@ -500,8 +504,8 @@ PageChunk aggregate_result_chunk(const std::shared_ptr<ObjectValue>& group_key,
         for (const auto& [name, value] : group_key->properties) {
             append_result_column(&chunk, name, value);
         }
-        append_result_column(&chunk, "_group",
-                             Value::object(std::make_shared<ObjectValue>(*group_key)));
+        append_result_column(
+            &chunk, "_group", Value::object(std::make_shared<ObjectValue>(*group_key)));
     }
     append_result_column(&chunk, column_name, std::move(*aggregate_value));
     if (partial_count.has_value()) {
@@ -670,8 +674,8 @@ void collect_child_accumulator_stats(const std::unique_ptr<Operator>& input,
 
 StreamingGroupOperator::StreamingGroupOperator(std::shared_ptr<plan::PlanNode> plan,
                                                std::unique_ptr<Operator> input)
-    : StreamingGroupOperator(std::move(plan), std::move(input),
-                             QueryMemoryContext::FromEnvironment()) {}
+    : StreamingGroupOperator(
+          std::move(plan), std::move(input), QueryMemoryContext::FromEnvironment()) {}
 
 StreamingGroupOperator::StreamingGroupOperator(std::shared_ptr<plan::PlanNode> plan,
                                                std::unique_ptr<Operator> input,
@@ -687,7 +691,9 @@ StreamingGroupOperator::StreamingGroupOperator(std::shared_ptr<plan::PlanNode> p
                                                            : parse_accumulator_memory_limit();
 }
 
-std::string StreamingGroupOperator::name() const { return "GroupOperator"; }
+std::string StreamingGroupOperator::name() const {
+    return "GroupOperator";
+}
 
 void StreamingGroupOperator::Cancel() {
     if (input_ != nullptr) {
@@ -747,7 +753,8 @@ absl::StatusOr<std::optional<Page>> StreamingGroupOperator::NextPage() {
                     chunks.back().group_key = group_key_object_for_row(
                         page_chunk, row_index, plan_->group().columns, group_indexes);
                     auto memory_status = account_accumulator_memory(
-                        &stats_, memory_context_,
+                        &stats_,
+                        memory_context_,
                         estimate_group_key_memory_bytes(chunks.back().group_key));
                     if (!memory_status.ok()) {
                         return memory_status;
@@ -755,7 +762,8 @@ absl::StatusOr<std::optional<Page>> StreamingGroupOperator::NextPage() {
                 }
                 {
                     ScopedAccumulatorTimer timer(&stats_.update_time_ms);
-                    append_source_row_to_chunk(&chunks[insertion.first->second], page_chunk,
+                    append_source_row_to_chunk(&chunks[insertion.first->second],
+                                               page_chunk,
                                                row_index,
                                                chunks[insertion.first->second].group_key);
                 }
@@ -778,13 +786,14 @@ absl::StatusOr<std::optional<Page>> StreamingGroupOperator::NextPage() {
 
 StreamingDistinctOperator::StreamingDistinctOperator(std::shared_ptr<plan::PlanNode> plan,
                                                      std::unique_ptr<Operator> input)
-    : StreamingDistinctOperator(std::move(plan), std::move(input),
-                                QueryMemoryContext::FromEnvironment()) {}
+    : StreamingDistinctOperator(
+          std::move(plan), std::move(input), QueryMemoryContext::FromEnvironment()) {}
 
-StreamingDistinctOperator::StreamingDistinctOperator(std::shared_ptr<plan::PlanNode> plan,
-                                                     std::unique_ptr<Operator> input,
-                                                     std::shared_ptr<QueryMemoryContext> memory_context,
-                                                     std::string phase)
+StreamingDistinctOperator::StreamingDistinctOperator(
+    std::shared_ptr<plan::PlanNode> plan,
+    std::unique_ptr<Operator> input,
+    std::shared_ptr<QueryMemoryContext> memory_context,
+    std::string phase)
     : plan_(std::move(plan)), input_(std::move(input)), memory_context_(std::move(memory_context)) {
     stats_.operator_name = name();
     stats_.mode = "distinct";
@@ -794,7 +803,9 @@ StreamingDistinctOperator::StreamingDistinctOperator(std::shared_ptr<plan::PlanN
                                                            : parse_accumulator_memory_limit();
 }
 
-std::string StreamingDistinctOperator::name() const { return "DistinctOperator"; }
+std::string StreamingDistinctOperator::name() const {
+    return "DistinctOperator";
+}
 
 void StreamingDistinctOperator::Cancel() {
     if (input_ != nullptr) {
@@ -847,7 +858,8 @@ absl::StatusOr<std::optional<Page>> StreamingDistinctOperator::NextPage() {
                 state.chunk.group_key = page_chunk.group_key;
                 groups.push_back(std::move(state));
                 auto memory_status = account_accumulator_memory(
-                    &stats_, memory_context_,
+                    &stats_,
+                    memory_context_,
                     estimate_group_key_memory_bytes(groups.back().chunk.group_key));
                 if (!memory_status.ok()) {
                     return memory_status;
@@ -877,14 +889,14 @@ absl::StatusOr<std::optional<Page>> StreamingDistinctOperator::NextPage() {
                     keep = state.seen.insert(std::move(value_key)).second;
                 }
                 if (keep) {
-                    auto memory_status =
-                        account_accumulator_memory(&stats_, memory_context_, value_key_memory_bytes);
+                    auto memory_status = account_accumulator_memory(
+                        &stats_, memory_context_, value_key_memory_bytes);
                     if (!memory_status.ok()) {
                         return memory_status;
                     }
                     ScopedAccumulatorTimer timer(&stats_.update_time_ms);
-                    append_source_row_to_chunk(&state.chunk, page_chunk, row_index,
-                                               page_chunk.group_key);
+                    append_source_row_to_chunk(
+                        &state.chunk, page_chunk, row_index, page_chunk.group_key);
                 }
             }
         }
@@ -911,12 +923,13 @@ absl::StatusOr<std::optional<Page>> StreamingDistinctOperator::NextPage() {
 
 StreamingAggregateOperator::StreamingAggregateOperator(std::shared_ptr<plan::PlanNode> plan,
                                                        std::unique_ptr<Operator> input)
-    : StreamingAggregateOperator(std::move(plan), std::move(input),
-                                 QueryMemoryContext::FromEnvironment()) {}
+    : StreamingAggregateOperator(
+          std::move(plan), std::move(input), QueryMemoryContext::FromEnvironment()) {}
 
-StreamingAggregateOperator::StreamingAggregateOperator(std::shared_ptr<plan::PlanNode> plan,
-                                                       std::unique_ptr<Operator> input,
-                                                       std::shared_ptr<QueryMemoryContext> memory_context)
+StreamingAggregateOperator::StreamingAggregateOperator(
+    std::shared_ptr<plan::PlanNode> plan,
+    std::unique_ptr<Operator> input,
+    std::shared_ptr<QueryMemoryContext> memory_context)
     : plan_(std::move(plan)), input_(std::move(input)), memory_context_(std::move(memory_context)) {
     stats_.operator_name = name();
     stats_.mode = "aggregate";
@@ -926,7 +939,9 @@ StreamingAggregateOperator::StreamingAggregateOperator(std::shared_ptr<plan::Pla
                                                            : parse_accumulator_memory_limit();
 }
 
-std::string StreamingAggregateOperator::name() const { return "AggregateOperator"; }
+std::string StreamingAggregateOperator::name() const {
+    return "AggregateOperator";
+}
 
 void StreamingAggregateOperator::Cancel() {
     if (input_ != nullptr) {
@@ -975,7 +990,8 @@ absl::StatusOr<std::optional<Page>> StreamingAggregateOperator::NextPage() {
                 state.group_key = page_chunk.group_key;
                 groups.push_back(std::move(state));
                 auto memory_status = account_accumulator_memory(
-                    &stats_, memory_context_,
+                    &stats_,
+                    memory_context_,
                     estimate_group_key_memory_bytes(groups.back().group_key));
                 if (!memory_status.ok()) {
                     return memory_status;
@@ -1005,7 +1021,8 @@ absl::StatusOr<std::optional<Page>> StreamingAggregateOperator::NextPage() {
         ScopedAccumulatorTimer timer(&stats_.result_time_ms);
         for (const auto& state : groups) {
             chunks.push_back(
-                aggregate_result_chunk(state.group_key, plan_->aggregate().column,
+                aggregate_result_chunk(state.group_key,
+                                       plan_->aggregate().column,
                                        aggregate_value_from_state(state, plan_->aggregate())));
         }
     }
@@ -1024,8 +1041,10 @@ StreamingGroupedAggregateOperator::StreamingGroupedAggregateOperator(
     std::vector<std::string> group_columns,
     std::unique_ptr<Operator> input,
     AggregatePhase phase)
-    : StreamingGroupedAggregateOperator(std::move(aggregate_plan), std::move(group_columns),
-                                        std::move(input), QueryMemoryContext::FromEnvironment(),
+    : StreamingGroupedAggregateOperator(std::move(aggregate_plan),
+                                        std::move(group_columns),
+                                        std::move(input),
+                                        QueryMemoryContext::FromEnvironment(),
                                         phase) {}
 
 StreamingGroupedAggregateOperator::StreamingGroupedAggregateOperator(
@@ -1047,7 +1066,9 @@ StreamingGroupedAggregateOperator::StreamingGroupedAggregateOperator(
                                                            : parse_accumulator_memory_limit();
 }
 
-std::string StreamingGroupedAggregateOperator::name() const { return "AggregateOperator"; }
+std::string StreamingGroupedAggregateOperator::name() const {
+    return "AggregateOperator";
+}
 
 void StreamingGroupedAggregateOperator::Cancel() {
     if (input_ != nullptr) {
@@ -1113,7 +1134,8 @@ absl::StatusOr<std::optional<Page>> StreamingGroupedAggregateOperator::NextPage(
                         page_chunk, row_index, group_columns_, group_indexes_in_chunk);
                     groups.push_back(std::move(state));
                     auto memory_status = account_accumulator_memory(
-                        &stats_, memory_context_,
+                        &stats_,
+                        memory_context_,
                         estimate_group_key_memory_bytes(groups.back().group_key));
                     if (!memory_status.ok()) {
                         return memory_status;
@@ -1123,7 +1145,8 @@ absl::StatusOr<std::optional<Page>> StreamingGroupedAggregateOperator::NextPage(
                 {
                     ScopedAccumulatorTimer timer(&stats_.update_time_ms);
                     auto update_status = update_aggregate_state(
-                        &state, aggregate_plan_->aggregate(),
+                        &state,
+                        aggregate_plan_->aggregate(),
                         page_chunk_value_at_index(page_chunk, row_index, aggregate_column),
                         page_chunk_value_at_index(page_chunk, row_index, partial_count_column),
                         phase_);
@@ -1155,7 +1178,8 @@ absl::StatusOr<std::optional<Page>> StreamingGroupedAggregateOperator::NextPage(
                 partial_count = static_cast<int64_t>(state.numeric_count);
             }
             chunks.push_back(aggregate_result_chunk(
-                state.group_key, aggregate_plan_->aggregate().column,
+                state.group_key,
+                aggregate_plan_->aggregate().column,
                 aggregate_value_from_state(state, aggregate_plan_->aggregate(), phase_),
                 partial_count));
         }
@@ -1165,8 +1189,8 @@ absl::StatusOr<std::optional<Page>> StreamingGroupedAggregateOperator::NextPage(
     for (const auto& chunk : chunks) {
         stats_.output_rows += chunk.row_count;
     }
-    auto output = page_from_accumulated_page_chunks(std::move(metadata), std::move(chunks),
-                                                    aggregate_plan_);
+    auto output =
+        page_from_accumulated_page_chunks(std::move(metadata), std::move(chunks), aggregate_plan_);
     release_accumulator_memory(memory_context_, stats_);
     return output;
 }

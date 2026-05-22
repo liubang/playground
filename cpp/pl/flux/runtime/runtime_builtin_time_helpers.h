@@ -17,9 +17,6 @@
 
 #pragma once
 
-#include "absl/time/civil_time.h"
-#include "absl/time/time.h"
-#include "cpp/pl/flux/runtime/runtime_builtin_table_helpers.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
@@ -27,6 +24,10 @@
 #include <limits>
 #include <optional>
 #include <string>
+
+#include "absl/time/civil_time.h"
+#include "absl/time/time.h"
+#include "cpp/pl/flux/runtime/runtime_builtin_table_helpers.h"
 
 namespace pl::flux {
 
@@ -119,8 +120,8 @@ inline std::optional<int64_t> parse_rfc3339_seconds(const std::string& literal) 
 }
 
 inline std::string format_rfc3339_seconds(int64_t seconds) {
-    return absl::FormatTime("%Y-%m-%dT%H:%M:%SZ", absl::FromUnixSeconds(seconds),
-                            absl::UTCTimeZone());
+    return absl::FormatTime(
+        "%Y-%m-%dT%H:%M:%SZ", absl::FromUnixSeconds(seconds), absl::UTCTimeZone());
 }
 
 struct WindowDuration {
@@ -170,10 +171,12 @@ inline absl::CivilSecond civil_second_from_utc_seconds(int64_t seconds) {
 }
 
 inline int64_t seconds_from_civil_second(const absl::CivilSecond& civil) {
-    return utc_seconds_from_civil(
-        static_cast<int>(civil.year()), static_cast<unsigned>(civil.month()),
-        static_cast<unsigned>(civil.day()), static_cast<unsigned>(civil.hour()),
-        static_cast<unsigned>(civil.minute()), static_cast<unsigned>(civil.second()));
+    return utc_seconds_from_civil(static_cast<int>(civil.year()),
+                                  static_cast<unsigned>(civil.month()),
+                                  static_cast<unsigned>(civil.day()),
+                                  static_cast<unsigned>(civil.hour()),
+                                  static_cast<unsigned>(civil.minute()),
+                                  static_cast<unsigned>(civil.second()));
 }
 
 inline absl::CivilSecond civil_second_in_location(int64_t seconds, const WindowLocation& location) {
@@ -222,8 +225,12 @@ inline absl::CivilSecond add_months_to_civil_second(const absl::CivilSecond& civ
         static_cast<int64_t>(civil.year()) * 12 + static_cast<int64_t>(civil.month()) - 1 + months;
     const int64_t year = floor_div(month_index, 12);
     const int64_t month = month_index - year * 12;
-    return absl::CivilSecond(static_cast<int>(year), static_cast<int>(month + 1), civil.day(),
-                             civil.hour(), civil.minute(), civil.second());
+    return absl::CivilSecond(static_cast<int>(year),
+                             static_cast<int>(month + 1),
+                             civil.day(),
+                             civil.hour(),
+                             civil.minute(),
+                             civil.second());
 }
 
 inline absl::StatusOr<WindowLocation> parse_window_location_value(const Value& value,
@@ -335,7 +342,10 @@ inline absl::StatusOr<WindowDuration> parse_window_duration(const Value& value,
     while (index < literal.size()) {
         if (std::isdigit(static_cast<unsigned char>(literal[index])) == 0) {
             return absl::InvalidArgumentError(
-                absl::StrCat(name, " `", property, "` must be ",
+                absl::StrCat(name,
+                             " `",
+                             property,
+                             "` must be ",
                              allow_negative ? "a duration" : "a positive duration"));
         }
         int64_t amount = 0;

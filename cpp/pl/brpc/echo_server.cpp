@@ -15,9 +15,10 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/06 21:10
 
-#include "cpp/pl/brpc/proto/echo.pb.h"
 #include <brpc/server.h>
 #include <gflags/gflags.h>
+
+#include "cpp/pl/brpc/proto/echo.pb.h"
 
 DEFINE_int32(port, 8000, "TCP Port of this server");
 DEFINE_int32(idle_timeout_s,

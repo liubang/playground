@@ -14,13 +14,13 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/pl/minidfs/datanode/heartbeat_sender.h"
-
 #include <atomic>
 #include <filesystem>
 #include <gtest/gtest.h>
 #include <string>
 #include <vector>
+
+#include "cpp/pl/minidfs/datanode/heartbeat_sender.h"
 
 namespace pl::minidfs {
 namespace {
@@ -30,9 +30,8 @@ namespace fs = std::filesystem;
 class HeartbeatSenderTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        test_dir_ = fs::temp_directory_path() / ("minidfs_hb_test_" +
-                                                  std::to_string(::getpid()) + "_" +
-                                                  std::to_string(counter_++));
+        test_dir_ = fs::temp_directory_path() / ("minidfs_hb_test_" + std::to_string(::getpid()) +
+                                                 "_" + std::to_string(counter_++));
         fs::create_directories(test_dir_);
 
         LocalBlockStore::Config config;
@@ -57,7 +56,9 @@ TEST_F(HeartbeatSenderTest, SendOnceSuccess) {
     std::atomic<int> hb_count{0};
     uint64_t received_dn_id = 0;
 
-    HeartbeatFunc hb_func = [&](uint64_t dn_id, uint64_t capacity, uint64_t used,
+    HeartbeatFunc hb_func = [&](uint64_t dn_id,
+                                uint64_t capacity,
+                                uint64_t used,
                                 uint64_t free_bytes) -> Result<std::vector<HeartbeatCommand>> {
         hb_count++;
         received_dn_id = dn_id;
@@ -65,7 +66,8 @@ TEST_F(HeartbeatSenderTest, SendOnceSuccess) {
         return std::vector<HeartbeatCommand>{};
     };
 
-    CommandHandler cmd_handler = [](const HeartbeatCommand&) {};
+    CommandHandler cmd_handler = [](const HeartbeatCommand&) {
+    };
 
     HeartbeatSender::Config cfg;
     cfg.datanode_id = 77;
@@ -81,8 +83,8 @@ TEST_F(HeartbeatSenderTest, SendOnceSuccess) {
 TEST_F(HeartbeatSenderTest, SendOnceWithCommands) {
     std::vector<HeartbeatCommand> received_cmds;
 
-    HeartbeatFunc hb_func = [](uint64_t, uint64_t, uint64_t,
-                               uint64_t) -> Result<std::vector<HeartbeatCommand>> {
+    HeartbeatFunc hb_func =
+        [](uint64_t, uint64_t, uint64_t, uint64_t) -> Result<std::vector<HeartbeatCommand>> {
         std::vector<HeartbeatCommand> cmds;
         cmds.push_back(HeartbeatCommand{
             .type = CommandType::kReplicate,
@@ -117,11 +119,12 @@ TEST_F(HeartbeatSenderTest, SendOnceWithCommands) {
 }
 
 TEST_F(HeartbeatSenderTest, SendOnceRPCFailure) {
-    HeartbeatFunc hb_func = [](uint64_t, uint64_t, uint64_t,
-                               uint64_t) -> Result<std::vector<HeartbeatCommand>> {
+    HeartbeatFunc hb_func =
+        [](uint64_t, uint64_t, uint64_t, uint64_t) -> Result<std::vector<HeartbeatCommand>> {
         return pl::makeError(pl::Status(5000, "heartbeat RPC failed"));
     };
-    CommandHandler cmd_handler = [](const HeartbeatCommand&) {};
+    CommandHandler cmd_handler = [](const HeartbeatCommand&) {
+    };
 
     HeartbeatSender::Config cfg;
     cfg.datanode_id = 1;
@@ -132,8 +135,8 @@ TEST_F(HeartbeatSenderTest, SendOnceRPCFailure) {
 }
 
 TEST_F(HeartbeatSenderTest, NoneCommandsNotDispatched) {
-    HeartbeatFunc hb_func = [](uint64_t, uint64_t, uint64_t,
-                               uint64_t) -> Result<std::vector<HeartbeatCommand>> {
+    HeartbeatFunc hb_func =
+        [](uint64_t, uint64_t, uint64_t, uint64_t) -> Result<std::vector<HeartbeatCommand>> {
         std::vector<HeartbeatCommand> cmds;
         cmds.push_back(HeartbeatCommand{.type = CommandType::kNone});
         return cmds;
@@ -155,12 +158,13 @@ TEST_F(HeartbeatSenderTest, NoneCommandsNotDispatched) {
 
 TEST_F(HeartbeatSenderTest, StartAndStop) {
     std::atomic<int> hb_count{0};
-    HeartbeatFunc hb_func = [&](uint64_t, uint64_t, uint64_t,
-                                uint64_t) -> Result<std::vector<HeartbeatCommand>> {
+    HeartbeatFunc hb_func =
+        [&](uint64_t, uint64_t, uint64_t, uint64_t) -> Result<std::vector<HeartbeatCommand>> {
         hb_count++;
         return std::vector<HeartbeatCommand>{};
     };
-    CommandHandler cmd_handler = [](const HeartbeatCommand&) {};
+    CommandHandler cmd_handler = [](const HeartbeatCommand&) {
+    };
 
     HeartbeatSender::Config cfg;
     cfg.datanode_id = 1;
@@ -180,11 +184,12 @@ TEST_F(HeartbeatSenderTest, StartAndStop) {
 }
 
 TEST_F(HeartbeatSenderTest, DoubleStartNoOp) {
-    HeartbeatFunc hb_func = [](uint64_t, uint64_t, uint64_t,
-                               uint64_t) -> Result<std::vector<HeartbeatCommand>> {
+    HeartbeatFunc hb_func =
+        [](uint64_t, uint64_t, uint64_t, uint64_t) -> Result<std::vector<HeartbeatCommand>> {
         return std::vector<HeartbeatCommand>{};
     };
-    CommandHandler cmd_handler = [](const HeartbeatCommand&) {};
+    CommandHandler cmd_handler = [](const HeartbeatCommand&) {
+    };
 
     HeartbeatSender::Config cfg;
     cfg.datanode_id = 1;

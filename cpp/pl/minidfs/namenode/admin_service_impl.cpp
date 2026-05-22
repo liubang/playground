@@ -16,8 +16,9 @@
 
 #include "cpp/pl/minidfs/namenode/admin_service_impl.h"
 
-#include "cpp/pl/minidfs/common/error_code.h"
 #include <brpc/closure_guard.h>
+
+#include "cpp/pl/minidfs/common/error_code.h"
 
 namespace pl::minidfs {
 
@@ -43,7 +44,8 @@ void AdminServiceImpl::GetClusterInfo(google::protobuf::RpcController* /*control
 
     auto all_dns = dn_mgr_->get_all_datanodes();
     if (all_dns.hasError()) {
-        fill_status(response->mutable_status(), static_cast<uint32_t>(ErrorCode::kInternalError),
+        fill_status(response->mutable_status(),
+                    static_cast<uint32_t>(ErrorCode::kInternalError),
                     all_dns.error().describe());
         return;
     }
@@ -130,7 +132,8 @@ void AdminServiceImpl::ListDataNodes(google::protobuf::RpcController* /*controll
 
     auto all_dns = dn_mgr_->get_all_datanodes();
     if (all_dns.hasError()) {
-        fill_status(response->mutable_status(), static_cast<uint32_t>(ErrorCode::kInternalError),
+        fill_status(response->mutable_status(),
+                    static_cast<uint32_t>(ErrorCode::kInternalError),
                     all_dns.error().describe());
         return;
     }
@@ -204,7 +207,8 @@ void AdminServiceImpl::GetDataNodeInfo(google::protobuf::RpcController* /*contro
     }
 
     if (!found) {
-        fill_status(response->mutable_status(), static_cast<uint32_t>(ErrorCode::kNotFound),
+        fill_status(response->mutable_status(),
+                    static_cast<uint32_t>(ErrorCode::kNotFound),
                     "DataNode not found");
         return;
     }
@@ -278,7 +282,8 @@ void AdminServiceImpl::GetInodeInfo(google::protobuf::RpcController* /*controlle
     }
 
     if (!found) {
-        fill_status(response->mutable_status(), static_cast<uint32_t>(ErrorCode::kFileNotFound),
+        fill_status(response->mutable_status(),
+                    static_cast<uint32_t>(ErrorCode::kFileNotFound),
                     "Inode not found");
         return;
     }
@@ -353,13 +358,15 @@ void AdminServiceImpl::GetFileBlocks(google::protobuf::RpcController* /*controll
     }
 
     if (!found) {
-        fill_status(response->mutable_status(), static_cast<uint32_t>(ErrorCode::kFileNotFound),
+        fill_status(response->mutable_status(),
+                    static_cast<uint32_t>(ErrorCode::kFileNotFound),
                     "File not found");
         return;
     }
 
     if (inode.type != InodeType::kFile) {
-        fill_status(response->mutable_status(), static_cast<uint32_t>(ErrorCode::kIsDirectory),
+        fill_status(response->mutable_status(),
+                    static_cast<uint32_t>(ErrorCode::kIsDirectory),
                     "Path is not a file");
         return;
     }
@@ -377,7 +384,8 @@ void AdminServiceImpl::GetFileBlocks(google::protobuf::RpcController* /*controll
     // List blocks
     auto blocks = metadata_store_->get_blocks_by_inode(inode.inode_id);
     if (blocks.hasError()) {
-        fill_status(response->mutable_status(), static_cast<uint32_t>(ErrorCode::kInternalError),
+        fill_status(response->mutable_status(),
+                    static_cast<uint32_t>(ErrorCode::kInternalError),
                     blocks.error().describe());
         return;
     }
@@ -437,7 +445,8 @@ void AdminServiceImpl::GetBlockInfo(google::protobuf::RpcController* /*controlle
 
     auto block_result = metadata_store_->get_block(request->block_id());
     if (block_result.hasError()) {
-        fill_status(response->mutable_status(), static_cast<uint32_t>(ErrorCode::kBlockNotFound),
+        fill_status(response->mutable_status(),
+                    static_cast<uint32_t>(ErrorCode::kBlockNotFound),
                     "Block not found");
         return;
     }

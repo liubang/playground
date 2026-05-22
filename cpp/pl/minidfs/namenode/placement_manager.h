@@ -17,12 +17,13 @@
 
 #pragma once
 
-#include "cpp/pl/minidfs/common/types.h"
-#include "cpp/pl/minidfs/namenode/datanode_manager.h"
-#include "cpp/pl/status/result.h"
 #include <cstdint>
 #include <optional>
 #include <vector>
+
+#include "cpp/pl/minidfs/common/types.h"
+#include "cpp/pl/minidfs/namenode/datanode_manager.h"
+#include "cpp/pl/status/result.h"
 
 namespace pl::minidfs {
 

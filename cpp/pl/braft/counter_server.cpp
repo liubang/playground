@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "cpp/pl/braft/proto/counter.pb.h"
 #include <braft/protobuf_file.h>
 #include <braft/raft.h>
 #include <braft/storage.h>
@@ -20,6 +19,8 @@
 #include <brpc/controller.h>
 #include <brpc/server.h>
 #include <gflags/gflags.h>
+
+#include "cpp/pl/braft/proto/counter.pb.h"
 
 DEFINE_bool(check_term, true, "Check if the leader changed to another term");
 DEFINE_bool(disable_cli, false, "Don't allow raft_cli access this node");

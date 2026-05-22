@@ -17,13 +17,14 @@
 
 #pragma once
 
-#include "cpp/pl/flux/common/compat.h"
-#include "cpp/pl/flux/runtime/runtime_builtin_table_helpers.h"
 #include <cmath>
 #include <cstdint>
 #include <limits>
 #include <string>
 #include <vector>
+
+#include "cpp/pl/flux/common/compat.h"
+#include "cpp/pl/flux/runtime/runtime_builtin_table_helpers.h"
 
 #if defined(__clang__)
 #pragma clang diagnostic push

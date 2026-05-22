@@ -17,10 +17,6 @@
 
 #pragma once
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/str_cat.h"
-#include "cpp/pl/flux/runtime/runtime_value.h"
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -28,6 +24,11 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "cpp/pl/flux/runtime/runtime_value.h"
 
 namespace pl::flux {
 
@@ -150,9 +151,13 @@ inline PageSchema SchemaFromPage(const Page& page) {
 inline absl::Status ValidatePageChunk(const PageChunk& chunk) {
     for (const auto& column : chunk.columns) {
         if (column.values.size() != chunk.row_count) {
-            return absl::InvalidArgumentError(
-                absl::StrCat("page column ", column.name, " has ", column.values.size(),
-                             " values but chunk has ", chunk.row_count, " rows"));
+            return absl::InvalidArgumentError(absl::StrCat("page column ",
+                                                           column.name,
+                                                           " has ",
+                                                           column.values.size(),
+                                                           " values but chunk has ",
+                                                           chunk.row_count,
+                                                           " rows"));
         }
     }
     return absl::OkStatus();
@@ -188,8 +193,9 @@ inline std::shared_ptr<ObjectValue> RowFromPageChunk(const PageChunk& chunk, siz
         return std::make_shared<ObjectValue>(std::move(props));
     }
     for (const auto& column : chunk.columns) {
-        props.emplace_back(column.name, row_index < column.values.size() ? column.values[row_index]
-                                                                         : Value::null());
+        props.emplace_back(column.name,
+                           row_index < column.values.size() ? column.values[row_index]
+                                                            : Value::null());
     }
     return std::make_shared<ObjectValue>(std::move(props));
 }
@@ -355,8 +361,8 @@ inline TableValue TableValueFromPage(const Page& page) {
     for (const auto& chunk : page.chunks) {
         chunks.push_back(TableChunkFromPageChunk(chunk));
     }
-    Value value = Value::table_stream(page.bucket, std::move(chunks), page.range_start,
-                                      page.range_stop, page.result_name);
+    Value value = Value::table_stream(
+        page.bucket, std::move(chunks), page.range_start, page.range_stop, page.result_name);
     value.as_table_mut().plan = page.plan;
     value.as_table_mut().materialized = page.materialized;
     return value.as_table();

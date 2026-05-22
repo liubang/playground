@@ -14,15 +14,16 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/plan/plan_node.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_package.h"
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
 
 namespace pl::flux::builtin {
 namespace {
@@ -85,7 +86,8 @@ absl::StatusOr<Value> builtin_sqlite_from(const std::vector<Value>& args) {
         return table_or.status();
     }
 
-    return Value::table_plan("sqlite", plan::MakeSourceScan("sqlite", "sqlite", *path_or, *table_or));
+    return Value::table_plan("sqlite",
+                             plan::MakeSourceScan("sqlite", "sqlite", *path_or, *table_or));
 }
 
 Value make_sqlite_package() {
@@ -97,6 +99,8 @@ Value make_sqlite_package() {
 
 } // namespace
 
-void RegisterSqliteStdlibPackage() { RegisterPackage("sqlite", make_sqlite_package); }
+void RegisterSqliteStdlibPackage() {
+    RegisterPackage("sqlite", make_sqlite_package);
+}
 
 } // namespace pl::flux::builtin

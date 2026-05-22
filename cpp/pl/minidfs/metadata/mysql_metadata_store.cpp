@@ -17,12 +17,13 @@
 
 #include "cpp/pl/minidfs/metadata/mysql_metadata_store.h"
 
-#include "cpp/pl/minidfs/common/error_code.h"
 #include <boost/mysql/error_with_diagnostics.hpp>
 #include <boost/mysql/results.hpp>
 #include <boost/mysql/row_view.hpp>
 #include <boost/mysql/string_view.hpp>
 #include <fmt/format.h>
+
+#include "cpp/pl/minidfs/common/error_code.h"
 
 namespace pl::minidfs {
 
@@ -169,14 +170,30 @@ inline std::string escape_sql(std::string_view input) {
     result.reserve(input.size() + input.size() / 8);
     for (char c : input) {
         switch (c) {
-        case '\'': result.append("\\'"); break;
-        case '\\': result.append("\\\\"); break;
-        case '"': result.append("\\\""); break;
-        case '\0': result.append("\\0"); break;
-        case '\n': result.append("\\n"); break;
-        case '\r': result.append("\\r"); break;
-        case '\x1a': result.append("\\Z"); break;
-        default: result.push_back(c); break;
+            case '\'':
+                result.append("\\'");
+                break;
+            case '\\':
+                result.append("\\\\");
+                break;
+            case '"':
+                result.append("\\\"");
+                break;
+            case '\0':
+                result.append("\\0");
+                break;
+            case '\n':
+                result.append("\\n");
+                break;
+            case '\r':
+                result.append("\\r");
+                break;
+            case '\x1a':
+                result.append("\\Z");
+                break;
+            default:
+                result.push_back(c);
+                break;
         }
     }
     return result;
@@ -257,7 +274,8 @@ pl::Result<std::optional<Inode>> MySQLMetadataStore::get_child(uint64_t parent_i
     auto sql = fmt::format("SELECT inode_id, type, parent_id, name, owner, `group`, permission, "
                            "length, replication, block_size, state, ctime_ms, mtime_ms, version "
                            "FROM inodes WHERE parent_id = {} AND name = '{}'",
-                           parent_id, escape_sql(name));
+                           parent_id,
+                           escape_sql(name));
 
     auto res = conn.execute(sql);
     if (res.hasError()) {
@@ -308,10 +326,20 @@ pl::Result<pl::Void> MySQLMetadataStore::create_inode(const Inode& inode) {
         "INSERT INTO inodes (inode_id, type, parent_id, name, owner, `group`, "
         "permission, length, replication, block_size, state, ctime_ms, mtime_ms, version) "
         "VALUES ({}, {}, {}, '{}', '{}', '{}', {}, {}, {}, {}, {}, {}, {}, {})",
-        inode.inode_id, static_cast<uint8_t>(inode.type), inode.parent_id, escape_sql(inode.name),
-        escape_sql(inode.owner), escape_sql(inode.group), inode.permission, inode.length,
-        inode.replication, inode.block_size, static_cast<uint8_t>(inode.state), inode.ctime_ms,
-        inode.mtime_ms, inode.version);
+        inode.inode_id,
+        static_cast<uint8_t>(inode.type),
+        inode.parent_id,
+        escape_sql(inode.name),
+        escape_sql(inode.owner),
+        escape_sql(inode.group),
+        inode.permission,
+        inode.length,
+        inode.replication,
+        inode.block_size,
+        static_cast<uint8_t>(inode.state),
+        inode.ctime_ms,
+        inode.mtime_ms,
+        inode.version);
 
     auto res = conn.execute(sql);
     if (res.hasError()) {
@@ -327,14 +355,23 @@ pl::Result<pl::Void> MySQLMetadataStore::update_inode(const Inode& inode) {
     }
     auto conn = std::move(conn_result.value());
 
-    auto sql = fmt::format(
-        "UPDATE inodes SET type={}, parent_id={}, name='{}', owner='{}', `group`='{}', "
-        "permission={}, length={}, replication={}, block_size={}, state={}, "
-        "mtime_ms={}, version=version+1 WHERE inode_id={} AND version={}",
-        static_cast<uint8_t>(inode.type), inode.parent_id, escape_sql(inode.name),
-        escape_sql(inode.owner), escape_sql(inode.group), inode.permission, inode.length,
-        inode.replication, inode.block_size, static_cast<uint8_t>(inode.state), inode.mtime_ms,
-        inode.inode_id, inode.version);
+    auto sql =
+        fmt::format("UPDATE inodes SET type={}, parent_id={}, name='{}', owner='{}', `group`='{}', "
+                    "permission={}, length={}, replication={}, block_size={}, state={}, "
+                    "mtime_ms={}, version=version+1 WHERE inode_id={} AND version={}",
+                    static_cast<uint8_t>(inode.type),
+                    inode.parent_id,
+                    escape_sql(inode.name),
+                    escape_sql(inode.owner),
+                    escape_sql(inode.group),
+                    inode.permission,
+                    inode.length,
+                    inode.replication,
+                    inode.block_size,
+                    static_cast<uint8_t>(inode.state),
+                    inode.mtime_ms,
+                    inode.inode_id,
+                    inode.version);
 
     auto res = conn.execute(sql);
     if (res.hasError()) {
@@ -344,7 +381,8 @@ pl::Result<pl::Void> MySQLMetadataStore::update_inode(const Inode& inode) {
     if (res.value().affected_rows() == 0) {
         return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kInternalError),
                              fmt::format("inode {} concurrent modification conflict (version={})",
-                                         inode.inode_id, inode.version));
+                                         inode.inode_id,
+                                         inode.version));
     }
     return pl::Void{};
 }
@@ -429,9 +467,15 @@ pl::Result<pl::Void> MySQLMetadataStore::create_block(const BlockMeta& block) {
     auto sql = fmt::format("INSERT INTO blocks (block_id, inode_id, block_index, generation_stamp, "
                            "length, state, desired_replica, ctime_ms, mtime_ms) "
                            "VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {})",
-                           block.block_id, block.inode_id, block.block_index,
-                           block.generation_stamp, block.length, static_cast<uint8_t>(block.state),
-                           block.desired_replica, block.ctime_ms, block.mtime_ms);
+                           block.block_id,
+                           block.inode_id,
+                           block.block_index,
+                           block.generation_stamp,
+                           block.length,
+                           static_cast<uint8_t>(block.state),
+                           block.desired_replica,
+                           block.ctime_ms,
+                           block.mtime_ms);
 
     auto res = conn.execute(sql);
     if (res.hasError()) {
@@ -449,8 +493,13 @@ pl::Result<pl::Void> MySQLMetadataStore::update_block(const BlockMeta& block) {
 
     auto sql = fmt::format("UPDATE blocks SET inode_id={}, block_index={}, generation_stamp={}, "
                            "length={}, state={}, desired_replica={}, mtime_ms={} WHERE block_id={}",
-                           block.inode_id, block.block_index, block.generation_stamp, block.length,
-                           static_cast<uint8_t>(block.state), block.desired_replica, block.mtime_ms,
+                           block.inode_id,
+                           block.block_index,
+                           block.generation_stamp,
+                           block.length,
+                           static_cast<uint8_t>(block.state),
+                           block.desired_replica,
+                           block.mtime_ms,
                            block.block_id);
 
     auto res = conn.execute(sql);
@@ -555,10 +604,17 @@ pl::Result<pl::Void> MySQLMetadataStore::upsert_replica(const BlockReplica& repl
         "length, generation_stamp, report_time_ms) "
         "VALUES ({}, {}, {}, {}, {}, {}, {}) "
         "ON DUPLICATE KEY UPDATE state={}, length={}, generation_stamp={}, report_time_ms={}",
-        replica.block_id, replica.datanode_id, replica.storage_id,
-        static_cast<uint8_t>(replica.state), replica.length, replica.generation_stamp,
-        replica.report_time_ms, static_cast<uint8_t>(replica.state), replica.length,
-        replica.generation_stamp, replica.report_time_ms);
+        replica.block_id,
+        replica.datanode_id,
+        replica.storage_id,
+        static_cast<uint8_t>(replica.state),
+        replica.length,
+        replica.generation_stamp,
+        replica.report_time_ms,
+        static_cast<uint8_t>(replica.state),
+        replica.length,
+        replica.generation_stamp,
+        replica.report_time_ms);
 
     auto res = conn.execute(sql);
     if (res.hasError()) {
@@ -593,7 +649,9 @@ pl::Result<pl::Void> MySQLMetadataStore::update_replica_state(uint64_t block_id,
 
     auto sql =
         fmt::format("UPDATE block_replicas SET state={} WHERE block_id={} AND datanode_id={}",
-                    static_cast<uint8_t>(new_state), block_id, datanode_id);
+                    static_cast<uint8_t>(new_state),
+                    block_id,
+                    datanode_id);
 
     auto res = conn.execute(sql);
     if (res.hasError()) {
@@ -713,19 +771,35 @@ pl::Result<pl::Void> MySQLMetadataStore::upsert_datanode(const DataNodeInfo& inf
     }
     auto conn = std::move(conn_result.value());
 
-    auto sql = fmt::format(
-        "INSERT INTO datanodes (datanode_id, uuid, hostname, ip, rpc_port, data_port, "
-        "rack, state, capacity_bytes, used_bytes, free_bytes, last_heartbeat_ms) "
-        "VALUES ({}, '{}', '{}', '{}', {}, {}, '{}', {}, {}, {}, {}, {}) "
-        "ON DUPLICATE KEY UPDATE hostname='{}', ip='{}', rpc_port={}, data_port={}, "
-        "rack='{}', state={}, capacity_bytes={}, used_bytes={}, free_bytes={}, "
-        "last_heartbeat_ms={}",
-        info.datanode_id, escape_sql(info.uuid), escape_sql(info.hostname), escape_sql(info.ip),
-        info.rpc_port, info.data_port, escape_sql(info.rack),
-        static_cast<uint8_t>(info.state), info.capacity_bytes, info.used_bytes, info.free_bytes,
-        info.last_heartbeat_ms, escape_sql(info.hostname), escape_sql(info.ip), info.rpc_port,
-        info.data_port, escape_sql(info.rack), static_cast<uint8_t>(info.state),
-        info.capacity_bytes, info.used_bytes, info.free_bytes, info.last_heartbeat_ms);
+    auto sql =
+        fmt::format("INSERT INTO datanodes (datanode_id, uuid, hostname, ip, rpc_port, data_port, "
+                    "rack, state, capacity_bytes, used_bytes, free_bytes, last_heartbeat_ms) "
+                    "VALUES ({}, '{}', '{}', '{}', {}, {}, '{}', {}, {}, {}, {}, {}) "
+                    "ON DUPLICATE KEY UPDATE hostname='{}', ip='{}', rpc_port={}, data_port={}, "
+                    "rack='{}', state={}, capacity_bytes={}, used_bytes={}, free_bytes={}, "
+                    "last_heartbeat_ms={}",
+                    info.datanode_id,
+                    escape_sql(info.uuid),
+                    escape_sql(info.hostname),
+                    escape_sql(info.ip),
+                    info.rpc_port,
+                    info.data_port,
+                    escape_sql(info.rack),
+                    static_cast<uint8_t>(info.state),
+                    info.capacity_bytes,
+                    info.used_bytes,
+                    info.free_bytes,
+                    info.last_heartbeat_ms,
+                    escape_sql(info.hostname),
+                    escape_sql(info.ip),
+                    info.rpc_port,
+                    info.data_port,
+                    escape_sql(info.rack),
+                    static_cast<uint8_t>(info.state),
+                    info.capacity_bytes,
+                    info.used_bytes,
+                    info.free_bytes,
+                    info.last_heartbeat_ms);
 
     auto res = conn.execute(sql);
     if (res.hasError()) {
@@ -748,8 +822,12 @@ pl::Result<pl::Void> MySQLMetadataStore::create_lease(const Lease& lease) {
     auto sql = fmt::format("INSERT INTO leases (lease_id, inode_id, client_id, state, "
                            "expire_time_ms, ctime_ms, mtime_ms) "
                            "VALUES ({}, {}, '{}', {}, {}, {}, {})",
-                           lease.lease_id, lease.inode_id, escape_sql(lease.client_id),
-                           static_cast<uint8_t>(lease.state), lease.expire_time_ms, lease.ctime_ms,
+                           lease.lease_id,
+                           lease.inode_id,
+                           escape_sql(lease.client_id),
+                           static_cast<uint8_t>(lease.state),
+                           lease.expire_time_ms,
+                           lease.ctime_ms,
                            lease.mtime_ms);
 
     auto res = conn.execute(sql);
@@ -792,7 +870,8 @@ pl::Result<pl::Void> MySQLMetadataStore::renew_lease(uint64_t inode_id, uint64_t
 
     auto sql =
         fmt::format("UPDATE leases SET expire_time_ms = {} WHERE inode_id = {} AND state = 0",
-                    new_expire_ms, inode_id);
+                    new_expire_ms,
+                    inode_id);
 
     auto res = conn.execute(sql);
     if (res.hasError()) {
@@ -850,7 +929,9 @@ pl::Result<uint64_t> MySQLMetadataStore::alloc_id(std::string_view name, uint64_
     // Table: id_allocators(name VARCHAR PK, next_id BIGINT UNSIGNED).
     auto sql = fmt::format("INSERT INTO id_allocators (name, next_id) VALUES ('{}', {}) "
                            "ON DUPLICATE KEY UPDATE next_id = next_id + {}",
-                           escape_sql(name), count, count);
+                           escape_sql(name),
+                           count,
+                           count);
 
     auto res = conn.execute(sql);
     if (res.hasError()) {
@@ -858,7 +939,8 @@ pl::Result<uint64_t> MySQLMetadataStore::alloc_id(std::string_view name, uint64_
     }
 
     // Read back the current value to determine the allocated range.
-    auto read_sql = fmt::format("SELECT next_id FROM id_allocators WHERE name = '{}'", escape_sql(name));
+    auto read_sql =
+        fmt::format("SELECT next_id FROM id_allocators WHERE name = '{}'", escape_sql(name));
     auto read_res = conn.execute(read_sql);
     if (read_res.hasError()) {
         return folly::makeUnexpected(read_res.error());
@@ -892,7 +974,9 @@ pl::Result<pl::Void> MySQLMetadataStore::write_oplog(std::string_view op_type,
     auto sql =
         fmt::format("INSERT INTO op_log (op_type, target_inode_id, request_id, payload_json) "
                     "VALUES ('{}', {}, '{}', '{}')",
-                    escape_sql(op_type), target_inode_id, escape_sql(request_id),
+                    escape_sql(op_type),
+                    target_inode_id,
+                    escape_sql(request_id),
                     escape_sql(payload_json));
 
     auto res = conn.execute(sql);
@@ -909,7 +993,8 @@ pl::Result<bool> MySQLMetadataStore::check_request_id(std::string_view request_i
     }
     auto conn = std::move(conn_result.value());
 
-    auto sql = fmt::format("SELECT 1 FROM op_log WHERE request_id = '{}' LIMIT 1", escape_sql(request_id));
+    auto sql =
+        fmt::format("SELECT 1 FROM op_log WHERE request_id = '{}' LIMIT 1", escape_sql(request_id));
 
     auto res = conn.execute(sql);
     if (res.hasError()) {

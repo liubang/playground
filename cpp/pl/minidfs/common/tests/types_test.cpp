@@ -14,10 +14,10 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/pl/minidfs/common/types.h"
-
 #include <gtest/gtest.h>
 #include <string>
+
+#include "cpp/pl/minidfs/common/types.h"
 
 namespace pl::minidfs {
 namespace {

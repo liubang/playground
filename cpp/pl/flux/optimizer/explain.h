@@ -17,9 +17,10 @@
 
 #pragma once
 
-#include "cpp/pl/flux/plan/plan_node.h"
 #include <memory>
 #include <string>
+
+#include "cpp/pl/flux/plan/plan_node.h"
 
 namespace pl::flux::optimizer {
 

@@ -17,8 +17,9 @@
 
 #pragma once
 
-#include "cpp/pl/flux/syntax/ast.h"
 #include <string>
+
+#include "cpp/pl/flux/syntax/ast.h"
 
 namespace pl::flux::lsp {
 

@@ -17,11 +17,12 @@
 
 #pragma once
 
+#include <cstdint>
+#include <string_view>
+
 #include "cpp/pl/minidfs/common/types.h"
 #include "cpp/pl/minidfs/metadata/metadata_store.h"
 #include "cpp/pl/status/result.h"
-#include <cstdint>
-#include <string_view>
 
 namespace pl::minidfs {
 

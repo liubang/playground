@@ -36,8 +36,6 @@ static void test1() {
 }
 
 int main(int argc, char* argv[]) {
-    ankerl::nanobench::Bench().run("test1", [&] {
-        test1();
-    });
+    ankerl::nanobench::Bench().run("test1", [&] { test1(); });
     return 0;
 }

@@ -17,10 +17,11 @@
 
 #include "cpp/pl/sst/block.h"
 
-#include "cpp/pl/sst/cell.h"
-#include "cpp/pl/sst/encoding.h"
 #include <cassert>
 #include <utility>
+
+#include "cpp/pl/sst/cell.h"
+#include "cpp/pl/sst/encoding.h"
 
 namespace pl {
 
@@ -67,7 +68,9 @@ void Block::cleanup() noexcept {
     owned_ = false;
 }
 
-Block::~Block() { cleanup(); }
+Block::~Block() {
+    cleanup();
+}
 
 class Block::BlockIterator : public Iterator {
 public:
@@ -282,8 +285,8 @@ private:
 };
 
 IteratorPtr Block::iterator(const ComparatorRef& comparator) {
-    return std::make_unique<BlockIterator>(comparator, shared_from_this(), data_, restart_offset_,
-                                           num_restarts_);
+    return std::make_unique<BlockIterator>(
+        comparator, shared_from_this(), data_, restart_offset_, num_restarts_);
 }
 
 } // namespace pl

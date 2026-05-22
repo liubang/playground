@@ -15,11 +15,12 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/06/02 15:35
 
-#include "cpp/meta/type_list.h"
 #include <catch2/catch_test_macros.hpp>
 #include <tuple>
 #include <type_traits>
 #include <variant>
+
+#include "cpp/meta/type_list.h"
 
 TEST_CASE("meta", "[type_list]") {
     using AList = pl::TypeList<int, char>;

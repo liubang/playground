@@ -17,8 +17,6 @@
 
 #include "cpp/pl/minidfs/datanode/local_block_store.h"
 
-#include "cpp/pl/minidfs/common/checksum.h"
-#include "cpp/pl/minidfs/common/error_code.h"
 #include <cstring>
 #include <fcntl.h>
 #include <filesystem>
@@ -26,6 +24,9 @@
 #include <fstream>
 #include <sys/stat.h>
 #include <unistd.h>
+
+#include "cpp/pl/minidfs/common/checksum.h"
+#include "cpp/pl/minidfs/common/error_code.h"
 
 namespace pl::minidfs {
 
@@ -385,9 +386,11 @@ pl::Result<std::string> LocalBlockStore::read_chunk(uint64_t block_id,
     // Verify checksum
     uint32_t crc = compute_crc32c(chunk_data.data(), chunk_data.size());
     if (crc != header.chunk_checksums[chunk_index]) {
-        return pl::makeError(make_checksum_error(
-            fmt::format("chunk {} CRC mismatch: expected={:#x}, got={:#x}", chunk_index,
-                        header.chunk_checksums[chunk_index], crc)));
+        return pl::makeError(
+            make_checksum_error(fmt::format("chunk {} CRC mismatch: expected={:#x}, got={:#x}",
+                                            chunk_index,
+                                            header.chunk_checksums[chunk_index],
+                                            crc)));
     }
 
     return chunk_data;

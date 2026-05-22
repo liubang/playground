@@ -15,9 +15,10 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2024/04/21 19:28
 
-#include "geohash.h"
 #include <cmath>
 #include <set>
+
+#include "geohash.h"
 
 namespace pl {
 

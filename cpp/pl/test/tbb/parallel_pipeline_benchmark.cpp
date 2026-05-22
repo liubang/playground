@@ -83,21 +83,13 @@ static void test2() {
 
 static void test3() {
     std::vector<Data> datas(n);
-    tbb::parallel_for_each(datas.begin(), datas.end(), [&](Data& data) {
-        data.step1();
-    });
+    tbb::parallel_for_each(datas.begin(), datas.end(), [&](Data& data) { data.step1(); });
 
-    tbb::parallel_for_each(datas.begin(), datas.end(), [&](Data& data) {
-        data.step2();
-    });
+    tbb::parallel_for_each(datas.begin(), datas.end(), [&](Data& data) { data.step2(); });
 
-    tbb::parallel_for_each(datas.begin(), datas.end(), [&](Data& data) {
-        data.step3();
-    });
+    tbb::parallel_for_each(datas.begin(), datas.end(), [&](Data& data) { data.step3(); });
 
-    tbb::parallel_for_each(datas.begin(), datas.end(), [&](Data& data) {
-        data.step4();
-    });
+    tbb::parallel_for_each(datas.begin(), datas.end(), [&](Data& data) { data.step4(); });
 }
 
 static void test4() {
@@ -136,18 +128,10 @@ static void test4() {
 
 int main(int argc, char* argv[]) {
     // put your code here
-    ankerl::nanobench::Bench().run("test1", [&] {
-        test1();
-    });
-    ankerl::nanobench::Bench().run("test2", [&] {
-        test2();
-    });
-    ankerl::nanobench::Bench().run("test3", [&] {
-        test3();
-    });
-    ankerl::nanobench::Bench().run("test4", [&] {
-        test4();
-    });
+    ankerl::nanobench::Bench().run("test1", [&] { test1(); });
+    ankerl::nanobench::Bench().run("test2", [&] { test2(); });
+    ankerl::nanobench::Bench().run("test3", [&] { test3(); });
+    ankerl::nanobench::Bench().run("test4", [&] { test4(); });
 
     return 0;
 }

@@ -557,7 +557,8 @@ void RecallHttpServiceImpl::HandleSearchByText(brpc::Controller* cntl) {
     }
 
     if (static_cast<int>(emb_result.embedding.size()) != index_.dimension()) {
-        SendErrorResponse(cntl, 500,
+        SendErrorResponse(cntl,
+                          500,
                           "embedding dimension mismatch: got " +
                               std::to_string(emb_result.embedding.size()) + " expected " +
                               std::to_string(index_.dimension()));

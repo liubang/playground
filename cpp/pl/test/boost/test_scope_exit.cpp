@@ -30,9 +30,7 @@ int main(int argc, char* argv[]) {
 
     int a = 10;
 
-    boost::scope::scope_exit scope([&a] {
-        std::cout << "scope exit, a=" << a << '\n';
-    });
+    boost::scope::scope_exit scope([&a] { std::cout << "scope exit, a=" << a << '\n'; });
 
     a++;
 

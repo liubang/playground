@@ -14,13 +14,13 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/pl/minidfs/datanode/block_reporter.h"
-
 #include <atomic>
 #include <filesystem>
 #include <gtest/gtest.h>
 #include <string>
 #include <vector>
+
+#include "cpp/pl/minidfs/datanode/block_reporter.h"
 
 namespace pl::minidfs {
 namespace {
@@ -30,9 +30,9 @@ namespace fs = std::filesystem;
 class BlockReporterTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        test_dir_ = fs::temp_directory_path() / ("minidfs_reporter_test_" +
-                                                  std::to_string(::getpid()) + "_" +
-                                                  std::to_string(counter_++));
+        test_dir_ =
+            fs::temp_directory_path() / ("minidfs_reporter_test_" + std::to_string(::getpid()) +
+                                         "_" + std::to_string(counter_++));
         fs::create_directories(test_dir_);
 
         LocalBlockStore::Config config;
@@ -63,15 +63,17 @@ protected:
 
 TEST_F(BlockReporterTest, SendFullReportEmpty) {
     std::atomic<int> report_count{0};
-    BlockReportFunc report_func = [&](uint64_t datanode_id,
-                                      const std::vector<BlockInfo>& blocks) -> Result<BlockReportResponse> {
+    BlockReportFunc report_func =
+        [&](uint64_t datanode_id,
+            const std::vector<BlockInfo>& blocks) -> Result<BlockReportResponse> {
         report_count++;
         EXPECT_EQ(datanode_id, 42u);
         EXPECT_TRUE(blocks.empty());
         return BlockReportResponse{};
     };
 
-    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {};
+    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {
+    };
 
     BlockReporter::Config cfg;
     cfg.datanode_id = 42;
@@ -88,12 +90,14 @@ TEST_F(BlockReporterTest, SendFullReportWithBlocks) {
     create_finalized_block(101, 5001);
 
     std::vector<BlockInfo> reported_blocks;
-    BlockReportFunc report_func = [&](uint64_t datanode_id,
-                                      const std::vector<BlockInfo>& blocks) -> Result<BlockReportResponse> {
+    BlockReportFunc report_func =
+        [&](uint64_t datanode_id,
+            const std::vector<BlockInfo>& blocks) -> Result<BlockReportResponse> {
         reported_blocks = blocks;
         return BlockReportResponse{};
     };
-    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {};
+    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {
+    };
 
     BlockReporter::Config cfg;
     cfg.datanode_id = 1;
@@ -109,7 +113,8 @@ TEST_F(BlockReporterTest, ReportResponseDeletesBlocks) {
     create_finalized_block(201, 6001);
 
     std::vector<std::pair<uint64_t, uint64_t>> deleted;
-    BlockReportFunc report_func = [](uint64_t, const std::vector<BlockInfo>&) -> Result<BlockReportResponse> {
+    BlockReportFunc report_func = [](uint64_t,
+                                     const std::vector<BlockInfo>&) -> Result<BlockReportResponse> {
         BlockReportResponse resp;
         resp.blocks_to_delete = {200}; // NN says delete block 200
         return resp;
@@ -129,10 +134,12 @@ TEST_F(BlockReporterTest, ReportResponseDeletesBlocks) {
 }
 
 TEST_F(BlockReporterTest, NotifyBlockFinalized) {
-    BlockReportFunc report_func = [](uint64_t, const std::vector<BlockInfo>&) -> Result<BlockReportResponse> {
+    BlockReportFunc report_func = [](uint64_t,
+                                     const std::vector<BlockInfo>&) -> Result<BlockReportResponse> {
         return BlockReportResponse{};
     };
-    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {};
+    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {
+    };
 
     BlockReporter::Config cfg;
     cfg.datanode_id = 1;
@@ -144,10 +151,12 @@ TEST_F(BlockReporterTest, NotifyBlockFinalized) {
 }
 
 TEST_F(BlockReporterTest, NotifyBlockDeleted) {
-    BlockReportFunc report_func = [](uint64_t, const std::vector<BlockInfo>&) -> Result<BlockReportResponse> {
+    BlockReportFunc report_func = [](uint64_t,
+                                     const std::vector<BlockInfo>&) -> Result<BlockReportResponse> {
         return BlockReportResponse{};
     };
-    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {};
+    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {
+    };
 
     BlockReporter::Config cfg;
     cfg.datanode_id = 1;
@@ -160,11 +169,13 @@ TEST_F(BlockReporterTest, NotifyBlockDeleted) {
 
 TEST_F(BlockReporterTest, StartAndStop) {
     std::atomic<int> report_count{0};
-    BlockReportFunc report_func = [&](uint64_t, const std::vector<BlockInfo>&) -> Result<BlockReportResponse> {
+    BlockReportFunc report_func =
+        [&](uint64_t, const std::vector<BlockInfo>&) -> Result<BlockReportResponse> {
         report_count++;
         return BlockReportResponse{};
     };
-    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {};
+    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {
+    };
 
     BlockReporter::Config cfg;
     cfg.datanode_id = 1;
@@ -185,10 +196,12 @@ TEST_F(BlockReporterTest, StartAndStop) {
 }
 
 TEST_F(BlockReporterTest, ReportRPCFailure) {
-    BlockReportFunc report_func = [](uint64_t, const std::vector<BlockInfo>&) -> Result<BlockReportResponse> {
+    BlockReportFunc report_func = [](uint64_t,
+                                     const std::vector<BlockInfo>&) -> Result<BlockReportResponse> {
         return pl::makeError(pl::Status(5000, "RPC failed"));
     };
-    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {};
+    DeleteBlockFunc delete_func = [](uint64_t, uint64_t) {
+    };
 
     BlockReporter::Config cfg;
     cfg.datanode_id = 1;

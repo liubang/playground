@@ -17,10 +17,11 @@
 
 #include "cpp/pl/minidfs/namenode/block_manager.h"
 
-#include "cpp/pl/minidfs/common/error_code.h"
-#include "cpp/pl/minidfs/namenode/placement_manager.h"
 #include <chrono>
 #include <fmt/format.h>
+
+#include "cpp/pl/minidfs/common/error_code.h"
+#include "cpp/pl/minidfs/namenode/placement_manager.h"
 
 namespace pl::minidfs {
 
@@ -121,7 +122,8 @@ pl::Result<pl::Void> BlockManager::commit_block(uint64_t block_id,
 
     if (block.state != BlockState::kAllocating) {
         return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kBlockAlreadyCommitted),
-                             fmt::format("block {} is already in state {}", block_id,
+                             fmt::format("block {} is already in state {}",
+                                         block_id,
                                          static_cast<int>(block.state)));
     }
 

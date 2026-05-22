@@ -17,12 +17,13 @@
 
 #pragma once
 
-#include "absl/status/statusor.h"
 #include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#include "absl/status/statusor.h"
 
 namespace pl::flux::connector {
 

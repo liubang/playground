@@ -18,13 +18,14 @@
 // format 命令：初始化 MiniDFS 的 MySQL 元数据库。
 // 读取 schema.sql 文件，逐条执行 DDL 语句，完成建库、建表和初始数据插入。
 
-#include "cpp/pl/minidfs/metadata/mysql_connection_pool.h"
 #include <fstream>
 #include <gflags/gflags.h>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
+
+#include "cpp/pl/minidfs/metadata/mysql_connection_pool.h"
 
 DEFINE_string(mysql_host, "127.0.0.1", "MySQL host");
 DEFINE_int32(mysql_port, 3306, "MySQL port");

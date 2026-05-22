@@ -15,9 +15,10 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/05/21 02:32
 
-#include "cpp/meta/expression.h"
 #include <catch2/catch_test_macros.hpp>
 #include <iostream>
+
+#include "cpp/meta/expression.h"
 
 TEST_CASE("meta", "[expression]") {
     SECTION("case1") {

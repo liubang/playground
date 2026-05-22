@@ -132,9 +132,8 @@ std::vector<std::shared_ptr<Statement>> Parser::parse_statement_list(
 std::unique_ptr<Statement> Parser::parse_statement(
     const std::optional<std::vector<std::shared_ptr<Attribute>>>& attributes) {
     const Position start = peek()->start_pos;
-    auto opt = depth_guard<std::unique_ptr<Statement>>([this, &attributes] {
-        return parse_statement_inner(attributes);
-    });
+    auto opt = depth_guard<std::unique_ptr<Statement>>(
+        [this, &attributes] { return parse_statement_inner(attributes); });
     if (!opt) {
         auto t = consume();
         auto bad = std::make_unique<BadStmt>(t->lit);
@@ -642,10 +641,10 @@ std::unique_ptr<Expression> Parser::parse_pipe_expression_suffix(std::unique_ptr
             errs_.emplace_back(
                 missing_at_message("pipe destination must be a function call",
                                    rhs->loc.is_valid() ? rhs->loc.start : t->start_pos));
-            auto call =
-                std::make_unique<CallExpr>(std::move(rhs), std::vector<std::shared_ptr<Comment>>{},
-                                           std::vector<std::shared_ptr<Expression>>{},
-                                           std::vector<std::shared_ptr<Comment>>{});
+            auto call = std::make_unique<CallExpr>(std::move(rhs),
+                                                   std::vector<std::shared_ptr<Comment>>{},
+                                                   std::vector<std::shared_ptr<Expression>>{},
+                                                   std::vector<std::shared_ptr<Comment>>{});
 
             res = std::make_unique<Expression>(
                 Expression::Type::PipeExpr,
@@ -678,7 +677,8 @@ std::unique_ptr<Expression> Parser::parse_pipe_expression() {
             std::make_unique<Property>(
                 std::make_unique<PropertyKey>(PropertyKey::Type::Identifier,
                                               std::unique_ptr<Identifier>(key)),
-                std::vector<std::shared_ptr<Comment>>{}, nullptr,
+                std::vector<std::shared_ptr<Comment>>{},
+                nullptr,
                 std::vector<std::shared_ptr<Comment>>{})
                 .release());
         prop->loc = expr->loc;
@@ -770,7 +770,8 @@ std::unique_ptr<Expression> Parser::parse_index_expression(std::unique_ptr<Expre
         return std::make_unique<Expression>(
             Expression::Type::IndexExpr,
             std::make_unique<IndexExpr>(
-                std::move(expr), std::vector<std::shared_ptr<Comment>>{},
+                std::move(expr),
+                std::vector<std::shared_ptr<Comment>>{},
                 std::make_unique<Expression>(Expression::Type::IntegerLit,
                                              std::make_unique<IntegerLit>(-1)),
                 std::vector<std::shared_ptr<Comment>>{}));
@@ -779,15 +780,17 @@ std::unique_ptr<Expression> Parser::parse_index_expression(std::unique_ptr<Expre
         return std::make_unique<Expression>(
             Expression::Type::MemberExpr,
             std::make_unique<MemberExpr>(
-                std::move(expr), start->comments,
+                std::move(expr),
+                start->comments,
                 std::make_unique<PropertyKey>(
                     PropertyKey::Type::StringLiteral,
                     std::move(std::get<std::unique_ptr<StringLit>>(iexpr->expr))),
                 end->comments));
     }
     return std::make_unique<Expression>(
-        Expression::Type::IndexExpr, std::make_unique<IndexExpr>(std::move(expr), start->comments,
-                                                                 std::move(iexpr), end->comments));
+        Expression::Type::IndexExpr,
+        std::make_unique<IndexExpr>(
+            std::move(expr), start->comments, std::move(iexpr), end->comments));
 }
 
 std::unique_ptr<Expression> Parser::parse_call_expression(std::unique_ptr<Expression> expr) {
@@ -797,9 +800,10 @@ std::unique_ptr<Expression> Parser::parse_call_expression(std::unique_ptr<Expres
     if (peek()->tok == TokenType::Ident && peek_next()->tok == TokenType::Colon) {
         auto params = parse_property_list();
         if (!params.empty()) {
-            auto obj_expr =
-                std::make_unique<ObjectExpr>(std::vector<std::shared_ptr<Comment>>{}, nullptr,
-                                             params, std::vector<std::shared_ptr<Comment>>{});
+            auto obj_expr = std::make_unique<ObjectExpr>(std::vector<std::shared_ptr<Comment>>{},
+                                                         nullptr,
+                                                         params,
+                                                         std::vector<std::shared_ptr<Comment>>{});
             arguments.emplace_back(
                 std::make_unique<Expression>(Expression::Type::ObjectExpr, std::move(obj_expr)));
         }
@@ -816,8 +820,8 @@ std::unique_ptr<Expression> Parser::parse_call_expression(std::unique_ptr<Expres
 std::vector<std::shared_ptr<Expression>> Parser::parse_call_argument_list() {
     std::vector<std::shared_ptr<Expression>> args;
     while (more()) {
-        auto arg = parse_expression_until_boundary(nullptr, {TokenType::Comma, TokenType::RParen},
-                                                   std::nullopt);
+        auto arg = parse_expression_until_boundary(
+            nullptr, {TokenType::Comma, TokenType::RParen}, std::nullopt);
         if (!arg) {
             std::stringstream ss;
             ss << "missing call argument at " << peek()->start_pos;
@@ -853,8 +857,8 @@ std::unique_ptr<Expression> Parser::parse_dot_expression(std::unique_ptr<Express
     auto dot = expect(TokenType::Dot);
     auto id = parse_identifier();
     auto prop = std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(id));
-    auto member = std::make_unique<MemberExpr>(std::move(expr), dot->comments, std::move(prop),
-                                               std::vector<std::shared_ptr<Comment>>{});
+    auto member = std::make_unique<MemberExpr>(
+        std::move(expr), dot->comments, std::move(prop), std::vector<std::shared_ptr<Comment>>{});
     auto ret = std::make_unique<Expression>(Expression::Type::MemberExpr, std::move(member));
     return ret;
 }
@@ -1252,14 +1256,14 @@ std::unique_ptr<Expression> Parser::parse_conditional_expression() {
         auto then_tok = expect_or_skip(TokenType::Then);
         std::unique_ptr<Expression> cons;
         if (then_tok->tok == TokenType::Then) {
-            cons = parse_expression_until_boundary(nullptr, {TokenType::Else},
-                                                   then_tok->start_pos.line);
+            cons = parse_expression_until_boundary(
+                nullptr, {TokenType::Else}, then_tok->start_pos.line);
         } else {
             synchronize({TokenType::Then, TokenType::Else});
             if (peek()->tok == TokenType::Then) {
                 then_tok = consume();
-                cons = parse_expression_until_boundary(nullptr, {TokenType::Else},
-                                                       then_tok->start_pos.line);
+                cons = parse_expression_until_boundary(
+                    nullptr, {TokenType::Else}, then_tok->start_pos.line);
             } else {
                 cons = create_placeholder_expression(then_tok.get());
             }
@@ -1596,8 +1600,8 @@ std::vector<std::shared_ptr<Property>> Parser::parse_property_list_suffix(
         props[last]->comma = comma_tok->comments;
     }
     auto list = parse_property_list();
-    props.insert(props.end(), std::make_move_iterator(list.begin()),
-                 std::make_move_iterator(list.end()));
+    props.insert(
+        props.end(), std::make_move_iterator(list.begin()), std::make_move_iterator(list.end()));
     return props;
 }
 
@@ -1787,9 +1791,8 @@ std::unique_ptr<ObjectExpr> Parser::parse_object_literal() {
 
 std::unique_ptr<Expression> Parser::parse_expression() {
     const Position start = peek_with_regex()->start_pos;
-    auto expr = depth_guard<std::unique_ptr<Expression>>([this] {
-        return parse_conditional_expression();
-    });
+    auto expr =
+        depth_guard<std::unique_ptr<Expression>>([this] { return parse_conditional_expression(); });
 
     if (!expr) {
         auto t = consume();
@@ -1946,7 +1949,9 @@ std::unique_ptr<Property> Parser::parse_parameter() {
             std::make_unique<Expression>(Expression::Type::PipeLit, std::make_unique<PipeLit>());
         auto prop = std::make_unique<Property>(
             std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
-            pipe->comments, std::move(value), std::vector<std::shared_ptr<Comment>>{});
+            pipe->comments,
+            std::move(value),
+            std::vector<std::shared_ptr<Comment>>{});
         prop->loc = key_loc;
         return prop;
     }
@@ -1963,7 +1968,9 @@ std::unique_ptr<Property> Parser::parse_parameter() {
         }
         auto prop = std::make_unique<Property>(
             std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
-            question->comments, std::move(value), separator);
+            question->comments,
+            std::move(value),
+            separator);
         prop->loc = key_loc;
         return prop;
     }
@@ -1979,7 +1986,9 @@ std::unique_ptr<Property> Parser::parse_parameter() {
     }
     auto prop = std::make_unique<Property>(
         std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
-        std::vector<std::shared_ptr<Comment>>{}, std::move(value), separator);
+        std::vector<std::shared_ptr<Comment>>{},
+        std::move(value),
+        separator);
     prop->loc = key_loc;
     return prop;
 }
@@ -2005,14 +2014,15 @@ std::unique_ptr<Expression> Parser::parse_paren_ident_expression(std::unique_ptr
         if (next->tok == TokenType::Arrow) {
             auto prop = std::make_shared<Property>(
                 std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
-                std::vector<std::shared_ptr<Comment>>{}, nullptr,
+                std::vector<std::shared_ptr<Comment>>{},
+                nullptr,
                 std::vector<std::shared_ptr<Comment>>{});
             prop->loc = key_loc;
             std::vector<std::shared_ptr<Property>> params = {prop};
             return parse_function_expression(std::move(lparen), std::move(tt), params);
         }
-        auto ident_expr = std::make_unique<Expression>(Expression::Type::Identifier,
-                                                       std::move(key));
+        auto ident_expr =
+            std::make_unique<Expression>(Expression::Type::Identifier, std::move(key));
         ident_expr->loc = key_loc;
         return std::make_unique<Expression>(
             Expression::Type::ParenExpr,
@@ -2024,7 +2034,9 @@ std::unique_ptr<Expression> Parser::parse_paren_ident_expression(std::unique_ptr
         auto value = parse_expression();
         auto prop = std::make_shared<Property>(
             std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
-            tt->comments, std::move(value), std::vector<std::shared_ptr<Comment>>{});
+            tt->comments,
+            std::move(value),
+            std::vector<std::shared_ptr<Comment>>{});
         prop->loc = key_loc;
         std::vector<std::shared_ptr<Property>> params = {prop};
         if (peek()->tok == TokenType::Comma) {
@@ -2041,7 +2053,9 @@ std::unique_ptr<Expression> Parser::parse_paren_ident_expression(std::unique_ptr
         auto tt = consume();
         auto prop = std::make_shared<Property>(
             std::make_unique<PropertyKey>(PropertyKey::Type::Identifier, std::move(key)),
-            std::vector<std::shared_ptr<Comment>>{}, nullptr, tt->comments);
+            std::vector<std::shared_ptr<Comment>>{},
+            nullptr,
+            tt->comments);
         prop->loc = key_loc;
         std::vector<std::shared_ptr<Property>> params = {prop};
         auto others = parse_parameter_list();
@@ -2078,8 +2092,8 @@ std::unique_ptr<Expression> Parser::parse_function_expression(
     std::unique_ptr<Token> rparen,
     const std::vector<std::shared_ptr<Property>>& params) {
     auto arrow = expect_or_skip(TokenType::Arrow);
-    return parse_function_body_expression(std::move(lparen), std::move(rparen), std::move(arrow),
-                                          params);
+    return parse_function_body_expression(
+        std::move(lparen), std::move(rparen), std::move(arrow), params);
 }
 
 std::unique_ptr<Expression> Parser::parse_function_body_expression(
@@ -2091,16 +2105,16 @@ std::unique_ptr<Expression> Parser::parse_function_body_expression(
     if (t->tok == TokenType::LBrace) {
         auto block = parse_block();
         auto fbody = std::make_unique<FunctionBody>(FunctionBody::Type::Block, std::move(block));
-        auto func = std::make_unique<FunctionExpr>(lparen->comments, params, rparen->comments,
-                                                   arrow->comments, std::move(fbody));
+        auto func = std::make_unique<FunctionExpr>(
+            lparen->comments, params, rparen->comments, arrow->comments, std::move(fbody));
 
         auto expr = std::make_unique<Expression>(Expression::Type::FunctionExpr, std::move(func));
         return expr;
     }
     auto expr = parse_expression();
     auto fbody = std::make_unique<FunctionBody>(FunctionBody::Type::Expression, std::move(expr));
-    auto func = std::make_unique<FunctionExpr>(lparen->comments, params, rparen->comments,
-                                               arrow->comments, std::move(fbody));
+    auto func = std::make_unique<FunctionExpr>(
+        lparen->comments, params, rparen->comments, arrow->comments, std::move(fbody));
     auto ret = std::make_unique<Expression>(Expression::Type::FunctionExpr, std::move(func));
     return ret;
 }
@@ -2225,8 +2239,8 @@ std::unique_ptr<Expression> Parser::parse_primary_expression() {
 std::vector<std::shared_ptr<AttributeParam>> Parser::parse_attribute_params() {
     std::vector<std::shared_ptr<AttributeParam>> params;
     while (more()) {
-        auto value = parse_expression_until_boundary(nullptr, {TokenType::Comma, TokenType::RParen},
-                                                     std::nullopt);
+        auto value = parse_expression_until_boundary(
+            nullptr, {TokenType::Comma, TokenType::RParen}, std::nullopt);
         if (!value) {
             std::stringstream ss;
             ss << "missing attribute parameter at " << peek()->start_pos;
@@ -2284,10 +2298,7 @@ std::unique_ptr<Attribute> Parser::parse_attribute_rest(
 std::unique_ptr<Attribute> Parser::parse_attribute_inner() {
     auto tok = expect(TokenType::Attribute);
     auto lit = tok->lit;
-    auto name = std::string(std::find_if(lit.begin(), lit.end(),
-                                         [](char c) {
-                                             return c != '@';
-                                         }),
+    auto name = std::string(std::find_if(lit.begin(), lit.end(), [](char c) { return c != '@'; }),
                             lit.end());
     return parse_attribute_rest(std::move(tok), name);
 }

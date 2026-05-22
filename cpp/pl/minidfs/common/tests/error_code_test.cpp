@@ -14,10 +14,10 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/pl/minidfs/common/error_code.h"
-
 #include <gtest/gtest.h>
 #include <string_view>
+
+#include "cpp/pl/minidfs/common/error_code.h"
 
 namespace pl::minidfs {
 namespace {
@@ -151,22 +151,38 @@ TEST(ErrorCodeTest, NameInternalErrors) {
 TEST(ErrorCodeTest, AllNamesNonEmpty) {
     auto codes = {
         ErrorCode::kOK,
-        ErrorCode::kInvalidArgument, ErrorCode::kNotFound,
-        ErrorCode::kAlreadyExists, ErrorCode::kNotDirectory,
-        ErrorCode::kIsDirectory, ErrorCode::kPermissionDenied,
-        ErrorCode::kDirectoryNotEmpty, ErrorCode::kPathTooLong,
+        ErrorCode::kInvalidArgument,
+        ErrorCode::kNotFound,
+        ErrorCode::kAlreadyExists,
+        ErrorCode::kNotDirectory,
+        ErrorCode::kIsDirectory,
+        ErrorCode::kPermissionDenied,
+        ErrorCode::kDirectoryNotEmpty,
+        ErrorCode::kPathTooLong,
         ErrorCode::kInvalidPath,
-        ErrorCode::kLeaseExpired, ErrorCode::kLeaseConflict,
-        ErrorCode::kFileUnderConstruction, ErrorCode::kLeaseNotFound,
-        ErrorCode::kNoAvailableDataNode, ErrorCode::kBlockNotFound,
-        ErrorCode::kBlockCorrupt, ErrorCode::kReplicaNotFound,
-        ErrorCode::kChecksumMismatch, ErrorCode::kBlockAlreadyCommitted,
+        ErrorCode::kLeaseExpired,
+        ErrorCode::kLeaseConflict,
+        ErrorCode::kFileUnderConstruction,
+        ErrorCode::kLeaseNotFound,
+        ErrorCode::kNoAvailableDataNode,
+        ErrorCode::kBlockNotFound,
+        ErrorCode::kBlockCorrupt,
+        ErrorCode::kReplicaNotFound,
+        ErrorCode::kChecksumMismatch,
+        ErrorCode::kBlockAlreadyCommitted,
         ErrorCode::kInsufficientReplicas,
-        ErrorCode::kMySQLError, ErrorCode::kMySQLConnectFailed,
-        ErrorCode::kMySQLQueryFailed, ErrorCode::kMySQLTxnFailed,
-        ErrorCode::kRPCError, ErrorCode::kRPCTimeout, ErrorCode::kRPCConnectFailed,
-        ErrorCode::kIOError, ErrorCode::kDiskFull, ErrorCode::kFileNotFound,
-        ErrorCode::kInternalError, ErrorCode::kRequestDuplicated,
+        ErrorCode::kMySQLError,
+        ErrorCode::kMySQLConnectFailed,
+        ErrorCode::kMySQLQueryFailed,
+        ErrorCode::kMySQLTxnFailed,
+        ErrorCode::kRPCError,
+        ErrorCode::kRPCTimeout,
+        ErrorCode::kRPCConnectFailed,
+        ErrorCode::kIOError,
+        ErrorCode::kDiskFull,
+        ErrorCode::kFileNotFound,
+        ErrorCode::kInternalError,
+        ErrorCode::kRequestDuplicated,
     };
     for (auto code : codes) {
         EXPECT_FALSE(error_code_name(code).empty()) << "Code " << static_cast<uint16_t>(code);

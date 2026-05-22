@@ -15,18 +15,19 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/25 09:26
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/str_cat.h"
-#include "cpp/pl/flux/connector/memory_source.h"
-#include "cpp/pl/flux/runtime/runtime_builtin_package.h"
-#include "cpp/pl/flux/runtime/runtime_eval.h"
 #include <exception>
 #include <fstream>
 #include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
+
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "cpp/pl/flux/connector/memory_source.h"
+#include "cpp/pl/flux/runtime/runtime_builtin_package.h"
+#include "cpp/pl/flux/runtime/runtime_eval.h"
 
 namespace pl::flux::builtin {
 namespace {
@@ -203,8 +204,8 @@ absl::StatusOr<Value> parse_raw_csv_table(const std::string& csv, const std::str
             continue;
         }
         if (fields_or->size() != header.size()) {
-            return absl::InvalidArgumentError(absl::StrCat(name, " CSV row has ", fields_or->size(),
-                                                           " fields, expected ", header.size()));
+            return absl::InvalidArgumentError(absl::StrCat(
+                name, " CSV row has ", fields_or->size(), " fields, expected ", header.size()));
         }
         std::vector<std::pair<std::string, Value>> properties;
         properties.reserve(header.size());
@@ -327,27 +328,36 @@ absl::StatusOr<Value> parse_annotated_csv_table(const std::string& csv, const st
             header = std::move(fields);
             if (datatypes.size() != header.size()) {
                 return absl::InvalidArgumentError(
-                    absl::StrCat(name, " annotated CSV requires #datatype for each column: got ",
-                                 datatypes.size(), ", expected ", header.size()));
+                    absl::StrCat(name,
+                                 " annotated CSV requires #datatype for each column: got ",
+                                 datatypes.size(),
+                                 ", expected ",
+                                 header.size()));
             }
             if (groups.size() != header.size()) {
                 return absl::InvalidArgumentError(
-                    absl::StrCat(name, " annotated CSV requires #group for each column: got ",
-                                 groups.size(), ", expected ", header.size()));
+                    absl::StrCat(name,
+                                 " annotated CSV requires #group for each column: got ",
+                                 groups.size(),
+                                 ", expected ",
+                                 header.size()));
             }
             if (defaults.empty()) {
                 defaults.resize(header.size());
             }
             if (defaults.size() != header.size()) {
                 return absl::InvalidArgumentError(
-                    absl::StrCat(name, " annotated CSV #default column count mismatch: got ",
-                                 defaults.size(), ", expected ", header.size()));
+                    absl::StrCat(name,
+                                 " annotated CSV #default column count mismatch: got ",
+                                 defaults.size(),
+                                 ", expected ",
+                                 header.size()));
             }
             continue;
         }
         if (fields.size() != header.size()) {
-            return absl::InvalidArgumentError(absl::StrCat(name, " CSV row has ", fields.size(),
-                                                           " fields, expected ", header.size()));
+            return absl::InvalidArgumentError(absl::StrCat(
+                name, " CSV row has ", fields.size(), " fields, expected ", header.size()));
         }
         std::vector<std::pair<std::string, Value>> properties;
         std::vector<std::pair<std::string, Value>> group_properties;

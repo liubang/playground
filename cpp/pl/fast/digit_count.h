@@ -6,7 +6,9 @@
 namespace pl {
 
 // c++20可以用bit_width
-int int_log2(uint64_t x) { return 63 - __builtin_clzll(x | 1); }
+int int_log2(uint64_t x) {
+    return 63 - __builtin_clzll(x | 1);
+}
 
 int digit_count(uint64_t x) {
     static uint64_t table[] = {9,

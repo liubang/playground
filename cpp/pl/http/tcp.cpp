@@ -35,9 +35,7 @@ void TcpServer::start() {
     for (;;) {
         SocketAddrStorage peer_addr;
         int conn_id = ::accept(sock_fd, &peer_addr.addr, &peer_addr.addr_len);
-        pool.emplace_back([this, conn_id] {
-            this->on_accept(conn_id);
-        });
+        pool.emplace_back([this, conn_id] { this->on_accept(conn_id); });
     }
 
     for (auto& t : pool) {

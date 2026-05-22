@@ -15,8 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/16 09:37
 
-#include "cpp/pl/flux/execution/physical_executor.h"
-#include "cpp/pl/flux/plan/plan_node.h"
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -26,6 +24,9 @@
 #include <string>
 #include <unistd.h>
 #include <vector>
+
+#include "cpp/pl/flux/execution/physical_executor.h"
+#include "cpp/pl/flux/plan/plan_node.h"
 
 namespace {
 
@@ -46,15 +47,16 @@ bool create_database(const std::string& path, int64_t rows) {
         std::cerr << "sqlite open failed\n";
         return false;
     }
-    if (exec_sql(db, "PRAGMA journal_mode=OFF;"
-                     "PRAGMA synchronous=OFF;"
-                     "CREATE TABLE cpu("
-                     "_time TEXT NOT NULL,"
-                     "host TEXT NOT NULL,"
-                     "region TEXT NOT NULL,"
-                     "usage REAL NOT NULL,"
-                     "seq INTEGER NOT NULL);"
-                     "BEGIN;") != SQLITE_OK) {
+    if (exec_sql(db,
+                 "PRAGMA journal_mode=OFF;"
+                 "PRAGMA synchronous=OFF;"
+                 "CREATE TABLE cpu("
+                 "_time TEXT NOT NULL,"
+                 "host TEXT NOT NULL,"
+                 "region TEXT NOT NULL,"
+                 "usage REAL NOT NULL,"
+                 "seq INTEGER NOT NULL);"
+                 "BEGIN;") != SQLITE_OK) {
         sqlite3_close(db);
         return false;
     }
@@ -72,8 +74,8 @@ bool create_database(const std::string& path, int64_t rows) {
         const std::string region = index % 2 == 0 ? "west" : "east";
         sqlite3_bind_text(stmt, 1, time.c_str(), static_cast<int>(time.size()), SQLITE_TRANSIENT);
         sqlite3_bind_text(stmt, 2, host.c_str(), static_cast<int>(host.size()), SQLITE_TRANSIENT);
-        sqlite3_bind_text(stmt, 3, region.c_str(), static_cast<int>(region.size()),
-                          SQLITE_TRANSIENT);
+        sqlite3_bind_text(
+            stmt, 3, region.c_str(), static_cast<int>(region.size()), SQLITE_TRANSIENT);
         sqlite3_bind_double(stmt, 4, static_cast<double>(index % 100));
         sqlite3_bind_int64(stmt, 5, index);
         if (sqlite3_step(stmt) != SQLITE_DONE) {
@@ -155,8 +157,8 @@ AccumulatorTotals accumulator_totals(const pl::flux::execution::ExecutionProfile
             totals.output_rows += accumulator.output_rows;
             totals.groups += accumulator.groups;
             totals.memory_bytes += accumulator.memory_bytes;
-            totals.memory_limit_bytes = std::max(totals.memory_limit_bytes,
-                                                 accumulator.memory_limit_bytes);
+            totals.memory_limit_bytes =
+                std::max(totals.memory_limit_bytes, accumulator.memory_limit_bytes);
             totals.memory_limited = totals.memory_limited || accumulator.memory_limited;
             totals.key_time_ms += accumulator.key_time_ms;
             totals.hash_time_ms += accumulator.hash_time_ms;
@@ -216,8 +218,8 @@ int run_benchmark(int argc, char** argv) {
         auto materialized =
             pl::flux::plan::MakeMaterializeBarrier(scan, "benchmark memory fallback", "benchmark");
         auto grouped = pl::flux::plan::MakeGroup(materialized, {"host"});
-        query = pl::flux::plan::MakeAggregate(grouped, pl::flux::plan::AggregateFunction::Count,
-                                              "usage");
+        query = pl::flux::plan::MakeAggregate(
+            grouped, pl::flux::plan::AggregateFunction::Count, "usage");
     } else if (scenario == "group_sum") {
         auto materialized =
             pl::flux::plan::MakeMaterializeBarrier(scan, "benchmark memory fallback", "benchmark");
@@ -228,8 +230,8 @@ int run_benchmark(int argc, char** argv) {
         auto materialized =
             pl::flux::plan::MakeMaterializeBarrier(scan, "benchmark memory fallback", "benchmark");
         auto grouped = pl::flux::plan::MakeGroup(materialized, {"host"});
-        query = pl::flux::plan::MakeAggregate(grouped, pl::flux::plan::AggregateFunction::Mean,
-                                              "usage");
+        query = pl::flux::plan::MakeAggregate(
+            grouped, pl::flux::plan::AggregateFunction::Mean, "usage");
     } else if (scenario == "distinct_host") {
         auto materialized =
             pl::flux::plan::MakeMaterializeBarrier(scan, "benchmark memory fallback", "benchmark");

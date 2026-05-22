@@ -15,18 +15,19 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/10 18:30
 
-#include "cpp/pl/minidfs/metadata/mysql_connection_pool.h"
-#include "cpp/pl/minidfs/metadata/mysql_metadata_store.h"
-#include "cpp/pl/minidfs/namenode/block_manager.h"
-#include "cpp/pl/minidfs/namenode/datanode_manager.h"
-#include "cpp/pl/minidfs/namenode/lease_manager.h"
-#include "cpp/pl/minidfs/namenode/admin_service_impl.h"
-#include "cpp/pl/minidfs/namenode/namenode_service_impl.h"
-#include "cpp/pl/minidfs/namenode/namespace_manager.h"
-#include "cpp/pl/minidfs/namenode/placement_manager.h"
 #include <brpc/server.h>
 #include <folly/logging/xlog.h>
 #include <gflags/gflags.h>
+
+#include "cpp/pl/minidfs/metadata/mysql_connection_pool.h"
+#include "cpp/pl/minidfs/metadata/mysql_metadata_store.h"
+#include "cpp/pl/minidfs/namenode/admin_service_impl.h"
+#include "cpp/pl/minidfs/namenode/block_manager.h"
+#include "cpp/pl/minidfs/namenode/datanode_manager.h"
+#include "cpp/pl/minidfs/namenode/lease_manager.h"
+#include "cpp/pl/minidfs/namenode/namenode_service_impl.h"
+#include "cpp/pl/minidfs/namenode/namespace_manager.h"
+#include "cpp/pl/minidfs/namenode/placement_manager.h"
 
 DEFINE_int32(port, 9000, "NameNode RPC service port");
 DEFINE_string(mysql_host, "127.0.0.1", "MySQL host");
@@ -72,7 +73,8 @@ int main(int argc, char* argv[]) {
     pl::minidfs::LeaseManager lease_mgr(&metadata_store);
 
     // Create service implementations
-    pl::minidfs::NameNodeServiceImpl namenode_service(&ns_mgr, &block_mgr, &lease_mgr, &metadata_store);
+    pl::minidfs::NameNodeServiceImpl namenode_service(
+        &ns_mgr, &block_mgr, &lease_mgr, &metadata_store);
     pl::minidfs::DataNodeProtocolServiceImpl datanode_protocol_service(&dn_mgr, &block_mgr);
     pl::minidfs::AdminServiceImpl admin_service(&ns_mgr, &dn_mgr, &metadata_store);
 

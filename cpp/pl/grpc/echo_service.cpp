@@ -15,10 +15,11 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2025/06/22 10:51
 
+#include <grpcpp/security/server_credentials.h>
+
 #include "absl/flags/parse.h"
 #include "absl/log/initialize.h"
 #include "echo_service_impl.h"
-#include <grpcpp/security/server_credentials.h>
 
 void RunServer() {
     std::string server_address("0.0.0.0:50051");

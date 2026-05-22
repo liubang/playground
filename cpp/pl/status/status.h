@@ -17,13 +17,13 @@
 
 #pragma once
 
-#include "status_code.h"
-
 #include <any>
 #include <cstdint>
 #include <fmt/format.h>
 #include <memory>
 #include <string>
+
+#include "status_code.h"
 
 namespace pl {
 
@@ -61,9 +61,9 @@ public:
 
     Status& operator=(const Status& other) {
         if (std::addressof(other) != this) {
-            data_ = construct(other.code(), (other.rep() != nullptr)
-                                                ? std::make_unique<StatusRep>(*other.rep())
-                                                : nullptr);
+            data_ = construct(other.code(),
+                              (other.rep() != nullptr) ? std::make_unique<StatusRep>(*other.rep())
+                                                       : nullptr);
         }
         return *this;
     }
@@ -153,11 +153,11 @@ template <> struct formatter<pl::Status> : formatter<pl::status_code_t> {
     auto format(const pl::Status& status, FormatContext& ctx) const {
         auto msg = status.message();
         if (msg.empty()) {
-            return fmt::format_to(ctx.out(), "{}({})", pl::StatusCode::toString(status.code()),
-                                  status.code());
+            return fmt::format_to(
+                ctx.out(), "{}({})", pl::StatusCode::toString(status.code()), status.code());
         }
-        return fmt::format_to(ctx.out(), "{}({}) {}", pl::StatusCode::toString(status.code()),
-                              status.code(), msg);
+        return fmt::format_to(
+            ctx.out(), "{}({}) {}", pl::StatusCode::toString(status.code()), status.code(), msg);
     }
 };
 FMT_END_NAMESPACE

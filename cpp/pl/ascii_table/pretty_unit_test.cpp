@@ -15,10 +15,11 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/17 21:47
 
-#include "cpp/pl/ascii_table/pretty.h"
 #include <gtest/gtest.h>
 #include <sstream>
 #include <stdexcept>
+
+#include "cpp/pl/ascii_table/pretty.h"
 
 namespace pl::pretty {
 namespace {

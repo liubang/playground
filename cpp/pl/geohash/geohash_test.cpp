@@ -15,10 +15,11 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/06/04 20:10
 
-#include "geo.h"
-#include "geohash.h"
 #include <cmath>
 #include <gtest/gtest.h>
+
+#include "geo.h"
+#include "geohash.h"
 
 // ============================================================================
 // GeoHash encode/decode tests

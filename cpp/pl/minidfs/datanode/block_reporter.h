@@ -17,9 +17,6 @@
 
 #pragma once
 
-#include "cpp/pl/minidfs/common/constants.h"
-#include "cpp/pl/minidfs/datanode/local_block_store.h"
-#include "cpp/pl/status/result.h"
 #include <atomic>
 #include <cstdint>
 #include <functional>
@@ -27,6 +24,10 @@
 #include <thread>
 #include <unordered_set>
 #include <vector>
+
+#include "cpp/pl/minidfs/common/constants.h"
+#include "cpp/pl/minidfs/datanode/local_block_store.h"
+#include "cpp/pl/status/result.h"
 
 namespace pl::minidfs {
 

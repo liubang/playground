@@ -17,8 +17,9 @@
 
 #include "cpp/pl/minidfs/namenode/namenode_service_impl.h"
 
-#include "cpp/pl/minidfs/common/error_code.h"
 #include <brpc/closure_guard.h>
+
+#include "cpp/pl/minidfs/common/error_code.h"
 
 namespace pl::minidfs {
 
@@ -70,7 +71,9 @@ NameNodeServiceImpl::NameNodeServiceImpl(NamespaceManager* ns_mgr,
                                          BlockManager* block_mgr,
                                          LeaseManager* lease_mgr,
                                          MetadataStore* metadata_store)
-    : ns_mgr_(ns_mgr), block_mgr_(block_mgr), lease_mgr_(lease_mgr),
+    : ns_mgr_(ns_mgr),
+      block_mgr_(block_mgr),
+      lease_mgr_(lease_mgr),
       metadata_store_(metadata_store) {}
 
 bool NameNodeServiceImpl::check_idempotent(const protocol::RequestHeader& header,
@@ -97,8 +100,7 @@ void NameNodeServiceImpl::write_oplog(std::string_view op_type,
         return;
     }
     // best-effort: 写入失败不影响主流程
-    (void)metadata_store_->write_oplog(op_type, target_inode_id,
-                                       header.request_id(), "{}");
+    (void)metadata_store_->write_oplog(op_type, target_inode_id, header.request_id(), "{}");
 }
 
 // ============================================================================
@@ -115,8 +117,11 @@ void NameNodeServiceImpl::Mkdir(google::protobuf::RpcController* /*controller*/,
         return;
     }
 
-    auto result = ns_mgr_->mkdir(request->path(), request->owner(), request->group(),
-                                 request->permission(), /*create_parent=*/true);
+    auto result = ns_mgr_->mkdir(request->path(),
+                                 request->owner(),
+                                 request->group(),
+                                 request->permission(),
+                                 /*create_parent=*/true);
     if (result.hasError()) {
         fill_status(response->mutable_status(), result.error().code(), result.error().message());
         return;
@@ -143,8 +148,12 @@ void NameNodeServiceImpl::CreateFile(google::protobuf::RpcController* /*controll
         request->replication() > 0 ? request->replication() : kDefaultReplication;
     uint64_t block_size = request->block_size() > 0 ? request->block_size() : kDefaultBlockSize;
 
-    auto result = ns_mgr_->create_file(request->path(), request->owner(), request->group(),
-                                       request->permission(), replication, block_size);
+    auto result = ns_mgr_->create_file(request->path(),
+                                       request->owner(),
+                                       request->group(),
+                                       request->permission(),
+                                       replication,
+                                       block_size);
     if (result.hasError()) {
         fill_status(response->mutable_status(), result.error().code(), result.error().message());
         return;
@@ -153,7 +162,8 @@ void NameNodeServiceImpl::CreateFile(google::protobuf::RpcController* /*controll
     // Acquire lease for the client
     auto lease_result = lease_mgr_->acquire_lease(result.value().inode_id, request->client_id());
     if (lease_result.hasError()) {
-        fill_status(response->mutable_status(), lease_result.error().code(),
+        fill_status(response->mutable_status(),
+                    lease_result.error().code(),
                     lease_result.error().message());
         return;
     }
@@ -175,7 +185,8 @@ void NameNodeServiceImpl::CompleteFile(google::protobuf::RpcController* /*contro
     // Get located blocks to compute final file length
     auto blocks_result = block_mgr_->get_located_blocks(request->inode_id());
     if (blocks_result.hasError()) {
-        fill_status(response->mutable_status(), blocks_result.error().code(),
+        fill_status(response->mutable_status(),
+                    blocks_result.error().code(),
                     blocks_result.error().message());
         return;
     }
@@ -188,7 +199,8 @@ void NameNodeServiceImpl::CompleteFile(google::protobuf::RpcController* /*contro
     // Complete the file (transition state)
     auto complete_result = ns_mgr_->complete_file(request->inode_id(), total_length);
     if (complete_result.hasError()) {
-        fill_status(response->mutable_status(), complete_result.error().code(),
+        fill_status(response->mutable_status(),
+                    complete_result.error().code(),
                     complete_result.error().message());
         return;
     }
@@ -366,9 +378,13 @@ void DataNodeProtocolServiceImpl::RegisterDataNode(google::protobuf::RpcControll
                                                    google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
 
-    auto result = dn_mgr_->register_datanode(request->uuid(), request->hostname(), request->ip(),
-                                             request->rpc_port(), request->data_port(),
-                                             request->rack(), request->capacity_bytes());
+    auto result = dn_mgr_->register_datanode(request->uuid(),
+                                             request->hostname(),
+                                             request->ip(),
+                                             request->rpc_port(),
+                                             request->data_port(),
+                                             request->rack(),
+                                             request->capacity_bytes());
 
     if (result.hasError()) {
         fill_status(response->mutable_status(), result.error().code(), result.error().message());
@@ -385,8 +401,10 @@ void DataNodeProtocolServiceImpl::Heartbeat(google::protobuf::RpcController* /*c
                                             google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
 
-    auto result = dn_mgr_->handle_heartbeat(request->datanode_id(), request->capacity_bytes(),
-                                            request->used_bytes(), request->free_bytes());
+    auto result = dn_mgr_->handle_heartbeat(request->datanode_id(),
+                                            request->capacity_bytes(),
+                                            request->used_bytes(),
+                                            request->free_bytes());
     if (result.hasError()) {
         fill_status(response->mutable_status(), result.error().code(), result.error().message());
         return;
@@ -417,8 +435,8 @@ void DataNodeProtocolServiceImpl::CommitBlock(google::protobuf::RpcController* /
                                               google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
 
-    auto result = block_mgr_->commit_block(request->block_id(), request->length(),
-                                           request->generation_stamp());
+    auto result = block_mgr_->commit_block(
+        request->block_id(), request->length(), request->generation_stamp());
     if (result.hasError()) {
         fill_status(response->mutable_status(), result.error().code(), result.error().message());
         return;

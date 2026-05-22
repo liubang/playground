@@ -16,13 +16,13 @@
 
 #pragma once
 
-#include "cpp/pl/minidfs/common/types.h"
-#include "cpp/pl/status/result.h"
-
 #include <brpc/channel.h>
 #include <cstdint>
 #include <string>
 #include <vector>
+
+#include "cpp/pl/minidfs/common/types.h"
+#include "cpp/pl/status/result.h"
 
 namespace pl::minidfs {
 
@@ -47,11 +47,11 @@ public:
     /// inode_id: 已创建的 under_construction 文件
     /// block_size / chunk_size / replication: 写入参数
     static pl::Result<DfsOutputStream> create(brpc::Channel* namenode_channel,
-                                               uint64_t inode_id,
-                                               std::string_view client_id,
-                                               uint64_t block_size,
-                                               uint64_t chunk_size,
-                                               uint32_t replication);
+                                              uint64_t inode_id,
+                                              std::string_view client_id,
+                                              uint64_t block_size,
+                                              uint64_t chunk_size,
+                                              uint32_t replication);
 
     /// 写入数据，可以任意长度，内部自动按 block/chunk 分片
     pl::Result<pl::Void> write(const void* data, uint64_t len);
@@ -89,7 +89,7 @@ private:
     uint64_t chunk_size_ = 0;
     uint32_t replication_ = 0;
 
-    std::string buffer_;             // 当前 block 的数据缓冲区
+    std::string buffer_; // 当前 block 的数据缓冲区
     uint32_t current_block_index_ = 0;
     uint64_t total_bytes_written_ = 0;
     bool closed_ = false;

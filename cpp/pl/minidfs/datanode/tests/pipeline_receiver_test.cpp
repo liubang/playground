@@ -14,12 +14,12 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/pl/minidfs/datanode/pipeline_receiver.h"
-
-#include "cpp/pl/minidfs/common/checksum.h"
 #include <filesystem>
 #include <gtest/gtest.h>
 #include <string>
+
+#include "cpp/pl/minidfs/common/checksum.h"
+#include "cpp/pl/minidfs/datanode/pipeline_receiver.h"
 
 namespace pl::minidfs {
 namespace {
@@ -56,9 +56,9 @@ protected:
 class PipelineReceiverTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        test_dir_ = fs::temp_directory_path() / ("minidfs_pipeline_test_" +
-                                                  std::to_string(::getpid()) + "_" +
-                                                  std::to_string(counter_++));
+        test_dir_ =
+            fs::temp_directory_path() / ("minidfs_pipeline_test_" + std::to_string(::getpid()) +
+                                         "_" + std::to_string(counter_++));
         fs::create_directories(test_dir_);
 
         LocalBlockStore::Config config;
@@ -74,8 +74,8 @@ protected:
         fs::remove_all(test_dir_, ec);
     }
 
-    PacketHeader make_packet(uint64_t block_id, uint64_t gs, uint32_t chunk_idx,
-                             const void* data, uint32_t len) {
+    PacketHeader make_packet(
+        uint64_t block_id, uint64_t gs, uint32_t chunk_idx, const void* data, uint32_t len) {
         PacketHeader hdr{};
         hdr.block_id = block_id;
         hdr.generation_stamp = gs;

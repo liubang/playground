@@ -15,12 +15,12 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2024/12/18 00:28
 
-#include "cpp/pl/fastrange/fastrange.h"
-#include "cpp/pl/lang/common.h"
-
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+
+#include "cpp/pl/fastrange/fastrange.h"
+#include "cpp/pl/lang/common.h"
 
 namespace pl {
 

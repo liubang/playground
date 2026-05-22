@@ -62,9 +62,20 @@ TokenPtr Scanner::scan(int32_t mode) {
     int32_t token_end_line = 0;
     int32_t token_end_col = 0;
 
-    auto err =
-        real_scan(mode, &p_, ps_, pe_, eof_, &last_newline_, cur_line_, token_, token_start,
-                  token_start_line, token_start_col, token_end, token_end_line, token_end_col);
+    auto err = real_scan(mode,
+                         &p_,
+                         ps_,
+                         pe_,
+                         eof_,
+                         &last_newline_,
+                         cur_line_,
+                         token_,
+                         token_start,
+                         token_start_line,
+                         token_start_col,
+                         token_end,
+                         token_end_line,
+                         token_end_col);
     TokenPtr t;
     if (err != 0) {
         // TODO(liubang):

@@ -22,7 +22,9 @@
 namespace pl {
 
 void HttpServer::on_accept(int connect_id) {
-    SCOPE_EXIT { ::close(connect_id); };
+    SCOPE_EXIT {
+        ::close(connect_id);
+    };
     char buf[1024];
     int ret = ::read(connect_id, buf, sizeof(buf));
     if (ret == -1) {

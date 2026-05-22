@@ -15,13 +15,14 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2024/05/14 21:00
 
-#include "z3.h"
-#include "z3sfc.h"
 #include <cassert>
 #include <ctime>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+
+#include "z3.h"
+#include "z3sfc.h"
 
 std::chrono::system_clock::time_point utc_string_to_time_point(const std::string& utc_string) {
     std::tm tm = {};
@@ -39,7 +40,6 @@ void debug(pl::curve::Z3 z3) {
 }
 
 int main(int argc, char* argv[]) {
-
     {
         pl::curve::Z3 z3(1, 2, 4);
         std::cout << z3;

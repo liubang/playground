@@ -15,12 +15,13 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/18 00:32
 
-#include "cpp/pl/flux/contrib/lsp/server.h"
 #include <charconv>
 #include <cstdio>
 #include <cstring>
 #include <string>
 #include <system_error>
+
+#include "cpp/pl/flux/contrib/lsp/server.h"
 
 namespace {
 
@@ -39,7 +40,9 @@ void print_usage(const char* prog) {
                  prog);
 }
 
-void print_version() { std::fprintf(stderr, "flux-ls 0.1.0\n"); }
+void print_version() {
+    std::fprintf(stderr, "flux-ls 0.1.0\n");
+}
 
 // 安全解析正整数，失败返回 0
 int parse_positive_int(std::string_view sv) {

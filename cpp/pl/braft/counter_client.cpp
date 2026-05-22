@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "cpp/pl/braft/proto/counter.pb.h"
 #include <braft/raft.h>
 #include <braft/route_table.h>
 #include <braft/util.h>
@@ -20,6 +19,8 @@
 #include <brpc/controller.h>
 #include <bthread/bthread.h>
 #include <gflags/gflags.h>
+
+#include "cpp/pl/braft/proto/counter.pb.h"
 
 DEFINE_bool(log_each_request, false, "Print log for each request");
 DEFINE_bool(use_bthread, false, "Use bthread to send requests");

@@ -17,15 +17,16 @@
 
 #pragma once
 
-#include "ast.h"
-#include "scanner.h"
-#include "strconv.h"
-#include "token.h"
 #include <algorithm>
 #include <functional>
 #include <memory>
 #include <set>
 #include <utility>
+
+#include "ast.h"
+#include "scanner.h"
+#include "strconv.h"
+#include "token.h"
 
 namespace pl::flux {
 
