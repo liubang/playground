@@ -17,14 +17,15 @@
 
 #pragma once
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "cpp/pl/flux/connector/table_source.h"
-#include "cpp/pl/flux/runtime/runtime_value.h"
 #include <optional>
 #include <string>
 #include <unordered_set>
 #include <vector>
+
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "cpp/pl/flux/connector/table_source.h"
+#include "cpp/pl/flux/runtime/runtime_value.h"
 
 namespace pl::flux::connector {
 

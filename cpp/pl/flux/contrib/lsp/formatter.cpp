@@ -175,7 +175,9 @@ void Formatter::format_expr(const Expression& expr) {
     }
 }
 
-void Formatter::format_identifier(const Identifier& id) { emit(id.name); }
+void Formatter::format_identifier(const Identifier& id) {
+    emit(id.name);
+}
 
 void Formatter::format_array_expr(const ArrayExpr& expr) {
     if (expr.elements.empty()) {
@@ -509,7 +511,9 @@ void Formatter::format_stmt(const Statement& stmt) {
     }
 }
 
-void Formatter::format_expr_stmt(const ExprStmt& stmt) { format_expr(*stmt.expression); }
+void Formatter::format_expr_stmt(const ExprStmt& stmt) {
+    format_expr(*stmt.expression);
+}
 
 void Formatter::format_variable_assgn(const VariableAssgn& stmt) {
     emit(stmt.id->string());
@@ -723,9 +727,8 @@ bool Formatter::is_complex_call(const CallExpr& expr) const {
         });
     }
     // A call is complex if any argument is complex
-    return std::ranges::any_of(expr.arguments, [this](const auto& arg) {
-        return is_complex_expr(*arg);
-    });
+    return std::ranges::any_of(expr.arguments,
+                               [this](const auto& arg) { return is_complex_expr(*arg); });
 }
 
 bool Formatter::is_complex_expr(const Expression& expr) const {
@@ -807,7 +810,9 @@ void Formatter::emit(std::string_view s) {
     }
 }
 
-void Formatter::emit_newline() { output_.push_back('\n'); }
+void Formatter::emit_newline() {
+    output_.push_back('\n');
+}
 
 void Formatter::emit_indent() {
     for (int i = 0; i < indent_level_; ++i) {
@@ -819,9 +824,13 @@ void Formatter::emit_indent() {
     }
 }
 
-void Formatter::indent() { ++indent_level_; }
+void Formatter::indent() {
+    ++indent_level_;
+}
 
-void Formatter::dedent() { --indent_level_; }
+void Formatter::dedent() {
+    --indent_level_;
+}
 
 int Formatter::current_column() const {
     // Find the last newline and calculate column from there

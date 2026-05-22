@@ -17,9 +17,10 @@
 
 #include "cpp/pl/flux/contrib/lsp/jsonrpc.h"
 
+#include <sstream>
+
 #include "cpp/pl/flux/contrib/lsp/json_util.h"
 #include "simdjson.h"
-#include <sstream>
 
 namespace pl::flux::lsp {
 

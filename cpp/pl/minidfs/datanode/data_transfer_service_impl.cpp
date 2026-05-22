@@ -17,10 +17,11 @@
 
 #include "cpp/pl/minidfs/datanode/data_transfer_service_impl.h"
 
-#include "cpp/pl/minidfs/common/checksum.h"
-#include "cpp/pl/minidfs/common/error_code.h"
 #include <brpc/closure_guard.h>
 #include <folly/logging/xlog.h>
+
+#include "cpp/pl/minidfs/common/checksum.h"
+#include "cpp/pl/minidfs/common/error_code.h"
 
 namespace pl::minidfs {
 
@@ -63,10 +64,11 @@ void DataTransferServiceImpl::WriteBlock(google::protobuf::RpcController* /*cont
 
     // If this is chunk 0, create the block first
     if (request->chunk_index() == 0) {
-        auto create_result = store_->create_block(block_id, request->inode_id(),
-                                                  request->block_index(), generation_stamp);
+        auto create_result = store_->create_block(
+            block_id, request->inode_id(), request->block_index(), generation_stamp);
         if (create_result.hasError()) {
-            fill_status(response->mutable_status(), create_result.error().code(),
+            fill_status(response->mutable_status(),
+                        create_result.error().code(),
                         create_result.error().message());
             response->set_ack_status(static_cast<uint32_t>(AckStatus::kIOError));
             return;
@@ -77,17 +79,19 @@ void DataTransferServiceImpl::WriteBlock(google::protobuf::RpcController* /*cont
     const auto& data = request->data();
     uint32_t computed_crc = compute_crc32c(data.data(), data.size());
     if (computed_crc != request->checksum()) {
-        fill_status(response->mutable_status(), static_cast<uint32_t>(ErrorCode::kChecksumMismatch),
+        fill_status(response->mutable_status(),
+                    static_cast<uint32_t>(ErrorCode::kChecksumMismatch),
                     "CRC32C mismatch on received chunk");
         response->set_ack_status(static_cast<uint32_t>(AckStatus::kChecksumError));
         return;
     }
 
     // Append chunk to local block
-    auto append_result = store_->append_chunk(block_id, generation_stamp, data.data(),
-                                              static_cast<uint32_t>(data.size()));
+    auto append_result = store_->append_chunk(
+        block_id, generation_stamp, data.data(), static_cast<uint32_t>(data.size()));
     if (append_result.hasError()) {
-        fill_status(response->mutable_status(), append_result.error().code(),
+        fill_status(response->mutable_status(),
+                    append_result.error().code(),
                     append_result.error().message());
         response->set_ack_status(static_cast<uint32_t>(AckStatus::kIOError));
         return;
@@ -102,7 +106,8 @@ void DataTransferServiceImpl::WriteBlock(google::protobuf::RpcController* /*cont
     if (request->is_last_chunk()) {
         auto finalize_result = store_->finalize_block(block_id, generation_stamp);
         if (finalize_result.hasError()) {
-            fill_status(response->mutable_status(), finalize_result.error().code(),
+            fill_status(response->mutable_status(),
+                        finalize_result.error().code(),
                         finalize_result.error().message());
             response->set_ack_status(static_cast<uint32_t>(AckStatus::kIOError));
             return;
@@ -137,8 +142,8 @@ void DataTransferServiceImpl::ReadBlock(google::protobuf::RpcController* /*contr
 
     auto data_result = store_->read_block_data(block_id, generation_stamp);
     if (data_result.hasError()) {
-        fill_status(response->mutable_status(), data_result.error().code(),
-                    data_result.error().message());
+        fill_status(
+            response->mutable_status(), data_result.error().code(), data_result.error().message());
         return;
     }
 
@@ -180,20 +185,24 @@ void DataTransferServiceImpl::TransferBlock(google::protobuf::RpcController* /*c
     // Create block in tmp/
     // For replication, we use block_id as inode_id placeholder and index 0.
     // The actual inode_id and block_index are resolved by NameNode metadata.
-    auto create_result = store_->create_block(block_id, /*inode_id=*/0,
-                                              /*block_index=*/0, generation_stamp);
+    auto create_result = store_->create_block(block_id,
+                                              /*inode_id=*/0,
+                                              /*block_index=*/0,
+                                              generation_stamp);
     if (create_result.hasError()) {
-        fill_status(response->mutable_status(), create_result.error().code(),
+        fill_status(response->mutable_status(),
+                    create_result.error().code(),
                     create_result.error().message());
         return;
     }
 
     // Write data as a single chunk
     if (!data.empty()) {
-        auto append_result = store_->append_chunk(block_id, generation_stamp, data.data(),
-                                                  static_cast<uint32_t>(data.size()));
+        auto append_result = store_->append_chunk(
+            block_id, generation_stamp, data.data(), static_cast<uint32_t>(data.size()));
         if (append_result.hasError()) {
-            fill_status(response->mutable_status(), append_result.error().code(),
+            fill_status(response->mutable_status(),
+                        append_result.error().code(),
                         append_result.error().message());
             return;
         }
@@ -202,7 +211,8 @@ void DataTransferServiceImpl::TransferBlock(google::protobuf::RpcController* /*c
     // Finalize
     auto finalize_result = store_->finalize_block(block_id, generation_stamp);
     if (finalize_result.hasError()) {
-        fill_status(response->mutable_status(), finalize_result.error().code(),
+        fill_status(response->mutable_status(),
+                    finalize_result.error().code(),
                     finalize_result.error().message());
         return;
     }
@@ -211,8 +221,11 @@ void DataTransferServiceImpl::TransferBlock(google::protobuf::RpcController* /*c
         reporter_->notify_block_finalized(block_id, generation_stamp);
     }
 
-    XLOGF(INFO, "block {}:{} received via transfer replication ({} bytes)", block_id,
-          generation_stamp, data.size());
+    XLOGF(INFO,
+          "block {}:{} received via transfer replication ({} bytes)",
+          block_id,
+          generation_stamp,
+          data.size());
 
     fill_status(response->mutable_status(), 0);
 }

@@ -17,11 +17,12 @@
 
 #include "cpp/pl/sst/sstable_format.h"
 
-#include "cpp/pl/sst/encoding.h"
-#include "snappy.h"
 #include <cassert>
 #include <crc32c/crc32c.h>
 #include <zstd.h>
+
+#include "cpp/pl/sst/encoding.h"
+#include "snappy.h"
 
 namespace pl {
 

@@ -15,7 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/15 23:39
 
-#include "cpp/pl/flux/cli/flux_cli.h"
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
@@ -23,6 +22,8 @@
 #include <gtest/gtest.h>
 #include <sstream>
 #include <vector>
+
+#include "cpp/pl/flux/cli/flux_cli.h"
 
 namespace pl::flux {
 namespace {
@@ -68,28 +69,37 @@ std::string ReadAllText(const std::string& path) {
 
 std::string RewriteExamplePaths(std::string source) {
     source =
-        ReplaceAll(source, "cpp/pl/flux/examples/ops_dashboard/data/cpu_usage.annotated.csv",
+        ReplaceAll(source,
+                   "cpp/pl/flux/examples/ops_dashboard/data/cpu_usage.annotated.csv",
                    RunfilePath("cpp/pl/flux/examples/ops_dashboard/data/cpu_usage.annotated.csv"));
     source = ReplaceAll(
-        source, "cpp/pl/flux/examples/ops_dashboard/data/cpu_monthly_usage.annotated.csv",
+        source,
+        "cpp/pl/flux/examples/ops_dashboard/data/cpu_monthly_usage.annotated.csv",
         RunfilePath("cpp/pl/flux/examples/ops_dashboard/data/cpu_monthly_usage.annotated.csv"));
     source =
-        ReplaceAll(source, "cpp/pl/flux/examples/ops_dashboard/data/mem_usage.annotated.csv",
+        ReplaceAll(source,
+                   "cpp/pl/flux/examples/ops_dashboard/data/mem_usage.annotated.csv",
                    RunfilePath("cpp/pl/flux/examples/ops_dashboard/data/mem_usage.annotated.csv"));
     source =
-        ReplaceAll(source, "cpp/pl/flux/examples/feature_gallery/data/site_ops.annotated.csv",
+        ReplaceAll(source,
+                   "cpp/pl/flux/examples/feature_gallery/data/site_ops.annotated.csv",
                    RunfilePath("cpp/pl/flux/examples/feature_gallery/data/site_ops.annotated.csv"));
     source = ReplaceAll(
-        source, "cpp/pl/flux/examples/feature_gallery/data/service_counters.annotated.csv",
+        source,
+        "cpp/pl/flux/examples/feature_gallery/data/service_counters.annotated.csv",
         RunfilePath("cpp/pl/flux/examples/feature_gallery/data/service_counters.annotated.csv"));
-    source = ReplaceAll(source, "cpp/pl/flux/examples/feature_gallery/data/alerts.raw.csv",
+    source = ReplaceAll(source,
+                        "cpp/pl/flux/examples/feature_gallery/data/alerts.raw.csv",
                         RunfilePath("cpp/pl/flux/examples/feature_gallery/data/alerts.raw.csv"));
     source = ReplaceAll(
-        source, "cpp/pl/flux/examples/feature_gallery/data/multi_block.annotated.csv",
+        source,
+        "cpp/pl/flux/examples/feature_gallery/data/multi_block.annotated.csv",
         RunfilePath("cpp/pl/flux/examples/feature_gallery/data/multi_block.annotated.csv"));
-    source = ReplaceAll(source, "cpp/pl/flux/examples/cross_source/metrics.db",
+    source = ReplaceAll(source,
+                        "cpp/pl/flux/examples/cross_source/metrics.db",
                         RunfilePath("cpp/pl/flux/examples/cross_source/metrics.db"));
-    source = ReplaceAll(source, "cpp/pl/flux/examples/cross_source/owners.csv",
+    source = ReplaceAll(source,
+                        "cpp/pl/flux/examples/cross_source/owners.csv",
                         RunfilePath("cpp/pl/flux/examples/cross_source/owners.csv"));
     return source;
 }
@@ -157,7 +167,8 @@ TEST(FluxCliTest, ExecutesFluxFileSourceWithImportsAndPipelines) {
             |> filter(fn: (r) => r._measurement == "cpu")
             |> limit(n: 1)
     )",
-                                    "query.flux", env);
+                                    "query.flux",
+                                    env);
 
     EXPECT_EQ(0, result.exit_code);
     EXPECT_NE(std::string::npos, result.output.find("Result: data\n"));
@@ -230,8 +241,8 @@ TEST(FluxCliTest, ExecutesCrossSourceSqliteCsvJoinExample) {
     auto env = MakeFluxCliEnvironment();
     FluxCliOptions options;
     options.result_name = "sqlite_csv_join";
-    auto result = ExecuteExampleScript("cpp/pl/flux/examples/cross_source/sqlite_csv_join.flux",
-                                       env, options);
+    auto result = ExecuteExampleScript(
+        "cpp/pl/flux/examples/cross_source/sqlite_csv_join.flux", env, options);
 
     EXPECT_EQ(0, result.exit_code);
     EXPECT_TRUE(result.error.empty());
@@ -340,7 +351,8 @@ TEST(FluxCliTest, RendersKeptEmptyLogicalTablesWhenRequested) {
             |> group(columns: ["host"])
             |> filter(fn: (r) => r._value >= 80.0, onEmpty: "keep")
     )",
-                                    "<test>", env);
+                                    "<test>",
+                                    env);
 
     EXPECT_EQ(0, result.exit_code);
     EXPECT_TRUE(result.error.empty());
@@ -372,7 +384,9 @@ TEST(FluxCliTest, EmitsEmptyLogicalTableMetadataInJsonOutput) {
             |> group(columns: ["host"])
             |> filter(fn: (r) => r._value >= 80.0, onEmpty: "keep")
     )",
-                                    "<test>", env, options);
+                                    "<test>",
+                                    env,
+                                    options);
 
     EXPECT_EQ(0, result.exit_code);
     EXPECT_TRUE(result.error.empty());
@@ -472,44 +486,93 @@ TEST(FluxCliTest, ExecutesCheckedInOpsDashboardQueryVariants) {
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/cpu_distinct_hosts.flux",
-            {"Result: cpu_distinct_hosts\n", "\"edge-1\"", "\"edge-2\"", "\"us-east\"",
-             "\"us-west\"", "70", "91"},
+            {"Result: cpu_distinct_hosts\n",
+             "\"edge-1\"",
+             "\"edge-2\"",
+             "\"us-east\"",
+             "\"us-west\"",
+             "70",
+             "91"},
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/cpu_gap_fill.flux",
-            {"Result: cpu_gap_fill\n", "2024-05-01T10:00:30Z", "2024-05-01T10:01:00Z",
-             "2024-05-01T10:01:30Z", "\"edge-1\"", "70", "74", "82"},
+            {"Result: cpu_gap_fill\n",
+             "2024-05-01T10:00:30Z",
+             "2024-05-01T10:01:00Z",
+             "2024-05-01T10:01:30Z",
+             "\"edge-1\"",
+             "70",
+             "74",
+             "82"},
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/cpu_elapsed_by_host.flux",
-            {"Result: cpu_elapsed_by_host\n", "2024-05-01T10:00:40Z", "2024-05-01T10:01:05Z",
-             "2024-05-01T10:01:10Z", "\"edge-1\"", "\"edge-2\"", "30", "25", "50"},
+            {"Result: cpu_elapsed_by_host\n",
+             "2024-05-01T10:00:40Z",
+             "2024-05-01T10:01:05Z",
+             "2024-05-01T10:01:10Z",
+             "\"edge-1\"",
+             "\"edge-2\"",
+             "30",
+             "25",
+             "50"},
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/cpu_usage_difference.flux",
-            {"Result: cpu_usage_difference\n", "2024-05-01T10:00:40Z", "2024-05-01T10:01:05Z",
-             "2024-05-01T10:01:10Z", "\"edge-1\"", "\"edge-2\"", "4", "8", "-4"},
+            {"Result: cpu_usage_difference\n",
+             "2024-05-01T10:00:40Z",
+             "2024-05-01T10:01:05Z",
+             "2024-05-01T10:01:10Z",
+             "\"edge-1\"",
+             "\"edge-2\"",
+             "4",
+             "8",
+             "-4"},
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/cpu_usage_derivative.flux",
-            {"Result: cpu_usage_derivative\n", "2024-05-01T10:00:40Z", "2024-05-01T10:01:05Z",
-             "2024-05-01T10:01:10Z", "\"edge-1\"", "\"edge-2\"", "0.133333333333333", "0.32",
+            {"Result: cpu_usage_derivative\n",
+             "2024-05-01T10:00:40Z",
+             "2024-05-01T10:01:05Z",
+             "2024-05-01T10:01:10Z",
+             "\"edge-1\"",
+             "\"edge-2\"",
+             "0.133333333333333",
+             "0.32",
              "-0.08"},
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/latest_two_cpu_windows.flux",
-            {"Result: latest_two_cpu_windows\n", "2024-05-01T10:01:05Z", "2024-05-01T10:00:20Z",
-             "\"edge-1\"", "\"edge-2\"", "82", "91"},
+            {"Result: latest_two_cpu_windows\n",
+             "2024-05-01T10:01:05Z",
+             "2024-05-01T10:00:20Z",
+             "\"edge-1\"",
+             "\"edge-2\"",
+             "82",
+             "91"},
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/host_usage_pivot.flux",
-            {"Result: host_usage_pivot\n", "2024-05-01T10:01:00Z", "2024-05-01T10:02:00Z",
-             "\"edge-1\"", "\"edge-2\"", "cpu", "mem", "72", "63", "91", "75"},
+            {"Result: host_usage_pivot\n",
+             "2024-05-01T10:01:00Z",
+             "2024-05-01T10:02:00Z",
+             "\"edge-1\"",
+             "\"edge-2\"",
+             "cpu",
+             "mem",
+             "72",
+             "63",
+             "91",
+             "75"},
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/monthly_cpu_calendar.flux",
-            {"Result: monthly_cpu_calendar\n", "2024-01-01T00:00:00Z", "2024-02-01T00:00:00Z",
-             "2024-03-01T00:00:00Z", "60", "77"},
+            {"Result: monthly_cpu_calendar\n",
+             "2024-01-01T00:00:00Z",
+             "2024-02-01T00:00:00Z",
+             "2024-03-01T00:00:00Z",
+             "60",
+             "77"},
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/fleet_usage_union.flux",
@@ -525,8 +588,12 @@ TEST(FluxCliTest, ExecutesCheckedInOpsDashboardQueryVariants) {
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux",
-            {"Result: latest_west_cpu\n", "Result: latest_east_mem\n", "\"edge-2\"", "\"us-east\"",
-             "87", "68"},
+            {"Result: latest_west_cpu\n",
+             "Result: latest_east_mem\n",
+             "\"edge-2\"",
+             "\"us-east\"",
+             "87",
+             "68"},
         },
     };
 
@@ -575,7 +642,8 @@ TEST(FluxCliTest, ExecutesTableHelperQueries) {
         west_values = hosts |> findColumn(fn: (r) => r.region == "us-west", column: "_value")
         west_record = hosts |> findRecord(fn: (r) => r.region == "us-west")
     )",
-                                    "<test>", env);
+                                    "<test>",
+                                    env);
 
     EXPECT_EQ(0, result.exit_code);
     EXPECT_TRUE(result.error.empty());
@@ -597,7 +665,8 @@ TEST(FluxCliTest, RendersMultipleNamedResultsAsSeparateBlocks) {
         value = 41
         value + 1
     )",
-                                    "<test>", env);
+                                    "<test>",
+                                    env);
 
     EXPECT_EQ(0, result.exit_code);
     EXPECT_EQ("Result: value\n"
@@ -622,7 +691,9 @@ TEST(FluxCliTest, EmitsAnnotatedCsvForTableResults) {
             mode: "raw",
         )
     )",
-                                    "query.flux", env, options);
+                                    "query.flux",
+                                    env,
+                                    options);
 
     EXPECT_EQ(0, result.exit_code);
     EXPECT_EQ("#datatype,string,long,string,string,string\n"
@@ -690,7 +761,8 @@ TEST(FluxCliTest, UsesYieldNameInHumanReadableAndAnnotatedCsvOutput) {
         )
             |> yield(name: "cpu")
     )",
-                                   "<test>", env);
+                                   "<test>",
+                                   env);
 
     EXPECT_EQ(0, human.exit_code);
     EXPECT_NE(std::string::npos, human.output.find("Result: cpu\n"));
@@ -710,7 +782,9 @@ TEST(FluxCliTest, UsesYieldNameInHumanReadableAndAnnotatedCsvOutput) {
         )
             |> yield(name: "cpu")
     )",
-                                 "<test>", env, csv_options);
+                                 "<test>",
+                                 env,
+                                 csv_options);
 
     EXPECT_EQ(0, csv.exit_code);
     EXPECT_NE(std::string::npos, csv.output.find("#default,cpu,,,"));
@@ -729,7 +803,9 @@ TEST(FluxCliTest, EmitsAnnotatedCsvUsingExistingTableMetadataAndGroupColumns) {
 
         data = csv.from(csv: "#datatype,string,long,dateTime:RFC3339,string,double\n#group,false,false,true,true,false\n#default,_result,,,,\n,result,table,_time,_measurement,_value\n,cpu,0,2024-01-01T00:00:00Z,cpu,95.5\n\n#datatype,string,long,dateTime:RFC3339,string,double\n#group,false,false,true,true,false\n#default,_result,,,,\n,result,table,_time,_measurement,_value\n,mem,1,2024-01-01T00:01:00Z,mem,42.0\n")
     )",
-                                    "query.flux", env, options);
+                                    "query.flux",
+                                    env,
+                                    options);
 
     EXPECT_EQ(0, result.exit_code);
     EXPECT_TRUE(result.error.empty());
@@ -768,7 +844,9 @@ TEST(FluxCliTest, EmitsJsonForMixedResults) {
         )
         value + 1
     )",
-                                    "<test>", env, options);
+                                    "<test>",
+                                    env,
+                                    options);
 
     EXPECT_EQ(0, result.exit_code);
     EXPECT_TRUE(result.error.empty());
@@ -865,7 +943,9 @@ TEST(FluxCliTest, ListsNamedResultsWithoutRenderingValues) {
         value = 41
         value + 1
     )",
-                                    "<test>", env, options);
+                                    "<test>",
+                                    env,
+                                    options);
 
     EXPECT_EQ(0, result.exit_code);
     EXPECT_EQ("value\n_result\n", result.output);
@@ -878,8 +958,8 @@ TEST(FluxCliTest, ListsFilteredNamedResults) {
     options.list_results = true;
     options.result_name = "latest_east_mem";
 
-    auto result = ExecuteExampleScript("cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux",
-                                       env, options);
+    auto result = ExecuteExampleScript(
+        "cpp/pl/flux/examples/ops_dashboard/dual_region_latest.flux", env, options);
 
     EXPECT_EQ(0, result.exit_code);
     EXPECT_EQ("latest_east_mem\n", result.output);

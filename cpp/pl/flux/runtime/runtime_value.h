@@ -17,8 +17,6 @@
 
 #pragma once
 
-#include "absl/status/statusor.h"
-#include "cpp/pl/flux/plan/plan_node.h"
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -27,6 +25,9 @@
 #include <utility>
 #include <variant>
 #include <vector>
+
+#include "absl/status/statusor.h"
+#include "cpp/pl/flux/plan/plan_node.h"
 
 namespace pl::flux {
 

@@ -17,12 +17,6 @@
 
 #include "cpp/pl/flux/connector/mysql_source.h"
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/str_cat.h"
-#include "absl/time/time.h"
-#include "cpp/pl/flux/connector/mysql_connection_pool.h"
-#include "cpp/pl/flux/connector/sql_builder.h"
 #include <algorithm>
 #include <boost/asio/io_context.hpp>
 #include <boost/mysql/any_connection.hpp>
@@ -57,6 +51,13 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "absl/time/time.h"
+#include "cpp/pl/flux/connector/mysql_connection_pool.h"
+#include "cpp/pl/flux/connector/sql_builder.h"
 
 namespace pl::flux::connector {
 namespace {
@@ -142,8 +143,7 @@ MySQLRuntimeOptions mysql_runtime_options_from_env() {
     options.target_split_count =
         read_size_option("FLUX_MYSQL_TARGET_SPLITS", options.target_split_count);
     options.rows_per_page = read_size_option("FLUX_MYSQL_ROWS_PER_PAGE", options.rows_per_page);
-    options.max_pool_size =
-        read_size_option("FLUX_MYSQL_MAX_POOL_SIZE", options.max_pool_size);
+    options.max_pool_size = read_size_option("FLUX_MYSQL_MAX_POOL_SIZE", options.max_pool_size);
     options.split_cache_max_entries =
         read_size_option("FLUX_MYSQL_SPLIT_CACHE_MAX_ENTRIES", options.split_cache_max_entries);
     options.split_cache_ttl_ms =
@@ -918,11 +918,15 @@ absl::StatusOr<TableStatistics> MySQLSource::Statistics() const {
         for (const auto& column : schema_or->columns) {
             auto column_stats_or =
                 execute_query(conn_or->connection(),
-                              absl::StrCat("SELECT COUNT(DISTINCT ", quote_identifier(column.name),
-                                           "), SUM(CASE WHEN ", quote_identifier(column.name),
+                              absl::StrCat("SELECT COUNT(DISTINCT ",
+                                           quote_identifier(column.name),
+                                           "), SUM(CASE WHEN ",
+                                           quote_identifier(column.name),
                                            " IS NULL THEN 1 ELSE 0 END), AVG(CHAR_LENGTH(CAST(",
-                                           quote_identifier(column.name), " AS CHAR))) FROM (",
-                                           query_, ") AS flux_source"),
+                                           quote_identifier(column.name),
+                                           " AS CHAR))) FROM (",
+                                           query_,
+                                           ") AS flux_source"),
                               "column statistics query");
             if (!column_stats_or.ok() || column_stats_or->rows().empty() ||
                 column_stats_or->rows()[0].size() < 3) {
@@ -1152,12 +1156,14 @@ absl::StatusOr<std::vector<ConnectorSplit>> MySQLSplitManager::GetSplits(
             upper = cached_extent->upper;
             count = cached_extent->count;
         } else {
-            auto extent_or =
-                execute_query(conn,
-                              absl::StrCat("SELECT MIN(", quote_identifier(candidate), "), MAX(",
-                                           quote_identifier(candidate), "), COUNT(*) FROM ",
-                                           quote_table_identifier(table.table)),
-                              "split extent query");
+            auto extent_or = execute_query(conn,
+                                           absl::StrCat("SELECT MIN(",
+                                                        quote_identifier(candidate),
+                                                        "), MAX(",
+                                                        quote_identifier(candidate),
+                                                        "), COUNT(*) FROM ",
+                                                        quote_table_identifier(table.table)),
+                                           "split extent query");
             if (!extent_or.ok() || extent_or->rows().empty() || extent_or->rows()[0].size() < 3) {
                 continue;
             }
@@ -1224,10 +1230,9 @@ MySQLPageSourceProvider::MySQLPageSourceProvider(size_t rows_per_page) {
     rows_per_page_ = options_.rows_per_page;
 }
 
-MySQLPageSourceProvider::MySQLPageSourceProvider(MySQLRuntimeOptions options,
-                                                 const std::shared_ptr<MySQLBoostConnectionPool>& /*pool*/)
-    : options_(options),
-      rows_per_page_(std::max<size_t>(1, options_.rows_per_page)) {}
+MySQLPageSourceProvider::MySQLPageSourceProvider(
+    MySQLRuntimeOptions options, const std::shared_ptr<MySQLBoostConnectionPool>& /*pool*/)
+    : options_(options), rows_per_page_(std::max<size_t>(1, options_.rows_per_page)) {}
 
 struct MySQLPageSource::Impl {
     asio::io_context ctx;
@@ -1453,9 +1458,13 @@ absl::StatusOr<std::optional<Page>> MySQLPageSource::NextPage() {
     return page;
 }
 
-ConnectorSplitStats MySQLPageSource::Stats() const { return stats_; }
+ConnectorSplitStats MySQLPageSource::Stats() const {
+    return stats_;
+}
 
-bool MySQLPageSource::Finished() const { return stats_.finished; }
+bool MySQLPageSource::Finished() const {
+    return stats_.finished;
+}
 
 absl::StatusOr<std::unique_ptr<ConnectorPageSource>> MySQLPageSourceProvider::CreatePageSource(
     const ConnectorSplit& split) const {
@@ -1463,9 +1472,15 @@ absl::StatusOr<std::unique_ptr<ConnectorPageSource>> MySQLPageSourceProvider::Cr
     // dynamic execution_state/read_some_rows is ASAN-clean. Metadata and split
     // discovery already use the official Boost.MySQL pool; scans stay direct to
     // avoid reintroducing the reproduced container-overflow path.
-    auto page_source = std::make_unique<MySQLPageSource>(
-        split.table.dsn, split.table.table, split.request, rows_per_page_, split.split_column,
-        split.split_lower, split.split_upper, split.split_id, options_);
+    auto page_source = std::make_unique<MySQLPageSource>(split.table.dsn,
+                                                         split.table.table,
+                                                         split.request,
+                                                         rows_per_page_,
+                                                         split.split_column,
+                                                         split.split_lower,
+                                                         split.split_upper,
+                                                         split.split_id,
+                                                         options_);
     auto status = page_source->Initialize();
     if (!status.ok()) {
         return status;

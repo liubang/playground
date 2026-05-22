@@ -20,7 +20,6 @@
 #include <iostream>
 
 int main(int argc, char* argv[]) {
-
     std::cout.imbue(std::locale(std::cout.getloc(),
                                 new boost::local_time::local_time_facet("%Y-%m-%dT%H:%M:%S%F%Q")));
     std::cout << boost::local_time::local_microsec_clock::local_time(

@@ -15,10 +15,11 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/14 10:44
 
-#include "cpp/pl/recall/embedding_client.h"
-#include "cpp/pl/recall/recall_service.h"
 #include <brpc/server.h>
 #include <gflags/gflags.h>
+
+#include "cpp/pl/recall/embedding_client.h"
+#include "cpp/pl/recall/recall_service.h"
 
 DEFINE_int32(port, 8200, "TCP port of this server");
 DEFINE_int32(idle_timeout_s,
@@ -73,7 +74,8 @@ int main(int argc, char* argv[]) {
     }
 
     // 注册 HTTP 服务，通过 restful_mappings 将 /api/recall/* 路由到 default_method
-    if (server.AddService(service.get(), brpc::SERVER_DOESNT_OWN_SERVICE,
+    if (server.AddService(service.get(),
+                          brpc::SERVER_DOESNT_OWN_SERVICE,
                           "/api/recall/add              => default_method,"
                           "/api/recall/batch_add        => default_method,"
                           "/api/recall/search           => default_method,"

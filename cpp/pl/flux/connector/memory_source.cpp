@@ -17,7 +17,6 @@
 
 #include "cpp/pl/flux/connector/memory_source.h"
 
-#include "absl/status/status.h"
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -26,6 +25,8 @@
 #include <sstream>
 #include <unordered_set>
 #include <utility>
+
+#include "absl/status/status.h"
 
 namespace pl::flux::connector {
 namespace {
@@ -318,9 +319,13 @@ private:
 ArraySource::ArraySource(std::string bucket, std::vector<std::shared_ptr<ObjectValue>> rows)
     : bucket_(std::move(bucket)), rows_(std::move(rows)) {}
 
-absl::StatusOr<TableSchema> ArraySource::Schema() const { return schema_from_rows(rows_); }
+absl::StatusOr<TableSchema> ArraySource::Schema() const {
+    return schema_from_rows(rows_);
+}
 
-SourceCapabilities ArraySource::Capabilities() const { return {}; }
+SourceCapabilities ArraySource::Capabilities() const {
+    return {};
+}
 
 absl::StatusOr<TableStatistics> ArraySource::Statistics() const {
     return statistics_from_rows(rows_);
@@ -335,9 +340,13 @@ absl::StatusOr<Value> ArraySource::Scan(const ScanRequest& request) {
 
 CsvSource::CsvSource(std::vector<std::shared_ptr<ObjectValue>> rows) : rows_(std::move(rows)) {}
 
-absl::StatusOr<TableSchema> CsvSource::Schema() const { return schema_from_rows(rows_); }
+absl::StatusOr<TableSchema> CsvSource::Schema() const {
+    return schema_from_rows(rows_);
+}
 
-SourceCapabilities CsvSource::Capabilities() const { return {}; }
+SourceCapabilities CsvSource::Capabilities() const {
+    return {};
+}
 
 absl::StatusOr<TableStatistics> CsvSource::Statistics() const {
     return statistics_from_rows(rows_);
@@ -425,9 +434,14 @@ absl::StatusOr<std::unique_ptr<ConnectorPageSource>> MemoryPageSourceProvider::C
     if (has_unsupported_memory_pushdown(split.request)) {
         return absl::UnimplementedError("memory source pushdown supports projection/filter/limit");
     }
-    return std::unique_ptr<ConnectorPageSource>(new MemoryPageSource(
-        bucket_, rows_, split.request, split.row_offset, split.row_limit.value_or(rows_.size()),
-        rows_per_page_, split.split_id));
+    return std::unique_ptr<ConnectorPageSource>(
+        new MemoryPageSource(bucket_,
+                             rows_,
+                             split.request,
+                             split.row_offset,
+                             split.row_limit.value_or(rows_.size()),
+                             rows_per_page_,
+                             split.split_id));
 }
 
 std::unique_ptr<ConnectorRuntime> MakeMemoryConnectorRuntime(

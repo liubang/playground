@@ -21,7 +21,9 @@ namespace pl::flux {
 
 namespace {
 
-bool is_identifier_continue(unsigned char c) { return std::isalnum(c) != 0 || c == '_'; }
+bool is_identifier_continue(unsigned char c) {
+    return std::isalnum(c) != 0 || c == '_';
+}
 
 uint32_t column_for(const char* ptr, const char* last_newline) {
     return static_cast<uint32_t>(ptr - last_newline + 1);
@@ -72,9 +74,20 @@ std::unique_ptr<Token> Scanner::scan(int32_t mode) {
     int32_t token_end_line = 0;
     int32_t token_end_col = 0;
 
-    auto err =
-        real_scan(mode, &p_, ps_, pe_, eof_, &last_newline_, cur_line_, token_, token_start,
-                  token_start_line, token_start_col, token_end, token_end_line, token_end_col);
+    auto err = real_scan(mode,
+                         &p_,
+                         ps_,
+                         pe_,
+                         eof_,
+                         &last_newline_,
+                         cur_line_,
+                         token_,
+                         token_start,
+                         token_start_line,
+                         token_start_col,
+                         token_end,
+                         token_end_line,
+                         token_end_col);
     if (err != 0) {
         auto token = std::make_unique<Token>();
         token->tok = TokenType::Illegal;

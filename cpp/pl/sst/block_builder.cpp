@@ -17,8 +17,9 @@
 
 #include "cpp/pl/sst/block_builder.h"
 
-#include "cpp/pl/sst/encoding.h"
 #include <cassert>
+
+#include "cpp/pl/sst/encoding.h"
 
 namespace pl {
 

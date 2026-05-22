@@ -15,14 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/24 22:10
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/str_cat.h"
-#include "absl/time/civil_time.h"
-#include "absl/time/time.h"
-#include "cpp/pl/flux/common/compat.h"
-#include "cpp/pl/flux/runtime/runtime_builtin_package.h"
-#include "cpp/pl/flux/syntax/strconv.h"
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -34,6 +26,15 @@
 #include <simdjson.h>
 #include <string>
 #include <vector>
+
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "absl/time/civil_time.h"
+#include "absl/time/time.h"
+#include "cpp/pl/flux/common/compat.h"
+#include "cpp/pl/flux/runtime/runtime_builtin_package.h"
+#include "cpp/pl/flux/syntax/strconv.h"
 
 namespace pl::flux::builtin {
 namespace {
@@ -224,8 +225,8 @@ std::optional<int64_t> parse_rfc3339_seconds(const std::string& literal) {
 }
 
 std::string format_rfc3339_seconds(int64_t seconds) {
-    return absl::FormatTime("%Y-%m-%dT%H:%M:%SZ", absl::FromUnixSeconds(seconds),
-                            absl::UTCTimeZone());
+    return absl::FormatTime(
+        "%Y-%m-%dT%H:%M:%SZ", absl::FromUnixSeconds(seconds), absl::UTCTimeZone());
 }
 
 int64_t days_from_civil(int year, unsigned month, unsigned day) {
@@ -250,9 +251,9 @@ int64_t utc_seconds_from_civil(int year,
 }
 
 int64_t weekday_sunday_zero(const absl::CivilSecond& civil) {
-    const int64_t days =
-        days_from_civil(static_cast<int>(civil.year()), static_cast<unsigned>(civil.month()),
-                        static_cast<unsigned>(civil.day()));
+    const int64_t days = days_from_civil(static_cast<int>(civil.year()),
+                                         static_cast<unsigned>(civil.month()),
+                                         static_cast<unsigned>(civil.day()));
     return ((days + 4) % 7 + 7) % 7;
 }
 
@@ -360,10 +361,12 @@ absl::CivilSecond add_months_to_civil_second(const absl::CivilSecond& civil, int
 }
 
 int64_t seconds_from_civil_second(const absl::CivilSecond& civil) {
-    return utc_seconds_from_civil(
-        static_cast<int>(civil.year()), static_cast<unsigned>(civil.month()),
-        static_cast<unsigned>(civil.day()), static_cast<unsigned>(civil.hour()),
-        static_cast<unsigned>(civil.minute()), static_cast<unsigned>(civil.second()));
+    return utc_seconds_from_civil(static_cast<int>(civil.year()),
+                                  static_cast<unsigned>(civil.month()),
+                                  static_cast<unsigned>(civil.day()),
+                                  static_cast<unsigned>(civil.hour()),
+                                  static_cast<unsigned>(civil.minute()),
+                                  static_cast<unsigned>(civil.second()));
 }
 
 absl::StatusOr<Value> date_shift(const ObjectValue& object,
@@ -1181,30 +1184,34 @@ Value make_math_package() {
         {"path", Value::string("math")},
         {"pi", Value::floating(3.14159265358979323846)},
         {"abs", make_builtin_value("math.abs", builtin_math_abs, "x")},
-        {"ceil", make_builtin_value(
-                     "math.ceil",
-                     [](const std::vector<Value>& args) {
-                         return builtin_math_unary(args, "math.ceil", std::ceil);
-                     },
-                     "x")},
-        {"floor", make_builtin_value(
-                      "math.floor",
-                      [](const std::vector<Value>& args) {
-                          return builtin_math_unary(args, "math.floor", std::floor);
-                      },
-                      "x")},
-        {"round", make_builtin_value(
-                      "math.round",
-                      [](const std::vector<Value>& args) {
-                          return builtin_math_unary(args, "math.round", std::round);
-                      },
-                      "x")},
-        {"sqrt", make_builtin_value(
-                     "math.sqrt",
-                     [](const std::vector<Value>& args) {
-                         return builtin_math_unary(args, "math.sqrt", std::sqrt);
-                     },
-                     "x")},
+        {"ceil",
+         make_builtin_value(
+             "math.ceil",
+             [](const std::vector<Value>& args) {
+                 return builtin_math_unary(args, "math.ceil", std::ceil);
+             },
+             "x")},
+        {"floor",
+         make_builtin_value(
+             "math.floor",
+             [](const std::vector<Value>& args) {
+                 return builtin_math_unary(args, "math.floor", std::floor);
+             },
+             "x")},
+        {"round",
+         make_builtin_value(
+             "math.round",
+             [](const std::vector<Value>& args) {
+                 return builtin_math_unary(args, "math.round", std::round);
+             },
+             "x")},
+        {"sqrt",
+         make_builtin_value(
+             "math.sqrt",
+             [](const std::vector<Value>& args) {
+                 return builtin_math_unary(args, "math.sqrt", std::sqrt);
+             },
+             "x")},
         {"pow", make_builtin_value("math.pow", builtin_math_pow)},
     });
 }
@@ -1215,69 +1222,69 @@ Value make_date_package() {
         {"add", make_builtin_value("date.add", builtin_date_add, "to")},
         {"sub", make_builtin_value("date.sub", builtin_date_sub, "from")},
         {"truncate", make_builtin_value("date.truncate", builtin_date_truncate, "t")},
-        {"hour", make_builtin_value(
-                     "date.hour",
-                     [](const std::vector<Value>& args) {
-                         return builtin_date_component(
-                             args, "date.hour", [](absl::CivilSecond civil) {
-                                 return static_cast<int64_t>(civil.hour());
-                             });
-                     },
-                     "t")},
-        {"minute", make_builtin_value(
-                       "date.minute",
-                       [](const std::vector<Value>& args) {
-                           return builtin_date_component(
-                               args, "date.minute", [](absl::CivilSecond civil) {
-                                   return static_cast<int64_t>(civil.minute());
-                               });
-                       },
-                       "t")},
-        {"second", make_builtin_value(
-                       "date.second",
-                       [](const std::vector<Value>& args) {
-                           return builtin_date_component(
-                               args, "date.second", [](absl::CivilSecond civil) {
-                                   return static_cast<int64_t>(civil.second());
-                               });
-                       },
-                       "t")},
-        {"monthDay", make_builtin_value(
-                         "date.monthDay",
-                         [](const std::vector<Value>& args) {
-                             return builtin_date_component(
-                                 args, "date.monthDay", [](absl::CivilSecond civil) {
-                                     return static_cast<int64_t>(civil.day());
-                                 });
-                         },
-                         "t")},
-        {"month", make_builtin_value(
-                      "date.month",
-                      [](const std::vector<Value>& args) {
-                          return builtin_date_component(
-                              args, "date.month", [](absl::CivilSecond civil) {
-                                  return static_cast<int64_t>(civil.month());
-                              });
-                      },
-                      "t")},
-        {"year", make_builtin_value(
-                     "date.year",
-                     [](const std::vector<Value>& args) {
-                         return builtin_date_component(
-                             args, "date.year", [](absl::CivilSecond civil) {
-                                 return static_cast<int64_t>(civil.year());
-                             });
-                     },
-                     "t")},
-        {"weekDay", make_builtin_value(
-                        "date.weekDay",
-                        [](const std::vector<Value>& args) {
-                            return builtin_date_component(args, "date.weekDay",
-                                                          [](absl::CivilSecond civil) {
-                                                              return weekday_sunday_zero(civil);
-                                                          });
-                        },
-                        "t")},
+        {"hour",
+         make_builtin_value(
+             "date.hour",
+             [](const std::vector<Value>& args) {
+                 return builtin_date_component(args, "date.hour", [](absl::CivilSecond civil) {
+                     return static_cast<int64_t>(civil.hour());
+                 });
+             },
+             "t")},
+        {"minute",
+         make_builtin_value(
+             "date.minute",
+             [](const std::vector<Value>& args) {
+                 return builtin_date_component(args, "date.minute", [](absl::CivilSecond civil) {
+                     return static_cast<int64_t>(civil.minute());
+                 });
+             },
+             "t")},
+        {"second",
+         make_builtin_value(
+             "date.second",
+             [](const std::vector<Value>& args) {
+                 return builtin_date_component(args, "date.second", [](absl::CivilSecond civil) {
+                     return static_cast<int64_t>(civil.second());
+                 });
+             },
+             "t")},
+        {"monthDay",
+         make_builtin_value(
+             "date.monthDay",
+             [](const std::vector<Value>& args) {
+                 return builtin_date_component(args, "date.monthDay", [](absl::CivilSecond civil) {
+                     return static_cast<int64_t>(civil.day());
+                 });
+             },
+             "t")},
+        {"month",
+         make_builtin_value(
+             "date.month",
+             [](const std::vector<Value>& args) {
+                 return builtin_date_component(args, "date.month", [](absl::CivilSecond civil) {
+                     return static_cast<int64_t>(civil.month());
+                 });
+             },
+             "t")},
+        {"year",
+         make_builtin_value(
+             "date.year",
+             [](const std::vector<Value>& args) {
+                 return builtin_date_component(args, "date.year", [](absl::CivilSecond civil) {
+                     return static_cast<int64_t>(civil.year());
+                 });
+             },
+             "t")},
+        {"weekDay",
+         make_builtin_value(
+             "date.weekDay",
+             [](const std::vector<Value>& args) {
+                 return builtin_date_component(args, "date.weekDay", [](absl::CivilSecond civil) {
+                     return weekday_sunday_zero(civil);
+                 });
+             },
+             "t")},
     });
 }
 
@@ -1315,63 +1322,65 @@ Value make_system_package() {
 Value make_types_package() {
     return Value::object({
         {"path", Value::string("types")},
-        {"isBool", make_builtin_value(
-                       "types.isBool",
-                       [](const std::vector<Value>& args) {
-                           return builtin_types_is_value_type(args, "types.isBool",
-                                                              Value::Type::Bool);
-                       },
-                       "v")},
-        {"isDuration", make_builtin_value(
-                           "types.isDuration",
-                           [](const std::vector<Value>& args) {
-                               return builtin_types_is_value_type(args, "types.isDuration",
-                                                                  Value::Type::Duration);
-                           },
-                           "v")},
-        {"isFloat", make_builtin_value(
-                        "types.isFloat",
-                        [](const std::vector<Value>& args) {
-                            return builtin_types_is_value_type(args, "types.isFloat",
-                                                               Value::Type::Float);
-                        },
-                        "v")},
-        {"isInt", make_builtin_value(
-                      "types.isInt",
-                      [](const std::vector<Value>& args) {
-                          return builtin_types_is_value_type(args, "types.isInt", Value::Type::Int);
-                      },
-                      "v")},
+        {"isBool",
+         make_builtin_value(
+             "types.isBool",
+             [](const std::vector<Value>& args) {
+                 return builtin_types_is_value_type(args, "types.isBool", Value::Type::Bool);
+             },
+             "v")},
+        {"isDuration",
+         make_builtin_value(
+             "types.isDuration",
+             [](const std::vector<Value>& args) {
+                 return builtin_types_is_value_type(
+                     args, "types.isDuration", Value::Type::Duration);
+             },
+             "v")},
+        {"isFloat",
+         make_builtin_value(
+             "types.isFloat",
+             [](const std::vector<Value>& args) {
+                 return builtin_types_is_value_type(args, "types.isFloat", Value::Type::Float);
+             },
+             "v")},
+        {"isInt",
+         make_builtin_value(
+             "types.isInt",
+             [](const std::vector<Value>& args) {
+                 return builtin_types_is_value_type(args, "types.isInt", Value::Type::Int);
+             },
+             "v")},
         {"isNumeric", make_builtin_value("types.isNumeric", builtin_types_is_numeric, "v")},
-        {"isRegexp", make_builtin_value(
-                         "types.isRegexp",
-                         [](const std::vector<Value>& args) {
-                             return builtin_types_is_value_type(args, "types.isRegexp",
-                                                                Value::Type::Regex);
-                         },
-                         "v")},
-        {"isString", make_builtin_value(
-                         "types.isString",
-                         [](const std::vector<Value>& args) {
-                             return builtin_types_is_value_type(args, "types.isString",
-                                                                Value::Type::String);
-                         },
-                         "v")},
-        {"isTime", make_builtin_value(
-                       "types.isTime",
-                       [](const std::vector<Value>& args) {
-                           return builtin_types_is_value_type(args, "types.isTime",
-                                                              Value::Type::Time);
-                       },
-                       "v")},
+        {"isRegexp",
+         make_builtin_value(
+             "types.isRegexp",
+             [](const std::vector<Value>& args) {
+                 return builtin_types_is_value_type(args, "types.isRegexp", Value::Type::Regex);
+             },
+             "v")},
+        {"isString",
+         make_builtin_value(
+             "types.isString",
+             [](const std::vector<Value>& args) {
+                 return builtin_types_is_value_type(args, "types.isString", Value::Type::String);
+             },
+             "v")},
+        {"isTime",
+         make_builtin_value(
+             "types.isTime",
+             [](const std::vector<Value>& args) {
+                 return builtin_types_is_value_type(args, "types.isTime", Value::Type::Time);
+             },
+             "v")},
         {"isType", make_builtin_value("types.isType", builtin_types_is_type, "v")},
-        {"isUInt", make_builtin_value(
-                       "types.isUInt",
-                       [](const std::vector<Value>& args) {
-                           return builtin_types_is_value_type(args, "types.isUInt",
-                                                              Value::Type::UInt);
-                       },
-                       "v")},
+        {"isUInt",
+         make_builtin_value(
+             "types.isUInt",
+             [](const std::vector<Value>& args) {
+                 return builtin_types_is_value_type(args, "types.isUInt", Value::Type::UInt);
+             },
+             "v")},
     });
 }
 

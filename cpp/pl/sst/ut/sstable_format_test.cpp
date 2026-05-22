@@ -15,10 +15,11 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/17 22:42
 
-#include "cpp/pl/sst/encoding.h"
-#include "cpp/pl/sst/sstable_format.h"
 #include <gtest/gtest.h>
 #include <string>
+
+#include "cpp/pl/sst/encoding.h"
+#include "cpp/pl/sst/sstable_format.h"
 
 namespace pl {
 

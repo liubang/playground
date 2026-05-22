@@ -15,8 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/10/25 20:30
 
-#include "all.h"
 #include <gtest/gtest.h>
+
+#include "all.h"
 
 TEST(bithacks, sign_of_integer) {
     EXPECT_EQ(-1, pl::sign_of_integer(-10));

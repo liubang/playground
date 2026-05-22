@@ -15,8 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/05/21 23:04
 
-#include "cpp/pl/bf/yabf.h"
 #include <gtest/gtest.h>
+
+#include "cpp/pl/bf/yabf.h"
 
 TEST(bf, yabf) {
     // x = std::getchar(); y = x + 3; std::putchar(y);

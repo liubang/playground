@@ -17,8 +17,9 @@
 
 #include "cpp/pl/minidfs/metadata/mysql_connection_pool.h"
 
-#include "cpp/pl/minidfs/common/error_code.h"
 #include <boost/mysql/error_with_diagnostics.hpp>
+
+#include "cpp/pl/minidfs/common/error_code.h"
 
 namespace pl::minidfs {
 
@@ -133,9 +134,7 @@ MySQLConnectionPool::create_connection() {
 
 pl::Result<PooledConnection> MySQLConnectionPool::acquire() {
     std::unique_lock lock(mutex_);
-    cv_.wait(lock, [this] {
-        return !idle_.empty();
-    });
+    cv_.wait(lock, [this] { return !idle_.empty(); });
 
     auto entry = std::move(idle_.front());
     idle_.pop();

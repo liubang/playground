@@ -17,11 +17,12 @@
 
 #include "cpp/pl/flux/runtime/runtime_value.h"
 
-#include "cpp/pl/flux/common/compat.h"
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
 #include <unordered_set>
+
+#include "cpp/pl/flux/common/compat.h"
 
 namespace pl::flux {
 
@@ -106,33 +107,53 @@ void ensure_chunk_metadata(TableChunk& chunk) {
 
 } // namespace
 
-std::string DurationValue::string() const { return literal; }
+std::string DurationValue::string() const {
+    return literal;
+}
 
-std::string TimeValue::string() const { return literal; }
+std::string TimeValue::string() const {
+    return literal;
+}
 
-std::string RegexValue::string() const { return literal; }
+std::string RegexValue::string() const {
+    return literal;
+}
 
 Value::Value() : type_(Type::Null), storage_(std::monostate{}) {}
 
 Value::Value(Type type, Storage storage) : type_(type), storage_(std::move(storage)) {}
 
-Value Value::null() { return {}; }
+Value Value::null() {
+    return {};
+}
 
-Value Value::boolean(bool value) { return Value(Type::Bool, value); }
+Value Value::boolean(bool value) {
+    return Value(Type::Bool, value);
+}
 
-Value Value::integer(int64_t value) { return Value(Type::Int, value); }
+Value Value::integer(int64_t value) {
+    return Value(Type::Int, value);
+}
 
-Value Value::uinteger(uint64_t value) { return Value(Type::UInt, value); }
+Value Value::uinteger(uint64_t value) {
+    return Value(Type::UInt, value);
+}
 
-Value Value::floating(double value) { return Value(Type::Float, value); }
+Value Value::floating(double value) {
+    return Value(Type::Float, value);
+}
 
-Value Value::string(std::string value) { return Value(Type::String, std::move(value)); }
+Value Value::string(std::string value) {
+    return Value(Type::String, std::move(value));
+}
 
 Value Value::duration(std::string literal) {
     return Value(Type::Duration, DurationValue{std::move(literal)});
 }
 
-Value Value::time(std::string literal) { return Value(Type::Time, TimeValue{std::move(literal)}); }
+Value Value::time(std::string literal) {
+    return Value(Type::Time, TimeValue{std::move(literal)});
+}
 
 Value Value::regex(std::string literal) {
     return Value(Type::Regex, RegexValue{std::move(literal)});
@@ -203,15 +224,21 @@ Value Value::function(std::shared_ptr<FunctionValue> function) {
     return Value(Type::Function, std::move(function));
 }
 
-const bool& Value::as_bool() const { return checked_get<bool>(storage_, type_, Type::Bool); }
+const bool& Value::as_bool() const {
+    return checked_get<bool>(storage_, type_, Type::Bool);
+}
 
-const int64_t& Value::as_int() const { return checked_get<int64_t>(storage_, type_, Type::Int); }
+const int64_t& Value::as_int() const {
+    return checked_get<int64_t>(storage_, type_, Type::Int);
+}
 
 const uint64_t& Value::as_uint() const {
     return checked_get<uint64_t>(storage_, type_, Type::UInt);
 }
 
-const double& Value::as_float() const { return checked_get<double>(storage_, type_, Type::Float); }
+const double& Value::as_float() const {
+    return checked_get<double>(storage_, type_, Type::Float);
+}
 
 const std::string& Value::as_string() const {
     return checked_get<std::string>(storage_, type_, Type::String);
@@ -333,7 +360,9 @@ std::string ArrayValue::string() const {
     return out;
 }
 
-bool ArrayValue::operator==(const ArrayValue& other) const { return elements == other.elements; }
+bool ArrayValue::operator==(const ArrayValue& other) const {
+    return elements == other.elements;
+}
 
 std::string ObjectValue::string() const {
     std::string out = "{";
@@ -403,8 +432,8 @@ std::string TableValue::string() const {
 
 bool TableValue::operator==(const TableValue& other) const {
     if (bucket != other.bucket || range_start != other.range_start ||
-        range_stop != other.range_stop || result_name != other.result_name ||
-        plan != other.plan || materialized != other.materialized || rows.size() != other.rows.size() ||
+        range_stop != other.range_stop || result_name != other.result_name || plan != other.plan ||
+        materialized != other.materialized || rows.size() != other.rows.size() ||
         tables != other.tables) {
         return false;
     }
@@ -419,7 +448,9 @@ bool TableValue::operator==(const TableValue& other) const {
     return true;
 }
 
-size_t TableValue::table_count() const { return tables.size(); }
+size_t TableValue::table_count() const {
+    return tables.size();
+}
 
 std::string FunctionValue::string() const {
     return kind == Kind::Builtin ? "<builtin " + name + ">" : "<function " + name + ">";

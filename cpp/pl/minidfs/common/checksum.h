@@ -40,7 +40,8 @@ enum class ChecksumType : uint8_t {
 #if defined(__linux__)
     // ISA-L: crc32_iscsi 使用与 CRC32C 相同的多项式 (iSCSI polynomial)
     return ::crc32_iscsi(const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(data)),
-                         static_cast<int>(size), 0);
+                         static_cast<int>(size),
+                         0);
 #elif defined(__APPLE__)
     // Google crc32c: 在 ARM64 macOS 上利用硬件 CRC32 指令
     return ::crc32c_value(reinterpret_cast<const uint8_t*>(data), size);
@@ -58,7 +59,8 @@ enum class ChecksumType : uint8_t {
 [[nodiscard]] inline uint32_t extend_crc32c(uint32_t crc, const void* data, size_t size) {
 #if defined(__linux__)
     return ::crc32_iscsi(const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(data)),
-                         static_cast<int>(size), crc);
+                         static_cast<int>(size),
+                         crc);
 #elif defined(__APPLE__)
     return ::crc32c_extend(crc, reinterpret_cast<const uint8_t*>(data), size);
 #else

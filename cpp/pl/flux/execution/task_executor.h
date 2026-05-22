@@ -44,9 +44,7 @@ public:
         using Result = std::invoke_result_t<F>;
         auto packaged = std::make_shared<std::packaged_task<Result()>>(std::forward<F>(task));
         std::future<Result> future = packaged->get_future();
-        Enqueue([packaged]() {
-            (*packaged)();
-        });
+        Enqueue([packaged]() { (*packaged)(); });
         return future;
     }
 

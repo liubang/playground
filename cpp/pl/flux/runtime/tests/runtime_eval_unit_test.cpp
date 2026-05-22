@@ -15,12 +15,13 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/15 00:47
 
-#include "cpp/pl/flux/syntax/parser.h"
-#include "cpp/pl/flux/runtime/runtime_builtin.h"
-#include "cpp/pl/flux/runtime/runtime_eval.h"
 #include <cstdio>
 #include <fstream>
 #include <gtest/gtest.h>
+
+#include "cpp/pl/flux/runtime/runtime_builtin.h"
+#include "cpp/pl/flux/runtime/runtime_eval.h"
+#include "cpp/pl/flux/syntax/parser.h"
 
 namespace pl::flux {
 namespace {
@@ -57,10 +58,11 @@ TEST(RuntimeEvalTest, EvaluatesLiteralsArithmeticAndConditionalExpressions) {
 
 TEST(RuntimeEvalTest, EvaluatesIdentifiersMembersIndexesAndExists) {
     Environment env;
-    env.define("config", Value::object({
-                             {"enabled", Value::boolean(true)},
-                             {"tags", Value::array({Value::string("cpu"), Value::string("mem")})},
-                         }));
+    env.define("config",
+               Value::object({
+                   {"enabled", Value::boolean(true)},
+                   {"tags", Value::array({Value::string("cpu"), Value::string("mem")})},
+               }));
     const auto& expr = ParseAssignmentInit(
         "result = if exists config.enabled then config.tags[1] else \"missing\"");
 
@@ -84,10 +86,11 @@ TEST(RuntimeEvalTest, EvaluatesStringInterpolationAndRegexMatches) {
 
 TEST(RuntimeEvalTest, EvaluatesRecordUpdateWithObjectSource) {
     Environment env;
-    env.define("base", Value::object({
-                           {"enabled", Value::boolean(false)},
-                           {"host", Value::string("local")},
-                       }));
+    env.define("base",
+               Value::object({
+                   {"enabled", Value::boolean(false)},
+                   {"host", Value::string("local")},
+               }));
     const auto& expr = ParseAssignmentInit("result = {base with enabled: true, level: \"hot\"}");
 
     auto result = ExpressionEvaluator::Evaluate(expr, env);
@@ -520,14 +523,14 @@ TEST(RuntimeEvalTest, EvaluatesAggregateBuiltins) {
     ASSERT_TRUE(max.ok()) << max.status();
     EXPECT_EQ(Value::floating(4.5), *max);
 
-    const auto& uint_overflow_expr = ParseAssignmentInit(
-        "result = sum([18446744073709551615u, 1u])");
+    const auto& uint_overflow_expr =
+        ParseAssignmentInit("result = sum([18446744073709551615u, 1u])");
     auto uint_overflow = ExpressionEvaluator::Evaluate(uint_overflow_expr, env);
     ASSERT_FALSE(uint_overflow.ok());
     EXPECT_EQ(absl::StatusCode::kInvalidArgument, uint_overflow.status().code());
 
-    const auto& mixed_overflow_expr = ParseAssignmentInit(
-        "result = sum([9223372036854775808u, -1])");
+    const auto& mixed_overflow_expr =
+        ParseAssignmentInit("result = sum([9223372036854775808u, -1])");
     auto mixed_overflow = ExpressionEvaluator::Evaluate(mixed_overflow_expr, env);
     ASSERT_FALSE(mixed_overflow.ok());
     EXPECT_EQ(absl::StatusCode::kInvalidArgument, mixed_overflow.status().code());
@@ -1661,10 +1664,11 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowWithTimezoneLocation) {
 TEST(RuntimeEvalTest, EvaluatesAggregateWindowWithGlobalOptionLocation) {
     Environment env;
     InstallBuiltinsAndArrayPackage(env);
-    env.define_option("location", Value::object({
-                                      {"zone", Value::string("UTC")},
-                                      {"offset", Value::duration("-8h")},
-                                  }));
+    env.define_option("location",
+                      Value::object({
+                          {"zone", Value::string("UTC")},
+                          {"offset", Value::duration("-8h")},
+                      }));
 
     const auto& expr = ParseAssignmentInit(R"(
         result = array.from(
@@ -1692,10 +1696,11 @@ TEST(RuntimeEvalTest, EvaluatesAggregateWindowWithGlobalOptionLocation) {
 TEST(RuntimeEvalTest, AggregateWindowExplicitLocationOverridesGlobalOptionLocation) {
     Environment env;
     InstallBuiltinsAndArrayPackage(env);
-    env.define_option("location", Value::object({
-                                      {"zone", Value::string("UTC")},
-                                      {"offset", Value::duration("-8h")},
-                                  }));
+    env.define_option("location",
+                      Value::object({
+                          {"zone", Value::string("UTC")},
+                          {"offset", Value::duration("-8h")},
+                      }));
 
     const auto& expr = ParseAssignmentInit(R"(
         result = array.from(

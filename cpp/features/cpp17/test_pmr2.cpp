@@ -15,10 +15,11 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/10/05 01:33
 
-#include "cpp/pl/debug/measure.h"
 #include <list>
 #include <memory_resource>
 #include <vector>
+
+#include "cpp/pl/debug/measure.h"
 
 std::pmr::synchronized_pool_resource spr;
 

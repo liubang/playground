@@ -15,12 +15,13 @@
 // Authors: liubang (it.liubang@gmail.com)
 
 #include "cpp/pl/minidfs/common/config.h"
-#include "cpp/pl/minidfs/common/error_code.h"
 
 #include <fstream>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#include "cpp/pl/minidfs/common/error_code.h"
 
 namespace pl::minidfs {
 
@@ -29,15 +30,16 @@ namespace {
 // 去除首尾空白
 std::string trim(std::string_view sv) {
     auto start = sv.find_first_not_of(" \t\r\n");
-    if (start == std::string_view::npos) return {};
+    if (start == std::string_view::npos)
+        return {};
     auto end = sv.find_last_not_of(" \t\r\n");
     return std::string(sv.substr(start, end - start + 1));
 }
 
 // 去除引号
 std::string unquote(const std::string& s) {
-    if (s.size() >= 2 && ((s.front() == '"' && s.back() == '"') ||
-                          (s.front() == '\'' && s.back() == '\''))) {
+    if (s.size() >= 2 &&
+        ((s.front() == '"' && s.back() == '"') || (s.front() == '\'' && s.back() == '\''))) {
         return s.substr(1, s.size() - 2);
     }
     return s;
@@ -57,7 +59,8 @@ struct YamlMap {
 
     uint64_t get_u64(const std::string& key, uint64_t def = 0) const {
         auto it = values.find(key);
-        if (it == values.end()) return def;
+        if (it == values.end())
+            return def;
         return std::stoull(it->second);
     }
 
@@ -89,7 +92,8 @@ pl::Result<YamlMap> parse_yaml(const std::string& path) {
     while (std::getline(file, line)) {
         // 跳过注释和空行
         auto trimmed = trim(line);
-        if (trimmed.empty() || trimmed[0] == '#') continue;
+        if (trimmed.empty() || trimmed[0] == '#')
+            continue;
 
         // 计算缩进
         auto indent = line.find_first_not_of(' ');
@@ -97,7 +101,8 @@ pl::Result<YamlMap> parse_yaml(const std::string& path) {
         if (indent == 0) {
             // 顶级 key
             auto colon = trimmed.find(':');
-            if (colon == std::string::npos) continue;
+            if (colon == std::string::npos)
+                continue;
             auto key = trim(trimmed.substr(0, colon));
             auto val = trim(trimmed.substr(colon + 1));
             if (val.empty()) {
@@ -114,7 +119,8 @@ pl::Result<YamlMap> parse_yaml(const std::string& path) {
                 yaml.lists[section].push_back(val);
             } else {
                 auto colon = trimmed.find(':');
-                if (colon == std::string::npos) continue;
+                if (colon == std::string::npos)
+                    continue;
                 auto key = trim(trimmed.substr(0, colon));
                 auto val = trim(trimmed.substr(colon + 1));
                 if (val.empty()) {
@@ -163,8 +169,9 @@ pl::Result<NameNodeConfig> load_namenode_config(const std::string& path) {
     cfg.heartbeat.interval_ms = yaml.get_u64("heartbeat.interval_ms", cfg.heartbeat.interval_ms);
     cfg.replication.scan_interval_ms =
         yaml.get_u64("replication.scan_interval_ms", cfg.replication.scan_interval_ms);
-    cfg.replication.max_replication_tasks_per_round = yaml.get_u32(
-        "replication.max_replication_tasks_per_round", cfg.replication.max_replication_tasks_per_round);
+    cfg.replication.max_replication_tasks_per_round =
+        yaml.get_u32("replication.max_replication_tasks_per_round",
+                     cfg.replication.max_replication_tasks_per_round);
     return cfg;
 }
 
@@ -184,7 +191,8 @@ pl::Result<DataNodeConfig> load_datanode_config(const std::string& path) {
     cfg.storage.data_dirs = yaml.get_list("storage");
     if (cfg.storage.data_dirs.empty()) {
         auto single = yaml.get("storage.data_dir", "");
-        if (!single.empty()) cfg.storage.data_dirs.push_back(single);
+        if (!single.empty())
+            cfg.storage.data_dirs.push_back(single);
     }
     cfg.storage.reserved_bytes = yaml.get_u64("storage.reserved_bytes", cfg.storage.reserved_bytes);
     cfg.heartbeat.interval_ms = yaml.get_u64("heartbeat.interval_ms", cfg.heartbeat.interval_ms);

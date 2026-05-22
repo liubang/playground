@@ -15,11 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/09
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/str_cat.h"
-#include "cpp/pl/flux/plan/plan_node.h"
-#include "cpp/pl/flux/runtime/runtime_builtin_package.h"
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -27,6 +22,12 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "cpp/pl/flux/plan/plan_node.h"
+#include "cpp/pl/flux/runtime/runtime_builtin_package.h"
 
 namespace pl::flux::builtin {
 namespace {
@@ -162,8 +163,18 @@ absl::StatusOr<std::string> connection_dsn(const ObjectValue& object) {
         return ssl_or.status();
     }
 
-    return absl::StrCat("mysql://", *user_or, ":", *password_or, "@", *host_or, ":", *port_or, "/",
-                        *database_or, "?ssl=", *ssl_or ? "true" : "false");
+    return absl::StrCat("mysql://",
+                        *user_or,
+                        ":",
+                        *password_or,
+                        "@",
+                        *host_or,
+                        ":",
+                        *port_or,
+                        "/",
+                        *database_or,
+                        "?ssl=",
+                        *ssl_or ? "true" : "false");
 }
 
 absl::Status reject_raw_query_property(const ObjectValue& object) {
@@ -202,6 +213,8 @@ Value make_mysql_package() {
 
 } // namespace
 
-void RegisterMysqlStdlibPackage() { RegisterPackage("mysql", make_mysql_package); }
+void RegisterMysqlStdlibPackage() {
+    RegisterPackage("mysql", make_mysql_package);
+}
 
 } // namespace pl::flux::builtin
