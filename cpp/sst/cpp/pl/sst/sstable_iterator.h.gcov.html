@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-22 00:08:34</td>
+            <td class="headerValue">2026-05-22 13:10:40</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -88,53 +88,54 @@
 <span id="L17"><span class="lineNum">      17</span>                 :             : </span>
 <span id="L18"><span class="lineNum">      18</span>                 :             : #pragma once</span>
 <span id="L19"><span class="lineNum">      19</span>                 :             : </span>
-<span id="L20"><span class="lineNum">      20</span>                 :             : #include &quot;cpp/pl/sst/iterator.h&quot;</span>
-<span id="L21"><span class="lineNum">      21</span>                 :             : #include &lt;functional&gt;</span>
-<span id="L22"><span class="lineNum">      22</span>                 :             : #include &lt;utility&gt;</span>
-<span id="L23"><span class="lineNum">      23</span>                 :             : </span>
-<span id="L24"><span class="lineNum">      24</span>                 :             : namespace pl {</span>
-<span id="L25"><span class="lineNum">      25</span>                 :             : </span>
-<span id="L26"><span class="lineNum">      26</span>                 :             : using BlockFunc = std::function&lt;IteratorPtr(std::string_view)&gt;;</span>
-<span id="L27"><span class="lineNum">      27</span>                 :             : </span>
-<span id="L28"><span class="lineNum">      28</span>                 :             : class SSTableIterator : public Iterator {</span>
-<span id="L29"><span class="lineNum">      29</span>                 :             : public:</span>
-<span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC tlaBgGNC">           9 :     SSTableIterator(IteratorPtr index_iter, BlockFunc block_func)</span></span>
-<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaGNC">           9 :         : index_iter_(std::move(index_iter)), data_block_func_(std::move(block_func)) {}</span></span>
-<span id="L32"><span class="lineNum">      32</span>                 :             : </span>
-<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC">          15 :     ~SSTableIterator() override = default;</span></span>
-<span id="L34"><span class="lineNum">      34</span>                 :             : </span>
-<span id="L35"><span class="lineNum">      35</span>                 :             :     void first() override;</span>
-<span id="L36"><span class="lineNum">      36</span>                 :             : </span>
-<span id="L37"><span class="lineNum">      37</span>                 :             :     void last() override;</span>
-<span id="L38"><span class="lineNum">      38</span>                 :             : </span>
-<span id="L39"><span class="lineNum">      39</span>                 :             :     void next() override;</span>
-<span id="L40"><span class="lineNum">      40</span>                 :             : </span>
-<span id="L41"><span class="lineNum">      41</span>                 :             :     void prev() override;</span>
-<span id="L42"><span class="lineNum">      42</span>                 :             : </span>
-<span id="L43"><span class="lineNum">      43</span>                 :             :     void seek(std::string_view target) override;</span>
-<span id="L44"><span class="lineNum">      44</span>                 :             : </span>
-<span id="L45"><span class="lineNum">      45</span>                 :             :     [[nodiscard]] Status status() const override;</span>
-<span id="L46"><span class="lineNum">      46</span>                 :             : </span>
-<span id="L47"><span class="lineNum">      47</span>                 :             :     [[nodiscard]] bool valid() const override;</span>
-<span id="L48"><span class="lineNum">      48</span>                 :             : </span>
-<span id="L49"><span class="lineNum">      49</span>                 :             :     [[nodiscard]] CellRef cell() const override;</span>
-<span id="L50"><span class="lineNum">      50</span>                 :             : </span>
-<span id="L51"><span class="lineNum">      51</span>                 :             : private:</span>
-<span id="L52"><span class="lineNum">      52</span>                 :             :     void initDataBlock();</span>
-<span id="L53"><span class="lineNum">      53</span>                 :             :     void forwardSkipEmptyData();</span>
-<span id="L54"><span class="lineNum">      54</span>                 :             :     void backwardSkipEmptyData();</span>
-<span id="L55"><span class="lineNum">      55</span>                 :             :     [[nodiscard]] bool shouldStopSkipping() const;</span>
-<span id="L56"><span class="lineNum">      56</span>                 :             :     void captureDataIterError();</span>
-<span id="L57"><span class="lineNum">      57</span>                 :             : </span>
-<span id="L58"><span class="lineNum">      58</span>                 :             : private:</span>
-<span id="L59"><span class="lineNum">      59</span>                 :             :     Status status_{StatusCode::kOK};</span>
-<span id="L60"><span class="lineNum">      60</span>                 :             :     IteratorPtr index_iter_;</span>
-<span id="L61"><span class="lineNum">      61</span>                 :             :     IteratorPtr data_iter_;</span>
-<span id="L62"><span class="lineNum">      62</span>                 :             :     std::string data_block_handle_;</span>
-<span id="L63"><span class="lineNum">      63</span>                 :             :     BlockFunc data_block_func_;</span>
-<span id="L64"><span class="lineNum">      64</span>                 :             : };</span>
-<span id="L65"><span class="lineNum">      65</span>                 :             : </span>
-<span id="L66"><span class="lineNum">      66</span>                 :             : } // namespace pl</span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : #include &lt;functional&gt;</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : #include &lt;utility&gt;</span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : </span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : #include &quot;cpp/pl/sst/iterator.h&quot;</span>
+<span id="L24"><span class="lineNum">      24</span>                 :             : </span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : namespace pl {</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : </span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : using BlockFunc = std::function&lt;IteratorPtr(std::string_view)&gt;;</span>
+<span id="L28"><span class="lineNum">      28</span>                 :             : </span>
+<span id="L29"><span class="lineNum">      29</span>                 :             : class SSTableIterator : public Iterator {</span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : public:</span>
+<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaGNC tlaBgGNC">           9 :     SSTableIterator(IteratorPtr index_iter, BlockFunc block_func)</span></span>
+<span id="L32"><span class="lineNum">      32</span>                 :<span class="tlaGNC">           9 :         : index_iter_(std::move(index_iter)), data_block_func_(std::move(block_func)) {}</span></span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : </span>
+<span id="L34"><span class="lineNum">      34</span>                 :<span class="tlaGNC">          15 :     ~SSTableIterator() override = default;</span></span>
+<span id="L35"><span class="lineNum">      35</span>                 :             : </span>
+<span id="L36"><span class="lineNum">      36</span>                 :             :     void first() override;</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             : </span>
+<span id="L38"><span class="lineNum">      38</span>                 :             :     void last() override;</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             : </span>
+<span id="L40"><span class="lineNum">      40</span>                 :             :     void next() override;</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             : </span>
+<span id="L42"><span class="lineNum">      42</span>                 :             :     void prev() override;</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             : </span>
+<span id="L44"><span class="lineNum">      44</span>                 :             :     void seek(std::string_view target) override;</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             : </span>
+<span id="L46"><span class="lineNum">      46</span>                 :             :     [[nodiscard]] Status status() const override;</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             : </span>
+<span id="L48"><span class="lineNum">      48</span>                 :             :     [[nodiscard]] bool valid() const override;</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             : </span>
+<span id="L50"><span class="lineNum">      50</span>                 :             :     [[nodiscard]] CellRef cell() const override;</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             : </span>
+<span id="L52"><span class="lineNum">      52</span>                 :             : private:</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             :     void initDataBlock();</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             :     void forwardSkipEmptyData();</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             :     void backwardSkipEmptyData();</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             :     [[nodiscard]] bool shouldStopSkipping() const;</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             :     void captureDataIterError();</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             : </span>
+<span id="L59"><span class="lineNum">      59</span>                 :             : private:</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             :     Status status_{StatusCode::kOK};</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             :     IteratorPtr index_iter_;</span>
+<span id="L62"><span class="lineNum">      62</span>                 :             :     IteratorPtr data_iter_;</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             :     std::string data_block_handle_;</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             :     BlockFunc data_block_func_;</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             : };</span>
+<span id="L66"><span class="lineNum">      66</span>                 :             : </span>
+<span id="L67"><span class="lineNum">      67</span>                 :             : } // namespace pl</span>
         </pre>
               </td>
             </tr>

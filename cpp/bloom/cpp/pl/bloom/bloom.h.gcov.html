@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-22 00:08:34</td>
+            <td class="headerValue">2026-05-22 13:10:40</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">83.3&nbsp;%</td>
@@ -86,12 +86,12 @@
 <span id="L15"><span class="lineNum">      15</span>                 :             : // Authors: liubang (it.liubang@gmail.com)</span>
 <span id="L16"><span class="lineNum">      16</span>                 :             : // Created: 2024/12/18 00:28</span>
 <span id="L17"><span class="lineNum">      17</span>                 :             : </span>
-<span id="L18"><span class="lineNum">      18</span>                 :             : #include &quot;cpp/pl/fastrange/fastrange.h&quot;</span>
-<span id="L19"><span class="lineNum">      19</span>                 :             : #include &quot;cpp/pl/lang/common.h&quot;</span>
-<span id="L20"><span class="lineNum">      20</span>                 :             : </span>
-<span id="L21"><span class="lineNum">      21</span>                 :             : #include &lt;algorithm&gt;</span>
-<span id="L22"><span class="lineNum">      22</span>                 :             : #include &lt;cmath&gt;</span>
-<span id="L23"><span class="lineNum">      23</span>                 :             : #include &lt;cstdint&gt;</span>
+<span id="L18"><span class="lineNum">      18</span>                 :             : #include &lt;algorithm&gt;</span>
+<span id="L19"><span class="lineNum">      19</span>                 :             : #include &lt;cmath&gt;</span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : #include &lt;cstdint&gt;</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : </span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : #include &quot;cpp/pl/fastrange/fastrange.h&quot;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : #include &quot;cpp/pl/lang/common.h&quot;</span>
 <span id="L24"><span class="lineNum">      24</span>                 :             : </span>
 <span id="L25"><span class="lineNum">      25</span>                 :             : namespace pl {</span>
 <span id="L26"><span class="lineNum">      26</span>                 :             : </span>
@@ -248,9 +248,9 @@
 <span id="L177"><span class="lineNum">     177</span>                 :             : </span>
 <span id="L178"><span class="lineNum">     178</span>                 :<span class="tlaGNC">        1001 :     static bool hash_may_match(uint32_t h, uint32_t total_bits, int num_probes, const char* data) {</span></span>
 <span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">        1001 :         const uint32_t delta = (h &gt;&gt; 17) | (h &lt;&lt; 15); // Rotate right 17 bits</span></span>
-<span id="L180"><span class="lineNum">     180</span>         [<span class="tlaGBC" title="Branch 0 was taken 2986 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 334 times"> + </span>]:<span class="tlaGNC">        3320 :         for (int i = 0; i &lt; num_probes; ++i) {</span></span>
-<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">        2986 :             const uint32_t bitpos = h % total_bits;</span></span>
-<span id="L182"><span class="lineNum">     182</span>         [<span class="tlaGBC" title="Branch 0 was taken 2319 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 667 times"> + </span>]:<span class="tlaGNC">        2986 :             if ((data[bitpos &gt;&gt; 3] &amp; (uint8_t{1} &lt;&lt; (bitpos &amp; 7))) == 0) {</span></span>
+<span id="L180"><span class="lineNum">     180</span>         [<span class="tlaGBC" title="Branch 0 was taken 2985 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 335 times"> + </span>]:<span class="tlaGNC">        3320 :         for (int i = 0; i &lt; num_probes; ++i) {</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">        2985 :             const uint32_t bitpos = h % total_bits;</span></span>
+<span id="L182"><span class="lineNum">     182</span>         [<span class="tlaGBC" title="Branch 0 was taken 2319 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 666 times"> + </span>]:<span class="tlaGNC">        2985 :             if ((data[bitpos &gt;&gt; 3] &amp; (uint8_t{1} &lt;&lt; (bitpos &amp; 7))) == 0) {</span></span>
 <span id="L183"><span class="lineNum">     183</span>                 :             :                 return false;</span>
 <span id="L184"><span class="lineNum">     184</span>                 :             :             }</span>
 <span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">        2319 :             h += delta;</span></span>
