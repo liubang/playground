@@ -35,7 +35,9 @@ BlockReporter::BlockReporter(Config config,
       report_func_(std::move(report_func)),
       delete_func_(std::move(delete_func)) {}
 
-BlockReporter::~BlockReporter() { stop(); }
+BlockReporter::~BlockReporter() {
+    stop();
+}
 
 // ============================================================================
 // Lifecycle
@@ -46,9 +48,7 @@ void BlockReporter::start() {
     if (!running_.compare_exchange_strong(expected, true)) {
         return;
     }
-    thread_ = std::thread([this] {
-        run_loop();
-    });
+    thread_ = std::thread([this] { run_loop(); });
 }
 
 void BlockReporter::stop() {
@@ -71,7 +71,9 @@ pl::Result<BlockReportResponse> BlockReporter::send_full_report() {
 
     auto response = report_func_(config_.datanode_id, blocks_result.value());
     if (response.hasError()) {
-        XLOGF(WARN, "block report RPC failed for datanode {}: {}", config_.datanode_id,
+        XLOGF(WARN,
+              "block report RPC failed for datanode {}: {}",
+              config_.datanode_id,
               response.error().describe());
         return pl::makeError(std::move(response.error()));
     }

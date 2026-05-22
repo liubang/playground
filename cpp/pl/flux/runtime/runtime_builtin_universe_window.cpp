@@ -27,8 +27,8 @@ absl::StatusOr<const TableValue*> materialized_table_ref(const TableValue& table
     if (table.materialized) {
         return &table;
     }
-    Value value = Value::table_plan(table.bucket, table.plan, table.range_start, table.range_stop,
-                                    table.result_name);
+    Value value = Value::table_plan(
+        table.bucket, table.plan, table.range_start, table.range_stop, table.result_name);
     auto materialized_or = execution::MaterializeValue(std::move(value));
     if (!materialized_or.ok()) {
         return materialized_or.status();
@@ -105,14 +105,15 @@ absl::StatusOr<Value> builtin_elapsed(const std::vector<Value>& args) {
         if (const auto previous = previous_time_by_group.find(group_key);
             previous != previous_time_by_group.end()) {
             auto updated = object_with_upserted_property(
-                *row, *column_name_or,
+                *row,
+                *column_name_or,
                 Value::integer((*seconds_or - previous->second) / unit_seconds));
             rows.push_back(std::make_shared<ObjectValue>(updated.as_object()));
         }
         previous_time_by_group[group_key] = *seconds_or;
     }
-    auto result = Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
-                               (*table_or)->range_stop);
+    auto result = Value::table(
+        (*table_or)->bucket, std::move(rows), (*table_or)->range_start, (*table_or)->range_stop);
     return with_materialization_barrier(std::move(result), **table_or, "elapsed");
 }
 
@@ -182,8 +183,8 @@ absl::StatusOr<Value> builtin_difference(const std::vector<Value>& args) {
         }
         previous_by_group[group_key] = *current;
     }
-    auto result = Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
-                               (*table_or)->range_stop);
+    auto result = Value::table(
+        (*table_or)->bucket, std::move(rows), (*table_or)->range_start, (*table_or)->range_stop);
     return with_materialization_barrier(std::move(result), **table_or, "difference");
 }
 
@@ -298,8 +299,8 @@ absl::StatusOr<Value> builtin_derivative(const std::vector<Value>& args) {
         previous_value_by_group[group_key] = *current;
         previous_time_by_group[group_key] = *seconds_or;
     }
-    auto result = Value::table((*table_or)->bucket, std::move(rows), (*table_or)->range_start,
-                               (*table_or)->range_stop);
+    auto result = Value::table(
+        (*table_or)->bucket, std::move(rows), (*table_or)->range_start, (*table_or)->range_stop);
     return with_materialization_barrier(std::move(result), **table_or, "derivative");
 }
 
@@ -417,8 +418,8 @@ absl::StatusOr<Value> builtin_window(const std::vector<Value>& args) {
                 max_time_exclusive_seconds = *row_seconds + 1;
             }
 
-            auto primary_start_or = aggregate_window_start_for_time(*row_seconds, *parsed_every_or,
-                                                                    offset, *location_or);
+            auto primary_start_or = aggregate_window_start_for_time(
+                *row_seconds, *parsed_every_or, offset, *location_or);
             if (!primary_start_or.has_value()) {
                 continue;
             }
@@ -479,8 +480,8 @@ absl::StatusOr<Value> builtin_window(const std::vector<Value>& args) {
                 const bool within_table_range =
                     !table_range_start_seconds.has_value() ||
                     !table_range_stop_seconds.has_value() ||
-                    aggregate_window_is_within_range(*bounds_or, *table_range_start_seconds,
-                                                     *table_range_stop_seconds);
+                    aggregate_window_is_within_range(
+                        *bounds_or, *table_range_start_seconds, *table_range_stop_seconds);
                 if (!within_table_range) {
                     continue;
                 }
@@ -488,14 +489,20 @@ absl::StatusOr<Value> builtin_window(const std::vector<Value>& args) {
                     chunk_indexes.emplace(candidate_start, chunk_windows.size());
                 if (inserted) {
                     TableChunk next;
-                    next.group_key =
-                        window_group_object(chunk, *start_column_or, bounds_or->start_seconds,
-                                            *stop_column_or, bounds_or->stop_seconds);
+                    next.group_key = window_group_object(chunk,
+                                                         *start_column_or,
+                                                         bounds_or->start_seconds,
+                                                         *stop_column_or,
+                                                         bounds_or->stop_seconds);
                     chunk_windows.push_back(std::move(next));
                 }
-                chunk_windows[chunk_it->second].rows.push_back(row_with_window_bounds(
-                    *row, *start_column_or, bounds_or->start_seconds, *stop_column_or,
-                    bounds_or->stop_seconds, chunk_windows[chunk_it->second].group_key));
+                chunk_windows[chunk_it->second].rows.push_back(
+                    row_with_window_bounds(*row,
+                                           *start_column_or,
+                                           bounds_or->start_seconds,
+                                           *stop_column_or,
+                                           bounds_or->stop_seconds,
+                                           chunk_windows[chunk_it->second].group_key));
             }
         }
 
@@ -506,9 +513,10 @@ absl::StatusOr<Value> builtin_window(const std::vector<Value>& args) {
             if (first_window_start_or.has_value()) {
                 if (!window_duration_is_negative(period)) {
                     while (true) {
-                        auto previous_or = add_window_duration_to_time(
-                            *first_window_start_or, negate_window_duration(*parsed_every_or),
-                            *location_or);
+                        auto previous_or =
+                            add_window_duration_to_time(*first_window_start_or,
+                                                        negate_window_duration(*parsed_every_or),
+                                                        *location_or);
                         if (!previous_or.has_value() || *previous_or >= *first_window_start_or) {
                             break;
                         }
@@ -521,8 +529,8 @@ absl::StatusOr<Value> builtin_window(const std::vector<Value>& args) {
                         first_window_start_or = previous_or;
                     }
                 } else {
-                    auto next_or = add_window_duration_to_time(*first_window_start_or,
-                                                               *parsed_every_or, *location_or);
+                    auto next_or = add_window_duration_to_time(
+                        *first_window_start_or, *parsed_every_or, *location_or);
                     if (next_or.has_value() && *next_or > *first_window_start_or) {
                         first_window_start_or = next_or;
                     } else {
@@ -545,16 +553,18 @@ absl::StatusOr<Value> builtin_window(const std::vector<Value>& args) {
                 const bool within_table_range =
                     !table_range_start_seconds.has_value() ||
                     !table_range_stop_seconds.has_value() ||
-                    aggregate_window_is_within_range(*bounds_or, *table_range_start_seconds,
-                                                     *table_range_stop_seconds);
+                    aggregate_window_is_within_range(
+                        *bounds_or, *table_range_start_seconds, *table_range_stop_seconds);
                 if (within_span && within_table_range) {
                     auto [chunk_it, inserted] =
                         chunk_indexes.emplace(*window_start_or, chunk_windows.size());
                     if (inserted) {
                         TableChunk next;
-                        next.group_key =
-                            window_group_object(chunk, *start_column_or, bounds_or->start_seconds,
-                                                *stop_column_or, bounds_or->stop_seconds);
+                        next.group_key = window_group_object(chunk,
+                                                             *start_column_or,
+                                                             bounds_or->start_seconds,
+                                                             *stop_column_or,
+                                                             bounds_or->stop_seconds);
                         next.columns = visible_columns_in_chunk(chunk);
                         if (std::find(next.columns.begin(), next.columns.end(), *start_column_or) ==
                             next.columns.end()) {
@@ -587,9 +597,11 @@ absl::StatusOr<Value> builtin_window(const std::vector<Value>& args) {
         chunks.insert(chunks.end(), chunk_windows.begin(), chunk_windows.end());
     }
 
-    auto result =
-        Value::table_stream((*table_or)->bucket, std::move(chunks), (*table_or)->range_start,
-                            (*table_or)->range_stop, (*table_or)->result_name);
+    auto result = Value::table_stream((*table_or)->bucket,
+                                      std::move(chunks),
+                                      (*table_or)->range_start,
+                                      (*table_or)->range_stop,
+                                      (*table_or)->result_name);
     return with_materialization_barrier(std::move(result), **table_or, "window");
 }
 
@@ -813,8 +825,8 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args,
                 const bool within_table_range =
                     !table_range_start_seconds.has_value() ||
                     !table_range_stop_seconds.has_value() ||
-                    aggregate_window_is_within_range(*bounds_or, *table_range_start_seconds,
-                                                     *table_range_stop_seconds);
+                    aggregate_window_is_within_range(
+                        *bounds_or, *table_range_start_seconds, *table_range_stop_seconds);
                 if (within_table_range &&
                     aggregate_window_contains_time(*row_seconds, *bounds_or)) {
                     auto [bucket_it, bucket_inserted] =
@@ -842,8 +854,8 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args,
                     const bool within_table_range =
                         !table_range_start_seconds.has_value() ||
                         !table_range_stop_seconds.has_value() ||
-                        aggregate_window_is_within_range(*bounds_or, *table_range_start_seconds,
-                                                         *table_range_stop_seconds);
+                        aggregate_window_is_within_range(
+                            *bounds_or, *table_range_start_seconds, *table_range_stop_seconds);
                     if (within_table_range &&
                         aggregate_window_contains_time(*row_seconds, *bounds_or)) {
                         candidate_starts.push_back(*current);
@@ -873,8 +885,8 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args,
                     const bool within_table_range =
                         !table_range_start_seconds.has_value() ||
                         !table_range_stop_seconds.has_value() ||
-                        aggregate_window_is_within_range(*bounds_or, *table_range_start_seconds,
-                                                         *table_range_stop_seconds);
+                        aggregate_window_is_within_range(
+                            *bounds_or, *table_range_start_seconds, *table_range_stop_seconds);
                     if (within_table_range &&
                         aggregate_window_contains_time(*row_seconds, *bounds_or)) {
                         candidate_starts.push_back(*current);
@@ -910,9 +922,10 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args,
                 if (first_window_start_or.has_value()) {
                     if (!window_duration_is_negative(period)) {
                         while (true) {
-                            auto previous_or = add_window_duration_to_time(
-                                *first_window_start_or, negate_window_duration(*every_or),
-                                *location_or);
+                            auto previous_or =
+                                add_window_duration_to_time(*first_window_start_or,
+                                                            negate_window_duration(*every_or),
+                                                            *location_or);
                             if (!previous_or.has_value() ||
                                 *previous_or >= *first_window_start_or) {
                                 break;
@@ -926,8 +939,8 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args,
                             first_window_start_or = previous_or;
                         }
                     } else {
-                        auto next_or = add_window_duration_to_time(*first_window_start_or,
-                                                                   *every_or, *location_or);
+                        auto next_or = add_window_duration_to_time(
+                            *first_window_start_or, *every_or, *location_or);
                         if (next_or.has_value() && *next_or > *first_window_start_or) {
                             first_window_start_or = next_or;
                         } else {
@@ -945,12 +958,13 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args,
                     if (bounds_or->lower_seconds >= group.span.max_time_exclusive_seconds) {
                         break;
                     }
-                    if (aggregate_window_intersects_range(*bounds_or, group.span.min_time_seconds,
+                    if (aggregate_window_intersects_range(*bounds_or,
+                                                          group.span.min_time_seconds,
                                                           group.span.max_time_exclusive_seconds) &&
                         (!table_range_start_seconds.has_value() ||
                          !table_range_stop_seconds.has_value() ||
-                         aggregate_window_is_within_range(*bounds_or, *table_range_start_seconds,
-                                                          *table_range_stop_seconds))) {
+                         aggregate_window_is_within_range(
+                             *bounds_or, *table_range_start_seconds, *table_range_stop_seconds))) {
                         auto [it, inserted] =
                             group.bucket_indexes.emplace(*window_start_or, group.buckets.size());
                         if (inserted) {
@@ -971,19 +985,19 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args,
                 }
             }
 
-            std::stable_sort(group.buckets.begin(), group.buckets.end(),
-                             [](const auto& lhs, const auto& rhs) {
-                                 if (lhs.start_seconds == rhs.start_seconds) {
-                                     return false;
-                                 }
-                                 if (!lhs.start_seconds.has_value()) {
-                                     return false;
-                                 }
-                                 if (!rhs.start_seconds.has_value()) {
-                                     return true;
-                                 }
-                                 return *lhs.start_seconds < *rhs.start_seconds;
-                             });
+            std::stable_sort(
+                group.buckets.begin(), group.buckets.end(), [](const auto& lhs, const auto& rhs) {
+                    if (lhs.start_seconds == rhs.start_seconds) {
+                        return false;
+                    }
+                    if (!lhs.start_seconds.has_value()) {
+                        return false;
+                    }
+                    if (!rhs.start_seconds.has_value()) {
+                        return true;
+                    }
+                    return *lhs.start_seconds < *rhs.start_seconds;
+                });
 
             TableChunk output_chunk;
             output_chunk.rows.reserve(group.buckets.size());
@@ -1011,20 +1025,25 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args,
                 std::optional<int64_t> window_stop_seconds;
                 std::optional<int64_t> time_src_seconds;
                 if (bucket.start_seconds.has_value()) {
-                    auto bounds_or = aggregate_window_bounds_for_start(*bucket.start_seconds,
-                                                                       period, *location_or);
+                    auto bounds_or = aggregate_window_bounds_for_start(
+                        *bucket.start_seconds, period, *location_or);
                     if (!bounds_or.has_value()) {
                         return absl::InternalError("aggregateWindow failed to compute window stop");
                     }
                     window_start_seconds = *bucket.start_seconds;
                     window_stop_seconds = bounds_or->stop_seconds;
-                    time_src_seconds =
-                        aggregate_window_time_src_seconds(bucket.first_row, *bucket.start_seconds,
-                                                          *window_stop_seconds, *time_src_or);
+                    time_src_seconds = aggregate_window_time_src_seconds(bucket.first_row,
+                                                                         *bucket.start_seconds,
+                                                                         *window_stop_seconds,
+                                                                         *time_src_or);
                 }
-                output_chunk.rows.push_back(aggregate_window_output_row(
-                    bucket.first_row, *column_or, std::move(aggregate_value), window_start_seconds,
-                    window_stop_seconds, *time_dst_or, time_src_seconds));
+                output_chunk.rows.push_back(aggregate_window_output_row(bucket.first_row,
+                                                                        *column_or,
+                                                                        std::move(aggregate_value),
+                                                                        window_start_seconds,
+                                                                        window_stop_seconds,
+                                                                        *time_dst_or,
+                                                                        time_src_seconds));
             }
             chunks.push_back(std::move(output_chunk));
         }
@@ -1044,7 +1063,8 @@ void InstallUniverseWindowBuiltins(Environment& env) {
     install_builtin(env, "derivative", builtin_derivative, "tables");
     install_builtin(env, "window", builtin_window, "tables");
     install_builtin(
-        env, "aggregateWindow",
+        env,
+        "aggregateWindow",
         [&env](const std::vector<Value>& args) -> absl::StatusOr<Value> {
             auto option_or = env.lookup_option("location");
             if (option_or.ok()) {
@@ -1077,7 +1097,8 @@ bool InstallKnownUniverseWindowBuiltin(Environment& env, const std::string& name
     }
     if (name == "aggregateWindow") {
         install_builtin(
-            env, "aggregateWindow",
+            env,
+            "aggregateWindow",
             [&env](const std::vector<Value>& args) -> absl::StatusOr<Value> {
                 auto option_or = env.lookup_option("location");
                 if (option_or.ok()) {

@@ -17,12 +17,13 @@
 
 #pragma once
 
-#include "absl/status/statusor.h"
 #include <boost/mysql/connection_pool.hpp>
 #include <cstddef>
 #include <memory>
 #include <optional>
 #include <string>
+
+#include "absl/status/statusor.h"
 
 namespace pl::flux::connector {
 

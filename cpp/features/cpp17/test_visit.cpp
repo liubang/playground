@@ -39,7 +39,8 @@ void saxpy(std::vector<float> a, float b, float c) {
                 }
             }
         },
-        has_b, has_c);
+        has_b,
+        has_c);
 }
 
 int main(int argc, char* argv[]) {

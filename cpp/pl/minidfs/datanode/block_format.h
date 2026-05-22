@@ -17,12 +17,13 @@
 
 #pragma once
 
-#include "cpp/pl/minidfs/common/checksum.h"
-#include "cpp/pl/minidfs/common/compression.h"
-#include "cpp/pl/minidfs/common/constants.h"
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
+
+#include "cpp/pl/minidfs/common/checksum.h"
+#include "cpp/pl/minidfs/common/compression.h"
+#include "cpp/pl/minidfs/common/constants.h"
 
 namespace pl::minidfs {
 

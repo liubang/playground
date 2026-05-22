@@ -17,9 +17,10 @@
 
 #pragma once
 
+#include <memory>
+
 #include "cpp/pl/minidfs/metadata/metadata_store.h"
 #include "cpp/pl/minidfs/metadata/mysql_connection_pool.h"
-#include <memory>
 
 namespace pl::minidfs {
 

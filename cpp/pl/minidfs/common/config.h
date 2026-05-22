@@ -40,8 +40,8 @@ struct MySQLConfigYaml {
 
 struct FilesystemConfig {
     uint32_t default_replication = 3;
-    uint64_t default_block_size = 134217728;  // 128MB
-    uint64_t default_chunk_size = 1048576;    // 1MB
+    uint64_t default_block_size = 134217728; // 128MB
+    uint64_t default_chunk_size = 1048576;   // 1MB
     uint32_t min_write_replica = 2;
 };
 

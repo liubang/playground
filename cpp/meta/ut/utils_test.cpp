@@ -17,9 +17,10 @@
 
 #include "cpp/meta/ut/utils_test.h"
 
+#include <catch2/catch_test_macros.hpp>
+
 #include "cpp/meta/traits.h"
 #include "cpp/meta/utils.h"
-#include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("utils", "[array]") {
     using arr345 = std::array<std::array<std::array<int, 3>, 4>, 5>;
@@ -64,7 +65,9 @@ TEST_CASE("utils", "[unique]") {
         std::is_same_v<pl::Unique<longList>::type, pl::TypeList<char, float, int, double>::type>);
 };
 
-TEST_CASE("utils", "[sums]") { static_assert(pl::sums(1, 2, 3, 4) == 10); };
+TEST_CASE("utils", "[sums]") {
+    static_assert(pl::sums(1, 2, 3, 4) == 10);
+};
 
 TEST_CASE("utils", "[no_destructor]") {
     // smoke test

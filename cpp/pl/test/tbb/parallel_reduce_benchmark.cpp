@@ -33,26 +33,21 @@ static void test1() {
 
 static void test2() {
     float res = tbb::parallel_reduce(
-        tbb::blocked_range<size_t>(0, n), (float)0,
+        tbb::blocked_range<size_t>(0, n),
+        (float)0,
         [&](tbb::blocked_range<size_t> r, float local_res) {
             for (size_t i = r.begin(); i < r.end(); ++i) {
                 local_res += std::sin(i);
             }
             return local_res;
         },
-        [](float x, float y) {
-            return x + y;
-        });
+        [](float x, float y) { return x + y; });
 
     std::cout << res << std::endl;
 }
 
 int main(int argc, char* argv[]) {
-    ankerl::nanobench::Bench().run("test1", [&] {
-        test1();
-    });
-    ankerl::nanobench::Bench().run("test2", [&] {
-        test2();
-    });
+    ankerl::nanobench::Bench().run("test1", [&] { test1(); });
+    ankerl::nanobench::Bench().run("test2", [&] { test2(); });
     return 0;
 }

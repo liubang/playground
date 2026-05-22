@@ -17,9 +17,10 @@
 
 #include "cpp/pl/minidfs/namenode/placement_manager.h"
 
-#include "cpp/pl/minidfs/common/error_code.h"
 #include <algorithm>
 #include <random>
+
+#include "cpp/pl/minidfs/common/error_code.h"
 
 namespace pl::minidfs {
 
@@ -27,7 +28,6 @@ PlacementManager::PlacementManager(DataNodeManager* dn_manager) : dn_manager_(dn
 
 pl::Result<std::vector<DataNodeInfo>> PlacementManager::choose_targets(
     uint32_t num_replicas, std::optional<uint64_t> exclude_datanode_id) {
-
     auto live_result = dn_manager_->get_live_datanodes();
     if (live_result.hasError()) {
         return folly::makeUnexpected(live_result.error());
@@ -37,7 +37,8 @@ pl::Result<std::vector<DataNodeInfo>> PlacementManager::choose_targets(
 
     // Filter out excluded datanode.
     if (exclude_datanode_id.has_value()) {
-        candidates.erase(std::remove_if(candidates.begin(), candidates.end(),
+        candidates.erase(std::remove_if(candidates.begin(),
+                                        candidates.end(),
                                         [&](const DataNodeInfo& dn) {
                                             return dn.datanode_id == exclude_datanode_id.value();
                                         }),
@@ -51,10 +52,10 @@ pl::Result<std::vector<DataNodeInfo>> PlacementManager::choose_targets(
 
     // Sort by free space descending, then shuffle within each rack group
     // for simple rack-awareness.
-    std::sort(candidates.begin(), candidates.end(),
-              [](const DataNodeInfo& a, const DataNodeInfo& b) {
-                  return a.free_bytes > b.free_bytes;
-              });
+    std::sort(
+        candidates.begin(), candidates.end(), [](const DataNodeInfo& a, const DataNodeInfo& b) {
+            return a.free_bytes > b.free_bytes;
+        });
 
     // Simple rack-aware selection:
     // 1. Pick the first node (most free space).

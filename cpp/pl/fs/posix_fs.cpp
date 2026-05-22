@@ -17,7 +17,6 @@
 
 #include "cpp/pl/fs/posix_fs.h"
 
-#include "cpp/pl/status/result.h"
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -27,6 +26,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <utime.h>
+
+#include "cpp/pl/status/result.h"
 
 namespace pl {
 
@@ -38,14 +39,22 @@ public:
         if (fd_ != -1) {
             int ret = ::fsync(fd_);
             if (ret != 0) {
-                XLOGF(WARN, "fsync failed, fd: {}, file: {}, errno: {}, message: {}", fd_,
-                      file_path_, errno, std::strerror(errno));
+                XLOGF(WARN,
+                      "fsync failed, fd: {}, file: {}, errno: {}, message: {}",
+                      fd_,
+                      file_path_,
+                      errno,
+                      std::strerror(errno));
             }
 
             ret = ::close(fd_);
             if (ret != 0) {
-                XLOGF(WARN, "close failed, fd: {}, file: {}, errno: {}, message: {}", fd_,
-                      file_path_, errno, std::strerror(errno));
+                XLOGF(WARN,
+                      "close failed, fd: {}, file: {}, errno: {}, message: {}",
+                      fd_,
+                      file_path_,
+                      errno,
+                      std::strerror(errno));
             }
         }
         fd_ = -1;
@@ -68,7 +77,10 @@ Result<Void> PosixFileSystem::open(std::string_view path, uint64_t flags, FileDe
         ret = ::open(path.data(), flags);
     }
     if (ret == -1) {
-        XLOGF(WARN, "open failed, path: {}, errno: {}, message: {}", path, errno,
+        XLOGF(WARN,
+              "open failed, path: {}, errno: {}, message: {}",
+              path,
+              errno,
               std::strerror(errno));
         return makeError(StatusCode::kIOError);
     }
@@ -82,15 +94,23 @@ Result<Void> PosixFileSystem::close(const FileDescriptorRef& fd) {
     if (posix_fd->fd_ != -1) {
         int ret = ::fsync(posix_fd->fd_);
         if (ret != 0) {
-            XLOGF(WARN, "fsync failed, fd: {}, file: {}, errno: {}, message: {}", posix_fd->fd_,
-                  posix_fd->file_path_, errno, std::strerror(errno));
+            XLOGF(WARN,
+                  "fsync failed, fd: {}, file: {}, errno: {}, message: {}",
+                  posix_fd->fd_,
+                  posix_fd->file_path_,
+                  errno,
+                  std::strerror(errno));
             return makeError(StatusCode::kIOError);
         }
 
         ret = ::close(posix_fd->fd_);
         if (ret != 0) {
-            XLOGF(WARN, "close failed, fd: {}, file: {}, errno: {}, message: {}", posix_fd->fd_,
-                  posix_fd->file_path_, errno, std::strerror(errno));
+            XLOGF(WARN,
+                  "close failed, fd: {}, file: {}, errno: {}, message: {}",
+                  posix_fd->fd_,
+                  posix_fd->file_path_,
+                  errno,
+                  std::strerror(errno));
             return makeError(StatusCode::kIOError);
         }
     }
@@ -105,11 +125,15 @@ Result<Void> PosixFileSystem::pread(const FileDescriptorRef& fd,
     auto* posix_fd = static_cast<PosixFileDescriptor*>(fd.get());
     uint64_t read_count = 0;
     while (read_count < n) {
-        ssize_t len = ::pread(posix_fd->fd_, (void*)(buffer + read_count), n - read_count,
-                              offset + read_count);
+        ssize_t len = ::pread(
+            posix_fd->fd_, (void*)(buffer + read_count), n - read_count, offset + read_count);
         if (len == -1) {
-            XLOGF(WARN, "pread failed, fd: {}, file: {}, errno: {}, message: {}", posix_fd->fd_,
-                  posix_fd->file_path_, errno, std::strerror(errno));
+            XLOGF(WARN,
+                  "pread failed, fd: {}, file: {}, errno: {}, message: {}",
+                  posix_fd->fd_,
+                  posix_fd->file_path_,
+                  errno,
+                  std::strerror(errno));
             return makeError(StatusCode::kIOError);
         }
         read_count += len;
@@ -131,8 +155,12 @@ Result<Void> PosixFileSystem::append(const FileDescriptorRef& fd,
     while (writed_size < write_size) {
         ssize_t len = ::write(posix_fd->fd_, write_data + writed_size, write_size - writed_size);
         if (len == -1) {
-            XLOGF(WARN, "append failed, fd: {}, file: {}, errno: {}, message: {}", posix_fd->fd_,
-                  posix_fd->file_path_, errno, std::strerror(errno));
+            XLOGF(WARN,
+                  "append failed, fd: {}, file: {}, errno: {}, message: {}",
+                  posix_fd->fd_,
+                  posix_fd->file_path_,
+                  errno,
+                  std::strerror(errno));
             return makeError(StatusCode::kIOError);
         }
         writed_size += len;
@@ -144,8 +172,12 @@ Result<Void> PosixFileSystem::fsync(const FileDescriptorRef& fd, uint64_t flags)
     auto* posix_fd = static_cast<PosixFileDescriptor*>(fd.get());
     int ret = ::fsync(posix_fd->fd_);
     if (ret != 0) {
-        XLOGF(WARN, "fsync failed, fd: {}, file: {}, errno: {}, message: {}", posix_fd->fd_,
-              posix_fd->file_path_, errno, std::strerror(errno));
+        XLOGF(WARN,
+              "fsync failed, fd: {}, file: {}, errno: {}, message: {}",
+              posix_fd->fd_,
+              posix_fd->file_path_,
+              errno,
+              std::strerror(errno));
         return makeError(StatusCode::kIOError);
     }
     RETURN_VOID;
@@ -155,7 +187,10 @@ Result<Void> PosixFileSystem::size(std::string_view path, uint64_t* result) {
     struct stat buffer;
     int ret = ::stat(path.data(), &buffer);
     if (ret != 0) {
-        XLOGF(WARN, "stat failed,  file: {}, errno: {}, message: {}", path, errno,
+        XLOGF(WARN,
+              "stat failed,  file: {}, errno: {}, message: {}",
+              path,
+              errno,
               std::strerror(errno));
         return makeError(StatusCode::kIOError);
     }
@@ -168,8 +203,12 @@ Result<Void> PosixFileSystem::size(const FileDescriptorRef& fd, uint64_t* result
     struct stat buffer;
     int ret = ::fstat(posix_fd->fd_, &buffer);
     if (ret != 0) {
-        XLOGF(WARN, "fstat failed, fd: {}, file: {}, errno: {}, message: {}", posix_fd->fd_,
-              posix_fd->file_path_, errno, std::strerror(errno));
+        XLOGF(WARN,
+              "fstat failed, fd: {}, file: {}, errno: {}, message: {}",
+              posix_fd->fd_,
+              posix_fd->file_path_,
+              errno,
+              std::strerror(errno));
         return makeError(StatusCode::kIOError);
     }
     *result = static_cast<uint64_t>(buffer.st_size);
@@ -180,7 +219,10 @@ Result<Void> PosixFileSystem::mtime(std::string_view path, std::time_t* result) 
     struct stat buffer;
     int ret = ::stat(path.data(), &buffer);
     if (ret != 0) {
-        XLOGF(WARN, "stat failed, file: {}, errno: {}, message: {}", path, errno,
+        XLOGF(WARN,
+              "stat failed, file: {}, errno: {}, message: {}",
+              path,
+              errno,
               std::strerror(errno));
         return makeError(StatusCode::kIOError);
     }
@@ -193,8 +235,12 @@ Result<Void> PosixFileSystem::mtime(const FileDescriptorRef& fd, std::time_t* re
     struct stat buffer;
     int ret = ::fstat(posix_fd->fd_, &buffer);
     if (ret != 0) {
-        XLOGF(WARN, "fstat failed, fd: {}, file: {}, errno: {}, message: {}", posix_fd->fd_,
-              posix_fd->file_path_, errno, std::strerror(errno));
+        XLOGF(WARN,
+              "fstat failed, fd: {}, file: {}, errno: {}, message: {}",
+              posix_fd->fd_,
+              posix_fd->file_path_,
+              errno,
+              std::strerror(errno));
         return makeError(StatusCode::kIOError);
     }
     *result = buffer.st_mtime;
@@ -211,7 +257,10 @@ Result<Void> PosixFileSystem::isdir(std::string_view path, bool* result) {
     int ret = ::stat(path.data(), &buffer);
     if (ret != 0) {
         *result = false;
-        XLOGF(WARN, "stat failed, file: {}, errno: {}, message: {}", path, errno,
+        XLOGF(WARN,
+              "stat failed, file: {}, errno: {}, message: {}",
+              path,
+              errno,
               std::strerror(errno));
         return makeError(StatusCode::kIOError);
     }
@@ -226,7 +275,10 @@ Result<Void> PosixFileSystem::rename(std::string_view old_path, std::string_view
 
 Result<Void> PosixFileSystem::mkdir(std::string_view path, uint64_t flags) {
     if (::mkdir(path.data(), flags) != 0) {
-        XLOGF(WARN, "mkdir failed, file: {}, errno: {}, message: {}", path, errno,
+        XLOGF(WARN,
+              "mkdir failed, file: {}, errno: {}, message: {}",
+              path,
+              errno,
               std::strerror(errno));
         return makeError(StatusCode::kIOError);
     }
@@ -237,7 +289,10 @@ Result<Void> PosixFileSystem::remove(std::string_view path) {
     std::error_code err;
     bool ret = std::filesystem::remove_all(path, err) != 0u;
     if (!ret) {
-        XLOGF(WARN, "remove failed, file: {}, errno: {}, message: {}", path, errno,
+        XLOGF(WARN,
+              "remove failed, file: {}, errno: {}, message: {}",
+              path,
+              errno,
               std::strerror(errno));
         return makeError(StatusCode::kIOError);
     }
@@ -253,7 +308,10 @@ Result<Void> PosixFileSystem::utime(std::string_view path, time_t set_time) {
         utimeb_p = &utimeb;
     }
     if (::utime(path.data(), utimeb_p) != 0) {
-        XLOGF(WARN, "utime failed, file: {}, errno: {}, message: {}", path, errno,
+        XLOGF(WARN,
+              "utime failed, file: {}, errno: {}, message: {}",
+              path,
+              errno,
               std::strerror(errno));
         return makeError(StatusCode::kIOError);
     }

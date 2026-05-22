@@ -6,13 +6,11 @@
 
 int main(int, char**) {
     uint64_t x = 1;
-    ankerl::nanobench::Bench().run("x += x", [&]() {
-        ankerl::nanobench::doNotOptimizeAway(x += x);
-    });
+    ankerl::nanobench::Bench().run("x += x",
+                                   [&]() { ankerl::nanobench::doNotOptimizeAway(x += x); });
 
-    ankerl::nanobench::Bench().run("sleep 10ms", [&]() {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    });
+    ankerl::nanobench::Bench().run(
+        "sleep 10ms", [&]() { std::this_thread::sleep_for(std::chrono::milliseconds(10)); });
 
     std::random_device dev;
     std::mt19937_64 rng(dev());

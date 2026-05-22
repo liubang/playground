@@ -15,11 +15,12 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/09
 
+#include <cstdlib>
+#include <optional>
+
 #include "cpp/pl/flux/connector/mysql_connection_pool.h"
 #include "cpp/pl/flux/connector/mysql_source.h"
 #include "gtest/gtest.h"
-#include <cstdlib>
-#include <optional>
 
 namespace pl::flux::connector {
 namespace {

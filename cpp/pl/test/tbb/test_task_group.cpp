@@ -37,12 +37,8 @@ void interact() {
 
 auto main(int argc, char* argv[]) -> int {
     tbb::task_group tg;
-    tg.run([&] {
-        download("hello.zip");
-    });
-    tg.run([&] {
-        interact();
-    });
+    tg.run([&] { download("hello.zip"); });
+    tg.run([&] { interact(); });
     tg.wait();
     return 0;
 }

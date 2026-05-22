@@ -50,11 +50,7 @@ static void test2() {
 
 int main(int argc, char* argv[]) {
     // put your code here
-    ankerl::nanobench::Bench().run("test1", [&] {
-        test1();
-    });
-    ankerl::nanobench::Bench().run("test2", [&] {
-        test2();
-    });
+    ankerl::nanobench::Bench().run("test1", [&] { test1(); });
+    ankerl::nanobench::Bench().run("test2", [&] { test2(); });
     return 0;
 }

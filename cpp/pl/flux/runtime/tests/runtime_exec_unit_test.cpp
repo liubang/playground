@@ -15,15 +15,6 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/15 00:47
 
-#include "cpp/pl/flux/connector/connector_registry.h"
-#include "cpp/pl/flux/connector/memory_source.h"
-#include "cpp/pl/flux/execution/materializer.h"
-#include "cpp/pl/flux/execution/physical_executor.h"
-#include "cpp/pl/flux/execution/task_executor.h"
-#include "cpp/pl/flux/optimizer/explain.h"
-#include "cpp/pl/flux/runtime/runtime_builtin.h"
-#include "cpp/pl/flux/runtime/runtime_exec.h"
-#include "cpp/pl/flux/syntax/parser.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -33,6 +24,16 @@
 #include <optional>
 #include <unordered_map>
 #include <unordered_set>
+
+#include "cpp/pl/flux/connector/connector_registry.h"
+#include "cpp/pl/flux/connector/memory_source.h"
+#include "cpp/pl/flux/execution/materializer.h"
+#include "cpp/pl/flux/execution/physical_executor.h"
+#include "cpp/pl/flux/execution/task_executor.h"
+#include "cpp/pl/flux/optimizer/explain.h"
+#include "cpp/pl/flux/runtime/runtime_builtin.h"
+#include "cpp/pl/flux/runtime/runtime_exec.h"
+#include "cpp/pl/flux/syntax/parser.h"
 
 namespace pl::flux {
 namespace {
@@ -53,8 +54,8 @@ std::optional<std::string> mysql_test_dsn() {
 }
 
 std::shared_ptr<plan::PlanNode> SqliteCpuScanPlan() {
-    return plan::MakeSourceScan("sqlite", "sqlite", "cpp/pl/flux/examples/cross_source/metrics.db",
-                                "cpu");
+    return plan::MakeSourceScan(
+        "sqlite", "sqlite", "cpp/pl/flux/examples/cross_source/metrics.db", "cpu");
 }
 
 class BlockingTestOperator final : public execution::Operator {
@@ -654,7 +655,8 @@ TEST(RuntimeExecTest, PhysicalExecutorRunsMemorySuffixAfterConnectorScan) {
                                   {"host", "usage"}),
                 {{"usage", "value"}}),
             {{.column = "value", .desc = true}}),
-        1, 0);
+        1,
+        0);
 
     auto result_or = execution::PhysicalExecutor().Execute(plan);
 
@@ -688,7 +690,8 @@ TEST(RuntimeExecTest, PhysicalPlannerBuildsOperatorPipeline) {
          .literal = {.kind = plan::PredicateLiteralKind::String, .string_value = "west"}},
     };
     auto plan = plan::MakeLimit(
-        plan::MakeFilter(plan::MakeGroup(SqliteCpuScanPlan(), {"host"}), std::move(predicates)), 1,
+        plan::MakeFilter(plan::MakeGroup(SqliteCpuScanPlan(), {"host"}), std::move(predicates)),
+        1,
         0);
 
     auto task_or = execution::PhysicalPlanner().Plan(plan);
@@ -715,9 +718,10 @@ TEST(RuntimeExecTest, PhysicalPlannerBuildsOperatorPipeline) {
 
 TEST(RuntimeExecTest, PhysicalPlannerPreservesMaterializeOperatorInPipeline) {
     auto plan = plan::MakeAggregate(
-        plan::MakeMaterializeBarrier(plan::MakeGroup(SqliteCpuScanPlan(), {"host"}),
-                                     "unsupported lazy builtin", "test"),
-        plan::AggregateFunction::Mean, "usage");
+        plan::MakeMaterializeBarrier(
+            plan::MakeGroup(SqliteCpuScanPlan(), {"host"}), "unsupported lazy builtin", "test"),
+        plan::AggregateFunction::Mean,
+        "usage");
 
     auto task_or = execution::PhysicalPlanner().Plan(plan);
 
@@ -740,9 +744,10 @@ TEST(RuntimeExecTest, PhysicalPlannerPreservesMaterializeOperatorInPipeline) {
 
 TEST(RuntimeExecTest, PhysicalExecutorRunsMemoryAggregateAcrossMaterializeBarrier) {
     auto plan = plan::MakeAggregate(
-        plan::MakeMaterializeBarrier(plan::MakeGroup(SqliteCpuScanPlan(), {"host"}),
-                                     "unsupported lazy builtin", "test"),
-        plan::AggregateFunction::Mean, "usage");
+        plan::MakeMaterializeBarrier(
+            plan::MakeGroup(SqliteCpuScanPlan(), {"host"}), "unsupported lazy builtin", "test"),
+        plan::AggregateFunction::Mean,
+        "usage");
 
     auto result_or = execution::PhysicalExecutor().Execute(plan);
 
@@ -811,9 +816,9 @@ TEST(RuntimeExecTest, PhysicalExecutorRunsLocalHashJoinAcrossConnectorInputs) {
 }
 
 TEST(RuntimeExecTest, PhysicalPlannerBuildsMultiInputJoinPipeline) {
-    auto join =
-        plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
-                       plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}), {"host"});
+    auto join = plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
+                               {"host"});
 
     auto task_or = execution::PhysicalPlanner().Plan(join);
 
@@ -850,9 +855,9 @@ TEST(RuntimeExecTest, PhysicalPlannerBuildsMultiInputJoinPipeline) {
 }
 
 TEST(RuntimeExecTest, SchedulerRunsJoinPipelineDagAndRecordsStats) {
-    auto join =
-        plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
-                       plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}), {"host"});
+    auto join = plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
+                               {"host"});
 
     auto task_or = execution::PhysicalPlanner().Plan(join);
     ASSERT_TRUE(task_or.ok()) << task_or.status();
@@ -882,11 +887,11 @@ TEST(RuntimeExecTest, SchedulerRunsJoinPipelineDagAndRecordsStats) {
 }
 
 TEST(RuntimeExecTest, PhysicalPlannerBuildsNestedJoinPipelineDag) {
-    auto nested =
-        plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
-                       plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}), {"host"});
-    auto join = plan::MakeJoin(std::move(nested),
-                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}), {"host"});
+    auto nested = plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                                 plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
+                                 {"host"});
+    auto join = plan::MakeJoin(
+        std::move(nested), plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}), {"host"});
 
     auto task_or = execution::PhysicalPlanner().Plan(join);
 
@@ -904,11 +909,11 @@ TEST(RuntimeExecTest, PhysicalPlannerBuildsNestedJoinPipelineDag) {
 }
 
 TEST(RuntimeExecTest, PhysicalExecutorRunsNestedJoinPipelineDag) {
-    auto nested =
-        plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
-                       plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}), {"host"});
-    auto join = plan::MakeJoin(std::move(nested),
-                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}), {"host"});
+    auto nested = plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                                 plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
+                                 {"host"});
+    auto join = plan::MakeJoin(
+        std::move(nested), plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}), {"host"});
 
     auto result_or = execution::PhysicalExecutor().Execute(join);
 
@@ -959,7 +964,8 @@ TEST(RuntimeExecTest, PhysicalPlannerBuildsExchangeRootPipelineDag) {
 
 TEST(RuntimeExecTest, PhysicalExecutorRunsExchangeRepartitionByKeys) {
     auto plan = plan::MakeExchange(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
-                                   plan::ExchangeKind::Repartition, {"host"});
+                                   plan::ExchangeKind::Repartition,
+                                   {"host"});
 
     auto result_or = execution::PhysicalExecutor().Execute(plan);
 
@@ -1076,8 +1082,8 @@ TEST(RuntimeExecTest, SchedulerCancelsExchangeProducersWhenRootSinkFails) {
     };
     connector::ConnectorRegistry::Global().Register(
         spec.source, [rows](const connector::SourceSpec& requested) {
-            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
-                                                         kRowsPerPage, kSplits);
+            return connector::MakeMemoryConnectorRuntime(
+                requested, requested.table, rows, kRowsPerPage, kSplits);
         });
 
     auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
@@ -1117,8 +1123,8 @@ TEST(RuntimeExecTest, PhysicalExecutorStreamsRowsToSinkWithoutMaterializingResul
     };
     connector::ConnectorRegistry::Global().Register(
         spec.source, [rows](const connector::SourceSpec& requested) {
-            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
-                                                         kRowsPerPage, kSplits);
+            return connector::MakeMemoryConnectorRuntime(
+                requested, requested.table, rows, kRowsPerPage, kSplits);
         });
 
     auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
@@ -1201,8 +1207,8 @@ TEST(RuntimeExecTest, ParallelMemoryScanBenchmarkRunsLargeStreamingQuery) {
     };
     connector::ConnectorRegistry::Global().Register(
         spec.source, [rows](const connector::SourceSpec& requested) {
-            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
-                                                         kRowsPerPage, kSplits);
+            return connector::MakeMemoryConnectorRuntime(
+                requested, requested.table, rows, kRowsPerPage, kSplits);
         });
 
     auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
@@ -1257,8 +1263,8 @@ TEST(RuntimeExecTest, StreamingGroupAggregateRunsLargeMemoryFallback) {
     };
     connector::ConnectorRegistry::Global().Register(
         spec.source, [rows](const connector::SourceSpec& requested) {
-            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
-                                                         kRowsPerPage, kSplits);
+            return connector::MakeMemoryConnectorRuntime(
+                requested, requested.table, rows, kRowsPerPage, kSplits);
         });
 
     auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
@@ -1327,8 +1333,8 @@ TEST(RuntimeExecTest, TwoStageGroupedAggregateMergesPartialMean) {
     };
     connector::ConnectorRegistry::Global().Register(
         spec.source, [rows](const connector::SourceSpec& requested) {
-            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
-                                                         kRowsPerPage, kSplits);
+            return connector::MakeMemoryConnectorRuntime(
+                requested, requested.table, rows, kRowsPerPage, kSplits);
         });
 
     auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
@@ -1376,8 +1382,8 @@ TEST(RuntimeExecTest, TwoStageGroupedAggregateSkipsEmptyPartialGroups) {
     };
     connector::ConnectorRegistry::Global().Register(
         spec.source, [rows](const connector::SourceSpec& requested) {
-            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
-                                                         kRowsPerPage, kSplits);
+            return connector::MakeMemoryConnectorRuntime(
+                requested, requested.table, rows, kRowsPerPage, kSplits);
         });
 
     auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
@@ -1424,8 +1430,8 @@ TEST(RuntimeExecTest, StreamingDistinctRunsLargeMemoryFallback) {
     };
     connector::ConnectorRegistry::Global().Register(
         spec.source, [rows](const connector::SourceSpec& requested) {
-            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
-                                                         kRowsPerPage, kSplits);
+            return connector::MakeMemoryConnectorRuntime(
+                requested, requested.table, rows, kRowsPerPage, kSplits);
         });
 
     auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
@@ -1467,7 +1473,8 @@ TEST(RuntimeExecTest, DriverRecordsBlockedStatusInSharedPipelineStats) {
 TEST(RuntimeExecTest, PhysicalExplainShowsCboAlternatives) {
     auto plan = plan::MakeJoin(
         plan::MakeLimit(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}), 1, 0),
-        plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}), {"host"});
+        plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
+        {"host"});
 
     const auto physical = optimizer::FormatPhysicalPlan(plan);
 
@@ -1477,9 +1484,9 @@ TEST(RuntimeExecTest, PhysicalExplainShowsCboAlternatives) {
 }
 
 TEST(RuntimeExecTest, PipelineExplainShowsPipelineDag) {
-    auto join =
-        plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
-                       plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}), {"host"});
+    auto join = plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
+                               {"host"});
 
     const auto pipeline = execution::FormatPipelinePlan(join);
 
@@ -1522,8 +1529,8 @@ TEST(RuntimeExecTest, SmallGroupedAggregateSkipsTwoStagePlan) {
     };
     connector::ConnectorRegistry::Global().Register(
         spec.source, [rows](const connector::SourceSpec& requested) {
-            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
-                                                         kRowsPerPage, kSplits);
+            return connector::MakeMemoryConnectorRuntime(
+                requested, requested.table, rows, kRowsPerPage, kSplits);
         });
 
     auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
@@ -1559,8 +1566,8 @@ TEST(RuntimeExecTest, HighCardinalityGroupedAggregateUsesPartitionedFinal) {
     };
     connector::ConnectorRegistry::Global().Register(
         spec.source, [rows](const connector::SourceSpec& requested) {
-            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
-                                                         kRowsPerPage, kSplits);
+            return connector::MakeMemoryConnectorRuntime(
+                requested, requested.table, rows, kRowsPerPage, kSplits);
         });
 
     auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
@@ -1609,8 +1616,8 @@ TEST(RuntimeExecTest, HighCardinalityRootGroupUsesPartitionedFinal) {
     };
     connector::ConnectorRegistry::Global().Register(
         spec.source, [rows](const connector::SourceSpec& requested) {
-            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
-                                                         kRowsPerPage, kSplits);
+            return connector::MakeMemoryConnectorRuntime(
+                requested, requested.table, rows, kRowsPerPage, kSplits);
         });
 
     auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
@@ -1665,8 +1672,8 @@ TEST(RuntimeExecTest, HighCardinalityRootDistinctUsesPartitionedFinal) {
     };
     connector::ConnectorRegistry::Global().Register(
         spec.source, [rows](const connector::SourceSpec& requested) {
-            return connector::MakeMemoryConnectorRuntime(requested, requested.table, rows,
-                                                         kRowsPerPage, kSplits);
+            return connector::MakeMemoryConnectorRuntime(
+                requested, requested.table, rows, kRowsPerPage, kSplits);
         });
 
     auto scan = plan::MakeSourceScan(spec.source, spec.driver, spec.dsn, spec.table);
@@ -1703,9 +1710,9 @@ TEST(RuntimeExecTest, AccumulatorMemoryGuardFailsHighCardinalityGroup) {
     std::vector<std::shared_ptr<ObjectValue>> rows;
     rows.reserve(kRows);
     for (size_t index = 0; index < kRows; ++index) {
-        rows.push_back(TestRow({{"host", Value::string("very-wide-host-key-" +
-                                                       std::to_string(index))},
-                                {"usage", Value::floating(1.0)}}));
+        rows.push_back(
+            TestRow({{"host", Value::string("very-wide-host-key-" + std::to_string(index))},
+                     {"usage", Value::floating(1.0)}}));
     }
 
     connector::SourceSpec spec{
@@ -1733,9 +1740,9 @@ TEST(RuntimeExecTest, AccumulatorMemoryGuardFailsHighCardinalityGroup) {
 }
 
 TEST(RuntimeExecTest, ExecutionProfileFormatterShowsRuntimeStats) {
-    auto join =
-        plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
-                       plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}), {"host"});
+    auto join = plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
+                               {"host"});
 
     auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(join);
 

@@ -70,7 +70,9 @@ Pretty& Pretty::add_cell(CellType t, const std::string& val) {
     return *this;
 }
 
-void Pretty::render() const { render(std::cout); }
+void Pretty::render() const {
+    render(std::cout);
+}
 
 void Pretty::render(std::ostream& out) const {
     auto len = maxcell_per_line_ * 3 + 1;

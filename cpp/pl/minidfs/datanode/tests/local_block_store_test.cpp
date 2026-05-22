@@ -14,13 +14,13 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/pl/minidfs/datanode/local_block_store.h"
-
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
 #include <string>
+
+#include "cpp/pl/minidfs/datanode/local_block_store.h"
 
 namespace pl::minidfs {
 namespace {
@@ -32,7 +32,7 @@ protected:
     void SetUp() override {
         // Create a unique temporary directory for each test
         test_dir_ = fs::temp_directory_path() / ("minidfs_test_" + std::to_string(::getpid()) +
-                                                  "_" + std::to_string(counter_++));
+                                                 "_" + std::to_string(counter_++));
         fs::create_directories(test_dir_);
 
         LocalBlockStore::Config config;

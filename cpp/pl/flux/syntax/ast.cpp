@@ -31,10 +31,9 @@ std::string attributes_prefix(const std::vector<std::shared_ptr<Attribute>>& att
     if (attributes.empty()) {
         return "";
     }
-    return absl::StrJoin(attributes, " ",
-                         [](std::string* out, const auto& attr) {
-                             out->append(attr->string());
-                         }) +
+    return absl::StrJoin(attributes,
+                         " ",
+                         [](std::string* out, const auto& attr) { out->append(attr->string()); }) +
            " ";
 }
 
@@ -42,18 +41,18 @@ std::string parameter_type_string(const ParameterType& parameter) {
     switch (parameter.type) {
         case ParameterType::Type::Required: {
             const auto& required = std::get<std::shared_ptr<Required>>(parameter.value);
-            return absl::StrFormat("%s: %s", required->name->string(),
-                                   mono_type_string(*required->monotype));
+            return absl::StrFormat(
+                "%s: %s", required->name->string(), mono_type_string(*required->monotype));
         }
         case ParameterType::Type::Optional: {
             const auto& optional = std::get<std::unique_ptr<Optional>>(parameter.value);
-            return absl::StrFormat("?%s: %s", optional->name->string(),
-                                   mono_type_string(*optional->monotype));
+            return absl::StrFormat(
+                "?%s: %s", optional->name->string(), mono_type_string(*optional->monotype));
         }
         case ParameterType::Type::Pipe: {
             const auto& pipe = std::get<std::unique_ptr<Pipe>>(parameter.value);
-            return absl::StrFormat("<-%s: %s", pipe->name->string(),
-                                   mono_type_string(*pipe->monotype));
+            return absl::StrFormat(
+                "<-%s: %s", pipe->name->string(), mono_type_string(*pipe->monotype));
         }
     }
     pl::assume_unreachable();
@@ -79,8 +78,8 @@ std::string mono_type_string(const MonoType& mono) {
                 mono_type_string(*std::get<std::unique_ptr<VectorType>>(mono.value)->element));
         case MonoType::Type::Dict: {
             const auto& dict = std::get<std::unique_ptr<DictType>>(mono.value);
-            return absl::StrFormat("[%s:%s]", mono_type_string(*dict->key),
-                                   mono_type_string(*dict->val));
+            return absl::StrFormat(
+                "[%s:%s]", mono_type_string(*dict->key), mono_type_string(*dict->val));
         }
         case MonoType::Type::Dynamic:
             return "dynamic";
@@ -88,15 +87,15 @@ std::string mono_type_string(const MonoType& mono) {
             const auto& record = std::get<std::unique_ptr<RecordType>>(mono.value);
             std::vector<std::string> props;
             for (const auto& property : record->properties) {
-                props.emplace_back(absl::StrFormat("%s: %s", property->name->string(),
-                                                   mono_type_string(*property->monotype)));
+                props.emplace_back(absl::StrFormat(
+                    "%s: %s", property->name->string(), mono_type_string(*property->monotype)));
             }
             if (record->tvar) {
                 if (props.empty()) {
                     return absl::StrFormat("{%s with}", record->tvar->string());
                 }
-                return absl::StrFormat("{%s with %s}", record->tvar->string(),
-                                       absl::StrJoin(props, ", "));
+                return absl::StrFormat(
+                    "{%s with %s}", record->tvar->string(), absl::StrJoin(props, ", "));
             }
             return absl::StrFormat("{%s}", absl::StrJoin(props, ", "));
         }
@@ -106,8 +105,8 @@ std::string mono_type_string(const MonoType& mono) {
             for (const auto& parameter : function->parameters) {
                 params.emplace_back(parameter_type_string(*parameter));
             }
-            return absl::StrFormat("(%s) => %s", absl::StrJoin(params, ", "),
-                                   mono_type_string(*function->monotype));
+            return absl::StrFormat(
+                "(%s) => %s", absl::StrJoin(params, ", "), mono_type_string(*function->monotype));
         }
         case MonoType::Type::Label:
             return std::get<std::unique_ptr<LabelLit>>(mono.value)->string();
@@ -138,22 +137,31 @@ std::string ImportDeclaration::string() const {
     return attributes_prefix(attributes) + "import " + path->string();
 }
 
-std::string ArrayItem::string() const { return expression->string(); }
+std::string ArrayItem::string() const {
+    return expression->string();
+}
 
-std::string ExprStmt::string() const { return expression->string(); }
+std::string ExprStmt::string() const {
+    return expression->string();
+}
 
 std::string ArrayExpr::string() const {
-    auto args = absl::StrJoin(elements, ", ", [](std::string* out, const auto& e) {
-        out->append(e->string());
-    });
+    auto args = absl::StrJoin(
+        elements, ", ", [](std::string* out, const auto& e) { out->append(e->string()); });
     return absl::StrFormat("[ %s ]", args);
 }
 
-std::string AttributeParam::string() const { return "value: " + value->string(); }
+std::string AttributeParam::string() const {
+    return "value: " + value->string();
+}
 
-std::string VariableAssgn::string() const { return id->string() + " = " + init->string(); }
+std::string VariableAssgn::string() const {
+    return id->string() + " = " + init->string();
+}
 
-std::string OptionStmt::string() const { return assignment->string(); }
+std::string OptionStmt::string() const {
+    return assignment->string();
+}
 
 std::string Assignment::string() const {
     std::stringstream ss;
@@ -171,9 +179,8 @@ std::string Assignment::string() const {
 }
 
 std::string FunctionExpr::string() const {
-    auto props = absl::StrJoin(params, ", ", [](std::string* out, const auto& p) {
-        out->append(p->string());
-    });
+    auto props = absl::StrJoin(
+        params, ", ", [](std::string* out, const auto& p) { out->append(p->string()); });
     return absl::StrFormat("(%s) => { %s }", props, body->string());
 }
 
@@ -219,9 +226,8 @@ std::string PipeExpr::string() const {
 }
 
 std::string CallExpr::string() const {
-    auto args = absl::StrJoin(arguments, ", ", [](std::string* out, const auto& e) {
-        out->append(e->string());
-    });
+    auto args = absl::StrJoin(
+        arguments, ", ", [](std::string* out, const auto& e) { out->append(e->string()); });
     return absl::StrFormat("%s: ( %s )", callee->string(), args);
 }
 
@@ -240,32 +246,42 @@ std::string Block::string() const {
                            }));
 }
 
-std::string StringLit::string() const { return value; }
-
-std::string FloatLit::string() const { return absl::StrFormat("%.4f", value); }
-
-std::string IntegerLit::string() const { return absl::StrFormat("%d", value); }
-
-std::string Duration::string() const { return absl::StrFormat("%d%s", magnitude, unit); }
-
-std::string DurationLit::string() const {
-    return absl::StrJoin(values, ", ", [](std::string* out, const auto& d) {
-        out->append(d->string());
-    });
+std::string StringLit::string() const {
+    return value;
 }
 
-std::string ReturnStmt::string() const { return absl::StrFormat("return %s", argument->string()); }
+std::string FloatLit::string() const {
+    return absl::StrFormat("%.4f", value);
+}
+
+std::string IntegerLit::string() const {
+    return absl::StrFormat("%d", value);
+}
+
+std::string Duration::string() const {
+    return absl::StrFormat("%d%s", magnitude, unit);
+}
+
+std::string DurationLit::string() const {
+    return absl::StrJoin(
+        values, ", ", [](std::string* out, const auto& d) { out->append(d->string()); });
+}
+
+std::string ReturnStmt::string() const {
+    return absl::StrFormat("return %s", argument->string());
+}
 
 std::string LogicalExpr::string() const {
     return absl::StrFormat("%s %s %s", left->string(), op_string(op), right->string());
 }
 
-std::string WithSource::string() const { return source ? source->string() : ""; }
+std::string WithSource::string() const {
+    return source ? source->string() : "";
+}
 
 std::string ObjectExpr::string() const {
-    auto props = absl::StrJoin(properties, ", ", [](std::string* out, const auto& p) {
-        out->append(p->string());
-    });
+    auto props = absl::StrJoin(
+        properties, ", ", [](std::string* out, const auto& p) { out->append(p->string()); });
     if (with) {
         if (props.empty()) {
             return absl::StrFormat("{ %s with }", with->string());
@@ -287,15 +303,13 @@ std::string UnaryExpr::string() const {
     return absl::StrFormat("%s %s", op_string(op), argument->string());
 }
 std::string ConditionalExpr::string() const {
-    return absl::StrFormat("if %s then %s else %s", test->string(), consequent->string(),
-                           alternate->string());
+    return absl::StrFormat(
+        "if %s then %s else %s", test->string(), consequent->string(), alternate->string());
 }
 std::string StringExpr::string() const {
     return "\"" +
-           absl::StrJoin(parts, "",
-                         [](std::string* out, const auto& p) {
-                             out->append(p->string());
-                         }) +
+           absl::StrJoin(
+               parts, "", [](std::string* out, const auto& p) { out->append(p->string()); }) +
            "\"";
 }
 std::string StringExprPart::string() const {
@@ -307,20 +321,38 @@ std::string StringExprPart::string() const {
     }
     pl::assume_unreachable();
 }
-std::string TextPart::string() const { return value; }
-std::string InterpolatedPart::string() const { return "${" + expression->string() + "}"; }
-std::string ParenExpr::string() const { return "(" + expression->string() + ")"; }
-std::string BooleanLit::string() const { return value ? "true" : "false"; }
+std::string TextPart::string() const {
+    return value;
+}
+std::string InterpolatedPart::string() const {
+    return "${" + expression->string() + "}";
+}
+std::string ParenExpr::string() const {
+    return "(" + expression->string() + ")";
+}
+std::string BooleanLit::string() const {
+    return value ? "true" : "false";
+}
 std::string DateTimeLit::string() const {
     char buf[64];
     std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &value);
     return buf;
 }
-std::string RegexpLit::string() const { return "/" + value + "/"; }
-std::string PipeLit::string() const { return "<-"; }
-std::string LabelLit::string() const { return "." + value; }
-std::string BadExpr::string() const { return text; }
-std::string UintLit::string() const { return absl::StrCat(value, "u"); }
+std::string RegexpLit::string() const {
+    return "/" + value + "/";
+}
+std::string PipeLit::string() const {
+    return "<-";
+}
+std::string LabelLit::string() const {
+    return "." + value;
+}
+std::string BadExpr::string() const {
+    return text;
+}
+std::string UintLit::string() const {
+    return absl::StrCat(value, "u");
+}
 
 std::string Statement::string() const {
     std::stringstream ss;
@@ -442,7 +474,9 @@ std::string Expression::string() const {
     return ss.str();
 }
 
-std::string Identifier::string() const { return name; }
+std::string Identifier::string() const {
+    return name;
+}
 
 std::string DictExpr::string() const {
     return absl::StrFormat("[ %s ]",
@@ -453,12 +487,14 @@ std::string DictExpr::string() const {
                            }));
 }
 
-std::string BadStmt::string() const { return text; }
+std::string BadStmt::string() const {
+    return text;
+}
 
 std::string TestCaseStmt::string() const {
     if (extends) {
-        return absl::StrFormat("testcase %s extends %s %s", id->string(), extends->string(),
-                               block->string());
+        return absl::StrFormat(
+            "testcase %s extends %s %s", id->string(), extends->string(), block->string());
     }
     return absl::StrFormat("testcase %s %s", id->string(), block->string());
 }

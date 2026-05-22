@@ -17,9 +17,10 @@
 
 #include "cpp/pl/minidfs/namenode/lease_manager.h"
 
+#include <chrono>
+
 #include "cpp/pl/minidfs/common/constants.h"
 #include "cpp/pl/minidfs/common/error_code.h"
-#include <chrono>
 
 namespace pl::minidfs {
 
@@ -108,7 +109,9 @@ pl::Result<pl::Void> LeaseManager::release_lease(uint64_t inode_id, std::string_
     return store_->close_lease(inode_id);
 }
 
-pl::Result<uint64_t> LeaseManager::expire_stale_leases() { return store_->expire_leases(now_ms()); }
+pl::Result<uint64_t> LeaseManager::expire_stale_leases() {
+    return store_->expire_leases(now_ms());
+}
 
 pl::Result<bool> LeaseManager::has_active_lease(uint64_t inode_id) {
     auto existing = store_->get_active_lease(inode_id);

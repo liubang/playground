@@ -29,7 +29,9 @@ bool starts_with_char(const std::string& text, char ch) {
     return !text.empty() && text.front() == ch;
 }
 
-bool ends_with_char(const std::string& text, char ch) { return !text.empty() && text.back() == ch; }
+bool ends_with_char(const std::string& text, char ch) {
+    return !text.empty() && text.back() == ch;
+}
 
 } // namespace
 

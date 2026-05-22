@@ -16,10 +16,10 @@
 // Created: 2023/06/08 15:06
 #pragma once
 
-#include "cpp/pl/scope/preprocessor.h"
-
 #include <type_traits>
 #include <utility>
+
+#include "cpp/pl/scope/preprocessor.h"
 
 namespace pl {
 

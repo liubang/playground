@@ -15,8 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/15 00:47
 
-#include "cpp/pl/flux/runtime/runtime_value.h"
 #include <gtest/gtest.h>
+
+#include "cpp/pl/flux/runtime/runtime_value.h"
 
 namespace pl::flux {
 namespace {

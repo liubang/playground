@@ -17,13 +17,14 @@
 
 #include "cpp/pl/flux/optimizer/explain.h"
 
+#include <sstream>
+#include <vector>
+
 #include "cpp/pl/flux/connector/connector_registry.h"
 #include "cpp/pl/flux/connector/connector_runtime.h"
 #include "cpp/pl/flux/optimizer/cbo.h"
 #include "cpp/pl/flux/optimizer/rbo.h"
 #include "cpp/pl/flux/plan/physical_plan.h"
-#include <sstream>
-#include <vector>
 
 namespace pl::flux::optimizer {
 namespace {
@@ -108,8 +109,8 @@ void FormatLogicalNodeDetail(const plan::PlanNode& node, std::ostringstream* out
         }
         *out << ")";
     } else if (node.kind == plan::PlanNodeKind::Join) {
-        *out << "(method=\"" << plan::JoinMethodName(node.join().method) << "\", on="
-             << plan::StringList(node.join().on) << ", build=\""
+        *out << "(method=\"" << plan::JoinMethodName(node.join().method)
+             << "\", on=" << plan::StringList(node.join().on) << ", build=\""
              << plan::JoinBuildSideName(node.join().build_side) << "\")";
     } else if (node.kind == plan::PlanNodeKind::Exchange) {
         *out << "(kind=\"" << plan::ExchangeKindName(node.exchange().kind) << "\"";
@@ -136,8 +137,8 @@ void FormatLogicalPlanTree(const plan::PlanNode& node,
     const std::string child_prefix = is_root ? "" : prefix + (is_last ? "   " : "|  ");
     for (size_t i = 0; i < node.inputs.size(); ++i) {
         if (node.inputs[i] != nullptr) {
-            FormatLogicalPlanTree(*node.inputs[i], child_prefix, i + 1 == node.inputs.size(), false,
-                                  out);
+            FormatLogicalPlanTree(
+                *node.inputs[i], child_prefix, i + 1 == node.inputs.size(), false, out);
         }
     }
 }

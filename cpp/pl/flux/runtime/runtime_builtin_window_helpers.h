@@ -17,13 +17,14 @@
 
 #pragma once
 
-#include "cpp/pl/flux/runtime/runtime_builtin_time_helpers.h"
 #include <memory>
 #include <optional>
 #include <string>
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+#include "cpp/pl/flux/runtime/runtime_builtin_time_helpers.h"
 
 namespace pl::flux {
 
@@ -42,8 +43,8 @@ inline std::shared_ptr<ObjectValue> window_group_object(const TableChunk& chunk,
     auto group = chunk_group_object(chunk);
     Value updated = object_with_upserted_property(
         *group, start_column, Value::time(format_rfc3339_seconds(start_seconds)));
-    updated = object_with_upserted_property(updated.as_object(), stop_column,
-                                            Value::time(format_rfc3339_seconds(stop_seconds)));
+    updated = object_with_upserted_property(
+        updated.as_object(), stop_column, Value::time(format_rfc3339_seconds(stop_seconds)));
     return std::make_shared<ObjectValue>(updated.as_object());
 }
 
@@ -56,8 +57,8 @@ inline std::shared_ptr<ObjectValue> row_with_window_bounds(
     const std::shared_ptr<ObjectValue>& group) {
     Value updated = object_with_upserted_property(
         row, start_column, Value::time(format_rfc3339_seconds(start_seconds)));
-    updated = object_with_upserted_property(updated.as_object(), stop_column,
-                                            Value::time(format_rfc3339_seconds(stop_seconds)));
+    updated = object_with_upserted_property(
+        updated.as_object(), stop_column, Value::time(format_rfc3339_seconds(stop_seconds)));
     updated = object_with_upserted_property(updated.as_object(), "_group", Value::object(group));
     return std::make_shared<ObjectValue>(updated.as_object());
 }
@@ -66,8 +67,8 @@ inline std::unordered_set<std::string> aggregate_window_allowed_columns(
     const ObjectValue& row,
     const std::string& aggregate_column,
     const std::string& time_dst_column) {
-    std::unordered_set<std::string> allowed = {"_group", "_start", "_stop", aggregate_column,
-                                               time_dst_column};
+    std::unordered_set<std::string> allowed = {
+        "_group", "_start", "_stop", aggregate_column, time_dst_column};
     const Value* group = row.lookup("_group");
     if (group != nullptr && group->type() == Value::Type::Object) {
         for (const auto& [name, value] : group->as_object().properties) {
@@ -205,8 +206,8 @@ inline std::shared_ptr<ObjectValue> aggregate_window_output_row(
         upsert("_stop", &stop_index, Value::time(format_rfc3339_seconds(*window_stop)));
     }
     if (time_src_seconds.has_value()) {
-        upsert(time_dst_column, &time_index,
-               Value::time(format_rfc3339_seconds(*time_src_seconds)));
+        upsert(
+            time_dst_column, &time_index, Value::time(format_rfc3339_seconds(*time_src_seconds)));
     }
     return std::make_shared<ObjectValue>(std::move(props));
 }

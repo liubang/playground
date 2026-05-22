@@ -14,8 +14,9 @@
 
 #pragma once
 
-#include "ast.h"
 #include <string>
+
+#include "ast.h"
 
 namespace pl::flux {
 

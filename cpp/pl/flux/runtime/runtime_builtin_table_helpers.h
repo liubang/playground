@@ -17,10 +17,6 @@
 
 #pragma once
 
-#include "absl/status/status.h"
-#include "absl/strings/str_cat.h"
-#include "cpp/pl/flux/runtime/runtime_env.h"
-#include "cpp/pl/flux/runtime/runtime_eval.h"
 #include <algorithm>
 #include <functional>
 #include <limits>
@@ -31,6 +27,11 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+#include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
+#include "cpp/pl/flux/runtime/runtime_env.h"
+#include "cpp/pl/flux/runtime/runtime_eval.h"
 
 namespace pl::flux {
 
@@ -384,11 +385,13 @@ inline std::vector<std::string> all_visible_columns_in_order(const TableValue& t
     return columns;
 }
 
-inline std::vector<TableChunk> clone_table_chunks(const TableValue& table) { return table.tables; }
+inline std::vector<TableChunk> clone_table_chunks(const TableValue& table) {
+    return table.tables;
+}
 
 inline Value table_with_chunks_like(const TableValue& table, std::vector<TableChunk> chunks) {
-    return Value::table_stream(table.bucket, std::move(chunks), table.range_start, table.range_stop,
-                               table.result_name);
+    return Value::table_stream(
+        table.bucket, std::move(chunks), table.range_start, table.range_stop, table.result_name);
 }
 
 enum class EmptyChunkPolicy {

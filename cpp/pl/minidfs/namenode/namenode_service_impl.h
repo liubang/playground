@@ -35,8 +35,10 @@ namespace pl::minidfs {
 
 class NameNodeServiceImpl : public protocol::NameNodeService {
 public:
-    NameNodeServiceImpl(NamespaceManager* ns_mgr, BlockManager* block_mgr,
-                        LeaseManager* lease_mgr, MetadataStore* metadata_store);
+    NameNodeServiceImpl(NamespaceManager* ns_mgr,
+                        BlockManager* block_mgr,
+                        LeaseManager* lease_mgr,
+                        MetadataStore* metadata_store);
     ~NameNodeServiceImpl() override = default;
 
     void Mkdir(google::protobuf::RpcController* controller,
@@ -95,11 +97,11 @@ private:
     static void fill_located_block(protocol::LocatedBlockProto* proto, const LocatedBlock& lb);
 
     // 幂等性检查：若 request_id 已处理过则返回 true（调用方应直接返回成功）
-    bool check_idempotent(const protocol::RequestHeader& header,
-                          protocol::StatusProto* status);
+    bool check_idempotent(const protocol::RequestHeader& header, protocol::StatusProto* status);
 
     // 写入 oplog（幂等性记录）
-    void write_oplog(std::string_view op_type, uint64_t target_inode_id,
+    void write_oplog(std::string_view op_type,
+                     uint64_t target_inode_id,
                      const protocol::RequestHeader& header);
 
     NamespaceManager* ns_mgr_;

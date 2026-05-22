@@ -15,12 +15,13 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2024/12/09 00:05
 
-#include "cpp/pl/random/random.h"
-#include "cpp/pl/skiplist/skiplist.h"
 #include <gtest/gtest.h>
 #include <memory>
 #include <string>
 #include <vector>
+
+#include "cpp/pl/random/random.h"
+#include "cpp/pl/skiplist/skiplist.h"
 
 namespace {
 

@@ -17,14 +17,15 @@
 
 #pragma once
 
-#include "cpp/pl/minidfs/common/types.h"
-#include "cpp/pl/status/result.h"
 #include <brpc/channel.h>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "cpp/pl/minidfs/common/types.h"
+#include "cpp/pl/status/result.h"
 
 namespace pl::minidfs {
 
@@ -161,7 +162,8 @@ public:
         std::vector<BlockLocation> locations;
     };
     [[nodiscard]] Result<std::vector<FileBlockDetail>> get_file_blocks(uint64_t inode_id);
-    [[nodiscard]] Result<std::vector<FileBlockDetail>> get_file_blocks_by_path(std::string_view path);
+    [[nodiscard]] Result<std::vector<FileBlockDetail>> get_file_blocks_by_path(
+        std::string_view path);
 
     /// Detailed replica info for a single block.
     struct ReplicaDetail {

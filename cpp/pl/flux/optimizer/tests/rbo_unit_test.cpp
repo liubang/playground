@@ -15,16 +15,17 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/10 00:00
 
-#include "cpp/pl/flux/optimizer/rbo.h"
 #include <gtest/gtest.h>
 #include <utility>
+
+#include "cpp/pl/flux/optimizer/rbo.h"
 
 namespace pl::flux::optimizer {
 namespace {
 
 std::shared_ptr<plan::PlanNode> SourceScanPlan() {
-    return plan::MakeSourceScan("sqlite", "sqlite", "cpp/pl/flux/examples/cross_source/metrics.db",
-                                "cpu");
+    return plan::MakeSourceScan(
+        "sqlite", "sqlite", "cpp/pl/flux/examples/cross_source/metrics.db", "cpu");
 }
 
 TEST(PlanNodeTest, DefaultConstructsWithMatchingMaterializeSpec) {
@@ -43,13 +44,14 @@ TEST(RuleBasedOptimizerTest, KeepsLogicalPlanStableWhileRecordingDeterministicTr
     };
     auto input = SourceScanPlan();
     auto plan = plan::MakeLimit(
-        plan::MakeSort(
-            plan::MakeProject(plan::MakeFilter(plan::MakeRange(input, "2024-01-01T00:00:00Z",
-                                                               "2024-01-02T00:00:00Z"),
-                                               std::move(predicates)),
-                              {"_time", "host", "usage"}),
-            {{.column = "usage", .desc = true}}),
-        10, 0);
+        plan::MakeSort(plan::MakeProject(plan::MakeFilter(plan::MakeRange(input,
+                                                                          "2024-01-01T00:00:00Z",
+                                                                          "2024-01-02T00:00:00Z"),
+                                                          std::move(predicates)),
+                                         {"_time", "host", "usage"}),
+                       {{.column = "usage", .desc = true}}),
+        10,
+        0);
 
     auto result_or = DefaultRuleBasedOptimizer().Optimize(plan);
 
@@ -88,7 +90,8 @@ TEST(RuleBasedOptimizerTest, KeepsLogicalPlanStableWhileRecordingDeterministicTr
 TEST(RuleBasedOptimizerTest, RecordsAggregatePushdownRequestWithColumnMapping) {
     auto plan = plan::MakeAggregate(
         plan::MakeGroup(plan::MakeRename(SourceScanPlan(), {{"usage", "cpu_usage"}}), {"host"}),
-        plan::AggregateFunction::Mean, "cpu_usage");
+        plan::AggregateFunction::Mean,
+        "cpu_usage");
 
     auto result_or = DefaultRuleBasedOptimizer().Optimize(plan);
 
@@ -102,8 +105,8 @@ TEST(RuleBasedOptimizerTest, RecordsAggregatePushdownRequestWithColumnMapping) {
 }
 
 TEST(RuleBasedOptimizerTest, TracesMaterializationBarrierWithoutPushdownRules) {
-    auto plan = plan::MakeMaterializeBarrier(plan::MakeGroup(SourceScanPlan(), {"host"}),
-                                             "unsupported lazy builtin", "test");
+    auto plan = plan::MakeMaterializeBarrier(
+        plan::MakeGroup(SourceScanPlan(), {"host"}), "unsupported lazy builtin", "test");
 
     auto result_or = DefaultRuleBasedOptimizer().Optimize(plan);
 

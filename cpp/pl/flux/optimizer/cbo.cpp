@@ -17,14 +17,15 @@
 
 #include "cpp/pl/flux/optimizer/cbo.h"
 
-#include "absl/status/status.h"
-#include "absl/strings/str_cat.h"
-#include "cpp/pl/flux/connector/connector_registry.h"
-#include "cpp/pl/flux/connector/connector_runtime.h"
 #include <algorithm>
 #include <cmath>
 #include <memory>
 #include <utility>
+
+#include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
+#include "cpp/pl/flux/connector/connector_registry.h"
+#include "cpp/pl/flux/connector/connector_runtime.h"
 
 namespace pl::flux::optimizer {
 namespace {
@@ -37,11 +38,17 @@ constexpr double kConnectorCpuPerRow = 0.05;
 constexpr double kJoinBuildCpuPerRow = 1.25;
 constexpr double kJoinProbeCpuPerRow = 0.75;
 
-bool has_rows(const plan::CostEstimate& cost) { return cost.rows.has_value(); }
+bool has_rows(const plan::CostEstimate& cost) {
+    return cost.rows.has_value();
+}
 
-plan::CostEstimate unknown_cost() { return {}; }
+plan::CostEstimate unknown_cost() {
+    return {};
+}
 
-double safe_non_negative(int64_t value) { return static_cast<double>(std::max<int64_t>(0, value)); }
+double safe_non_negative(int64_t value) {
+    return static_cast<double>(std::max<int64_t>(0, value));
+}
 
 plan::CostEstimate combine_unary_cost(const plan::CostEstimate& input,
                                       double output_rows,
@@ -340,8 +347,8 @@ absl::StatusOr<CboPlanResult> CostBasedOptimizer::OptimizeWithTrace(
                                     ? plan::JoinBuildSide::Right
                                     : plan::JoinBuildSide::Left;
         result.alternatives[0].name = join_alternative_name(chosen_side);
-        auto other_cost_or =
-            EstimateJoinWithBuildSide(result.rbo_result.plan, other_side, cost_model, stats_provider);
+        auto other_cost_or = EstimateJoinWithBuildSide(
+            result.rbo_result.plan, other_side, cost_model, stats_provider);
         result.alternatives.push_back(PlanAlternative{
             .name = join_alternative_name(other_side),
             .shape = PhysicalShape::LocalHashJoin,
@@ -379,6 +386,8 @@ CostBasedOptimizer FastCostBasedOptimizer() {
     return CostBasedOptimizer(CboOptions{.collect_connector_stats = false});
 }
 
-std::string PhysicalShapeName(PhysicalShape shape) { return alternative_name(shape); }
+std::string PhysicalShapeName(PhysicalShape shape) {
+    return alternative_name(shape);
+}
 
 } // namespace pl::flux::optimizer

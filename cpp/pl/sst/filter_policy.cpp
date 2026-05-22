@@ -17,8 +17,9 @@
 
 #include "cpp/pl/sst/filter_policy.h"
 
-#include "xxhash.h"
 #include <array>
+
+#include "xxhash.h"
 
 namespace pl {
 
@@ -27,8 +28,12 @@ static constexpr uint32_t kBloomFilterV1 = 1; // Standard BloomFilter
 static constexpr uint32_t kBloomFilterV2 = 2; // Blocked BloomFilter
 
 namespace {
-inline uint32_t Lower32of64(uint64_t v) { return static_cast<uint32_t>(v); }
-inline uint32_t Upper32of64(uint64_t v) { return static_cast<uint32_t>(v >> 32); }
+inline uint32_t Lower32of64(uint64_t v) {
+    return static_cast<uint32_t>(v);
+}
+inline uint32_t Upper32of64(uint64_t v) {
+    return static_cast<uint32_t>(v >> 32);
+}
 } // namespace
 
 void FilterBuilder::add_key(std::string_view key) {
@@ -57,7 +62,9 @@ void FilterBuilder::add_key_and_alt(std::string_view key, std::string_view alt) 
     }
 }
 
-size_t FilterBuilder::estimate_hashes_added() { return hashes_.size(); }
+size_t FilterBuilder::estimate_hashes_added() {
+    return hashes_.size();
+}
 
 std::size_t StandardBloomFilterBuilder::calculate_space(std::size_t num_hashes) const {
     std::size_t bit_count = num_hashes * bits_per_key_;
@@ -163,17 +170,17 @@ std::size_t BlockedBloomFilterBuilder::calculate_space(std::size_t num_hashes) c
 
 bool StandardBloomFilterReader::key_may_match(std::string_view key) {
     uint64_t hash = ::XXH3_64bits(key.data(), key.size());
-    return StandardBloomFilter::hash_may_match(hash, (buf_length_ - kMetadataLen) << 3, num_probes_,
-                                               buf_);
+    return StandardBloomFilter::hash_may_match(
+        hash, (buf_length_ - kMetadataLen) << 3, num_probes_, buf_);
 }
 
 bool BlockedBloomFilterReader::key_may_match(std::string_view key) {
     uint64_t hash = ::XXH3_64bits(key.data(), key.size());
     uint32_t byte_offset;
-    BlockedBloomFilter::prepare_hash(Lower32of64(hash), buf_length_ - kMetadataLen, buf_,
-                                     &byte_offset);
-    return BlockedBloomFilter::hash_may_match_prepared(Upper32of64(hash), num_probes_,
-                                                       buf_ + byte_offset);
+    BlockedBloomFilter::prepare_hash(
+        Lower32of64(hash), buf_length_ - kMetadataLen, buf_, &byte_offset);
+    return BlockedBloomFilter::hash_may_match_prepared(
+        Upper32of64(hash), num_probes_, buf_ + byte_offset);
 }
 
 } // namespace pl

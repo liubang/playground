@@ -15,11 +15,12 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/15 00:31
 
-#include "cpp/pl/flux/runtime/runtime_page.h"
-#include "gtest/gtest.h"
 #include <memory>
 #include <utility>
 #include <vector>
+
+#include "cpp/pl/flux/runtime/runtime_page.h"
+#include "gtest/gtest.h"
 
 namespace pl::flux {
 namespace {
@@ -89,10 +90,10 @@ TEST(RuntimePageTest, ValidatesColumnVectorRowCounts) {
 }
 
 TEST(RuntimePageTest, InfersSchemaAndReadsRowsFromColumnVectors) {
-    Page page = PageFromRows(
-        "cpu",
-        {row({{"host", Value::string("edge-1")}, {"usage", Value::floating(71.5)}}),
-         row({{"host", Value::string("edge-2")}, {"usage", Value::null()}})});
+    Page page =
+        PageFromRows("cpu",
+                     {row({{"host", Value::string("edge-1")}, {"usage", Value::floating(71.5)}}),
+                      row({{"host", Value::string("edge-2")}, {"usage", Value::null()}})});
 
     PageSchema schema = SchemaFromPage(page);
 
@@ -110,11 +111,11 @@ TEST(RuntimePageTest, InfersSchemaAndReadsRowsFromColumnVectors) {
 }
 
 TEST(RuntimePageTest, SlicesChunksWithoutMaterializingRows) {
-    Page page = PageFromRows(
-        "cpu",
-        {row({{"host", Value::string("edge-1")}, {"usage", Value::integer(1)}}),
-         row({{"host", Value::string("edge-2")}, {"usage", Value::integer(2)}}),
-         row({{"host", Value::string("edge-3")}, {"usage", Value::integer(3)}})});
+    Page page =
+        PageFromRows("cpu",
+                     {row({{"host", Value::string("edge-1")}, {"usage", Value::integer(1)}}),
+                      row({{"host", Value::string("edge-2")}, {"usage", Value::integer(2)}}),
+                      row({{"host", Value::string("edge-3")}, {"usage", Value::integer(3)}})});
 
     PageChunk slice = SlicePageChunkRows(page.chunks[0], 1, 2);
 

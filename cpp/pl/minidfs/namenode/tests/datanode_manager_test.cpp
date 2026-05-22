@@ -15,10 +15,11 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/10 21:00
 
+#include <gtest/gtest.h>
+
 #include "cpp/pl/minidfs/common/constants.h"
 #include "cpp/pl/minidfs/namenode/datanode_manager.h"
 #include "cpp/pl/minidfs/namenode/tests/mock_metadata_store.h"
-#include <gtest/gtest.h>
 
 namespace pl::minidfs {
 namespace {
@@ -54,8 +55,8 @@ TEST_F(DataNodeManagerTest, ReRegister) {
     ASSERT_TRUE(first.hasValue());
 
     // Re-register with different hostname.
-    auto second = mgr_->register_datanode("uuid-1", "host1-new", "10.0.0.2", 9000, 9100, "/rack2",
-                                          2000 * kGB);
+    auto second = mgr_->register_datanode(
+        "uuid-1", "host1-new", "10.0.0.2", 9000, 9100, "/rack2", 2000 * kGB);
     ASSERT_TRUE(second.hasValue());
     EXPECT_EQ(first.value(), second.value());
 

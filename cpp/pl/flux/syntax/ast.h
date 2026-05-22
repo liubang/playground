@@ -17,13 +17,14 @@
 
 #pragma once
 
-#include "cpp/pl/lang/assume.h"
-#include "token.h"
 #include <ctime>
 #include <unordered_map>
 #include <utility>
 #include <variant>
 #include <vector>
+
+#include "cpp/pl/lang/assume.h"
+#include "token.h"
 
 namespace pl::flux {
 

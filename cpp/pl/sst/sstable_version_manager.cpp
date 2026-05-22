@@ -61,9 +61,13 @@ void SSTableVersion::copyFrom(const SSTableVersionRef& version) {
     sst_patch_map_ = version->sst_patch_map_;
 }
 
-void SSTableVersionEdit::addSSTable(const SSTableRef& sstable) { add_sstables_.push_back(sstable); }
+void SSTableVersionEdit::addSSTable(const SSTableRef& sstable) {
+    add_sstables_.push_back(sstable);
+}
 
-void SSTableVersionEdit::delSSTable(const SSTId& sstid) { del_sstables_.push_back(sstid); }
+void SSTableVersionEdit::delSSTable(const SSTId& sstid) {
+    del_sstables_.push_back(sstid);
+}
 
 void SSTableVersionManager::applyVersionEdit(const SSTableVersionEditRef& edit) {
     assert(edit != nullptr);

@@ -15,12 +15,12 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/10/15 15:42
 
-#include "scanner.h"
 #include <iostream>
 #include <memory>
 
-int main(int argc, char* argv[]) {
+#include "scanner.h"
 
+int main(int argc, char* argv[]) {
     std::string sql =
         R"(SELECT "level description"::field, "location"::tag, "water_level"::field FROM "h2o_feet" GROUP BY time(600000us) ORDER BY time ASC)";
 

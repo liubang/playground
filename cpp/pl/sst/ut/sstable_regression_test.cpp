@@ -15,15 +15,16 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/03/29 12:01
 
-#include "cpp/pl/sst/sstable_builder.h"
-#include "cpp/pl/sst/sstable_iterator.h"
-#include "cpp/pl/sst/sstable_version_manager.h"
 #include <filesystem>
 #include <gtest/gtest.h>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "cpp/pl/sst/sstable_builder.h"
+#include "cpp/pl/sst/sstable_iterator.h"
+#include "cpp/pl/sst/sstable_version_manager.h"
 
 namespace pl {
 namespace {
@@ -257,8 +258,8 @@ TEST(SSTableBuilderRegressionTest, RealTableRoundTripsAcrossBlocksWithCompressio
         std::make_shared<Cell>(CellType::CT_PUT, "row-003", "cf", "col-a", v2, 3),
         std::make_shared<Cell>(CellType::CT_PUT, "row-004", "cf", "col-a", v3, 4),
     };
-    auto table = buildAndOpenTable(root, CompressionType::SNAPPY, 21, cells, 80,
-                                   FilterPolicyType::STANDARD_BLOOM_FILTER, 9);
+    auto table = buildAndOpenTable(
+        root, CompressionType::SNAPPY, 21, cells, 80, FilterPolicyType::STANDARD_BLOOM_FILTER, 9);
     ASSERT_NE(table, nullptr);
 
     EXPECT_EQ(21, table->sstId());

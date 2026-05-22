@@ -17,12 +17,13 @@
 
 #pragma once
 
-#include "cpp/pl/bloom/bloom.h"
 #include <cstring>
 #include <deque>
 #include <memory>
 #include <optional>
 #include <string_view>
+
+#include "cpp/pl/bloom/bloom.h"
 
 namespace pl {
 
@@ -49,7 +50,6 @@ using FilterBuilderPtr = std::unique_ptr<FilterBuilder>;
 using FilterBuilderRef = std::shared_ptr<FilterBuilder>;
 
 class StandardBloomFilterBuilder : public FilterBuilder {
-
 public:
     StandardBloomFilterBuilder(int bits_per_key) : bits_per_key_(bits_per_key) {}
 
@@ -71,7 +71,6 @@ private:
 };
 
 class BlockedBloomFilterBuilder : public FilterBuilder {
-
 public:
     BlockedBloomFilterBuilder(int bits_per_key) {
         millibits_per_key_ = static_cast<int>(bits_per_key * 1000.0 + 0.500001);

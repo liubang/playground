@@ -15,9 +15,10 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/06 21:10
 
-#include "cpp/pl/brpc/proto/echo.pb.h"
 #include <brpc/channel.h>
 #include <gflags/gflags.h>
+
+#include "cpp/pl/brpc/proto/echo.pb.h"
 
 DEFINE_string(server, "0.0.0.0:8000", "IP Address of server");
 DEFINE_string(load_balancer, "", "The algorithm for load balancing");

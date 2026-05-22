@@ -15,9 +15,10 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2024/12/22 14:09
 
-#include "cpp/pl/lang/common.h"
 #include <benchmark/benchmark.h>
 #include <vector>
+
+#include "cpp/pl/lang/common.h"
 
 // Function without __builtin_prefetch
 void NoPrefetch(benchmark::State& state) {

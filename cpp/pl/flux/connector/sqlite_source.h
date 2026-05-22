@@ -17,16 +17,17 @@
 
 #pragma once
 
-#include "absl/status/statusor.h"
-#include "cpp/pl/flux/connector/connector_runtime.h"
-#include "cpp/pl/flux/connector/table_source.h"
-#include "cpp/pl/flux/runtime/runtime_value.h"
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
+
+#include "absl/status/statusor.h"
+#include "cpp/pl/flux/connector/connector_runtime.h"
+#include "cpp/pl/flux/connector/table_source.h"
+#include "cpp/pl/flux/runtime/runtime_value.h"
 
 namespace pl::flux::connector {
 

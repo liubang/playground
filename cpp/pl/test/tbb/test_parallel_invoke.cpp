@@ -34,12 +34,6 @@ void interact() {
 }
 
 int main(int argc, char* argv[]) {
-    tbb::parallel_invoke(
-        [&] {
-            download("hello.zip");
-        },
-        [&] {
-            interact();
-        });
+    tbb::parallel_invoke([&] { download("hello.zip"); }, [&] { interact(); });
     return 0;
 }

@@ -22,7 +22,9 @@
 constexpr size_t n = 1 << 28;
 std::vector<float> a(n);
 
-static float func(float x) { return x * (x * x + x * 3.14f - 1 / (x + 1)) + 42 / (2.718f - x); }
+static float func(float x) {
+    return x * (x * x + x * 3.14f - 1 / (x + 1)) + 42 / (2.718f - x);
+}
 
 void BM_serial_func(benchmark::State& bm) {
     for (auto _ : bm) {

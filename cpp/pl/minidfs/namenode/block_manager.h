@@ -17,12 +17,13 @@
 
 #pragma once
 
-#include "cpp/pl/minidfs/common/types.h"
-#include "cpp/pl/minidfs/metadata/metadata_store.h"
-#include "cpp/pl/status/result.h"
 #include <atomic>
 #include <cstdint>
 #include <vector>
+
+#include "cpp/pl/minidfs/common/types.h"
+#include "cpp/pl/minidfs/metadata/metadata_store.h"
+#include "cpp/pl/status/result.h"
 
 namespace pl::minidfs {
 

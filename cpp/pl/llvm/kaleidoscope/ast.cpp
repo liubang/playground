@@ -17,8 +17,9 @@
 
 #include "cpp/pl/llvm/kaleidoscope/ast.h"
 
-#include "cpp/pl/llvm/kaleidoscope/laxer.h"
 #include <map>
+
+#include "cpp/pl/llvm/kaleidoscope/laxer.h"
 
 namespace pl::llvm {
 

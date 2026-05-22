@@ -14,15 +14,18 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/05/21 02:32
-#include "cpp/pl/scope/scope.h"
 #include <gtest/gtest.h>
+
+#include "cpp/pl/scope/scope.h"
 
 TEST(tools, scope) {
     static int i = 0;
     {
         ++i;
 
-        SCOPE_EXIT { i--; };
+        SCOPE_EXIT {
+            i--;
+        };
 
         EXPECT_EQ(1, i);
     }

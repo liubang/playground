@@ -17,10 +17,6 @@
 
 #include "cpp/pl/flux/connector/sqlite_source.h"
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/str_cat.h"
-#include "cpp/pl/flux/connector/sql_builder.h"
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -32,6 +28,11 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "cpp/pl/flux/connector/sql_builder.h"
 
 namespace pl::flux::connector {
 namespace {
@@ -96,8 +97,12 @@ std::string query_for_table(const std::string& table) {
 }
 
 std::string query_for_table_rowid_range(const std::string& table, int64_t lower, int64_t upper) {
-    return absl::StrCat("SELECT * FROM ", quote_identifier(table), " WHERE rowid >= ", lower,
-                        " AND rowid <= ", upper);
+    return absl::StrCat("SELECT * FROM ",
+                        quote_identifier(table),
+                        " WHERE rowid >= ",
+                        lower,
+                        " AND rowid <= ",
+                        upper);
 }
 
 // predicate_op_sql / aggregate_fn_sql / validate_column are now shared via
@@ -129,11 +134,16 @@ absl::Status bind_value(sqlite3_stmt* stmt, int index, const Value& value) {
             rc = sqlite3_bind_double(stmt, index, value.as_float());
             break;
         case Value::Type::String:
-            rc = sqlite3_bind_text(stmt, index, value.as_string().c_str(),
-                                   static_cast<int>(value.as_string().size()), SQLITE_TRANSIENT);
+            rc = sqlite3_bind_text(stmt,
+                                   index,
+                                   value.as_string().c_str(),
+                                   static_cast<int>(value.as_string().size()),
+                                   SQLITE_TRANSIENT);
             break;
         case Value::Type::Time:
-            rc = sqlite3_bind_text(stmt, index, value.as_time().literal.c_str(),
+            rc = sqlite3_bind_text(stmt,
+                                   index,
+                                   value.as_time().literal.c_str(),
                                    static_cast<int>(value.as_time().literal.size()),
                                    SQLITE_TRANSIENT);
             break;
@@ -570,12 +580,17 @@ absl::StatusOr<TableStatistics> SQLiteSource::Statistics() const {
     if (schema_or.ok()) {
         statistics.columns.reserve(schema_or->columns.size());
         for (const auto& column : schema_or->columns) {
-            auto column_stats_or = prepare_statement(
-                db_or->get(), absl::StrCat("SELECT COUNT(DISTINCT ", quote_identifier(column.name),
-                                           "), SUM(CASE WHEN ", quote_identifier(column.name),
-                                           " IS NULL THEN 1 ELSE 0 END), AVG(LENGTH(CAST(",
-                                           quote_identifier(column.name), " AS TEXT))) FROM (",
-                                           query_, ") AS flux_source"));
+            auto column_stats_or =
+                prepare_statement(db_or->get(),
+                                  absl::StrCat("SELECT COUNT(DISTINCT ",
+                                               quote_identifier(column.name),
+                                               "), SUM(CASE WHEN ",
+                                               quote_identifier(column.name),
+                                               " IS NULL THEN 1 ELSE 0 END), AVG(LENGTH(CAST(",
+                                               quote_identifier(column.name),
+                                               " AS TEXT))) FROM (",
+                                               query_,
+                                               ") AS flux_source"));
             if (!column_stats_or.ok()) {
                 statistics.columns.push_back({.name = column.name});
                 continue;
@@ -901,18 +916,26 @@ absl::StatusOr<std::optional<Page>> SQLitePageSource::NextPage() {
     return page;
 }
 
-ConnectorSplitStats SQLitePageSource::Stats() const { return stats_; }
+ConnectorSplitStats SQLitePageSource::Stats() const {
+    return stats_;
+}
 
-bool SQLitePageSource::Finished() const { return stats_.finished; }
+bool SQLitePageSource::Finished() const {
+    return stats_.finished;
+}
 
 SQLitePageSourceProvider::SQLitePageSourceProvider(size_t rows_per_page)
     : rows_per_page_(std::max<size_t>(1, rows_per_page)) {}
 
 absl::StatusOr<std::unique_ptr<ConnectorPageSource>> SQLitePageSourceProvider::CreatePageSource(
     const ConnectorSplit& split) const {
-    auto page_source = std::make_unique<SQLitePageSource>(
-        split.table.dsn, split.table.table, split.request, rows_per_page_, split.rowid_lower,
-        split.rowid_upper, split.split_id);
+    auto page_source = std::make_unique<SQLitePageSource>(split.table.dsn,
+                                                          split.table.table,
+                                                          split.request,
+                                                          rows_per_page_,
+                                                          split.rowid_lower,
+                                                          split.rowid_upper,
+                                                          split.split_id);
     auto status = page_source->Initialize();
     if (!status.ok()) {
         return status;

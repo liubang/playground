@@ -17,10 +17,11 @@
 
 #include "cpp/pl/sst/sstable.h"
 
+#include <folly/ScopeGuard.h>
+
 #include "cpp/pl/fs/posix_fs.h"
 #include "cpp/pl/sst/encoding.h"
 #include "cpp/pl/sst/sstable_iterator.h"
-#include <folly/ScopeGuard.h>
 
 namespace pl {
 
@@ -107,12 +108,12 @@ Result<Void> SSTable::readFilter(const Footer& footer) {
     auto num_probes = decodeInt<uint8_t>(block.data.data() + (block.data.size() - 1));
     switch (filter_type) {
         case FilterPolicyType::STANDARD_BLOOM_FILTER:
-            filter_ = std::make_unique<StandardBloomFilterReader>(block.data.data(),
-                                                                  block.data.size(), num_probes);
+            filter_ = std::make_unique<StandardBloomFilterReader>(
+                block.data.data(), block.data.size(), num_probes);
             break;
         case pl::FilterPolicyType::BLOCKED_BLOOM_FILTER:
-            filter_ = std::make_unique<BlockedBloomFilterReader>(block.data.data(),
-                                                                 block.data.size(), num_probes);
+            filter_ = std::make_unique<BlockedBloomFilterReader>(
+                block.data.data(), block.data.size(), num_probes);
             break;
         default:
             assert(false);
@@ -200,10 +201,9 @@ Result<CellVecRef> SSTable::get(std::string_view rowkey, Arena* buf) {
 }
 
 IteratorPtr SSTable::iterator() {
-    return std::make_unique<SSTableIterator>(index_block_->iterator(options_->comparator),
-                                             [that = this](std::string_view b) {
-                                                 return that->blockReader(b);
-                                             });
+    return std::make_unique<SSTableIterator>(
+        index_block_->iterator(options_->comparator),
+        [that = this](std::string_view b) { return that->blockReader(b); });
 }
 
 } // namespace pl

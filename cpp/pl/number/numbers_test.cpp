@@ -15,8 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/05/21 23:50
 
-#include "cpp/pl/number/numbers.h"
 #include <gtest/gtest.h>
+
+#include "cpp/pl/number/numbers.h"
 
 TEST(tools, ip) {
     EXPECT_TRUE(pl::is_power_of_two(1));

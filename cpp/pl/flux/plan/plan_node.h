@@ -576,9 +576,8 @@ inline void FormatNodeDetail(const PlanNode& node, std::ostringstream* out) {
         }
     } else if (node.kind == PlanNodeKind::Join) {
         const auto& join = node.join();
-        *out << "(method=\"" << JoinMethodName(join.method) << "\", on="
-             << StringList(join.on) << ", build=\"" << JoinBuildSideName(join.build_side)
-             << "\")";
+        *out << "(method=\"" << JoinMethodName(join.method) << "\", on=" << StringList(join.on)
+             << ", build=\"" << JoinBuildSideName(join.build_side) << "\")";
     } else if (node.kind == PlanNodeKind::Exchange) {
         const auto& exchange = node.exchange();
         *out << "(kind=\"" << ExchangeKindName(exchange.kind) << "\"";

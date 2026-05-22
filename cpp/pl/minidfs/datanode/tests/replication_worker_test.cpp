@@ -14,8 +14,6 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/pl/minidfs/datanode/replication_worker.h"
-
 #include <atomic>
 #include <chrono>
 #include <filesystem>
@@ -25,6 +23,8 @@
 #include <thread>
 #include <vector>
 
+#include "cpp/pl/minidfs/datanode/replication_worker.h"
+
 namespace pl::minidfs {
 namespace {
 
@@ -33,9 +33,9 @@ namespace fs = std::filesystem;
 class ReplicationWorkerTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        test_dir_ = fs::temp_directory_path() / ("minidfs_repworker_test_" +
-                                                  std::to_string(::getpid()) + "_" +
-                                                  std::to_string(counter_++));
+        test_dir_ =
+            fs::temp_directory_path() / ("minidfs_repworker_test_" + std::to_string(::getpid()) +
+                                         "_" + std::to_string(counter_++));
         fs::create_directories(test_dir_);
 
         LocalBlockStore::Config config;
@@ -76,8 +76,11 @@ TEST_F(ReplicationWorkerTest, CopyTaskSuccess) {
     std::mutex mu;
     std::vector<CopyRecord> copies;
 
-    CopyFunc copy_func = [&](uint64_t block_id, uint64_t gs, const std::string& data,
-                             const std::string& host, uint32_t port) -> Result<Void> {
+    CopyFunc copy_func = [&](uint64_t block_id,
+                             uint64_t gs,
+                             const std::string& data,
+                             const std::string& host,
+                             uint32_t port) -> Result<Void> {
         std::lock_guard lock(mu);
         copies.push_back({block_id, gs, data, host, port});
         RETURN_VOID;
@@ -113,8 +116,8 @@ TEST_F(ReplicationWorkerTest, DeleteTaskSuccess) {
     create_finalized_block(200, 6000, "delete me");
     EXPECT_TRUE(store_->has_block(200, 6000));
 
-    CopyFunc copy_func = [](uint64_t, uint64_t, const std::string&,
-                            const std::string&, uint32_t) -> Result<Void> {
+    CopyFunc copy_func =
+        [](uint64_t, uint64_t, const std::string&, const std::string&, uint32_t) -> Result<Void> {
         RETURN_VOID;
     };
 
@@ -142,8 +145,8 @@ TEST_F(ReplicationWorkerTest, MultipleTasks) {
     create_finalized_block(301, 7001, "data_301");
 
     std::atomic<int> copy_count{0};
-    CopyFunc copy_func = [&](uint64_t, uint64_t, const std::string&,
-                             const std::string&, uint32_t) -> Result<Void> {
+    CopyFunc copy_func =
+        [&](uint64_t, uint64_t, const std::string&, const std::string&, uint32_t) -> Result<Void> {
         copy_count++;
         RETURN_VOID;
     };
@@ -177,8 +180,8 @@ TEST_F(ReplicationWorkerTest, MultipleTasks) {
 TEST_F(ReplicationWorkerTest, CopyBlockNotFound) {
     // Block 999 doesn't exist — copy should fail gracefully (not crash)
     std::atomic<int> copy_count{0};
-    CopyFunc copy_func = [&](uint64_t, uint64_t, const std::string&,
-                             const std::string&, uint32_t) -> Result<Void> {
+    CopyFunc copy_func =
+        [&](uint64_t, uint64_t, const std::string&, const std::string&, uint32_t) -> Result<Void> {
         copy_count++;
         RETURN_VOID;
     };
@@ -204,8 +207,8 @@ TEST_F(ReplicationWorkerTest, CopyBlockNotFound) {
 }
 
 TEST_F(ReplicationWorkerTest, PendingCount) {
-    CopyFunc copy_func = [](uint64_t, uint64_t, const std::string&,
-                            const std::string&, uint32_t) -> Result<Void> {
+    CopyFunc copy_func =
+        [](uint64_t, uint64_t, const std::string&, const std::string&, uint32_t) -> Result<Void> {
         // Slow task
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
         RETURN_VOID;
@@ -217,10 +220,16 @@ TEST_F(ReplicationWorkerTest, PendingCount) {
 
     // Enqueue without starting — tasks accumulate
     create_finalized_block(400, 8000, "data");
-    worker.enqueue(DataNodeTask{.kind = TaskKind::kCopy, .block_id = 400,
-                                .generation_stamp = 8000, .target_host = "x", .target_port = 1});
-    worker.enqueue(DataNodeTask{.kind = TaskKind::kCopy, .block_id = 400,
-                                .generation_stamp = 8000, .target_host = "y", .target_port = 2});
+    worker.enqueue(DataNodeTask{.kind = TaskKind::kCopy,
+                                .block_id = 400,
+                                .generation_stamp = 8000,
+                                .target_host = "x",
+                                .target_port = 1});
+    worker.enqueue(DataNodeTask{.kind = TaskKind::kCopy,
+                                .block_id = 400,
+                                .generation_stamp = 8000,
+                                .target_host = "y",
+                                .target_port = 2});
 
     EXPECT_EQ(worker.pending_count(), 2u);
 
@@ -235,8 +244,8 @@ TEST_F(ReplicationWorkerTest, StopDrainsQueue) {
     create_finalized_block(500, 9000, "drain_test");
 
     std::atomic<int> copy_count{0};
-    CopyFunc copy_func = [&](uint64_t, uint64_t, const std::string&,
-                             const std::string&, uint32_t) -> Result<Void> {
+    CopyFunc copy_func =
+        [&](uint64_t, uint64_t, const std::string&, const std::string&, uint32_t) -> Result<Void> {
         copy_count++;
         RETURN_VOID;
     };

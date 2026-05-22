@@ -17,12 +17,12 @@
 
 #pragma once
 
-#include "types.h"
-
 #include <cmath>
 #include <cstdint>
 #include <functional>
 #include <vector>
+
+#include "types.h"
 
 namespace pl::curve {
 
@@ -156,7 +156,9 @@ protected:
             uint64_t b = bit(zmin, i);
             uint64_t c = bit(zmax, i);
 
-            ZN_MATCH_ALL(0, 0, 0) { continue; }
+            ZN_MATCH_ALL(0, 0, 0) {
+                continue;
+            }
             ZN_MATCH_ALL(0, 0, 1) {
                 zmax = load(zmax, under(bits), bits, dim);
                 bigmin = load(zmin, over(bits), bits, dim);
@@ -185,7 +187,9 @@ protected:
                 // assert(false);
                 continue;
             }
-            ZN_MATCH_ALL(1, 1, 1) { continue; }
+            ZN_MATCH_ALL(1, 1, 1) {
+                continue;
+            }
         }
 #undef ZN_MATCH_ALL
 

@@ -110,8 +110,11 @@ int main(int argc, char* argv[]) {
     // 1. 逐条添加库表向量
     // ========================================================================
     const std::vector<std::string> table_ids = {
-        "default.user_info",      "default.order_detail",      "default.product_catalog",
-        "default.payment_record", "default.delivery_tracking",
+        "default.user_info",
+        "default.order_detail",
+        "default.product_catalog",
+        "default.payment_record",
+        "default.delivery_tracking",
     };
 
     for (const auto& table_id : table_ids) {

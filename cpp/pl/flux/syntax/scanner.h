@@ -17,15 +17,15 @@
 
 #pragma once
 
-#include "token.h"
 #include <cctype>
 #include <map>
 #include <memory>
 #include <vector>
 
+#include "token.h"
+
 namespace pl::flux {
 class Scanner {
-
 public:
     Scanner(const char* data, size_t len)
         : data_(data),

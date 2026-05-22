@@ -17,15 +17,16 @@
 
 #pragma once
 
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
 #include "cpp/pl/flux/contrib/lsp/formatter.h"
 #include "cpp/pl/flux/contrib/lsp/jsonrpc.h"
 #include "cpp/pl/flux/contrib/lsp/symbol_table.h"
 #include "cpp/pl/flux/contrib/lsp/transport.h"
 #include "cpp/pl/flux/syntax/ast.h"
-#include <memory>
-#include <string>
-#include <unordered_map>
-#include <vector>
 
 namespace pl::flux::lsp {
 

@@ -14,14 +14,14 @@
 
 // Authors: liubang (it.liubang@gmail.com)
 
-#include "cpp/pl/log/logger.h"
-
 #include <arpa/inet.h>
 #include <cstdio>
 #include <fcntl.h>
 #include <fmt/format.h>
 #include <memory>
 #include <netdb.h>
+
+#include "cpp/pl/log/logger.h"
 #if defined(__APPLE__) && defined(__MACH__)
 #include <sys/event.h>
 #elif defined(__linux__)

@@ -17,10 +17,9 @@
 
 #pragma once
 
-#include <tbb/parallel_invoke.h>
-
 #include <algorithm>
 #include <functional>
+#include <tbb/parallel_invoke.h>
 
 namespace pl {
 
@@ -68,13 +67,8 @@ template <typename T> void quick_sort2(T* data, size_t size) {
             data[right--] = data[left];
     }
     data[left] = pivot;
-    tbb::parallel_invoke(
-        [&] {
-            quick_sort(data, left);
-        },
-        [&] {
-            quick_sort(data + left + 1, size - left - 1);
-        });
+    tbb::parallel_invoke([&] { quick_sort(data, left); },
+                         [&] { quick_sort(data + left + 1, size - left - 1); });
 }
 
 template <typename T> void quick_sort3(T* data, size_t size) {
@@ -101,13 +95,8 @@ template <typename T> void quick_sort3(T* data, size_t size) {
             data[right--] = data[left];
     }
     data[left] = pivot;
-    tbb::parallel_invoke(
-        [&] {
-            quick_sort(data, left);
-        },
-        [&] {
-            quick_sort(data + left + 1, size - left - 1);
-        });
+    tbb::parallel_invoke([&] { quick_sort(data, left); },
+                         [&] { quick_sort(data + left + 1, size - left - 1); });
 }
 
 } // namespace pl

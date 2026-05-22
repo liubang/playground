@@ -16,13 +16,13 @@
 
 #pragma once
 
-#include "cpp/pl/minidfs/common/types.h"
-#include "cpp/pl/status/result.h"
-
 #include <brpc/channel.h>
 #include <cstdint>
 #include <string>
 #include <vector>
+
+#include "cpp/pl/minidfs/common/types.h"
+#include "cpp/pl/status/result.h"
 
 namespace pl::minidfs {
 
@@ -78,7 +78,7 @@ private:
     // 当前 block 缓存
     uint32_t current_block_index_ = 0;
     std::string current_block_data_;
-    uint64_t current_block_offset_ = 0;  // block 在文件中的起始 offset
+    uint64_t current_block_offset_ = 0; // block 在文件中的起始 offset
 };
 
 } // namespace pl::minidfs

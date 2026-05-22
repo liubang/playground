@@ -1,7 +1,8 @@
-#include "ttokens.h"
-#include "types.h"
 #include <cstdio>
 #include <cstdlib>
+
+#include "ttokens.h"
+#include "types.h"
 
 int main(int argc, char* argv[]) {
     int value;
