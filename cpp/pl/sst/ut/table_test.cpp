@@ -15,12 +15,13 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/06/04 22:43
 
-#include "cpp/pl/random/random.h"
-#include "cpp/pl/sst/sstable.h"
-#include "cpp/pl/sst/sstable_builder.h"
 #include <cstdio>
 #include <gtest/gtest.h>
 #include <set>
+
+#include "cpp/pl/random/random.h"
+#include "cpp/pl/sst/sstable.h"
+#include "cpp/pl/sst/sstable_builder.h"
 
 namespace pl {
 
@@ -248,11 +249,17 @@ protected:
     }
 };
 
-TEST_F(SSTableTest, table_without_compression) { seek_from_sst(0); }
+TEST_F(SSTableTest, table_without_compression) {
+    seek_from_sst(0);
+}
 
-TEST_F(SSTableTest, table_with_snappy_compression) { seek_from_sst(1); }
+TEST_F(SSTableTest, table_with_snappy_compression) {
+    seek_from_sst(1);
+}
 
-TEST_F(SSTableTest, table_with_zstd_compression) { seek_from_sst(2); }
+TEST_F(SSTableTest, table_with_zstd_compression) {
+    seek_from_sst(2);
+}
 
 TEST_F(SSTableTest, scan_all) {
     const auto& cells = TestDataManager::instance().cell_sets()[0];

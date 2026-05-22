@@ -27,13 +27,13 @@ TaskExecutor::TaskExecutor(size_t worker_count) {
     const size_t count = worker_count == 0 ? hardware : worker_count;
     workers_.reserve(count);
     for (size_t index = 0; index < count; ++index) {
-        workers_.emplace_back([this]() {
-            WorkerLoop();
-        });
+        workers_.emplace_back([this]() { WorkerLoop(); });
     }
 }
 
-TaskExecutor::~TaskExecutor() { Shutdown(); }
+TaskExecutor::~TaskExecutor() {
+    Shutdown();
+}
 
 void TaskExecutor::Shutdown() {
     {
@@ -68,9 +68,7 @@ void TaskExecutor::WorkerLoop() {
         std::function<void()> task;
         {
             std::unique_lock<std::mutex> lock(mu_);
-            cv_.wait(lock, [this]() {
-                return shutdown_ || !tasks_.empty();
-            });
+            cv_.wait(lock, [this]() { return shutdown_ || !tasks_.empty(); });
             if (shutdown_ && tasks_.empty()) {
                 return;
             }

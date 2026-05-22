@@ -15,9 +15,8 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/18 11:26
 
-#include <gtest/gtest.h>
-
 #include <cstdint>
+#include <gtest/gtest.h>
 #include <optional>
 #include <variant>
 
@@ -116,7 +115,8 @@ TEST(MakeErrorResponseTest, NoResultFieldInError) {
 
 // notification 没有 id 字段，只有 method 和 params
 TEST(MakeNotificationTest, FormatWithoutId) {
-    std::string result = make_notification("textDocument/publishDiagnostics", R"({"diagnostics":[]})");
+    std::string result =
+        make_notification("textDocument/publishDiagnostics", R"({"diagnostics":[]})");
 
     EXPECT_NE(result.find(R"("jsonrpc":"2.0")"), std::string::npos);
     EXPECT_NE(result.find(R"("method":"textDocument/publishDiagnostics")"), std::string::npos);

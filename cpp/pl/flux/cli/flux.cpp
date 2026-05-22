@@ -15,13 +15,14 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/15 23:39
 
-#include "cpp/pl/flux/cli/flux_cli.h"
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <optional>
 #include <string>
 #include <unistd.h>
+
+#include "cpp/pl/flux/cli/flux_cli.h"
 
 namespace {
 
@@ -212,8 +213,8 @@ int main(int argc, char* argv[]) {
 
     if (repl || (!file_name.has_value() && !eval_source.has_value())) {
         options.table_borders = isatty(STDOUT_FILENO) != 0;
-        return pl::flux::RunFluxRepl(std::cin, std::cout, std::cerr, isatty(STDIN_FILENO) != 0,
-                                     options);
+        return pl::flux::RunFluxRepl(
+            std::cin, std::cout, std::cerr, isatty(STDIN_FILENO) != 0, options);
     }
 
     std::string source;

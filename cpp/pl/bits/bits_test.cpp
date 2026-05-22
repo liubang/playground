@@ -15,8 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/06/04 20:10
 
-#include "cpp/pl/bits/bits.h"
 #include <iostream>
+
+#include "cpp/pl/bits/bits.h"
 
 int main(int argc, char* argv[]) {
     uint64_t i = 26;

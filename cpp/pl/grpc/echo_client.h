@@ -17,10 +17,10 @@
 
 #pragma once
 
-#include "cpp/pl/grpc/proto/echo.grpc.pb.h"
-
 #include <grpcpp/grpcpp.h>
 #include <thread>
+
+#include "cpp/pl/grpc/proto/echo.grpc.pb.h"
 
 namespace pl {
 class EchoServiceClient {

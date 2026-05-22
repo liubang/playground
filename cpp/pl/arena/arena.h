@@ -17,11 +17,11 @@
 
 #pragma once
 
-#include "cpp/pl/utility/utility.h"
-
 #include <cstdint>
 #include <memory>
 #include <vector>
+
+#include "cpp/pl/utility/utility.h"
 
 namespace pl {
 
@@ -44,8 +44,8 @@ public:
             auto& current_block = blocks_[current_block_ids_];
             // Compute alignment based on the absolute address, not just the offset
             auto base_addr = reinterpret_cast<std::uintptr_t>(current_block.data.get());
-            std::size_t aligned_used = align_up_addr(base_addr + current_block.used, alignment) -
-                                       base_addr;
+            std::size_t aligned_used =
+                align_up_addr(base_addr + current_block.used, alignment) - base_addr;
             if (aligned_used + size <= current_block.size) {
                 void* ptr = current_block.data.get() + aligned_used;
                 current_block.used = aligned_used + size;

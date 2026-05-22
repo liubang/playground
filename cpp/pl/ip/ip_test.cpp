@@ -15,9 +15,10 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/05/21 02:32
 
-#include "cpp/pl/ip/ip.h"
 #include <gtest/gtest.h>
 #include <iostream>
+
+#include "cpp/pl/ip/ip.h"
 
 TEST(tools, ip) {
     auto ip = pl::getLocalIp();

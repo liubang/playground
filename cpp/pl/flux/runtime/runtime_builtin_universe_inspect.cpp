@@ -29,8 +29,8 @@ absl::StatusOr<const TableValue*> materialized_table_ref(const TableValue& table
     if (table.materialized) {
         return &table;
     }
-    Value value = Value::table_plan(table.bucket, table.plan, table.range_start, table.range_stop,
-                                    table.result_name);
+    Value value = Value::table_plan(
+        table.bucket, table.plan, table.range_start, table.range_stop, table.result_name);
     auto materialized_or = execution::MaterializeValue(std::move(value));
     if (!materialized_or.ok()) {
         return materialized_or.status();
@@ -49,7 +49,9 @@ absl::StatusOr<Value> builtin_yield(const std::vector<Value>& args) {
         return table_or.status();
     }
     auto name_or = optional_string_property(
-        **object_or, "yield", "name",
+        **object_or,
+        "yield",
+        "name",
         (*table_or)->result_name.has_value() ? *(*table_or)->result_name : "_result");
     if (!name_or.ok()) {
         return name_or.status();
@@ -60,8 +62,8 @@ absl::StatusOr<Value> builtin_yield(const std::vector<Value>& args) {
         return materialized_or.status();
     }
     const TableValue* table = *materialized_or;
-    return Value::table_stream(table->bucket, table->tables, table->range_start, table->range_stop,
-                               *name_or);
+    return Value::table_stream(
+        table->bucket, table->tables, table->range_start, table->range_stop, *name_or);
 }
 
 absl::StatusOr<Value> builtin_columns(const std::vector<Value>& args) {

@@ -36,7 +36,9 @@ inline int sign_of_integer(int v) {
  * @param int y
  * @return true iff x and y have opposite signs
  */
-inline bool opposite_signs(int x, int y) { return (x ^ y) < 0; }
+inline bool opposite_signs(int x, int y) {
+    return (x ^ y) < 0;
+}
 
 /**
  * @brief compute the integer absolute value without branching
@@ -56,7 +58,9 @@ inline unsigned int abs(int v) {
  * @param int y
  * @return int
  */
-inline int min(int x, int y) { return y ^ ((x ^ y) & -static_cast<int>(x < y)); }
+inline int min(int x, int y) {
+    return y ^ ((x ^ y) & -static_cast<int>(x < y));
+}
 
 /**
  * @brief compute maximum of two integers without branching
@@ -65,7 +69,9 @@ inline int min(int x, int y) { return y ^ ((x ^ y) & -static_cast<int>(x < y)); 
  * @param int y
  * @return int
  */
-inline int max(int x, int y) { return x ^ ((x ^ y) & -static_cast<int>(x < y)); }
+inline int max(int x, int y) {
+    return x ^ ((x ^ y) & -static_cast<int>(x < y));
+}
 
 /**
  * @brief determining if an integer is a power of 2
@@ -73,7 +79,9 @@ inline int max(int x, int y) { return x ^ ((x ^ y) & -static_cast<int>(x < y)); 
  * @param int v
  * @return bool
  */
-inline bool power_of_2(int v) { return (v != 0) && ((v & (v - 1)) == 0); }
+inline bool power_of_2(int v) {
+    return (v != 0) && ((v & (v - 1)) == 0);
+}
 
 /**
  * @brief sign extending from a constant bit-width

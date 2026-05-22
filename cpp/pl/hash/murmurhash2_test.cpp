@@ -15,8 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/05/21 22:42
 
-#include "cpp/pl/hash/murmurhash2.h"
 #include <gtest/gtest.h>
+
+#include "cpp/pl/hash/murmurhash2.h"
 
 TEST(hash, murmurhash2_test) {
     const char* data = "hello world";

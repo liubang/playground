@@ -28,7 +28,9 @@ namespace pl::minidfs {
 ReplicationWorker::ReplicationWorker(Config config, LocalBlockStore* store, CopyFunc copy_func)
     : config_(std::move(config)), store_(store), copy_func_(std::move(copy_func)) {}
 
-ReplicationWorker::~ReplicationWorker() { stop(); }
+ReplicationWorker::~ReplicationWorker() {
+    stop();
+}
 
 // ============================================================================
 // Lifecycle
@@ -41,9 +43,7 @@ void ReplicationWorker::start() {
     }
     threads_.reserve(config_.max_concurrent_tasks);
     for (uint32_t i = 0; i < config_.max_concurrent_tasks; ++i) {
-        threads_.emplace_back([this] {
-            worker_loop();
-        });
+        threads_.emplace_back([this] { worker_loop(); });
     }
 }
 
@@ -118,28 +118,42 @@ void ReplicationWorker::execute_copy(const DataNodeTask& task) {
     // Read full block data from local store
     auto data_result = store_->read_block_data(task.block_id, task.generation_stamp);
     if (data_result.hasError()) {
-        XLOGF(ERR, "replication copy failed: cannot read block {}: {}", task.block_id,
+        XLOGF(ERR,
+              "replication copy failed: cannot read block {}: {}",
+              task.block_id,
               data_result.error().describe());
         return;
     }
 
     // Send to target via the copy function (pipeline protocol)
-    auto copy_result = copy_func_(task.block_id, task.generation_stamp, data_result.value(),
-                                  task.target_host, task.target_port);
+    auto copy_result = copy_func_(task.block_id,
+                                  task.generation_stamp,
+                                  data_result.value(),
+                                  task.target_host,
+                                  task.target_port);
     if (copy_result.hasError()) {
-        XLOGF(ERR, "replication copy failed: send to {}:{} for block {}: {}", task.target_host,
-              task.target_port, task.block_id, copy_result.error().describe());
+        XLOGF(ERR,
+              "replication copy failed: send to {}:{} for block {}: {}",
+              task.target_host,
+              task.target_port,
+              task.block_id,
+              copy_result.error().describe());
         return;
     }
 
-    XLOGF(INFO, "replication copy succeeded: block {} -> {}:{}", task.block_id, task.target_host,
+    XLOGF(INFO,
+          "replication copy succeeded: block {} -> {}:{}",
+          task.block_id,
+          task.target_host,
           task.target_port);
 }
 
 void ReplicationWorker::execute_delete(const DataNodeTask& task) {
     auto result = store_->delete_block(task.block_id, task.generation_stamp);
     if (result.hasError()) {
-        XLOGF(WARN, "replication delete failed for block {}: {}", task.block_id,
+        XLOGF(WARN,
+              "replication delete failed for block {}: {}",
+              task.block_id,
               result.error().describe());
         return;
     }

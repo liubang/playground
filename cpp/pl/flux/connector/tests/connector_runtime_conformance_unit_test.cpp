@@ -12,16 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "cpp/pl/flux/connector/memory_source.h"
-#include "cpp/pl/flux/connector/mysql_source.h"
-#include "cpp/pl/flux/connector/sqlite_source.h"
-#include "gtest/gtest.h"
 #include <cstdlib>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "cpp/pl/flux/connector/memory_source.h"
+#include "cpp/pl/flux/connector/mysql_source.h"
+#include "cpp/pl/flux/connector/sqlite_source.h"
+#include "gtest/gtest.h"
 
 namespace pl::flux::connector {
 namespace {

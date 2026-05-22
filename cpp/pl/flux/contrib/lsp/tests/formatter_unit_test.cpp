@@ -15,19 +15,18 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/18 11:26
 
-#include "cpp/pl/flux/contrib/lsp/formatter.h"
-#include "cpp/pl/flux/syntax/parser.h"
-
 #include <gtest/gtest.h>
 #include <memory>
 #include <string>
+
+#include "cpp/pl/flux/contrib/lsp/formatter.h"
+#include "cpp/pl/flux/syntax/parser.h"
 
 namespace {
 
 // 解析 Flux 源码并格式化，返回格式化结果
 // 封装 Parser + Formatter 的调用链，避免每个 TEST 重复样板代码
-std::string format_source(const std::string& source,
-                          pl::flux::lsp::FormatOptions opts = {}) {
+std::string format_source(const std::string& source, pl::flux::lsp::FormatOptions opts = {}) {
     pl::flux::Parser parser(source);
     auto file = parser.parse_file("test.flux");
     pl::flux::lsp::Formatter formatter(opts);
@@ -49,7 +48,9 @@ TEST(FormatterTest, SimpleVariableAssignmentString) {
     // 字符串字面量的赋值
     const std::string source = R"(name = "hello")";
     const std::string result = format_source(source);
-    EXPECT_EQ(result, R"(name = "hello")" "\n");
+    EXPECT_EQ(result,
+              R"(name = "hello")"
+              "\n");
 }
 
 TEST(FormatterTest, MultipleSimpleAssignmentsNoExtraBlankLine) {
@@ -63,7 +64,8 @@ TEST(FormatterTest, MultipleSimpleAssignmentsNoExtraBlankLine) {
 
 TEST(FormatterTest, PipeChainFormatsWithNewlineAndIndent) {
     // Pipe chain 应在每个 |> 前换行并缩进，保持数据流的可读性
-    const std::string source = "from(bucket: \"test\") |> filter(fn: (r) => r._value > 0) |> yield()";
+    const std::string source =
+        "from(bucket: \"test\") |> filter(fn: (r) => r._value > 0) |> yield()";
     const std::string result = format_source(source);
 
     // 第一行是 from(...)，后续每个 |> 独占一行并缩进
@@ -134,8 +136,8 @@ TEST(FormatterTest, EmptyDict) {
 TEST(FormatterTest, LongCallExpressionWraps) {
     // 超过 max_line_width 的 call expression 应自动展开为多行
     // 使用较短的参数名，确保换行后每行可以在限制内
-    const std::string source =
-        "result = from(bucket: \"my-bucket\", org: \"my-org\", token: \"secret-token-value\", start: -1h)";
+    const std::string source = "result = from(bucket: \"my-bucket\", org: \"my-org\", token: "
+                               "\"secret-token-value\", start: -1h)";
     const std::string result = format_source(source, {.max_line_width = 40});
 
     // 展开后应包含换行和缩进，而非全部挤在一行

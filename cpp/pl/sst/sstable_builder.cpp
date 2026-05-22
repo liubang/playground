@@ -17,13 +17,14 @@
 
 #include "cpp/pl/sst/sstable_builder.h"
 
-#include "cpp/pl/fs/posix_fs.h"
-#include "cpp/pl/sst/encoding.h"
-#include "snappy.h"
 #include <cassert>
 #include <crc32c/crc32c.h>
 #include <utility>
 #include <zstd.h>
+
+#include "cpp/pl/fs/posix_fs.h"
+#include "cpp/pl/sst/encoding.h"
+#include "snappy.h"
 
 namespace pl {
 
@@ -251,8 +252,8 @@ Result<Void> SSTableBuilder::finish() {
     // 写filter block
     if (filter_builder_ != nullptr) {
         std::unique_ptr<const char[]> filter_buf;
-        auto result = writeBlockRaw(filter_builder_->finish(&filter_buf), CompressionType::NONE,
-                                    &filter_block_handle);
+        auto result = writeBlockRaw(
+            filter_builder_->finish(&filter_buf), CompressionType::NONE, &filter_block_handle);
         RETURN_AND_LOG_ON_ERROR(result);
     } else {
         // Write empty filter block to make filter_block_handle valid.

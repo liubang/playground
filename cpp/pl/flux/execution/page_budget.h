@@ -17,9 +17,10 @@
 
 #pragma once
 
-#include "cpp/pl/flux/runtime/runtime_page.h"
 #include <algorithm>
 #include <cstddef>
+
+#include "cpp/pl/flux/runtime/runtime_page.h"
 
 namespace pl::flux::execution {
 

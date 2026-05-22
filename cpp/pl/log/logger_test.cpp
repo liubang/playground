@@ -15,8 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2024/06/25 17:55
 
-#include "cpp/pl/log/logger.h"
 #include <thread>
+
+#include "cpp/pl/log/logger.h"
 
 int main(int argc, char* argv[]) {
     int8_t i8 = 1;

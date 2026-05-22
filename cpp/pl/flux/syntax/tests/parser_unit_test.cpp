@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "cpp/pl/flux/syntax/ast_debug.h"
-#include "cpp/pl/flux/syntax/parser.h"
 #include <algorithm>
 #include <gtest/gtest.h>
+
+#include "cpp/pl/flux/syntax/ast_debug.h"
+#include "cpp/pl/flux/syntax/parser.h"
 
 namespace pl::flux {
 namespace {

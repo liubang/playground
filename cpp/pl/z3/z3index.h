@@ -17,11 +17,11 @@
 
 #pragma once
 
-#include "binned_time.h"
-#include "z3sfc.h"
-
 #include <memory>
 #include <string_view>
+
+#include "binned_time.h"
+#include "z3sfc.h"
 
 namespace pl::curve {
 

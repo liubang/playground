@@ -1,8 +1,9 @@
-#include "fslock.h"
 #include <gtest/gtest.h>
 #include <random>
 #include <thread>
 #include <vector>
+
+#include "fslock.h"
 
 namespace {
 int64_t rand_int(int64_t min, int64_t max) {

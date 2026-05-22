@@ -17,10 +17,10 @@
 
 #pragma once
 
-#include "chrono_unit.h"
-
 #include <chrono>
 #include <cstdint>
+
+#include "chrono_unit.h"
 
 namespace pl::curve {
 

@@ -15,12 +15,13 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/10 21:00
 
+#include <gtest/gtest.h>
+
 #include "cpp/pl/minidfs/common/constants.h"
 #include "cpp/pl/minidfs/namenode/datanode_manager.h"
 #include "cpp/pl/minidfs/namenode/placement_manager.h"
 #include "cpp/pl/minidfs/namenode/replication_manager.h"
 #include "cpp/pl/minidfs/namenode/tests/mock_metadata_store.h"
-#include <gtest/gtest.h>
 
 namespace pl::minidfs {
 namespace {

@@ -15,19 +15,16 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2025/01/05 12:19
 
-#include "cpp/meta/match.h"
 #include <catch2/catch_test_macros.hpp>
 #include <cstdio>
+
+#include "cpp/meta/match.h"
 
 TEST_CASE("meta", "[match]") {
     std::variant<int, std::string> value[] = {10, "hello"};
     for (auto x : value)
         x >> pl::match{
-                 [](int x) {
-                     ::printf("x(int) = %d\n", x);
-                 },
-                 [](const std::string& x) {
-                     ::printf("x(string) = %s\n", x.c_str());
-                 },
+                 [](int x) { ::printf("x(int) = %d\n", x); },
+                 [](const std::string& x) { ::printf("x(string) = %s\n", x.c_str()); },
              };
 }

@@ -15,9 +15,10 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/11/02 12:20
 
-#include "cpp/pl/flux/syntax/scanner.h"
 #include <iostream>
 #include <memory>
+
+#include "cpp/pl/flux/syntax/scanner.h"
 
 int main(int /*argc*/, char* /*argv*/[]) {
     std::string flux = R"(
@@ -34,7 +35,8 @@ int main(int /*argc*/, char* /*argv*/[]) {
         |> aggregateWindow(every: 1m, fn: mean)
     )";
 
-    std::unique_ptr<pl::flux::Scanner> scanner = std::make_unique<pl::flux::Scanner>(flux.data(), flux.size());
+    std::unique_ptr<pl::flux::Scanner> scanner =
+        std::make_unique<pl::flux::Scanner>(flux.data(), flux.size());
 
     for (;;) {
         auto token = scanner->scan();

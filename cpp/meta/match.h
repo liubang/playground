@@ -24,6 +24,8 @@ template <class... T> struct match : T... {
     using T::operator()...;
 };
 
-inline void operator>>(auto& v, auto&& f) { std::visit(std::move(f), v); };
+inline void operator>>(auto& v, auto&& f) {
+    std::visit(std::move(f), v);
+};
 
 } // namespace pl

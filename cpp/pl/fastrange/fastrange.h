@@ -41,8 +41,8 @@ static inline uint64_t fastrange64(uint64_t word, uint64_t p) {
     uint64_t highProduct;
     _umul128(word, p, &highProduct); // ignore output
     return highProduct;
-    unsigned __int64 _umul128(unsigned __int64 Multiplier, unsigned __int64 Multiplicand,
-                              unsigned __int64* HighProduct);
+    unsigned __int64 _umul128(
+        unsigned __int64 Multiplier, unsigned __int64 Multiplicand, unsigned __int64* HighProduct);
 #else
     return word % p; // fallback
 #endif // __SIZEOF_INT128__

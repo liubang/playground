@@ -15,9 +15,10 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2023/05/21 23:23
 
-#include "cpp/meta/tuple_iteration_apply.h"
 #include <catch2/catch_test_macros.hpp>
 #include <tuple>
+
+#include "cpp/meta/tuple_iteration_apply.h"
 
 TEST_CASE("meta", "[PrintTupleApplyFn]") {
     std::tuple tp{10, 20, "hello"};

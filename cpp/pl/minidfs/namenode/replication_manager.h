@@ -17,11 +17,12 @@
 
 #pragma once
 
+#include <cstdint>
+#include <vector>
+
 #include "cpp/pl/minidfs/metadata/metadata_store.h"
 #include "cpp/pl/minidfs/namenode/placement_manager.h"
 #include "cpp/pl/status/result.h"
-#include <cstdint>
-#include <vector>
 
 namespace pl::minidfs {
 

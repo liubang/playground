@@ -17,9 +17,7 @@
 
 #include "cpp/pl/flux/connector/mysql_connection_pool.h"
 
-#include "absl/status/status.h"
-#include "absl/strings/str_cat.h"
-#include "cpp/pl/flux/connector/mysql_source.h"
+#include <algorithm>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/use_future.hpp>
@@ -31,10 +29,13 @@
 #include <boost/mysql/results.hpp>
 #include <boost/mysql/ssl_mode.hpp>
 #include <boost/system/system_error.hpp>
-#include <algorithm>
 #include <exception>
 #include <future>
 #include <utility>
+
+#include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
+#include "cpp/pl/flux/connector/mysql_source.h"
 
 namespace pl::flux::connector {
 namespace {
@@ -85,11 +86,9 @@ struct MySQLBoostConnectionPool::Impl {
     mysql::connection_pool pool;
 };
 
-MySQLBoostConnectionPool::Lease::Lease(mysql::pooled_connection conn)
-    : conn_(std::move(conn)) {}
+MySQLBoostConnectionPool::Lease::Lease(mysql::pooled_connection conn) : conn_(std::move(conn)) {}
 
-MySQLBoostConnectionPool::Lease::Lease(Lease&& other) noexcept
-    : conn_(std::move(other.conn_)) {}
+MySQLBoostConnectionPool::Lease::Lease(Lease&& other) noexcept : conn_(std::move(other.conn_)) {}
 
 MySQLBoostConnectionPool::Lease& MySQLBoostConnectionPool::Lease::operator=(
     Lease&& other) noexcept {
@@ -101,7 +100,9 @@ MySQLBoostConnectionPool::Lease& MySQLBoostConnectionPool::Lease::operator=(
     return *this;
 }
 
-MySQLBoostConnectionPool::Lease::~Lease() { Release(); }
+MySQLBoostConnectionPool::Lease::~Lease() {
+    Release();
+}
 
 mysql::any_connection* MySQLBoostConnectionPool::Lease::connection() {
     if (!conn_.has_value() || !conn_->valid()) {

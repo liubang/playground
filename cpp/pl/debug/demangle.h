@@ -40,7 +40,9 @@ static std::string demangle(const char* name) {
     return s;
 }
 
-static std::string demangle(std::type_info const& type) { return demangle(type.name()); }
+static std::string demangle(std::type_info const& type) {
+    return demangle(type.name());
+}
 
 template <typename T> static std::string demangle() {
     std::string s{demangle(typeid(std::remove_cv_t<std::remove_reference_t<T>>))};

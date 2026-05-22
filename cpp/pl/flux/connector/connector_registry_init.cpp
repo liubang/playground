@@ -22,13 +22,11 @@
 namespace pl::flux::connector {
 
 void RegisterBuiltinConnectors(ConnectorRegistry& registry) {
-    registry.Register("sqlite", [](const SourceSpec& spec) {
-        return MakeSQLiteConnectorRuntime(spec);
-    });
+    registry.Register("sqlite",
+                      [](const SourceSpec& spec) { return MakeSQLiteConnectorRuntime(spec); });
 
-    registry.Register("mysql", [](const SourceSpec& spec) {
-        return MakeMySQLConnectorRuntime(spec);
-    });
+    registry.Register("mysql",
+                      [](const SourceSpec& spec) { return MakeMySQLConnectorRuntime(spec); });
 }
 
 } // namespace pl::flux::connector
