@@ -17,6 +17,8 @@
 
 #include "cpp/pl/flux/runtime/runtime_exec.h"
 
+#include <sstream>
+
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/common/compat.h"
 #include "cpp/pl/flux/runtime/runtime_builtin.h"
@@ -24,6 +26,24 @@
 
 namespace pl::flux {
 namespace {
+
+std::string location_text(const SourceLocation& loc) {
+    if (!loc.is_valid()) {
+        return "<unknown>";
+    }
+    std::stringstream ss;
+    ss << loc;
+    return ss.str();
+}
+
+absl::Status with_statement_location(const absl::Status& status, const Statement& stmt) {
+    if (status.ok()) {
+        return status;
+    }
+    return absl::Status(
+        status.code(),
+        absl::StrCat(status.message(), " while executing statement at ", location_text(stmt.loc)));
+}
 
 absl::StatusOr<std::string> property_name(const PropertyKey& key) {
     switch (key.type) {
@@ -209,7 +229,7 @@ absl::StatusOr<ExecutionResult> StatementExecutor::Execute(const Statement& stmt
             const auto& expr = std::get<std::unique_ptr<ExprStmt>>(stmt.stmt);
             auto value_or = ExpressionEvaluator::Evaluate(*expr->expression, env);
             if (!value_or.ok()) {
-                return value_or.status();
+                return with_statement_location(value_or.status(), stmt);
             }
             return ExecutionResult::normal(*value_or);
         }
@@ -217,39 +237,50 @@ absl::StatusOr<ExecutionResult> StatementExecutor::Execute(const Statement& stmt
             const auto& var = std::get<std::unique_ptr<VariableAssgn>>(stmt.stmt);
             auto value_or = ExpressionEvaluator::Evaluate(*var->init, env);
             if (!value_or.ok()) {
-                return value_or.status();
+                return with_statement_location(value_or.status(), stmt);
             }
             env.define(var->id->name, *value_or);
             return ExecutionResult::normal(*value_or);
         }
         case Statement::Type::OptionStatement: {
             const auto& option = std::get<std::unique_ptr<OptionStmt>>(stmt.stmt);
-            return execute_option_assignment(*option->assignment, env);
+            auto result_or = execute_option_assignment(*option->assignment, env);
+            if (!result_or.ok()) {
+                return with_statement_location(result_or.status(), stmt);
+            }
+            return result_or;
         }
         case Statement::Type::ReturnStatement: {
             const auto& ret = std::get<std::unique_ptr<ReturnStmt>>(stmt.stmt);
             auto value_or = ExpressionEvaluator::Evaluate(*ret->argument, env);
             if (!value_or.ok()) {
-                return value_or.status();
+                return with_statement_location(value_or.status(), stmt);
             }
             return ExecutionResult::returned(*value_or);
         }
         case Statement::Type::BadStatement:
-            return absl::InvalidArgumentError(
-                absl::StrCat("cannot execute bad statement: ",
-                             std::get<std::unique_ptr<BadStmt>>(stmt.stmt)->text));
-        case Statement::Type::TestCaseStatement:
-            return execute_testcase_statement(*std::get<std::unique_ptr<TestCaseStmt>>(stmt.stmt),
-                                              env);
+            return with_statement_location(
+                absl::InvalidArgumentError(
+                    absl::StrCat("cannot execute bad statement: ",
+                                 std::get<std::unique_ptr<BadStmt>>(stmt.stmt)->text)),
+                stmt);
+        case Statement::Type::TestCaseStatement: {
+            auto result_or = execute_testcase_statement(
+                *std::get<std::unique_ptr<TestCaseStmt>>(stmt.stmt), env);
+            if (!result_or.ok()) {
+                return with_statement_location(result_or.status(), stmt);
+            }
+            return result_or;
+        }
         case Statement::Type::BuiltinStatement: {
             const auto& builtin = std::get<std::unique_ptr<BuiltinStmt>>(stmt.stmt);
             auto status = BuiltinRegistry::Ensure(env, builtin->id->name);
             if (!status.ok()) {
-                return status;
+                return with_statement_location(status, stmt);
             }
             auto value_or = env.lookup(builtin->id->name);
             if (!value_or.ok()) {
-                return value_or.status();
+                return with_statement_location(value_or.status(), stmt);
             }
             return ExecutionResult::normal(*value_or);
         }
