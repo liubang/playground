@@ -30,6 +30,7 @@
 | `strings.flux`            | `strings.containsStr`、`strings.hasPrefix`、`strings.hasSuffix`、`strings.joinStr`、`strings.replaceAll`、`strings.split`、`strings.toUpper`、`strings.toLower`、`strings.trimSpace` |
 | `syntax.flux`             | `package`、alias `import`、`option`、`builtin`、attribute、`testcase`、literal、数组/字典/对象/record update、函数/闭包/默认参数/pipe 参数、位置/命名调用、函数作为参数/返回值/对象和数组成员、`reduce` 风格 Fibonacci/factorial/max、调用/管道、高阶函数、运算符、条件、`exists`、字符串插值 |
 | `system.flux`             | `system.time`                                                                                                                                                                        |
+| `timezone.flux`           | `timezone.utc`、`timezone.fixed`、`timezone.location`，以及 location 记录驱动的 `aggregateWindow`                                                                                    |
 | `types.flux`              | `types.isBool`、`types.isDuration`、`types.isFloat`、`types.isInt`、`types.isNumeric`、`types.isRegexp`、`types.isString`、`types.isTime`、`types.isType`、`types.isUInt`            |
 | `universe_core.flux`      | `len`、`string`、`contains`                                                                                                                                                          |
 | `universe_transform.flux` | `range`、`filter`、`map`、`limit`、`tail`、`keep`、`drop`、`rename`、`duplicate`、`set`、`sort`、`group`、`pivot`、`fill`、`union`                                                   |

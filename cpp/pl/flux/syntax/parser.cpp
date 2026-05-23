@@ -60,6 +60,22 @@ std::string missing_at_message(std::string_view message, const Position& pos) {
     return ss.str();
 }
 
+bool starts_new_statement_after_missing_delimiter(const Token& token, const Token& next) {
+    switch (token.tok) {
+        case TokenType::Import:
+        case TokenType::Option:
+        case TokenType::Builtin:
+        case TokenType::TestCase:
+        case TokenType::Return:
+        case TokenType::Attribute:
+            return true;
+        case TokenType::Ident:
+            return next.tok == TokenType::Assign;
+        default:
+            return false;
+    }
+}
+
 } // namespace
 
 std::unique_ptr<Package> Parser::parse_single_package(const std::string& pkgpath,
@@ -1465,6 +1481,9 @@ std::unique_ptr<Expression> Parser::parse_array_items_rest(std::unique_ptr<Token
 
         auto last = peek()->start_offset;
         while (more()) {
+            if (starts_new_statement_after_missing_delimiter(*peek(), *peek_next())) {
+                break;
+            }
             std::vector<std::shared_ptr<Comment>> ncomma;
             auto expression = parse_expression();
             if (expression->type == Expression::Type::BadExpr) {

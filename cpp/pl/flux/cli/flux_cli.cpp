@@ -372,12 +372,15 @@ void append_json_table(JsonBuilder& builder, const TableValue& table) {
     append_json_field_name(builder, "tables", first_field);
     builder.start_array();
     bool first_table = true;
-    for (const auto& chunk : table.tables) {
+    for (size_t chunk_index = 0; chunk_index < table.tables.size(); ++chunk_index) {
+        const auto& chunk = table.tables[chunk_index];
         if (!first_table) {
             builder.append_comma();
         }
         builder.start_object();
         bool first_chunk_field = true;
+        append_json_field_name(builder, "table", first_chunk_field);
+        builder.append(static_cast<int64_t>(chunk_index));
         append_json_field_name(builder, "columns", first_chunk_field);
         builder.start_array();
         for (size_t column_index = 0; column_index < chunk.columns.size(); ++column_index) {
@@ -385,6 +388,16 @@ void append_json_table(JsonBuilder& builder, const TableValue& table) {
                 builder.append_comma();
             }
             builder.append(chunk.columns[column_index]);
+        }
+        builder.end_array();
+        const auto group_columns = collect_group_columns(chunk);
+        append_json_field_name(builder, "group", first_chunk_field);
+        builder.start_array();
+        for (size_t column_index = 0; column_index < chunk.columns.size(); ++column_index) {
+            if (column_index > 0) {
+                builder.append_comma();
+            }
+            builder.append(group_columns.count(chunk.columns[column_index]) != 0);
         }
         builder.end_array();
         if (chunk.group_key != nullptr) {

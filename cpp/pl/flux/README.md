@@ -9,7 +9,7 @@
 - 人类可读、annotated CSV、JSON 三种 CLI 输出
 - REPL、内联源码、文件执行、结果筛选
 - 一批默认加载的 universe builtin
-- `array`、`csv`、`date`、`dict`、`join`、`json`、`math`、`regexp`、`runtime`、`sqlite`、`strings`、`system`、`types` 等内置包
+- `array`、`csv`、`date`、`dict`、`join`、`json`、`math`、`regexp`、`runtime`、`sqlite`、`strings`、`system`、`timezone`、`types` 等内置包
 - `stdlib_conformance` 快照样例，约束每个已实现 builtin 的主要行为
 
 更细的语法和运行时支持矩阵见 [SUPPORT_MATRIX.md](./SUPPORT_MATRIX.md)。
@@ -106,6 +106,8 @@ flux> :quit
 | `--list-results`                      | 列出脚本可输出的结果名     |
 | `--quiet`                             | 执行但不打印结果           |
 | `--no-prelude`                        | 不注入默认 builtin/prelude |
+
+JSON 输出会保留逻辑表结构：每个 table chunk 包含 `table` 序号、`columns`、与列对齐的 `group` flags、可选 `groupKey` 和行数据。
 
 ## 示例与测试
 
@@ -331,7 +333,7 @@ Universe builtin 默认注入，无需 `import`。
 | `join.right(left:, right:, on:)`     | 右连接                           |
 | `join.full(left:, right:, on:)`      | 全连接                           |
 
-`join` package 是顶层 `join()` 的 facade，覆盖常用内存表连接路径。
+`join` package 是顶层 `join()` 的 facade，覆盖常用内存表连接路径。`on` 可以是 predicate 函数，也可以是列名数组；列名数组路径下可用 `leftName` / `rightName` 控制重名列输出后缀。
 
 ### `json`
 
@@ -389,6 +391,16 @@ Universe builtin 默认注入，无需 `import`。
 | `system.time()` | 返回当前 UTC 时间 |
 
 `system.time()` 是唯一一个 conformance 中用正则匹配的包函数，因为输出随执行时间变化。
+
+### `timezone`
+
+| 函数                         | 说明                     |
+| ---------------------------- | ------------------------ |
+| `timezone.utc`               | 默认 UTC location 记录   |
+| `timezone.fixed(offset:)`    | 生成固定偏移 location    |
+| `timezone.location(name:)`   | 生成命名时区 location    |
+
+`timezone` 返回的 location 记录可直接传给 `window(location:)`、`aggregateWindow(location:)`，也可用于 `option location = ...`。
 
 ### `types`
 

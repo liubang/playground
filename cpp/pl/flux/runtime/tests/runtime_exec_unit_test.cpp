@@ -3555,6 +3555,13 @@ TEST(RuntimeExecTest, ExecutesJoinStdlibPackageHelpers) {
                 mem: r._value,
             }),
         )
+        keyed = join.inner(
+            left: cpu,
+            right: mem,
+            on: ["_time", "host"],
+            leftName: "cpu",
+            rightName: "mem",
+        )
         full
     )");
     ASSERT_NE(file, nullptr);
@@ -3583,6 +3590,11 @@ TEST(RuntimeExecTest, ExecutesJoinStdlibPackageHelpers) {
     ASSERT_EQ(3, env.lookup("full")->as_table().rows.size());
     EXPECT_TRUE(env.lookup("full")->as_table().rows[1]->lookup("mem")->is_null());
     EXPECT_TRUE(env.lookup("full")->as_table().rows[2]->lookup("cpu")->is_null());
+    ASSERT_TRUE(env.lookup("keyed").ok());
+    ASSERT_EQ(1, env.lookup("keyed")->as_table().rows.size());
+    EXPECT_EQ("90", env.lookup("keyed")->as_table().rows[0]->lookup("_value_cpu")->string());
+    EXPECT_EQ("40", env.lookup("keyed")->as_table().rows[0]->lookup("_value_mem")->string());
+    EXPECT_EQ("t1", env.lookup("keyed")->as_table().rows[0]->lookup("_time")->as_string());
     EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
 }
 
