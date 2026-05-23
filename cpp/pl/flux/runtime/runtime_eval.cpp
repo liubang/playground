@@ -752,6 +752,10 @@ absl::StatusOr<Value> eval_binary_numeric(const BinaryExpr& binary,
             return Value::boolean(left_num > right_num);
         case Operator::GreaterThanEqualOperator:
             return Value::boolean(left_num >= right_num);
+        case Operator::EqualOperator:
+            return Value::boolean(left_num == right_num);
+        case Operator::NotEqualOperator:
+            return Value::boolean(left_num != right_num);
         default:
             return unsupported(whole_expr, "numeric binary operator");
     }
