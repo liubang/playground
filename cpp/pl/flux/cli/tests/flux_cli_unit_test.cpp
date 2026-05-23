@@ -392,8 +392,10 @@ TEST(FluxCliTest, EmitsEmptyLogicalTableMetadataInJsonOutput) {
     EXPECT_TRUE(result.error.empty());
     EXPECT_NE(std::string::npos, result.output.find("\"tables\":["));
     EXPECT_NE(std::string::npos, result.output.find("\"groupKey\":{\"host\":\"edge-2\"}"));
+    EXPECT_NE(std::string::npos, result.output.find("\"table\":1"));
     EXPECT_NE(std::string::npos,
               result.output.find("\"columns\":[\"host\",\"_value\",\"_group\"]"));
+    EXPECT_NE(std::string::npos, result.output.find("\"group\":[true,false,false]"));
     EXPECT_NE(std::string::npos, result.output.find("\"rows\":[]"));
 }
 
@@ -827,6 +829,8 @@ TEST(FluxCliTest, ReportsParserAndRuntimeErrors) {
     EXPECT_EQ(1, runtime_result.exit_code);
     EXPECT_TRUE(runtime_result.output.empty());
     EXPECT_NE(std::string::npos, runtime_result.error.find("missing"));
+    EXPECT_NE(std::string::npos,
+              runtime_result.error.find("while executing statement at file: <bad>@"));
 }
 
 TEST(FluxCliTest, EmitsJsonForMixedResults) {

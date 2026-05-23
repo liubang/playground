@@ -1521,6 +1521,38 @@ next = 42
     EXPECT_EQ("42", next->init->string());
 }
 
+TEST(FluxParserTest, RecoversNextStatementAfterUnclosedArray) {
+    const std::string source = R"(
+values = [1, 2
+next = 42
+)";
+
+    Parser parser(source);
+    auto file = parser.parse_file("unclosed_array.flux");
+
+    ASSERT_NE(file, nullptr);
+    ASSERT_FALSE(parser.errors().empty());
+    ASSERT_EQ(2, file->body.size());
+    ASSERT_EQ(Statement::Type::VariableAssignment, file->body[0]->type);
+    ASSERT_EQ(Statement::Type::VariableAssignment, file->body[1]->type);
+
+    const auto& values = std::get<std::unique_ptr<VariableAssgn>>(file->body[0]->stmt);
+    ASSERT_NE(values, nullptr);
+    ASSERT_NE(values->init, nullptr);
+    ASSERT_EQ(Expression::Type::ArrayExpr, values->init->type);
+    const auto& array = std::get<std::unique_ptr<ArrayExpr>>(values->init->expr);
+    ASSERT_NE(array, nullptr);
+    ASSERT_EQ(2, array->elements.size());
+    EXPECT_EQ("1", array->elements[0]->expression->string());
+    EXPECT_EQ("2", array->elements[1]->expression->string());
+
+    const auto& next = std::get<std::unique_ptr<VariableAssgn>>(file->body[1]->stmt);
+    ASSERT_NE(next, nullptr);
+    EXPECT_EQ("next", next->id->name);
+    EXPECT_EQ("42", next->init->string());
+    EXPECT_TRUE(ErrorContains(parser.errors(), "expected RBrack, got Ident(next) at"));
+}
+
 TEST(FluxParserTest, RecoversFromLeadingEmptyObjectProperty) {
     const std::string source = R"(
 config = {, host: "local", port: 8080}
