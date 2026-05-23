@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-23 13:08:54</td>
+            <td class="headerValue">2026-05-23 23:19:57</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -117,49 +117,49 @@
 <span id="L46"><span class="lineNum">      46</span>                 :             :                           int32_t&amp; token_end_line,</span>
 <span id="L47"><span class="lineNum">      47</span>                 :             :                           int32_t&amp; token_end_col);</span>
 <span id="L48"><span class="lineNum">      48</span>                 :             : </span>
-<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">       39467 : std::unique_ptr&lt;Token&gt; Scanner::scan_with_comments(int32_t mode) {</span></span>
-<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC">       39467 :     std::unique_ptr&lt;Token&gt; token;</span></span>
+<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">       40721 : std::unique_ptr&lt;Token&gt; Scanner::scan_with_comments(int32_t mode) {</span></span>
+<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC">       40721 :     std::unique_ptr&lt;Token&gt; token;</span></span>
 <span id="L51"><span class="lineNum">      51</span>                 :             :     for (;;) {</span>
-<span id="L52"><span class="lineNum">      52</span>   [<span class="tlaGBC" title="Branch 0 was taken 39468 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 39467 times"> + </span>]:<span class="tlaGNC">       78936 :         token = scan(mode);</span></span>
-<span id="L53"><span class="lineNum">      53</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 39467 times"> + </span>]:<span class="tlaGNC">       39468 :         if (token-&gt;tok != TokenType::Comment) {</span></span>
+<span id="L52"><span class="lineNum">      52</span>   [<span class="tlaGBC" title="Branch 0 was taken 40722 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 40721 times"> + </span>]:<span class="tlaGNC">       81444 :         token = scan(mode);</span></span>
+<span id="L53"><span class="lineNum">      53</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 40721 times"> + </span>]:<span class="tlaGNC">       40722 :         if (token-&gt;tok != TokenType::Comment) {</span></span>
 <span id="L54"><span class="lineNum">      54</span>                 :             :             break;</span>
 <span id="L55"><span class="lineNum">      55</span>                 :             :         }</span>
 <span id="L56"><span class="lineNum">      56</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           2 :         comments_.emplace_back(std::make_shared&lt;Comment&gt;(token-&gt;lit));</span></span>
 <span id="L57"><span class="lineNum">      57</span>                 :             :     }</span>
-<span id="L58"><span class="lineNum">      58</span>         [<span class="tlaGBC" title="Branch 0 was taken 39467 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       39467 :     token-&gt;comments.insert(token-&gt;comments.end(), comments_.begin(), comments_.end());</span></span>
-<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">       39467 :     return token;</span></span>
+<span id="L58"><span class="lineNum">      58</span>         [<span class="tlaGBC" title="Branch 0 was taken 40721 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       40721 :     token-&gt;comments.insert(token-&gt;comments.end(), comments_.begin(), comments_.end());</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">       40721 :     return token;</span></span>
 <span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaUNC tlaBgUNC">           0 : }</span></span>
 <span id="L61"><span class="lineNum">      61</span>                 :             : </span>
-<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC tlaBgGNC">       39468 : std::unique_ptr&lt;Token&gt; Scanner::scan(int32_t mode) {</span></span>
-<span id="L63"><span class="lineNum">      63</span>         [<span class="tlaGBC" title="Branch 0 was taken 88 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 39380 times"> + </span>]:<span class="tlaGNC">       39468 :     if (p_ == eof_) {</span></span>
-<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">          88 :         return get_eof_token();</span></span>
+<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC tlaBgGNC">       40722 : std::unique_ptr&lt;Token&gt; Scanner::scan(int32_t mode) {</span></span>
+<span id="L63"><span class="lineNum">      63</span>         [<span class="tlaGBC" title="Branch 0 was taken 90 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 40632 times"> + </span>]:<span class="tlaGNC">       40722 :     if (p_ == eof_) {</span></span>
+<span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">          90 :         return get_eof_token();</span></span>
 <span id="L65"><span class="lineNum">      65</span>                 :             :     }</span>
-<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">       39380 :     checkpoint_ = p_;</span></span>
-<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">       39380 :     checkpoint_line_ = cur_line_;</span></span>
-<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">       39380 :     checkpoint_last_newline_ = last_newline_;</span></span>
+<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">       40632 :     checkpoint_ = p_;</span></span>
+<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">       40632 :     checkpoint_line_ = cur_line_;</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">       40632 :     checkpoint_last_newline_ = last_newline_;</span></span>
 <span id="L69"><span class="lineNum">      69</span>                 :             : </span>
-<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">       39380 :     int32_t token_start = 0;</span></span>
-<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">       39380 :     int32_t token_start_line = 0;</span></span>
-<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">       39380 :     int32_t token_start_col = 0;</span></span>
-<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">       39380 :     int32_t token_end = 0;</span></span>
-<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">       39380 :     int32_t token_end_line = 0;</span></span>
-<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">       39380 :     int32_t token_end_col = 0;</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">       40632 :     int32_t token_start = 0;</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">       40632 :     int32_t token_start_line = 0;</span></span>
+<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaGNC">       40632 :     int32_t token_start_col = 0;</span></span>
+<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">       40632 :     int32_t token_end = 0;</span></span>
+<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">       40632 :     int32_t token_end_line = 0;</span></span>
+<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">       40632 :     int32_t token_end_col = 0;</span></span>
 <span id="L76"><span class="lineNum">      76</span>                 :             : </span>
-<span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC">       39380 :     auto err = real_scan(mode,</span></span>
+<span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC">       40632 :     auto err = real_scan(mode,</span></span>
 <span id="L78"><span class="lineNum">      78</span>                 :             :                          &amp;p_,</span>
 <span id="L79"><span class="lineNum">      79</span>                 :             :                          ps_,</span>
 <span id="L80"><span class="lineNum">      80</span>                 :             :                          pe_,</span>
 <span id="L81"><span class="lineNum">      81</span>                 :             :                          eof_,</span>
 <span id="L82"><span class="lineNum">      82</span>                 :             :                          &amp;last_newline_,</span>
-<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">       39380 :                          cur_line_,</span></span>
-<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">       39380 :                          token_,</span></span>
+<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">       40632 :                          cur_line_,</span></span>
+<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">       40632 :                          token_,</span></span>
 <span id="L85"><span class="lineNum">      85</span>                 :             :                          token_start,</span>
 <span id="L86"><span class="lineNum">      86</span>                 :             :                          token_start_line,</span>
 <span id="L87"><span class="lineNum">      87</span>                 :             :                          token_start_col,</span>
 <span id="L88"><span class="lineNum">      88</span>                 :             :                          token_end,</span>
 <span id="L89"><span class="lineNum">      89</span>                 :             :                          token_end_line,</span>
 <span id="L90"><span class="lineNum">      90</span>                 :             :                          token_end_col);</span>
-<span id="L91"><span class="lineNum">      91</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 39376 times"> + </span>]:<span class="tlaGNC">       39380 :     if (err != 0) {</span></span>
+<span id="L91"><span class="lineNum">      91</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 40628 times"> + </span>]:<span class="tlaGNC">       40632 :     if (err != 0) {</span></span>
 <span id="L92"><span class="lineNum">      92</span>                 :<span class="tlaGNC">           4 :         auto token = std::make_unique&lt;Token&gt;();</span></span>
 <span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">           4 :         token-&gt;tok = TokenType::Illegal;</span></span>
 <span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaGNC">           4 :         token-&gt;lit = std::string(</span></span>
@@ -178,47 +178,47 @@
 <span id="L107"><span class="lineNum">     107</span>                 :             :         return token;</span>
 <span id="L108"><span class="lineNum">     108</span>                 :<span class="tlaGNC">           4 :     }</span></span>
 <span id="L109"><span class="lineNum">     109</span>                 :             : </span>
-<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">       39376 :     std::unique_ptr&lt;Token&gt; t;</span></span>
-<span id="L111"><span class="lineNum">     111</span>   [<span class="tlaGBC" title="Branch 0 was taken 328 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 39048 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 328 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">       39376 :     if (token_ == TokenType::Illegal &amp;&amp; p_ == eof_) {</span></span>
-<span id="L112"><span class="lineNum">     112</span>         [<span class="tlaGBC" title="Branch 0 was taken 328 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         656 :         t = get_eof_token();</span></span>
+<span id="L110"><span class="lineNum">     110</span>                 :<span class="tlaGNC">       40628 :     std::unique_ptr&lt;Token&gt; t;</span></span>
+<span id="L111"><span class="lineNum">     111</span>   [<span class="tlaGBC" title="Branch 0 was taken 332 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 40296 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 332 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">       40628 :     if (token_ == TokenType::Illegal &amp;&amp; p_ == eof_) {</span></span>
+<span id="L112"><span class="lineNum">     112</span>         [<span class="tlaGBC" title="Branch 0 was taken 332 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         664 :         t = get_eof_token();</span></span>
 <span id="L113"><span class="lineNum">     113</span>                 :             :     } else {</span>
-<span id="L114"><span class="lineNum">     114</span>         [<span class="tlaGBC" title="Branch 0 was taken 39048 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       78096 :         t = std::make_unique&lt;Token&gt;();</span></span>
-<span id="L115"><span class="lineNum">     115</span>         [<span class="tlaGBC" title="Branch 0 was taken 39048 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       39048 :         t-&gt;tok = token_;</span></span>
+<span id="L114"><span class="lineNum">     114</span>         [<span class="tlaGBC" title="Branch 0 was taken 40296 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       80592 :         t = std::make_unique&lt;Token&gt;();</span></span>
+<span id="L115"><span class="lineNum">     115</span>         [<span class="tlaGBC" title="Branch 0 was taken 40296 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       40296 :         t-&gt;tok = token_;</span></span>
 <span id="L116"><span class="lineNum">     116</span>                 :             :         t-&gt;lit =</span>
-<span id="L117"><span class="lineNum">     117</span>         [<span class="tlaGBC" title="Branch 0 was taken 39048 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       39048 :             std::string(data_ + token_start, static_cast&lt;std::size_t&gt;(token_end - token_start));</span></span>
-<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">       39048 :         t-&gt;start_offset = static_cast&lt;uint32_t&gt;(token_start);</span></span>
-<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">       39048 :         t-&gt;end_offset = static_cast&lt;uint32_t&gt;(token_end);</span></span>
-<span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC">       39048 :         t-&gt;start_pos = Position(static_cast&lt;uint32_t&gt;(token_start_line),</span></span>
-<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">       39048 :                                 static_cast&lt;uint32_t&gt;(token_start_col));</span></span>
-<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC">       39048 :         t-&gt;end_pos =</span></span>
-<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">       39048 :             Position(static_cast&lt;uint32_t&gt;(token_end_line), static_cast&lt;uint32_t&gt;(token_end_col));</span></span>
-<span id="L124"><span class="lineNum">     124</span>         [<span class="tlaGBC" title="Branch 0 was taken 39048 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       39048 :         maybe_promote_unsigned_integer(t.get());</span></span>
+<span id="L117"><span class="lineNum">     117</span>         [<span class="tlaGBC" title="Branch 0 was taken 40296 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       40296 :             std::string(data_ + token_start, static_cast&lt;std::size_t&gt;(token_end - token_start));</span></span>
+<span id="L118"><span class="lineNum">     118</span>                 :<span class="tlaGNC">       40296 :         t-&gt;start_offset = static_cast&lt;uint32_t&gt;(token_start);</span></span>
+<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaGNC">       40296 :         t-&gt;end_offset = static_cast&lt;uint32_t&gt;(token_end);</span></span>
+<span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC">       40296 :         t-&gt;start_pos = Position(static_cast&lt;uint32_t&gt;(token_start_line),</span></span>
+<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">       40296 :                                 static_cast&lt;uint32_t&gt;(token_start_col));</span></span>
+<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC">       40296 :         t-&gt;end_pos =</span></span>
+<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">       40296 :             Position(static_cast&lt;uint32_t&gt;(token_end_line), static_cast&lt;uint32_t&gt;(token_end_col));</span></span>
+<span id="L124"><span class="lineNum">     124</span>         [<span class="tlaGBC" title="Branch 0 was taken 40296 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       40296 :         maybe_promote_unsigned_integer(t.get());</span></span>
 <span id="L125"><span class="lineNum">     125</span>                 :             :     }</span>
-<span id="L126"><span class="lineNum">     126</span>         [<span class="tlaGBC" title="Branch 0 was taken 39376 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       39376 :     positions_[t-&gt;start_pos] = t-&gt;start_offset;</span></span>
-<span id="L127"><span class="lineNum">     127</span>         [<span class="tlaGBC" title="Branch 0 was taken 39376 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       39376 :     positions_[t-&gt;end_pos] = t-&gt;end_offset;</span></span>
+<span id="L126"><span class="lineNum">     126</span>         [<span class="tlaGBC" title="Branch 0 was taken 40628 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       40628 :     positions_[t-&gt;start_pos] = t-&gt;start_offset;</span></span>
+<span id="L127"><span class="lineNum">     127</span>         [<span class="tlaGBC" title="Branch 0 was taken 40628 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       40628 :     positions_[t-&gt;end_pos] = t-&gt;end_offset;</span></span>
 <span id="L128"><span class="lineNum">     128</span>                 :             : </span>
 <span id="L129"><span class="lineNum">     129</span>                 :             :     return t;</span>
-<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">       39376 : }</span></span>
+<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">       40628 : }</span></span>
 <span id="L131"><span class="lineNum">     131</span>                 :             : </span>
-<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">         416 : std::unique_ptr&lt;Token&gt; Scanner::get_eof_token() {</span></span>
-<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">         416 :     const auto column = static_cast&lt;uint32_t&gt;(eof_ - last_newline_ + 1);</span></span>
-<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">         416 :     auto token = std::make_unique&lt;Token&gt;();</span></span>
-<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">         416 :     token-&gt;tok = TokenType::Eof;</span></span>
-<span id="L136"><span class="lineNum">     136</span>         [<span class="tlaGBC" title="Branch 0 was taken 416 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         416 :     token-&gt;lit = &quot;&quot;;</span></span>
-<span id="L137"><span class="lineNum">     137</span>         [<span class="tlaGBC" title="Branch 0 was taken 416 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         416 :     token-&gt;start_offset = static_cast&lt;uint32_t&gt;(data_len_);</span></span>
-<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">         416 :     token-&gt;end_offset = static_cast&lt;uint32_t&gt;(data_len_);</span></span>
-<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">         416 :     token-&gt;start_pos = Position(static_cast&lt;uint32_t&gt;(cur_line_), column);</span></span>
-<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">         416 :     token-&gt;end_pos = Position(static_cast&lt;uint32_t&gt;(cur_line_), column);</span></span>
+<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">         422 : std::unique_ptr&lt;Token&gt; Scanner::get_eof_token() {</span></span>
+<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">         422 :     const auto column = static_cast&lt;uint32_t&gt;(eof_ - last_newline_ + 1);</span></span>
+<span id="L134"><span class="lineNum">     134</span>                 :<span class="tlaGNC">         422 :     auto token = std::make_unique&lt;Token&gt;();</span></span>
+<span id="L135"><span class="lineNum">     135</span>                 :<span class="tlaGNC">         422 :     token-&gt;tok = TokenType::Eof;</span></span>
+<span id="L136"><span class="lineNum">     136</span>         [<span class="tlaGBC" title="Branch 0 was taken 422 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         422 :     token-&gt;lit = &quot;&quot;;</span></span>
+<span id="L137"><span class="lineNum">     137</span>         [<span class="tlaGBC" title="Branch 0 was taken 422 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         422 :     token-&gt;start_offset = static_cast&lt;uint32_t&gt;(data_len_);</span></span>
+<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">         422 :     token-&gt;end_offset = static_cast&lt;uint32_t&gt;(data_len_);</span></span>
+<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">         422 :     token-&gt;start_pos = Position(static_cast&lt;uint32_t&gt;(cur_line_), column);</span></span>
+<span id="L140"><span class="lineNum">     140</span>                 :<span class="tlaGNC">         422 :     token-&gt;end_pos = Position(static_cast&lt;uint32_t&gt;(cur_line_), column);</span></span>
 <span id="L141"><span class="lineNum">     141</span>                 :             :     // Register the EOF positions so that source_location() can compute a valid source snippet when</span>
 <span id="L142"><span class="lineNum">     142</span>                 :             :     // the EOF token's position is used as a range boundary.</span>
-<span id="L143"><span class="lineNum">     143</span>   [<span class="tlaGBC" title="Branch 0 was taken 416 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 416 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         416 :     positions_[token-&gt;start_pos] = token-&gt;start_offset;</span></span>
-<span id="L144"><span class="lineNum">     144</span>         [<span class="tlaGBC" title="Branch 0 was taken 416 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         416 :     positions_[token-&gt;end_pos] = token-&gt;end_offset;</span></span>
-<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">         416 :     return token;</span></span>
+<span id="L143"><span class="lineNum">     143</span>   [<span class="tlaGBC" title="Branch 0 was taken 422 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 422 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         422 :     positions_[token-&gt;start_pos] = token-&gt;start_offset;</span></span>
+<span id="L144"><span class="lineNum">     144</span>         [<span class="tlaGBC" title="Branch 0 was taken 422 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         422 :     positions_[token-&gt;end_pos] = token-&gt;end_offset;</span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">         422 :     return token;</span></span>
 <span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaUNC tlaBgUNC">           0 : }</span></span>
 <span id="L147"><span class="lineNum">     147</span>                 :             : </span>
-<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC tlaBgGNC">       39048 : void Scanner::maybe_promote_unsigned_integer(Token* token) {</span></span>
-<span id="L149"><span class="lineNum">     149</span>   [<span class="tlaGBC" title="Branch 0 was taken 39048 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 586 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 38462 times"> + </span> :<span class="tlaGNC">       39048 :     if (token == nullptr || token-&gt;tok != TokenType::Int || p_ &gt;= eof_ || *p_ != 'u') {</span></span>
-<span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 563 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 23 times"> + </span><span class="tlaGBC" title="Branch 6 was taken 11 times"> + </span><span class="tlaGBC" title="Branch 7 was taken 552 times"> + </span>]
+<span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC tlaBgGNC">       40296 : void Scanner::maybe_promote_unsigned_integer(Token* token) {</span></span>
+<span id="L149"><span class="lineNum">     149</span>   [<span class="tlaGBC" title="Branch 0 was taken 40296 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 669 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 39627 times"> + </span> :<span class="tlaGNC">       40296 :     if (token == nullptr || token-&gt;tok != TokenType::Int || p_ &gt;= eof_ || *p_ != 'u') {</span></span>
+<span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 646 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 23 times"> + </span><span class="tlaGBC" title="Branch 6 was taken 11 times"> + </span><span class="tlaGBC" title="Branch 7 was taken 635 times"> + </span>]
 <span id="L150"><span class="lineNum">     150</span>                 :             :         return;</span>
 <span id="L151"><span class="lineNum">     151</span>                 :             :     }</span>
 <span id="L152"><span class="lineNum">     152</span>                 :<span class="tlaGNC">          11 :     const char* suffix = p_ + 1;</span></span>
