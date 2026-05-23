@@ -149,7 +149,7 @@
 - 少数 AST/debug 字符串形式仍然是简化版，不是标准 Flux 格式
 - 还没有语义分析或类型检查层
 - 运行时执行仍是“可用子集”，虽然已经能跑常见内存查询管道，但更广的 builtin 和流式语义仍缺失
-- `array.from` / `array.concat` / `array.filter` / `array.map` / `array.contains` / `array.reduce` / `array.any` / `array.all` / `csv.from` / `sqlite.from` / `mysql.from` / `date.*` / `dict.*` / `regexp.*` / `strings.*` / `math.*` / `json.encode` / `runtime.version` / `system.time` / `types.*` / `join.*` 这类 package 入口已可用，但完整标准库接口仍远未实现
+- `array.*` / `csv.from` / `sqlite.from` / `mysql.from` / `date.*` / `dict.*` / `regexp.*` / `strings.*` / `math.*` / `json.encode` / `runtime.version` / `system.time` / `types.*` / `join.*` 这类 package 入口已可用，但完整标准库接口仍远未实现
 - CLI 输出已经具备结果导向和多表感知能力，但距离官方 Influx 结果集格式仍有差距
 
 ## 推荐下一步
@@ -169,7 +169,7 @@
 
 ### 官方 package 对齐
 
-- 已有：`array`，包含 `array.from`、`array.concat`、`array.filter`、`array.map`、`array.contains`、`array.reduce`、`array.any`、`array.all`
+- 已有：`array`，包含 `array.from`、`array.concat`、`array.filter`、`array.map`、`array.contains`、`array.reduce`、`array.any`、`array.all`、`array.range`、`array.repeat`、`array.length`、`array.get`、`array.slice`、`array.sort`、`array.flatMap`、`array.find`、`array.findIndex`、`array.take`、`array.drop`、`array.reverse`、`array.unique`、`array.unfold`、`array.scan`、`array.zip`、`array.enumerate`
 - 已有：`csv`，包含 `csv.from`
 - 已有：`sqlite`，包含 `sqlite.from`；connector / plan / pushdown 见 `DATASOURCE_ARCHITECTURE.md`
 - 已有：`mysql`，包含 `mysql.from(dsn:, table:)` 和显式连接字段形态；connector / plan / pushdown 复用 SQL provider 路线
