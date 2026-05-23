@@ -17,7 +17,7 @@
 
 | 文件                      | 主覆盖                                                                                                                                                                               |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `array.flux`              | `array.from`、`array.concat`、`array.filter`、`array.map`、`array.contains`、`array.reduce`、`array.any`、`array.all`                                                                |
+| `array.flux`              | `array.from`、`array.concat`、`array.filter`、`array.map`、`array.contains`、`array.reduce`、`array.any`、`array.all`、`array.range`、`array.repeat`、`array.length`、`array.get`、`array.slice`、`array.sort`、`array.flatMap`、`array.find`、`array.findIndex`、`array.take`、`array.drop`、`array.reverse`、`array.unique`、`array.unfold`、`array.scan`、`array.zip`、`array.enumerate` |
 | `csv.flux`                | `csv.from`                                                                                                                                                                           |
 | `date.flux`               | `date.add`、`date.sub`、`date.truncate`、`date.year`、`date.month`、`date.monthDay`、`date.weekDay`、`date.hour`、`date.minute`、`date.second`                                       |
 | `dict.flux`               | `dict.fromList`、`dict.get`、`dict.insert`、`dict.remove`                                                                                                                            |
