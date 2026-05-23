@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-22 13:10:40</td>
+            <td class="headerValue">2026-05-23 13:08:54</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -838,23 +838,23 @@
 <span id="L731"><span class="lineNum">     731</span>                 :             : </span>
 <span id="L732"><span class="lineNum">     732</span>                 :             : } // namespace</span>
 <span id="L733"><span class="lineNum">     733</span>                 :             : </span>
-<span id="L734"><span class="lineNum">     734</span>                 :<span class="tlaGNC">         198 : bool InstallKnownUniverseJoinBuiltin(Environment&amp; env, const std::string&amp; name) {</span></span>
-<span id="L735"><span class="lineNum">     735</span>         [<span class="tlaGBC" title="Branch 0 was taken 182 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">         198 :     if (name == &quot;join&quot;) {</span></span>
-<span id="L736"><span class="lineNum">     736</span>   [<span class="tlaGBC" title="Branch 0 was taken 182 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 182 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         364 :         install_builtin(env, &quot;join&quot;, builtin_join);</span></span>
-<span id="L737"><span class="lineNum">     737</span>                 :<span class="tlaGNC">         182 :         return true;</span></span>
+<span id="L734"><span class="lineNum">     734</span>                 :<span class="tlaGNC">         200 : bool InstallKnownUniverseJoinBuiltin(Environment&amp; env, const std::string&amp; name) {</span></span>
+<span id="L735"><span class="lineNum">     735</span>         [<span class="tlaGBC" title="Branch 0 was taken 184 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">         200 :     if (name == &quot;join&quot;) {</span></span>
+<span id="L736"><span class="lineNum">     736</span>   [<span class="tlaGBC" title="Branch 0 was taken 184 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 184 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         368 :         install_builtin(env, &quot;join&quot;, builtin_join);</span></span>
+<span id="L737"><span class="lineNum">     737</span>                 :<span class="tlaGNC">         184 :         return true;</span></span>
 <span id="L738"><span class="lineNum">     738</span>                 :             :     }</span>
 <span id="L739"><span class="lineNum">     739</span>                 :             :     return false;</span>
 <span id="L740"><span class="lineNum">     740</span>                 :             : }</span>
 <span id="L741"><span class="lineNum">     741</span>                 :             : </span>
-<span id="L742"><span class="lineNum">     742</span>                 :<span class="tlaGNC">         179 : void InstallUniverseJoinBuiltins(Environment&amp; env) {</span></span>
-<span id="L743"><span class="lineNum">     743</span>         [<span class="tlaGBC" title="Branch 0 was taken 179 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         179 :     InstallKnownUniverseJoinBuiltin(env, &quot;join&quot;);</span></span>
-<span id="L744"><span class="lineNum">     744</span>                 :<span class="tlaGNC">         179 : }</span></span>
+<span id="L742"><span class="lineNum">     742</span>                 :<span class="tlaGNC">         181 : void InstallUniverseJoinBuiltins(Environment&amp; env) {</span></span>
+<span id="L743"><span class="lineNum">     743</span>         [<span class="tlaGBC" title="Branch 0 was taken 181 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         181 :     InstallKnownUniverseJoinBuiltin(env, &quot;join&quot;);</span></span>
+<span id="L744"><span class="lineNum">     744</span>                 :<span class="tlaGNC">         181 : }</span></span>
 <span id="L745"><span class="lineNum">     745</span>                 :             : </span>
 <span id="L746"><span class="lineNum">     746</span>                 :             : namespace builtin {</span>
 <span id="L747"><span class="lineNum">     747</span>                 :             : </span>
-<span id="L748"><span class="lineNum">     748</span>         [<span class="tlaGBC" title="Branch 0 was taken 23 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          23 : void RegisterJoinStdlibPackage() {</span></span>
-<span id="L749"><span class="lineNum">     749</span>   [<span class="tlaGBC" title="Branch 0 was taken 23 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 23 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          46 :     RegisterPackage(&quot;join&quot;, make_join_package);</span></span>
-<span id="L750"><span class="lineNum">     750</span>                 :<span class="tlaGNC">          23 : }</span></span>
+<span id="L748"><span class="lineNum">     748</span>         [<span class="tlaGBC" title="Branch 0 was taken 24 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          24 : void RegisterJoinStdlibPackage() {</span></span>
+<span id="L749"><span class="lineNum">     749</span>   [<span class="tlaGBC" title="Branch 0 was taken 24 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 24 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          48 :     RegisterPackage(&quot;join&quot;, make_join_package);</span></span>
+<span id="L750"><span class="lineNum">     750</span>                 :<span class="tlaGNC">          24 : }</span></span>
 <span id="L751"><span class="lineNum">     751</span>                 :             : </span>
 <span id="L752"><span class="lineNum">     752</span>                 :             : } // namespace builtin</span>
 <span id="L753"><span class="lineNum">     753</span>                 :             : </span>
