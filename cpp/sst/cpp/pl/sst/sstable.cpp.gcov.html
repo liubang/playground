@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">91.5&nbsp;%</td>
+            <td class="headerCovTableEntryHi">92.6&nbsp;%</td>
             <td class="headerCovTableEntry">94</td>
-            <td class="headerCovTableEntry">86</td>
+            <td class="headerCovTableEntry">87</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-23 13:08:54</td>
+            <td class="headerValue">2026-05-23 23:19:57</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">40.0&nbsp;%</td>
@@ -49,9 +49,9 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">35.6&nbsp;%</td>
+            <td class="headerCovTableEntryLo">36.0&nbsp;%</td>
             <td class="headerCovTableEntry">250</td>
-            <td class="headerCovTableEntry">89</td>
+            <td class="headerCovTableEntry">90</td>
           </tr>
                   <tr><td><img src="../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -206,27 +206,27 @@
 <span id="L122"><span class="lineNum">     122</span>                 :             :     RETURN_VOID;</span>
 <span id="L123"><span class="lineNum">     123</span>                 :             : }</span>
 <span id="L124"><span class="lineNum">     124</span>                 :             : </span>
-<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">        5731 : IteratorPtr SSTable::blockReader(std::string_view index_value) {</span></span>
+<span id="L125"><span class="lineNum">     125</span>                 :<span class="tlaGNC">        5751 : IteratorPtr SSTable::blockReader(std::string_view index_value) {</span></span>
 <span id="L126"><span class="lineNum">     126</span>                 :             :     BlockHandle handle;</span>
-<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">        5731 :     auto s = handle.decodeFrom(index_value);</span></span>
-<span id="L128"><span class="lineNum">     128</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5731 times"> + </span>]:<span class="tlaGNC">        5731 :     if (s.hasError()) {</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaGNC">        5751 :     auto s = handle.decodeFrom(index_value);</span></span>
+<span id="L128"><span class="lineNum">     128</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5751 times"> + </span>]:<span class="tlaGNC">        5751 :     if (s.hasError()) {</span></span>
 <span id="L129"><span class="lineNum">     129</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         XLOGF(ERR, &quot;decode block index error: {}&quot;, s.error());</span></span>
 <span id="L130"><span class="lineNum">     130</span>                 :             :         return nullptr;</span>
 <span id="L131"><span class="lineNum">     131</span>                 :             :     }</span>
 <span id="L132"><span class="lineNum">     132</span>                 :             : </span>
-<span id="L133"><span class="lineNum">     133</span>         [<span class="tlaGBC" title="Branch 0 was taken 5731 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">        5731 :     auto block_content_result = BlockReader::readBlock(reader_, fd_, handle);</span></span>
+<span id="L133"><span class="lineNum">     133</span>         [<span class="tlaGBC" title="Branch 0 was taken 5751 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">        5751 :     auto block_content_result = BlockReader::readBlock(reader_, fd_, handle);</span></span>
 <span id="L134"><span class="lineNum">     134</span>                 :             : </span>
-<span id="L135"><span class="lineNum">     135</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5731 times"> + </span>]:<span class="tlaGNC">        5731 :     if (block_content_result.hasError()) {</span></span>
+<span id="L135"><span class="lineNum">     135</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5751 times"> + </span>]:<span class="tlaGNC">        5751 :     if (block_content_result.hasError()) {</span></span>
 <span id="L136"><span class="lineNum">     136</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         XLOGF(ERR, &quot;read block error: {}&quot;, block_content_result.error());</span></span>
 <span id="L137"><span class="lineNum">     137</span>                 :             :         return nullptr;</span>
 <span id="L138"><span class="lineNum">     138</span>                 :             :     }</span>
 <span id="L139"><span class="lineNum">     139</span>                 :             : </span>
-<span id="L140"><span class="lineNum">     140</span>         [<span class="tlaGBC" title="Branch 0 was taken 5731 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">        5731 :     BlockContents contents = block_content_result.value();</span></span>
+<span id="L140"><span class="lineNum">     140</span>         [<span class="tlaGBC" title="Branch 0 was taken 5751 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">        5751 :     BlockContents contents = block_content_result.value();</span></span>
 <span id="L141"><span class="lineNum">     141</span>                 :             :     auto block = std::make_shared&lt;Block&gt;(contents);</span>
-<span id="L142"><span class="lineNum">     142</span>         [<span class="tlaGBC" title="Branch 0 was taken 5731 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        5731 :     auto iter = block-&gt;iterator(options_-&gt;comparator);</span></span>
+<span id="L142"><span class="lineNum">     142</span>         [<span class="tlaGBC" title="Branch 0 was taken 5751 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        5751 :     auto iter = block-&gt;iterator(options_-&gt;comparator);</span></span>
 <span id="L143"><span class="lineNum">     143</span>                 :             : </span>
 <span id="L144"><span class="lineNum">     144</span>                 :             :     return iter;</span>
-<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">        5731 : }</span></span>
+<span id="L145"><span class="lineNum">     145</span>                 :<span class="tlaGNC">        5751 : }</span></span>
 <span id="L146"><span class="lineNum">     146</span>                 :             : </span>
 <span id="L147"><span class="lineNum">     147</span>                 :             : // 将来会废弃这个接口，在上层统一实现query和scan操作语义</span>
 <span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">        1001 : Result&lt;CellVecRef&gt; SSTable::get(std::string_view rowkey, Arena* buf) {</span></span>
@@ -246,27 +246,27 @@
 <span id="L161"><span class="lineNum">     161</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1001 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">        1001 :         RETURN_AND_LOG_ON_ERROR(result);</span></span>
 <span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
 <span id="L162"><span class="lineNum">     162</span>                 :             : </span>
-<span id="L163"><span class="lineNum">     163</span>   [<span class="tlaGBC" title="Branch 0 was taken 1001 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 667 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 334 times"> + </span>]:<span class="tlaGNC">        1001 :         if (!filter_-&gt;key_may_match(rowkey)) {</span></span>
-<span id="L164"><span class="lineNum">     164</span>   [<span class="tlaGBC" title="Branch 0 was taken 667 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 667 times"> + </span>]:<span class="tlaGNC">        1334 :             XLOGF(DBG, &quot;search_key: {} filted by bloom filter&quot;, rowkey);</span></span>
-<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">        1334 :             return makeError(StatusCode::kKVStoreNotFound);</span></span>
+<span id="L163"><span class="lineNum">     163</span>   [<span class="tlaGBC" title="Branch 0 was taken 1001 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 665 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 336 times"> + </span>]:<span class="tlaGNC">        1001 :         if (!filter_-&gt;key_may_match(rowkey)) {</span></span>
+<span id="L164"><span class="lineNum">     164</span>   [<span class="tlaGBC" title="Branch 0 was taken 665 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 665 times"> + </span>]:<span class="tlaGNC">        1330 :             XLOGF(DBG, &quot;search_key: {} filted by bloom filter&quot;, rowkey);</span></span>
+<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">        1330 :             return makeError(StatusCode::kKVStoreNotFound);</span></span>
 <span id="L166"><span class="lineNum">     166</span>                 :             :         }</span>
 <span id="L167"><span class="lineNum">     167</span>                 :             :     }</span>
-<span id="L168"><span class="lineNum">     168</span>         [<span class="tlaGBC" title="Branch 0 was taken 334 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         334 :     auto data_iter = blockReader(idx_handle);</span></span>
-<span id="L169"><span class="lineNum">     169</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 334 times"> + </span>]:<span class="tlaGNC">         334 :     if (data_iter == nullptr) {</span></span>
+<span id="L168"><span class="lineNum">     168</span>         [<span class="tlaGBC" title="Branch 0 was taken 336 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         336 :     auto data_iter = blockReader(idx_handle);</span></span>
+<span id="L169"><span class="lineNum">     169</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 336 times"> + </span>]:<span class="tlaGNC">         336 :     if (data_iter == nullptr) {</span></span>
 <span id="L170"><span class="lineNum">     170</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return makeError(StatusCode::kDataCorruption, &quot;invalid data block&quot;);</span></span>
 <span id="L171"><span class="lineNum">     171</span>                 :             :     }</span>
-<span id="L172"><span class="lineNum">     172</span>         [<span class="tlaGBC" title="Branch 0 was taken 334 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">         334 :     data_iter-&gt;seek(rowkey);</span></span>
-<span id="L173"><span class="lineNum">     173</span>   [<span class="tlaGBC" title="Branch 0 was taken 334 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 334 times"> + </span>]:<span class="tlaGNC">         334 :     if (!data_iter-&gt;valid()) {</span></span>
+<span id="L172"><span class="lineNum">     172</span>         [<span class="tlaGBC" title="Branch 0 was taken 336 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">         336 :     data_iter-&gt;seek(rowkey);</span></span>
+<span id="L173"><span class="lineNum">     173</span>   [<span class="tlaGBC" title="Branch 0 was taken 336 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 336 times"> + </span>]:<span class="tlaGNC">         336 :     if (!data_iter-&gt;valid()) {</span></span>
 <span id="L174"><span class="lineNum">     174</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return makeError(StatusCode::kKVStoreNotFound);</span></span>
 <span id="L175"><span class="lineNum">     175</span>                 :             :     }</span>
 <span id="L176"><span class="lineNum">     176</span>                 :             : </span>
 <span id="L177"><span class="lineNum">     177</span>                 :             :     // first cell</span>
-<span id="L178"><span class="lineNum">     178</span>         [<span class="tlaGBC" title="Branch 0 was taken 334 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">         334 :     auto cell = data_iter-&gt;cell();</span></span>
-<span id="L179"><span class="lineNum">     179</span>   [<span class="tlaGBC" title="Branch 0 was taken 334 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 334 times"> + </span>]:<span class="tlaGNC">         334 :     if (options_-&gt;comparator-&gt;compare(cell-&gt;rowkey(), rowkey) != 0) {</span></span>
-<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return makeError(StatusCode::kKVStoreNotFound);</span></span>
+<span id="L178"><span class="lineNum">     178</span>         [<span class="tlaGBC" title="Branch 0 was taken 336 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">         336 :     auto cell = data_iter-&gt;cell();</span></span>
+<span id="L179"><span class="lineNum">     179</span>   [<span class="tlaGBC" title="Branch 0 was taken 336 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 334 times"> + </span>]:<span class="tlaGNC">         336 :     if (options_-&gt;comparator-&gt;compare(cell-&gt;rowkey(), rowkey) != 0) {</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC">           4 :         return makeError(StatusCode::kKVStoreNotFound);</span></span>
 <span id="L181"><span class="lineNum">     181</span>                 :             :     }</span>
 <span id="L182"><span class="lineNum">     182</span>                 :             : </span>
-<span id="L183"><span class="lineNum">     183</span>         [<span class="tlaGBC" title="Branch 0 was taken 334 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">         334 :     CellVecRef cells;</span></span>
+<span id="L183"><span class="lineNum">     183</span>         [<span class="tlaGBC" title="Branch 0 was taken 334 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         334 :     CellVecRef cells;</span></span>
 <span id="L184"><span class="lineNum">     184</span>                 :             : </span>
 <span id="L185"><span class="lineNum">     185</span>                 :             :     // should copy</span>
 <span id="L186"><span class="lineNum">     186</span>   [<span class="tlaGBC" title="Branch 0 was taken 334 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 334 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         334 :     cells.emplace_back(cell-&gt;clone(buf));</span></span>
@@ -275,9 +275,9 @@
 <span id="L188"><span class="lineNum">     188</span>                 :             : </span>
 <span id="L189"><span class="lineNum">     189</span>                 :             :     // get all cells of the row</span>
 <span id="L190"><span class="lineNum">     190</span>                 :             :     // TODO(liubang): cell merger</span>
-<span id="L191"><span class="lineNum">     191</span>   [<span class="tlaGBC" title="Branch 0 was taken 5330 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5238 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 92 times"> + </span>]:<span class="tlaGNC">        5330 :     while (data_iter-&gt;valid()) {</span></span>
-<span id="L192"><span class="lineNum">     192</span>   [<span class="tlaGBC" title="Branch 0 was taken 5238 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5238 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">       10476 :         cell = data_iter-&gt;cell();</span></span>
-<span id="L193"><span class="lineNum">     193</span>   [<span class="tlaGBC" title="Branch 0 was taken 5238 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 4996 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 242 times"> + </span>]:<span class="tlaGNC">        5238 :         if (options_-&gt;comparator-&gt;compare(cell-&gt;rowkey(), rowkey) != 0) {</span></span>
+<span id="L191"><span class="lineNum">     191</span>   [<span class="tlaGBC" title="Branch 0 was taken 5330 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5246 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 84 times"> + </span>]:<span class="tlaGNC">        5330 :     while (data_iter-&gt;valid()) {</span></span>
+<span id="L192"><span class="lineNum">     192</span>   [<span class="tlaGBC" title="Branch 0 was taken 5246 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5246 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">       10492 :         cell = data_iter-&gt;cell();</span></span>
+<span id="L193"><span class="lineNum">     193</span>   [<span class="tlaGBC" title="Branch 0 was taken 5246 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 4996 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 250 times"> + </span>]:<span class="tlaGNC">        5246 :         if (options_-&gt;comparator-&gt;compare(cell-&gt;rowkey(), rowkey) != 0) {</span></span>
 <span id="L194"><span class="lineNum">     194</span>                 :             :             break;</span>
 <span id="L195"><span class="lineNum">     195</span>                 :             :         }</span>
 <span id="L196"><span class="lineNum">     196</span>   [<span class="tlaGBC" title="Branch 0 was taken 4996 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 4996 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">        4996 :         cells.emplace_back(cell-&gt;clone(buf));</span></span>
@@ -286,12 +286,12 @@
 <span id="L198"><span class="lineNum">     198</span>                 :             :     }</span>
 <span id="L199"><span class="lineNum">     199</span>                 :             : </span>
 <span id="L200"><span class="lineNum">     200</span>                 :             :     return std::move(cells);</span>
-<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaGNC">        1669 : }</span></span>
+<span id="L201"><span class="lineNum">     201</span>                 :<span class="tlaGNC">        1671 : }</span></span>
 <span id="L202"><span class="lineNum">     202</span>                 :             : </span>
 <span id="L203"><span class="lineNum">     203</span>                 :<span class="tlaGNC">           6 : IteratorPtr SSTable::iterator() {</span></span>
 <span id="L204"><span class="lineNum">     204</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           6 :     return std::make_unique&lt;SSTableIterator&gt;(</span></span>
 <span id="L205"><span class="lineNum">     205</span>                 :<span class="tlaGNC">          12 :         index_block_-&gt;iterator(options_-&gt;comparator),</span></span>
-<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaGNC">        5409 :         [that = this](std::string_view b) { return that-&gt;blockReader(b); });</span></span>
+<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaGNC">        5427 :         [that = this](std::string_view b) { return that-&gt;blockReader(b); });</span></span>
 <span id="L207"><span class="lineNum">     207</span>                 :             : }</span>
 <span id="L208"><span class="lineNum">     208</span>                 :             : </span>
 <span id="L209"><span class="lineNum">     209</span>                 :             : } // namespace pl</span>

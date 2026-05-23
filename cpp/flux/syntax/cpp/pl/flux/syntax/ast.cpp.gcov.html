@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-23 13:08:54</td>
+            <td class="headerValue">2026-05-23 23:19:57</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">84.8&nbsp;%</td>
@@ -330,17 +330,17 @@
 <span id="L254"><span class="lineNum">     254</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaGNC">           7 :     return absl::StrFormat(&quot;%.4f&quot;, value);</span></span>
 <span id="L255"><span class="lineNum">     255</span>                 :             : }</span>
 <span id="L256"><span class="lineNum">     256</span>                 :             : </span>
-<span id="L257"><span class="lineNum">     257</span>                 :<span class="tlaGNC">          58 : std::string IntegerLit::string() const {</span></span>
-<span id="L258"><span class="lineNum">     258</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaGNC">          58 :     return absl::StrFormat(&quot;%d&quot;, value);</span></span>
+<span id="L257"><span class="lineNum">     257</span>                 :<span class="tlaGNC">          61 : std::string IntegerLit::string() const {</span></span>
+<span id="L258"><span class="lineNum">     258</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaGNC">          61 :     return absl::StrFormat(&quot;%d&quot;, value);</span></span>
 <span id="L259"><span class="lineNum">     259</span>                 :             : }</span>
 <span id="L260"><span class="lineNum">     260</span>                 :             : </span>
-<span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaGNC">         189 : std::string Duration::string() const {</span></span>
-<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC">         189 :     return absl::StrFormat(&quot;%d%s&quot;, magnitude, unit);</span></span>
+<span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaGNC">         193 : std::string Duration::string() const {</span></span>
+<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC">         193 :     return absl::StrFormat(&quot;%d%s&quot;, magnitude, unit);</span></span>
 <span id="L263"><span class="lineNum">     263</span>                 :             : }</span>
 <span id="L264"><span class="lineNum">     264</span>                 :             : </span>
-<span id="L265"><span class="lineNum">     265</span>                 :<span class="tlaGNC">         189 : std::string DurationLit::string() const {</span></span>
+<span id="L265"><span class="lineNum">     265</span>                 :<span class="tlaGNC">         193 : std::string DurationLit::string() const {</span></span>
 <span id="L266"><span class="lineNum">     266</span>                 :             :     return absl::StrJoin(</span>
-<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC">         567 :         values, &quot;, &quot;, [](std::string* out, const auto&amp; d) { out-&gt;append(d-&gt;string()); });</span></span>
+<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC">         579 :         values, &quot;, &quot;, [](std::string* out, const auto&amp; d) { out-&gt;append(d-&gt;string()); });</span></span>
 <span id="L268"><span class="lineNum">     268</span>                 :             : }</span>
 <span id="L269"><span class="lineNum">     269</span>                 :             : </span>
 <span id="L270"><span class="lineNum">     270</span>                 :<span class="tlaGNC">           1 : std::string ReturnStmt::string() const {</span></span>
@@ -413,10 +413,10 @@
 <span id="L334"><span class="lineNum">     334</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaGNC">           7 :     return value ? &quot;true&quot; : &quot;false&quot;;</span></span>
 <span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span><span class="tlaUNC" title="Branch 6 was not executed"> # </span><span class="tlaUNC" title="Branch 7 was not executed"> # </span>]
 <span id="L335"><span class="lineNum">     335</span>                 :             : }</span>
-<span id="L336"><span class="lineNum">     336</span>                 :<span class="tlaGNC">         170 : std::string DateTimeLit::string() const {</span></span>
+<span id="L336"><span class="lineNum">     336</span>                 :<span class="tlaGNC">         174 : std::string DateTimeLit::string() const {</span></span>
 <span id="L337"><span class="lineNum">     337</span>                 :             :     char buf[64];</span>
-<span id="L338"><span class="lineNum">     338</span>                 :<span class="tlaGNC">         170 :     std::strftime(buf, sizeof(buf), &quot;%Y-%m-%dT%H:%M:%SZ&quot;, &amp;value);</span></span>
-<span id="L339"><span class="lineNum">     339</span>                 :<span class="tlaGNC">         170 :     return buf;</span></span>
+<span id="L338"><span class="lineNum">     338</span>                 :<span class="tlaGNC">         174 :     std::strftime(buf, sizeof(buf), &quot;%Y-%m-%dT%H:%M:%SZ&quot;, &amp;value);</span></span>
+<span id="L339"><span class="lineNum">     339</span>                 :<span class="tlaGNC">         174 :     return buf;</span></span>
 <span id="L340"><span class="lineNum">     340</span>                 :             : }</span>
 <span id="L341"><span class="lineNum">     341</span>                 :<span class="tlaGNC">          40 : std::string RegexpLit::string() const {</span></span>
 <span id="L342"><span class="lineNum">     342</span>                 :<span class="tlaGNC">          80 :     return &quot;/&quot; + value + &quot;/&quot;;</span></span>
@@ -470,12 +470,12 @@
 <span id="L389"><span class="lineNum">     389</span>                 :             :     }</span>
 <span id="L390"><span class="lineNum">     390</span>                 :<span class="tlaGNC tlaBgGNC">           3 :     return ss.str();</span></span>
 <span id="L391"><span class="lineNum">     391</span>                 :<span class="tlaGNC">           3 : }</span></span>
-<span id="L392"><span class="lineNum">     392</span>                 :<span class="tlaGNC">         434 : std::string Expression::string() const {</span></span>
-<span id="L393"><span class="lineNum">     393</span>                 :<span class="tlaGNC">         434 :     std::stringstream ss;</span></span>
-<span id="L394"><span class="lineNum">     394</span>   [<span class="tlaGBC" title="Branch 0 was taken 98 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 16 times"> + </span> :<span class="tlaGNC">         434 :     switch (type) {</span></span>
+<span id="L392"><span class="lineNum">     392</span>                 :<span class="tlaGNC">         437 : std::string Expression::string() const {</span></span>
+<span id="L393"><span class="lineNum">     393</span>                 :<span class="tlaGNC">         437 :     std::stringstream ss;</span></span>
+<span id="L394"><span class="lineNum">     394</span>   [<span class="tlaGBC" title="Branch 0 was taken 98 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 3 was taken 16 times"> + </span> :<span class="tlaGNC">         437 :     switch (type) {</span></span>
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 59 times"> + </span><span class="tlaGBC" title="Branch 6 was taken 36 times"> + </span><span class="tlaGBC" title="Branch 7 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 8 was taken 19 times"> + </span> 
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 9 was taken 13 times"> + </span><span class="tlaGBC" title="Branch 10 was taken 28 times"> + </span><span class="tlaGBC" title="Branch 11 was taken 18 times"> + </span><span class="tlaGBC" title="Branch 12 was taken 7 times"> + </span><span class="tlaGBC" title="Branch 13 was taken 2 times"> + </span> 
-<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 14 was taken 6 times"> + </span><span class="tlaGBC" title="Branch 15 was taken 35 times"> + </span><span class="tlaGBC" title="Branch 16 was taken 7 times"> + </span><span class="tlaGBC" title="Branch 17 was taken 52 times"> + </span><span class="tlaGBC" title="Branch 18 was taken 8 times"> + </span> 
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 14 was taken 6 times"> + </span><span class="tlaGBC" title="Branch 15 was taken 38 times"> + </span><span class="tlaGBC" title="Branch 16 was taken 7 times"> + </span><span class="tlaGBC" title="Branch 17 was taken 52 times"> + </span><span class="tlaGBC" title="Branch 18 was taken 8 times"> + </span> 
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 19 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 20 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 21 was not taken"> - </span><span class="tlaGBC" title="Branch 22 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 23 was not taken"> - </span> 
 <span class="lineNum">        </span>       <span class="tlaGBC" title="Branch 24 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 25 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 26 was not taken"> - </span>]
 <span id="L395"><span class="lineNum">     395</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 98 times"> + </span>]:<span class="tlaGNC">          98 :         case Type::Identifier:</span></span>
@@ -523,9 +523,9 @@
 <span id="L437"><span class="lineNum">     437</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           6 :         case Type::ParenExpr:</span></span>
 <span id="L438"><span class="lineNum">     438</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           6 :             ss &lt;&lt; std::get&lt;std::unique_ptr&lt;ParenExpr&gt;&gt;(expr)-&gt;string();</span></span>
 <span id="L439"><span class="lineNum">     439</span>                 :<span class="tlaGNC">           6 :             break;</span></span>
-<span id="L440"><span class="lineNum">     440</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 35 times"> + </span>]:<span class="tlaGNC">          35 :         case Type::IntegerLit:</span></span>
-<span id="L441"><span class="lineNum">     441</span>         [<span class="tlaGBC" title="Branch 0 was taken 35 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          35 :             ss &lt;&lt; std::get&lt;std::unique_ptr&lt;IntegerLit&gt;&gt;(expr)-&gt;string();</span></span>
-<span id="L442"><span class="lineNum">     442</span>                 :<span class="tlaGNC">          35 :             break;</span></span>
+<span id="L440"><span class="lineNum">     440</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 38 times"> + </span>]:<span class="tlaGNC">          38 :         case Type::IntegerLit:</span></span>
+<span id="L441"><span class="lineNum">     441</span>         [<span class="tlaGBC" title="Branch 0 was taken 38 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          38 :             ss &lt;&lt; std::get&lt;std::unique_ptr&lt;IntegerLit&gt;&gt;(expr)-&gt;string();</span></span>
+<span id="L442"><span class="lineNum">     442</span>                 :<span class="tlaGNC">          38 :             break;</span></span>
 <span id="L443"><span class="lineNum">     443</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">           7 :         case Type::FloatLit:</span></span>
 <span id="L444"><span class="lineNum">     444</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :             ss &lt;&lt; std::get&lt;std::unique_ptr&lt;FloatLit&gt;&gt;(expr)-&gt;string();</span></span>
 <span id="L445"><span class="lineNum">     445</span>                 :<span class="tlaGNC">           7 :             break;</span></span>
@@ -557,8 +557,8 @@
 <span id="L471"><span class="lineNum">     471</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :             ss &lt;&lt; std::get&lt;std::unique_ptr&lt;BadExpr&gt;&gt;(expr)-&gt;string();</span></span>
 <span id="L472"><span class="lineNum">     472</span>                 :<span class="tlaGNC">           4 :             break;</span></span>
 <span id="L473"><span class="lineNum">     473</span>                 :             :     }</span>
-<span id="L474"><span class="lineNum">     474</span>                 :<span class="tlaGNC">         434 :     return ss.str();</span></span>
-<span id="L475"><span class="lineNum">     475</span>                 :<span class="tlaGNC">         434 : }</span></span>
+<span id="L474"><span class="lineNum">     474</span>                 :<span class="tlaGNC">         437 :     return ss.str();</span></span>
+<span id="L475"><span class="lineNum">     475</span>                 :<span class="tlaGNC">         437 : }</span></span>
 <span id="L476"><span class="lineNum">     476</span>                 :             : </span>
 <span id="L477"><span class="lineNum">     477</span>                 :<span class="tlaGNC">         401 : std::string Identifier::string() const {</span></span>
 <span id="L478"><span class="lineNum">     478</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaGNC">         401 :     return name;</span></span>

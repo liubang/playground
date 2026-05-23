@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-23 13:08:54</td>
+            <td class="headerValue">2026-05-23 23:19:57</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -261,11 +261,11 @@
 <span id="L188"><span class="lineNum">     188</span>                 :             :     return values;</span>
 <span id="L189"><span class="lineNum">     189</span>                 :             : }</span>
 <span id="L190"><span class="lineNum">     190</span>                 :             : </span>
-<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC">         196 : inline absl::StatusOr&lt;NumericSummary&gt; summarize_numeric_array(const ArrayValue&amp; array,</span></span>
+<span id="L191"><span class="lineNum">     191</span>                 :<span class="tlaGNC">         200 : inline absl::StatusOr&lt;NumericSummary&gt; summarize_numeric_array(const ArrayValue&amp; array,</span></span>
 <span id="L192"><span class="lineNum">     192</span>                 :             :                                                               const std::string&amp; name) {</span>
-<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">         196 :     NumericSummary summary;</span></span>
-<span id="L194"><span class="lineNum">     194</span>         [<span class="tlaGBC" title="Branch 0 was taken 262 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 194 times"> + </span>]:<span class="tlaGNC">         456 :     for (const auto&amp; item : array.elements) {</span></span>
-<span id="L195"><span class="lineNum">     195</span>   [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 25 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 234 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         262 :         switch (item.type()) {</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">         200 :     NumericSummary summary;</span></span>
+<span id="L194"><span class="lineNum">     194</span>         [<span class="tlaGBC" title="Branch 0 was taken 266 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 198 times"> + </span>]:<span class="tlaGNC">         464 :     for (const auto&amp; item : array.elements) {</span></span>
+<span id="L195"><span class="lineNum">     195</span>   [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 25 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 238 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         266 :         switch (item.type()) {</span></span>
 <span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC">           3 :             case Value::Type::UInt:</span></span>
 <span id="L197"><span class="lineNum">     197</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 :                 if (summary.kind == NumericKind::Float) {</span></span>
 <span id="L198"><span class="lineNum">     198</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                     summary.float_sum += static_cast&lt;double&gt;(item.as_uint());</span></span>
@@ -303,15 +303,15 @@
 <span id="L230"><span class="lineNum">     230</span>                 :             :                     }</span>
 <span id="L231"><span class="lineNum">     231</span>                 :             :                 }</span>
 <span id="L232"><span class="lineNum">     232</span>                 :             :                 break;</span>
-<span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaGNC">         234 :             case Value::Type::Float:</span></span>
-<span id="L234"><span class="lineNum">     234</span>         [<span class="tlaGBC" title="Branch 0 was taken 187 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 47 times"> + </span>]:<span class="tlaGNC">         234 :                 if (summary.kind == NumericKind::UInt) {</span></span>
-<span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC">         187 :                     summary.float_sum = static_cast&lt;double&gt;(summary.uint_sum);</span></span>
+<span id="L233"><span class="lineNum">     233</span>                 :<span class="tlaGNC">         238 :             case Value::Type::Float:</span></span>
+<span id="L234"><span class="lineNum">     234</span>         [<span class="tlaGBC" title="Branch 0 was taken 191 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 47 times"> + </span>]:<span class="tlaGNC">         238 :                 if (summary.kind == NumericKind::UInt) {</span></span>
+<span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC">         191 :                     summary.float_sum = static_cast&lt;double&gt;(summary.uint_sum);</span></span>
 <span id="L236"><span class="lineNum">     236</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 47 times"> + </span>]:<span class="tlaGNC">          47 :                 } else if (summary.kind == NumericKind::Int) {</span></span>
 <span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                     summary.float_sum = static_cast&lt;double&gt;(summary.int_sum);</span></span>
 <span id="L238"><span class="lineNum">     238</span>                 :             :                 }</span>
-<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC tlaBgGNC">         234 :                 summary.kind = NumericKind::Float;</span></span>
-<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC">         234 :                 summary.float_sum += item.as_float();</span></span>
-<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaGNC">         234 :                 break;</span></span>
+<span id="L239"><span class="lineNum">     239</span>                 :<span class="tlaGNC tlaBgGNC">         238 :                 summary.kind = NumericKind::Float;</span></span>
+<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC">         238 :                 summary.float_sum += item.as_float();</span></span>
+<span id="L241"><span class="lineNum">     241</span>                 :<span class="tlaGNC">         238 :                 break;</span></span>
 <span id="L242"><span class="lineNum">     242</span>                 :             :             default:</span>
 <span id="L243"><span class="lineNum">     243</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :                 return absl::InvalidArgumentError(</span></span>
 <span id="L244"><span class="lineNum">     244</span>                 :<span class="tlaUNC">           0 :                     absl::StrCat(name, &quot; expects an array of numeric values&quot;));</span></span>
