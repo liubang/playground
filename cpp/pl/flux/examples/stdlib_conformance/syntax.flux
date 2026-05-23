@@ -49,6 +49,20 @@ transforms = [
     (x) => x + 1,
     (x) => x * 2,
 ]
+fib = (steps) => {
+    state = steps |> arr.reduce(
+        identity: {prev: 0, curr: 1},
+        fn: (x, acc) => ({prev: acc.curr, curr: acc.prev + acc.curr}),
+    )
+    return state.prev
+}
+factorial = (values) =>
+    values |> arr.reduce(identity: {value: 1}, fn: (x, acc) => ({value: acc.value * x}))
+max_value = (values) =>
+    values |> arr.reduce(
+        identity: {value: -999},
+        fn: (x, acc) => ({value: (if x > acc.value then x else acc.value)}),
+    )
 
 testcase syntax_smoke extends "stdlib" {
     local = score(value: 4)
@@ -110,6 +124,9 @@ hot = rows
         indexed_function: transforms[1](3),
         inline_function: ((x) => x + 1)(2),
         pipe_function: 4 |> pipe_add(inc: 3),
+        fibonacci_6: fib(steps: [1, 2, 3, 4, 5, 6]),
+        factorial_5: factorial(values: [1, 2, 3, 4, 5]).value,
+        max_value: max_value(values: [3, 9, 4, 7]).value,
     },
     array_hof: (numbers |> arr.map(fn: (x) => x * 2) |> arr.filter(fn: (x) => x > 4)),
     table_hof: {host: hot.host, label: hot.label, hot: hot.hot},
