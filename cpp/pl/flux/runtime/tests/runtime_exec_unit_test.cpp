@@ -2446,7 +2446,16 @@ TEST(RuntimeExecTest, ExecutesTopLevelFileStatementsInSharedEnvironment) {
     EXPECT_EQ("{path: \"array\", from: <builtin array.from>, concat: <builtin array.concat>, "
               "filter: <builtin array.filter>, map: <builtin array.map>, "
               "contains: <builtin array.contains>, reduce: <builtin array.reduce>, "
-              "any: <builtin array.any>, all: <builtin array.all>}",
+              "any: <builtin array.any>, all: <builtin array.all>, "
+              "range: <builtin array.range>, repeat: <builtin array.repeat>, "
+              "length: <builtin array.length>, get: <builtin array.get>, "
+              "slice: <builtin array.slice>, sort: <builtin array.sort>, "
+              "flatMap: <builtin array.flatMap>, find: <builtin array.find>, "
+              "findIndex: <builtin array.findIndex>, take: <builtin array.take>, "
+              "drop: <builtin array.drop>, reverse: <builtin array.reverse>, "
+              "unique: <builtin array.unique>, unfold: <builtin array.unfold>, "
+              "scan: <builtin array.scan>, zip: <builtin array.zip>, "
+              "enumerate: <builtin array.enumerate>}",
               env.lookup("array")->string());
     ASSERT_TRUE(env.lookup("regexp").ok());
     EXPECT_EQ("{path: \"regexp\", compile: <builtin regexp.compile>, "

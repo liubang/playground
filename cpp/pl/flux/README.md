@@ -247,6 +247,23 @@ Universe builtin 默认注入，无需 `import`。
 | `array.reduce(arr:, identity:, fn:)` | 折叠数组           |
 | `array.any(arr:, fn:)`               | 任一元素满足谓词   |
 | `array.all(arr:, fn:)`               | 全部元素满足谓词   |
+| `array.range(start:, stop:, step:)`  | 生成整数序列       |
+| `array.repeat(value:, n:)`           | 重复生成值         |
+| `array.length(arr:)`                 | 数组长度           |
+| `array.get(arr:, index:, default:)`  | 安全索引访问       |
+| `array.slice(arr:, start:, end:)`    | 切片               |
+| `array.sort(arr:, desc:)`            | 标量数组排序       |
+| `array.flatMap(arr:, fn:)`           | 映射后拍平         |
+| `array.find(arr:, fn:, default:)`    | 查找首个匹配元素   |
+| `array.findIndex(arr:, fn:)`         | 查找首个匹配索引   |
+| `array.take(arr:, n:)`               | 取前 N 个元素      |
+| `array.drop(arr:, n:)`               | 跳过前 N 个元素    |
+| `array.reverse(arr:)`                | 反转数组           |
+| `array.unique(arr:)`                 | 去重               |
+| `array.unfold(seed:, fn:, limit:)`   | 按状态展开数组     |
+| `array.scan(arr:, identity:, fn:)`   | 保留每步折叠结果   |
+| `array.zip(left:, right:)`           | 配对两个数组       |
+| `array.enumerate(arr:)`              | 添加元素索引       |
 
 ### `csv`
 
