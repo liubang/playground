@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-22 13:10:40</td>
+            <td class="headerValue">2026-05-23 13:08:54</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">84.8&nbsp;%</td>
@@ -334,13 +334,13 @@
 <span id="L258"><span class="lineNum">     258</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaGNC">          58 :     return absl::StrFormat(&quot;%d&quot;, value);</span></span>
 <span id="L259"><span class="lineNum">     259</span>                 :             : }</span>
 <span id="L260"><span class="lineNum">     260</span>                 :             : </span>
-<span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaGNC">         185 : std::string Duration::string() const {</span></span>
-<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC">         185 :     return absl::StrFormat(&quot;%d%s&quot;, magnitude, unit);</span></span>
+<span id="L261"><span class="lineNum">     261</span>                 :<span class="tlaGNC">         189 : std::string Duration::string() const {</span></span>
+<span id="L262"><span class="lineNum">     262</span>                 :<span class="tlaGNC">         189 :     return absl::StrFormat(&quot;%d%s&quot;, magnitude, unit);</span></span>
 <span id="L263"><span class="lineNum">     263</span>                 :             : }</span>
 <span id="L264"><span class="lineNum">     264</span>                 :             : </span>
-<span id="L265"><span class="lineNum">     265</span>                 :<span class="tlaGNC">         185 : std::string DurationLit::string() const {</span></span>
+<span id="L265"><span class="lineNum">     265</span>                 :<span class="tlaGNC">         189 : std::string DurationLit::string() const {</span></span>
 <span id="L266"><span class="lineNum">     266</span>                 :             :     return absl::StrJoin(</span>
-<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC">         555 :         values, &quot;, &quot;, [](std::string* out, const auto&amp; d) { out-&gt;append(d-&gt;string()); });</span></span>
+<span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaGNC">         567 :         values, &quot;, &quot;, [](std::string* out, const auto&amp; d) { out-&gt;append(d-&gt;string()); });</span></span>
 <span id="L268"><span class="lineNum">     268</span>                 :             : }</span>
 <span id="L269"><span class="lineNum">     269</span>                 :             : </span>
 <span id="L270"><span class="lineNum">     270</span>                 :<span class="tlaGNC">           1 : std::string ReturnStmt::string() const {</span></span>
@@ -418,8 +418,8 @@
 <span id="L338"><span class="lineNum">     338</span>                 :<span class="tlaGNC">         170 :     std::strftime(buf, sizeof(buf), &quot;%Y-%m-%dT%H:%M:%SZ&quot;, &amp;value);</span></span>
 <span id="L339"><span class="lineNum">     339</span>                 :<span class="tlaGNC">         170 :     return buf;</span></span>
 <span id="L340"><span class="lineNum">     340</span>                 :             : }</span>
-<span id="L341"><span class="lineNum">     341</span>                 :<span class="tlaGNC">          36 : std::string RegexpLit::string() const {</span></span>
-<span id="L342"><span class="lineNum">     342</span>                 :<span class="tlaGNC">          72 :     return &quot;/&quot; + value + &quot;/&quot;;</span></span>
+<span id="L341"><span class="lineNum">     341</span>                 :<span class="tlaGNC">          40 : std::string RegexpLit::string() const {</span></span>
+<span id="L342"><span class="lineNum">     342</span>                 :<span class="tlaGNC">          80 :     return &quot;/&quot; + value + &quot;/&quot;;</span></span>
 <span id="L343"><span class="lineNum">     343</span>                 :             : }</span>
 <span id="L344"><span class="lineNum">     344</span>                 :<span class="tlaUNC tlaBgUNC">           0 : std::string PipeLit::string() const {</span></span>
 <span id="L345"><span class="lineNum">     345</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC">           0 :     return &quot;&lt;-&quot;;</span></span>

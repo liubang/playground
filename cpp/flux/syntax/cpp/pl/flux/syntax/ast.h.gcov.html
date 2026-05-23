@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-22 13:10:40</td>
+            <td class="headerValue">2026-05-23 13:08:54</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -173,18 +173,18 @@
 <span id="L102"><span class="lineNum">     102</span>                 :             : enum class Operator;</span>
 <span id="L103"><span class="lineNum">     103</span>                 :             : enum class LogicalOperator;</span>
 <span id="L104"><span class="lineNum">     104</span>                 :             : </span>
-<span id="L105"><span class="lineNum">     105</span>                 :<span class="tlaGNC tlaBgGNC">          11 : struct AttributeParam {</span></span>
+<span id="L105"><span class="lineNum">     105</span>                 :<span class="tlaGNC tlaBgGNC">          17 : struct AttributeParam {</span></span>
 <span id="L106"><span class="lineNum">     106</span>                 :             :     std::unique_ptr&lt;Expression&gt; value;</span>
 <span id="L107"><span class="lineNum">     107</span>                 :             :     std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt; comma;</span>
 <span id="L108"><span class="lineNum">     108</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L109"><span class="lineNum">     109</span>                 :             : };</span>
 <span id="L110"><span class="lineNum">     110</span>                 :             : </span>
-<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">           9 : struct Attribute {</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :<span class="tlaGNC">          11 : struct Attribute {</span></span>
 <span id="L112"><span class="lineNum">     112</span>                 :             :     std::string name;</span>
 <span id="L113"><span class="lineNum">     113</span>                 :             :     std::vector&lt;std::shared_ptr&lt;AttributeParam&gt;&gt; params;</span>
 <span id="L114"><span class="lineNum">     114</span>                 :             :     Attribute() = default;</span>
-<span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaGNC">           9 :     Attribute(std::string name_in, const std::vector&lt;std::shared_ptr&lt;AttributeParam&gt;&gt;&amp; params_in)</span></span>
-<span id="L116"><span class="lineNum">     116</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :         : name(std::move(name_in)), params(params_in) {}</span></span>
+<span id="L115"><span class="lineNum">     115</span>                 :<span class="tlaGNC">          11 :     Attribute(std::string name_in, const std::vector&lt;std::shared_ptr&lt;AttributeParam&gt;&gt;&amp; params_in)</span></span>
+<span id="L116"><span class="lineNum">     116</span>         [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          11 :         : name(std::move(name_in)), params(params_in) {}</span></span>
 <span id="L117"><span class="lineNum">     117</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L118"><span class="lineNum">     118</span>                 :             : };</span>
 <span id="L119"><span class="lineNum">     119</span>                 :             : </span>
@@ -211,7 +211,7 @@
 <span id="L140"><span class="lineNum">     140</span>                 :             :     std::vector&lt;std::shared_ptr&lt;Attribute&gt;&gt; attributes;</span>
 <span id="L141"><span class="lineNum">     141</span>                 :             :     std::unique_ptr&lt;Identifier&gt; name;</span>
 <span id="L142"><span class="lineNum">     142</span>                 :             :     PackageClause() : name(nullptr) {}</span>
-<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">          11 :     PackageClause(std::unique_ptr&lt;Identifier&gt; name_in) : name(std::move(name_in)) {}</span></span>
+<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">          13 :     PackageClause(std::unique_ptr&lt;Identifier&gt; name_in) : name(std::move(name_in)) {}</span></span>
 <span id="L144"><span class="lineNum">     144</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L145"><span class="lineNum">     145</span>                 :             : };</span>
 <span id="L146"><span class="lineNum">     146</span>                 :             : </span>
@@ -222,12 +222,12 @@
 <span id="L151"><span class="lineNum">     151</span>                 :             :     std::unique_ptr&lt;StringLit&gt; path;</span>
 <span id="L152"><span class="lineNum">     152</span>                 :             :     ImportDeclaration() : alias(nullptr), path(nullptr) {}</span>
 <span id="L153"><span class="lineNum">     153</span>                 :             :     ImportDeclaration(std::unique_ptr&lt;Identifier&gt; alias_in, std::unique_ptr&lt;StringLit&gt; path_in)</span>
-<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">         214 :         : alias(std::move(alias_in)), path(std::move(path_in)) {}</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">         218 :         : alias(std::move(alias_in)), path(std::move(path_in)) {}</span></span>
 <span id="L155"><span class="lineNum">     155</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L156"><span class="lineNum">     156</span>                 :             : };</span>
 <span id="L157"><span class="lineNum">     157</span>                 :             : </span>
 <span id="L158"><span class="lineNum">     158</span>                 :             : // stmt</span>
-<span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaGNC">         190 : struct ExprStmt {</span></span>
+<span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaGNC">         192 : struct ExprStmt {</span></span>
 <span id="L160"><span class="lineNum">     160</span>                 :             :     std::unique_ptr&lt;Expression&gt; expression;</span>
 <span id="L161"><span class="lineNum">     161</span>                 :             :     ExprStmt() = default;</span>
 <span id="L162"><span class="lineNum">     162</span>                 :             :     ExprStmt(const ExprStmt&amp;) = delete;</span>
@@ -238,23 +238,23 @@
 <span id="L167"><span class="lineNum">     167</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L168"><span class="lineNum">     168</span>                 :             : };</span>
 <span id="L169"><span class="lineNum">     169</span>                 :             : </span>
-<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">         687 : struct VariableAssgn {</span></span>
+<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">         741 : struct VariableAssgn {</span></span>
 <span id="L171"><span class="lineNum">     171</span>                 :             :     std::unique_ptr&lt;Identifier&gt; id;</span>
 <span id="L172"><span class="lineNum">     172</span>                 :             :     std::unique_ptr&lt;Expression&gt; init;</span>
 <span id="L173"><span class="lineNum">     173</span>                 :             :     VariableAssgn() = default;</span>
 <span id="L174"><span class="lineNum">     174</span>                 :             :     VariableAssgn(std::unique_ptr&lt;Identifier&gt; id_in, std::unique_ptr&lt;Expression&gt; init_in)</span>
-<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">         687 :         : id(std::move(id_in)), init(std::move(init_in)) {}</span></span>
+<span id="L175"><span class="lineNum">     175</span>                 :<span class="tlaGNC">         741 :         : id(std::move(id_in)), init(std::move(init_in)) {}</span></span>
 <span id="L176"><span class="lineNum">     176</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L177"><span class="lineNum">     177</span>                 :             : };</span>
 <span id="L178"><span class="lineNum">     178</span>                 :             : </span>
-<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">          25 : struct OptionStmt {</span></span>
+<span id="L179"><span class="lineNum">     179</span>                 :<span class="tlaGNC">          29 : struct OptionStmt {</span></span>
 <span id="L180"><span class="lineNum">     180</span>                 :             :     std::unique_ptr&lt;Assignment&gt; assignment;</span>
 <span id="L181"><span class="lineNum">     181</span>                 :             :     OptionStmt() = default;</span>
 <span id="L182"><span class="lineNum">     182</span>                 :             :     OptionStmt(std::unique_ptr&lt;Assignment&gt; assignment_in) : assignment(std::move(assignment_in)) {}</span>
 <span id="L183"><span class="lineNum">     183</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L184"><span class="lineNum">     184</span>                 :             : };</span>
 <span id="L185"><span class="lineNum">     185</span>                 :             : </span>
-<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">          15 : struct ReturnStmt {</span></span>
+<span id="L186"><span class="lineNum">     186</span>                 :<span class="tlaGNC">          21 : struct ReturnStmt {</span></span>
 <span id="L187"><span class="lineNum">     187</span>                 :             :     std::unique_ptr&lt;Expression&gt; argument;</span>
 <span id="L188"><span class="lineNum">     188</span>                 :             :     ReturnStmt() = default;</span>
 <span id="L189"><span class="lineNum">     189</span>                 :             :     ReturnStmt(std::unique_ptr&lt;Expression&gt; argument_in) : argument(std::move(argument_in)) {}</span>
@@ -275,7 +275,7 @@
 <span id="L204"><span class="lineNum">     204</span>                 :             :     TestCaseStmt(std::unique_ptr&lt;Identifier&gt; id_in,</span>
 <span id="L205"><span class="lineNum">     205</span>                 :             :                  std::unique_ptr&lt;StringLit&gt; extends_in,</span>
 <span id="L206"><span class="lineNum">     206</span>                 :             :                  std::unique_ptr&lt;Block&gt; block_in)</span>
-<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaGNC">           5 :         : id(std::move(id_in)), extends(std::move(extends_in)), block(std::move(block_in)) {}</span></span>
+<span id="L207"><span class="lineNum">     207</span>                 :<span class="tlaGNC">           7 :         : id(std::move(id_in)), extends(std::move(extends_in)), block(std::move(block_in)) {}</span></span>
 <span id="L208"><span class="lineNum">     208</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L209"><span class="lineNum">     209</span>                 :             : };</span>
 <span id="L210"><span class="lineNum">     210</span>                 :             : </span>
@@ -287,7 +287,7 @@
 <span id="L216"><span class="lineNum">     216</span>                 :             :     BuiltinStmt(const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; colon_in,</span>
 <span id="L217"><span class="lineNum">     217</span>                 :             :                 std::unique_ptr&lt;Identifier&gt; id_in,</span>
 <span id="L218"><span class="lineNum">     218</span>                 :             :                 std::unique_ptr&lt;TypeExpression&gt; ty_in)</span>
-<span id="L219"><span class="lineNum">     219</span>         [<span class="tlaGBC" title="Branch 0 was taken 144 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         144 :         : colon(colon_in), id(std::move(id_in)), ty(std::move(ty_in)) {}</span></span>
+<span id="L219"><span class="lineNum">     219</span>         [<span class="tlaGBC" title="Branch 0 was taken 146 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         146 :         : colon(colon_in), id(std::move(id_in)), ty(std::move(ty_in)) {}</span></span>
 <span id="L220"><span class="lineNum">     220</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L221"><span class="lineNum">     221</span>                 :             : };</span>
 <span id="L222"><span class="lineNum">     222</span>                 :             : </span>
@@ -313,16 +313,16 @@
 <span id="L242"><span class="lineNum">     242</span>                 :             :                                std::unique_ptr&lt;TestCaseStmt&gt;,</span>
 <span id="L243"><span class="lineNum">     243</span>                 :             :                                std::unique_ptr&lt;BuiltinStmt&gt;&gt;;</span>
 <span id="L244"><span class="lineNum">     244</span>                 :             :     StmtT stmt;</span>
-<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC">        1053 :     Statement(Type type_in, StmtT stmt_in) : type(type_in), stmt(std::move(stmt_in)) {}</span></span>
+<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC">        1121 :     Statement(Type type_in, StmtT stmt_in) : type(type_in), stmt(std::move(stmt_in)) {}</span></span>
 <span id="L246"><span class="lineNum">     246</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L247"><span class="lineNum">     247</span>                 :             : };</span>
 <span id="L248"><span class="lineNum">     248</span>                 :             : </span>
 <span id="L249"><span class="lineNum">     249</span>                 :             : // expr</span>
 <span id="L250"><span class="lineNum">     250</span>                 :             : </span>
-<span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaGNC">       11093 : struct Identifier {</span></span>
+<span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaGNC">       11713 : struct Identifier {</span></span>
 <span id="L252"><span class="lineNum">     252</span>                 :             :     std::string name;</span>
 <span id="L253"><span class="lineNum">     253</span>                 :             :     Identifier() = default;</span>
-<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaGNC">       11093 :     Identifier(std::string name_in) : name(std::move(name_in)) {}</span></span>
+<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaGNC">       11713 :     Identifier(std::string name_in) : name(std::move(name_in)) {}</span></span>
 <span id="L255"><span class="lineNum">     255</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L256"><span class="lineNum">     256</span>                 :             : };</span>
 <span id="L257"><span class="lineNum">     257</span>                 :             : </span>
@@ -382,20 +382,20 @@
 <span id="L311"><span class="lineNum">     311</span>                 :             :     std::unique_ptr&lt;FunctionBody&gt; body;</span>
 <span id="L312"><span class="lineNum">     312</span>                 :             : </span>
 <span id="L313"><span class="lineNum">     313</span>                 :             :     FunctionExpr() = default;</span>
-<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC">         351 :     FunctionExpr(const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; lparen_in,</span></span>
+<span id="L314"><span class="lineNum">     314</span>                 :<span class="tlaGNC">         401 :     FunctionExpr(const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; lparen_in,</span></span>
 <span id="L315"><span class="lineNum">     315</span>                 :             :                  const std::vector&lt;std::shared_ptr&lt;Property&gt;&gt;&amp; params_in,</span>
 <span id="L316"><span class="lineNum">     316</span>                 :             :                  const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; rparen_in,</span>
 <span id="L317"><span class="lineNum">     317</span>                 :             :                  const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; arrow_in,</span>
 <span id="L318"><span class="lineNum">     318</span>                 :             :                  std::unique_ptr&lt;FunctionBody&gt; body_in)</span>
-<span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaGNC">         351 :         : lparen(lparen_in),</span></span>
-<span id="L320"><span class="lineNum">     320</span>         [<span class="tlaGBC" title="Branch 0 was taken 351 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         351 :           params(params_in),</span></span>
-<span id="L321"><span class="lineNum">     321</span>         [<span class="tlaGBC" title="Branch 0 was taken 351 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         351 :           rparen(rparen_in),</span></span>
-<span id="L322"><span class="lineNum">     322</span>         [<span class="tlaGBC" title="Branch 0 was taken 351 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         351 :           arrow(arrow_in),</span></span>
-<span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaGNC">         351 :           body(std::move(body_in)) {}</span></span>
+<span id="L319"><span class="lineNum">     319</span>                 :<span class="tlaGNC">         401 :         : lparen(lparen_in),</span></span>
+<span id="L320"><span class="lineNum">     320</span>         [<span class="tlaGBC" title="Branch 0 was taken 401 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         401 :           params(params_in),</span></span>
+<span id="L321"><span class="lineNum">     321</span>         [<span class="tlaGBC" title="Branch 0 was taken 401 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         401 :           rparen(rparen_in),</span></span>
+<span id="L322"><span class="lineNum">     322</span>         [<span class="tlaGBC" title="Branch 0 was taken 401 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         401 :           arrow(arrow_in),</span></span>
+<span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaGNC">         401 :           body(std::move(body_in)) {}</span></span>
 <span id="L324"><span class="lineNum">     324</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L325"><span class="lineNum">     325</span>                 :             : };</span>
 <span id="L326"><span class="lineNum">     326</span>                 :             : </span>
-<span id="L327"><span class="lineNum">     327</span>                 :<span class="tlaGNC">          66 : struct LogicalExpr {</span></span>
+<span id="L327"><span class="lineNum">     327</span>                 :<span class="tlaGNC">          72 : struct LogicalExpr {</span></span>
 <span id="L328"><span class="lineNum">     328</span>                 :             :     LogicalOperator op;</span>
 <span id="L329"><span class="lineNum">     329</span>                 :             :     std::unique_ptr&lt;Expression&gt; left;</span>
 <span id="L330"><span class="lineNum">     330</span>                 :             :     std::unique_ptr&lt;Expression&gt; right;</span>
@@ -403,11 +403,11 @@
 <span id="L332"><span class="lineNum">     332</span>                 :             :     LogicalExpr(LogicalOperator op_in,</span>
 <span id="L333"><span class="lineNum">     333</span>                 :             :                 std::unique_ptr&lt;Expression&gt; left_in,</span>
 <span id="L334"><span class="lineNum">     334</span>                 :             :                 std::unique_ptr&lt;Expression&gt; right_in)</span>
-<span id="L335"><span class="lineNum">     335</span>                 :<span class="tlaGNC">          19 :         : op(op_in), left(std::move(left_in)), right(std::move(right_in)) {}</span></span>
+<span id="L335"><span class="lineNum">     335</span>                 :<span class="tlaGNC">          21 :         : op(op_in), left(std::move(left_in)), right(std::move(right_in)) {}</span></span>
 <span id="L336"><span class="lineNum">     336</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L337"><span class="lineNum">     337</span>                 :             : };</span>
 <span id="L338"><span class="lineNum">     338</span>                 :             : </span>
-<span id="L339"><span class="lineNum">     339</span>                 :<span class="tlaGNC">          23 : struct WithSource {</span></span>
+<span id="L339"><span class="lineNum">     339</span>                 :<span class="tlaGNC">          27 : struct WithSource {</span></span>
 <span id="L340"><span class="lineNum">     340</span>                 :             :     std::unique_ptr&lt;Identifier&gt; source;</span>
 <span id="L341"><span class="lineNum">     341</span>                 :             :     std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt; with;</span>
 <span id="L342"><span class="lineNum">     342</span>                 :             :     [[nodiscard]] std::string string() const;</span>
@@ -419,14 +419,14 @@
 <span id="L348"><span class="lineNum">     348</span>                 :             :     std::vector&lt;std::shared_ptr&lt;Property&gt;&gt; properties;</span>
 <span id="L349"><span class="lineNum">     349</span>                 :             :     std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt; rbrace;</span>
 <span id="L350"><span class="lineNum">     350</span>                 :             :     ObjectExpr() = default;</span>
-<span id="L351"><span class="lineNum">     351</span>                 :<span class="tlaGNC">        1616 :     ObjectExpr(const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; lbrace_in,</span></span>
+<span id="L351"><span class="lineNum">     351</span>                 :<span class="tlaGNC">        1662 :     ObjectExpr(const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; lbrace_in,</span></span>
 <span id="L352"><span class="lineNum">     352</span>                 :             :                std::unique_ptr&lt;WithSource&gt; with_in,</span>
 <span id="L353"><span class="lineNum">     353</span>                 :             :                const std::vector&lt;std::shared_ptr&lt;Property&gt;&gt;&amp; properties_in,</span>
 <span id="L354"><span class="lineNum">     354</span>                 :             :                const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; rbrace_in)</span>
-<span id="L355"><span class="lineNum">     355</span>                 :<span class="tlaGNC">        1616 :         : lbrace(lbrace_in),</span></span>
+<span id="L355"><span class="lineNum">     355</span>                 :<span class="tlaGNC">        1662 :         : lbrace(lbrace_in),</span></span>
 <span id="L356"><span class="lineNum">     356</span>                 :             :           with(std::move(with_in)),</span>
-<span id="L357"><span class="lineNum">     357</span>         [<span class="tlaGBC" title="Branch 0 was taken 1616 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1616 :           properties(properties_in),</span></span>
-<span id="L358"><span class="lineNum">     358</span>         [<span class="tlaGBC" title="Branch 0 was taken 1616 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1616 :           rbrace(rbrace_in) {}</span></span>
+<span id="L357"><span class="lineNum">     357</span>         [<span class="tlaGBC" title="Branch 0 was taken 1662 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1662 :           properties(properties_in),</span></span>
+<span id="L358"><span class="lineNum">     358</span>         [<span class="tlaGBC" title="Branch 0 was taken 1662 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1662 :           rbrace(rbrace_in) {}</span></span>
 <span id="L359"><span class="lineNum">     359</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L360"><span class="lineNum">     360</span>                 :             : };</span>
 <span id="L361"><span class="lineNum">     361</span>                 :             : </span>
@@ -436,14 +436,14 @@
 <span id="L365"><span class="lineNum">     365</span>                 :             :     std::unique_ptr&lt;PropertyKey&gt; property;</span>
 <span id="L366"><span class="lineNum">     366</span>                 :             :     std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt; rbrack;</span>
 <span id="L367"><span class="lineNum">     367</span>                 :             :     MemberExpr() = default;</span>
-<span id="L368"><span class="lineNum">     368</span>                 :<span class="tlaGNC">        1317 :     MemberExpr(std::unique_ptr&lt;Expression&gt; expr_in,</span></span>
+<span id="L368"><span class="lineNum">     368</span>                 :<span class="tlaGNC">        1393 :     MemberExpr(std::unique_ptr&lt;Expression&gt; expr_in,</span></span>
 <span id="L369"><span class="lineNum">     369</span>                 :             :                const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; lbrack_in,</span>
 <span id="L370"><span class="lineNum">     370</span>                 :             :                std::unique_ptr&lt;PropertyKey&gt; property_in,</span>
 <span id="L371"><span class="lineNum">     371</span>                 :             :                const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; rbrack_in)</span>
-<span id="L372"><span class="lineNum">     372</span>         [<span class="tlaGBC" title="Branch 0 was taken 1317 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1317 :         : object(std::move(expr_in)),</span></span>
-<span id="L373"><span class="lineNum">     373</span>         [<span class="tlaGBC" title="Branch 0 was taken 1317 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1317 :           lbrack(lbrack_in),</span></span>
+<span id="L372"><span class="lineNum">     372</span>         [<span class="tlaGBC" title="Branch 0 was taken 1393 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1393 :         : object(std::move(expr_in)),</span></span>
+<span id="L373"><span class="lineNum">     373</span>         [<span class="tlaGBC" title="Branch 0 was taken 1393 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1393 :           lbrack(lbrack_in),</span></span>
 <span id="L374"><span class="lineNum">     374</span>                 :             :           property(std::move(property_in)),</span>
-<span id="L375"><span class="lineNum">     375</span>         [<span class="tlaGBC" title="Branch 0 was taken 1317 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1317 :           rbrack(rbrack_in) {}</span></span>
+<span id="L375"><span class="lineNum">     375</span>         [<span class="tlaGBC" title="Branch 0 was taken 1393 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1393 :           rbrack(rbrack_in) {}</span></span>
 <span id="L376"><span class="lineNum">     376</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L377"><span class="lineNum">     377</span>                 :             : };</span>
 <span id="L378"><span class="lineNum">     378</span>                 :             : </span>
@@ -454,18 +454,18 @@
 <span id="L383"><span class="lineNum">     383</span>                 :             :     std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt; rbrack;</span>
 <span id="L384"><span class="lineNum">     384</span>                 :             : </span>
 <span id="L385"><span class="lineNum">     385</span>                 :             :     IndexExpr() = default;</span>
-<span id="L386"><span class="lineNum">     386</span>                 :<span class="tlaGNC">           7 :     IndexExpr(std::unique_ptr&lt;Expression&gt; array_in,</span></span>
+<span id="L386"><span class="lineNum">     386</span>                 :<span class="tlaGNC">          11 :     IndexExpr(std::unique_ptr&lt;Expression&gt; array_in,</span></span>
 <span id="L387"><span class="lineNum">     387</span>                 :             :               const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; lbrack_in,</span>
 <span id="L388"><span class="lineNum">     388</span>                 :             :               std::unique_ptr&lt;Expression&gt; index_in,</span>
 <span id="L389"><span class="lineNum">     389</span>                 :             :               const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; rbrack_in)</span>
-<span id="L390"><span class="lineNum">     390</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :         : array(std::move(array_in)),</span></span>
-<span id="L391"><span class="lineNum">     391</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :           lbrack(lbrack_in),</span></span>
+<span id="L390"><span class="lineNum">     390</span>         [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          11 :         : array(std::move(array_in)),</span></span>
+<span id="L391"><span class="lineNum">     391</span>         [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          11 :           lbrack(lbrack_in),</span></span>
 <span id="L392"><span class="lineNum">     392</span>                 :             :           index(std::move(index_in)),</span>
-<span id="L393"><span class="lineNum">     393</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :           rbrack(rbrack_in) {}</span></span>
+<span id="L393"><span class="lineNum">     393</span>         [<span class="tlaGBC" title="Branch 0 was taken 11 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          11 :           rbrack(rbrack_in) {}</span></span>
 <span id="L394"><span class="lineNum">     394</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L395"><span class="lineNum">     395</span>                 :             : };</span>
 <span id="L396"><span class="lineNum">     396</span>                 :             : </span>
-<span id="L397"><span class="lineNum">     397</span>                 :<span class="tlaGNC">         388 : struct BinaryExpr {</span></span>
+<span id="L397"><span class="lineNum">     397</span>                 :<span class="tlaGNC">         454 : struct BinaryExpr {</span></span>
 <span id="L398"><span class="lineNum">     398</span>                 :             :     Operator op;</span>
 <span id="L399"><span class="lineNum">     399</span>                 :             :     std::unique_ptr&lt;Expression&gt; left;</span>
 <span id="L400"><span class="lineNum">     400</span>                 :             :     std::unique_ptr&lt;Expression&gt; right;</span>
@@ -473,25 +473,25 @@
 <span id="L402"><span class="lineNum">     402</span>                 :             :     BinaryExpr(Operator op_in,</span>
 <span id="L403"><span class="lineNum">     403</span>                 :             :                std::unique_ptr&lt;Expression&gt; left_in,</span>
 <span id="L404"><span class="lineNum">     404</span>                 :             :                std::unique_ptr&lt;Expression&gt; right_in)</span>
-<span id="L405"><span class="lineNum">     405</span>                 :<span class="tlaGNC">         299 :         : op(op_in), left(std::move(left_in)), right(std::move(right_in)) {}</span></span>
+<span id="L405"><span class="lineNum">     405</span>                 :<span class="tlaGNC">         343 :         : op(op_in), left(std::move(left_in)), right(std::move(right_in)) {}</span></span>
 <span id="L406"><span class="lineNum">     406</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L407"><span class="lineNum">     407</span>                 :             : };</span>
 <span id="L408"><span class="lineNum">     408</span>                 :             : </span>
-<span id="L409"><span class="lineNum">     409</span>                 :<span class="tlaGNC">          48 : struct UnaryExpr {</span></span>
+<span id="L409"><span class="lineNum">     409</span>                 :<span class="tlaGNC">          60 : struct UnaryExpr {</span></span>
 <span id="L410"><span class="lineNum">     410</span>                 :             :     Operator op;</span>
 <span id="L411"><span class="lineNum">     411</span>                 :             :     std::unique_ptr&lt;Expression&gt; argument;</span>
 <span id="L412"><span class="lineNum">     412</span>                 :             :     UnaryExpr() = default;</span>
 <span id="L413"><span class="lineNum">     413</span>                 :             :     UnaryExpr(Operator op_in, std::unique_ptr&lt;Expression&gt; argument_in)</span>
-<span id="L414"><span class="lineNum">     414</span>                 :<span class="tlaGNC">          18 :         : op(op_in), argument(std::move(argument_in)) {}</span></span>
+<span id="L414"><span class="lineNum">     414</span>                 :<span class="tlaGNC">          24 :         : op(op_in), argument(std::move(argument_in)) {}</span></span>
 <span id="L415"><span class="lineNum">     415</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L416"><span class="lineNum">     416</span>                 :             : };</span>
 <span id="L417"><span class="lineNum">     417</span>                 :             : </span>
-<span id="L418"><span class="lineNum">     418</span>                 :<span class="tlaGNC">        1077 : struct PipeExpr {</span></span>
+<span id="L418"><span class="lineNum">     418</span>                 :<span class="tlaGNC">        1095 : struct PipeExpr {</span></span>
 <span id="L419"><span class="lineNum">     419</span>                 :             :     std::unique_ptr&lt;Expression&gt; argument;</span>
 <span id="L420"><span class="lineNum">     420</span>                 :             :     std::unique_ptr&lt;CallExpr&gt; call;</span>
 <span id="L421"><span class="lineNum">     421</span>                 :             :     PipeExpr() = default;</span>
 <span id="L422"><span class="lineNum">     422</span>                 :             :     PipeExpr(std::unique_ptr&lt;Expression&gt; argument_in, std::unique_ptr&lt;CallExpr&gt; call_in)</span>
-<span id="L423"><span class="lineNum">     423</span>                 :<span class="tlaGNC">        1077 :         : argument(std::move(argument_in)), call(std::move(call_in)) {}</span></span>
+<span id="L423"><span class="lineNum">     423</span>                 :<span class="tlaGNC">        1095 :         : argument(std::move(argument_in)), call(std::move(call_in)) {}</span></span>
 <span id="L424"><span class="lineNum">     424</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L425"><span class="lineNum">     425</span>                 :             : };</span>
 <span id="L426"><span class="lineNum">     426</span>                 :             : </span>
@@ -501,14 +501,14 @@
 <span id="L430"><span class="lineNum">     430</span>                 :             :     std::vector&lt;std::shared_ptr&lt;Expression&gt;&gt; arguments;</span>
 <span id="L431"><span class="lineNum">     431</span>                 :             :     std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt; rparen;</span>
 <span id="L432"><span class="lineNum">     432</span>                 :             :     CallExpr() = default;</span>
-<span id="L433"><span class="lineNum">     433</span>                 :<span class="tlaGNC">        1758 :     CallExpr(std::unique_ptr&lt;Expression&gt; callee_in,</span></span>
+<span id="L433"><span class="lineNum">     433</span>                 :<span class="tlaGNC">        1824 :     CallExpr(std::unique_ptr&lt;Expression&gt; callee_in,</span></span>
 <span id="L434"><span class="lineNum">     434</span>                 :             :              const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; lparen_in,</span>
 <span id="L435"><span class="lineNum">     435</span>                 :             :              const std::vector&lt;std::shared_ptr&lt;Expression&gt;&gt;&amp; arguments_in,</span>
 <span id="L436"><span class="lineNum">     436</span>                 :             :              const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; rparen_in)</span>
-<span id="L437"><span class="lineNum">     437</span>         [<span class="tlaGBC" title="Branch 0 was taken 1758 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1758 :         : callee(std::move(callee_in)),</span></span>
-<span id="L438"><span class="lineNum">     438</span>         [<span class="tlaGBC" title="Branch 0 was taken 1758 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1758 :           lparen(lparen_in),</span></span>
-<span id="L439"><span class="lineNum">     439</span>         [<span class="tlaGBC" title="Branch 0 was taken 1758 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1758 :           arguments(arguments_in),</span></span>
-<span id="L440"><span class="lineNum">     440</span>         [<span class="tlaGBC" title="Branch 0 was taken 1758 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1758 :           rparen(rparen_in) {}</span></span>
+<span id="L437"><span class="lineNum">     437</span>         [<span class="tlaGBC" title="Branch 0 was taken 1824 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1824 :         : callee(std::move(callee_in)),</span></span>
+<span id="L438"><span class="lineNum">     438</span>         [<span class="tlaGBC" title="Branch 0 was taken 1824 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1824 :           lparen(lparen_in),</span></span>
+<span id="L439"><span class="lineNum">     439</span>         [<span class="tlaGBC" title="Branch 0 was taken 1824 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1824 :           arguments(arguments_in),</span></span>
+<span id="L440"><span class="lineNum">     440</span>         [<span class="tlaGBC" title="Branch 0 was taken 1824 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1824 :           rparen(rparen_in) {}</span></span>
 <span id="L441"><span class="lineNum">     441</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L442"><span class="lineNum">     442</span>                 :             : };</span>
 <span id="L443"><span class="lineNum">     443</span>                 :             : </span>
@@ -522,7 +522,7 @@
 <span id="L451"><span class="lineNum">     451</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L452"><span class="lineNum">     452</span>                 :             : };</span>
 <span id="L453"><span class="lineNum">     453</span>                 :             : </span>
-<span id="L454"><span class="lineNum">     454</span>                 :<span class="tlaGNC">           7 : struct StringExpr {</span></span>
+<span id="L454"><span class="lineNum">     454</span>                 :<span class="tlaGNC">          11 : struct StringExpr {</span></span>
 <span id="L455"><span class="lineNum">     455</span>                 :             :     std::vector&lt;std::shared_ptr&lt;StringExprPart&gt;&gt; parts;</span>
 <span id="L456"><span class="lineNum">     456</span>                 :             :     StringExpr() = default;</span>
 <span id="L457"><span class="lineNum">     457</span>                 :             :     StringExpr(std::vector&lt;std::shared_ptr&lt;StringExprPart&gt;&gt; parts_in)</span>
@@ -530,7 +530,7 @@
 <span id="L459"><span class="lineNum">     459</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L460"><span class="lineNum">     460</span>                 :             : };</span>
 <span id="L461"><span class="lineNum">     461</span>                 :             : </span>
-<span id="L462"><span class="lineNum">     462</span>                 :<span class="tlaGNC">          15 : struct StringExprPart {</span></span>
+<span id="L462"><span class="lineNum">     462</span>                 :<span class="tlaGNC">          27 : struct StringExprPart {</span></span>
 <span id="L463"><span class="lineNum">     463</span>                 :             :     enum class Type {</span>
 <span id="L464"><span class="lineNum">     464</span>                 :             :         Text,</span>
 <span id="L465"><span class="lineNum">     465</span>                 :             :         Interpolated,</span>
@@ -540,16 +540,16 @@
 <span id="L469"><span class="lineNum">     469</span>                 :             :     Type type;</span>
 <span id="L470"><span class="lineNum">     470</span>                 :             :     StringExprT part;</span>
 <span id="L471"><span class="lineNum">     471</span>                 :             :     StringExprPart() = default;</span>
-<span id="L472"><span class="lineNum">     472</span>                 :<span class="tlaGNC">          15 :     StringExprPart(Type type_in, StringExprT part_in) : type(type_in), part(std::move(part_in)) {}</span></span>
+<span id="L472"><span class="lineNum">     472</span>                 :<span class="tlaGNC">          27 :     StringExprPart(Type type_in, StringExprT part_in) : type(type_in), part(std::move(part_in)) {}</span></span>
 <span id="L473"><span class="lineNum">     473</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L474"><span class="lineNum">     474</span>                 :             : };</span>
 <span id="L475"><span class="lineNum">     475</span>                 :             : </span>
-<span id="L476"><span class="lineNum">     476</span>                 :<span class="tlaGNC">           7 : struct TextPart {</span></span>
+<span id="L476"><span class="lineNum">     476</span>                 :<span class="tlaGNC">          11 : struct TextPart {</span></span>
 <span id="L477"><span class="lineNum">     477</span>                 :             :     std::string value;</span>
 <span id="L478"><span class="lineNum">     478</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L479"><span class="lineNum">     479</span>                 :             : };</span>
 <span id="L480"><span class="lineNum">     480</span>                 :             : </span>
-<span id="L481"><span class="lineNum">     481</span>                 :<span class="tlaGNC">           8 : struct InterpolatedPart {</span></span>
+<span id="L481"><span class="lineNum">     481</span>                 :<span class="tlaGNC">          16 : struct InterpolatedPart {</span></span>
 <span id="L482"><span class="lineNum">     482</span>                 :             :     std::unique_ptr&lt;Expression&gt; expression;</span>
 <span id="L483"><span class="lineNum">     483</span>                 :             :     InterpolatedPart() = default;</span>
 <span id="L484"><span class="lineNum">     484</span>                 :             :     InterpolatedPart(std::unique_ptr&lt;Expression&gt; expression_in)</span>
@@ -562,10 +562,10 @@
 <span id="L491"><span class="lineNum">     491</span>                 :             :     std::unique_ptr&lt;Expression&gt; expression;</span>
 <span id="L492"><span class="lineNum">     492</span>                 :             :     std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt; rparen;</span>
 <span id="L493"><span class="lineNum">     493</span>                 :             :     ParenExpr() = default;</span>
-<span id="L494"><span class="lineNum">     494</span>                 :<span class="tlaGNC">          75 :     ParenExpr(const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; lparen_in,</span></span>
+<span id="L494"><span class="lineNum">     494</span>                 :<span class="tlaGNC">          95 :     ParenExpr(const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; lparen_in,</span></span>
 <span id="L495"><span class="lineNum">     495</span>                 :             :               std::unique_ptr&lt;Expression&gt; expr_in,</span>
 <span id="L496"><span class="lineNum">     496</span>                 :             :               const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; rparen_in)</span>
-<span id="L497"><span class="lineNum">     497</span>         [<span class="tlaGBC" title="Branch 0 was taken 75 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          75 :         : lparen(lparen_in), expression(std::move(expr_in)), rparen(rparen_in) {}</span></span>
+<span id="L497"><span class="lineNum">     497</span>         [<span class="tlaGBC" title="Branch 0 was taken 95 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          95 :         : lparen(lparen_in), expression(std::move(expr_in)), rparen(rparen_in) {}</span></span>
 <span id="L498"><span class="lineNum">     498</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L499"><span class="lineNum">     499</span>                 :             : };</span>
 <span id="L500"><span class="lineNum">     500</span>                 :             : </span>
@@ -579,35 +579,35 @@
 <span id="L508"><span class="lineNum">     508</span>                 :             : struct FloatLit {</span>
 <span id="L509"><span class="lineNum">     509</span>                 :             :     double value;</span>
 <span id="L510"><span class="lineNum">     510</span>                 :             :     FloatLit() = default;</span>
-<span id="L511"><span class="lineNum">     511</span>                 :<span class="tlaGNC">         539 :     FloatLit(double value_in) : value(value_in) {}</span></span>
+<span id="L511"><span class="lineNum">     511</span>                 :<span class="tlaGNC">         551 :     FloatLit(double value_in) : value(value_in) {}</span></span>
 <span id="L512"><span class="lineNum">     512</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L513"><span class="lineNum">     513</span>                 :             : };</span>
 <span id="L514"><span class="lineNum">     514</span>                 :             : </span>
-<span id="L515"><span class="lineNum">     515</span>                 :<span class="tlaGNC">        2733 : struct StringLit {</span></span>
+<span id="L515"><span class="lineNum">     515</span>                 :<span class="tlaGNC">        2803 : struct StringLit {</span></span>
 <span id="L516"><span class="lineNum">     516</span>                 :             :     std::string value;</span>
 <span id="L517"><span class="lineNum">     517</span>                 :             :     StringLit() = default;</span>
-<span id="L518"><span class="lineNum">     518</span>                 :<span class="tlaGNC">        2733 :     StringLit(std::string value_in) : value(std::move(value_in)) {}</span></span>
+<span id="L518"><span class="lineNum">     518</span>                 :<span class="tlaGNC">        2803 :     StringLit(std::string value_in) : value(std::move(value_in)) {}</span></span>
 <span id="L519"><span class="lineNum">     519</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L520"><span class="lineNum">     520</span>                 :             : };</span>
 <span id="L521"><span class="lineNum">     521</span>                 :             : </span>
-<span id="L522"><span class="lineNum">     522</span>                 :<span class="tlaGNC">         209 : struct Duration {</span></span>
+<span id="L522"><span class="lineNum">     522</span>                 :<span class="tlaGNC">         213 : struct Duration {</span></span>
 <span id="L523"><span class="lineNum">     523</span>                 :             :     int64_t magnitude;</span>
 <span id="L524"><span class="lineNum">     524</span>                 :             :     std::string unit;</span>
 <span id="L525"><span class="lineNum">     525</span>                 :             :     Duration(int64_t magnitude_in, std::string unit_in)</span>
-<span id="L526"><span class="lineNum">     526</span>                 :<span class="tlaGNC">         209 :         : magnitude(magnitude_in), unit(std::move(unit_in)) {}</span></span>
+<span id="L526"><span class="lineNum">     526</span>                 :<span class="tlaGNC">         213 :         : magnitude(magnitude_in), unit(std::move(unit_in)) {}</span></span>
 <span id="L527"><span class="lineNum">     527</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L528"><span class="lineNum">     528</span>                 :             : };</span>
 <span id="L529"><span class="lineNum">     529</span>                 :             : </span>
-<span id="L530"><span class="lineNum">     530</span>                 :<span class="tlaGNC">         159 : struct DurationLit {</span></span>
+<span id="L530"><span class="lineNum">     530</span>                 :<span class="tlaGNC">         163 : struct DurationLit {</span></span>
 <span id="L531"><span class="lineNum">     531</span>                 :             :     std::vector&lt;std::shared_ptr&lt;Duration&gt;&gt; values;</span>
 <span id="L532"><span class="lineNum">     532</span>                 :             :     DurationLit() = default;</span>
-<span id="L533"><span class="lineNum">     533</span>         [<span class="tlaGBC" title="Branch 0 was taken 159 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         159 :     DurationLit(const std::vector&lt;std::shared_ptr&lt;Duration&gt;&gt;&amp; values_in) : values(values_in) {}</span></span>
+<span id="L533"><span class="lineNum">     533</span>         [<span class="tlaGBC" title="Branch 0 was taken 163 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         163 :     DurationLit(const std::vector&lt;std::shared_ptr&lt;Duration&gt;&gt;&amp; values_in) : values(values_in) {}</span></span>
 <span id="L534"><span class="lineNum">     534</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L535"><span class="lineNum">     535</span>                 :             : };</span>
 <span id="L536"><span class="lineNum">     536</span>                 :             : </span>
 <span id="L537"><span class="lineNum">     537</span>                 :             : struct UintLit {</span>
 <span id="L538"><span class="lineNum">     538</span>                 :             :     uint64_t value;</span>
-<span id="L539"><span class="lineNum">     539</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     UintLit() : value(0) {}</span></span>
+<span id="L539"><span class="lineNum">     539</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :     UintLit() : value(0) {}</span></span>
 <span id="L540"><span class="lineNum">     540</span>                 :             :     UintLit(uint64_t value_in) : value(value_in) {}</span>
 <span id="L541"><span class="lineNum">     541</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L542"><span class="lineNum">     542</span>                 :             : };</span>
@@ -615,7 +615,7 @@
 <span id="L544"><span class="lineNum">     544</span>                 :             : struct BooleanLit {</span>
 <span id="L545"><span class="lineNum">     545</span>                 :             :     bool value;</span>
 <span id="L546"><span class="lineNum">     546</span>                 :             :     BooleanLit() : value(false) {}</span>
-<span id="L547"><span class="lineNum">     547</span>                 :<span class="tlaGNC">         114 :     BooleanLit(bool value_in) : value(value_in) {}</span></span>
+<span id="L547"><span class="lineNum">     547</span>                 :<span class="tlaGNC">         122 :     BooleanLit(bool value_in) : value(value_in) {}</span></span>
 <span id="L548"><span class="lineNum">     548</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L549"><span class="lineNum">     549</span>                 :             : };</span>
 <span id="L550"><span class="lineNum">     550</span>                 :             : </span>
@@ -626,7 +626,7 @@
 <span id="L555"><span class="lineNum">     555</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L556"><span class="lineNum">     556</span>                 :             : };</span>
 <span id="L557"><span class="lineNum">     557</span>                 :             : </span>
-<span id="L558"><span class="lineNum">     558</span>                 :<span class="tlaGNC">          18 : struct RegexpLit {</span></span>
+<span id="L558"><span class="lineNum">     558</span>                 :<span class="tlaGNC">          22 : struct RegexpLit {</span></span>
 <span id="L559"><span class="lineNum">     559</span>                 :             :     std::string value;</span>
 <span id="L560"><span class="lineNum">     560</span>                 :             :     RegexpLit() = default;</span>
 <span id="L561"><span class="lineNum">     561</span>                 :             :     RegexpLit(std::string value_in) : value(std::move(value_in)) {}</span>
@@ -713,7 +713,7 @@
 <span id="L642"><span class="lineNum">     642</span>                 :             :     SourceLocation loc;</span>
 <span id="L643"><span class="lineNum">     643</span>                 :             :     ExprT expr;</span>
 <span id="L644"><span class="lineNum">     644</span>                 :             :     Expression() = default;</span>
-<span id="L645"><span class="lineNum">     645</span>                 :<span class="tlaGNC">        6334 :     Expression(Type type_in, ExprT expr_in) : type(type_in), expr(std::move(expr_in)) {}</span></span>
+<span id="L645"><span class="lineNum">     645</span>                 :<span class="tlaGNC">        6628 :     Expression(Type type_in, ExprT expr_in) : type(type_in), expr(std::move(expr_in)) {}</span></span>
 <span id="L646"><span class="lineNum">     646</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L647"><span class="lineNum">     647</span>                 :             : };</span>
 <span id="L648"><span class="lineNum">     648</span>                 :             : </span>
@@ -834,16 +834,16 @@
 <span id="L759"><span class="lineNum">     759</span>                 :             : }</span>
 <span id="L760"><span class="lineNum">     760</span>                 :             : </span>
 <span id="L761"><span class="lineNum">     761</span>                 :             : // assign</span>
-<span id="L762"><span class="lineNum">     762</span>                 :<span class="tlaGNC tlaBgGNC">           9 : struct MemberAssgn {</span></span>
+<span id="L762"><span class="lineNum">     762</span>                 :<span class="tlaGNC tlaBgGNC">          11 : struct MemberAssgn {</span></span>
 <span id="L763"><span class="lineNum">     763</span>                 :             :     std::unique_ptr&lt;MemberExpr&gt; member;</span>
 <span id="L764"><span class="lineNum">     764</span>                 :             :     std::unique_ptr&lt;Expression&gt; init;</span>
 <span id="L765"><span class="lineNum">     765</span>                 :             :     MemberAssgn() = default;</span>
 <span id="L766"><span class="lineNum">     766</span>                 :             :     MemberAssgn(std::unique_ptr&lt;MemberExpr&gt; member_in, std::unique_ptr&lt;Expression&gt; init_in)</span>
-<span id="L767"><span class="lineNum">     767</span>                 :<span class="tlaGNC">           9 :         : member(std::move(member_in)), init(std::move(init_in)) {}</span></span>
+<span id="L767"><span class="lineNum">     767</span>                 :<span class="tlaGNC">          11 :         : member(std::move(member_in)), init(std::move(init_in)) {}</span></span>
 <span id="L768"><span class="lineNum">     768</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L769"><span class="lineNum">     769</span>                 :             : };</span>
 <span id="L770"><span class="lineNum">     770</span>                 :             : </span>
-<span id="L771"><span class="lineNum">     771</span>                 :<span class="tlaGNC">          25 : struct Assignment {</span></span>
+<span id="L771"><span class="lineNum">     771</span>                 :<span class="tlaGNC">          29 : struct Assignment {</span></span>
 <span id="L772"><span class="lineNum">     772</span>                 :             :     using AssiT = std::variant&lt;std::unique_ptr&lt;VariableAssgn&gt;, std::unique_ptr&lt;MemberAssgn&gt;&gt;;</span>
 <span id="L773"><span class="lineNum">     773</span>                 :             :     enum class Type { VariableAssignment, MemberAssignment };</span>
 <span id="L774"><span class="lineNum">     774</span>                 :             :     Type type;</span>
@@ -851,7 +851,7 @@
 <span id="L776"><span class="lineNum">     776</span>                 :             : </span>
 <span id="L777"><span class="lineNum">     777</span>                 :             :     Assignment() = default;</span>
 <span id="L778"><span class="lineNum">     778</span>                 :             :     Assignment(Assignment::Type type_in, AssiT value_in)</span>
-<span id="L779"><span class="lineNum">     779</span>                 :<span class="tlaGNC">          25 :         : type(type_in), value(std::move(value_in)) {}</span></span>
+<span id="L779"><span class="lineNum">     779</span>                 :<span class="tlaGNC">          29 :         : type(type_in), value(std::move(value_in)) {}</span></span>
 <span id="L780"><span class="lineNum">     780</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L781"><span class="lineNum">     781</span>                 :             : };</span>
 <span id="L782"><span class="lineNum">     782</span>                 :             : </span>
@@ -863,19 +863,19 @@
 <span id="L788"><span class="lineNum">     788</span>                 :             :     std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt; separator;</span>
 <span id="L789"><span class="lineNum">     789</span>                 :             :     std::unique_ptr&lt;Expression&gt; value;</span>
 <span id="L790"><span class="lineNum">     790</span>                 :             :     std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt; comma;</span>
-<span id="L791"><span class="lineNum">     791</span>                 :<span class="tlaGNC">        4523 :     Property() = default;</span></span>
-<span id="L792"><span class="lineNum">     792</span>                 :<span class="tlaGNC">         420 :     Property(std::unique_ptr&lt;PropertyKey&gt; key_in,</span></span>
+<span id="L791"><span class="lineNum">     791</span>                 :<span class="tlaGNC">        4743 :     Property() = default;</span></span>
+<span id="L792"><span class="lineNum">     792</span>                 :<span class="tlaGNC">         484 :     Property(std::unique_ptr&lt;PropertyKey&gt; key_in,</span></span>
 <span id="L793"><span class="lineNum">     793</span>                 :             :              const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; separator_in,</span>
 <span id="L794"><span class="lineNum">     794</span>                 :             :              std::unique_ptr&lt;Expression&gt; value_in,</span>
 <span id="L795"><span class="lineNum">     795</span>                 :             :              const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; comma_in)</span>
-<span id="L796"><span class="lineNum">     796</span>         [<span class="tlaGBC" title="Branch 0 was taken 420 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         420 :         : key(std::move(key_in)),</span></span>
-<span id="L797"><span class="lineNum">     797</span>         [<span class="tlaGBC" title="Branch 0 was taken 420 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         420 :           separator(separator_in),</span></span>
+<span id="L796"><span class="lineNum">     796</span>         [<span class="tlaGBC" title="Branch 0 was taken 484 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         484 :         : key(std::move(key_in)),</span></span>
+<span id="L797"><span class="lineNum">     797</span>         [<span class="tlaGBC" title="Branch 0 was taken 484 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         484 :           separator(separator_in),</span></span>
 <span id="L798"><span class="lineNum">     798</span>                 :             :           value(std::move(value_in)),</span>
-<span id="L799"><span class="lineNum">     799</span>         [<span class="tlaGBC" title="Branch 0 was taken 420 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         420 :           comma(comma_in) {}</span></span>
+<span id="L799"><span class="lineNum">     799</span>         [<span class="tlaGBC" title="Branch 0 was taken 484 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         484 :           comma(comma_in) {}</span></span>
 <span id="L800"><span class="lineNum">     800</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L801"><span class="lineNum">     801</span>                 :             : };</span>
 <span id="L802"><span class="lineNum">     802</span>                 :             : </span>
-<span id="L803"><span class="lineNum">     803</span>                 :<span class="tlaGNC">        6260 : struct PropertyKey {</span></span>
+<span id="L803"><span class="lineNum">     803</span>                 :<span class="tlaGNC">        6620 : struct PropertyKey {</span></span>
 <span id="L804"><span class="lineNum">     804</span>                 :             :     using PropKeyT = std::variant&lt;std::unique_ptr&lt;Identifier&gt;, std::unique_ptr&lt;StringLit&gt;&gt;;</span>
 <span id="L805"><span class="lineNum">     805</span>                 :             :     enum class Type { Identifier, StringLiteral };</span>
 <span id="L806"><span class="lineNum">     806</span>                 :             : </span>
@@ -884,7 +884,7 @@
 <span id="L809"><span class="lineNum">     809</span>                 :             : </span>
 <span id="L810"><span class="lineNum">     810</span>                 :             :     PropertyKey() = default;</span>
 <span id="L811"><span class="lineNum">     811</span>                 :             :     PropertyKey(PropertyKey::Type type_in, PropKeyT key_in)</span>
-<span id="L812"><span class="lineNum">     812</span>                 :<span class="tlaGNC">        6260 :         : type(type_in), key(std::move(key_in)) {}</span></span>
+<span id="L812"><span class="lineNum">     812</span>                 :<span class="tlaGNC">        6620 :         : type(type_in), key(std::move(key_in)) {}</span></span>
 <span id="L813"><span class="lineNum">     813</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L814"><span class="lineNum">     814</span>                 :             : };</span>
 <span id="L815"><span class="lineNum">     815</span>                 :             : </span>
@@ -901,32 +901,32 @@
 <span id="L826"><span class="lineNum">     826</span>                 :             :     Block(Block&amp;&amp;) = default;</span>
 <span id="L827"><span class="lineNum">     827</span>                 :             :     Block&amp; operator=(const Block&amp;) = default;</span>
 <span id="L828"><span class="lineNum">     828</span>                 :             :     Block&amp; operator=(Block&amp;&amp;) = default;</span>
-<span id="L829"><span class="lineNum">     829</span>                 :<span class="tlaGNC">          14 :     Block(const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; lbrace_in,</span></span>
+<span id="L829"><span class="lineNum">     829</span>                 :<span class="tlaGNC">          20 :     Block(const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; lbrace_in,</span></span>
 <span id="L830"><span class="lineNum">     830</span>                 :             :           const std::vector&lt;std::shared_ptr&lt;Statement&gt;&gt;&amp; body_in,</span>
 <span id="L831"><span class="lineNum">     831</span>                 :             :           const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; rbrace_in)</span>
-<span id="L832"><span class="lineNum">     832</span>   [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          14 :         : lbrace(lbrace_in), body(body_in), rbrace(rbrace_in) {}</span></span>
-<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
+<span id="L832"><span class="lineNum">     832</span>   [<span class="tlaGBC" title="Branch 0 was taken 20 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 20 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          20 :         : lbrace(lbrace_in), body(body_in), rbrace(rbrace_in) {}</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 20 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L833"><span class="lineNum">     833</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L834"><span class="lineNum">     834</span>                 :             : };</span>
 <span id="L835"><span class="lineNum">     835</span>                 :             : </span>
-<span id="L836"><span class="lineNum">     836</span>                 :<span class="tlaGNC">         351 : struct FunctionBody {</span></span>
+<span id="L836"><span class="lineNum">     836</span>                 :<span class="tlaGNC">         401 : struct FunctionBody {</span></span>
 <span id="L837"><span class="lineNum">     837</span>                 :             :     enum class Type { Block, Expression };</span>
 <span id="L838"><span class="lineNum">     838</span>                 :             :     using FuncT = std::variant&lt;std::unique_ptr&lt;Block&gt;, std::unique_ptr&lt;Expression&gt;&gt;;</span>
 <span id="L839"><span class="lineNum">     839</span>                 :             :     Type type;</span>
 <span id="L840"><span class="lineNum">     840</span>                 :             :     FuncT body;</span>
-<span id="L841"><span class="lineNum">     841</span>                 :<span class="tlaGNC">         351 :     FunctionBody(Type type_in, FuncT body_in) : type(type_in), body(std::move(body_in)) {}</span></span>
+<span id="L841"><span class="lineNum">     841</span>                 :<span class="tlaGNC">         401 :     FunctionBody(Type type_in, FuncT body_in) : type(type_in), body(std::move(body_in)) {}</span></span>
 <span id="L842"><span class="lineNum">     842</span>                 :             :     [[nodiscard]] std::string string() const;</span>
 <span id="L843"><span class="lineNum">     843</span>                 :             : };</span>
 <span id="L844"><span class="lineNum">     844</span>                 :             : </span>
 <span id="L845"><span class="lineNum">     845</span>                 :             : // parameter</span>
 <span id="L846"><span class="lineNum">     846</span>                 :             : </span>
-<span id="L847"><span class="lineNum">     847</span>                 :<span class="tlaGNC">         269 : struct TvarType {</span></span>
+<span id="L847"><span class="lineNum">     847</span>                 :<span class="tlaGNC">         271 : struct TvarType {</span></span>
 <span id="L848"><span class="lineNum">     848</span>                 :             :     std::unique_ptr&lt;Identifier&gt; name;</span>
 <span id="L849"><span class="lineNum">     849</span>                 :             :     TvarType() = default;</span>
 <span id="L850"><span class="lineNum">     850</span>                 :             :     TvarType(std::unique_ptr&lt;Identifier&gt; name_in) : name(std::move(name_in)) {}</span>
 <span id="L851"><span class="lineNum">     851</span>                 :             : };</span>
 <span id="L852"><span class="lineNum">     852</span>                 :             : </span>
-<span id="L853"><span class="lineNum">     853</span>                 :<span class="tlaGNC">         198 : struct NamedType {</span></span>
+<span id="L853"><span class="lineNum">     853</span>                 :<span class="tlaGNC">         200 : struct NamedType {</span></span>
 <span id="L854"><span class="lineNum">     854</span>                 :             :     std::unique_ptr&lt;Identifier&gt; name;</span>
 <span id="L855"><span class="lineNum">     855</span>                 :             :     NamedType() = default;</span>
 <span id="L856"><span class="lineNum">     856</span>                 :             :     NamedType(std::unique_ptr&lt;Identifier&gt; name_in) : name(std::move(name_in)) {}</span>
@@ -960,13 +960,13 @@
 <span id="L884"><span class="lineNum">     884</span>                 :             : </span>
 <span id="L885"><span class="lineNum">     885</span>                 :             : struct DynamicType {};</span>
 <span id="L886"><span class="lineNum">     886</span>                 :             : </span>
-<span id="L887"><span class="lineNum">     887</span>                 :<span class="tlaGNC tlaBgGNC">         157 : struct FunctionType {</span></span>
+<span id="L887"><span class="lineNum">     887</span>                 :<span class="tlaGNC tlaBgGNC">         159 : struct FunctionType {</span></span>
 <span id="L888"><span class="lineNum">     888</span>                 :             :     std::vector&lt;std::shared_ptr&lt;ParameterType&gt;&gt; parameters;</span>
 <span id="L889"><span class="lineNum">     889</span>                 :             :     std::unique_ptr&lt;MonoType&gt; monotype;</span>
 <span id="L890"><span class="lineNum">     890</span>                 :             :     FunctionType() = default;</span>
 <span id="L891"><span class="lineNum">     891</span>                 :             :     FunctionType(const std::vector&lt;std::shared_ptr&lt;ParameterType&gt;&gt;&amp; parameters_in,</span>
 <span id="L892"><span class="lineNum">     892</span>                 :             :                  std::unique_ptr&lt;MonoType&gt; monotype_in)</span>
-<span id="L893"><span class="lineNum">     893</span>         [<span class="tlaGBC" title="Branch 0 was taken 157 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         157 :         : parameters(parameters_in), monotype(std::move(monotype_in)) {}</span></span>
+<span id="L893"><span class="lineNum">     893</span>         [<span class="tlaGBC" title="Branch 0 was taken 159 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         159 :         : parameters(parameters_in), monotype(std::move(monotype_in)) {}</span></span>
 <span id="L894"><span class="lineNum">     894</span>                 :             : };</span>
 <span id="L895"><span class="lineNum">     895</span>                 :             : </span>
 <span id="L896"><span class="lineNum">     896</span>                 :             : struct PropertyType {</span>
@@ -987,13 +987,13 @@
 <span id="L911"><span class="lineNum">     911</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :         : tvar(std::move(tvar_in)), properties(properties_in) {}</span></span>
 <span id="L912"><span class="lineNum">     912</span>                 :             : };</span>
 <span id="L913"><span class="lineNum">     913</span>                 :             : </span>
-<span id="L914"><span class="lineNum">     914</span>                 :<span class="tlaGNC">         144 : struct TypeExpression {</span></span>
+<span id="L914"><span class="lineNum">     914</span>                 :<span class="tlaGNC">         146 : struct TypeExpression {</span></span>
 <span id="L915"><span class="lineNum">     915</span>                 :             :     std::unique_ptr&lt;MonoType&gt; monotype;</span>
 <span id="L916"><span class="lineNum">     916</span>                 :             :     std::vector&lt;std::shared_ptr&lt;TypeConstraint&gt;&gt; constraints;</span>
 <span id="L917"><span class="lineNum">     917</span>                 :             :     TypeExpression() = default;</span>
-<span id="L918"><span class="lineNum">     918</span>                 :<span class="tlaGNC">         144 :     TypeExpression(std::unique_ptr&lt;MonoType&gt; monotype_in,</span></span>
+<span id="L918"><span class="lineNum">     918</span>                 :<span class="tlaGNC">         146 :     TypeExpression(std::unique_ptr&lt;MonoType&gt; monotype_in,</span></span>
 <span id="L919"><span class="lineNum">     919</span>                 :             :                    const std::vector&lt;std::shared_ptr&lt;TypeConstraint&gt;&gt;&amp; constraints_in)</span>
-<span id="L920"><span class="lineNum">     920</span>         [<span class="tlaGBC" title="Branch 0 was taken 144 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         144 :         : monotype(std::move(monotype_in)), constraints(constraints_in) {}</span></span>
+<span id="L920"><span class="lineNum">     920</span>         [<span class="tlaGBC" title="Branch 0 was taken 146 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         146 :         : monotype(std::move(monotype_in)), constraints(constraints_in) {}</span></span>
 <span id="L921"><span class="lineNum">     921</span>                 :             : };</span>
 <span id="L922"><span class="lineNum">     922</span>                 :             : </span>
 <span id="L923"><span class="lineNum">     923</span>                 :             : struct TypeConstraint {</span>
@@ -1001,12 +1001,12 @@
 <span id="L925"><span class="lineNum">     925</span>                 :             :     std::unique_ptr&lt;Identifier&gt; tvar;</span>
 <span id="L926"><span class="lineNum">     926</span>                 :             :     std::vector&lt;std::shared_ptr&lt;Identifier&gt;&gt; kinds;</span>
 <span id="L927"><span class="lineNum">     927</span>                 :             :     TypeConstraint() = default;</span>
-<span id="L928"><span class="lineNum">     928</span>                 :<span class="tlaGNC">           5 :     TypeConstraint(std::unique_ptr&lt;Identifier&gt; tvar_in,</span></span>
+<span id="L928"><span class="lineNum">     928</span>                 :<span class="tlaGNC">           7 :     TypeConstraint(std::unique_ptr&lt;Identifier&gt; tvar_in,</span></span>
 <span id="L929"><span class="lineNum">     929</span>                 :             :                    const std::vector&lt;std::shared_ptr&lt;Identifier&gt;&gt;&amp; kinds_in)</span>
-<span id="L930"><span class="lineNum">     930</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           5 :         : tvar(std::move(tvar_in)), kinds(kinds_in) {}</span></span>
+<span id="L930"><span class="lineNum">     930</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :         : tvar(std::move(tvar_in)), kinds(kinds_in) {}</span></span>
 <span id="L931"><span class="lineNum">     931</span>                 :             : };</span>
 <span id="L932"><span class="lineNum">     932</span>                 :             : </span>
-<span id="L933"><span class="lineNum">     933</span>                 :<span class="tlaGNC">         912 : struct MonoType {</span></span>
+<span id="L933"><span class="lineNum">     933</span>                 :<span class="tlaGNC">         918 : struct MonoType {</span></span>
 <span id="L934"><span class="lineNum">     934</span>                 :             :     enum class Type {</span>
 <span id="L935"><span class="lineNum">     935</span>                 :             :         Tvar,</span>
 <span id="L936"><span class="lineNum">     936</span>                 :             :         Basic,</span>
@@ -1034,7 +1034,7 @@
 <span id="L958"><span class="lineNum">     958</span>                 :             :     MonoT value;</span>
 <span id="L959"><span class="lineNum">     959</span>                 :             : </span>
 <span id="L960"><span class="lineNum">     960</span>                 :             :     MonoType() = default;</span>
-<span id="L961"><span class="lineNum">     961</span>                 :<span class="tlaGNC">         912 :     MonoType(MonoType::Type type_in, MonoT value_in) : type(type_in), value(std::move(value_in)) {}</span></span>
+<span id="L961"><span class="lineNum">     961</span>                 :<span class="tlaGNC">         918 :     MonoType(MonoType::Type type_in, MonoT value_in) : type(type_in), value(std::move(value_in)) {}</span></span>
 <span id="L962"><span class="lineNum">     962</span>                 :             : };</span>
 <span id="L963"><span class="lineNum">     963</span>                 :             : </span>
 <span id="L964"><span class="lineNum">     964</span>                 :             : struct Required {</span>
@@ -1056,7 +1056,7 @@
 <span id="L980"><span class="lineNum">     980</span>                 :             :     std::unique_ptr&lt;MonoType&gt; monotype;</span>
 <span id="L981"><span class="lineNum">     981</span>                 :             : };</span>
 <span id="L982"><span class="lineNum">     982</span>                 :             : </span>
-<span id="L983"><span class="lineNum">     983</span>                 :<span class="tlaGNC">         317 : struct ParameterType {</span></span>
+<span id="L983"><span class="lineNum">     983</span>                 :<span class="tlaGNC">         319 : struct ParameterType {</span></span>
 <span id="L984"><span class="lineNum">     984</span>                 :             :     enum class Type {</span>
 <span id="L985"><span class="lineNum">     985</span>                 :             :         Required,</span>
 <span id="L986"><span class="lineNum">     986</span>                 :             :         Optional,</span>
@@ -1071,7 +1071,7 @@
 <span id="L995"><span class="lineNum">     995</span>                 :             : </span>
 <span id="L996"><span class="lineNum">     996</span>                 :             :     ParameterType() = default;</span>
 <span id="L997"><span class="lineNum">     997</span>                 :             :     ParameterType(ParameterType::Type type_in, ParamT value_in)</span>
-<span id="L998"><span class="lineNum">     998</span>                 :<span class="tlaGNC">         317 :         : type(type_in), value(std::move(value_in)) {}</span></span>
+<span id="L998"><span class="lineNum">     998</span>                 :<span class="tlaGNC">         319 :         : type(type_in), value(std::move(value_in)) {}</span></span>
 <span id="L999"><span class="lineNum">     999</span>                 :             : };</span>
 <span id="L1000"><span class="lineNum">    1000</span>                 :             : </span>
 <span id="L1001"><span class="lineNum">    1001</span>                 :             : } // namespace pl::flux</span>

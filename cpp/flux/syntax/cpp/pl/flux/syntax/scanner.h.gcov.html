@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-22 13:10:40</td>
+            <td class="headerValue">2026-05-23 13:08:54</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -98,28 +98,28 @@
 <span id="L27"><span class="lineNum">      27</span>                 :             : namespace pl::flux {</span>
 <span id="L28"><span class="lineNum">      28</span>                 :             : class Scanner {</span>
 <span id="L29"><span class="lineNum">      29</span>                 :             : public:</span>
-<span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC tlaBgGNC">         418 :     Scanner(const char* data, size_t len)</span></span>
-<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaGNC">         418 :         : data_(data),</span></span>
-<span id="L32"><span class="lineNum">      32</span>                 :<span class="tlaGNC">         418 :           data_len_(len),</span></span>
-<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC">         418 :           ps_(data),</span></span>
-<span id="L34"><span class="lineNum">      34</span>                 :<span class="tlaGNC">         418 :           p_(data),</span></span>
-<span id="L35"><span class="lineNum">      35</span>                 :<span class="tlaGNC">         418 :           pe_(data + len),</span></span>
-<span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaGNC">         418 :           eof_(data + len),</span></span>
-<span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC">         418 :           last_newline_(data),</span></span>
-<span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC">         418 :           cur_line_(1),</span></span>
-<span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaGNC">         418 :           checkpoint_(data),</span></span>
-<span id="L40"><span class="lineNum">      40</span>                 :<span class="tlaGNC">         418 :           checkpoint_line_(1),</span></span>
-<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">         418 :           checkpoint_last_newline_(data),</span></span>
-<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">         418 :           token_(TokenType::Illegal) {}</span></span>
+<span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC tlaBgGNC">         420 :     Scanner(const char* data, size_t len)</span></span>
+<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaGNC">         420 :         : data_(data),</span></span>
+<span id="L32"><span class="lineNum">      32</span>                 :<span class="tlaGNC">         420 :           data_len_(len),</span></span>
+<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC">         420 :           ps_(data),</span></span>
+<span id="L34"><span class="lineNum">      34</span>                 :<span class="tlaGNC">         420 :           p_(data),</span></span>
+<span id="L35"><span class="lineNum">      35</span>                 :<span class="tlaGNC">         420 :           pe_(data + len),</span></span>
+<span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaGNC">         420 :           eof_(data + len),</span></span>
+<span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC">         420 :           last_newline_(data),</span></span>
+<span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC">         420 :           cur_line_(1),</span></span>
+<span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaGNC">         420 :           checkpoint_(data),</span></span>
+<span id="L40"><span class="lineNum">      40</span>                 :<span class="tlaGNC">         420 :           checkpoint_line_(1),</span></span>
+<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">         420 :           checkpoint_last_newline_(data),</span></span>
+<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">         420 :           token_(TokenType::Illegal) {}</span></span>
 <span id="L43"><span class="lineNum">      43</span>                 :             : </span>
-<span id="L44"><span class="lineNum">      44</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">       36536 :     std::unique_ptr&lt;Token&gt; scan() { return scan_with_comments(0); }</span></span>
+<span id="L44"><span class="lineNum">      44</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">       38544 :     std::unique_ptr&lt;Token&gt; scan() { return scan_with_comments(0); }</span></span>
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 1 time"> + </span> 
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span><span class="tlaGBC" title="Branch 12 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 13 was not taken"> - </span> 
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 14 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 15 was not taken"> - </span><span class="tlaGBC" title="Branch 16 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 17 was not taken"> - </span><span class="tlaGBC" title="Branch 18 was taken 1 time"> + </span> 
 <span class="lineNum">        </span> <span class="tlaUNC" title="Branch 19 was not taken"> - </span><span class="tlaGBC" title="Branch 20 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 21 was not taken"> - </span><span class="tlaGBC" title="Branch 22 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 23 was not taken"> - </span> 
 <span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 24 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 25 was not taken"> - </span>]
-<span id="L45"><span class="lineNum">      45</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         796 :     std::unique_ptr&lt;Token&gt; scan_with_regex() { return scan_with_comments(1); }</span></span>
-<span id="L46"><span class="lineNum">      46</span>         [<span class="tlaGBC" title="Branch 0 was taken 22 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          22 :     std::unique_ptr&lt;Token&gt; scan_with_expr() { return scan_with_comments(2); }</span></span>
+<span id="L45"><span class="lineNum">      45</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         884 :     std::unique_ptr&lt;Token&gt; scan_with_regex() { return scan_with_comments(1); }</span></span>
+<span id="L46"><span class="lineNum">      46</span>         [<span class="tlaGBC" title="Branch 0 was taken 38 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          38 :     std::unique_ptr&lt;Token&gt; scan_with_expr() { return scan_with_comments(2); }</span></span>
 <span id="L47"><span class="lineNum">      47</span>                 :             :     std::unique_ptr&lt;Token&gt; scan_with_comments(int32_t mode);</span>
 <span id="L48"><span class="lineNum">      48</span>                 :             : </span>
 <span id="L49"><span class="lineNum">      49</span>                 :             :     /**</span>
@@ -128,28 +128,28 @@
 <span id="L52"><span class="lineNum">      52</span>                 :             :      * will not unread the discarded whitespace.</span>
 <span id="L53"><span class="lineNum">      53</span>                 :             :      */</span>
 <span id="L54"><span class="lineNum">      54</span>                 :             :     void unread() {</span>
-<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">          19 :         p_ = checkpoint_;</span></span>
-<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC">          19 :         cur_line_ = checkpoint_line_;</span></span>
-<span id="L57"><span class="lineNum">      57</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          19 :         last_newline_ = checkpoint_last_newline_;</span></span>
-<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">          18 :     }</span></span>
+<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">          23 :         p_ = checkpoint_;</span></span>
+<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC">          23 :         cur_line_ = checkpoint_line_;</span></span>
+<span id="L57"><span class="lineNum">      57</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          23 :         last_newline_ = checkpoint_last_newline_;</span></span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">          22 :     }</span></span>
 <span id="L59"><span class="lineNum">      59</span>                 :             : </span>
 <span id="L60"><span class="lineNum">      60</span>                 :             :     /**</span>
 <span id="L61"><span class="lineNum">      61</span>                 :             :      * Get the offset of a position</span>
 <span id="L62"><span class="lineNum">      62</span>                 :             :      */</span>
-<span id="L63"><span class="lineNum">      63</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 107372 times"> + </span>]:<span class="tlaGNC">      107372 :     uint32_t offset(const Position&amp; pos) {</span></span>
+<span id="L63"><span class="lineNum">      63</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 113576 times"> + </span>]:<span class="tlaGNC">      113576 :     uint32_t offset(const Position&amp; pos) {</span></span>
 <span id="L64"><span class="lineNum">      64</span>                 :             :         if (positions_.count(pos) == 0) {</span>
 <span id="L65"><span class="lineNum">      65</span>                 :             :             // TODO(liubang): error handler</span>
 <span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             return UINT32_MAX;</span></span>
 <span id="L67"><span class="lineNum">      67</span>                 :             :         }</span>
-<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC tlaBgGNC">      107372 :         return positions_.at(pos);</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC tlaBgGNC">      113576 :         return positions_.at(pos);</span></span>
 <span id="L69"><span class="lineNum">      69</span>                 :             :     }</span>
 <span id="L70"><span class="lineNum">      70</span>                 :             : </span>
 <span id="L71"><span class="lineNum">      71</span>                 :             :     /**</span>
 <span id="L72"><span class="lineNum">      72</span>                 :             :      * Append a comment to the current scanner</span>
 <span id="L73"><span class="lineNum">      73</span>                 :             :      */</span>
-<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">          18 :     void set_comments(const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; t) {</span></span>
-<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">          18 :         comments_.insert(comments_.end(), t.begin(), t.end());</span></span>
-<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">          18 :     }</span></span>
+<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">          22 :     void set_comments(const std::vector&lt;std::shared_ptr&lt;Comment&gt;&gt;&amp; t) {</span></span>
+<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">          22 :         comments_.insert(comments_.end(), t.begin(), t.end());</span></span>
+<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">          22 :     }</span></span>
 <span id="L77"><span class="lineNum">      77</span>                 :             : </span>
 <span id="L78"><span class="lineNum">      78</span>                 :             : private:</span>
 <span id="L79"><span class="lineNum">      79</span>                 :             :     std::unique_ptr&lt;Token&gt; scan(int32_t mode);</span>
