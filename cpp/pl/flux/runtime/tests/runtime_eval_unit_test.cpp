@@ -290,6 +290,16 @@ TEST(RuntimeEvalTest, EvaluatesArrayPackageHelpers) {
     ASSERT_TRUE(filter.ok()) << filter.status();
     EXPECT_EQ("[3, 4]", filter->string());
 
+    const auto& equal_filter_expr = ParseAssignmentInit(R"(
+        result = {
+            equal: array.filter(arr: [1, 2, 3, 4], fn: (x) => x == 3),
+            not_equal: array.filter(arr: [1, 2, 3, 4], fn: (x) => x != 3),
+        }
+    )");
+    auto equal_filter = ExpressionEvaluator::Evaluate(equal_filter_expr, env);
+    ASSERT_TRUE(equal_filter.ok()) << equal_filter.status();
+    EXPECT_EQ("{equal: [3], not_equal: [1, 2, 4]}", equal_filter->string());
+
     const auto& map_expr = ParseAssignmentInit(R"(
         result = array.map(arr: [1, 2, 3], fn: (x) => ({_value: x * 10, label: "v${x}"}))
     )");
