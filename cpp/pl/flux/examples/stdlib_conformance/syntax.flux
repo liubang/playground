@@ -37,6 +37,18 @@ score = (value) => {
 }
 
 pipe_add = (<-value, ?inc = 1) => value + inc
+apply = (value, fn) => fn(value)
+apply_twice = (value, fn) => fn(fn(value))
+make_adder = (delta) => (value) => value + delta
+add_five = make_adder(delta: 5)
+callbacks = {
+    classify: (r) => (if r.usage >= 80.0 then "hot" else "steady"),
+    bump: (x) => x + 1,
+}
+transforms = [
+    (x) => x + 1,
+    (x) => x * 2,
+]
 
 testcase syntax_smoke extends "stdlib" {
     local = score(value: 4)
@@ -88,9 +100,17 @@ hot = rows
     logical: not falsy and (truthy or falsy),
     conditional: (if exists updated.service then "present" else "missing"),
     closure_default: decorate(r: base).label,
-    block_function: score(value: 4),
-    arrow_shorthand: ((x) => x + 1)(2),
-    pipe_function: 4 |> pipe_add(inc: 3),
+    functions: {
+        positional_call: score(4),
+        named_call: score(value: 4),
+        closure_return: add_five(value: 3),
+        higher_order_arg: apply(value: 4, fn: (x) => x * 3),
+        higher_order_nested: apply_twice(value: 2, fn: (x) => x + 3),
+        object_function: callbacks.classify(r: updated),
+        indexed_function: transforms[1](3),
+        inline_function: ((x) => x + 1)(2),
+        pipe_function: 4 |> pipe_add(inc: 3),
+    },
     array_hof: (numbers |> arr.map(fn: (x) => x * 2) |> arr.filter(fn: (x) => x > 4)),
     table_hof: {host: hot.host, label: hot.label, hot: hot.hot},
 }
