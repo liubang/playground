@@ -679,8 +679,16 @@ absl::StatusOr<Value> builtin_join_package_method(const std::vector<Value>& args
         if (!on_or.ok()) {
             return on_or.status();
         }
-        auto result_or =
-            join_with_column_keys(**left_or, **right_or, "left", "right", *on_or, method, as_fn);
+        auto left_name_or = optional_string_property(**object_or, name, "leftName", "left");
+        if (!left_name_or.ok()) {
+            return left_name_or.status();
+        }
+        auto right_name_or = optional_string_property(**object_or, name, "rightName", "right");
+        if (!right_name_or.ok()) {
+            return right_name_or.status();
+        }
+        auto result_or = join_with_column_keys(
+            **left_or, **right_or, *left_name_or, *right_name_or, *on_or, method, as_fn);
         if (!result_or.ok()) {
             return result_or.status();
         }
