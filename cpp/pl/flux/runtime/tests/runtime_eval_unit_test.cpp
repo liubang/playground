@@ -44,6 +44,13 @@ void InstallBuiltinsAndArrayPackage(Environment& env) {
     env.define("array", *array_or);
 }
 
+void InstallBuiltinsAndPackage(Environment& env, const std::string& name) {
+    BuiltinRegistry::Install(env);
+    auto package_or = BuiltinRegistry::ImportPackage(name);
+    ASSERT_TRUE(package_or.ok()) << package_or.status();
+    env.define(name, *package_or);
+}
+
 TEST(RuntimeEvalTest, EvaluatesLiteralsArithmeticAndConditionalExpressions) {
     Environment env;
     const auto& expr =
@@ -82,6 +89,32 @@ TEST(RuntimeEvalTest, EvaluatesStringInterpolationAndRegexMatches) {
 
     ASSERT_TRUE(result.ok()) << result.status();
     EXPECT_EQ("\"host local\"", result->string());
+}
+
+TEST(RuntimeEvalTest, RejectsInvalidTimezonePackageArguments) {
+    {
+        Environment env;
+        InstallBuiltinsAndPackage(env, "timezone");
+        const auto& expr = ParseAssignmentInit(R"(result = timezone.fixed(offset: "8h"))");
+
+        auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+        ASSERT_FALSE(result.ok());
+        EXPECT_NE(std::string::npos,
+                  std::string(result.status().message()).find("offset` must be a duration"));
+    }
+    {
+        Environment env;
+        InstallBuiltinsAndPackage(env, "timezone");
+        const auto& expr =
+            ParseAssignmentInit(R"(result = timezone.location(name: "Mars/Olympus"))");
+
+        auto result = ExpressionEvaluator::Evaluate(expr, env);
+
+        ASSERT_FALSE(result.ok());
+        EXPECT_NE(std::string::npos,
+                  std::string(result.status().message()).find("unknown zone: Mars/Olympus"));
+    }
 }
 
 TEST(RuntimeEvalTest, EvaluatesRecordUpdateWithObjectSource) {

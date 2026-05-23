@@ -1152,6 +1152,44 @@ absl::StatusOr<Value> builtin_system_time(const std::vector<Value>& args) {
     return Value::time(absl::FormatTime("%Y-%m-%dT%H:%M:%SZ", absl::Now(), absl::UTCTimeZone()));
 }
 
+absl::StatusOr<Value> builtin_timezone_fixed(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "timezone.fixed");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto offset_or = require_object_property(**object_or, "timezone.fixed", "offset");
+    if (!offset_or.ok()) {
+        return offset_or.status();
+    }
+    if ((*offset_or)->type() != Value::Type::Duration) {
+        return absl::InvalidArgumentError("timezone.fixed `offset` must be a duration");
+    }
+    return Value::object({
+        {"zone", Value::string("UTC")},
+        {"offset", **offset_or},
+    });
+}
+
+absl::StatusOr<Value> builtin_timezone_location(const std::vector<Value>& args) {
+    auto object_or = require_object_argument(args, "timezone.location");
+    if (!object_or.ok()) {
+        return object_or.status();
+    }
+    auto name_or = string_property(**object_or, "timezone.location", "name");
+    if (!name_or.ok()) {
+        return name_or.status();
+    }
+    absl::TimeZone zone;
+    if (!absl::LoadTimeZone(*name_or, &zone)) {
+        return absl::InvalidArgumentError(
+            absl::StrCat("timezone.location unknown zone: ", *name_or));
+    }
+    return Value::object({
+        {"zone", Value::string(*name_or)},
+        {"offset", Value::duration("0s")},
+    });
+}
+
 Value make_regexp_package() {
     return Value::object({
         {"path", Value::string("regexp")},
@@ -1319,6 +1357,19 @@ Value make_system_package() {
     });
 }
 
+Value make_timezone_package() {
+    return Value::object({
+        {"path", Value::string("timezone")},
+        {"utc",
+         Value::object({
+             {"zone", Value::string("UTC")},
+             {"offset", Value::duration("0s")},
+         })},
+        {"fixed", make_builtin_value("timezone.fixed", builtin_timezone_fixed)},
+        {"location", make_builtin_value("timezone.location", builtin_timezone_location)},
+    });
+}
+
 Value make_types_package() {
     return Value::object({
         {"path", Value::string("types")},
@@ -1395,6 +1446,7 @@ void RegisterScalarStdlibPackages() {
     RegisterPackage("json", make_json_package);
     RegisterPackage("runtime", make_runtime_package);
     RegisterPackage("system", make_system_package);
+    RegisterPackage("timezone", make_timezone_package);
     RegisterPackage("types", make_types_package);
 }
 
