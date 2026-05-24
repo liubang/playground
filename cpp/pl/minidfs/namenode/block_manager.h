@@ -29,7 +29,6 @@ namespace pl::minidfs {
 
 class PlacementManager;
 
-// ============================================================================
 // BlockManager — manages block lifecycle on the NameNode side.
 //
 // Responsibilities:
@@ -38,7 +37,6 @@ class PlacementManager;
 //   - Manage generation stamps (monotonically increasing)
 //   - Handle block state transitions
 //   - Provide located-block info for reads
-// ============================================================================
 
 class BlockManager {
 public:
@@ -64,6 +62,10 @@ public:
 
     /// Report a corrupt block replica from a datanode.
     pl::Result<pl::Void> report_corrupt_replica(uint64_t block_id, uint64_t datanode_id);
+
+    /// Invalidate all blocks belonging to an inode (mark kDeleted, remove replicas).
+    /// Must be called before the inode is deleted from the namespace.
+    pl::Result<pl::Void> invalidate_blocks(uint64_t inode_id);
 
     /// Generate a new unique generation stamp.
     uint64_t next_generation_stamp();

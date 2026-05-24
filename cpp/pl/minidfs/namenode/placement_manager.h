@@ -27,7 +27,6 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
 // PlacementManager — replica placement policy.
 //
 // Implements a simplified rack-aware placement:
@@ -36,7 +35,6 @@ namespace pl::minidfs {
 //   - Third+ replicas: spread across racks, prefer nodes with more free space
 //
 // Excludes datanodes that are already holding a replica of the same block.
-// ============================================================================
 
 class PlacementManager {
 public:

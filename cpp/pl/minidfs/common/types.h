@@ -26,10 +26,7 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
 // Inode
-// ============================================================================
-
 enum class InodeType : uint8_t {
     kDirectory = 1,
     kFile = 2,
@@ -62,10 +59,7 @@ struct Inode {
     uint64_t version = 0;
 };
 
-// ============================================================================
 // Block metadata (stored in MySQL, not to be confused with BlockHeader on disk)
-// ============================================================================
-
 enum class BlockState : uint8_t {
     kAllocating = 0,
     kCommitted = 1,
@@ -85,10 +79,7 @@ struct BlockMeta {
     uint64_t mtime_ms = 0;
 };
 
-// ============================================================================
 // Block Replica
-// ============================================================================
-
 enum class ReplicaState : uint8_t {
     kWriting = 0,
     kFinalized = 1,
@@ -108,10 +99,7 @@ struct BlockReplica {
     uint64_t report_time_ms = 0;
 };
 
-// ============================================================================
 // DataNode
-// ============================================================================
-
 enum class DataNodeState : uint8_t {
     kLive = 0,
     kStale = 1,
@@ -135,10 +123,7 @@ struct DataNodeInfo {
     uint64_t last_heartbeat_ms = 0;
 };
 
-// ============================================================================
 // Lease
-// ============================================================================
-
 enum class LeaseState : uint8_t {
     kActive = 0,
     kClosed = 1,
@@ -154,10 +139,7 @@ struct Lease {
     uint64_t mtime_ms = 0;
 };
 
-// ============================================================================
 // Located Block (used in client-facing responses)
-// ============================================================================
-
 struct DataNodeEndpoint {
     uint64_t datanode_id = 0;
     std::string host;
@@ -172,10 +154,7 @@ struct LocatedBlock {
     std::vector<DataNodeEndpoint> locations;
 };
 
-// ============================================================================
 // File Status (used in list/stat responses)
-// ============================================================================
-
 struct FileStatus {
     uint64_t inode_id = 0;
     std::string path;

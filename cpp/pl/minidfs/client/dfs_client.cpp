@@ -62,11 +62,22 @@ inline FileStatus to_file_status(const protocol::FileStatusProto& proto) {
     };
 }
 
+// RAII wrapper for file descriptors.
+class ScopedFd {
+public:
+    explicit ScopedFd(int fd) : fd_(fd) {}
+    ~ScopedFd() { if (fd_ >= 0) ::close(fd_); }
+    ScopedFd(const ScopedFd&) = delete;
+    ScopedFd& operator=(const ScopedFd&) = delete;
+    int get() const { return fd_; }
+    int release() { int f = fd_; fd_ = -1; return f; }
+private:
+    int fd_;
+};
+
 } // namespace
 
-// =============================================================================
 // Lifecycle
-// =============================================================================
 
 std::unique_ptr<DfsClient> DfsClient::create(DfsClientConfig config) {
     auto client = std::unique_ptr<DfsClient>(new DfsClient(std::move(config)));
@@ -91,9 +102,7 @@ bool DfsClient::init() {
     return true;
 }
 
-// =============================================================================
 // Namespace operations
-// =============================================================================
 
 Result<Void> DfsClient::mkdir(std::string_view path) {
     protocol::NameNodeService_Stub stub(&namenode_channel_);
@@ -204,22 +213,19 @@ Result<Void> DfsClient::mv(std::string_view src, std::string_view dst) {
     return check_status(response.status());
 }
 
-// =============================================================================
 // File write — pipeline replication
-// =============================================================================
 
 Result<Void> DfsClient::put(std::string_view local_path, std::string_view dfs_path) {
     // 1. Open local file
-    int fd = ::open(std::string(local_path).c_str(), O_RDONLY);
-    if (fd < 0) {
+    ScopedFd fd(::open(std::string(local_path).c_str(), O_RDONLY));
+    if (fd.get() < 0) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kIOError),
                             "Cannot open local file: {}",
                             local_path);
     }
 
     struct stat st{};
-    if (::fstat(fd, &st) != 0) {
-        ::close(fd);
+    if (::fstat(fd.get(), &st) != 0) {
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kIOError),
                             "Cannot stat local file: {}",
                             local_path);
@@ -243,13 +249,11 @@ Result<Void> DfsClient::put(std::string_view local_path, std::string_view dfs_pa
     stub.CreateFile(&cntl, &create_req, &create_resp, nullptr);
 
     if (cntl.Failed()) {
-        ::close(fd);
         return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
                             "CreateFile RPC failed: {}",
                             cntl.ErrorText());
     }
     if (create_resp.status().code() != 0) {
-        ::close(fd);
         return pl::makeError(static_cast<status_code_t>(create_resp.status().code()),
                              create_resp.status().message());
     }
@@ -266,9 +270,8 @@ Result<Void> DfsClient::put(std::string_view local_path, std::string_view dfs_pa
         uint64_t bytes_read = 0;
 
         while (bytes_read < to_read) {
-            auto n = ::read(fd, buf.data() + bytes_read, to_read - bytes_read);
+            auto n = ::read(fd.get(), buf.data() + bytes_read, to_read - bytes_read);
             if (n <= 0) {
-                ::close(fd);
                 return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kIOError),
                                     "Read error on local file at offset {}",
                                     file_size - remaining + bytes_read);
@@ -278,14 +281,12 @@ Result<Void> DfsClient::put(std::string_view local_path, std::string_view dfs_pa
 
         auto result = write_block(inode_id, block_index, buf.data(), bytes_read);
         if (result.hasError()) {
-            ::close(fd);
             RETURN_ERROR(result);
         }
 
         remaining -= bytes_read;
         ++block_index;
     }
-    ::close(fd);
 
     // 4. CompleteFile
     cntl.Reset();
@@ -400,12 +401,31 @@ Result<uint64_t> DfsClient::write_block(uint64_t inode_id,
         ++chunk_index;
     }
 
+    // Commit the block on NameNode after all chunks are written
+    cntl.Reset();
+    protocol::CommitBlockRequest commit_req;
+    commit_req.set_block_id(located_block.block_id());
+    commit_req.set_length(length);
+    commit_req.set_generation_stamp(located_block.generation_stamp());
+
+    protocol::CommitBlockResponse commit_resp;
+    protocol::DataNodeProtocolService_Stub dn_proto_stub(&namenode_channel_);
+    dn_proto_stub.CommitBlock(&cntl, &commit_req, &commit_resp, nullptr);
+
+    if (cntl.Failed()) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
+                            "CommitBlock RPC failed: {}",
+                            cntl.ErrorText());
+    }
+    if (commit_resp.status().code() != 0) {
+        return pl::makeError(static_cast<status_code_t>(commit_resp.status().code()),
+                             commit_resp.status().message());
+    }
+
     return length;
 }
 
-// =============================================================================
 // File read
-// =============================================================================
 
 Result<Void> DfsClient::get(std::string_view dfs_path, std::string_view local_path) {
     // 1. Get file status to obtain inode_id
@@ -481,9 +501,7 @@ Result<Void> DfsClient::get(std::string_view dfs_path, std::string_view local_pa
     RETURN_VOID;
 }
 
-// =============================================================================
 // Admin / diagnostic operations
-// =============================================================================
 
 Result<DfsClient::ClusterInfo> DfsClient::get_cluster_info() {
     protocol::AdminService_Stub stub(&namenode_channel_);
@@ -819,9 +837,7 @@ Result<DfsClient::BlockDetail> DfsClient::get_block_info(uint64_t block_id) {
     return detail;
 }
 
-// =============================================================================
 // File read
-// =============================================================================
 
 Result<std::string> DfsClient::read_block(const LocatedBlock& block) {
     // Try each replica location until one succeeds

@@ -32,9 +32,7 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
 // BlockInfo — lightweight descriptor for a stored block on disk.
-// ============================================================================
 
 struct BlockInfo {
     uint64_t block_id = 0;
@@ -42,7 +40,6 @@ struct BlockInfo {
     uint64_t length = 0; // total file size on disk (header + data)
 };
 
-// ============================================================================
 // LocalBlockStore — manages block files on the local filesystem.
 //
 // Directory layout under the configured storage root:
@@ -65,7 +62,6 @@ struct BlockInfo {
 // Thread safety:
 //   The store uses a mutex for metadata operations (create, finalize, delete).
 //   Concurrent reads of finalized blocks are safe without locking.
-// ============================================================================
 
 class LocalBlockStore {
 public:
@@ -93,10 +89,15 @@ public:
     /// Append a data chunk to a block currently in tmp/.
     /// Updates the header's chunk metadata and writes data after the header.
     /// Returns the updated data length (uncompressed cumulative).
+    ///
+    /// Ordering: chunk_index must equal the current chunk_count (sequential writes).
+    /// Idempotency: if chunk_index == chunk_count - 1 and CRC matches the last
+    /// written chunk, the call is treated as a successful retry (no re-append).
     pl::Result<uint64_t> append_chunk(uint64_t block_id,
                                       uint64_t generation_stamp,
                                       const void* data,
-                                      uint32_t size);
+                                      uint32_t size,
+                                      uint32_t chunk_index);
 
     /// Finalize a block: verify checksums, update header, move from tmp/ to current/.
     pl::Result<pl::Void> finalize_block(uint64_t block_id, uint64_t generation_stamp);

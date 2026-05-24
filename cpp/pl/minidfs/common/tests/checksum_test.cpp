@@ -23,10 +23,7 @@
 namespace pl::minidfs {
 namespace {
 
-// ============================================================================
 // compute_crc32c (void*, size_t) tests
-// ============================================================================
-
 TEST(ChecksumTest, EmptyData) {
     uint32_t crc = compute_crc32c("", 0);
     EXPECT_EQ(crc, 0u);
@@ -60,10 +57,7 @@ TEST(ChecksumTest, SingleByteDifference) {
     EXPECT_NE(compute_crc32c(a.data(), a.size()), compute_crc32c(b.data(), b.size()));
 }
 
-// ============================================================================
 // compute_crc32c (string_view) tests
-// ============================================================================
-
 TEST(ChecksumTest, StringViewOverload) {
     std::string data = "abcdefgh";
     uint32_t crc_ptr = compute_crc32c(data.data(), data.size());
@@ -76,10 +70,7 @@ TEST(ChecksumTest, StringViewEmpty) {
     EXPECT_EQ(crc, 0u);
 }
 
-// ============================================================================
 // extend_crc32c tests
-// ============================================================================
-
 TEST(ChecksumTest, ExtendEquivalentToFull) {
     std::string part1 = "hello";
     std::string part2 = " world";
@@ -113,10 +104,7 @@ TEST(ChecksumTest, ExtendMultipleChunks) {
     EXPECT_EQ(crc, expected);
 }
 
-// ============================================================================
 // verify_crc32c tests
-// ============================================================================
-
 TEST(ChecksumTest, VerifyCorrect) {
     std::string data = "verify me";
     uint32_t crc = compute_crc32c(data.data(), data.size());
@@ -136,10 +124,7 @@ TEST(ChecksumTest, VerifyAfterCorruption) {
     EXPECT_FALSE(verify_crc32c(data.data(), data.size(), crc));
 }
 
-// ============================================================================
 // Large data test
-// ============================================================================
-
 TEST(ChecksumTest, LargeData) {
     std::string large(1024 * 1024, 'A');
     uint32_t crc = compute_crc32c(large.data(), large.size());
@@ -147,10 +132,7 @@ TEST(ChecksumTest, LargeData) {
     EXPECT_TRUE(verify_crc32c(large.data(), large.size(), crc));
 }
 
-// ============================================================================
 // ChecksumType enum
-// ============================================================================
-
 TEST(ChecksumTest, ChecksumTypeValues) {
     EXPECT_EQ(static_cast<uint8_t>(ChecksumType::kNone), 0u);
     EXPECT_EQ(static_cast<uint8_t>(ChecksumType::kCRC32C), 1u);

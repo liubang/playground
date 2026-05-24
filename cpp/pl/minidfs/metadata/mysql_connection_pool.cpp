@@ -23,9 +23,7 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
 // PooledConnection implementation
-// ============================================================================
 
 PooledConnection::PooledConnection(std::unique_ptr<boost::mysql::any_connection> conn,
                                    std::shared_ptr<boost::asio::io_context> io_ctx,
@@ -67,9 +65,7 @@ pl::Result<boost::mysql::results> PooledConnection::execute(std::string_view sql
     }
 }
 
-// ============================================================================
 // MySQLConnectionPool implementation
-// ============================================================================
 
 MySQLConnectionPool::MySQLConnectionPool(const MySQLConfig& config)
     : config_(config), pool_size_(config.pool_size) {}

@@ -16,15 +16,12 @@
 
 #include <gtest/gtest.h>
 
-#include "cpp/pl/minidfs/common/compression.h"
+#include "cpp/pl/minidfs/datanode/block_format.h"
 
 namespace pl::minidfs {
 namespace {
 
-// ============================================================================
 // CompressionType enum values
-// ============================================================================
-
 TEST(CompressionTest, EnumValues) {
     EXPECT_EQ(static_cast<uint8_t>(CompressionType::kNone), 0u);
     EXPECT_EQ(static_cast<uint8_t>(CompressionType::kSnappy), 1u);
@@ -35,10 +32,7 @@ TEST(CompressionTest, EnumUnderlyingType) {
     static_assert(std::is_same_v<std::underlying_type_t<CompressionType>, uint8_t>);
 }
 
-// ============================================================================
 // compression_type_name tests
-// ============================================================================
-
 TEST(CompressionTest, NameNone) {
     EXPECT_EQ(compression_type_name(CompressionType::kNone), "none");
 }

@@ -28,7 +28,6 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
 // Transaction — RAII-style database transaction handle.
 //
 // Usage:
@@ -36,8 +35,6 @@ namespace pl::minidfs {
 //   // ... do work ...
 //   txn->commit();
 //   // If commit() is not called, destructor rolls back.
-// ============================================================================
-
 class Transaction {
 public:
     virtual ~Transaction() = default;
@@ -57,7 +54,6 @@ protected:
     Transaction() = default;
 };
 
-// ============================================================================
 // MetadataStore — abstract interface for all metadata persistence.
 //
 // Design principles:
@@ -67,21 +63,14 @@ protected:
 //     operations within a transaction observe snapshot isolation.
 //   - For operations that need transactional guarantees, callers should
 //     begin_transaction(), perform operations, then commit().
-// ============================================================================
-
 class MetadataStore {
 public:
     virtual ~MetadataStore() = default;
 
-    // ========================================================================
     // Transaction management
-    // ========================================================================
-
     virtual pl::Result<std::unique_ptr<Transaction>> begin_transaction() = 0;
 
-    // ========================================================================
     // Inode operations
-    // ========================================================================
 
     /// Get an inode by ID. Returns NotFound if not exists.
     virtual pl::Result<Inode> get_inode(uint64_t inode_id) = 0;
@@ -103,9 +92,7 @@ public:
     /// Delete an inode by ID.
     virtual pl::Result<pl::Void> delete_inode(uint64_t inode_id) = 0;
 
-    // ========================================================================
     // Block operations
-    // ========================================================================
 
     /// Get block metadata by block_id.
     virtual pl::Result<BlockMeta> get_block(uint64_t block_id) = 0;
@@ -122,9 +109,7 @@ public:
     /// Get all blocks in a given state (used by replication scanner).
     virtual pl::Result<std::vector<BlockMeta>> get_blocks_by_state(BlockState state) = 0;
 
-    // ========================================================================
     // Block Replica operations
-    // ========================================================================
 
     /// Get all replicas for a block.
     virtual pl::Result<std::vector<BlockReplica>> get_replicas(uint64_t block_id) = 0;
@@ -144,9 +129,7 @@ public:
                                                       uint64_t datanode_id,
                                                       ReplicaState new_state) = 0;
 
-    // ========================================================================
     // DataNode operations
-    // ========================================================================
 
     /// Get datanode info by ID.
     virtual pl::Result<DataNodeInfo> get_datanode(uint64_t datanode_id) = 0;
@@ -163,9 +146,7 @@ public:
     /// Insert or update datanode info (upsert on datanode_id).
     virtual pl::Result<pl::Void> upsert_datanode(const DataNodeInfo& info) = 0;
 
-    // ========================================================================
     // Lease operations
-    // ========================================================================
 
     /// Create a new lease for a file.
     virtual pl::Result<pl::Void> create_lease(const Lease& lease) = 0;
@@ -182,17 +163,13 @@ public:
     /// Expire all leases whose expire_time_ms < now_ms. Returns number expired.
     virtual pl::Result<uint64_t> expire_leases(uint64_t now_ms) = 0;
 
-    // ========================================================================
     // ID Allocation
-    // ========================================================================
 
     /// Allocate `count` consecutive IDs from the named allocator.
     /// Returns the first ID in the allocated range.
     virtual pl::Result<uint64_t> alloc_id(std::string_view name, uint64_t count = 1) = 0;
 
-    // ========================================================================
     // Operation Log (for idempotency and auditing)
-    // ========================================================================
 
     /// Write an operation log entry.
     virtual pl::Result<pl::Void> write_oplog(std::string_view op_type,
@@ -203,10 +180,7 @@ public:
     /// Check if a request_id has already been processed (for idempotency).
     virtual pl::Result<bool> check_request_id(std::string_view request_id) = 0;
 
-    // ========================================================================
     // Lifecycle
-    // ========================================================================
-
     MetadataStore(const MetadataStore&) = delete;
     MetadataStore& operator=(const MetadataStore&) = delete;
     MetadataStore(MetadataStore&&) = default;

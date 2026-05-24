@@ -17,22 +17,11 @@
 
 #include "cpp/pl/minidfs/namenode/lease_manager.h"
 
-#include <chrono>
-
 #include "cpp/pl/minidfs/common/constants.h"
 #include "cpp/pl/minidfs/common/error_code.h"
+#include "cpp/pl/minidfs/common/time_util.h"
 
 namespace pl::minidfs {
-
-namespace {
-
-uint64_t now_ms() {
-    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
-                                     std::chrono::system_clock::now().time_since_epoch())
-                                     .count());
-}
-
-} // namespace
 
 LeaseManager::LeaseManager(MetadataStore* store) : store_(store) {}
 

@@ -20,7 +20,6 @@
 #pragma once
 
 #include "cpp/pl/minidfs/common/checksum.h"
-#include "cpp/pl/minidfs/common/compression.h"
 #include "cpp/pl/minidfs/common/constants.h"
 #include "cpp/pl/minidfs/common/error_code.h"
 #include "cpp/pl/minidfs/common/types.h"

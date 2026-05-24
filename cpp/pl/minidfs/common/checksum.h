@@ -21,7 +21,7 @@
 #include <cstring>
 #include <string_view>
 
-// 平台适配：Linux 使用 ISA-L (SIMD 优化)，macOS 使用 Google crc32c (ARM 硬件指令)
+// Platform adaptation: Linux uses ISA-L (SIMD optimized), macOS uses Google crc32c (ARM HW instructions)
 #if defined(__linux__)
 #include <isa-l/crc.h>
 #elif defined(__APPLE__)
@@ -38,12 +38,12 @@ enum class ChecksumType : uint8_t {
 /// Compute CRC32C checksum over a byte range.
 [[nodiscard]] inline uint32_t compute_crc32c(const void* data, size_t size) {
 #if defined(__linux__)
-    // ISA-L: crc32_iscsi 使用与 CRC32C 相同的多项式 (iSCSI polynomial)
+    // ISA-L: crc32_iscsi uses the same polynomial as CRC32C (iSCSI polynomial)
     return ::crc32_iscsi(const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(data)),
                          static_cast<int>(size),
                          0);
 #elif defined(__APPLE__)
-    // Google crc32c: 在 ARM64 macOS 上利用硬件 CRC32 指令
+    // Google crc32c: uses hardware CRC32 instructions on ARM64 macOS
     return ::crc32c_value(reinterpret_cast<const uint8_t*>(data), size);
 #else
 #error "Unsupported platform for CRC32C"

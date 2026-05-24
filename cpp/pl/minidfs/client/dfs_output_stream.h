@@ -26,13 +26,10 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
 // DfsOutputStream — 流式写入 DFS 文件
 //
 // 内部按 block_size 分块，每满一个 block 即向 NameNode AllocateBlock 后
 // 通过 pipeline 写入 DataNode。close() 时提交最后一个 block 并 CompleteFile。
-// ============================================================================
-
 class DfsOutputStream {
 public:
     ~DfsOutputStream();
