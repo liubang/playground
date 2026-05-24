@@ -27,22 +27,14 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
-// PipelineTarget — identifies a downstream datanode in the write pipeline.
-// ============================================================================
-
 struct PipelineTarget {
     std::string host;
     uint32_t data_port = 0;
 };
 
-// ============================================================================
 // PacketHeader — header for each data packet in the pipeline protocol.
-//
 // Wire format (network order):
 //   [4B magic][8B block_id][8B generation_stamp][4B chunk_index][4B data_length][4B crc32c]
-// ============================================================================
-
 struct PacketHeader {
     static constexpr uint32_t kMagic = 0x4D504B54; // "MPKT"
 
@@ -53,10 +45,6 @@ struct PacketHeader {
     uint32_t checksum = 0; // CRC32C of the data payload
 };
 
-// ============================================================================
-// AckStatus — status codes in pipeline acknowledgment messages.
-// ============================================================================
-
 enum class AckStatus : uint8_t {
     kSuccess = 0,
     kChecksumError = 1,
@@ -65,28 +53,15 @@ enum class AckStatus : uint8_t {
     kDownstreamError = 4,
 };
 
-// ============================================================================
 // PipelineReceiver — handles the receiving side of the write pipeline.
 //
 // Protocol for a single block write:
-//   1. Client (or upstream DN) opens a connection and sends SetupPacket
-//      containing block_id, generation_stamp, inode_id, block_index, and
-//      the list of downstream targets.
+//   1. Client sends SetupPacket with block metadata and downstream targets.
 //   2. This DN opens a connection to the next downstream target (if any).
-//   3. For each data chunk:
-//      a. Receive PacketHeader + data payload from upstream.
-//      b. Verify CRC32C of received data.
-//      c. Write chunk to local store (append_chunk).
-//      d. Forward PacketHeader + data to downstream (if any).
-//      e. Wait for ACK from downstream.
-//      f. Send ACK to upstream.
-//   4. Receive FinalizePacket → finalize_block locally, forward, ACK.
+//   3. For each data chunk: receive, verify CRC, write locally, forward, ACK.
+//   4. On FinalizePacket: finalize_block locally, forward, ACK.
 //
-// This class encapsulates the logic for steps 2-4. The actual network I/O
-// is abstracted via virtual methods to allow unit testing without real sockets.
-// In production, the brpc service layer invokes these methods.
-// ============================================================================
-
+// Network I/O is abstracted via virtual methods for testability.
 class PipelineReceiver {
 public:
     explicit PipelineReceiver(LocalBlockStore* store);

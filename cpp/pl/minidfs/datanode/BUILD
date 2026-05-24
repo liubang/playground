@@ -27,11 +27,7 @@ package(default_visibility = ["//cpp/pl/minidfs:__subpackages__"])
 
 cc_library(
     name = "block_format",
-    srcs = ["block.cpp"],
-    hdrs = [
-        "block.h",
-        "block_format.h",
-    ],
+    hdrs = ["block_format.h"],
     deps = [
         "//cpp/pl/minidfs/common",
     ],

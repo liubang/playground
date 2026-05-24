@@ -22,10 +22,7 @@
 namespace pl::minidfs {
 namespace {
 
-// ============================================================================
 // Inode default values
-// ============================================================================
-
 TEST(TypesTest, InodeDefaults) {
     Inode inode;
     EXPECT_EQ(inode.inode_id, 0u);
@@ -55,10 +52,7 @@ TEST(TypesTest, FileStateValues) {
     EXPECT_EQ(static_cast<uint8_t>(FileState::kDeleted), 2u);
 }
 
-// ============================================================================
 // BlockMeta default values
-// ============================================================================
-
 TEST(TypesTest, BlockMetaDefaults) {
     BlockMeta bm;
     EXPECT_EQ(bm.block_id, 0u);
@@ -79,10 +73,7 @@ TEST(TypesTest, BlockStateValues) {
     EXPECT_EQ(static_cast<uint8_t>(BlockState::kDeleted), 3u);
 }
 
-// ============================================================================
 // BlockReplica default values
-// ============================================================================
-
 TEST(TypesTest, BlockReplicaDefaults) {
     BlockReplica br;
     EXPECT_EQ(br.block_id, 0u);
@@ -103,10 +94,7 @@ TEST(TypesTest, ReplicaStateValues) {
     EXPECT_EQ(static_cast<uint8_t>(ReplicaState::kDeleted), 5u);
 }
 
-// ============================================================================
 // DataNodeInfo default values
-// ============================================================================
-
 TEST(TypesTest, DataNodeInfoDefaults) {
     DataNodeInfo dn;
     EXPECT_EQ(dn.datanode_id, 0u);
@@ -131,10 +119,7 @@ TEST(TypesTest, DataNodeStateValues) {
     EXPECT_EQ(static_cast<uint8_t>(DataNodeState::kDecommissioned), 4u);
 }
 
-// ============================================================================
 // Lease default values
-// ============================================================================
-
 TEST(TypesTest, LeaseDefaults) {
     Lease lease;
     EXPECT_EQ(lease.lease_id, 0u);
@@ -151,10 +136,7 @@ TEST(TypesTest, LeaseStateValues) {
     EXPECT_EQ(static_cast<uint8_t>(LeaseState::kClosed), 1u);
 }
 
-// ============================================================================
 // LocatedBlock / DataNodeEndpoint
-// ============================================================================
-
 TEST(TypesTest, LocatedBlockDefaults) {
     LocatedBlock lb;
     EXPECT_EQ(lb.block_id, 0u);
@@ -171,10 +153,7 @@ TEST(TypesTest, DataNodeEndpointDefaults) {
     EXPECT_EQ(ep.data_port, 0u);
 }
 
-// ============================================================================
 // FileStatus
-// ============================================================================
-
 TEST(TypesTest, FileStatusDefaults) {
     FileStatus fs;
     EXPECT_EQ(fs.inode_id, 0u);
@@ -189,10 +168,7 @@ TEST(TypesTest, FileStatusDefaults) {
     EXPECT_EQ(fs.permission, 0u);
 }
 
-// ============================================================================
 // Struct assignment / copy
-// ============================================================================
-
 TEST(TypesTest, InodeCopy) {
     Inode a;
     a.inode_id = 42;

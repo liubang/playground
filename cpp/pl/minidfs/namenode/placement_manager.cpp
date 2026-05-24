@@ -37,12 +37,9 @@ pl::Result<std::vector<DataNodeInfo>> PlacementManager::choose_targets(
 
     // Filter out excluded datanode.
     if (exclude_datanode_id.has_value()) {
-        candidates.erase(std::remove_if(candidates.begin(),
-                                        candidates.end(),
-                                        [&](const DataNodeInfo& dn) {
-                                            return dn.datanode_id == exclude_datanode_id.value();
-                                        }),
-                         candidates.end());
+        std::erase_if(candidates, [&](const DataNodeInfo& dn) {
+            return dn.datanode_id == exclude_datanode_id.value();
+        });
     }
 
     if (candidates.size() < num_replicas) {
@@ -50,25 +47,23 @@ pl::Result<std::vector<DataNodeInfo>> PlacementManager::choose_targets(
                              "not enough live datanodes for requested replication");
     }
 
-    // Sort by free space descending, then shuffle within each rack group
-    // for simple rack-awareness.
+    // Use a thread-local random engine for randomization.
+    thread_local std::mt19937 rng{std::random_device{}()};
+
+    // Sort by free space descending for capacity-aware placement.
     std::sort(
         candidates.begin(), candidates.end(), [](const DataNodeInfo& a, const DataNodeInfo& b) {
             return a.free_bytes > b.free_bytes;
         });
 
-    // Simple rack-aware selection:
-    // 1. Pick the first node (most free space).
-    // 2. Try to pick a node from a different rack.
-    // 3. Fill remaining from remaining candidates.
+    // Add bounded randomness: shuffle within the top 2*num_replicas candidates
+    // to avoid always picking the exact same nodes while still preferring high-free nodes.
+    size_t shuffle_range = std::min<size_t>(candidates.size(), num_replicas * 2);
+    std::shuffle(candidates.begin(), candidates.begin() + shuffle_range, rng);
+
+    // Rack-aware selection.
     std::vector<DataNodeInfo> chosen;
     chosen.reserve(num_replicas);
-
-    // Use a thread-local random engine for shuffling.
-    thread_local std::mt19937 rng{std::random_device{}()};
-
-    // Shuffle to add some randomness (avoid always picking the same top-free nodes).
-    std::shuffle(candidates.begin(), candidates.end(), rng);
 
     // Greedy rack-aware selection.
     std::vector<std::string> used_racks;

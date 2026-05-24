@@ -17,21 +17,15 @@
 
 #include "cpp/pl/minidfs/namenode/namespace_manager.h"
 
-#include <chrono>
 #include <fmt/format.h>
 
 #include "cpp/pl/minidfs/common/constants.h"
 #include "cpp/pl/minidfs/common/error_code.h"
+#include "cpp/pl/minidfs/common/time_util.h"
 
 namespace pl::minidfs {
 
 namespace {
-
-uint64_t now_ms() {
-    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
-                                     std::chrono::system_clock::now().time_since_epoch())
-                                     .count());
-}
 
 pl::Result<pl::Void> validate_path(std::string_view path) {
     if (path.empty() || path[0] != '/') {
@@ -50,10 +44,7 @@ pl::Result<pl::Void> validate_path(std::string_view path) {
 
 NamespaceManager::NamespaceManager(MetadataStore* store) : store_(store) {}
 
-// ============================================================================
 // Path utilities
-// ============================================================================
-
 std::vector<std::string_view> NamespaceManager::split_path(std::string_view path) {
     std::vector<std::string_view> components;
     size_t start = 1; // skip leading '/'
@@ -147,10 +138,7 @@ pl::Result<Inode> NamespaceManager::ensure_parent(const std::vector<std::string_
     return current;
 }
 
-// ============================================================================
 // Directory operations
-// ============================================================================
-
 pl::Result<Inode> NamespaceManager::mkdir(std::string_view path,
                                           std::string_view owner,
                                           std::string_view group,
@@ -226,10 +214,7 @@ pl::Result<Inode> NamespaceManager::mkdir(std::string_view path,
     return dir;
 }
 
-// ============================================================================
 // File operations
-// ============================================================================
-
 pl::Result<Inode> NamespaceManager::create_file(std::string_view path,
                                                 std::string_view owner,
                                                 std::string_view group,
@@ -328,22 +313,29 @@ pl::Result<Inode> NamespaceManager::remove(std::string_view path, bool recursive
             return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kDirectoryNotEmpty),
                                  fmt::format("directory '{}' is not empty", inode.name));
         }
-        // Recursive delete: remove all children first.
+        // Recursive delete: remove all children using iterative DFS.
         if (recursive) {
-            for (const auto& child : children.value()) {
-                if (child.type == InodeType::kDirectory) {
-                    // Recursively build path — for simplicity, delete by inode directly.
-                    auto grandchildren = store_->list_children(child.inode_id);
-                    if (grandchildren.hasError()) {
-                        return folly::makeUnexpected(grandchildren.error());
-                    }
-                    // Simple recursive inode deletion (DFS).
-                    // For production, this should be iterative with a stack.
-                    if (!grandchildren.value().empty()) {
-                        // TODO: implement deep recursive delete
+            std::vector<uint64_t> delete_stack;
+            // Collect all descendant inodes in post-order (children before parents).
+            std::vector<uint64_t> to_delete;
+            delete_stack.push_back(inode.inode_id);
+            while (!delete_stack.empty()) {
+                uint64_t cur = delete_stack.back();
+                delete_stack.pop_back();
+                auto cur_children = store_->list_children(cur);
+                if (cur_children.hasError()) {
+                    return folly::makeUnexpected(cur_children.error());
+                }
+                for (const auto& child : cur_children.value()) {
+                    to_delete.push_back(child.inode_id);
+                    if (child.type == InodeType::kDirectory) {
+                        delete_stack.push_back(child.inode_id);
                     }
                 }
-                auto del = store_->delete_inode(child.inode_id);
+            }
+            // Delete in reverse order (deepest first) to respect FK constraints.
+            for (auto it = to_delete.rbegin(); it != to_delete.rend(); ++it) {
+                auto del = store_->delete_inode(*it);
                 if (del.hasError()) {
                     return folly::makeUnexpected(del.error());
                 }
@@ -414,10 +406,7 @@ pl::Result<pl::Void> NamespaceManager::rename(std::string_view src, std::string_
     return store_->update_inode(updated);
 }
 
-// ============================================================================
 // Query operations
-// ============================================================================
-
 pl::Result<FileStatus> NamespaceManager::get_file_status(std::string_view path) {
     auto valid = validate_path(path);
     if (valid.hasError()) {

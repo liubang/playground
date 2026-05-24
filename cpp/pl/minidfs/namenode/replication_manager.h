@@ -26,10 +26,7 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
 // ReplicationTask — describes a pending replication or deletion action.
-// ============================================================================
-
 struct ReplicationTask {
     uint64_t block_id = 0;
     uint64_t source_datanode = 0; // Copy from (0 if deletion task)
@@ -37,15 +34,12 @@ struct ReplicationTask {
     bool is_deletion = false;
 };
 
-// ============================================================================
 // ReplicationManager — ensures blocks maintain desired replica count.
 //
 // Periodically scans committed blocks and:
 //   - Under-replicated: schedules replication tasks
 //   - Over-replicated: schedules deletion tasks
 //   - Corrupt replicas: invalidates and schedules re-replication
-// ============================================================================
-
 class ReplicationManager {
 public:
     ReplicationManager(MetadataStore* store, PlacementManager* placement);

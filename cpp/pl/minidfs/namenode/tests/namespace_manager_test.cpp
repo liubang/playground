@@ -35,10 +35,7 @@ protected:
     std::unique_ptr<NamespaceManager> mgr_;
 };
 
-// ============================================================================
 // mkdir tests
-// ============================================================================
-
 TEST_F(NamespaceManagerTest, MkdirSimple) {
     auto result = mgr_->mkdir("/foo", "user1", "grp1", 0755);
     ASSERT_TRUE(result.hasValue());
@@ -99,10 +96,7 @@ TEST_F(NamespaceManagerTest, MkdirInvalidPath) {
     ASSERT_TRUE(result.hasError());
 }
 
-// ============================================================================
 // create_file tests
-// ============================================================================
-
 TEST_F(NamespaceManagerTest, CreateFileSimple) {
     auto result = mgr_->create_file("/myfile.txt", "user1", "grp1", 0644, 3, 128 * 1024 * 1024);
     ASSERT_TRUE(result.hasValue());
@@ -123,10 +117,7 @@ TEST_F(NamespaceManagerTest, CreateFileDuplicate) {
     ASSERT_TRUE(result.hasError());
 }
 
-// ============================================================================
 // remove tests
-// ============================================================================
-
 TEST_F(NamespaceManagerTest, RemoveFile) {
     mgr_->create_file("/todel.txt", "user1", "grp1", 0644, 3, 128 * kMB);
     auto result = mgr_->remove("/todel.txt");
@@ -165,10 +156,7 @@ TEST_F(NamespaceManagerTest, RemoveRoot) {
     ASSERT_TRUE(result.hasError());
 }
 
-// ============================================================================
 // rename tests
-// ============================================================================
-
 TEST_F(NamespaceManagerTest, RenameFile) {
     mgr_->create_file("/src.txt", "user1", "grp1", 0644, 3, 128 * kMB);
     auto result = mgr_->rename("/src.txt", "/dst.txt");
@@ -194,10 +182,7 @@ TEST_F(NamespaceManagerTest, RenameSrcNotFound) {
     ASSERT_TRUE(result.hasError());
 }
 
-// ============================================================================
 // get_file_status / list_status tests
-// ============================================================================
-
 TEST_F(NamespaceManagerTest, GetFileStatus) {
     mgr_->create_file("/status.txt", "owner1", "grp1", 0644, 2, 64 * kMB);
     auto result = mgr_->get_file_status("/status.txt");
@@ -229,10 +214,7 @@ TEST_F(NamespaceManagerTest, ListStatusOnFile) {
     ASSERT_TRUE(result.hasError());
 }
 
-// ============================================================================
 // resolve_path tests
-// ============================================================================
-
 TEST_F(NamespaceManagerTest, ResolvePathRoot) {
     auto result = mgr_->resolve_path("/");
     ASSERT_TRUE(result.hasValue());
@@ -244,10 +226,7 @@ TEST_F(NamespaceManagerTest, ResolvePathNotFound) {
     ASSERT_TRUE(result.hasError());
 }
 
-// ============================================================================
 // complete_file tests
-// ============================================================================
-
 TEST_F(NamespaceManagerTest, CompleteFile) {
     auto file = mgr_->create_file("/wip.txt", "user1", "grp1", 0644, 3, 128 * kMB);
     ASSERT_TRUE(file.hasValue());
