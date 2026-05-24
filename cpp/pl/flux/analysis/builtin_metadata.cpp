@@ -651,7 +651,7 @@ std::vector<std::string> CompletionParams(const BuiltinSignature& sig) {
             continue;
         }
         if (param.kind == Kind::Optional) {
-            params.push_back("?" + param.name + ":");
+            params.push_back(param.name + ":");
         } else {
             params.push_back(param.name + ":");
         }
