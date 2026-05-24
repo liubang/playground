@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-24 16:02:16</td>
+            <td class="headerValue">2026-05-24 19:38:23</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -98,116 +98,91 @@
 <span id="L27"><span class="lineNum">      27</span>                 :             : </span>
 <span id="L28"><span class="lineNum">      28</span>                 :             : namespace pl::minidfs {</span>
 <span id="L29"><span class="lineNum">      29</span>                 :             : </span>
-<span id="L30"><span class="lineNum">      30</span>                 :             : // ============================================================================</span>
-<span id="L31"><span class="lineNum">      31</span>                 :             : // PipelineTarget — identifies a downstream datanode in the write pipeline.</span>
-<span id="L32"><span class="lineNum">      32</span>                 :             : // ============================================================================</span>
-<span id="L33"><span class="lineNum">      33</span>                 :             : </span>
-<span id="L34"><span class="lineNum">      34</span>   [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          35 : struct PipelineTarget {</span></span>
-<span id="L35"><span class="lineNum">      35</span>                 :             :     std::string host;</span>
-<span id="L36"><span class="lineNum">      36</span>                 :             :     uint32_t data_port = 0;</span>
-<span id="L37"><span class="lineNum">      37</span>                 :             : };</span>
-<span id="L38"><span class="lineNum">      38</span>                 :             : </span>
-<span id="L39"><span class="lineNum">      39</span>                 :             : // ============================================================================</span>
-<span id="L40"><span class="lineNum">      40</span>                 :             : // PacketHeader — header for each data packet in the pipeline protocol.</span>
-<span id="L41"><span class="lineNum">      41</span>                 :             : //</span>
-<span id="L42"><span class="lineNum">      42</span>                 :             : // Wire format (network order):</span>
-<span id="L43"><span class="lineNum">      43</span>                 :             : //   [4B magic][8B block_id][8B generation_stamp][4B chunk_index][4B data_length][4B crc32c]</span>
-<span id="L44"><span class="lineNum">      44</span>                 :             : // ============================================================================</span>
-<span id="L45"><span class="lineNum">      45</span>                 :             : </span>
-<span id="L46"><span class="lineNum">      46</span>                 :             : struct PacketHeader {</span>
-<span id="L47"><span class="lineNum">      47</span>                 :             :     static constexpr uint32_t kMagic = 0x4D504B54; // &quot;MPKT&quot;</span>
-<span id="L48"><span class="lineNum">      48</span>                 :             : </span>
-<span id="L49"><span class="lineNum">      49</span>                 :             :     uint64_t block_id = 0;</span>
-<span id="L50"><span class="lineNum">      50</span>                 :             :     uint64_t generation_stamp = 0;</span>
-<span id="L51"><span class="lineNum">      51</span>                 :             :     uint32_t chunk_index = 0;</span>
-<span id="L52"><span class="lineNum">      52</span>                 :             :     uint32_t data_length = 0;</span>
-<span id="L53"><span class="lineNum">      53</span>                 :             :     uint32_t checksum = 0; // CRC32C of the data payload</span>
+<span id="L30"><span class="lineNum">      30</span>   [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          35 : struct PipelineTarget {</span></span>
+<span id="L31"><span class="lineNum">      31</span>                 :             :     std::string host;</span>
+<span id="L32"><span class="lineNum">      32</span>                 :             :     uint32_t data_port = 0;</span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : };</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             : </span>
+<span id="L35"><span class="lineNum">      35</span>                 :             : // PacketHeader — header for each data packet in the pipeline protocol.</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             : // Wire format (network order):</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             : //   [4B magic][8B block_id][8B generation_stamp][4B chunk_index][4B data_length][4B crc32c]</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             : struct PacketHeader {</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             :     static constexpr uint32_t kMagic = 0x4D504B54; // &quot;MPKT&quot;</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             : </span>
+<span id="L41"><span class="lineNum">      41</span>                 :             :     uint64_t block_id = 0;</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             :     uint64_t generation_stamp = 0;</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             :     uint32_t chunk_index = 0;</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             :     uint32_t data_length = 0;</span>
+<span id="L45"><span class="lineNum">      45</span>                 :             :     uint32_t checksum = 0; // CRC32C of the data payload</span>
+<span id="L46"><span class="lineNum">      46</span>                 :             : };</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             : </span>
+<span id="L48"><span class="lineNum">      48</span>                 :             : enum class AckStatus : uint8_t {</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             :     kSuccess = 0,</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             :     kChecksumError = 1,</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             :     kIOError = 2,</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             :     kDiskFull = 3,</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             :     kDownstreamError = 4,</span>
 <span id="L54"><span class="lineNum">      54</span>                 :             : };</span>
 <span id="L55"><span class="lineNum">      55</span>                 :             : </span>
-<span id="L56"><span class="lineNum">      56</span>                 :             : // ============================================================================</span>
-<span id="L57"><span class="lineNum">      57</span>                 :             : // AckStatus — status codes in pipeline acknowledgment messages.</span>
-<span id="L58"><span class="lineNum">      58</span>                 :             : // ============================================================================</span>
-<span id="L59"><span class="lineNum">      59</span>                 :             : </span>
-<span id="L60"><span class="lineNum">      60</span>                 :             : enum class AckStatus : uint8_t {</span>
-<span id="L61"><span class="lineNum">      61</span>                 :             :     kSuccess = 0,</span>
-<span id="L62"><span class="lineNum">      62</span>                 :             :     kChecksumError = 1,</span>
-<span id="L63"><span class="lineNum">      63</span>                 :             :     kIOError = 2,</span>
-<span id="L64"><span class="lineNum">      64</span>                 :             :     kDiskFull = 3,</span>
-<span id="L65"><span class="lineNum">      65</span>                 :             :     kDownstreamError = 4,</span>
-<span id="L66"><span class="lineNum">      66</span>                 :             : };</span>
-<span id="L67"><span class="lineNum">      67</span>                 :             : </span>
-<span id="L68"><span class="lineNum">      68</span>                 :             : // ============================================================================</span>
-<span id="L69"><span class="lineNum">      69</span>                 :             : // PipelineReceiver — handles the receiving side of the write pipeline.</span>
-<span id="L70"><span class="lineNum">      70</span>                 :             : //</span>
-<span id="L71"><span class="lineNum">      71</span>                 :             : // Protocol for a single block write:</span>
-<span id="L72"><span class="lineNum">      72</span>                 :             : //   1. Client (or upstream DN) opens a connection and sends SetupPacket</span>
-<span id="L73"><span class="lineNum">      73</span>                 :             : //      containing block_id, generation_stamp, inode_id, block_index, and</span>
-<span id="L74"><span class="lineNum">      74</span>                 :             : //      the list of downstream targets.</span>
-<span id="L75"><span class="lineNum">      75</span>                 :             : //   2. This DN opens a connection to the next downstream target (if any).</span>
-<span id="L76"><span class="lineNum">      76</span>                 :             : //   3. For each data chunk:</span>
-<span id="L77"><span class="lineNum">      77</span>                 :             : //      a. Receive PacketHeader + data payload from upstream.</span>
-<span id="L78"><span class="lineNum">      78</span>                 :             : //      b. Verify CRC32C of received data.</span>
-<span id="L79"><span class="lineNum">      79</span>                 :             : //      c. Write chunk to local store (append_chunk).</span>
-<span id="L80"><span class="lineNum">      80</span>                 :             : //      d. Forward PacketHeader + data to downstream (if any).</span>
-<span id="L81"><span class="lineNum">      81</span>                 :             : //      e. Wait for ACK from downstream.</span>
-<span id="L82"><span class="lineNum">      82</span>                 :             : //      f. Send ACK to upstream.</span>
-<span id="L83"><span class="lineNum">      83</span>                 :             : //   4. Receive FinalizePacket → finalize_block locally, forward, ACK.</span>
-<span id="L84"><span class="lineNum">      84</span>                 :             : //</span>
-<span id="L85"><span class="lineNum">      85</span>                 :             : // This class encapsulates the logic for steps 2-4. The actual network I/O</span>
-<span id="L86"><span class="lineNum">      86</span>                 :             : // is abstracted via virtual methods to allow unit testing without real sockets.</span>
-<span id="L87"><span class="lineNum">      87</span>                 :             : // In production, the brpc service layer invokes these methods.</span>
-<span id="L88"><span class="lineNum">      88</span>                 :             : // ============================================================================</span>
-<span id="L89"><span class="lineNum">      89</span>                 :             : </span>
-<span id="L90"><span class="lineNum">      90</span>                 :             : class PipelineReceiver {</span>
-<span id="L91"><span class="lineNum">      91</span>                 :             : public:</span>
-<span id="L92"><span class="lineNum">      92</span>                 :             :     explicit PipelineReceiver(LocalBlockStore* store);</span>
-<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">          14 :     ~PipelineReceiver() = default;</span></span>
-<span id="L94"><span class="lineNum">      94</span>                 :             : </span>
-<span id="L95"><span class="lineNum">      95</span>                 :             :     PipelineReceiver(const PipelineReceiver&amp;) = delete;</span>
-<span id="L96"><span class="lineNum">      96</span>                 :             :     PipelineReceiver&amp; operator=(const PipelineReceiver&amp;) = delete;</span>
-<span id="L97"><span class="lineNum">      97</span>                 :             : </span>
-<span id="L98"><span class="lineNum">      98</span>                 :             :     /// Setup a new pipeline session for writing a block.</span>
-<span id="L99"><span class="lineNum">      99</span>                 :             :     /// Creates the block in tmp/ and records downstream targets.</span>
-<span id="L100"><span class="lineNum">     100</span>                 :             :     pl::Result&lt;pl::Void&gt; setup(uint64_t block_id,</span>
-<span id="L101"><span class="lineNum">     101</span>                 :             :                                uint64_t inode_id,</span>
-<span id="L102"><span class="lineNum">     102</span>                 :             :                                uint32_t block_index,</span>
-<span id="L103"><span class="lineNum">     103</span>                 :             :                                uint64_t generation_stamp,</span>
-<span id="L104"><span class="lineNum">     104</span>                 :             :                                std::vector&lt;PipelineTarget&gt; downstream_targets);</span>
-<span id="L105"><span class="lineNum">     105</span>                 :             : </span>
-<span id="L106"><span class="lineNum">     106</span>                 :             :     /// Receive and process one data packet.</span>
-<span id="L107"><span class="lineNum">     107</span>                 :             :     /// Writes locally, forwards downstream (if targets exist), returns ACK status.</span>
-<span id="L108"><span class="lineNum">     108</span>                 :             :     pl::Result&lt;AckStatus&gt; receive_packet(const PacketHeader&amp; header,</span>
-<span id="L109"><span class="lineNum">     109</span>                 :             :                                          const void* data,</span>
-<span id="L110"><span class="lineNum">     110</span>                 :             :                                          uint32_t data_length);</span>
-<span id="L111"><span class="lineNum">     111</span>                 :             : </span>
-<span id="L112"><span class="lineNum">     112</span>                 :             :     /// Finalize the current block write session.</span>
-<span id="L113"><span class="lineNum">     113</span>                 :             :     /// Moves block from tmp/ to current/, notifies downstream.</span>
-<span id="L114"><span class="lineNum">     114</span>                 :             :     pl::Result&lt;pl::Void&gt; finalize(uint64_t block_id, uint64_t generation_stamp);</span>
-<span id="L115"><span class="lineNum">     115</span>                 :             : </span>
-<span id="L116"><span class="lineNum">     116</span>                 :             :     /// Abort the current session (e.g., on error). Removes tmp block.</span>
-<span id="L117"><span class="lineNum">     117</span>                 :             :     void abort(uint64_t block_id, uint64_t generation_stamp);</span>
-<span id="L118"><span class="lineNum">     118</span>                 :             : </span>
-<span id="L119"><span class="lineNum">     119</span>                 :             :     /// Get the downstream targets for the current session.</span>
-<span id="L120"><span class="lineNum">     120</span>                 :             :     const std::vector&lt;PipelineTarget&gt;&amp; downstream_targets() const { return downstream_targets_; }</span>
-<span id="L121"><span class="lineNum">     121</span>                 :             : </span>
-<span id="L122"><span class="lineNum">     122</span>                 :             : protected:</span>
-<span id="L123"><span class="lineNum">     123</span>                 :             :     /// Forward a packet to the next downstream datanode.</span>
-<span id="L124"><span class="lineNum">     124</span>                 :             :     /// Override in tests to avoid real network I/O.</span>
-<span id="L125"><span class="lineNum">     125</span>                 :             :     virtual pl::Result&lt;AckStatus&gt; forward_to_downstream(const PacketHeader&amp; header,</span>
-<span id="L126"><span class="lineNum">     126</span>                 :             :                                                         const void* data,</span>
-<span id="L127"><span class="lineNum">     127</span>                 :             :                                                         uint32_t data_length);</span>
-<span id="L128"><span class="lineNum">     128</span>                 :             : </span>
-<span id="L129"><span class="lineNum">     129</span>                 :             :     /// Forward finalize to downstream.</span>
-<span id="L130"><span class="lineNum">     130</span>                 :             :     virtual pl::Result&lt;pl::Void&gt; forward_finalize(uint64_t block_id, uint64_t generation_stamp);</span>
-<span id="L131"><span class="lineNum">     131</span>                 :             : </span>
-<span id="L132"><span class="lineNum">     132</span>                 :             : private:</span>
-<span id="L133"><span class="lineNum">     133</span>                 :             :     LocalBlockStore* store_;</span>
-<span id="L134"><span class="lineNum">     134</span>                 :             :     std::vector&lt;PipelineTarget&gt; downstream_targets_;</span>
-<span id="L135"><span class="lineNum">     135</span>                 :             :     uint64_t active_block_id_ = 0;</span>
-<span id="L136"><span class="lineNum">     136</span>                 :             :     uint64_t active_generation_stamp_ = 0;</span>
-<span id="L137"><span class="lineNum">     137</span>                 :             : };</span>
-<span id="L138"><span class="lineNum">     138</span>                 :             : </span>
-<span id="L139"><span class="lineNum">     139</span>                 :             : } // namespace pl::minidfs</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             : // PipelineReceiver — handles the receiving side of the write pipeline.</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             : //</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             : // Protocol for a single block write:</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             : //   1. Client sends SetupPacket with block metadata and downstream targets.</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             : //   2. This DN opens a connection to the next downstream target (if any).</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             : //   3. For each data chunk: receive, verify CRC, write locally, forward, ACK.</span>
+<span id="L62"><span class="lineNum">      62</span>                 :             : //   4. On FinalizePacket: finalize_block locally, forward, ACK.</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             : //</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             : // Network I/O is abstracted via virtual methods for testability.</span>
+<span id="L65"><span class="lineNum">      65</span>                 :             : class PipelineReceiver {</span>
+<span id="L66"><span class="lineNum">      66</span>                 :             : public:</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             :     explicit PipelineReceiver(LocalBlockStore* store);</span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">          14 :     ~PipelineReceiver() = default;</span></span>
+<span id="L69"><span class="lineNum">      69</span>                 :             : </span>
+<span id="L70"><span class="lineNum">      70</span>                 :             :     PipelineReceiver(const PipelineReceiver&amp;) = delete;</span>
+<span id="L71"><span class="lineNum">      71</span>                 :             :     PipelineReceiver&amp; operator=(const PipelineReceiver&amp;) = delete;</span>
+<span id="L72"><span class="lineNum">      72</span>                 :             : </span>
+<span id="L73"><span class="lineNum">      73</span>                 :             :     /// Setup a new pipeline session for writing a block.</span>
+<span id="L74"><span class="lineNum">      74</span>                 :             :     /// Creates the block in tmp/ and records downstream targets.</span>
+<span id="L75"><span class="lineNum">      75</span>                 :             :     pl::Result&lt;pl::Void&gt; setup(uint64_t block_id,</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             :                                uint64_t inode_id,</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             :                                uint32_t block_index,</span>
+<span id="L78"><span class="lineNum">      78</span>                 :             :                                uint64_t generation_stamp,</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             :                                std::vector&lt;PipelineTarget&gt; downstream_targets);</span>
+<span id="L80"><span class="lineNum">      80</span>                 :             : </span>
+<span id="L81"><span class="lineNum">      81</span>                 :             :     /// Receive and process one data packet.</span>
+<span id="L82"><span class="lineNum">      82</span>                 :             :     /// Writes locally, forwards downstream (if targets exist), returns ACK status.</span>
+<span id="L83"><span class="lineNum">      83</span>                 :             :     pl::Result&lt;AckStatus&gt; receive_packet(const PacketHeader&amp; header,</span>
+<span id="L84"><span class="lineNum">      84</span>                 :             :                                          const void* data,</span>
+<span id="L85"><span class="lineNum">      85</span>                 :             :                                          uint32_t data_length);</span>
+<span id="L86"><span class="lineNum">      86</span>                 :             : </span>
+<span id="L87"><span class="lineNum">      87</span>                 :             :     /// Finalize the current block write session.</span>
+<span id="L88"><span class="lineNum">      88</span>                 :             :     /// Moves block from tmp/ to current/, notifies downstream.</span>
+<span id="L89"><span class="lineNum">      89</span>                 :             :     pl::Result&lt;pl::Void&gt; finalize(uint64_t block_id, uint64_t generation_stamp);</span>
+<span id="L90"><span class="lineNum">      90</span>                 :             : </span>
+<span id="L91"><span class="lineNum">      91</span>                 :             :     /// Abort the current session (e.g., on error). Removes tmp block.</span>
+<span id="L92"><span class="lineNum">      92</span>                 :             :     void abort(uint64_t block_id, uint64_t generation_stamp);</span>
+<span id="L93"><span class="lineNum">      93</span>                 :             : </span>
+<span id="L94"><span class="lineNum">      94</span>                 :             :     /// Get the downstream targets for the current session.</span>
+<span id="L95"><span class="lineNum">      95</span>                 :             :     const std::vector&lt;PipelineTarget&gt;&amp; downstream_targets() const { return downstream_targets_; }</span>
+<span id="L96"><span class="lineNum">      96</span>                 :             : </span>
+<span id="L97"><span class="lineNum">      97</span>                 :             : protected:</span>
+<span id="L98"><span class="lineNum">      98</span>                 :             :     /// Forward a packet to the next downstream datanode.</span>
+<span id="L99"><span class="lineNum">      99</span>                 :             :     /// Override in tests to avoid real network I/O.</span>
+<span id="L100"><span class="lineNum">     100</span>                 :             :     virtual pl::Result&lt;AckStatus&gt; forward_to_downstream(const PacketHeader&amp; header,</span>
+<span id="L101"><span class="lineNum">     101</span>                 :             :                                                         const void* data,</span>
+<span id="L102"><span class="lineNum">     102</span>                 :             :                                                         uint32_t data_length);</span>
+<span id="L103"><span class="lineNum">     103</span>                 :             : </span>
+<span id="L104"><span class="lineNum">     104</span>                 :             :     /// Forward finalize to downstream.</span>
+<span id="L105"><span class="lineNum">     105</span>                 :             :     virtual pl::Result&lt;pl::Void&gt; forward_finalize(uint64_t block_id, uint64_t generation_stamp);</span>
+<span id="L106"><span class="lineNum">     106</span>                 :             : </span>
+<span id="L107"><span class="lineNum">     107</span>                 :             : private:</span>
+<span id="L108"><span class="lineNum">     108</span>                 :             :     LocalBlockStore* store_;</span>
+<span id="L109"><span class="lineNum">     109</span>                 :             :     std::vector&lt;PipelineTarget&gt; downstream_targets_;</span>
+<span id="L110"><span class="lineNum">     110</span>                 :             :     uint64_t active_block_id_ = 0;</span>
+<span id="L111"><span class="lineNum">     111</span>                 :             :     uint64_t active_generation_stamp_ = 0;</span>
+<span id="L112"><span class="lineNum">     112</span>                 :             : };</span>
+<span id="L113"><span class="lineNum">     113</span>                 :             : </span>
+<span id="L114"><span class="lineNum">     114</span>                 :             : } // namespace pl::minidfs</span>
         </pre>
               </td>
             </tr>

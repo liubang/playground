@@ -32,12 +32,12 @@
             <td></td>
             <td class="headerItem">Lines:</td>
             <td class="headerCovTableEntryMed">86.8&nbsp;%</td>
-            <td class="headerCovTableEntry">690</td>
-            <td class="headerCovTableEntry">599</td>
+            <td class="headerCovTableEntry">692</td>
+            <td class="headerCovTableEntry">601</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-24 16:02:16</td>
+            <td class="headerValue">2026-05-24 19:38:23</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -1111,9 +1111,9 @@
 <span id="L975"><span class="lineNum">     975</span>                 :             :     }</span>
 <span id="L976"><span class="lineNum">     976</span>                 :             :     const auto count =</span>
 <span id="L977"><span class="lineNum">     977</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :         *n_or &lt;= 0 ? 0 : std::min(static_cast&lt;size_t&gt;(*n_or), (*arr_or)-&gt;elements.size());</span></span>
-<span id="L978"><span class="lineNum">     978</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :     return Value::array(std::vector&lt;Value&gt;(</span></span>
-<span id="L979"><span class="lineNum">     979</span>                 :             :         (*arr_or)-&gt;elements.begin(),</span>
-<span id="L980"><span class="lineNum">     980</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           4 :         std::next((*arr_or)-&gt;elements.begin(), static_cast&lt;int64_t&gt;(count))));</span></span>
+<span id="L978"><span class="lineNum">     978</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :     return Value::array(</span></span>
+<span id="L979"><span class="lineNum">     979</span>                 :<span class="tlaGNC">           2 :         std::vector&lt;Value&gt;((*arr_or)-&gt;elements.begin(),</span></span>
+<span id="L980"><span class="lineNum">     980</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           4 :                            std::next((*arr_or)-&gt;elements.begin(), static_cast&lt;int64_t&gt;(count))));</span></span>
 <span id="L981"><span class="lineNum">     981</span>                 :             : }</span>
 <span id="L982"><span class="lineNum">     982</span>                 :             : </span>
 <span id="L983"><span class="lineNum">     983</span>                 :<span class="tlaGNC">           2 : absl::StatusOr&lt;Value&gt; builtin_array_drop(const std::vector&lt;Value&gt;&amp; args) {</span></span>
@@ -1133,9 +1133,9 @@
 <span id="L995"><span class="lineNum">     995</span>                 :             :     }</span>
 <span id="L996"><span class="lineNum">     996</span>                 :             :     const auto count =</span>
 <span id="L997"><span class="lineNum">     997</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :         *n_or &lt;= 0 ? 0 : std::min(static_cast&lt;size_t&gt;(*n_or), (*arr_or)-&gt;elements.size());</span></span>
-<span id="L998"><span class="lineNum">     998</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :     return Value::array(std::vector&lt;Value&gt;(</span></span>
-<span id="L999"><span class="lineNum">     999</span>                 :             :         std::next((*arr_or)-&gt;elements.begin(), static_cast&lt;int64_t&gt;(count)),</span>
-<span id="L1000"><span class="lineNum">    1000</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :         (*arr_or)-&gt;elements.end()));</span></span>
+<span id="L998"><span class="lineNum">     998</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :     return Value::array(</span></span>
+<span id="L999"><span class="lineNum">     999</span>                 :<span class="tlaGNC">           2 :         std::vector&lt;Value&gt;(std::next((*arr_or)-&gt;elements.begin(), static_cast&lt;int64_t&gt;(count)),</span></span>
+<span id="L1000"><span class="lineNum">    1000</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :                            (*arr_or)-&gt;elements.end()));</span></span>
 <span id="L1001"><span class="lineNum">    1001</span>                 :             : }</span>
 <span id="L1002"><span class="lineNum">    1002</span>                 :             : </span>
 <span id="L1003"><span class="lineNum">    1003</span>                 :<span class="tlaGNC">           2 : absl::StatusOr&lt;Value&gt; builtin_array_reverse(const std::vector&lt;Value&gt;&amp; args) {</span></span>

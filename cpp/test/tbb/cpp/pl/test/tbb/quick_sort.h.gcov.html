@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-24 16:02:16</td>
+            <td class="headerValue">2026-05-24 19:38:23</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">71.4&nbsp;%</td>
@@ -94,60 +94,60 @@
 <span id="L23"><span class="lineNum">      23</span>                 :             : </span>
 <span id="L24"><span class="lineNum">      24</span>                 :             : namespace pl {</span>
 <span id="L25"><span class="lineNum">      25</span>                 :             : </span>
-<span id="L26"><span class="lineNum">      26</span>                 :<span class="tlaGNC tlaBgGNC">       96301 : template &lt;typename T&gt; void quick_sort(T* data, size_t size) {</span></span>
-<span id="L27"><span class="lineNum">      27</span>         [<span class="tlaGBC" title="Branch 0 was taken 96304 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 96188 times"> + </span>]:<span class="tlaGNC">      192492 :     if (size &lt; 1)</span></span>
+<span id="L26"><span class="lineNum">      26</span>                 :<span class="tlaGNC tlaBgGNC">      329990 : template &lt;typename T&gt; void quick_sort(T* data, size_t size) {</span></span>
+<span id="L27"><span class="lineNum">      27</span>         [<span class="tlaGBC" title="Branch 0 was taken 330009 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 329498 times"> + </span>]:<span class="tlaGNC">      659507 :     if (size &lt; 1)</span></span>
 <span id="L28"><span class="lineNum">      28</span>                 :             :         return;</span>
 <span id="L29"><span class="lineNum">      29</span>                 :             :     size_t mid = std::hash&lt;size_t&gt;{}(size);</span>
-<span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC">       96188 :     mid ^= std::hash&lt;void*&gt;{}(static_cast&lt;void*&gt;(data));</span></span>
-<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaGNC">       96188 :     mid %= size;</span></span>
-<span id="L32"><span class="lineNum">      32</span>                 :<span class="tlaGNC">       96188 :     std::swap(data[0], data[mid]);</span></span>
-<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC">       96188 :     T pivot = data[0];</span></span>
-<span id="L34"><span class="lineNum">      34</span>                 :<span class="tlaGNC">       96188 :     size_t left = 0, right = size - 1;</span></span>
-<span id="L35"><span class="lineNum">      35</span>         [<span class="tlaGBC" title="Branch 0 was taken 219290 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 96188 times"> + </span>]:<span class="tlaGNC">      315478 :     while (left &lt; right) {</span></span>
-<span id="L36"><span class="lineNum">      36</span>   [<span class="tlaGBC" title="Branch 0 was taken 547782 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 23938 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 352430 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 195352 times"> + </span>]:<span class="tlaGNC">      571720 :         while (left &lt; right &amp;&amp; !(data[right] &lt; pivot))</span></span>
-<span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC">      352430 :             right--;</span></span>
-<span id="L38"><span class="lineNum">      38</span>         [<span class="tlaGBC" title="Branch 0 was taken 195361 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 23929 times"> + </span>]:<span class="tlaGNC">      219290 :         if (left &lt; right)</span></span>
-<span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaGNC">      195361 :             data[left++] = data[right];</span></span>
-<span id="L40"><span class="lineNum">      40</span>   [<span class="tlaGBC" title="Branch 0 was taken 486073 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 55889 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 322672 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 163401 times"> + </span>]:<span class="tlaGNC">      541962 :         while (left &lt; right &amp;&amp; data[left] &lt; pivot)</span></span>
-<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">      322672 :             left++;</span></span>
-<span id="L42"><span class="lineNum">      42</span>         [<span class="tlaGBC" title="Branch 0 was taken 163402 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 55888 times"> + </span>]:<span class="tlaGNC">      219290 :         if (left &lt; right)</span></span>
-<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">      163402 :             data[right--] = data[left];</span></span>
+<span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC">      329498 :     mid ^= std::hash&lt;void*&gt;{}(static_cast&lt;void*&gt;(data));</span></span>
+<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaGNC">      329498 :     mid %= size;</span></span>
+<span id="L32"><span class="lineNum">      32</span>                 :<span class="tlaGNC">      329498 :     std::swap(data[0], data[mid]);</span></span>
+<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC">      329498 :     T pivot = data[0];</span></span>
+<span id="L34"><span class="lineNum">      34</span>                 :<span class="tlaGNC">      329498 :     size_t left = 0, right = size - 1;</span></span>
+<span id="L35"><span class="lineNum">      35</span>         [<span class="tlaGBC" title="Branch 0 was taken 733236 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 329498 times"> + </span>]:<span class="tlaGNC">     1062734 :     while (left &lt; right) {</span></span>
+<span id="L36"><span class="lineNum">      36</span>   [<span class="tlaGBC" title="Branch 0 was taken 1846252 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 82146 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1195162 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 651090 times"> + </span>]:<span class="tlaGNC">     1928398 :         while (left &lt; right &amp;&amp; !(data[right] &lt; pivot))</span></span>
+<span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC">     1195162 :             right--;</span></span>
+<span id="L38"><span class="lineNum">      38</span>         [<span class="tlaGBC" title="Branch 0 was taken 651091 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 82145 times"> + </span>]:<span class="tlaGNC">      733236 :         if (left &lt; right)</span></span>
+<span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaGNC">      651091 :             data[left++] = data[right];</span></span>
+<span id="L40"><span class="lineNum">      40</span>   [<span class="tlaGBC" title="Branch 0 was taken 1652003 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 191801 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 1110568 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 541435 times"> + </span>]:<span class="tlaGNC">     1843804 :         while (left &lt; right &amp;&amp; data[left] &lt; pivot)</span></span>
+<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">     1110568 :             left++;</span></span>
+<span id="L42"><span class="lineNum">      42</span>         [<span class="tlaGBC" title="Branch 0 was taken 541432 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 191804 times"> + </span>]:<span class="tlaGNC">      733236 :         if (left &lt; right)</span></span>
+<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">      541432 :             data[right--] = data[left];</span></span>
 <span id="L44"><span class="lineNum">      44</span>                 :             :     }</span>
-<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">       96188 :     data[left] = pivot;</span></span>
-<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">       96188 :     quick_sort(data, left);</span></span>
-<span id="L47"><span class="lineNum">      47</span>                 :<span class="tlaGNC">       96191 :     quick_sort(data + left + 1, size - left - 1);</span></span>
+<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">      329498 :     data[left] = pivot;</span></span>
+<span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">      329498 :     quick_sort(data, left);</span></span>
+<span id="L47"><span class="lineNum">      47</span>                 :<span class="tlaGNC">      329517 :     quick_sort(data + left + 1, size - left - 1);</span></span>
 <span id="L48"><span class="lineNum">      48</span>                 :             : }</span>
 <span id="L49"><span class="lineNum">      49</span>                 :             : </span>
-<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC">          20 : template &lt;typename T&gt; void quick_sort2(T* data, size_t size) {</span></span>
-<span id="L51"><span class="lineNum">      51</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 20 times"> + </span>]:<span class="tlaGNC">          20 :     if (size &lt; 1)</span></span>
+<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC">         164 : template &lt;typename T&gt; void quick_sort2(T* data, size_t size) {</span></span>
+<span id="L51"><span class="lineNum">      51</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 164 times"> + </span>]:<span class="tlaGNC">         164 :     if (size &lt; 1)</span></span>
 <span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return;</span></span>
 <span id="L53"><span class="lineNum">      53</span>                 :             :     size_t mid = std::hash&lt;size_t&gt;{}(size);</span>
-<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC tlaBgGNC">          20 :     mid ^= std::hash&lt;void*&gt;{}(static_cast&lt;void*&gt;(data));</span></span>
-<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">          20 :     mid %= size;</span></span>
-<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC">          20 :     std::swap(data[0], data[mid]);</span></span>
-<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">          20 :     T pivot = data[0];</span></span>
-<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">          20 :     size_t left = 0, right = size - 1;</span></span>
-<span id="L59"><span class="lineNum">      59</span>         [<span class="tlaGBC" title="Branch 0 was taken 3241 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 20 times"> + </span>]:<span class="tlaGNC">        3281 :     while (left &lt; right) {</span></span>
-<span id="L60"><span class="lineNum">      60</span>   [<span class="tlaGBC" title="Branch 0 was taken 10489 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 7256 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 3233 times"> + </span>]:<span class="tlaGNC">       10497 :         while (left &lt; right &amp;&amp; !(data[right] &lt; pivot))</span></span>
-<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">        7256 :             right--;</span></span>
-<span id="L62"><span class="lineNum">      62</span>         [<span class="tlaGBC" title="Branch 0 was taken 3233 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span>]:<span class="tlaGNC">        3241 :         if (left &lt; right)</span></span>
-<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC">        3233 :             data[left++] = data[right];</span></span>
-<span id="L64"><span class="lineNum">      64</span>   [<span class="tlaGBC" title="Branch 0 was taken 9971 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 18 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 6748 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 3223 times"> + </span>]:<span class="tlaGNC">        9989 :         while (left &lt; right &amp;&amp; data[left] &lt; pivot)</span></span>
-<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">        6748 :             left++;</span></span>
-<span id="L66"><span class="lineNum">      66</span>         [<span class="tlaGBC" title="Branch 0 was taken 3223 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 18 times"> + </span>]:<span class="tlaGNC">        3241 :         if (left &lt; right)</span></span>
-<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">        3223 :             data[right--] = data[left];</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC tlaBgGNC">         164 :     mid ^= std::hash&lt;void*&gt;{}(static_cast&lt;void*&gt;(data));</span></span>
+<span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">         164 :     mid %= size;</span></span>
+<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC">         164 :     std::swap(data[0], data[mid]);</span></span>
+<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">         164 :     T pivot = data[0];</span></span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">         164 :     size_t left = 0, right = size - 1;</span></span>
+<span id="L59"><span class="lineNum">      59</span>         [<span class="tlaGBC" title="Branch 0 was taken 26882 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 164 times"> + </span>]:<span class="tlaGNC">       27210 :     while (left &lt; right) {</span></span>
+<span id="L60"><span class="lineNum">      60</span>   [<span class="tlaGBC" title="Branch 0 was taken 88091 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 59 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 61268 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 26823 times"> + </span>]:<span class="tlaGNC">       88150 :         while (left &lt; right &amp;&amp; !(data[right] &lt; pivot))</span></span>
+<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">       61268 :             right--;</span></span>
+<span id="L62"><span class="lineNum">      62</span>         [<span class="tlaGBC" title="Branch 0 was taken 26823 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 59 times"> + </span>]:<span class="tlaGNC">       26882 :         if (left &lt; right)</span></span>
+<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC">       26823 :             data[left++] = data[right];</span></span>
+<span id="L64"><span class="lineNum">      64</span>   [<span class="tlaGBC" title="Branch 0 was taken 79681 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 141 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 52940 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 26741 times"> + </span>]:<span class="tlaGNC">       79822 :         while (left &lt; right &amp;&amp; data[left] &lt; pivot)</span></span>
+<span id="L65"><span class="lineNum">      65</span>                 :<span class="tlaGNC">       52940 :             left++;</span></span>
+<span id="L66"><span class="lineNum">      66</span>         [<span class="tlaGBC" title="Branch 0 was taken 26741 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 141 times"> + </span>]:<span class="tlaGNC">       26882 :         if (left &lt; right)</span></span>
+<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">       26741 :             data[right--] = data[left];</span></span>
 <span id="L68"><span class="lineNum">      68</span>                 :             :     }</span>
-<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC">          20 :     data[left] = pivot;</span></span>
-<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">          20 :     tbb::parallel_invoke([&amp;] { quick_sort(data, left); },</span></span>
-<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">          40 :                          [&amp;] { quick_sort(data + left + 1, size - left - 1); });</span></span>
+<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC">         164 :     data[left] = pivot;</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">         164 :     tbb::parallel_invoke([&amp;] { quick_sort(data, left); },</span></span>
+<span id="L71"><span class="lineNum">      71</span>                 :<span class="tlaGNC">         328 :                          [&amp;] { quick_sort(data + left + 1, size - left - 1); });</span></span>
 <span id="L72"><span class="lineNum">      72</span>                 :             : }</span>
 <span id="L73"><span class="lineNum">      73</span>                 :             : </span>
-<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">          92 : template &lt;typename T&gt; void quick_sort3(T* data, size_t size) {</span></span>
-<span id="L75"><span class="lineNum">      75</span>         [<span class="tlaGBC" title="Branch 0 was taken 92 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          92 :     if (size &lt; 1)</span></span>
-<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">          92 :         return;</span></span>
-<span id="L77"><span class="lineNum">      77</span>         [<span class="tlaGBC" title="Branch 0 was taken 92 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          92 :     if (size &lt; (1 &lt;&lt; 16)) {</span></span>
-<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC">          92 :         std::sort(data, data + size, std::less&lt;T&gt;{});</span></span>
-<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaGNC">          92 :         return;</span></span>
+<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">         220 : template &lt;typename T&gt; void quick_sort3(T* data, size_t size) {</span></span>
+<span id="L75"><span class="lineNum">      75</span>         [<span class="tlaGBC" title="Branch 0 was taken 220 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         220 :     if (size &lt; 1)</span></span>
+<span id="L76"><span class="lineNum">      76</span>                 :<span class="tlaGNC">         220 :         return;</span></span>
+<span id="L77"><span class="lineNum">      77</span>         [<span class="tlaGBC" title="Branch 0 was taken 220 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         220 :     if (size &lt; (1 &lt;&lt; 16)) {</span></span>
+<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC">         220 :         std::sort(data, data + size, std::less&lt;T&gt;{});</span></span>
+<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaGNC">         220 :         return;</span></span>
 <span id="L80"><span class="lineNum">      80</span>                 :             :     }</span>
 <span id="L81"><span class="lineNum">      81</span>                 :             :     size_t mid = std::hash&lt;size_t&gt;{}(size);</span>
 <span id="L82"><span class="lineNum">      82</span>                 :<span class="tlaUNC tlaBgUNC">           0 :     mid ^= std::hash&lt;void*&gt;{}(static_cast&lt;void*&gt;(data));</span></span>

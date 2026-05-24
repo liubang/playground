@@ -31,27 +31,27 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">90.5&nbsp;%</td>
-            <td class="headerCovTableEntry">84</td>
-            <td class="headerCovTableEntry">76</td>
+            <td class="headerCovTableEntryMed">88.2&nbsp;%</td>
+            <td class="headerCovTableEntry">102</td>
+            <td class="headerCovTableEntry">90</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-24 16:02:16</td>
+            <td class="headerValue">2026-05-24 19:38:23</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">6</td>
-            <td class="headerCovTableEntry">6</td>
+            <td class="headerCovTableEntry">7</td>
+            <td class="headerCovTableEntry">7</td>
           </tr>
           <tr>
             <td></td>
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">58.1&nbsp;%</td>
-            <td class="headerCovTableEntry">74</td>
-            <td class="headerCovTableEntry">43</td>
+            <td class="headerCovTableEntryLo">58.2&nbsp;%</td>
+            <td class="headerCovTableEntry">98</td>
+            <td class="headerCovTableEntry">57</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -88,178 +88,206 @@
 <span id="L17"><span class="lineNum">      17</span>                 :             : </span>
 <span id="L18"><span class="lineNum">      18</span>                 :             : #include &quot;cpp/pl/minidfs/namenode/block_manager.h&quot;</span>
 <span id="L19"><span class="lineNum">      19</span>                 :             : </span>
-<span id="L20"><span class="lineNum">      20</span>                 :             : #include &lt;chrono&gt;</span>
-<span id="L21"><span class="lineNum">      21</span>                 :             : #include &lt;fmt/format.h&gt;</span>
-<span id="L22"><span class="lineNum">      22</span>                 :             : </span>
-<span id="L23"><span class="lineNum">      23</span>                 :             : #include &quot;cpp/pl/minidfs/common/error_code.h&quot;</span>
+<span id="L20"><span class="lineNum">      20</span>                 :             : #include &lt;fmt/format.h&gt;</span>
+<span id="L21"><span class="lineNum">      21</span>                 :             : </span>
+<span id="L22"><span class="lineNum">      22</span>                 :             : #include &quot;cpp/pl/minidfs/common/error_code.h&quot;</span>
+<span id="L23"><span class="lineNum">      23</span>                 :             : #include &quot;cpp/pl/minidfs/common/time_util.h&quot;</span>
 <span id="L24"><span class="lineNum">      24</span>                 :             : #include &quot;cpp/pl/minidfs/namenode/placement_manager.h&quot;</span>
 <span id="L25"><span class="lineNum">      25</span>                 :             : </span>
 <span id="L26"><span class="lineNum">      26</span>                 :             : namespace pl::minidfs {</span>
 <span id="L27"><span class="lineNum">      27</span>                 :             : </span>
-<span id="L28"><span class="lineNum">      28</span>                 :             : namespace {</span>
-<span id="L29"><span class="lineNum">      29</span>                 :             : </span>
-<span id="L30"><span class="lineNum">      30</span>                 :             : uint64_t now_ms() {</span>
-<span id="L31"><span class="lineNum">      31</span>                 :             :     return static_cast&lt;uint64_t&gt;(std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(</span>
-<span id="L32"><span class="lineNum">      32</span>                 :<span class="tlaGNC tlaBgGNC">           7 :                                      std::chrono::system_clock::now().time_since_epoch())</span></span>
-<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC">          11 :                                      .count());</span></span>
-<span id="L34"><span class="lineNum">      34</span>                 :             : }</span>
-<span id="L35"><span class="lineNum">      35</span>                 :             : </span>
-<span id="L36"><span class="lineNum">      36</span>                 :             : } // namespace</span>
-<span id="L37"><span class="lineNum">      37</span>                 :             : </span>
-<span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC">           7 : BlockManager::BlockManager(MetadataStore* store, PlacementManager* placement)</span></span>
-<span id="L39"><span class="lineNum">      39</span>                 :<span class="tlaGNC">           7 :     : store_(store), placement_(placement) {}</span></span>
-<span id="L40"><span class="lineNum">      40</span>                 :             : </span>
-<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">          10 : uint64_t BlockManager::next_generation_stamp() {</span></span>
-<span id="L42"><span class="lineNum">      42</span>                 :<span class="tlaGNC">          10 :     return generation_stamp_counter_.fetch_add(1, std::memory_order_relaxed) + 1;</span></span>
-<span id="L43"><span class="lineNum">      43</span>                 :             : }</span>
-<span id="L44"><span class="lineNum">      44</span>                 :             : </span>
-<span id="L45"><span class="lineNum">      45</span>                 :<span class="tlaGNC">           7 : pl::Result&lt;LocatedBlock&gt; BlockManager::allocate_block(uint64_t inode_id,</span></span>
-<span id="L46"><span class="lineNum">      46</span>                 :             :                                                       uint32_t block_index,</span>
-<span id="L47"><span class="lineNum">      47</span>                 :             :                                                       uint32_t replication) {</span>
-<span id="L48"><span class="lineNum">      48</span>                 :             :     // Allocate a block ID.</span>
-<span id="L49"><span class="lineNum">      49</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">           7 :     auto id_result = store_-&gt;alloc_id(&quot;block&quot;);</span></span>
-<span id="L50"><span class="lineNum">      50</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">           7 :     if (id_result.hasError()) {</span></span>
-<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(id_result.error());</span></span>
-<span id="L52"><span class="lineNum">      52</span>                 :             :     }</span>
-<span id="L53"><span class="lineNum">      53</span>                 :             : </span>
-<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC tlaBgGNC">           7 :     uint64_t block_id = id_result.value();</span></span>
-<span id="L55"><span class="lineNum">      55</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :     uint64_t gen = next_generation_stamp();</span></span>
-<span id="L56"><span class="lineNum">      56</span>                 :             :     uint64_t ts = now_ms();</span>
-<span id="L57"><span class="lineNum">      57</span>                 :             : </span>
-<span id="L58"><span class="lineNum">      58</span>                 :             :     // Create block metadata entry (state = Allocating).</span>
-<span id="L59"><span class="lineNum">      59</span>                 :<span class="tlaGNC">           7 :     BlockMeta block;</span></span>
-<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC">           7 :     block.block_id = block_id;</span></span>
-<span id="L61"><span class="lineNum">      61</span>                 :<span class="tlaGNC">           7 :     block.inode_id = inode_id;</span></span>
-<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaGNC">           7 :     block.block_index = block_index;</span></span>
-<span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC">           7 :     block.generation_stamp = gen;</span></span>
-<span id="L64"><span class="lineNum">      64</span>                 :             :     block.length = 0;</span>
-<span id="L65"><span class="lineNum">      65</span>                 :             :     block.state = BlockState::kAllocating;</span>
-<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">           7 :     block.desired_replica = replication;</span></span>
-<span id="L67"><span class="lineNum">      67</span>                 :<span class="tlaGNC">           7 :     block.ctime_ms = ts;</span></span>
-<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">           7 :     block.mtime_ms = ts;</span></span>
-<span id="L69"><span class="lineNum">      69</span>                 :             : </span>
-<span id="L70"><span class="lineNum">      70</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :     auto create_res = store_-&gt;create_block(block);</span></span>
-<span id="L71"><span class="lineNum">      71</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">           7 :     if (create_res.hasError()) {</span></span>
-<span id="L72"><span class="lineNum">      72</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(create_res.error());</span></span>
-<span id="L73"><span class="lineNum">      73</span>                 :             :     }</span>
-<span id="L74"><span class="lineNum">      74</span>                 :             : </span>
-<span id="L75"><span class="lineNum">      75</span>                 :             :     // Select datanodes for placement.</span>
-<span id="L76"><span class="lineNum">      76</span>   [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 7 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           7 :     auto targets = placement_-&gt;choose_targets(replication, std::nullopt);</span></span>
-<span id="L77"><span class="lineNum">      77</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">           7 :     if (targets.hasError()) {</span></span>
-<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(targets.error());</span></span>
-<span id="L79"><span class="lineNum">      79</span>                 :             :     }</span>
-<span id="L80"><span class="lineNum">      80</span>                 :             : </span>
-<span id="L81"><span class="lineNum">      81</span>                 :             :     // Register replicas (state = Writing).</span>
-<span id="L82"><span class="lineNum">      82</span>         [<span class="tlaGBC" title="Branch 0 was taken 21 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          28 :     for (const auto&amp; dn : targets.value()) {</span></span>
-<span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">          21 :         BlockReplica replica;</span></span>
-<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC">          21 :         replica.block_id = block_id;</span></span>
-<span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC">          21 :         replica.datanode_id = dn.datanode_id;</span></span>
-<span id="L86"><span class="lineNum">      86</span>                 :             :         replica.storage_id = 0;</span>
-<span id="L87"><span class="lineNum">      87</span>                 :             :         replica.state = ReplicaState::kWriting;</span>
-<span id="L88"><span class="lineNum">      88</span>                 :             :         replica.length = 0;</span>
-<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC">          21 :         replica.generation_stamp = gen;</span></span>
-<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">          21 :         replica.report_time_ms = ts;</span></span>
-<span id="L91"><span class="lineNum">      91</span>                 :             : </span>
-<span id="L92"><span class="lineNum">      92</span>         [<span class="tlaGBC" title="Branch 0 was taken 21 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          21 :         auto upsert_res = store_-&gt;upsert_replica(replica);</span></span>
-<span id="L93"><span class="lineNum">      93</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 21 times"> + </span>]:<span class="tlaGNC">          21 :         if (upsert_res.hasError()) {</span></span>
-<span id="L94"><span class="lineNum">      94</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             return folly::makeUnexpected(upsert_res.error());</span></span>
-<span id="L95"><span class="lineNum">      95</span>                 :             :         }</span>
-<span id="L96"><span class="lineNum">      96</span>                 :             :     }</span>
-<span id="L97"><span class="lineNum">      97</span>                 :             : </span>
-<span id="L98"><span class="lineNum">      98</span>                 :             :     // Build LocatedBlock response.</span>
-<span id="L99"><span class="lineNum">      99</span>                 :<span class="tlaGNC tlaBgGNC">           7 :     LocatedBlock located;</span></span>
-<span id="L100"><span class="lineNum">     100</span>                 :<span class="tlaGNC">           7 :     located.block_id = block_id;</span></span>
-<span id="L101"><span class="lineNum">     101</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           7 :     located.generation_stamp = gen;</span></span>
-<span id="L102"><span class="lineNum">     102</span>                 :             :     located.offset = 0; // caller will set actual offset</span>
-<span id="L103"><span class="lineNum">     103</span>                 :             :     located.length = 0;</span>
-<span id="L104"><span class="lineNum">     104</span>         [<span class="tlaGBC" title="Branch 0 was taken 21 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">          28 :     for (const auto&amp; dn : targets.value()) {</span></span>
-<span id="L105"><span class="lineNum">     105</span>         [<span class="tlaGBC" title="Branch 0 was taken 21 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          42 :         located.locations.push_back(DataNodeEndpoint{</span></span>
-<span id="L106"><span class="lineNum">     106</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 21 times"> + </span>]:<span class="tlaGNC">          21 :             .datanode_id = dn.datanode_id,</span></span>
-<span id="L107"><span class="lineNum">     107</span>                 :             :             .host = dn.ip.empty() ? dn.hostname : dn.ip,</span>
-<span id="L108"><span class="lineNum">     108</span>         [<span class="tlaGBC" title="Branch 0 was taken 21 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          21 :             .data_port = dn.data_port,</span></span>
-<span id="L109"><span class="lineNum">     109</span>                 :             :         });</span>
+<span id="L28"><span class="lineNum">      28</span>                 :<span class="tlaGNC tlaBgGNC">          16 : BlockManager::BlockManager(MetadataStore* store, PlacementManager* placement)</span></span>
+<span id="L29"><span class="lineNum">      29</span>                 :<span class="tlaGNC">          16 :     : store_(store), placement_(placement) {}</span></span>
+<span id="L30"><span class="lineNum">      30</span>                 :             : </span>
+<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaGNC">          13 : uint64_t BlockManager::next_generation_stamp() {</span></span>
+<span id="L32"><span class="lineNum">      32</span>                 :<span class="tlaGNC">          13 :     return generation_stamp_counter_.fetch_add(1, std::memory_order_relaxed) + 1;</span></span>
+<span id="L33"><span class="lineNum">      33</span>                 :             : }</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             : </span>
+<span id="L35"><span class="lineNum">      35</span>                 :<span class="tlaGNC">          10 : pl::Result&lt;LocatedBlock&gt; BlockManager::allocate_block(uint64_t inode_id,</span></span>
+<span id="L36"><span class="lineNum">      36</span>                 :             :                                                       uint32_t block_index,</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             :                                                       uint32_t replication) {</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             :     // Allocate a block ID.</span>
+<span id="L39"><span class="lineNum">      39</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">          10 :     auto id_result = store_-&gt;alloc_id(&quot;block&quot;);</span></span>
+<span id="L40"><span class="lineNum">      40</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">          10 :     if (id_result.hasError()) {</span></span>
+<span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(id_result.error());</span></span>
+<span id="L42"><span class="lineNum">      42</span>                 :             :     }</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             : </span>
+<span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaGNC tlaBgGNC">          10 :     uint64_t block_id = id_result.value();</span></span>
+<span id="L45"><span class="lineNum">      45</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :     uint64_t gen = next_generation_stamp();</span></span>
+<span id="L46"><span class="lineNum">      46</span>                 :             :     uint64_t ts = now_ms();</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             : </span>
+<span id="L48"><span class="lineNum">      48</span>                 :             :     // Create block metadata entry (state = Allocating).</span>
+<span id="L49"><span class="lineNum">      49</span>                 :<span class="tlaGNC">          10 :     BlockMeta block;</span></span>
+<span id="L50"><span class="lineNum">      50</span>                 :<span class="tlaGNC">          10 :     block.block_id = block_id;</span></span>
+<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">          10 :     block.inode_id = inode_id;</span></span>
+<span id="L52"><span class="lineNum">      52</span>                 :<span class="tlaGNC">          10 :     block.block_index = block_index;</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">          10 :     block.generation_stamp = gen;</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :             :     block.length = 0;</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             :     block.state = BlockState::kAllocating;</span>
+<span id="L56"><span class="lineNum">      56</span>                 :<span class="tlaGNC">          10 :     block.desired_replica = replication;</span></span>
+<span id="L57"><span class="lineNum">      57</span>                 :<span class="tlaGNC">          10 :     block.ctime_ms = ts;</span></span>
+<span id="L58"><span class="lineNum">      58</span>                 :<span class="tlaGNC">          10 :     block.mtime_ms = ts;</span></span>
+<span id="L59"><span class="lineNum">      59</span>                 :             : </span>
+<span id="L60"><span class="lineNum">      60</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :     auto create_res = store_-&gt;create_block(block);</span></span>
+<span id="L61"><span class="lineNum">      61</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">          10 :     if (create_res.hasError()) {</span></span>
+<span id="L62"><span class="lineNum">      62</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(create_res.error());</span></span>
+<span id="L63"><span class="lineNum">      63</span>                 :             :     }</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             : </span>
+<span id="L65"><span class="lineNum">      65</span>                 :             :     // Select datanodes for placement.</span>
+<span id="L66"><span class="lineNum">      66</span>   [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 10 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          10 :     auto targets = placement_-&gt;choose_targets(replication, std::nullopt);</span></span>
+<span id="L67"><span class="lineNum">      67</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">          10 :     if (targets.hasError()) {</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(targets.error());</span></span>
+<span id="L69"><span class="lineNum">      69</span>                 :             :     }</span>
+<span id="L70"><span class="lineNum">      70</span>                 :             : </span>
+<span id="L71"><span class="lineNum">      71</span>                 :             :     // Register replicas (state = Writing).</span>
+<span id="L72"><span class="lineNum">      72</span>         [<span class="tlaGBC" title="Branch 0 was taken 30 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          40 :     for (const auto&amp; dn : targets.value()) {</span></span>
+<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">          30 :         BlockReplica replica;</span></span>
+<span id="L74"><span class="lineNum">      74</span>                 :<span class="tlaGNC">          30 :         replica.block_id = block_id;</span></span>
+<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">          30 :         replica.datanode_id = dn.datanode_id;</span></span>
+<span id="L76"><span class="lineNum">      76</span>                 :             :         replica.storage_id = 0;</span>
+<span id="L77"><span class="lineNum">      77</span>                 :             :         replica.state = ReplicaState::kWriting;</span>
+<span id="L78"><span class="lineNum">      78</span>                 :             :         replica.length = 0;</span>
+<span id="L79"><span class="lineNum">      79</span>                 :<span class="tlaGNC">          30 :         replica.generation_stamp = gen;</span></span>
+<span id="L80"><span class="lineNum">      80</span>                 :<span class="tlaGNC">          30 :         replica.report_time_ms = ts;</span></span>
+<span id="L81"><span class="lineNum">      81</span>                 :             : </span>
+<span id="L82"><span class="lineNum">      82</span>         [<span class="tlaGBC" title="Branch 0 was taken 30 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          30 :         auto upsert_res = store_-&gt;upsert_replica(replica);</span></span>
+<span id="L83"><span class="lineNum">      83</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 30 times"> + </span>]:<span class="tlaGNC">          30 :         if (upsert_res.hasError()) {</span></span>
+<span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             return folly::makeUnexpected(upsert_res.error());</span></span>
+<span id="L85"><span class="lineNum">      85</span>                 :             :         }</span>
+<span id="L86"><span class="lineNum">      86</span>                 :             :     }</span>
+<span id="L87"><span class="lineNum">      87</span>                 :             : </span>
+<span id="L88"><span class="lineNum">      88</span>                 :             :     // Build LocatedBlock response.</span>
+<span id="L89"><span class="lineNum">      89</span>                 :<span class="tlaGNC tlaBgGNC">          10 :     LocatedBlock located;</span></span>
+<span id="L90"><span class="lineNum">      90</span>                 :<span class="tlaGNC">          10 :     located.block_id = block_id;</span></span>
+<span id="L91"><span class="lineNum">      91</span>         [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :     located.generation_stamp = gen;</span></span>
+<span id="L92"><span class="lineNum">      92</span>                 :             :     located.offset = 0; // caller will set actual offset</span>
+<span id="L93"><span class="lineNum">      93</span>                 :             :     located.length = 0;</span>
+<span id="L94"><span class="lineNum">      94</span>         [<span class="tlaGBC" title="Branch 0 was taken 30 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">          40 :     for (const auto&amp; dn : targets.value()) {</span></span>
+<span id="L95"><span class="lineNum">      95</span>         [<span class="tlaGBC" title="Branch 0 was taken 30 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          60 :         located.locations.push_back(DataNodeEndpoint{</span></span>
+<span id="L96"><span class="lineNum">      96</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 30 times"> + </span>]:<span class="tlaGNC">          30 :             .datanode_id = dn.datanode_id,</span></span>
+<span id="L97"><span class="lineNum">      97</span>                 :             :             .host = dn.ip.empty() ? dn.hostname : dn.ip,</span>
+<span id="L98"><span class="lineNum">      98</span>         [<span class="tlaGBC" title="Branch 0 was taken 30 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          30 :             .data_port = dn.data_port,</span></span>
+<span id="L99"><span class="lineNum">      99</span>                 :             :         });</span>
+<span id="L100"><span class="lineNum">     100</span>                 :             :     }</span>
+<span id="L101"><span class="lineNum">     101</span>                 :             :     return located;</span>
+<span id="L102"><span class="lineNum">     102</span>                 :             : }</span>
+<span id="L103"><span class="lineNum">     103</span>                 :             : </span>
+<span id="L104"><span class="lineNum">     104</span>                 :<span class="tlaGNC">           7 : pl::Result&lt;pl::Void&gt; BlockManager::commit_block(uint64_t block_id,</span></span>
+<span id="L105"><span class="lineNum">     105</span>                 :             :                                                 uint64_t length,</span>
+<span id="L106"><span class="lineNum">     106</span>                 :             :                                                 uint64_t generation_stamp) {</span>
+<span id="L107"><span class="lineNum">     107</span>                 :<span class="tlaGNC">           7 :     auto block_result = store_-&gt;get_block(block_id);</span></span>
+<span id="L108"><span class="lineNum">     108</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">           7 :     if (block_result.hasError()) {</span></span>
+<span id="L109"><span class="lineNum">     109</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(block_result.error());</span></span>
 <span id="L110"><span class="lineNum">     110</span>                 :             :     }</span>
-<span id="L111"><span class="lineNum">     111</span>                 :             :     return located;</span>
-<span id="L112"><span class="lineNum">     112</span>                 :             : }</span>
-<span id="L113"><span class="lineNum">     113</span>                 :             : </span>
-<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">           5 : pl::Result&lt;pl::Void&gt; BlockManager::commit_block(uint64_t block_id,</span></span>
-<span id="L115"><span class="lineNum">     115</span>                 :             :                                                 uint64_t length,</span>
-<span id="L116"><span class="lineNum">     116</span>                 :             :                                                 uint64_t generation_stamp) {</span>
-<span id="L117"><span class="lineNum">     117</span>                 :<span class="tlaGNC">           5 :     auto block_result = store_-&gt;get_block(block_id);</span></span>
-<span id="L118"><span class="lineNum">     118</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5 times"> + </span>]:<span class="tlaGNC">           5 :     if (block_result.hasError()) {</span></span>
-<span id="L119"><span class="lineNum">     119</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(block_result.error());</span></span>
-<span id="L120"><span class="lineNum">     120</span>                 :             :     }</span>
-<span id="L121"><span class="lineNum">     121</span>                 :             :     auto&amp; block = block_result.value();</span>
-<span id="L122"><span class="lineNum">     122</span>                 :             : </span>
-<span id="L123"><span class="lineNum">     123</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           5 :     if (block.state != BlockState::kAllocating) {</span></span>
-<span id="L124"><span class="lineNum">     124</span>                 :<span class="tlaGNC">           1 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kBlockAlreadyCommitted),</span></span>
-<span id="L125"><span class="lineNum">     125</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :                              fmt::format(&quot;block {} is already in state {}&quot;,</span></span>
-<span id="L126"><span class="lineNum">     126</span>                 :             :                                          block_id,</span>
-<span id="L127"><span class="lineNum">     127</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :                                          static_cast&lt;int&gt;(block.state)));</span></span>
+<span id="L111"><span class="lineNum">     111</span>                 :             :     auto&amp; block = block_result.value();</span>
+<span id="L112"><span class="lineNum">     112</span>                 :             : </span>
+<span id="L113"><span class="lineNum">     113</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           7 :     if (block.state != BlockState::kAllocating) {</span></span>
+<span id="L114"><span class="lineNum">     114</span>                 :<span class="tlaGNC">           1 :         return pl::makeError(static_cast&lt;pl::status_code_t&gt;(ErrorCode::kBlockAlreadyCommitted),</span></span>
+<span id="L115"><span class="lineNum">     115</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :                              fmt::format(&quot;block {} is already in state {}&quot;,</span></span>
+<span id="L116"><span class="lineNum">     116</span>                 :             :                                          block_id,</span>
+<span id="L117"><span class="lineNum">     117</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :                                          static_cast&lt;int&gt;(block.state)));</span></span>
+<span id="L118"><span class="lineNum">     118</span>                 :             :     }</span>
+<span id="L119"><span class="lineNum">     119</span>                 :             : </span>
+<span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC">           6 :     block.state = BlockState::kCommitted;</span></span>
+<span id="L121"><span class="lineNum">     121</span>                 :<span class="tlaGNC">           6 :     block.length = length;</span></span>
+<span id="L122"><span class="lineNum">     122</span>                 :<span class="tlaGNC">           6 :     block.generation_stamp = generation_stamp;</span></span>
+<span id="L123"><span class="lineNum">     123</span>                 :<span class="tlaGNC">           6 :     block.mtime_ms = now_ms();</span></span>
+<span id="L124"><span class="lineNum">     124</span>                 :             : </span>
+<span id="L125"><span class="lineNum">     125</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           6 :     auto update_result = store_-&gt;update_block(block);</span></span>
+<span id="L126"><span class="lineNum">     126</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           6 :     if (update_result.hasError()) {</span></span>
+<span id="L127"><span class="lineNum">     127</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(update_result.error());</span></span>
 <span id="L128"><span class="lineNum">     128</span>                 :             :     }</span>
 <span id="L129"><span class="lineNum">     129</span>                 :             : </span>
-<span id="L130"><span class="lineNum">     130</span>                 :<span class="tlaGNC">           4 :     block.state = BlockState::kCommitted;</span></span>
-<span id="L131"><span class="lineNum">     131</span>                 :<span class="tlaGNC">           4 :     block.length = length;</span></span>
-<span id="L132"><span class="lineNum">     132</span>                 :<span class="tlaGNC">           4 :     block.generation_stamp = generation_stamp;</span></span>
-<span id="L133"><span class="lineNum">     133</span>                 :<span class="tlaGNC">           4 :     block.mtime_ms = now_ms();</span></span>
-<span id="L134"><span class="lineNum">     134</span>                 :             : </span>
-<span id="L135"><span class="lineNum">     135</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           4 :     return store_-&gt;update_block(block);</span></span>
-<span id="L136"><span class="lineNum">     136</span>                 :             : }</span>
-<span id="L137"><span class="lineNum">     137</span>                 :             : </span>
-<span id="L138"><span class="lineNum">     138</span>                 :<span class="tlaGNC">           2 : pl::Result&lt;std::vector&lt;LocatedBlock&gt;&gt; BlockManager::get_located_blocks(uint64_t inode_id) {</span></span>
-<span id="L139"><span class="lineNum">     139</span>                 :<span class="tlaGNC">           2 :     auto blocks_result = store_-&gt;get_blocks_by_inode(inode_id);</span></span>
-<span id="L140"><span class="lineNum">     140</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :     if (blocks_result.hasError()) {</span></span>
-<span id="L141"><span class="lineNum">     141</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(blocks_result.error());</span></span>
-<span id="L142"><span class="lineNum">     142</span>                 :             :     }</span>
-<span id="L143"><span class="lineNum">     143</span>                 :             : </span>
-<span id="L144"><span class="lineNum">     144</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           2 :     std::vector&lt;LocatedBlock&gt; located_blocks;</span></span>
-<span id="L145"><span class="lineNum">     145</span>                 :             :     uint64_t offset = 0;</span>
-<span id="L146"><span class="lineNum">     146</span>                 :             : </span>
-<span id="L147"><span class="lineNum">     147</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           5 :     for (const auto&amp; block : blocks_result.value()) {</span></span>
-<span id="L148"><span class="lineNum">     148</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           3 :         if (block.state != BlockState::kCommitted) {</span></span>
-<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">           1 :             continue; // Only return committed blocks for reading.</span></span>
-<span id="L150"><span class="lineNum">     150</span>                 :             :         }</span>
+<span id="L130"><span class="lineNum">     130</span>                 :             :     // Transition all replicas from kWriting to kFinalized.</span>
+<span id="L131"><span class="lineNum">     131</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           6 :     auto replicas_result = store_-&gt;get_replicas(block_id);</span></span>
+<span id="L132"><span class="lineNum">     132</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           6 :     if (replicas_result.hasValue()) {</span></span>
+<span id="L133"><span class="lineNum">     133</span>         [<span class="tlaGBC" title="Branch 0 was taken 18 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">          24 :         for (const auto&amp; r : replicas_result.value()) {</span></span>
+<span id="L134"><span class="lineNum">     134</span>         [<span class="tlaGBC" title="Branch 0 was taken 18 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          18 :             if (r.state == ReplicaState::kWriting) {</span></span>
+<span id="L135"><span class="lineNum">     135</span>         [<span class="tlaGBC" title="Branch 0 was taken 18 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          36 :                 store_-&gt;update_replica_state(r.block_id, r.datanode_id, ReplicaState::kFinalized);</span></span>
+<span id="L136"><span class="lineNum">     136</span>                 :             :             }</span>
+<span id="L137"><span class="lineNum">     137</span>                 :             :         }</span>
+<span id="L138"><span class="lineNum">     138</span>                 :             :     }</span>
+<span id="L139"><span class="lineNum">     139</span>                 :             : </span>
+<span id="L140"><span class="lineNum">     140</span>                 :             :     return pl::Void{};</span>
+<span id="L141"><span class="lineNum">     141</span>                 :             : }</span>
+<span id="L142"><span class="lineNum">     142</span>                 :             : </span>
+<span id="L143"><span class="lineNum">     143</span>                 :<span class="tlaGNC">           4 : pl::Result&lt;std::vector&lt;LocatedBlock&gt;&gt; BlockManager::get_located_blocks(uint64_t inode_id) {</span></span>
+<span id="L144"><span class="lineNum">     144</span>                 :<span class="tlaGNC">           4 :     auto blocks_result = store_-&gt;get_blocks_by_inode(inode_id);</span></span>
+<span id="L145"><span class="lineNum">     145</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           4 :     if (blocks_result.hasError()) {</span></span>
+<span id="L146"><span class="lineNum">     146</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(blocks_result.error());</span></span>
+<span id="L147"><span class="lineNum">     147</span>                 :             :     }</span>
+<span id="L148"><span class="lineNum">     148</span>                 :             : </span>
+<span id="L149"><span class="lineNum">     149</span>         [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           4 :     std::vector&lt;LocatedBlock&gt; located_blocks;</span></span>
+<span id="L150"><span class="lineNum">     150</span>                 :             :     uint64_t offset = 0;</span>
 <span id="L151"><span class="lineNum">     151</span>                 :             : </span>
-<span id="L152"><span class="lineNum">     152</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         auto replicas_result = store_-&gt;get_replicas(block.block_id);</span></span>
-<span id="L153"><span class="lineNum">     153</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           2 :         if (replicas_result.hasError()) {</span></span>
-<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             return folly::makeUnexpected(replicas_result.error());</span></span>
+<span id="L152"><span class="lineNum">     152</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           9 :     for (const auto&amp; block : blocks_result.value()) {</span></span>
+<span id="L153"><span class="lineNum">     153</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           5 :         if (block.state != BlockState::kCommitted) {</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">           2 :             continue; // Only return committed blocks for reading.</span></span>
 <span id="L155"><span class="lineNum">     155</span>                 :             :         }</span>
 <span id="L156"><span class="lineNum">     156</span>                 :             : </span>
-<span id="L157"><span class="lineNum">     157</span>                 :<span class="tlaGNC tlaBgGNC">           2 :         LocatedBlock lb;</span></span>
-<span id="L158"><span class="lineNum">     158</span>                 :<span class="tlaGNC">           2 :         lb.block_id = block.block_id;</span></span>
-<span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaGNC">           2 :         lb.generation_stamp = block.generation_stamp;</span></span>
-<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">           2 :         lb.offset = offset;</span></span>
-<span id="L161"><span class="lineNum">     161</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         lb.length = block.length;</span></span>
-<span id="L162"><span class="lineNum">     162</span>                 :             : </span>
-<span id="L163"><span class="lineNum">     163</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           8 :         for (const auto&amp; replica : replicas_result.value()) {</span></span>
-<span id="L164"><span class="lineNum">     164</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           6 :             if (replica.state != ReplicaState::kFinalized) {</span></span>
-<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 continue;</span></span>
-<span id="L166"><span class="lineNum">     166</span>                 :             :             }</span>
-<span id="L167"><span class="lineNum">     167</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           6 :             auto dn_result = store_-&gt;get_datanode(replica.datanode_id);</span></span>
-<span id="L168"><span class="lineNum">     168</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span>]:<span class="tlaGNC">           6 :             if (dn_result.hasError()) {</span></span>
-<span id="L169"><span class="lineNum">     169</span>                 :             :                 continue; // Skip unavailable datanodes.</span>
-<span id="L170"><span class="lineNum">     170</span>                 :             :             }</span>
-<span id="L171"><span class="lineNum">     171</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 6 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          18 :             lb.locations.push_back(DataNodeEndpoint{</span></span>
-<span id="L172"><span class="lineNum">     172</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           6 :                 .datanode_id = dn_result.value().datanode_id,</span></span>
-<span id="L173"><span class="lineNum">     173</span>                 :             :                 .host = dn_result.value().ip.empty() ? dn_result.value().hostname</span>
-<span id="L174"><span class="lineNum">     174</span>                 :             :                                                      : dn_result.value().ip,</span>
-<span id="L175"><span class="lineNum">     175</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           6 :                 .data_port = dn_result.value().data_port,</span></span>
-<span id="L176"><span class="lineNum">     176</span>                 :             :             });</span>
-<span id="L177"><span class="lineNum">     177</span>                 :             :         }</span>
-<span id="L178"><span class="lineNum">     178</span>                 :             : </span>
-<span id="L179"><span class="lineNum">     179</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         if (!lb.locations.empty()) {</span></span>
-<span id="L180"><span class="lineNum">     180</span>                 :             :             located_blocks.push_back(std::move(lb));</span>
-<span id="L181"><span class="lineNum">     181</span>                 :             :         }</span>
-<span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">           2 :         offset += block.length;</span></span>
-<span id="L183"><span class="lineNum">     183</span>                 :             :     }</span>
-<span id="L184"><span class="lineNum">     184</span>                 :             :     return located_blocks;</span>
-<span id="L185"><span class="lineNum">     185</span>                 :<span class="tlaGNC">           2 : }</span></span>
-<span id="L186"><span class="lineNum">     186</span>                 :             : </span>
-<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">           1 : pl::Result&lt;pl::Void&gt; BlockManager::report_corrupt_replica(uint64_t block_id, uint64_t datanode_id) {</span></span>
-<span id="L188"><span class="lineNum">     188</span>                 :<span class="tlaGNC">           1 :     return store_-&gt;update_replica_state(block_id, datanode_id, ReplicaState::kCorrupt);</span></span>
-<span id="L189"><span class="lineNum">     189</span>                 :             : }</span>
-<span id="L190"><span class="lineNum">     190</span>                 :             : </span>
-<span id="L191"><span class="lineNum">     191</span>                 :             : } // namespace pl::minidfs</span>
+<span id="L157"><span class="lineNum">     157</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :         auto replicas_result = store_-&gt;get_replicas(block.block_id);</span></span>
+<span id="L158"><span class="lineNum">     158</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">           3 :         if (replicas_result.hasError()) {</span></span>
+<span id="L159"><span class="lineNum">     159</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             return folly::makeUnexpected(replicas_result.error());</span></span>
+<span id="L160"><span class="lineNum">     160</span>                 :             :         }</span>
+<span id="L161"><span class="lineNum">     161</span>                 :             : </span>
+<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC tlaBgGNC">           3 :         LocatedBlock lb;</span></span>
+<span id="L163"><span class="lineNum">     163</span>                 :<span class="tlaGNC">           3 :         lb.block_id = block.block_id;</span></span>
+<span id="L164"><span class="lineNum">     164</span>                 :<span class="tlaGNC">           3 :         lb.generation_stamp = block.generation_stamp;</span></span>
+<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">           3 :         lb.offset = offset;</span></span>
+<span id="L166"><span class="lineNum">     166</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :         lb.length = block.length;</span></span>
+<span id="L167"><span class="lineNum">     167</span>                 :             : </span>
+<span id="L168"><span class="lineNum">     168</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC">          12 :         for (const auto&amp; replica : replicas_result.value()) {</span></span>
+<span id="L169"><span class="lineNum">     169</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 9 times"> + </span>]:<span class="tlaGNC">           9 :             if (replica.state != ReplicaState::kFinalized) {</span></span>
+<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaUNC tlaBgUNC">           0 :                 continue;</span></span>
+<span id="L171"><span class="lineNum">     171</span>                 :             :             }</span>
+<span id="L172"><span class="lineNum">     172</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">           9 :             auto dn_result = store_-&gt;get_datanode(replica.datanode_id);</span></span>
+<span id="L173"><span class="lineNum">     173</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 9 times"> + </span>]:<span class="tlaGNC">           9 :             if (dn_result.hasError()) {</span></span>
+<span id="L174"><span class="lineNum">     174</span>                 :             :                 continue; // Skip unavailable datanodes.</span>
+<span id="L175"><span class="lineNum">     175</span>                 :             :             }</span>
+<span id="L176"><span class="lineNum">     176</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 9 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          27 :             lb.locations.push_back(DataNodeEndpoint{</span></span>
+<span id="L177"><span class="lineNum">     177</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :                 .datanode_id = dn_result.value().datanode_id,</span></span>
+<span id="L178"><span class="lineNum">     178</span>                 :             :                 .host = dn_result.value().ip.empty() ? dn_result.value().hostname</span>
+<span id="L179"><span class="lineNum">     179</span>                 :             :                                                      : dn_result.value().ip,</span>
+<span id="L180"><span class="lineNum">     180</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :                 .data_port = dn_result.value().data_port,</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :             :             });</span>
+<span id="L182"><span class="lineNum">     182</span>                 :             :         }</span>
+<span id="L183"><span class="lineNum">     183</span>                 :             : </span>
+<span id="L184"><span class="lineNum">     184</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           3 :         if (!lb.locations.empty()) {</span></span>
+<span id="L185"><span class="lineNum">     185</span>                 :             :             located_blocks.push_back(std::move(lb));</span>
+<span id="L186"><span class="lineNum">     186</span>                 :             :         }</span>
+<span id="L187"><span class="lineNum">     187</span>                 :<span class="tlaGNC">           3 :         offset += block.length;</span></span>
+<span id="L188"><span class="lineNum">     188</span>                 :             :     }</span>
+<span id="L189"><span class="lineNum">     189</span>                 :             :     return located_blocks;</span>
+<span id="L190"><span class="lineNum">     190</span>                 :<span class="tlaGNC">           4 : }</span></span>
+<span id="L191"><span class="lineNum">     191</span>                 :             : </span>
+<span id="L192"><span class="lineNum">     192</span>                 :<span class="tlaGNC">           1 : pl::Result&lt;pl::Void&gt; BlockManager::report_corrupt_replica(uint64_t block_id, uint64_t datanode_id) {</span></span>
+<span id="L193"><span class="lineNum">     193</span>                 :<span class="tlaGNC">           1 :     return store_-&gt;update_replica_state(block_id, datanode_id, ReplicaState::kCorrupt);</span></span>
+<span id="L194"><span class="lineNum">     194</span>                 :             : }</span>
+<span id="L195"><span class="lineNum">     195</span>                 :             : </span>
+<span id="L196"><span class="lineNum">     196</span>                 :<span class="tlaGNC">           1 : pl::Result&lt;pl::Void&gt; BlockManager::invalidate_blocks(uint64_t inode_id) {</span></span>
+<span id="L197"><span class="lineNum">     197</span>                 :<span class="tlaGNC">           1 :     auto blocks_result = store_-&gt;get_blocks_by_inode(inode_id);</span></span>
+<span id="L198"><span class="lineNum">     198</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :     if (blocks_result.hasError()) {</span></span>
+<span id="L199"><span class="lineNum">     199</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return folly::makeUnexpected(blocks_result.error());</span></span>
+<span id="L200"><span class="lineNum">     200</span>                 :             :     }</span>
+<span id="L201"><span class="lineNum">     201</span>                 :             : </span>
+<span id="L202"><span class="lineNum">     202</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC tlaBgGNC">           2 :     for (auto&amp; block : blocks_result.value()) {</span></span>
+<span id="L203"><span class="lineNum">     203</span>                 :             :         // Delete all replicas for this block.</span>
+<span id="L204"><span class="lineNum">     204</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         auto del_rep = store_-&gt;delete_replicas_by_block(block.block_id);</span></span>
+<span id="L205"><span class="lineNum">     205</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :         if (del_rep.hasError()) {</span></span>
+<span id="L206"><span class="lineNum">     206</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             return folly::makeUnexpected(del_rep.error());</span></span>
+<span id="L207"><span class="lineNum">     207</span>                 :             :         }</span>
+<span id="L208"><span class="lineNum">     208</span>                 :             :         // Mark block as deleted.</span>
+<span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaGNC tlaBgGNC">           1 :         block.state = BlockState::kDeleted;</span></span>
+<span id="L210"><span class="lineNum">     210</span>                 :<span class="tlaGNC">           1 :         block.mtime_ms = now_ms();</span></span>
+<span id="L211"><span class="lineNum">     211</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         auto upd = store_-&gt;update_block(block);</span></span>
+<span id="L212"><span class="lineNum">     212</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 :         if (upd.hasError()) {</span></span>
+<span id="L213"><span class="lineNum">     213</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             return folly::makeUnexpected(upd.error());</span></span>
+<span id="L214"><span class="lineNum">     214</span>                 :             :         }</span>
+<span id="L215"><span class="lineNum">     215</span>                 :             :     }</span>
+<span id="L216"><span class="lineNum">     216</span>                 :             :     return pl::Void{};</span>
+<span id="L217"><span class="lineNum">     217</span>                 :             : }</span>
+<span id="L218"><span class="lineNum">     218</span>                 :             : </span>
+<span id="L219"><span class="lineNum">     219</span>                 :             : } // namespace pl::minidfs</span>
         </pre>
               </td>
             </tr>

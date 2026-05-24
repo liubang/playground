@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-24 16:02:16</td>
+            <td class="headerValue">2026-05-24 19:38:23</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -102,89 +102,72 @@
 <span id="L31"><span class="lineNum">      31</span>                 :             : </span>
 <span id="L32"><span class="lineNum">      32</span>                 :             : namespace pl::minidfs {</span>
 <span id="L33"><span class="lineNum">      33</span>                 :             : </span>
-<span id="L34"><span class="lineNum">      34</span>                 :             : // ============================================================================</span>
-<span id="L35"><span class="lineNum">      35</span>                 :             : // ReplicationTask — a unit of work for the replication worker.</span>
-<span id="L36"><span class="lineNum">      36</span>                 :             : //</span>
-<span id="L37"><span class="lineNum">      37</span>                 :             : // Two kinds:</span>
-<span id="L38"><span class="lineNum">      38</span>                 :             : //   - Copy: read a block from local store, send to a remote DN (pipeline).</span>
-<span id="L39"><span class="lineNum">      39</span>                 :             : //   - Delete: remove a local block replica as instructed by NameNode.</span>
-<span id="L40"><span class="lineNum">      40</span>                 :             : // ============================================================================</span>
-<span id="L41"><span class="lineNum">      41</span>                 :             : </span>
-<span id="L42"><span class="lineNum">      42</span>                 :             : enum class TaskKind : uint8_t {</span>
-<span id="L43"><span class="lineNum">      43</span>                 :             :     kCopy = 0,</span>
-<span id="L44"><span class="lineNum">      44</span>                 :             :     kDelete = 1,</span>
+<span id="L34"><span class="lineNum">      34</span>                 :             : enum class TaskKind : uint8_t {</span>
+<span id="L35"><span class="lineNum">      35</span>                 :             :     kCopy = 0,</span>
+<span id="L36"><span class="lineNum">      36</span>                 :             :     kDelete = 1,</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             : };</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             : </span>
+<span id="L39"><span class="lineNum">      39</span>         [<span class="tlaGBC" title="Branch 0 was taken 20 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          37 : struct DataNodeTask {</span></span>
+<span id="L40"><span class="lineNum">      40</span>                 :             :     TaskKind kind = TaskKind::kCopy;</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             :     uint64_t block_id = 0;</span>
+<span id="L42"><span class="lineNum">      42</span>                 :             :     uint64_t generation_stamp = 0;</span>
+<span id="L43"><span class="lineNum">      43</span>                 :             :     std::string target_host;  // For copy: destination DN host</span>
+<span id="L44"><span class="lineNum">      44</span>                 :             :     uint32_t target_port = 0; // For copy: destination DN data port</span>
 <span id="L45"><span class="lineNum">      45</span>                 :             : };</span>
 <span id="L46"><span class="lineNum">      46</span>                 :             : </span>
-<span id="L47"><span class="lineNum">      47</span>         [<span class="tlaGBC" title="Branch 0 was taken 20 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          37 : struct DataNodeTask {</span></span>
-<span id="L48"><span class="lineNum">      48</span>                 :             :     TaskKind kind = TaskKind::kCopy;</span>
-<span id="L49"><span class="lineNum">      49</span>                 :             :     uint64_t block_id = 0;</span>
-<span id="L50"><span class="lineNum">      50</span>                 :             :     uint64_t generation_stamp = 0;</span>
-<span id="L51"><span class="lineNum">      51</span>                 :             :     std::string target_host;  // For copy: destination DN host</span>
-<span id="L52"><span class="lineNum">      52</span>                 :             :     uint32_t target_port = 0; // For copy: destination DN data port</span>
-<span id="L53"><span class="lineNum">      53</span>                 :             : };</span>
-<span id="L54"><span class="lineNum">      54</span>                 :             : </span>
-<span id="L55"><span class="lineNum">      55</span>                 :             : // ============================================================================</span>
-<span id="L56"><span class="lineNum">      56</span>                 :             : // ReplicationWorker — executes block replication and deletion tasks.</span>
-<span id="L57"><span class="lineNum">      57</span>                 :             : //</span>
-<span id="L58"><span class="lineNum">      58</span>                 :             : // Tasks are enqueued by the HeartbeatSender (from NN commands) or by the</span>
-<span id="L59"><span class="lineNum">      59</span>                 :             : // BlockReporter (from block report responses). The worker processes them</span>
-<span id="L60"><span class="lineNum">      60</span>                 :             : // sequentially from a thread-safe queue.</span>
-<span id="L61"><span class="lineNum">      61</span>                 :             : //</span>
-<span id="L62"><span class="lineNum">      62</span>                 :             : // For copy tasks, the worker reads block data from local store and sends</span>
-<span id="L63"><span class="lineNum">      63</span>                 :             : // it to the target DN via the pipeline protocol. The actual network send</span>
-<span id="L64"><span class="lineNum">      64</span>                 :             : // is abstracted via a callback (CopyFunc) for testability.</span>
-<span id="L65"><span class="lineNum">      65</span>                 :             : // ============================================================================</span>
-<span id="L66"><span class="lineNum">      66</span>                 :             : </span>
-<span id="L67"><span class="lineNum">      67</span>                 :             : using CopyFunc = std::function&lt;pl::Result&lt;pl::Void&gt;(uint64_t block_id,</span>
-<span id="L68"><span class="lineNum">      68</span>                 :             :                                                     uint64_t generation_stamp,</span>
-<span id="L69"><span class="lineNum">      69</span>                 :             :                                                     const std::string&amp; data,</span>
-<span id="L70"><span class="lineNum">      70</span>                 :             :                                                     const std::string&amp; target_host,</span>
-<span id="L71"><span class="lineNum">      71</span>                 :             :                                                     uint32_t target_port)&gt;;</span>
-<span id="L72"><span class="lineNum">      72</span>                 :             : </span>
-<span id="L73"><span class="lineNum">      73</span>                 :             : class ReplicationWorker {</span>
-<span id="L74"><span class="lineNum">      74</span>                 :             : public:</span>
-<span id="L75"><span class="lineNum">      75</span>                 :             :     struct Config {</span>
-<span id="L76"><span class="lineNum">      76</span>                 :             :         uint32_t max_concurrent_tasks = 4;</span>
-<span id="L77"><span class="lineNum">      77</span>                 :             :     };</span>
-<span id="L78"><span class="lineNum">      78</span>                 :             : </span>
-<span id="L79"><span class="lineNum">      79</span>                 :             :     ReplicationWorker(Config config, LocalBlockStore* store, CopyFunc copy_func);</span>
-<span id="L80"><span class="lineNum">      80</span>                 :             :     ~ReplicationWorker();</span>
-<span id="L81"><span class="lineNum">      81</span>                 :             : </span>
-<span id="L82"><span class="lineNum">      82</span>                 :             :     ReplicationWorker(const ReplicationWorker&amp;) = delete;</span>
-<span id="L83"><span class="lineNum">      83</span>                 :             :     ReplicationWorker&amp; operator=(const ReplicationWorker&amp;) = delete;</span>
-<span id="L84"><span class="lineNum">      84</span>                 :             : </span>
-<span id="L85"><span class="lineNum">      85</span>                 :             :     /// Start worker threads.</span>
-<span id="L86"><span class="lineNum">      86</span>                 :             :     void start();</span>
+<span id="L47"><span class="lineNum">      47</span>                 :             : // ReplicationWorker — executes block replication and deletion tasks.</span>
+<span id="L48"><span class="lineNum">      48</span>                 :             : // Tasks are enqueued by HeartbeatSender or BlockReporter and processed</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             : // from a thread-safe queue. Network send is abstracted via CopyFunc.</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             : using CopyFunc = std::function&lt;pl::Result&lt;pl::Void&gt;(uint64_t block_id,</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             :                                                     uint64_t generation_stamp,</span>
+<span id="L52"><span class="lineNum">      52</span>                 :             :                                                     const std::string&amp; data,</span>
+<span id="L53"><span class="lineNum">      53</span>                 :             :                                                     const std::string&amp; target_host,</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             :                                                     uint32_t target_port)&gt;;</span>
+<span id="L55"><span class="lineNum">      55</span>                 :             : </span>
+<span id="L56"><span class="lineNum">      56</span>                 :             : class ReplicationWorker {</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             : public:</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             :     struct Config {</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             :         uint32_t max_concurrent_tasks = 4;</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             :     };</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             : </span>
+<span id="L62"><span class="lineNum">      62</span>                 :             :     ReplicationWorker(Config config, LocalBlockStore* store, CopyFunc copy_func);</span>
+<span id="L63"><span class="lineNum">      63</span>                 :             :     ~ReplicationWorker();</span>
+<span id="L64"><span class="lineNum">      64</span>                 :             : </span>
+<span id="L65"><span class="lineNum">      65</span>                 :             :     ReplicationWorker(const ReplicationWorker&amp;) = delete;</span>
+<span id="L66"><span class="lineNum">      66</span>                 :             :     ReplicationWorker&amp; operator=(const ReplicationWorker&amp;) = delete;</span>
+<span id="L67"><span class="lineNum">      67</span>                 :             : </span>
+<span id="L68"><span class="lineNum">      68</span>                 :             :     /// Start worker threads.</span>
+<span id="L69"><span class="lineNum">      69</span>                 :             :     void start();</span>
+<span id="L70"><span class="lineNum">      70</span>                 :             : </span>
+<span id="L71"><span class="lineNum">      71</span>                 :             :     /// Stop worker threads. Blocks until all threads exit.</span>
+<span id="L72"><span class="lineNum">      72</span>                 :             :     void stop();</span>
+<span id="L73"><span class="lineNum">      73</span>                 :             : </span>
+<span id="L74"><span class="lineNum">      74</span>                 :             :     /// Enqueue a task for processing.</span>
+<span id="L75"><span class="lineNum">      75</span>                 :             :     void enqueue(DataNodeTask task);</span>
+<span id="L76"><span class="lineNum">      76</span>                 :             : </span>
+<span id="L77"><span class="lineNum">      77</span>                 :             :     /// Get the number of pending tasks.</span>
+<span id="L78"><span class="lineNum">      78</span>                 :             :     size_t pending_count() const;</span>
+<span id="L79"><span class="lineNum">      79</span>                 :             : </span>
+<span id="L80"><span class="lineNum">      80</span>                 :             :     /// Check if the worker is running.</span>
+<span id="L81"><span class="lineNum">      81</span>                 :             :     bool running() const { return running_.load(std::memory_order_relaxed); }</span>
+<span id="L82"><span class="lineNum">      82</span>                 :             : </span>
+<span id="L83"><span class="lineNum">      83</span>                 :             : private:</span>
+<span id="L84"><span class="lineNum">      84</span>                 :             :     void worker_loop();</span>
+<span id="L85"><span class="lineNum">      85</span>                 :             :     void execute_copy(const DataNodeTask&amp; task);</span>
+<span id="L86"><span class="lineNum">      86</span>                 :             :     void execute_delete(const DataNodeTask&amp; task);</span>
 <span id="L87"><span class="lineNum">      87</span>                 :             : </span>
-<span id="L88"><span class="lineNum">      88</span>                 :             :     /// Stop worker threads. Blocks until all threads exit.</span>
-<span id="L89"><span class="lineNum">      89</span>                 :             :     void stop();</span>
-<span id="L90"><span class="lineNum">      90</span>                 :             : </span>
-<span id="L91"><span class="lineNum">      91</span>                 :             :     /// Enqueue a task for processing.</span>
-<span id="L92"><span class="lineNum">      92</span>                 :             :     void enqueue(DataNodeTask task);</span>
-<span id="L93"><span class="lineNum">      93</span>                 :             : </span>
-<span id="L94"><span class="lineNum">      94</span>                 :             :     /// Get the number of pending tasks.</span>
-<span id="L95"><span class="lineNum">      95</span>                 :             :     size_t pending_count() const;</span>
-<span id="L96"><span class="lineNum">      96</span>                 :             : </span>
-<span id="L97"><span class="lineNum">      97</span>                 :             :     /// Check if the worker is running.</span>
-<span id="L98"><span class="lineNum">      98</span>                 :             :     bool running() const { return running_.load(std::memory_order_relaxed); }</span>
-<span id="L99"><span class="lineNum">      99</span>                 :             : </span>
-<span id="L100"><span class="lineNum">     100</span>                 :             : private:</span>
-<span id="L101"><span class="lineNum">     101</span>                 :             :     void worker_loop();</span>
-<span id="L102"><span class="lineNum">     102</span>                 :             :     void execute_copy(const DataNodeTask&amp; task);</span>
-<span id="L103"><span class="lineNum">     103</span>                 :             :     void execute_delete(const DataNodeTask&amp; task);</span>
-<span id="L104"><span class="lineNum">     104</span>                 :             : </span>
-<span id="L105"><span class="lineNum">     105</span>                 :             :     Config config_;</span>
-<span id="L106"><span class="lineNum">     106</span>                 :             :     LocalBlockStore* store_;</span>
-<span id="L107"><span class="lineNum">     107</span>                 :             :     CopyFunc copy_func_;</span>
-<span id="L108"><span class="lineNum">     108</span>                 :             : </span>
-<span id="L109"><span class="lineNum">     109</span>                 :             :     std::atomic&lt;bool&gt; running_{false};</span>
-<span id="L110"><span class="lineNum">     110</span>                 :             :     mutable std::mutex queue_mu_;</span>
-<span id="L111"><span class="lineNum">     111</span>                 :             :     std::condition_variable queue_cv_;</span>
-<span id="L112"><span class="lineNum">     112</span>                 :             :     std::queue&lt;DataNodeTask&gt; task_queue_;</span>
-<span id="L113"><span class="lineNum">     113</span>                 :             :     std::vector&lt;std::thread&gt; threads_;</span>
-<span id="L114"><span class="lineNum">     114</span>                 :             : };</span>
-<span id="L115"><span class="lineNum">     115</span>                 :             : </span>
-<span id="L116"><span class="lineNum">     116</span>                 :             : } // namespace pl::minidfs</span>
+<span id="L88"><span class="lineNum">      88</span>                 :             :     Config config_;</span>
+<span id="L89"><span class="lineNum">      89</span>                 :             :     LocalBlockStore* store_;</span>
+<span id="L90"><span class="lineNum">      90</span>                 :             :     CopyFunc copy_func_;</span>
+<span id="L91"><span class="lineNum">      91</span>                 :             : </span>
+<span id="L92"><span class="lineNum">      92</span>                 :             :     std::atomic&lt;bool&gt; running_{false};</span>
+<span id="L93"><span class="lineNum">      93</span>                 :             :     mutable std::mutex queue_mu_;</span>
+<span id="L94"><span class="lineNum">      94</span>                 :             :     std::condition_variable queue_cv_;</span>
+<span id="L95"><span class="lineNum">      95</span>                 :             :     std::queue&lt;DataNodeTask&gt; task_queue_;</span>
+<span id="L96"><span class="lineNum">      96</span>                 :             :     std::vector&lt;std::thread&gt; threads_;</span>
+<span id="L97"><span class="lineNum">      97</span>                 :             : };</span>
+<span id="L98"><span class="lineNum">      98</span>                 :             : </span>
+<span id="L99"><span class="lineNum">      99</span>                 :             : } // namespace pl::minidfs</span>
         </pre>
               </td>
             </tr>
