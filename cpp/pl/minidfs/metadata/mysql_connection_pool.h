@@ -32,10 +32,6 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
-// MySQL connection configuration
-// ============================================================================
-
 struct MySQLConfig {
     std::string host = "127.0.0.1";
     uint16_t port = 3306;
@@ -45,10 +41,7 @@ struct MySQLConfig {
     uint32_t pool_size = 16;
 };
 
-// ============================================================================
 // PooledConnection — RAII handle that returns connection to pool on destruction
-// ============================================================================
-
 class MySQLConnectionPool;
 
 class PooledConnection {
@@ -83,10 +76,7 @@ private:
     MySQLConnectionPool* pool_ = nullptr;
 };
 
-// ============================================================================
 // MySQLConnectionPool — thread-safe connection pool
-// ============================================================================
-
 class MySQLConnectionPool : public std::enable_shared_from_this<MySQLConnectionPool> {
 public:
     ~MySQLConnectionPool();

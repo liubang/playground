@@ -31,28 +31,16 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
-// BlockReportResponse — NameNode response to a block report.
-//
-// The NameNode may instruct the DN to delete blocks it doesn't know about
-// (stale replicas), or to re-replicate blocks it considers under-replicated.
-// ============================================================================
-
+// The NameNode may instruct the DN to delete stale replicas
+// or re-replicate under-replicated blocks.
 struct BlockReportResponse {
     std::vector<uint64_t> blocks_to_delete; // block_ids the NN wants removed
 };
 
-// ============================================================================
 // BlockReporter — periodically reports all stored blocks to the NameNode.
-//
-// Two modes:
-//   - Full report: sends all blocks in current/ (periodic, e.g., every 10min)
-//   - Incremental report: sends only blocks added/removed since last report
-//     (triggered by finalize/delete events)
-//
-// The actual RPC is abstracted via a callback for testability.
-// ============================================================================
-
+// Full report: sends all blocks in current/ periodically.
+// Incremental tracking: records adds/removes between full reports.
+// RPC is abstracted via a callback for testability.
 using BlockReportFunc = std::function<pl::Result<BlockReportResponse>(
     uint64_t datanode_id, const std::vector<BlockInfo>& blocks)>;
 

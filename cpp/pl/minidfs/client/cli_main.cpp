@@ -377,9 +377,7 @@ int cmd_get(DfsClient* client, int argc, char* argv[]) {
     return 0;
 }
 
-// =============================================================================
 // Admin commands
-// =============================================================================
 
 int cmd_fsinfo(DfsClient* client, int /*argc*/, char* /*argv*/[]) {
     auto result = client->get_cluster_info();

@@ -23,17 +23,22 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
-// Helper utilities
-// ============================================================================
+namespace {
 
-void NameNodeServiceImpl::fill_status(protocol::StatusProto* proto,
-                                      uint32_t code,
-                                      std::string_view msg) {
+void set_status(protocol::StatusProto* proto, uint32_t code, std::string_view msg = {}) {
     proto->set_code(code);
     if (!msg.empty()) {
         proto->set_message(std::string(msg));
     }
+}
+
+} // namespace
+
+// Helper utilities
+void NameNodeServiceImpl::fill_status(protocol::StatusProto* proto,
+                                      uint32_t code,
+                                      std::string_view msg) {
+    set_status(proto, code, msg);
 }
 
 void NameNodeServiceImpl::fill_file_status(protocol::FileStatusProto* proto, const FileStatus& fs) {
@@ -63,10 +68,6 @@ void NameNodeServiceImpl::fill_located_block(protocol::LocatedBlockProto* proto,
     }
 }
 
-// ============================================================================
-// NameNodeServiceImpl construction
-// ============================================================================
-
 NameNodeServiceImpl::NameNodeServiceImpl(NamespaceManager* ns_mgr,
                                          BlockManager* block_mgr,
                                          LeaseManager* lease_mgr,
@@ -86,7 +87,7 @@ bool NameNodeServiceImpl::check_idempotent(const protocol::RequestHeader& header
         return false;
     }
     if (result.value()) {
-        // 已处理过，直接返回成功
+        // Already processed, return success directly
         fill_status(status, 0);
         return true;
     }
@@ -99,14 +100,11 @@ void NameNodeServiceImpl::write_oplog(std::string_view op_type,
     if (header.request_id().empty()) {
         return;
     }
-    // best-effort: 写入失败不影响主流程
+    // Best-effort: write failure does not affect the main flow
     (void)metadata_store_->write_oplog(op_type, target_inode_id, header.request_id(), "{}");
 }
 
-// ============================================================================
 // Namespace Operations
-// ============================================================================
-
 void NameNodeServiceImpl::Mkdir(google::protobuf::RpcController* /*controller*/,
                                 const protocol::MkdirRequest* request,
                                 protocol::MkdirResponse* response,
@@ -162,6 +160,8 @@ void NameNodeServiceImpl::CreateFile(google::protobuf::RpcController* /*controll
     // Acquire lease for the client
     auto lease_result = lease_mgr_->acquire_lease(result.value().inode_id, request->client_id());
     if (lease_result.hasError()) {
+        // Compensate: remove the inode we just created to avoid orphans.
+        (void)ns_mgr_->remove(request->path());
         fill_status(response->mutable_status(),
                     lease_result.error().code(),
                     lease_result.error().message());
@@ -255,6 +255,37 @@ void NameNodeServiceImpl::Delete(google::protobuf::RpcController* /*controller*/
         return;
     }
 
+    // Resolve the target to clean up blocks before namespace removal.
+    auto target = ns_mgr_->resolve_path(request->path());
+    if (target.hasError()) {
+        fill_status(response->mutable_status(), target.error().code(), target.error().message());
+        return;
+    }
+
+    // Invalidate blocks for file inodes that will be deleted.
+    if (target.value().type == InodeType::kFile) {
+        (void)block_mgr_->invalidate_blocks(target.value().inode_id);
+    } else if (request->recursive()) {
+        // For recursive directory delete, walk children and invalidate file blocks.
+        // Uses a stack-based DFS to handle arbitrary depth.
+        std::vector<uint64_t> dir_stack = {target.value().inode_id};
+        while (!dir_stack.empty()) {
+            uint64_t dir_id = dir_stack.back();
+            dir_stack.pop_back();
+            auto children = metadata_store_->list_children(dir_id);
+            if (children.hasError()) {
+                continue;
+            }
+            for (const auto& child : children.value()) {
+                if (child.type == InodeType::kFile) {
+                    (void)block_mgr_->invalidate_blocks(child.inode_id);
+                } else if (child.type == InodeType::kDirectory) {
+                    dir_stack.push_back(child.inode_id);
+                }
+            }
+        }
+    }
+
     auto result = ns_mgr_->remove(request->path(), request->recursive());
     if (result.hasError()) {
         fill_status(response->mutable_status(), result.error().code(), result.error().message());
@@ -289,10 +320,7 @@ void NameNodeServiceImpl::Rename(google::protobuf::RpcController* /*controller*/
     fill_status(response->mutable_status(), 0);
 }
 
-// ============================================================================
 // Block Operations
-// ============================================================================
-
 void NameNodeServiceImpl::AllocateBlock(google::protobuf::RpcController* /*controller*/,
                                         const protocol::AllocateBlockRequest* request,
                                         protocol::AllocateBlockResponse* response,
@@ -337,10 +365,7 @@ void NameNodeServiceImpl::GetLocatedBlocks(google::protobuf::RpcController* /*co
     }
 }
 
-// ============================================================================
 // Lease Operations
-// ============================================================================
-
 void NameNodeServiceImpl::RenewLease(google::protobuf::RpcController* /*controller*/,
                                      const protocol::RenewLeaseRequest* request,
                                      protocol::RenewLeaseResponse* response,
@@ -355,17 +380,11 @@ void NameNodeServiceImpl::RenewLease(google::protobuf::RpcController* /*controll
     fill_status(response->mutable_status(), 0);
 }
 
-// ============================================================================
 // DataNodeProtocolServiceImpl
-// ============================================================================
-
 void DataNodeProtocolServiceImpl::fill_status(protocol::StatusProto* proto,
                                               uint32_t code,
                                               std::string_view msg) {
-    proto->set_code(code);
-    if (!msg.empty()) {
-        proto->set_message(std::string(msg));
-    }
+    set_status(proto, code, msg);
 }
 
 DataNodeProtocolServiceImpl::DataNodeProtocolServiceImpl(DataNodeManager* dn_mgr,

@@ -54,9 +54,7 @@ public:
     DfsClient(const DfsClient&) = delete;
     DfsClient& operator=(const DfsClient&) = delete;
 
-    // =========================================================================
     // Namespace operations
-    // =========================================================================
 
     /// Create a directory (and parents) at the given path.
     [[nodiscard]] Result<Void> mkdir(std::string_view path);
@@ -73,9 +71,7 @@ public:
     /// Rename/move a file or directory.
     [[nodiscard]] Result<Void> mv(std::string_view src, std::string_view dst);
 
-    // =========================================================================
     // File read/write operations
-    // =========================================================================
 
     /// Write a local file to DFS using pipeline replication.
     /// The full path must not already exist.
@@ -84,9 +80,7 @@ public:
     /// Read a DFS file to a local path.
     [[nodiscard]] Result<Void> get(std::string_view dfs_path, std::string_view local_path);
 
-    // =========================================================================
     // Admin / diagnostic operations
-    // =========================================================================
 
     /// Cluster-wide summary (capacity, nodes, blocks, files).
     struct ClusterInfo {

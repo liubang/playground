@@ -27,7 +27,6 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
 // NamespaceManager — manages the directory tree (inode namespace).
 //
 // Responsibilities:
@@ -35,7 +34,6 @@ namespace pl::minidfs {
 //   - mkdir, create file, delete, rename, list, stat
 //   - Enforces naming rules and directory consistency
 //   - Allocates inode IDs via MetadataStore
-// ============================================================================
 
 class NamespaceManager {
 public:
@@ -45,9 +43,7 @@ public:
     NamespaceManager(const NamespaceManager&) = delete;
     NamespaceManager& operator=(const NamespaceManager&) = delete;
 
-    // ========================================================================
     // Directory operations
-    // ========================================================================
 
     /// Create a directory at the given path. Creates intermediate dirs if create_parent=true.
     pl::Result<Inode> mkdir(std::string_view path,
@@ -56,9 +52,7 @@ public:
                             uint32_t permission,
                             bool create_parent = false);
 
-    // ========================================================================
     // File operations
-    // ========================================================================
 
     /// Create a new file. The file starts in UnderConstruction state.
     /// Returns the created inode. Caller must hold a lease to write blocks.
@@ -75,9 +69,7 @@ public:
     /// Rename/move a file or directory.
     pl::Result<pl::Void> rename(std::string_view src, std::string_view dst);
 
-    // ========================================================================
     // Query operations
-    // ========================================================================
 
     /// Get file/directory status by path.
     pl::Result<FileStatus> get_file_status(std::string_view path);
@@ -88,9 +80,7 @@ public:
     /// Resolve a path to its inode. Returns NotFound if path does not exist.
     pl::Result<Inode> resolve_path(std::string_view path);
 
-    // ========================================================================
     // Internal helpers (public for testability)
-    // ========================================================================
 
     /// Complete a file (transition from UnderConstruction to Normal).
     pl::Result<pl::Void> complete_file(uint64_t inode_id, uint64_t final_length);
