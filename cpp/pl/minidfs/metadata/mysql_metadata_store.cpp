@@ -220,9 +220,13 @@ pl::Result<std::unique_ptr<MySQLMetadataStore>> MySQLMetadataStore::create(
 
 thread_local PooledConnection* MySQLMetadataStore::bound_conn_ = nullptr;
 
-void MySQLMetadataStore::bind_connection(PooledConnection* conn) { bound_conn_ = conn; }
+void MySQLMetadataStore::bind_connection(PooledConnection* conn) {
+    bound_conn_ = conn;
+}
 
-void MySQLMetadataStore::unbind_connection() { bound_conn_ = nullptr; }
+void MySQLMetadataStore::unbind_connection() {
+    bound_conn_ = nullptr;
+}
 
 pl::Result<PooledConnection> MySQLMetadataStore::acquire_connection() {
     return pool_->acquire();

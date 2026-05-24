@@ -49,12 +49,9 @@ protected:
         lease_mgr_ = std::make_unique<LeaseManager>(store_.get());
 
         // Register 3 datanodes so placement can succeed.
-        dn_mgr_->register_datanode("dn-1", "host1", "10.0.0.1", 9000, 9100, "/rack1",
-                                   1000 * kGB);
-        dn_mgr_->register_datanode("dn-2", "host2", "10.0.0.2", 9000, 9100, "/rack2",
-                                   1000 * kGB);
-        dn_mgr_->register_datanode("dn-3", "host3", "10.0.0.3", 9000, 9100, "/rack3",
-                                   1000 * kGB);
+        dn_mgr_->register_datanode("dn-1", "host1", "10.0.0.1", 9000, 9100, "/rack1", 1000 * kGB);
+        dn_mgr_->register_datanode("dn-2", "host2", "10.0.0.2", 9000, 9100, "/rack2", 1000 * kGB);
+        dn_mgr_->register_datanode("dn-3", "host3", "10.0.0.3", 9000, 9100, "/rack3", 1000 * kGB);
     }
 
     testing::MockMetadataStore* store_raw() { return store_.get(); }
@@ -110,8 +107,7 @@ TEST_F(RegressionNameNodeTest, P0_WriteWithoutCommitBlockProducesZeroLengthFile)
     bool has_locations = block_visible && !located_after_commit.value()[0].locations.empty();
 
     // FIX VERIFIED: committed block is now readable with finalized replica locations.
-    EXPECT_TRUE(block_visible)
-        << "FIX VERIFIED: Committed block is visible in get_located_blocks";
+    EXPECT_TRUE(block_visible) << "FIX VERIFIED: Committed block is visible in get_located_blocks";
     EXPECT_TRUE(has_locations)
         << "FIX VERIFIED: Replicas are transitioned to kFinalized, locations available";
 }
@@ -134,8 +130,7 @@ TEST_F(RegressionNameNodeTest, P0_PipelineReplicationMetadataInconsistency) {
     // Verify: NameNode created 3 replicas in kWriting state
     auto replicas = store_raw()->get_replicas(alloc.value().block_id);
     ASSERT_TRUE(replicas.hasValue());
-    EXPECT_EQ(replicas.value().size(), 3u)
-        << "NameNode pre-registers 3 replicas for pipeline";
+    EXPECT_EQ(replicas.value().size(), 3u) << "NameNode pre-registers 3 replicas for pipeline";
 
     // All replicas are in kWriting state
     for (const auto& r : replicas.value()) {
@@ -271,8 +266,7 @@ TEST_F(RegressionNameNodeTest, P1_DeleteFileLeavesBlockMetadata) {
     ASSERT_TRUE(alloc.hasValue());
     uint64_t block_id = alloc.value().block_id;
 
-    auto commit =
-        block_mgr_->commit_block(block_id, 1 * kMB, alloc.value().generation_stamp);
+    auto commit = block_mgr_->commit_block(block_id, 1 * kMB, alloc.value().generation_stamp);
     ASSERT_TRUE(commit.hasValue());
 
     // FIX VERIFIED: Simulate what NameNodeServiceImpl::Delete does:
@@ -320,8 +314,7 @@ TEST_F(RegressionNameNodeTest, P0_TransactionBindingMultiOpConsistency) {
     ASSERT_TRUE(dir.hasValue());
 
     // 2. Create a file inside it
-    auto file =
-        ns_mgr_->create_file("/txn_dir/data.dat", "user", "grp", 0644, 3, 128 * kMB);
+    auto file = ns_mgr_->create_file("/txn_dir/data.dat", "user", "grp", 0644, 3, 128 * kMB);
     ASSERT_TRUE(file.hasValue());
 
     // 3. Acquire a lease on the file
@@ -451,8 +444,10 @@ TEST_F(RegressionNameNodeTest, P0_AllocIdFirstInsertContiguity) {
     // Verify contiguity: second base should immediately follow first range.
     EXPECT_EQ(base2, base1 + 5)
         << "BUG: alloc_id produced non-contiguous ranges. "
-           "First alloc returned " << base1 << " (range [" << base1 << ", " << base1 + 5
-        << ")), second returned " << base2 << " (expected " << base1 + 5 << "). "
+           "First alloc returned "
+        << base1 << " (range [" << base1 << ", " << base1 + 5 << ")), second returned " << base2
+        << " (expected " << base1 + 5
+        << "). "
            "In MySQL, first-insert LAST_INSERT_ID() returns 0 instead of the correct base.";
 
     // Third allocation to further verify.

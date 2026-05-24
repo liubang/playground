@@ -975,9 +975,9 @@ absl::StatusOr<Value> builtin_array_take(const std::vector<Value>& args) {
     }
     const auto count =
         *n_or <= 0 ? 0 : std::min(static_cast<size_t>(*n_or), (*arr_or)->elements.size());
-    return Value::array(std::vector<Value>(
-        (*arr_or)->elements.begin(),
-        std::next((*arr_or)->elements.begin(), static_cast<int64_t>(count))));
+    return Value::array(
+        std::vector<Value>((*arr_or)->elements.begin(),
+                           std::next((*arr_or)->elements.begin(), static_cast<int64_t>(count))));
 }
 
 absl::StatusOr<Value> builtin_array_drop(const std::vector<Value>& args) {
@@ -995,9 +995,9 @@ absl::StatusOr<Value> builtin_array_drop(const std::vector<Value>& args) {
     }
     const auto count =
         *n_or <= 0 ? 0 : std::min(static_cast<size_t>(*n_or), (*arr_or)->elements.size());
-    return Value::array(std::vector<Value>(
-        std::next((*arr_or)->elements.begin(), static_cast<int64_t>(count)),
-        (*arr_or)->elements.end()));
+    return Value::array(
+        std::vector<Value>(std::next((*arr_or)->elements.begin(), static_cast<int64_t>(count)),
+                           (*arr_or)->elements.end()));
 }
 
 absl::StatusOr<Value> builtin_array_reverse(const std::vector<Value>& args) {
