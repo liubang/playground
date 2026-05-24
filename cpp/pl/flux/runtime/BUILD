@@ -140,6 +140,7 @@ cc_library(
     deps = [
         ":runtime_env",
         ":runtime_eval",
+        "//cpp/pl/flux/analysis:builtin_metadata",
         "//cpp/pl/flux/common",
         "//cpp/pl/flux/connector",
         "//cpp/pl/flux/execution",
@@ -224,6 +225,7 @@ cc_test(
     deps = [
         ":runtime_builtin",
         ":runtime_eval",
+        "//cpp/pl/flux/analysis:builtin_metadata",
         "@abseil-cpp//absl/status",
         "@googletest//:gtest_main",
     ],
