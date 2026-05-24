@@ -86,5 +86,13 @@ TEST(BuiltinMetadataTest, BuildsCompletionParameters) {
     EXPECT_EQ("fn:", params[1]);
 }
 
+TEST(BuiltinMetadataTest, CompletionParametersDoNotExposeOptionalMarkerSyntax) {
+    const auto* sig = FindUniverseBuiltinSignature("yield");
+    ASSERT_NE(sig, nullptr);
+    const auto params = CompletionParams(*sig);
+    ASSERT_EQ(1, params.size());
+    EXPECT_EQ("name:", params[0]);
+}
+
 } // namespace
 } // namespace pl::flux::analysis
