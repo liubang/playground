@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-23 23:19:57</td>
+            <td class="headerValue">2026-05-24 16:02:16</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -99,12 +99,12 @@
 <span id="L28"><span class="lineNum">      28</span>                 :             : namespace pl::flux::builtin {</span>
 <span id="L29"><span class="lineNum">      29</span>                 :             : namespace {</span>
 <span id="L30"><span class="lineNum">      30</span>                 :             : </span>
-<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaGNC tlaBgGNC">          28 : Value make_builtin_value(const std::string&amp; name, FunctionValue::BuiltinCallback fn) {</span></span>
+<span id="L31"><span class="lineNum">      31</span>                 :<span class="tlaGNC tlaBgGNC">          29 : Value make_builtin_value(const std::string&amp; name, FunctionValue::BuiltinCallback fn) {</span></span>
 <span id="L32"><span class="lineNum">      32</span>                 :             :     auto callable = std::make_shared&lt;FunctionValue&gt;();</span>
-<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC">          28 :     callable-&gt;kind = FunctionValue::Kind::Builtin;</span></span>
-<span id="L34"><span class="lineNum">      34</span>         [<span class="tlaGBC" title="Branch 0 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          28 :     callable-&gt;name = name;</span></span>
-<span id="L35"><span class="lineNum">      35</span>                 :<span class="tlaGNC">          28 :     callable-&gt;builtin = std::move(fn);</span></span>
-<span id="L36"><span class="lineNum">      36</span>   [<span class="tlaGBC" title="Branch 0 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          56 :     return Value::function(std::move(callable));</span></span>
+<span id="L33"><span class="lineNum">      33</span>                 :<span class="tlaGNC">          29 :     callable-&gt;kind = FunctionValue::Kind::Builtin;</span></span>
+<span id="L34"><span class="lineNum">      34</span>         [<span class="tlaGBC" title="Branch 0 was taken 29 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          29 :     callable-&gt;name = name;</span></span>
+<span id="L35"><span class="lineNum">      35</span>                 :<span class="tlaGNC">          29 :     callable-&gt;builtin = std::move(fn);</span></span>
+<span id="L36"><span class="lineNum">      36</span>   [<span class="tlaGBC" title="Branch 0 was taken 29 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          58 :     return Value::function(std::move(callable));</span></span>
 <span id="L37"><span class="lineNum">      37</span>                 :             : }</span>
 <span id="L38"><span class="lineNum">      38</span>                 :             : </span>
 <span id="L39"><span class="lineNum">      39</span>         [<span class="tlaGBC" title="Branch 0 was taken 30 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          30 : absl::StatusOr&lt;const ObjectValue*&gt; require_object_argument(const std::vector&lt;Value&gt;&amp; args,</span></span>
@@ -170,13 +170,13 @@
 <span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 9 was not taken"> - </span>]
 <span id="L91"><span class="lineNum">      91</span>                 :             : }</span>
 <span id="L92"><span class="lineNum">      92</span>                 :             : </span>
-<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">          28 : Value make_sqlite_package() {</span></span>
-<span id="L94"><span class="lineNum">      94</span>   [<span class="tlaGBC" title="Branch 0 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 56 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 28 times"> + </span> :<span class="tlaGNC">         112 :     return Value::object({</span></span>
+<span id="L93"><span class="lineNum">      93</span>                 :<span class="tlaGNC">          29 : Value make_sqlite_package() {</span></span>
+<span id="L94"><span class="lineNum">      94</span>   [<span class="tlaGBC" title="Branch 0 was taken 29 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 58 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 29 times"> + </span> :<span class="tlaGNC">         116 :     return Value::object({</span></span>
 <span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
-<span id="L95"><span class="lineNum">      95</span>   [<span class="tlaGBC" title="Branch 0 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          28 :         {&quot;path&quot;, Value::string(&quot;sqlite&quot;)},</span></span>
-<span id="L96"><span class="lineNum">      96</span>   [<span class="tlaGBC" title="Branch 0 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          56 :         {&quot;from&quot;, make_builtin_value(&quot;sqlite.from&quot;, builtin_sqlite_from)},</span></span>
-<span id="L97"><span class="lineNum">      97</span>         [<span class="tlaGBC" title="Branch 0 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          56 :     });</span></span>
-<span id="L98"><span class="lineNum">      98</span>   [<span class="tlaGBC" title="Branch 0 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 28 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          56 : }</span></span>
+<span id="L95"><span class="lineNum">      95</span>   [<span class="tlaGBC" title="Branch 0 was taken 29 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 29 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          29 :         {&quot;path&quot;, Value::string(&quot;sqlite&quot;)},</span></span>
+<span id="L96"><span class="lineNum">      96</span>   [<span class="tlaGBC" title="Branch 0 was taken 29 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 29 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          58 :         {&quot;from&quot;, make_builtin_value(&quot;sqlite.from&quot;, builtin_sqlite_from)},</span></span>
+<span id="L97"><span class="lineNum">      97</span>         [<span class="tlaGBC" title="Branch 0 was taken 29 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          58 :     });</span></span>
+<span id="L98"><span class="lineNum">      98</span>   [<span class="tlaGBC" title="Branch 0 was taken 29 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 29 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          58 : }</span></span>
 <span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L99"><span class="lineNum">      99</span>                 :             : </span>
 <span id="L100"><span class="lineNum">     100</span>                 :             : } // namespace</span>

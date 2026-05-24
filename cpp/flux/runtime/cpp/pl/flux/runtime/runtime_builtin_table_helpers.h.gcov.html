@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-23 23:19:57</td>
+            <td class="headerValue">2026-05-24 16:02:16</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -873,23 +873,23 @@
 <span id="L791"><span class="lineNum">     791</span>                 :             :     return rows;</span>
 <span id="L792"><span class="lineNum">     792</span>         [<span class="tlaGBC" title="Branch 0 was taken 136 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         215 : }</span></span>
 <span id="L793"><span class="lineNum">     793</span>                 :             : </span>
-<span id="L794"><span class="lineNum">     794</span>                 :<span class="tlaGNC">        7732 : inline Value make_builtin_value(const std::string&amp; name,</span></span>
+<span id="L794"><span class="lineNum">     794</span>                 :<span class="tlaGNC">        7789 : inline Value make_builtin_value(const std::string&amp; name,</span></span>
 <span id="L795"><span class="lineNum">     795</span>                 :             :                                 FunctionValue::BuiltinCallback fn,</span>
 <span id="L796"><span class="lineNum">     796</span>                 :             :                                 std::string pipe_param_name = {}) {</span>
 <span id="L797"><span class="lineNum">     797</span>                 :             :     auto callable = std::make_shared&lt;FunctionValue&gt;();</span>
-<span id="L798"><span class="lineNum">     798</span>                 :<span class="tlaGNC">        7732 :     callable-&gt;kind = FunctionValue::Kind::Builtin;</span></span>
-<span id="L799"><span class="lineNum">     799</span>         [<span class="tlaGBC" title="Branch 0 was taken 7732 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        7732 :     callable-&gt;name = name;</span></span>
-<span id="L800"><span class="lineNum">     800</span>                 :<span class="tlaGNC">        7732 :     callable-&gt;pipe_param_name = std::move(pipe_param_name);</span></span>
-<span id="L801"><span class="lineNum">     801</span>                 :<span class="tlaGNC">        7732 :     callable-&gt;builtin = std::move(fn);</span></span>
-<span id="L802"><span class="lineNum">     802</span>   [<span class="tlaGBC" title="Branch 0 was taken 7732 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">       15464 :     return Value::function(std::move(callable));</span></span>
+<span id="L798"><span class="lineNum">     798</span>                 :<span class="tlaGNC">        7789 :     callable-&gt;kind = FunctionValue::Kind::Builtin;</span></span>
+<span id="L799"><span class="lineNum">     799</span>         [<span class="tlaGBC" title="Branch 0 was taken 7789 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        7789 :     callable-&gt;name = name;</span></span>
+<span id="L800"><span class="lineNum">     800</span>                 :<span class="tlaGNC">        7789 :     callable-&gt;pipe_param_name = std::move(pipe_param_name);</span></span>
+<span id="L801"><span class="lineNum">     801</span>                 :<span class="tlaGNC">        7789 :     callable-&gt;builtin = std::move(fn);</span></span>
+<span id="L802"><span class="lineNum">     802</span>   [<span class="tlaGBC" title="Branch 0 was taken 7789 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">       15578 :     return Value::function(std::move(callable));</span></span>
 <span id="L803"><span class="lineNum">     803</span>                 :             : }</span>
 <span id="L804"><span class="lineNum">     804</span>                 :             : </span>
-<span id="L805"><span class="lineNum">     805</span>                 :<span class="tlaGNC">        7712 : inline void install_builtin(Environment&amp; env,</span></span>
+<span id="L805"><span class="lineNum">     805</span>                 :<span class="tlaGNC">        7753 : inline void install_builtin(Environment&amp; env,</span></span>
 <span id="L806"><span class="lineNum">     806</span>                 :             :                             const std::string&amp; name,</span>
 <span id="L807"><span class="lineNum">     807</span>                 :             :                             FunctionValue::BuiltinCallback fn,</span>
 <span id="L808"><span class="lineNum">     808</span>                 :             :                             std::string pipe_param_name = {}) {</span>
-<span id="L809"><span class="lineNum">     809</span>   [<span class="tlaGBC" title="Branch 0 was taken 7712 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 7712 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">       30848 :     env.define(name, make_builtin_value(name, std::move(fn), std::move(pipe_param_name)));</span></span>
-<span id="L810"><span class="lineNum">     810</span>                 :<span class="tlaGNC">        7712 : }</span></span>
+<span id="L809"><span class="lineNum">     809</span>   [<span class="tlaGBC" title="Branch 0 was taken 7753 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 7753 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">       31012 :     env.define(name, make_builtin_value(name, std::move(fn), std::move(pipe_param_name)));</span></span>
+<span id="L810"><span class="lineNum">     810</span>                 :<span class="tlaGNC">        7753 : }</span></span>
 <span id="L811"><span class="lineNum">     811</span>                 :             : </span>
 <span id="L812"><span class="lineNum">     812</span>                 :             : } // namespace detail</span>
 <span id="L813"><span class="lineNum">     813</span>                 :             : </span>

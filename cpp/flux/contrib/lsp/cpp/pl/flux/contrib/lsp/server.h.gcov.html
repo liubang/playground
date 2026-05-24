@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-23 23:19:57</td>
+            <td class="headerValue">2026-05-24 16:02:16</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -93,9 +93,9 @@
 <span id="L22"><span class="lineNum">      22</span>                 :             : #include &lt;unordered_map&gt;</span>
 <span id="L23"><span class="lineNum">      23</span>                 :             : #include &lt;vector&gt;</span>
 <span id="L24"><span class="lineNum">      24</span>                 :             : </span>
-<span id="L25"><span class="lineNum">      25</span>                 :             : #include &quot;cpp/pl/flux/contrib/lsp/formatter.h&quot;</span>
-<span id="L26"><span class="lineNum">      26</span>                 :             : #include &quot;cpp/pl/flux/contrib/lsp/jsonrpc.h&quot;</span>
-<span id="L27"><span class="lineNum">      27</span>                 :             : #include &quot;cpp/pl/flux/contrib/lsp/symbol_table.h&quot;</span>
+<span id="L25"><span class="lineNum">      25</span>                 :             : #include &quot;cpp/pl/flux/analysis/semantic_analyzer.h&quot;</span>
+<span id="L26"><span class="lineNum">      26</span>                 :             : #include &quot;cpp/pl/flux/contrib/lsp/formatter.h&quot;</span>
+<span id="L27"><span class="lineNum">      27</span>                 :             : #include &quot;cpp/pl/flux/contrib/lsp/jsonrpc.h&quot;</span>
 <span id="L28"><span class="lineNum">      28</span>                 :             : #include &quot;cpp/pl/flux/contrib/lsp/transport.h&quot;</span>
 <span id="L29"><span class="lineNum">      29</span>                 :             : #include &quot;cpp/pl/flux/syntax/ast.h&quot;</span>
 <span id="L30"><span class="lineNum">      30</span>                 :             : </span>
@@ -117,9 +117,9 @@
 <span id="L46"><span class="lineNum">      46</span>                 :             :     std::vector&lt;std::string&gt; parse_errors;</span>
 <span id="L47"><span class="lineNum">      47</span>                 :             :     int ast_version = -1; // version at which ast was computed</span>
 <span id="L48"><span class="lineNum">      48</span>                 :             : </span>
-<span id="L49"><span class="lineNum">      49</span>                 :             :     // Cached symbol table — rebuilt when AST changes.</span>
-<span id="L50"><span class="lineNum">      50</span>                 :             :     SymbolTable symbols;</span>
-<span id="L51"><span class="lineNum">      51</span>                 :             :     int symbols_version = -1;</span>
+<span id="L49"><span class="lineNum">      49</span>                 :             :     // Cached semantic binding graph — rebuilt when AST changes.</span>
+<span id="L50"><span class="lineNum">      50</span>                 :             :     analysis::AnalysisResult analysis;</span>
+<span id="L51"><span class="lineNum">      51</span>                 :             :     int analysis_version = -1;</span>
 <span id="L52"><span class="lineNum">      52</span>                 :             : };</span>
 <span id="L53"><span class="lineNum">      53</span>                 :             : </span>
 <span id="L54"><span class="lineNum">      54</span>                 :             : // Flux Language Server implementation.</span>
@@ -164,8 +164,8 @@
 <span id="L93"><span class="lineNum">      93</span>                 :             :     // Ensure cached AST is up-to-date for a document.</span>
 <span id="L94"><span class="lineNum">      94</span>                 :             :     void ensure_ast(Document&amp; doc);</span>
 <span id="L95"><span class="lineNum">      95</span>                 :             : </span>
-<span id="L96"><span class="lineNum">      96</span>                 :             :     // Ensure cached symbol table is up-to-date for a document.</span>
-<span id="L97"><span class="lineNum">      97</span>                 :             :     void ensure_symbols(Document&amp; doc);</span>
+<span id="L96"><span class="lineNum">      96</span>                 :             :     // Ensure cached semantic analysis is up-to-date for a document.</span>
+<span id="L97"><span class="lineNum">      97</span>                 :             :     void ensure_analysis(Document&amp; doc);</span>
 <span id="L98"><span class="lineNum">      98</span>                 :             : </span>
 <span id="L99"><span class="lineNum">      99</span>                 :             :     // Publish diagnostics for a document.</span>
 <span id="L100"><span class="lineNum">     100</span>                 :             :     void publish_diagnostics(const std::string&amp; uri);</span>

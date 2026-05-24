@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-23 23:19:57</td>
+            <td class="headerValue">2026-05-24 16:02:16</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">90.9&nbsp;%</td>
@@ -90,13 +90,13 @@
 <span id="L19"><span class="lineNum">      19</span>                 :             : </span>
 <span id="L20"><span class="lineNum">      20</span>                 :             : namespace pl::flux {</span>
 <span id="L21"><span class="lineNum">      21</span>                 :             : </span>
-<span id="L22"><span class="lineNum">      22</span>                 :<span class="tlaGNC tlaBgGNC">         282 : Environment::Environment() = default;</span></span>
+<span id="L22"><span class="lineNum">      22</span>                 :<span class="tlaGNC tlaBgGNC">         283 : Environment::Environment() = default;</span></span>
 <span id="L23"><span class="lineNum">      23</span>                 :             : </span>
 <span id="L24"><span class="lineNum">      24</span>                 :<span class="tlaGNC">        1411 : Environment::Environment(std::shared_ptr&lt;Environment&gt; parent) : parent_(std::move(parent)) {}</span></span>
 <span id="L25"><span class="lineNum">      25</span>                 :             : </span>
-<span id="L26"><span class="lineNum">      26</span>                 :<span class="tlaGNC">       10626 : void Environment::define(const std::string&amp; name, const Value&amp; value) {</span></span>
+<span id="L26"><span class="lineNum">      26</span>                 :<span class="tlaGNC">       10670 : void Environment::define(const std::string&amp; name, const Value&amp; value) {</span></span>
 <span id="L27"><span class="lineNum">      27</span>                 :             :     bindings_[name] = value;</span>
-<span id="L28"><span class="lineNum">      28</span>                 :<span class="tlaGNC">       10626 : }</span></span>
+<span id="L28"><span class="lineNum">      28</span>                 :<span class="tlaGNC">       10670 : }</span></span>
 <span id="L29"><span class="lineNum">      29</span>                 :             : </span>
 <span id="L30"><span class="lineNum">      30</span>                 :<span class="tlaGNC">          36 : void Environment::define_option(const std::string&amp; name, const Value&amp; value) {</span></span>
 <span id="L31"><span class="lineNum">      31</span>                 :             :     options_[name] = value;</span>
@@ -119,8 +119,8 @@
 <span id="L48"><span class="lineNum">      48</span>                 :             :     return absl::OkStatus();</span>
 <span id="L49"><span class="lineNum">      49</span>                 :             : }</span>
 <span id="L50"><span class="lineNum">      50</span>                 :             : </span>
-<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">        7859 : absl::StatusOr&lt;Value&gt; Environment::lookup(const std::string&amp; name) const {</span></span>
-<span id="L52"><span class="lineNum">      52</span>         [<span class="tlaGBC" title="Branch 0 was taken 6308 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1551 times"> + </span>]:<span class="tlaGNC">        7859 :     if (auto it = bindings_.find(name); it != bindings_.end()) {</span></span>
+<span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">        7903 : absl::StatusOr&lt;Value&gt; Environment::lookup(const std::string&amp; name) const {</span></span>
+<span id="L52"><span class="lineNum">      52</span>         [<span class="tlaGBC" title="Branch 0 was taken 6352 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1551 times"> + </span>]:<span class="tlaGNC">        7903 :     if (auto it = bindings_.find(name); it != bindings_.end()) {</span></span>
 <span id="L53"><span class="lineNum">      53</span>                 :             :         return it-&gt;second;</span>
 <span id="L54"><span class="lineNum">      54</span>                 :             :     }</span>
 <span id="L55"><span class="lineNum">      55</span>         [<span class="tlaGBC" title="Branch 0 was taken 1287 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 264 times"> + </span>]:<span class="tlaGNC">        1551 :     if (parent_ != nullptr) {</span></span>

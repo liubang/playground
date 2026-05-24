@@ -31,26 +31,26 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">93.0&nbsp;%</td>
-            <td class="headerCovTableEntry">142</td>
+            <td class="headerCovTableEntryHi">98.5&nbsp;%</td>
+            <td class="headerCovTableEntry">134</td>
             <td class="headerCovTableEntry">132</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-23 23:19:57</td>
+            <td class="headerValue">2026-05-24 16:02:16</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">9</td>
-            <td class="headerCovTableEntry">9</td>
+            <td class="headerCovTableEntry">8</td>
+            <td class="headerCovTableEntry">8</td>
           </tr>
           <tr>
             <td></td>
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">49.3&nbsp;%</td>
-            <td class="headerCovTableEntry">414</td>
+            <td class="headerCovTableEntryLo">52.3&nbsp;%</td>
+            <td class="headerCovTableEntry">390</td>
             <td class="headerCovTableEntry">204</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
@@ -322,44 +322,35 @@
 <span id="L228"><span class="lineNum">     228</span>                 :             : </span>
 <span id="L229"><span class="lineNum">     229</span>                 :             : } // namespace</span>
 <span id="L230"><span class="lineNum">     230</span>                 :             : </span>
-<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">         185 : void InstallUniverseInspectBuiltins(Environment&amp; env) {</span></span>
-<span id="L232"><span class="lineNum">     232</span>   [<span class="tlaGBC" title="Branch 0 was taken 185 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 185 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         370 :     install_builtin(env, &quot;columns&quot;, builtin_columns, &quot;tables&quot;);</span></span>
-<span id="L233"><span class="lineNum">     233</span>   [<span class="tlaGBC" title="Branch 0 was taken 185 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 185 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         370 :     install_builtin(env, &quot;keys&quot;, builtin_keys, &quot;tables&quot;);</span></span>
-<span id="L234"><span class="lineNum">     234</span>   [<span class="tlaGBC" title="Branch 0 was taken 185 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 185 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         370 :     install_builtin(env, &quot;findColumn&quot;, builtin_find_column, &quot;tables&quot;);</span></span>
-<span id="L235"><span class="lineNum">     235</span>   [<span class="tlaGBC" title="Branch 0 was taken 185 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 185 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         370 :     install_builtin(env, &quot;findRecord&quot;, builtin_find_record, &quot;tables&quot;);</span></span>
-<span id="L236"><span class="lineNum">     236</span>   [<span class="tlaGBC" title="Branch 0 was taken 185 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 185 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         370 :     install_builtin(env, &quot;explain&quot;, builtin_explain, &quot;tables&quot;);</span></span>
-<span id="L237"><span class="lineNum">     237</span>   [<span class="tlaGBC" title="Branch 0 was taken 185 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 185 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         370 :     install_builtin(env, &quot;yield&quot;, builtin_yield, &quot;tables&quot;);</span></span>
-<span id="L238"><span class="lineNum">     238</span>                 :<span class="tlaGNC">         185 : }</span></span>
-<span id="L239"><span class="lineNum">     239</span>                 :             : </span>
-<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC">          16 : bool InstallKnownUniverseInspectBuiltin(Environment&amp; env, const std::string&amp; name) {</span></span>
-<span id="L241"><span class="lineNum">     241</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">          16 :     if (name == &quot;columns&quot;) {</span></span>
-<span id="L242"><span class="lineNum">     242</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         install_builtin(env, &quot;columns&quot;, builtin_columns, &quot;tables&quot;);</span></span>
-<span id="L243"><span class="lineNum">     243</span>                 :<span class="tlaUNC">           0 :         return true;</span></span>
-<span id="L244"><span class="lineNum">     244</span>                 :             :     }</span>
-<span id="L245"><span class="lineNum">     245</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          16 :     if (name == &quot;keys&quot;) {</span></span>
-<span id="L246"><span class="lineNum">     246</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         install_builtin(env, &quot;keys&quot;, builtin_keys, &quot;tables&quot;);</span></span>
-<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaUNC">           0 :         return true;</span></span>
-<span id="L248"><span class="lineNum">     248</span>                 :             :     }</span>
-<span id="L249"><span class="lineNum">     249</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          16 :     if (name == &quot;findColumn&quot;) {</span></span>
-<span id="L250"><span class="lineNum">     250</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         install_builtin(env, &quot;findColumn&quot;, builtin_find_column, &quot;tables&quot;);</span></span>
-<span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaUNC">           0 :         return true;</span></span>
-<span id="L252"><span class="lineNum">     252</span>                 :             :     }</span>
-<span id="L253"><span class="lineNum">     253</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          16 :     if (name == &quot;findRecord&quot;) {</span></span>
-<span id="L254"><span class="lineNum">     254</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         install_builtin(env, &quot;findRecord&quot;, builtin_find_record, &quot;tables&quot;);</span></span>
-<span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaUNC">           0 :         return true;</span></span>
-<span id="L256"><span class="lineNum">     256</span>                 :             :     }</span>
-<span id="L257"><span class="lineNum">     257</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          16 :     if (name == &quot;explain&quot;) {</span></span>
-<span id="L258"><span class="lineNum">     258</span>   [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          26 :         install_builtin(env, &quot;explain&quot;, builtin_explain, &quot;tables&quot;);</span></span>
-<span id="L259"><span class="lineNum">     259</span>                 :<span class="tlaGNC">          13 :         return true;</span></span>
-<span id="L260"><span class="lineNum">     260</span>                 :             :     }</span>
-<span id="L261"><span class="lineNum">     261</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">           3 :     if (name == &quot;yield&quot;) {</span></span>
-<span id="L262"><span class="lineNum">     262</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           2 :         install_builtin(env, &quot;yield&quot;, builtin_yield, &quot;tables&quot;);</span></span>
-<span id="L263"><span class="lineNum">     263</span>                 :<span class="tlaGNC">           1 :         return true;</span></span>
-<span id="L264"><span class="lineNum">     264</span>                 :             :     }</span>
-<span id="L265"><span class="lineNum">     265</span>                 :             :     return false;</span>
-<span id="L266"><span class="lineNum">     266</span>                 :             : }</span>
-<span id="L267"><span class="lineNum">     267</span>                 :             : </span>
-<span id="L268"><span class="lineNum">     268</span>                 :             : } // namespace pl::flux</span>
+<span id="L231"><span class="lineNum">     231</span>                 :<span class="tlaGNC">        1132 : bool InstallKnownUniverseInspectBuiltin(Environment&amp; env, const std::string&amp; name) {</span></span>
+<span id="L232"><span class="lineNum">     232</span>         [<span class="tlaGBC" title="Branch 0 was taken 186 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 946 times"> + </span>]:<span class="tlaGNC">        1132 :     if (name == &quot;columns&quot;) {</span></span>
+<span id="L233"><span class="lineNum">     233</span>   [<span class="tlaGBC" title="Branch 0 was taken 186 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 186 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         372 :         install_builtin(env, &quot;columns&quot;, builtin_columns, &quot;tables&quot;);</span></span>
+<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC">         186 :         return true;</span></span>
+<span id="L235"><span class="lineNum">     235</span>                 :             :     }</span>
+<span id="L236"><span class="lineNum">     236</span>         [<span class="tlaGBC" title="Branch 0 was taken 186 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 760 times"> + </span>]:<span class="tlaGNC">         946 :     if (name == &quot;keys&quot;) {</span></span>
+<span id="L237"><span class="lineNum">     237</span>   [<span class="tlaGBC" title="Branch 0 was taken 186 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 186 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         372 :         install_builtin(env, &quot;keys&quot;, builtin_keys, &quot;tables&quot;);</span></span>
+<span id="L238"><span class="lineNum">     238</span>                 :<span class="tlaGNC">         186 :         return true;</span></span>
+<span id="L239"><span class="lineNum">     239</span>                 :             :     }</span>
+<span id="L240"><span class="lineNum">     240</span>         [<span class="tlaGBC" title="Branch 0 was taken 186 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 574 times"> + </span>]:<span class="tlaGNC">         760 :     if (name == &quot;findColumn&quot;) {</span></span>
+<span id="L241"><span class="lineNum">     241</span>   [<span class="tlaGBC" title="Branch 0 was taken 186 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 186 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         372 :         install_builtin(env, &quot;findColumn&quot;, builtin_find_column, &quot;tables&quot;);</span></span>
+<span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaGNC">         186 :         return true;</span></span>
+<span id="L243"><span class="lineNum">     243</span>                 :             :     }</span>
+<span id="L244"><span class="lineNum">     244</span>         [<span class="tlaGBC" title="Branch 0 was taken 186 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 388 times"> + </span>]:<span class="tlaGNC">         574 :     if (name == &quot;findRecord&quot;) {</span></span>
+<span id="L245"><span class="lineNum">     245</span>   [<span class="tlaGBC" title="Branch 0 was taken 186 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 186 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         372 :         install_builtin(env, &quot;findRecord&quot;, builtin_find_record, &quot;tables&quot;);</span></span>
+<span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaGNC">         186 :         return true;</span></span>
+<span id="L247"><span class="lineNum">     247</span>                 :             :     }</span>
+<span id="L248"><span class="lineNum">     248</span>         [<span class="tlaGBC" title="Branch 0 was taken 199 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 189 times"> + </span>]:<span class="tlaGNC">         388 :     if (name == &quot;explain&quot;) {</span></span>
+<span id="L249"><span class="lineNum">     249</span>   [<span class="tlaGBC" title="Branch 0 was taken 199 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 199 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         398 :         install_builtin(env, &quot;explain&quot;, builtin_explain, &quot;tables&quot;);</span></span>
+<span id="L250"><span class="lineNum">     250</span>                 :<span class="tlaGNC">         199 :         return true;</span></span>
+<span id="L251"><span class="lineNum">     251</span>                 :             :     }</span>
+<span id="L252"><span class="lineNum">     252</span>         [<span class="tlaGBC" title="Branch 0 was taken 187 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">         189 :     if (name == &quot;yield&quot;) {</span></span>
+<span id="L253"><span class="lineNum">     253</span>   [<span class="tlaGBC" title="Branch 0 was taken 187 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 187 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         374 :         install_builtin(env, &quot;yield&quot;, builtin_yield, &quot;tables&quot;);</span></span>
+<span id="L254"><span class="lineNum">     254</span>                 :<span class="tlaGNC">         187 :         return true;</span></span>
+<span id="L255"><span class="lineNum">     255</span>                 :             :     }</span>
+<span id="L256"><span class="lineNum">     256</span>                 :             :     return false;</span>
+<span id="L257"><span class="lineNum">     257</span>                 :             : }</span>
+<span id="L258"><span class="lineNum">     258</span>                 :             : </span>
+<span id="L259"><span class="lineNum">     259</span>                 :             : } // namespace pl::flux</span>
         </pre>
               </td>
             </tr>

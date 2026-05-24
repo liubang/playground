@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-23 23:19:57</td>
+            <td class="headerValue">2026-05-24 16:02:16</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -94,10 +94,10 @@
 <span id="L23"><span class="lineNum">      23</span>                 :             : namespace pl::flux::builtin {</span>
 <span id="L24"><span class="lineNum">      24</span>                 :             : namespace {</span>
 <span id="L25"><span class="lineNum">      25</span>                 :             : </span>
-<span id="L26"><span class="lineNum">      26</span>                 :<span class="tlaGNC tlaBgGNC">         649 : std::unordered_map&lt;std::string, PackageBuilder&gt;&amp; package_builders() {</span></span>
-<span id="L27"><span class="lineNum">      27</span>   [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 624 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         649 :     static auto* builders = new std::unordered_map&lt;std::string, PackageBuilder&gt;();</span></span>
+<span id="L26"><span class="lineNum">      26</span>                 :<span class="tlaGNC tlaBgGNC">         730 : std::unordered_map&lt;std::string, PackageBuilder&gt;&amp; package_builders() {</span></span>
+<span id="L27"><span class="lineNum">      27</span>   [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 705 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         730 :     static auto* builders = new std::unordered_map&lt;std::string, PackageBuilder&gt;();</span></span>
 <span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
-<span id="L28"><span class="lineNum">      28</span>                 :<span class="tlaGNC">         649 :     return *builders;</span></span>
+<span id="L28"><span class="lineNum">      28</span>                 :<span class="tlaGNC">         730 :     return *builders;</span></span>
 <span id="L29"><span class="lineNum">      29</span>                 :             : }</span>
 <span id="L30"><span class="lineNum">      30</span>                 :             : </span>
 <span id="L31"><span class="lineNum">      31</span>                 :             : } // namespace</span>
@@ -106,13 +106,13 @@
 <span id="L34"><span class="lineNum">      34</span>                 :<span class="tlaGNC">         750 :     package_builders()[path] = std::move(builder);</span></span>
 <span id="L35"><span class="lineNum">      35</span>                 :<span class="tlaGNC">         375 : }</span></span>
 <span id="L36"><span class="lineNum">      36</span>                 :             : </span>
-<span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC">         274 : std::optional&lt;Value&gt; ImportRegisteredPackage(const std::string&amp; path) {</span></span>
-<span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC">         274 :     const auto&amp; builders = package_builders();</span></span>
+<span id="L37"><span class="lineNum">      37</span>                 :<span class="tlaGNC">         355 : std::optional&lt;Value&gt; ImportRegisteredPackage(const std::string&amp; path) {</span></span>
+<span id="L38"><span class="lineNum">      38</span>                 :<span class="tlaGNC">         355 :     const auto&amp; builders = package_builders();</span></span>
 <span id="L39"><span class="lineNum">      39</span>                 :             :     auto it = builders.find(path);</span>
-<span id="L40"><span class="lineNum">      40</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 271 times"> + </span>]:<span class="tlaGNC">         274 :     if (it == builders.end()) {</span></span>
+<span id="L40"><span class="lineNum">      40</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 352 times"> + </span>]:<span class="tlaGNC">         355 :     if (it == builders.end()) {</span></span>
 <span id="L41"><span class="lineNum">      41</span>                 :<span class="tlaGNC">           3 :         return std::nullopt;</span></span>
 <span id="L42"><span class="lineNum">      42</span>                 :             :     }</span>
-<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">         542 :     return it-&gt;second();</span></span>
+<span id="L43"><span class="lineNum">      43</span>                 :<span class="tlaGNC">         704 :     return it-&gt;second();</span></span>
 <span id="L44"><span class="lineNum">      44</span>                 :             : }</span>
 <span id="L45"><span class="lineNum">      45</span>                 :             : </span>
 <span id="L46"><span class="lineNum">      46</span>                 :<span class="tlaGNC">           3 : Value MakeUnknownPackage(const std::string&amp; path) {</span></span>
