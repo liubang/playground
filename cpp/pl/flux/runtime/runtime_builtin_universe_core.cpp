@@ -110,10 +110,4 @@ bool InstallKnownUniverseCoreBuiltin(Environment& env, const std::string& name) 
     return false;
 }
 
-void InstallUniverseCoreBuiltins(Environment& env) {
-    InstallKnownUniverseCoreBuiltin(env, "len");
-    InstallKnownUniverseCoreBuiltin(env, "string");
-    InstallKnownUniverseCoreBuiltin(env, "contains");
-}
-
 } // namespace pl::flux

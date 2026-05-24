@@ -21,6 +21,7 @@
 
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
+#include "cpp/pl/flux/analysis/builtin_metadata.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_package.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_universe.h"
 
@@ -50,12 +51,11 @@ bool install_known_builtin(Environment& env, const std::string& name) {
 } // namespace
 
 void BuiltinRegistry::Install(Environment& env) {
-    InstallUniverseCoreBuiltins(env);
-    InstallUniverseTransformBuiltins(env);
-    InstallUniverseAggregateBuiltins(env);
-    InstallUniverseWindowBuiltins(env);
-    InstallUniverseJoinBuiltins(env);
-    InstallUniverseInspectBuiltins(env);
+    for (const auto& sig : analysis::AllBuiltinSignatures()) {
+        if (sig.package.empty() && sig.implemented && analysis::IsCallableBuiltin(sig)) {
+            install_known_builtin(env, sig.name);
+        }
+    }
 }
 
 absl::Status BuiltinRegistry::Ensure(Environment& env, const std::string& name) {

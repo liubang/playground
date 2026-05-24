@@ -1057,27 +1057,6 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args,
 
 } // namespace
 
-void InstallUniverseWindowBuiltins(Environment& env) {
-    install_builtin(env, "elapsed", builtin_elapsed, "tables");
-    install_builtin(env, "difference", builtin_difference, "tables");
-    install_builtin(env, "derivative", builtin_derivative, "tables");
-    install_builtin(env, "window", builtin_window, "tables");
-    install_builtin(
-        env,
-        "aggregateWindow",
-        [&env](const std::vector<Value>& args) -> absl::StatusOr<Value> {
-            auto option_or = env.lookup_option("location");
-            if (option_or.ok()) {
-                return builtin_aggregate_window(args, &*option_or);
-            }
-            if (option_or.status().code() != absl::StatusCode::kNotFound) {
-                return option_or.status();
-            }
-            return builtin_aggregate_window(args);
-        },
-        "tables");
-}
-
 bool InstallKnownUniverseWindowBuiltin(Environment& env, const std::string& name) {
     if (name == "elapsed") {
         install_builtin(env, "elapsed", builtin_elapsed, "tables");

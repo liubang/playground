@@ -6,6 +6,7 @@
 
 - Flux scanner、parser、AST 调试输出
 - 表达式求值、作用域、函数、管道、顶层执行环境
+- 共享 builtin metadata、semantic model 和完整 analyzer，用于包/函数签名、作用域、定义/引用解析、表达式类型、record/table schema、绑定/类型诊断和 LSP 能力
 - 人类可读、annotated CSV、JSON 三种 CLI 输出
 - REPL、内联源码、文件执行、结果筛选
 - 一批默认加载的 universe builtin
@@ -433,9 +434,11 @@ bazel build //cpp/pl/flux/contrib/lsp:flux-ls
 
 | 能力 | 说明 |
 | ---- | ---- |
-| `textDocument/publishDiagnostics` | 实时语法诊断，基于 parser 错误推送 |
-| `textDocument/completion` | 关键字、内置包和函数补全 |
-| `textDocument/hover` | 标识符悬浮提示 |
+| `textDocument/publishDiagnostics` | 实时语法诊断，并合并 semantic analyzer 的未定义标识符、未知包成员、参数缺失/重复等诊断 |
+| `textDocument/completion` | 关键字、内置包和函数补全，builtin/package 候选来自共享 metadata |
+| `textDocument/hover` | 基于共享 metadata 的 builtin/package 函数签名与说明 |
+| `textDocument/definition` / `references` / `rename` | 基于 analysis binder 的定义、引用和作用域级重命名 |
+| `textDocument/semanticTokens/full` | 基于 analysis binder 的变量、函数、参数、import namespace 着色 |
 | `textDocument/formatting` | 全文档格式化 |
 
 ### Formatter 规则

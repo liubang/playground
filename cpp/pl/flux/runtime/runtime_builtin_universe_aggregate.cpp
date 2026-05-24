@@ -542,23 +542,6 @@ absl::StatusOr<Value> builtin_last(const std::vector<Value>& args) {
 
 } // namespace
 
-void InstallUniverseAggregateBuiltins(Environment& env) {
-    install_builtin(env, "sum", builtin_sum, "values");
-    install_builtin(env, "mean", builtin_mean, "values");
-    install_builtin(env, "min", builtin_min, "values");
-    install_builtin(env, "max", builtin_max, "values");
-    install_builtin(env, "reduce", builtin_reduce, "tables");
-    install_builtin(env, "distinct", builtin_distinct, "tables");
-    install_builtin(env, "count", builtin_count, "tables");
-    install_builtin(env, "spread", builtin_spread, "tables");
-    install_builtin(env, "quantile", builtin_quantile, "tables");
-    install_builtin(env, "median", builtin_median, "tables");
-    install_builtin(env, "first", builtin_first, "tables");
-    install_builtin(env, "last", builtin_last, "tables");
-    install_builtin(env, "top", builtin_top, "tables");
-    install_builtin(env, "bottom", builtin_bottom, "tables");
-}
-
 bool InstallKnownUniverseAggregateBuiltin(Environment& env, const std::string& name) {
     if (name == "sum") {
         install_builtin(env, "sum", builtin_sum, "values");
