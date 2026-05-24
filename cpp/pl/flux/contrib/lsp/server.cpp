@@ -20,8 +20,11 @@
 #include <algorithm>
 #include <cctype>
 #include <sstream>
+#include <unordered_set>
 #include <utility>
 
+#include "cpp/pl/flux/analysis/builtin_metadata.h"
+#include "cpp/pl/flux/analysis/semantic_analyzer.h"
 #include "cpp/pl/flux/contrib/lsp/formatter.h"
 #include "cpp/pl/flux/contrib/lsp/json_util.h"
 #include "cpp/pl/flux/syntax/parser.h"
@@ -267,143 +270,30 @@ bool apply_incremental_change(std::string& content,
 // ============================================================
 
 const std::vector<std::pair<std::string, std::string>>& universe_table_builtins() {
-    static const std::vector<std::pair<std::string, std::string>> builtins = {
-        {"range", "range(start:, stop:) - Filter by time range"},
-        {"filter", "filter(fn:) - Filter rows by predicate"},
-        {"map", "map(fn:) - Transform each row"},
-        {"limit", "limit(n:) - Take first n rows"},
-        {"tail", "tail(n:) - Take last n rows"},
-        {"keep", "keep(columns:) - Keep specified columns"},
-        {"drop", "drop(columns:) - Drop specified columns"},
-        {"rename", "rename(columns:) - Rename columns"},
-        {"duplicate", "duplicate(column:, as:) - Duplicate a column"},
-        {"set", "set(key:, value:) - Set column value"},
-        {"sort", "sort(columns:, desc:) - Sort by columns"},
-        {"group", "group(columns:) - Group by columns"},
-        {"pivot", "pivot(rowKey:, columnKey:, valueColumn:) - Pivot table"},
-        {"fill", "fill(column:, value:) - Fill null values"},
-        {"union", "union(tables:) - Union multiple table streams"},
-        {"count", "count(column:) - Count rows"},
-        {"sum", "sum() - Sum values"},
-        {"mean", "mean() - Calculate mean"},
-        {"min", "min() - Find minimum"},
-        {"max", "max() - Find maximum"},
-        {"spread", "spread(column:) - Max minus min"},
-        {"quantile", "quantile(q:, column:) - Calculate quantile"},
-        {"median", "median(column:) - Calculate median"},
-        {"first", "first() - First row per group"},
-        {"last", "last() - Last row per group"},
-        {"top", "top(n:, columns:) - Top n rows"},
-        {"bottom", "bottom(n:, columns:) - Bottom n rows"},
-        {"reduce", "reduce(identity:, fn:) - Fold rows"},
-        {"distinct", "distinct(column:) - Unique values"},
-        {"window", "window(every:) - Time-based windowing"},
-        {"aggregateWindow", "aggregateWindow(every:, fn:) - Window + aggregate"},
-        {"elapsed", "elapsed(unit:) - Time between rows"},
-        {"difference", "difference(columns:) - Row-to-row difference"},
-        {"derivative", "derivative(unit:) - Rate of change"},
-        {"join", "join(tables:, on:) - Join tables"},
-        {"columns", "columns() - List column names"},
-        {"keys", "keys() - List group key columns"},
-        {"findColumn", "findColumn(fn:, column:) - Extract column as array"},
-        {"findRecord", "findRecord(fn:, idx:) - Extract record"},
-        {"explain", "explain() - Show query plan"},
-        {"yield", "yield(name:) - Name and output result"},
-    };
+    static const auto builtins = [] {
+        std::vector<std::pair<std::string, std::string>> items;
+        for (const auto& sig : analysis::BuiltinsForPackage("")) {
+            items.emplace_back(sig->name, analysis::SignatureDetail(*sig));
+        }
+        return items;
+    }();
     return builtins;
 }
 
 const std::unordered_map<std::string, std::vector<std::pair<std::string, std::string>>>&
 known_packages() {
-    static const std::unordered_map<std::string, std::vector<std::pair<std::string, std::string>>>
-        pkgs = {
-            {"array",
-             {{"from", "array.from(rows:) - Create table from array"},
-              {"concat", "array.concat(arr:, v:) - Concatenate arrays"},
-              {"filter", "array.filter(arr:, fn:) - Filter array"},
-              {"map", "array.map(arr:, fn:) - Map array"},
-              {"contains", "array.contains(arr:, value:) - Check membership"},
-              {"reduce", "array.reduce(arr:, identity:, fn:) - Fold array"},
-              {"any", "array.any(arr:, fn:) - Any match"},
-              {"all", "array.all(arr:, fn:) - All match"},
-              {"range", "array.range(start:, stop:, step:) - Generate integer range"},
-              {"repeat", "array.repeat(value:, n:) - Repeat value"},
-              {"length", "array.length(arr:) - Array length"},
-              {"get", "array.get(arr:, index:, default:) - Safe element access"},
-              {"slice", "array.slice(arr:, start:, end:) - Slice array"},
-              {"sort", "array.sort(arr:, desc:) - Sort scalar array"},
-              {"flatMap", "array.flatMap(arr:, fn:) - Map and flatten"},
-              {"find", "array.find(arr:, fn:, default:) - First matching element"},
-              {"findIndex", "array.findIndex(arr:, fn:) - First matching index"},
-              {"take", "array.take(arr:, n:) - Take first elements"},
-              {"drop", "array.drop(arr:, n:) - Drop first elements"},
-              {"reverse", "array.reverse(arr:) - Reverse array"},
-              {"unique", "array.unique(arr:) - Remove duplicates"},
-              {"unfold", "array.unfold(seed:, fn:, limit:) - Generate from state"},
-              {"scan", "array.scan(arr:, identity:, fn:) - Running fold"},
-              {"zip", "array.zip(left:, right:) - Zip arrays"},
-              {"enumerate", "array.enumerate(arr:) - Add element indexes"}}},
-            {"csv", {{"from", "csv.from(csv:, file:, mode:) - Parse CSV to table"}}},
-            {"sqlite", {{"from", "sqlite.from(path:, table:) - Scan SQLite table"}}},
-            {"mysql", {{"from", "mysql.from(dsn:, table:) - Scan MySQL table"}}},
-            {"date",
-             {{"add", "date.add(d:, to:) - Add duration to time"},
-              {"sub", "date.sub(d:, from:) - Subtract duration"},
-              {"truncate", "date.truncate(t:, unit:) - Truncate time"},
-              {"year", "date.year(t:) - Extract year"},
-              {"month", "date.month(t:) - Extract month"},
-              {"monthDay", "date.monthDay(t:) - Day of month"},
-              {"weekDay", "date.weekDay(t:) - Day of week"},
-              {"hour", "date.hour(t:) - Extract hour"},
-              {"minute", "date.minute(t:) - Extract minute"},
-              {"second", "date.second(t:) - Extract second"}}},
-            {"dict",
-             {{"fromList", "dict.fromList(pairs:) - Create dict"},
-              {"get", "dict.get(dict:, key:, default:) - Get value"},
-              {"insert", "dict.insert(dict:, key:, value:) - Insert"},
-              {"remove", "dict.remove(dict:, key:) - Remove key"}}},
-            {"join",
-             {{"inner", "join.inner(left:, right:, on:) - Inner join"},
-              {"left", "join.left(left:, right:, on:) - Left join"},
-              {"right", "join.right(left:, right:, on:) - Right join"},
-              {"full", "join.full(left:, right:, on:) - Full join"}}},
-            {"json", {{"encode", "json.encode(v:) - Encode to JSON string"}}},
-            {"math",
-             {{"abs", "math.abs(x:) - Absolute value"},
-              {"ceil", "math.ceil(x:) - Ceiling"},
-              {"floor", "math.floor(x:) - Floor"},
-              {"round", "math.round(x:) - Round"},
-              {"sqrt", "math.sqrt(x:) - Square root"},
-              {"pow", "math.pow(x:, y:) - Power"}}},
-            {"regexp",
-             {{"compile", "regexp.compile(v:) - Compile regex"},
-              {"findString", "regexp.findString(r:, v:) - Find match"},
-              {"matchRegexpString", "regexp.matchRegexpString(r:, v:) - Test match"},
-              {"quoteMeta", "regexp.quoteMeta(v:) - Escape metacharacters"}}},
-            {"runtime", {{"version", "runtime.version() - Runtime version"}}},
-            {"strings",
-             {{"containsStr", "strings.containsStr(v:, substr:) - Contains"},
-              {"hasPrefix", "strings.hasPrefix(v:, prefix:) - Has prefix"},
-              {"hasSuffix", "strings.hasSuffix(v:, suffix:) - Has suffix"},
-              {"joinStr", "strings.joinStr(arr:, v:) - Join strings"},
-              {"replaceAll", "strings.replaceAll(v:, t:, u:) - Replace all"},
-              {"split", "strings.split(v:, t:) - Split string"},
-              {"toUpper", "strings.toUpper(v:) - To uppercase"},
-              {"toLower", "strings.toLower(v:) - To lowercase"},
-              {"trimSpace", "strings.trimSpace(v:) - Trim whitespace"}}},
-            {"system", {{"time", "system.time() - Current UTC time"}}},
-            {"types",
-             {{"isNumeric", "types.isNumeric(v:) - Is numeric"},
-              {"isType", "types.isType(v:, type:) - Check type"},
-              {"isString", "types.isString(v:) - Is string"},
-              {"isDuration", "types.isDuration(v:) - Is duration"},
-              {"isBool", "types.isBool(v:) - Is bool"},
-              {"isInt", "types.isInt(v:) - Is int"},
-              {"isUInt", "types.isUInt(v:) - Is uint"},
-              {"isFloat", "types.isFloat(v:) - Is float"},
-              {"isTime", "types.isTime(v:) - Is time"},
-              {"isRegexp", "types.isRegexp(v:) - Is regexp"}}},
-        };
+    static const auto pkgs = [] {
+        std::unordered_map<std::string, std::vector<std::pair<std::string, std::string>>> items;
+        for (const auto& package : analysis::KnownPackages()) {
+            auto builtins = analysis::BuiltinsForPackage(package);
+            auto& entries = items[package];
+            entries.reserve(builtins.size());
+            for (const auto* sig : builtins) {
+                entries.emplace_back(sig->name, analysis::SignatureDetail(*sig));
+            }
+        }
+        return items;
+    }();
     return pkgs;
 }
 
@@ -450,31 +340,6 @@ std::string snippet_escape(std::string_view s) {
         out += c;
     }
     return out;
-}
-
-std::vector<std::string> params_from_detail_signature(const std::string& detail) {
-    const auto lparen = detail.find('(');
-    const auto rparen = detail.find(')', lparen == std::string::npos ? 0 : lparen + 1);
-    if (lparen == std::string::npos || rparen == std::string::npos || rparen <= lparen + 1) {
-        return {};
-    }
-
-    std::vector<std::string> params;
-    std::string_view param_list(detail.data() + lparen + 1, rparen - lparen - 1);
-    while (!param_list.empty()) {
-        const auto comma = param_list.find(',');
-        const auto piece =
-            comma == std::string_view::npos ? param_list : param_list.substr(0, comma);
-        auto param = trim_copy(piece);
-        if (!param.empty()) {
-            params.push_back(std::move(param));
-        }
-        if (comma == std::string_view::npos) {
-            break;
-        }
-        param_list.remove_prefix(comma + 1);
-    }
-    return params;
 }
 
 std::string make_function_snippet(const std::string& label,
@@ -787,22 +652,18 @@ void FluxLanguageServer::ensure_ast(Document& doc) {
     doc.ast_version = doc.version;
 }
 
-// ============================================================
-// Symbol table cache
-// ============================================================
-
-void FluxLanguageServer::ensure_symbols(Document& doc) {
+void FluxLanguageServer::ensure_analysis(Document& doc) {
     ensure_ast(doc);
-    if (doc.symbols_version == doc.version) {
-        return; // Cache is fresh
-    }
-    if (!doc.ast) {
-        doc.symbols = SymbolTable{};
-        doc.symbols_version = doc.version;
+    if (doc.analysis_version == doc.version) {
         return;
     }
-    doc.symbols = build_symbol_table(*doc.ast, doc.uri);
-    doc.symbols_version = doc.version;
+    if (!doc.ast) {
+        doc.analysis = analysis::AnalysisResult{};
+        doc.analysis_version = doc.version;
+        return;
+    }
+    doc.analysis = analysis::SemanticAnalyzer().Analyze(*doc.ast);
+    doc.analysis_version = doc.version;
 }
 
 void FluxLanguageServer::publish_diagnostics(const std::string& uri) {
@@ -812,7 +673,7 @@ void FluxLanguageServer::publish_diagnostics(const std::string& uri) {
     }
 
     ensure_ast(it->second);
-    ensure_symbols(it->second);
+    ensure_analysis(it->second);
     const auto& doc = it->second;
 
     std::ostringstream os;
@@ -858,14 +719,15 @@ void FluxLanguageServer::publish_diagnostics(const std::string& uri) {
         emit_diagnostic(1, 1, 1, 1, 1, err);
     }
 
-    // Semantic diagnostics from symbol table (undefined references)
-    for (const auto& diag : doc.symbols.diagnostics) {
-        emit_diagnostic(diag.location.start_line,
-                        diag.location.start_col,
-                        diag.location.end_line,
-                        diag.location.end_col,
-                        diag.severity,
-                        diag.message);
+    if (doc.ast) {
+        for (const auto& diag : doc.analysis.diagnostics) {
+            emit_diagnostic(diag.location.start.line,
+                            diag.location.start.column,
+                            diag.location.end.line,
+                            diag.location.end.column,
+                            static_cast<int>(diag.severity),
+                            diag.message);
+        }
     }
 
     os << "]}";
@@ -913,6 +775,7 @@ void FluxLanguageServer::handle_hover(const JsonRpcMessage& msg) {
         return;
     }
 
+    ensure_analysis(it->second);
     auto result =
         build_hover_response(it->second, static_cast<int>(line), static_cast<int>(character));
     reply(msg, result);
@@ -952,83 +815,68 @@ std::string FluxLanguageServer::build_completion_response(Document& doc, int lin
         [&](const std::string& label, const std::string& detail, std::vector<std::string> params) {
             add_item(label, detail, 3 /* Function */, make_function_snippet(label, params));
         };
-    auto add_function_item_from_detail = [&](const std::string& label, const std::string& detail) {
-        add_function_item(label, detail, params_from_detail_signature(detail));
-    };
 
     // Check context
     auto pkg_prefix = prefix_before_dot(doc.content, line, character);
 
     if (!pkg_prefix.empty()) {
         // Package member completion
-        const auto& pkgs = known_packages();
-        auto pkg_it = pkgs.find(pkg_prefix);
-        if (pkg_it != pkgs.end()) {
-            for (const auto& [name, detail] : pkg_it->second) {
-                add_function_item_from_detail(name, detail);
+        for (const auto* sig : analysis::BuiltinsForPackage(pkg_prefix)) {
+            if (sig != nullptr) {
+                if (analysis::IsCallableBuiltin(*sig)) {
+                    add_function_item(sig->name,
+                                      analysis::SignatureDetail(*sig),
+                                      analysis::CompletionParams(*sig));
+                } else {
+                    add_plain_item(sig->name, analysis::SignatureDetail(*sig), 12 /* Value */);
+                }
             }
         }
     } else if (is_after_pipe(doc.content, line, character)) {
         // After |> : suggest table transforms
-        for (const auto& [name, detail] : universe_table_builtins()) {
-            add_function_item_from_detail(name, detail);
+        for (const auto* sig : analysis::BuiltinsForPackage("")) {
+            if (sig != nullptr) {
+                add_function_item(
+                    sig->name, analysis::SignatureDetail(*sig), analysis::CompletionParams(*sig));
+            }
         }
     } else {
         // General completion: keywords + universe builtins + known packages
         for (const auto& kw : flux_keywords()) {
             add_plain_item(kw, "keyword", 14 /* Keyword */);
         }
-        for (const auto& [name, detail] : universe_table_builtins()) {
-            add_function_item_from_detail(name, detail);
+        for (const auto* sig : analysis::BuiltinsForPackage("")) {
+            if (sig != nullptr) {
+                add_function_item(
+                    sig->name, analysis::SignatureDetail(*sig), analysis::CompletionParams(*sig));
+            }
         }
         // Package names
         for (const auto& [pkg_name, _] : known_packages()) {
             add_plain_item(pkg_name, "package", 9 /* Module */);
         }
 
-        // User-defined symbols from AST
-        ensure_ast(doc);
-        if (doc.ast) {
-            for (const auto& stmt : doc.ast->body) {
-                if (stmt->type == Statement::Type::VariableAssignment) {
-                    const auto& va = *std::get<std::unique_ptr<VariableAssgn>>(stmt->stmt);
-                    if (va.id && !va.id->name.empty()) {
-                        // Determine kind: function or variable
-                        int sym_kind = 6; // Variable
-                        std::string detail = "variable";
-                        if (va.init && va.init->type == Expression::Type::FunctionExpr) {
-                            sym_kind = 3; // Function
-                            detail = "function";
-                            const auto& fn =
-                                *std::get<std::unique_ptr<FunctionExpr>>(va.init->expr);
-                            std::vector<std::string> params;
-                            params.reserve(fn.params.size());
-                            for (const auto& param : fn.params) {
-                                if (param && param->key) {
-                                    params.push_back(param->key->string());
-                                }
-                            }
-                            add_function_item(va.id->name, detail, std::move(params));
-                        } else {
-                            add_plain_item(va.id->name, detail, sym_kind);
-                        }
-                    }
-                } else if (stmt->type == Statement::Type::OptionStatement) {
-                    const auto& opt = *std::get<std::unique_ptr<OptionStmt>>(stmt->stmt);
-                    if (opt.assignment &&
-                        opt.assignment->type == Assignment::Type::VariableAssignment) {
-                        const auto& va =
-                            *std::get<std::unique_ptr<VariableAssgn>>(opt.assignment->value);
-                        if (va.id && !va.id->name.empty()) {
-                            add_plain_item(va.id->name, "option", 6 /* Variable */);
-                        }
-                    }
-                } else if (stmt->type == Statement::Type::BuiltinStatement) {
-                    const auto& bi = *std::get<std::unique_ptr<BuiltinStmt>>(stmt->stmt);
-                    if (bi.id && !bi.id->name.empty()) {
-                        add_function_item(bi.id->name, "builtin", {});
-                    }
-                }
+        // User-defined symbols from semantic analysis.
+        ensure_analysis(doc);
+        for (const auto& def : doc.analysis.definitions) {
+            if (def.kind == analysis::SymbolKind::Parameter ||
+                def.kind == analysis::SymbolKind::Import) {
+                continue;
+            }
+            switch (def.kind) {
+                case analysis::SymbolKind::Function:
+                    add_function_item(def.name, def.type.ToString(), def.parameters);
+                    break;
+                case analysis::SymbolKind::Builtin:
+                case analysis::SymbolKind::PackageBuiltin:
+                    add_function_item(def.name, "builtin", def.parameters);
+                    break;
+                case analysis::SymbolKind::Option:
+                    add_plain_item(def.name, "option: " + def.type.ToString(), 6 /* Variable */);
+                    break;
+                default:
+                    add_plain_item(def.name, def.type.ToString(), 6 /* Variable */);
+                    break;
             }
         }
     }
@@ -1041,6 +889,21 @@ std::string FluxLanguageServer::build_hover_response(const Document& doc, int li
     auto word = word_at_position(doc.content, line, character);
     if (word.empty()) {
         return "null";
+    }
+
+    const auto ast_line = static_cast<uint32_t>(line + 1);
+    const auto ast_col = lsp_position_to_byte_column(doc.content, line, character);
+    if (const auto* def = doc.analysis.DefinitionForSymbolAt(ast_line, ast_col); def != nullptr) {
+        std::ostringstream os;
+        std::string hover_text = "**" + def->name + "**\n\n`" + def->type.ToString() + "`";
+        os << R"({"contents":{"kind":"markdown","value":)" << json_escape(hover_text) << "}}";
+        return os.str();
+    }
+    if (auto type = doc.analysis.TypeAt(ast_line, ast_col); type.has_value()) {
+        std::ostringstream os;
+        os << R"({"contents":{"kind":"markdown","value":)"
+           << json_escape("`" + type->ToString() + "`") << "}}";
+        return os.str();
     }
 
     // Check if it's a builtin
@@ -1294,44 +1157,26 @@ void FluxLanguageServer::handle_definition(const JsonRpcMessage& msg) {
         return;
     }
 
-    ensure_symbols(it->second);
-    const auto& symbols = it->second.symbols;
+    ensure_analysis(it->second);
+    const auto& analysis = it->second.analysis;
     const auto& content = it->second.content;
 
-    // Use word_at_position for precise cursor identification
-    auto name =
-        word_at_position(it->second.content, static_cast<int>(line), static_cast<int>(character));
-    if (name.empty()) {
-        // Fallback to symbol_at with 1-based coordinates
-        uint32_t ast_line = static_cast<uint32_t>(line + 1);
-        uint32_t ast_col = lsp_position_to_byte_column(
-            it->second.content, static_cast<int>(line), static_cast<int>(character));
-        name = symbols.symbol_at(ast_line, ast_col);
-    }
-    if (name.empty()) {
-        reply(msg, "null");
-        return;
-    }
-
-    const auto* def = symbols.definition_for_symbol_at(
-        name,
-        static_cast<uint32_t>(line + 1),
-        lsp_position_to_byte_column(content, static_cast<int>(line), static_cast<int>(character)));
-    if (!def) {
-        def = symbols.find_definition(name);
-    }
+    const auto ast_line = static_cast<uint32_t>(line + 1);
+    const auto ast_col =
+        lsp_position_to_byte_column(content, static_cast<int>(line), static_cast<int>(character));
+    const auto* def = analysis.DefinitionForSymbolAt(ast_line, ast_col);
     if (!def) {
         reply(msg, "null");
         return;
     }
 
     auto [sl, sc] =
-        to_lsp_position(it->second.content, def->location.start_line, def->location.start_col);
+        to_lsp_position(it->second.content, def->location.start.line, def->location.start.column);
     auto [el, ec] =
-        to_lsp_position(it->second.content, def->location.end_line, def->location.end_col);
+        to_lsp_position(it->second.content, def->location.end.line, def->location.end.column);
 
     std::ostringstream os;
-    os << R"({"uri":)" << json_escape(def->location.uri) << R"(,"range":{"start":{"line":)" << sl
+    os << R"({"uri":)" << json_escape(uri) << R"(,"range":{"start":{"line":)" << sl
        << R"(,"character":)" << sc << R"(},"end":{"line":)" << el << R"(,"character":)" << ec
        << "}}}";
     reply(msg, os.str());
@@ -1355,23 +1200,9 @@ void FluxLanguageServer::handle_references(const JsonRpcMessage& msg) {
         return;
     }
 
-    ensure_symbols(it->second);
-    const auto& symbols = it->second.symbols;
+    ensure_analysis(it->second);
+    const auto& analysis = it->second.analysis;
     const auto& content = it->second.content;
-
-    // Use word_at_position for precise cursor identification
-    auto name =
-        word_at_position(it->second.content, static_cast<int>(line), static_cast<int>(character));
-    if (name.empty()) {
-        uint32_t ast_line = static_cast<uint32_t>(line + 1);
-        uint32_t ast_col = lsp_position_to_byte_column(
-            it->second.content, static_cast<int>(line), static_cast<int>(character));
-        name = symbols.symbol_at(ast_line, ast_col);
-    }
-    if (name.empty()) {
-        reply(msg, "[]");
-        return;
-    }
 
     auto include_decl_val = doc_result.value().at_pointer("/context/includeDeclaration");
     bool include_declaration = true;
@@ -1382,27 +1213,25 @@ void FluxLanguageServer::handle_references(const JsonRpcMessage& msg) {
         }
     }
 
-    const SymbolDef* target_def = symbols.definition_for_symbol_at(
-        name,
-        static_cast<uint32_t>(line + 1),
-        lsp_position_to_byte_column(content, static_cast<int>(line), static_cast<int>(character)));
-    if (!target_def) {
-        target_def = symbols.find_definition(name);
-    }
+    const auto ast_line = static_cast<uint32_t>(line + 1);
+    const auto ast_col =
+        lsp_position_to_byte_column(content, static_cast<int>(line), static_cast<int>(character));
+    const auto* target_def = analysis.DefinitionForSymbolAt(ast_line, ast_col);
+    const auto fallback_name = analysis.SymbolAt(ast_line, ast_col);
 
     // Collect all references + optionally the definition itself
     std::ostringstream os;
     os << "[";
     bool first = true;
 
-    auto emit_location = [&](const Location& loc) {
+    auto emit_location = [&](const SourceLocation& loc) {
         if (!first) {
             os << ",";
         }
         first = false;
-        auto [sl, sc] = to_lsp_position(content, loc.start_line, loc.start_col);
-        auto [el, ec] = to_lsp_position(content, loc.end_line, loc.end_col);
-        os << R"({"uri":)" << json_escape(loc.uri) << R"(,"range":{"start":{"line":)" << sl
+        auto [sl, sc] = to_lsp_position(content, loc.start.line, loc.start.column);
+        auto [el, ec] = to_lsp_position(content, loc.end.line, loc.end.column);
+        os << R"({"uri":)" << json_escape(uri) << R"(,"range":{"start":{"line":)" << sl
            << R"(,"character":)" << sc << R"(},"end":{"line":)" << el << R"(,"character":)" << ec
            << "}}})";
     };
@@ -1412,7 +1241,8 @@ void FluxLanguageServer::handle_references(const JsonRpcMessage& msg) {
     }
 
     // All references
-    auto refs = target_def ? symbols.references_of(*target_def) : symbols.references_of(name);
+    auto refs =
+        target_def ? analysis.ReferencesOf(*target_def) : analysis.ReferencesOf(fallback_name);
     for (const auto* ref : refs) {
         emit_location(ref->location);
     }
@@ -1445,52 +1275,38 @@ void FluxLanguageServer::handle_rename(const JsonRpcMessage& msg) {
         return;
     }
 
-    ensure_symbols(it->second);
-    const auto& symbols = it->second.symbols;
+    ensure_analysis(it->second);
+    const auto& analysis = it->second.analysis;
     const auto& content = it->second.content;
 
-    // Use word_at_position for precise cursor identification
-    auto name =
-        word_at_position(it->second.content, static_cast<int>(line), static_cast<int>(character));
-    if (name.empty()) {
-        uint32_t ast_line = static_cast<uint32_t>(line + 1);
-        uint32_t ast_col = lsp_position_to_byte_column(
-            it->second.content, static_cast<int>(line), static_cast<int>(character));
-        name = symbols.symbol_at(ast_line, ast_col);
-    }
-    if (name.empty()) {
+    // Collect all locations that need to be renamed (definition + references)
+    std::vector<SourceLocation> locations;
+
+    const auto ast_line = static_cast<uint32_t>(line + 1);
+    const auto ast_col =
+        lsp_position_to_byte_column(content, static_cast<int>(line), static_cast<int>(character));
+    const auto* def = analysis.DefinitionForSymbolAt(ast_line, ast_col);
+    if (def) {
+        locations.push_back(def->location);
+    } else {
         reply(msg, "null");
         return;
     }
 
-    // Collect all locations that need to be renamed (definition + references)
-    std::vector<const Location*> locations;
-
-    auto* def = symbols.definition_for_symbol_at(
-        name,
-        static_cast<uint32_t>(line + 1),
-        lsp_position_to_byte_column(content, static_cast<int>(line), static_cast<int>(character)));
-    if (!def) {
-        def = symbols.find_definition(name);
-    }
-    if (def) {
-        locations.push_back(&def->location);
-    }
-
-    auto refs = def ? symbols.references_of(*def) : symbols.references_of(name);
+    auto refs = analysis.ReferencesOf(*def);
     for (const auto* ref : refs) {
-        locations.push_back(&ref->location);
+        locations.push_back(ref->location);
     }
 
     bool has_valid_location = false;
-    for (const auto* loc : locations) {
-        if (loc->start_line > 0 && loc->start_col > 0) {
+    for (const auto& loc : locations) {
+        if (loc.start.line > 0 && loc.start.column > 0) {
             has_valid_location = true;
             break;
         }
     }
 
-    if (locations.empty() && !has_valid_location) {
+    if (locations.empty() || !has_valid_location) {
         reply(msg, "null");
         return;
     }
@@ -1511,34 +1327,15 @@ void FluxLanguageServer::handle_rename(const JsonRpcMessage& msg) {
     };
 
     if (has_valid_location) {
-        for (const auto* loc : locations) {
-            if (loc->start_line == 0 || loc->start_col == 0) {
+        for (const auto& loc : locations) {
+            if (loc.start.line == 0 || loc.start.column == 0) {
                 continue;
             }
-            auto [sl, sc] = to_lsp_position(content, loc->start_line, loc->start_col);
-            auto [el, ec] = to_lsp_position(content, loc->end_line, loc->end_col);
+            auto [sl, sc] = to_lsp_position(content, loc.start.line, loc.start.column);
+            auto [el, ec] = to_lsp_position(content, loc.end.line, loc.end.column);
             if (sl == el) {
                 emit_edit(sl, sc, ec);
             }
-        }
-    } else {
-        const size_t ls = line_offset(content, static_cast<int>(line));
-        const size_t le = next_line_offset(content, ls);
-        size_t pos = ls;
-        while (pos < le) {
-            pos = content.find(name, pos);
-            if (pos == std::string::npos || pos >= le) {
-                break;
-            }
-            const bool left_ok = pos == ls || !is_ident_char(content[pos - 1]);
-            const size_t end = pos + name.size();
-            const bool right_ok = end >= le || !is_ident_char(content[end]);
-            if (left_ok && right_ok) {
-                emit_edit(static_cast<uint32_t>(line),
-                          lsp_character_for_byte_offset(content, ls, pos),
-                          lsp_character_for_byte_offset(content, ls, end));
-            }
-            pos = end;
         }
     }
     os << "]}}";
@@ -1607,47 +1404,17 @@ void FluxLanguageServer::handle_signature_help(const JsonRpcMessage& msg) {
         return;
     }
 
-    // Look up the function in the symbol table for parameter info
-    ensure_symbols(it->second);
-    const auto& symbols = it->second.symbols;
-    const auto* def = symbols.find_definition(func_name);
+    // Look up the function in semantic analysis for parameter info.
+    ensure_analysis(it->second);
+    const auto& analysis = it->second.analysis;
+    const auto* def = analysis.FindDefinition(func_name);
 
     std::vector<std::string> params;
     if (def && !def->parameters.empty()) {
         params = def->parameters;
     } else {
-        // Try built-in knowledge base
-        for (const auto& [name, detail] : universe_table_builtins()) {
-            if (name == func_name) {
-                // Extract parameter names from detail string like "filter(fn:) - ..."
-                auto paren_start = detail.find('(');
-                auto paren_end = detail.find(')');
-                if (paren_start != std::string::npos && paren_end != std::string::npos &&
-                    paren_end > paren_start + 1) {
-                    std::string param_str =
-                        detail.substr(paren_start + 1, paren_end - paren_start - 1);
-                    size_t start = 0;
-                    while (start < param_str.size()) {
-                        auto comma = param_str.find(',', start);
-                        if (comma == std::string::npos) {
-                            comma = param_str.size();
-                        }
-                        auto p = param_str.substr(start, comma - start);
-                        // Trim whitespace
-                        while (!p.empty() && p.front() == ' ') {
-                            p.erase(p.begin());
-                        }
-                        while (!p.empty() && p.back() == ' ') {
-                            p.pop_back();
-                        }
-                        if (!p.empty()) {
-                            params.push_back(p);
-                        }
-                        start = comma + 1;
-                    }
-                }
-                break;
-            }
+        if (const auto* sig = analysis::FindUniverseBuiltinSignature(func_name); sig != nullptr) {
+            params = analysis::CompletionParams(*sig);
         }
     }
 
@@ -1695,8 +1462,8 @@ void FluxLanguageServer::handle_document_highlight(const JsonRpcMessage& msg) {
         return;
     }
 
-    ensure_symbols(it->second);
-    const auto& symbols = it->second.symbols;
+    ensure_analysis(it->second);
+    const auto& analysis = it->second.analysis;
     const auto& content = it->second.content;
 
     // Use word_at_position for precise cursor identification
@@ -1706,7 +1473,7 @@ void FluxLanguageServer::handle_document_highlight(const JsonRpcMessage& msg) {
         uint32_t ast_line = static_cast<uint32_t>(line + 1);
         uint32_t ast_col = lsp_position_to_byte_column(
             it->second.content, static_cast<int>(line), static_cast<int>(character));
-        name = symbols.symbol_at(ast_line, ast_col);
+        name = analysis.SymbolAt(ast_line, ast_col);
     }
     if (name.empty()) {
         reply(msg, "[]");
@@ -1718,32 +1485,31 @@ void FluxLanguageServer::handle_document_highlight(const JsonRpcMessage& msg) {
     os << "[";
     bool first = true;
 
-    auto emit_highlight = [&](const Location& loc, int kind) {
+    auto emit_highlight = [&](const SourceLocation& loc, int kind) {
         if (!first) {
             os << ",";
         }
         first = false;
-        auto [sl, sc] = to_lsp_position(content, loc.start_line, loc.start_col);
-        auto [el, ec] = to_lsp_position(content, loc.end_line, loc.end_col);
+        auto [sl, sc] = to_lsp_position(content, loc.start.line, loc.start.column);
+        auto [el, ec] = to_lsp_position(content, loc.end.line, loc.end.column);
         os << R"({"range":{"start":{"line":)" << sl << R"(,"character":)" << sc
            << R"(},"end":{"line":)" << el << R"(,"character":)" << ec << R"(}},"kind":)" << kind
            << "}";
     };
 
     // Definition highlight (Write = 3)
-    auto* def = symbols.definition_for_symbol_at(
-        name,
+    const auto* def = analysis.DefinitionForSymbolAt(
         static_cast<uint32_t>(line + 1),
         lsp_position_to_byte_column(content, static_cast<int>(line), static_cast<int>(character)));
     if (!def) {
-        def = symbols.find_definition(name);
+        def = analysis.FindDefinition(name);
     }
     if (def) {
         emit_highlight(def->location, 3);
     }
 
     // Reference highlights (Read = 2)
-    auto refs = def ? symbols.references_of(*def) : symbols.references_of(name);
+    auto refs = def ? analysis.ReferencesOf(*def) : analysis.ReferencesOf(name);
     for (const auto* ref : refs) {
         emit_highlight(ref->location, 2);
     }
@@ -1771,7 +1537,7 @@ void FluxLanguageServer::handle_semantic_tokens(const JsonRpcMessage& msg) {
         return;
     }
 
-    ensure_symbols(it->second);
+    ensure_analysis(it->second);
     const auto& doc = it->second;
     if (!doc.ast) {
         reply(msg, R"({"data":[]})");
@@ -1796,35 +1562,36 @@ void FluxLanguageServer::handle_semantic_tokens(const JsonRpcMessage& msg) {
     std::vector<SemanticToken> tokens;
 
     // Definitions
-    for (const auto& def : doc.symbols.definitions) {
+    for (const auto& def : doc.analysis.definitions) {
         uint32_t type_idx = 0; // variable
         uint32_t mod = 0b011;  // declaration + definition
         switch (def.kind) {
-            case SymbolKind::Function:
+            case analysis::SymbolKind::Function:
                 type_idx = 1;
                 break;
-            case SymbolKind::Variable:
+            case analysis::SymbolKind::Variable:
                 type_idx = 0;
                 break;
-            case SymbolKind::Option:
+            case analysis::SymbolKind::Option:
                 type_idx = 0;
                 mod = 0b111; // declaration + definition + readonly
                 break;
-            case SymbolKind::Builtin:
+            case analysis::SymbolKind::Builtin:
+            case analysis::SymbolKind::PackageBuiltin:
                 type_idx = 1;
                 mod = 0b101; // declaration + readonly
                 break;
-            case SymbolKind::Import:
+            case analysis::SymbolKind::Import:
                 type_idx = 9; // namespace
                 break;
-            case SymbolKind::Parameter:
+            case analysis::SymbolKind::Parameter:
                 type_idx = 6;
                 break;
         }
-        if (def.location.start_line > 0 && def.name.size() > 0) {
+        if (def.location.start.line > 0 && def.name.size() > 0) {
             tokens.push_back({
-                .line = def.location.start_line,
-                .col = def.location.start_col,
+                .line = def.location.start.line,
+                .col = def.location.start.column,
                 .length = static_cast<uint32_t>(def.name.size()),
                 .type = type_idx,
                 .modifiers = mod,
@@ -1833,31 +1600,34 @@ void FluxLanguageServer::handle_semantic_tokens(const JsonRpcMessage& msg) {
     }
 
     // References
-    for (const auto& ref : doc.symbols.references) {
+    for (const auto& ref : doc.analysis.references) {
         // Determine type by looking up definition
         uint32_t type_idx = 0; // variable by default
-        const auto* def = doc.symbols.find_definition(ref.name);
+        const auto* def = doc.analysis.FindDefinition(ref.definition_id);
         if (def) {
             switch (def->kind) {
-                case SymbolKind::Function:
-                case SymbolKind::Builtin:
+                case analysis::SymbolKind::Function:
+                case analysis::SymbolKind::Builtin:
+                case analysis::SymbolKind::PackageBuiltin:
                     type_idx = 1;
                     break;
-                case SymbolKind::Parameter:
+                case analysis::SymbolKind::Parameter:
                     type_idx = 6;
                     break;
-                case SymbolKind::Import:
+                case analysis::SymbolKind::Import:
                     type_idx = 9;
                     break;
                 default:
                     type_idx = 0;
                     break;
             }
+        } else if (ref.kind == analysis::ReferenceKind::PackageMember) {
+            type_idx = 1;
         }
-        if (ref.location.start_line > 0 && ref.name.size() > 0) {
+        if (ref.location.start.line > 0 && ref.name.size() > 0) {
             tokens.push_back({
-                .line = ref.location.start_line,
-                .col = ref.location.start_col,
+                .line = ref.location.start.line,
+                .col = ref.location.start.column,
                 .length = static_cast<uint32_t>(ref.name.size()),
                 .type = type_idx,
                 .modifiers = 0,
@@ -1917,7 +1687,7 @@ void FluxLanguageServer::handle_code_action(const JsonRpcMessage& msg) {
         return;
     }
 
-    ensure_symbols(it->second);
+    ensure_analysis(it->second);
     const auto& doc = it->second;
 
     // Provide code actions for semantic diagnostics (undefined identifiers)
@@ -1932,10 +1702,9 @@ void FluxLanguageServer::handle_code_action(const JsonRpcMessage& msg) {
     bool first = true;
 
     // Check if there are diagnostics in the requested range that we can fix
-    for (const auto& diag : doc.symbols.diagnostics) {
-        // Convert AST 1-based to LSP 0-based
-        uint32_t diag_line = diag.location.start_line > 0 ? diag.location.start_line - 1 : 0;
-        uint32_t diag_col = diag.location.start_col > 0 ? diag.location.start_col - 1 : 0;
+    for (const auto& diag : doc.analysis.diagnostics) {
+        auto [diag_line, diag_col] =
+            to_lsp_position(doc.content, diag.location.start.line, diag.location.start.column);
 
         // Check if diagnostic falls within the requested range
         if (static_cast<int64_t>(diag_line) >= range_start_line &&
@@ -1986,7 +1755,6 @@ void FluxLanguageServer::handle_inlay_hint(const JsonRpcMessage& msg) {
     }
 
     ensure_ast(it->second);
-    ensure_symbols(it->second);
     const auto& doc = it->second;
     if (!doc.ast) {
         reply(msg, "[]");

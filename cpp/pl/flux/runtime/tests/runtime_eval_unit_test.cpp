@@ -18,7 +18,9 @@
 #include <cstdio>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <unordered_set>
 
+#include "cpp/pl/flux/analysis/builtin_metadata.h"
 #include "cpp/pl/flux/runtime/runtime_builtin.h"
 #include "cpp/pl/flux/runtime/runtime_eval.h"
 #include "cpp/pl/flux/syntax/parser.h"
@@ -61,6 +63,46 @@ TEST(RuntimeEvalTest, EvaluatesLiteralsArithmeticAndConditionalExpressions) {
     ASSERT_TRUE(result.ok()) << result.status();
     EXPECT_EQ(Value::Type::String, result->type());
     EXPECT_EQ("\"hot\"", result->string());
+}
+
+TEST(RuntimeBuiltinMetadataTest, InstallsImplementedUniverseBuiltinsFromAnalysisMetadata) {
+    Environment env;
+    BuiltinRegistry::Install(env);
+
+    for (const auto& sig : analysis::AllBuiltinSignatures()) {
+        if (!sig.package.empty() || !sig.implemented) {
+            continue;
+        }
+        auto value_or = env.lookup(sig.name);
+        ASSERT_TRUE(value_or.ok()) << sig.fq_name << ": " << value_or.status();
+        EXPECT_EQ(Value::Type::Function, value_or->type()) << sig.fq_name;
+    }
+}
+
+TEST(RuntimeBuiltinMetadataTest, ImportsImplementedPackageBuiltinsFromAnalysisMetadata) {
+    std::unordered_set<std::string> checked_packages;
+
+    for (const auto& sig : analysis::AllBuiltinSignatures()) {
+        if (sig.package.empty() || !sig.implemented) {
+            continue;
+        }
+
+        auto package_or = BuiltinRegistry::ImportPackage(sig.package);
+        ASSERT_TRUE(package_or.ok()) << sig.package << ": " << package_or.status();
+        ASSERT_EQ(Value::Type::Object, package_or->type()) << sig.package;
+
+        const auto& package = package_or->as_object();
+        const Value* member = package.lookup(sig.name);
+        ASSERT_NE(nullptr, member) << sig.fq_name;
+        if (analysis::IsCallableBuiltin(sig)) {
+            EXPECT_EQ(Value::Type::Function, member->type()) << sig.fq_name;
+        }
+        checked_packages.insert(sig.package);
+    }
+
+    for (const auto& package : analysis::KnownPackages()) {
+        EXPECT_TRUE(checked_packages.contains(package)) << package;
+    }
 }
 
 TEST(RuntimeEvalTest, EvaluatesIdentifiersMembersIndexesAndExists) {
