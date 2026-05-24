@@ -66,11 +66,19 @@ inline FileStatus to_file_status(const protocol::FileStatusProto& proto) {
 class ScopedFd {
 public:
     explicit ScopedFd(int fd) : fd_(fd) {}
-    ~ScopedFd() { if (fd_ >= 0) ::close(fd_); }
+    ~ScopedFd() {
+        if (fd_ >= 0)
+            ::close(fd_);
+    }
     ScopedFd(const ScopedFd&) = delete;
     ScopedFd& operator=(const ScopedFd&) = delete;
     int get() const { return fd_; }
-    int release() { int f = fd_; fd_ = -1; return f; }
+    int release() {
+        int f = fd_;
+        fd_ = -1;
+        return f;
+    }
+
 private:
     int fd_;
 };
