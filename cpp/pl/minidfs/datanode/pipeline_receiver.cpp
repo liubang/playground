@@ -24,15 +24,7 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
-// Construction
-// ============================================================================
-
 PipelineReceiver::PipelineReceiver(LocalBlockStore* store) : store_(store) {}
-
-// ============================================================================
-// Pipeline Session Management
-// ============================================================================
 
 pl::Result<pl::Void> PipelineReceiver::setup(uint64_t block_id,
                                              uint64_t inode_id,
@@ -75,7 +67,8 @@ pl::Result<AckStatus> PipelineReceiver::receive_packet(const PacketHeader& heade
 
     // Write chunk to local store
     auto append_result =
-        store_->append_chunk(header.block_id, header.generation_stamp, data, data_length);
+        store_->append_chunk(header.block_id, header.generation_stamp, data, data_length,
+                             header.chunk_index);
     if (append_result.hasError()) {
         return AckStatus::kIOError;
     }
@@ -137,10 +130,7 @@ void PipelineReceiver::abort(uint64_t block_id, uint64_t generation_stamp) {
     }
 }
 
-// ============================================================================
-// Downstream Forwarding (default implementation — no-op for unit testing)
-// ============================================================================
-
+// Downstream Forwarding (default no-op for unit testing)
 pl::Result<AckStatus> PipelineReceiver::forward_to_downstream(
     [[maybe_unused]] const PacketHeader& header,
     [[maybe_unused]] const void* data,

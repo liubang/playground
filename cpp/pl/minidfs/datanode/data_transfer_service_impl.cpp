@@ -17,17 +17,15 @@
 
 #include "cpp/pl/minidfs/datanode/data_transfer_service_impl.h"
 
+#include <brpc/channel.h>
 #include <brpc/closure_guard.h>
+#include <brpc/controller.h>
 #include <folly/logging/xlog.h>
 
 #include "cpp/pl/minidfs/common/checksum.h"
 #include "cpp/pl/minidfs/common/error_code.h"
 
 namespace pl::minidfs {
-
-// ============================================================================
-// Helper
-// ============================================================================
 
 void DataTransferServiceImpl::fill_status(protocol::StatusProto* proto,
                                           uint32_t code,
@@ -38,21 +36,12 @@ void DataTransferServiceImpl::fill_status(protocol::StatusProto* proto,
     }
 }
 
-// ============================================================================
-// Construction
-// ============================================================================
-
 DataTransferServiceImpl::DataTransferServiceImpl(LocalBlockStore* store, BlockReporter* reporter)
     : store_(store), reporter_(reporter) {}
 
-// ============================================================================
-// WriteBlock — pipeline write handling
-//
-// This is called for each chunk in the pipeline. The first call for a block
-// implicitly creates the block in tmp/. Subsequent calls append chunks.
+// WriteBlock — pipeline write handling.
+// First call for a block creates it in tmp/. Subsequent calls append chunks.
 // When is_last_chunk is true, the block is finalized.
-// ============================================================================
-
 void DataTransferServiceImpl::WriteBlock(google::protobuf::RpcController* /*controller*/,
                                          const protocol::WriteBlockRequest* request,
                                          protocol::WriteBlockResponse* response,
@@ -88,7 +77,8 @@ void DataTransferServiceImpl::WriteBlock(google::protobuf::RpcController* /*cont
 
     // Append chunk to local block
     auto append_result = store_->append_chunk(
-        block_id, generation_stamp, data.data(), static_cast<uint32_t>(data.size()));
+        block_id, generation_stamp, data.data(), static_cast<uint32_t>(data.size()),
+        request->chunk_index());
     if (append_result.hasError()) {
         fill_status(response->mutable_status(),
                     append_result.error().code(),
@@ -97,10 +87,60 @@ void DataTransferServiceImpl::WriteBlock(google::protobuf::RpcController* /*cont
         return;
     }
 
-    // Forward to downstream pipeline targets if any
-    // In production, we'd iterate request->pipeline() and forward to the next
-    // target via a brpc stub. For now, we handle the local write only.
-    // Pipeline forwarding will be wired in the DataNode main integration.
+    // Forward to the next downstream pipeline target (if any)
+    if (request->pipeline_size() > 0) {
+        const auto& next_target = request->pipeline(0);
+        std::string next_addr = next_target.host() + ":" + std::to_string(next_target.data_port());
+
+        brpc::Channel downstream_channel;
+        brpc::ChannelOptions opts;
+        opts.timeout_ms = 10000;
+        opts.max_retry = 1;
+
+        if (downstream_channel.Init(next_addr.c_str(), &opts) != 0) {
+            fill_status(response->mutable_status(),
+                        static_cast<uint32_t>(ErrorCode::kRPCConnectFailed),
+                        "Cannot connect to downstream DN: " + next_addr);
+            response->set_ack_status(static_cast<uint32_t>(AckStatus::kIOError));
+            return;
+        }
+
+        protocol::DataTransferService_Stub downstream_stub(&downstream_channel);
+        brpc::Controller fwd_cntl;
+
+        // Build forwarded request: pop the first pipeline target
+        protocol::WriteBlockRequest fwd_req;
+        fwd_req.set_block_id(request->block_id());
+        fwd_req.set_inode_id(request->inode_id());
+        fwd_req.set_block_index(request->block_index());
+        fwd_req.set_generation_stamp(request->generation_stamp());
+        fwd_req.set_data(request->data());
+        fwd_req.set_chunk_index(request->chunk_index());
+        fwd_req.set_checksum(request->checksum());
+        fwd_req.set_is_last_chunk(request->is_last_chunk());
+
+        // Pass remaining pipeline targets (skip first which is current downstream)
+        for (int i = 1; i < request->pipeline_size(); ++i) {
+            auto* t = fwd_req.add_pipeline();
+            t->set_datanode_id(request->pipeline(i).datanode_id());
+            t->set_host(request->pipeline(i).host());
+            t->set_data_port(request->pipeline(i).data_port());
+        }
+
+        protocol::WriteBlockResponse fwd_resp;
+        downstream_stub.WriteBlock(&fwd_cntl, &fwd_req, &fwd_resp, nullptr);
+
+        if (fwd_cntl.Failed() || fwd_resp.status().code() != 0) {
+            std::string err_msg = fwd_cntl.Failed()
+                                      ? fwd_cntl.ErrorText()
+                                      : fwd_resp.status().message();
+            fill_status(response->mutable_status(),
+                        static_cast<uint32_t>(ErrorCode::kPipelineError),
+                        "Pipeline forwarding failed to " + next_addr + ": " + err_msg);
+            response->set_ack_status(static_cast<uint32_t>(AckStatus::kIOError));
+            return;
+        }
+    }
 
     // Finalize if last chunk
     if (request->is_last_chunk()) {
@@ -125,10 +165,7 @@ void DataTransferServiceImpl::WriteBlock(google::protobuf::RpcController* /*cont
     response->set_ack_status(static_cast<uint32_t>(AckStatus::kSuccess));
 }
 
-// ============================================================================
 // ReadBlock — client reads block data from DataNode
-// ============================================================================
-
 void DataTransferServiceImpl::ReadBlock(google::protobuf::RpcController* /*controller*/,
                                         const protocol::ReadBlockRequest* request,
                                         protocol::ReadBlockResponse* response,
@@ -165,13 +202,8 @@ void DataTransferServiceImpl::ReadBlock(google::protobuf::RpcController* /*contr
     fill_status(response->mutable_status(), 0);
 }
 
-// ============================================================================
-// TransferBlock — full-block replication
-//
-// Used by ReplicationWorker: receives a complete block data payload,
-// creates + writes + finalizes in one shot.
-// ============================================================================
-
+// TransferBlock — full-block replication.
+// Receives a complete block data payload, creates + writes + finalizes in one shot.
 void DataTransferServiceImpl::TransferBlock(google::protobuf::RpcController* /*controller*/,
                                             const protocol::TransferBlockRequest* request,
                                             protocol::TransferBlockResponse* response,
@@ -199,7 +231,8 @@ void DataTransferServiceImpl::TransferBlock(google::protobuf::RpcController* /*c
     // Write data as a single chunk
     if (!data.empty()) {
         auto append_result = store_->append_chunk(
-            block_id, generation_stamp, data.data(), static_cast<uint32_t>(data.size()));
+            block_id, generation_stamp, data.data(), static_cast<uint32_t>(data.size()),
+            /*chunk_index=*/0);
         if (append_result.hasError()) {
             fill_status(response->mutable_status(),
                         append_result.error().code(),

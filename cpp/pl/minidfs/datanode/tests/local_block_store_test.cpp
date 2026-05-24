@@ -30,7 +30,6 @@ namespace fs = std::filesystem;
 class LocalBlockStoreTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        // Create a unique temporary directory for each test
         test_dir_ = fs::temp_directory_path() / ("minidfs_test_" + std::to_string(::getpid()) +
                                                  "_" + std::to_string(counter_++));
         fs::create_directories(test_dir_);
@@ -55,20 +54,14 @@ protected:
     static inline int counter_ = 0;
 };
 
-// ============================================================================
 // init tests
-// ============================================================================
-
 TEST_F(LocalBlockStoreTest, InitCreatesDirectories) {
     EXPECT_TRUE(fs::exists(test_dir_ / "tmp"));
     EXPECT_TRUE(fs::exists(test_dir_ / "current"));
     EXPECT_TRUE(fs::exists(test_dir_ / "trash"));
 }
 
-// ============================================================================
 // create_block tests
-// ============================================================================
-
 TEST_F(LocalBlockStoreTest, CreateBlock) {
     auto result = store_->create_block(100, 1, 0, 5000);
     ASSERT_TRUE(result.hasValue());
@@ -86,15 +79,12 @@ TEST_F(LocalBlockStoreTest, CreateBlockDuplicate) {
     EXPECT_TRUE(r2.hasError());
 }
 
-// ============================================================================
 // append_chunk tests
-// ============================================================================
-
 TEST_F(LocalBlockStoreTest, AppendChunk) {
     store_->create_block(200, 1, 0, 6000);
 
     std::string data = "hello world";
-    auto result = store_->append_chunk(200, 6000, data.data(), data.size());
+    auto result = store_->append_chunk(200, 6000, data.data(), data.size(), 0);
     ASSERT_TRUE(result.hasValue());
     EXPECT_EQ(result.value(), data.size());
 }
@@ -106,32 +96,29 @@ TEST_F(LocalBlockStoreTest, AppendMultipleChunks) {
     std::string chunk2 = "bbbb";
     std::string chunk3 = "cccc";
 
-    auto r1 = store_->append_chunk(201, 6001, chunk1.data(), chunk1.size());
+    auto r1 = store_->append_chunk(201, 6001, chunk1.data(), chunk1.size(), 0);
     ASSERT_TRUE(r1.hasValue());
     EXPECT_EQ(r1.value(), 4u);
 
-    auto r2 = store_->append_chunk(201, 6001, chunk2.data(), chunk2.size());
+    auto r2 = store_->append_chunk(201, 6001, chunk2.data(), chunk2.size(), 1);
     ASSERT_TRUE(r2.hasValue());
     EXPECT_EQ(r2.value(), 8u);
 
-    auto r3 = store_->append_chunk(201, 6001, chunk3.data(), chunk3.size());
+    auto r3 = store_->append_chunk(201, 6001, chunk3.data(), chunk3.size(), 2);
     ASSERT_TRUE(r3.hasValue());
     EXPECT_EQ(r3.value(), 12u);
 }
 
 TEST_F(LocalBlockStoreTest, AppendChunkToNonexistent) {
-    auto result = store_->append_chunk(999, 1, "x", 1);
+    auto result = store_->append_chunk(999, 1, "x", 1, 0);
     EXPECT_TRUE(result.hasError());
 }
 
-// ============================================================================
 // finalize_block tests
-// ============================================================================
-
 TEST_F(LocalBlockStoreTest, FinalizeBlock) {
     store_->create_block(300, 1, 0, 7000);
     std::string data = "finalize me";
-    store_->append_chunk(300, 7000, data.data(), data.size());
+    store_->append_chunk(300, 7000, data.data(), data.size(), 0);
 
     auto result = store_->finalize_block(300, 7000);
     ASSERT_TRUE(result.hasValue());
@@ -147,10 +134,7 @@ TEST_F(LocalBlockStoreTest, FinalizeBlockNotFound) {
     EXPECT_TRUE(result.hasError());
 }
 
-// ============================================================================
 // delete_block tests
-// ============================================================================
-
 TEST_F(LocalBlockStoreTest, DeleteBlock) {
     store_->create_block(400, 1, 0, 8000);
     store_->finalize_block(400, 8000);
@@ -168,10 +152,7 @@ TEST_F(LocalBlockStoreTest, DeleteBlockNotInCurrent) {
     EXPECT_TRUE(result.hasError());
 }
 
-// ============================================================================
 // purge_trash tests
-// ============================================================================
-
 TEST_F(LocalBlockStoreTest, PurgeTrash) {
     store_->create_block(500, 1, 0, 9000);
     store_->finalize_block(500, 9000);
@@ -195,14 +176,11 @@ TEST_F(LocalBlockStoreTest, PurgeEmptyTrash) {
     EXPECT_EQ(result.value(), 0u);
 }
 
-// ============================================================================
 // read_block_data tests
-// ============================================================================
-
 TEST_F(LocalBlockStoreTest, ReadBlockData) {
     store_->create_block(600, 1, 0, 10000);
     std::string data = "read this data";
-    store_->append_chunk(600, 10000, data.data(), data.size());
+    store_->append_chunk(600, 10000, data.data(), data.size(), 0);
     store_->finalize_block(600, 10000);
 
     auto result = store_->read_block_data(600, 10000);
@@ -214,8 +192,8 @@ TEST_F(LocalBlockStoreTest, ReadBlockDataMultipleChunks) {
     store_->create_block(601, 1, 0, 10001);
     std::string chunk1 = "AAAA";
     std::string chunk2 = "BBBB";
-    store_->append_chunk(601, 10001, chunk1.data(), chunk1.size());
-    store_->append_chunk(601, 10001, chunk2.data(), chunk2.size());
+    store_->append_chunk(601, 10001, chunk1.data(), chunk1.size(), 0);
+    store_->append_chunk(601, 10001, chunk2.data(), chunk2.size(), 1);
     store_->finalize_block(601, 10001);
 
     auto result = store_->read_block_data(601, 10001);
@@ -228,16 +206,13 @@ TEST_F(LocalBlockStoreTest, ReadBlockDataNotFound) {
     EXPECT_TRUE(result.hasError());
 }
 
-// ============================================================================
 // read_chunk tests
-// ============================================================================
-
 TEST_F(LocalBlockStoreTest, ReadChunk) {
     store_->create_block(700, 1, 0, 11000);
     std::string chunk0 = "first";
     std::string chunk1 = "second";
-    store_->append_chunk(700, 11000, chunk0.data(), chunk0.size());
-    store_->append_chunk(700, 11000, chunk1.data(), chunk1.size());
+    store_->append_chunk(700, 11000, chunk0.data(), chunk0.size(), 0);
+    store_->append_chunk(700, 11000, chunk1.data(), chunk1.size(), 1);
     store_->finalize_block(700, 11000);
 
     auto r0 = store_->read_chunk(700, 11000, 0);
@@ -252,21 +227,18 @@ TEST_F(LocalBlockStoreTest, ReadChunk) {
 TEST_F(LocalBlockStoreTest, ReadChunkOutOfBounds) {
     store_->create_block(701, 1, 0, 11001);
     std::string data = "one";
-    store_->append_chunk(701, 11001, data.data(), data.size());
+    store_->append_chunk(701, 11001, data.data(), data.size(), 0);
     store_->finalize_block(701, 11001);
 
     auto result = store_->read_chunk(701, 11001, 5);
     EXPECT_TRUE(result.hasError());
 }
 
-// ============================================================================
 // verify_block tests
-// ============================================================================
-
 TEST_F(LocalBlockStoreTest, VerifyBlockValid) {
     store_->create_block(800, 1, 0, 12000);
     std::string data = "verify me";
-    store_->append_chunk(800, 12000, data.data(), data.size());
+    store_->append_chunk(800, 12000, data.data(), data.size(), 0);
     store_->finalize_block(800, 12000);
 
     auto result = store_->verify_block(800, 12000);
@@ -277,7 +249,7 @@ TEST_F(LocalBlockStoreTest, VerifyBlockValid) {
 TEST_F(LocalBlockStoreTest, VerifyBlockCorrupt) {
     store_->create_block(801, 1, 0, 12001);
     std::string data = "verify me too";
-    store_->append_chunk(801, 12001, data.data(), data.size());
+    store_->append_chunk(801, 12001, data.data(), data.size(), 0);
     store_->finalize_block(801, 12001);
 
     // Corrupt the data region by overwriting some bytes
@@ -294,10 +266,7 @@ TEST_F(LocalBlockStoreTest, VerifyBlockCorrupt) {
     EXPECT_FALSE(result.value());
 }
 
-// ============================================================================
 // report_blocks tests
-// ============================================================================
-
 TEST_F(LocalBlockStoreTest, ReportBlocksEmpty) {
     auto result = store_->report_blocks();
     ASSERT_TRUE(result.hasValue());
@@ -307,12 +276,12 @@ TEST_F(LocalBlockStoreTest, ReportBlocksEmpty) {
 TEST_F(LocalBlockStoreTest, ReportBlocksMultiple) {
     store_->create_block(900, 1, 0, 13000);
     std::string d1 = "block one";
-    store_->append_chunk(900, 13000, d1.data(), d1.size());
+    store_->append_chunk(900, 13000, d1.data(), d1.size(), 0);
     store_->finalize_block(900, 13000);
 
     store_->create_block(901, 1, 1, 13001);
     std::string d2 = "block two!!";
-    store_->append_chunk(901, 13001, d2.data(), d2.size());
+    store_->append_chunk(901, 13001, d2.data(), d2.size(), 0);
     store_->finalize_block(901, 13001);
 
     auto result = store_->report_blocks();
@@ -337,10 +306,7 @@ TEST_F(LocalBlockStoreTest, ReportBlocksMultiple) {
     EXPECT_TRUE(found_901);
 }
 
-// ============================================================================
 // has_block tests
-// ============================================================================
-
 TEST_F(LocalBlockStoreTest, HasBlock) {
     store_->create_block(1000, 1, 0, 14000);
     store_->finalize_block(1000, 14000);
@@ -350,10 +316,7 @@ TEST_F(LocalBlockStoreTest, HasBlock) {
     EXPECT_FALSE(store_->has_block(1001, 14000)); // wrong id
 }
 
-// ============================================================================
 // available_bytes tests
-// ============================================================================
-
 TEST_F(LocalBlockStoreTest, AvailableBytes) {
     auto result = store_->available_bytes();
     ASSERT_TRUE(result.hasValue());
@@ -361,17 +324,14 @@ TEST_F(LocalBlockStoreTest, AvailableBytes) {
     EXPECT_GT(result.value(), 0u);
 }
 
-// ============================================================================
 // Full lifecycle test
-// ============================================================================
-
 TEST_F(LocalBlockStoreTest, FullLifecycle) {
     // Create -> append -> finalize -> read -> verify -> delete -> purge
     auto create = store_->create_block(1100, 42, 0, 15000);
     ASSERT_TRUE(create.hasValue());
 
     std::string data = "lifecycle test data payload";
-    auto append = store_->append_chunk(1100, 15000, data.data(), data.size());
+    auto append = store_->append_chunk(1100, 15000, data.data(), data.size(), 0);
     ASSERT_TRUE(append.hasValue());
 
     auto finalize = store_->finalize_block(1100, 15000);

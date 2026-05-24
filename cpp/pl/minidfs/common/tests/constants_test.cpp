@@ -21,10 +21,7 @@
 namespace pl::minidfs {
 namespace {
 
-// ============================================================================
 // Size constants
-// ============================================================================
-
 TEST(ConstantsTest, SizeUnits) {
     EXPECT_EQ(kKB, 1024ULL);
     EXPECT_EQ(kMB, 1024ULL * 1024ULL);
@@ -40,10 +37,7 @@ TEST(ConstantsTest, SizeRelationships) {
     EXPECT_EQ(kPB, 1024 * kTB);
 }
 
-// ============================================================================
 // Block format constants
-// ============================================================================
-
 TEST(ConstantsTest, BlockMagic) {
     // "MDFS" = 0x4D444653
     EXPECT_EQ(kBlockMagic, 0x4D444653u);
@@ -61,10 +55,7 @@ TEST(ConstantsTest, DefaultChunkSize) {
     EXPECT_EQ(kDefaultChunkSize, 1 * kMB);
 }
 
-// ============================================================================
 // Filesystem defaults
-// ============================================================================
-
 TEST(ConstantsTest, DefaultBlockSize) {
     EXPECT_EQ(kDefaultBlockSize, 128 * kMB);
 }
@@ -82,10 +73,7 @@ TEST(ConstantsTest, DefaultPermission) {
     EXPECT_EQ(kDefaultPermission, 0755u);
 }
 
-// ============================================================================
 // DataNode timing
-// ============================================================================
-
 TEST(ConstantsTest, HeartbeatInterval) {
     EXPECT_EQ(kDefaultHeartbeatIntervalMs, 3000u);
 }
@@ -104,10 +92,7 @@ TEST(ConstantsTest, BlockReportInterval) {
     EXPECT_EQ(kDefaultBlockReportIntervalMs, 600000u);
 }
 
-// ============================================================================
 // Replication
-// ============================================================================
-
 TEST(ConstantsTest, ReplicationScanInterval) {
     EXPECT_EQ(kDefaultReplicationScanIntervalMs, 30000u);
 }
@@ -116,18 +101,12 @@ TEST(ConstantsTest, MaxReplicationTasks) {
     EXPECT_EQ(kDefaultMaxReplicationTasksPerRound, 100u);
 }
 
-// ============================================================================
 // Lease
-// ============================================================================
-
 TEST(ConstantsTest, LeaseTimeout) {
     EXPECT_EQ(kDefaultLeaseTimeoutMs, 60000u);
 }
 
-// ============================================================================
 // Namespace
-// ============================================================================
-
 TEST(ConstantsTest, MaxPathLength) {
     EXPECT_EQ(kMaxPathLength, 8192u);
 }

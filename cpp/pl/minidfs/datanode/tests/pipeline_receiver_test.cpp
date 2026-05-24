@@ -90,10 +90,7 @@ protected:
     static inline int counter_ = 0;
 };
 
-// ============================================================================
 // setup tests
-// ============================================================================
-
 TEST_F(PipelineReceiverTest, SetupCreatesBlockInTmp) {
     TestPipelineReceiver receiver(store_.get());
     auto result = receiver.setup(100, 1, 0, 5000, {});
@@ -114,10 +111,7 @@ TEST_F(PipelineReceiverTest, SetupWithDownstreamTargets) {
     EXPECT_EQ(receiver.downstream_targets().size(), 2u);
 }
 
-// ============================================================================
 // receive_packet tests
-// ============================================================================
-
 TEST_F(PipelineReceiverTest, ReceivePacketSuccess) {
     TestPipelineReceiver receiver(store_.get());
     receiver.setup(200, 1, 0, 6000, {});
@@ -183,10 +177,7 @@ TEST_F(PipelineReceiverTest, ReceivePacketDownstreamFailure) {
     EXPECT_EQ(result.value(), AckStatus::kIOError);
 }
 
-// ============================================================================
 // finalize tests
-// ============================================================================
-
 TEST_F(PipelineReceiverTest, FinalizeSuccess) {
     TestPipelineReceiver receiver(store_.get());
     receiver.setup(300, 1, 0, 7000, {});
@@ -238,10 +229,7 @@ TEST_F(PipelineReceiverTest, FinalizeDownstreamError) {
     EXPECT_TRUE(result.hasError());
 }
 
-// ============================================================================
 // abort tests
-// ============================================================================
-
 TEST_F(PipelineReceiverTest, AbortRemovesTmpBlock) {
     TestPipelineReceiver receiver(store_.get());
     receiver.setup(400, 1, 0, 8000, {});
@@ -259,10 +247,7 @@ TEST_F(PipelineReceiverTest, AbortNonexistentNocrash) {
     receiver.abort(999, 1);
 }
 
-// ============================================================================
 // Full pipeline lifecycle
-// ============================================================================
-
 TEST_F(PipelineReceiverTest, FullLifecycle) {
     TestPipelineReceiver receiver(store_.get());
     std::vector<PipelineTarget> targets = {{.host = "dn2", .data_port = 9001}};

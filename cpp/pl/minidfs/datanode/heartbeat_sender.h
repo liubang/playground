@@ -30,10 +30,6 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
-// HeartbeatResponse — commands returned by NameNode in heartbeat response.
-// ============================================================================
-
 enum class CommandType : uint8_t {
     kNone = 0,
     kReplicate = 1,  // Replicate a block to another DN
@@ -50,20 +46,9 @@ struct HeartbeatCommand {
     uint32_t target_port = 0;
 };
 
-// ============================================================================
 // HeartbeatSender — periodically sends heartbeats to the NameNode.
-//
-// Each heartbeat includes:
-//   - DataNode identity (uuid, datanode_id)
-//   - Storage capacity, used, free bytes
-//
-// The NameNode responds with a list of commands (replicate, delete, etc.)
-// which are dispatched to the appropriate workers.
-//
-// The actual RPC call is abstracted via a callback (HeartbeatFunc) to
-// decouple from the brpc stub, allowing unit testing.
-// ============================================================================
-
+// The NameNode responds with commands (replicate, delete, etc.) dispatched
+// to the appropriate workers. RPC is abstracted via HeartbeatFunc for testability.
 using HeartbeatFunc = std::function<pl::Result<std::vector<HeartbeatCommand>>(
     uint64_t datanode_id, uint64_t capacity_bytes, uint64_t used_bytes, uint64_t free_bytes)>;
 

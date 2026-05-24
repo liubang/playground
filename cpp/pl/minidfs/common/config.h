@@ -101,7 +101,6 @@ struct ClientConfig {
     uint32_t max_retry = 3;
 };
 
-// 从 YAML 文件加载配置
 pl::Result<NameNodeConfig> load_namenode_config(const std::string& path);
 pl::Result<DataNodeConfig> load_datanode_config(const std::string& path);
 pl::Result<ClientConfig> load_client_config(const std::string& path);

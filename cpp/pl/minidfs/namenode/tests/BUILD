@@ -108,3 +108,19 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "regression_test",
+    srcs = ["regression_test.cpp"],
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":mock_metadata_store",
+        "//cpp/pl/minidfs/namenode:block_manager",
+        "//cpp/pl/minidfs/namenode:datanode_manager",
+        "//cpp/pl/minidfs/namenode:lease_manager",
+        "//cpp/pl/minidfs/namenode:namespace_manager",
+        "//cpp/pl/minidfs/namenode:placement_manager",
+        "@googletest//:gtest_main",
+    ],
+)

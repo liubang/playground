@@ -27,7 +27,6 @@ namespace pl::minidfs {
 
 namespace {
 
-// 去除首尾空白
 std::string trim(std::string_view sv) {
     auto start = sv.find_first_not_of(" \t\r\n");
     if (start == std::string_view::npos)
@@ -36,7 +35,6 @@ std::string trim(std::string_view sv) {
     return std::string(sv.substr(start, end - start + 1));
 }
 
-// 去除引号
 std::string unquote(const std::string& s) {
     if (s.size() >= 2 &&
         ((s.front() == '"' && s.back() == '"') || (s.front() == '\'' && s.back() == '\''))) {
@@ -45,11 +43,11 @@ std::string unquote(const std::string& s) {
     return s;
 }
 
-// 简易 YAML 解析器：支持二级嵌套 key: value 和 list item `- value`
+// Simple YAML parser: supports two-level nested key: value and list items
 struct YamlMap {
-    // "section.key" -> "value" 扁平映射
+    // "section.key" -> "value" flat mapping
     std::unordered_map<std::string, std::string> values;
-    // "section" -> [values] 列表项
+    // "section" -> [values] list items
     std::unordered_map<std::string, std::vector<std::string>> lists;
 
     std::string get(const std::string& key, const std::string& def = {}) const {
@@ -90,31 +88,31 @@ pl::Result<YamlMap> parse_yaml(const std::string& path) {
     std::string section;
 
     while (std::getline(file, line)) {
-        // 跳过注释和空行
+        // Skip comments and blank lines
         auto trimmed = trim(line);
         if (trimmed.empty() || trimmed[0] == '#')
             continue;
 
-        // 计算缩进
+        // Calculate indentation
         auto indent = line.find_first_not_of(' ');
 
         if (indent == 0) {
-            // 顶级 key
+            // Top-level key
             auto colon = trimmed.find(':');
             if (colon == std::string::npos)
                 continue;
             auto key = trim(trimmed.substr(0, colon));
             auto val = trim(trimmed.substr(colon + 1));
             if (val.empty()) {
-                // section 头
+                // Section header
                 section = key;
             } else {
                 yaml.values[key] = unquote(val);
             }
         } else {
-            // 子级
+            // Indented content: list items or nested keys.
             if (trimmed.starts_with("- ")) {
-                // 列表项，追加到当前 section
+                // List item, append to current section
                 auto val = unquote(trim(trimmed.substr(2)));
                 yaml.lists[section].push_back(val);
             } else {
@@ -124,7 +122,7 @@ pl::Result<YamlMap> parse_yaml(const std::string& path) {
                 auto key = trim(trimmed.substr(0, colon));
                 auto val = trim(trimmed.substr(colon + 1));
                 if (val.empty()) {
-                    // 子 section（三级嵌套场景，取父级前缀拼接）
+                    // Sub-section (3-level nesting: join with parent prefix)
                     section = section.substr(0, section.find('.')) + "." + key;
                 } else {
                     auto full_key = section + "." + key;
