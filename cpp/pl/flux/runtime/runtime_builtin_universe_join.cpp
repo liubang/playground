@@ -747,10 +747,6 @@ bool InstallKnownUniverseJoinBuiltin(Environment& env, const std::string& name) 
     return false;
 }
 
-void InstallUniverseJoinBuiltins(Environment& env) {
-    InstallKnownUniverseJoinBuiltin(env, "join");
-}
-
 namespace builtin {
 
 void RegisterJoinStdlibPackage() {
