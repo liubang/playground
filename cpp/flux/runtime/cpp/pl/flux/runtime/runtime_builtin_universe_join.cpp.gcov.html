@@ -31,18 +31,18 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryHi">90.6&nbsp;%</td>
-            <td class="headerCovTableEntry">360</td>
-            <td class="headerCovTableEntry">326</td>
+            <td class="headerCovTableEntryHi">90.5&nbsp;%</td>
+            <td class="headerCovTableEntry">357</td>
+            <td class="headerCovTableEntry">323</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-23 23:19:57</td>
+            <td class="headerValue">2026-05-24 16:02:16</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
-            <td class="headerCovTableEntry">27</td>
-            <td class="headerCovTableEntry">27</td>
+            <td class="headerCovTableEntry">26</td>
+            <td class="headerCovTableEntry">26</td>
           </tr>
           <tr>
             <td></td>
@@ -50,8 +50,8 @@
             <td></td>
             <td class="headerItem">Branches:</td>
             <td class="headerCovTableEntryLo">56.5&nbsp;%</td>
-            <td class="headerCovTableEntry">788</td>
-            <td class="headerCovTableEntry">445</td>
+            <td class="headerCovTableEntry">786</td>
+            <td class="headerCovTableEntry">444</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -815,58 +815,54 @@
 <span id="L711"><span class="lineNum">     711</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :     return absl::InvalidArgumentError(absl::StrCat(name, &quot; `on` must be an array or function&quot;));</span></span>
 <span id="L712"><span class="lineNum">     712</span>                 :             : }</span>
 <span id="L713"><span class="lineNum">     713</span>                 :             : </span>
-<span id="L714"><span class="lineNum">     714</span>                 :<span class="tlaGNC tlaBgGNC">           5 : Value make_join_package() {</span></span>
-<span id="L715"><span class="lineNum">     715</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 25 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 5 times"> + </span> :<span class="tlaGNC">          35 :     return Value::object({</span></span>
+<span id="L714"><span class="lineNum">     714</span>                 :<span class="tlaGNC tlaBgGNC">           9 : Value make_join_package() {</span></span>
+<span id="L715"><span class="lineNum">     715</span>   [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 45 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 9 times"> + </span> :<span class="tlaGNC">          63 :     return Value::object({</span></span>
 <span class="lineNum">        </span>          <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
-<span id="L716"><span class="lineNum">     716</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           5 :         {&quot;path&quot;, Value::string(&quot;join&quot;)},</span></span>
+<span id="L716"><span class="lineNum">     716</span>   [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           9 :         {&quot;path&quot;, Value::string(&quot;join&quot;)},</span></span>
 <span id="L717"><span class="lineNum">     717</span>                 :             :         {&quot;inner&quot;,</span>
-<span id="L718"><span class="lineNum">     718</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          10 :          make_builtin_value(&quot;join.inner&quot;,</span></span>
+<span id="L718"><span class="lineNum">     718</span>   [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          18 :          make_builtin_value(&quot;join.inner&quot;,</span></span>
 <span id="L719"><span class="lineNum">     719</span>                 :<span class="tlaGNC">           6 :                             [](const std::vector&lt;Value&gt;&amp; args) {</span></span>
 <span id="L720"><span class="lineNum">     720</span>         [<span class="tlaGBC" title="Branch 0 was taken 6 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 :                                 return builtin_join_package_method(args, &quot;inner&quot;);</span></span>
 <span id="L721"><span class="lineNum">     721</span>                 :             :                             })},</span>
 <span id="L722"><span class="lineNum">     722</span>                 :             :         {&quot;left&quot;,</span>
-<span id="L723"><span class="lineNum">     723</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          10 :          make_builtin_value(&quot;join.left&quot;,</span></span>
+<span id="L723"><span class="lineNum">     723</span>   [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          18 :          make_builtin_value(&quot;join.left&quot;,</span></span>
 <span id="L724"><span class="lineNum">     724</span>                 :<span class="tlaGNC">           7 :                             [](const std::vector&lt;Value&gt;&amp; args) {</span></span>
 <span id="L725"><span class="lineNum">     725</span>         [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          14 :                                 return builtin_join_package_method(args, &quot;left&quot;);</span></span>
 <span id="L726"><span class="lineNum">     726</span>                 :             :                             })},</span>
 <span id="L727"><span class="lineNum">     727</span>                 :             :         {&quot;right&quot;,</span>
-<span id="L728"><span class="lineNum">     728</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          10 :          make_builtin_value(&quot;join.right&quot;,</span></span>
+<span id="L728"><span class="lineNum">     728</span>   [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          18 :          make_builtin_value(&quot;join.right&quot;,</span></span>
 <span id="L729"><span class="lineNum">     729</span>                 :<span class="tlaGNC">           5 :                             [](const std::vector&lt;Value&gt;&amp; args) {</span></span>
 <span id="L730"><span class="lineNum">     730</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :                                 return builtin_join_package_method(args, &quot;right&quot;);</span></span>
 <span id="L731"><span class="lineNum">     731</span>                 :             :                             })},</span>
 <span id="L732"><span class="lineNum">     732</span>                 :             :         {&quot;full&quot;,</span>
-<span id="L733"><span class="lineNum">     733</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          10 :          make_builtin_value(&quot;join.full&quot;,</span></span>
+<span id="L733"><span class="lineNum">     733</span>   [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          18 :          make_builtin_value(&quot;join.full&quot;,</span></span>
 <span id="L734"><span class="lineNum">     734</span>                 :<span class="tlaGNC">           5 :                             [](const std::vector&lt;Value&gt;&amp; args) {</span></span>
 <span id="L735"><span class="lineNum">     735</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :                                 return builtin_join_package_method(args, &quot;full&quot;);</span></span>
 <span id="L736"><span class="lineNum">     736</span>                 :             :                             })},</span>
-<span id="L737"><span class="lineNum">     737</span>         [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          10 :     });</span></span>
-<span id="L738"><span class="lineNum">     738</span>   [<span class="tlaGBC" title="Branch 0 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          25 : }</span></span>
-<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 5 times"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 5 times"> + </span> 
+<span id="L737"><span class="lineNum">     737</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          18 :     });</span></span>
+<span id="L738"><span class="lineNum">     738</span>   [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          45 : }</span></span>
+<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 9 times"> + </span> 
 <span class="lineNum">        </span>       <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaUNC" title="Branch 10 was not taken"> - </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span>]
 <span id="L739"><span class="lineNum">     739</span>                 :             : </span>
 <span id="L740"><span class="lineNum">     740</span>                 :             : } // namespace</span>
 <span id="L741"><span class="lineNum">     741</span>                 :             : </span>
-<span id="L742"><span class="lineNum">     742</span>                 :<span class="tlaGNC">         204 : bool InstallKnownUniverseJoinBuiltin(Environment&amp; env, const std::string&amp; name) {</span></span>
-<span id="L743"><span class="lineNum">     743</span>         [<span class="tlaGBC" title="Branch 0 was taken 188 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">         204 :     if (name == &quot;join&quot;) {</span></span>
-<span id="L744"><span class="lineNum">     744</span>   [<span class="tlaGBC" title="Branch 0 was taken 188 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 188 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         376 :         install_builtin(env, &quot;join&quot;, builtin_join);</span></span>
-<span id="L745"><span class="lineNum">     745</span>                 :<span class="tlaGNC">         188 :         return true;</span></span>
+<span id="L742"><span class="lineNum">     742</span>                 :<span class="tlaGNC">        1321 : bool InstallKnownUniverseJoinBuiltin(Environment&amp; env, const std::string&amp; name) {</span></span>
+<span id="L743"><span class="lineNum">     743</span>         [<span class="tlaGBC" title="Branch 0 was taken 189 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1132 times"> + </span>]:<span class="tlaGNC">        1321 :     if (name == &quot;join&quot;) {</span></span>
+<span id="L744"><span class="lineNum">     744</span>   [<span class="tlaGBC" title="Branch 0 was taken 189 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 189 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         378 :         install_builtin(env, &quot;join&quot;, builtin_join);</span></span>
+<span id="L745"><span class="lineNum">     745</span>                 :<span class="tlaGNC">         189 :         return true;</span></span>
 <span id="L746"><span class="lineNum">     746</span>                 :             :     }</span>
 <span id="L747"><span class="lineNum">     747</span>                 :             :     return false;</span>
 <span id="L748"><span class="lineNum">     748</span>                 :             : }</span>
 <span id="L749"><span class="lineNum">     749</span>                 :             : </span>
-<span id="L750"><span class="lineNum">     750</span>                 :<span class="tlaGNC">         185 : void InstallUniverseJoinBuiltins(Environment&amp; env) {</span></span>
-<span id="L751"><span class="lineNum">     751</span>         [<span class="tlaGBC" title="Branch 0 was taken 185 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         185 :     InstallKnownUniverseJoinBuiltin(env, &quot;join&quot;);</span></span>
-<span id="L752"><span class="lineNum">     752</span>                 :<span class="tlaGNC">         185 : }</span></span>
-<span id="L753"><span class="lineNum">     753</span>                 :             : </span>
-<span id="L754"><span class="lineNum">     754</span>                 :             : namespace builtin {</span>
+<span id="L750"><span class="lineNum">     750</span>                 :             : namespace builtin {</span>
+<span id="L751"><span class="lineNum">     751</span>                 :             : </span>
+<span id="L752"><span class="lineNum">     752</span>         [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          25 : void RegisterJoinStdlibPackage() {</span></span>
+<span id="L753"><span class="lineNum">     753</span>   [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          50 :     RegisterPackage(&quot;join&quot;, make_join_package);</span></span>
+<span id="L754"><span class="lineNum">     754</span>                 :<span class="tlaGNC">          25 : }</span></span>
 <span id="L755"><span class="lineNum">     755</span>                 :             : </span>
-<span id="L756"><span class="lineNum">     756</span>         [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          25 : void RegisterJoinStdlibPackage() {</span></span>
-<span id="L757"><span class="lineNum">     757</span>   [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          50 :     RegisterPackage(&quot;join&quot;, make_join_package);</span></span>
-<span id="L758"><span class="lineNum">     758</span>                 :<span class="tlaGNC">          25 : }</span></span>
-<span id="L759"><span class="lineNum">     759</span>                 :             : </span>
-<span id="L760"><span class="lineNum">     760</span>                 :             : } // namespace builtin</span>
-<span id="L761"><span class="lineNum">     761</span>                 :             : </span>
-<span id="L762"><span class="lineNum">     762</span>                 :             : } // namespace pl::flux</span>
+<span id="L756"><span class="lineNum">     756</span>                 :             : } // namespace builtin</span>
+<span id="L757"><span class="lineNum">     757</span>                 :             : </span>
+<span id="L758"><span class="lineNum">     758</span>                 :             : } // namespace pl::flux</span>
         </pre>
               </td>
             </tr>

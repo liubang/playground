@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-23 23:19:57</td>
+            <td class="headerValue">2026-05-24 16:02:16</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -154,10 +154,10 @@
 <span id="L83"><span class="lineNum">      83</span>                 :             :     virtual absl::StatusOr&lt;std::optional&lt;Page&gt;&gt; NextPage() = 0;</span>
 <span id="L84"><span class="lineNum">      84</span>                 :<span class="tlaGNC tlaBgGNC">           9 :     virtual void Cancel() {}</span></span>
 <span id="L85"><span class="lineNum">      85</span>                 :<span class="tlaGNC">          70 :     virtual void CollectSplitStats(std::vector&lt;connector::ConnectorSplitStats&gt;*) const {}</span></span>
-<span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC">         260 :     virtual void CollectAccumulatorStats(std::vector&lt;AccumulatorStats&gt;*) const {}</span></span>
+<span id="L86"><span class="lineNum">      86</span>                 :<span class="tlaGNC">         258 :     virtual void CollectAccumulatorStats(std::vector&lt;AccumulatorStats&gt;*) const {}</span></span>
 <span id="L87"><span class="lineNum">      87</span>                 :             : };</span>
 <span id="L88"><span class="lineNum">      88</span>                 :             : </span>
-<span id="L89"><span class="lineNum">      89</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">        2454 : struct ExchangeDistributionProfile {</span></span>
+<span id="L89"><span class="lineNum">      89</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">        2452 : struct ExchangeDistributionProfile {</span></span>
 <span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 35 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span><span class="tlaGBC" title="Branch 8 was taken 2 times"> + </span> 
 <span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 9 was not taken"> - </span>]
 <span id="L90"><span class="lineNum">      90</span>                 :             :     std::string kind;</span>
@@ -232,7 +232,7 @@
 <span id="L159"><span class="lineNum">     159</span>                 :             :         const std::shared_ptr&lt;plan::PlanNode&gt;&amp; logical_plan) const;</span>
 <span id="L160"><span class="lineNum">     160</span>                 :             : };</span>
 <span id="L161"><span class="lineNum">     161</span>                 :             : </span>
-<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">         271 : class Driver {</span></span>
+<span id="L162"><span class="lineNum">     162</span>                 :<span class="tlaGNC">         270 : class Driver {</span></span>
 <span id="L163"><span class="lineNum">     163</span>                 :             : public:</span>
 <span id="L164"><span class="lineNum">     164</span>                 :             :     explicit Driver(Pipeline pipeline);</span>
 <span id="L165"><span class="lineNum">     165</span>                 :             : </span>
