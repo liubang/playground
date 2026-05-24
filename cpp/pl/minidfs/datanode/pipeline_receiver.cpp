@@ -66,9 +66,8 @@ pl::Result<AckStatus> PipelineReceiver::receive_packet(const PacketHeader& heade
     }
 
     // Write chunk to local store
-    auto append_result =
-        store_->append_chunk(header.block_id, header.generation_stamp, data, data_length,
-                             header.chunk_index);
+    auto append_result = store_->append_chunk(
+        header.block_id, header.generation_stamp, data, data_length, header.chunk_index);
     if (append_result.hasError()) {
         return AckStatus::kIOError;
     }

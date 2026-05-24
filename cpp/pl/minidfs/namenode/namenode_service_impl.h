@@ -94,7 +94,8 @@ private:
     static void fill_file_status(protocol::FileStatusProto* proto, const FileStatus& fs);
     static void fill_located_block(protocol::LocatedBlockProto* proto, const LocatedBlock& lb);
 
-    // Idempotency check: returns true if request_id was already processed (caller should return success)
+    // Idempotency check: returns true if request_id was already processed (caller should return
+    // success)
     bool check_idempotent(const protocol::RequestHeader& header, protocol::StatusProto* status);
 
     // Write oplog (idempotency record)

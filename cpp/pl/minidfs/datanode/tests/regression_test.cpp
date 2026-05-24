@@ -37,9 +37,9 @@ namespace fs = std::filesystem;
 class RegressionDataNodeTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        test_dir_ = fs::temp_directory_path() / ("minidfs_regression_" +
-                                                  std::to_string(::getpid()) + "_" +
-                                                  std::to_string(counter_++));
+        test_dir_ =
+            fs::temp_directory_path() /
+            ("minidfs_regression_" + std::to_string(::getpid()) + "_" + std::to_string(counter_++));
         fs::create_directories(test_dir_);
 
         LocalBlockStore::Config config;
@@ -75,8 +75,8 @@ TEST_F(RegressionDataNodeTest, P1_ReadBlockDataDoesNotVerifyOnDiskCRC) {
     std::string original_data = "This is important data that must be verified";
 
     ASSERT_TRUE(store_->create_block(block_id, 1, 0, gen).hasValue());
-    ASSERT_TRUE(
-        store_->append_chunk(block_id, gen, original_data.data(), original_data.size(), 0).hasValue());
+    ASSERT_TRUE(store_->append_chunk(block_id, gen, original_data.data(), original_data.size(), 0)
+                    .hasValue());
     ASSERT_TRUE(store_->finalize_block(block_id, gen).hasValue());
 
     // Verify the block is valid before corruption
@@ -106,8 +106,7 @@ TEST_F(RegressionDataNodeTest, P1_ReadBlockDataDoesNotVerifyOnDiskCRC) {
         << "BUG CONFIRMED: read_block_data returns success on corrupted block";
 
     // The data is corrupted but no error was raised
-    EXPECT_NE(read_result.value(), original_data)
-        << "Data should be different due to corruption";
+    EXPECT_NE(read_result.value(), original_data) << "Data should be different due to corruption";
 }
 
 // P2: Chunk write has no idempotency — retry of create_block fails
@@ -163,8 +162,7 @@ TEST_F(RegressionDataNodeTest, P2_ChunkRetryDuplicatesData_FIXED) {
     ASSERT_TRUE(data.hasValue());
 
     std::string expected = "AAAABBBB";
-    EXPECT_EQ(data.value(), expected)
-        << "FIX VERIFIED: Chunk retry does not duplicate data";
+    EXPECT_EQ(data.value(), expected) << "FIX VERIFIED: Chunk retry does not duplicate data";
 }
 
 // P2: Out-of-order chunk arrival causes data corruption
