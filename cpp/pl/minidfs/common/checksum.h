@@ -21,7 +21,8 @@
 #include <cstring>
 #include <string_view>
 
-// Platform adaptation: Linux uses ISA-L (SIMD optimized), macOS uses Google crc32c (ARM HW instructions)
+// Platform adaptation: Linux uses ISA-L (SIMD optimized), macOS uses Google crc32c (ARM HW
+// instructions)
 #if defined(__linux__)
 #include <isa-l/crc.h>
 #elif defined(__APPLE__)
