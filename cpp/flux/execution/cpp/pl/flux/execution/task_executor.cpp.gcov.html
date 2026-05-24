@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-24 16:02:16</td>
+            <td class="headerValue">2026-05-24 19:38:23</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -139,7 +139,7 @@
 <span id="L68"><span class="lineNum">      68</span>                 :             :         std::function&lt;void()&gt; task;</span>
 <span id="L69"><span class="lineNum">      69</span>                 :             :         {</span>
 <span id="L70"><span class="lineNum">      70</span>         [<span class="tlaGBC" title="Branch 0 was taken 544 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         544 :             std::unique_lock&lt;std::mutex&gt; lock(mu_);</span></span>
-<span id="L71"><span class="lineNum">      71</span>   [<span class="tlaGBC" title="Branch 0 was taken 750 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 272 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 478 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 272 times"> + </span> :<span class="tlaGNC">        1566 :             cv_.wait(lock, [this]() { return shutdown_ || !tasks_.empty(); });</span></span>
+<span id="L71"><span class="lineNum">      71</span>   [<span class="tlaGBC" title="Branch 0 was taken 571 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 272 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 299 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 272 times"> + </span> :<span class="tlaGNC">        1387 :             cv_.wait(lock, [this]() { return shutdown_ || !tasks_.empty(); });</span></span>
 <span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 544 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L72"><span class="lineNum">      72</span>   [<span class="tlaGBC" title="Branch 0 was taken 272 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 272 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 272 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         544 :             if (shutdown_ &amp;&amp; tasks_.empty()) {</span></span>
 <span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">         272 :                 return;</span></span>

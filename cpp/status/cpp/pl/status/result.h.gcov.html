@@ -37,12 +37,12 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-24 16:02:16</td>
+            <td class="headerValue">2026-05-24 19:38:23</td>
             <td></td>
             <td class="headerItem">Functions:</td>
-            <td class="headerCovTableEntryLo">64.7&nbsp;%</td>
+            <td class="headerCovTableEntryLo">67.6&nbsp;%</td>
             <td class="headerCovTableEntry">34</td>
-            <td class="headerCovTableEntry">22</td>
+            <td class="headerCovTableEntry">23</td>
           </tr>
           <tr>
             <td></td>
@@ -121,8 +121,8 @@
 <span id="L50"><span class="lineNum">      50</span>                 :             : using Void = folly::Unit;</span>
 <span id="L51"><span class="lineNum">      51</span>                 :             : </span>
 <span id="L52"><span class="lineNum">      52</span>                 :             : template &lt;typename... Args&gt;</span>
-<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC tlaBgGNC">         742 : [[nodiscard]] inline folly::Unexpected&lt;Status&gt; makeError(Args&amp;&amp;... args) {</span></span>
-<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">         742 :     return folly::makeUnexpected(Status(std::forward&lt;Args&gt;(args)...));</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC tlaBgGNC">         747 : [[nodiscard]] inline folly::Unexpected&lt;Status&gt; makeError(Args&amp;&amp;... args) {</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">         747 :     return folly::makeUnexpected(Status(std::forward&lt;Args&gt;(args)...));</span></span>
 <span id="L55"><span class="lineNum">      55</span>                 :             : }</span>
 <span id="L56"><span class="lineNum">      56</span>                 :             : </span>
 <span id="L57"><span class="lineNum">      57</span>                 :             : template &lt;typename T&gt; [[nodiscard]] inline status_code_t getStatusCode(const Result&lt;T&gt;&amp; result) {</span>

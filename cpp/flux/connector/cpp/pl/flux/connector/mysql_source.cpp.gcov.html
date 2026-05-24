@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-24 16:02:16</td>
+            <td class="headerValue">2026-05-24 19:38:23</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">92.5&nbsp;%</td>
@@ -49,9 +49,9 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">42.4&nbsp;%</td>
+            <td class="headerCovTableEntryLo">42.2&nbsp;%</td>
             <td class="headerCovTableEntry">1284</td>
-            <td class="headerCovTableEntry">545</td>
+            <td class="headerCovTableEntry">542</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -229,22 +229,22 @@
 <span id="L153"><span class="lineNum">     153</span>                 :<span class="tlaGNC">           9 :     return options;</span></span>
 <span id="L154"><span class="lineNum">     154</span>                 :             : }</span>
 <span id="L155"><span class="lineNum">     155</span>                 :             : </span>
-<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">          45 : bool parse_port(std::string_view text, uint16_t* port) {</span></span>
-<span id="L157"><span class="lineNum">     157</span>         [<span class="tlaGBC" title="Branch 0 was taken 45 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          45 :     if (text.empty()) {</span></span>
+<span id="L156"><span class="lineNum">     156</span>                 :<span class="tlaGNC">          47 : bool parse_port(std::string_view text, uint16_t* port) {</span></span>
+<span id="L157"><span class="lineNum">     157</span>         [<span class="tlaGBC" title="Branch 0 was taken 47 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          47 :     if (text.empty()) {</span></span>
 <span id="L158"><span class="lineNum">     158</span>                 :             :         return false;</span>
 <span id="L159"><span class="lineNum">     159</span>                 :             :     }</span>
 <span id="L160"><span class="lineNum">     160</span>                 :             :     uint32_t value = 0;</span>
-<span id="L161"><span class="lineNum">     161</span>         [<span class="tlaGBC" title="Branch 0 was taken 181 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 44 times"> + </span>]:<span class="tlaGNC">         225 :     for (const char ch : text) {</span></span>
-<span id="L162"><span class="lineNum">     162</span>         [<span class="tlaGBC" title="Branch 0 was taken 181 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         181 :         if (ch &lt; '0' || ch &gt; '9') {</span></span>
+<span id="L161"><span class="lineNum">     161</span>         [<span class="tlaGBC" title="Branch 0 was taken 189 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 46 times"> + </span>]:<span class="tlaGNC">         235 :     for (const char ch : text) {</span></span>
+<span id="L162"><span class="lineNum">     162</span>         [<span class="tlaGBC" title="Branch 0 was taken 189 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         189 :         if (ch &lt; '0' || ch &gt; '9') {</span></span>
 <span id="L163"><span class="lineNum">     163</span>                 :             :             return false;</span>
 <span id="L164"><span class="lineNum">     164</span>                 :             :         }</span>
-<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">         181 :         value = value * 10 + static_cast&lt;uint32_t&gt;(ch - '0');</span></span>
-<span id="L166"><span class="lineNum">     166</span>         [<span class="tlaGBC" title="Branch 0 was taken 180 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">         181 :         if (value &gt; 65535) {</span></span>
+<span id="L165"><span class="lineNum">     165</span>                 :<span class="tlaGNC">         189 :         value = value * 10 + static_cast&lt;uint32_t&gt;(ch - '0');</span></span>
+<span id="L166"><span class="lineNum">     166</span>         [<span class="tlaGBC" title="Branch 0 was taken 188 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">         189 :         if (value &gt; 65535) {</span></span>
 <span id="L167"><span class="lineNum">     167</span>                 :             :             return false;</span>
 <span id="L168"><span class="lineNum">     168</span>                 :             :         }</span>
 <span id="L169"><span class="lineNum">     169</span>                 :             :     }</span>
-<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">          44 :     *port = static_cast&lt;uint16_t&gt;(value);</span></span>
-<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">          44 :     return true;</span></span>
+<span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">          46 :     *port = static_cast&lt;uint16_t&gt;(value);</span></span>
+<span id="L171"><span class="lineNum">     171</span>                 :<span class="tlaGNC">          46 :     return true;</span></span>
 <span id="L172"><span class="lineNum">     172</span>                 :             : }</span>
 <span id="L173"><span class="lineNum">     173</span>                 :             : </span>
 <span id="L174"><span class="lineNum">     174</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           1 : absl::StatusOr&lt;bool&gt; parse_ssl_query(std::string_view query) {</span></span>
@@ -285,10 +285,10 @@
 <span id="L206"><span class="lineNum">     206</span>                 :             :     return false;</span>
 <span id="L207"><span class="lineNum">     207</span>                 :             : }</span>
 <span id="L208"><span class="lineNum">     208</span>                 :             : </span>
-<span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaGNC tlaBgGNC">          45 : absl::StatusOr&lt;std::pair&lt;std::string_view, bool&gt;&gt; split_database_and_query(</span></span>
+<span id="L209"><span class="lineNum">     209</span>                 :<span class="tlaGNC tlaBgGNC">          47 : absl::StatusOr&lt;std::pair&lt;std::string_view, bool&gt;&gt; split_database_and_query(</span></span>
 <span id="L210"><span class="lineNum">     210</span>                 :             :     std::string_view database) {</span>
-<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC">          45 :     const size_t query_start = database.find('?');</span></span>
-<span id="L212"><span class="lineNum">     212</span>         [<span class="tlaGBC" title="Branch 0 was taken 44 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">          45 :     if (query_start == std::string_view::npos) {</span></span>
+<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC">          47 :     const size_t query_start = database.find('?');</span></span>
+<span id="L212"><span class="lineNum">     212</span>         [<span class="tlaGBC" title="Branch 0 was taken 46 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">          47 :     if (query_start == std::string_view::npos) {</span></span>
 <span id="L213"><span class="lineNum">     213</span>                 :             :         return std::pair&lt;std::string_view, bool&gt;{database, false};</span>
 <span id="L214"><span class="lineNum">     214</span>                 :             :     }</span>
 <span id="L215"><span class="lineNum">     215</span>                 :<span class="tlaGNC">           1 :     auto ssl_or = parse_ssl_query(database.substr(query_start + 1));</span></span>
@@ -298,57 +298,57 @@
 <span id="L219"><span class="lineNum">     219</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :     return std::pair&lt;std::string_view, bool&gt;{database.substr(0, query_start), *ssl_or};</span></span>
 <span id="L220"><span class="lineNum">     220</span>                 :             : }</span>
 <span id="L221"><span class="lineNum">     221</span>                 :             : </span>
-<span id="L222"><span class="lineNum">     222</span>         [<span class="tlaGBC" title="Branch 0 was taken 45 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          44 : absl::StatusOr&lt;MySQLConnectionConfig&gt; parse_mysql_url(std::string_view dsn) {</span></span>
+<span id="L222"><span class="lineNum">     222</span>         [<span class="tlaGBC" title="Branch 0 was taken 46 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          46 : absl::StatusOr&lt;MySQLConnectionConfig&gt; parse_mysql_url(std::string_view dsn) {</span></span>
 <span id="L223"><span class="lineNum">     223</span>                 :             :     constexpr std::string_view kPrefix = &quot;mysql://&quot;;</span>
 <span id="L224"><span class="lineNum">     224</span>                 :             :     dsn.remove_prefix(kPrefix.size());</span>
 <span id="L225"><span class="lineNum">     225</span>                 :             : </span>
-<span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaGNC">          44 :     const size_t at = dsn.find('@');</span></span>
-<span id="L227"><span class="lineNum">     227</span>         [<span class="tlaGBC" title="Branch 0 was taken 45 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          44 :     const size_t slash = dsn.find('/', at == std::string_view::npos ? 0 : at + 1);</span></span>
-<span id="L228"><span class="lineNum">     228</span>         [<span class="tlaGBC" title="Branch 0 was taken 44 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          44 :     if (at == std::string_view::npos || slash == std::string_view::npos ||</span></span>
-<span id="L229"><span class="lineNum">     229</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 45 times"> + </span>]:<span class="tlaGNC">          44 :         slash + 1 &gt;= dsn.size()) {</span></span>
+<span id="L226"><span class="lineNum">     226</span>                 :<span class="tlaGNC">          46 :     const size_t at = dsn.find('@');</span></span>
+<span id="L227"><span class="lineNum">     227</span>         [<span class="tlaGBC" title="Branch 0 was taken 46 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          46 :     const size_t slash = dsn.find('/', at == std::string_view::npos ? 0 : at + 1);</span></span>
+<span id="L228"><span class="lineNum">     228</span>         [<span class="tlaGBC" title="Branch 0 was taken 46 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          46 :     if (at == std::string_view::npos || slash == std::string_view::npos ||</span></span>
+<span id="L229"><span class="lineNum">     229</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 46 times"> + </span>]:<span class="tlaGNC">          46 :         slash + 1 &gt;= dsn.size()) {</span></span>
 <span id="L230"><span class="lineNum">     230</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(</span></span>
 <span id="L231"><span class="lineNum">     231</span>                 :             :             &quot;mysql dsn must be mysql://user:password@host[:port]/database&quot;);</span>
 <span id="L232"><span class="lineNum">     232</span>                 :             :     }</span>
 <span id="L233"><span class="lineNum">     233</span>                 :             : </span>
-<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC tlaBgGNC">          45 :     const std::string_view userinfo = dsn.substr(0, at);</span></span>
-<span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC">          44 :     const size_t colon = userinfo.find(':');</span></span>
-<span id="L236"><span class="lineNum">     236</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 44 times"> + </span>]:<span class="tlaGNC">          44 :     if (colon == std::string_view::npos) {</span></span>
+<span id="L234"><span class="lineNum">     234</span>                 :<span class="tlaGNC tlaBgGNC">          46 :     const std::string_view userinfo = dsn.substr(0, at);</span></span>
+<span id="L235"><span class="lineNum">     235</span>                 :<span class="tlaGNC">          46 :     const size_t colon = userinfo.find(':');</span></span>
+<span id="L236"><span class="lineNum">     236</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 46 times"> + </span>]:<span class="tlaGNC">          46 :     if (colon == std::string_view::npos) {</span></span>
 <span id="L237"><span class="lineNum">     237</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;mysql dsn requires user and password&quot;);</span></span>
 <span id="L238"><span class="lineNum">     238</span>                 :             :     }</span>
 <span id="L239"><span class="lineNum">     239</span>                 :             : </span>
-<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC tlaBgGNC">          44 :     std::string_view hostport = dsn.substr(at + 1, slash - at - 1);</span></span>
-<span id="L241"><span class="lineNum">     241</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 44 times"> + </span>]:<span class="tlaGNC">          44 :     if (hostport.empty()) {</span></span>
+<span id="L240"><span class="lineNum">     240</span>                 :<span class="tlaGNC tlaBgGNC">          46 :     std::string_view hostport = dsn.substr(at + 1, slash - at - 1);</span></span>
+<span id="L241"><span class="lineNum">     241</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 46 times"> + </span>]:<span class="tlaGNC">          46 :     if (hostport.empty()) {</span></span>
 <span id="L242"><span class="lineNum">     242</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;mysql dsn requires host&quot;);</span></span>
 <span id="L243"><span class="lineNum">     243</span>                 :             :     }</span>
 <span id="L244"><span class="lineNum">     244</span>                 :             : </span>
-<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC tlaBgGNC">          44 :     uint16_t port = 3306;</span></span>
-<span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaGNC">          44 :     std::string_view host = hostport;</span></span>
-<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC">          44 :     const size_t port_colon = hostport.rfind(':');</span></span>
-<span id="L248"><span class="lineNum">     248</span>         [<span class="tlaGBC" title="Branch 0 was taken 44 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          44 :     if (port_colon != std::string_view::npos) {</span></span>
-<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC">          44 :         host = hostport.substr(0, port_colon);</span></span>
-<span id="L250"><span class="lineNum">     250</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 44 times"> + </span>]:<span class="tlaGNC">          45 :         if (!parse_port(hostport.substr(port_colon + 1), &amp;port)) {</span></span>
+<span id="L245"><span class="lineNum">     245</span>                 :<span class="tlaGNC tlaBgGNC">          46 :     uint16_t port = 3306;</span></span>
+<span id="L246"><span class="lineNum">     246</span>                 :<span class="tlaGNC">          46 :     std::string_view host = hostport;</span></span>
+<span id="L247"><span class="lineNum">     247</span>                 :<span class="tlaGNC">          46 :     const size_t port_colon = hostport.rfind(':');</span></span>
+<span id="L248"><span class="lineNum">     248</span>         [<span class="tlaGBC" title="Branch 0 was taken 46 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          46 :     if (port_colon != std::string_view::npos) {</span></span>
+<span id="L249"><span class="lineNum">     249</span>                 :<span class="tlaGNC">          46 :         host = hostport.substr(0, port_colon);</span></span>
+<span id="L250"><span class="lineNum">     250</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 46 times"> + </span>]:<span class="tlaGNC">          46 :         if (!parse_port(hostport.substr(port_colon + 1), &amp;port)) {</span></span>
 <span id="L251"><span class="lineNum">     251</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             return absl::InvalidArgumentError(&quot;mysql dsn port must be a uint16&quot;);</span></span>
 <span id="L252"><span class="lineNum">     252</span>                 :             :         }</span>
 <span id="L253"><span class="lineNum">     253</span>                 :             :     }</span>
-<span id="L254"><span class="lineNum">     254</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 44 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          44 :     if (host.empty()) {</span></span>
+<span id="L254"><span class="lineNum">     254</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 46 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          46 :     if (host.empty()) {</span></span>
 <span id="L255"><span class="lineNum">     255</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;mysql dsn requires host&quot;);</span></span>
 <span id="L256"><span class="lineNum">     256</span>                 :             :     }</span>
 <span id="L257"><span class="lineNum">     257</span>                 :             : </span>
-<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC tlaBgGNC">          44 :     auto database_or = split_database_and_query(dsn.substr(slash + 1));</span></span>
-<span id="L259"><span class="lineNum">     259</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 44 times"> + </span>]:<span class="tlaGNC">          44 :     if (!database_or.ok()) {</span></span>
+<span id="L258"><span class="lineNum">     258</span>                 :<span class="tlaGNC tlaBgGNC">          46 :     auto database_or = split_database_and_query(dsn.substr(slash + 1));</span></span>
+<span id="L259"><span class="lineNum">     259</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 46 times"> + </span>]:<span class="tlaGNC">          46 :     if (!database_or.ok()) {</span></span>
 <span id="L260"><span class="lineNum">     260</span>                 :             :         return database_or.status();</span>
 <span id="L261"><span class="lineNum">     261</span>                 :             :     }</span>
-<span id="L262"><span class="lineNum">     262</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 44 times"> + </span>]:<span class="tlaGNC">          44 :     if (database_or-&gt;first.empty()) {</span></span>
+<span id="L262"><span class="lineNum">     262</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 46 times"> + </span>]:<span class="tlaGNC">          46 :     if (database_or-&gt;first.empty()) {</span></span>
 <span id="L263"><span class="lineNum">     263</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;mysql dsn requires database&quot;);</span></span>
 <span id="L264"><span class="lineNum">     264</span>                 :             :     }</span>
 <span id="L265"><span class="lineNum">     265</span>                 :             : </span>
 <span id="L266"><span class="lineNum">     266</span>                 :<span class="tlaGNC tlaBgGNC">          46 :     return MySQLConnectionConfig{</span></span>
 <span id="L267"><span class="lineNum">     267</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         .host = std::string(host),</span></span>
 <span id="L268"><span class="lineNum">     268</span>                 :             :         .port = port,</span>
-<span id="L269"><span class="lineNum">     269</span>         [<span class="tlaGBC" title="Branch 0 was taken 45 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          45 :         .user = std::string(userinfo.substr(0, colon)),</span></span>
-<span id="L270"><span class="lineNum">     270</span>         [<span class="tlaGBC" title="Branch 0 was taken 44 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          44 :         .password = std::string(userinfo.substr(colon + 1)),</span></span>
+<span id="L269"><span class="lineNum">     269</span>         [<span class="tlaGBC" title="Branch 0 was taken 46 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          46 :         .user = std::string(userinfo.substr(0, colon)),</span></span>
+<span id="L270"><span class="lineNum">     270</span>         [<span class="tlaGBC" title="Branch 0 was taken 46 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          46 :         .password = std::string(userinfo.substr(colon + 1)),</span></span>
 <span id="L271"><span class="lineNum">     271</span>                 :<span class="tlaGNC">          46 :         .database = std::string(database_or-&gt;first),</span></span>
-<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC">          45 :         .ssl = database_or-&gt;second,</span></span>
+<span id="L272"><span class="lineNum">     272</span>                 :<span class="tlaGNC">          46 :         .ssl = database_or-&gt;second,</span></span>
 <span id="L273"><span class="lineNum">     273</span>                 :             :     };</span>
 <span id="L274"><span class="lineNum">     274</span>                 :             : }</span>
 <span id="L275"><span class="lineNum">     275</span>                 :             : </span>
@@ -411,9 +411,9 @@
 <span id="L332"><span class="lineNum">     332</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :     return absl::StrCat(err.what(), &quot;: &quot;, std::string(server_message));</span></span>
 <span id="L333"><span class="lineNum">     333</span>                 :             : }</span>
 <span id="L334"><span class="lineNum">     334</span>                 :             : </span>
-<span id="L335"><span class="lineNum">     335</span>                 :<span class="tlaGNC tlaBgGNC">          24 : absl::StatusOr&lt;mysql::any_connection&gt; open_connection(asio::io_context* ctx,</span></span>
+<span id="L335"><span class="lineNum">     335</span>                 :<span class="tlaGNC tlaBgGNC">          25 : absl::StatusOr&lt;mysql::any_connection&gt; open_connection(asio::io_context* ctx,</span></span>
 <span id="L336"><span class="lineNum">     336</span>                 :             :                                                       const std::string&amp; dsn) {</span>
-<span id="L337"><span class="lineNum">     337</span>                 :<span class="tlaGNC">          24 :     auto config_or = ParseMySQLDsn(dsn);</span></span>
+<span id="L337"><span class="lineNum">     337</span>                 :<span class="tlaGNC">          25 :     auto config_or = ParseMySQLDsn(dsn);</span></span>
 <span id="L338"><span class="lineNum">     338</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 25 times"> + </span>]:<span class="tlaGNC">          25 :     if (!config_or.ok()) {</span></span>
 <span id="L339"><span class="lineNum">     339</span>                 :             :         return config_or.status();</span>
 <span id="L340"><span class="lineNum">     340</span>                 :             :     }</span>
@@ -423,10 +423,10 @@
 <span id="L344"><span class="lineNum">     344</span>                 :             :     params.username = config_or-&gt;user;</span>
 <span id="L345"><span class="lineNum">     345</span>                 :             :     params.password = config_or-&gt;password;</span>
 <span id="L346"><span class="lineNum">     346</span>                 :             :     params.database = config_or-&gt;database;</span>
-<span id="L347"><span class="lineNum">     347</span>         [<span class="tlaGBC" title="Branch 0 was taken 23 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">          24 :     params.ssl = config_or-&gt;ssl ? mysql::ssl_mode::enable : mysql::ssl_mode::disable;</span></span>
+<span id="L347"><span class="lineNum">     347</span>         [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          25 :     params.ssl = config_or-&gt;ssl ? mysql::ssl_mode::enable : mysql::ssl_mode::disable;</span></span>
 <span id="L348"><span class="lineNum">     348</span>                 :             : </span>
 <span id="L349"><span class="lineNum">     349</span>                 :             :     try {</span>
-<span id="L350"><span class="lineNum">     350</span>         [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          24 :         mysql::any_connection conn(*ctx);</span></span>
+<span id="L350"><span class="lineNum">     350</span>         [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          25 :         mysql::any_connection conn(*ctx);</span></span>
 <span id="L351"><span class="lineNum">     351</span>         [<span class="tlaGBC" title="Branch 0 was taken 25 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          25 :         conn.connect(params);</span></span>
 <span id="L352"><span class="lineNum">     352</span>                 :             :         conn.set_meta_mode(mysql::metadata_mode::full);</span>
 <span id="L353"><span class="lineNum">     353</span>                 :             :         mysql::results result;</span>
@@ -896,10 +896,10 @@
 <span id="L804"><span class="lineNum">     804</span>                 :             : </span>
 <span id="L805"><span class="lineNum">     805</span>                 :             : } // namespace</span>
 <span id="L806"><span class="lineNum">     806</span>                 :             : </span>
-<span id="L807"><span class="lineNum">     807</span>                 :<span class="tlaGNC">          47 : absl::StatusOr&lt;MySQLConnectionConfig&gt; ParseMySQLDsn(const std::string&amp; dsn) {</span></span>
-<span id="L808"><span class="lineNum">     808</span>                 :<span class="tlaGNC">          47 :     constexpr std::string_view kUrlPrefix = &quot;mysql://&quot;;</span></span>
-<span id="L809"><span class="lineNum">     809</span>         [<span class="tlaGBC" title="Branch 0 was taken 45 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">          47 :     if (std::string_view(dsn).starts_with(kUrlPrefix)) {</span></span>
-<span id="L810"><span class="lineNum">     810</span>                 :<span class="tlaGNC">          45 :         return parse_mysql_url(dsn);</span></span>
+<span id="L807"><span class="lineNum">     807</span>                 :<span class="tlaGNC">          48 : absl::StatusOr&lt;MySQLConnectionConfig&gt; ParseMySQLDsn(const std::string&amp; dsn) {</span></span>
+<span id="L808"><span class="lineNum">     808</span>                 :<span class="tlaGNC">          48 :     constexpr std::string_view kUrlPrefix = &quot;mysql://&quot;;</span></span>
+<span id="L809"><span class="lineNum">     809</span>         [<span class="tlaGBC" title="Branch 0 was taken 46 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">          48 :     if (std::string_view(dsn).starts_with(kUrlPrefix)) {</span></span>
+<span id="L810"><span class="lineNum">     810</span>                 :<span class="tlaGNC">          46 :         return parse_mysql_url(dsn);</span></span>
 <span id="L811"><span class="lineNum">     811</span>                 :             :     }</span>
 <span id="L812"><span class="lineNum">     812</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :     if (dsn.find(&quot;@tcp(&quot;) != std::string::npos) {</span></span>
 <span id="L813"><span class="lineNum">     813</span>                 :<span class="tlaGNC">           2 :         return parse_tcp_dsn(dsn);</span></span>
@@ -1115,9 +1115,9 @@
 <span id="L1016"><span class="lineNum">    1016</span>                 :             : </span>
 <span id="L1017"><span class="lineNum">    1017</span>                 :<span class="tlaUNC tlaBgUNC">           0 : MySQLConnectorMetadata::MySQLConnectorMetadata(SourceSpec spec) : spec_(std::move(spec)) {}</span></span>
 <span id="L1018"><span class="lineNum">    1018</span>                 :             : </span>
-<span id="L1019"><span class="lineNum">    1019</span>                 :<span class="tlaGNC tlaBgGNC">           9 : MySQLConnectorMetadata::MySQLConnectorMetadata(SourceSpec spec,</span></span>
-<span id="L1020"><span class="lineNum">    1020</span>                 :<span class="tlaGNC">           9 :                                                std::shared_ptr&lt;MySQLBoostConnectionPool&gt; pool)</span></span>
-<span id="L1021"><span class="lineNum">    1021</span>                 :<span class="tlaGNC">           9 :     : spec_(std::move(spec)), pool_(std::move(pool)) {}</span></span>
+<span id="L1019"><span class="lineNum">    1019</span>                 :<span class="tlaGNC tlaBgGNC">          10 : MySQLConnectorMetadata::MySQLConnectorMetadata(SourceSpec spec,</span></span>
+<span id="L1020"><span class="lineNum">    1020</span>                 :<span class="tlaGNC">          10 :                                                std::shared_ptr&lt;MySQLBoostConnectionPool&gt; pool)</span></span>
+<span id="L1021"><span class="lineNum">    1021</span>                 :<span class="tlaGNC">          10 :     : spec_(std::move(spec)), pool_(std::move(pool)) {}</span></span>
 <span id="L1022"><span class="lineNum">    1022</span>                 :             : </span>
 <span id="L1023"><span class="lineNum">    1023</span>                 :<span class="tlaGNC">           4 : absl::StatusOr&lt;TableHandle&gt; MySQLConnectorMetadata::GetTableHandle(const SourceSpec&amp; spec) const {</span></span>
 <span id="L1024"><span class="lineNum">    1024</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           4 :     if (spec.source != &quot;mysql&quot; &amp;&amp; spec.driver != &quot;mysql&quot;) {</span></span>
@@ -1162,11 +1162,11 @@
 <span id="L1057"><span class="lineNum">    1057</span>                 :<span class="tlaGNC">           1 :     target_split_count_ = options_.target_split_count;</span></span>
 <span id="L1058"><span class="lineNum">    1058</span>                 :<span class="tlaGNC">           1 : }</span></span>
 <span id="L1059"><span class="lineNum">    1059</span>                 :             : </span>
-<span id="L1060"><span class="lineNum">    1060</span>                 :<span class="tlaGNC">           9 : MySQLSplitManager::MySQLSplitManager(MySQLRuntimeOptions options,</span></span>
-<span id="L1061"><span class="lineNum">    1061</span>                 :<span class="tlaGNC">           9 :                                      std::shared_ptr&lt;MySQLBoostConnectionPool&gt; pool)</span></span>
-<span id="L1062"><span class="lineNum">    1062</span>                 :<span class="tlaGNC">           9 :     : options_(options),</span></span>
+<span id="L1060"><span class="lineNum">    1060</span>                 :<span class="tlaGNC">          10 : MySQLSplitManager::MySQLSplitManager(MySQLRuntimeOptions options,</span></span>
+<span id="L1061"><span class="lineNum">    1061</span>                 :<span class="tlaGNC">          10 :                                      std::shared_ptr&lt;MySQLBoostConnectionPool&gt; pool)</span></span>
+<span id="L1062"><span class="lineNum">    1062</span>                 :<span class="tlaGNC">          10 :     : options_(options),</span></span>
 <span id="L1063"><span class="lineNum">    1063</span>                 :             :       pool_(std::move(pool)),</span>
-<span id="L1064"><span class="lineNum">    1064</span>   [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaGNC">           9 :       target_split_count_(options_.target_split_count == 0 ? 8 : options_.target_split_count) {}</span></span>
+<span id="L1064"><span class="lineNum">    1064</span>   [<span class="tlaGBC" title="Branch 0 was taken 10 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaGNC">          10 :       target_split_count_(options_.target_split_count == 0 ? 8 : options_.target_split_count) {}</span></span>
 <span id="L1065"><span class="lineNum">    1065</span>                 :             : </span>
 <span id="L1066"><span class="lineNum">    1066</span>                 :<span class="tlaGNC">           5 : absl::StatusOr&lt;std::vector&lt;ConnectorSplit&gt;&gt; MySQLSplitManager::GetSplits(</span></span>
 <span id="L1067"><span class="lineNum">    1067</span>                 :             :     const TableHandle&amp; table, const ScanRequest&amp; request) const {</span>
@@ -1346,9 +1346,9 @@
 <span id="L1230"><span class="lineNum">    1230</span>                 :<span class="tlaGNC">           1 :     rows_per_page_ = options_.rows_per_page;</span></span>
 <span id="L1231"><span class="lineNum">    1231</span>                 :<span class="tlaGNC">           1 : }</span></span>
 <span id="L1232"><span class="lineNum">    1232</span>                 :             : </span>
-<span id="L1233"><span class="lineNum">    1233</span>                 :<span class="tlaGNC">           9 : MySQLPageSourceProvider::MySQLPageSourceProvider(</span></span>
-<span id="L1234"><span class="lineNum">    1234</span>                 :<span class="tlaGNC">           9 :     MySQLRuntimeOptions options, const std::shared_ptr&lt;MySQLBoostConnectionPool&gt;&amp; /*pool*/)</span></span>
-<span id="L1235"><span class="lineNum">    1235</span>                 :<span class="tlaGNC">           9 :     : options_(options), rows_per_page_(std::max&lt;size_t&gt;(1, options_.rows_per_page)) {}</span></span>
+<span id="L1233"><span class="lineNum">    1233</span>                 :<span class="tlaGNC">          10 : MySQLPageSourceProvider::MySQLPageSourceProvider(</span></span>
+<span id="L1234"><span class="lineNum">    1234</span>                 :<span class="tlaGNC">          10 :     MySQLRuntimeOptions options, const std::shared_ptr&lt;MySQLBoostConnectionPool&gt;&amp; /*pool*/)</span></span>
+<span id="L1235"><span class="lineNum">    1235</span>                 :<span class="tlaGNC">          10 :     : options_(options), rows_per_page_(std::max&lt;size_t&gt;(1, options_.rows_per_page)) {}</span></span>
 <span id="L1236"><span class="lineNum">    1236</span>                 :             : </span>
 <span id="L1237"><span class="lineNum">    1237</span>                 :             : struct MySQLPageSource::Impl {</span>
 <span id="L1238"><span class="lineNum">    1238</span>                 :             :     asio::io_context ctx;</span>
@@ -1368,7 +1368,7 @@
 <span id="L1252"><span class="lineNum">    1252</span>                 :             :     }</span>
 <span id="L1253"><span class="lineNum">    1253</span>                 :             : };</span>
 <span id="L1254"><span class="lineNum">    1254</span>                 :             : </span>
-<span id="L1255"><span class="lineNum">    1255</span>                 :<span class="tlaGNC">          12 : MySQLPageSource::MySQLPageSource(std::string dsn,</span></span>
+<span id="L1255"><span class="lineNum">    1255</span>                 :<span class="tlaGNC">          13 : MySQLPageSource::MySQLPageSource(std::string dsn,</span></span>
 <span id="L1256"><span class="lineNum">    1256</span>                 :             :                                  std::string table,</span>
 <span id="L1257"><span class="lineNum">    1257</span>                 :             :                                  ScanRequest request,</span>
 <span id="L1258"><span class="lineNum">    1258</span>                 :             :                                  size_t rows_per_page,</span>
@@ -1376,21 +1376,21 @@
 <span id="L1260"><span class="lineNum">    1260</span>                 :             :                                  std::optional&lt;int64_t&gt; split_lower,</span>
 <span id="L1261"><span class="lineNum">    1261</span>                 :             :                                  std::optional&lt;int64_t&gt; split_upper,</span>
 <span id="L1262"><span class="lineNum">    1262</span>                 :             :                                  int64_t split_id,</span>
-<span id="L1263"><span class="lineNum">    1263</span>                 :<span class="tlaGNC">          12 :                                  MySQLRuntimeOptions options)</span></span>
-<span id="L1264"><span class="lineNum">    1264</span>                 :<span class="tlaGNC">          12 :     : impl_(std::make_unique&lt;Impl&gt;()),</span></span>
+<span id="L1263"><span class="lineNum">    1263</span>                 :<span class="tlaGNC">          13 :                                  MySQLRuntimeOptions options)</span></span>
+<span id="L1264"><span class="lineNum">    1264</span>                 :<span class="tlaGNC">          13 :     : impl_(std::make_unique&lt;Impl&gt;()),</span></span>
 <span id="L1265"><span class="lineNum">    1265</span>                 :<span class="tlaGNC">          13 :       dsn_(std::move(dsn)),</span></span>
 <span id="L1266"><span class="lineNum">    1266</span>                 :<span class="tlaGNC">          13 :       table_(std::move(table)),</span></span>
-<span id="L1267"><span class="lineNum">    1267</span>                 :<span class="tlaGNC">          12 :       rows_per_page_(std::max&lt;size_t&gt;(1, rows_per_page)),</span></span>
-<span id="L1268"><span class="lineNum">    1268</span>                 :<span class="tlaGNC">          24 :       options_(options) {</span></span>
-<span id="L1269"><span class="lineNum">    1269</span>                 :<span class="tlaGNC">          12 :     impl_-&gt;request = std::move(request);</span></span>
+<span id="L1267"><span class="lineNum">    1267</span>                 :<span class="tlaGNC">          13 :       rows_per_page_(std::max&lt;size_t&gt;(1, rows_per_page)),</span></span>
+<span id="L1268"><span class="lineNum">    1268</span>                 :<span class="tlaGNC">          26 :       options_(options) {</span></span>
+<span id="L1269"><span class="lineNum">    1269</span>                 :<span class="tlaGNC">          13 :     impl_-&gt;request = std::move(request);</span></span>
 <span id="L1270"><span class="lineNum">    1270</span>                 :             :     impl_-&gt;split_column = std::move(split_column);</span>
-<span id="L1271"><span class="lineNum">    1271</span>                 :<span class="tlaGNC">          12 :     impl_-&gt;split_lower = split_lower;</span></span>
-<span id="L1272"><span class="lineNum">    1272</span>                 :<span class="tlaGNC">          12 :     impl_-&gt;split_upper = split_upper;</span></span>
-<span id="L1273"><span class="lineNum">    1273</span>                 :<span class="tlaGNC">          12 :     stats_.split_id = split_id;</span></span>
-<span id="L1274"><span class="lineNum">    1274</span>                 :<span class="tlaGNC">          12 : }</span></span>
+<span id="L1271"><span class="lineNum">    1271</span>                 :<span class="tlaGNC">          13 :     impl_-&gt;split_lower = split_lower;</span></span>
+<span id="L1272"><span class="lineNum">    1272</span>                 :<span class="tlaGNC">          13 :     impl_-&gt;split_upper = split_upper;</span></span>
+<span id="L1273"><span class="lineNum">    1273</span>                 :<span class="tlaGNC">          13 :     stats_.split_id = split_id;</span></span>
+<span id="L1274"><span class="lineNum">    1274</span>                 :<span class="tlaGNC">          13 : }</span></span>
 <span id="L1275"><span class="lineNum">    1275</span>                 :             : </span>
-<span id="L1276"><span class="lineNum">    1276</span>                 :<span class="tlaGNC">          12 : absl::Status MySQLPageSource::Initialize() {</span></span>
-<span id="L1277"><span class="lineNum">    1277</span>                 :<span class="tlaGNC">          12 :     const auto connect_started = Clock::now();</span></span>
+<span id="L1276"><span class="lineNum">    1276</span>                 :<span class="tlaGNC">          13 : absl::Status MySQLPageSource::Initialize() {</span></span>
+<span id="L1277"><span class="lineNum">    1277</span>                 :<span class="tlaGNC">          13 :     const auto connect_started = Clock::now();</span></span>
 <span id="L1278"><span class="lineNum">    1278</span>                 :<span class="tlaGNC">          13 :     auto conn_or = open_connection(&amp;impl_-&gt;ctx, dsn_);</span></span>
 <span id="L1279"><span class="lineNum">    1279</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 13 times"> + </span>]:<span class="tlaGNC">          13 :     stats_.connect_time_ms += elapsed_ms(connect_started);</span></span>
 <span id="L1280"><span class="lineNum">    1280</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 13 times"> + </span>]:<span class="tlaGNC">          13 :     if (!conn_or.ok()) {</span></span>
@@ -1590,22 +1590,22 @@
 <span id="L1466"><span class="lineNum">    1466</span>                 :<span class="tlaGNC">          12 :     return stats_.finished;</span></span>
 <span id="L1467"><span class="lineNum">    1467</span>                 :             : }</span>
 <span id="L1468"><span class="lineNum">    1468</span>                 :             : </span>
-<span id="L1469"><span class="lineNum">    1469</span>                 :<span class="tlaGNC">          12 : absl::StatusOr&lt;std::unique_ptr&lt;ConnectorPageSource&gt;&gt; MySQLPageSourceProvider::CreatePageSource(</span></span>
+<span id="L1469"><span class="lineNum">    1469</span>                 :<span class="tlaGNC">          13 : absl::StatusOr&lt;std::unique_ptr&lt;ConnectorPageSource&gt;&gt; MySQLPageSourceProvider::CreatePageSource(</span></span>
 <span id="L1470"><span class="lineNum">    1470</span>                 :             :     const ConnectorSplit&amp; split) const {</span>
 <span id="L1471"><span class="lineNum">    1471</span>                 :             :     // TODO: Re-enable pooled streaming once Boost.MySQL pooled_connection with</span>
 <span id="L1472"><span class="lineNum">    1472</span>                 :             :     // dynamic execution_state/read_some_rows is ASAN-clean. Metadata and split</span>
 <span id="L1473"><span class="lineNum">    1473</span>                 :             :     // discovery already use the official Boost.MySQL pool; scans stay direct to</span>
 <span id="L1474"><span class="lineNum">    1474</span>                 :             :     // avoid reintroducing the reproduced container-overflow path.</span>
-<span id="L1475"><span class="lineNum">    1475</span>                 :<span class="tlaGNC">          12 :     auto page_source = std::make_unique&lt;MySQLPageSource&gt;(split.table.dsn,</span></span>
-<span id="L1476"><span class="lineNum">    1476</span>                 :<span class="tlaGNC">          12 :                                                          split.table.table,</span></span>
-<span id="L1477"><span class="lineNum">    1477</span>                 :<span class="tlaGNC">          12 :                                                          split.request,</span></span>
-<span id="L1478"><span class="lineNum">    1478</span>                 :<span class="tlaGNC">          12 :                                                          rows_per_page_,</span></span>
-<span id="L1479"><span class="lineNum">    1479</span>                 :<span class="tlaGNC">          12 :                                                          split.split_column,</span></span>
-<span id="L1480"><span class="lineNum">    1480</span>                 :<span class="tlaGNC">          12 :                                                          split.split_lower,</span></span>
-<span id="L1481"><span class="lineNum">    1481</span>                 :<span class="tlaGNC">          12 :                                                          split.split_upper,</span></span>
-<span id="L1482"><span class="lineNum">    1482</span>                 :<span class="tlaGNC">          12 :                                                          split.split_id,</span></span>
-<span id="L1483"><span class="lineNum">    1483</span>                 :<span class="tlaGNC">          12 :                                                          options_);</span></span>
-<span id="L1484"><span class="lineNum">    1484</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 :     auto status = page_source-&gt;Initialize();</span></span>
+<span id="L1475"><span class="lineNum">    1475</span>                 :<span class="tlaGNC">          13 :     auto page_source = std::make_unique&lt;MySQLPageSource&gt;(split.table.dsn,</span></span>
+<span id="L1476"><span class="lineNum">    1476</span>                 :<span class="tlaGNC">          13 :                                                          split.table.table,</span></span>
+<span id="L1477"><span class="lineNum">    1477</span>                 :<span class="tlaGNC">          13 :                                                          split.request,</span></span>
+<span id="L1478"><span class="lineNum">    1478</span>                 :<span class="tlaGNC">          13 :                                                          rows_per_page_,</span></span>
+<span id="L1479"><span class="lineNum">    1479</span>                 :<span class="tlaGNC">          13 :                                                          split.split_column,</span></span>
+<span id="L1480"><span class="lineNum">    1480</span>                 :<span class="tlaGNC">          13 :                                                          split.split_lower,</span></span>
+<span id="L1481"><span class="lineNum">    1481</span>                 :<span class="tlaGNC">          13 :                                                          split.split_upper,</span></span>
+<span id="L1482"><span class="lineNum">    1482</span>                 :<span class="tlaGNC">          13 :                                                          split.split_id,</span></span>
+<span id="L1483"><span class="lineNum">    1483</span>                 :<span class="tlaGNC">          13 :                                                          options_);</span></span>
+<span id="L1484"><span class="lineNum">    1484</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          13 :     auto status = page_source-&gt;Initialize();</span></span>
 <span id="L1485"><span class="lineNum">    1485</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 13 times"> + </span>]:<span class="tlaGNC">          13 :     if (!status.ok()) {</span></span>
 <span id="L1486"><span class="lineNum">    1486</span>                 :             :         return status;</span>
 <span id="L1487"><span class="lineNum">    1487</span>                 :             :     }</span>
@@ -1616,15 +1616,15 @@
 <span id="L1492"><span class="lineNum">    1492</span>                 :<span class="tlaGNC">           9 :     MySQLRuntimeOptions options = mysql_runtime_options_from_env();</span></span>
 <span id="L1493"><span class="lineNum">    1493</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :     std::shared_ptr&lt;MySQLBoostConnectionPool&gt; pool;</span></span>
 <span id="L1494"><span class="lineNum">    1494</span>   [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           9 :     if (!spec.dsn.empty() &amp;&amp; options.max_pool_size &gt; 0) {</span></span>
-<span id="L1495"><span class="lineNum">    1495</span>   [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          18 :         auto pool_or = MakeMySQLBoostConnectionPool(spec.dsn, options.max_pool_size);</span></span>
-<span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
-<span id="L1496"><span class="lineNum">    1496</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span>]:<span class="tlaGNC">           9 :         if (pool_or.ok()) {</span></span>
+<span id="L1495"><span class="lineNum">    1495</span>   [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          18 :         auto pool_or = MakeMySQLBoostConnectionPool(spec.dsn, options.max_pool_size);</span></span>
+<span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
+<span id="L1496"><span class="lineNum">    1496</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :         if (pool_or.ok()) {</span></span>
 <span id="L1497"><span class="lineNum">    1497</span>                 :             :             pool = std::move(*pool_or);</span>
 <span id="L1498"><span class="lineNum">    1498</span>                 :             :         }</span>
 <span id="L1499"><span class="lineNum">    1499</span>                 :             :     }</span>
 <span id="L1500"><span class="lineNum">    1500</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :     auto runtime = std::make_unique&lt;ConnectorRuntime&gt;();</span></span>
-<span id="L1501"><span class="lineNum">    1501</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :     runtime-&gt;metadata = std::make_unique&lt;MySQLConnectorMetadata&gt;(spec, pool);</span></span>
-<span id="L1502"><span class="lineNum">    1502</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     runtime-&gt;split_manager = std::make_unique&lt;MySQLSplitManager&gt;(options, pool);</span></span>
+<span id="L1501"><span class="lineNum">    1501</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :     runtime-&gt;metadata = std::make_unique&lt;MySQLConnectorMetadata&gt;(spec, pool);</span></span>
+<span id="L1502"><span class="lineNum">    1502</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :     runtime-&gt;split_manager = std::make_unique&lt;MySQLSplitManager&gt;(options, pool);</span></span>
 <span id="L1503"><span class="lineNum">    1503</span>   [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           9 :     runtime-&gt;page_source_provider = std::make_unique&lt;MySQLPageSourceProvider&gt;(options, pool);</span></span>
 <span id="L1504"><span class="lineNum">    1504</span>                 :<span class="tlaGNC">           9 :     return runtime;</span></span>
 <span id="L1505"><span class="lineNum">    1505</span>                 :<span class="tlaUNC tlaBgUNC">           0 : }</span></span>
