@@ -21,10 +21,7 @@ package pl.minidfs.protocol;
 
 option cc_generic_services = true;
 
-// ============================================================================
 // Common types
-// ============================================================================
-
 message StatusProto {
     uint32 code = 1;
     string message = 2;
@@ -69,10 +66,7 @@ message BlockInfoProto {
     uint64 length = 3;
 }
 
-// ============================================================================
 // NameNode Client Protocol — RPCs called by DFS clients
-// ============================================================================
-
 message MkdirRequest {
     string path = 1;
     string owner = 2;
@@ -181,10 +175,7 @@ message RenewLeaseResponse {
     StatusProto status = 1;
 }
 
-// ============================================================================
 // NameNode DataNode Protocol — RPCs called by DataNodes
-// ============================================================================
-
 message RegisterDataNodeRequest {
     string uuid = 1;
     string hostname = 2;
@@ -248,9 +239,7 @@ message CommitBlockResponse {
     StatusProto status = 1;
 }
 
-// ============================================================================
 // Services
-// ============================================================================
 
 // Client-facing NameNode service
 service NameNodeService {
@@ -338,10 +327,7 @@ message TransferBlockResponse {
     StatusProto status = 1;
 }
 
-// ============================================================================
 // Admin messages
-// ============================================================================
-
 message GetClusterInfoRequest {}
 
 message GetClusterInfoResponse {

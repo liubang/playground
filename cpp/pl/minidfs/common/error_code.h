@@ -72,6 +72,7 @@ enum class ErrorCode : uint16_t {
     kRPCError = 5000,
     kRPCTimeout = 5001,
     kRPCConnectFailed = 5002,
+    kPipelineError = 5003,
 
     // IO errors
     kIOError = 6000,
@@ -142,6 +143,8 @@ constexpr std::string_view error_code_name(ErrorCode code) {
             return "RPCTimeout";
         case ErrorCode::kRPCConnectFailed:
             return "RPCConnectFailed";
+        case ErrorCode::kPipelineError:
+            return "PipelineError";
         case ErrorCode::kIOError:
             return "IOError";
         case ErrorCode::kDiskFull:

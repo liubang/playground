@@ -1,4 +1,4 @@
-// Copyright (c) 2025 The Authors. All rights reserved.
+// Copyright (c) 2026 The Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,11 +13,20 @@
 // limitations under the License.
 
 // Authors: liubang (it.liubang@gmail.com)
-// Created: 2025/07/01 00:45
-
-// Deprecated: this header is kept for backward compatibility.
-// Prefer including "cpp/pl/minidfs/datanode/block_format.h" directly.
+// Created: 2026/05/24 17:23
 
 #pragma once
 
-#include "cpp/pl/minidfs/datanode/block_format.h"
+#include <chrono>
+#include <cstdint>
+
+namespace pl::minidfs {
+
+/// Return current wall-clock time in milliseconds since epoch.
+inline uint64_t now_ms() {
+    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                     std::chrono::system_clock::now().time_since_epoch())
+                                     .count());
+}
+
+} // namespace pl::minidfs

@@ -24,9 +24,9 @@ cc_library(
     hdrs = [
         "checksum.h",
         "common.h",
-        "compression.h",
         "constants.h",
         "error_code.h",
+        "time_util.h",
         "types.h",
     ],
     deps = select({

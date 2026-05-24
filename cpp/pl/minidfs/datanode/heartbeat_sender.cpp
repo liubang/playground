@@ -22,10 +22,6 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
-// Construction & Destruction
-// ============================================================================
-
 HeartbeatSender::HeartbeatSender(Config config,
                                  LocalBlockStore* store,
                                  HeartbeatFunc heartbeat_func,
@@ -38,10 +34,6 @@ HeartbeatSender::HeartbeatSender(Config config,
 HeartbeatSender::~HeartbeatSender() {
     stop();
 }
-
-// ============================================================================
-// Lifecycle
-// ============================================================================
 
 void HeartbeatSender::start() {
     bool expected = false;
@@ -57,10 +49,6 @@ void HeartbeatSender::stop() {
         thread_.join();
     }
 }
-
-// ============================================================================
-// Heartbeat Logic
-// ============================================================================
 
 pl::Result<std::vector<HeartbeatCommand>> HeartbeatSender::send_once() {
     // Query storage capacity from local block store

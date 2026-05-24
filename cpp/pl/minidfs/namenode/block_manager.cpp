@@ -17,23 +17,13 @@
 
 #include "cpp/pl/minidfs/namenode/block_manager.h"
 
-#include <chrono>
 #include <fmt/format.h>
 
 #include "cpp/pl/minidfs/common/error_code.h"
+#include "cpp/pl/minidfs/common/time_util.h"
 #include "cpp/pl/minidfs/namenode/placement_manager.h"
 
 namespace pl::minidfs {
-
-namespace {
-
-uint64_t now_ms() {
-    return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
-                                     std::chrono::system_clock::now().time_since_epoch())
-                                     .count());
-}
-
-} // namespace
 
 BlockManager::BlockManager(MetadataStore* store, PlacementManager* placement)
     : store_(store), placement_(placement) {}
@@ -132,7 +122,22 @@ pl::Result<pl::Void> BlockManager::commit_block(uint64_t block_id,
     block.generation_stamp = generation_stamp;
     block.mtime_ms = now_ms();
 
-    return store_->update_block(block);
+    auto update_result = store_->update_block(block);
+    if (update_result.hasError()) {
+        return folly::makeUnexpected(update_result.error());
+    }
+
+    // Transition all replicas from kWriting to kFinalized.
+    auto replicas_result = store_->get_replicas(block_id);
+    if (replicas_result.hasValue()) {
+        for (const auto& r : replicas_result.value()) {
+            if (r.state == ReplicaState::kWriting) {
+                store_->update_replica_state(r.block_id, r.datanode_id, ReplicaState::kFinalized);
+            }
+        }
+    }
+
+    return pl::Void{};
 }
 
 pl::Result<std::vector<LocatedBlock>> BlockManager::get_located_blocks(uint64_t inode_id) {
@@ -186,6 +191,29 @@ pl::Result<std::vector<LocatedBlock>> BlockManager::get_located_blocks(uint64_t 
 
 pl::Result<pl::Void> BlockManager::report_corrupt_replica(uint64_t block_id, uint64_t datanode_id) {
     return store_->update_replica_state(block_id, datanode_id, ReplicaState::kCorrupt);
+}
+
+pl::Result<pl::Void> BlockManager::invalidate_blocks(uint64_t inode_id) {
+    auto blocks_result = store_->get_blocks_by_inode(inode_id);
+    if (blocks_result.hasError()) {
+        return folly::makeUnexpected(blocks_result.error());
+    }
+
+    for (auto& block : blocks_result.value()) {
+        // Delete all replicas for this block.
+        auto del_rep = store_->delete_replicas_by_block(block.block_id);
+        if (del_rep.hasError()) {
+            return folly::makeUnexpected(del_rep.error());
+        }
+        // Mark block as deleted.
+        block.state = BlockState::kDeleted;
+        block.mtime_ms = now_ms();
+        auto upd = store_->update_block(block);
+        if (upd.hasError()) {
+            return folly::makeUnexpected(upd.error());
+        }
+    }
+    return pl::Void{};
 }
 
 } // namespace pl::minidfs

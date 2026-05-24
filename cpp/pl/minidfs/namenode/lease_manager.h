@@ -26,13 +26,11 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
 // LeaseManager — manages file write leases.
 //
 // Only one client can hold a lease on a file at a time. Leases ensure that
 // concurrent writers don't corrupt file data. Leases have a timeout and
 // must be periodically renewed.
-// ============================================================================
 
 class LeaseManager {
 public:

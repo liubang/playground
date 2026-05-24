@@ -22,10 +22,7 @@
 namespace pl::minidfs {
 namespace {
 
-// ============================================================================
 // ErrorCode value tests
-// ============================================================================
-
 TEST(ErrorCodeTest, OKIsZero) {
     EXPECT_EQ(static_cast<uint16_t>(ErrorCode::kOK), 0u);
 }
@@ -83,10 +80,7 @@ TEST(ErrorCodeTest, InternalErrorRange) {
     EXPECT_EQ(static_cast<uint16_t>(ErrorCode::kRequestDuplicated), 9001u);
 }
 
-// ============================================================================
 // error_code_name tests
-// ============================================================================
-
 TEST(ErrorCodeTest, NameOK) {
     EXPECT_EQ(error_code_name(ErrorCode::kOK), "OK");
 }
@@ -144,10 +138,7 @@ TEST(ErrorCodeTest, NameInternalErrors) {
     EXPECT_EQ(error_code_name(ErrorCode::kRequestDuplicated), "RequestDuplicated");
 }
 
-// ============================================================================
 // error_code_name returns non-empty for all known codes
-// ============================================================================
-
 TEST(ErrorCodeTest, AllNamesNonEmpty) {
     auto codes = {
         ErrorCode::kOK,

@@ -22,10 +22,6 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
-// Construction & Destruction
-// ============================================================================
-
 BlockReporter::BlockReporter(Config config,
                              LocalBlockStore* store,
                              BlockReportFunc report_func,
@@ -38,10 +34,6 @@ BlockReporter::BlockReporter(Config config,
 BlockReporter::~BlockReporter() {
     stop();
 }
-
-// ============================================================================
-// Lifecycle
-// ============================================================================
 
 void BlockReporter::start() {
     bool expected = false;
@@ -57,10 +49,6 @@ void BlockReporter::stop() {
         thread_.join();
     }
 }
-
-// ============================================================================
-// Reporting Logic
-// ============================================================================
 
 pl::Result<BlockReportResponse> BlockReporter::send_full_report() {
     auto blocks_result = store_->report_blocks();

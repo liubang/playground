@@ -39,7 +39,7 @@ cc_test(
     copts = TEST_COPTS,
     linkopts = LINKOPTS,
     deps = [
-        "//cpp/pl/minidfs/common",
+        "//cpp/pl/minidfs/datanode:block_format",
         "@googletest//:gtest_main",
     ],
 )

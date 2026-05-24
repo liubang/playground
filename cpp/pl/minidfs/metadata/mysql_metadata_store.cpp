@@ -27,18 +27,20 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
 // MySQLTransaction -- RAII transaction using a pooled connection.
-// ============================================================================
 
 class MySQLTransaction final : public Transaction {
 public:
-    explicit MySQLTransaction(PooledConnection conn) : conn_(std::move(conn)) {}
+    MySQLTransaction(PooledConnection conn, MySQLMetadataStore* store)
+        : conn_(std::move(conn)), store_(store) {
+        store_->bind_connection(&conn_);
+    }
 
     ~MySQLTransaction() override {
         if (!committed_) {
             rollback();
         }
+        store_->unbind_connection();
     }
 
     pl::Result<pl::Void> commit() override {
@@ -62,12 +64,11 @@ public:
 
 private:
     PooledConnection conn_;
+    MySQLMetadataStore* store_;
     bool committed_ = false;
 };
 
-// ============================================================================
 // Helper: row field extraction
-// ============================================================================
 
 namespace {
 
@@ -164,7 +165,7 @@ Lease row_to_lease(const boost::mysql::row_view& row) {
     return l;
 }
 
-// 转义 SQL 字符串中的特殊字符，防止注入
+// Escape special characters in SQL string literals to prevent injection.
 inline std::string escape_sql(std::string_view input) {
     std::string result;
     result.reserve(input.size() + input.size() / 8);
@@ -201,9 +202,7 @@ inline std::string escape_sql(std::string_view input) {
 
 } // namespace
 
-// ============================================================================
 // MySQLMetadataStore construction
-// ============================================================================
 
 MySQLMetadataStore::MySQLMetadataStore(std::shared_ptr<MySQLConnectionPool> pool)
     : pool_(std::move(pool)) {}
@@ -217,9 +216,21 @@ pl::Result<std::unique_ptr<MySQLMetadataStore>> MySQLMetadataStore::create(
     return std::unique_ptr<MySQLMetadataStore>(new MySQLMetadataStore(std::move(pool)));
 }
 
-// ============================================================================
 // Transaction management
-// ============================================================================
+
+thread_local PooledConnection* MySQLMetadataStore::bound_conn_ = nullptr;
+
+void MySQLMetadataStore::bind_connection(PooledConnection* conn) { bound_conn_ = conn; }
+
+void MySQLMetadataStore::unbind_connection() { bound_conn_ = nullptr; }
+
+pl::Result<PooledConnection> MySQLMetadataStore::acquire_connection() {
+    return pool_->acquire();
+}
+
+PooledConnection* MySQLMetadataStore::get_active_conn(PooledConnection& owned) {
+    return bound_conn_ ? bound_conn_ : &owned;
+}
 
 pl::Result<std::unique_ptr<Transaction>> MySQLMetadataStore::begin_transaction() {
     auto conn_result = pool_->acquire();
@@ -231,26 +242,28 @@ pl::Result<std::unique_ptr<Transaction>> MySQLMetadataStore::begin_transaction()
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
-    return std::unique_ptr<Transaction>(std::make_unique<MySQLTransaction>(std::move(conn)));
+    return std::unique_ptr<Transaction>(std::make_unique<MySQLTransaction>(std::move(conn), this));
 }
 
-// ============================================================================
 // Inode operations
-// ============================================================================
 
 pl::Result<Inode> MySQLMetadataStore::get_inode(uint64_t inode_id) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql = fmt::format("SELECT inode_id, type, parent_id, name, owner, `group`, permission, "
                            "length, replication, block_size, state, ctime_ms, mtime_ms, version "
                            "FROM inodes WHERE inode_id = {}",
                            inode_id);
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -265,11 +278,15 @@ pl::Result<Inode> MySQLMetadataStore::get_inode(uint64_t inode_id) {
 
 pl::Result<std::optional<Inode>> MySQLMetadataStore::get_child(uint64_t parent_id,
                                                                std::string_view name) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql = fmt::format("SELECT inode_id, type, parent_id, name, owner, `group`, permission, "
                            "length, replication, block_size, state, ctime_ms, mtime_ms, version "
@@ -277,7 +294,7 @@ pl::Result<std::optional<Inode>> MySQLMetadataStore::get_child(uint64_t parent_i
                            parent_id,
                            escape_sql(name));
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -290,18 +307,22 @@ pl::Result<std::optional<Inode>> MySQLMetadataStore::get_child(uint64_t parent_i
 }
 
 pl::Result<std::vector<Inode>> MySQLMetadataStore::list_children(uint64_t parent_id) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql = fmt::format("SELECT inode_id, type, parent_id, name, owner, `group`, permission, "
                            "length, replication, block_size, state, ctime_ms, mtime_ms, version "
                            "FROM inodes WHERE parent_id = {} ORDER BY name",
                            parent_id);
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -316,11 +337,15 @@ pl::Result<std::vector<Inode>> MySQLMetadataStore::list_children(uint64_t parent
 }
 
 pl::Result<pl::Void> MySQLMetadataStore::create_inode(const Inode& inode) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql = fmt::format(
         "INSERT INTO inodes (inode_id, type, parent_id, name, owner, `group`, "
@@ -341,7 +366,7 @@ pl::Result<pl::Void> MySQLMetadataStore::create_inode(const Inode& inode) {
         inode.mtime_ms,
         inode.version);
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -349,11 +374,15 @@ pl::Result<pl::Void> MySQLMetadataStore::create_inode(const Inode& inode) {
 }
 
 pl::Result<pl::Void> MySQLMetadataStore::update_inode(const Inode& inode) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql =
         fmt::format("UPDATE inodes SET type={}, parent_id={}, name='{}', owner='{}', `group`='{}', "
@@ -373,52 +402,59 @@ pl::Result<pl::Void> MySQLMetadataStore::update_inode(const Inode& inode) {
                     inode.inode_id,
                     inode.version);
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
-    // CAS 检查：若无行被更新，说明存在并发修改冲突
+    // CAS check: if no rows updated, either inode not found or version conflict.
     if (res.value().affected_rows() == 0) {
-        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kInternalError),
-                             fmt::format("inode {} concurrent modification conflict (version={})",
-                                         inode.inode_id,
-                                         inode.version));
+        return pl::makeError(
+            static_cast<pl::status_code_t>(ErrorCode::kInternalError),
+            fmt::format("inode {} update failed: not found or version conflict (version={})",
+                        inode.inode_id,
+                        inode.version));
     }
     return pl::Void{};
 }
 
 pl::Result<pl::Void> MySQLMetadataStore::delete_inode(uint64_t inode_id) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql = fmt::format("DELETE FROM inodes WHERE inode_id = {}", inode_id);
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
     return pl::Void{};
 }
 
-// ============================================================================
 // Block operations
-// ============================================================================
 
 pl::Result<BlockMeta> MySQLMetadataStore::get_block(uint64_t block_id) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql = fmt::format("SELECT block_id, inode_id, block_index, generation_stamp, length, "
                            "state, desired_replica, ctime_ms, mtime_ms "
                            "FROM blocks WHERE block_id = {}",
                            block_id);
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -432,18 +468,22 @@ pl::Result<BlockMeta> MySQLMetadataStore::get_block(uint64_t block_id) {
 }
 
 pl::Result<std::vector<BlockMeta>> MySQLMetadataStore::get_blocks_by_inode(uint64_t inode_id) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql = fmt::format("SELECT block_id, inode_id, block_index, generation_stamp, length, "
                            "state, desired_replica, ctime_ms, mtime_ms "
                            "FROM blocks WHERE inode_id = {} ORDER BY block_index",
                            inode_id);
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -458,11 +498,15 @@ pl::Result<std::vector<BlockMeta>> MySQLMetadataStore::get_blocks_by_inode(uint6
 }
 
 pl::Result<pl::Void> MySQLMetadataStore::create_block(const BlockMeta& block) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql = fmt::format("INSERT INTO blocks (block_id, inode_id, block_index, generation_stamp, "
                            "length, state, desired_replica, ctime_ms, mtime_ms) "
@@ -477,7 +521,7 @@ pl::Result<pl::Void> MySQLMetadataStore::create_block(const BlockMeta& block) {
                            block.ctime_ms,
                            block.mtime_ms);
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -485,11 +529,15 @@ pl::Result<pl::Void> MySQLMetadataStore::create_block(const BlockMeta& block) {
 }
 
 pl::Result<pl::Void> MySQLMetadataStore::update_block(const BlockMeta& block) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql = fmt::format("UPDATE blocks SET inode_id={}, block_index={}, generation_stamp={}, "
                            "length={}, state={}, desired_replica={}, mtime_ms={} WHERE block_id={}",
@@ -502,7 +550,7 @@ pl::Result<pl::Void> MySQLMetadataStore::update_block(const BlockMeta& block) {
                            block.mtime_ms,
                            block.block_id);
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -510,18 +558,22 @@ pl::Result<pl::Void> MySQLMetadataStore::update_block(const BlockMeta& block) {
 }
 
 pl::Result<std::vector<BlockMeta>> MySQLMetadataStore::get_blocks_by_state(BlockState state) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql = fmt::format("SELECT block_id, inode_id, block_index, generation_stamp, length, "
                            "state, desired_replica, ctime_ms, mtime_ms "
                            "FROM blocks WHERE state = {}",
                            static_cast<uint8_t>(state));
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -535,23 +587,25 @@ pl::Result<std::vector<BlockMeta>> MySQLMetadataStore::get_blocks_by_state(Block
     return result;
 }
 
-// ============================================================================
 // Block Replica operations
-// ============================================================================
 
 pl::Result<std::vector<BlockReplica>> MySQLMetadataStore::get_replicas(uint64_t block_id) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql = fmt::format("SELECT block_id, datanode_id, storage_id, state, length, "
                            "generation_stamp, report_time_ms "
                            "FROM block_replicas WHERE block_id = {}",
                            block_id);
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -567,18 +621,22 @@ pl::Result<std::vector<BlockReplica>> MySQLMetadataStore::get_replicas(uint64_t 
 
 pl::Result<std::vector<BlockReplica>> MySQLMetadataStore::get_replicas_by_datanode(
     uint64_t datanode_id) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql = fmt::format("SELECT block_id, datanode_id, storage_id, state, length, "
                            "generation_stamp, report_time_ms "
                            "FROM block_replicas WHERE datanode_id = {}",
                            datanode_id);
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -593,11 +651,15 @@ pl::Result<std::vector<BlockReplica>> MySQLMetadataStore::get_replicas_by_datano
 }
 
 pl::Result<pl::Void> MySQLMetadataStore::upsert_replica(const BlockReplica& replica) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql = fmt::format(
         "INSERT INTO block_replicas (block_id, datanode_id, storage_id, state, "
@@ -616,7 +678,7 @@ pl::Result<pl::Void> MySQLMetadataStore::upsert_replica(const BlockReplica& repl
         replica.generation_stamp,
         replica.report_time_ms);
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -624,14 +686,18 @@ pl::Result<pl::Void> MySQLMetadataStore::upsert_replica(const BlockReplica& repl
 }
 
 pl::Result<pl::Void> MySQLMetadataStore::delete_replicas_by_block(uint64_t block_id) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql = fmt::format("DELETE FROM block_replicas WHERE block_id = {}", block_id);
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -641,11 +707,15 @@ pl::Result<pl::Void> MySQLMetadataStore::delete_replicas_by_block(uint64_t block
 pl::Result<pl::Void> MySQLMetadataStore::update_replica_state(uint64_t block_id,
                                                               uint64_t datanode_id,
                                                               ReplicaState new_state) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql =
         fmt::format("UPDATE block_replicas SET state={} WHERE block_id={} AND datanode_id={}",
@@ -653,30 +723,32 @@ pl::Result<pl::Void> MySQLMetadataStore::update_replica_state(uint64_t block_id,
                     block_id,
                     datanode_id);
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
     return pl::Void{};
 }
 
-// ============================================================================
 // DataNode operations
-// ============================================================================
 
 pl::Result<DataNodeInfo> MySQLMetadataStore::get_datanode(uint64_t datanode_id) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql = fmt::format("SELECT datanode_id, uuid, hostname, ip, rpc_port, data_port, rack, "
                            "state, capacity_bytes, used_bytes, free_bytes, last_heartbeat_ms "
                            "FROM datanodes WHERE datanode_id = {}",
                            datanode_id);
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -691,18 +763,22 @@ pl::Result<DataNodeInfo> MySQLMetadataStore::get_datanode(uint64_t datanode_id) 
 
 pl::Result<std::optional<DataNodeInfo>> MySQLMetadataStore::get_datanode_by_uuid(
     std::string_view uuid) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql = fmt::format("SELECT datanode_id, uuid, hostname, ip, rpc_port, data_port, rack, "
                            "state, capacity_bytes, used_bytes, free_bytes, last_heartbeat_ms "
                            "FROM datanodes WHERE uuid = '{}'",
                            escape_sql(uuid));
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -716,18 +792,22 @@ pl::Result<std::optional<DataNodeInfo>> MySQLMetadataStore::get_datanode_by_uuid
 
 pl::Result<std::vector<DataNodeInfo>> MySQLMetadataStore::list_datanodes_by_state(
     DataNodeState state) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql = fmt::format("SELECT datanode_id, uuid, hostname, ip, rpc_port, data_port, rack, "
                            "state, capacity_bytes, used_bytes, free_bytes, last_heartbeat_ms "
                            "FROM datanodes WHERE state = {}",
                            static_cast<uint8_t>(state));
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -742,15 +822,19 @@ pl::Result<std::vector<DataNodeInfo>> MySQLMetadataStore::list_datanodes_by_stat
 }
 
 pl::Result<std::vector<DataNodeInfo>> MySQLMetadataStore::list_all_datanodes() {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
-    auto res = conn.execute("SELECT datanode_id, uuid, hostname, ip, rpc_port, data_port, rack, "
-                            "state, capacity_bytes, used_bytes, free_bytes, last_heartbeat_ms "
-                            "FROM datanodes");
+    auto res = conn->execute("SELECT datanode_id, uuid, hostname, ip, rpc_port, data_port, rack, "
+                             "state, capacity_bytes, used_bytes, free_bytes, last_heartbeat_ms "
+                             "FROM datanodes");
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -765,11 +849,15 @@ pl::Result<std::vector<DataNodeInfo>> MySQLMetadataStore::list_all_datanodes() {
 }
 
 pl::Result<pl::Void> MySQLMetadataStore::upsert_datanode(const DataNodeInfo& info) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql =
         fmt::format("INSERT INTO datanodes (datanode_id, uuid, hostname, ip, rpc_port, data_port, "
@@ -801,23 +889,25 @@ pl::Result<pl::Void> MySQLMetadataStore::upsert_datanode(const DataNodeInfo& inf
                     info.free_bytes,
                     info.last_heartbeat_ms);
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
     return pl::Void{};
 }
 
-// ============================================================================
 // Lease operations
-// ============================================================================
 
 pl::Result<pl::Void> MySQLMetadataStore::create_lease(const Lease& lease) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql = fmt::format("INSERT INTO leases (lease_id, inode_id, client_id, state, "
                            "expire_time_ms, ctime_ms, mtime_ms) "
@@ -830,7 +920,7 @@ pl::Result<pl::Void> MySQLMetadataStore::create_lease(const Lease& lease) {
                            lease.ctime_ms,
                            lease.mtime_ms);
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -838,18 +928,22 @@ pl::Result<pl::Void> MySQLMetadataStore::create_lease(const Lease& lease) {
 }
 
 pl::Result<std::optional<Lease>> MySQLMetadataStore::get_active_lease(uint64_t inode_id) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql = fmt::format(
         "SELECT lease_id, inode_id, client_id, state, expire_time_ms, ctime_ms, mtime_ms "
         "FROM leases WHERE inode_id = {} AND state = 0 LIMIT 1",
         inode_id);
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -862,18 +956,22 @@ pl::Result<std::optional<Lease>> MySQLMetadataStore::get_active_lease(uint64_t i
 }
 
 pl::Result<pl::Void> MySQLMetadataStore::renew_lease(uint64_t inode_id, uint64_t new_expire_ms) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql =
         fmt::format("UPDATE leases SET expire_time_ms = {} WHERE inode_id = {} AND state = 0",
                     new_expire_ms,
                     inode_id);
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -881,16 +979,20 @@ pl::Result<pl::Void> MySQLMetadataStore::renew_lease(uint64_t inode_id, uint64_t
 }
 
 pl::Result<pl::Void> MySQLMetadataStore::close_lease(uint64_t inode_id) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql =
         fmt::format("UPDATE leases SET state = 1 WHERE inode_id = {} AND state = 0", inode_id);
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -898,50 +1000,62 @@ pl::Result<pl::Void> MySQLMetadataStore::close_lease(uint64_t inode_id) {
 }
 
 pl::Result<uint64_t> MySQLMetadataStore::expire_leases(uint64_t now_ms) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql =
         fmt::format("UPDATE leases SET state = 1 WHERE state = 0 AND expire_time_ms < {}", now_ms);
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
     return res.value().affected_rows();
 }
 
-// ============================================================================
 // ID Allocation
-// ============================================================================
 
 pl::Result<uint64_t> MySQLMetadataStore::alloc_id(std::string_view name, uint64_t count) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
-    // Atomic allocation via INSERT ... ON DUPLICATE KEY UPDATE.
+    // Atomic allocation via INSERT ... ON DUPLICATE KEY UPDATE with
+    // LAST_INSERT_ID() trick to avoid TOCTOU between UPDATE and SELECT.
     // Table: id_allocators(name VARCHAR PK, next_id BIGINT UNSIGNED).
-    auto sql = fmt::format("INSERT INTO id_allocators (name, next_id) VALUES ('{}', {}) "
-                           "ON DUPLICATE KEY UPDATE next_id = next_id + {}",
-                           escape_sql(name),
-                           count,
-                           count);
+    //
+    // INSERT path: LAST_INSERT_ID(0) sets the session value to 0 (the base of
+    // the first allocated range), and next_id becomes 0 + count.
+    // UPDATE path: LAST_INSERT_ID(next_id) captures the current next_id as base,
+    // then adds count.
+    auto sql = fmt::format(
+        "INSERT INTO id_allocators (name, next_id) VALUES ('{}', LAST_INSERT_ID(0) + {}) "
+        "ON DUPLICATE KEY UPDATE next_id = LAST_INSERT_ID(next_id) + {}",
+        escape_sql(name),
+        count,
+        count);
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
 
-    // Read back the current value to determine the allocated range.
-    auto read_sql =
-        fmt::format("SELECT next_id FROM id_allocators WHERE name = '{}'", escape_sql(name));
-    auto read_res = conn.execute(read_sql);
+    // LAST_INSERT_ID() returns the session-local value set by the UPDATE above.
+    // This is immune to concurrent modifications on other connections.
+    auto read_res = conn->execute("SELECT LAST_INSERT_ID()");
     if (read_res.hasError()) {
         return folly::makeUnexpected(read_res.error());
     }
@@ -949,27 +1063,30 @@ pl::Result<uint64_t> MySQLMetadataStore::alloc_id(std::string_view name, uint64_
     auto rows = read_res.value().rows();
     if (rows.empty()) {
         return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kInternalError),
-                             "id_allocators: read after write failed");
+                             "id_allocators: LAST_INSERT_ID() returned no rows");
     }
 
-    uint64_t next_id = to_u64(rows[0][0]);
-    // Allocated range: [next_id - count, next_id). Return first ID.
-    return next_id - count;
+    // LAST_INSERT_ID() gives us the value of next_id BEFORE the addition.
+    // So the allocated range is [last_insert_id, last_insert_id + count).
+    uint64_t base_id = to_u64(rows[0][0]);
+    return base_id;
 }
 
-// ============================================================================
 // Operation Log
-// ============================================================================
 
 pl::Result<pl::Void> MySQLMetadataStore::write_oplog(std::string_view op_type,
                                                      uint64_t target_inode_id,
                                                      std::string_view request_id,
                                                      std::string_view payload_json) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql =
         fmt::format("INSERT INTO op_log (op_type, target_inode_id, request_id, payload_json) "
@@ -979,7 +1096,7 @@ pl::Result<pl::Void> MySQLMetadataStore::write_oplog(std::string_view op_type,
                     escape_sql(request_id),
                     escape_sql(payload_json));
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }
@@ -987,16 +1104,20 @@ pl::Result<pl::Void> MySQLMetadataStore::write_oplog(std::string_view op_type,
 }
 
 pl::Result<bool> MySQLMetadataStore::check_request_id(std::string_view request_id) {
-    auto conn_result = pool_->acquire();
-    if (conn_result.hasError()) {
-        return folly::makeUnexpected(conn_result.error());
+    PooledConnection owned;
+    if (!bound_conn_) {
+        auto conn_result = pool_->acquire();
+        if (conn_result.hasError()) {
+            return folly::makeUnexpected(conn_result.error());
+        }
+        owned = std::move(conn_result.value());
     }
-    auto conn = std::move(conn_result.value());
+    auto* conn = get_active_conn(owned);
 
     auto sql =
         fmt::format("SELECT 1 FROM op_log WHERE request_id = '{}' LIMIT 1", escape_sql(request_id));
 
-    auto res = conn.execute(sql);
+    auto res = conn->execute(sql);
     if (res.hasError()) {
         return folly::makeUnexpected(res.error());
     }

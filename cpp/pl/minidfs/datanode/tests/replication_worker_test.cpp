@@ -54,7 +54,7 @@ protected:
     /// Helper: create and finalize a block with some data.
     void create_finalized_block(uint64_t block_id, uint64_t gs, const std::string& data) {
         store_->create_block(block_id, 1, 0, gs);
-        store_->append_chunk(block_id, gs, data.data(), data.size());
+        store_->append_chunk(block_id, gs, data.data(), data.size(), 0);
         store_->finalize_block(block_id, gs);
     }
 

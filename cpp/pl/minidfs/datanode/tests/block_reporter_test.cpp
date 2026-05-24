@@ -52,7 +52,7 @@ protected:
     void create_finalized_block(uint64_t block_id, uint64_t gs) {
         store_->create_block(block_id, 1, 0, gs);
         std::string data = "data_" + std::to_string(block_id);
-        store_->append_chunk(block_id, gs, data.data(), data.size());
+        store_->append_chunk(block_id, gs, data.data(), data.size(), 0);
         store_->finalize_block(block_id, gs);
     }
 

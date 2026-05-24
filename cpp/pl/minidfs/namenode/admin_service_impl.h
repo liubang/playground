@@ -23,12 +23,9 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
 // AdminServiceImpl — brpc service implementation for cluster administration.
 //
 // Provides read-only diagnostic and management RPCs for operators and CLI.
-// ============================================================================
-
 class AdminServiceImpl : public protocol::AdminService {
 public:
     AdminServiceImpl(NamespaceManager* ns_mgr,

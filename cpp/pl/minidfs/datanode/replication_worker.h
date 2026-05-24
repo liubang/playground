@@ -31,14 +31,6 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
-// ReplicationTask — a unit of work for the replication worker.
-//
-// Two kinds:
-//   - Copy: read a block from local store, send to a remote DN (pipeline).
-//   - Delete: remove a local block replica as instructed by NameNode.
-// ============================================================================
-
 enum class TaskKind : uint8_t {
     kCopy = 0,
     kDelete = 1,
@@ -52,18 +44,9 @@ struct DataNodeTask {
     uint32_t target_port = 0; // For copy: destination DN data port
 };
 
-// ============================================================================
 // ReplicationWorker — executes block replication and deletion tasks.
-//
-// Tasks are enqueued by the HeartbeatSender (from NN commands) or by the
-// BlockReporter (from block report responses). The worker processes them
-// sequentially from a thread-safe queue.
-//
-// For copy tasks, the worker reads block data from local store and sends
-// it to the target DN via the pipeline protocol. The actual network send
-// is abstracted via a callback (CopyFunc) for testability.
-// ============================================================================
-
+// Tasks are enqueued by HeartbeatSender or BlockReporter and processed
+// from a thread-safe queue. Network send is abstracted via CopyFunc.
 using CopyFunc = std::function<pl::Result<pl::Void>(uint64_t block_id,
                                                     uint64_t generation_stamp,
                                                     const std::string& data,

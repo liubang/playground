@@ -27,7 +27,6 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
 // DataNodeManager — manages datanode registration and heartbeat state machine.
 //
 // State transitions:
@@ -35,7 +34,6 @@ namespace pl::minidfs {
 //   Live: heartbeat received within stale timeout
 //   Stale: no heartbeat for stale_timeout_ms
 //   Dead: no heartbeat for dead_timeout_ms
-// ============================================================================
 
 class DataNodeManager {
 public:
