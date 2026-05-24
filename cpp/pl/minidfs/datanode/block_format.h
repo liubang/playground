@@ -19,15 +19,34 @@
 
 #include <cstdint>
 #include <cstring>
+#include <string_view>
 #include <type_traits>
 
 #include "cpp/pl/minidfs/common/checksum.h"
-#include "cpp/pl/minidfs/common/compression.h"
 #include "cpp/pl/minidfs/common/constants.h"
 
 namespace pl::minidfs {
 
-// ============================================================================
+/// Compression algorithm used for block data chunks.
+enum class CompressionType : uint8_t {
+    kNone = 0,
+    kSnappy = 1,
+    kZstd = 2,
+};
+
+/// Return the human-readable name of a compression type.
+constexpr std::string_view compression_type_name(CompressionType type) {
+    switch (type) {
+        case CompressionType::kNone:
+            return "none";
+        case CompressionType::kSnappy:
+            return "snappy";
+        case CompressionType::kZstd:
+            return "zstd";
+    }
+    return "unknown";
+}
+
 // BlockHeader — on-disk binary format for a block file.
 //
 // Layout: [BlockHeader (fixed size)] [Data Region (variable)]
@@ -37,7 +56,6 @@ namespace pl::minidfs {
 // Each chunk's CRC32C is recorded in `chunk_checksums`.
 //
 // The `block_checksum` covers the entire data region (all chunks concatenated).
-// ============================================================================
 
 #pragma pack(push, 1)
 struct BlockHeader {
@@ -65,9 +83,7 @@ static_assert(std::is_trivially_copyable_v<BlockHeader>,
 // Header size is fixed regardless of actual chunk_count.
 inline constexpr size_t kBlockHeaderSize = sizeof(BlockHeader);
 
-// ============================================================================
 // Utility functions
-// ============================================================================
 
 /// Validate that a BlockHeader has the correct magic and version.
 [[nodiscard]] inline bool validate_block_header(const BlockHeader& header) {

@@ -81,3 +81,14 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "regression_test",
+    srcs = ["regression_test.cpp"],
+    copts = TEST_COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        "//cpp/pl/minidfs/datanode:local_block_store",
+        "@googletest//:gtest_main",
+    ],
+)

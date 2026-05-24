@@ -48,9 +48,7 @@ inline pl::Status make_checksum_error(std::string_view msg) {
 
 } // namespace
 
-// ============================================================================
 // Construction & Initialization
-// ============================================================================
 
 LocalBlockStore::LocalBlockStore(Config config)
     : config_(std::move(config)),
@@ -79,9 +77,7 @@ pl::Result<pl::Void> LocalBlockStore::init() {
     RETURN_VOID;
 }
 
-// ============================================================================
 // Block Filename Utilities
-// ============================================================================
 
 std::string LocalBlockStore::block_filename(uint64_t block_id, uint64_t generation_stamp) {
     return fmt::format("blk_{}_{}.blk", block_id, generation_stamp);
@@ -93,9 +89,7 @@ fs::path LocalBlockStore::block_path(std::string_view subdir,
     return root_path_ / subdir / block_filename(block_id, generation_stamp);
 }
 
-// ============================================================================
 // Header I/O
-// ============================================================================
 
 pl::Result<BlockHeader> LocalBlockStore::read_header(const fs::path& path) const {
     std::ifstream ifs(path, std::ios::binary);
@@ -140,9 +134,7 @@ pl::Result<pl::Void> LocalBlockStore::write_header(const fs::path& path,
     RETURN_VOID;
 }
 
-// ============================================================================
 // Block Lifecycle
-// ============================================================================
 
 pl::Result<pl::Void> LocalBlockStore::create_block(uint64_t block_id,
                                                    uint64_t inode_id,
@@ -179,7 +171,8 @@ pl::Result<pl::Void> LocalBlockStore::create_block(uint64_t block_id,
 pl::Result<uint64_t> LocalBlockStore::append_chunk(uint64_t block_id,
                                                    uint64_t generation_stamp,
                                                    const void* data,
-                                                   uint32_t size) {
+                                                   uint32_t size,
+                                                   uint32_t chunk_index) {
     std::lock_guard lock(mu_);
 
     auto path = block_path("tmp", block_id, generation_stamp);
@@ -189,23 +182,33 @@ pl::Result<uint64_t> LocalBlockStore::append_chunk(uint64_t block_id,
     }
 
     auto header = header_result.value();
+
+    // Compute CRC32C for this chunk (needed for both ordering check and idempotency)
+    uint32_t crc = compute_crc32c(data, size);
+
+    // Idempotency: if chunk_index == last written chunk and CRC matches, treat as retry.
+    if (chunk_index < header.chunk_count) {
+        if (chunk_index == header.chunk_count - 1 &&
+            header.chunk_checksums[chunk_index] == crc) {
+            // Duplicate/retried write — return current data length (success, no-op).
+            return header.data_length;
+        }
+        // chunk_index < chunk_count but CRC doesn't match or not the last chunk
+        return pl::makeError(pl::Status(
+            static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument),
+            fmt::format("chunk_index {} already written with different data", chunk_index)));
+    }
+
+    // Ordering: chunk_index must be exactly the next expected chunk.
+    if (chunk_index != header.chunk_count) {
+        return pl::makeError(pl::Status(
+            static_cast<pl::status_code_t>(ErrorCode::kInvalidArgument),
+            fmt::format("expected chunk_index {} but got {}", header.chunk_count, chunk_index)));
+    }
+
     if (header.chunk_count >= kMaxChunkCount) {
         return pl::makeError(pl::Status(static_cast<pl::status_code_t>(ErrorCode::kIOError),
                                         "max chunk count reached"));
-    }
-
-    // Calculate offset within data region (relative to end of header)
-    uint32_t data_offset = 0;
-    if (header.chunk_count > 0) {
-        // Next offset = previous offset + previous chunk would be at file position
-        // But we store offsets relative to start of data region
-        data_offset = header.chunk_offsets[header.chunk_count - 1];
-        // We need to know the size of the previous chunk. For simplicity,
-        // the offset of chunk N is the cumulative size of chunks 0..N-1.
-        // Actually, chunk_offsets[i] is the start offset of chunk i within data region.
-        // So the next chunk starts at chunk_offsets[count-1] + size_of_last_chunk.
-        // Since we don't store individual chunk sizes in the header (only offsets),
-        // the easiest approach: offset for chunk N = file_size - kBlockHeaderSize.
     }
 
     // Open file to get actual data region size
@@ -216,16 +219,13 @@ pl::Result<uint64_t> LocalBlockStore::append_chunk(uint64_t block_id,
     }
 
     auto file_size = static_cast<uint64_t>(fs_file.tellp());
-    data_offset = static_cast<uint32_t>(file_size - kBlockHeaderSize);
+    uint32_t data_offset = static_cast<uint32_t>(file_size - kBlockHeaderSize);
 
     // Write chunk data at end of file
     fs_file.write(reinterpret_cast<const char*>(data), size);
     if (!fs_file.good()) {
         return pl::makeError(make_io_error("failed to append chunk data"));
     }
-
-    // Compute CRC32C for this chunk
-    uint32_t crc = compute_crc32c(data, size);
 
     // Update header
     header.chunk_offsets[header.chunk_count] = data_offset;
@@ -305,9 +305,7 @@ pl::Result<uint32_t> LocalBlockStore::purge_trash() {
     return count;
 }
 
-// ============================================================================
 // Block Reading
-// ============================================================================
 
 pl::Result<std::string> LocalBlockStore::read_block_data(uint64_t block_id,
                                                          uint64_t generation_stamp) {
@@ -439,9 +437,7 @@ pl::Result<bool> LocalBlockStore::verify_block(uint64_t block_id, uint64_t gener
     return true;
 }
 
-// ============================================================================
 // Block Reporting
-// ============================================================================
 
 pl::Result<std::vector<BlockInfo>> LocalBlockStore::report_blocks() {
     std::lock_guard lock(mu_);

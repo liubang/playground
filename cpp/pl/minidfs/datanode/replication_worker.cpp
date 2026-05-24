@@ -21,20 +21,12 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
-// Construction & Destruction
-// ============================================================================
-
 ReplicationWorker::ReplicationWorker(Config config, LocalBlockStore* store, CopyFunc copy_func)
     : config_(std::move(config)), store_(store), copy_func_(std::move(copy_func)) {}
 
 ReplicationWorker::~ReplicationWorker() {
     stop();
 }
-
-// ============================================================================
-// Lifecycle
-// ============================================================================
 
 void ReplicationWorker::start() {
     bool expected = false;
@@ -58,10 +50,6 @@ void ReplicationWorker::stop() {
     threads_.clear();
 }
 
-// ============================================================================
-// Task Queue
-// ============================================================================
-
 void ReplicationWorker::enqueue(DataNodeTask task) {
     {
         std::lock_guard lock(queue_mu_);
@@ -74,10 +62,6 @@ size_t ReplicationWorker::pending_count() const {
     std::lock_guard lock(queue_mu_);
     return task_queue_.size();
 }
-
-// ============================================================================
-// Worker Loop
-// ============================================================================
 
 void ReplicationWorker::worker_loop() {
     while (true) {
@@ -109,10 +93,6 @@ void ReplicationWorker::worker_loop() {
         }
     }
 }
-
-// ============================================================================
-// Task Execution
-// ============================================================================
 
 void ReplicationWorker::execute_copy(const DataNodeTask& task) {
     // Read full block data from local store

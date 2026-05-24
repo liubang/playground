@@ -27,23 +27,17 @@
 
 namespace pl::minidfs::testing {
 
-// ============================================================================
 // MockTransaction — no-op transaction for in-memory store.
-// ============================================================================
-
 class MockTransaction final : public Transaction {
 public:
     pl::Result<pl::Void> commit() override { return pl::Void{}; }
     void rollback() override {}
 };
 
-// ============================================================================
 // MockMetadataStore — thread-safe in-memory MetadataStore for unit tests.
 //
 // Provides a fully functional implementation backed by std::unordered_map,
 // enabling all Manager tests to run without MySQL.
-// ============================================================================
-
 class MockMetadataStore final : public MetadataStore {
 public:
     MockMetadataStore() {
@@ -68,18 +62,12 @@ public:
         id_counters_["lease"] = 1000;
     }
 
-    // ========================================================================
     // Transaction
-    // ========================================================================
-
     pl::Result<std::unique_ptr<Transaction>> begin_transaction() override {
         return std::unique_ptr<Transaction>(std::make_unique<MockTransaction>());
     }
 
-    // ========================================================================
     // Inode operations
-    // ========================================================================
-
     pl::Result<Inode> get_inode(uint64_t inode_id) override {
         std::lock_guard lock(mu_);
         auto it = inodes_.find(inode_id);
@@ -141,10 +129,7 @@ public:
         return pl::Void{};
     }
 
-    // ========================================================================
     // Block operations
-    // ========================================================================
-
     pl::Result<BlockMeta> get_block(uint64_t block_id) override {
         std::lock_guard lock(mu_);
         auto it = blocks_.find(block_id);
@@ -197,10 +182,7 @@ public:
         return result;
     }
 
-    // ========================================================================
     // Block Replica operations
-    // ========================================================================
-
     pl::Result<std::vector<BlockReplica>> get_replicas(uint64_t block_id) override {
         std::lock_guard lock(mu_);
         std::vector<BlockReplica> result;
@@ -260,10 +242,7 @@ public:
                              "replica not found");
     }
 
-    // ========================================================================
     // DataNode operations
-    // ========================================================================
-
     pl::Result<DataNodeInfo> get_datanode(uint64_t datanode_id) override {
         std::lock_guard lock(mu_);
         auto it = datanodes_.find(datanode_id);
@@ -311,10 +290,7 @@ public:
         return pl::Void{};
     }
 
-    // ========================================================================
     // Lease operations
-    // ========================================================================
-
     pl::Result<pl::Void> create_lease(const Lease& lease) override {
         std::lock_guard lock(mu_);
         leases_.push_back(lease);
@@ -366,27 +342,17 @@ public:
         return count;
     }
 
-    // ========================================================================
     // ID Allocation
-    // ========================================================================
-
     pl::Result<uint64_t> alloc_id(std::string_view name, uint64_t count = 1) override {
         std::lock_guard lock(mu_);
         auto key = std::string(name);
-        auto it = id_counters_.find(key);
-        if (it == id_counters_.end()) {
-            id_counters_[key] = 1000;
-            it = id_counters_.find(key);
-        }
+        auto [it, inserted] = id_counters_.emplace(key, 0);
         uint64_t id = it->second;
         it->second += count;
         return id;
     }
 
-    // ========================================================================
     // Operation Log
-    // ========================================================================
-
     pl::Result<pl::Void> write_oplog(std::string_view /*op_type*/,
                                      uint64_t /*target_inode_id*/,
                                      std::string_view request_id,

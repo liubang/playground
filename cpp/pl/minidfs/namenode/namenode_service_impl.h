@@ -26,12 +26,10 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
 // NameNodeServiceImpl — brpc service implementation for client-facing RPCs.
 //
 // Delegates to the internal managers (NamespaceManager, BlockManager, etc.)
 // and translates between proto messages and internal types.
-// ============================================================================
 
 class NameNodeServiceImpl : public protocol::NameNodeService {
 public:
@@ -96,10 +94,10 @@ private:
     static void fill_file_status(protocol::FileStatusProto* proto, const FileStatus& fs);
     static void fill_located_block(protocol::LocatedBlockProto* proto, const LocatedBlock& lb);
 
-    // 幂等性检查：若 request_id 已处理过则返回 true（调用方应直接返回成功）
+    // Idempotency check: returns true if request_id was already processed (caller should return success)
     bool check_idempotent(const protocol::RequestHeader& header, protocol::StatusProto* status);
 
-    // 写入 oplog（幂等性记录）
+    // Write oplog (idempotency record)
     void write_oplog(std::string_view op_type,
                      uint64_t target_inode_id,
                      const protocol::RequestHeader& header);
@@ -110,9 +108,7 @@ private:
     MetadataStore* metadata_store_;
 };
 
-// ============================================================================
 // DataNodeProtocolServiceImpl — brpc service for DataNode-facing RPCs.
-// ============================================================================
 
 class DataNodeProtocolServiceImpl : public protocol::DataNodeProtocolService {
 public:

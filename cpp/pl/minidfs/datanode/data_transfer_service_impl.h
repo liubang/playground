@@ -24,14 +24,8 @@
 
 namespace pl::minidfs {
 
-// ============================================================================
 // DataTransferServiceImpl — brpc service for DN-to-DN block transfers.
-//
-// Handles:
-//   - WriteBlock: pipeline write from client or upstream DN
-//   - TransferBlock: full-block replication from another DN
-// ============================================================================
-
+// Handles WriteBlock (pipeline write) and TransferBlock (full-block replication).
 class DataTransferServiceImpl : public protocol::DataTransferService {
 public:
     DataTransferServiceImpl(LocalBlockStore* store, BlockReporter* reporter);
