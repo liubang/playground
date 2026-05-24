@@ -76,9 +76,11 @@ void DataTransferServiceImpl::WriteBlock(google::protobuf::RpcController* /*cont
     }
 
     // Append chunk to local block
-    auto append_result = store_->append_chunk(
-        block_id, generation_stamp, data.data(), static_cast<uint32_t>(data.size()),
-        request->chunk_index());
+    auto append_result = store_->append_chunk(block_id,
+                                              generation_stamp,
+                                              data.data(),
+                                              static_cast<uint32_t>(data.size()),
+                                              request->chunk_index());
     if (append_result.hasError()) {
         fill_status(response->mutable_status(),
                     append_result.error().code(),
@@ -131,9 +133,8 @@ void DataTransferServiceImpl::WriteBlock(google::protobuf::RpcController* /*cont
         downstream_stub.WriteBlock(&fwd_cntl, &fwd_req, &fwd_resp, nullptr);
 
         if (fwd_cntl.Failed() || fwd_resp.status().code() != 0) {
-            std::string err_msg = fwd_cntl.Failed()
-                                      ? fwd_cntl.ErrorText()
-                                      : fwd_resp.status().message();
+            std::string err_msg =
+                fwd_cntl.Failed() ? fwd_cntl.ErrorText() : fwd_resp.status().message();
             fill_status(response->mutable_status(),
                         static_cast<uint32_t>(ErrorCode::kPipelineError),
                         "Pipeline forwarding failed to " + next_addr + ": " + err_msg);
@@ -230,9 +231,11 @@ void DataTransferServiceImpl::TransferBlock(google::protobuf::RpcController* /*c
 
     // Write data as a single chunk
     if (!data.empty()) {
-        auto append_result = store_->append_chunk(
-            block_id, generation_stamp, data.data(), static_cast<uint32_t>(data.size()),
-            /*chunk_index=*/0);
+        auto append_result = store_->append_chunk(block_id,
+                                                  generation_stamp,
+                                                  data.data(),
+                                                  static_cast<uint32_t>(data.size()),
+                                                  /*chunk_index=*/0);
         if (append_result.hasError()) {
             fill_status(response->mutable_status(),
                         append_result.error().code(),

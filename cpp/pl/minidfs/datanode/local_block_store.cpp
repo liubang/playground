@@ -188,8 +188,7 @@ pl::Result<uint64_t> LocalBlockStore::append_chunk(uint64_t block_id,
 
     // Idempotency: if chunk_index == last written chunk and CRC matches, treat as retry.
     if (chunk_index < header.chunk_count) {
-        if (chunk_index == header.chunk_count - 1 &&
-            header.chunk_checksums[chunk_index] == crc) {
+        if (chunk_index == header.chunk_count - 1 && header.chunk_checksums[chunk_index] == crc) {
             // Duplicate/retried write — return current data length (success, no-op).
             return header.data_length;
         }
