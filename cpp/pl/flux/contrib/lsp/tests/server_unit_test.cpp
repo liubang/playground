@@ -91,6 +91,13 @@ static std::string make_completion_request(int id,
            std::to_string(character) + "}}}";
 }
 
+static std::string make_hover_request(int id, const std::string& uri, int line, int character) {
+    return R"({"jsonrpc":"2.0","id":)" + std::to_string(id) +
+           R"(,"method":"textDocument/hover","params":{"textDocument":{"uri":")" + uri +
+           R"("},"position":{"line":)" + std::to_string(line) + R"(,"character":)" +
+           std::to_string(character) + "}}}";
+}
+
 static std::string make_formatting_request(int id, const std::string& uri) {
     return R"({"jsonrpc":"2.0","id":)" + std::to_string(id) +
            R"(,"method":"textDocument/formatting","params":{"textDocument":{"uri":")" + uri +
@@ -288,6 +295,9 @@ TEST(FluxLanguageServerTest, CompletionReturnsFunctionSnippets) {
     EXPECT_NE(comp_resp.find(R"("insertText":"range(start: ${1:value}, stop: ${2:value})$0")"),
               std::string::npos)
         << comp_resp;
+    EXPECT_NE(comp_resp.find(R"("insertText":"yield(name: ${1:value})$0")"), std::string::npos)
+        << comp_resp;
+    EXPECT_EQ(comp_resp.find(R"("insertText":"yield(?name:)"), std::string::npos) << comp_resp;
     EXPECT_NE(comp_resp.find(R"("insertText":"myFunc(${1:x}, ${2:y})$0")"), std::string::npos)
         << comp_resp;
 
@@ -841,6 +851,158 @@ TEST(FluxLanguageServerTest, SignatureHelp) {
     // Should contain signatures with parameters
     EXPECT_NE(sig_resp.find("\"signatures\""), std::string::npos) << sig_resp;
     EXPECT_NE(sig_resp.find("\"parameters\""), std::string::npos) << sig_resp;
+
+    fclose(in_file);
+    fclose(out_file);
+}
+
+TEST(FluxLanguageServerTest, SignatureHelpUsesBuiltinMetadataLabel) {
+    FILE* in_file = tmpfile();
+    FILE* out_file = tmpfile();
+    ASSERT_NE(in_file, nullptr);
+    ASSERT_NE(out_file, nullptr);
+
+    write_lsp_message(in_file, make_initialize_request(1));
+    write_lsp_message(in_file, make_initialized_notification());
+    write_lsp_message(
+        in_file,
+        make_did_open_notification("file:///builtin-sig.flux", "data = range(start: -1h)\n"));
+    write_lsp_message(in_file, make_completion_request(2, "file:///builtin-sig.flux", 0, 14));
+    write_lsp_message(
+        in_file,
+        R"({"jsonrpc":"2.0","id":3,"method":"textDocument/signatureHelp","params":{"textDocument":{"uri":"file:///builtin-sig.flux"},"position":{"line":0,"character":14}}})");
+    write_lsp_message(in_file, make_shutdown_request(4));
+    write_lsp_message(in_file, make_exit_notification());
+    rewind(in_file);
+
+    StdioTransport transport(in_file, out_file);
+    FluxLanguageServer server(std::move(transport));
+    server.run();
+
+    rewind(out_file);
+    read_lsp_response(out_file);
+    read_lsp_response(out_file);
+    read_lsp_response(out_file);
+
+    auto sig_resp = read_lsp_response(out_file);
+    ASSERT_FALSE(sig_resp.empty());
+    expect_valid_json(sig_resp);
+    EXPECT_NE(sig_resp.find("range(<-tables: stream[A], start: time|duration"), std::string::npos)
+        << sig_resp;
+    EXPECT_NE(sig_resp.find("=> stream[A]"), std::string::npos) << sig_resp;
+    EXPECT_EQ(sig_resp.find("stream[dynamic]"), std::string::npos) << sig_resp;
+
+    fclose(in_file);
+    fclose(out_file);
+}
+
+TEST(FluxLanguageServerTest, HoverPrefersBuiltinSignatureOverExpressionType) {
+    FILE* in_file = tmpfile();
+    FILE* out_file = tmpfile();
+    ASSERT_NE(in_file, nullptr);
+    ASSERT_NE(out_file, nullptr);
+
+    write_lsp_message(in_file, make_initialize_request(1));
+    write_lsp_message(in_file, make_initialized_notification());
+    write_lsp_message(in_file,
+                      make_did_open_notification("file:///hover.flux",
+                                                 "data = range(start: -1h)\n"
+                                                 "    |> yield(name: \"out\")\n"));
+    write_lsp_message(in_file, make_hover_request(2, "file:///hover.flux", 0, 8));
+    write_lsp_message(in_file, make_shutdown_request(3));
+    write_lsp_message(in_file, make_exit_notification());
+    rewind(in_file);
+
+    StdioTransport transport(in_file, out_file);
+    FluxLanguageServer server(std::move(transport));
+    server.run();
+
+    rewind(out_file);
+    read_lsp_response(out_file);
+    read_lsp_response(out_file);
+
+    auto hover_resp = read_lsp_response(out_file);
+    ASSERT_FALSE(hover_resp.empty());
+    expect_valid_json(hover_resp);
+    EXPECT_NE(hover_resp.find("range(<-tables: stream[A], start: time|duration"), std::string::npos)
+        << hover_resp;
+    EXPECT_EQ(hover_resp.find("stream[dynamic]"), std::string::npos) << hover_resp;
+
+    fclose(in_file);
+    fclose(out_file);
+}
+
+TEST(FluxLanguageServerTest, HoverPrefersPackageFunctionSignatureOverExpressionType) {
+    FILE* in_file = tmpfile();
+    FILE* out_file = tmpfile();
+    ASSERT_NE(in_file, nullptr);
+    ASSERT_NE(out_file, nullptr);
+
+    write_lsp_message(in_file, make_initialize_request(1));
+    write_lsp_message(in_file, make_initialized_notification());
+    write_lsp_message(
+        in_file,
+        make_did_open_notification("file:///package-hover.flux",
+                                   "import \"mysql\"\n"
+                                   "data = mysql.from(host: \"127.0.0.1\", table: \"cpu\")\n"));
+    write_lsp_message(in_file, make_hover_request(2, "file:///package-hover.flux", 1, 14));
+    write_lsp_message(in_file, make_shutdown_request(3));
+    write_lsp_message(in_file, make_exit_notification());
+    rewind(in_file);
+
+    StdioTransport transport(in_file, out_file);
+    FluxLanguageServer server(std::move(transport));
+    server.run();
+
+    rewind(out_file);
+    read_lsp_response(out_file);
+    read_lsp_response(out_file);
+
+    auto hover_resp = read_lsp_response(out_file);
+    ASSERT_FALSE(hover_resp.empty());
+    expect_valid_json(hover_resp);
+    EXPECT_NE(hover_resp.find("mysql.from("), std::string::npos) << hover_resp;
+    EXPECT_NE(hover_resp.find("=> stream[A]"), std::string::npos) << hover_resp;
+    EXPECT_EQ(hover_resp.find("stream[{}]"), std::string::npos) << hover_resp;
+
+    fclose(in_file);
+    fclose(out_file);
+}
+
+TEST(FluxLanguageServerTest, SignatureHelpUsesPackageFunctionMetadataLabel) {
+    FILE* in_file = tmpfile();
+    FILE* out_file = tmpfile();
+    ASSERT_NE(in_file, nullptr);
+    ASSERT_NE(out_file, nullptr);
+
+    write_lsp_message(in_file, make_initialize_request(1));
+    write_lsp_message(in_file, make_initialized_notification());
+    write_lsp_message(
+        in_file,
+        make_did_open_notification("file:///package-sig.flux",
+                                   "import \"mysql\"\n"
+                                   "data = mysql.from(host: \"127.0.0.1\", table: \"cpu\")\n"));
+    write_lsp_message(
+        in_file,
+        R"({"jsonrpc":"2.0","id":2,"method":"textDocument/signatureHelp","params":{"textDocument":{"uri":"file:///package-sig.flux"},"position":{"line":1,"character":18}}})");
+    write_lsp_message(in_file, make_shutdown_request(3));
+    write_lsp_message(in_file, make_exit_notification());
+    rewind(in_file);
+
+    StdioTransport transport(in_file, out_file);
+    FluxLanguageServer server(std::move(transport));
+    server.run();
+
+    rewind(out_file);
+    read_lsp_response(out_file);
+    read_lsp_response(out_file);
+
+    auto sig_resp = read_lsp_response(out_file);
+    ASSERT_FALSE(sig_resp.empty());
+    expect_valid_json(sig_resp);
+    EXPECT_NE(sig_resp.find("mysql.from("), std::string::npos) << sig_resp;
+    EXPECT_NE(sig_resp.find("=> stream[A]"), std::string::npos) << sig_resp;
+    EXPECT_EQ(sig_resp.find("stream[{}]"), std::string::npos) << sig_resp;
 
     fclose(in_file);
     fclose(out_file);
