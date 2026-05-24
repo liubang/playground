@@ -1191,24 +1191,6 @@ absl::StatusOr<Value> builtin_union(const std::vector<Value>& args) {
 
 } // namespace
 
-void InstallUniverseTransformBuiltins(Environment& env) {
-    install_builtin(env, "range", builtin_range, "tables");
-    install_builtin(env, "filter", builtin_filter, "tables");
-    install_builtin(env, "map", builtin_map, "tables");
-    install_builtin(env, "limit", builtin_limit, "tables");
-    install_builtin(env, "tail", builtin_tail, "tables");
-    install_builtin(env, "keep", builtin_keep, "tables");
-    install_builtin(env, "drop", builtin_drop, "tables");
-    install_builtin(env, "rename", builtin_rename, "tables");
-    install_builtin(env, "duplicate", builtin_duplicate, "tables");
-    install_builtin(env, "set", builtin_set, "tables");
-    install_builtin(env, "sort", builtin_sort, "tables");
-    install_builtin(env, "group", builtin_group, "tables");
-    install_builtin(env, "pivot", builtin_pivot, "tables");
-    install_builtin(env, "fill", builtin_fill, "tables");
-    install_builtin(env, "union", builtin_union);
-}
-
 bool InstallKnownUniverseTransformBuiltin(Environment& env, const std::string& name) {
     if (name == "range") {
         install_builtin(env, "range", builtin_range, "tables");

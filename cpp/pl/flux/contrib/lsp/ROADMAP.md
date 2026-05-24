@@ -28,7 +28,7 @@
 
 | # | 任务 | 状态 |
 |---|------|------|
-| 2.1 | 符号表 + 作用域分析器（SymbolTable + SymbolCollector） | ✅ 完成 |
+| 2.1 | 共享 analysis analyzer（scope tree + definition/reference graph） | ✅ 完成 |
 | 2.2 | textDocument/definition | ✅ 完成 |
 | 2.3 | textDocument/references | ✅ 完成 |
 | 2.4 | textDocument/rename | ✅ 完成 |
@@ -62,5 +62,6 @@
 | 日期 | 变更内容 |
 |------|----------|
 | 2025-07-19 | 第一阶段完成：AST 缓存、增量同步、documentSymbol、foldingRange、用户符号补全 |
-| 2025-07-19 | 第二阶段完成：符号表分析器、definition、references、rename、signatureHelp、documentHighlight、语义诊断 |
+| 2025-07-19 | 第二阶段完成：共享 analysis analyzer、definition、references、rename、signatureHelp、documentHighlight、语义诊断 |
+| 2026-05-24 | 清理旧 LSP SymbolTable，所有语义导航、诊断和 quickfix 统一改为复用 `cpp/pl/flux/analysis` |
 | 2025-07-19 | 第三阶段完成：semanticTokens、codeAction、inlayHint、selectionRange |
