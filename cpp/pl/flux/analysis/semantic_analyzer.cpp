@@ -122,6 +122,7 @@ public:
     AnalysisResult Bind(const File& file) {
         push_scope(file.loc);
         bind_imports(file);
+        predeclare_top_level_bindings(file);
         for (const auto& stmt : file.body) {
             if (stmt) {
                 visit_statement(*stmt);
@@ -152,6 +153,50 @@ private:
                 define(name, SymbolKind::Import, loc, {}, imp->path->value, std::nullopt);
             imports_[name] = {.path = imp->path->value, .definition_id = id};
             result_.imported_packages.push_back(imp->path->value);
+        }
+    }
+
+    void predeclare_top_level_bindings(const File& file) {
+        for (const auto& stmt : file.body) {
+            if (!stmt) {
+                continue;
+            }
+            switch (stmt->type) {
+                case Statement::Type::VariableAssignment: {
+                    const auto& va = *std::get<std::unique_ptr<VariableAssgn>>(stmt->stmt);
+                    if (va.id && !va.id->name.empty()) {
+                        predeclare(va.id->name,
+                                   SymbolKind::Variable,
+                                   name_location(stmt->loc, va.id->name));
+                    }
+                    break;
+                }
+                case Statement::Type::BuiltinStatement: {
+                    const auto& bi = *std::get<std::unique_ptr<BuiltinStmt>>(stmt->stmt);
+                    if (bi.id && !bi.id->name.empty()) {
+                        const uint32_t offset =
+                            stmt->loc.start.column + 8 <= stmt->loc.end.column ? 8U : 0U;
+                        predeclare(bi.id->name,
+                                   SymbolKind::Builtin,
+                                   offset_name_location(stmt->loc, offset, bi.id->name),
+                                   Type::Dynamic());
+                    }
+                    break;
+                }
+                case Statement::Type::TestCaseStatement: {
+                    const auto& tc = *std::get<std::unique_ptr<TestCaseStmt>>(stmt->stmt);
+                    if (tc.id && !tc.id->name.empty()) {
+                        const uint32_t offset =
+                            stmt->loc.start.column + 9 <= stmt->loc.end.column ? 9U : 0U;
+                        predeclare(tc.id->name,
+                                   SymbolKind::Function,
+                                   offset_name_location(stmt->loc, offset, tc.id->name));
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
         }
     }
 
@@ -201,6 +246,9 @@ private:
             const auto kind = va.init && va.init->type == Expression::Type::FunctionExpr
                                   ? SymbolKind::Function
                                   : SymbolKind::Variable;
+            if (update_predeclared(va.id->name, kind, std::move(params), std::move(init_type))) {
+                return;
+            }
             define(va.id->name,
                    kind,
                    name_location(loc, va.id->name),
@@ -243,6 +291,9 @@ private:
         if (!bi.id || bi.id->name.empty()) {
             return;
         }
+        if (update_predeclared(bi.id->name, SymbolKind::Builtin, {}, Type::Dynamic())) {
+            return;
+        }
         const uint32_t offset = loc.start.column + 8 <= loc.end.column ? 8U : 0U;
         define(bi.id->name,
                SymbolKind::Builtin,
@@ -255,6 +306,12 @@ private:
 
     void visit_testcase_statement(const TestCaseStmt& tc, const SourceLocation& loc) {
         if (tc.id && !tc.id->name.empty()) {
+            if (update_predeclared(tc.id->name, SymbolKind::Function, {}, Type::Unknown())) {
+                if (tc.block) {
+                    visit_block(*tc.block);
+                }
+                return;
+            }
             const uint32_t offset = loc.start.column + 9 <= loc.end.column ? 9U : 0U;
             define(
                 tc.id->name, SymbolKind::Function, offset_name_location(loc, offset, tc.id->name));
@@ -1274,8 +1331,9 @@ private:
                   std::optional<std::string> import_path = std::nullopt,
                   std::optional<std::string> builtin_package = std::nullopt,
                   Type type = Type::Unknown()) {
-        const auto duplicate = scopes_.back().definitions.find(name);
-        if (duplicate != scopes_.back().definitions.end()) {
+        auto& scope = scopes_[current_scope_id_];
+        const auto duplicate = scope.definitions.find(name);
+        if (duplicate != scope.definitions.end()) {
             diagnostic("duplicate definition: " + name, loc, DiagnosticSeverity::Warning);
         }
         const size_t id = next_symbol_id_++;
@@ -1290,9 +1348,38 @@ private:
             .parameters = std::move(params),
             .type = std::move(type),
         });
-        scopes_.back().definitions[name] = id;
+        scope.definitions[name] = id;
         result_.scopes[current_scope_id_].definitions.push_back(id);
         return id;
+    }
+
+    void predeclare(const std::string& name,
+                    SymbolKind kind,
+                    const SourceLocation& loc,
+                    Type type = Type::Unknown()) {
+        const auto id = define(name, kind, loc, {}, std::nullopt, std::nullopt, std::move(type));
+        predeclared_definition_ids_.insert(id);
+    }
+
+    bool update_predeclared(const std::string& name,
+                            SymbolKind kind,
+                            std::vector<std::string> params,
+                            Type type) {
+        const auto& scope = scopes_[current_scope_id_];
+        const auto it = scope.definitions.find(name);
+        if (it == scope.definitions.end() || !predeclared_definition_ids_.contains(it->second)) {
+            return false;
+        }
+        for (auto& def : result_.definitions) {
+            if (def.id == it->second) {
+                def.kind = kind;
+                def.parameters = std::move(params);
+                def.type = std::move(type);
+                predeclared_definition_ids_.erase(it->second);
+                return true;
+            }
+        }
+        return false;
     }
 
     size_t reference(const std::string& name, const SourceLocation& loc, ReferenceKind kind) {
@@ -1386,6 +1473,7 @@ private:
 
     AnalysisResult result_;
     std::vector<Scope> scopes_;
+    std::unordered_set<size_t> predeclared_definition_ids_;
     std::unordered_map<std::string, ImportBinding> imports_;
     size_t current_scope_id_ = 0;
     size_t next_symbol_id_ = 1;

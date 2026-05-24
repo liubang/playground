@@ -899,12 +899,6 @@ std::string FluxLanguageServer::build_hover_response(const Document& doc, int li
         os << R"({"contents":{"kind":"markdown","value":)" << json_escape(hover_text) << "}}";
         return os.str();
     }
-    if (auto type = doc.analysis.TypeAt(ast_line, ast_col); type.has_value()) {
-        std::ostringstream os;
-        os << R"({"contents":{"kind":"markdown","value":)"
-           << json_escape("`" + type->ToString() + "`") << "}}";
-        return os.str();
-    }
 
     // Check if it's a builtin
     for (const auto& [name, detail] : universe_table_builtins()) {
@@ -944,6 +938,13 @@ std::string FluxLanguageServer::build_hover_response(const Document& doc, int li
                 }
             }
         }
+    }
+
+    if (auto type = doc.analysis.TypeAt(ast_line, ast_col); type.has_value()) {
+        std::ostringstream os;
+        os << R"({"contents":{"kind":"markdown","value":)"
+           << json_escape("`" + type->ToString() + "`") << "}}";
+        return os.str();
     }
 
     // Check if it's a keyword
@@ -1369,6 +1370,7 @@ void FluxLanguageServer::handle_signature_help(const JsonRpcMessage& msg) {
     int active_param = 0;
     int paren_depth = 0;
     std::string func_name;
+    std::string package_name;
 
     for (int i = static_cast<int>(pos) - 1; i >= 0; --i) {
         char c = content[static_cast<size_t>(i)];
@@ -1392,6 +1394,19 @@ void FluxLanguageServer::handle_signature_help(const JsonRpcMessage& msg) {
                     func_name = content.substr(static_cast<size_t>(name_start),
                                                static_cast<size_t>(name_end - name_start));
                 }
+                int package_end = name_start;
+                if (package_end > 0 && content[static_cast<size_t>(package_end - 1)] == '.') {
+                    int package_start = package_end - 1;
+                    while (package_start > 0 &&
+                           is_ident_char(content[static_cast<size_t>(package_start - 1)])) {
+                        --package_start;
+                    }
+                    if (package_start < package_end - 1) {
+                        package_name =
+                            content.substr(static_cast<size_t>(package_start),
+                                           static_cast<size_t>(package_end - 1 - package_start));
+                    }
+                }
                 break;
             }
         } else if (c == ',' && paren_depth == 0) {
@@ -1410,11 +1425,17 @@ void FluxLanguageServer::handle_signature_help(const JsonRpcMessage& msg) {
     const auto* def = analysis.FindDefinition(func_name);
 
     std::vector<std::string> params;
-    if (def && !def->parameters.empty()) {
+    std::string label;
+    if (package_name.empty() && def && !def->parameters.empty()) {
         params = def->parameters;
+        label = func_name + "(";
     } else {
-        if (const auto* sig = analysis::FindUniverseBuiltinSignature(func_name); sig != nullptr) {
+        const auto* sig = package_name.empty()
+                              ? analysis::FindUniverseBuiltinSignature(func_name)
+                              : analysis::FindBuiltinSignature(package_name, func_name);
+        if (sig != nullptr) {
             params = analysis::CompletionParams(*sig);
+            label = analysis::SignatureLabel(*sig);
         }
     }
 
@@ -1425,14 +1446,18 @@ void FluxLanguageServer::handle_signature_help(const JsonRpcMessage& msg) {
 
     // Build SignatureHelp response
     std::ostringstream os;
-    std::string label = func_name + "(";
-    for (size_t i = 0; i < params.size(); ++i) {
-        if (i > 0) {
-            label += ", ";
+    if (label.empty() || label.back() == '(') {
+        if (label.empty()) {
+            label = func_name + "(";
         }
-        label += params[i];
+        for (size_t i = 0; i < params.size(); ++i) {
+            if (i > 0) {
+                label += ", ";
+            }
+            label += params[i];
+        }
+        label += ")";
     }
-    label += ")";
     os << R"({"signatures":[{"label":)" << json_escape(label) << R"(,"parameters":[)";
     for (size_t i = 0; i < params.size(); ++i) {
         if (i > 0) {
