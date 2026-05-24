@@ -77,21 +77,6 @@ cc_library(
 )
 
 cc_library(
-    name = "symbol_table",
-    srcs = [
-        "symbol_table.cpp",
-    ],
-    hdrs = [
-        "symbol_table.h",
-    ],
-    copts = COPTS,
-    linkopts = LINKOPTS,
-    deps = [
-        "//cpp/pl/flux/syntax:parser",
-    ],
-)
-
-cc_library(
     name = "server",
     srcs = [
         "server.cpp",
@@ -105,8 +90,9 @@ cc_library(
         ":formatter",
         ":json_util",
         ":jsonrpc",
-        ":symbol_table",
         ":transport",
+        "//cpp/pl/flux/analysis:builtin_metadata",
+        "//cpp/pl/flux/analysis:semantic_analyzer",
         "//cpp/pl/flux/syntax:parser",
         "@simdjson",
     ],
@@ -191,4 +177,3 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
-

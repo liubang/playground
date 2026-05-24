@@ -228,15 +228,6 @@ absl::StatusOr<Value> builtin_explain(const std::vector<Value>& args) {
 
 } // namespace
 
-void InstallUniverseInspectBuiltins(Environment& env) {
-    install_builtin(env, "columns", builtin_columns, "tables");
-    install_builtin(env, "keys", builtin_keys, "tables");
-    install_builtin(env, "findColumn", builtin_find_column, "tables");
-    install_builtin(env, "findRecord", builtin_find_record, "tables");
-    install_builtin(env, "explain", builtin_explain, "tables");
-    install_builtin(env, "yield", builtin_yield, "tables");
-}
-
 bool InstallKnownUniverseInspectBuiltin(Environment& env, const std::string& name) {
     if (name == "columns") {
         install_builtin(env, "columns", builtin_columns, "tables");

@@ -22,9 +22,9 @@
 #include <unordered_map>
 #include <vector>
 
+#include "cpp/pl/flux/analysis/semantic_analyzer.h"
 #include "cpp/pl/flux/contrib/lsp/formatter.h"
 #include "cpp/pl/flux/contrib/lsp/jsonrpc.h"
-#include "cpp/pl/flux/contrib/lsp/symbol_table.h"
 #include "cpp/pl/flux/contrib/lsp/transport.h"
 #include "cpp/pl/flux/syntax/ast.h"
 
@@ -46,9 +46,9 @@ struct Document {
     std::vector<std::string> parse_errors;
     int ast_version = -1; // version at which ast was computed
 
-    // Cached symbol table — rebuilt when AST changes.
-    SymbolTable symbols;
-    int symbols_version = -1;
+    // Cached semantic binding graph — rebuilt when AST changes.
+    analysis::AnalysisResult analysis;
+    int analysis_version = -1;
 };
 
 // Flux Language Server implementation.
@@ -93,8 +93,8 @@ private:
     // Ensure cached AST is up-to-date for a document.
     void ensure_ast(Document& doc);
 
-    // Ensure cached symbol table is up-to-date for a document.
-    void ensure_symbols(Document& doc);
+    // Ensure cached semantic analysis is up-to-date for a document.
+    void ensure_analysis(Document& doc);
 
     // Publish diagnostics for a document.
     void publish_diagnostics(const std::string& uri);

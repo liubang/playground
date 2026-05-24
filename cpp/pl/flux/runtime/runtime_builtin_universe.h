@@ -23,22 +23,16 @@
 
 namespace pl::flux {
 
-void InstallUniverseCoreBuiltins(Environment& env);
 bool InstallKnownUniverseCoreBuiltin(Environment& env, const std::string& name);
 
-void InstallUniverseTransformBuiltins(Environment& env);
 bool InstallKnownUniverseTransformBuiltin(Environment& env, const std::string& name);
 
-void InstallUniverseAggregateBuiltins(Environment& env);
 bool InstallKnownUniverseAggregateBuiltin(Environment& env, const std::string& name);
 
-void InstallUniverseWindowBuiltins(Environment& env);
 bool InstallKnownUniverseWindowBuiltin(Environment& env, const std::string& name);
 
-void InstallUniverseJoinBuiltins(Environment& env);
 bool InstallKnownUniverseJoinBuiltin(Environment& env, const std::string& name);
 
-void InstallUniverseInspectBuiltins(Environment& env);
 bool InstallKnownUniverseInspectBuiltin(Environment& env, const std::string& name);
 
 } // namespace pl::flux
