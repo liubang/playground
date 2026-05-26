@@ -26,6 +26,15 @@
 namespace pl::minidfs {
 namespace {
 
+std::vector<uint64_t> datanode_ids(const LocatedBlock& block) {
+    std::vector<uint64_t> ids;
+    ids.reserve(block.locations.size());
+    for (const auto& location : block.locations) {
+        ids.push_back(location.datanode_id);
+    }
+    return ids;
+}
+
 class BlockManagerTest : public ::testing::Test {
 protected:
     void SetUp() override {
@@ -67,8 +76,10 @@ TEST_F(BlockManagerTest, CommitBlock) {
     auto alloc = block_mgr_->allocate_block(/*inode_id=*/100, /*block_index=*/0, /*replication=*/3);
     ASSERT_TRUE(alloc.hasValue());
 
-    auto result =
-        block_mgr_->commit_block(alloc.value().block_id, 128 * kMB, alloc.value().generation_stamp);
+    auto result = block_mgr_->commit_block(alloc.value().block_id,
+                                           128 * kMB,
+                                           alloc.value().generation_stamp,
+                                           datanode_ids(alloc.value()));
     ASSERT_TRUE(result.hasValue());
 
     auto block = store_->get_block(alloc.value().block_id);
@@ -76,35 +87,38 @@ TEST_F(BlockManagerTest, CommitBlock) {
     EXPECT_EQ(block.value().length, 128 * kMB);
 }
 
-TEST_F(BlockManagerTest, CommitBlockTwiceFails) {
+TEST_F(BlockManagerTest, CommitBlockTwiceIsIdempotent) {
     auto alloc = block_mgr_->allocate_block(/*inode_id=*/100, /*block_index=*/0, /*replication=*/3);
     ASSERT_TRUE(alloc.hasValue());
 
-    block_mgr_->commit_block(alloc.value().block_id, 128 * kMB, alloc.value().generation_stamp);
-    auto second =
-        block_mgr_->commit_block(alloc.value().block_id, 128 * kMB, alloc.value().generation_stamp);
-    ASSERT_TRUE(second.hasError());
+    block_mgr_->commit_block(alloc.value().block_id,
+                             128 * kMB,
+                             alloc.value().generation_stamp,
+                             datanode_ids(alloc.value()));
+    auto second = block_mgr_->commit_block(alloc.value().block_id,
+                                           128 * kMB,
+                                           alloc.value().generation_stamp,
+                                           datanode_ids(alloc.value()));
+    ASSERT_TRUE(second.hasValue());
+
+    auto conflicting = block_mgr_->commit_block(alloc.value().block_id,
+                                                64 * kMB,
+                                                alloc.value().generation_stamp,
+                                                datanode_ids(alloc.value()));
+    ASSERT_TRUE(conflicting.hasError());
 }
 
 TEST_F(BlockManagerTest, GetLocatedBlocks) {
     // Allocate and commit 2 blocks for the same inode.
     auto b0 = block_mgr_->allocate_block(100, 0, 3);
     ASSERT_TRUE(b0.hasValue());
-    block_mgr_->commit_block(b0.value().block_id, 128 * kMB, b0.value().generation_stamp);
+    block_mgr_->commit_block(
+        b0.value().block_id, 128 * kMB, b0.value().generation_stamp, datanode_ids(b0.value()));
 
     auto b1 = block_mgr_->allocate_block(100, 1, 3);
     ASSERT_TRUE(b1.hasValue());
-    block_mgr_->commit_block(b1.value().block_id, 64 * kMB, b1.value().generation_stamp);
-
-    // Finalize replicas so they are returned by get_located_blocks.
-    auto replicas0 = store_->get_replicas(b0.value().block_id);
-    for (const auto& r : replicas0.value()) {
-        store_->update_replica_state(r.block_id, r.datanode_id, ReplicaState::kFinalized);
-    }
-    auto replicas1 = store_->get_replicas(b1.value().block_id);
-    for (const auto& r : replicas1.value()) {
-        store_->update_replica_state(r.block_id, r.datanode_id, ReplicaState::kFinalized);
-    }
+    block_mgr_->commit_block(
+        b1.value().block_id, 64 * kMB, b1.value().generation_stamp, datanode_ids(b1.value()));
 
     auto result = block_mgr_->get_located_blocks(100);
     ASSERT_TRUE(result.hasValue());
@@ -147,6 +161,27 @@ TEST_F(BlockManagerTest, ReportCorruptReplica) {
         }
     }
     EXPECT_TRUE(found_corrupt);
+}
+
+TEST_F(BlockManagerTest, CommitBlockOnlyFinalizesReportedReplicas) {
+    auto alloc = block_mgr_->allocate_block(/*inode_id=*/100, /*block_index=*/0, /*replication=*/3);
+    ASSERT_TRUE(alloc.hasValue());
+    ASSERT_GE(alloc.value().locations.size(), 2u);
+
+    uint64_t only_successful_dn = alloc.value().locations[0].datanode_id;
+    auto result = block_mgr_->commit_block(
+        alloc.value().block_id, 128 * kMB, alloc.value().generation_stamp, {only_successful_dn});
+    ASSERT_TRUE(result.hasValue());
+
+    auto replicas = store_->get_replicas(alloc.value().block_id);
+    ASSERT_TRUE(replicas.hasValue());
+    for (const auto& replica : replicas.value()) {
+        if (replica.datanode_id == only_successful_dn) {
+            EXPECT_EQ(replica.state, ReplicaState::kFinalized);
+        } else {
+            EXPECT_EQ(replica.state, ReplicaState::kWriting);
+        }
+    }
 }
 
 TEST_F(BlockManagerTest, GenerationStampMonotonic) {

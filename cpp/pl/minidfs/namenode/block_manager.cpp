@@ -18,6 +18,7 @@
 #include "cpp/pl/minidfs/namenode/block_manager.h"
 
 #include <fmt/format.h>
+#include <unordered_set>
 
 #include "cpp/pl/minidfs/common/error_code.h"
 #include "cpp/pl/minidfs/common/time_util.h"
@@ -101,38 +102,69 @@ pl::Result<LocatedBlock> BlockManager::allocate_block(uint64_t inode_id,
     return located;
 }
 
-pl::Result<pl::Void> BlockManager::commit_block(uint64_t block_id,
-                                                uint64_t length,
-                                                uint64_t generation_stamp) {
+pl::Result<pl::Void> BlockManager::commit_block(
+    uint64_t block_id,
+    uint64_t length,
+    uint64_t generation_stamp,
+    const std::vector<uint64_t>& finalized_datanode_ids) {
+    if (finalized_datanode_ids.empty()) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kInsufficientReplicas),
+                             fmt::format("no finalized replicas reported for block {}", block_id));
+    }
+
     auto block_result = store_->get_block(block_id);
     if (block_result.hasError()) {
         return folly::makeUnexpected(block_result.error());
     }
     auto& block = block_result.value();
 
-    if (block.state != BlockState::kAllocating) {
+    bool already_committed = block.state == BlockState::kCommitted && block.length == length &&
+                             block.generation_stamp == generation_stamp;
+    if (block.state != BlockState::kAllocating && !already_committed) {
         return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kBlockAlreadyCommitted),
                              fmt::format("block {} is already in state {}",
                                          block_id,
                                          static_cast<int>(block.state)));
     }
 
-    block.state = BlockState::kCommitted;
-    block.length = length;
-    block.generation_stamp = generation_stamp;
-    block.mtime_ms = now_ms();
+    std::unordered_set<uint64_t> finalized(finalized_datanode_ids.begin(),
+                                           finalized_datanode_ids.end());
 
-    auto update_result = store_->update_block(block);
-    if (update_result.hasError()) {
-        return folly::makeUnexpected(update_result.error());
+    auto replicas_result = store_->get_replicas(block_id);
+    if (replicas_result.hasError()) {
+        return folly::makeUnexpected(replicas_result.error());
+    }
+    uint32_t finalized_count = 0;
+    for (const auto& r : replicas_result.value()) {
+        if ((r.state == ReplicaState::kWriting || r.state == ReplicaState::kFinalized) &&
+            finalized.contains(r.datanode_id)) {
+            ++finalized_count;
+        }
+    }
+    if (finalized_count == 0) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kInsufficientReplicas),
+                             fmt::format("no matching replicas finalized for block {}", block_id));
     }
 
-    // Transition all replicas from kWriting to kFinalized.
-    auto replicas_result = store_->get_replicas(block_id);
-    if (replicas_result.hasValue()) {
-        for (const auto& r : replicas_result.value()) {
-            if (r.state == ReplicaState::kWriting) {
+    if (!already_committed) {
+        block.state = BlockState::kCommitted;
+        block.length = length;
+        block.generation_stamp = generation_stamp;
+        block.mtime_ms = now_ms();
+
+        auto update_result = store_->update_block(block);
+        if (update_result.hasError()) {
+            return folly::makeUnexpected(update_result.error());
+        }
+    }
+
+    // Transition only replicas that are known to have successfully written the block.
+    for (const auto& r : replicas_result.value()) {
+        if (r.state == ReplicaState::kWriting && finalized.contains(r.datanode_id)) {
+            auto update_replica =
                 store_->update_replica_state(r.block_id, r.datanode_id, ReplicaState::kFinalized);
+            if (update_replica.hasError()) {
+                return folly::makeUnexpected(update_replica.error());
             }
         }
     }
@@ -200,10 +232,18 @@ pl::Result<pl::Void> BlockManager::invalidate_blocks(uint64_t inode_id) {
     }
 
     for (auto& block : blocks_result.value()) {
-        // Delete all replicas for this block.
-        auto del_rep = store_->delete_replicas_by_block(block.block_id);
-        if (del_rep.hasError()) {
-            return folly::makeUnexpected(del_rep.error());
+        auto replicas = store_->get_replicas(block.block_id);
+        if (replicas.hasError()) {
+            return folly::makeUnexpected(replicas.error());
+        }
+        for (const auto& replica : replicas.value()) {
+            if (replica.state != ReplicaState::kDeleted) {
+                auto mark = store_->update_replica_state(
+                    block.block_id, replica.datanode_id, ReplicaState::kDeleting);
+                if (mark.hasError()) {
+                    return folly::makeUnexpected(mark.error());
+                }
+            }
         }
         // Mark block as deleted.
         block.state = BlockState::kDeleted;
@@ -211,6 +251,46 @@ pl::Result<pl::Void> BlockManager::invalidate_blocks(uint64_t inode_id) {
         auto upd = store_->update_block(block);
         if (upd.hasError()) {
             return folly::makeUnexpected(upd.error());
+        }
+    }
+    return pl::Void{};
+}
+
+pl::Result<std::vector<BlockMeta>> BlockManager::get_blocks_to_delete(uint64_t datanode_id) {
+    auto replicas = store_->get_replicas_by_datanode(datanode_id);
+    if (replicas.hasError()) {
+        return folly::makeUnexpected(replicas.error());
+    }
+
+    std::vector<BlockMeta> blocks;
+    for (const auto& replica : replicas.value()) {
+        if (replica.state != ReplicaState::kDeleting) {
+            continue;
+        }
+        auto block = store_->get_block(replica.block_id);
+        if (block.hasError()) {
+            continue;
+        }
+        blocks.push_back(block.value());
+    }
+    return blocks;
+}
+
+pl::Result<pl::Void> BlockManager::reconcile_block_report(
+    uint64_t datanode_id, const std::unordered_set<uint64_t>& reported_block_ids) {
+    auto replicas = store_->get_replicas_by_datanode(datanode_id);
+    if (replicas.hasError()) {
+        return folly::makeUnexpected(replicas.error());
+    }
+
+    for (const auto& replica : replicas.value()) {
+        if (replica.state == ReplicaState::kDeleting &&
+            !reported_block_ids.contains(replica.block_id)) {
+            auto mark =
+                store_->update_replica_state(replica.block_id, datanode_id, ReplicaState::kDeleted);
+            if (mark.hasError()) {
+                return folly::makeUnexpected(mark.error());
+            }
         }
     }
     return pl::Void{};
