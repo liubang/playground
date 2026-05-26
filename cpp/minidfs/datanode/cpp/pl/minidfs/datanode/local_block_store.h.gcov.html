@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-24 19:38:23</td>
+            <td class="headerValue">2026-05-26 13:20:28</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -201,7 +201,7 @@
 <span id="L130"><span class="lineNum">     130</span>                 :             :     pl::Result&lt;uint64_t&gt; available_bytes() const;</span>
 <span id="L131"><span class="lineNum">     131</span>                 :             : </span>
 <span id="L132"><span class="lineNum">     132</span>                 :             :     /// Get the storage root path.</span>
-<span id="L133"><span class="lineNum">     133</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           9 :     const std::string&amp; storage_root() const { return config_.storage_root; }</span></span>
+<span id="L133"><span class="lineNum">     133</span>         [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           8 :     const std::string&amp; storage_root() const { return config_.storage_root; }</span></span>
 <span id="L134"><span class="lineNum">     134</span>                 :             : </span>
 <span id="L135"><span class="lineNum">     135</span>                 :             : private:</span>
 <span id="L136"><span class="lineNum">     136</span>                 :             :     /// Generate the canonical filename for a block.</span>
@@ -215,19 +215,22 @@
 <span id="L144"><span class="lineNum">     144</span>                 :             :     /// Read the BlockHeader from a file.</span>
 <span id="L145"><span class="lineNum">     145</span>                 :             :     pl::Result&lt;BlockHeader&gt; read_header(const std::filesystem::path&amp; path) const;</span>
 <span id="L146"><span class="lineNum">     146</span>                 :             : </span>
-<span id="L147"><span class="lineNum">     147</span>                 :             :     /// Write the BlockHeader to a file (at offset 0).</span>
-<span id="L148"><span class="lineNum">     148</span>                 :             :     pl::Result&lt;pl::Void&gt; write_header(const std::filesystem::path&amp; path,</span>
-<span id="L149"><span class="lineNum">     149</span>                 :             :                                       const BlockHeader&amp; header) const;</span>
-<span id="L150"><span class="lineNum">     150</span>                 :             : </span>
-<span id="L151"><span class="lineNum">     151</span>                 :             :     Config config_;</span>
-<span id="L152"><span class="lineNum">     152</span>                 :             :     std::filesystem::path root_path_;</span>
-<span id="L153"><span class="lineNum">     153</span>                 :             :     std::filesystem::path tmp_path_;</span>
-<span id="L154"><span class="lineNum">     154</span>                 :             :     std::filesystem::path current_path_;</span>
-<span id="L155"><span class="lineNum">     155</span>                 :             :     std::filesystem::path trash_path_;</span>
-<span id="L156"><span class="lineNum">     156</span>                 :             :     mutable std::mutex mu_;</span>
-<span id="L157"><span class="lineNum">     157</span>                 :             : };</span>
-<span id="L158"><span class="lineNum">     158</span>                 :             : </span>
-<span id="L159"><span class="lineNum">     159</span>                 :             : } // namespace pl::minidfs</span>
+<span id="L147"><span class="lineNum">     147</span>                 :             :     /// Verify CRC32C integrity for a block file at an explicit path.</span>
+<span id="L148"><span class="lineNum">     148</span>                 :             :     pl::Result&lt;bool&gt; verify_block_file(const std::filesystem::path&amp; path) const;</span>
+<span id="L149"><span class="lineNum">     149</span>                 :             : </span>
+<span id="L150"><span class="lineNum">     150</span>                 :             :     /// Write the BlockHeader to a file (at offset 0).</span>
+<span id="L151"><span class="lineNum">     151</span>                 :             :     pl::Result&lt;pl::Void&gt; write_header(const std::filesystem::path&amp; path,</span>
+<span id="L152"><span class="lineNum">     152</span>                 :             :                                       const BlockHeader&amp; header) const;</span>
+<span id="L153"><span class="lineNum">     153</span>                 :             : </span>
+<span id="L154"><span class="lineNum">     154</span>                 :             :     Config config_;</span>
+<span id="L155"><span class="lineNum">     155</span>                 :             :     std::filesystem::path root_path_;</span>
+<span id="L156"><span class="lineNum">     156</span>                 :             :     std::filesystem::path tmp_path_;</span>
+<span id="L157"><span class="lineNum">     157</span>                 :             :     std::filesystem::path current_path_;</span>
+<span id="L158"><span class="lineNum">     158</span>                 :             :     std::filesystem::path trash_path_;</span>
+<span id="L159"><span class="lineNum">     159</span>                 :             :     mutable std::mutex mu_;</span>
+<span id="L160"><span class="lineNum">     160</span>                 :             : };</span>
+<span id="L161"><span class="lineNum">     161</span>                 :             : </span>
+<span id="L162"><span class="lineNum">     162</span>                 :             : } // namespace pl::minidfs</span>
         </pre>
               </td>
             </tr>
