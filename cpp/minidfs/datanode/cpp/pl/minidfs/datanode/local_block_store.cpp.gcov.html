@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-26 13:20:28</td>
+            <td class="headerValue">2026-05-26 22:37:00</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">94.4&nbsp;%</td>
@@ -515,13 +515,13 @@
 <span id="L431"><span class="lineNum">     431</span>                 :             :     }</span>
 <span id="L432"><span class="lineNum">     432</span>                 :             : </span>
 <span id="L433"><span class="lineNum">     433</span>                 :             :     uint32_t block_crc = compute_crc32c(data.data(), data.size());</span>
-<span id="L434"><span class="lineNum">     434</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">          16 :     if (block_crc != header.block_checksum) {</span></span>
+<span id="L434"><span class="lineNum">     434</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          15 :     if (block_crc != header.block_checksum) {</span></span>
 <span id="L435"><span class="lineNum">     435</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(make_checksum_error(fmt::format(</span></span>
 <span id="L436"><span class="lineNum">     436</span>                 :             :             &quot;block CRC mismatch: expected={:#x}, got={:#x}&quot;, header.block_checksum, block_crc)));</span>
 <span id="L437"><span class="lineNum">     437</span>                 :             :     }</span>
 <span id="L438"><span class="lineNum">     438</span>                 :             : </span>
 <span id="L439"><span class="lineNum">     439</span>                 :             :     return data;</span>
-<span id="L440"><span class="lineNum">     440</span>                 :<span class="tlaGNC tlaBgGNC">          17 : }</span></span>
+<span id="L440"><span class="lineNum">     440</span>                 :<span class="tlaGNC tlaBgGNC">          16 : }</span></span>
 <span id="L441"><span class="lineNum">     441</span>                 :             : </span>
 <span id="L442"><span class="lineNum">     442</span>                 :<span class="tlaGNC">           3 : pl::Result&lt;std::string&gt; LocalBlockStore::read_chunk(uint64_t block_id,</span></span>
 <span id="L443"><span class="lineNum">     443</span>                 :             :                                                     uint64_t generation_stamp,</span>
@@ -671,18 +671,18 @@
 <span id="L587"><span class="lineNum">     587</span>         [<span class="tlaGBC" title="Branch 0 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          18 :     return fs::exists(path);</span></span>
 <span id="L588"><span class="lineNum">     588</span>                 :             : }</span>
 <span id="L589"><span class="lineNum">     589</span>                 :             : </span>
-<span id="L590"><span class="lineNum">     590</span>                 :<span class="tlaGNC">          15 : pl::Result&lt;uint64_t&gt; LocalBlockStore::available_bytes() const {</span></span>
+<span id="L590"><span class="lineNum">     590</span>                 :<span class="tlaGNC">          16 : pl::Result&lt;uint64_t&gt; LocalBlockStore::available_bytes() const {</span></span>
 <span id="L591"><span class="lineNum">     591</span>                 :             :     std::error_code ec;</span>
-<span id="L592"><span class="lineNum">     592</span>                 :<span class="tlaGNC">          15 :     auto space = fs::space(root_path_, ec);</span></span>
-<span id="L593"><span class="lineNum">     593</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          15 :     if (ec) {</span></span>
+<span id="L592"><span class="lineNum">     592</span>                 :<span class="tlaGNC">          16 :     auto space = fs::space(root_path_, ec);</span></span>
+<span id="L593"><span class="lineNum">     593</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">          16 :     if (ec) {</span></span>
 <span id="L594"><span class="lineNum">     594</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return pl::makeError(</span></span>
 <span id="L595"><span class="lineNum">     595</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :             make_io_error(fmt::format(&quot;failed to query disk space: {}&quot;, ec.message())));</span></span>
 <span id="L596"><span class="lineNum">     596</span>                 :             :     }</span>
-<span id="L597"><span class="lineNum">     597</span>                 :<span class="tlaGNC tlaBgGNC">          15 :     uint64_t available = space.available;</span></span>
-<span id="L598"><span class="lineNum">     598</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 15 times"> + </span>]:<span class="tlaGNC">          15 :     if (available &lt;= config_.reserved_bytes) {</span></span>
+<span id="L597"><span class="lineNum">     597</span>                 :<span class="tlaGNC tlaBgGNC">          16 :     uint64_t available = space.available;</span></span>
+<span id="L598"><span class="lineNum">     598</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span>]:<span class="tlaGNC">          16 :     if (available &lt;= config_.reserved_bytes) {</span></span>
 <span id="L599"><span class="lineNum">     599</span>                 :             :         return uint64_t{0};</span>
 <span id="L600"><span class="lineNum">     600</span>                 :             :     }</span>
-<span id="L601"><span class="lineNum">     601</span>                 :<span class="tlaGNC">          15 :     return available - config_.reserved_bytes;</span></span>
+<span id="L601"><span class="lineNum">     601</span>                 :<span class="tlaGNC">          16 :     return available - config_.reserved_bytes;</span></span>
 <span id="L602"><span class="lineNum">     602</span>                 :             : }</span>
 <span id="L603"><span class="lineNum">     603</span>                 :             : </span>
 <span id="L604"><span class="lineNum">     604</span>                 :             : } // namespace pl::minidfs</span>
