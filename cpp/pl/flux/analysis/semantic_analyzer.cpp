@@ -18,6 +18,7 @@
 #include "cpp/pl/flux/analysis/semantic_analyzer.h"
 
 #include <algorithm>
+#include <fstream>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -109,12 +110,189 @@ bool is_named_call_argument(const Expression& expr) {
     return obj.with == nullptr;
 }
 
+size_t edit_distance(std::string_view lhs, std::string_view rhs) {
+    std::vector<size_t> prev(rhs.size() + 1);
+    std::vector<size_t> curr(rhs.size() + 1);
+    for (size_t j = 0; j <= rhs.size(); ++j) {
+        prev[j] = j;
+    }
+    for (size_t i = 1; i <= lhs.size(); ++i) {
+        curr[0] = i;
+        for (size_t j = 1; j <= rhs.size(); ++j) {
+            const size_t cost = lhs[i - 1] == rhs[j - 1] ? 0 : 1;
+            curr[j] = std::min({prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost});
+        }
+        prev.swap(curr);
+    }
+    return prev[rhs.size()];
+}
+
+std::optional<std::string> closest_name(std::string_view target,
+                                        const std::vector<std::string>& candidates) {
+    std::optional<std::string> best;
+    size_t best_distance = std::numeric_limits<size_t>::max();
+    for (const auto& candidate : candidates) {
+        const auto distance = edit_distance(target, candidate);
+        if (distance < best_distance) {
+            best_distance = distance;
+            best = candidate;
+        }
+    }
+    if (best.has_value() && best_distance <= std::max<size_t>(2, target.size() / 3)) {
+        return best;
+    }
+    return std::nullopt;
+}
+
 struct ResolvedCallee {
     const BuiltinSignature* sig = nullptr;
     SourceLocation location;
     size_t package_definition_id = 0;
     std::string package;
     std::string member;
+};
+
+struct FunctionContext {
+    std::unordered_map<std::string, Type> params;
+    std::optional<Type> return_type;
+};
+
+RecordFieldType make_field(std::string name, Type type) {
+    return {.name = std::move(name), .type = std::make_shared<Type>(std::move(type))};
+}
+
+std::vector<std::string> split_csv_record(std::string_view line) {
+    std::vector<std::string> fields;
+    std::string field;
+    bool quoted = false;
+    for (size_t i = 0; i < line.size(); ++i) {
+        const char ch = line[i];
+        if (quoted) {
+            if (ch == '"') {
+                if (i + 1 < line.size() && line[i + 1] == '"') {
+                    field.push_back('"');
+                    ++i;
+                } else {
+                    quoted = false;
+                }
+            } else {
+                field.push_back(ch);
+            }
+            continue;
+        }
+        if (ch == ',') {
+            fields.push_back(field);
+            field.clear();
+        } else if (ch == '"') {
+            if (field.empty()) {
+                quoted = true;
+            } else {
+                field.push_back(ch);
+            }
+        } else {
+            field.push_back(ch);
+        }
+    }
+    fields.push_back(field);
+    return fields;
+}
+
+Type type_for_csv_datatype(std::string_view datatype) {
+    if (datatype == "long") {
+        return Type::Scalar(TypeKind::Int);
+    }
+    if (datatype == "unsignedLong") {
+        return Type::Scalar(TypeKind::UInt);
+    }
+    if (datatype == "double") {
+        return Type::Scalar(TypeKind::Float);
+    }
+    if (datatype == "boolean" || datatype == "bool") {
+        return Type::Scalar(TypeKind::Bool);
+    }
+    if (datatype == "dateTime:RFC3339" || datatype == "dateTime:RFC3339Nano") {
+        return Type::Scalar(TypeKind::Time);
+    }
+    if (datatype == "duration") {
+        return Type::Scalar(TypeKind::Duration);
+    }
+    return Type::Scalar(TypeKind::String);
+}
+
+std::optional<std::string> read_text_file(const std::string& path) {
+    std::ifstream file(path);
+    if (!file) {
+        return std::nullopt;
+    }
+    std::ostringstream out;
+    out << file.rdbuf();
+    return out.str();
+}
+
+std::optional<Type> infer_csv_schema_from_text(const std::string& csv, std::string_view mode) {
+    std::istringstream input(csv);
+    std::string line;
+    std::vector<std::string> datatypes;
+    std::vector<std::string> header;
+
+    while (std::getline(input, line)) {
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        if (line.empty()) {
+            continue;
+        }
+        auto fields = split_csv_record(line);
+        if (fields.empty()) {
+            continue;
+        }
+        if (mode != "raw" && fields[0] == "#datatype") {
+            datatypes = std::move(fields);
+            continue;
+        }
+        if (mode != "raw" && (fields[0] == "#group" || fields[0] == "#default")) {
+            continue;
+        }
+        header = std::move(fields);
+        break;
+    }
+
+    if (header.empty()) {
+        return std::nullopt;
+    }
+
+    std::vector<RecordFieldType> fields;
+    fields.reserve(header.size());
+    for (size_t i = 0; i < header.size(); ++i) {
+        if (header[i].empty()) {
+            continue;
+        }
+        auto type = Type::Scalar(TypeKind::String);
+        if (mode != "raw" && i < datatypes.size()) {
+            type = type_for_csv_datatype(datatypes[i]);
+        }
+        fields.push_back(make_field(header[i], std::move(type)));
+    }
+    return Type::Stream(Type::Record(std::move(fields), false));
+}
+
+class SourceSchemaResolver {
+public:
+    std::optional<Type> ResolveCsv(std::optional<std::string> csv,
+                                   std::optional<std::string> file,
+                                   std::optional<std::string> mode) const {
+        const std::string resolved_mode = mode.value_or("annotations");
+        if (csv.has_value()) {
+            return infer_csv_schema_from_text(*csv, resolved_mode);
+        }
+        if (file.has_value()) {
+            auto text = read_text_file(*file);
+            if (text.has_value()) {
+                return infer_csv_schema_from_text(*text, resolved_mode);
+            }
+        }
+        return std::nullopt;
+    }
 };
 
 class Binder {
@@ -350,7 +528,7 @@ private:
                 break;
             case Expression::Type::FunctionExpr:
                 type = visit_function_expression(
-                    *std::get<std::unique_ptr<FunctionExpr>>(expr.expr), expr.loc);
+                    *std::get<std::unique_ptr<FunctionExpr>>(expr.expr), expr.loc, nullptr);
                 break;
             case Expression::Type::ObjectExpr:
                 type = visit_object_expression(*std::get<std::unique_ptr<ObjectExpr>>(expr.expr),
@@ -445,16 +623,24 @@ private:
         }
         visit_callee(call.callee.get(), resolved);
         std::vector<Type> arg_types;
-        for (const auto& arg : call.arguments) {
-            if (arg) {
-                arg_types.push_back(visit_expression(*arg));
+        if (resolved.sig != nullptr && call.arguments.size() == 1 && call.arguments[0] &&
+            is_named_call_argument(*call.arguments[0])) {
+            const auto& obj = *std::get<std::unique_ptr<ObjectExpr>>(call.arguments[0]->expr);
+            arg_types.push_back(visit_named_call_object(
+                obj, call.arguments[0]->loc, *resolved.sig, pipe_value_present, pipe_type));
+        } else {
+            for (const auto& arg : call.arguments) {
+                if (arg) {
+                    arg_types.push_back(visit_expression(*arg));
+                }
             }
         }
         if (resolved.sig != nullptr && IsCallableBuiltin(*resolved.sig)) {
             check_builtin_argument_types(
                 call, *resolved.sig, arg_types, pipe_value_present, pipe_type);
         }
-        auto return_type = infer_call_return_type(call, resolved, pipe_value_present, pipe_type);
+        auto return_type =
+            infer_call_return_type(call, resolved, pipe_value_present, pipe_type, arg_types);
         result_.calls.push_back({
             .location = call.callee ? call.callee->loc : SourceLocation{},
             .callee_location = call.callee ? call.callee->loc : SourceLocation{},
@@ -552,8 +738,7 @@ private:
         (void)reference(obj.name, mem.object->loc, ReferenceKind::PackageObject);
         const auto* sig = FindBuiltinSignature(import_it->second.path, member);
         if (sig == nullptr && IsKnownPackage(import_it->second.path)) {
-            diagnostic("unknown function `" + member + "` in package `" + import_it->second.path +
-                           "`",
+            diagnostic(unknown_package_member_message(import_it->second.path, member),
                        loc,
                        DiagnosticSeverity::Error);
             return Type::Error();
@@ -580,7 +765,9 @@ private:
         }
     }
 
-    Type visit_function_expression(const FunctionExpr& fn, const SourceLocation& loc) {
+    Type visit_function_expression(const FunctionExpr& fn,
+                                   const SourceLocation& loc,
+                                   const FunctionContext* context) {
         push_scope(loc);
         std::unordered_set<std::string> seen;
         std::vector<FunctionParamType> params;
@@ -597,6 +784,12 @@ private:
                     "duplicate function parameter: " + name, param->loc, DiagnosticSeverity::Error);
             }
             auto default_type = param->value ? visit_expression(*param->value) : Type::Dynamic();
+            if (context != nullptr) {
+                const auto context_it = context->params.find(name);
+                if (context_it != context->params.end()) {
+                    default_type = context_it->second;
+                }
+            }
             define(name,
                    SymbolKind::Parameter,
                    param->loc,
@@ -621,8 +814,84 @@ private:
                     visit_expression(*std::get<std::unique_ptr<Expression>>(fn.body->body));
             }
         }
+        if (context != nullptr && context->return_type.has_value() &&
+            !CanAssign(*context->return_type, result_type)) {
+            diagnostic("function result expects " + context->return_type->ToString() + ", got " +
+                           result_type.ToString(),
+                       loc,
+                       DiagnosticSeverity::Warning);
+        }
         pop_scope();
         return Type::Function(std::move(params), std::move(result_type));
+    }
+
+    Type visit_named_call_object(const ObjectExpr& obj,
+                                 const SourceLocation& loc,
+                                 const BuiltinSignature& sig,
+                                 bool pipe_value_present,
+                                 const Type& pipe_type) {
+        std::vector<RecordFieldType> fields;
+        for (const auto& prop : obj.properties) {
+            if (!prop || !prop->key || !prop->value) {
+                continue;
+            }
+            const auto name = property_name(*prop->key);
+            auto context = function_context_for_argument(sig, name, pipe_value_present, pipe_type);
+            Type value_type;
+            if (context.has_value() && prop->value->type == Expression::Type::FunctionExpr) {
+                value_type = visit_function_expression(
+                    *std::get<std::unique_ptr<FunctionExpr>>(prop->value->expr),
+                    prop->value->loc,
+                    &*context);
+                check_contextual_function_result(sig, name, value_type, prop->value->loc);
+            } else {
+                value_type = visit_expression(*prop->value);
+            }
+            upsert_field(fields, name, std::move(value_type));
+        }
+        result_.record_schemas.push_back({.location = loc, .fields = fields, .open = false});
+        return Type::Record(std::move(fields), false);
+    }
+
+    std::optional<FunctionContext> function_context_for_argument(const BuiltinSignature& sig,
+                                                                 std::string_view arg_name,
+                                                                 bool pipe_value_present,
+                                                                 const Type& pipe_type) const {
+        if (!pipe_value_present || arg_name != "fn") {
+            return std::nullopt;
+        }
+        const auto row = stream_row(pipe_type);
+        if (!row.has_value()) {
+            return std::nullopt;
+        }
+        if (sig.package.empty() && sig.name == "filter") {
+            return FunctionContext{.params = {{"r", *row}},
+                                   .return_type = Type::Scalar(TypeKind::Bool)};
+        }
+        if (sig.package.empty() && sig.name == "map") {
+            return FunctionContext{.params = {{"r", *row}}, .return_type = std::nullopt};
+        }
+        if (sig.package.empty() && (sig.name == "findColumn" || sig.name == "findRecord")) {
+            return FunctionContext{.params = {{"key", Type::Record({}, true)}},
+                                   .return_type = Type::Scalar(TypeKind::Bool)};
+        }
+        return std::nullopt;
+    }
+
+    void check_contextual_function_result(const BuiltinSignature& sig,
+                                          std::string_view arg_name,
+                                          const Type& fn_type,
+                                          const SourceLocation& loc) {
+        if (arg_name != "fn" || fn_type.kind != TypeKind::Function || fn_type.args.empty()) {
+            return;
+        }
+        const auto& result_type = fn_type.args[0];
+        if (sig.package.empty() && sig.name == "map" && !result_type.IsUnknownLike() &&
+            result_type.kind != TypeKind::Record) {
+            diagnostic("map fn must return a record, got " + result_type.ToString(),
+                       loc,
+                       DiagnosticSeverity::Warning);
+        }
     }
 
     Type visit_object_expression(const ObjectExpr& obj, const SourceLocation& loc) {
@@ -928,7 +1197,8 @@ private:
     Type infer_call_return_type(const CallExpr& call,
                                 const ResolvedCallee& resolved,
                                 bool pipe_value_present,
-                                const Type& pipe_type) {
+                                const Type& pipe_type,
+                                const std::vector<Type>& arg_types) {
         if (resolved.sig == nullptr) {
             auto type = call.callee ? visit_free_callee_type(*call.callee) : Type::Dynamic();
             if (type.kind == TypeKind::Function && !type.args.empty()) {
@@ -944,6 +1214,13 @@ private:
             return base;
         }
         const auto name = resolved.sig->name;
+        if (resolved.sig->provider) {
+            if (auto provider = infer_provider_return_type(call, *resolved.sig);
+                provider.has_value()) {
+                add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, *provider);
+                return *provider;
+            }
+        }
         if (name == "from" && resolved.package == "array") {
             auto rows = named_object_field_type(call, "rows");
             if (rows && rows->kind == TypeKind::Array && !rows->args.empty()) {
@@ -964,12 +1241,52 @@ private:
                 return apply_rename(call, pipe_type);
             }
             if (name == "map") {
-                return apply_map(call, pipe_type);
+                return apply_map(call, pipe_type, arg_types);
+            }
+            if (name == "group") {
+                return apply_group(call, pipe_type);
+            }
+            if (name == "duplicate") {
+                return apply_duplicate(call, pipe_type);
+            }
+            if (name == "set") {
+                return apply_set(call, pipe_type);
             }
             add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, pipe_type);
             return pipe_type.IsUnknownLike() ? base : pipe_type;
         }
+        if (name == "join" && resolved.package.empty()) {
+            return apply_join(call, arg_types);
+        }
         return base;
+    }
+
+    std::optional<Type> infer_provider_return_type(const CallExpr& call,
+                                                   const BuiltinSignature& sig) {
+        if (sig.package == "array" && sig.name == "from") {
+            auto rows = named_object_field_type(call, "rows");
+            if (rows && rows->kind == TypeKind::Array && !rows->args.empty()) {
+                return Type::Stream(rows->args[0]);
+            }
+            return Type::Stream(Type::Record({}, true));
+        }
+        if ((sig.package == "mysql" || sig.package == "sqlite") && sig.name == "from") {
+            return Type::Stream(Type::Record({}, true));
+        }
+        if (sig.package == "csv" && sig.name == "from") {
+            auto schema = source_schema_resolver_.ResolveCsv(literal_string_argument(call, "csv"),
+                                                             literal_string_argument(call, "file"),
+                                                             literal_string_argument(call, "mode"));
+            if (schema.has_value()) {
+                return schema;
+            }
+            return Type::Stream(Type::Record({}, true));
+        }
+        return std::nullopt;
+    }
+
+    RecordFieldType field(std::string name, Type type) const {
+        return make_field(std::move(name), std::move(type));
     }
 
     Type visit_free_callee_type(const Expression& callee) {
@@ -1058,6 +1375,8 @@ private:
         for (const auto& column : columns) {
             if (auto field = row->Field(column); field.has_value()) {
                 fields.push_back({.name = column, .type = std::make_shared<Type>(*field)});
+            } else if (row->open_record) {
+                fields.push_back({.name = column, .type = std::make_shared<Type>(Type::Dynamic())});
             }
         }
         auto result = Type::Stream(Type::Record(std::move(fields), false));
@@ -1100,8 +1419,10 @@ private:
         return result;
     }
 
-    Type apply_map(const CallExpr& call, const Type& pipe_type) {
-        auto fn = named_object_field_type(call, "fn");
+    Type apply_map(const CallExpr& call,
+                   const Type& pipe_type,
+                   const std::vector<Type>& arg_types) {
+        auto fn = named_argument_type(call, "fn", arg_types);
         if (fn && fn->kind == TypeKind::Function && !fn->args.empty() &&
             fn->args[0].kind == TypeKind::Record) {
             auto result = Type::Stream(fn->args[0]);
@@ -1111,6 +1432,159 @@ private:
         return pipe_type;
     }
 
+    Type apply_group(const CallExpr& call, const Type& pipe_type) {
+        auto columns = named_string_array(call, "columns");
+        const auto mode = literal_string_argument(call, "mode").value_or("by");
+        if (mode == "except") {
+            const std::unordered_set<std::string> excluded(columns.begin(), columns.end());
+            columns.clear();
+            if (const auto row = stream_row(pipe_type); row.has_value()) {
+                for (const auto& field : row->fields) {
+                    if (excluded.count(field.name) == 0) {
+                        columns.push_back(field.name);
+                    }
+                }
+            }
+        }
+        add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, pipe_type, columns);
+        return pipe_type;
+    }
+
+    Type apply_duplicate(const CallExpr& call, const Type& pipe_type) {
+        auto row = stream_row(pipe_type);
+        const auto column = literal_string_argument(call, "column");
+        const auto as = literal_string_argument(call, "as");
+        if (!row || !column.has_value() || !as.has_value()) {
+            return pipe_type;
+        }
+        auto source = row->Field(*column).value_or(Type::Dynamic());
+        auto fields = row->fields;
+        upsert_field(fields, *as, std::move(source));
+        auto result = Type::Stream(Type::Record(std::move(fields), row->open_record));
+        add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, result);
+        return result;
+    }
+
+    Type apply_set(const CallExpr& call, const Type& pipe_type) {
+        auto row = stream_row(pipe_type);
+        const auto key = literal_string_argument(call, "key");
+        if (!row || !key.has_value()) {
+            return pipe_type;
+        }
+        auto fields = row->fields;
+        upsert_field(fields, *key, Type::Scalar(TypeKind::String));
+        auto result = Type::Stream(Type::Record(std::move(fields), row->open_record));
+        add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, result);
+        return result;
+    }
+
+    Type apply_join(const CallExpr& call, const std::vector<Type>& arg_types) {
+        auto tables = named_argument_type(call, "tables", arg_types);
+        const auto keys = named_string_array(call, "on");
+        if (!tables || tables->kind != TypeKind::Record || tables->fields.empty()) {
+            return Type::Stream(Type::Record({}, true));
+        }
+        if (tables->fields.size() != 2) {
+            diagnostic("join currently expects exactly two input tables",
+                       call.callee ? call.callee->loc : SourceLocation{},
+                       DiagnosticSeverity::Error);
+            return Type::Stream(Type::Record({}, true));
+        }
+
+        const auto left_row = table_row_for_join(call, tables->fields[0]);
+        const auto right_row = table_row_for_join(call, tables->fields[1]);
+        if (!left_row.has_value() || !right_row.has_value()) {
+            return Type::Stream(Type::Record({}, true));
+        }
+
+        std::vector<RecordFieldType> fields;
+        std::unordered_set<std::string> emitted;
+        std::unordered_map<std::string, Type> key_types;
+        const std::unordered_set<std::string> key_set(keys.begin(), keys.end());
+        const auto overlapping = overlapping_join_columns(*left_row, *right_row, key_set);
+        const bool open = left_row->open_record || right_row->open_record;
+
+        auto append_table = [&](const RecordFieldType& table_field, const Type& row) {
+            for (const auto& key : keys) {
+                auto key_type = row.Field(key);
+                if (!key_type.has_value()) {
+                    if (!row.open_record) {
+                        diagnostic("join key `" + key + "` is missing from table `" +
+                                       table_field.name + "`",
+                                   call.callee ? call.callee->loc : SourceLocation{},
+                                   DiagnosticSeverity::Error);
+                    }
+                    continue;
+                }
+                const auto existing = key_types.find(key);
+                if (existing != key_types.end() && !CanAssign(existing->second, *key_type)) {
+                    diagnostic("join key `" + key + "` has incompatible types: " +
+                                   existing->second.ToString() + " and " + key_type->ToString(),
+                               call.callee ? call.callee->loc : SourceLocation{},
+                               DiagnosticSeverity::Warning);
+                } else {
+                    key_types.emplace(key, *key_type);
+                }
+            }
+            for (const auto& source_field : row.fields) {
+                if (!source_field.type) {
+                    continue;
+                }
+                std::string output_name = source_field.name;
+                const bool is_key = key_set.count(source_field.name) != 0;
+                if (!is_key && overlapping.count(output_name) != 0) {
+                    output_name += "_" + table_field.name;
+                }
+                if (is_key && emitted.contains(output_name)) {
+                    continue;
+                }
+                emitted.insert(output_name);
+                fields.push_back({.name = std::move(output_name), .type = source_field.type});
+            }
+        };
+
+        append_table(tables->fields[0], *left_row);
+        append_table(tables->fields[1], *right_row);
+
+        auto result = Type::Stream(Type::Record(std::move(fields), open));
+        add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, result);
+        return result;
+    }
+
+    std::optional<Type> table_row_for_join(const CallExpr& call,
+                                           const RecordFieldType& table_field) {
+        if (!table_field.type) {
+            return std::nullopt;
+        }
+        const auto row = stream_row(*table_field.type);
+        if (!row || row->kind != TypeKind::Record) {
+            diagnostic("join table `" + table_field.name + "` must be a stream, got " +
+                           table_field.type->ToString(),
+                       call.callee ? call.callee->loc : SourceLocation{},
+                       DiagnosticSeverity::Error);
+            return std::nullopt;
+        }
+        return row;
+    }
+
+    std::unordered_set<std::string> overlapping_join_columns(
+        const Type& left_row,
+        const Type& right_row,
+        const std::unordered_set<std::string>& key_set) const {
+        std::unordered_set<std::string> right_fields;
+        for (const auto& field : right_row.fields) {
+            right_fields.insert(field.name);
+        }
+        std::unordered_set<std::string> overlap;
+        for (const auto& field : left_row.fields) {
+            if (key_set.count(field.name) != 0 || right_fields.count(field.name) == 0) {
+                continue;
+            }
+            overlap.insert(field.name);
+        }
+        return overlap;
+    }
+
     std::optional<Type> stream_row(const Type& type) const {
         if ((type.kind == TypeKind::Stream || type.kind == TypeKind::Table) && !type.args.empty()) {
             return type.args[0];
@@ -1118,7 +1592,9 @@ private:
         return std::nullopt;
     }
 
-    void add_table_schema(const SourceLocation& loc, const Type& type) {
+    void add_table_schema(const SourceLocation& loc,
+                          const Type& type,
+                          std::vector<std::string> group_key = {}) {
         auto row = stream_row(type);
         if (!row || row->kind != TypeKind::Record) {
             return;
@@ -1126,7 +1602,7 @@ private:
         result_.table_schemas.push_back({
             .location = loc,
             .columns = row->fields,
-            .group_key = {},
+            .group_key = std::move(group_key),
             .open = row->open_record,
         });
     }
@@ -1179,6 +1655,42 @@ private:
             }
         }
         return nullptr;
+    }
+
+    std::optional<std::string> literal_string_argument(const CallExpr& call,
+                                                       std::string_view name) const {
+        const auto* expr = named_argument_expression(call, name);
+        if (expr == nullptr || expr->type != Expression::Type::StringLit) {
+            return std::nullopt;
+        }
+        return std::get<std::unique_ptr<StringLit>>(expr->expr)->value;
+    }
+
+    std::string unknown_argument_message(const BuiltinSignature& sig, std::string_view name) const {
+        std::vector<std::string> candidates;
+        candidates.reserve(sig.params.size());
+        for (const auto& param : sig.params) {
+            candidates.push_back(param.name);
+        }
+        std::string message = "unknown argument `" + std::string(name) + "` for " + sig.fq_name;
+        if (auto suggestion = closest_name(name, candidates); suggestion.has_value()) {
+            message += "; did you mean `" + *suggestion + "`?";
+        }
+        return message;
+    }
+
+    std::string unknown_package_member_message(std::string_view package,
+                                               std::string_view member) const {
+        std::vector<std::string> candidates;
+        for (const auto* sig : BuiltinsForPackage(package)) {
+            candidates.push_back(sig->name);
+        }
+        std::string message = "unknown function `" + std::string(member) + "` in package `" +
+                              std::string(package) + "`";
+        if (auto suggestion = closest_name(member, candidates); suggestion.has_value()) {
+            message += "; did you mean `" + *suggestion + "`?";
+        }
+        return message;
     }
 
     void check_builtin_argument_types(const CallExpr& call,
@@ -1238,9 +1750,8 @@ private:
                                DiagnosticSeverity::Error);
                 }
                 if (!allowed.contains(name)) {
-                    diagnostic("unknown argument `" + name + "` for " + sig.fq_name,
-                               prop->loc,
-                               DiagnosticSeverity::Error);
+                    diagnostic(
+                        unknown_argument_message(sig, name), prop->loc, DiagnosticSeverity::Error);
                 }
                 required.erase(name);
             }
@@ -1302,8 +1813,7 @@ private:
         }
         const auto* sig = FindBuiltinSignature(import_it->second.path, prop);
         if (sig == nullptr && IsKnownPackage(import_it->second.path)) {
-            diagnostic("unknown function `" + prop + "` in package `" + import_it->second.path +
-                           "`",
+            diagnostic(unknown_package_member_message(import_it->second.path, prop),
                        call.callee->loc,
                        DiagnosticSeverity::Error);
         }
@@ -1398,9 +1908,39 @@ private:
             .resolved = resolved,
         });
         if (!resolved) {
-            diagnostic("undefined identifier: " + name, loc, DiagnosticSeverity::Warning);
+            std::string message = "undefined identifier: " + name;
+            if (auto suggestion = closest_name(name, accessible_symbol_names());
+                suggestion.has_value()) {
+                message += "; did you mean `" + *suggestion + "`?";
+            }
+            diagnostic(std::move(message), loc, DiagnosticSeverity::Warning);
         }
         return index;
+    }
+
+    std::vector<std::string> accessible_symbol_names() const {
+        std::vector<std::string> names;
+        std::unordered_set<std::string> seen;
+        size_t scope_index = current_scope_id_;
+        while (true) {
+            const auto& scope = scopes_[scope_index];
+            for (const auto& [name, id] : scope.definitions) {
+                (void)id;
+                if (seen.insert(name).second) {
+                    names.push_back(name);
+                }
+            }
+            if (scope.id == scope.parent_id) {
+                break;
+            }
+            scope_index = scope.parent_id;
+        }
+        for (const auto& sig : AllBuiltinSignatures()) {
+            if (sig.package.empty() && seen.insert(sig.name).second) {
+                names.push_back(sig.name);
+            }
+        }
+        return names;
     }
 
     size_t resolve(const std::string& name) const {
@@ -1475,6 +2015,7 @@ private:
     std::vector<Scope> scopes_;
     std::unordered_set<size_t> predeclared_definition_ids_;
     std::unordered_map<std::string, ImportBinding> imports_;
+    SourceSchemaResolver source_schema_resolver_;
     size_t current_scope_id_ = 0;
     size_t next_symbol_id_ = 1;
 };

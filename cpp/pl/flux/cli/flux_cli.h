@@ -44,6 +44,10 @@ struct FluxAstOptions {
     bool json = false;
 };
 
+struct FluxAnalyzeOptions {
+    bool json = false;
+};
+
 struct FluxCliResult {
     int exit_code = 0;
     std::string output;
@@ -58,6 +62,10 @@ FluxCliResult ExecuteFluxSource(const std::string& source,
 FluxCliResult DumpFluxAstSource(const std::string& source,
                                 const std::string& name,
                                 const FluxAstOptions& options = {});
+FluxCliResult AnalyzeFluxSource(const std::string& source,
+                                const std::string& name,
+                                const FluxAnalyzeOptions& options = {});
+FluxCliResult DumpFluxBuiltinCatalog(bool json = false);
 int RunFluxRepl(std::istream& input,
                 std::ostream& output,
                 std::ostream& error,

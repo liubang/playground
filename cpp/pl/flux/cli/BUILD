@@ -37,6 +37,8 @@ cc_library(
     linkopts = LINKOPTS,
     deps = [
         "//cpp/pl/ascii_table:pretty",
+        "//cpp/pl/flux/analysis:builtin_metadata",
+        "//cpp/pl/flux/analysis:semantic_analyzer",
         "//cpp/pl/flux/common",
         "//cpp/pl/flux/execution",
         "//cpp/pl/flux/runtime:runtime_builtin",
