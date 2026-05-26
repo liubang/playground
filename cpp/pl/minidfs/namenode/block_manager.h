@@ -19,6 +19,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <unordered_set>
 #include <vector>
 
 #include "cpp/pl/minidfs/common/types.h"
@@ -55,7 +56,8 @@ public:
     /// Commit a block after successful write. Updates length and state.
     pl::Result<pl::Void> commit_block(uint64_t block_id,
                                       uint64_t length,
-                                      uint64_t generation_stamp);
+                                      uint64_t generation_stamp,
+                                      const std::vector<uint64_t>& finalized_datanode_ids = {});
 
     /// Get located blocks for reading a file (all committed blocks with locations).
     pl::Result<std::vector<LocatedBlock>> get_located_blocks(uint64_t inode_id);
@@ -66,6 +68,13 @@ public:
     /// Invalidate all blocks belonging to an inode (mark kDeleted, remove replicas).
     /// Must be called before the inode is deleted from the namespace.
     pl::Result<pl::Void> invalidate_blocks(uint64_t inode_id);
+
+    /// Return pending block deletion commands for a datanode.
+    pl::Result<std::vector<BlockMeta>> get_blocks_to_delete(uint64_t datanode_id);
+
+    /// Mark replicas no longer reported by a datanode as deleted.
+    pl::Result<pl::Void> reconcile_block_report(
+        uint64_t datanode_id, const std::unordered_set<uint64_t>& reported_block_ids);
 
     /// Generate a new unique generation stamp.
     uint64_t next_generation_stamp();
