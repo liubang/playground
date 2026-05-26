@@ -131,6 +131,14 @@ bool has_duplicate_columns(const std::vector<std::string>& columns) {
     return false;
 }
 
+absl::Status require_capability(bool supported, std::string_view capability) {
+    if (supported) {
+        return absl::OkStatus();
+    }
+    return absl::InvalidArgumentError(
+        absl::StrCat("connector does not support ", capability, " pushdown"));
+}
+
 void set_projection_columns(connector::ScanRequest* request,
                             const std::vector<std::string>& source_columns,
                             const std::vector<std::string>& visible_columns) {
@@ -161,6 +169,11 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
         }
         plan.visible_columns = std::move(*columns_or);
         plan.source_columns = plan.visible_columns;
+        auto capabilities_or = SourceScanCapabilities(node->source_scan());
+        if (!capabilities_or.ok()) {
+            return capabilities_or.status();
+        }
+        plan.capabilities = *capabilities_or;
         return plan;
     }
     if (node->inputs.size() != 1) {
@@ -172,6 +185,10 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
     }
     switch (node->kind) {
         case plan::PlanNodeKind::Range: {
+            auto status = require_capability(plan_or->capabilities.time_range, "time range");
+            if (!status.ok()) {
+                return status;
+            }
             auto source_column_or = source_column_for_visible(
                 plan_or->visible_columns, plan_or->source_columns, "_time", "range");
             if (!source_column_or.ok()) {
@@ -188,6 +205,10 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
             return plan_or;
         }
         case plan::PlanNodeKind::Filter:
+            if (auto status = require_capability(plan_or->capabilities.filter, "filter");
+                !status.ok()) {
+                return status;
+            }
             if (node->filter().predicates.empty()) {
                 return absl::InvalidArgumentError("filter has no pushable predicates");
             }
@@ -205,6 +226,10 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
             }
             return plan_or;
         case plan::PlanNodeKind::Project: {
+            if (auto status = require_capability(plan_or->capabilities.projection, "projection");
+                !status.ok()) {
+                return status;
+            }
             std::vector<std::string> projected_source_columns;
             projected_source_columns.reserve(node->project().columns.size());
             for (const auto& column : node->project().columns) {
@@ -222,6 +247,10 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
             return plan_or;
         }
         case plan::PlanNodeKind::Rename:
+            if (auto status = require_capability(plan_or->capabilities.projection, "projection");
+                !status.ok()) {
+                return status;
+            }
             for (auto& column : plan_or->visible_columns) {
                 if (auto renamed = mapped_column_name(node->rename().columns, column);
                     renamed.has_value()) {
@@ -235,6 +264,10 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
                 &plan_or->request, plan_or->source_columns, plan_or->visible_columns);
             return plan_or;
         case plan::PlanNodeKind::Group:
+            if (auto status = require_capability(plan_or->capabilities.aggregate, "group");
+                !status.ok()) {
+                return status;
+            }
             plan_or->request.group_by.clear();
             plan_or->request.group_by.reserve(node->group().columns.size());
             for (const auto& column : node->group().columns) {
@@ -247,6 +280,10 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
             }
             return plan_or;
         case plan::PlanNodeKind::Aggregate: {
+            if (auto status = require_capability(plan_or->capabilities.aggregate, "aggregate");
+                !status.ok()) {
+                return status;
+            }
             if (plan_or->request.distinct.has_value()) {
                 return absl::InvalidArgumentError("aggregate after distinct is not pushable");
             }
@@ -268,6 +305,10 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
             return plan_or;
         }
         case plan::PlanNodeKind::Distinct: {
+            if (auto status = require_capability(plan_or->capabilities.distinct, "distinct");
+                !status.ok()) {
+                return status;
+            }
             auto source_column_or = source_column_for_visible(plan_or->visible_columns,
                                                               plan_or->source_columns,
                                                               node->distinct().column,
@@ -279,12 +320,20 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
             return plan_or;
         }
         case plan::PlanNodeKind::Limit:
+            if (auto status = require_capability(plan_or->capabilities.limit, "limit");
+                !status.ok()) {
+                return status;
+            }
             plan_or->request.limit = node->limit().n;
             if (node->limit().offset != 0) {
                 plan_or->request.offset = node->limit().offset;
             }
             return plan_or;
         case plan::PlanNodeKind::Sort:
+            if (auto status = require_capability(plan_or->capabilities.sort, "sort");
+                !status.ok()) {
+                return status;
+            }
             plan_or->request.order_by.clear();
             plan_or->request.order_by.reserve(node->sort().keys.size());
             for (const auto& key : node->sort().keys) {
@@ -598,6 +647,21 @@ absl::StatusOr<std::vector<std::string>> SourceScanColumns(const plan::SourceSca
     return columns;
 }
 
+absl::StatusOr<connector::SourceCapabilities> SourceScanCapabilities(
+    const plan::SourceScanSpec& source) {
+    connector::SourceSpec spec{
+        .source = source.source, .driver = source.driver, .dsn = source.dsn, .table = source.table};
+    auto runtime_or = connector::ConnectorRegistry::Global().CreateRuntime(spec);
+    if (!runtime_or.ok()) {
+        return runtime_or.status();
+    }
+    auto handle_or = (*runtime_or)->metadata->GetTableHandle(spec);
+    if (!handle_or.ok()) {
+        return handle_or.status();
+    }
+    return (*runtime_or)->metadata->Capabilities(*handle_or);
+}
+
 absl::StatusOr<std::vector<std::string>> VisibleColumnsForPlan(
     const std::shared_ptr<plan::PlanNode>& node) {
     if (node == nullptr) {
@@ -643,6 +707,35 @@ absl::StatusOr<std::vector<std::string>> VisibleColumnsForPlan(
 
 bool CanExecutePushdownPlan(const PushdownPlan& plan) {
     return plan.request.group_by.empty() || plan.request.aggregate.has_value();
+}
+
+std::string FormatSourceCapabilities(const connector::SourceCapabilities& capabilities) {
+    std::vector<std::string> enabled;
+    if (capabilities.projection) {
+        enabled.push_back("projection");
+    }
+    if (capabilities.filter) {
+        enabled.push_back("filter");
+    }
+    if (capabilities.time_range) {
+        enabled.push_back("time_range");
+    }
+    if (capabilities.limit) {
+        enabled.push_back("limit");
+    }
+    if (capabilities.sort) {
+        enabled.push_back("sort");
+    }
+    if (capabilities.aggregate) {
+        enabled.push_back("aggregate");
+    }
+    if (capabilities.distinct) {
+        enabled.push_back("distinct");
+    }
+    std::ostringstream out;
+    out << "capabilities=";
+    append_string_list(&out, enabled);
+    return out.str();
 }
 
 std::string FormatPushdownRequest(const connector::ScanRequest& request) {
@@ -730,7 +823,8 @@ std::optional<std::string> SourcePushdownSummary(const PlanOptimizerResult& resu
     if (!result.pushdown_plan.has_value() || !CanExecutePushdownPlan(*result.pushdown_plan)) {
         return std::nullopt;
     }
-    return FormatPushdownRequest(result.pushdown_plan->request);
+    return FormatSourceCapabilities(result.pushdown_plan->capabilities) + "\n" +
+           FormatPushdownRequest(result.pushdown_plan->request);
 }
 
 bool IsPushdownSourceScan(const plan::PlanNode& node) {

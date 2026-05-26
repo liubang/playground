@@ -62,9 +62,10 @@ TEST(SemanticAnalyzerTest, ReportsUnknownKnownPackageMember) {
     auto result = Analyze(R"(
 import "array"
 
-array.nope(arr: [1])
+array.lenght(arr: [1])
 )");
-    EXPECT_TRUE(HasDiagnostic(result, "unknown function `nope`"));
+    EXPECT_TRUE(HasDiagnostic(result, "unknown function `lenght`"));
+    EXPECT_TRUE(HasDiagnostic(result, "did you mean `length`"));
 }
 
 TEST(SemanticAnalyzerTest, ChecksMissingAndUnknownNamedArguments) {
@@ -78,9 +79,10 @@ array.map(arr: [1])
     auto unknown = Analyze(R"(
 import "array"
 
-array.map(arr: [1], fn: (x) => x, nope: 2)
+array.map(arr: [1], fn: (x) => x, ar: 2)
 )");
-    EXPECT_TRUE(HasDiagnostic(unknown, "unknown argument `nope`"));
+    EXPECT_TRUE(HasDiagnostic(unknown, "unknown argument `ar`"));
+    EXPECT_TRUE(HasDiagnostic(unknown, "did you mean `arr`"));
 }
 
 TEST(SemanticAnalyzerTest, PipeSatisfiesPipeParameter) {
@@ -245,9 +247,134 @@ array.from(rows: [{_value: 1, host: "a"}])
     const auto& schema = result.table_schemas.back();
     ASSERT_EQ(2, schema.columns.size());
     EXPECT_EQ("host", schema.columns[0].name);
-    EXPECT_EQ("dynamic", schema.columns[0].type->ToString());
+    EXPECT_EQ("string", schema.columns[0].type->ToString());
     EXPECT_EQ("doubled", schema.columns[1].name);
+    EXPECT_EQ("int", schema.columns[1].type->ToString());
+}
+
+TEST(SemanticAnalyzerTest, ContextuallyTypesFilterFunctionRows) {
+    auto result = Analyze(R"(
+import "array"
+
+array.from(rows: [{_value: 1, host: "a", active: true}])
+    |> filter(fn: (r) => r.active and r.host == "a")
+)");
+    EXPECT_FALSE(HasDiagnostic(result, "unknown field"));
+    EXPECT_FALSE(HasDiagnostic(result, "expects bool"));
+}
+
+TEST(SemanticAnalyzerTest, InfersCsvSchemaFromLiteralInput) {
+    auto result = Analyze(R"(
+import "csv"
+
+csv.from(csv: "host,owner,tier\nedge-1,search,prod\n", mode: "raw")
+)");
+    ASSERT_FALSE(result.table_schemas.empty());
+    const auto& schema = result.table_schemas.back();
+    EXPECT_FALSE(schema.open);
+    ASSERT_EQ(3, schema.columns.size());
+    EXPECT_EQ("host", schema.columns[0].name);
+    EXPECT_EQ("string", schema.columns[0].type->ToString());
+    EXPECT_EQ("owner", schema.columns[1].name);
+    EXPECT_EQ("string", schema.columns[1].type->ToString());
+}
+
+TEST(SemanticAnalyzerTest, KeepProjectsRequestedColumnsFromOpenProviderRows) {
+    auto result = Analyze(R"(
+import "mysql"
+
+mysql.from(host: "127.0.0.1", user: "flux", password: "flux", database: "flux_test", table: "cpu")
+    |> keep(columns: ["host", "active"])
+)");
+    ASSERT_FALSE(result.table_schemas.empty());
+    const auto& schema = result.table_schemas.back();
+    EXPECT_FALSE(schema.open);
+    ASSERT_EQ(2, schema.columns.size());
+    EXPECT_EQ("host", schema.columns[0].name);
+    EXPECT_EQ("dynamic", schema.columns[0].type->ToString());
+    EXPECT_EQ("active", schema.columns[1].name);
     EXPECT_EQ("dynamic", schema.columns[1].type->ToString());
+}
+
+TEST(SemanticAnalyzerTest, TracksGroupExceptKeys) {
+    auto result = Analyze(R"(
+import "array"
+
+array.from(rows: [{host: "edge-1", region: "west", usage: 1.0}])
+    |> group(columns: ["usage"], mode: "except")
+)");
+    ASSERT_FALSE(result.table_schemas.empty());
+    const auto& grouped = result.table_schemas.back();
+    EXPECT_EQ((std::vector<std::string>{"host", "region"}), grouped.group_key);
+}
+
+TEST(SemanticAnalyzerTest, JoinSchemaMatchesRuntimeColumnSuffixes) {
+    auto result = Analyze(R"(
+import "array"
+
+cpu = array.from(rows: [{host: "edge-1", _value: 90.0, region: "west"}])
+mem = array.from(rows: [{host: "edge-1", _value: 70.0}])
+
+join(tables: {cpu: cpu, mem: mem}, on: ["host"])
+)");
+    ASSERT_FALSE(result.table_schemas.empty());
+    const auto& joined = result.table_schemas.back();
+    EXPECT_FALSE(joined.open);
+    std::vector<std::string> names;
+    for (const auto& column : joined.columns) {
+        names.push_back(column.name);
+    }
+    EXPECT_EQ((std::vector<std::string>{"host", "_value_cpu", "region", "_value_mem"}), names);
+}
+
+TEST(SemanticAnalyzerTest, ReportsJoinInputCountLikeRuntime) {
+    auto result = Analyze(R"(
+import "array"
+
+a = array.from(rows: [{host: "edge-1"}])
+b = array.from(rows: [{host: "edge-1"}])
+c = array.from(rows: [{host: "edge-1"}])
+
+join(tables: {a: a, b: b, c: c}, on: ["host"])
+)");
+    EXPECT_TRUE(HasDiagnostic(result, "join currently expects exactly two input tables"));
+}
+
+TEST(SemanticAnalyzerTest, TracksGroupKeysAndJoinSchema) {
+    auto result = Analyze(R"(
+import "csv"
+import "mysql"
+
+cpu = mysql.from(host: "127.0.0.1", user: "flux", password: "flux", database: "flux_test", table: "cpu")
+    |> keep(columns: ["host", "region", "usage", "active"])
+    |> group(columns: ["host"])
+
+owners = csv.from(csv: "host,owner,tier\nedge-1,search,prod\n", mode: "raw")
+    |> group(columns: ["host"])
+
+join(tables: {cpu: cpu, owners: owners}, on: ["host"])
+)");
+    ASSERT_FALSE(result.table_schemas.empty());
+    const auto& joined = result.table_schemas.back();
+    EXPECT_FALSE(HasDiagnostic(result, "join key `host` is missing"));
+    EXPECT_TRUE(HasDiagnostic(result, "undefined identifier: cpu") == false);
+    EXPECT_TRUE(HasDiagnostic(result, "undefined identifier: owners") == false);
+
+    bool saw_group_key = false;
+    for (const auto& schema : result.table_schemas) {
+        if (schema.group_key == std::vector<std::string>{"host"}) {
+            saw_group_key = true;
+        }
+    }
+    EXPECT_TRUE(saw_group_key);
+    bool saw_owner = false;
+    for (const auto& column : joined.columns) {
+        if (column.name == "owner") {
+            saw_owner = true;
+            EXPECT_EQ("string", column.type->ToString());
+        }
+    }
+    EXPECT_TRUE(saw_owner);
 }
 
 TEST(SemanticAnalyzerTest, ReportsObviousTypeMismatches) {

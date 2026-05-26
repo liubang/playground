@@ -51,6 +51,8 @@ void print_usage(std::ostream& out) {
         << "       flux -e 'source'\n"
         << "       flux ast [--json] [file.flux]\n"
         << "       flux ast -e 'source'\n\n"
+        << "       flux analyze [--json] [file.flux]\n"
+        << "       flux builtins [--json]\n\n"
         << "Without a file or -e, flux starts a small REPL.\n";
 }
 
@@ -113,11 +115,98 @@ int run_ast_command(int argc, char* argv[]) {
     return result.exit_code;
 }
 
+int run_analyze_command(int argc, char* argv[]) {
+    pl::flux::FluxAnalyzeOptions options;
+    std::optional<std::string> eval_source;
+    std::optional<std::string> file_name;
+
+    for (int i = 2; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "--help" || arg == "-h") {
+            print_usage(std::cout);
+            return 0;
+        }
+        if (arg == "--json") {
+            options.json = true;
+            continue;
+        }
+        if (arg == "--eval" || arg == "-e") {
+            if (i + 1 >= argc) {
+                std::cerr << arg << " requires source text\n";
+                return 1;
+            }
+            eval_source = argv[++i];
+            continue;
+        }
+        if (file_name.has_value()) {
+            std::cerr << "unexpected extra argument: " << arg << '\n';
+            print_usage(std::cerr);
+            return 1;
+        }
+        file_name = arg;
+    }
+
+    if (eval_source.has_value() && file_name.has_value()) {
+        std::cerr << "-e cannot be combined with a file\n";
+        return 1;
+    }
+
+    std::string source;
+    std::string name = "<stdin>";
+    if (eval_source.has_value()) {
+        source = *eval_source;
+        name = "<eval>";
+    } else if (file_name.has_value()) {
+        name = *file_name;
+        std::ifstream file(name);
+        if (!file) {
+            std::cerr << "failed to open " << name << '\n';
+            return 1;
+        }
+        source = read_all(file);
+    } else {
+        source = read_all(std::cin);
+    }
+
+    auto result = pl::flux::AnalyzeFluxSource(source, name, options);
+    std::cout << result.output;
+    std::cerr << result.error;
+    return result.exit_code;
+}
+
+int run_builtins_command(int argc, char* argv[]) {
+    bool json = false;
+    for (int i = 2; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "--help" || arg == "-h") {
+            print_usage(std::cout);
+            return 0;
+        }
+        if (arg == "--json") {
+            json = true;
+            continue;
+        }
+        std::cerr << "unexpected argument: " << arg << '\n';
+        print_usage(std::cerr);
+        return 1;
+    }
+    auto result = pl::flux::DumpFluxBuiltinCatalog(json);
+    std::cout << result.output;
+    std::cerr << result.error;
+    return result.exit_code;
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
     if (argc > 1 && std::string(argv[1]) == "ast") {
         return run_ast_command(argc, argv);
+    }
+    if (argc > 1 && std::string(argv[1]) == "analyze") {
+        return run_analyze_command(argc, argv);
+    }
+    if (argc > 1 && std::string(argv[1]) == "builtins") {
+        return run_builtins_command(argc, argv);
     }
 
     pl::flux::FluxCliOptions options;

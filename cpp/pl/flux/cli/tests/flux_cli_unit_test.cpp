@@ -995,6 +995,34 @@ TEST(FluxCliTest, DumpsPartialAstAndReportsParserErrors) {
     EXPECT_NE(std::string::npos, result.error.find("parser errors"));
 }
 
+TEST(FluxCliTest, AnalyzesSourceAndDumpsBuiltinCatalog) {
+    auto analysis = AnalyzeFluxSource(R"(
+import "array"
+
+array.from(rows: [{_value: 1, host: "a"}])
+    |> map(fn: (r) => ({host: r.host, doubled: r._value * 2}))
+)",
+                                      "<test>");
+
+    EXPECT_EQ(0, analysis.exit_code);
+    EXPECT_TRUE(analysis.error.empty());
+    EXPECT_NE(std::string::npos, analysis.output.find("Diagnostics\n  <none>"));
+    EXPECT_NE(std::string::npos, analysis.output.find("host: string"));
+    EXPECT_NE(std::string::npos, analysis.output.find("doubled: int"));
+
+    FluxAnalyzeOptions json_options;
+    json_options.json = true;
+    auto json = AnalyzeFluxSource("x = missing", "<test>", json_options);
+    EXPECT_EQ(1, json.exit_code);
+    EXPECT_NE(std::string::npos, json.output.find("\"diagnostics\""));
+    EXPECT_NE(std::string::npos, json.output.find("undefined identifier"));
+
+    auto catalog = DumpFluxBuiltinCatalog();
+    EXPECT_EQ(0, catalog.exit_code);
+    EXPECT_NE(std::string::npos, catalog.output.find("range(<-tables: stream[A]"));
+    EXPECT_NE(std::string::npos, catalog.output.find("mysql.from("));
+}
+
 TEST(FluxCliTest, ReplPreservesEnvironmentBetweenInputs) {
     std::istringstream input("x = 40\nx + 2\n:quit\n");
     std::ostringstream output;

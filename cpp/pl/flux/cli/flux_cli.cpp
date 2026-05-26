@@ -30,6 +30,8 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_join.h"
 #include "cpp/pl/ascii_table/pretty.h"
+#include "cpp/pl/flux/analysis/builtin_metadata.h"
+#include "cpp/pl/flux/analysis/semantic_analyzer.h"
 #include "cpp/pl/flux/common/compat.h"
 #include "cpp/pl/flux/execution/materializer.h"
 #include "cpp/pl/flux/runtime/runtime_builtin.h"
@@ -50,6 +52,12 @@ std::string parser_error_text(const Parser& parser) {
     for (const auto& error : parser.errors()) {
         out << "  - " << error << '\n';
     }
+    return out.str();
+}
+
+std::string source_location_text(const SourceLocation& loc) {
+    std::ostringstream out;
+    out << loc.start.line << ":" << loc.start.column;
     return out.str();
 }
 
@@ -1134,6 +1142,154 @@ FluxCliResult DumpFluxAstSource(const std::string& source,
 
     std::string output = options.json ? dump_ast_json(*file) : dump_ast(*file);
     return FluxCliResult{.exit_code = exit_code, .output = output, .error = error};
+}
+
+FluxCliResult AnalyzeFluxSource(const std::string& source,
+                                const std::string& name,
+                                const FluxAnalyzeOptions& options) {
+    Parser parser(source);
+    auto file = parser.parse_file(name);
+    if (!file) {
+        return FluxCliResult{.exit_code = 2, .output = "", .error = "failed to parse input\n"};
+    }
+    if (!parser.errors().empty()) {
+        return FluxCliResult{.exit_code = 2, .output = "", .error = parser_error_text(parser)};
+    }
+
+    const auto result = analysis::SemanticAnalyzer().Analyze(*file);
+    std::ostringstream out;
+    if (options.json) {
+        out << "{";
+        out << "\"diagnostics\":[";
+        for (size_t i = 0; i < result.diagnostics.size(); ++i) {
+            if (i != 0) {
+                out << ",";
+            }
+            const auto& diag = result.diagnostics[i];
+            out << "{\"message\":";
+            JsonBuilder message;
+            message.append(diag.message);
+            out << message.view();
+            out << ",\"severity\":" << static_cast<int>(diag.severity) << ",\"location\":\""
+                << source_location_text(diag.location) << "\"}";
+        }
+        out << "],\"definitions\":[";
+        for (size_t i = 0; i < result.definitions.size(); ++i) {
+            if (i != 0) {
+                out << ",";
+            }
+            const auto& def = result.definitions[i];
+            out << "{\"name\":";
+            JsonBuilder name_builder;
+            name_builder.append(def.name);
+            out << name_builder.view();
+            out << ",\"type\":";
+            JsonBuilder type_builder;
+            type_builder.append(def.type.ToString());
+            out << type_builder.view();
+            out << "}";
+        }
+        out << "],\"tableSchemas\":[";
+        for (size_t i = 0; i < result.table_schemas.size(); ++i) {
+            if (i != 0) {
+                out << ",";
+            }
+            const auto& schema = result.table_schemas[i];
+            out << "{\"columns\":[";
+            for (size_t j = 0; j < schema.columns.size(); ++j) {
+                if (j != 0) {
+                    out << ",";
+                }
+                out << "{\"name\":";
+                JsonBuilder column_name;
+                column_name.append(schema.columns[j].name);
+                out << column_name.view();
+                out << ",\"type\":";
+                JsonBuilder column_type;
+                column_type.append(schema.columns[j].type ? schema.columns[j].type->ToString()
+                                                          : "unknown");
+                out << column_type.view();
+                out << "}";
+            }
+            out << "]}";
+        }
+        out << "]}\n";
+        return FluxCliResult{
+            .exit_code = result.diagnostics.empty() ? 0 : 1, .output = out.str(), .error = ""};
+    }
+
+    out << "Diagnostics\n";
+    if (result.diagnostics.empty()) {
+        out << "  <none>\n";
+    } else {
+        for (const auto& diag : result.diagnostics) {
+            out << "  - [" << static_cast<int>(diag.severity) << "] "
+                << source_location_text(diag.location) << " " << diag.message << "\n";
+        }
+    }
+    out << "Definitions\n";
+    for (const auto& def : result.definitions) {
+        out << "  - " << def.name << ": " << def.type.ToString() << "\n";
+    }
+    out << "Imports\n";
+    for (const auto& import : result.imported_packages) {
+        out << "  - " << import << "\n";
+    }
+    out << "Table Schemas\n";
+    if (result.table_schemas.empty()) {
+        out << "  <none>\n";
+    } else {
+        for (const auto& schema : result.table_schemas) {
+            out << "  - " << (schema.open ? "open" : "closed") << " ";
+            out << "{";
+            for (size_t i = 0; i < schema.columns.size(); ++i) {
+                if (i != 0) {
+                    out << ", ";
+                }
+                out << schema.columns[i].name << ": "
+                    << (schema.columns[i].type ? schema.columns[i].type->ToString() : "unknown");
+            }
+            out << "}";
+            if (!schema.group_key.empty()) {
+                out << " group=" << absl::StrJoin(schema.group_key, ",");
+            }
+            out << "\n";
+        }
+    }
+    return FluxCliResult{
+        .exit_code = result.diagnostics.empty() ? 0 : 1, .output = out.str(), .error = ""};
+}
+
+FluxCliResult DumpFluxBuiltinCatalog(bool json) {
+    std::ostringstream out;
+    const auto& sigs = analysis::AllBuiltinSignatures();
+    if (json) {
+        out << "[";
+        for (size_t i = 0; i < sigs.size(); ++i) {
+            if (i != 0) {
+                out << ",";
+            }
+            out << "{\"name\":";
+            JsonBuilder name;
+            name.append(sigs[i].fq_name);
+            out << name.view();
+            out << ",\"signature\":";
+            JsonBuilder signature;
+            signature.append(analysis::SignatureLabel(sigs[i]));
+            out << signature.view();
+            out << ",\"implemented\":" << (sigs[i].implemented ? "true" : "false") << "}";
+        }
+        out << "]\n";
+        return FluxCliResult{.exit_code = 0, .output = out.str(), .error = ""};
+    }
+    for (const auto& sig : sigs) {
+        out << analysis::SignatureLabel(sig);
+        if (!sig.implemented) {
+            out << " [metadata-only]";
+        }
+        out << "\n";
+    }
+    return FluxCliResult{.exit_code = 0, .output = out.str(), .error = ""};
 }
 
 int RunFluxRepl(std::istream& input,
