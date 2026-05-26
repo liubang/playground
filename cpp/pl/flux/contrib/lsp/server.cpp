@@ -1738,6 +1738,9 @@ void FluxLanguageServer::handle_code_action(const JsonRpcMessage& msg) {
             const std::string prefix = "undefined identifier: ";
             if (diag.message.find(prefix) == 0) {
                 std::string id_name = diag.message.substr(prefix.size());
+                if (const auto semicolon = id_name.find(';'); semicolon != std::string::npos) {
+                    id_name = id_name.substr(0, semicolon);
+                }
 
                 // Check if it looks like a known package name
                 const auto& pkgs = known_packages();

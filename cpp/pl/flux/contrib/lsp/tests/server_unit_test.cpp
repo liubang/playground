@@ -1008,6 +1008,42 @@ TEST(FluxLanguageServerTest, SignatureHelpUsesPackageFunctionMetadataLabel) {
     fclose(out_file);
 }
 
+TEST(FluxLanguageServerTest, HoverShowsContextualRowFieldType) {
+    FILE* in_file = tmpfile();
+    FILE* out_file = tmpfile();
+    ASSERT_NE(in_file, nullptr);
+    ASSERT_NE(out_file, nullptr);
+
+    write_lsp_message(in_file, make_initialize_request(1));
+    write_lsp_message(in_file, make_initialized_notification());
+    write_lsp_message(in_file,
+                      make_did_open_notification("file:///row-hover.flux",
+                                                 "import \"array\"\n"
+                                                 "array.from(rows: [{_value: 1, host: \"a\"}])\n"
+                                                 "    |> map(fn: (r) => ({host: r.host}))\n"));
+    write_lsp_message(in_file, make_hover_request(2, "file:///row-hover.flux", 2, 35));
+    write_lsp_message(in_file, make_shutdown_request(3));
+    write_lsp_message(in_file, make_exit_notification());
+    rewind(in_file);
+
+    StdioTransport transport(in_file, out_file);
+    FluxLanguageServer server(std::move(transport));
+    server.run();
+
+    rewind(out_file);
+    read_lsp_response(out_file);
+    read_lsp_response(out_file);
+
+    auto hover_resp = read_lsp_response(out_file);
+    ASSERT_FALSE(hover_resp.empty());
+    expect_valid_json(hover_resp);
+    EXPECT_NE(hover_resp.find("`string`"), std::string::npos) << hover_resp;
+    EXPECT_EQ(hover_resp.find("`dynamic`"), std::string::npos) << hover_resp;
+
+    fclose(in_file);
+    fclose(out_file);
+}
+
 // 场景: textDocument/documentHighlight 高亮符号所有出现位置
 TEST(FluxLanguageServerTest, DocumentHighlight) {
     FILE* in_file = tmpfile();
