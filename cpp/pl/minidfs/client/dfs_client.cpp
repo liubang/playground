@@ -415,6 +415,10 @@ Result<uint64_t> DfsClient::write_block(uint64_t inode_id,
     commit_req.set_block_id(located_block.block_id());
     commit_req.set_length(length);
     commit_req.set_generation_stamp(located_block.generation_stamp());
+    commit_req.set_datanode_id(primary.datanode_id());
+    for (const auto& location : located_block.locations()) {
+        commit_req.add_finalized_datanode_ids(location.datanode_id());
+    }
 
     protocol::CommitBlockResponse commit_resp;
     protocol::DataNodeProtocolService_Stub dn_proto_stub(&namenode_channel_);

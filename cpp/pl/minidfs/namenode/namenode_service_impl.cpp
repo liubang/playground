@@ -18,6 +18,7 @@
 #include "cpp/pl/minidfs/namenode/namenode_service_impl.h"
 
 #include <brpc/closure_guard.h>
+#include <unordered_set>
 
 #include "cpp/pl/minidfs/common/error_code.h"
 
@@ -146,6 +147,12 @@ void NameNodeServiceImpl::CreateFile(google::protobuf::RpcController* /*controll
         request->replication() > 0 ? request->replication() : kDefaultReplication;
     uint64_t block_size = request->block_size() > 0 ? request->block_size() : kDefaultBlockSize;
 
+    auto txn = metadata_store_->begin_transaction();
+    if (txn.hasError()) {
+        fill_status(response->mutable_status(), txn.error().code(), txn.error().message());
+        return;
+    }
+
     auto result = ns_mgr_->create_file(request->path(),
                                        request->owner(),
                                        request->group(),
@@ -165,6 +172,14 @@ void NameNodeServiceImpl::CreateFile(google::protobuf::RpcController* /*controll
         fill_status(response->mutable_status(),
                     lease_result.error().code(),
                     lease_result.error().message());
+        return;
+    }
+
+    auto commit_result = txn.value()->commit();
+    if (commit_result.hasError()) {
+        fill_status(response->mutable_status(),
+                    commit_result.error().code(),
+                    commit_result.error().message());
         return;
     }
 
@@ -196,6 +211,12 @@ void NameNodeServiceImpl::CompleteFile(google::protobuf::RpcController* /*contro
         total_length += b.length;
     }
 
+    auto txn = metadata_store_->begin_transaction();
+    if (txn.hasError()) {
+        fill_status(response->mutable_status(), txn.error().code(), txn.error().message());
+        return;
+    }
+
     // Complete the file (transition state)
     auto complete_result = ns_mgr_->complete_file(request->inode_id(), total_length);
     if (complete_result.hasError()) {
@@ -205,8 +226,22 @@ void NameNodeServiceImpl::CompleteFile(google::protobuf::RpcController* /*contro
         return;
     }
 
-    // Release lease
-    lease_mgr_->release_lease(request->inode_id(), request->client_id());
+    // Release lease. A lease mismatch must not be hidden behind a successful complete.
+    auto release_result = lease_mgr_->release_lease(request->inode_id(), request->client_id());
+    if (release_result.hasError()) {
+        fill_status(response->mutable_status(),
+                    release_result.error().code(),
+                    release_result.error().message());
+        return;
+    }
+
+    auto commit_result = txn.value()->commit();
+    if (commit_result.hasError()) {
+        fill_status(response->mutable_status(),
+                    commit_result.error().code(),
+                    commit_result.error().message());
+        return;
+    }
 
     fill_status(response->mutable_status(), 0);
 }
@@ -255,6 +290,12 @@ void NameNodeServiceImpl::Delete(google::protobuf::RpcController* /*controller*/
         return;
     }
 
+    auto txn = metadata_store_->begin_transaction();
+    if (txn.hasError()) {
+        fill_status(response->mutable_status(), txn.error().code(), txn.error().message());
+        return;
+    }
+
     // Resolve the target to clean up blocks before namespace removal.
     auto target = ns_mgr_->resolve_path(request->path());
     if (target.hasError()) {
@@ -264,7 +305,13 @@ void NameNodeServiceImpl::Delete(google::protobuf::RpcController* /*controller*/
 
     // Invalidate blocks for file inodes that will be deleted.
     if (target.value().type == InodeType::kFile) {
-        (void)block_mgr_->invalidate_blocks(target.value().inode_id);
+        auto invalidate = block_mgr_->invalidate_blocks(target.value().inode_id);
+        if (invalidate.hasError()) {
+            fill_status(response->mutable_status(),
+                        invalidate.error().code(),
+                        invalidate.error().message());
+            return;
+        }
     } else if (request->recursive()) {
         // For recursive directory delete, walk children and invalidate file blocks.
         // Uses a stack-based DFS to handle arbitrary depth.
@@ -278,7 +325,13 @@ void NameNodeServiceImpl::Delete(google::protobuf::RpcController* /*controller*/
             }
             for (const auto& child : children.value()) {
                 if (child.type == InodeType::kFile) {
-                    (void)block_mgr_->invalidate_blocks(child.inode_id);
+                    auto invalidate = block_mgr_->invalidate_blocks(child.inode_id);
+                    if (invalidate.hasError()) {
+                        fill_status(response->mutable_status(),
+                                    invalidate.error().code(),
+                                    invalidate.error().message());
+                        return;
+                    }
                 } else if (child.type == InodeType::kDirectory) {
                     dir_stack.push_back(child.inode_id);
                 }
@@ -289,6 +342,14 @@ void NameNodeServiceImpl::Delete(google::protobuf::RpcController* /*controller*/
     auto result = ns_mgr_->remove(request->path(), request->recursive());
     if (result.hasError()) {
         fill_status(response->mutable_status(), result.error().code(), result.error().message());
+        return;
+    }
+
+    auto commit_result = txn.value()->commit();
+    if (commit_result.hasError()) {
+        fill_status(response->mutable_status(),
+                    commit_result.error().code(),
+                    commit_result.error().message());
         return;
     }
 
@@ -430,9 +491,19 @@ void DataNodeProtocolServiceImpl::Heartbeat(google::protobuf::RpcController* /*c
     }
 
     fill_status(response->mutable_status(), 0);
-    // Commands are generated separately by ReplicationManager scans;
-    // for now return empty commands. In production, a command queue
-    // per-datanode would be drained here.
+
+    auto deletions = block_mgr_->get_blocks_to_delete(request->datanode_id());
+    if (deletions.hasError()) {
+        fill_status(
+            response->mutable_status(), deletions.error().code(), deletions.error().message());
+        return;
+    }
+    for (const auto& block : deletions.value()) {
+        auto* command = response->add_commands();
+        command->set_type(protocol::DataNodeCommand::DELETE);
+        command->set_block_id(block.block_id);
+        command->set_generation_stamp(block.generation_stamp);
+    }
 }
 
 void DataNodeProtocolServiceImpl::BlockReport(google::protobuf::RpcController* /*controller*/,
@@ -441,10 +512,18 @@ void DataNodeProtocolServiceImpl::BlockReport(google::protobuf::RpcController* /
                                               google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
 
-    // For each reported block, we could verify against MetadataStore.
-    // For now, accept the report and return empty blocks_to_delete.
-    // Full reconciliation logic will be added in a later iteration.
-    (void)request;
+    std::unordered_set<uint64_t> reported;
+    reported.reserve(request->blocks_size());
+    for (const auto& block : request->blocks()) {
+        reported.insert(block.block_id());
+    }
+
+    auto reconcile = block_mgr_->reconcile_block_report(request->datanode_id(), reported);
+    if (reconcile.hasError()) {
+        fill_status(
+            response->mutable_status(), reconcile.error().code(), reconcile.error().message());
+        return;
+    }
     fill_status(response->mutable_status(), 0);
 }
 
@@ -454,8 +533,17 @@ void DataNodeProtocolServiceImpl::CommitBlock(google::protobuf::RpcController* /
                                               google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
 
+    std::vector<uint64_t> finalized_datanodes;
+    finalized_datanodes.reserve(request->finalized_datanode_ids_size() + 1);
+    for (uint64_t datanode_id : request->finalized_datanode_ids()) {
+        finalized_datanodes.push_back(datanode_id);
+    }
+    if (finalized_datanodes.empty() && request->datanode_id() != 0) {
+        finalized_datanodes.push_back(request->datanode_id());
+    }
+
     auto result = block_mgr_->commit_block(
-        request->block_id(), request->length(), request->generation_stamp());
+        request->block_id(), request->length(), request->generation_stamp(), finalized_datanodes);
     if (result.hasError()) {
         fill_status(response->mutable_status(), result.error().code(), result.error().message());
         return;
