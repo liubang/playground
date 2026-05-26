@@ -60,16 +60,14 @@ protected:
     static inline int counter_ = 0;
 };
 
-// P1: ReadBlock doesn't verify on-disk CRC — silent data corruption
+// P1: ReadBlock verifies on-disk CRC and rejects silent corruption
 //
 // Scenario:
 //   1. Write a block with valid CRC
 //   2. Corrupt the data on disk (simulate silent bit-rot)
-//   3. read_block_data() returns corrupted data without error
-//   4. The checksum in the ReadBlock RPC response is computed AFTER reading,
-//      so it matches the (corrupted) data — client can't detect disk corruption
+//   3. read_block_data() rejects the corrupted block with a checksum error
 
-TEST_F(RegressionDataNodeTest, P1_ReadBlockDataDoesNotVerifyOnDiskCRC) {
+TEST_F(RegressionDataNodeTest, P1_ReadBlockDataVerifiesOnDiskCRC_FIXED) {
     uint64_t block_id = 42;
     uint64_t gen = 100;
     std::string original_data = "This is important data that must be verified";
@@ -100,21 +98,18 @@ TEST_F(RegressionDataNodeTest, P1_ReadBlockDataDoesNotVerifyOnDiskCRC) {
     ASSERT_TRUE(verify_after.hasValue());
     EXPECT_FALSE(verify_after.value()) << "verify_block correctly detects corruption";
 
-    // BUG: read_block_data() returns corrupted data WITHOUT error
+    // FIX VERIFIED: read_block_data() rejects corrupted data.
     auto read_result = store_->read_block_data(block_id, gen);
-    ASSERT_TRUE(read_result.hasValue())
-        << "BUG CONFIRMED: read_block_data returns success on corrupted block";
-
-    // The data is corrupted but no error was raised
-    EXPECT_NE(read_result.value(), original_data) << "Data should be different due to corruption";
+    EXPECT_TRUE(read_result.hasError())
+        << "FIX VERIFIED: read_block_data returns checksum error on corrupted block";
 }
 
-// P2: Chunk write has no idempotency — retry of create_block fails
+// P2: chunk 0 retry is idempotent
 //
 // Scenario: Client retries chunk 0 (which calls create_block again)
 //           → kAlreadyExists error breaks the write pipeline
 
-TEST_F(RegressionDataNodeTest, P2_ChunkZeroRetryCreateBlockNotIdempotent) {
+TEST_F(RegressionDataNodeTest, P2_ChunkZeroRetryCreateBlockIdempotent_FIXED) {
     uint64_t block_id = 200;
     uint64_t gen = 500;
 
@@ -126,11 +121,11 @@ TEST_F(RegressionDataNodeTest, P2_ChunkZeroRetryCreateBlockNotIdempotent) {
     // Simulate RPC retry: client retries chunk 0 → tries to create_block again
     auto retry_create = store_->create_block(block_id, 1, 0, gen);
 
-    // create_block is still not idempotent (separate issue), but append_chunk
-    // retry with same chunk_index and data IS idempotent now.
-    // This test documents that create_block retry remains an error.
-    EXPECT_TRUE(retry_create.hasError())
-        << "create_block retry fails (expected — idempotency is at append_chunk level)";
+    EXPECT_TRUE(retry_create.hasValue())
+        << "FIX VERIFIED: create_block retry for same block identity is idempotent";
+
+    auto retry_append = store_->append_chunk(block_id, gen, chunk0.data(), chunk0.size(), 0);
+    EXPECT_TRUE(retry_append.hasValue()) << "FIX VERIFIED: retried chunk 0 append is idempotent";
 }
 
 // P2: Chunk retry causes duplicate data append

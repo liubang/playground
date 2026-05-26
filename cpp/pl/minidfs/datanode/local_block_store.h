@@ -144,6 +144,9 @@ private:
     /// Read the BlockHeader from a file.
     pl::Result<BlockHeader> read_header(const std::filesystem::path& path) const;
 
+    /// Verify CRC32C integrity for a block file at an explicit path.
+    pl::Result<bool> verify_block_file(const std::filesystem::path& path) const;
+
     /// Write the BlockHeader to a file (at offset 0).
     pl::Result<pl::Void> write_header(const std::filesystem::path& path,
                                       const BlockHeader& header) const;
