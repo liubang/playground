@@ -38,6 +38,7 @@ enum class PushdownState {
 struct PushdownPlan {
     const plan::SourceScanSpec* source = nullptr;
     connector::ScanRequest request;
+    connector::SourceCapabilities capabilities;
     std::vector<std::string> visible_columns;
     std::vector<std::string> source_columns;
 };
@@ -93,9 +94,12 @@ RuleBasedOptimizer DefaultRuleBasedOptimizer();
 std::vector<std::string> AppliedRuleNames(const PlanOptimizerResult& result);
 
 absl::StatusOr<std::vector<std::string>> SourceScanColumns(const plan::SourceScanSpec& source);
+absl::StatusOr<connector::SourceCapabilities> SourceScanCapabilities(
+    const plan::SourceScanSpec& source);
 absl::StatusOr<std::vector<std::string>> VisibleColumnsForPlan(
     const std::shared_ptr<plan::PlanNode>& node);
 bool CanExecutePushdownPlan(const PushdownPlan& plan);
+std::string FormatSourceCapabilities(const connector::SourceCapabilities& capabilities);
 std::string FormatPushdownRequest(const connector::ScanRequest& request);
 std::optional<std::string> SourcePushdownSummary(const PlanOptimizerResult& result);
 bool IsPushdownSourceScan(const plan::PlanNode& node);
