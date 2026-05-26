@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-24 19:38:23</td>
+            <td class="headerValue">2026-05-26 13:20:28</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -138,7 +138,7 @@
 <span id="L67"><span class="lineNum">      67</span>                 :             :     kDeleted = 3,</span>
 <span id="L68"><span class="lineNum">      68</span>                 :             : };</span>
 <span id="L69"><span class="lineNum">      69</span>                 :             : </span>
-<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC tlaBgGNC">          16 : struct BlockMeta {</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC tlaBgGNC">          17 : struct BlockMeta {</span></span>
 <span id="L71"><span class="lineNum">      71</span>                 :             :     uint64_t block_id = 0;</span>
 <span id="L72"><span class="lineNum">      72</span>                 :             :     uint64_t inode_id = 0;</span>
 <span id="L73"><span class="lineNum">      73</span>                 :             :     uint32_t block_index = 0;</span>
@@ -211,13 +211,13 @@
 <span id="L140"><span class="lineNum">     140</span>                 :             : };</span>
 <span id="L141"><span class="lineNum">     141</span>                 :             : </span>
 <span id="L142"><span class="lineNum">     142</span>                 :             : // Located Block (used in client-facing responses)</span>
-<span id="L143"><span class="lineNum">     143</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         123 : struct DataNodeEndpoint {</span></span>
+<span id="L143"><span class="lineNum">     143</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         132 : struct DataNodeEndpoint {</span></span>
 <span id="L144"><span class="lineNum">     144</span>                 :             :     uint64_t datanode_id = 0;</span>
 <span id="L145"><span class="lineNum">     145</span>                 :             :     std::string host;</span>
 <span id="L146"><span class="lineNum">     146</span>                 :             :     uint32_t data_port = 0;</span>
 <span id="L147"><span class="lineNum">     147</span>                 :             : };</span>
 <span id="L148"><span class="lineNum">     148</span>                 :             : </span>
-<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">          32 : struct LocatedBlock {</span></span>
+<span id="L149"><span class="lineNum">     149</span>                 :<span class="tlaGNC">          34 : struct LocatedBlock {</span></span>
 <span id="L150"><span class="lineNum">     150</span>                 :             :     uint64_t block_id = 0;</span>
 <span id="L151"><span class="lineNum">     151</span>                 :             :     uint64_t generation_stamp = 0;</span>
 <span id="L152"><span class="lineNum">     152</span>                 :             :     uint64_t offset = 0;</span>
