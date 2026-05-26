@@ -76,7 +76,10 @@ TEST_F(LocalBlockStoreTest, CreateBlockDuplicate) {
     ASSERT_TRUE(r1.hasValue());
 
     auto r2 = store_->create_block(100, 1, 0, 5000);
-    EXPECT_TRUE(r2.hasError());
+    EXPECT_TRUE(r2.hasValue());
+
+    auto different_identity = store_->create_block(100, 2, 0, 5000);
+    EXPECT_TRUE(different_identity.hasError());
 }
 
 // append_chunk tests

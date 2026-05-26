@@ -23,6 +23,7 @@
 #include <gtest/gtest.h>
 #include <mutex>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
 #include "cpp/pl/minidfs/common/constants.h"
@@ -64,6 +65,15 @@ protected:
     std::unique_ptr<LeaseManager> lease_mgr_;
 };
 
+std::vector<uint64_t> datanode_ids(const LocatedBlock& block) {
+    std::vector<uint64_t> ids;
+    ids.reserve(block.locations.size());
+    for (const auto& location : block.locations) {
+        ids.push_back(location.datanode_id);
+    }
+    return ids;
+}
+
 // P0: Write-then-read failure — CommitBlock not called by client path
 //
 // Scenario: Simulate the server-side effect of the client write path:
@@ -96,7 +106,8 @@ TEST_F(RegressionNameNodeTest, P0_WriteWithoutCommitBlockProducesZeroLengthFile)
         << "Without CommitBlock, no blocks are visible for reading (expected)";
 
     // FIX VERIFIED: After the client calls CommitBlock, block becomes visible.
-    auto commit = block_mgr_->commit_block(lb.block_id, 1 * kMB, lb.generation_stamp);
+    auto commit =
+        block_mgr_->commit_block(lb.block_id, 1 * kMB, lb.generation_stamp, datanode_ids(lb));
     ASSERT_TRUE(commit.hasValue());
 
     // FIX #2: commit_block now transitions replicas from kWriting to kFinalized.
@@ -112,15 +123,15 @@ TEST_F(RegressionNameNodeTest, P0_WriteWithoutCommitBlockProducesZeroLengthFile)
         << "FIX VERIFIED: Replicas are transitioned to kFinalized, locations available";
 }
 
-// P0: Pipeline replication — metadata says 3 replicas, only 1 actually written
+// P0: Pipeline replication — commit must only finalize replicas that actually acked
 //
 // Scenario:
 //   1. AllocateBlock returns 3 target datanodes
 //   2. NameNode creates kWriting replicas for all 3
-//   3. But DataNode only writes locally (no pipeline forwarding)
-//   4. Result: 2 out of 3 replicas are metadata-only ghosts
+//   3. Only a subset of DNs reports successful write
+//   4. Result: only that subset may transition to kFinalized
 
-TEST_F(RegressionNameNodeTest, P0_PipelineReplicationMetadataInconsistency) {
+TEST_F(RegressionNameNodeTest, P0_PipelineReplicationCommitOnlyFinalizesAckedReplicas) {
     auto file = ns_mgr_->create_file("/pipeline.dat", "user", "grp", 0644, 3, 128 * kMB);
     ASSERT_TRUE(file.hasValue());
 
@@ -137,15 +148,25 @@ TEST_F(RegressionNameNodeTest, P0_PipelineReplicationMetadataInconsistency) {
         EXPECT_EQ(r.state, ReplicaState::kWriting);
     }
 
-    // BUG: In reality, the DataNode only writes to the primary.
-    // The other 2 replicas will NEVER have data on disk.
-    // This test documents the inconsistency.
-    EXPECT_EQ(alloc.value().locations.size(), 3u)
-        << "BUG CONFIRMED: 3 locations returned but only primary will have data";
+    ASSERT_FALSE(alloc.value().locations.empty());
+    uint64_t acked_dn = alloc.value().locations[0].datanode_id;
+    auto commit = block_mgr_->commit_block(
+        alloc.value().block_id, 1 * kMB, alloc.value().generation_stamp, {acked_dn});
+    ASSERT_TRUE(commit.hasValue());
+
+    auto after_commit = store_raw()->get_replicas(alloc.value().block_id);
+    ASSERT_TRUE(after_commit.hasValue());
+    for (const auto& r : after_commit.value()) {
+        if (r.datanode_id == acked_dn) {
+            EXPECT_EQ(r.state, ReplicaState::kFinalized);
+        } else {
+            EXPECT_EQ(r.state, ReplicaState::kWriting)
+                << "FIX VERIFIED: unacked replicas are not finalized";
+        }
+    }
 }
 
-// P1: Transaction interface is non-functional — CreateFile + lease failure
-//     leaves orphan inode
+// P1: CreateFile + lease acquisition must be a single transactional operation.
 //
 // With MockMetadataStore this can't reproduce the connection-mismatch directly.
 // We test the SEMANTIC consequence: operations are not grouped atomically.
@@ -157,13 +178,8 @@ TEST_F(RegressionNameNodeTest, P1_CreateFileLeaseFailureLeavesOrphanInode) {
     auto lease1 = lease_mgr_->acquire_lease(file1.value().inode_id, "client-1");
     ASSERT_TRUE(lease1.hasValue());
 
-    // BUG DOCUMENTED: In the real NameNodeServiceImpl::CreateFile flow:
-    //   1. create_file() → inserts inode (SUCCEEDS, COMMITTED immediately)
-    //   2. lease_mgr_->acquire_lease() → if it fails, the inode is NOT rolled back
-    //   3. begin_transaction() gets a different connection from subsequent ops
-    //
-    // We can verify the non-atomic nature: create_file + acquire_lease are
-    // two independent store operations, not wrapped in one transaction.
+    // Manager-level operations are still independently callable; the RPC service
+    // wraps create_file + acquire_lease in one MetadataStore transaction.
     auto file2 = ns_mgr_->create_file("/file2.dat", "user2", "grp", 0644, 3, 128 * kMB);
     ASSERT_TRUE(file2.hasValue());
 
@@ -173,11 +189,10 @@ TEST_F(RegressionNameNodeTest, P1_CreateFileLeaseFailureLeavesOrphanInode) {
     ASSERT_TRUE(stat1.hasValue());
     ASSERT_TRUE(stat2.hasValue());
 
-    // This test passes, documenting that there is NO atomicity between
-    // inode creation and lease acquisition. If lease fails, orphan remains.
+    // This test keeps the lower-level managers available for focused unit tests.
 }
 
-// P1: alloc_id() concurrent duplicate IDs (MySQL-specific TOCTOU)
+// P1: alloc_id() must be safe under concurrent callers.
 //
 // MockMetadataStore uses a mutex so this passes. Documents the interface
 // contract and serves as a canary for MySQL-backed tests.
@@ -208,17 +223,16 @@ TEST_F(RegressionNameNodeTest, P1_AllocIdConcurrentSafety) {
     std::sort(all_ids.begin(), all_ids.end());
     auto last = std::unique(all_ids.begin(), all_ids.end());
     EXPECT_EQ(last, all_ids.end())
-        << "BUG (MySQL only): Concurrent alloc_id produced duplicate IDs. "
-           "Mock passes because of mutex, but MySQL implementation has TOCTOU.";
+        << "alloc_id must not produce duplicate IDs under concurrent callers.";
     EXPECT_EQ(static_cast<int>(all_ids.size()), kThreads * kAllocsPerThread);
 }
 
-// P1: Recursive delete leaves orphan grandchildren
+// P1: Recursive delete removes all descendants.
 //
 // Scenario:
 //   1. Create /a/b/c (nested directories)
 //   2. Delete /a with recursive=true
-//   3. BUG: grandchildren (/a/b/c) become orphans in the store
+//   3. All descendants are removed, deepest first.
 
 TEST_F(RegressionNameNodeTest, P1_RecursiveDeleteLeavesOrphans) {
     auto a = ns_mgr_->mkdir("/a", "user", "grp", 0755, true);
@@ -250,12 +264,12 @@ TEST_F(RegressionNameNodeTest, P1_RecursiveDeleteLeavesOrphans) {
         << "FIX VERIFIED: Deep file /a/b/c/file.txt is properly deleted";
 }
 
-// P1: Delete file doesn't clean up blocks/replicas metadata
+// P1: Delete preserves replica metadata until DataNodes confirm cleanup.
 //
 // Scenario:
 //   1. Create file, allocate block, commit block
 //   2. Delete the file
-//   3. BUG: Block and replica metadata remain in the store
+//   3. Block is hidden from reads and replicas move to kDeleting
 
 TEST_F(RegressionNameNodeTest, P1_DeleteFileLeavesBlockMetadata) {
     auto file = ns_mgr_->create_file("/todelete.dat", "user", "grp", 0644, 3, 128 * kMB);
@@ -266,7 +280,8 @@ TEST_F(RegressionNameNodeTest, P1_DeleteFileLeavesBlockMetadata) {
     ASSERT_TRUE(alloc.hasValue());
     uint64_t block_id = alloc.value().block_id;
 
-    auto commit = block_mgr_->commit_block(block_id, 1 * kMB, alloc.value().generation_stamp);
+    auto commit = block_mgr_->commit_block(
+        block_id, 1 * kMB, alloc.value().generation_stamp, datanode_ids(alloc.value()));
     ASSERT_TRUE(commit.hasValue());
 
     // FIX VERIFIED: Simulate what NameNodeServiceImpl::Delete does:
@@ -284,10 +299,35 @@ TEST_F(RegressionNameNodeTest, P1_DeleteFileLeavesBlockMetadata) {
     EXPECT_EQ(block.value().state, BlockState::kDeleted)
         << "FIX VERIFIED: Block is marked as kDeleted after file deletion";
 
-    // FIX VERIFIED: Replica metadata is cleaned up
+    // FIX VERIFIED: Replica metadata is retained in kDeleting until DataNode confirms deletion.
     auto replicas = store_raw()->get_replicas(block_id);
-    EXPECT_TRUE(!replicas.hasValue() || replicas.value().empty())
-        << "FIX VERIFIED: Replica metadata is removed after file deletion";
+    ASSERT_TRUE(replicas.hasValue());
+    ASSERT_FALSE(replicas.value().empty());
+    for (const auto& replica : replicas.value()) {
+        EXPECT_EQ(replica.state, ReplicaState::kDeleting)
+            << "FIX VERIFIED: Replica remains addressable for delete commands";
+    }
+
+    auto commands = block_mgr_->get_blocks_to_delete(replicas.value()[0].datanode_id);
+    ASSERT_TRUE(commands.hasValue());
+    ASSERT_FALSE(commands.value().empty())
+        << "FIX VERIFIED: NameNode can still issue a delete command for this replica";
+
+    std::unordered_set<uint64_t> empty_report;
+    auto reconcile =
+        block_mgr_->reconcile_block_report(replicas.value()[0].datanode_id, empty_report);
+    ASSERT_TRUE(reconcile.hasValue());
+
+    auto after_reconcile = store_raw()->get_replicas(block_id);
+    ASSERT_TRUE(after_reconcile.hasValue());
+    bool confirmed_deleted = false;
+    for (const auto& replica : after_reconcile.value()) {
+        if (replica.datanode_id == replicas.value()[0].datanode_id) {
+            confirmed_deleted = (replica.state == ReplicaState::kDeleted);
+        }
+    }
+    EXPECT_TRUE(confirmed_deleted)
+        << "FIX VERIFIED: missing block report confirms the DataNode deleted the replica";
 }
 
 // P0: Transaction binding — operations within begin_transaction()/commit()
@@ -442,13 +482,10 @@ TEST_F(RegressionNameNodeTest, P0_AllocIdFirstInsertContiguity) {
     uint64_t base2 = second.value();
 
     // Verify contiguity: second base should immediately follow first range.
-    EXPECT_EQ(base2, base1 + 5)
-        << "BUG: alloc_id produced non-contiguous ranges. "
-           "First alloc returned "
-        << base1 << " (range [" << base1 << ", " << base1 + 5 << ")), second returned " << base2
-        << " (expected " << base1 + 5
-        << "). "
-           "In MySQL, first-insert LAST_INSERT_ID() returns 0 instead of the correct base.";
+    EXPECT_EQ(base2, base1 + 5) << "alloc_id produced non-contiguous ranges. First alloc returned "
+                                << base1 << " (range [" << base1 << ", " << base1 + 5
+                                << ")), second returned " << base2 << " (expected " << base1 + 5
+                                << ").";
 
     // Third allocation to further verify.
     auto third = store_raw()->alloc_id(fresh_name, 2);

@@ -233,6 +233,7 @@ message CommitBlockRequest {
     uint64 length = 2;
     uint64 generation_stamp = 3;
     uint64 datanode_id = 4;
+    repeated uint64 finalized_datanode_ids = 5;
 }
 
 message CommitBlockResponse {

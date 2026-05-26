@@ -144,9 +144,35 @@ pl::Result<pl::Void> LocalBlockStore::create_block(uint64_t block_id,
 
     auto path = block_path("tmp", block_id, generation_stamp);
     if (fs::exists(path)) {
+        auto header_result = read_header(path);
+        if (header_result.hasError()) {
+            return pl::makeError(std::move(header_result.error()));
+        }
+        const auto& header = header_result.value();
+        if (header.block_id == block_id && header.inode_id == inode_id &&
+            header.block_index == block_index && header.generation_stamp == generation_stamp) {
+            RETURN_VOID;
+        }
         return pl::makeError(
             pl::Status(static_cast<pl::status_code_t>(ErrorCode::kAlreadyExists),
-                       fmt::format("tmp block already exists: {}", path.string())));
+                       fmt::format("tmp block exists with different identity: {}", path.string())));
+    }
+
+    auto current_path = block_path("current", block_id, generation_stamp);
+    if (fs::exists(current_path)) {
+        auto header_result = read_header(current_path);
+        if (header_result.hasError()) {
+            return pl::makeError(std::move(header_result.error()));
+        }
+        const auto& header = header_result.value();
+        if (header.block_id == block_id && header.inode_id == inode_id &&
+            header.block_index == block_index && header.generation_stamp == generation_stamp) {
+            RETURN_VOID;
+        }
+        return pl::makeError(
+            pl::Status(static_cast<pl::status_code_t>(ErrorCode::kAlreadyExists),
+                       fmt::format("current block exists with different identity: {}",
+                                   current_path.string())));
     }
 
     // Initialize header
@@ -178,6 +204,21 @@ pl::Result<uint64_t> LocalBlockStore::append_chunk(uint64_t block_id,
     auto path = block_path("tmp", block_id, generation_stamp);
     auto header_result = read_header(path);
     if (header_result.hasError()) {
+        auto current = block_path("current", block_id, generation_stamp);
+        if (fs::exists(current)) {
+            auto current_header = read_header(current);
+            if (current_header.hasError()) {
+                return pl::makeError(std::move(current_header.error()));
+            }
+            uint32_t crc = compute_crc32c(data, size);
+            const auto& header = current_header.value();
+            if (chunk_index < header.chunk_count && header.chunk_checksums[chunk_index] == crc) {
+                return header.data_length;
+            }
+            return pl::makeError(pl::Status(
+                static_cast<pl::status_code_t>(ErrorCode::kBlockAlreadyCommitted),
+                fmt::format("block {}:{} is already finalized", block_id, generation_stamp)));
+        }
         return pl::makeError(std::move(header_result.error()));
     }
 
@@ -256,7 +297,28 @@ pl::Result<pl::Void> LocalBlockStore::finalize_block(uint64_t block_id, uint64_t
 
     auto src = block_path("tmp", block_id, generation_stamp);
     if (!fs::exists(src)) {
+        auto current = block_path("current", block_id, generation_stamp);
+        if (fs::exists(current)) {
+            auto verify = verify_block_file(current);
+            if (verify.hasError()) {
+                return folly::makeUnexpected(verify.error());
+            }
+            if (!verify.value()) {
+                return pl::makeError(make_checksum_error(
+                    fmt::format("finalized block checksum mismatch: {}", current.string())));
+            }
+            RETURN_VOID;
+        }
         return pl::makeError(make_not_found(fmt::format("tmp block not found: {}", src.string())));
+    }
+
+    auto verify = verify_block_file(src);
+    if (verify.hasError()) {
+        return folly::makeUnexpected(verify.error());
+    }
+    if (!verify.value()) {
+        return pl::makeError(
+            make_checksum_error(fmt::format("tmp block checksum mismatch: {}", src.string())));
     }
 
     auto dst = block_path("current", block_id, generation_stamp);
@@ -331,6 +393,9 @@ pl::Result<std::string> LocalBlockStore::read_block_data(uint64_t block_id,
     // = file_size - header_size
     ifs.seekg(0, std::ios::end);
     auto file_size = static_cast<uint64_t>(ifs.tellg());
+    if (file_size < kBlockHeaderSize) {
+        return pl::makeError(make_io_error("block file is smaller than header"));
+    }
     uint64_t data_region_size = file_size - kBlockHeaderSize;
 
     ifs.seekg(kBlockHeaderSize);
@@ -338,6 +403,37 @@ pl::Result<std::string> LocalBlockStore::read_block_data(uint64_t block_id,
     ifs.read(data.data(), static_cast<std::streamsize>(data_region_size));
     if (!ifs.good()) {
         return pl::makeError(make_io_error("failed to read block data"));
+    }
+
+    if (data_region_size != header.data_length) {
+        return pl::makeError(
+            make_io_error(fmt::format("block data length mismatch: header={}, file={}",
+                                      header.data_length,
+                                      data_region_size)));
+    }
+
+    for (uint32_t i = 0; i < header.chunk_count; ++i) {
+        uint32_t offset = header.chunk_offsets[i];
+        uint32_t end = (i + 1 < header.chunk_count) ? header.chunk_offsets[i + 1]
+                                                    : static_cast<uint32_t>(data.size());
+        if (end < offset || end > data.size()) {
+            return pl::makeError(
+                make_io_error(fmt::format("invalid chunk offsets for chunk {}", i)));
+        }
+        uint32_t crc = compute_crc32c(data.data() + offset, end - offset);
+        if (crc != header.chunk_checksums[i]) {
+            return pl::makeError(
+                make_checksum_error(fmt::format("chunk {} CRC mismatch: expected={:#x}, got={:#x}",
+                                                i,
+                                                header.chunk_checksums[i],
+                                                crc)));
+        }
+    }
+
+    uint32_t block_crc = compute_crc32c(data.data(), data.size());
+    if (block_crc != header.block_checksum) {
+        return pl::makeError(make_checksum_error(fmt::format(
+            "block CRC mismatch: expected={:#x}, got={:#x}", header.block_checksum, block_crc)));
     }
 
     return data;
@@ -395,6 +491,10 @@ pl::Result<std::string> LocalBlockStore::read_chunk(uint64_t block_id,
 
 pl::Result<bool> LocalBlockStore::verify_block(uint64_t block_id, uint64_t generation_stamp) {
     auto path = block_path("current", block_id, generation_stamp);
+    return verify_block_file(path);
+}
+
+pl::Result<bool> LocalBlockStore::verify_block_file(const fs::path& path) const {
     auto header_result = read_header(path);
     if (header_result.hasError()) {
         return pl::makeError(std::move(header_result.error()));
@@ -405,21 +505,33 @@ pl::Result<bool> LocalBlockStore::verify_block(uint64_t block_id, uint64_t gener
         return true;
     }
 
-    // Verify each chunk's CRC individually
     std::ifstream ifs(path, std::ios::binary);
+    if (!ifs.is_open()) {
+        return pl::makeError(make_not_found(path.string()));
+    }
+    ifs.seekg(0, std::ios::end);
+    auto file_size = static_cast<uint64_t>(ifs.tellg());
+    if (file_size < kBlockHeaderSize || file_size - kBlockHeaderSize != header.data_length) {
+        return false;
+    }
+
+    // Verify each chunk's CRC individually.
     ifs.seekg(kBlockHeaderSize);
 
     for (uint32_t i = 0; i < header.chunk_count; ++i) {
         uint32_t chunk_size = 0;
         if (i + 1 < header.chunk_count) {
+            if (header.chunk_offsets[i + 1] < header.chunk_offsets[i]) {
+                return false;
+            }
             chunk_size = header.chunk_offsets[i + 1] - header.chunk_offsets[i];
         } else {
-            ifs.seekg(0, std::ios::end);
-            auto file_size = static_cast<uint64_t>(ifs.tellg());
-            chunk_size =
-                static_cast<uint32_t>(file_size - kBlockHeaderSize - header.chunk_offsets[i]);
-            ifs.seekg(static_cast<std::streamoff>(kBlockHeaderSize + header.chunk_offsets[i]));
+            if (header.chunk_offsets[i] > header.data_length) {
+                return false;
+            }
+            chunk_size = static_cast<uint32_t>(header.data_length - header.chunk_offsets[i]);
         }
+        ifs.seekg(static_cast<std::streamoff>(kBlockHeaderSize + header.chunk_offsets[i]));
 
         std::string buf(chunk_size, '\0');
         ifs.read(buf.data(), chunk_size);
@@ -433,7 +545,13 @@ pl::Result<bool> LocalBlockStore::verify_block(uint64_t block_id, uint64_t gener
         }
     }
 
-    return true;
+    ifs.seekg(kBlockHeaderSize);
+    std::string all_data(header.data_length, '\0');
+    ifs.read(all_data.data(), static_cast<std::streamsize>(all_data.size()));
+    if (!ifs.good()) {
+        return false;
+    }
+    return compute_crc32c(all_data.data(), all_data.size()) == header.block_checksum;
 }
 
 // Block Reporting
