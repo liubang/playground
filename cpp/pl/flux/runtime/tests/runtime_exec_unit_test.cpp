@@ -788,6 +788,9 @@ TEST(RuntimeExecTest, PhysicalExecutorRunsMemoryDistinctAfterConnectorScan) {
     for (const auto& row : table.rows) {
         ASSERT_NE(nullptr, row);
         hosts.push_back(row->lookup("host")->string());
+        EXPECT_NE(nullptr, row->lookup("region"));
+        EXPECT_NE(nullptr, row->lookup("_group"));
+        EXPECT_EQ(nullptr, row->lookup("usage"));
     }
     std::sort(hosts.begin(), hosts.end());
     EXPECT_EQ((std::vector<std::string>{"\"edge-1\"", "\"edge-2\"", "\"edge-3\""}), hosts);
@@ -1450,6 +1453,8 @@ TEST(RuntimeExecTest, StreamingDistinctRunsLargeMemoryFallback) {
         const Value* host = row->lookup("host");
         ASSERT_NE(nullptr, host);
         hosts.insert(host->as_string());
+        EXPECT_EQ(nullptr, row->lookup("usage"));
+        EXPECT_EQ(nullptr, row->lookup("seq"));
     }
     EXPECT_EQ(kHosts, hosts.size());
     ASSERT_FALSE(result_or->profile.pipelines.empty());
@@ -3246,9 +3251,11 @@ TEST(RuntimeExecTest, ExecutesDistinctQueryFile) {
     ASSERT_TRUE(env.lookup("hosts").ok());
     ASSERT_EQ(2, env.lookup("hosts")->as_table().rows.size());
     EXPECT_EQ("\"a\"", env.lookup("hosts")->as_table().rows[0]->lookup("host")->string());
-    EXPECT_EQ("90", env.lookup("hosts")->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ(nullptr, env.lookup("hosts")->as_table().rows[0]->lookup("_value"));
+    EXPECT_EQ(nullptr, env.lookup("hosts")->as_table().rows[0]->lookup("region"));
     EXPECT_EQ("\"b\"", env.lookup("hosts")->as_table().rows[1]->lookup("host")->string());
-    EXPECT_EQ("60", env.lookup("hosts")->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ(nullptr, env.lookup("hosts")->as_table().rows[1]->lookup("_value"));
+    EXPECT_EQ(nullptr, env.lookup("hosts")->as_table().rows[1]->lookup("region"));
     EXPECT_EQ(Value::Type::Table, result_or->last.value.type());
 }
 
