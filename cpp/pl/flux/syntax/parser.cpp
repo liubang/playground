@@ -2354,8 +2354,19 @@ std::unique_ptr<Token> Parser::close(TokenType end) {
         return scan();
     }
     if (blocks_.find(end) == blocks_.end()) {
-        // TODO: error handler
-        return nullptr;
+        const auto* token = peek();
+        errs_.emplace_back(std::string("internal parser error: unmatched close delimiter ") +
+                           token_to_string(end));
+        auto ret = std::make_unique<Token>();
+        ret->tok = token == nullptr ? TokenType::Eof : token->tok;
+        if (token != nullptr) {
+            ret->lit = token->lit;
+            ret->start_pos = token->start_pos;
+            ret->end_pos = token->end_pos;
+            ret->start_offset = token->start_offset;
+            ret->end_offset = token->end_offset;
+        }
+        return ret;
     }
     blocks_[end]--;
     const auto* token = peek();
@@ -2529,8 +2540,7 @@ std::unique_ptr<Token> Parser::consume() {
         mark_consumed(*token);
         return token;
     }
-    // TODO: handler error
-    return nullptr;
+    return scan();
 }
 
 } // namespace pl::flux

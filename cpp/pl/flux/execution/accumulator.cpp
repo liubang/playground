@@ -445,6 +445,13 @@ void ensure_column(PageChunk* target, const ColumnVector& source) {
     target->columns.push_back(make_empty_column_like(source, target->row_count));
 }
 
+void ensure_named_column(PageChunk* target, std::string name, Value::Type type) {
+    if (target == nullptr || find_page_chunk_column(*target, name).has_value()) {
+        return;
+    }
+    target->columns.push_back(make_empty_column(std::move(name), type, target->row_count));
+}
+
 void append_source_row_to_chunk(PageChunk* target,
                                 const PageChunk& source,
                                 size_t row_index,
@@ -473,6 +480,40 @@ void append_source_row_to_chunk(PageChunk* target,
         target_column.values.push_back(value == nullptr ? Value::null() : *value);
         if (target_column.type == Value::Type::Null && value != nullptr && !value->is_null()) {
             target_column.type = value->type();
+        }
+    }
+    ++target->row_count;
+}
+
+void append_distinct_row_to_chunk(PageChunk* target,
+                                  const std::shared_ptr<ObjectValue>& group_key,
+                                  const std::string& column_name,
+                                  Value value) {
+    if (target == nullptr) {
+        return;
+    }
+    if (group_key != nullptr) {
+        for (const auto& [name, group_value] : group_key->properties) {
+            ensure_named_column(target, name, group_value.type());
+        }
+        ensure_named_column(target, "_group", Value::Type::Object);
+    }
+    ensure_named_column(target, column_name, value.type());
+
+    for (auto& target_column : target->columns) {
+        if (target_column.name == "_group") {
+            target_column.values.push_back(Value::object(group_key));
+            continue;
+        }
+        const Value* output = nullptr;
+        if (target_column.name == column_name) {
+            output = &value;
+        } else if (group_key != nullptr) {
+            output = group_key->lookup(target_column.name);
+        }
+        target_column.values.push_back(output == nullptr ? Value::null() : *output);
+        if (target_column.type == Value::Type::Null && output != nullptr && !output->is_null()) {
+            target_column.type = output->type();
         }
     }
     ++target->row_count;
@@ -872,10 +913,10 @@ absl::StatusOr<std::optional<Page>> StreamingDistinctOperator::NextPage() {
                 ++stats_.input_rows;
                 GroupKey value_key;
                 size_t value_key_memory_bytes = 0;
+                const Value* value =
+                    page_chunk_value_at_index(page_chunk, row_index, distinct_column);
                 {
                     ScopedAccumulatorTimer timer(&stats_.key_time_ms);
-                    const Value* value =
-                        page_chunk_value_at_index(page_chunk, row_index, distinct_column);
                     value_key.kind = GroupKey::Kind::Single;
                     value_key.single = value == nullptr
                                            ? GroupKeyPart{.missing = true}
@@ -895,8 +936,10 @@ absl::StatusOr<std::optional<Page>> StreamingDistinctOperator::NextPage() {
                         return memory_status;
                     }
                     ScopedAccumulatorTimer timer(&stats_.update_time_ms);
-                    append_source_row_to_chunk(
-                        &state.chunk, page_chunk, row_index, page_chunk.group_key);
+                    append_distinct_row_to_chunk(&state.chunk,
+                                                 page_chunk.group_key,
+                                                 plan_->distinct().column,
+                                                 value == nullptr ? Value::null() : *value);
                 }
             }
         }
