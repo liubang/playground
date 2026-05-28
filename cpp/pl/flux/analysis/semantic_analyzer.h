@@ -115,7 +115,11 @@ struct AnalysisResult {
 
 class SemanticAnalyzer {
 public:
-    AnalysisResult Analyze(const File& file);
+    struct Options {
+        std::string source_base_dir;
+    };
+
+    AnalysisResult Analyze(const File& file, Options options = {});
 };
 
 struct PackageAnalysisResult {

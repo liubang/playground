@@ -105,8 +105,66 @@ std::string query_for_table_rowid_range(const std::string& table, int64_t lower,
                         upper);
 }
 
-// predicate_op_sql / aggregate_fn_sql / validate_column are now shared via
-// sql_builder.h as PredicateOpSql / AggregateFnSql / ValidateColumn.
+std::string quote_sql_string(const std::string& value) {
+    std::string out = "'";
+    for (const char ch : value) {
+        if (ch == '\'') {
+            out += "''";
+        } else {
+            out.push_back(ch);
+        }
+    }
+    out.push_back('\'');
+    return out;
+}
+
+class SQLiteDialect final : public SqlDialect {
+public:
+    [[nodiscard]] std::string QuoteIdentifier(const std::string& identifier) const override {
+        return quote_identifier(identifier);
+    }
+
+    [[nodiscard]] absl::StatusOr<std::string> FormatLiteral(
+        const Value& value, bool /*normalize_time*/) const override {
+        switch (value.type()) {
+            case Value::Type::Null:
+                return "NULL";
+            case Value::Type::Bool:
+                return value.as_bool() ? "1" : "0";
+            case Value::Type::Int:
+                return absl::StrCat(value.as_int());
+            case Value::Type::UInt:
+                return absl::StrCat(value.as_uint());
+            case Value::Type::Float:
+                return absl::StrCat(value.as_float());
+            case Value::Type::String:
+                return quote_sql_string(value.as_string());
+            case Value::Type::Time:
+                return quote_sql_string(value.as_time().literal);
+            default:
+                return absl::InvalidArgumentError("sqlite source literal type is not pushable");
+        }
+    }
+
+    [[nodiscard]] std::string SourceName() const override { return "sqlite"; }
+
+    [[nodiscard]] std::string FormatLimit(std::optional<int64_t> limit,
+                                          std::optional<int64_t> offset) const override {
+        std::string sql;
+        if (limit.has_value()) {
+            sql += absl::StrCat(" LIMIT ", *limit);
+        }
+        if (offset.has_value()) {
+            if (!limit.has_value()) {
+                sql += " LIMIT -1";
+            }
+            sql += absl::StrCat(" OFFSET ", *offset);
+        }
+        return sql;
+    }
+
+    [[nodiscard]] std::string UnboundedLimit() const override { return "LIMIT -1"; }
+};
 
 struct SqliteParam {
     Value value;
@@ -156,19 +214,9 @@ absl::Status bind_value(sqlite3_stmt* stmt, int index, const Value& value) {
     return absl::OkStatus();
 }
 
-absl::Status bind_int64(sqlite3_stmt* stmt, int index, int64_t value) {
-    const int rc = sqlite3_bind_int64(stmt, index, value);
-    if (rc != SQLITE_OK) {
-        return absl::InvalidArgumentError("sqlite bind failed");
-    }
-    return absl::OkStatus();
-}
-
 struct BuiltSql {
     std::string sql;
     std::vector<SqliteParam> params;
-    std::optional<int64_t> limit;
-    std::optional<int64_t> offset;
 };
 
 bool request_requires_global_sql_order(const ScanRequest& request) {
@@ -216,168 +264,17 @@ size_t default_sqlite_split_count() {
 absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
                                         const ScanRequest& request,
                                         const TableSchema& schema) {
-    auto contract_status = ValidateScanRequestAgainstSchema(request, schema, "sqlite");
-    if (!contract_status.ok()) {
-        return contract_status;
+    const SQLiteDialect dialect;
+    auto sql_or = BuildParameterizedScanSql(query, request, schema, dialect);
+    if (!sql_or.ok()) {
+        return sql_or.status();
     }
-
-    std::unordered_set<std::string> schema_columns;
-    schema_columns.reserve(schema.columns.size());
-    for (const auto& column : schema.columns) {
-        schema_columns.insert(column.name);
-    }
-
-    if (request.distinct.has_value()) {
-        auto status = ValidateColumn(schema_columns, *request.distinct, "sqlite", "distinct");
-        if (!status.ok()) {
-            return status;
-        }
-    }
-
-    std::string sql = "SELECT ";
-    if (request.aggregate.has_value()) {
-        for (size_t i = 0; i < request.group_by.size(); ++i) {
-            auto status = ValidateColumn(schema_columns, request.group_by[i], "sqlite", "group");
-            if (!status.ok()) {
-                return status;
-            }
-            if (i != 0) {
-                sql += ", ";
-            }
-            sql += quote_identifier(request.group_by[i]);
-        }
-        if (!request.group_by.empty()) {
-            sql += ", ";
-        }
-        auto status =
-            ValidateColumn(schema_columns, request.aggregate->column, "sqlite", "aggregate");
-        if (!status.ok()) {
-            return status;
-        }
-        sql += AggregateFnSql(request.aggregate->fn);
-        sql += "(";
-        sql += quote_identifier(request.aggregate->column);
-        sql += ") AS ";
-        sql += quote_identifier(request.aggregate->alias.empty() ? request.aggregate->column
-                                                                 : request.aggregate->alias);
-    } else if (!request.projection_columns.empty()) {
-        for (size_t i = 0; i < request.projection_columns.size(); ++i) {
-            const auto& projection = request.projection_columns[i];
-            auto status = ValidateColumn(schema_columns, projection.column, "sqlite", "projection");
-            if (!status.ok()) {
-                return status;
-            }
-            if (i != 0) {
-                sql += ", ";
-            }
-            sql += quote_identifier(projection.column);
-            if (!projection.alias.empty() && projection.alias != projection.column) {
-                sql += " AS ";
-                sql += quote_identifier(projection.alias);
-            }
-        }
-    } else if (request.columns.empty()) {
-        sql += "*";
-    } else {
-        for (size_t i = 0; i < request.columns.size(); ++i) {
-            auto status =
-                ValidateColumn(schema_columns, request.columns[i], "sqlite", "projection");
-            if (!status.ok()) {
-                return status;
-            }
-            if (i != 0) {
-                sql += ", ";
-            }
-            sql += quote_identifier(request.columns[i]);
-        }
-    }
-    sql += " FROM (";
-    sql += query;
-    sql += ") AS flux_source";
-
-    std::vector<std::string> where_clauses;
     std::vector<SqliteParam> params;
-    if (request.time_range.has_value()) {
-        auto status = ValidateColumn(schema_columns, "_time", "sqlite", "time range");
-        if (!status.ok()) {
-            return status;
-        }
-        if (request.time_range->start.has_value()) {
-            where_clauses.push_back(quote_identifier("_time") + " >= ?");
-            params.push_back({Value::string(*request.time_range->start)});
-        }
-        if (request.time_range->stop.has_value()) {
-            where_clauses.push_back(quote_identifier("_time") + " < ?");
-            params.push_back({Value::string(*request.time_range->stop)});
-        }
+    params.reserve(sql_or->params.size());
+    for (const auto& param : sql_or->params) {
+        params.push_back({.value = param.value});
     }
-    for (const auto& predicate : request.predicates) {
-        auto status = ValidateColumn(schema_columns, predicate.column, "sqlite", "predicate");
-        if (!status.ok()) {
-            return status;
-        }
-        where_clauses.push_back(quote_identifier(predicate.column) + " " +
-                                PredicateOpSql(predicate.op) + " ?");
-        params.push_back({predicate.literal});
-    }
-    if (!where_clauses.empty()) {
-        sql += " WHERE ";
-        for (size_t i = 0; i < where_clauses.size(); ++i) {
-            if (i != 0) {
-                sql += " AND ";
-            }
-            sql += where_clauses[i];
-        }
-    }
-
-    if (request.aggregate.has_value() && !request.group_by.empty()) {
-        sql += " GROUP BY ";
-        for (size_t i = 0; i < request.group_by.size(); ++i) {
-            if (i != 0) {
-                sql += ", ";
-            }
-            sql += quote_identifier(request.group_by[i]);
-        }
-    } else if (request.distinct.has_value()) {
-        sql += " GROUP BY ";
-        sql += quote_identifier(*request.distinct);
-    }
-
-    if (!request.order_by.empty()) {
-        sql += " ORDER BY ";
-        for (size_t i = 0; i < request.order_by.size(); ++i) {
-            auto status =
-                ValidateColumn(schema_columns, request.order_by[i].column, "sqlite", "sort");
-            if (!status.ok()) {
-                return status;
-            }
-            if (i != 0) {
-                sql += ", ";
-            }
-            sql += quote_identifier(request.order_by[i].column);
-            sql += request.order_by[i].desc ? " DESC" : " ASC";
-        }
-    }
-    if (request.limit.has_value()) {
-        if (*request.limit < 0) {
-            return absl::InvalidArgumentError("sqlite source limit must be non-negative");
-        }
-        sql += " LIMIT ?";
-    }
-    if (request.offset.has_value()) {
-        if (*request.offset < 0) {
-            return absl::InvalidArgumentError("sqlite source offset must be non-negative");
-        }
-        if (!request.limit.has_value()) {
-            sql += " LIMIT -1";
-        }
-        sql += " OFFSET ?";
-    }
-
-    return BuiltSql{.sql = std::move(sql),
-                    .params = std::move(params),
-                    .limit = request.limit,
-                    .offset = request.offset};
+    return BuiltSql{.sql = std::move(sql_or->sql), .params = std::move(params)};
 }
 
 Value value_from_sqlite_column(sqlite3_stmt* stmt, int column) {
@@ -416,19 +313,6 @@ absl::Status bind_scan_sql(sqlite3_stmt* stmt, const BuiltSql& sql) {
             return status;
         }
         ++bind_index;
-    }
-    if (sql.limit.has_value()) {
-        auto status = bind_int64(stmt, bind_index, *sql.limit);
-        if (!status.ok()) {
-            return status;
-        }
-        ++bind_index;
-    }
-    if (sql.offset.has_value()) {
-        auto status = bind_int64(stmt, bind_index, *sql.offset);
-        if (!status.ok()) {
-            return status;
-        }
     }
     return absl::OkStatus();
 }
