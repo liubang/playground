@@ -229,6 +229,20 @@ std::optional<std::string> read_text_file(const std::string& path) {
     return out.str();
 }
 
+bool is_absolute_path(std::string_view path) {
+    return !path.empty() && path.front() == '/';
+}
+
+std::string join_path(std::string_view base, std::string_view path) {
+    if (base.empty() || is_absolute_path(path)) {
+        return std::string(path);
+    }
+    if (base.back() == '/') {
+        return std::string(base) + std::string(path);
+    }
+    return std::string(base) + "/" + std::string(path);
+}
+
 std::optional<Type> infer_csv_schema_from_text(const std::string& csv, std::string_view mode) {
     std::istringstream input(csv);
     std::string line;
@@ -278,6 +292,9 @@ std::optional<Type> infer_csv_schema_from_text(const std::string& csv, std::stri
 
 class SourceSchemaResolver {
 public:
+    explicit SourceSchemaResolver(std::string source_base_dir)
+        : source_base_dir_(std::move(source_base_dir)) {}
+
     std::optional<Type> ResolveCsv(std::optional<std::string> csv,
                                    std::optional<std::string> file,
                                    std::optional<std::string> mode) const {
@@ -286,17 +303,26 @@ public:
             return infer_csv_schema_from_text(*csv, resolved_mode);
         }
         if (file.has_value()) {
-            auto text = read_text_file(*file);
+            auto text = read_text_file(join_path(source_base_dir_, *file));
+            if (!text.has_value() && !source_base_dir_.empty()) {
+                text = read_text_file(*file);
+            }
             if (text.has_value()) {
                 return infer_csv_schema_from_text(*text, resolved_mode);
             }
         }
         return std::nullopt;
     }
+
+private:
+    std::string source_base_dir_;
 };
 
 class Binder {
 public:
+    explicit Binder(SemanticAnalyzer::Options options = {})
+        : source_schema_resolver_(std::move(options.source_base_dir)) {}
+
     AnalysisResult Bind(const File& file) {
         push_scope(file.loc);
         bind_imports(file);
@@ -697,6 +723,14 @@ private:
                 .member = resolved.member,
                 .resolved = true,
             });
+            return;
+        }
+        if (callee->type == Expression::Type::MemberExpr && !resolved.package.empty()) {
+            const auto& mem = *std::get<std::unique_ptr<MemberExpr>>(callee->expr);
+            if (mem.object != nullptr && mem.object->type == Expression::Type::Identifier) {
+                const auto& obj = *std::get<std::unique_ptr<Identifier>>(mem.object->expr);
+                (void)reference(obj.name, mem.object->loc, ReferenceKind::PackageObject);
+            }
             return;
         }
         (void)visit_expression(*callee);
@@ -1229,6 +1263,9 @@ private:
                 return stream;
             }
         }
+        if (pipe_value_present && is_table_numeric_aggregate(*resolved.sig)) {
+            return apply_table_numeric_aggregate(call, *resolved.sig, pipe_type);
+        }
         if (pipe_value_present &&
             (base.kind == TypeKind::Stream || resolved.sig->return_type == "stream[A]")) {
             if (name == "keep") {
@@ -1251,6 +1288,9 @@ private:
             }
             if (name == "set") {
                 return apply_set(call, pipe_type);
+            }
+            if (name == "distinct") {
+                return apply_distinct(call, pipe_type);
             }
             add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, pipe_type);
             return pipe_type.IsUnknownLike() ? base : pipe_type;
@@ -1478,6 +1518,32 @@ private:
         return result;
     }
 
+    Type apply_distinct(const CallExpr& call, const Type& pipe_type) {
+        auto row = stream_row(pipe_type);
+        if (!row) {
+            return pipe_type;
+        }
+        const auto column = literal_string_argument(call, "column").value_or("_value");
+        auto column_type = row->Field(column).value_or(Type::Dynamic());
+        auto result = Type::Stream(Type::Record({field(column, std::move(column_type))}, false));
+        add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, result);
+        return result;
+    }
+
+    Type apply_table_numeric_aggregate(const CallExpr& call,
+                                       const BuiltinSignature&,
+                                       const Type& pipe_type) {
+        auto row = stream_row(pipe_type);
+        if (!row) {
+            return pipe_type;
+        }
+        const auto column = literal_string_argument(call, "column").value_or("_value");
+        auto result =
+            Type::Stream(Type::Record({field(column, Type::Scalar(TypeKind::Float))}, false));
+        add_table_schema(call.callee ? call.callee->loc : SourceLocation{}, result);
+        return result;
+    }
+
     Type apply_join(const CallExpr& call, const std::vector<Type>& arg_types) {
         auto tables = named_argument_type(call, "tables", arg_types);
         const auto keys = named_string_array(call, "on");
@@ -1693,6 +1759,15 @@ private:
         return message;
     }
 
+    bool is_table_numeric_aggregate(const BuiltinSignature& sig) const {
+        return sig.package.empty() &&
+               (sig.name == "sum" || sig.name == "mean" || sig.name == "min" || sig.name == "max");
+    }
+
+    bool can_call_without_pipe_argument(const BuiltinSignature& sig, const CallExpr& call) const {
+        return is_table_numeric_aggregate(sig) && !call.arguments.empty();
+    }
+
     void check_builtin_argument_types(const CallExpr& call,
                                       const BuiltinSignature& sig,
                                       const std::vector<Type>& arg_types,
@@ -1728,7 +1803,8 @@ private:
         for (const auto& param : sig.params) {
             allowed.insert(param.name);
             if (param.kind == BuiltinParamKind::Required ||
-                (param.kind == BuiltinParamKind::Pipe && !pipe_value_present)) {
+                (param.kind == BuiltinParamKind::Pipe && !pipe_value_present &&
+                 !can_call_without_pipe_argument(sig, call))) {
                 required.insert(param.name);
             }
         }
@@ -2167,8 +2243,8 @@ std::vector<const SymbolReference*> AnalysisResult::ReferencesOf(std::string_vie
     return result;
 }
 
-AnalysisResult SemanticAnalyzer::Analyze(const File& file) {
-    return Binder().Bind(file);
+AnalysisResult SemanticAnalyzer::Analyze(const File& file, Options options) {
+    return Binder(std::move(options)).Bind(file);
 }
 
 const Symbol* PackageAnalysisResult::FindExport(std::string_view name) const {

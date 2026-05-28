@@ -94,5 +94,26 @@ TEST(BuiltinMetadataTest, CompletionParametersDoNotExposeOptionalMarkerSyntax) {
     EXPECT_EQ("name:", params[0]);
 }
 
+TEST(BuiltinMetadataTest, MatchesImplementedRuntimeContracts) {
+    const auto* sum = FindUniverseBuiltinSignature("sum");
+    ASSERT_NE(sum, nullptr);
+    ASSERT_GE(sum->params.size(), 1);
+    EXPECT_EQ("values", sum->params[0].name);
+    EXPECT_EQ(BuiltinParamKind::Pipe, sum->params[0].kind);
+
+    const auto* csv_from = FindBuiltinSignature("csv", "from");
+    ASSERT_NE(csv_from, nullptr);
+    ASSERT_EQ(3, csv_from->params.size());
+    EXPECT_EQ("mode", csv_from->params[2].name);
+    ASSERT_TRUE(csv_from->params[2].default_value.has_value());
+    EXPECT_EQ("annotations", *csv_from->params[2].default_value);
+
+    const auto* join = FindUniverseBuiltinSignature("join");
+    ASSERT_NE(join, nullptr);
+    ASSERT_GE(join->params.size(), 2);
+    EXPECT_EQ("on", join->params[1].name);
+    EXPECT_EQ("[string]", join->params[1].type);
+}
+
 } // namespace
 } // namespace pl::flux::analysis

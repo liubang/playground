@@ -237,6 +237,8 @@ absl::Status BuildSelectClause(std::string* sql,
                 *sql += dialect.QuoteIdentifier(projection.alias);
             }
         }
+    } else if (request.distinct.has_value() && request.columns.empty()) {
+        *sql += dialect.QuoteIdentifier(*request.distinct);
     } else if (request.columns.empty()) {
         *sql += "*";
     } else {
