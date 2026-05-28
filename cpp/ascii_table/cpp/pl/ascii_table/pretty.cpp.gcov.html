@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-26 22:37:00</td>
+            <td class="headerValue">2026-05-28 23:33:28</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -120,25 +120,25 @@
 <span id="L49"><span class="lineNum">      49</span>         [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           2 :         throw std::out_of_range(&quot;Row cell count must match the table header count.&quot;);</span></span>
 <span id="L50"><span class="lineNum">      50</span>                 :             :     }</span>
 <span id="L51"><span class="lineNum">      51</span>                 :<span class="tlaGNC">         896 :     next();</span></span>
-<span id="L52"><span class="lineNum">      52</span>         [<span class="tlaGBC" title="Branch 0 was taken 5987 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 896 times"> + </span>]:<span class="tlaGNC">        6883 :     for (const auto&amp; val : vals) {</span></span>
-<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">        5987 :         add_cell(CellType::CT_STRING, val);</span></span>
+<span id="L52"><span class="lineNum">      52</span>         [<span class="tlaGBC" title="Branch 0 was taken 5975 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 896 times"> + </span>]:<span class="tlaGNC">        6871 :     for (const auto&amp; val : vals) {</span></span>
+<span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">        5975 :         add_cell(CellType::CT_STRING, val);</span></span>
 <span id="L54"><span class="lineNum">      54</span>                 :             :     }</span>
 <span id="L55"><span class="lineNum">      55</span>                 :<span class="tlaGNC">         896 :     return *this;</span></span>
 <span id="L56"><span class="lineNum">      56</span>                 :             : }</span>
 <span id="L57"><span class="lineNum">      57</span>                 :             : </span>
-<span id="L58"><span class="lineNum">      58</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5991 times"> + </span>]:<span class="tlaGNC">        5991 : Pretty&amp; Pretty::add_cell(CellType t, const std::string&amp; val) {</span></span>
+<span id="L58"><span class="lineNum">      58</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5979 times"> + </span>]:<span class="tlaGNC">        5979 : Pretty&amp; Pretty::add_cell(CellType t, const std::string&amp; val) {</span></span>
 <span id="L59"><span class="lineNum">      59</span>                 :             :     assert(!lines_.empty());</span>
 <span id="L60"><span class="lineNum">      60</span>                 :             :     auto lines = lines_.size();</span>
 <span id="L61"><span class="lineNum">      61</span>                 :             :     auto&amp; cells = lines_[lines - 1];</span>
-<span id="L62"><span class="lineNum">      62</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5991 times"> + </span>]:<span class="tlaGNC">        5991 :     if (cell_idx_ &gt;= maxcell_per_line_) {</span></span>
+<span id="L62"><span class="lineNum">      62</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5979 times"> + </span>]:<span class="tlaGNC">        5979 :     if (cell_idx_ &gt;= maxcell_per_line_) {</span></span>
 <span id="L63"><span class="lineNum">      63</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         throw std::out_of_range(&quot;Too many cells in this line.&quot;);</span></span>
 <span id="L64"><span class="lineNum">      64</span>                 :             :     }</span>
-<span id="L65"><span class="lineNum">      65</span>         [<span class="tlaGBC" title="Branch 0 was taken 2849 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3142 times"> + </span>]:<span class="tlaGNC tlaBgGNC">        5991 :     if (cell_max_length_[cell_idx_] &lt; val.size()) {</span></span>
-<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">        2849 :         cell_max_length_[cell_idx_] = static_cast&lt;uint32_t&gt;(val.size());</span></span>
+<span id="L65"><span class="lineNum">      65</span>         [<span class="tlaGBC" title="Branch 0 was taken 2843 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3136 times"> + </span>]:<span class="tlaGNC tlaBgGNC">        5979 :     if (cell_max_length_[cell_idx_] &lt; val.size()) {</span></span>
+<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">        2843 :         cell_max_length_[cell_idx_] = static_cast&lt;uint32_t&gt;(val.size());</span></span>
 <span id="L67"><span class="lineNum">      67</span>                 :             :     }</span>
-<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">        5991 :     cells.emplace_back(t, val);</span></span>
-<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC">        5991 :     ++cell_idx_;</span></span>
-<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">        5991 :     return *this;</span></span>
+<span id="L68"><span class="lineNum">      68</span>                 :<span class="tlaGNC">        5979 :     cells.emplace_back(t, val);</span></span>
+<span id="L69"><span class="lineNum">      69</span>                 :<span class="tlaGNC">        5979 :     ++cell_idx_;</span></span>
+<span id="L70"><span class="lineNum">      70</span>                 :<span class="tlaGNC">        5979 :     return *this;</span></span>
 <span id="L71"><span class="lineNum">      71</span>                 :             : }</span>
 <span id="L72"><span class="lineNum">      72</span>                 :             : </span>
 <span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">           1 : void Pretty::render() const {</span></span>
@@ -147,8 +147,8 @@
 <span id="L76"><span class="lineNum">      76</span>                 :             : </span>
 <span id="L77"><span class="lineNum">      77</span>                 :<span class="tlaGNC">         296 : void Pretty::render(std::ostream&amp; out) const {</span></span>
 <span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC">         296 :     auto len = maxcell_per_line_ * 3 + 1;</span></span>
-<span id="L79"><span class="lineNum">      79</span>         [<span class="tlaGBC" title="Branch 0 was taken 1853 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 296 times"> + </span>]:<span class="tlaGNC">        2149 :     for (const auto&amp; mlen : cell_max_length_) {</span></span>
-<span id="L80"><span class="lineNum">      80</span>                 :<span class="tlaGNC">        1853 :         len += mlen;</span></span>
+<span id="L79"><span class="lineNum">      79</span>         [<span class="tlaGBC" title="Branch 0 was taken 1849 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 296 times"> + </span>]:<span class="tlaGNC">        2145 :     for (const auto&amp; mlen : cell_max_length_) {</span></span>
+<span id="L80"><span class="lineNum">      80</span>                 :<span class="tlaGNC">        1849 :         len += mlen;</span></span>
 <span id="L81"><span class="lineNum">      81</span>                 :             :     }</span>
 <span id="L82"><span class="lineNum">      82</span>         [<span class="tlaGBC" title="Branch 0 was taken 292 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">         296 :     if (show_sep_) {</span></span>
 <span id="L83"><span class="lineNum">      83</span>                 :<span class="tlaGNC">         292 :         print_header(out, len, '=');</span></span>
@@ -199,16 +199,16 @@
 <span id="L127"><span class="lineNum">     127</span>         [<span class="tlaGBC" title="Branch 0 was taken 885 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">         895 :     if (show_sep_) {</span></span>
 <span id="L128"><span class="lineNum">     128</span>         [<span class="tlaGBC" title="Branch 0 was taken 885 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         885 :         oss &lt;&lt; &quot;| &quot;;</span></span>
 <span id="L129"><span class="lineNum">     129</span>                 :             :     }</span>
-<span id="L130"><span class="lineNum">     130</span>         [<span class="tlaGBC" title="Branch 0 was taken 5986 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 895 times"> + </span>]:<span class="tlaGNC">        6881 :     for (size_t i = 0; i &lt; cells.size(); ++i) {</span></span>
+<span id="L130"><span class="lineNum">     130</span>         [<span class="tlaGBC" title="Branch 0 was taken 5974 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 895 times"> + </span>]:<span class="tlaGNC">        6869 :     for (size_t i = 0; i &lt; cells.size(); ++i) {</span></span>
 <span id="L131"><span class="lineNum">     131</span>                 :             :         const auto&amp; cell = cells[i];</span>
-<span id="L132"><span class="lineNum">     132</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5986 times"> + </span>]:<span class="tlaGNC">        5986 :         auto max_len = cell_max_length_[i];</span></span>
-<span id="L133"><span class="lineNum">     133</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5986 times"> + </span>]:<span class="tlaGNC">        5986 :         if (!cell.valid()) {</span></span>
+<span id="L132"><span class="lineNum">     132</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5974 times"> + </span>]:<span class="tlaGNC">        5974 :         auto max_len = cell_max_length_[i];</span></span>
+<span id="L133"><span class="lineNum">     133</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5974 times"> + </span>]:<span class="tlaGNC">        5974 :         if (!cell.valid()) {</span></span>
 <span id="L134"><span class="lineNum">     134</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :             oss &lt;&lt; pad_right(&quot;&quot;, max_len);</span></span>
 <span id="L135"><span class="lineNum">     135</span>                 :             :         } else {</span>
-<span id="L136"><span class="lineNum">     136</span>         [<span class="tlaGBC" title="Branch 0 was taken 5986 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">       11972 :             oss &lt;&lt; pad_right(cell.val, max_len);</span></span>
+<span id="L136"><span class="lineNum">     136</span>         [<span class="tlaGBC" title="Branch 0 was taken 5974 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">       11948 :             oss &lt;&lt; pad_right(cell.val, max_len);</span></span>
 <span id="L137"><span class="lineNum">     137</span>                 :             :         }</span>
-<span id="L138"><span class="lineNum">     138</span>   [<span class="tlaGBC" title="Branch 0 was taken 5936 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 50 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 5051 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 885 times"> + </span>]:<span class="tlaGNC">        5986 :         if (show_sep_ &amp;&amp; i + 1 &lt; cells.size()) {</span></span>
-<span id="L139"><span class="lineNum">     139</span>         [<span class="tlaGBC" title="Branch 0 was taken 5051 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        5051 :             oss &lt;&lt; &quot; | &quot;;</span></span>
+<span id="L138"><span class="lineNum">     138</span>   [<span class="tlaGBC" title="Branch 0 was taken 5924 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 50 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 5039 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 885 times"> + </span>]:<span class="tlaGNC">        5974 :         if (show_sep_ &amp;&amp; i + 1 &lt; cells.size()) {</span></span>
+<span id="L139"><span class="lineNum">     139</span>         [<span class="tlaGBC" title="Branch 0 was taken 5039 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        5039 :             oss &lt;&lt; &quot; | &quot;;</span></span>
 <span id="L140"><span class="lineNum">     140</span>   [<span class="tlaGBC" title="Branch 0 was taken 50 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 885 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 40 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 10 times"> + </span>]:<span class="tlaGNC">         935 :         } else if (!show_sep_ &amp;&amp; i + 1 &lt; cells.size()) {</span></span>
 <span id="L141"><span class="lineNum">     141</span>         [<span class="tlaGBC" title="Branch 0 was taken 40 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          40 :             oss &lt;&lt; &quot; &quot;;</span></span>
 <span id="L142"><span class="lineNum">     142</span>                 :             :         }</span>
@@ -219,17 +219,17 @@
 <span id="L147"><span class="lineNum">     147</span>         [<span class="tlaGBC" title="Branch 0 was taken 895 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         895 :     out &lt;&lt; oss.str() &lt;&lt; '\n';</span></span>
 <span id="L148"><span class="lineNum">     148</span>                 :<span class="tlaGNC">         895 : }</span></span>
 <span id="L149"><span class="lineNum">     149</span>                 :             : </span>
-<span id="L150"><span class="lineNum">     150</span>         [<span class="tlaGBC" title="Branch 0 was taken 3112 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2874 times"> + </span>]:<span class="tlaGNC">        5986 : [[nodiscard]] std::string Pretty::pad_right(const std::string&amp; input,</span></span>
+<span id="L150"><span class="lineNum">     150</span>         [<span class="tlaGBC" title="Branch 0 was taken 3106 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2868 times"> + </span>]:<span class="tlaGNC">        5974 : [[nodiscard]] std::string Pretty::pad_right(const std::string&amp; input,</span></span>
 <span id="L151"><span class="lineNum">     151</span>                 :             :                                             size_t total_length,</span>
 <span id="L152"><span class="lineNum">     152</span>                 :             :                                             char pad_char) const {</span>
-<span id="L153"><span class="lineNum">     153</span>         [<span class="tlaGBC" title="Branch 0 was taken 3112 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2874 times"> + </span>]:<span class="tlaGNC">        5986 :     if (input.size() &gt;= total_length) {</span></span>
-<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">        3112 :         return input.substr(0, total_length);</span></span>
+<span id="L153"><span class="lineNum">     153</span>         [<span class="tlaGBC" title="Branch 0 was taken 3106 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2868 times"> + </span>]:<span class="tlaGNC">        5974 :     if (input.size() &gt;= total_length) {</span></span>
+<span id="L154"><span class="lineNum">     154</span>                 :<span class="tlaGNC">        3106 :         return input.substr(0, total_length);</span></span>
 <span id="L155"><span class="lineNum">     155</span>                 :             :     }</span>
 <span id="L156"><span class="lineNum">     156</span>                 :             :     std::string result;</span>
-<span id="L157"><span class="lineNum">     157</span>         [<span class="tlaGBC" title="Branch 0 was taken 2874 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        2874 :     result.reserve(total_length);</span></span>
+<span id="L157"><span class="lineNum">     157</span>         [<span class="tlaGBC" title="Branch 0 was taken 2868 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        2868 :     result.reserve(total_length);</span></span>
 <span id="L158"><span class="lineNum">     158</span>                 :             :     result.append(input);</span>
-<span id="L159"><span class="lineNum">     159</span>         [<span class="tlaGBC" title="Branch 0 was taken 2874 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        2874 :     result.append(total_length - input.size(), pad_char);</span></span>
-<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">        2874 :     return result;</span></span>
+<span id="L159"><span class="lineNum">     159</span>         [<span class="tlaGBC" title="Branch 0 was taken 2868 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        2868 :     result.append(total_length - input.size(), pad_char);</span></span>
+<span id="L160"><span class="lineNum">     160</span>                 :<span class="tlaGNC">        2868 :     return result;</span></span>
 <span id="L161"><span class="lineNum">     161</span>                 :             : }</span>
 <span id="L162"><span class="lineNum">     162</span>                 :             : </span>
 <span id="L163"><span class="lineNum">     163</span>                 :             : } // namespace pl::pretty</span>
