@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-26 22:37:00</td>
+            <td class="headerValue">2026-05-28 23:33:28</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -95,13 +95,13 @@
 <span id="L24"><span class="lineNum">      24</span>                 :             : namespace pl::flux::lsp {</span>
 <span id="L25"><span class="lineNum">      25</span>                 :             : </span>
 <span id="L26"><span class="lineNum">      26</span>                 :             : // 完整的 JSON 字符串转义，处理所有 0x00-0x1F 控制字符</span>
-<span id="L27"><span class="lineNum">      27</span>         [<span class="tlaGBC" title="Branch 0 was taken 768 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">         768 : inline std::string json_escape(std::string_view s) {</span></span>
+<span id="L27"><span class="lineNum">      27</span>         [<span class="tlaGBC" title="Branch 0 was taken 790 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">         790 : inline std::string json_escape(std::string_view s) {</span></span>
 <span id="L28"><span class="lineNum">      28</span>                 :             :     std::string out;</span>
-<span id="L29"><span class="lineNum">      29</span>         [<span class="tlaGBC" title="Branch 0 was taken 768 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         768 :     out.reserve(s.size() + 8);</span></span>
+<span id="L29"><span class="lineNum">      29</span>         [<span class="tlaGBC" title="Branch 0 was taken 790 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         790 :     out.reserve(s.size() + 8);</span></span>
 <span id="L30"><span class="lineNum">      30</span>                 :             :     out += '&quot;';</span>
-<span id="L31"><span class="lineNum">      31</span>         [<span class="tlaGBC" title="Branch 0 was taken 25013 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 768 times"> + </span>]:<span class="tlaGNC">       25781 :     for (unsigned char c : s) {</span></span>
-<span id="L32"><span class="lineNum">      32</span>   [<span class="tlaGBC" title="Branch 0 was taken 26 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 2 was taken 41 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">       25013 :         switch (c) {</span></span>
-<span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaGBC" title="Branch 7 was taken 24944 times"> + </span>]
+<span id="L31"><span class="lineNum">      31</span>         [<span class="tlaGBC" title="Branch 0 was taken 26070 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 790 times"> + </span>]:<span class="tlaGNC">       26860 :     for (unsigned char c : s) {</span></span>
+<span id="L32"><span class="lineNum">      32</span>   [<span class="tlaGBC" title="Branch 0 was taken 30 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 2 was taken 46 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">       26070 :         switch (c) {</span></span>
+<span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaGBC" title="Branch 7 was taken 25992 times"> + </span>]
 <span id="L33"><span class="lineNum">      33</span>                 :             :             case '&quot;':</span>
 <span id="L34"><span class="lineNum">      34</span>                 :             :                 out += &quot;\\\&quot;&quot;;</span>
 <span id="L35"><span class="lineNum">      35</span>                 :             :                 break;</span>
@@ -123,8 +123,8 @@
 <span id="L51"><span class="lineNum">      51</span>                 :             :             case '\f':</span>
 <span id="L52"><span class="lineNum">      52</span>                 :             :                 out += &quot;\\f&quot;;</span>
 <span id="L53"><span class="lineNum">      53</span>                 :             :                 break;</span>
-<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">       24944 :             default:</span></span>
-<span id="L55"><span class="lineNum">      55</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 24943 times"> + </span>]:<span class="tlaGNC">       24944 :                 if (c &lt; 0x20) {</span></span>
+<span id="L54"><span class="lineNum">      54</span>                 :<span class="tlaGNC">       25992 :             default:</span></span>
+<span id="L55"><span class="lineNum">      55</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 25991 times"> + </span>]:<span class="tlaGNC">       25992 :                 if (c &lt; 0x20) {</span></span>
 <span id="L56"><span class="lineNum">      56</span>                 :             :                     // JSON 规范要求所有控制字符使用 \uXXXX 转义</span>
 <span id="L57"><span class="lineNum">      57</span>                 :             :                     char buf[8];</span>
 <span id="L58"><span class="lineNum">      58</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :                     std::snprintf(buf, sizeof(buf), &quot;\\u%04x&quot;, c);</span></span>
@@ -135,7 +135,7 @@
 <span id="L63"><span class="lineNum">      63</span>                 :             :         }</span>
 <span id="L64"><span class="lineNum">      64</span>                 :             :     }</span>
 <span id="L65"><span class="lineNum">      65</span>                 :             :     out += '&quot;';</span>
-<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">         768 :     return out;</span></span>
+<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">         790 :     return out;</span></span>
 <span id="L67"><span class="lineNum">      67</span>                 :             : }</span>
 <span id="L68"><span class="lineNum">      68</span>                 :             : </span>
 <span id="L69"><span class="lineNum">      69</span>                 :             : // 转义字符串但不加外层引号 (用于组装 JSON id 等场景)</span>

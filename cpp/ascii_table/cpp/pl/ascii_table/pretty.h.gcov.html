@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-26 22:37:00</td>
+            <td class="headerValue">2026-05-28 23:33:28</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -102,11 +102,11 @@
 <span id="L31"><span class="lineNum">      31</span>                 :             :     CT_SEP = 2,</span>
 <span id="L32"><span class="lineNum">      32</span>                 :             : };</span>
 <span id="L33"><span class="lineNum">      33</span>                 :             : </span>
-<span id="L34"><span class="lineNum">      34</span>                 :<span class="tlaGNC tlaBgGNC">        5992 : struct Cell {</span></span>
+<span id="L34"><span class="lineNum">      34</span>                 :<span class="tlaGNC tlaBgGNC">        5980 : struct Cell {</span></span>
 <span id="L35"><span class="lineNum">      35</span>                 :<span class="tlaGNC">           1 :     Cell() = default;</span></span>
-<span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaGNC">        5993 :     Cell(CellType type, std::string value) : t(type), val(std::move(value)) {}</span></span>
+<span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaGNC">        5981 :     Cell(CellType type, std::string value) : t(type), val(std::move(value)) {}</span></span>
 <span id="L37"><span class="lineNum">      37</span>                 :             : </span>
-<span id="L38"><span class="lineNum">      38</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5987 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">        5988 :     [[nodiscard]] bool valid() const { return t != CellType::CT_NONE; }</span></span>
+<span id="L38"><span class="lineNum">      38</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 5975 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC">        5976 :     [[nodiscard]] bool valid() const { return t != CellType::CT_NONE; }</span></span>
 <span id="L39"><span class="lineNum">      39</span>                 :             : </span>
 <span id="L40"><span class="lineNum">      40</span>                 :             :     CellType t{CellType::CT_NONE};</span>
 <span id="L41"><span class="lineNum">      41</span>                 :             :     std::string val;</span>
