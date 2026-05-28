@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="700" viewBox="0 0 1120 700" role="img" aria-labelledby="title desc">
+  <title id="title">mllm Memory and Ownership Model</title>
+  <desc id="desc">Ownership and lifetime boundaries for mmap weights, tensor views, backend buffers, scratch memory, and KV cache.</desc>
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 Z" fill="#64748b"/>
+    </marker>
+    <style>
+      text { font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace; }
+      .bg { fill: #020617; }
+      .title { fill: #f8fafc; font-size: 22px; font-weight: 700; }
+      .subtitle { fill: #94a3b8; font-size: 11px; }
+      .boundary { fill: rgba(15, 23, 42, 0.44); stroke: #475569; stroke-width: 1.3; stroke-dasharray: 8 5; }
+      .boundary-title { fill: #cbd5e1; font-size: 12px; font-weight: 700; }
+      .node-title { fill: #f8fafc; font-size: 12px; font-weight: 700; }
+      .node-sub { fill: #94a3b8; font-size: 9px; }
+      .note { fill: #cbd5e1; font-size: 10px; }
+      .line { fill: none; stroke: #64748b; stroke-width: 1.5; marker-end: url(#arrow); }
+      .own { fill: none; stroke: #34d399; stroke-width: 1.7; marker-end: url(#arrow); }
+      .view { fill: none; stroke: #a78bfa; stroke-width: 1.5; stroke-dasharray: 6 4; marker-end: url(#arrow); }
+      .temp { fill: none; stroke: #fb923c; stroke-width: 1.5; stroke-dasharray: 4 4; marker-end: url(#arrow); }
+      .file { fill: rgba(76, 29, 149, 0.42); stroke: #a78bfa; stroke-width: 1.5; }
+      .owner { fill: rgba(6, 78, 59, 0.42); stroke: #34d399; stroke-width: 1.5; }
+      .viewbox { fill: rgba(30, 41, 59, 0.72); stroke: #94a3b8; stroke-width: 1.5; }
+      .backend { fill: rgba(120, 53, 15, 0.36); stroke: #fbbf24; stroke-width: 1.5; }
+      .mask { fill: #0f172a; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1120" height="700"/>
+  <rect x="0" y="0" width="1120" height="700" fill="url(#grid)" opacity="0.65"/>
+  <text class="title" x="40" y="42">Memory and Ownership Model</text>
+  <text class="subtitle" x="40" y="64">TensorView never owns memory; model, backend, scratch arena, and KV cache own their lifetimes explicitly</text>
+
+  <!-- Connections behind nodes -->
+  <path class="own" d="M205 185 H285"/>
+  <path class="own" d="M430 185 H520"/>
+  <path class="view" d="M430 245 H520"/>
+  <path class="line" d="M665 185 H755"/>
+  <path class="line" d="M665 245 H755"/>
+  <path class="temp" d="M335 470 H480"/>
+  <path class="temp" d="M640 470 H785"/>
+  <path class="own" d="M335 560 H785"/>
+  <path class="view" d="M900 470 V560"/>
+
+  <!-- Boundaries -->
+  <rect class="boundary" x="40" y="105" width="1038" height="225" rx="12"/>
+  <text class="boundary-title" x="60" y="132">Model Lifetime</text>
+
+  <rect class="boundary" x="40" y="380" width="1038" height="230" rx="12"/>
+  <text class="boundary-title" x="60" y="407">Generation Lifetime</text>
+
+  <!-- Model lifetime row -->
+  <rect class="mask" x="85" y="155" width="120" height="70" rx="6"/>
+  <rect class="file" x="85" y="155" width="120" height="70" rx="6"/>
+  <text class="node-title" x="145" y="183" text-anchor="middle">model.gguf</text>
+  <text class="node-sub" x="145" y="201" text-anchor="middle">file on disk</text>
+
+  <rect class="mask" x="285" y="135" width="145" height="110" rx="6"/>
+  <rect class="owner" x="285" y="135" width="145" height="110" rx="6"/>
+  <text class="node-title" x="357.5" y="163" text-anchor="middle">GGUFFile</text>
+  <text class="node-sub" x="357.5" y="181" text-anchor="middle">owns MappedFile</text>
+  <text class="node-sub" x="357.5" y="197" text-anchor="middle">tensor directory</text>
+  <text class="node-sub" x="357.5" y="213" text-anchor="middle">metadata</text>
+
+  <rect class="mask" x="520" y="135" width="145" height="110" rx="6"/>
+  <rect class="owner" x="520" y="135" width="145" height="110" rx="6"/>
+  <text class="node-title" x="592.5" y="163" text-anchor="middle">Model</text>
+  <text class="node-sub" x="592.5" y="181" text-anchor="middle">shared_ptr&lt;GGUFFile&gt;</text>
+  <text class="node-sub" x="592.5" y="197" text-anchor="middle">layer weight names</text>
+  <text class="node-sub" x="592.5" y="213" text-anchor="middle">validated config</text>
+
+  <rect class="mask" x="755" y="135" width="145" height="110" rx="6"/>
+  <rect class="backend" x="755" y="135" width="145" height="110" rx="6"/>
+  <text class="node-title" x="827.5" y="163" text-anchor="middle">Backend Weights</text>
+  <text class="node-sub" x="827.5" y="181" text-anchor="middle">mapped view or</text>
+  <text class="node-sub" x="827.5" y="197" text-anchor="middle">imported buffer</text>
+  <text class="node-sub" x="827.5" y="213" text-anchor="middle">backend-owned</text>
+
+  <rect class="mask" x="285" y="255" width="145" height="45" rx="6"/>
+  <rect class="viewbox" x="285" y="255" width="145" height="45" rx="6"/>
+  <text class="node-title" x="357.5" y="282" text-anchor="middle">TensorView</text>
+
+  <rect class="mask" x="520" y="255" width="145" height="45" rx="6"/>
+  <rect class="viewbox" x="520" y="255" width="145" height="45" rx="6"/>
+  <text class="node-title" x="592.5" y="282" text-anchor="middle">WeightTable</text>
+
+  <!-- Generation lifetime row -->
+  <rect class="mask" x="115" y="440" width="220" height="70" rx="6"/>
+  <rect class="owner" x="115" y="440" width="220" height="70" rx="6"/>
+  <text class="node-title" x="225" y="468" text-anchor="middle">ScratchArena</text>
+  <text class="node-sub" x="225" y="486" text-anchor="middle">temporary activations</text>
+
+  <rect class="mask" x="480" y="440" width="160" height="70" rx="6"/>
+  <rect class="viewbox" x="480" y="440" width="160" height="70" rx="6"/>
+  <text class="node-title" x="560" y="468" text-anchor="middle">Intermediate Views</text>
+  <text class="node-sub" x="560" y="486" text-anchor="middle">valid until reset</text>
+
+  <rect class="mask" x="785" y="440" width="170" height="70" rx="6"/>
+  <rect class="backend" x="785" y="440" width="170" height="70" rx="6"/>
+  <text class="node-title" x="870" y="468" text-anchor="middle">Backend Ops</text>
+  <text class="node-sub" x="870" y="486" text-anchor="middle">shape/dtype checked</text>
+
+  <rect class="mask" x="115" y="530" width="220" height="70" rx="6"/>
+  <rect class="owner" x="115" y="530" width="220" height="70" rx="6"/>
+  <text class="node-title" x="225" y="558" text-anchor="middle">KV Cache</text>
+  <text class="node-sub" x="225" y="576" text-anchor="middle">generation-owned</text>
+
+  <rect class="mask" x="785" y="530" width="170" height="70" rx="6"/>
+  <rect class="viewbox" x="785" y="530" width="170" height="70" rx="6"/>
+  <text class="node-title" x="870" y="558" text-anchor="middle">KVCacheView</text>
+  <text class="node-sub" x="870" y="576" text-anchor="middle">continuous range</text>
+
+  <!-- Notes -->
+  <rect x="55" y="638" width="1010" height="34" rx="6" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+  <text class="note" x="75" y="660">Rules: green = owner, violet dashed = view, orange dashed = temporary. TensorView must not outlive its owner.</text>
+</svg>

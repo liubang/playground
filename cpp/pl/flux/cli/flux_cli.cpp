@@ -61,6 +61,20 @@ std::string source_location_text(const SourceLocation& loc) {
     return out.str();
 }
 
+std::string source_base_dir_for_name(const std::string& name) {
+    if (name.empty() || name.front() == '<') {
+        return "";
+    }
+    const auto slash = name.rfind('/');
+    if (slash == std::string::npos) {
+        return "";
+    }
+    if (slash == 0) {
+        return "/";
+    }
+    return name.substr(0, slash);
+}
+
 std::vector<std::string> collect_table_columns(const TableValue& table) {
     std::vector<std::string> columns;
     std::unordered_set<std::string> seen;
@@ -1156,7 +1170,8 @@ FluxCliResult AnalyzeFluxSource(const std::string& source,
         return FluxCliResult{.exit_code = 2, .output = "", .error = parser_error_text(parser)};
     }
 
-    const auto result = analysis::SemanticAnalyzer().Analyze(*file);
+    const auto result = analysis::SemanticAnalyzer().Analyze(
+        *file, {.source_base_dir = source_base_dir_for_name(name)});
     std::ostringstream out;
     if (options.json) {
         out << "{";

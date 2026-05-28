@@ -28,11 +28,6 @@
 
 namespace pl::flux {
 
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-function"
-#endif
-
 namespace detail {
 
 inline std::shared_ptr<ObjectValue> window_group_object(const TableChunk& chunk,
@@ -213,9 +208,5 @@ inline std::shared_ptr<ObjectValue> aggregate_window_output_row(
 }
 
 } // namespace detail
-
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif
 
 } // namespace pl::flux

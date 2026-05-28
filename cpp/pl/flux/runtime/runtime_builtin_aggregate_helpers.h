@@ -26,11 +26,6 @@
 #include "cpp/pl/flux/common/compat.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_table_helpers.h"
 
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-function"
-#endif
-
 namespace pl::flux::detail {
 
 enum class NumericKind {
@@ -294,7 +289,3 @@ inline absl::StatusOr<Value> aggregate_min_max(const std::vector<Value>& args,
 }
 
 } // namespace pl::flux::detail
-
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif

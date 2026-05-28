@@ -488,13 +488,7 @@ TEST(FluxCliTest, ExecutesCheckedInOpsDashboardQueryVariants) {
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/cpu_distinct_hosts.flux",
-            {"Result: cpu_distinct_hosts\n",
-             "\"edge-1\"",
-             "\"edge-2\"",
-             "\"us-east\"",
-             "\"us-west\"",
-             "70",
-             "91"},
+            {"Result: cpu_distinct_hosts\n", "\"edge-1\"", "\"edge-2\""},
         },
         {
             "cpp/pl/flux/examples/ops_dashboard/cpu_gap_fill.flux",

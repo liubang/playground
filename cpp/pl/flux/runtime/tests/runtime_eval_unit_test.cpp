@@ -1164,9 +1164,11 @@ TEST(RuntimeEvalTest, EvaluatesDistinctBuiltin) {
     ASSERT_EQ(Value::Type::Table, result->type());
     ASSERT_EQ(2, result->as_table().rows.size());
     EXPECT_EQ("\"a\"", result->as_table().rows[0]->lookup("host")->string());
-    EXPECT_EQ("10", result->as_table().rows[0]->lookup("_value")->string());
+    EXPECT_EQ(nullptr, result->as_table().rows[0]->lookup("_value"));
+    EXPECT_EQ(nullptr, result->as_table().rows[0]->lookup("region"));
     EXPECT_EQ("\"b\"", result->as_table().rows[1]->lookup("host")->string());
-    EXPECT_EQ("30", result->as_table().rows[1]->lookup("_value")->string());
+    EXPECT_EQ(nullptr, result->as_table().rows[1]->lookup("_value"));
+    EXPECT_EQ(nullptr, result->as_table().rows[1]->lookup("region"));
 }
 
 TEST(RuntimeEvalTest, EvaluatesTailBuiltinWithOffset) {

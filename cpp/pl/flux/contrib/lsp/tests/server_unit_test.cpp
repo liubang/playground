@@ -1008,6 +1008,58 @@ TEST(FluxLanguageServerTest, SignatureHelpUsesPackageFunctionMetadataLabel) {
     fclose(out_file);
 }
 
+TEST(FluxLanguageServerTest, PackageAliasDrivesCompletionHoverAndSignatureHelp) {
+    FILE* in_file = tmpfile();
+    FILE* out_file = tmpfile();
+    ASSERT_NE(in_file, nullptr);
+    ASSERT_NE(out_file, nullptr);
+
+    const std::string uri = "file:///alias-package.flux";
+    write_lsp_message(in_file, make_initialize_request(1));
+    write_lsp_message(in_file, make_initialized_notification());
+    write_lsp_message(in_file,
+                      make_did_open_notification(uri,
+                                                 "import r \"regexp\"\n"
+                                                 "value = r.findString(r: /edge/, v: \"edge-1\")\n"
+                                                 "r.\n"));
+    write_lsp_message(in_file, make_completion_request(2, uri, 2, 2));
+    write_lsp_message(in_file, make_hover_request(3, uri, 1, 12));
+    write_lsp_message(
+        in_file,
+        R"({"jsonrpc":"2.0","id":4,"method":"textDocument/signatureHelp","params":{"textDocument":{"uri":"file:///alias-package.flux"},"position":{"line":1,"character":22}}})");
+    write_lsp_message(in_file, make_shutdown_request(5));
+    write_lsp_message(in_file, make_exit_notification());
+    rewind(in_file);
+
+    StdioTransport transport(in_file, out_file);
+    FluxLanguageServer server(std::move(transport));
+    server.run();
+
+    rewind(out_file);
+    read_lsp_response(out_file);
+    read_lsp_response(out_file);
+
+    auto completion_resp = read_lsp_response(out_file);
+    ASSERT_FALSE(completion_resp.empty());
+    expect_valid_json(completion_resp);
+    EXPECT_NE(completion_resp.find("\"label\":\"findString\""), std::string::npos)
+        << completion_resp;
+    EXPECT_EQ(completion_resp.find("\"label\":\"yield\""), std::string::npos) << completion_resp;
+
+    auto hover_resp = read_lsp_response(out_file);
+    ASSERT_FALSE(hover_resp.empty());
+    expect_valid_json(hover_resp);
+    EXPECT_NE(hover_resp.find("regexp.findString("), std::string::npos) << hover_resp;
+
+    auto signature_resp = read_lsp_response(out_file);
+    ASSERT_FALSE(signature_resp.empty());
+    expect_valid_json(signature_resp);
+    EXPECT_NE(signature_resp.find("regexp.findString("), std::string::npos) << signature_resp;
+
+    fclose(in_file);
+    fclose(out_file);
+}
+
 TEST(FluxLanguageServerTest, HoverShowsContextualRowFieldType) {
     FILE* in_file = tmpfile();
     FILE* out_file = tmpfile();
