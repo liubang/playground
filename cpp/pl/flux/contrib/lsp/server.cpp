@@ -297,6 +297,60 @@ known_packages() {
     return pkgs;
 }
 
+std::string percent_decode(std::string_view text) {
+    std::string out;
+    out.reserve(text.size());
+    for (size_t i = 0; i < text.size(); ++i) {
+        if (text[i] == '%' && i + 2 < text.size() && std::isxdigit(text[i + 1]) &&
+            std::isxdigit(text[i + 2])) {
+            const auto hex = [](char ch) -> int {
+                if (ch >= '0' && ch <= '9') {
+                    return ch - '0';
+                }
+                if (ch >= 'a' && ch <= 'f') {
+                    return ch - 'a' + 10;
+                }
+                return ch - 'A' + 10;
+            };
+            out.push_back(static_cast<char>((hex(text[i + 1]) << 4) | hex(text[i + 2])));
+            i += 2;
+        } else {
+            out.push_back(text[i]);
+        }
+    }
+    return out;
+}
+
+std::string file_uri_base_dir(const std::string& uri) {
+    constexpr std::string_view prefix = "file://";
+    if (!uri.starts_with(prefix)) {
+        return "";
+    }
+    auto path = percent_decode(std::string_view(uri).substr(prefix.size()));
+    const auto slash = path.rfind('/');
+    if (slash == std::string::npos) {
+        return "";
+    }
+    if (slash == 0) {
+        return "/";
+    }
+    return path.substr(0, slash);
+}
+
+std::string package_path_for_qualifier(const analysis::AnalysisResult& analysis,
+                                       const std::string& qualifier) {
+    for (const auto& def : analysis.definitions) {
+        if (def.kind == analysis::SymbolKind::Import && def.name == qualifier &&
+            def.import_path.has_value()) {
+            return *def.import_path;
+        }
+    }
+    if (analysis::IsKnownPackage(qualifier)) {
+        return qualifier;
+    }
+    return "";
+}
+
 const std::vector<std::string>& flux_keywords() {
     static const std::vector<std::string> kws = {
         "and",
@@ -662,7 +716,8 @@ void FluxLanguageServer::ensure_analysis(Document& doc) {
         doc.analysis_version = doc.version;
         return;
     }
-    doc.analysis = analysis::SemanticAnalyzer().Analyze(*doc.ast);
+    doc.analysis = analysis::SemanticAnalyzer().Analyze(
+        *doc.ast, {.source_base_dir = file_uri_base_dir(doc.uri)});
     doc.analysis_version = doc.version;
 }
 
@@ -821,14 +876,18 @@ std::string FluxLanguageServer::build_completion_response(Document& doc, int lin
 
     if (!pkg_prefix.empty()) {
         // Package member completion
-        for (const auto* sig : analysis::BuiltinsForPackage(pkg_prefix)) {
-            if (sig != nullptr) {
-                if (analysis::IsCallableBuiltin(*sig)) {
-                    add_function_item(sig->name,
-                                      analysis::SignatureDetail(*sig),
-                                      analysis::CompletionParams(*sig));
-                } else {
-                    add_plain_item(sig->name, analysis::SignatureDetail(*sig), 12 /* Value */);
+        ensure_analysis(doc);
+        const auto package_path = package_path_for_qualifier(doc.analysis, pkg_prefix);
+        if (!package_path.empty()) {
+            for (const auto* sig : analysis::BuiltinsForPackage(package_path)) {
+                if (sig != nullptr) {
+                    if (analysis::IsCallableBuiltin(*sig)) {
+                        add_function_item(sig->name,
+                                          analysis::SignatureDetail(*sig),
+                                          analysis::CompletionParams(*sig));
+                    } else {
+                        add_plain_item(sig->name, analysis::SignatureDetail(*sig), 12 /* Value */);
+                    }
                 }
             }
         }
@@ -918,8 +977,9 @@ std::string FluxLanguageServer::build_hover_response(const Document& doc, int li
     // Check packages
     auto pkg_prefix = prefix_before_dot(doc.content, line, character);
     if (!pkg_prefix.empty()) {
+        const auto package_path = package_path_for_qualifier(doc.analysis, pkg_prefix);
         const auto& pkgs = known_packages();
-        auto pkg_it = pkgs.find(pkg_prefix);
+        auto pkg_it = pkgs.find(package_path);
         if (pkg_it != pkgs.end()) {
             for (const auto& [name, detail] : pkg_it->second) {
                 if (name == word) {
@@ -1430,9 +1490,14 @@ void FluxLanguageServer::handle_signature_help(const JsonRpcMessage& msg) {
         params = def->parameters;
         label = func_name + "(";
     } else {
-        const auto* sig = package_name.empty()
-                              ? analysis::FindUniverseBuiltinSignature(func_name)
-                              : analysis::FindBuiltinSignature(package_name, func_name);
+        const auto package_path = package_name.empty()
+                                      ? std::string{}
+                                      : package_path_for_qualifier(analysis, package_name);
+        const auto* sig =
+            package_name.empty()
+                ? analysis::FindUniverseBuiltinSignature(func_name)
+                : (package_path.empty() ? nullptr
+                                        : analysis::FindBuiltinSignature(package_path, func_name));
         if (sig != nullptr) {
             params = analysis::CompletionParams(*sig);
             label = analysis::SignatureLabel(*sig);

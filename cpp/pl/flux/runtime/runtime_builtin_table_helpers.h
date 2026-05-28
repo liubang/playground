@@ -35,11 +35,6 @@
 
 namespace pl::flux {
 
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-function"
-#endif
-
 namespace detail {
 
 inline absl::StatusOr<const ArrayValue*> require_array_argument(const std::vector<Value>& args,
@@ -810,9 +805,5 @@ inline void install_builtin(Environment& env,
 }
 
 } // namespace detail
-
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif
 
 } // namespace pl::flux

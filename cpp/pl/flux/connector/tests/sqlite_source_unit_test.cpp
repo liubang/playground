@@ -249,6 +249,27 @@ TEST(SQLiteSourceTest, PushesDownDistinctColumn) {
     EXPECT_EQ(nullptr, table.rows[0]->lookup("host"));
 }
 
+TEST(SQLiteSourceTest, PushesDownDistinctWithoutLeakingSourceColumns) {
+    SQLiteSource source(kMetricsDb, "cpu");
+    ScanRequest request;
+    request.distinct = "host";
+    request.order_by.push_back({
+        .column = "host",
+        .desc = false,
+    });
+
+    auto value_or = source.Scan(request);
+
+    ASSERT_TRUE(value_or.ok()) << value_or.status();
+    ASSERT_EQ(Value::Type::Table, value_or->type());
+    const auto& table = value_or->as_table();
+    ASSERT_EQ(3, table.rows.size());
+    ASSERT_NE(nullptr, table.rows[0]);
+    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
+    EXPECT_EQ(nullptr, table.rows[0]->lookup("usage"));
+    EXPECT_EQ(nullptr, table.rows[0]->lookup("region"));
+}
+
 TEST(SQLiteSourceTest, RejectsUnknownPushdownColumn) {
     SQLiteSource source(kMetricsDb, "cpu");
     ScanRequest request;

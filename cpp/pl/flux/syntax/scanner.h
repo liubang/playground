@@ -62,7 +62,6 @@ public:
      */
     uint32_t offset(const Position& pos) {
         if (positions_.count(pos) == 0) {
-            // TODO(liubang): error handler
             return UINT32_MAX;
         }
         return positions_.at(pos);

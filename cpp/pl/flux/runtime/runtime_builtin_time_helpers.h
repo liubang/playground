@@ -31,11 +31,6 @@
 
 namespace pl::flux {
 
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-function"
-#endif
-
 namespace detail {
 
 inline std::optional<std::string> row_time_literal(const ObjectValue& row) {
@@ -614,9 +609,5 @@ inline bool aggregate_window_is_within_range(const WindowBounds& bounds,
 }
 
 } // namespace detail
-
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif
 
 } // namespace pl::flux

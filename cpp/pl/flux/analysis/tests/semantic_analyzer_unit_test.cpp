@@ -15,6 +15,8 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/24 11:05
 
+#include <cstdlib>
+#include <fstream>
 #include <gtest/gtest.h>
 #include <memory>
 #include <string>
@@ -42,6 +44,16 @@ bool HasDiagnostic(const AnalysisResult& result, const std::string& needle) {
     return false;
 }
 
+int DiagnosticCount(const AnalysisResult& result, const std::string& needle) {
+    int count = 0;
+    for (const auto& diag : result.diagnostics) {
+        if (diag.message.find(needle) != std::string::npos) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 std::shared_ptr<File> ParseFile(std::string source, std::string name) {
     Parser parser(std::move(source));
     auto file = parser.parse_file(std::move(name));
@@ -63,9 +75,10 @@ TEST(SemanticAnalyzerTest, ReportsUnknownKnownPackageMember) {
 import "array"
 
 array.lenght(arr: [1])
-)");
+    )");
     EXPECT_TRUE(HasDiagnostic(result, "unknown function `lenght`"));
     EXPECT_TRUE(HasDiagnostic(result, "did you mean `length`"));
+    EXPECT_EQ(1, DiagnosticCount(result, "unknown function `lenght`"));
 }
 
 TEST(SemanticAnalyzerTest, ChecksMissingAndUnknownNamedArguments) {
@@ -236,6 +249,33 @@ array.from(rows: [{_time: 2024-01-01T00:00:00Z, _value: 1, host: "a"}])
     EXPECT_EQ("int", schema.columns[1].type->ToString());
 }
 
+TEST(SemanticAnalyzerTest, InfersAggregateAndDistinctOutputSchemas) {
+    auto aggregate = Analyze(R"(
+import "array"
+
+array.from(rows: [{_value: 1, host: "a"}, {_value: 2, host: "b"}])
+    |> sum()
+)");
+    EXPECT_FALSE(HasDiagnostic(aggregate, "missing required argument `values`"));
+    ASSERT_FALSE(aggregate.table_schemas.empty());
+    const auto& aggregate_schema = aggregate.table_schemas.back();
+    ASSERT_EQ(1, aggregate_schema.columns.size());
+    EXPECT_EQ("_value", aggregate_schema.columns[0].name);
+    EXPECT_EQ("float", aggregate_schema.columns[0].type->ToString());
+
+    auto distinct = Analyze(R"(
+import "array"
+
+array.from(rows: [{host: "a", usage: 1.0}, {host: "a", usage: 2.0}])
+    |> distinct(column: "host")
+)");
+    ASSERT_FALSE(distinct.table_schemas.empty());
+    const auto& distinct_schema = distinct.table_schemas.back();
+    ASSERT_EQ(1, distinct_schema.columns.size());
+    EXPECT_EQ("host", distinct_schema.columns[0].name);
+    EXPECT_EQ("string", distinct_schema.columns[0].type->ToString());
+}
+
 TEST(SemanticAnalyzerTest, MapSchemaUsesFunctionReturnRecord) {
     auto result = Analyze(R"(
 import "array"
@@ -277,6 +317,35 @@ csv.from(csv: "host,owner,tier\nedge-1,search,prod\n", mode: "raw")
     EXPECT_EQ("string", schema.columns[0].type->ToString());
     EXPECT_EQ("owner", schema.columns[1].name);
     EXPECT_EQ("string", schema.columns[1].type->ToString());
+}
+
+TEST(SemanticAnalyzerTest, InfersCsvSchemaFromRelativeFileBaseDir) {
+    const char* tmpdir_env = std::getenv("TEST_TMPDIR");
+    const std::string tmpdir = tmpdir_env == nullptr ? "/tmp" : tmpdir_env;
+    {
+        std::ofstream file(tmpdir + "/owners.csv");
+        ASSERT_TRUE(file);
+        file << "host,owner,tier\nedge-1,search,prod\n";
+    }
+
+    std::string source = R"(
+import "csv"
+
+csv.from(file: "owners.csv", mode: "raw")
+)";
+    Parser parser(source);
+    auto file = parser.parse_file("cpp/pl/flux/examples/cross_source/mysql_csv_join.flux");
+    ASSERT_TRUE(parser.errors().empty()) << ::testing::PrintToString(parser.errors());
+
+    auto result = SemanticAnalyzer().Analyze(*file, {.source_base_dir = tmpdir});
+
+    ASSERT_FALSE(result.table_schemas.empty());
+    const auto& schema = result.table_schemas.back();
+    EXPECT_FALSE(schema.open);
+    ASSERT_EQ(3, schema.columns.size());
+    EXPECT_EQ("host", schema.columns[0].name);
+    EXPECT_EQ("owner", schema.columns[1].name);
+    EXPECT_EQ("tier", schema.columns[2].name);
 }
 
 TEST(SemanticAnalyzerTest, KeepProjectsRequestedColumnsFromOpenProviderRows) {

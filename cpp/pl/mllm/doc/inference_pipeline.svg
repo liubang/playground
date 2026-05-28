@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="680" viewBox="0 0 1120 680" role="img" aria-labelledby="title desc">
+  <title id="title">mllm Inference Pipeline</title>
+  <desc id="desc">Prompt prefill and token decode pipeline for the mllm MVP.</desc>
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 Z" fill="#64748b"/>
+    </marker>
+    <style>
+      text { font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace; }
+      .bg { fill: #020617; }
+      .title { fill: #f8fafc; font-size: 22px; font-weight: 700; }
+      .subtitle { fill: #94a3b8; font-size: 11px; }
+      .lane { fill: rgba(15, 23, 42, 0.42); stroke: #475569; stroke-width: 1.3; stroke-dasharray: 8 5; }
+      .lane-label { fill: #cbd5e1; font-size: 12px; font-weight: 700; }
+      .step-title { fill: #f8fafc; font-size: 11px; font-weight: 700; }
+      .step-sub { fill: #94a3b8; font-size: 8.5px; }
+      .label { fill: #cbd5e1; font-size: 10px; }
+      .line { fill: none; stroke: #64748b; stroke-width: 1.5; marker-end: url(#arrow); }
+      .loop { fill: none; stroke: #fb923c; stroke-width: 1.5; stroke-dasharray: 6 4; marker-end: url(#arrow); }
+      .io { fill: rgba(8, 51, 68, 0.42); stroke: #22d3ee; stroke-width: 1.5; }
+      .runtime { fill: rgba(6, 78, 59, 0.42); stroke: #34d399; stroke-width: 1.5; }
+      .state { fill: rgba(76, 29, 149, 0.42); stroke: #a78bfa; stroke-width: 1.5; }
+      .kernel { fill: rgba(120, 53, 15, 0.36); stroke: #fbbf24; stroke-width: 1.5; }
+      .mask { fill: #0f172a; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1120" height="680"/>
+  <rect x="0" y="0" width="1120" height="680" fill="url(#grid)" opacity="0.65"/>
+  <text class="title" x="40" y="42">Inference Pipeline</text>
+  <text class="subtitle" x="40" y="64">MVP flow: tokenize prompt, prefill cache, decode one token at a time, stream text pieces</text>
+
+  <!-- Connections behind nodes -->
+  <path class="line" d="M175 160 H245"/>
+  <path class="line" d="M375 160 H445"/>
+  <path class="line" d="M575 160 H645"/>
+  <path class="line" d="M775 160 H845"/>
+  <path class="line" d="M930 200 V255"/>
+  <path class="line" d="M930 325 V380"/>
+  <path class="line" d="M845 420 H775"/>
+  <path class="line" d="M645 420 H575"/>
+  <path class="line" d="M445 420 H375"/>
+  <path class="line" d="M245 420 H175"/>
+  <path class="line" d="M110 460 V535 H845"/>
+  <path class="loop" d="M930 460 V535 H1010 V380 H970"/>
+  <path class="line" d="M245 585 H845"/>
+
+  <!-- Lanes -->
+  <rect class="lane" x="35" y="95" width="1050" height="155" rx="12"/>
+  <text class="lane-label" x="55" y="122">Prompt Prefill</text>
+  <rect class="lane" x="35" y="315" width="1050" height="240" rx="12"/>
+  <text class="lane-label" x="55" y="342">Token Decode Loop</text>
+  <rect class="lane" x="35" y="580" width="1050" height="58" rx="12"/>
+  <text class="lane-label" x="55" y="574">Streaming Output</text>
+
+  <!-- Prefill nodes -->
+  <rect class="mask" x="65" y="130" width="110" height="60" rx="6"/>
+  <rect class="io" x="65" y="130" width="110" height="60" rx="6"/>
+  <text class="step-title" x="120" y="154" text-anchor="middle">Prompt</text>
+  <text class="step-sub" x="120" y="172" text-anchor="middle">UTF-8 text</text>
+
+  <rect class="mask" x="245" y="130" width="130" height="60" rx="6"/>
+  <rect class="runtime" x="245" y="130" width="130" height="60" rx="6"/>
+  <text class="step-title" x="310" y="154" text-anchor="middle">Tokenizer</text>
+  <text class="step-sub" x="310" y="172" text-anchor="middle">token ids + BOS</text>
+
+  <rect class="mask" x="445" y="130" width="130" height="60" rx="6"/>
+  <rect class="kernel" x="445" y="130" width="130" height="60" rx="6"/>
+  <text class="step-title" x="510" y="154" text-anchor="middle">Prefill Forward</text>
+  <text class="step-sub" x="510" y="172" text-anchor="middle">one token first</text>
+
+  <rect class="mask" x="645" y="130" width="130" height="60" rx="6"/>
+  <rect class="state" x="645" y="130" width="130" height="60" rx="6"/>
+  <text class="step-title" x="710" y="154" text-anchor="middle">KV Cache</text>
+  <text class="step-sub" x="710" y="172" text-anchor="middle">append K/V</text>
+
+  <rect class="mask" x="845" y="130" width="130" height="60" rx="6"/>
+  <rect class="runtime" x="845" y="130" width="130" height="60" rx="6"/>
+  <text class="step-title" x="910" y="154" text-anchor="middle">Last Logits</text>
+  <text class="step-sub" x="910" y="172" text-anchor="middle">start decode</text>
+
+  <!-- Decode nodes -->
+  <rect class="mask" x="845" y="380" width="130" height="80" rx="6"/>
+  <rect class="runtime" x="845" y="380" width="130" height="80" rx="6"/>
+  <text class="step-title" x="910" y="408" text-anchor="middle">Sampler</text>
+  <text class="step-sub" x="910" y="426" text-anchor="middle">greedy first</text>
+  <text class="step-sub" x="910" y="442" text-anchor="middle">seeded later</text>
+
+  <rect class="mask" x="645" y="380" width="130" height="80" rx="6"/>
+  <rect class="kernel" x="645" y="380" width="130" height="80" rx="6"/>
+  <text class="step-title" x="710" y="408" text-anchor="middle">Decode Forward</text>
+  <text class="step-sub" x="710" y="426" text-anchor="middle">single token</text>
+  <text class="step-sub" x="710" y="442" text-anchor="middle">Metal backend</text>
+
+  <rect class="mask" x="445" y="380" width="130" height="80" rx="6"/>
+  <rect class="state" x="445" y="380" width="130" height="80" rx="6"/>
+  <text class="step-title" x="510" y="408" text-anchor="middle">Update Cache</text>
+  <text class="step-sub" x="510" y="426" text-anchor="middle">capacity checked</text>
+  <text class="step-sub" x="510" y="442" text-anchor="middle">no ring overwrite</text>
+
+  <rect class="mask" x="245" y="380" width="130" height="80" rx="6"/>
+  <rect class="runtime" x="245" y="380" width="130" height="80" rx="6"/>
+  <text class="step-title" x="310" y="408" text-anchor="middle">Next Logits</text>
+  <text class="step-sub" x="310" y="426" text-anchor="middle">top-k parity</text>
+  <text class="step-sub" x="310" y="442" text-anchor="middle">for tests</text>
+
+  <rect class="mask" x="65" y="380" width="110" height="80" rx="6"/>
+  <rect class="io" x="65" y="380" width="110" height="80" rx="6"/>
+  <text class="step-title" x="120" y="408" text-anchor="middle">Token</text>
+  <text class="step-sub" x="120" y="426" text-anchor="middle">append output</text>
+  <text class="step-sub" x="120" y="442" text-anchor="middle">or stop</text>
+
+  <!-- Output lane -->
+  <rect class="mask" x="845" y="590" width="130" height="36" rx="6"/>
+  <rect class="io" x="845" y="590" width="130" height="36" rx="6"/>
+  <text class="step-title" x="910" y="613" text-anchor="middle">Callback Text Piece</text>
+
+  <rect class="mask" x="65" y="590" width="180" height="36" rx="6"/>
+  <rect class="runtime" x="65" y="590" width="180" height="36" rx="6"/>
+  <text class="step-title" x="155" y="613" text-anchor="middle">Detokenize Safely</text>
+
+  <!-- Annotations -->
+  <text class="label" x="790" y="525">loop until max tokens, EOS, overflow, or cancellation</text>
+  <text class="label" x="56" y="286">Validation points: token ids vs llama.cpp, logits golden tests, CPU/Metal tolerance checks</text>
+</svg>

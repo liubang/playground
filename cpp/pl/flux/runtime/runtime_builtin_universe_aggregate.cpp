@@ -112,6 +112,34 @@ absl::StatusOr<Value> table_numeric_aggregate(const TableValue& table,
     return with_aggregate_plan(std::move(result), table, fn, column);
 }
 
+std::shared_ptr<ObjectValue> materialize_distinct_row(const TableChunk& chunk,
+                                                      const std::string& column,
+                                                      Value value) {
+    std::vector<std::pair<std::string, Value>> props;
+    std::unordered_set<std::string> names;
+    if (chunk.group_key != nullptr) {
+        props.reserve(chunk.group_key->properties.size() + 2);
+        for (const auto& [name, group_value] : chunk.group_key->properties) {
+            props.emplace_back(name, group_value);
+            names.insert(name);
+        }
+        props.emplace_back("_group",
+                           Value::object(std::make_shared<ObjectValue>(*chunk.group_key)));
+        names.insert("_group");
+    }
+    if (!names.contains(column)) {
+        props.emplace_back(column, std::move(value));
+    } else {
+        for (auto& [name, existing] : props) {
+            if (name == column) {
+                existing = std::move(value);
+                break;
+            }
+        }
+    }
+    return std::make_shared<ObjectValue>(std::move(props));
+}
+
 absl::StatusOr<Value> builtin_sum(const std::vector<Value>& args) {
     if (auto table = piped_table_argument(args, "values"); table.has_value()) {
         const std::string column = aggregate_column_argument(args, "column");
@@ -257,7 +285,8 @@ absl::StatusOr<Value> builtin_distinct(const std::vector<Value>& args) {
             if (!seen.insert(key).second) {
                 continue;
             }
-            next.rows.push_back(row);
+            next.rows.push_back(materialize_distinct_row(
+                chunk, *column_or, value == nullptr ? Value::null() : *value));
         }
         chunks.push_back(std::move(next));
     }
