@@ -153,6 +153,54 @@ void set_projection_columns(connector::ScanRequest* request,
     }
 }
 
+std::optional<std::string> time_literal(const plan::PredicateLiteral& literal) {
+    if (literal.kind != plan::PredicateLiteralKind::Time) {
+        return std::nullopt;
+    }
+    return literal.string_value;
+}
+
+void merge_time_start(connector::TimeRange* time_range, std::string start) {
+    if (!time_range->start.has_value() || *time_range->start < start) {
+        time_range->start = std::move(start);
+    }
+}
+
+void merge_time_stop(connector::TimeRange* time_range, std::string stop) {
+    if (!time_range->stop.has_value() || stop < *time_range->stop) {
+        time_range->stop = std::move(stop);
+    }
+}
+
+bool try_merge_time_predicate(connector::ScanRequest* request,
+                              const plan::PredicateSpec& predicate,
+                              const std::string& source_column,
+                              bool supports_time_range) {
+    if (!supports_time_range || source_column != "_time") {
+        return false;
+    }
+    auto literal = time_literal(predicate.literal);
+    if (!literal.has_value()) {
+        return false;
+    }
+    switch (predicate.op) {
+        case plan::PredicateOp::Gte:
+            if (!request->time_range.has_value()) {
+                request->time_range = connector::TimeRange{};
+            }
+            merge_time_start(&*request->time_range, std::move(*literal));
+            return true;
+        case plan::PredicateOp::Lt:
+            if (!request->time_range.has_value()) {
+                request->time_range = connector::TimeRange{};
+            }
+            merge_time_stop(&*request->time_range, std::move(*literal));
+            return true;
+        default:
+            return false;
+    }
+}
+
 absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::PlanNode>& node) {
     if (node == nullptr) {
         return absl::InvalidArgumentError("missing plan");
@@ -205,10 +253,6 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
             return plan_or;
         }
         case plan::PlanNodeKind::Filter:
-            if (auto status = require_capability(plan_or->capabilities.filter, "filter");
-                !status.ok()) {
-                return status;
-            }
             if (node->filter().predicates.empty()) {
                 return absl::InvalidArgumentError("filter has no pushable predicates");
             }
@@ -217,6 +261,16 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
                     plan_or->visible_columns, plan_or->source_columns, predicate.column, "filter");
                 if (!source_column_or.ok()) {
                     return source_column_or.status();
+                }
+                if (try_merge_time_predicate(&plan_or->request,
+                                             predicate,
+                                             *source_column_or,
+                                             plan_or->capabilities.time_range)) {
+                    continue;
+                }
+                if (auto status = require_capability(plan_or->capabilities.filter, "filter");
+                    !status.ok()) {
+                    return status;
                 }
                 plan_or->request.predicates.push_back({
                     .op = to_connector_predicate_op(predicate.op),

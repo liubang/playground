@@ -87,6 +87,62 @@ TEST(RuleBasedOptimizerTest, KeepsLogicalPlanStableWhileRecordingDeterministicTr
     EXPECT_EQ("usage", result_or->pushdown_plan->request.projection_columns[2].alias);
 }
 
+TEST(RuleBasedOptimizerTest, MergesPushdownTimePredicatesIntoTimeRange) {
+    std::vector<plan::PredicateSpec> predicates = {
+        {.op = plan::PredicateOp::Gte,
+         .column = "_time",
+         .literal = {.kind = plan::PredicateLiteralKind::Time,
+                     .string_value = "2024-01-01T00:30:00Z"}},
+        {.op = plan::PredicateOp::Lt,
+         .column = "_time",
+         .literal = {.kind = plan::PredicateLiteralKind::Time,
+                     .string_value = "2024-01-01T01:30:00Z"}},
+        {.op = plan::PredicateOp::Eq,
+         .column = "host",
+         .literal = {.kind = plan::PredicateLiteralKind::String, .string_value = "edge-1"}},
+    };
+    auto plan = plan::MakeFilter(
+        plan::MakeRange(SourceScanPlan(), "2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z"),
+        std::move(predicates));
+
+    auto result_or = DefaultRuleBasedOptimizer().Optimize(plan);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(result_or->pushdown_plan.has_value());
+    ASSERT_TRUE(result_or->pushdown_plan->request.time_range.has_value());
+    EXPECT_EQ("2024-01-01T00:30:00Z", result_or->pushdown_plan->request.time_range->start.value());
+    EXPECT_EQ("2024-01-01T01:30:00Z", result_or->pushdown_plan->request.time_range->stop.value());
+    ASSERT_EQ(1, result_or->pushdown_plan->request.predicates.size());
+    EXPECT_EQ(connector::PredicateOp::Eq, result_or->pushdown_plan->request.predicates[0].op);
+    EXPECT_EQ("host", result_or->pushdown_plan->request.predicates[0].column);
+    EXPECT_EQ("edge-1", result_or->pushdown_plan->request.predicates[0].literal.as_string());
+}
+
+TEST(RuleBasedOptimizerTest, LeavesStringTimePredicatesAsFilters) {
+    std::vector<plan::PredicateSpec> predicates = {
+        {.op = plan::PredicateOp::Gte,
+         .column = "_time",
+         .literal = {.kind = plan::PredicateLiteralKind::String,
+                     .string_value = "2024-01-01T00:30:00Z"}},
+    };
+    auto plan = plan::MakeFilter(
+        plan::MakeRange(SourceScanPlan(), "2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z"),
+        std::move(predicates));
+
+    auto result_or = DefaultRuleBasedOptimizer().Optimize(plan);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(result_or->pushdown_plan.has_value());
+    ASSERT_TRUE(result_or->pushdown_plan->request.time_range.has_value());
+    EXPECT_EQ("2024-01-01T00:00:00Z", result_or->pushdown_plan->request.time_range->start.value());
+    EXPECT_EQ("2024-01-02T00:00:00Z", result_or->pushdown_plan->request.time_range->stop.value());
+    ASSERT_EQ(1, result_or->pushdown_plan->request.predicates.size());
+    EXPECT_EQ(connector::PredicateOp::Gte, result_or->pushdown_plan->request.predicates[0].op);
+    EXPECT_EQ("_time", result_or->pushdown_plan->request.predicates[0].column);
+    EXPECT_EQ("2024-01-01T00:30:00Z",
+              result_or->pushdown_plan->request.predicates[0].literal.as_string());
+}
+
 TEST(RuleBasedOptimizerTest, RecordsAggregatePushdownRequestWithColumnMapping) {
     auto plan = plan::MakeAggregate(
         plan::MakeGroup(plan::MakeRename(SourceScanPlan(), {{"usage", "cpu_usage"}}), {"host"}),
