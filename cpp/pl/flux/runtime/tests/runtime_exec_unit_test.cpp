@@ -21,7 +21,9 @@
 #include <cstdlib>
 #include <gtest/gtest.h>
 #include <iostream>
+#include <memory>
 #include <optional>
+#include <sqlite3.h>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -56,6 +58,45 @@ std::optional<std::string> mysql_test_dsn() {
 std::shared_ptr<plan::PlanNode> SqliteCpuScanPlan() {
     return plan::MakeSourceScan(
         "sqlite", "sqlite", "cpp/pl/flux/examples/cross_source/metrics.db", "cpu");
+}
+
+struct SqliteTestDbDeleter {
+    void operator()(sqlite3* db) const {
+        if (db != nullptr) {
+            sqlite3_close(db);
+        }
+    }
+};
+
+using SqliteTestDb = std::unique_ptr<sqlite3, SqliteTestDbDeleter>;
+
+void ExecuteSql(sqlite3* db, const char* sql) {
+    char* error = nullptr;
+    const int rc = sqlite3_exec(db, sql, nullptr, nullptr, &error);
+    std::unique_ptr<char, decltype(&sqlite3_free)> error_guard(error, sqlite3_free);
+    ASSERT_EQ(SQLITE_OK, rc) << (error == nullptr ? "" : error);
+}
+
+void CreateBoolMetricsDb(const std::string& path) {
+    sqlite3* raw_db = nullptr;
+    ASSERT_EQ(SQLITE_OK,
+              sqlite3_open_v2(
+                  path.c_str(), &raw_db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr));
+    SqliteTestDb db(raw_db);
+    ExecuteSql(db.get(), R"SQL(
+        DROP TABLE IF EXISTS cpu;
+        CREATE TABLE cpu (
+            _time TEXT NOT NULL,
+            host TEXT NOT NULL,
+            usage REAL NOT NULL,
+            active BOOLEAN NOT NULL
+        );
+        INSERT INTO cpu (_time, host, usage, active) VALUES
+            ('2024-07-01 10:00:00.000000', 'edge-1', 71.5, TRUE),
+            ('2024-07-01 10:01:00.000000', 'edge-2', 64.0, TRUE),
+            ('2024-07-01 10:02:00.000000', 'edge-3', 42.75, FALSE),
+            ('2024-07-01 10:03:00.000000', 'edge-2', 82.0, TRUE);
+    )SQL");
 }
 
 class BlockingTestOperator final : public execution::Operator {
@@ -478,6 +519,147 @@ TEST(RuntimeExecTest, ExplainFormatsLogicalPlan) {
         "    projection: [*]\n"
         "    predicates:\n"
         "      - host == \"edge-1\"\n"
+        "    limit: 1\n",
+        plan_or->as_string());
+}
+
+TEST(RuntimeExecTest, FilterMergesTimeBoundsForPushdown) {
+    auto file = ParseFile(R"(
+        import "sqlite"
+        builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
+        builtin limit : (<-tables: stream[A], n: int) => stream[A]
+        builtin range : (<-tables: stream[A], start: time, stop: time) => stream[A]
+        builtin explain : (<-tables: stream[A]) => string
+
+        data = sqlite.from(
+            path: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
+        )
+            |> range(start: 2024-07-01T10:00:00Z, stop: 2024-07-01T10:05:00Z)
+            |> filter(fn: (r) => (r._time >= 2024-07-01T10:01:00Z) and (r._time < 2024-07-01T10:04:00Z) and (r.host == "edge-1"))
+            |> limit(n: 10)
+
+        plan = data |> explain()
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto data_or = env.lookup("data");
+    ASSERT_TRUE(data_or.ok()) << data_or.status();
+    ASSERT_EQ(Value::Type::Table, data_or->type());
+    auto materialized_or = execution::MaterializeValue(*data_or);
+    ASSERT_TRUE(materialized_or.ok()) << materialized_or.status();
+    const auto& table = materialized_or->as_table();
+    ASSERT_EQ(1, table.rows.size());
+    EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
+    EXPECT_EQ("93.25", table.rows[0]->lookup("usage")->string());
+
+    const auto plan_or = env.lookup("plan");
+    ASSERT_TRUE(plan_or.ok()) << plan_or.status();
+    ASSERT_EQ(Value::Type::String, plan_or->type());
+    EXPECT_EQ(
+        "Limit [sqlite pushdown]\n"
+        "`- Filter [sqlite pushdown: _time >= 2024-07-01T10:01:00Z and _time < "
+        "2024-07-01T10:04:00Z and host == \"edge-1\"]\n"
+        "   `- Range [sqlite pushdown]\n"
+        "      `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
+        "capabilities=[projection, filter, time_range, limit, sort, aggregate, distinct]\n"
+        "SourcePushdown\n"
+        "  request:\n"
+        "    projection: [*]\n"
+        "    time_range: {start=2024-07-01T10:01:00Z, stop=2024-07-01T10:04:00Z}\n"
+        "    predicates:\n"
+        "      - host == \"edge-1\"\n"
+        "    limit: 10\n",
+        plan_or->as_string());
+}
+
+TEST(RuntimeExecTest, FilterExtractsBooleanShorthandForPushdownPlan) {
+    const std::string path = ::testing::TempDir() + "/runtime_bool_pushdown_metrics.db";
+    ASSERT_NO_FATAL_FAILURE(CreateBoolMetricsDb(path));
+
+    auto file = ParseFile(std::string(R"(
+        import "sqlite"
+        builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
+        builtin limit : (<-tables: stream[A], n: int) => stream[A]
+        builtin explain : (<-tables: stream[A]) => string
+
+        data = sqlite.from(
+            path: ")") + path +
+                          R"(",
+            table: "cpu",
+        )
+            |> filter(fn: (r) => (r.active) and (r.host == "edge-2"))
+            |> limit(n: 10)
+
+        plan = data |> explain()
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto plan_or = env.lookup("plan");
+    ASSERT_TRUE(plan_or.ok()) << plan_or.status();
+    ASSERT_EQ(Value::Type::String, plan_or->type());
+    EXPECT_EQ(
+        "Limit [sqlite pushdown]\n"
+        "`- Filter [sqlite pushdown: active == true and host == \"edge-2\"]\n"
+        "   `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
+        "capabilities=[projection, filter, time_range, limit, sort, aggregate, distinct]\n"
+        "SourcePushdown\n"
+        "  request:\n"
+        "    projection: [*]\n"
+        "    predicates:\n"
+        "      - active == true\n"
+        "      - host == \"edge-2\"\n"
+        "    limit: 10\n",
+        plan_or->as_string());
+}
+
+TEST(RuntimeExecTest, FilterExtractsNegatedBooleanShorthandForPushdownPlan) {
+    const std::string path = ::testing::TempDir() + "/runtime_negated_bool_pushdown_metrics.db";
+    ASSERT_NO_FATAL_FAILURE(CreateBoolMetricsDb(path));
+
+    auto file = ParseFile(std::string(R"(
+        import "sqlite"
+        builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
+        builtin limit : (<-tables: stream[A], n: int) => stream[A]
+        builtin explain : (<-tables: stream[A]) => string
+
+        data = sqlite.from(
+            path: ")") + path +
+                          R"(",
+            table: "cpu",
+        )
+            |> filter(fn: (r) => not r.active)
+            |> limit(n: 1)
+
+        plan = data |> explain()
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto plan_or = env.lookup("plan");
+    ASSERT_TRUE(plan_or.ok()) << plan_or.status();
+    ASSERT_EQ(Value::Type::String, plan_or->type());
+    EXPECT_EQ(
+        "Limit [sqlite pushdown]\n"
+        "`- Filter [sqlite pushdown: active == false]\n"
+        "   `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
+        "capabilities=[projection, filter, time_range, limit, sort, aggregate, distinct]\n"
+        "SourcePushdown\n"
+        "  request:\n"
+        "    projection: [*]\n"
+        "    predicates:\n"
+        "      - active == false\n"
         "    limit: 1\n",
         plan_or->as_string());
 }

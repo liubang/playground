@@ -15,6 +15,10 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/05/07 00:35
 
+#include <memory>
+#include <sqlite3.h>
+#include <string>
+
 #include "cpp/pl/flux/connector/sqlite_source.h"
 #include "gtest/gtest.h"
 
@@ -22,6 +26,45 @@ namespace pl::flux::connector {
 namespace {
 
 constexpr const char* kMetricsDb = "cpp/pl/flux/examples/cross_source/metrics.db";
+
+struct SqliteTestDbDeleter {
+    void operator()(sqlite3* db) const {
+        if (db != nullptr) {
+            sqlite3_close(db);
+        }
+    }
+};
+
+using SqliteTestDb = std::unique_ptr<sqlite3, SqliteTestDbDeleter>;
+
+void ExecuteSql(sqlite3* db, const char* sql) {
+    char* error = nullptr;
+    const int rc = sqlite3_exec(db, sql, nullptr, nullptr, &error);
+    std::unique_ptr<char, decltype(&sqlite3_free)> error_guard(error, sqlite3_free);
+    ASSERT_EQ(SQLITE_OK, rc) << (error == nullptr ? "" : error);
+}
+
+void CreateBoolMetricsDb(const std::string& path) {
+    sqlite3* raw_db = nullptr;
+    ASSERT_EQ(SQLITE_OK,
+              sqlite3_open_v2(
+                  path.c_str(), &raw_db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr));
+    SqliteTestDb db(raw_db);
+    ExecuteSql(db.get(), R"SQL(
+        DROP TABLE IF EXISTS cpu;
+        CREATE TABLE cpu (
+            _time TEXT NOT NULL,
+            host TEXT NOT NULL,
+            usage REAL NOT NULL,
+            active BOOLEAN NOT NULL
+        );
+        INSERT INTO cpu (_time, host, usage, active) VALUES
+            ('2024-07-01 10:00:00.000000', 'edge-1', 71.5, TRUE),
+            ('2024-07-01 10:01:00.000000', 'edge-2', 64.0, TRUE),
+            ('2024-07-01 10:02:00.000000', 'edge-3', 42.75, FALSE),
+            ('2024-07-01 10:03:00.000000', 'edge-2', 82.0, TRUE);
+    )SQL");
+}
 
 TEST(SQLiteSourceTest, ScansTableIntoTableValue) {
     SQLiteSource source(kMetricsDb, "cpu");
@@ -195,6 +238,41 @@ TEST(SQLiteSourceTest, PushesDownProjectionTimeRangePredicateSortAndLimit) {
     EXPECT_EQ("\"edge-1\"", table.rows[0]->lookup("host")->string());
     EXPECT_EQ("93.25", table.rows[0]->lookup("usage")->string());
     EXPECT_EQ(nullptr, table.rows[0]->lookup("_time"));
+}
+
+TEST(SQLiteSourceTest, PushesDownBooleanPredicates) {
+    const std::string path = ::testing::TempDir() + "/sqlite_bool_predicate_metrics.db";
+    ASSERT_NO_FATAL_FAILURE(CreateBoolMetricsDb(path));
+
+    SQLiteSource source(path, "cpu");
+    ScanRequest request;
+    request.columns = {"host", "usage", "active"};
+    request.predicates.push_back({
+        .op = PredicateOp::Eq,
+        .column = "active",
+        .literal = Value::boolean(true),
+    });
+    request.predicates.push_back({
+        .op = PredicateOp::Eq,
+        .column = "host",
+        .literal = Value::string("edge-2"),
+    });
+    request.order_by.push_back({
+        .column = "_time",
+        .desc = false,
+    });
+
+    auto value_or = source.Scan(request);
+
+    ASSERT_TRUE(value_or.ok()) << value_or.status();
+    ASSERT_EQ(Value::Type::Table, value_or->type());
+    const auto& table = value_or->as_table();
+    ASSERT_EQ(2, table.rows.size());
+    EXPECT_EQ("\"edge-2\"", table.rows[0]->lookup("host")->string());
+    EXPECT_EQ("64", table.rows[0]->lookup("usage")->string());
+    EXPECT_EQ("1", table.rows[0]->lookup("active")->string());
+    EXPECT_EQ("82", table.rows[1]->lookup("usage")->string());
+    EXPECT_EQ("1", table.rows[1]->lookup("active")->string());
 }
 
 TEST(SQLiteSourceTest, PushesDownProjectionAliases) {

@@ -86,6 +86,7 @@ cc_test(
         ":connector",
         "@abseil-cpp//absl/status",
         "@googletest//:gtest_main",
+        "@sqlite3",
     ],
 )
 
