@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-28 23:33:28</td>
+            <td class="headerValue">2026-05-29 23:33:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -97,11 +97,11 @@
 <span id="L26"><span class="lineNum">      26</span>                 :             : namespace {</span>
 <span id="L27"><span class="lineNum">      27</span>                 :             : </span>
 <span id="L28"><span class="lineNum">      28</span>                 :             : bool starts_with_char(const std::string&amp; text, char ch) {</span>
-<span id="L29"><span class="lineNum">      29</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 24 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 2932 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC tlaBgGNC">        2957 :     return !text.empty() &amp;&amp; text.front() == ch;</span></span>
+<span id="L29"><span class="lineNum">      29</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 24 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 2943 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 1 time"> + </span>]:<span class="tlaGNC tlaBgGNC">        2968 :     return !text.empty() &amp;&amp; text.front() == ch;</span></span>
 <span id="L30"><span class="lineNum">      30</span>                 :             : }</span>
 <span id="L31"><span class="lineNum">      31</span>                 :             : </span>
 <span id="L32"><span class="lineNum">      32</span>                 :             : bool ends_with_char(const std::string&amp; text, char ch) {</span>
-<span id="L33"><span class="lineNum">      33</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 24 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 2932 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">        2956 :     return !text.empty() &amp;&amp; text.back() == ch;</span></span>
+<span id="L33"><span class="lineNum">      33</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 24 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 2943 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">        2967 :     return !text.empty() &amp;&amp; text.back() == ch;</span></span>
 <span id="L34"><span class="lineNum">      34</span>                 :             : }</span>
 <span id="L35"><span class="lineNum">      35</span>                 :             : </span>
 <span id="L36"><span class="lineNum">      36</span>                 :             : } // namespace</span>
@@ -139,14 +139,14 @@
 <span id="L68"><span class="lineNum">      68</span>                 :             :     return absl::OkStatus();</span>
 <span id="L69"><span class="lineNum">      69</span>                 :             : }</span>
 <span id="L70"><span class="lineNum">      70</span>                 :             : </span>
-<span id="L71"><span class="lineNum">      71</span>         [<span class="tlaGBC" title="Branch 0 was taken 2945 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        2945 : absl::StatusOr&lt;std::string&gt; StrConv::parse_text(const std::string&amp; lit) {</span></span>
+<span id="L71"><span class="lineNum">      71</span>         [<span class="tlaGBC" title="Branch 0 was taken 2956 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        2956 : absl::StatusOr&lt;std::string&gt; StrConv::parse_text(const std::string&amp; lit) {</span></span>
 <span id="L72"><span class="lineNum">      72</span>                 :             :     std::string s;</span>
-<span id="L73"><span class="lineNum">      73</span>         [<span class="tlaGBC" title="Branch 0 was taken 2945 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        2945 :     s.reserve(lit.size());</span></span>
-<span id="L74"><span class="lineNum">      74</span>         [<span class="tlaGBC" title="Branch 0 was taken 28752 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2944 times"> + </span>]:<span class="tlaGNC">       31696 :     for (size_t i = 0; i &lt; lit.length(); ++i) {</span></span>
-<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">       28752 :         const char c = lit[i];</span></span>
-<span id="L76"><span class="lineNum">      76</span>         [<span class="tlaGBC" title="Branch 0 was taken 28679 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 73 times"> + </span>]:<span class="tlaGNC">       28752 :         if (c != '\\') {</span></span>
-<span id="L77"><span class="lineNum">      77</span>         [<span class="tlaGBC" title="Branch 0 was taken 28679 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       28679 :             s.push_back(c);</span></span>
-<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC">       28679 :             continue;</span></span>
+<span id="L73"><span class="lineNum">      73</span>         [<span class="tlaGBC" title="Branch 0 was taken 2956 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        2956 :     s.reserve(lit.size());</span></span>
+<span id="L74"><span class="lineNum">      74</span>         [<span class="tlaGBC" title="Branch 0 was taken 29127 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2955 times"> + </span>]:<span class="tlaGNC">       32082 :     for (size_t i = 0; i &lt; lit.length(); ++i) {</span></span>
+<span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">       29127 :         const char c = lit[i];</span></span>
+<span id="L76"><span class="lineNum">      76</span>         [<span class="tlaGBC" title="Branch 0 was taken 29054 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 73 times"> + </span>]:<span class="tlaGNC">       29127 :         if (c != '\\') {</span></span>
+<span id="L77"><span class="lineNum">      77</span>         [<span class="tlaGBC" title="Branch 0 was taken 29054 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">       29054 :             s.push_back(c);</span></span>
+<span id="L78"><span class="lineNum">      78</span>                 :<span class="tlaGNC">       29054 :             continue;</span></span>
 <span id="L79"><span class="lineNum">      79</span>                 :             :         }</span>
 <span id="L80"><span class="lineNum">      80</span>                 :<span class="tlaGNC">          73 :         ++i;</span></span>
 <span id="L81"><span class="lineNum">      81</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 73 times"> + </span>]:<span class="tlaGNC">          73 :         if (i == lit.length()) {</span></span>
@@ -187,11 +187,11 @@
 <span id="L115"><span class="lineNum">     115</span>                 :             :     return s;</span>
 <span id="L116"><span class="lineNum">     116</span>                 :             : }</span>
 <span id="L117"><span class="lineNum">     117</span>                 :             : </span>
-<span id="L118"><span class="lineNum">     118</span>         [<span class="tlaGBC" title="Branch 0 was taken 2933 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">        2933 : absl::StatusOr&lt;std::string&gt; StrConv::parse_string(const std::string&amp; lit) {</span></span>
-<span id="L119"><span class="lineNum">     119</span>         [<span class="tlaGBC" title="Branch 0 was taken 2933 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        2933 :     if (lit.length() &lt; 2 || !starts_with_char(lit, '&quot;') || !ends_with_char(lit, '&quot;')) {</span></span>
+<span id="L118"><span class="lineNum">     118</span>         [<span class="tlaGBC" title="Branch 0 was taken 2944 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">        2944 : absl::StatusOr&lt;std::string&gt; StrConv::parse_string(const std::string&amp; lit) {</span></span>
+<span id="L119"><span class="lineNum">     119</span>         [<span class="tlaGBC" title="Branch 0 was taken 2944 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        2944 :     if (lit.length() &lt; 2 || !starts_with_char(lit, '&quot;') || !ends_with_char(lit, '&quot;')) {</span></span>
 <span id="L120"><span class="lineNum">     120</span>                 :<span class="tlaGNC">           2 :         return absl::InvalidArgumentError(&quot;invalid string literal&quot;);</span></span>
 <span id="L121"><span class="lineNum">     121</span>                 :             :     }</span>
-<span id="L122"><span class="lineNum">     122</span>         [<span class="tlaGBC" title="Branch 0 was taken 2932 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        5864 :     return parse_text(lit.substr(1, lit.length() - 2));</span></span>
+<span id="L122"><span class="lineNum">     122</span>         [<span class="tlaGBC" title="Branch 0 was taken 2943 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        5886 :     return parse_text(lit.substr(1, lit.length() - 2));</span></span>
 <span id="L123"><span class="lineNum">     123</span>                 :             : }</span>
 <span id="L124"><span class="lineNum">     124</span>                 :             : </span>
 <span id="L125"><span class="lineNum">     125</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 24 times"> + </span>]:<span class="tlaGNC">          24 : absl::StatusOr&lt;std::string&gt; StrConv::parse_regex(const std::string&amp; lit) {</span></span>
@@ -235,21 +235,21 @@
 <span id="L163"><span class="lineNum">     163</span>                 :             :     return unescaped;</span>
 <span id="L164"><span class="lineNum">     164</span>                 :             : }</span>
 <span id="L165"><span class="lineNum">     165</span>                 :             : </span>
-<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC tlaBgGNC">         180 : absl::StatusOr&lt;std::tm&gt; StrConv::parse_time(const std::string&amp; lit) {</span></span>
-<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">         180 :     std::istringstream s(lit);</span></span>
-<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">         180 :     std::tm t = {};</span></span>
-<span id="L169"><span class="lineNum">     169</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 179 times"> + </span>]:<span class="tlaGNC">         180 :     if (lit.find('T') == std::string::npos) {</span></span>
+<span id="L166"><span class="lineNum">     166</span>                 :<span class="tlaGNC tlaBgGNC">         184 : absl::StatusOr&lt;std::tm&gt; StrConv::parse_time(const std::string&amp; lit) {</span></span>
+<span id="L167"><span class="lineNum">     167</span>                 :<span class="tlaGNC">         184 :     std::istringstream s(lit);</span></span>
+<span id="L168"><span class="lineNum">     168</span>                 :<span class="tlaGNC">         184 :     std::tm t = {};</span></span>
+<span id="L169"><span class="lineNum">     169</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 183 times"> + </span>]:<span class="tlaGNC">         184 :     if (lit.find('T') == std::string::npos) {</span></span>
 <span id="L170"><span class="lineNum">     170</span>                 :<span class="tlaGNC">           1 :         constexpr char datefmt[] = &quot;%Y-%m-%d&quot;;</span></span>
 <span id="L171"><span class="lineNum">     171</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">           1 :         s &gt;&gt; std::get_time(&amp;t, datefmt);</span></span>
 <span id="L172"><span class="lineNum">     172</span>                 :             :     } else {</span>
-<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">         179 :         constexpr char rfc3339[] = &quot;%Y-%m-%dT%H:%M:%SZ&quot;;</span></span>
-<span id="L174"><span class="lineNum">     174</span>         [<span class="tlaGBC" title="Branch 0 was taken 179 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         179 :         s &gt;&gt; std::get_time(&amp;t, rfc3339);</span></span>
+<span id="L173"><span class="lineNum">     173</span>                 :<span class="tlaGNC">         183 :         constexpr char rfc3339[] = &quot;%Y-%m-%dT%H:%M:%SZ&quot;;</span></span>
+<span id="L174"><span class="lineNum">     174</span>         [<span class="tlaGBC" title="Branch 0 was taken 183 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         183 :         s &gt;&gt; std::get_time(&amp;t, rfc3339);</span></span>
 <span id="L175"><span class="lineNum">     175</span>                 :             :     }</span>
-<span id="L176"><span class="lineNum">     176</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 180 times"> + </span>]:<span class="tlaGNC">         180 :     if (s.fail()) {</span></span>
+<span id="L176"><span class="lineNum">     176</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 184 times"> + </span>]:<span class="tlaGNC">         184 :     if (s.fail()) {</span></span>
 <span id="L177"><span class="lineNum">     177</span>   [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;fail to parse time &quot; + lit);</span></span>
 <span id="L178"><span class="lineNum">     178</span>                 :             :     }</span>
 <span id="L179"><span class="lineNum">     179</span>                 :             :     return t;</span>
-<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC tlaBgGNC">         180 : }</span></span>
+<span id="L180"><span class="lineNum">     180</span>                 :<span class="tlaGNC tlaBgGNC">         184 : }</span></span>
 <span id="L181"><span class="lineNum">     181</span>                 :             : </span>
 <span id="L182"><span class="lineNum">     182</span>                 :<span class="tlaGNC">         218 : absl::StatusOr&lt;std::vector&lt;std::shared_ptr&lt;Duration&gt;&gt;&gt; StrConv::parse_duration(</span></span>
 <span id="L183"><span class="lineNum">     183</span>                 :             :     const std::string&amp; lit) {</span>

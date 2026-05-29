@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-28 23:33:28</td>
+            <td class="headerValue">2026-05-29 23:33:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">84.8&nbsp;%</td>
@@ -413,10 +413,10 @@
 <span id="L334"><span class="lineNum">     334</span>   [<span class="tlaGBC" title="Branch 0 was taken 2 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 2 was not executed"> # </span><span class="tlaUNC" title="Branch 3 was not executed"> # </span> :<span class="tlaGNC">           7 :     return value ? &quot;true&quot; : &quot;false&quot;;</span></span>
 <span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 4 was not executed"> # </span><span class="tlaUNC" title="Branch 5 was not executed"> # </span><span class="tlaUNC" title="Branch 6 was not executed"> # </span><span class="tlaUNC" title="Branch 7 was not executed"> # </span>]
 <span id="L335"><span class="lineNum">     335</span>                 :             : }</span>
-<span id="L336"><span class="lineNum">     336</span>                 :<span class="tlaGNC">         174 : std::string DateTimeLit::string() const {</span></span>
+<span id="L336"><span class="lineNum">     336</span>                 :<span class="tlaGNC">         178 : std::string DateTimeLit::string() const {</span></span>
 <span id="L337"><span class="lineNum">     337</span>                 :             :     char buf[64];</span>
-<span id="L338"><span class="lineNum">     338</span>                 :<span class="tlaGNC">         174 :     std::strftime(buf, sizeof(buf), &quot;%Y-%m-%dT%H:%M:%SZ&quot;, &amp;value);</span></span>
-<span id="L339"><span class="lineNum">     339</span>                 :<span class="tlaGNC">         174 :     return buf;</span></span>
+<span id="L338"><span class="lineNum">     338</span>                 :<span class="tlaGNC">         178 :     std::strftime(buf, sizeof(buf), &quot;%Y-%m-%dT%H:%M:%SZ&quot;, &amp;value);</span></span>
+<span id="L339"><span class="lineNum">     339</span>                 :<span class="tlaGNC">         178 :     return buf;</span></span>
 <span id="L340"><span class="lineNum">     340</span>                 :             : }</span>
 <span id="L341"><span class="lineNum">     341</span>                 :<span class="tlaGNC">          40 : std::string RegexpLit::string() const {</span></span>
 <span id="L342"><span class="lineNum">     342</span>                 :<span class="tlaGNC">          80 :     return &quot;/&quot; + value + &quot;/&quot;;</span></span>
