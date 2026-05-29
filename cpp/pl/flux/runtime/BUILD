@@ -247,5 +247,6 @@ cc_test(
         "//cpp/pl/flux/execution",
         "@abseil-cpp//absl/status",
         "@googletest//:gtest_main",
+        "@sqlite3",
     ],
 )
