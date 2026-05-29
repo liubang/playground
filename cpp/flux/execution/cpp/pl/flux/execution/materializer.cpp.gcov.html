@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-28 23:33:28</td>
+            <td class="headerValue">2026-05-29 23:33:58</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -93,31 +93,31 @@
 <span id="L22"><span class="lineNum">      22</span>                 :             : </span>
 <span id="L23"><span class="lineNum">      23</span>                 :             : namespace pl::flux::execution {</span>
 <span id="L24"><span class="lineNum">      24</span>                 :             : </span>
-<span id="L25"><span class="lineNum">      25</span>         [<span class="tlaGBC" title="Branch 0 was taken 237 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 272 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         509 : absl::StatusOr&lt;Value&gt; Materializer::Materialize(Value value) const {</span></span>
-<span id="L26"><span class="lineNum">      26</span>         [<span class="tlaGBC" title="Branch 0 was taken 237 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 272 times"> + </span>]:<span class="tlaGNC">         509 :     if (value.type() != Value::Type::Table) {</span></span>
+<span id="L25"><span class="lineNum">      25</span>         [<span class="tlaGBC" title="Branch 0 was taken 237 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 273 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         510 : absl::StatusOr&lt;Value&gt; Materializer::Materialize(Value value) const {</span></span>
+<span id="L26"><span class="lineNum">      26</span>         [<span class="tlaGBC" title="Branch 0 was taken 237 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 273 times"> + </span>]:<span class="tlaGNC">         510 :     if (value.type() != Value::Type::Table) {</span></span>
 <span id="L27"><span class="lineNum">      27</span>                 :             :         return value;</span>
 <span id="L28"><span class="lineNum">      28</span>                 :             :     }</span>
-<span id="L29"><span class="lineNum">      29</span>                 :<span class="tlaGNC">         272 :     auto&amp; table = value.as_table_mut();</span></span>
-<span id="L30"><span class="lineNum">      30</span>         [<span class="tlaGBC" title="Branch 0 was taken 243 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 29 times"> + </span>]:<span class="tlaGNC">         272 :     if (table.materialized) {</span></span>
+<span id="L29"><span class="lineNum">      29</span>                 :<span class="tlaGNC">         273 :     auto&amp; table = value.as_table_mut();</span></span>
+<span id="L30"><span class="lineNum">      30</span>         [<span class="tlaGBC" title="Branch 0 was taken 243 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 30 times"> + </span>]:<span class="tlaGNC">         273 :     if (table.materialized) {</span></span>
 <span id="L31"><span class="lineNum">      31</span>                 :             :         return value;</span>
 <span id="L32"><span class="lineNum">      32</span>                 :             :     }</span>
-<span id="L33"><span class="lineNum">      33</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 29 times"> + </span>]:<span class="tlaGNC">          29 :     if (table.plan == nullptr) {</span></span>
+<span id="L33"><span class="lineNum">      33</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 30 times"> + </span>]:<span class="tlaGNC">          30 :     if (table.plan == nullptr) {</span></span>
 <span id="L34"><span class="lineNum">      34</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return absl::InvalidArgumentError(&quot;cannot materialize lazy table without a plan&quot;);</span></span>
 <span id="L35"><span class="lineNum">      35</span>                 :             :     }</span>
-<span id="L36"><span class="lineNum">      36</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 26 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          29 :     auto materialized_or = PhysicalExecutor().Execute(table.plan);</span></span>
-<span id="L37"><span class="lineNum">      37</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 26 times"> + </span>]:<span class="tlaGNC">          29 :     if (!materialized_or.ok()) {</span></span>
+<span id="L36"><span class="lineNum">      36</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 27 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          30 :     auto materialized_or = PhysicalExecutor().Execute(table.plan);</span></span>
+<span id="L37"><span class="lineNum">      37</span>         [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 27 times"> + </span>]:<span class="tlaGNC">          30 :     if (!materialized_or.ok()) {</span></span>
 <span id="L38"><span class="lineNum">      38</span>                 :             :         return materialized_or.status();</span>
 <span id="L39"><span class="lineNum">      39</span>                 :             :     }</span>
-<span id="L40"><span class="lineNum">      40</span>         [<span class="tlaGBC" title="Branch 0 was taken 26 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          26 :     materialized_or-&gt;as_table_mut().plan = table.plan;</span></span>
-<span id="L41"><span class="lineNum">      41</span>         [<span class="tlaGBC" title="Branch 0 was taken 26 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          26 :     materialized_or-&gt;as_table_mut().range_start = table.range_start;</span></span>
-<span id="L42"><span class="lineNum">      42</span>         [<span class="tlaGBC" title="Branch 0 was taken 26 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          26 :     materialized_or-&gt;as_table_mut().range_stop = table.range_stop;</span></span>
-<span id="L43"><span class="lineNum">      43</span>         [<span class="tlaGBC" title="Branch 0 was taken 26 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          26 :     materialized_or-&gt;as_table_mut().result_name = table.result_name;</span></span>
-<span id="L44"><span class="lineNum">      44</span>   [<span class="tlaGBC" title="Branch 0 was taken 26 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 26 times"> + </span>]:<span class="tlaGNC">          26 :     materialized_or-&gt;as_table_mut().materialized = true;</span></span>
+<span id="L40"><span class="lineNum">      40</span>         [<span class="tlaGBC" title="Branch 0 was taken 27 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          27 :     materialized_or-&gt;as_table_mut().plan = table.plan;</span></span>
+<span id="L41"><span class="lineNum">      41</span>         [<span class="tlaGBC" title="Branch 0 was taken 27 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          27 :     materialized_or-&gt;as_table_mut().range_start = table.range_start;</span></span>
+<span id="L42"><span class="lineNum">      42</span>         [<span class="tlaGBC" title="Branch 0 was taken 27 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          27 :     materialized_or-&gt;as_table_mut().range_stop = table.range_stop;</span></span>
+<span id="L43"><span class="lineNum">      43</span>         [<span class="tlaGBC" title="Branch 0 was taken 27 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          27 :     materialized_or-&gt;as_table_mut().result_name = table.result_name;</span></span>
+<span id="L44"><span class="lineNum">      44</span>   [<span class="tlaGBC" title="Branch 0 was taken 27 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 27 times"> + </span>]:<span class="tlaGNC">          27 :     materialized_or-&gt;as_table_mut().materialized = true;</span></span>
 <span id="L45"><span class="lineNum">      45</span>                 :             :     return *materialized_or;</span>
 <span id="L46"><span class="lineNum">      46</span>                 :             : }</span>
 <span id="L47"><span class="lineNum">      47</span>                 :             : </span>
-<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">         509 : absl::StatusOr&lt;Value&gt; MaterializeValue(Value value) {</span></span>
-<span id="L49"><span class="lineNum">      49</span>         [<span class="tlaGBC" title="Branch 0 was taken 509 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1018 :     return Materializer().Materialize(std::move(value));</span></span>
+<span id="L48"><span class="lineNum">      48</span>                 :<span class="tlaGNC">         510 : absl::StatusOr&lt;Value&gt; MaterializeValue(Value value) {</span></span>
+<span id="L49"><span class="lineNum">      49</span>         [<span class="tlaGBC" title="Branch 0 was taken 510 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">        1020 :     return Materializer().Materialize(std::move(value));</span></span>
 <span id="L50"><span class="lineNum">      50</span>                 :             : }</span>
 <span id="L51"><span class="lineNum">      51</span>                 :             : </span>
 <span id="L52"><span class="lineNum">      52</span>                 :             : } // namespace pl::flux::execution</span>
