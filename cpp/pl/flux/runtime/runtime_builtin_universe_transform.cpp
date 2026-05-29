@@ -91,37 +91,54 @@ std::optional<std::string> row_member_column(const Expression& expr,
     return *column_or;
 }
 
+const Expression& unwrap_paren_expr(const Expression& expr) {
+    const auto* current = &expr;
+    while (current->type == Expression::Type::ParenExpr) {
+        const auto& paren = std::get<std::unique_ptr<ParenExpr>>(current->expr);
+        current = paren->expression.get();
+    }
+    return *current;
+}
+
+plan::PredicateLiteral boolean_predicate_literal(bool value) {
+    return plan::PredicateLiteral{
+        .kind = plan::PredicateLiteralKind::Bool,
+        .bool_value = value,
+    };
+}
+
 std::optional<plan::PredicateLiteral> predicate_literal(const Expression& expr) {
-    switch (expr.type) {
+    const auto& unwrapped = unwrap_paren_expr(expr);
+    switch (unwrapped.type) {
         case Expression::Type::BooleanLit:
             return plan::PredicateLiteral{
                 .kind = plan::PredicateLiteralKind::Bool,
-                .bool_value = std::get<std::unique_ptr<BooleanLit>>(expr.expr)->value,
+                .bool_value = std::get<std::unique_ptr<BooleanLit>>(unwrapped.expr)->value,
             };
         case Expression::Type::IntegerLit:
             return plan::PredicateLiteral{
                 .kind = plan::PredicateLiteralKind::Int,
-                .int_value = std::get<std::unique_ptr<IntegerLit>>(expr.expr)->value,
+                .int_value = std::get<std::unique_ptr<IntegerLit>>(unwrapped.expr)->value,
             };
         case Expression::Type::UnsignedIntegerLit:
             return plan::PredicateLiteral{
                 .kind = plan::PredicateLiteralKind::UInt,
-                .uint_value = std::get<std::unique_ptr<UintLit>>(expr.expr)->value,
+                .uint_value = std::get<std::unique_ptr<UintLit>>(unwrapped.expr)->value,
             };
         case Expression::Type::FloatLit:
             return plan::PredicateLiteral{
                 .kind = plan::PredicateLiteralKind::Float,
-                .float_value = std::get<std::unique_ptr<FloatLit>>(expr.expr)->value,
+                .float_value = std::get<std::unique_ptr<FloatLit>>(unwrapped.expr)->value,
             };
         case Expression::Type::StringLit:
             return plan::PredicateLiteral{
                 .kind = plan::PredicateLiteralKind::String,
-                .string_value = std::get<std::unique_ptr<StringLit>>(expr.expr)->value,
+                .string_value = std::get<std::unique_ptr<StringLit>>(unwrapped.expr)->value,
             };
         case Expression::Type::DateTimeLit:
             return plan::PredicateLiteral{
                 .kind = plan::PredicateLiteralKind::Time,
-                .string_value = std::get<std::unique_ptr<DateTimeLit>>(expr.expr)->string(),
+                .string_value = std::get<std::unique_ptr<DateTimeLit>>(unwrapped.expr)->string(),
             };
         default:
             return std::nullopt;
@@ -172,8 +189,10 @@ std::optional<plan::PredicateSpec> extract_binary_predicate(const BinaryExpr& bi
         return std::nullopt;
     }
 
-    if (auto column = row_member_column(*binary.left, row_param_name); column.has_value()) {
-        auto literal = predicate_literal(*binary.right);
+    const auto& left = unwrap_paren_expr(*binary.left);
+    const auto& right = unwrap_paren_expr(*binary.right);
+    if (auto column = row_member_column(left, row_param_name); column.has_value()) {
+        auto literal = predicate_literal(right);
         if (!literal.has_value()) {
             return std::nullopt;
         }
@@ -183,8 +202,8 @@ std::optional<plan::PredicateSpec> extract_binary_predicate(const BinaryExpr& bi
             .literal = *literal,
         };
     }
-    if (auto column = row_member_column(*binary.right, row_param_name); column.has_value()) {
-        auto literal = predicate_literal(*binary.left);
+    if (auto column = row_member_column(right, row_param_name); column.has_value()) {
+        auto literal = predicate_literal(left);
         if (!literal.has_value()) {
             return std::nullopt;
         }
@@ -197,22 +216,52 @@ std::optional<plan::PredicateSpec> extract_binary_predicate(const BinaryExpr& bi
     return std::nullopt;
 }
 
+std::optional<plan::PredicateSpec> extract_bool_member_predicate(
+    const Expression& expr, const std::string& row_param_name) {
+    const auto& unwrapped = unwrap_paren_expr(expr);
+    if (auto column = row_member_column(unwrapped, row_param_name); column.has_value()) {
+        return plan::PredicateSpec{
+            .op = plan::PredicateOp::Eq,
+            .column = *column,
+            .literal = boolean_predicate_literal(true),
+        };
+    }
+    if (unwrapped.type != Expression::Type::UnaryExpr) {
+        return std::nullopt;
+    }
+    const auto& unary = std::get<std::unique_ptr<UnaryExpr>>(unwrapped.expr);
+    if (unary->op != Operator::NotOperator) {
+        return std::nullopt;
+    }
+    const auto& argument = unwrap_paren_expr(*unary->argument);
+    auto column = row_member_column(argument, row_param_name);
+    if (!column.has_value()) {
+        return std::nullopt;
+    }
+    return plan::PredicateSpec{
+        .op = plan::PredicateOp::Eq,
+        .column = *column,
+        .literal = boolean_predicate_literal(false),
+    };
+}
+
 bool extract_predicates_from_expr(const Expression& expr,
                                   const std::string& row_param_name,
                                   std::vector<plan::PredicateSpec>* predicates) {
-    if (expr.type == Expression::Type::LogicalExpr) {
-        const auto& logical = std::get<std::unique_ptr<LogicalExpr>>(expr.expr);
+    const auto& unwrapped = unwrap_paren_expr(expr);
+    if (unwrapped.type == Expression::Type::LogicalExpr) {
+        const auto& logical = std::get<std::unique_ptr<LogicalExpr>>(unwrapped.expr);
         if (logical->op != LogicalOperator::AndOperator) {
             return false;
         }
         return extract_predicates_from_expr(*logical->left, row_param_name, predicates) &&
                extract_predicates_from_expr(*logical->right, row_param_name, predicates);
     }
-    if (expr.type != Expression::Type::BinaryExpr) {
-        return false;
-    }
-    const auto& binary = std::get<std::unique_ptr<BinaryExpr>>(expr.expr);
-    auto predicate = extract_binary_predicate(*binary, row_param_name);
+    auto predicate =
+        unwrapped.type == Expression::Type::BinaryExpr
+            ? extract_binary_predicate(*std::get<std::unique_ptr<BinaryExpr>>(unwrapped.expr),
+                                       row_param_name)
+            : extract_bool_member_predicate(unwrapped, row_param_name);
     if (!predicate.has_value()) {
         return false;
     }
