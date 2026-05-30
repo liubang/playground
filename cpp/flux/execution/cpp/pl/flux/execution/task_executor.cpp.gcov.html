@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-29 23:33:58</td>
+            <td class="headerValue">2026-05-30 10:36:53</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -98,7 +98,7 @@
 <span id="L27"><span class="lineNum">      27</span>         [<span class="tlaGBC" title="Branch 0 was taken 55 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          55 :     const size_t count = worker_count == 0 ? hardware : worker_count;</span></span>
 <span id="L28"><span class="lineNum">      28</span>         [<span class="tlaGBC" title="Branch 0 was taken 55 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          55 :     workers_.reserve(count);</span></span>
 <span id="L29"><span class="lineNum">      29</span>         [<span class="tlaGBC" title="Branch 0 was taken 273 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 55 times"> + </span>]:<span class="tlaGNC">         328 :     for (size_t index = 0; index &lt; count; ++index) {</span></span>
-<span id="L30"><span class="lineNum">      30</span>         [<span class="tlaGBC" title="Branch 0 was taken 273 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         545 :         workers_.emplace_back([this]() { WorkerLoop(); });</span></span>
+<span id="L30"><span class="lineNum">      30</span>         [<span class="tlaGBC" title="Branch 0 was taken 273 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         546 :         workers_.emplace_back([this]() { WorkerLoop(); });</span></span>
 <span id="L31"><span class="lineNum">      31</span>                 :             :     }</span>
 <span id="L32"><span class="lineNum">      32</span>                 :<span class="tlaGNC">          55 : }</span></span>
 <span id="L33"><span class="lineNum">      33</span>                 :             : </span>
@@ -134,20 +134,20 @@
 <span id="L63"><span class="lineNum">      63</span>                 :<span class="tlaGNC tlaBgGNC">         273 :     cv_.notify_one();</span></span>
 <span id="L64"><span class="lineNum">      64</span>                 :<span class="tlaGNC">         273 : }</span></span>
 <span id="L65"><span class="lineNum">      65</span>                 :             : </span>
-<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">         272 : void TaskExecutor::WorkerLoop() {</span></span>
+<span id="L66"><span class="lineNum">      66</span>                 :<span class="tlaGNC">         273 : void TaskExecutor::WorkerLoop() {</span></span>
 <span id="L67"><span class="lineNum">      67</span>                 :             :     while (true) {</span>
 <span id="L68"><span class="lineNum">      68</span>                 :             :         std::function&lt;void()&gt; task;</span>
 <span id="L69"><span class="lineNum">      69</span>                 :             :         {</span>
-<span id="L70"><span class="lineNum">      70</span>         [<span class="tlaGBC" title="Branch 0 was taken 546 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         544 :             std::unique_lock&lt;std::mutex&gt; lock(mu_);</span></span>
-<span id="L71"><span class="lineNum">      71</span>   [<span class="tlaGBC" title="Branch 0 was taken 762 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 273 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 489 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 273 times"> + </span> :<span class="tlaGNC">        1581 :             cv_.wait(lock, [this]() { return shutdown_ || !tasks_.empty(); });</span></span>
+<span id="L70"><span class="lineNum">      70</span>         [<span class="tlaGBC" title="Branch 0 was taken 546 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         546 :             std::unique_lock&lt;std::mutex&gt; lock(mu_);</span></span>
+<span id="L71"><span class="lineNum">      71</span>   [<span class="tlaGBC" title="Branch 0 was taken 660 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 273 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 387 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 273 times"> + </span> :<span class="tlaGNC">        1479 :             cv_.wait(lock, [this]() { return shutdown_ || !tasks_.empty(); });</span></span>
 <span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 546 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L72"><span class="lineNum">      72</span>   [<span class="tlaGBC" title="Branch 0 was taken 273 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 273 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 273 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         546 :             if (shutdown_ &amp;&amp; tasks_.empty()) {</span></span>
-<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">         272 :                 return;</span></span>
+<span id="L73"><span class="lineNum">      73</span>                 :<span class="tlaGNC">         273 :                 return;</span></span>
 <span id="L74"><span class="lineNum">      74</span>                 :             :             }</span>
 <span id="L75"><span class="lineNum">      75</span>                 :<span class="tlaGNC">         273 :             task = std::move(tasks_.front());</span></span>
 <span id="L76"><span class="lineNum">      76</span>                 :             :             tasks_.pop();</span>
 <span id="L77"><span class="lineNum">      77</span>                 :             :         }</span>
-<span id="L78"><span class="lineNum">      78</span>         [<span class="tlaGBC" title="Branch 0 was taken 272 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         273 :         task();</span></span>
+<span id="L78"><span class="lineNum">      78</span>         [<span class="tlaGBC" title="Branch 0 was taken 273 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         273 :         task();</span></span>
 <span id="L79"><span class="lineNum">      79</span>                 :             :     }</span>
 <span id="L80"><span class="lineNum">      80</span>                 :             : }</span>
 <span id="L81"><span class="lineNum">      81</span>                 :             : </span>
