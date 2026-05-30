@@ -143,6 +143,48 @@ TEST(RuleBasedOptimizerTest, LeavesStringTimePredicatesAsFilters) {
               result_or->pushdown_plan->request.predicates[0].literal.as_string());
 }
 
+TEST(RuleBasedOptimizerTest, NormalizesRedundantPushdownPredicates) {
+    std::vector<plan::PredicateSpec> first_filter = {
+        {.op = plan::PredicateOp::Eq,
+         .column = "host",
+         .literal = {.kind = plan::PredicateLiteralKind::String, .string_value = "edge-1"}},
+        {.op = plan::PredicateOp::Gt,
+         .column = "usage",
+         .literal = {.kind = plan::PredicateLiteralKind::Float, .float_value = 70.0}},
+        {.op = plan::PredicateOp::Lte,
+         .column = "usage",
+         .literal = {.kind = plan::PredicateLiteralKind::Float, .float_value = 95.0}},
+    };
+    std::vector<plan::PredicateSpec> second_filter = {
+        {.op = plan::PredicateOp::Eq,
+         .column = "host",
+         .literal = {.kind = plan::PredicateLiteralKind::String, .string_value = "edge-1"}},
+        {.op = plan::PredicateOp::Gt,
+         .column = "usage",
+         .literal = {.kind = plan::PredicateLiteralKind::Float, .float_value = 80.0}},
+        {.op = plan::PredicateOp::Lt,
+         .column = "usage",
+         .literal = {.kind = plan::PredicateLiteralKind::Float, .float_value = 95.0}},
+    };
+    auto plan = plan::MakeFilter(plan::MakeFilter(SourceScanPlan(), std::move(first_filter)),
+                                 std::move(second_filter));
+
+    auto result_or = DefaultRuleBasedOptimizer().Optimize(plan);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(result_or->pushdown_plan.has_value());
+    ASSERT_EQ(3, result_or->pushdown_plan->request.predicates.size());
+    EXPECT_EQ("host", result_or->pushdown_plan->request.predicates[0].column);
+    EXPECT_EQ(connector::PredicateOp::Eq, result_or->pushdown_plan->request.predicates[0].op);
+    EXPECT_EQ("edge-1", result_or->pushdown_plan->request.predicates[0].literal.as_string());
+    EXPECT_EQ("usage", result_or->pushdown_plan->request.predicates[1].column);
+    EXPECT_EQ(connector::PredicateOp::Gt, result_or->pushdown_plan->request.predicates[1].op);
+    EXPECT_EQ(80.0, result_or->pushdown_plan->request.predicates[1].literal.as_float());
+    EXPECT_EQ("usage", result_or->pushdown_plan->request.predicates[2].column);
+    EXPECT_EQ(connector::PredicateOp::Lt, result_or->pushdown_plan->request.predicates[2].op);
+    EXPECT_EQ(95.0, result_or->pushdown_plan->request.predicates[2].literal.as_float());
+}
+
 TEST(RuleBasedOptimizerTest, RecordsAggregatePushdownRequestWithColumnMapping) {
     auto plan = plan::MakeAggregate(
         plan::MakeGroup(plan::MakeRename(SourceScanPlan(), {{"usage", "cpu_usage"}}), {"host"}),
