@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-29 23:33:58</td>
+            <td class="headerValue">2026-05-30 10:36:53</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">91.7&nbsp;%</td>
@@ -157,7 +157,7 @@
 <span id="L86"><span class="lineNum">      86</span>                 :             :     Time,</span>
 <span id="L87"><span class="lineNum">      87</span>                 :             : };</span>
 <span id="L88"><span class="lineNum">      88</span>                 :             : </span>
-<span id="L89"><span class="lineNum">      89</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         655 : struct PredicateLiteral {</span></span>
+<span id="L89"><span class="lineNum">      89</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         667 : struct PredicateLiteral {</span></span>
 <span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaGBC" title="Branch 6 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
 <span id="L90"><span class="lineNum">      90</span>                 :             :     PredicateLiteralKind kind = PredicateLiteralKind::String;</span>
 <span id="L91"><span class="lineNum">      91</span>                 :             :     bool bool_value = false;</span>
@@ -167,14 +167,14 @@
 <span id="L95"><span class="lineNum">      95</span>                 :             :     std::string string_value;</span>
 <span id="L96"><span class="lineNum">      96</span>                 :             : };</span>
 <span id="L97"><span class="lineNum">      97</span>                 :             : </span>
-<span id="L98"><span class="lineNum">      98</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         425 : struct PredicateSpec {</span></span>
+<span id="L98"><span class="lineNum">      98</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         437 : struct PredicateSpec {</span></span>
 <span class="lineNum">        </span>    <span class="tlaGBC" title="Branch 4 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
 <span id="L99"><span class="lineNum">      99</span>                 :             :     PredicateOp op = PredicateOp::Eq;</span>
 <span id="L100"><span class="lineNum">     100</span>                 :             :     std::string column;</span>
 <span id="L101"><span class="lineNum">     101</span>                 :             :     PredicateLiteral literal;</span>
 <span id="L102"><span class="lineNum">     102</span>                 :             : };</span>
 <span id="L103"><span class="lineNum">     103</span>                 :             : </span>
-<span id="L104"><span class="lineNum">     104</span>                 :<span class="tlaGNC">          64 : struct FilterSpec {</span></span>
+<span id="L104"><span class="lineNum">     104</span>                 :<span class="tlaGNC">          68 : struct FilterSpec {</span></span>
 <span id="L105"><span class="lineNum">     105</span>                 :             :     std::vector&lt;PredicateSpec&gt; predicates;</span>
 <span id="L106"><span class="lineNum">     106</span>                 :             : };</span>
 <span id="L107"><span class="lineNum">     107</span>                 :             : </span>
@@ -252,7 +252,7 @@
 <span id="L178"><span class="lineNum">     178</span>                 :             :     std::vector&lt;std::string&gt; partition_keys;</span>
 <span id="L179"><span class="lineNum">     179</span>                 :             : };</span>
 <span id="L180"><span class="lineNum">     180</span>                 :             : </span>
-<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">         332 : struct MaterializeSpec {</span></span>
+<span id="L181"><span class="lineNum">     181</span>                 :<span class="tlaGNC">         335 : struct MaterializeSpec {</span></span>
 <span id="L182"><span class="lineNum">     182</span>                 :             :     std::string reason;</span>
 <span id="L183"><span class="lineNum">     183</span>                 :             :     std::string builtin;</span>
 <span id="L184"><span class="lineNum">     184</span>                 :             : };</span>
@@ -282,7 +282,7 @@
 <span id="L208"><span class="lineNum">     208</span>                 :             : // PlanNode — the core logical plan tree node.</span>
 <span id="L209"><span class="lineNum">     209</span>                 :             : // ---------------------------------------------------------------------------</span>
 <span id="L210"><span class="lineNum">     210</span>                 :             : </span>
-<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC">         366 : struct PlanNode {</span></span>
+<span id="L211"><span class="lineNum">     211</span>                 :<span class="tlaGNC">         369 : struct PlanNode {</span></span>
 <span id="L212"><span class="lineNum">     212</span>                 :             :     PlanNodeKind kind = PlanNodeKind::Materialize;</span>
 <span id="L213"><span class="lineNum">     213</span>                 :             :     std::vector&lt;std::shared_ptr&lt;PlanNode&gt;&gt; inputs;</span>
 <span id="L214"><span class="lineNum">     214</span>                 :             :     NodeSpec spec = MaterializeSpec{};</span>
@@ -385,24 +385,24 @@
 <span id="L308"><span class="lineNum">     308</span>                 :             : // Factory functions</span>
 <span id="L309"><span class="lineNum">     309</span>                 :             : // ---------------------------------------------------------------------------</span>
 <span id="L310"><span class="lineNum">     310</span>                 :             : </span>
-<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC tlaBgGNC">          91 : inline std::shared_ptr&lt;PlanNode&gt; MakeSourceScan(std::string source,</span></span>
+<span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC tlaBgGNC">          92 : inline std::shared_ptr&lt;PlanNode&gt; MakeSourceScan(std::string source,</span></span>
 <span id="L312"><span class="lineNum">     312</span>                 :             :                                                 std::string driver,</span>
 <span id="L313"><span class="lineNum">     313</span>                 :             :                                                 std::string dsn,</span>
 <span id="L314"><span class="lineNum">     314</span>                 :             :                                                 std::string table) {</span>
 <span id="L315"><span class="lineNum">     315</span>                 :             :     auto node = std::make_shared&lt;PlanNode&gt;();</span>
-<span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaGNC">          91 :     node-&gt;kind = PlanNodeKind::SourceScan;</span></span>
-<span id="L317"><span class="lineNum">     317</span>                 :<span class="tlaGNC">         182 :     node-&gt;spec = SourceScanSpec{.source = std::move(source),</span></span>
+<span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaGNC">          92 :     node-&gt;kind = PlanNodeKind::SourceScan;</span></span>
+<span id="L317"><span class="lineNum">     317</span>                 :<span class="tlaGNC">         184 :     node-&gt;spec = SourceScanSpec{.source = std::move(source),</span></span>
 <span id="L318"><span class="lineNum">     318</span>                 :             :                                 .driver = std::move(driver),</span>
 <span id="L319"><span class="lineNum">     319</span>                 :             :                                 .dsn = std::move(dsn),</span>
-<span id="L320"><span class="lineNum">     320</span>                 :<span class="tlaGNC">          91 :                                 .table = std::move(table)};</span></span>
-<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC">          91 :     return node;</span></span>
+<span id="L320"><span class="lineNum">     320</span>                 :<span class="tlaGNC">          92 :                                 .table = std::move(table)};</span></span>
+<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC">          92 :     return node;</span></span>
 <span id="L322"><span class="lineNum">     322</span>                 :             : }</span>
 <span id="L323"><span class="lineNum">     323</span>                 :             : </span>
-<span id="L324"><span class="lineNum">     324</span>                 :<span class="tlaGNC">         221 : inline std::shared_ptr&lt;PlanNode&gt; MakeUnaryNode(PlanNodeKind kind, std::shared_ptr&lt;PlanNode&gt; input) {</span></span>
+<span id="L324"><span class="lineNum">     324</span>                 :<span class="tlaGNC">         223 : inline std::shared_ptr&lt;PlanNode&gt; MakeUnaryNode(PlanNodeKind kind, std::shared_ptr&lt;PlanNode&gt; input) {</span></span>
 <span id="L325"><span class="lineNum">     325</span>                 :             :     auto node = std::make_shared&lt;PlanNode&gt;();</span>
-<span id="L326"><span class="lineNum">     326</span>                 :<span class="tlaGNC">         221 :     node-&gt;kind = kind;</span></span>
-<span id="L327"><span class="lineNum">     327</span>         [<span class="tlaGBC" title="Branch 0 was taken 221 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         221 :     node-&gt;inputs.push_back(std::move(input));</span></span>
-<span id="L328"><span class="lineNum">     328</span>                 :<span class="tlaGNC">         221 :     return node;</span></span>
+<span id="L326"><span class="lineNum">     326</span>                 :<span class="tlaGNC">         223 :     node-&gt;kind = kind;</span></span>
+<span id="L327"><span class="lineNum">     327</span>         [<span class="tlaGBC" title="Branch 0 was taken 223 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         223 :     node-&gt;inputs.push_back(std::move(input));</span></span>
+<span id="L328"><span class="lineNum">     328</span>                 :<span class="tlaGNC">         223 :     return node;</span></span>
 <span id="L329"><span class="lineNum">     329</span>                 :             : }</span>
 <span id="L330"><span class="lineNum">     330</span>                 :             : </span>
 <span id="L331"><span class="lineNum">     331</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          12 : inline std::shared_ptr&lt;PlanNode&gt; MakeRange(std::shared_ptr&lt;PlanNode&gt; input,</span></span>
@@ -413,11 +413,11 @@
 <span id="L336"><span class="lineNum">     336</span>                 :<span class="tlaGNC">          12 :     return node;</span></span>
 <span id="L337"><span class="lineNum">     337</span>                 :             : }</span>
 <span id="L338"><span class="lineNum">     338</span>                 :             : </span>
-<span id="L339"><span class="lineNum">     339</span>         [<span class="tlaGBC" title="Branch 0 was taken 32 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          32 : inline std::shared_ptr&lt;PlanNode&gt; MakeFilter(std::shared_ptr&lt;PlanNode&gt; input,</span></span>
+<span id="L339"><span class="lineNum">     339</span>         [<span class="tlaGBC" title="Branch 0 was taken 34 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          34 : inline std::shared_ptr&lt;PlanNode&gt; MakeFilter(std::shared_ptr&lt;PlanNode&gt; input,</span></span>
 <span id="L340"><span class="lineNum">     340</span>                 :             :                                             std::vector&lt;PredicateSpec&gt; predicates) {</span>
-<span id="L341"><span class="lineNum">     341</span>         [<span class="tlaGBC" title="Branch 0 was taken 32 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          64 :     auto node = MakeUnaryNode(PlanNodeKind::Filter, std::move(input));</span></span>
-<span id="L342"><span class="lineNum">     342</span>                 :<span class="tlaGNC">          32 :     node-&gt;spec = FilterSpec{std::move(predicates)};</span></span>
-<span id="L343"><span class="lineNum">     343</span>                 :<span class="tlaGNC">          32 :     return node;</span></span>
+<span id="L341"><span class="lineNum">     341</span>         [<span class="tlaGBC" title="Branch 0 was taken 34 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          68 :     auto node = MakeUnaryNode(PlanNodeKind::Filter, std::move(input));</span></span>
+<span id="L342"><span class="lineNum">     342</span>                 :<span class="tlaGNC">          34 :     node-&gt;spec = FilterSpec{std::move(predicates)};</span></span>
+<span id="L343"><span class="lineNum">     343</span>                 :<span class="tlaGNC">          34 :     return node;</span></span>
 <span id="L344"><span class="lineNum">     344</span>                 :             : }</span>
 <span id="L345"><span class="lineNum">     345</span>                 :             : </span>
 <span id="L346"><span class="lineNum">     346</span>         [<span class="tlaGBC" title="Branch 0 was taken 49 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          49 : inline std::shared_ptr&lt;PlanNode&gt; MakeProject(std::shared_ptr&lt;PlanNode&gt; input,</span></span>
