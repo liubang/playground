@@ -172,6 +172,118 @@ void merge_time_stop(connector::TimeRange* time_range, std::string stop) {
     }
 }
 
+bool is_lower_bound(connector::PredicateOp op) {
+    return op == connector::PredicateOp::Gt || op == connector::PredicateOp::Gte;
+}
+
+bool is_upper_bound(connector::PredicateOp op) {
+    return op == connector::PredicateOp::Lt || op == connector::PredicateOp::Lte;
+}
+
+std::optional<long double> numeric_literal(const Value& value) {
+    switch (value.type()) {
+        case Value::Type::Int:
+            return static_cast<long double>(value.as_int());
+        case Value::Type::UInt:
+            return static_cast<long double>(value.as_uint());
+        case Value::Type::Float:
+            return static_cast<long double>(value.as_float());
+        default:
+            return std::nullopt;
+    }
+}
+
+std::optional<int> compare_predicate_literals(const Value& left, const Value& right) {
+    if (auto left_number = numeric_literal(left); left_number.has_value()) {
+        auto right_number = numeric_literal(right);
+        if (!right_number.has_value()) {
+            return std::nullopt;
+        }
+        if (*left_number < *right_number) {
+            return -1;
+        }
+        if (*right_number < *left_number) {
+            return 1;
+        }
+        return 0;
+    }
+    if (left.type() != right.type()) {
+        return std::nullopt;
+    }
+    switch (left.type()) {
+        case Value::Type::Bool:
+            if (left.as_bool() == right.as_bool()) {
+                return 0;
+            }
+            return std::nullopt;
+        case Value::Type::String:
+            if (left.as_string() < right.as_string()) {
+                return -1;
+            }
+            if (right.as_string() < left.as_string()) {
+                return 1;
+            }
+            return 0;
+        case Value::Type::Time:
+            if (left.as_time().literal < right.as_time().literal) {
+                return -1;
+            }
+            if (right.as_time().literal < left.as_time().literal) {
+                return 1;
+            }
+            return 0;
+        default:
+            return std::nullopt;
+    }
+}
+
+bool stricter_lower_bound(connector::PredicateOp op, connector::PredicateOp other) {
+    return op == connector::PredicateOp::Gt && other == connector::PredicateOp::Gte;
+}
+
+bool stricter_upper_bound(connector::PredicateOp op, connector::PredicateOp other) {
+    return op == connector::PredicateOp::Lt && other == connector::PredicateOp::Lte;
+}
+
+bool predicate_subsumes(const connector::Predicate& candidate,
+                        const connector::Predicate& existing) {
+    if (candidate.column != existing.column) {
+        return false;
+    }
+    if (candidate.op == existing.op && candidate.literal == existing.literal) {
+        return true;
+    }
+    auto comparison = compare_predicate_literals(candidate.literal, existing.literal);
+    if (!comparison.has_value()) {
+        return false;
+    }
+    if (is_lower_bound(candidate.op) && is_lower_bound(existing.op)) {
+        return *comparison > 0 ||
+               (*comparison == 0 &&
+                (candidate.op == existing.op || stricter_lower_bound(candidate.op, existing.op)));
+    }
+    if (is_upper_bound(candidate.op) && is_upper_bound(existing.op)) {
+        return *comparison < 0 ||
+               (*comparison == 0 &&
+                (candidate.op == existing.op || stricter_upper_bound(candidate.op, existing.op)));
+    }
+    return false;
+}
+
+void add_normalized_predicate(std::vector<connector::Predicate>* predicates,
+                              connector::Predicate predicate) {
+    for (auto& existing : *predicates) {
+        if (predicate_subsumes(existing, predicate)) {
+            return;
+        }
+        if (predicate_subsumes(predicate, existing)) {
+            existing = std::move(predicate);
+            return;
+        }
+    }
+    predicates->push_back(std::move(predicate));
+}
+
 bool try_merge_time_predicate(connector::ScanRequest* request,
                               const plan::PredicateSpec& predicate,
                               const std::string& source_column,
@@ -272,11 +384,12 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
                     !status.ok()) {
                     return status;
                 }
-                plan_or->request.predicates.push_back({
-                    .op = to_connector_predicate_op(predicate.op),
-                    .column = *source_column_or,
-                    .literal = to_connector_literal(predicate.literal),
-                });
+                add_normalized_predicate(&plan_or->request.predicates,
+                                         {
+                                             .op = to_connector_predicate_op(predicate.op),
+                                             .column = *source_column_or,
+                                             .literal = to_connector_literal(predicate.literal),
+                                         });
             }
             return plan_or;
         case plan::PlanNodeKind::Project: {
