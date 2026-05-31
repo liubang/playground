@@ -2,6 +2,11 @@
 
 MiniDFS 是一个用 C++20 实现的 HDFS-like 分布式文件系统，基于 brpc 进行 RPC 通信，使用 MySQL 存储元数据。项目追求极致性能（硬件加速 CRC32C 校验、零拷贝 I/O、连接池复用）和工程品质（强类型抽象、RAII 资源管理、编译期约束）。
 
+## 文档
+
+- [docs/architecture.md](docs/architecture.md) — 架构概览：组件关系、数据流、设计决策
+- [docs/spec.md](docs/spec.md) — 实现规格：proto 定义、DDL、状态机、分阶段计划
+
 ## 架构
 
 ```text
@@ -68,8 +73,10 @@ cpp/pl/minidfs/
 ├── client/          # CLI 工具及 DfsClient SDK
 ├── docker-compose.yml
 ├── Dockerfile
-├── spec.md          # 详细设计规约
-└── readme.md
+└── docs/            # 项目文档
+    ├── architecture.md  # 架构概览
+    ├── spec.md          # 实现规格
+    └── images/          # drawio 图片
 ```
 
 ## 构建依赖
@@ -404,4 +411,4 @@ minidfs -namenode=$NAMENODE block 1001
 
 **CRC32C 校验**：Linux 使用 Intel ISA-L 库的 SIMD 加速实现，macOS 使用 Google crc32c 库（利用 ARM 硬件 CRC 指令）。两者计算结果一致（相同多项式），每个 chunk 独立校验，支持增量计算和快速验证。
 
-更多设计细节参见 [spec.md](spec.md)。
+更多设计细节参见 [docs/spec.md](docs/spec.md)。
