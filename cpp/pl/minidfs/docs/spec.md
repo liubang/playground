@@ -45,9 +45,9 @@ format -> start cluster -> mkdir -> put file -> get file -> ls -> stat -> rm
 
 # 3. 架构总览
 
-> 📐 原始图表文件: [doc/architecture_overview.drawio](doc/architecture_overview.drawio)
+> 📐 原始图表文件: [images/architecture_overview.drawio](images/architecture_overview.drawio)
 
-![MiniDFS 架构总览](doc/architecture_overview.drawio.png)
+![MiniDFS 架构总览](images/architecture_overview.drawio.png)
 
 ---
 
@@ -699,9 +699,9 @@ minidfs put ./a.log /warehouse/a.log
 
 以 3 副本（DN1 → DN2 → DN3）写入一个 Block 为例：
 
-> 📐 原始图表文件: [doc/pipeline_write.drawio](doc/pipeline_write.drawio)
+> 📐 原始图表文件: [images/pipeline_write.drawio](images/pipeline_write.drawio)
 
-![Pipeline 写入时序](doc/pipeline_write.drawio.png)
+![Pipeline 写入时序](images/pipeline_write.drawio.png)
 
 **单个 DataNode 处理 WriteBlock 的逻辑：**
 

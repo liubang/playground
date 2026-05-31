@@ -3,8 +3,6 @@
 这个目录保存 Flux 运行时和 connector scan 的本地基准测试。目标不是做完全隔离的微基准，
 而是给我们一个可重复的比较方法，用来观察引擎优化前后的变化。
 
-如果想看这轮优化是怎么一步步做出来的，可以配合阅读 [OPTIMIZATION_LOG.md](/Volumes/workspace/liubang/playground/cpp/pl/flux/benchmark/OPTIMIZATION_LOG.md)。
-
 ## Benchmark 层次
 
 当前基准分三类：

@@ -173,7 +173,7 @@
 
 - 已有：`array`，包含 `array.from`、`array.concat`、`array.filter`、`array.map`、`array.contains`、`array.reduce`、`array.any`、`array.all`、`array.range`、`array.repeat`、`array.length`、`array.get`、`array.slice`、`array.sort`、`array.flatMap`、`array.find`、`array.findIndex`、`array.take`、`array.drop`、`array.reverse`、`array.unique`、`array.unfold`、`array.scan`、`array.zip`、`array.enumerate`
 - 已有：`csv`，包含 `csv.from`
-- 已有：`sqlite`，包含 `sqlite.from`；connector / plan / pushdown 见 `DATASOURCE_ARCHITECTURE.md`
+- 已有：`sqlite`，包含 `sqlite.from`；connector / plan / pushdown 见 `datasource-evolution.md`
 - 已有：`mysql`，包含 `mysql.from(dsn:, table:)` 和显式连接字段形态；connector / plan / pushdown 复用 SQL provider 路线
 - 已有：`date`，包含 `date.add`、`date.sub`、`date.truncate`、`date.year`、`date.month`、`date.monthDay`、`date.weekDay`、`date.hour`、`date.minute`、`date.second`
 - 已有：`regexp`，包含 `regexp.compile`、`regexp.findString`、`regexp.matchRegexpString`、`regexp.quoteMeta`
