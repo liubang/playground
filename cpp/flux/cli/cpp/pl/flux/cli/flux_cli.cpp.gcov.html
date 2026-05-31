@@ -31,13 +31,13 @@
             <td class="headerValue">coverage_filtered.dat</td>
             <td></td>
             <td class="headerItem">Lines:</td>
-            <td class="headerCovTableEntryMed">80.0&nbsp;%</td>
+            <td class="headerCovTableEntryMed">80.4&nbsp;%</td>
             <td class="headerCovTableEntry">720</td>
-            <td class="headerCovTableEntry">576</td>
+            <td class="headerCovTableEntry">579</td>
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-30 10:36:53</td>
+            <td class="headerValue">2026-05-31 22:59:06</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">96.0&nbsp;%</td>
@@ -49,9 +49,9 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">52.8&nbsp;%</td>
+            <td class="headerCovTableEntryLo">52.9&nbsp;%</td>
             <td class="headerCovTableEntry">1289</td>
-            <td class="headerCovTableEntry">681</td>
+            <td class="headerCovTableEntry">682</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -333,7 +333,7 @@
 <span id="L257"><span class="lineNum">     257</span>                 :             : }</span>
 <span id="L258"><span class="lineNum">     258</span>                 :             : </span>
 <span id="L259"><span class="lineNum">     259</span>                 :             : bool contains_newline(std::string_view text) {</span>
-<span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaGNC tlaBgGNC">         145 :     return text.find('\n') != std::string_view::npos;</span></span>
+<span id="L260"><span class="lineNum">     260</span>                 :<span class="tlaGNC tlaBgGNC">         154 :     return text.find('\n') != std::string_view::npos;</span></span>
 <span id="L261"><span class="lineNum">     261</span>                 :             : }</span>
 <span id="L262"><span class="lineNum">     262</span>                 :             : </span>
 <span id="L263"><span class="lineNum">     263</span>         [<span class="tlaGBC" title="Branch 0 was taken 125 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 345 times"> + </span>]:<span class="tlaGNC">         470 : bool prefers_multiline_human_value(const Value&amp; value) {</span></span>
@@ -352,23 +352,23 @@
 <span id="L276"><span class="lineNum">     276</span>                 :             : }</span>
 <span id="L277"><span class="lineNum">     277</span>                 :             : </span>
 <span id="L278"><span class="lineNum">     278</span>                 :             : void append_indent(size_t indent, std::ostringstream&amp; out) {</span>
-<span id="L279"><span class="lineNum">     279</span>   [<span class="tlaGBC" title="Branch 0 was taken 24 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 12 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 2 times"> + </span> :<span class="tlaGNC">         998 :     for (size_t i = 0; i &lt; indent; ++i) {</span></span>
-<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 768 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 192 times"> + </span>]
-<span id="L280"><span class="lineNum">     280</span>                 :<span class="tlaGNC">         792 :         out &lt;&lt; ' ';</span></span>
+<span id="L279"><span class="lineNum">     279</span>   [<span class="tlaGBC" title="Branch 0 was taken 36 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 18 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 2 times"> + </span> :<span class="tlaGNC">        1428 :     for (size_t i = 0; i &lt; indent; ++i) {</span></span>
+<span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 1088 times"> + </span><span class="tlaGBC" title="Branch 5 was taken 284 times"> + </span>]
+<span id="L280"><span class="lineNum">     280</span>                 :<span class="tlaGNC">        1124 :         out &lt;&lt; ' ';</span></span>
 <span id="L281"><span class="lineNum">     281</span>                 :             :     }</span>
 <span id="L282"><span class="lineNum">     282</span>                 :             : }</span>
 <span id="L283"><span class="lineNum">     283</span>                 :             : </span>
-<span id="L284"><span class="lineNum">     284</span>                 :<span class="tlaGNC">           8 : void append_multiline_text_block(std::string_view text, size_t indent, std::ostringstream&amp; out) {</span></span>
+<span id="L284"><span class="lineNum">     284</span>                 :<span class="tlaGNC">          17 : void append_multiline_text_block(std::string_view text, size_t indent, std::ostringstream&amp; out) {</span></span>
 <span id="L285"><span class="lineNum">     285</span>                 :             :     size_t line_start = 0;</span>
-<span id="L286"><span class="lineNum">     286</span>         [<span class="tlaGBC" title="Branch 0 was taken 192 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 8 times"> + </span>]:<span class="tlaGNC">         200 :     while (line_start &lt; text.size()) {</span></span>
-<span id="L287"><span class="lineNum">     287</span>                 :<span class="tlaGNC">         192 :         const size_t line_end = text.find('\n', line_start);</span></span>
+<span id="L286"><span class="lineNum">     286</span>         [<span class="tlaGBC" title="Branch 0 was taken 284 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 17 times"> + </span>]:<span class="tlaGNC">         301 :     while (line_start &lt; text.size()) {</span></span>
+<span id="L287"><span class="lineNum">     287</span>                 :<span class="tlaGNC">         284 :         const size_t line_end = text.find('\n', line_start);</span></span>
 <span id="L288"><span class="lineNum">     288</span>                 :             :         append_indent(indent, out);</span>
-<span id="L289"><span class="lineNum">     289</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 192 times"> + </span>]:<span class="tlaGNC">         192 :         if (line_end == std::string_view::npos) {</span></span>
+<span id="L289"><span class="lineNum">     289</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 284 times"> + </span>]:<span class="tlaGNC">         284 :         if (line_end == std::string_view::npos) {</span></span>
 <span id="L290"><span class="lineNum">     290</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             out &lt;&lt; text.substr(line_start) &lt;&lt; '\n';</span></span>
 <span id="L291"><span class="lineNum">     291</span>                 :<span class="tlaUNC">           0 :             return;</span></span>
 <span id="L292"><span class="lineNum">     292</span>                 :             :         }</span>
-<span id="L293"><span class="lineNum">     293</span>                 :<span class="tlaGNC tlaBgGNC">         384 :         out &lt;&lt; text.substr(line_start, line_end - line_start) &lt;&lt; '\n';</span></span>
-<span id="L294"><span class="lineNum">     294</span>                 :<span class="tlaGNC">         192 :         line_start = line_end + 1;</span></span>
+<span id="L293"><span class="lineNum">     293</span>                 :<span class="tlaGNC tlaBgGNC">         568 :         out &lt;&lt; text.substr(line_start, line_end - line_start) &lt;&lt; '\n';</span></span>
+<span id="L294"><span class="lineNum">     294</span>                 :<span class="tlaGNC">         284 :         line_start = line_end + 1;</span></span>
 <span id="L295"><span class="lineNum">     295</span>                 :             :     }</span>
 <span id="L296"><span class="lineNum">     296</span>                 :             : }</span>
 <span id="L297"><span class="lineNum">     297</span>                 :             : </span>
@@ -378,12 +378,12 @@
 <span id="L301"><span class="lineNum">     301</span>                 :<span class="tlaUNC">           0 :         return;</span></span>
 <span id="L302"><span class="lineNum">     302</span>                 :             :     }</span>
 <span id="L303"><span class="lineNum">     303</span>                 :<span class="tlaGNC tlaBgGNC">           2 :     out &lt;&lt; &quot;{\n&quot;;</span></span>
-<span id="L304"><span class="lineNum">     304</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">          14 :     for (const auto&amp; [name, value] : object.properties) {</span></span>
-<span id="L305"><span class="lineNum">     305</span>                 :<span class="tlaGNC">          12 :         append_indent(indent + 2, out);</span></span>
-<span id="L306"><span class="lineNum">     306</span>                 :<span class="tlaGNC">          12 :         out &lt;&lt; name &lt;&lt; &quot;: &quot;;</span></span>
-<span id="L307"><span class="lineNum">     307</span>   [<span class="tlaGBC" title="Branch 0 was taken 8 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 8 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          12 :         if (value.type() == Value::Type::String &amp;&amp; contains_newline(value.as_string())) {</span></span>
-<span id="L308"><span class="lineNum">     308</span>                 :<span class="tlaGNC">           8 :             out &lt;&lt; &quot;|\n&quot;;</span></span>
-<span id="L309"><span class="lineNum">     309</span>                 :<span class="tlaGNC">           8 :             append_multiline_text_block(value.as_string(), indent + 4, out);</span></span>
+<span id="L304"><span class="lineNum">     304</span>         [<span class="tlaGBC" title="Branch 0 was taken 18 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 2 times"> + </span>]:<span class="tlaGNC">          20 :     for (const auto&amp; [name, value] : object.properties) {</span></span>
+<span id="L305"><span class="lineNum">     305</span>                 :<span class="tlaGNC">          18 :         append_indent(indent + 2, out);</span></span>
+<span id="L306"><span class="lineNum">     306</span>                 :<span class="tlaGNC">          18 :         out &lt;&lt; name &lt;&lt; &quot;: &quot;;</span></span>
+<span id="L307"><span class="lineNum">     307</span>   [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 14 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          18 :         if (value.type() == Value::Type::String &amp;&amp; contains_newline(value.as_string())) {</span></span>
+<span id="L308"><span class="lineNum">     308</span>                 :<span class="tlaGNC">          14 :             out &lt;&lt; &quot;|\n&quot;;</span></span>
+<span id="L309"><span class="lineNum">     309</span>                 :<span class="tlaGNC">          14 :             append_multiline_text_block(value.as_string(), indent + 4, out);</span></span>
 <span id="L310"><span class="lineNum">     310</span>                 :             :         } else {</span>
 <span id="L311"><span class="lineNum">     311</span>                 :<span class="tlaGNC">           4 :             append_human_value(value, indent + 2, out);</span></span>
 <span id="L312"><span class="lineNum">     312</span>                 :<span class="tlaGNC">           4 :             out &lt;&lt; '\n';</span></span>
@@ -393,13 +393,13 @@
 <span id="L316"><span class="lineNum">     316</span>                 :<span class="tlaGNC">           2 :     out &lt;&lt; &quot;}&quot;;</span></span>
 <span id="L317"><span class="lineNum">     317</span>                 :             : }</span>
 <span id="L318"><span class="lineNum">     318</span>                 :             : </span>
-<span id="L319"><span class="lineNum">     319</span>         [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 148 times"> + </span>]:<span class="tlaGNC">         160 : void append_human_value(const Value&amp; value, size_t indent, std::ostringstream&amp; out) {</span></span>
-<span id="L320"><span class="lineNum">     320</span>   [<span class="tlaGBC" title="Branch 0 was taken 12 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 148 times"> + </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 12 times"> + </span>]:<span class="tlaGNC">         160 :     if (value.type() == Value::Type::String &amp;&amp; contains_newline(value.as_string())) {</span></span>
-<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         out &lt;&lt; &quot;|\n&quot;;</span></span>
-<span id="L322"><span class="lineNum">     322</span>                 :<span class="tlaUNC">           0 :         append_multiline_text_block(value.as_string(), indent + 2, out);</span></span>
-<span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaUNC">           0 :         return;</span></span>
+<span id="L319"><span class="lineNum">     319</span>         [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 148 times"> + </span>]:<span class="tlaGNC">         163 : void append_human_value(const Value&amp; value, size_t indent, std::ostringstream&amp; out) {</span></span>
+<span id="L320"><span class="lineNum">     320</span>   [<span class="tlaGBC" title="Branch 0 was taken 15 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 148 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 3 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 12 times"> + </span>]:<span class="tlaGNC">         163 :     if (value.type() == Value::Type::String &amp;&amp; contains_newline(value.as_string())) {</span></span>
+<span id="L321"><span class="lineNum">     321</span>                 :<span class="tlaGNC">           3 :         out &lt;&lt; &quot;|\n&quot;;</span></span>
+<span id="L322"><span class="lineNum">     322</span>                 :<span class="tlaGNC">           3 :         append_multiline_text_block(value.as_string(), indent + 2, out);</span></span>
+<span id="L323"><span class="lineNum">     323</span>                 :<span class="tlaGNC">           3 :         return;</span></span>
 <span id="L324"><span class="lineNum">     324</span>                 :             :     }</span>
-<span id="L325"><span class="lineNum">     325</span>   [<span class="tlaGBC" title="Branch 0 was taken 79 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 81 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 77 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 2 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         160 :     if (value.type() == Value::Type::Object &amp;&amp; prefers_multiline_human_value(value)) {</span></span>
+<span id="L325"><span class="lineNum">     325</span>   [<span class="tlaGBC" title="Branch 0 was taken 79 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 81 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 77 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 2 times"> + </span>]:<span class="tlaGNC">         160 :     if (value.type() == Value::Type::Object &amp;&amp; prefers_multiline_human_value(value)) {</span></span>
 <span id="L326"><span class="lineNum">     326</span>                 :<span class="tlaGNC">           2 :         append_human_object(value.as_object(), indent, out);</span></span>
 <span id="L327"><span class="lineNum">     327</span>                 :<span class="tlaGNC">           2 :         return;</span></span>
 <span id="L328"><span class="lineNum">     328</span>                 :             :     }</span>
@@ -855,10 +855,10 @@
 <span id="L745"><span class="lineNum">     745</span>                 :             : </span>
 <span id="L746"><span class="lineNum">     746</span>         [<span class="tlaGBC" title="Branch 0 was taken 33 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          33 :     std::vector&lt;std::string&gt; available_results;</span></span>
 <span id="L747"><span class="lineNum">     747</span>         [<span class="tlaGBC" title="Branch 0 was taken 33 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          33 :     available_results.reserve(result.results.size());</span></span>
-<span id="L748"><span class="lineNum">     748</span>         [<span class="tlaGBC" title="Branch 0 was taken 193 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 33 times"> + </span>]:<span class="tlaGNC">         226 :     for (const auto&amp; named : result.results) {</span></span>
-<span id="L749"><span class="lineNum">     749</span>         [<span class="tlaGBC" title="Branch 0 was taken 193 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         193 :         available_results.push_back(named.name);</span></span>
-<span id="L750"><span class="lineNum">     750</span>         [<span class="tlaGBC" title="Branch 0 was taken 161 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 32 times"> + </span>]:<span class="tlaGNC">         193 :         if (named.name != result_name) {</span></span>
-<span id="L751"><span class="lineNum">     751</span>                 :<span class="tlaGNC">         161 :             continue;</span></span>
+<span id="L748"><span class="lineNum">     748</span>         [<span class="tlaGBC" title="Branch 0 was taken 196 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 33 times"> + </span>]:<span class="tlaGNC">         229 :     for (const auto&amp; named : result.results) {</span></span>
+<span id="L749"><span class="lineNum">     749</span>         [<span class="tlaGBC" title="Branch 0 was taken 196 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         196 :         available_results.push_back(named.name);</span></span>
+<span id="L750"><span class="lineNum">     750</span>         [<span class="tlaGBC" title="Branch 0 was taken 164 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 32 times"> + </span>]:<span class="tlaGNC">         196 :         if (named.name != result_name) {</span></span>
+<span id="L751"><span class="lineNum">     751</span>                 :<span class="tlaGNC">         164 :             continue;</span></span>
 <span id="L752"><span class="lineNum">     752</span>                 :             :         }</span>
 <span id="L753"><span class="lineNum">     753</span>         [<span class="tlaGBC" title="Branch 0 was taken 32 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          32 :         filtered.results.push_back(named);</span></span>
 <span id="L754"><span class="lineNum">     754</span>                 :<span class="tlaGNC">          32 :         filtered.last = ExecutionResult::normal(named.value);</span></span>
@@ -879,9 +879,9 @@
 <span id="L768"><span class="lineNum">     768</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           3 :         &quot;` was not found; available results: &quot; + absl::StrJoin(available_results, &quot;, &quot;));</span></span>
 <span id="L769"><span class="lineNum">     769</span>                 :<span class="tlaGNC">          33 : }</span></span>
 <span id="L770"><span class="lineNum">     770</span>                 :             : </span>
-<span id="L771"><span class="lineNum">     771</span>                 :<span class="tlaGNC">         357 : absl::StatusOr&lt;NamedResult&gt; materialize_named_result(NamedResult result) {</span></span>
-<span id="L772"><span class="lineNum">     772</span>   [<span class="tlaGBC" title="Branch 0 was taken 357 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 357 times"> + </span>]:<span class="tlaGNC">         714 :     auto value_or = execution::MaterializeValue(std::move(result.value));</span></span>
-<span id="L773"><span class="lineNum">     773</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 357 times"> + </span>]:<span class="tlaGNC">         357 :     if (!value_or.ok()) {</span></span>
+<span id="L771"><span class="lineNum">     771</span>                 :<span class="tlaGNC">         360 : absl::StatusOr&lt;NamedResult&gt; materialize_named_result(NamedResult result) {</span></span>
+<span id="L772"><span class="lineNum">     772</span>   [<span class="tlaGBC" title="Branch 0 was taken 360 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 360 times"> + </span>]:<span class="tlaGNC">         720 :     auto value_or = execution::MaterializeValue(std::move(result.value));</span></span>
+<span id="L773"><span class="lineNum">     773</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 360 times"> + </span>]:<span class="tlaGNC">         360 :     if (!value_or.ok()) {</span></span>
 <span id="L774"><span class="lineNum">     774</span>                 :             :         return value_or.status();</span>
 <span id="L775"><span class="lineNum">     775</span>                 :             :     }</span>
 <span id="L776"><span class="lineNum">     776</span>                 :             :     result.value = std::move(*value_or);</span>
@@ -898,12 +898,12 @@
 <span id="L787"><span class="lineNum">     787</span>                 :             : }</span>
 <span id="L788"><span class="lineNum">     788</span>                 :             : </span>
 <span id="L789"><span class="lineNum">     789</span>                 :<span class="tlaGNC">         126 : absl::StatusOr&lt;FileExecutionResult&gt; materialize_file_result(FileExecutionResult result) {</span></span>
-<span id="L790"><span class="lineNum">     790</span>         [<span class="tlaGBC" title="Branch 0 was taken 357 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 126 times"> + </span>]:<span class="tlaGNC">         483 :     for (auto&amp; named : result.results) {</span></span>
-<span id="L791"><span class="lineNum">     791</span>   [<span class="tlaGBC" title="Branch 0 was taken 357 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 357 times"> + </span>]:<span class="tlaGNC">         714 :         auto materialized_or = materialize_named_result(std::move(named));</span></span>
-<span id="L792"><span class="lineNum">     792</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 357 times"> + </span>]:<span class="tlaGNC">         357 :         if (!materialized_or.ok()) {</span></span>
+<span id="L790"><span class="lineNum">     790</span>         [<span class="tlaGBC" title="Branch 0 was taken 360 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 126 times"> + </span>]:<span class="tlaGNC">         486 :     for (auto&amp; named : result.results) {</span></span>
+<span id="L791"><span class="lineNum">     791</span>   [<span class="tlaGBC" title="Branch 0 was taken 360 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 360 times"> + </span>]:<span class="tlaGNC">         720 :         auto materialized_or = materialize_named_result(std::move(named));</span></span>
+<span id="L792"><span class="lineNum">     792</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 360 times"> + </span>]:<span class="tlaGNC">         360 :         if (!materialized_or.ok()) {</span></span>
 <span id="L793"><span class="lineNum">     793</span>                 :             :             return materialized_or.status();</span>
 <span id="L794"><span class="lineNum">     794</span>                 :             :         }</span>
-<span id="L795"><span class="lineNum">     795</span>                 :<span class="tlaGNC">         357 :         named = std::move(*materialized_or);</span></span>
+<span id="L795"><span class="lineNum">     795</span>                 :<span class="tlaGNC">         360 :         named = std::move(*materialized_or);</span></span>
 <span id="L796"><span class="lineNum">     796</span>                 :             :     }</span>
 <span id="L797"><span class="lineNum">     797</span>   [<span class="tlaGBC" title="Branch 0 was taken 126 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 126 times"> + </span>]:<span class="tlaGNC">         252 :     auto last_or = materialize_execution_result(std::move(result.last));</span></span>
 <span id="L798"><span class="lineNum">     798</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 126 times"> + </span>]:<span class="tlaGNC">         126 :     if (!last_or.ok()) {</span></span>
@@ -922,15 +922,15 @@
 <span id="L811"><span class="lineNum">     811</span>                 :             :     }</span>
 <span id="L812"><span class="lineNum">     812</span>                 :<span class="tlaGNC">           3 : }</span></span>
 <span id="L813"><span class="lineNum">     813</span>                 :             : </span>
-<span id="L814"><span class="lineNum">     814</span>         [<span class="tlaGBC" title="Branch 0 was taken 156 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         156 : void append_scalar_result(const NamedResult&amp; result, bool include_header, std::ostringstream&amp; out) {</span></span>
-<span id="L815"><span class="lineNum">     815</span>         [<span class="tlaGBC" title="Branch 0 was taken 156 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         156 :     if (result.value.is_null()) {</span></span>
+<span id="L814"><span class="lineNum">     814</span>         [<span class="tlaGBC" title="Branch 0 was taken 159 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         159 : void append_scalar_result(const NamedResult&amp; result, bool include_header, std::ostringstream&amp; out) {</span></span>
+<span id="L815"><span class="lineNum">     815</span>         [<span class="tlaGBC" title="Branch 0 was taken 159 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         159 :     if (result.value.is_null()) {</span></span>
 <span id="L816"><span class="lineNum">     816</span>                 :             :         return;</span>
 <span id="L817"><span class="lineNum">     817</span>                 :             :     }</span>
-<span id="L818"><span class="lineNum">     818</span>         [<span class="tlaGBC" title="Branch 0 was taken 145 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 11 times"> + </span>]:<span class="tlaGNC">         156 :     if (include_header) {</span></span>
-<span id="L819"><span class="lineNum">     819</span>                 :<span class="tlaGNC">         290 :         out &lt;&lt; &quot;Result: &quot; &lt;&lt; result.name &lt;&lt; '\n';</span></span>
+<span id="L818"><span class="lineNum">     818</span>         [<span class="tlaGBC" title="Branch 0 was taken 148 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 11 times"> + </span>]:<span class="tlaGNC">         159 :     if (include_header) {</span></span>
+<span id="L819"><span class="lineNum">     819</span>                 :<span class="tlaGNC">         296 :         out &lt;&lt; &quot;Result: &quot; &lt;&lt; result.name &lt;&lt; '\n';</span></span>
 <span id="L820"><span class="lineNum">     820</span>                 :             :     }</span>
-<span id="L821"><span class="lineNum">     821</span>                 :<span class="tlaGNC">         156 :     append_human_value(result.value, 0, out);</span></span>
-<span id="L822"><span class="lineNum">     822</span>                 :<span class="tlaGNC">         156 :     out &lt;&lt; '\n';</span></span>
+<span id="L821"><span class="lineNum">     821</span>                 :<span class="tlaGNC">         159 :     append_human_value(result.value, 0, out);</span></span>
+<span id="L822"><span class="lineNum">     822</span>                 :<span class="tlaGNC">         159 :     out &lt;&lt; '\n';</span></span>
 <span id="L823"><span class="lineNum">     823</span>                 :             : }</span>
 <span id="L824"><span class="lineNum">     824</span>                 :             : </span>
 <span id="L825"><span class="lineNum">     825</span>                 :<span class="tlaGNC">         168 : void append_table_result(const NamedResult&amp; result,</span></span>
@@ -1005,18 +1005,18 @@
 <span id="L894"><span class="lineNum">     894</span>                 :<span class="tlaGNC">         289 :     }</span></span>
 <span id="L895"><span class="lineNum">     895</span>                 :<span class="tlaGNC">         168 : }</span></span>
 <span id="L896"><span class="lineNum">     896</span>                 :             : </span>
-<span id="L897"><span class="lineNum">     897</span>         [<span class="tlaGBC" title="Branch 0 was taken 324 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         324 : void append_named_result(const NamedResult&amp; result,</span></span>
+<span id="L897"><span class="lineNum">     897</span>         [<span class="tlaGBC" title="Branch 0 was taken 327 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         327 : void append_named_result(const NamedResult&amp; result,</span></span>
 <span id="L898"><span class="lineNum">     898</span>                 :             :                          bool include_header,</span>
 <span id="L899"><span class="lineNum">     899</span>                 :             :                          const FluxCliOptions&amp; options,</span>
 <span id="L900"><span class="lineNum">     900</span>                 :             :                          std::ostringstream&amp; out) {</span>
-<span id="L901"><span class="lineNum">     901</span>         [<span class="tlaGBC" title="Branch 0 was taken 324 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         324 :     if (result.value.is_null()) {</span></span>
+<span id="L901"><span class="lineNum">     901</span>         [<span class="tlaGBC" title="Branch 0 was taken 327 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         327 :     if (result.value.is_null()) {</span></span>
 <span id="L902"><span class="lineNum">     902</span>                 :             :         return;</span>
 <span id="L903"><span class="lineNum">     903</span>                 :             :     }</span>
-<span id="L904"><span class="lineNum">     904</span>         [<span class="tlaGBC" title="Branch 0 was taken 168 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 156 times"> + </span>]:<span class="tlaGNC">         324 :     if (result.value.type() == Value::Type::Table) {</span></span>
+<span id="L904"><span class="lineNum">     904</span>         [<span class="tlaGBC" title="Branch 0 was taken 168 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 159 times"> + </span>]:<span class="tlaGNC">         327 :     if (result.value.type() == Value::Type::Table) {</span></span>
 <span id="L905"><span class="lineNum">     905</span>                 :<span class="tlaGNC">         168 :         append_table_result(result, include_header, options, out);</span></span>
 <span id="L906"><span class="lineNum">     906</span>                 :<span class="tlaGNC">         168 :         return;</span></span>
 <span id="L907"><span class="lineNum">     907</span>                 :             :     }</span>
-<span id="L908"><span class="lineNum">     908</span>                 :<span class="tlaGNC">         156 :     append_scalar_result(result, include_header, out);</span></span>
+<span id="L908"><span class="lineNum">     908</span>                 :<span class="tlaGNC">         159 :     append_scalar_result(result, include_header, out);</span></span>
 <span id="L909"><span class="lineNum">     909</span>                 :             : }</span>
 <span id="L910"><span class="lineNum">     910</span>                 :             : </span>
 <span id="L911"><span class="lineNum">     911</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 97 times"> + </span>]:<span class="tlaGNC">          97 : void append_cli_output(const FileExecutionResult&amp; result,</span></span>
@@ -1038,14 +1038,14 @@
 <span id="L927"><span class="lineNum">     927</span>                 :<span class="tlaGNC">          97 :     bool include_headers = multiple_results || has_table;</span></span>
 <span id="L928"><span class="lineNum">     928</span>                 :             : </span>
 <span id="L929"><span class="lineNum">     929</span>                 :             :     bool first = true;</span>
-<span id="L930"><span class="lineNum">     930</span>         [<span class="tlaGBC" title="Branch 0 was taken 324 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 97 times"> + </span>]:<span class="tlaGNC">         421 :     for (const auto&amp; named : result.results) {</span></span>
-<span id="L931"><span class="lineNum">     931</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 324 times"> + </span>]:<span class="tlaGNC">         324 :         if (named.value.is_null()) {</span></span>
+<span id="L930"><span class="lineNum">     930</span>         [<span class="tlaGBC" title="Branch 0 was taken 327 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 97 times"> + </span>]:<span class="tlaGNC">         424 :     for (const auto&amp; named : result.results) {</span></span>
+<span id="L931"><span class="lineNum">     931</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 327 times"> + </span>]:<span class="tlaGNC">         327 :         if (named.value.is_null()) {</span></span>
 <span id="L932"><span class="lineNum">     932</span>                 :<span class="tlaUNC tlaBgUNC">           0 :             continue;</span></span>
 <span id="L933"><span class="lineNum">     933</span>                 :             :         }</span>
-<span id="L934"><span class="lineNum">     934</span>         [<span class="tlaGBC" title="Branch 0 was taken 227 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 97 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         324 :         if (!first &amp;&amp; include_headers) {</span></span>
-<span id="L935"><span class="lineNum">     935</span>                 :<span class="tlaGNC">         227 :             out &lt;&lt; '\n';</span></span>
+<span id="L934"><span class="lineNum">     934</span>         [<span class="tlaGBC" title="Branch 0 was taken 230 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 97 times"> + </span>]:<span class="tlaGNC tlaBgGNC">         327 :         if (!first &amp;&amp; include_headers) {</span></span>
+<span id="L935"><span class="lineNum">     935</span>                 :<span class="tlaGNC">         230 :             out &lt;&lt; '\n';</span></span>
 <span id="L936"><span class="lineNum">     936</span>                 :             :         }</span>
-<span id="L937"><span class="lineNum">     937</span>                 :<span class="tlaGNC">         324 :         append_named_result(named, include_headers, options, out);</span></span>
+<span id="L937"><span class="lineNum">     937</span>                 :<span class="tlaGNC">         327 :         append_named_result(named, include_headers, options, out);</span></span>
 <span id="L938"><span class="lineNum">     938</span>                 :             :         first = false;</span>
 <span id="L939"><span class="lineNum">     939</span>                 :             :     }</span>
 <span id="L940"><span class="lineNum">     940</span>                 :             : }</span>

@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-30 10:36:53</td>
+            <td class="headerValue">2026-05-31 22:59:06</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -49,9 +49,9 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">50.0&nbsp;%</td>
-            <td class="headerCovTableEntry">2</td>
-            <td class="headerCovTableEntry">1</td>
+            <td class="headerCovTableEntryMed">83.3&nbsp;%</td>
+            <td class="headerCovTableEntry">6</td>
+            <td class="headerCovTableEntry">5</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -128,13 +128,13 @@
 <span id="L57"><span class="lineNum">      57</span>                 :             : </span>
 <span id="L58"><span class="lineNum">      58</span>                 :             : /// A bound SQL parameter plus whether string/time values should be normalized to</span>
 <span id="L59"><span class="lineNum">      59</span>                 :             : /// the backend's timestamp representation before binding.</span>
-<span id="L60"><span class="lineNum">      60</span>                 :<span class="tlaGNC tlaBgGNC">         682 : struct SqlParam {</span></span>
+<span id="L60"><span class="lineNum">      60</span>         [<span class="tlaGBC" title="Branch 0 was taken 327 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">        1701 : struct SqlParam {</span></span>
 <span id="L61"><span class="lineNum">      61</span>                 :             :     Value value;</span>
 <span id="L62"><span class="lineNum">      62</span>                 :             :     bool normalize_time = false;</span>
 <span id="L63"><span class="lineNum">      63</span>                 :             : };</span>
 <span id="L64"><span class="lineNum">      64</span>                 :             : </span>
 <span id="L65"><span class="lineNum">      65</span>                 :             : /// Parameterized SQL text and the values to bind to each placeholder.</span>
-<span id="L66"><span class="lineNum">      66</span>         [<span class="tlaGBC" title="Branch 0 was taken 13 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         514 : struct ParameterizedSql {</span></span>
+<span id="L66"><span class="lineNum">      66</span>   [<span class="tlaGBC" title="Branch 0 was taken 14 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 184 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 5 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 188 times"> + </span>]:<span class="tlaGNC">        1811 : struct ParameterizedSql {</span></span>
 <span id="L67"><span class="lineNum">      67</span>                 :             :     std::string sql;</span>
 <span id="L68"><span class="lineNum">      68</span>                 :             :     std::vector&lt;SqlParam&gt; params;</span>
 <span id="L69"><span class="lineNum">      69</span>                 :             : };</span>
@@ -204,7 +204,14 @@
 <span id="L133"><span class="lineNum">     133</span>                 :             :                                                            const TableSchema&amp; schema,</span>
 <span id="L134"><span class="lineNum">     134</span>                 :             :                                                            const SqlDialect&amp; dialect);</span>
 <span id="L135"><span class="lineNum">     135</span>                 :             : </span>
-<span id="L136"><span class="lineNum">     136</span>                 :             : } // namespace pl::flux::connector</span>
+<span id="L136"><span class="lineNum">     136</span>                 :             : /// Build a complete parameterized scan SQL from a parameterized base query.</span>
+<span id="L137"><span class="lineNum">     137</span>                 :             : /// Base-query parameters are preserved before outer scan parameters.</span>
+<span id="L138"><span class="lineNum">     138</span>                 :             : absl::StatusOr&lt;ParameterizedSql&gt; BuildParameterizedScanSql(ParameterizedSql base_query,</span>
+<span id="L139"><span class="lineNum">     139</span>                 :             :                                                            const ScanRequest&amp; request,</span>
+<span id="L140"><span class="lineNum">     140</span>                 :             :                                                            const TableSchema&amp; schema,</span>
+<span id="L141"><span class="lineNum">     141</span>                 :             :                                                            const SqlDialect&amp; dialect);</span>
+<span id="L142"><span class="lineNum">     142</span>                 :             : </span>
+<span id="L143"><span class="lineNum">     143</span>                 :             : } // namespace pl::flux::connector</span>
         </pre>
               </td>
             </tr>

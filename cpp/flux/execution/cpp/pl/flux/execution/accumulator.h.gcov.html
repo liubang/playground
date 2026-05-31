@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-30 10:36:53</td>
+            <td class="headerValue">2026-05-31 22:59:06</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -109,7 +109,7 @@
 <span id="L38"><span class="lineNum">      38</span>                 :             :     StreamingGroupOperator(std::shared_ptr&lt;plan::PlanNode&gt; plan,</span>
 <span id="L39"><span class="lineNum">      39</span>                 :             :                            std::unique_ptr&lt;Operator&gt; input,</span>
 <span id="L40"><span class="lineNum">      40</span>                 :             :                            std::shared_ptr&lt;QueryMemoryContext&gt; memory_context,</span>
-<span id="L41"><span class="lineNum">      41</span>   [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          20 :                            std::string phase = &quot;single&quot;);</span></span>
+<span id="L41"><span class="lineNum">      41</span>   [<span class="tlaGBC" title="Branch 0 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 9 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC tlaBgGNC">          24 :                            std::string phase = &quot;single&quot;);</span></span>
 <span id="L42"><span class="lineNum">      42</span>                 :             : </span>
 <span id="L43"><span class="lineNum">      43</span>                 :             :     [[nodiscard]] std::string name() const override;</span>
 <span id="L44"><span class="lineNum">      44</span>                 :             :     void Cancel() override;</span>
@@ -132,7 +132,7 @@
 <span id="L61"><span class="lineNum">      61</span>                 :             :     StreamingDistinctOperator(std::shared_ptr&lt;plan::PlanNode&gt; plan,</span>
 <span id="L62"><span class="lineNum">      62</span>                 :             :                               std::unique_ptr&lt;Operator&gt; input,</span>
 <span id="L63"><span class="lineNum">      63</span>                 :             :                               std::shared_ptr&lt;QueryMemoryContext&gt; memory_context,</span>
-<span id="L64"><span class="lineNum">      64</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 1 time"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           2 :                               std::string phase = &quot;single&quot;);</span></span>
+<span id="L64"><span class="lineNum">      64</span>   [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 3 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">           6 :                               std::string phase = &quot;single&quot;);</span></span>
 <span id="L65"><span class="lineNum">      65</span>                 :             : </span>
 <span id="L66"><span class="lineNum">      66</span>                 :             :     [[nodiscard]] std::string name() const override;</span>
 <span id="L67"><span class="lineNum">      67</span>                 :             :     void Cancel() override;</span>

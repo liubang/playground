@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-30 10:36:53</td>
+            <td class="headerValue">2026-05-31 22:59:06</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">95.7&nbsp;%</td>
@@ -450,40 +450,40 @@
 <span id="L374"><span class="lineNum">     374</span>                 :<span class="tlaGNC">           5 :     return kws;</span></span>
 <span id="L375"><span class="lineNum">     375</span>                 :             : }</span>
 <span id="L376"><span class="lineNum">     376</span>                 :             : </span>
-<span id="L377"><span class="lineNum">     377</span>                 :<span class="tlaGNC">         399 : std::string trim_copy(std::string_view s) {</span></span>
-<span id="L378"><span class="lineNum">     378</span>   [<span class="tlaGBC" title="Branch 0 was taken 399 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 399 times"> + </span>]:<span class="tlaGNC">         399 :     while (!s.empty() &amp;&amp; std::isspace(static_cast&lt;unsigned char&gt;(s.front()))) {</span></span>
+<span id="L377"><span class="lineNum">     377</span>                 :<span class="tlaGNC">         424 : std::string trim_copy(std::string_view s) {</span></span>
+<span id="L378"><span class="lineNum">     378</span>   [<span class="tlaGBC" title="Branch 0 was taken 424 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 424 times"> + </span>]:<span class="tlaGNC">         424 :     while (!s.empty() &amp;&amp; std::isspace(static_cast&lt;unsigned char&gt;(s.front()))) {</span></span>
 <span id="L379"><span class="lineNum">     379</span>                 :             :         s.remove_prefix(1);</span>
 <span id="L380"><span class="lineNum">     380</span>                 :             :     }</span>
-<span id="L381"><span class="lineNum">     381</span>   [<span class="tlaGBC" title="Branch 0 was taken 399 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 399 times"> + </span>]:<span class="tlaGNC">         399 :     while (!s.empty() &amp;&amp; std::isspace(static_cast&lt;unsigned char&gt;(s.back()))) {</span></span>
+<span id="L381"><span class="lineNum">     381</span>   [<span class="tlaGBC" title="Branch 0 was taken 424 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 424 times"> + </span>]:<span class="tlaGNC">         424 :     while (!s.empty() &amp;&amp; std::isspace(static_cast&lt;unsigned char&gt;(s.back()))) {</span></span>
 <span id="L382"><span class="lineNum">     382</span>                 :             :         s.remove_suffix(1);</span>
 <span id="L383"><span class="lineNum">     383</span>                 :             :     }</span>
-<span id="L384"><span class="lineNum">     384</span>                 :<span class="tlaGNC">         399 :     return std::string(s);</span></span>
+<span id="L384"><span class="lineNum">     384</span>                 :<span class="tlaGNC">         424 :     return std::string(s);</span></span>
 <span id="L385"><span class="lineNum">     385</span>                 :             : }</span>
 <span id="L386"><span class="lineNum">     386</span>                 :             : </span>
-<span id="L387"><span class="lineNum">     387</span>         [<span class="tlaGBC" title="Branch 0 was taken 625 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         625 : std::string snippet_escape(std::string_view s) {</span></span>
+<span id="L387"><span class="lineNum">     387</span>         [<span class="tlaGBC" title="Branch 0 was taken 650 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         650 : std::string snippet_escape(std::string_view s) {</span></span>
 <span id="L388"><span class="lineNum">     388</span>                 :             :     std::string out;</span>
-<span id="L389"><span class="lineNum">     389</span>         [<span class="tlaGBC" title="Branch 0 was taken 625 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         625 :     out.reserve(s.size());</span></span>
-<span id="L390"><span class="lineNum">     390</span>         [<span class="tlaGBC" title="Branch 0 was taken 3940 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 625 times"> + </span>]:<span class="tlaGNC">        4565 :     for (char c : s) {</span></span>
-<span id="L391"><span class="lineNum">     391</span>   [<span class="tlaGBC" title="Branch 0 was taken 3940 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 3940 times"> + </span>]:<span class="tlaGNC">        3940 :         if (c == '$' || c == '}' || c == '\\') {</span></span>
+<span id="L389"><span class="lineNum">     389</span>         [<span class="tlaGBC" title="Branch 0 was taken 650 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         650 :     out.reserve(s.size());</span></span>
+<span id="L390"><span class="lineNum">     390</span>         [<span class="tlaGBC" title="Branch 0 was taken 4135 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 650 times"> + </span>]:<span class="tlaGNC">        4785 :     for (char c : s) {</span></span>
+<span id="L391"><span class="lineNum">     391</span>   [<span class="tlaGBC" title="Branch 0 was taken 4135 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 4135 times"> + </span>]:<span class="tlaGNC">        4135 :         if (c == '$' || c == '}' || c == '\\') {</span></span>
 <span id="L392"><span class="lineNum">     392</span>                 :             :             out += '\\';</span>
 <span id="L393"><span class="lineNum">     393</span>                 :             :         }</span>
 <span id="L394"><span class="lineNum">     394</span>                 :             :         out += c;</span>
 <span id="L395"><span class="lineNum">     395</span>                 :             :     }</span>
-<span id="L396"><span class="lineNum">     396</span>                 :<span class="tlaGNC">         625 :     return out;</span></span>
+<span id="L396"><span class="lineNum">     396</span>                 :<span class="tlaGNC">         650 :     return out;</span></span>
 <span id="L397"><span class="lineNum">     397</span>                 :             : }</span>
 <span id="L398"><span class="lineNum">     398</span>                 :             : </span>
 <span id="L399"><span class="lineNum">     399</span>                 :<span class="tlaGNC">         226 : std::string make_function_snippet(const std::string&amp; label,</span></span>
 <span id="L400"><span class="lineNum">     400</span>                 :             :                                   const std::vector&lt;std::string&gt;&amp; params) {</span>
 <span id="L401"><span class="lineNum">     401</span>                 :<span class="tlaGNC">         226 :     std::string snippet = snippet_escape(label);</span></span>
 <span id="L402"><span class="lineNum">     402</span>                 :             :     snippet += '(';</span>
-<span id="L403"><span class="lineNum">     403</span>         [<span class="tlaGBC" title="Branch 0 was taken 399 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 226 times"> + </span>]:<span class="tlaGNC">         625 :     for (size_t i = 0; i &lt; params.size(); ++i) {</span></span>
-<span id="L404"><span class="lineNum">     404</span>         [<span class="tlaGBC" title="Branch 0 was taken 198 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 201 times"> + </span>]:<span class="tlaGNC">         399 :         if (i &gt; 0) {</span></span>
+<span id="L403"><span class="lineNum">     403</span>         [<span class="tlaGBC" title="Branch 0 was taken 424 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 226 times"> + </span>]:<span class="tlaGNC">         650 :     for (size_t i = 0; i &lt; params.size(); ++i) {</span></span>
+<span id="L404"><span class="lineNum">     404</span>         [<span class="tlaGBC" title="Branch 0 was taken 218 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 206 times"> + </span>]:<span class="tlaGNC">         424 :         if (i &gt; 0) {</span></span>
 <span id="L405"><span class="lineNum">     405</span>                 :             :             snippet += &quot;, &quot;;</span>
 <span id="L406"><span class="lineNum">     406</span>                 :             :         }</span>
-<span id="L407"><span class="lineNum">     407</span>         [<span class="tlaGBC" title="Branch 0 was taken 399 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         399 :         const auto param = trim_copy(params[i]);</span></span>
-<span id="L408"><span class="lineNum">     408</span>         [<span class="tlaGBC" title="Branch 0 was taken 399 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         399 :         const auto index = std::to_string(i + 1);</span></span>
-<span id="L409"><span class="lineNum">     409</span>   [<span class="tlaGBC" title="Branch 0 was taken 399 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 396 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 3 times"> + </span>]:<span class="tlaGNC">         399 :         if (!param.empty() &amp;&amp; param.back() == ':') {</span></span>
-<span id="L410"><span class="lineNum">     410</span>   [<span class="tlaGBC" title="Branch 0 was taken 396 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 396 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         792 :             snippet += snippet_escape(param);</span></span>
+<span id="L407"><span class="lineNum">     407</span>         [<span class="tlaGBC" title="Branch 0 was taken 424 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         424 :         const auto param = trim_copy(params[i]);</span></span>
+<span id="L408"><span class="lineNum">     408</span>         [<span class="tlaGBC" title="Branch 0 was taken 424 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         424 :         const auto index = std::to_string(i + 1);</span></span>
+<span id="L409"><span class="lineNum">     409</span>   [<span class="tlaGBC" title="Branch 0 was taken 424 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 421 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 3 times"> + </span>]:<span class="tlaGNC">         424 :         if (!param.empty() &amp;&amp; param.back() == ':') {</span></span>
+<span id="L410"><span class="lineNum">     410</span>   [<span class="tlaGBC" title="Branch 0 was taken 421 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 421 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">         842 :             snippet += snippet_escape(param);</span></span>
 <span id="L411"><span class="lineNum">     411</span>                 :             :             snippet += &quot; ${&quot;;</span>
 <span id="L412"><span class="lineNum">     412</span>                 :             :             snippet += index;</span>
 <span id="L413"><span class="lineNum">     413</span>                 :             :             snippet += &quot;:value}&quot;;</span>
