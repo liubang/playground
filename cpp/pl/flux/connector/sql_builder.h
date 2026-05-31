@@ -133,4 +133,11 @@ absl::StatusOr<ParameterizedSql> BuildParameterizedScanSql(const std::string& ba
                                                            const TableSchema& schema,
                                                            const SqlDialect& dialect);
 
+/// Build a complete parameterized scan SQL from a parameterized base query.
+/// Base-query parameters are preserved before outer scan parameters.
+absl::StatusOr<ParameterizedSql> BuildParameterizedScanSql(ParameterizedSql base_query,
+                                                           const ScanRequest& request,
+                                                           const TableSchema& schema,
+                                                           const SqlDialect& dialect);
+
 } // namespace pl::flux::connector
