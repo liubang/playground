@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-31 22:59:06</td>
+            <td class="headerValue">2026-05-31 23:22:13</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">-</td>
@@ -105,9 +105,9 @@
 <span id="L34"><span class="lineNum">      34</span>                 :             : };</span>
 <span id="L35"><span class="lineNum">      35</span>                 :             : </span>
 <span id="L36"><span class="lineNum">      36</span>                 :<span class="tlaGNC tlaBgGNC">        2404 : struct PlanStatistics {</span></span>
-<span id="L37"><span class="lineNum">      37</span>                 :             :     std::optional&lt;double&gt; row_count;</span>
-<span id="L38"><span class="lineNum">      38</span>                 :             :     std::optional&lt;double&gt; size_bytes;</span>
-<span id="L39"><span class="lineNum">      39</span>                 :             :     std::vector&lt;connector::ColumnStatistics&gt; columns;</span>
+<span id="L37"><span class="lineNum">      37</span>                 :             :     std::optional&lt;double&gt; row_count{};</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             :     std::optional&lt;double&gt; size_bytes{};</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             :     std::vector&lt;connector::ColumnStatistics&gt; columns{};</span>
 <span id="L40"><span class="lineNum">      40</span>                 :             : };</span>
 <span id="L41"><span class="lineNum">      41</span>                 :             : </span>
 <span id="L42"><span class="lineNum">      42</span>                 :             : enum class PhysicalShape {</span>
@@ -124,7 +124,7 @@
 <span id="L53"><span class="lineNum">      53</span>                 :             :     std::shared_ptr&lt;plan::PlanNode&gt; plan;</span>
 <span id="L54"><span class="lineNum">      54</span>                 :             :     plan::CostEstimate cost;</span>
 <span id="L55"><span class="lineNum">      55</span>                 :             :     bool chosen = false;</span>
-<span id="L56"><span class="lineNum">      56</span>                 :             :     std::string reason;</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             :     std::string reason{};</span>
 <span id="L57"><span class="lineNum">      57</span>                 :             : };</span>
 <span id="L58"><span class="lineNum">      58</span>                 :             : </span>
 <span id="L59"><span class="lineNum">      59</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 388 times"> + </span>]:<span class="tlaGNC">         388 : struct CboPlanResult {</span></span>
@@ -156,7 +156,7 @@
 <span id="L85"><span class="lineNum">      85</span>                 :             :     explicit CostBasedOptimizer(CboOptions options);</span>
 <span id="L86"><span class="lineNum">      86</span>                 :             : </span>
 <span id="L87"><span class="lineNum">      87</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;CboPlanResult&gt; OptimizeWithTrace(</span>
-<span id="L88"><span class="lineNum">      88</span>                 :             :         std::shared_ptr&lt;plan::PlanNode&gt; plan) const;</span>
+<span id="L88"><span class="lineNum">      88</span>                 :             :         const std::shared_ptr&lt;plan::PlanNode&gt;&amp; plan) const;</span>
 <span id="L89"><span class="lineNum">      89</span>                 :             : </span>
 <span id="L90"><span class="lineNum">      90</span>                 :             :     [[nodiscard]] absl::StatusOr&lt;PlanOptimizerResult&gt; Optimize(</span>
 <span id="L91"><span class="lineNum">      91</span>                 :             :         std::shared_ptr&lt;plan::PlanNode&gt; plan) const override;</span>

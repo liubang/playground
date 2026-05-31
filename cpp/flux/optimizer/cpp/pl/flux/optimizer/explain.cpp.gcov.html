@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-31 22:59:06</td>
+            <td class="headerValue">2026-05-31 23:22:13</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -50,8 +50,8 @@
             <td></td>
             <td class="headerItem">Branches:</td>
             <td class="headerCovTableEntryLo">48.0&nbsp;%</td>
-            <td class="headerCovTableEntry">475</td>
-            <td class="headerCovTableEntry">228</td>
+            <td class="headerCovTableEntry">469</td>
+            <td class="headerCovTableEntry">225</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -124,7 +124,7 @@
 <span id="L52"><span class="lineNum">      52</span>                 :             : </span>
 <span id="L53"><span class="lineNum">      53</span>                 :<span class="tlaGNC">          16 : void ApplyCboTraceForPlan(const std::shared_ptr&lt;plan::PlanNode&gt;&amp; node,</span></span>
 <span id="L54"><span class="lineNum">      54</span>                 :             :                           plan::PhysicalPlanNode* physical) {</span>
-<span id="L55"><span class="lineNum">      55</span>   [<span class="tlaGBC" title="Branch 0 was taken 16 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 16 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span>]:<span class="tlaGNC">          48 :     auto cbo_or = DefaultCostBasedOptimizer().OptimizeWithTrace(node);</span></span>
+<span id="L55"><span class="lineNum">      55</span>         [<span class="tlaGBC" title="Branch 0 was taken 16 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          16 :     auto cbo_or = DefaultCostBasedOptimizer().OptimizeWithTrace(node);</span></span>
 <span id="L56"><span class="lineNum">      56</span>         [<span class="tlaGBC" title="Branch 0 was taken 16 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          16 :     if (cbo_or.ok()) {</span></span>
 <span id="L57"><span class="lineNum">      57</span>         [<span class="tlaGBC" title="Branch 0 was taken 16 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          16 :         ApplyCboTrace(*cbo_or, physical);</span></span>
 <span id="L58"><span class="lineNum">      58</span>                 :             :     }</span>
@@ -570,7 +570,7 @@
 <span id="L481"><span class="lineNum">     481</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">           7 :     if (plan == nullptr) {</span></span>
 <span id="L482"><span class="lineNum">     482</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return &quot;&lt;no physical plan&gt;\n&quot;;</span></span>
 <span id="L483"><span class="lineNum">     483</span>                 :             :     }</span>
-<span id="L484"><span class="lineNum">     484</span>   [<span class="tlaGBC" title="Branch 0 was taken 7 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 7 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          21 :     auto cbo_or = DefaultCostBasedOptimizer().OptimizeWithTrace(plan);</span></span>
+<span id="L484"><span class="lineNum">     484</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           7 :     auto cbo_or = DefaultCostBasedOptimizer().OptimizeWithTrace(plan);</span></span>
 <span id="L485"><span class="lineNum">     485</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 7 times"> + </span>]:<span class="tlaGNC">           7 :     if (!cbo_or.ok()) {</span></span>
 <span id="L486"><span class="lineNum">     486</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         return cbo_or.status().ToString() + &quot;\n&quot;;</span></span>
 <span id="L487"><span class="lineNum">     487</span>                 :             :     }</span>
@@ -581,7 +581,7 @@
 <span id="L492"><span class="lineNum">     492</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           4 :     if (plan == nullptr) {</span></span>
 <span id="L493"><span class="lineNum">     493</span>                 :<span class="tlaUNC tlaBgUNC">           0 :         return &quot;flowchart TD\n  n0[\&quot;&lt;no physical plan&gt;\&quot;]\n&quot;;</span></span>
 <span id="L494"><span class="lineNum">     494</span>                 :             :     }</span>
-<span id="L495"><span class="lineNum">     495</span>   [<span class="tlaGBC" title="Branch 0 was taken 4 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaUNC" title="Branch 2 was not taken"> - </span><span class="tlaGBC" title="Branch 3 was taken 4 times"> + </span>]:<span class="tlaGNC tlaBgGNC">          12 :     auto cbo_or = DefaultCostBasedOptimizer().OptimizeWithTrace(plan);</span></span>
+<span id="L495"><span class="lineNum">     495</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC tlaBgGNC">           4 :     auto cbo_or = DefaultCostBasedOptimizer().OptimizeWithTrace(plan);</span></span>
 <span id="L496"><span class="lineNum">     496</span>         [<span class="tlaUNC" title="Branch 0 was not taken"> - </span><span class="tlaGBC" title="Branch 1 was taken 4 times"> + </span>]:<span class="tlaGNC">           4 :     if (!cbo_or.ok()) {</span></span>
 <span id="L497"><span class="lineNum">     497</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC tlaBgUNC">           0 :         std::ostringstream out;</span></span>
 <span id="L498"><span class="lineNum">     498</span>         [<span class="tlaUNC" title="Branch 0 was not executed"> # </span><span class="tlaUNC" title="Branch 1 was not executed"> # </span>]:<span class="tlaUNC">           0 :         out &lt;&lt; &quot;flowchart TD\n&quot;;</span></span>

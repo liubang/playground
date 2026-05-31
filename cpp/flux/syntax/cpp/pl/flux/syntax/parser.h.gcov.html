@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-31 22:59:06</td>
+            <td class="headerValue">2026-05-31 23:22:13</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryHi">100.0&nbsp;%</td>
@@ -246,7 +246,7 @@
 <span id="L175"><span class="lineNum">     175</span>                 :             : </span>
 <span id="L176"><span class="lineNum">     176</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_paren_ident_expression(std::unique_ptr&lt;Token&gt; lparen,</span>
 <span id="L177"><span class="lineNum">     177</span>                 :             :                                                              std::unique_ptr&lt;Identifier&gt; key,</span>
-<span id="L178"><span class="lineNum">     178</span>                 :             :                                                              SourceLocation key_loc);</span>
+<span id="L178"><span class="lineNum">     178</span>                 :             :                                                              const SourceLocation&amp; key_loc);</span>
 <span id="L179"><span class="lineNum">     179</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_expression_while_more(std::unique_ptr&lt;Expression&gt; init,</span>
 <span id="L180"><span class="lineNum">     180</span>                 :             :                                                             const std::set&lt;TokenType&gt;&amp; stop_tokens);</span>
 <span id="L181"><span class="lineNum">     181</span>                 :             :     std::unique_ptr&lt;Expression&gt; parse_property_value();</span>

@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-31 22:59:06</td>
+            <td class="headerValue">2026-05-31 23:22:13</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryMed">87.5&nbsp;%</td>
@@ -49,9 +49,9 @@
             <td></td>
             <td></td>
             <td class="headerItem">Branches:</td>
-            <td class="headerCovTableEntryLo">42.5&nbsp;%</td>
-            <td class="headerCovTableEntry">452</td>
-            <td class="headerCovTableEntry">192</td>
+            <td class="headerCovTableEntryLo">42.4&nbsp;%</td>
+            <td class="headerCovTableEntry">446</td>
+            <td class="headerCovTableEntry">189</td>
           </tr>
                   <tr><td><img src="../../../../../../glass.png" width=3 height=3 alt=""></td></tr>
                 </table>
@@ -105,7 +105,7 @@
 <span id="L34"><span class="lineNum">      34</span>                 :             : }</span>
 <span id="L35"><span class="lineNum">      35</span>                 :             : </span>
 <span id="L36"><span class="lineNum">      36</span>         [<span class="tlaGBC" title="Branch 0 was taken 183 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span>]:<span class="tlaGNC">         193 : bool starts_with(std::string_view text, std::string_view prefix) {</span></span>
-<span id="L37"><span class="lineNum">      37</span>   [<span class="tlaGBC" title="Branch 0 was taken 183 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 63 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 120 times"> + </span>]:<span class="tlaGNC">         193 :     return text.size() &gt;= prefix.size() &amp;&amp; text.substr(0, prefix.size()) == prefix;</span></span>
+<span id="L37"><span class="lineNum">      37</span>   [<span class="tlaGBC" title="Branch 0 was taken 183 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 10 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 63 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 120 times"> + </span>]:<span class="tlaGNC">         193 :     return text.size() &gt;= prefix.size() &amp;&amp; text.starts_with(prefix);</span></span>
 <span id="L38"><span class="lineNum">      38</span>                 :             : }</span>
 <span id="L39"><span class="lineNum">      39</span>                 :             : </span>
 <span id="L40"><span class="lineNum">      40</span>         [<span class="tlaGBC" title="Branch 0 was taken 120 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">         120 : bool ends_with(std::string_view text, std::string_view suffix) {</span></span>
@@ -447,15 +447,13 @@
 <span id="L342"><span class="lineNum">     342</span>         [<span class="tlaGBC" title="Branch 0 was taken 18 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 136 times"> + </span>]:<span class="tlaGNC">         154 :     if (text == &quot;record&quot;) {</span></span>
 <span id="L343"><span class="lineNum">     343</span>         [<span class="tlaGBC" title="Branch 0 was taken 18 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          18 :         return Type::Record({}, true);</span></span>
 <span id="L344"><span class="lineNum">     344</span>                 :             :     }</span>
-<span id="L345"><span class="lineNum">     345</span>   [<span class="tlaGBC" title="Branch 0 was taken 136 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 79 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 57 times"> + </span> :<span class="tlaGNC">         136 :     if (starts_with(text, &quot;stream[&quot;) &amp;&amp; ends_with(text, &quot;]&quot;)) {</span></span>
-<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 79 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaGBC" title="Branch 7 was taken 79 times"> + </span><span class="tlaGBC" title="Branch 8 was taken 57 times"> + </span> 
-<span class="lineNum">        </span>       <span class="tlaUNC" title="Branch 9 was not taken"> - </span><span class="tlaGBC" title="Branch 10 was taken 79 times"> + </span><span class="tlaUNC" title="Branch 11 was not taken"> - </span>]
+<span id="L345"><span class="lineNum">     345</span>   [<span class="tlaGBC" title="Branch 0 was taken 79 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 57 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 79 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">         136 :     if (starts_with(text, &quot;stream[&quot;) &amp;&amp; ends_with(text, &quot;]&quot;)) {</span></span>
+<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaGBC" title="Branch 5 was taken 79 times"> + </span><span class="tlaGBC" title="Branch 6 was taken 79 times"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
 <span id="L346"><span class="lineNum">     346</span>   [<span class="tlaGBC" title="Branch 0 was taken 79 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 79 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          79 :         return Type::Stream(ParseTypeExpression(std::string_view(text).substr(7, text.size() - 8)));</span></span>
 <span class="lineNum">        </span>          <span class="tlaGBC" title="Branch 4 was taken 79 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span>]
 <span id="L347"><span class="lineNum">     347</span>                 :             :     }</span>
-<span id="L348"><span class="lineNum">     348</span>   [<span class="tlaGBC" title="Branch 0 was taken 57 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span><span class="tlaGBC" title="Branch 2 was taken 41 times"> + </span><span class="tlaGBC" title="Branch 3 was taken 16 times"> + </span> :<span class="tlaGNC">          57 :     if (starts_with(text, &quot;[&quot;) &amp;&amp; ends_with(text, &quot;]&quot;)) {</span></span>
-<span class="lineNum">        </span> <span class="tlaGBC" title="Branch 4 was taken 41 times"> + </span><span class="tlaUNC" title="Branch 5 was not taken"> - </span><span class="tlaUNC" title="Branch 6 was not taken"> - </span><span class="tlaGBC" title="Branch 7 was taken 41 times"> + </span><span class="tlaGBC" title="Branch 8 was taken 41 times"> + </span> 
-<span class="lineNum">        </span>             <span class="tlaUNC" title="Branch 9 was not taken"> - </span>]
+<span id="L348"><span class="lineNum">     348</span>   [<span class="tlaGBC" title="Branch 0 was taken 41 times"> + </span><span class="tlaGBC" title="Branch 1 was taken 16 times"> + </span><span class="tlaGBC" title="Branch 2 was taken 41 times"> + </span><span class="tlaUNC" title="Branch 3 was not taken"> - </span> :<span class="tlaGNC">          57 :     if (starts_with(text, &quot;[&quot;) &amp;&amp; ends_with(text, &quot;]&quot;)) {</span></span>
+<span class="lineNum">        </span>    <span class="tlaUNC" title="Branch 4 was not taken"> - </span><span class="tlaGBC" title="Branch 5 was taken 41 times"> + </span><span class="tlaGBC" title="Branch 6 was taken 41 times"> + </span><span class="tlaUNC" title="Branch 7 was not taken"> - </span>]
 <span id="L349"><span class="lineNum">     349</span>         [<span class="tlaGBC" title="Branch 0 was taken 41 times"> + </span><span class="tlaUNC" title="Branch 1 was not taken"> - </span>]:<span class="tlaGNC">          41 :         auto inner = std::string_view(text).substr(1, text.size() - 2);</span></span>
 <span id="L350"><span class="lineNum">     350</span>                 :<span class="tlaGNC">          41 :         auto colon = inner.find(':');</span></span>
 <span id="L351"><span class="lineNum">     351</span>         [<span class="tlaGBC" title="Branch 0 was taken 1 time"> + </span><span class="tlaGBC" title="Branch 1 was taken 40 times"> + </span>]:<span class="tlaGNC">          41 :         if (colon != std::string_view::npos) {</span></span>
