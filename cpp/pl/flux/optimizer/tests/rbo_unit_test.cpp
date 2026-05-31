@@ -66,7 +66,7 @@ TEST(RuleBasedOptimizerTest, KeepsLogicalPlanStableWhileRecordingDeterministicTr
               }),
               AppliedRuleNames(*result_or));
     ASSERT_TRUE(result_or->pushdown_plan.has_value());
-    EXPECT_EQ(SourceScanPlan()->source_scan().table, result_or->pushdown_plan->source->table);
+    EXPECT_EQ(SourceScanPlan()->source_scan().table, result_or->pushdown_plan->source.table);
     EXPECT_EQ((std::vector<std::string>{"_time", "host", "usage"}),
               result_or->pushdown_plan->visible_columns);
     EXPECT_EQ((std::vector<std::string>{"_time", "host", "usage"}),
@@ -185,6 +185,33 @@ TEST(RuleBasedOptimizerTest, NormalizesRedundantPushdownPredicates) {
     EXPECT_EQ(95.0, result_or->pushdown_plan->request.predicates[2].literal.as_float());
 }
 
+TEST(RuleBasedOptimizerTest, NormalizesEqualityOverRedundantBounds) {
+    std::vector<plan::PredicateSpec> bounds = {
+        {.op = plan::PredicateOp::Gt,
+         .column = "usage",
+         .literal = {.kind = plan::PredicateLiteralKind::Float, .float_value = 70.0}},
+        {.op = plan::PredicateOp::Lte,
+         .column = "usage",
+         .literal = {.kind = plan::PredicateLiteralKind::Float, .float_value = 100.0}},
+    };
+    std::vector<plan::PredicateSpec> equality = {
+        {.op = plan::PredicateOp::Eq,
+         .column = "usage",
+         .literal = {.kind = plan::PredicateLiteralKind::Float, .float_value = 88.0}},
+    };
+    auto plan = plan::MakeFilter(plan::MakeFilter(SourceScanPlan(), std::move(bounds)),
+                                 std::move(equality));
+
+    auto result_or = DefaultRuleBasedOptimizer().Optimize(plan);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(result_or->pushdown_plan.has_value());
+    ASSERT_EQ(1, result_or->pushdown_plan->request.predicates.size());
+    EXPECT_EQ("usage", result_or->pushdown_plan->request.predicates[0].column);
+    EXPECT_EQ(connector::PredicateOp::Eq, result_or->pushdown_plan->request.predicates[0].op);
+    EXPECT_EQ(88.0, result_or->pushdown_plan->request.predicates[0].literal.as_float());
+}
+
 TEST(RuleBasedOptimizerTest, RecordsAggregatePushdownRequestWithColumnMapping) {
     auto plan = plan::MakeAggregate(
         plan::MakeGroup(plan::MakeRename(SourceScanPlan(), {{"usage", "cpu_usage"}}), {"host"}),
@@ -200,6 +227,80 @@ TEST(RuleBasedOptimizerTest, RecordsAggregatePushdownRequestWithColumnMapping) {
     EXPECT_EQ(connector::AggregateFunction::Mean, result_or->pushdown_plan->request.aggregate->fn);
     EXPECT_EQ("usage", result_or->pushdown_plan->request.aggregate->column);
     EXPECT_EQ("cpu_usage", result_or->pushdown_plan->request.aggregate->alias);
+}
+
+TEST(RuleBasedOptimizerTest, AllowsLimitAboveDistinctPushdown) {
+    auto plan = plan::MakeLimit(plan::MakeDistinct(SourceScanPlan(), "host"), 1, 0);
+
+    auto result_or = DefaultRuleBasedOptimizer().Optimize(plan);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_TRUE(result_or->pushdown_plan.has_value());
+    ASSERT_TRUE(result_or->pushdown_plan->request.distinct.has_value());
+    EXPECT_EQ("host", *result_or->pushdown_plan->request.distinct);
+    ASSERT_TRUE(result_or->pushdown_plan->request.limit.has_value());
+    EXPECT_EQ(1, *result_or->pushdown_plan->request.limit);
+}
+
+TEST(RuleBasedOptimizerTest, DoesNotPushDistinctAcrossChildLimit) {
+    auto plan = plan::MakeDistinct(plan::MakeLimit(SourceScanPlan(), 2, 0), "host");
+
+    auto result_or = DefaultRuleBasedOptimizer().Optimize(plan);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    EXPECT_FALSE(result_or->pushdown_plan.has_value());
+}
+
+TEST(RuleBasedOptimizerTest, DoesNotPushDistinctAcrossChildSort) {
+    auto plan = plan::MakeDistinct(
+        plan::MakeSort(SourceScanPlan(), {{.column = "usage", .desc = true}}), "host");
+
+    auto result_or = DefaultRuleBasedOptimizer().Optimize(plan);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    EXPECT_FALSE(result_or->pushdown_plan.has_value());
+}
+
+TEST(RuleBasedOptimizerTest, DoesNotPushAggregateAcrossChildLimit) {
+    auto plan =
+        plan::MakeAggregate(plan::MakeGroup(plan::MakeLimit(SourceScanPlan(), 2, 0), {"host"}),
+                            plan::AggregateFunction::Count,
+                            "usage");
+
+    auto result_or = DefaultRuleBasedOptimizer().Optimize(plan);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    EXPECT_FALSE(result_or->pushdown_plan.has_value());
+}
+
+TEST(RuleBasedOptimizerTest, RejectsInvalidExecutablePushdownRequests) {
+    auto source = SourceScanPlan();
+    PushdownPlan plan;
+    plan.source = source->source_scan();
+
+    plan.request.group_by = {"host"};
+    EXPECT_FALSE(CanExecutePushdownPlan(plan));
+
+    plan.request.aggregate = connector::AggregateRequest{
+        .fn = connector::AggregateFunction::Count,
+        .column = "usage",
+        .alias = "usage",
+    };
+    EXPECT_TRUE(CanExecutePushdownPlan(plan));
+
+    plan.request.distinct = "host";
+    EXPECT_FALSE(CanExecutePushdownPlan(plan));
+
+    plan.request = connector::ScanRequest{};
+    plan.request.partitioned_topn = true;
+    plan.request.limit = 2;
+    EXPECT_FALSE(CanExecutePushdownPlan(plan));
+
+    plan.request.order_by = {{.column = "usage", .desc = true}};
+    EXPECT_TRUE(CanExecutePushdownPlan(plan));
+
+    plan.request.offset = 1;
+    EXPECT_FALSE(CanExecutePushdownPlan(plan));
 }
 
 TEST(RuleBasedOptimizerTest, TracesMaterializationBarrierWithoutPushdownRules) {

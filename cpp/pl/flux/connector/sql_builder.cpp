@@ -448,6 +448,13 @@ absl::StatusOr<ParameterizedSql> BuildParameterizedScanSql(const std::string& ba
                                                            const ScanRequest& request,
                                                            const TableSchema& schema,
                                                            const SqlDialect& dialect) {
+    return BuildParameterizedScanSql(ParameterizedSql{.sql = base_query}, request, schema, dialect);
+}
+
+absl::StatusOr<ParameterizedSql> BuildParameterizedScanSql(ParameterizedSql base_query,
+                                                           const ScanRequest& request,
+                                                           const TableSchema& schema,
+                                                           const SqlDialect& dialect) {
     auto status = ValidateScanRequestAgainstSchema(request, schema, dialect.SourceName());
     if (!status.ok()) {
         return status;
@@ -459,14 +466,14 @@ absl::StatusOr<ParameterizedSql> BuildParameterizedScanSql(const std::string& ba
         schema_columns.insert(column.name);
     }
 
-    ParameterizedSql out;
+    ParameterizedSql out{.params = std::move(base_query.params)};
     status = BuildSelectClause(&out.sql, request, schema_columns, dialect);
     if (!status.ok()) {
         return status;
     }
 
     out.sql += " FROM (";
-    out.sql += base_query;
+    out.sql += base_query.sql;
     out.sql += ") AS flux_source";
 
     status = BuildParameterizedWhereClause(&out.sql, request, schema_columns, dialect, &out.params);
