@@ -39,7 +39,7 @@ struct BuiltinParam {
     std::string name;
     std::string type;
     BuiltinParamKind kind = BuiltinParamKind::Required;
-    std::optional<std::string> default_value;
+    std::optional<std::string> default_value{};
 };
 
 struct BuiltinSignature {

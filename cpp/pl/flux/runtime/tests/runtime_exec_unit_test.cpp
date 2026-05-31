@@ -1086,7 +1086,7 @@ TEST(RuntimeExecTest, PhysicalExecutorRunsMemoryAggregateAcrossMaterializeBarrie
         ASSERT_NE(nullptr, row);
         rows.emplace_back(row->lookup("host")->string(), row->lookup("usage")->string());
     }
-    std::sort(rows.begin(), rows.end());
+    std::ranges::sort(rows);
     EXPECT_EQ((std::vector<std::pair<std::string, std::string>>{
                   {"\"edge-1\"", "82.375"},
                   {"\"edge-2\"", "88"},
@@ -1114,7 +1114,7 @@ TEST(RuntimeExecTest, PhysicalExecutorRunsMemoryDistinctAfterConnectorScan) {
         EXPECT_NE(nullptr, row->lookup("_group"));
         EXPECT_EQ(nullptr, row->lookup("usage"));
     }
-    std::sort(hosts.begin(), hosts.end());
+    std::ranges::sort(hosts);
     EXPECT_EQ((std::vector<std::string>{"\"edge-1\"", "\"edge-2\"", "\"edge-3\""}), hosts);
 }
 
@@ -1260,7 +1260,7 @@ TEST(RuntimeExecTest, PhysicalPlannerPreservesJoinDagBelowBlockingWrapper) {
                                plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
                                {"host"});
     auto project = plan::MakeProject(std::move(join), {"host", "usage", "region"});
-    auto sort = plan::MakeSort(std::move(project), {{"usage", true}});
+    auto sort = plan::MakeSort(std::move(project), {{.column = "usage", .desc = true}});
 
     auto task_or = execution::PhysicalPlanner().Plan(sort);
 
@@ -1356,7 +1356,7 @@ TEST(RuntimeExecTest, PhysicalPlannerRepartitionsLargeJoinAcrossMultipleDrivers)
 }
 
 TEST(RuntimeExecTest, PhysicalPlannerRepartitionsLargeJoinBelowBlockingWrapper) {
-    auto sort = plan::MakeSort(PartitionedMemoryJoinPlan(), {{"usage", true}});
+    auto sort = plan::MakeSort(PartitionedMemoryJoinPlan(), {{.column = "usage", .desc = true}});
 
     auto task_or = execution::PhysicalPlanner().Plan(sort);
 
@@ -2125,7 +2125,7 @@ TEST(RuntimeExecTest, TwoStageGroupedAggregateMergesPartialMean) {
     std::unordered_map<std::string, std::pair<double, size_t>> expected;
     for (size_t index = 0; index < kRows; ++index) {
         const auto host_name = "edge-" + std::to_string(index % kHosts);
-        const double usage = static_cast<double>((index * 7) % 100);
+        const auto usage = static_cast<double>((index * 7) % 100);
         rows.push_back(TestRow({{"host", Value::string(host_name)},
                                 {"usage", Value::floating(usage)},
                                 {"seq", Value::integer(static_cast<int64_t>(index))}}));

@@ -34,9 +34,9 @@ struct CboOptions {
 };
 
 struct PlanStatistics {
-    std::optional<double> row_count;
-    std::optional<double> size_bytes;
-    std::vector<connector::ColumnStatistics> columns;
+    std::optional<double> row_count{};
+    std::optional<double> size_bytes{};
+    std::vector<connector::ColumnStatistics> columns{};
 };
 
 enum class PhysicalShape {
@@ -53,7 +53,7 @@ struct PlanAlternative {
     std::shared_ptr<plan::PlanNode> plan;
     plan::CostEstimate cost;
     bool chosen = false;
-    std::string reason;
+    std::string reason{};
 };
 
 struct CboPlanResult {
@@ -85,7 +85,7 @@ public:
     explicit CostBasedOptimizer(CboOptions options);
 
     [[nodiscard]] absl::StatusOr<CboPlanResult> OptimizeWithTrace(
-        std::shared_ptr<plan::PlanNode> plan) const;
+        const std::shared_ptr<plan::PlanNode>& plan) const;
 
     [[nodiscard]] absl::StatusOr<PlanOptimizerResult> Optimize(
         std::shared_ptr<plan::PlanNode> plan) const override;

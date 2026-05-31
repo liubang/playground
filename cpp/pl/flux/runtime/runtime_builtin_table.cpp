@@ -24,6 +24,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "absl/status/status.h"
@@ -165,7 +166,7 @@ absl::StatusOr<size_t> normalize_array_index(int64_t index, size_t size, const s
         }
         normalized += static_cast<int64_t>(size);
     }
-    if (normalized < 0 || static_cast<uint64_t>(normalized) >= size) {
+    if (normalized < 0 || std::cmp_greater_equal(normalized, size)) {
         return absl::OutOfRangeError(absl::StrCat(name, " index out of range"));
     }
     return static_cast<size_t>(normalized);
@@ -175,7 +176,7 @@ int64_t clamp_slice_index(int64_t index, size_t size) {
     if (size > static_cast<size_t>(std::numeric_limits<int64_t>::max())) {
         return 0;
     }
-    const int64_t signed_size = static_cast<int64_t>(size);
+    const auto signed_size = static_cast<int64_t>(size);
     int64_t normalized = index < 0 ? signed_size + index : index;
     normalized = std::max<int64_t>(0, normalized);
     normalized = std::min<int64_t>(signed_size, normalized);
@@ -1010,7 +1011,7 @@ absl::StatusOr<Value> builtin_array_reverse(const std::vector<Value>& args) {
         return arr_or.status();
     }
     std::vector<Value> reversed = (*arr_or)->elements;
-    std::reverse(reversed.begin(), reversed.end());
+    std::ranges::reverse(reversed);
     return Value::array(std::move(reversed));
 }
 
@@ -1025,7 +1026,7 @@ absl::StatusOr<Value> builtin_array_unique(const std::vector<Value>& args) {
     }
     std::vector<Value> unique;
     for (const auto& element : (*arr_or)->elements) {
-        if (std::find(unique.begin(), unique.end(), element) == unique.end()) {
+        if (std::ranges::find(unique, element) == unique.end()) {
             unique.push_back(element);
         }
     }

@@ -40,9 +40,9 @@ absl::Status with_statement_location(const absl::Status& status, const Statement
     if (status.ok()) {
         return status;
     }
-    return absl::Status(
+    return {
         status.code(),
-        absl::StrCat(status.message(), " while executing statement at ", location_text(stmt.loc)));
+        absl::StrCat(status.message(), " while executing statement at ", location_text(stmt.loc))};
 }
 
 absl::StatusOr<std::string> property_name(const PropertyKey& key) {
