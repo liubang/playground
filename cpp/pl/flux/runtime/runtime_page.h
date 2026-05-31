@@ -33,9 +33,9 @@
 namespace pl::flux {
 
 struct ColumnVector {
-    std::string name;
+    std::string name{};
     Value::Type type = Value::Type::Null;
-    std::vector<Value> values;
+    std::vector<Value> values{};
 };
 
 struct PageColumnSchema {

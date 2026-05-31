@@ -37,7 +37,7 @@ TaskExecutor::~TaskExecutor() {
 
 void TaskExecutor::Shutdown() {
     {
-        std::lock_guard<std::mutex> lock(mu_);
+        std::scoped_lock lock(mu_);
         if (shutdown_) {
             return;
         }
@@ -54,7 +54,7 @@ void TaskExecutor::Shutdown() {
 
 void TaskExecutor::Enqueue(std::function<void()> task) {
     {
-        std::lock_guard<std::mutex> lock(mu_);
+        std::scoped_lock lock(mu_);
         if (shutdown_) {
             throw std::runtime_error("task executor is shut down");
         }

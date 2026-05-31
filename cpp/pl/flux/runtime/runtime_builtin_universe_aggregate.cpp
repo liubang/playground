@@ -15,7 +15,9 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/25 10:40
 
+#include <algorithm>
 #include <optional>
+#include <ranges>
 
 #include "cpp/pl/flux/common/compat.h"
 #include "cpp/pl/flux/execution/materializer.h"
@@ -475,19 +477,18 @@ absl::StatusOr<Value> table_order_builtin(const std::vector<Value>& args,
 
     auto chunks = clone_table_chunks(*table);
     for (auto& chunk : chunks) {
-        std::stable_sort(
-            chunk.rows.begin(), chunk.rows.end(), [&](const auto& lhs, const auto& rhs) {
-                if (lhs == nullptr || rhs == nullptr) {
-                    return lhs != nullptr;
+        std::ranges::stable_sort(chunk.rows, [&](const auto& lhs, const auto& rhs) {
+            if (lhs == nullptr || rhs == nullptr) {
+                return lhs != nullptr;
+            }
+            for (const auto& column : *columns_or) {
+                const int cmp = compare_values(lhs->lookup(column), rhs->lookup(column));
+                if (cmp != 0) {
+                    return descending ? cmp > 0 : cmp < 0;
                 }
-                for (const auto& column : *columns_or) {
-                    const int cmp = compare_values(lhs->lookup(column), rhs->lookup(column));
-                    if (cmp != 0) {
-                        return descending ? cmp > 0 : cmp < 0;
-                    }
-                }
-                return false;
-            });
+            }
+            return false;
+        });
         if (chunk.rows.size() > static_cast<size_t>(*n_or)) {
             chunk.rows.resize(static_cast<size_t>(*n_or));
         }
@@ -531,13 +532,13 @@ absl::StatusOr<Value> table_single_row_builtin(const std::vector<Value>& args,
     for (const auto& chunk : table->tables) {
         TableChunk next;
         if (use_last) {
-            for (auto it = chunk.rows.rbegin(); it != chunk.rows.rend(); ++it) {
-                if (*it == nullptr) {
+            for (const auto& row : std::views::reverse(chunk.rows)) {
+                if (row == nullptr) {
                     continue;
                 }
-                const Value* value = (*it)->lookup(*column_or);
+                const Value* value = row->lookup(*column_or);
                 if (value != nullptr && !value->is_null()) {
-                    next.rows.push_back(*it);
+                    next.rows.push_back(row);
                     break;
                 }
             }

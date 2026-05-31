@@ -93,7 +93,7 @@ TEST(MakeResponseTest, StringIdResponseFormat) {
 
 // 错误响应必须包含 error 对象及正确的 code/message
 TEST(MakeErrorResponseTest, ContainsErrorCodeAndMessage) {
-    JsonRpcError err{ErrorCode::MethodNotFound, "method not found"};
+    JsonRpcError err{.code = ErrorCode::MethodNotFound, .message = "method not found"};
     std::string result = make_error_response(int64_t{1}, err);
 
     EXPECT_NE(result.find(R"("jsonrpc":"2.0")"), std::string::npos);
@@ -105,7 +105,7 @@ TEST(MakeErrorResponseTest, ContainsErrorCodeAndMessage) {
 
 // 成功响应不应出现 error 字段——这里确认 error 响应没有 result 字段
 TEST(MakeErrorResponseTest, NoResultFieldInError) {
-    JsonRpcError err{ErrorCode::InternalError, "internal error"};
+    JsonRpcError err{.code = ErrorCode::InternalError, .message = "internal error"};
     std::string result = make_error_response(int64_t{2}, err);
 
     EXPECT_EQ(result.find(R"("result")"), std::string::npos);

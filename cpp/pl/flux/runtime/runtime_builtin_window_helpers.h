@@ -26,9 +26,7 @@
 
 #include "cpp/pl/flux/runtime/runtime_builtin_time_helpers.h"
 
-namespace pl::flux {
-
-namespace detail {
+namespace pl::flux::detail {
 
 inline std::shared_ptr<ObjectValue> window_group_object(const TableChunk& chunk,
                                                         const std::string& start_column,
@@ -207,6 +205,4 @@ inline std::shared_ptr<ObjectValue> aggregate_window_output_row(
     return std::make_shared<ObjectValue>(std::move(props));
 }
 
-} // namespace detail
-
-} // namespace pl::flux
+} // namespace pl::flux::detail

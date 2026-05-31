@@ -22,9 +22,8 @@ namespace pl::flux {
 namespace {
 
 bool ErrorContains(const std::vector<std::string>& errors, const std::string& needle) {
-    return std::any_of(errors.begin(), errors.end(), [&](const std::string& err) {
-        return err.find(needle) != std::string::npos;
-    });
+    return std::ranges::any_of(
+        errors, [&](const std::string& err) { return err.find(needle) != std::string::npos; });
 }
 
 TEST(FluxParserTest, ParsesPackageImportsAndPipeExpression) {

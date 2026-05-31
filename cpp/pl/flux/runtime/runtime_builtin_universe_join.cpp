@@ -227,10 +227,8 @@ std::shared_ptr<ObjectValue> join_rows(const std::string& left_name,
             value = right->lookup(column);
         }
         if (value != nullptr) {
-            const bool already_present =
-                std::any_of(props.begin(), props.end(), [&](const auto& property) {
-                    return property.first == column;
-                });
+            const bool already_present = std::ranges::any_of(
+                props, [&](const auto& property) { return property.first == column; });
             if (!already_present) {
                 props.emplace_back(column, *value);
             }
@@ -247,10 +245,8 @@ std::shared_ptr<ObjectValue> join_rows(const std::string& left_name,
             const std::string output_key = overlapping_columns.count(column) != 0
                                                ? joined_property_name(table_name, column)
                                                : column;
-            const bool already_present =
-                std::any_of(props.begin(), props.end(), [&](const auto& property) {
-                    return property.first == output_key;
-                });
+            const bool already_present = std::ranges::any_of(
+                props, [&](const auto& property) { return property.first == output_key; });
             if (already_present) {
                 continue;
             }
@@ -638,7 +634,7 @@ absl::StatusOr<Value> builtin_join(const std::vector<Value>& args) {
     }
     if (method != "inner" && method != "left" && method != "right" && method != "full") {
         return absl::InvalidArgumentError(
-            "join `method` must be one of \"inner\", \"left\", \"right\", or \"full\"");
+            R"(join `method` must be one of "inner", "left", "right", or "full")");
     }
     auto lazy = lazy_join_with_column_keys(*(*tables_or)[0].second,
                                            *(*tables_or)[1].second,

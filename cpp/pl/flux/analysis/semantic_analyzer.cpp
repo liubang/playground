@@ -46,7 +46,7 @@ bool position_in_range(uint32_t line, uint32_t column, const SourceLocation& loc
 }
 
 uint64_t location_span(const SourceLocation& loc) {
-    const uint64_t line_span = static_cast<uint64_t>(loc.end.line - loc.start.line);
+    const auto line_span = static_cast<uint64_t>(loc.end.line - loc.start.line);
     const uint64_t col_span =
         loc.end.column >= loc.start.column ? loc.end.column - loc.start.column : 0;
     return line_span * 1000000ULL + col_span;
@@ -295,9 +295,9 @@ public:
     explicit SourceSchemaResolver(std::string source_base_dir)
         : source_base_dir_(std::move(source_base_dir)) {}
 
-    std::optional<Type> ResolveCsv(std::optional<std::string> csv,
-                                   std::optional<std::string> file,
-                                   std::optional<std::string> mode) const {
+    [[nodiscard]] std::optional<Type> ResolveCsv(std::optional<std::string> csv,
+                                                 std::optional<std::string> file,
+                                                 const std::optional<std::string>& mode) const {
         const std::string resolved_mode = mode.value_or("annotations");
         if (csv.has_value()) {
             return infer_csv_schema_from_text(*csv, resolved_mode);
@@ -340,7 +340,7 @@ private:
     struct Scope {
         size_t id = 0;
         size_t parent_id = 0;
-        std::unordered_map<std::string, size_t> definitions;
+        std::unordered_map<std::string, size_t> definitions{};
     };
 
     void bind_imports(const File& file) {
@@ -642,7 +642,9 @@ private:
         return Type::Unknown();
     }
 
-    Type visit_call_expression(const CallExpr& call, bool pipe_value_present, Type pipe_type) {
+    Type visit_call_expression(const CallExpr& call,
+                               bool pipe_value_present,
+                               const Type& pipe_type) {
         const auto resolved = resolve_callee(call);
         if (resolved.sig != nullptr && IsCallableBuiltin(*resolved.sig)) {
             check_builtin_call(call, *resolved.sig, resolved.location, pipe_value_present);
@@ -887,10 +889,11 @@ private:
         return Type::Record(std::move(fields), false);
     }
 
-    std::optional<FunctionContext> function_context_for_argument(const BuiltinSignature& sig,
-                                                                 std::string_view arg_name,
-                                                                 bool pipe_value_present,
-                                                                 const Type& pipe_type) const {
+    [[nodiscard]] std::optional<FunctionContext> function_context_for_argument(
+        const BuiltinSignature& sig,
+        std::string_view arg_name,
+        bool pipe_value_present,
+        const Type& pipe_type) const {
         if (!pipe_value_present || arg_name != "fn") {
             return std::nullopt;
         }
@@ -1063,7 +1066,7 @@ private:
             {.location = loc, .type = type, .reference_index = std::nullopt});
     }
 
-    Type type_for_name(const std::string& name) const {
+    [[nodiscard]] Type type_for_name(const std::string& name) const {
         if (name == "true" || name == "false") {
             return Type::Scalar(TypeKind::Bool);
         }
@@ -1086,8 +1089,9 @@ private:
         return Type::Dynamic();
     }
 
-    Type builtin_function_type(const BuiltinSignature& sig) const {
+    [[nodiscard]] Type builtin_function_type(const BuiltinSignature& sig) const {
         std::vector<FunctionParamType> params;
+        params.reserve(sig.params.size());
         for (const auto& param : sig.params) {
             params.push_back({
                 .name = param.name,
@@ -1187,7 +1191,7 @@ private:
         }
     }
 
-    std::string callee_name(const CallExpr& call) const {
+    [[nodiscard]] std::string callee_name(const CallExpr& call) const {
         if (!call.callee) {
             return "";
         }
@@ -1204,7 +1208,7 @@ private:
         return "";
     }
 
-    std::vector<std::string> call_argument_names(const CallExpr& call) const {
+    [[nodiscard]] std::vector<std::string> call_argument_names(const CallExpr& call) const {
         std::vector<std::string> names;
         if (call.arguments.size() == 1 && call.arguments[0] &&
             is_named_call_argument(*call.arguments[0])) {
@@ -1218,9 +1222,8 @@ private:
         return names;
     }
 
-    std::optional<Type> named_argument_type(const CallExpr& call,
-                                            std::string_view name,
-                                            const std::vector<Type>& arg_types) const {
+    [[nodiscard]] std::optional<Type> named_argument_type(
+        const CallExpr& call, std::string_view name, const std::vector<Type>& arg_types) const {
         if (arg_types.empty() || call.arguments.size() != 1 || !call.arguments[0] ||
             !is_named_call_argument(*call.arguments[0]) || arg_types[0].kind != TypeKind::Record) {
             return std::nullopt;
@@ -1325,7 +1328,7 @@ private:
         return std::nullopt;
     }
 
-    RecordFieldType field(std::string name, Type type) const {
+    [[nodiscard]] RecordFieldType field(std::string name, Type type) const {
         return make_field(std::move(name), std::move(type));
     }
 
@@ -1346,7 +1349,7 @@ private:
         return type.Field(name);
     }
 
-    Type expression_type_without_refs(const Expression& expr) const {
+    [[nodiscard]] Type expression_type_without_refs(const Expression& expr) const {
         switch (expr.type) {
             case Expression::Type::ObjectExpr: {
                 const auto& obj = *std::get<std::unique_ptr<ObjectExpr>>(expr.expr);
@@ -1432,7 +1435,7 @@ private:
         }
         std::vector<RecordFieldType> fields;
         for (const auto& field : row->fields) {
-            if (std::find(columns.begin(), columns.end(), field.name) == columns.end()) {
+            if (std::ranges::find(columns, field.name) == columns.end()) {
                 fields.push_back(field);
             }
         }
@@ -1622,7 +1625,7 @@ private:
         if (!table_field.type) {
             return std::nullopt;
         }
-        const auto row = stream_row(*table_field.type);
+        auto row = stream_row(*table_field.type);
         if (!row || row->kind != TypeKind::Record) {
             diagnostic("join table `" + table_field.name + "` must be a stream, got " +
                            table_field.type->ToString(),
@@ -1633,7 +1636,7 @@ private:
         return row;
     }
 
-    std::unordered_set<std::string> overlapping_join_columns(
+    [[nodiscard]] std::unordered_set<std::string> overlapping_join_columns(
         const Type& left_row,
         const Type& right_row,
         const std::unordered_set<std::string>& key_set) const {
@@ -1651,7 +1654,7 @@ private:
         return overlap;
     }
 
-    std::optional<Type> stream_row(const Type& type) const {
+    [[nodiscard]] std::optional<Type> stream_row(const Type& type) const {
         if ((type.kind == TypeKind::Stream || type.kind == TypeKind::Table) && !type.args.empty()) {
             return type.args[0];
         }
@@ -1673,7 +1676,8 @@ private:
         });
     }
 
-    std::vector<std::string> named_string_array(const CallExpr& call, std::string_view name) const {
+    [[nodiscard]] std::vector<std::string> named_string_array(const CallExpr& call,
+                                                              std::string_view name) const {
         const auto* expr = named_argument_expression(call, name);
         if (expr == nullptr || expr->type != Expression::Type::ArrayExpr) {
             return {};
@@ -1690,8 +1694,8 @@ private:
         return values;
     }
 
-    std::unordered_map<std::string, std::string> named_string_record(const CallExpr& call,
-                                                                     std::string_view name) const {
+    [[nodiscard]] std::unordered_map<std::string, std::string> named_string_record(
+        const CallExpr& call, std::string_view name) const {
         const auto* expr = named_argument_expression(call, name);
         if (expr == nullptr || expr->type != Expression::Type::ObjectExpr) {
             return {};
@@ -1709,7 +1713,8 @@ private:
         return result;
     }
 
-    const Expression* named_argument_expression(const CallExpr& call, std::string_view name) const {
+    [[nodiscard]] const Expression* named_argument_expression(const CallExpr& call,
+                                                              std::string_view name) const {
         if (call.arguments.size() != 1 || !call.arguments[0] ||
             !is_named_call_argument(*call.arguments[0])) {
             return nullptr;
@@ -1723,8 +1728,8 @@ private:
         return nullptr;
     }
 
-    std::optional<std::string> literal_string_argument(const CallExpr& call,
-                                                       std::string_view name) const {
+    [[nodiscard]] std::optional<std::string> literal_string_argument(const CallExpr& call,
+                                                                     std::string_view name) const {
         const auto* expr = named_argument_expression(call, name);
         if (expr == nullptr || expr->type != Expression::Type::StringLit) {
             return std::nullopt;
@@ -1732,7 +1737,8 @@ private:
         return std::get<std::unique_ptr<StringLit>>(expr->expr)->value;
     }
 
-    std::string unknown_argument_message(const BuiltinSignature& sig, std::string_view name) const {
+    [[nodiscard]] std::string unknown_argument_message(const BuiltinSignature& sig,
+                                                       std::string_view name) const {
         std::vector<std::string> candidates;
         candidates.reserve(sig.params.size());
         for (const auto& param : sig.params) {
@@ -1745,8 +1751,8 @@ private:
         return message;
     }
 
-    std::string unknown_package_member_message(std::string_view package,
-                                               std::string_view member) const {
+    [[nodiscard]] std::string unknown_package_member_message(std::string_view package,
+                                                             std::string_view member) const {
         std::vector<std::string> candidates;
         for (const auto* sig : BuiltinsForPackage(package)) {
             candidates.push_back(sig->name);
@@ -1759,12 +1765,13 @@ private:
         return message;
     }
 
-    bool is_table_numeric_aggregate(const BuiltinSignature& sig) const {
+    [[nodiscard]] bool is_table_numeric_aggregate(const BuiltinSignature& sig) const {
         return sig.package.empty() &&
                (sig.name == "sum" || sig.name == "mean" || sig.name == "min" || sig.name == "max");
     }
 
-    bool can_call_without_pipe_argument(const BuiltinSignature& sig, const CallExpr& call) const {
+    [[nodiscard]] bool can_call_without_pipe_argument(const BuiltinSignature& sig,
+                                                      const CallExpr& call) const {
         return is_table_numeric_aggregate(sig) && !call.arguments.empty();
     }
 
@@ -1994,7 +2001,7 @@ private:
         return index;
     }
 
-    std::vector<std::string> accessible_symbol_names() const {
+    [[nodiscard]] std::vector<std::string> accessible_symbol_names() const {
         std::vector<std::string> names;
         std::unordered_set<std::string> seen;
         size_t scope_index = current_scope_id_;
@@ -2019,7 +2026,7 @@ private:
         return names;
     }
 
-    size_t resolve(const std::string& name) const {
+    [[nodiscard]] size_t resolve(const std::string& name) const {
         size_t scope_index = current_scope_id_;
         while (true) {
             const auto& scope = scopes_[scope_index];
@@ -2034,7 +2041,7 @@ private:
         }
     }
 
-    bool is_intrinsic(const std::string& name) const {
+    [[nodiscard]] bool is_intrinsic(const std::string& name) const {
         static const std::unordered_set<std::string> names = {
             "true",
             "false",

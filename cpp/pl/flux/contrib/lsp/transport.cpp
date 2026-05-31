@@ -23,6 +23,7 @@
 #include <cstring>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace pl::flux::lsp {
 
@@ -46,7 +47,7 @@ bool iequals(std::string_view lhs, std::string_view rhs) {
 StdioTransport::StdioTransport(FILE* in, FILE* out) : in_(in), out_(out) {}
 
 std::optional<std::string> StdioTransport::read_message() {
-    if (!in_) {
+    if (in_ == nullptr) {
         return std::nullopt;
     }
 
@@ -55,7 +56,7 @@ std::optional<std::string> StdioTransport::read_message() {
     std::array<char, 256> line{};
 
     while (true) {
-        if (!std::fgets(line.data(), static_cast<int>(line.size()), in_)) {
+        if (std::fgets(line.data(), static_cast<int>(line.size()), in_) == nullptr) {
             return std::nullopt; // EOF
         }
 
@@ -74,12 +75,12 @@ std::optional<std::string> StdioTransport::read_message() {
             const char* value_start = line.data() + colon + 1;
             const char* value_end = line.data() + header.size();
             while (value_start < value_end &&
-                   std::isspace(static_cast<unsigned char>(*value_start))) {
+                   (std::isspace(static_cast<unsigned char>(*value_start)) != 0)) {
                 ++value_start;
             }
             // Trim trailing whitespace / \r\n
             while (value_end > value_start &&
-                   std::isspace(static_cast<unsigned char>(*(value_end - 1)))) {
+                   (std::isspace(static_cast<unsigned char>(*(value_end - 1))) != 0)) {
                 --value_end;
             }
             auto result = std::from_chars(value_start, value_end, content_length);
@@ -96,7 +97,7 @@ std::optional<std::string> StdioTransport::read_message() {
     // Read body
     std::string body(static_cast<size_t>(content_length), '\0');
     auto bytes_read = std::fread(body.data(), 1, static_cast<size_t>(content_length), in_);
-    if (bytes_read != static_cast<size_t>(content_length)) {
+    if (std::cmp_not_equal(bytes_read, content_length)) {
         return std::nullopt;
     }
 
@@ -104,7 +105,7 @@ std::optional<std::string> StdioTransport::read_message() {
 }
 
 void StdioTransport::write_message(const std::string& json) {
-    if (!out_) {
+    if (out_ == nullptr) {
         return;
     }
     std::fprintf(out_, "Content-Length: %zu\r\n\r\n", json.size());

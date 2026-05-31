@@ -560,8 +560,7 @@ private:
     void dump_function_type(const FunctionType& function, const std::string& prefix, bool is_last) {
         line(prefix, is_last, "MonoType Function");
         auto next = child_prefix(prefix, is_last);
-        for (size_t i = 0; i < function.parameters.size(); ++i) {
-            const auto& param = function.parameters[i];
+        for (const auto& param : function.parameters) {
             switch (param->type) {
                 case ParameterType::Type::Required: {
                     const auto& required = std::get<std::shared_ptr<Required>>(param->value);
