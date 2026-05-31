@@ -310,6 +310,119 @@ std::shared_ptr<plan::PhysicalPlanNode> BuildOutputPhysicalPlan(
     return output;
 }
 
+std::string EscapeMermaidLabel(const std::string& value) {
+    std::ostringstream out;
+    for (const char c : value) {
+        switch (c) {
+            case '\\':
+                out << "\\\\";
+                break;
+            case '"':
+                out << "\\\"";
+                break;
+            case '\n':
+                out << "<br/>";
+                break;
+            case '|':
+                out << "&#124;";
+                break;
+            default:
+                out << c;
+                break;
+        }
+    }
+    return out.str();
+}
+
+std::string LogicalNodeLabel(const plan::PlanNode& node) {
+    std::ostringstream label;
+    FormatLogicalNodeDetail(node, &label);
+    return label.str();
+}
+
+std::string PhysicalNodeLabel(const plan::PhysicalPlanNode& node) {
+    std::ostringstream label;
+    label << plan::PhysicalNodeKindName(node.kind) << (node.lazy ? " [lazy]" : " [eager]");
+    if (!node.operator_name.empty()) {
+        label << "\noperator: " << node.operator_name;
+    }
+    if (!node.source.empty()) {
+        label << "\nsource: " << node.source;
+    }
+    if (!node.table.empty()) {
+        label << "\ntable: " << node.table;
+    }
+    if (node.split_count.has_value()) {
+        label << "\nsplits: " << *node.split_count;
+    }
+    if (!node.optimizer.cbo_decision.empty()) {
+        label << "\ncbo: " << node.optimizer.cbo_decision;
+    }
+    return label.str();
+}
+
+void AppendMermaidNode(const std::string& id, const std::string& label, std::ostringstream* out) {
+    *out << "  " << id << "[\"" << EscapeMermaidLabel(label) << "\"]\n";
+}
+
+void AppendLogicalMermaidTree(const plan::PlanNode& node,
+                              size_t* next_id,
+                              std::ostringstream* out,
+                              std::string* node_id) {
+    *node_id = "n" + std::to_string((*next_id)++);
+    AppendMermaidNode(*node_id, LogicalNodeLabel(node), out);
+    for (const auto& input : node.inputs) {
+        if (input == nullptr) {
+            continue;
+        }
+        std::string child_id;
+        AppendLogicalMermaidTree(*input, next_id, out, &child_id);
+        *out << "  " << *node_id << " --> " << child_id << "\n";
+    }
+}
+
+void AppendPhysicalMermaidTree(const plan::PhysicalPlanNode& node,
+                               size_t* next_id,
+                               std::ostringstream* out,
+                               std::string* node_id) {
+    *node_id = "n" + std::to_string((*next_id)++);
+    AppendMermaidNode(*node_id, PhysicalNodeLabel(node), out);
+    for (const auto& input : node.inputs) {
+        if (input == nullptr) {
+            continue;
+        }
+        std::string child_id;
+        AppendPhysicalMermaidTree(*input, next_id, out, &child_id);
+        *out << "  " << *node_id << " --> " << child_id << "\n";
+    }
+}
+
+std::string FormatLogicalPlanMermaidOnly(const std::shared_ptr<plan::PlanNode>& plan) {
+    std::ostringstream out;
+    out << "flowchart TD\n";
+    if (plan == nullptr) {
+        AppendMermaidNode("n0", "<no plan>", &out);
+        return out.str();
+    }
+    size_t next_id = 0;
+    std::string root_id;
+    AppendLogicalMermaidTree(*plan, &next_id, &out, &root_id);
+    return out.str();
+}
+
+std::string FormatPhysicalPlanMermaidOnly(const std::shared_ptr<plan::PhysicalPlanNode>& physical) {
+    std::ostringstream out;
+    out << "flowchart TD\n";
+    if (physical == nullptr) {
+        AppendMermaidNode("n0", "<no physical plan>", &out);
+        return out.str();
+    }
+    size_t next_id = 0;
+    std::string root_id;
+    AppendPhysicalMermaidTree(*physical, &next_id, &out, &root_id);
+    return out.str();
+}
+
 } // namespace
 
 std::string FormatLogicalPlan(const std::shared_ptr<plan::PlanNode>& plan) {
@@ -323,6 +436,10 @@ std::string FormatLogicalPlan(const std::shared_ptr<plan::PlanNode>& plan) {
         out += *summary;
     }
     return out;
+}
+
+std::string FormatLogicalPlanMermaid(const std::shared_ptr<plan::PlanNode>& plan) {
+    return FormatLogicalPlanMermaidOnly(plan);
 }
 
 std::string FormatOptimizedLogicalPlan(const std::shared_ptr<plan::PlanNode>& plan) {
@@ -346,6 +463,20 @@ std::string FormatOptimizedLogicalPlan(const std::shared_ptr<plan::PlanNode>& pl
     return out.str();
 }
 
+std::string FormatOptimizedLogicalPlanMermaid(const std::shared_ptr<plan::PlanNode>& plan) {
+    if (plan == nullptr) {
+        return "flowchart TD\n  n0[\"<no plan>\"]\n";
+    }
+    auto optimized_or = DefaultRuleBasedOptimizer().Optimize(plan);
+    if (!optimized_or.ok()) {
+        std::ostringstream out;
+        out << "flowchart TD\n";
+        AppendMermaidNode("n0", optimized_or.status().ToString(), &out);
+        return out.str();
+    }
+    return FormatLogicalPlanMermaidOnly(optimized_or->plan);
+}
+
 std::string FormatPhysicalPlan(const std::shared_ptr<plan::PlanNode>& plan) {
     if (plan == nullptr) {
         return "<no physical plan>\n";
@@ -355,6 +486,20 @@ std::string FormatPhysicalPlan(const std::shared_ptr<plan::PlanNode>& plan) {
         return cbo_or.status().ToString() + "\n";
     }
     return plan::FormatPhysicalPlan(BuildOutputPhysicalPlan(cbo_or->rbo_result.plan));
+}
+
+std::string FormatPhysicalPlanMermaid(const std::shared_ptr<plan::PlanNode>& plan) {
+    if (plan == nullptr) {
+        return "flowchart TD\n  n0[\"<no physical plan>\"]\n";
+    }
+    auto cbo_or = DefaultCostBasedOptimizer().OptimizeWithTrace(plan);
+    if (!cbo_or.ok()) {
+        std::ostringstream out;
+        out << "flowchart TD\n";
+        AppendMermaidNode("n0", cbo_or.status().ToString(), &out);
+        return out.str();
+    }
+    return FormatPhysicalPlanMermaidOnly(BuildOutputPhysicalPlan(cbo_or->rbo_result.plan));
 }
 
 } // namespace pl::flux::optimizer
