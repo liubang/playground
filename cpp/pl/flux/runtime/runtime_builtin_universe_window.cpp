@@ -15,6 +15,8 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/25 10:40
 
+#include <algorithm>
+
 #include "cpp/pl/flux/execution/materializer.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_universe.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_window_helpers.h"
@@ -566,11 +568,11 @@ absl::StatusOr<Value> builtin_window(const std::vector<Value>& args) {
                                                              *stop_column_or,
                                                              bounds_or->stop_seconds);
                         next.columns = visible_columns_in_chunk(chunk);
-                        if (std::find(next.columns.begin(), next.columns.end(), *start_column_or) ==
+                        if (std::ranges::find(next.columns, *start_column_or) ==
                             next.columns.end()) {
                             next.columns.push_back(*start_column_or);
                         }
-                        if (std::find(next.columns.begin(), next.columns.end(), *stop_column_or) ==
+                        if (std::ranges::find(next.columns, *stop_column_or) ==
                             next.columns.end()) {
                             next.columns.push_back(*stop_column_or);
                         }
@@ -586,14 +588,13 @@ absl::StatusOr<Value> builtin_window(const std::vector<Value>& args) {
             }
         }
 
-        std::stable_sort(
-            chunk_windows.begin(), chunk_windows.end(), [&](const auto& lhs, const auto& rhs) {
-                const Value* lhs_start =
-                    lhs.group_key != nullptr ? lhs.group_key->lookup(*start_column_or) : nullptr;
-                const Value* rhs_start =
-                    rhs.group_key != nullptr ? rhs.group_key->lookup(*start_column_or) : nullptr;
-                return compare_values(lhs_start, rhs_start) < 0;
-            });
+        std::ranges::stable_sort(chunk_windows, [&](const auto& lhs, const auto& rhs) {
+            const Value* lhs_start =
+                lhs.group_key != nullptr ? lhs.group_key->lookup(*start_column_or) : nullptr;
+            const Value* rhs_start =
+                rhs.group_key != nullptr ? rhs.group_key->lookup(*start_column_or) : nullptr;
+            return compare_values(lhs_start, rhs_start) < 0;
+        });
         chunks.insert(chunks.end(), chunk_windows.begin(), chunk_windows.end());
     }
 
@@ -985,19 +986,18 @@ absl::StatusOr<Value> builtin_aggregate_window(const std::vector<Value>& args,
                 }
             }
 
-            std::stable_sort(
-                group.buckets.begin(), group.buckets.end(), [](const auto& lhs, const auto& rhs) {
-                    if (lhs.start_seconds == rhs.start_seconds) {
-                        return false;
-                    }
-                    if (!lhs.start_seconds.has_value()) {
-                        return false;
-                    }
-                    if (!rhs.start_seconds.has_value()) {
-                        return true;
-                    }
-                    return *lhs.start_seconds < *rhs.start_seconds;
-                });
+            std::ranges::stable_sort(group.buckets, [](const auto& lhs, const auto& rhs) {
+                if (lhs.start_seconds == rhs.start_seconds) {
+                    return false;
+                }
+                if (!lhs.start_seconds.has_value()) {
+                    return false;
+                }
+                if (!rhs.start_seconds.has_value()) {
+                    return true;
+                }
+                return *lhs.start_seconds < *rhs.start_seconds;
+            });
 
             TableChunk output_chunk;
             output_chunk.rows.reserve(group.buckets.size());

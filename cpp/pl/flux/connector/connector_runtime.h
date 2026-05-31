@@ -35,10 +35,10 @@
 namespace pl::flux::connector {
 
 struct TableHandle {
-    std::string source;
-    std::string driver;
-    std::string dsn;
-    std::string table;
+    std::string source{};
+    std::string driver{};
+    std::string dsn{};
+    std::string table{};
 };
 
 struct ColumnHandle {
@@ -51,14 +51,14 @@ struct ConnectorSplit {
     TableHandle table;
     ScanRequest request;
     int64_t split_id = 0;
-    std::optional<std::string> partition;
+    std::optional<std::string> partition{};
     size_t row_offset = 0;
-    std::optional<size_t> row_limit;
-    std::optional<int64_t> rowid_lower;
-    std::optional<int64_t> rowid_upper;
-    std::optional<std::string> split_column;
-    std::optional<int64_t> split_lower;
-    std::optional<int64_t> split_upper;
+    std::optional<size_t> row_limit{};
+    std::optional<int64_t> rowid_lower{};
+    std::optional<int64_t> rowid_upper{};
+    std::optional<std::string> split_column{};
+    std::optional<int64_t> split_lower{};
+    std::optional<int64_t> split_upper{};
     double metadata_time_ms = 0.0;
     double split_discovery_time_ms = 0.0;
     bool finished = false;

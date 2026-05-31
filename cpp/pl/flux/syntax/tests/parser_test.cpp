@@ -21,7 +21,7 @@
 #include "cpp/pl/flux/syntax/ast_debug.h"
 #include "cpp/pl/flux/syntax/parser.h"
 
-int main(int argc, char* argv[]) {
+int main() {
     std::string flux = R"(
     @edition("2022.1")
     package main

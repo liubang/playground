@@ -45,7 +45,7 @@ bool has_rows(const plan::CostEstimate& cost) {
 
 struct EstimatedPlan {
     plan::CostEstimate cost;
-    std::vector<connector::ColumnStatistics> columns;
+    std::vector<connector::ColumnStatistics> columns{};
 };
 
 enum class ExecutionLocation {
@@ -84,15 +84,15 @@ double clamp_fraction(double fraction) {
 
 const connector::ColumnStatistics* find_column(
     const std::vector<connector::ColumnStatistics>& columns, const std::string& name) {
-    auto it = std::find_if(
-        columns.begin(), columns.end(), [&](const auto& column) { return column.name == name; });
+    auto it =
+        std::ranges::find_if(columns, [&](const auto& column) { return column.name == name; });
     return it == columns.end() ? nullptr : &*it;
 }
 
 connector::ColumnStatistics* find_column(std::vector<connector::ColumnStatistics>* columns,
                                          const std::string& name) {
-    auto it = std::find_if(
-        columns->begin(), columns->end(), [&](const auto& column) { return column.name == name; });
+    auto it =
+        std::ranges::find_if(*columns, [&](const auto& column) { return column.name == name; });
     return it == columns->end() ? nullptr : &*it;
 }
 
@@ -629,7 +629,7 @@ size_t choose_lowest_known_cost(const std::vector<PlanAlternative>& alternatives
 CostBasedOptimizer::CostBasedOptimizer(CboOptions options) : options_(options) {}
 
 absl::StatusOr<CboPlanResult> CostBasedOptimizer::OptimizeWithTrace(
-    std::shared_ptr<plan::PlanNode> plan) const {
+    const std::shared_ptr<plan::PlanNode>& plan) const {
     auto rbo_or = DefaultRuleBasedOptimizer().Optimize(clone_plan(plan));
     if (!rbo_or.ok()) {
         return rbo_or.status();
@@ -736,7 +736,7 @@ absl::StatusOr<CboPlanResult> CostBasedOptimizer::OptimizeWithTrace(
 
 absl::StatusOr<PlanOptimizerResult> CostBasedOptimizer::Optimize(
     std::shared_ptr<plan::PlanNode> plan) const {
-    auto result_or = OptimizeWithTrace(std::move(plan));
+    auto result_or = OptimizeWithTrace(plan);
     if (!result_or.ok()) {
         return result_or.status();
     }

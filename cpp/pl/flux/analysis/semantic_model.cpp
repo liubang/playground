@@ -34,7 +34,7 @@ std::string trim(std::string_view text) {
 }
 
 bool starts_with(std::string_view text, std::string_view prefix) {
-    return text.size() >= prefix.size() && text.substr(0, prefix.size()) == prefix;
+    return text.size() >= prefix.size() && text.starts_with(prefix);
 }
 
 bool ends_with(std::string_view text, std::string_view suffix) {

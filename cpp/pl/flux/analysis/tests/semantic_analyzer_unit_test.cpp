@@ -28,8 +28,8 @@
 namespace pl::flux::analysis {
 namespace {
 
-AnalysisResult Analyze(std::string source) {
-    Parser parser(std::move(source));
+AnalysisResult Analyze(const std::string& source) {
+    Parser parser(source);
     auto file = parser.parse_file("semantic_test.flux");
     EXPECT_TRUE(parser.errors().empty()) << ::testing::PrintToString(parser.errors());
     return SemanticAnalyzer().Analyze(*file);
@@ -54,9 +54,9 @@ int DiagnosticCount(const AnalysisResult& result, const std::string& needle) {
     return count;
 }
 
-std::shared_ptr<File> ParseFile(std::string source, std::string name) {
-    Parser parser(std::move(source));
-    auto file = parser.parse_file(std::move(name));
+std::shared_ptr<File> ParseFile(const std::string& source, const std::string& name) {
+    Parser parser(source);
+    auto file = parser.parse_file(name);
     EXPECT_TRUE(parser.errors().empty()) << ::testing::PrintToString(parser.errors());
     return file;
 }
@@ -390,6 +390,7 @@ join(tables: {cpu: cpu, mem: mem}, on: ["host"])
     const auto& joined = result.table_schemas.back();
     EXPECT_FALSE(joined.open);
     std::vector<std::string> names;
+    names.reserve(joined.columns.size());
     for (const auto& column : joined.columns) {
         names.push_back(column.name);
     }

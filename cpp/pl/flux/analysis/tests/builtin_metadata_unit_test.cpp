@@ -25,10 +25,10 @@ namespace {
 
 TEST(BuiltinMetadataTest, ListsKnownPackages) {
     const auto packages = KnownPackages();
-    EXPECT_NE(std::find(packages.begin(), packages.end(), "array"), packages.end());
-    EXPECT_NE(std::find(packages.begin(), packages.end(), "sqlite"), packages.end());
-    EXPECT_NE(std::find(packages.begin(), packages.end(), "mysql"), packages.end());
-    EXPECT_NE(std::find(packages.begin(), packages.end(), "timezone"), packages.end());
+    EXPECT_NE(std::ranges::find(packages, "array"), packages.end());
+    EXPECT_NE(std::ranges::find(packages, "sqlite"), packages.end());
+    EXPECT_NE(std::ranges::find(packages, "mysql"), packages.end());
+    EXPECT_NE(std::ranges::find(packages, "timezone"), packages.end());
     EXPECT_TRUE(IsKnownPackage("strings"));
     EXPECT_FALSE(IsKnownPackage("experimental/unknown"));
 }

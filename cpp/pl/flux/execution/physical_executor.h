@@ -140,9 +140,9 @@ struct PipelineProfile {
     size_t drivers = 1;
     size_t pages = 0;
     size_t rows = 0;
-    std::vector<connector::ConnectorSplitStats> split_stats;
-    std::vector<AccumulatorStats> accumulator_stats;
-    std::vector<ExchangePartitionStats> exchange_partition_stats;
+    std::vector<connector::ConnectorSplitStats> split_stats{};
+    std::vector<AccumulatorStats> accumulator_stats{};
+    std::vector<ExchangePartitionStats> exchange_partition_stats{};
     bool blocked = false;
     bool finished = false;
     std::string error;

@@ -33,10 +33,10 @@ struct ConnectorRuntime;
 /// It corresponds to plan::SourceScanSpec but lives in the connector layer
 /// to avoid a circular dependency on plan/.
 struct SourceSpec {
-    std::string source;
-    std::string driver;
-    std::string dsn;
-    std::string table;
+    std::string source{};
+    std::string driver{};
+    std::string dsn{};
+    std::string table{};
 };
 
 /// Factory function type: given a SourceSpec, produce a complete connector runtime.

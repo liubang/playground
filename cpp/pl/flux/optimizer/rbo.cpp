@@ -87,7 +87,7 @@ Value to_connector_literal(const plan::PredicateLiteral& literal) {
 absl::StatusOr<size_t> visible_column_index(const std::vector<std::string>& visible_columns,
                                             const std::string& column,
                                             const std::string& context) {
-    auto it = std::find(visible_columns.begin(), visible_columns.end(), column);
+    auto it = std::ranges::find(visible_columns, column);
     if (it == visible_columns.end()) {
         return absl::InvalidArgumentError(
             absl::StrCat("pushdown ", context, " references unavailable column: ", column));
@@ -586,9 +586,8 @@ bool prefix_contains_node_kind(const std::shared_ptr<plan::PlanNode>& node,
 
 bool prefix_contains_any_node_kind(const std::shared_ptr<plan::PlanNode>& node,
                                    const std::vector<plan::PlanNodeKind>& kinds) {
-    return std::any_of(kinds.begin(), kinds.end(), [&](plan::PlanNodeKind kind) {
-        return prefix_contains_node_kind(node, kind);
-    });
+    return std::ranges::any_of(
+        kinds, [&](plan::PlanNodeKind kind) { return prefix_contains_node_kind(node, kind); });
 }
 
 std::string connector_predicate_op_string(connector::PredicateOp op) {
@@ -949,25 +948,25 @@ bool CanExecutePushdownPlan(const PushdownPlan& plan) {
 std::string FormatSourceCapabilities(const connector::SourceCapabilities& capabilities) {
     std::vector<std::string> enabled;
     if (capabilities.projection) {
-        enabled.push_back("projection");
+        enabled.emplace_back("projection");
     }
     if (capabilities.filter) {
-        enabled.push_back("filter");
+        enabled.emplace_back("filter");
     }
     if (capabilities.time_range) {
-        enabled.push_back("time_range");
+        enabled.emplace_back("time_range");
     }
     if (capabilities.limit) {
-        enabled.push_back("limit");
+        enabled.emplace_back("limit");
     }
     if (capabilities.sort) {
-        enabled.push_back("sort");
+        enabled.emplace_back("sort");
     }
     if (capabilities.aggregate) {
-        enabled.push_back("aggregate");
+        enabled.emplace_back("aggregate");
     }
     if (capabilities.distinct) {
-        enabled.push_back("distinct");
+        enabled.emplace_back("distinct");
     }
     std::ostringstream out;
     out << "capabilities=";
@@ -1003,8 +1002,7 @@ std::string FormatPushdownRequest(const connector::ScanRequest& request) {
     if (!request.predicates.empty()) {
         std::vector<std::string> predicates;
         predicates.reserve(request.predicates.size());
-        for (size_t i = 0; i < request.predicates.size(); ++i) {
-            const auto& predicate = request.predicates[i];
+        for (const auto& predicate : request.predicates) {
             std::ostringstream predicate_out;
             predicate_out << predicate.column << " " << connector_predicate_op_string(predicate.op)
                           << " " << predicate.literal.string();
@@ -1036,9 +1034,8 @@ std::string FormatPushdownRequest(const connector::ScanRequest& request) {
     if (!request.order_by.empty()) {
         std::vector<std::string> order_by;
         order_by.reserve(request.order_by.size());
-        for (size_t i = 0; i < request.order_by.size(); ++i) {
-            order_by.push_back(request.order_by[i].column +
-                               (request.order_by[i].desc ? " DESC" : " ASC"));
+        for (const auto& i : request.order_by) {
+            order_by.push_back(i.column + (i.desc ? " DESC" : " ASC"));
         }
         append_pushdown_list_field(&out, "order_by", order_by);
     }

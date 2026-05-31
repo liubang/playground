@@ -114,7 +114,7 @@ std::vector<std::string> collect_chunk_columns(const TableChunk& chunk) {
 
 std::vector<std::string> visible_table_columns(const TableValue& table) {
     auto columns = collect_table_columns(table);
-    columns.erase(std::remove(columns.begin(), columns.end(), "_group"), columns.end());
+    std::erase(columns, "_group");
     return columns;
 }
 
@@ -147,8 +147,7 @@ std::unordered_set<std::string> collect_group_columns(const TableChunk& chunk) {
 }
 
 bool chunk_has_column(const TableChunk& chunk, std::string_view name) {
-    if (std::find(chunk.columns.begin(), chunk.columns.end(), std::string(name)) !=
-        chunk.columns.end()) {
+    if (std::ranges::find(chunk.columns, std::string(name)) != chunk.columns.end()) {
         return true;
     }
     for (const auto& row : chunk.rows) {
@@ -876,10 +875,10 @@ void append_table_result(const NamedResult& result,
         for (const auto& row : chunk.rows) {
             std::vector<std::string> cells;
             cells.reserve(columns.size());
-            for (size_t i = 0; i < columns.size(); ++i) {
+            for (const auto& column : columns) {
                 std::string cell = "null";
                 if (row != nullptr) {
-                    if (const Value* value = row->lookup(columns[i]); value != nullptr) {
+                    if (const Value* value = row->lookup(column); value != nullptr) {
                         cell = value->string();
                     }
                 }
@@ -920,10 +919,9 @@ void append_cli_output(const FileExecutionResult& result,
     }
 
     bool multiple_results = result.results.size() > 1;
-    bool has_table = std::any_of(
-        result.results.begin(), result.results.end(), [](const NamedResult& named_result) {
-            return named_result.value.type() == Value::Type::Table;
-        });
+    bool has_table = std::ranges::any_of(result.results, [](const NamedResult& named_result) {
+        return named_result.value.type() == Value::Type::Table;
+    });
     bool include_headers = multiple_results || has_table;
 
     bool first = true;
@@ -1185,7 +1183,7 @@ FluxCliResult AnalyzeFluxSource(const std::string& source,
             JsonBuilder message;
             message.append(diag.message);
             out << message.view();
-            out << ",\"severity\":" << static_cast<int>(diag.severity) << ",\"location\":\""
+            out << ",\"severity\":" << static_cast<int>(diag.severity) << R"(,"location":")"
                 << source_location_text(diag.location) << "\"}";
         }
         out << "],\"definitions\":[";
