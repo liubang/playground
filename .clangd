@@ -59,6 +59,7 @@ Diagnostics:
     Remove: 
       - modernize-use-trailing-return-type
       - modernize-avoid-c-arrays
+      - modernize-use-std-format
     CheckOptions: 
       performance-move-const-arg.CheckTriviallyCopyableMove: true
       performance-move-const-arg.CheckMoveToConstRef: true

@@ -175,7 +175,7 @@ private:
 
     std::unique_ptr<Expression> parse_paren_ident_expression(std::unique_ptr<Token> lparen,
                                                              std::unique_ptr<Identifier> key,
-                                                             SourceLocation key_loc);
+                                                             const SourceLocation& key_loc);
     std::unique_ptr<Expression> parse_expression_while_more(std::unique_ptr<Expression> init,
                                                             const std::set<TokenType>& stop_tokens);
     std::unique_ptr<Expression> parse_property_value();

@@ -270,7 +270,7 @@ int run_benchmark(int argc, char** argv) {
     const SplitTotals splits = split_totals(result_or->profile);
     const AccumulatorTotals accumulators = accumulator_totals(result_or->profile);
     std::cout << "{"
-              << "\"scenario\":\"" << scenario << "\","
+              << R"("scenario":")" << scenario << "\","
               << "\"rows\":" << rows << ","
               << "\"threshold\":" << threshold << ","
               << "\"drivers\":" << drivers << ","

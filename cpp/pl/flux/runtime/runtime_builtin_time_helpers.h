@@ -29,9 +29,7 @@
 #include "absl/time/time.h"
 #include "cpp/pl/flux/runtime/runtime_builtin_table_helpers.h"
 
-namespace pl::flux {
-
-namespace detail {
+namespace pl::flux::detail {
 
 inline std::optional<std::string> row_time_literal(const ObjectValue& row) {
     const Value* time = row.lookup("_time");
@@ -608,6 +606,4 @@ inline bool aggregate_window_is_within_range(const WindowBounds& bounds,
            bounds.upper_seconds <= range_stop_seconds;
 }
 
-} // namespace detail
-
-} // namespace pl::flux
+} // namespace pl::flux::detail

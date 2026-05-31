@@ -488,7 +488,7 @@ void append_source_row_to_chunk(PageChunk* target,
 void append_distinct_row_to_chunk(PageChunk* target,
                                   const std::shared_ptr<ObjectValue>& group_key,
                                   const std::string& column_name,
-                                  Value value) {
+                                  const Value& value) {
     if (target == nullptr) {
         return;
     }

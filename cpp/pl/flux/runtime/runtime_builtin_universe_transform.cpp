@@ -15,9 +15,11 @@
 // Authors: liubang (it.liubang@gmail.com)
 // Created: 2026/04/25 10:40
 
+#include <algorithm>
 #include <limits>
 #include <optional>
 #include <unordered_set>
+#include <utility>
 
 #include "absl/strings/str_cat.h"
 #include "cpp/pl/flux/execution/materializer.h"
@@ -517,7 +519,7 @@ absl::StatusOr<Value> builtin_filter(const std::vector<Value>& args) {
     } else if (*on_empty_or == "keep") {
         empty_policy = EmptyChunkPolicy::Keep;
     } else {
-        return absl::InvalidArgumentError("filter `onEmpty` must be \"drop\" or \"keep\"");
+        return absl::InvalidArgumentError(R"(filter `onEmpty` must be "drop" or "keep")");
     }
     std::optional<std::vector<plan::PredicateSpec>> predicates;
     if (empty_policy == EmptyChunkPolicy::Drop) {
@@ -637,7 +639,7 @@ absl::StatusOr<Value> builtin_limit(const std::vector<Value>& args) {
     if (!(*table_or)->materialized && (*table_or)->plan != nullptr) {
         return lazy_table_with_plan(**table_or, plan::MakeLimit((*table_or)->plan, *n_or, offset));
     }
-    const size_t begin = static_cast<size_t>(offset);
+    const auto begin = static_cast<size_t>(offset);
     auto result = slice_table_like(**table_or, [&](size_t size) {
         const size_t end = std::min(size, begin + static_cast<size_t>(*n_or));
         return std::pair<size_t, size_t>{begin, end};
@@ -687,9 +689,9 @@ absl::StatusOr<Value> builtin_tail(const std::vector<Value>& args) {
     const TableValue* table = *materialized_or;
     auto result = slice_table_like(*table, [&](size_t row_count) {
         const size_t tail_end =
-            offset >= static_cast<int64_t>(row_count) ? 0 : row_count - static_cast<size_t>(offset);
+            std::cmp_greater_equal(offset, row_count) ? 0 : row_count - static_cast<size_t>(offset);
         const size_t tail_begin =
-            static_cast<size_t>(*n_or) >= tail_end ? 0 : tail_end - static_cast<size_t>(*n_or);
+            std::cmp_greater_equal(*n_or, tail_end) ? 0 : tail_end - static_cast<size_t>(*n_or);
         return std::pair<size_t, size_t>{tail_begin, tail_end};
     });
     return with_materialization_barrier(std::move(result), **table_or, "tail");
@@ -924,19 +926,18 @@ absl::StatusOr<Value> builtin_sort(const std::vector<Value>& args) {
 
     auto chunks = clone_table_chunks(**table_or);
     for (auto& chunk : chunks) {
-        std::stable_sort(
-            chunk.rows.begin(), chunk.rows.end(), [&](const auto& lhs, const auto& rhs) {
-                if (lhs == nullptr || rhs == nullptr) {
-                    return lhs != nullptr;
+        std::ranges::stable_sort(chunk.rows, [&](const auto& lhs, const auto& rhs) {
+            if (lhs == nullptr || rhs == nullptr) {
+                return lhs != nullptr;
+            }
+            for (const auto& column : *columns_or) {
+                const int cmp = compare_values(lhs->lookup(column), rhs->lookup(column));
+                if (cmp != 0) {
+                    return *desc_or ? cmp > 0 : cmp < 0;
                 }
-                for (const auto& column : *columns_or) {
-                    const int cmp = compare_values(lhs->lookup(column), rhs->lookup(column));
-                    if (cmp != 0) {
-                        return *desc_or ? cmp > 0 : cmp < 0;
-                    }
-                }
-                return false;
-            });
+            }
+            return false;
+        });
     }
     auto result = table_with_chunks_like(**table_or, std::move(chunks));
     return with_sort_plan(std::move(result), **table_or, *columns_or, *desc_or);
@@ -960,7 +961,7 @@ absl::StatusOr<Value> builtin_group(const std::vector<Value>& args) {
         return mode_or.status();
     }
     if (*mode_or != "by" && *mode_or != "except") {
-        return absl::InvalidArgumentError("group `mode` must be either \"by\" or \"except\"");
+        return absl::InvalidArgumentError(R"(group `mode` must be either "by" or "except")");
     }
     if (!(*table_or)->materialized && (*table_or)->plan != nullptr) {
         std::vector<std::string> group_columns = *columns_or;

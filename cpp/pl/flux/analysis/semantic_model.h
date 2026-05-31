@@ -52,23 +52,23 @@ enum class TypeKind {
 struct Type;
 
 struct RecordFieldType {
-    std::string name;
-    std::shared_ptr<Type> type;
+    std::string name{};
+    std::shared_ptr<Type> type{};
 };
 
 struct FunctionParamType {
-    std::string name;
-    std::shared_ptr<Type> type;
+    std::string name{};
+    std::shared_ptr<Type> type{};
     bool optional = false;
     bool pipe = false;
 };
 
 struct Type {
     TypeKind kind = TypeKind::Unknown;
-    std::string name;
-    std::vector<Type> args;
-    std::vector<RecordFieldType> fields;
-    std::vector<FunctionParamType> params;
+    std::string name{};
+    std::vector<Type> args{};
+    std::vector<RecordFieldType> fields{};
+    std::vector<FunctionParamType> params{};
     bool open_record = false;
 
     static Type Unknown();

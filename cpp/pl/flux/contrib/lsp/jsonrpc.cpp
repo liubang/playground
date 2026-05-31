@@ -60,7 +60,7 @@ std::string make_notification(const std::string& method, const std::string& para
 std::optional<JsonRpcMessage> parse_message(const std::string& json) {
     simdjson::dom::parser parser;
     auto doc = parser.parse(json);
-    if (doc.error()) {
+    if (doc.error() != 0u) {
         return std::nullopt;
     }
 
@@ -68,24 +68,24 @@ std::optional<JsonRpcMessage> parse_message(const std::string& json) {
 
     // Parse method (required)
     auto method_val = doc["method"];
-    if (method_val.error()) {
+    if (method_val.error() != 0u) {
         return std::nullopt;
     }
     auto method_str = method_val.get_c_str();
-    if (method_str.error()) {
+    if (method_str.error() != 0u) {
         return std::nullopt;
     }
     msg.method = std::string(method_str.value());
 
     // Parse id (optional - notifications don't have it)
     auto id_val = doc["id"];
-    if (!id_val.error()) {
+    if (id_val.error() == 0u) {
         auto id_int = id_val.get_int64();
-        if (!id_int.error()) {
+        if (id_int.error() == 0u) {
             msg.id = id_int.value();
         } else {
             auto id_str = id_val.get_c_str();
-            if (!id_str.error()) {
+            if (id_str.error() == 0u) {
                 msg.id = std::string(id_str.value());
             }
             // else: null id or unexpected type, treat as notification
@@ -94,7 +94,7 @@ std::optional<JsonRpcMessage> parse_message(const std::string& json) {
 
     // Parse params (optional) - store as raw JSON string
     auto params_val = doc["params"];
-    if (!params_val.error()) {
+    if (params_val.error() == 0u) {
         msg.params = simdjson::minify(params_val.value());
     } else {
         msg.params = "{}";

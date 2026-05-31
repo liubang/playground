@@ -28,26 +28,26 @@
 namespace pl::flux::connector {
 
 struct ColumnSchema {
-    std::string name;
+    std::string name{};
     Value::Type type = Value::Type::Null;
     bool nullable = true;
 };
 
 struct TableSchema {
-    std::vector<ColumnSchema> columns;
+    std::vector<ColumnSchema> columns{};
 };
 
 struct ColumnStatistics {
-    std::string name;
-    std::optional<double> distinct_values;
-    std::optional<double> null_fraction;
-    std::optional<double> average_width_bytes;
+    std::string name{};
+    std::optional<double> distinct_values{};
+    std::optional<double> null_fraction{};
+    std::optional<double> average_width_bytes{};
 };
 
 struct TableStatistics {
-    std::optional<double> row_count;
-    std::optional<double> size_bytes;
-    std::vector<ColumnStatistics> columns;
+    std::optional<double> row_count{};
+    std::optional<double> size_bytes{};
+    std::vector<ColumnStatistics> columns{};
 };
 
 struct SourceCapabilities {
@@ -61,8 +61,8 @@ struct SourceCapabilities {
 };
 
 struct TimeRange {
-    std::optional<std::string> start;
-    std::optional<std::string> stop;
+    std::optional<std::string> start{};
+    std::optional<std::string> stop{};
 };
 
 enum class PredicateOp {
@@ -76,18 +76,18 @@ enum class PredicateOp {
 
 struct Predicate {
     PredicateOp op = PredicateOp::Eq;
-    std::string column;
-    Value literal;
+    std::string column{};
+    Value literal{};
 };
 
 struct OrderBy {
-    std::string column;
+    std::string column{};
     bool desc = false;
 };
 
 struct ProjectionColumn {
-    std::string column;
-    std::string alias;
+    std::string column{};
+    std::string alias{};
 };
 
 enum class AggregateFunction {
@@ -100,21 +100,21 @@ enum class AggregateFunction {
 
 struct AggregateRequest {
     AggregateFunction fn = AggregateFunction::Count;
-    std::string column;
-    std::string alias;
+    std::string column{};
+    std::string alias{};
 };
 
 struct ScanRequest {
-    std::vector<std::string> columns;
-    std::vector<ProjectionColumn> projection_columns;
-    std::optional<TimeRange> time_range;
-    std::vector<Predicate> predicates;
-    std::vector<OrderBy> order_by;
-    std::vector<std::string> group_by;
-    std::optional<AggregateRequest> aggregate;
-    std::optional<std::string> distinct;
-    std::optional<int64_t> limit;
-    std::optional<int64_t> offset;
+    std::vector<std::string> columns{};
+    std::vector<ProjectionColumn> projection_columns{};
+    std::optional<TimeRange> time_range{};
+    std::vector<Predicate> predicates{};
+    std::vector<OrderBy> order_by{};
+    std::vector<std::string> group_by{};
+    std::optional<AggregateRequest> aggregate{};
+    std::optional<std::string> distinct{};
+    std::optional<int64_t> limit{};
+    std::optional<int64_t> offset{};
     bool partitioned_topn = false;
 };
 

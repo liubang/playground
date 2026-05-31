@@ -29,6 +29,7 @@
 #include <mutex>
 #include <optional>
 #include <queue>
+#include <ranges>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -215,7 +216,7 @@ std::vector<std::shared_ptr<ObjectValue>> rows_from_page(const Page& page) {
 absl::StatusOr<Page> apply_sort_page(const Page& input,
                                      const std::shared_ptr<plan::PlanNode>& plan) {
     auto rows = rows_from_page(input);
-    std::stable_sort(rows.begin(), rows.end(), [&](const auto& lhs, const auto& rhs) {
+    std::ranges::stable_sort(rows, [&](const auto& lhs, const auto& rhs) {
         return page_row_less(lhs, rhs, plan->sort().keys);
     });
     Page output = PageFromRows(input.bucket, std::move(rows));
@@ -258,9 +259,8 @@ absl::StatusOr<Page> apply_topn_page(const Page& input,
         rows.push_back(heap.top());
         heap.pop();
     }
-    std::stable_sort(rows.begin(), rows.end(), [&](const auto& lhs, const auto& rhs) {
-        return page_row_less(lhs, rhs, keys);
-    });
+    std::ranges::stable_sort(
+        rows, [&](const auto& lhs, const auto& rhs) { return page_row_less(lhs, rhs, keys); });
     Page output = PageFromRows(input.bucket, std::move(rows));
     output.range_start = input.range_start;
     output.range_stop = input.range_stop;
@@ -604,10 +604,8 @@ std::shared_ptr<ObjectValue> local_join_row(const ObjectValue* left,
     }
 
     auto append = [&](const std::string& column, const Value* value) {
-        const bool already_present =
-            std::any_of(props.begin(), props.end(), [&](const auto& property) {
-                return property.first == column;
-            });
+        const bool already_present = std::ranges::any_of(
+            props, [&](const auto& property) { return property.first == column; });
         if (!already_present) {
             props.emplace_back(column, value == nullptr ? Value::null() : *value);
         }
@@ -1078,7 +1076,7 @@ public:
           max_buffered_bytes_(std::max<size_t>(1, max_buffered_bytes)) {}
 
     void SetProducerCount(size_t producer_count) {
-        std::lock_guard<std::mutex> lock(mu_);
+        std::scoped_lock lock(mu_);
         producer_count_ = std::max<size_t>(1, producer_count);
     }
 
@@ -1126,24 +1124,24 @@ public:
     }
 
     [[nodiscard]] size_t page_count() const {
-        std::lock_guard<std::mutex> lock(mu_);
+        std::scoped_lock lock(mu_);
         return pages_.size();
     }
     [[nodiscard]] size_t row_count() const {
-        std::lock_guard<std::mutex> lock(mu_);
+        std::scoped_lock lock(mu_);
         return rows_;
     }
     [[nodiscard]] bool finished() const {
-        std::lock_guard<std::mutex> lock(mu_);
+        std::scoped_lock lock(mu_);
         return finished_;
     }
     [[nodiscard]] bool closed() const {
-        std::lock_guard<std::mutex> lock(mu_);
+        std::scoped_lock lock(mu_);
         return closed_;
     }
 
     absl::Status Finish() {
-        std::lock_guard<std::mutex> lock(mu_);
+        std::scoped_lock lock(mu_);
         if (closed_) {
             return absl::FailedPreconditionError("exchange buffer is closed");
         }
@@ -1159,14 +1157,14 @@ public:
     }
 
     void MarkError(const absl::Status& status) {
-        std::lock_guard<std::mutex> lock(mu_);
+        std::scoped_lock lock(mu_);
         error_ = status.ToString();
         finished_ = true;
         cv_.notify_all();
     }
 
     void Close() {
-        std::lock_guard<std::mutex> lock(mu_);
+        std::scoped_lock lock(mu_);
         closed_ = true;
         finished_ = true;
         cv_.notify_all();
@@ -1744,7 +1742,7 @@ public:
                 if (remaining_limit_ == 0) {
                     break;
                 }
-                if (remaining_offset_ >= static_cast<int64_t>(source.row_count)) {
+                if (std::cmp_greater_equal(remaining_offset_, source.row_count)) {
                     remaining_offset_ -= static_cast<int64_t>(source.row_count);
                     continue;
                 }
@@ -2042,7 +2040,7 @@ absl::StatusOr<PlannedOperator> BuildOperator(
                                                   optimized_plan->inputs[0]->group().columns,
                                                   std::move(planned_or->root),
                                                   memory_context));
-        planned_or->operators.push_back("GroupOperator");
+        planned_or->operators.emplace_back("GroupOperator");
         planned_or->operators.push_back(planned_or->root->name());
         return std::move(*planned_or);
     }
@@ -2299,8 +2297,8 @@ BuildUnaryWrappedJoinOperator(const UnaryWrappedJoinPlan& plan,
     std::unique_ptr<Operator> current(
         new LocalHashJoinOperator(plan.join, std::move(left), std::move(right)));
     operators.push_back(current->name());
-    for (auto it = plan.wrappers.rbegin(); it != plan.wrappers.rend(); ++it) {
-        auto wrapped_or = WrapUnaryOperator(*it, std::move(current), memory_context);
+    for (const auto& wrapper : std::views::reverse(plan.wrappers)) {
+        auto wrapped_or = WrapUnaryOperator(wrapper, std::move(current), memory_context);
         if (!wrapped_or.ok()) {
             return wrapped_or.status();
         }
@@ -2434,7 +2432,7 @@ absl::StatusOr<PartitionedProducedPipeline> AddPartitionedProducerPipelineForPla
 
 struct ParallelInputPlan {
     PlannedOperator planned;
-    std::vector<std::string> dependencies;
+    std::vector<std::string> dependencies{};
 };
 
 absl::StatusOr<ParallelInputPlan> BuildParallelInputForPlan(
@@ -2906,9 +2904,9 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecut
         }
 
         std::vector<std::string> partial_operators = std::move(planned.operators);
-        partial_operators.push_back("GroupOperator");
-        partial_operators.push_back("PartialAggregateOperator");
-        partial_operators.push_back("HashPartitionExchangeSinkOperator");
+        partial_operators.emplace_back("GroupOperator");
+        partial_operators.emplace_back("PartialAggregateOperator");
+        partial_operators.emplace_back("HashPartitionExchangeSinkOperator");
 
         task.pipelines.push_back(
             MakePipeline("aggregate-partial",
@@ -2967,9 +2965,9 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecut
     }
 
     std::vector<std::string> partial_operators = std::move(planned.operators);
-    partial_operators.push_back("GroupOperator");
-    partial_operators.push_back("PartialAggregateOperator");
-    partial_operators.push_back("ExchangeSinkOperator");
+    partial_operators.emplace_back("GroupOperator");
+    partial_operators.emplace_back("PartialAggregateOperator");
+    partial_operators.emplace_back("ExchangeSinkOperator");
 
     task.pipelines.push_back(MakePipeline("aggregate-partial",
                                           "aggregate partial",
@@ -2988,7 +2986,7 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecut
                                                                         std::move(current),
                                                                         memory_context,
                                                                         AggregatePhase::Final));
-    root_operators.push_back("FinalAggregateOperator");
+    root_operators.emplace_back("FinalAggregateOperator");
     for (size_t index = *aggregate_index; index > 0; --index) {
         auto wrapped_or = WrapUnaryOperator(chain[index - 1], std::move(current), memory_context);
         if (!wrapped_or.ok()) {
@@ -3057,8 +3055,8 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildPartitionedGroupExecutionTask(
     }
 
     std::vector<std::string> partial_operators = std::move(planned.operators);
-    partial_operators.push_back("PartialGroupOperator");
-    partial_operators.push_back("HashPartitionExchangeSinkOperator");
+    partial_operators.emplace_back("PartialGroupOperator");
+    partial_operators.emplace_back("HashPartitionExchangeSinkOperator");
 
     task.pipelines.push_back(
         MakePipeline("group-partial",
@@ -3131,8 +3129,8 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildPartitionedDistinctExecutionTa
     }
 
     std::vector<std::string> partial_operators = std::move(planned.operators);
-    partial_operators.push_back("PartialDistinctOperator");
-    partial_operators.push_back("HashPartitionExchangeSinkOperator");
+    partial_operators.emplace_back("PartialDistinctOperator");
+    partial_operators.emplace_back("HashPartitionExchangeSinkOperator");
 
     task.pipelines.push_back(MakePipeline("distinct-partial",
                                           "distinct partial partitioned",
@@ -3203,7 +3201,7 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildUnaryBreakerExecutionTask(
             const auto& aggregate = chain[index - 2];
             current = std::unique_ptr<Operator>(new StreamingGroupedAggregateOperator(
                 aggregate, node->group().columns, std::move(current), memory_context));
-            operators.push_back("GroupOperator");
+            operators.emplace_back("GroupOperator");
             operators.push_back(current->name());
             index -= 2;
             continue;
@@ -3235,7 +3233,7 @@ absl::Status QueryMemoryContext::Reserve(size_t bytes) {
     if (bytes == 0) {
         return absl::OkStatus();
     }
-    std::lock_guard<std::mutex> lock(mu_);
+    std::scoped_lock lock(mu_);
     used_bytes_ += bytes;
     peak_bytes_ = std::max(peak_bytes_, used_bytes_);
     if (limit_bytes_ != 0 && used_bytes_ > limit_bytes_) {
@@ -3253,12 +3251,12 @@ void QueryMemoryContext::Release(size_t bytes) {
     if (bytes == 0) {
         return;
     }
-    std::lock_guard<std::mutex> lock(mu_);
+    std::scoped_lock lock(mu_);
     used_bytes_ = bytes > used_bytes_ ? 0 : used_bytes_ - bytes;
 }
 
 MemoryProfile QueryMemoryContext::Snapshot() const {
-    std::lock_guard<std::mutex> lock(mu_);
+    std::scoped_lock lock(mu_);
     return MemoryProfile{
         .used_bytes = used_bytes_,
         .peak_bytes = peak_bytes_,
@@ -3268,7 +3266,7 @@ MemoryProfile QueryMemoryContext::Snapshot() const {
 }
 
 size_t QueryMemoryContext::limit_bytes() const {
-    std::lock_guard<std::mutex> lock(mu_);
+    std::scoped_lock lock(mu_);
     return limit_bytes_;
 }
 
@@ -3378,7 +3376,7 @@ void ResetPipelineStats(const std::shared_ptr<Pipeline::Stats>& stats) {
     if (stats == nullptr) {
         return;
     }
-    std::lock_guard<std::mutex> lock(stats->mu);
+    std::scoped_lock lock(stats->mu);
     stats->pages = 0;
     stats->rows = 0;
     stats->split_stats.clear();
@@ -3393,7 +3391,7 @@ void AddPipelineStatsPage(const std::shared_ptr<Pipeline::Stats>& stats, const P
     if (stats == nullptr) {
         return;
     }
-    std::lock_guard<std::mutex> lock(stats->mu);
+    std::scoped_lock lock(stats->mu);
     ++stats->pages;
     stats->rows += page.row_count();
 }
@@ -3402,7 +3400,7 @@ void FinishPipelineStats(const std::shared_ptr<Pipeline::Stats>& stats) {
     if (stats == nullptr) {
         return;
     }
-    std::lock_guard<std::mutex> lock(stats->mu);
+    std::scoped_lock lock(stats->mu);
     stats->finished = true;
 }
 
@@ -3411,7 +3409,7 @@ void AddPipelineSplitStats(const std::shared_ptr<Pipeline::Stats>& stats,
     if (stats == nullptr || split_stats.empty()) {
         return;
     }
-    std::lock_guard<std::mutex> lock(stats->mu);
+    std::scoped_lock lock(stats->mu);
     stats->split_stats.insert(stats->split_stats.end(), split_stats.begin(), split_stats.end());
 }
 
@@ -3420,7 +3418,7 @@ void AddPipelineAccumulatorStats(const std::shared_ptr<Pipeline::Stats>& stats,
     if (stats == nullptr || accumulator_stats.empty()) {
         return;
     }
-    std::lock_guard<std::mutex> lock(stats->mu);
+    std::scoped_lock lock(stats->mu);
     stats->accumulator_stats.insert(
         stats->accumulator_stats.end(), accumulator_stats.begin(), accumulator_stats.end());
 }
@@ -3431,7 +3429,7 @@ void AddPipelineExchangePartitionStats(
     if (stats == nullptr || exchange_partition_stats.empty()) {
         return;
     }
-    std::lock_guard<std::mutex> lock(stats->mu);
+    std::scoped_lock lock(stats->mu);
     for (const auto& partition : exchange_partition_stats) {
         if (stats->exchange_partition_stats.size() <= partition.partition) {
             stats->exchange_partition_stats.resize(partition.partition + 1);
@@ -3447,7 +3445,7 @@ void FailPipelineStats(const std::shared_ptr<Pipeline::Stats>& stats, const absl
     if (stats == nullptr) {
         return;
     }
-    std::lock_guard<std::mutex> lock(stats->mu);
+    std::scoped_lock lock(stats->mu);
     stats->blocked = status.code() == absl::StatusCode::kUnavailable;
     stats->error = status.ToString();
     stats->finished = true;
@@ -3557,7 +3555,7 @@ ExecutionProfile BuildExecutionProfile(const std::vector<PipelineProfile>& pipel
         if (stats[index] == nullptr) {
             continue;
         }
-        std::lock_guard<std::mutex> lock(stats[index]->mu);
+        std::scoped_lock lock(stats[index]->mu);
         profile.pipelines[index].pages = stats[index]->pages;
         profile.pipelines[index].rows = stats[index]->rows;
         profile.pipelines[index].split_stats = stats[index]->split_stats;
@@ -3898,7 +3896,7 @@ absl::StatusOr<SchedulerStreamResult> Scheduler::RunToSink(ExecutionTask task,
                     if (!stream_output) {
                         return absl::OkStatus();
                     }
-                    std::lock_guard<std::mutex> lock(sink_mu);
+                    std::scoped_lock lock(sink_mu);
                     return sink(std::move(page));
                 });
             });

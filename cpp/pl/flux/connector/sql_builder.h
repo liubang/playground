@@ -58,14 +58,14 @@ public:
 /// A bound SQL parameter plus whether string/time values should be normalized to
 /// the backend's timestamp representation before binding.
 struct SqlParam {
-    Value value;
+    Value value{};
     bool normalize_time = false;
 };
 
 /// Parameterized SQL text and the values to bind to each placeholder.
 struct ParameterizedSql {
-    std::string sql;
-    std::vector<SqlParam> params;
+    std::string sql{};
+    std::vector<SqlParam> params{};
 };
 
 /// Common helper: convert a PredicateOp to its SQL operator string.

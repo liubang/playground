@@ -76,8 +76,8 @@ struct SymbolReference {
     ReferenceKind kind = ReferenceKind::Identifier;
     size_t scope_id = 0;
     size_t definition_id = 0;
-    std::optional<std::string> package;
-    std::optional<std::string> member;
+    std::optional<std::string> package{};
+    std::optional<std::string> member{};
     bool resolved = false;
 };
 
@@ -85,7 +85,7 @@ struct ScopeInfo {
     size_t id = 0;
     size_t parent_id = 0;
     SourceLocation location;
-    std::vector<size_t> definitions;
+    std::vector<size_t> definitions{};
 };
 
 struct AnalysisResult {
@@ -99,18 +99,18 @@ struct AnalysisResult {
     std::vector<RecordSchema> record_schemas;
     std::vector<TableSchema> table_schemas;
 
-    const Symbol* FindDefinition(size_t id) const;
-    const Symbol* FindDefinition(std::string_view name) const;
-    const Symbol* DefinitionAt(uint32_t line, uint32_t column) const;
-    const SymbolReference* ReferenceAt(uint32_t line, uint32_t column) const;
-    const Symbol* DefinitionForSymbolAt(uint32_t line, uint32_t column) const;
-    const ExpressionInfo* ExpressionAt(uint32_t line, uint32_t column) const;
-    std::optional<Type> TypeAt(uint32_t line, uint32_t column) const;
-    const CallInfo* CallAt(uint32_t line, uint32_t column) const;
-    const TableSchema* TableSchemaAt(uint32_t line, uint32_t column) const;
-    std::string SymbolAt(uint32_t line, uint32_t column) const;
-    std::vector<const SymbolReference*> ReferencesOf(const Symbol& def) const;
-    std::vector<const SymbolReference*> ReferencesOf(std::string_view name) const;
+    [[nodiscard]] const Symbol* FindDefinition(size_t id) const;
+    [[nodiscard]] const Symbol* FindDefinition(std::string_view name) const;
+    [[nodiscard]] const Symbol* DefinitionAt(uint32_t line, uint32_t column) const;
+    [[nodiscard]] const SymbolReference* ReferenceAt(uint32_t line, uint32_t column) const;
+    [[nodiscard]] const Symbol* DefinitionForSymbolAt(uint32_t line, uint32_t column) const;
+    [[nodiscard]] const ExpressionInfo* ExpressionAt(uint32_t line, uint32_t column) const;
+    [[nodiscard]] std::optional<Type> TypeAt(uint32_t line, uint32_t column) const;
+    [[nodiscard]] const CallInfo* CallAt(uint32_t line, uint32_t column) const;
+    [[nodiscard]] const TableSchema* TableSchemaAt(uint32_t line, uint32_t column) const;
+    [[nodiscard]] std::string SymbolAt(uint32_t line, uint32_t column) const;
+    [[nodiscard]] std::vector<const SymbolReference*> ReferencesOf(const Symbol& def) const;
+    [[nodiscard]] std::vector<const SymbolReference*> ReferencesOf(std::string_view name) const;
 };
 
 class SemanticAnalyzer {
@@ -127,7 +127,7 @@ struct PackageAnalysisResult {
     std::vector<Symbol> exports;
     std::vector<SemanticDiagnostic> diagnostics;
 
-    const Symbol* FindExport(std::string_view name) const;
+    [[nodiscard]] const Symbol* FindExport(std::string_view name) const;
 };
 
 class PackageAnalyzer {

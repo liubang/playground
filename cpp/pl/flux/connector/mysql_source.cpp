@@ -90,7 +90,7 @@ struct MySQLMetadataCache {
 };
 
 MySQLMetadataCache& metadata_cache() {
-    static MySQLMetadataCache* cache = new MySQLMetadataCache();
+    static auto* cache = new MySQLMetadataCache();
     return *cache;
 }
 
@@ -126,9 +126,8 @@ bool read_bool_option(const char* name, bool fallback) {
         return fallback;
     }
     std::string text(value);
-    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
-        return static_cast<char>(std::tolower(ch));
-    });
+    std::ranges::transform(
+        text, text.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
     if (text == "1" || text == "true" || text == "yes" || text == "on") {
         return true;
     }
@@ -834,7 +833,7 @@ absl::StatusOr<TableSchema> MySQLSource::Schema() const {
     const std::string key = cache_key(dsn_, table_);
     {
         auto& cache = metadata_cache();
-        std::lock_guard<std::mutex> lock(cache.mu);
+        std::scoped_lock lock(cache.mu);
         auto it = cache.schemas.find(key);
         if (it != cache.schemas.end()) {
             return it->second;
@@ -858,7 +857,7 @@ absl::StatusOr<TableSchema> MySQLSource::Schema() const {
     }
     {
         auto& cache = metadata_cache();
-        std::lock_guard<std::mutex> lock(cache.mu);
+        std::scoped_lock lock(cache.mu);
         cache.schemas.emplace(key, *schema_or);
     }
     return *schema_or;
@@ -880,7 +879,7 @@ absl::StatusOr<TableStatistics> MySQLSource::Statistics() const {
     const std::string key = cache_key(dsn_, table_);
     {
         auto& cache = metadata_cache();
-        std::lock_guard<std::mutex> lock(cache.mu);
+        std::scoped_lock lock(cache.mu);
         auto it = cache.statistics.find(key);
         if (it != cache.statistics.end()) {
             return it->second;
@@ -955,7 +954,7 @@ absl::StatusOr<TableStatistics> MySQLSource::Statistics() const {
     }
     {
         auto& cache = metadata_cache();
-        std::lock_guard<std::mutex> lock(cache.mu);
+        std::scoped_lock lock(cache.mu);
         cache.statistics.emplace(key, statistics);
     }
     return statistics;
@@ -1089,8 +1088,7 @@ absl::StatusOr<std::vector<ConnectorSplit>> MySQLSplitManager::GetSplits(
     std::vector<std::string> split_candidates;
     split_candidates.reserve(schema_or->columns.size());
     auto add_split_candidate = [&](const std::string& column) {
-        if (std::find(split_candidates.begin(), split_candidates.end(), column) ==
-            split_candidates.end()) {
+        if (std::ranges::find(split_candidates, column) == split_candidates.end()) {
             split_candidates.push_back(column);
         }
     };
@@ -1106,7 +1104,7 @@ absl::StatusOr<std::vector<ConnectorSplit>> MySQLSplitManager::GetSplits(
     const std::string key = cache_key(table.dsn, table.table);
     {
         auto& cache = metadata_cache();
-        std::lock_guard<std::mutex> lock(cache.mu);
+        std::scoped_lock lock(cache.mu);
         auto it = cache.primary_keys.find(key);
         if (it != cache.primary_keys.end() && it->second.has_value()) {
             add_split_candidate(*it->second);
@@ -1135,7 +1133,7 @@ absl::StatusOr<std::vector<ConnectorSplit>> MySQLSplitManager::GetSplits(
         std::optional<MySQLMetadataCache::SplitExtent> cached_extent;
         {
             auto& cache = metadata_cache();
-            std::lock_guard<std::mutex> lock(cache.mu);
+            std::scoped_lock lock(cache.mu);
             auto it = cache.split_extents.find(extent_key);
             if (it != cache.split_extents.end()) {
                 const bool fresh = options_.split_cache_ttl_ms == 0 ||
@@ -1173,7 +1171,7 @@ absl::StatusOr<std::vector<ConnectorSplit>> MySQLSplitManager::GetSplits(
             count = int64_from_mysql_field(row.at(2));
             if (lower.has_value() && upper.has_value() && count.has_value()) {
                 auto& cache = metadata_cache();
-                std::lock_guard<std::mutex> lock(cache.mu);
+                std::scoped_lock lock(cache.mu);
                 if (options_.split_cache_max_entries > 0 &&
                     cache.split_extents.size() >= options_.split_cache_max_entries) {
                     cache.split_extents.clear();

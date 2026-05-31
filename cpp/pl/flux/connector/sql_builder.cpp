@@ -65,7 +65,7 @@ absl::Status ValidateColumn(const std::unordered_set<std::string>& schema_column
         return absl::OkStatus();
     }
     std::vector<std::string> sorted(schema_columns.begin(), schema_columns.end());
-    std::sort(sorted.begin(), sorted.end());
+    std::ranges::sort(sorted);
     std::string available;
     for (size_t i = 0; i < sorted.size(); ++i) {
         if (i != 0) {
