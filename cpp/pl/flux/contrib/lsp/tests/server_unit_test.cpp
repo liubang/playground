@@ -38,7 +38,7 @@ static void write_lsp_message(FILE* f, const std::string& json) {
 static std::string read_lsp_response(FILE* f) {
     char line[256];
     int content_length = -1;
-    while (fgets(line, sizeof(line), f)) {
+    while (fgets(line, sizeof(line), f) != nullptr) {
         // header 与 body 之间以空行分隔
         if (strcmp(line, "\r\n") == 0 || strcmp(line, "\n") == 0) {
             break;
