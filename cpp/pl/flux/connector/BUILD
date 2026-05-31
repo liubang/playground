@@ -91,6 +91,19 @@ cc_test(
 )
 
 cc_test(
+    name = "sql_builder_unit_test",
+    srcs = [
+        "tests/sql_builder_unit_test.cpp",
+    ],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    deps = [
+        ":connector",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
     name = "mysql_source_unit_test",
     srcs = [
         "tests/mysql_source_unit_test.cpp",
