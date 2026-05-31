@@ -32,155 +32,76 @@
   </a>
 </p>
 
-个人多语言实验项目，使用 [Bazel](https://bazel.build/) 统一构建，用于学习、原型验证和小型方案探索。涵盖 C++、Java、Go、Python 等多个技术方向，所有语言共享同一个构建系统和 CI 流水线。
+个人技术实验 Monorepo。使用 [Bazel](https://bazel.build/) 统一构建 C++/Java/Go/Python 多语言项目。
 
-## 目录结构
+不是代码片段集合 —— 仓库中包含多个从零实现的系统级项目（分布式文件系统、查询语言解释器、存储引擎等），每个都有完整的模块划分、测试覆盖和 CI。技术方向集中在分布式系统、存储引擎、编译器/解释器和模板元编程。
 
-```text
-.
-├── cpp/        C++ 实验、工具库与测试（C++20，gRPC/brpc/Faiss/RocksDB 等）
-├── java/       Java 实验（Spring Boot 3.5，Bazel 原生构建）
-├── go/         Go 示例、小工具与 cgo 示范
-├── python/     Python 示例与 Bazel targets
-├── proto/      共享 protobuf 定义
-├── registry/   Bazel 本地 registry（OpenBLAS、ISA-L 等自定义模块）
-├── bazel/      Bazel 辅助 patch 文件
-├── php/        简易 PHP 路由实现
-├── tla/        TLA+ 规约
-├── latex/      LaTeX/TikZ 示例
-└── bash/       Shell 脚本
-```
+## 特色项目
 
-## 环境依赖
+| 项目 | 简介 | 规模 |
+|------|------|------|
+| [MiniDFS](cpp/pl/minidfs/) | HDFS-like 分布式文件系统。NameNode/DataNode/Client 完整架构，brpc 通信，块存储与副本管理，MySQL 元数据，Docker 部署 | ~70 files |
+| [Flux 解释器](cpp/pl/flux/) | Flux 查询语言子集实现。Scanner/Parser/AST → 语义分析 → 优化器(RBO+CBO) → 物理执行引擎 → Connector(SQLite/MySQL)，附带 LSP 和 REPL | ~120 files |
+| [SSTable 引擎](cpp/pl/sst/) | LSM-Tree 存储引擎核心组件。Block 编解码、布隆过滤器、压缩(zstd/snappy)、迭代器、版本管理，含 CLI 工具 | ~30 files |
+| [InfluxQL Parser](cpp/pl/influxql/) | InfluxQL 词法/语法分析器，Ragel 生成的 scanner + 手写 parser | — |
+| [Braft 分布式计数器](cpp/pl/braft/) | 基于 braft 的 Raft 状态机示例：日志复制、快照、leader 选举、集群部署 | — |
+| [模板元编程库](cpp/meta/) | C++20 元编程：Type List、Expression Template、Pattern Matching、Tuple Iteration，全部带单元测试 | — |
+| [LLVM Kaleidoscope](cpp/pl/llvm/) | LLVM 官方教程的 C++ 实现，Lexer → AST → Codegen | — |
+| [Recall (FAISS)](cpp/pl/recall/) | 基于 FAISS 的向量召回服务，gRPC 接口 | — |
 
-所有语言的工具链和第三方库均由 Bazel 自动管理，本地只需安装 Bazel 本身和 C++ 编译器。Java SDK、Go SDK、Python 解释器、Maven 依赖等都由 Bazel 在首次构建时自动下载，无需手动安装。
+其他小型实现：[Skip List](cpp/pl/skiplist/)、[Bloom Filter](cpp/pl/bloom/)、[Arena Allocator](cpp/pl/arena/)、[Thread Pool](cpp/pl/thread/)、[Geohash](cpp/pl/geohash/)、[Brainfuck 解释器](cpp/pl/bf/)、[HTTP Server](cpp/pl/http/)
 
-### macOS
+## 当前重点
 
-```bash
-brew install bazelisk llvm libomp
-```
+- **MiniDFS** — 完善 DataNode 心跳、块汇报、副本恢复流程
+- **Flux** — 优化器与执行引擎迭代，扩展 connector 支持
+- **SSTable** — Compaction 策略、Range Query 优化
+- **TLA+** — 分布式协议的形式化验证练习
 
-安装后确认 `/opt/homebrew/opt/llvm/bin/clang++` 可用，`.bazelrc` 中 `build:macos` 已引用此路径。
+## 仓库结构
 
-### Linux（Debian/Ubuntu）
+| 目录 | 说明 |
+|------|------|
+| `cpp/` | C++20 项目。分布式系统、存储引擎、查询语言、元编程、RPC 示例等 |
+| `java/` | Java 21。Spring Boot 3.5 + Bazel 原生构建 |
+| `go/` | Go 1.24。工具库、cgo 多模式示范 |
+| `python/` | Python 3.13。pybind11 绑定、Manim 动画 |
+| `proto/` | 跨语言共享的 Protobuf 定义 |
+| `tla/` | TLA+ 形式化规约（Transfer、SimpleProgram 等） |
+| `registry/` | Bazel 本地模块注册表（OpenBLAS、ISA-L 等） |
 
-```bash
-# Bazelisk
-wget -qO /usr/local/bin/bazel \
-  https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64
-chmod +x /usr/local/bin/bazel
+## 为什么用 Bazel
 
-# GCC（默认编译器，需支持 C++20）
-sudo apt install gcc-14 g++-14
+四种语言 + Protobuf 跨语言生成，如果用传统方案需要同时维护 CMake、Maven、go build、pip 四套构建系统，且无法表达跨语言依赖（比如 Go 通过 cgo 调用 C++ 库，Python 通过 pybind11 绑定 C++ 代码）。
 
-# 构建 C++ 项目所需的系统依赖
-sudo apt install nasm libomp-dev
-```
+Bazel 在这个场景下解决了几个问题：所有语言用同一套 `BUILD` 文件描述依赖图；Java/Go/Python 工具链自动下载，本地只需要 Bazel + C++ 编译器；Protobuf 定义一次编写，各语言的 stub 自动生成；基于内容哈希的缓存避免不必要的重新编译；`.bazelversion` + `MODULE.bazel.lock` + `maven_install.json` 锁定全部版本，任何人 clone 后构建结果一致。
 
-如需使用 LLVM 替代 GCC，安装 Clang 18+ 后以 `--config=llvm` 构建即可。
+## 构建
 
-## 构建与测试
-
-Bazel 版本通过 `.bazelversion` 锁定为 8.6.0，Bazelisk 会自动下载对应版本。
-
-### 全量构建
+本地依赖：Bazelisk + C++ 编译器（macOS: `brew install bazelisk llvm libomp`，Linux: GCC 14+ 或 Clang 18+）。其余工具链（JDK 21、Go 1.24、Python 3.13）由 Bazel 自动下载。
 
 ```bash
-bazel build //...
-bazel test //...
-```
+bazel build //...    # 全量构建
+bazel test //...     # 全量测试
 
-### C++
-
-C++ 标准为 C++20，macOS 默认使用 Homebrew LLVM，Linux 默认使用 GCC。
-
-```bash
+# 单语言
 bazel build //cpp/...
-bazel test //cpp/...
-
-# Linux 切换至 LLVM 工具链
-bazel build //cpp/... --config=llvm
-
-# Release 模式（关闭 ASan）
-bazel build //cpp/... --config=release
-```
-
-### Java
-
-Java 语言版本和运行时均为 21，由 Bazel 通过 `rules_java` 自动下载远程 JDK，无需本地安装。Maven 依赖通过 `rules_jvm_external` 管理，依赖声明在 `MODULE.bazel` 中，解析结果锁定在 `maven_install.json`。
-
-```bash
 bazel build //java/...
-bazel test //java/...
-
-# 构建 Spring Boot fat jar（可通过 java -jar 直接运行）
-bazel build //java/t/spring:demo_deploy.jar
-
-# 直接启动 Spring Boot 应用
-bazel run //java/t/spring:demo
-```
-
-修改 `MODULE.bazel` 中的 Maven 依赖后，需要重新生成锁文件：
-
-```bash
-REPIN=1 bazel run @maven//:pin
-```
-
-### Go
-
-Go SDK 由 `rules_go` 自动下载（当前版本 1.24.12），第三方依赖通过 Gazelle 从 `go/go.mod` 解析，无需本地安装 Go。
-
-```bash
 bazel build //go/...
-bazel test //go/...
-```
-
-如需在 Bazel 之外使用 Go 工具链（如 `go mod tidy`），需本地安装 Go：macOS 上 `brew install go`，Linux 上 `sudo apt install golang-go` 或从官网下载。
-
-### Python
-
-Python 解释器由 `rules_python` 自动下载（当前版本 3.13），pip 依赖从 `requirements_lock.txt` 解析。
-
-```bash
 bazel build //python/...
-bazel test //python/...
+
+# C++ 配置选项
+bazel build //cpp/... --config=llvm      # Linux 切换 LLVM 工具链
+bazel build //cpp/... --config=release   # 关闭 ASan
 ```
 
-`python/manim/manimations` 目录下的 Manim 动画不走 Bazel，通过 [uv](https://github.com/astral-sh/uv) 运行：
+Bazel 版本锁定为 8.6.0（见 `.bazelversion`），默认开启 AddressSanitizer。
 
-```bash
-cd python/manim/manimations && uv run manim -pqh hello.py HelloWorld
-```
+Java Maven 依赖修改后需 `REPIN=1 bazel run @maven//:pin` 重新生成锁文件。
 
 ## 覆盖率
 
-CI 自动生成 C++、Java、Go 的测试覆盖率报告，发布在 GitHub Pages 上：
-
-- C++ 覆盖率详情：https://liubang.github.io/playground/cpp/
-- Java 覆盖率详情：https://liubang.github.io/playground/java/
-- Go 覆盖率详情：https://liubang.github.io/playground/go/
-
-## clangd 配置
-
-项目使用 [Hedron Compile Commands Extractor](https://github.com/hedronvision/bazel-compile-commands-extractor) 生成 `compile_commands.json`，配合根目录的 `.clangd` 文件为 clangd 提供编译参数：
-
-```bash
-bazel run @hedron_compile_commands//:refresh_all
-```
-
-macOS 上若 clangd 的 libc++ 头文件与 Homebrew LLVM 版本不匹配，创建 `~/Library/Preferences/clangd/config.yaml`：
-
-```yaml
-CompileFlags:
-  Compiler: /opt/homebrew/opt/llvm/bin/clang++
-  Add:
-    - -resource-dir=/opt/homebrew/opt/llvm/lib/clang/22
-```
-
-> 注意：Neovim 的 clangd 启动参数中若包含 `--query-driver`，会与上述 `Compiler` 指令冲突，macOS 上应移除。
-
-Linux 上 clangd 通常与系统标准库版本一致，一般无需额外配置。
+CI 自动生成测试覆盖率报告：[C++](https://liubang.github.io/playground/cpp/) | [Java](https://liubang.github.io/playground/java/) | [Go](https://liubang.github.io/playground/go/)
 
 ## 许可证
 

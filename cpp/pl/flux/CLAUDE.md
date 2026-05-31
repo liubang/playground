@@ -134,7 +134,7 @@
   - 数据生成逻辑
   - 对应查询模板
   - `benchmark/README.md` 中的覆盖范围说明
-  - 必要时在 `benchmark/OPTIMIZATION_LOG.md` 记录引入原因和观察结论
+  - 必要时在 `benchmark/README.md` 中补充观察结论
 - benchmark 的输入数据和查询应尽量代表真实热点，而不是只为得到好看的数字。
 
 ## 8. Examples 规则
@@ -146,13 +146,13 @@
 
 ## 9. 测试规则
 
-### 7.1 最低验证要求
+### 9.1 最低验证要求
 
 - 默认至少运行受影响模块的单测。
 - 对代码行为改动，默认还要运行 `bazel test //cpp/pl/flux:all`。
 - 只有纯文档修改可以不重跑测试，但最终说明里必须明确写出“本轮未重跑测试，因为只改文档”。
 
-### 7.2 必须补测试的场景
+### 9.2 必须补测试的场景
 
 - 修 bug 时
 - 修改逻辑表相关语义时
@@ -161,7 +161,7 @@
 - 修改 examples 目录内容或 example 预期时
 - 因 benchmark 发现功能性回归时
 
-### 7.3 测试放置约定
+### 9.3 测试放置约定
 
 - 运行时表达式和值语义优先放在 `runtime/tests/runtime_eval_unit_test.cpp`
 - 执行流或更高层行为放在 `runtime/tests/runtime_exec_unit_test.cpp`
@@ -176,12 +176,10 @@
 
 - `README.md`
   说明模块定位、核心能力、用户如何开始，以及关键规则入口。
-- `SUPPORT_MATRIX.md`
+- `docs/support-matrix.md`
   说明“已支持/部分支持/未支持”的能力矩阵，避免写超出真实实现的乐观描述。
 - `benchmark/README.md`
   说明 benchmark 覆盖范围、运行方式、结果解释口径。
-- `benchmark/OPTIMIZATION_LOG.md`
-  记录优化过程、关键决策、回归教训和测量观察。
 - `CLAUDE.md`
   约束后续迭代应遵循的流程、校验项和提交前标准。
 
@@ -204,4 +202,4 @@
 
 - 后续在 `cpp/pl/flux` 的开发，默认把这份文档视为长期规则，而不是一次性说明。
 - 如果后续又总结出新的稳定约束，应优先补充到这里，而不是只留在对话记录里。
-- 与性能优化相关、对后续工作有复用价值的过程和结论，继续沉淀到 `benchmark/OPTIMIZATION_LOG.md`。
+- 与性能优化相关、对后续工作有复用价值的过程和结论，继续沉淀到 `benchmark/README.md`。
