@@ -112,6 +112,105 @@ std::shared_ptr<ObjectValue> TestRow(std::vector<std::pair<std::string, Value>> 
     return std::make_shared<ObjectValue>(std::move(props));
 }
 
+std::shared_ptr<plan::PlanNode> PartitionedMemoryJoinPlan(bool skewed = false) {
+    constexpr size_t kLeftRows = 8192;
+    constexpr size_t kRightRows = 4096;
+    constexpr size_t kRowsPerPage = 512;
+    constexpr size_t kSplits = 8;
+    std::vector<std::shared_ptr<ObjectValue>> left_rows;
+    left_rows.reserve(kLeftRows);
+    for (size_t index = 0; index < kLeftRows; ++index) {
+        const size_t host = skewed ? 0 : index % kRightRows;
+        left_rows.push_back(TestRow({{"host", Value::string("edge-" + std::to_string(host))},
+                                     {"usage", Value::integer(static_cast<int64_t>(index))}}));
+    }
+    std::vector<std::shared_ptr<ObjectValue>> right_rows;
+    right_rows.reserve(kRightRows);
+    for (size_t index = 0; index < kRightRows; ++index) {
+        right_rows.push_back(
+            TestRow({{"host", Value::string("edge-" + std::to_string(index))},
+                     {"region", Value::string(index % 2 == 0 ? "east" : "west")}}));
+    }
+
+    connector::SourceSpec left_spec{
+        .source = "partitioned_join_left_memory",
+        .driver = "partitioned_join_left_memory",
+        .dsn = "memory://partitioned-join-left",
+        .table = "cpu",
+    };
+    connector::ConnectorRegistry::Global().Register(
+        left_spec.source, [rows = std::move(left_rows)](const connector::SourceSpec& requested) {
+            return connector::MakeMemoryConnectorRuntime(
+                requested, requested.table, rows, kRowsPerPage, kSplits);
+        });
+    connector::SourceSpec right_spec{
+        .source = "partitioned_join_right_memory",
+        .driver = "partitioned_join_right_memory",
+        .dsn = "memory://partitioned-join-right",
+        .table = "owners",
+    };
+    connector::ConnectorRegistry::Global().Register(
+        right_spec.source, [rows = std::move(right_rows)](const connector::SourceSpec& requested) {
+            return connector::MakeMemoryConnectorRuntime(
+                requested, requested.table, rows, kRowsPerPage, kSplits);
+        });
+
+    auto join = plan::MakeJoin(
+        plan::MakeSourceScan(left_spec.source, left_spec.driver, left_spec.dsn, left_spec.table),
+        plan::MakeSourceScan(
+            right_spec.source, right_spec.driver, right_spec.dsn, right_spec.table),
+        {"host"});
+    return plan::MakeProject(std::move(join), {"host", "usage", "region"});
+}
+
+std::shared_ptr<plan::PlanNode> BroadcastMemoryJoinPlan(
+    plan::JoinMethod method = plan::JoinMethod::Inner) {
+    constexpr size_t kProbeRows = 8192;
+    constexpr size_t kRowsPerPage = 512;
+    constexpr size_t kSplits = 8;
+    std::vector<std::shared_ptr<ObjectValue>> probe_rows;
+    probe_rows.reserve(kProbeRows);
+    for (size_t index = 0; index < kProbeRows; ++index) {
+        probe_rows.push_back(TestRow({{"host", Value::string("edge-hot")},
+                                      {"usage", Value::integer(static_cast<int64_t>(index))}}));
+    }
+    std::vector<std::shared_ptr<ObjectValue>> build_rows;
+    build_rows.push_back(
+        TestRow({{"host", Value::string("edge-hot")}, {"region", Value::string("east")}}));
+
+    connector::SourceSpec probe_spec{
+        .source = "broadcast_join_probe_memory",
+        .driver = "broadcast_join_probe_memory",
+        .dsn = "memory://broadcast-join-probe",
+        .table = "cpu",
+    };
+    connector::ConnectorRegistry::Global().Register(
+        probe_spec.source, [rows = std::move(probe_rows)](const connector::SourceSpec& requested) {
+            return connector::MakeMemoryConnectorRuntime(
+                requested, requested.table, rows, kRowsPerPage, kSplits);
+        });
+    connector::SourceSpec build_spec{
+        .source = "broadcast_join_build_memory",
+        .driver = "broadcast_join_build_memory",
+        .dsn = "memory://broadcast-join-build",
+        .table = "owners",
+    };
+    connector::ConnectorRegistry::Global().Register(
+        build_spec.source, [rows = std::move(build_rows)](const connector::SourceSpec& requested) {
+            return connector::MakeMemoryConnectorRuntime(
+                requested, requested.table, rows, kRowsPerPage, kSplits);
+        });
+
+    auto join =
+        plan::MakeJoin(plan::MakeSourceScan(
+                           probe_spec.source, probe_spec.driver, probe_spec.dsn, probe_spec.table),
+                       plan::MakeSourceScan(
+                           build_spec.source, build_spec.driver, build_spec.dsn, build_spec.table),
+                       {"host"},
+                       method);
+    return plan::MakeProject(std::move(join), {"host", "usage", "region"});
+}
+
 class SinglePageTestOperator final : public execution::Operator {
 public:
     explicit SinglePageTestOperator(int64_t value) : value_(value) {}
@@ -621,6 +720,47 @@ TEST(RuntimeExecTest, FilterExtractsBooleanShorthandForPushdownPlan) {
         plan_or->as_string());
 }
 
+TEST(RuntimeExecTest, FilterNormalizesBooleanEqualityOverRedundantNotEqual) {
+    const std::string path = ::testing::TempDir() + "/runtime_bool_normalized_metrics.db";
+    ASSERT_NO_FATAL_FAILURE(CreateBoolMetricsDb(path));
+
+    auto file = ParseFile(std::string(R"(
+        import "sqlite"
+        builtin filter : (<-tables: stream[A], fn: (r: A) => bool) => stream[A]
+        builtin explain : (<-tables: stream[A]) => string
+
+        data = sqlite.from(
+            path: ")") + path +
+                          R"(",
+            table: "cpu",
+        )
+            |> filter(fn: (r) => r.active != false)
+            |> filter(fn: (r) => r.active)
+
+        plan = data |> explain()
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto plan_or = env.lookup("plan");
+    ASSERT_TRUE(plan_or.ok()) << plan_or.status();
+    ASSERT_EQ(Value::Type::String, plan_or->type());
+    EXPECT_EQ(
+        "Filter [sqlite pushdown: active == true]\n"
+        "`- Filter [sqlite pushdown: active != false]\n"
+        "   `- SourceScan [sqlite scan](source=\"sqlite\", driver=\"sqlite\", table=\"cpu\")\n"
+        "capabilities=[projection, filter, time_range, limit, sort, aggregate, distinct]\n"
+        "SourcePushdown\n"
+        "  request:\n"
+        "    projection: [*]\n"
+        "    predicates:\n"
+        "      - active == true\n",
+        plan_or->as_string());
+}
+
 TEST(RuntimeExecTest, FilterExtractsNegatedBooleanShorthandForPushdownPlan) {
     const std::string path = ::testing::TempDir() + "/runtime_negated_bool_pushdown_metrics.db";
     ASSERT_NO_FATAL_FAILURE(CreateBoolMetricsDb(path));
@@ -1002,6 +1142,18 @@ TEST(RuntimeExecTest, PhysicalExecutorRunsLocalHashJoinAcrossConnectorInputs) {
     EXPECT_TRUE(saw_joined_row);
 }
 
+TEST(RuntimeExecTest, PhysicalExecutorJoinsMatchingGroupInstancesOnly) {
+    auto join = plan::MakeJoin(plan::MakeGroup(SqliteCpuScanPlan(), {"_time"}),
+                               plan::MakeGroup(SqliteCpuScanPlan(), {"region"}),
+                               {"host"});
+
+    auto result_or = execution::PhysicalExecutor().Execute(join);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_EQ(Value::Type::Table, result_or->type());
+    EXPECT_TRUE(result_or->as_table().rows.empty());
+}
+
 TEST(RuntimeExecTest, PhysicalPlannerBuildsMultiInputJoinPipeline) {
     auto join = plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
                                plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
@@ -1071,6 +1223,412 @@ TEST(RuntimeExecTest, SchedulerRunsJoinPipelineDagAndRecordsStats) {
     EXPECT_EQ(1, root_stats->pages);
     EXPECT_EQ(6, root_stats->rows);
     EXPECT_TRUE(root_stats->error.empty());
+}
+
+TEST(RuntimeExecTest, PhysicalPlannerPreservesJoinDagBelowStreamingWrapper) {
+    auto join = plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
+                               {"host"});
+    auto project = plan::MakeProject(std::move(join), {"host", "usage", "region"});
+
+    auto task_or = execution::PhysicalPlanner().Plan(project);
+
+    ASSERT_TRUE(task_or.ok()) << task_or.status();
+    ASSERT_EQ(3, task_or->pipelines.size());
+    EXPECT_EQ("join-left", task_or->pipelines[0].id);
+    EXPECT_EQ("join-right", task_or->pipelines[1].id);
+    EXPECT_EQ("main", task_or->pipelines[2].id);
+    EXPECT_EQ((std::vector<std::string>{
+                  "ExchangeSourceOperator",
+                  "ExchangeSourceOperator",
+                  "LocalHashJoinOperator",
+                  "ProjectOperator",
+                  "OutputOperator",
+              }),
+              task_or->pipelines[2].operators);
+
+    auto result_or = execution::Scheduler().Run(std::move(*task_or));
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    EXPECT_EQ(6, result_or->as_table().rows.size());
+    ASSERT_NE(nullptr, result_or->as_table().rows[0]->lookup("host"));
+    ASSERT_NE(nullptr, result_or->as_table().rows[0]->lookup("usage"));
+    ASSERT_NE(nullptr, result_or->as_table().rows[0]->lookup("region"));
+}
+
+TEST(RuntimeExecTest, PhysicalPlannerPreservesJoinDagBelowBlockingWrapper) {
+    auto join = plan::MakeJoin(plan::MakeProject(SqliteCpuScanPlan(), {"host", "usage"}),
+                               plan::MakeProject(SqliteCpuScanPlan(), {"host", "region"}),
+                               {"host"});
+    auto project = plan::MakeProject(std::move(join), {"host", "usage", "region"});
+    auto sort = plan::MakeSort(std::move(project), {{"usage", true}});
+
+    auto task_or = execution::PhysicalPlanner().Plan(sort);
+
+    ASSERT_TRUE(task_or.ok()) << task_or.status();
+    ASSERT_EQ(4, task_or->pipelines.size());
+    EXPECT_EQ("breaker-input-left", task_or->pipelines[0].id);
+    EXPECT_EQ("breaker-input-right", task_or->pipelines[1].id);
+    EXPECT_EQ("breaker-input", task_or->pipelines[2].id);
+    EXPECT_EQ((std::vector<std::string>{"breaker-input-left", "breaker-input-right"}),
+              task_or->pipelines[2].dependencies);
+    EXPECT_EQ((std::vector<std::string>{
+                  "ExchangeSourceOperator",
+                  "ExchangeSourceOperator",
+                  "LocalHashJoinOperator",
+                  "ProjectOperator",
+                  "ExchangeSinkOperator",
+              }),
+              task_or->pipelines[2].operators);
+    EXPECT_EQ("main", task_or->pipelines[3].id);
+    EXPECT_EQ((std::vector<std::string>{"breaker-input"}), task_or->pipelines[3].dependencies);
+    EXPECT_EQ((std::vector<std::string>{
+                  "ExchangeSourceOperator",
+                  "SortOperator",
+                  "OutputOperator",
+              }),
+              task_or->pipelines[3].operators);
+
+    auto result_or = execution::Scheduler().Run(std::move(*task_or));
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    EXPECT_EQ(6, result_or->as_table().rows.size());
+    EXPECT_EQ("93.25", result_or->as_table().rows[0]->lookup("usage")->string());
+}
+
+TEST(RuntimeExecTest, PhysicalPlannerRepartitionsLargeJoinAcrossMultipleDrivers) {
+    auto project = PartitionedMemoryJoinPlan();
+
+    auto task_or = execution::PhysicalPlanner().Plan(project);
+
+    ASSERT_TRUE(task_or.ok()) << task_or.status();
+    ASSERT_EQ(3, task_or->pipelines.size());
+    EXPECT_EQ("join-left", task_or->pipelines[0].id);
+    EXPECT_EQ((std::vector<std::string>{
+                  "ConnectorScanOperator",
+                  "HashPartitionExchangeSinkOperator",
+              }),
+              task_or->pipelines[0].operators);
+    EXPECT_EQ("join-right", task_or->pipelines[1].id);
+    EXPECT_EQ((std::vector<std::string>{
+                  "ConnectorScanOperator",
+                  "HashPartitionExchangeSinkOperator",
+              }),
+              task_or->pipelines[1].operators);
+    EXPECT_EQ("main", task_or->pipelines[2].id);
+    EXPECT_EQ("main partitioned join", task_or->pipelines[2].name);
+    ASSERT_TRUE(task_or->pipelines[2].distribution.has_value());
+    EXPECT_EQ("hash", task_or->pipelines[2].distribution->kind);
+    EXPECT_EQ(3, task_or->pipelines[2].distribution->partitions);
+    EXPECT_EQ(3, task_or->pipelines[2].driver_roots.size());
+    EXPECT_EQ((std::vector<std::string>{
+                  "ExchangeSourceOperator",
+                  "ExchangeSourceOperator",
+                  "LocalHashJoinOperator",
+                  "ProjectOperator",
+                  "OutputOperator",
+              }),
+              task_or->pipelines[2].operators);
+
+    const auto graph = execution::FormatPipelinePlanMermaid(project);
+    EXPECT_NE(std::string::npos, graph.find("HashPartitionExchangeSinkOperator"));
+    EXPECT_NE(std::string::npos, graph.find("distribution: hash(partitions=3"));
+    EXPECT_NE(std::string::npos, graph.find("drivers: 3"));
+
+    auto result_or = execution::Scheduler().RunWithProfile(std::move(*task_or));
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    EXPECT_EQ(8192, result_or->value.as_table().rows.size());
+    ASSERT_EQ(3, result_or->profile.pipelines.size());
+    EXPECT_EQ(3, result_or->profile.pipelines[2].drivers);
+    EXPECT_TRUE(result_or->profile.pipelines[0].distribution.has_value());
+    EXPECT_TRUE(result_or->profile.pipelines[1].distribution.has_value());
+    ASSERT_EQ(3, result_or->profile.pipelines[0].exchange_partition_stats.size());
+    size_t partitioned_rows = 0;
+    for (const auto& stats : result_or->profile.pipelines[0].exchange_partition_stats) {
+        partitioned_rows += stats.rows;
+        if (stats.rows != 0) {
+            EXPECT_GT(stats.bytes, 0);
+        }
+    }
+    EXPECT_EQ(8192, partitioned_rows);
+    const auto profile = execution::FormatExecutionProfile(result_or->profile);
+    EXPECT_NE(std::string::npos, profile.find("exchange_partition_stats"));
+    const auto profile_json = execution::FormatExecutionProfileJson(result_or->profile);
+    EXPECT_NE(std::string::npos, profile_json.find(R"("exchangePartitionStats")"));
+}
+
+TEST(RuntimeExecTest, PhysicalPlannerRepartitionsLargeJoinBelowBlockingWrapper) {
+    auto sort = plan::MakeSort(PartitionedMemoryJoinPlan(), {{"usage", true}});
+
+    auto task_or = execution::PhysicalPlanner().Plan(sort);
+
+    ASSERT_TRUE(task_or.ok()) << task_or.status();
+    ASSERT_EQ(4, task_or->pipelines.size());
+    EXPECT_EQ("breaker-input-left", task_or->pipelines[0].id);
+    EXPECT_EQ("breaker-input-right", task_or->pipelines[1].id);
+    EXPECT_EQ("breaker-input", task_or->pipelines[2].id);
+    EXPECT_EQ("partitioned join producer", task_or->pipelines[2].name);
+    EXPECT_EQ(3, task_or->pipelines[2].driver_roots.size());
+    EXPECT_EQ((std::vector<std::string>{
+                  "ExchangeSourceOperator",
+                  "ExchangeSourceOperator",
+                  "LocalHashJoinOperator",
+                  "ProjectOperator",
+                  "ExchangeSinkOperator",
+              }),
+              task_or->pipelines[2].operators);
+    EXPECT_EQ("main", task_or->pipelines[3].id);
+
+    auto result_or = execution::Scheduler().Run(std::move(*task_or));
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    EXPECT_EQ(8192, result_or->as_table().rows.size());
+    EXPECT_EQ("8191", result_or->as_table().rows[0]->lookup("usage")->string());
+}
+
+TEST(RuntimeExecTest, PartitionedJoinProfileExposesSkewedHashDistribution) {
+    auto project = PartitionedMemoryJoinPlan(true);
+
+    auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(project);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    EXPECT_EQ(8192, result_or->value.as_table().rows.size());
+    ASSERT_EQ(3, result_or->profile.pipelines.size());
+    const auto& partition_stats = result_or->profile.pipelines[0].exchange_partition_stats;
+    ASSERT_EQ(3, partition_stats.size());
+    size_t non_empty_partitions = 0;
+    size_t max_partition_rows = 0;
+    for (const auto& stats : partition_stats) {
+        if (stats.rows != 0) {
+            ++non_empty_partitions;
+        }
+        max_partition_rows = std::max(max_partition_rows, stats.rows);
+    }
+    EXPECT_EQ(1, non_empty_partitions);
+    EXPECT_EQ(8192, max_partition_rows);
+}
+
+TEST(RuntimeExecTest, BroadcastJoinSpreadsHotProbeRowsAcrossDrivers) {
+    auto project = BroadcastMemoryJoinPlan();
+
+    auto task_or = execution::PhysicalPlanner().Plan(project);
+
+    ASSERT_TRUE(task_or.ok()) << task_or.status();
+    ASSERT_EQ(3, task_or->pipelines.size());
+    EXPECT_EQ((std::vector<std::string>{
+                  "ConnectorScanOperator",
+                  "RoundRobinPartitionExchangeSinkOperator",
+              }),
+              task_or->pipelines[0].operators);
+    ASSERT_TRUE(task_or->pipelines[0].distribution.has_value());
+    EXPECT_EQ("round_robin", task_or->pipelines[0].distribution->kind);
+    EXPECT_EQ((std::vector<std::string>{
+                  "ConnectorScanOperator",
+                  "BroadcastExchangeSinkOperator",
+              }),
+              task_or->pipelines[1].operators);
+    ASSERT_TRUE(task_or->pipelines[1].distribution.has_value());
+    EXPECT_EQ("broadcast", task_or->pipelines[1].distribution->kind);
+    ASSERT_TRUE(task_or->pipelines[2].distribution.has_value());
+    EXPECT_EQ("round_robin", task_or->pipelines[2].distribution->kind);
+    EXPECT_EQ(3, task_or->pipelines[2].driver_roots.size());
+
+    const auto graph = execution::FormatPipelinePlanMermaid(project);
+    EXPECT_NE(std::string::npos, graph.find("RoundRobinPartitionExchangeSinkOperator"));
+    EXPECT_NE(std::string::npos, graph.find("BroadcastExchangeSinkOperator"));
+    EXPECT_NE(std::string::npos, graph.find("distribution: broadcast(partitions=3"));
+
+    auto result_or = execution::Scheduler().RunWithProfile(std::move(*task_or));
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    EXPECT_EQ(8192, result_or->value.as_table().rows.size());
+    ASSERT_EQ(3, result_or->profile.pipelines[0].exchange_partition_stats.size());
+    size_t min_probe_rows = 8192;
+    size_t max_probe_rows = 0;
+    for (const auto& stats : result_or->profile.pipelines[0].exchange_partition_stats) {
+        min_probe_rows = std::min(min_probe_rows, stats.rows);
+        max_probe_rows = std::max(max_probe_rows, stats.rows);
+    }
+    EXPECT_LE(max_probe_rows - min_probe_rows, 8);
+    ASSERT_EQ(3, result_or->profile.pipelines[1].exchange_partition_stats.size());
+    for (const auto& stats : result_or->profile.pipelines[1].exchange_partition_stats) {
+        EXPECT_EQ(1, stats.rows);
+        EXPECT_GT(stats.bytes, 0);
+    }
+}
+
+TEST(RuntimeExecTest, OuterJoinKeepsHashPartitioningForSmallBuildSide) {
+    auto project = BroadcastMemoryJoinPlan(plan::JoinMethod::Left);
+
+    auto task_or = execution::PhysicalPlanner().Plan(project);
+
+    ASSERT_TRUE(task_or.ok()) << task_or.status();
+    ASSERT_EQ(3, task_or->pipelines.size());
+    ASSERT_TRUE(task_or->pipelines[0].distribution.has_value());
+    ASSERT_TRUE(task_or->pipelines[1].distribution.has_value());
+    ASSERT_TRUE(task_or->pipelines[2].distribution.has_value());
+    EXPECT_EQ("hash", task_or->pipelines[0].distribution->kind);
+    EXPECT_EQ("hash", task_or->pipelines[1].distribution->kind);
+    EXPECT_EQ("hash", task_or->pipelines[2].distribution->kind);
+
+    auto result_or = execution::Scheduler().Run(std::move(*task_or));
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    EXPECT_EQ(8192, result_or->as_table().rows.size());
+}
+
+TEST(RuntimeExecTest, PhysicalPlannerRepartitionsLargeNestedJoinWithoutCollapsingDag) {
+    auto nested = PartitionedMemoryJoinPlan();
+    auto owners = plan::MakeSourceScan("partitioned_join_right_memory",
+                                       "partitioned_join_right_memory",
+                                       "memory://partitioned-join-right",
+                                       "owners");
+    auto join = plan::MakeJoin(std::move(nested), std::move(owners), {"host"});
+
+    auto task_or = execution::PhysicalPlanner().Plan(join);
+
+    ASSERT_TRUE(task_or.ok()) << task_or.status();
+    ASSERT_EQ(6, task_or->pipelines.size());
+    EXPECT_EQ("join-left-source-left", task_or->pipelines[0].id);
+    EXPECT_EQ("join-left-source-right", task_or->pipelines[1].id);
+    EXPECT_EQ("join-left-source", task_or->pipelines[2].id);
+    EXPECT_EQ("partitioned join producer", task_or->pipelines[2].name);
+    EXPECT_EQ("join-left", task_or->pipelines[3].id);
+    EXPECT_EQ("repartition producer", task_or->pipelines[3].name);
+    EXPECT_EQ((std::vector<std::string>{"join-left-source"}), task_or->pipelines[3].dependencies);
+    EXPECT_EQ((std::vector<std::string>{
+                  "ExchangeSourceOperator",
+                  "HashPartitionExchangeSinkOperator",
+              }),
+              task_or->pipelines[3].operators);
+    EXPECT_EQ("join-right", task_or->pipelines[4].id);
+    EXPECT_EQ("main", task_or->pipelines[5].id);
+    EXPECT_EQ(3, task_or->pipelines[5].driver_roots.size());
+
+    auto result_or = execution::Scheduler().Run(std::move(*task_or));
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    EXPECT_EQ(8192, result_or->as_table().rows.size());
+}
+
+TEST(RuntimeExecTest, PartitionedGroupConsumesJoinDriversWithoutIntermediateGather) {
+    auto group = plan::MakeGroup(PartitionedMemoryJoinPlan(), {"host"});
+
+    auto task_or = execution::PhysicalPlanner().Plan(group);
+
+    ASSERT_TRUE(task_or.ok()) << task_or.status();
+    ASSERT_EQ(4, task_or->pipelines.size());
+    EXPECT_EQ("group-input-left", task_or->pipelines[0].id);
+    EXPECT_EQ("group-input-right", task_or->pipelines[1].id);
+    EXPECT_EQ("group-partial", task_or->pipelines[2].id);
+    EXPECT_EQ((std::vector<std::string>{"group-input-left", "group-input-right"}),
+              task_or->pipelines[2].dependencies);
+    EXPECT_EQ((std::vector<std::string>{
+                  "ExchangeSourceOperator",
+                  "ExchangeSourceOperator",
+                  "LocalHashJoinOperator",
+                  "ProjectOperator",
+                  "PartialGroupOperator",
+                  "HashPartitionExchangeSinkOperator",
+              }),
+              task_or->pipelines[2].operators);
+    EXPECT_EQ("main", task_or->pipelines[3].id);
+
+    auto result_or = execution::Scheduler().Run(std::move(*task_or));
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    EXPECT_EQ(8192, result_or->as_table().rows.size());
+}
+
+TEST(RuntimeExecTest, PartitionedDistinctConsumesJoinDriversWithoutIntermediateGather) {
+    auto distinct = plan::MakeDistinct(PartitionedMemoryJoinPlan(), "host");
+
+    auto task_or = execution::PhysicalPlanner().Plan(distinct);
+
+    ASSERT_TRUE(task_or.ok()) << task_or.status();
+    ASSERT_EQ(4, task_or->pipelines.size());
+    EXPECT_EQ("distinct-input-left", task_or->pipelines[0].id);
+    EXPECT_EQ("distinct-input-right", task_or->pipelines[1].id);
+    EXPECT_EQ("distinct-partial", task_or->pipelines[2].id);
+    EXPECT_EQ((std::vector<std::string>{"distinct-input-left", "distinct-input-right"}),
+              task_or->pipelines[2].dependencies);
+    EXPECT_EQ((std::vector<std::string>{
+                  "ExchangeSourceOperator",
+                  "ExchangeSourceOperator",
+                  "LocalHashJoinOperator",
+                  "ProjectOperator",
+                  "PartialDistinctOperator",
+                  "HashPartitionExchangeSinkOperator",
+              }),
+              task_or->pipelines[2].operators);
+    EXPECT_EQ("main", task_or->pipelines[3].id);
+
+    auto result_or = execution::Scheduler().Run(std::move(*task_or));
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    EXPECT_EQ(4096, result_or->as_table().rows.size());
+}
+
+TEST(RuntimeExecTest, TwoStageAggregateConsumesJoinDriversWithoutIntermediateGather) {
+    auto group = plan::MakeGroup(PartitionedMemoryJoinPlan(), {"host"});
+    auto aggregate = plan::MakeAggregate(std::move(group), plan::AggregateFunction::Count, "usage");
+
+    auto task_or = execution::PhysicalPlanner().Plan(aggregate);
+
+    ASSERT_TRUE(task_or.ok()) << task_or.status();
+    ASSERT_EQ(4, task_or->pipelines.size());
+    EXPECT_EQ("aggregate-input-left", task_or->pipelines[0].id);
+    EXPECT_EQ("aggregate-input-right", task_or->pipelines[1].id);
+    EXPECT_EQ("aggregate-partial", task_or->pipelines[2].id);
+    EXPECT_EQ((std::vector<std::string>{"aggregate-input-left", "aggregate-input-right"}),
+              task_or->pipelines[2].dependencies);
+    EXPECT_EQ((std::vector<std::string>{
+                  "ExchangeSourceOperator",
+                  "ExchangeSourceOperator",
+                  "LocalHashJoinOperator",
+                  "ProjectOperator",
+                  "GroupOperator",
+                  "PartialAggregateOperator",
+                  "ExchangeSinkOperator",
+              }),
+              task_or->pipelines[2].operators);
+    EXPECT_EQ("main", task_or->pipelines[3].id);
+
+    auto result_or = execution::Scheduler().Run(std::move(*task_or));
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_EQ(4096, result_or->as_table().rows.size());
+    for (const auto& row : result_or->as_table().rows) {
+        ASSERT_NE(nullptr, row);
+        ASSERT_NE(nullptr, row->lookup("usage"));
+        EXPECT_EQ(2, row->lookup("usage")->as_int());
+    }
+}
+
+TEST(RuntimeExecTest, TwoStageAggregateConsumesBroadcastJoinDriversWithoutIntermediateGather) {
+    auto group = plan::MakeGroup(BroadcastMemoryJoinPlan(), {"host"});
+    auto aggregate = plan::MakeAggregate(std::move(group), plan::AggregateFunction::Count, "usage");
+
+    auto task_or = execution::PhysicalPlanner().Plan(aggregate);
+
+    ASSERT_TRUE(task_or.ok()) << task_or.status();
+    ASSERT_EQ(4, task_or->pipelines.size());
+    EXPECT_EQ("aggregate-input-left", task_or->pipelines[0].id);
+    EXPECT_EQ("round_robin", task_or->pipelines[0].distribution->kind);
+    EXPECT_EQ("aggregate-input-right", task_or->pipelines[1].id);
+    EXPECT_EQ("broadcast", task_or->pipelines[1].distribution->kind);
+    EXPECT_EQ("aggregate-partial", task_or->pipelines[2].id);
+    EXPECT_EQ((std::vector<std::string>{
+                  "ExchangeSourceOperator",
+                  "ExchangeSourceOperator",
+                  "LocalHashJoinOperator",
+                  "ProjectOperator",
+                  "GroupOperator",
+                  "PartialAggregateOperator",
+                  "ExchangeSinkOperator",
+              }),
+              task_or->pipelines[2].operators);
+
+    auto result_or = execution::Scheduler().Run(std::move(*task_or));
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    ASSERT_EQ(1, result_or->as_table().rows.size());
+    ASSERT_NE(nullptr, result_or->as_table().rows[0]);
+    ASSERT_NE(nullptr, result_or->as_table().rows[0]->lookup("usage"));
+    EXPECT_EQ(8192, result_or->as_table().rows[0]->lookup("usage")->as_int());
 }
 
 TEST(RuntimeExecTest, PhysicalPlannerBuildsNestedJoinPipelineDag) {
@@ -1372,6 +1930,70 @@ TEST(RuntimeExecTest, SqliteTopNUsesTwoStageSplitPipeline) {
     EXPECT_EQ("topn-partial", result_or->profile.pipelines[0].id);
     EXPECT_GT(result_or->profile.pipelines[0].drivers, 1);
     EXPECT_TRUE(result_or->profile.pipelines[1].blocking);
+}
+
+TEST(RuntimeExecTest, SqliteTopNWithOffsetUsesSinglePushdownPlan) {
+    plan::SortKey key{.column = "usage", .desc = true};
+    auto query = plan::MakeLimit(plan::MakeSort(SqliteCpuScanPlan(), {key}), 2, 1);
+
+    const auto pipeline = execution::FormatPipelinePlan(query);
+
+    EXPECT_EQ(std::string::npos, pipeline.find("Pipeline(id=\"topn-partial\""));
+    EXPECT_EQ(std::string::npos, pipeline.find("TopNOperator"));
+
+    auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(query);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto& rows = result_or->value.as_table().rows;
+    ASSERT_EQ(2, rows.size());
+    EXPECT_EQ("88", rows[0]->lookup("usage")->string());
+    EXPECT_EQ("71.5", rows[1]->lookup("usage")->string());
+}
+
+TEST(RuntimeExecTest, SqliteDistinctAfterLimitKeepsLimitBeforeDistinct) {
+    auto query = plan::MakeDistinct(plan::MakeLimit(SqliteCpuScanPlan(), 2, 0), "host");
+
+    const auto pipeline = execution::FormatPipelinePlan(query);
+
+    EXPECT_EQ(std::string::npos, pipeline.find("distinct: host"));
+    EXPECT_NE(std::string::npos, pipeline.find("DistinctOperator"));
+
+    auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(query);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto& rows = result_or->value.as_table().rows;
+    ASSERT_EQ(2, rows.size());
+    EXPECT_EQ("edge-1", rows[0]->lookup("host")->as_string());
+    EXPECT_EQ("edge-2", rows[1]->lookup("host")->as_string());
+}
+
+TEST(RuntimeExecTest, SqliteAggregateAfterLimitKeepsLimitBeforeAggregate) {
+    auto query =
+        plan::MakeAggregate(plan::MakeGroup(plan::MakeLimit(SqliteCpuScanPlan(), 2, 0), {"host"}),
+                            plan::AggregateFunction::Count,
+                            "usage");
+
+    const auto pipeline = execution::FormatPipelinePlan(query);
+
+    EXPECT_EQ(std::string::npos, pipeline.find("aggregate: COUNT(usage)"));
+    EXPECT_NE(std::string::npos, pipeline.find("AggregateOperator"));
+
+    auto result_or = execution::PhysicalExecutor().ExecuteWithProfile(query);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    const auto& rows = result_or->value.as_table().rows;
+    ASSERT_EQ(2, rows.size());
+    std::unordered_map<std::string, int64_t> counts;
+    for (const auto& row : rows) {
+        ASSERT_NE(nullptr, row);
+        const Value* host = row->lookup("host");
+        const Value* usage = row->lookup("usage");
+        ASSERT_NE(nullptr, host);
+        ASSERT_NE(nullptr, usage);
+        counts[host->as_string()] = usage->as_int();
+    }
+    EXPECT_EQ(1, counts["edge-1"]);
+    EXPECT_EQ(1, counts["edge-2"]);
 }
 
 TEST(RuntimeExecTest, ParallelMemoryScanBenchmarkRunsLargeStreamingQuery) {
@@ -1997,6 +2619,152 @@ TEST(RuntimeExecTest, ExplainCanReturnPipelineJson) {
     ASSERT_EQ(Value::Type::String, plan_or->type());
     EXPECT_NE(std::string::npos, plan_or->as_string().find(R"("pipelines")"));
     EXPECT_NE(std::string::npos, plan_or->as_string().find(R"("operators")"));
+}
+
+TEST(RuntimeExecTest, ExplainCanReturnMermaidGraphs) {
+    auto file = ParseFile(R"(
+        import "sqlite"
+        builtin explain : (
+            <-tables: stream[A],
+            ?physical: bool,
+            ?optimized: bool,
+            ?pipeline: bool,
+            ?graph: bool,
+        ) => string
+
+        data = sqlite.from(
+            path: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
+        )
+
+        logical = data |> explain(graph: true)
+        optimized = data |> explain(optimized: true, graph: true)
+        physical = data |> explain(physical: true, graph: true)
+        pipeline = data |> explain(pipeline: true, graph: true)
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    auto logical_or = env.lookup("logical");
+    auto optimized_or = env.lookup("optimized");
+    auto physical_or = env.lookup("physical");
+    auto pipeline_or = env.lookup("pipeline");
+    ASSERT_TRUE(logical_or.ok()) << logical_or.status();
+    ASSERT_TRUE(optimized_or.ok()) << optimized_or.status();
+    ASSERT_TRUE(physical_or.ok()) << physical_or.status();
+    ASSERT_TRUE(pipeline_or.ok()) << pipeline_or.status();
+    EXPECT_NE(std::string::npos, logical_or->as_string().find("flowchart TD"));
+    EXPECT_NE(std::string::npos, logical_or->as_string().find("SourceScan"));
+    EXPECT_NE(std::string::npos, optimized_or->as_string().find("flowchart TD"));
+    EXPECT_NE(std::string::npos, physical_or->as_string().find("OutputSink [eager]"));
+    EXPECT_NE(std::string::npos, physical_or->as_string().find("ConnectorScan [lazy]"));
+    EXPECT_NE(std::string::npos, pipeline_or->as_string().find("flowchart TD"));
+    EXPECT_NE(std::string::npos,
+              pipeline_or->as_string().find("operators: [ConnectorScanOperator"));
+}
+
+TEST(RuntimeExecTest, UniverseJoinPreservesLazyPlanForFederatedPipelineGraph) {
+    auto file = ParseFile(R"(
+        import "sqlite"
+        builtin explain : (
+            <-tables: stream[A],
+            ?physical: bool,
+            ?pipeline: bool,
+            ?graph: bool,
+        ) => string
+        builtin join : (tables: A, ?method: string, on: [string]) => stream[B]
+        builtin keep : (<-tables: stream[A], columns: [string]) => stream[B]
+        builtin sort : (<-tables: stream[A], columns: [string], ?desc: bool) => stream[A]
+
+        left = sqlite.from(
+            path: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
+        )
+            |> keep(columns: ["host", "usage"])
+        right = sqlite.from(
+            path: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
+        )
+            |> keep(columns: ["host", "region"])
+        joined = join(tables: {left: left, right: right}, on: ["host"])
+        wrapped = joined
+            |> keep(columns: ["host", "usage", "region"])
+            |> sort(columns: ["usage"], desc: true)
+        logical = joined |> explain(graph: true)
+        physical = joined |> explain(physical: true, graph: true)
+        pipeline = joined |> explain(pipeline: true, graph: true)
+        wrappedPipeline = wrapped |> explain(pipeline: true, graph: true)
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    auto joined_or = env.lookup("joined");
+    ASSERT_TRUE(joined_or.ok()) << joined_or.status();
+    ASSERT_EQ(Value::Type::Table, joined_or->type());
+    EXPECT_FALSE(joined_or->as_table().materialized);
+    ASSERT_NE(nullptr, joined_or->as_table().plan);
+    EXPECT_EQ(plan::PlanNodeKind::Join, joined_or->as_table().plan->kind);
+
+    auto logical_or = env.lookup("logical");
+    auto physical_or = env.lookup("physical");
+    auto pipeline_or = env.lookup("pipeline");
+    auto wrapped_pipeline_or = env.lookup("wrappedPipeline");
+    ASSERT_TRUE(logical_or.ok()) << logical_or.status();
+    ASSERT_TRUE(physical_or.ok()) << physical_or.status();
+    ASSERT_TRUE(pipeline_or.ok()) << pipeline_or.status();
+    ASSERT_TRUE(wrapped_pipeline_or.ok()) << wrapped_pipeline_or.status();
+    EXPECT_NE(std::string::npos, logical_or->as_string().find("Join [memory]"));
+    EXPECT_NE(std::string::npos, logical_or->as_string().find("method=\\\"inner\\\""));
+    EXPECT_NE(std::string::npos, physical_or->as_string().find("LocalHashJoin [eager]"));
+    EXPECT_NE(std::string::npos, pipeline_or->as_string().find("join-left"));
+    EXPECT_NE(std::string::npos, pipeline_or->as_string().find("join-right"));
+    EXPECT_NE(std::string::npos, pipeline_or->as_string().find("LocalHashJoinOperator"));
+    EXPECT_NE(std::string::npos, wrapped_pipeline_or->as_string().find("breaker-input-left"));
+    EXPECT_NE(std::string::npos, wrapped_pipeline_or->as_string().find("breaker-input-right"));
+    EXPECT_NE(std::string::npos, wrapped_pipeline_or->as_string().find("LocalHashJoinOperator"));
+
+    auto materialized_or = execution::MaterializeValue(*joined_or);
+    ASSERT_TRUE(materialized_or.ok()) << materialized_or.status();
+    EXPECT_EQ(6, materialized_or->as_table().rows.size());
+}
+
+TEST(RuntimeExecTest, JoinPackagePreservesLazyPlanForColumnKeys) {
+    auto file = ParseFile(R"(
+        import "join"
+        import "sqlite"
+
+        left = sqlite.from(
+            path: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
+        )
+        right = sqlite.from(
+            path: "cpp/pl/flux/examples/cross_source/metrics.db",
+            table: "cpu",
+        )
+        joined = join.inner(left: left, right: right, on: ["host"])
+    )");
+    ASSERT_NE(file, nullptr);
+
+    Environment env;
+    auto result_or = StatementExecutor::ExecuteFile(*file, env);
+
+    ASSERT_TRUE(result_or.ok()) << result_or.status();
+    auto joined_or = env.lookup("joined");
+    ASSERT_TRUE(joined_or.ok()) << joined_or.status();
+    ASSERT_EQ(Value::Type::Table, joined_or->type());
+    EXPECT_FALSE(joined_or->as_table().materialized);
+    ASSERT_NE(nullptr, joined_or->as_table().plan);
+    EXPECT_EQ(plan::PlanNodeKind::Join, joined_or->as_table().plan->kind);
+
+    auto materialized_or = execution::MaterializeValue(*joined_or);
+    ASSERT_TRUE(materialized_or.ok()) << materialized_or.status();
+    EXPECT_EQ(6, materialized_or->as_table().rows.size());
 }
 
 TEST(RuntimeExecTest, ExecutionProfileFormatterMarksStreamingAccumulators) {

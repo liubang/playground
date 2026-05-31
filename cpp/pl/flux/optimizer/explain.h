@@ -25,7 +25,10 @@
 namespace pl::flux::optimizer {
 
 std::string FormatLogicalPlan(const std::shared_ptr<plan::PlanNode>& plan);
+std::string FormatLogicalPlanMermaid(const std::shared_ptr<plan::PlanNode>& plan);
 std::string FormatOptimizedLogicalPlan(const std::shared_ptr<plan::PlanNode>& plan);
+std::string FormatOptimizedLogicalPlanMermaid(const std::shared_ptr<plan::PlanNode>& plan);
 std::string FormatPhysicalPlan(const std::shared_ptr<plan::PlanNode>& plan);
+std::string FormatPhysicalPlanMermaid(const std::shared_ptr<plan::PlanNode>& plan);
 
 } // namespace pl::flux::optimizer

@@ -51,6 +51,41 @@ absl::StatusOr<const TableValue*> materialized_table_ref(const TableValue& table
     return &storage->as_table();
 }
 
+std::optional<plan::JoinMethod> plan_join_method(const std::string& method) {
+    if (method == "inner") {
+        return plan::JoinMethod::Inner;
+    }
+    if (method == "left") {
+        return plan::JoinMethod::Left;
+    }
+    if (method == "right") {
+        return plan::JoinMethod::Right;
+    }
+    if (method == "full") {
+        return plan::JoinMethod::Full;
+    }
+    return std::nullopt;
+}
+
+std::optional<Value> lazy_join_with_column_keys(const TableValue& left,
+                                                const TableValue& right,
+                                                const std::string& left_name,
+                                                const std::string& right_name,
+                                                const std::vector<std::string>& on_columns,
+                                                const std::string& method,
+                                                const FunctionValue* as_fn) {
+    const auto plan_method = plan_join_method(method);
+    if (left.materialized || right.materialized || left.plan == nullptr || right.plan == nullptr ||
+        !plan_method.has_value() || as_fn != nullptr) {
+        return std::nullopt;
+    }
+    return Value::table_plan(
+        left.bucket.empty() ? right.bucket : left.bucket,
+        plan::MakeJoin(left.plan, right.plan, on_columns, *plan_method, left_name, right_name),
+        left.range_start.has_value() ? left.range_start : right.range_start,
+        left.range_stop.has_value() ? left.range_stop : right.range_stop);
+}
+
 absl::StatusOr<std::vector<std::pair<std::string, const TableValue*>>>
 require_named_table_object_property(const ObjectValue& object,
                                     const std::string& name,
@@ -590,19 +625,6 @@ absl::StatusOr<Value> builtin_join(const std::vector<Value>& args) {
     if (tables_or->size() != 2) {
         return absl::InvalidArgumentError("join currently expects exactly two input tables");
     }
-    std::vector<Value> materialized_tables;
-    materialized_tables.reserve(tables_or->size());
-    for (auto& [name, table] : *tables_or) {
-        (void)name;
-        if (table->materialized) {
-            continue;
-        }
-        auto materialized_or = materialized_table_ref(*table, &materialized_tables.emplace_back());
-        if (!materialized_or.ok()) {
-            return materialized_or.status();
-        }
-        table = *materialized_or;
-    }
     auto on_or = string_array_property(**object_or, "join", "on");
     if (!on_or.ok()) {
         return on_or.status();
@@ -617,6 +639,30 @@ absl::StatusOr<Value> builtin_join(const std::vector<Value>& args) {
     if (method != "inner" && method != "left" && method != "right" && method != "full") {
         return absl::InvalidArgumentError(
             "join `method` must be one of \"inner\", \"left\", \"right\", or \"full\"");
+    }
+    auto lazy = lazy_join_with_column_keys(*(*tables_or)[0].second,
+                                           *(*tables_or)[1].second,
+                                           (*tables_or)[0].first,
+                                           (*tables_or)[1].first,
+                                           *on_or,
+                                           method,
+                                           nullptr);
+    if (lazy.has_value()) {
+        return std::move(*lazy);
+    }
+
+    std::vector<Value> materialized_tables;
+    materialized_tables.reserve(tables_or->size());
+    for (auto& [name, table] : *tables_or) {
+        (void)name;
+        if (table->materialized) {
+            continue;
+        }
+        auto materialized_or = materialized_table_ref(*table, &materialized_tables.emplace_back());
+        if (!materialized_or.ok()) {
+            return materialized_or.status();
+        }
+        table = *materialized_or;
     }
 
     auto result_or = join_with_column_keys(*(*tables_or)[0].second,
@@ -648,18 +694,6 @@ absl::StatusOr<Value> builtin_join_package_method(const std::vector<Value>& args
     if (!right_or.ok()) {
         return right_or.status();
     }
-    Value left_materialized;
-    auto left_materialized_or = materialized_table_ref(**left_or, &left_materialized);
-    if (!left_materialized_or.ok()) {
-        return left_materialized_or.status();
-    }
-    left_or = *left_materialized_or;
-    Value right_materialized;
-    auto right_materialized_or = materialized_table_ref(**right_or, &right_materialized);
-    if (!right_materialized_or.ok()) {
-        return right_materialized_or.status();
-    }
-    right_or = *right_materialized_or;
     auto on_value_or = require_object_property(**object_or, name, "on");
     if (!on_value_or.ok()) {
         return on_value_or.status();
@@ -674,6 +708,9 @@ absl::StatusOr<Value> builtin_join_package_method(const std::vector<Value>& args
         as_fn = &as_value->as_function();
     }
 
+    std::optional<std::vector<std::string>> on_columns;
+    std::string left_name;
+    std::string right_name;
     if ((*on_value_or)->type() == Value::Type::Array) {
         auto on_or = string_array_value(**on_value_or, name, "on");
         if (!on_or.ok()) {
@@ -687,8 +724,32 @@ absl::StatusOr<Value> builtin_join_package_method(const std::vector<Value>& args
         if (!right_name_or.ok()) {
             return right_name_or.status();
         }
+        on_columns = std::move(*on_or);
+        left_name = std::move(*left_name_or);
+        right_name = std::move(*right_name_or);
+        auto lazy = lazy_join_with_column_keys(
+            **left_or, **right_or, left_name, right_name, *on_columns, method, as_fn);
+        if (lazy.has_value()) {
+            return std::move(*lazy);
+        }
+    }
+
+    Value left_materialized;
+    auto left_materialized_or = materialized_table_ref(**left_or, &left_materialized);
+    if (!left_materialized_or.ok()) {
+        return left_materialized_or.status();
+    }
+    left_or = *left_materialized_or;
+    Value right_materialized;
+    auto right_materialized_or = materialized_table_ref(**right_or, &right_materialized);
+    if (!right_materialized_or.ok()) {
+        return right_materialized_or.status();
+    }
+    right_or = *right_materialized_or;
+
+    if ((*on_value_or)->type() == Value::Type::Array) {
         auto result_or = join_with_column_keys(
-            **left_or, **right_or, *left_name_or, *right_name_or, *on_or, method, as_fn);
+            **left_or, **right_or, left_name, right_name, *on_columns, method, as_fn);
         if (!result_or.ok()) {
             return result_or.status();
         }

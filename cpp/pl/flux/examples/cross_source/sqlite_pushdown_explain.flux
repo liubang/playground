@@ -22,11 +22,18 @@ services = sqlite.from(
     |> keep(columns: ["service"])
     |> sort(columns: ["service"], desc: false)
 
+optimizedGraph = data |> explain(optimized: true, graph: true)
+physicalGraph = data |> explain(physical: true, graph: true)
+pipelineGraph = services |> explain(pipeline: true, graph: true)
+
 {
     values: data |> findColumn(fn: (r) => true, column: "value"),
     services: services |> findColumn(fn: (r) => true, column: "service"),
     plan: data |> explain(),
+    optimizedGraph: optimizedGraph,
     physicalPlan: data |> explain(physical: true),
+    physicalGraph: physicalGraph,
+    pipelineGraph: pipelineGraph,
     distinctPlan: services |> explain(),
     distinctPhysicalPlan: services |> explain(physical: true),
 }

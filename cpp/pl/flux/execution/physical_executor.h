@@ -76,6 +76,19 @@ private:
     bool limited_ = false;
 };
 
+struct ExchangeDistributionProfile {
+    std::string kind;
+    std::vector<std::string> partition_keys;
+    bool include_group_key = false;
+    size_t partitions = 1;
+};
+
+struct ExchangePartitionStats {
+    size_t partition = 0;
+    size_t rows = 0;
+    size_t bytes = 0;
+};
+
 class Operator {
 public:
     virtual ~Operator() = default;
@@ -84,13 +97,7 @@ public:
     virtual void Cancel() {}
     virtual void CollectSplitStats(std::vector<connector::ConnectorSplitStats>*) const {}
     virtual void CollectAccumulatorStats(std::vector<AccumulatorStats>*) const {}
-};
-
-struct ExchangeDistributionProfile {
-    std::string kind;
-    std::vector<std::string> partition_keys;
-    bool include_group_key = false;
-    size_t partitions = 1;
+    virtual void CollectExchangePartitionStats(std::vector<ExchangePartitionStats>*) const {}
 };
 
 struct Pipeline {
@@ -100,6 +107,7 @@ struct Pipeline {
         size_t rows = 0;
         std::vector<connector::ConnectorSplitStats> split_stats;
         std::vector<AccumulatorStats> accumulator_stats;
+        std::vector<ExchangePartitionStats> exchange_partition_stats;
         bool blocked = false;
         bool finished = false;
         std::string error;
@@ -134,6 +142,7 @@ struct PipelineProfile {
     size_t rows = 0;
     std::vector<connector::ConnectorSplitStats> split_stats;
     std::vector<AccumulatorStats> accumulator_stats;
+    std::vector<ExchangePartitionStats> exchange_partition_stats;
     bool blocked = false;
     bool finished = false;
     std::string error;
@@ -208,6 +217,7 @@ public:
 
 std::string FormatPipelinePlan(const std::shared_ptr<plan::PlanNode>& logical_plan);
 std::string FormatPipelinePlanJson(const std::shared_ptr<plan::PlanNode>& logical_plan);
+std::string FormatPipelinePlanMermaid(const std::shared_ptr<plan::PlanNode>& logical_plan);
 std::string FormatExecutionProfile(const ExecutionProfile& profile);
 std::string FormatExecutionProfileJson(const ExecutionProfile& profile);
 

@@ -209,21 +209,35 @@ absl::StatusOr<Value> builtin_explain(const std::vector<Value>& args) {
     if (!json_or.ok()) {
         return json_or.status();
     }
+    auto graph_or = optional_bool_property(**object_or, "explain", "graph", false);
+    if (!graph_or.ok()) {
+        return graph_or.status();
+    }
+    if (*json_or && *graph_or) {
+        return absl::InvalidArgumentError("explain cannot combine json and graph output");
+    }
     if (*pipeline_or) {
+        if (*graph_or) {
+            return Value::string(execution::FormatPipelinePlanMermaid((*table_or)->plan));
+        }
         return Value::string(*json_or ? execution::FormatPipelinePlanJson((*table_or)->plan)
                                       : execution::FormatPipelinePlan((*table_or)->plan));
     }
     if (*physical_or) {
-        return Value::string(optimizer::FormatPhysicalPlan((*table_or)->plan));
+        return Value::string(*graph_or ? optimizer::FormatPhysicalPlanMermaid((*table_or)->plan)
+                                       : optimizer::FormatPhysicalPlan((*table_or)->plan));
     }
     auto optimized_or = optional_bool_property(**object_or, "explain", "optimized", false);
     if (!optimized_or.ok()) {
         return optimized_or.status();
     }
     if (*optimized_or) {
-        return Value::string(optimizer::FormatOptimizedLogicalPlan((*table_or)->plan));
+        return Value::string(*graph_or
+                                 ? optimizer::FormatOptimizedLogicalPlanMermaid((*table_or)->plan)
+                                 : optimizer::FormatOptimizedLogicalPlan((*table_or)->plan));
     }
-    return Value::string(optimizer::FormatLogicalPlan((*table_or)->plan));
+    return Value::string(*graph_or ? optimizer::FormatLogicalPlanMermaid((*table_or)->plan)
+                                   : optimizer::FormatLogicalPlan((*table_or)->plan));
 }
 
 } // namespace
