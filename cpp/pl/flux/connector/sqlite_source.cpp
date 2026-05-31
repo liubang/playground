@@ -343,9 +343,9 @@ std::shared_ptr<ObjectValue> row_from_sqlite_stmt(sqlite3_stmt* stmt,
                                                   const std::vector<std::string>& column_names) {
     std::vector<std::pair<std::string, Value>> properties;
     properties.reserve(column_names.size());
-    for (int i = 0; i < static_cast<int>(column_names.size()); ++i) {
-        properties.emplace_back(column_names[static_cast<size_t>(i)],
-                                value_from_sqlite_column(stmt, i));
+    for (size_t i = 0; i < column_names.size(); ++i) {
+        properties.emplace_back(column_names[i],
+                                value_from_sqlite_column(stmt, static_cast<int>(i)));
     }
     return std::make_shared<ObjectValue>(std::move(properties));
 }
@@ -371,9 +371,9 @@ void append_sqlite_stmt_to_page_chunk(sqlite3_stmt* stmt, PageChunk* chunk) {
             chunk->columns.push_back(ColumnVector{.name = name == nullptr ? "" : name});
         }
     }
-    for (int i = 0; i < static_cast<int>(chunk->columns.size()); ++i) {
-        Value value = value_from_sqlite_column(stmt, i);
-        auto& column = chunk->columns[static_cast<size_t>(i)];
+    for (size_t i = 0; i < chunk->columns.size(); ++i) {
+        Value value = value_from_sqlite_column(stmt, static_cast<int>(i));
+        auto& column = chunk->columns[i];
         if (column.type == Value::Type::Null && !value.is_null()) {
             column.type = value.type();
         }

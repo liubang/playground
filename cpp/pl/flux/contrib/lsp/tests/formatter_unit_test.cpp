@@ -158,8 +158,7 @@ TEST(FormatterTest, LongCallExpressionWraps) {
 
 TEST(FormatterTest, LongObjectExpressionWraps) {
     // 属性较多的 object 应展开为多行格式
-    const std::string source =
-        "obj = {a: \"value-a\", b: \"value-b\", c: \"value-c\", d: \"value-d\"}";
+    const std::string source = R"(obj = {a: "value-a", b: "value-b", c: "value-c", d: "value-d"})";
     const std::string result = format_source(source, {.max_line_width = 40});
 
     // 多行 object 格式：每条属性独占一行，带缩进和逗号

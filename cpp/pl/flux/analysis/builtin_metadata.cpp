@@ -606,9 +606,8 @@ std::vector<const BuiltinSignature*> BuiltinsForPackage(std::string_view package
             result.push_back(&sig);
         }
     }
-    std::sort(result.begin(), result.end(), [](const auto* lhs, const auto* rhs) {
-        return lhs->name < rhs->name;
-    });
+    std::ranges::sort(result,
+                      [](const auto* lhs, const auto* rhs) { return lhs->name < rhs->name; });
     return result;
 }
 
@@ -620,7 +619,7 @@ std::vector<std::string> KnownPackages() {
         }
     }
     std::vector<std::string> result(unique.begin(), unique.end());
-    std::sort(result.begin(), result.end());
+    std::ranges::sort(result);
     return result;
 }
 

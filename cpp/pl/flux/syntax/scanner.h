@@ -35,11 +35,8 @@ public:
           pe_(data + len),
           eof_(data + len),
           last_newline_(data),
-          cur_line_(1),
           checkpoint_(data),
-          checkpoint_line_(1),
-          checkpoint_last_newline_(data),
-          token_(TokenType::Illegal) {}
+          checkpoint_last_newline_(data) {}
 
     std::unique_ptr<Token> scan() { return scan_with_comments(0); }
     std::unique_ptr<Token> scan_with_regex() { return scan_with_comments(1); }
@@ -87,11 +84,11 @@ private:
     const char* pe_;
     const char* eof_;
     const char* last_newline_;
-    int32_t cur_line_;
+    int32_t cur_line_{1};
     const char* checkpoint_;
-    int32_t checkpoint_line_;
+    int32_t checkpoint_line_{1};
     const char* checkpoint_last_newline_;
-    TokenType token_;
+    TokenType token_{TokenType::Illegal};
     std::map<Position, uint32_t> positions_;
     std::vector<std::shared_ptr<Comment>> comments_;
 };

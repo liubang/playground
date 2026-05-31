@@ -17,6 +17,8 @@
 
 #include "parser.h"
 
+#include <algorithm>
+
 namespace pl::flux {
 
 #if defined(FLUX_ENABLE_DEBUG)
@@ -2023,7 +2025,7 @@ std::unique_ptr<Property> Parser::parse_invalid_parameter() {
 
 std::unique_ptr<Expression> Parser::parse_paren_ident_expression(std::unique_ptr<Token> lparen,
                                                                  std::unique_ptr<Identifier> key,
-                                                                 SourceLocation key_loc) {
+                                                                 const SourceLocation& key_loc) {
     const auto* t = peek();
     if (t->tok == TokenType::RParen) {
         // close() calls consume() which moves token_ away, making t dangling. Capture the RParen
@@ -2317,8 +2319,7 @@ std::unique_ptr<Attribute> Parser::parse_attribute_rest(
 std::unique_ptr<Attribute> Parser::parse_attribute_inner() {
     auto tok = expect(TokenType::Attribute);
     auto lit = tok->lit;
-    auto name = std::string(std::find_if(lit.begin(), lit.end(), [](char c) { return c != '@'; }),
-                            lit.end());
+    auto name = std::string(std::ranges::find_if(lit, [](char c) { return c != '@'; }), lit.end());
     return parse_attribute_rest(std::move(tok), name);
 }
 

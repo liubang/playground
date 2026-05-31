@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <functional>
 #include <memory>
+#include <numbers>
 #include <optional>
 #include <regex>
 #include <simdjson.h>
@@ -707,9 +708,8 @@ absl::StatusOr<Value> builtin_strings_to_upper(const std::vector<Value>& args) {
         return value_or.status();
     }
     std::string out = *value_or;
-    std::transform(out.begin(), out.end(), out.begin(), [](unsigned char ch) {
-        return static_cast<char>(std::toupper(ch));
-    });
+    std::ranges::transform(
+        out, out.begin(), [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
     return Value::string(std::move(out));
 }
 
@@ -719,9 +719,8 @@ absl::StatusOr<Value> builtin_strings_to_lower(const std::vector<Value>& args) {
         return value_or.status();
     }
     std::string out = *value_or;
-    std::transform(out.begin(), out.end(), out.begin(), [](unsigned char ch) {
-        return static_cast<char>(std::tolower(ch));
-    });
+    std::ranges::transform(
+        out, out.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
     return Value::string(std::move(out));
 }
 
@@ -798,11 +797,11 @@ absl::StatusOr<Value> builtin_strings_trim_space(const std::vector<Value>& args)
     }
     const auto& value = *value_or;
     size_t first = 0;
-    while (first < value.size() && std::isspace(static_cast<unsigned char>(value[first]))) {
+    while (first < value.size() && (std::isspace(static_cast<unsigned char>(value[first])) != 0)) {
         ++first;
     }
     size_t last = value.size();
-    while (last > first && std::isspace(static_cast<unsigned char>(value[last - 1]))) {
+    while (last > first && (std::isspace(static_cast<unsigned char>(value[last - 1])) != 0)) {
         --last;
     }
     return Value::string(value.substr(first, last - first));
@@ -1220,7 +1219,7 @@ Value make_strings_package() {
 Value make_math_package() {
     return Value::object({
         {"path", Value::string("math")},
-        {"pi", Value::floating(3.14159265358979323846)},
+        {"pi", Value::floating(std::numbers::pi)},
         {"abs", make_builtin_value("math.abs", builtin_math_abs, "x")},
         {"ceil",
          make_builtin_value(

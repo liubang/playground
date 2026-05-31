@@ -92,7 +92,7 @@ struct PredicateLiteral {
     int64_t int_value = 0;
     uint64_t uint_value = 0;
     double float_value = 0.0;
-    std::string string_value;
+    std::string string_value{};
 };
 
 struct PredicateSpec {
