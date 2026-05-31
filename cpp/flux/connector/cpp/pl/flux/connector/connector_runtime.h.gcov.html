@@ -37,7 +37,7 @@
           </tr>
           <tr>
             <td class="headerItem">Test Date:</td>
-            <td class="headerValue">2026-05-31 22:59:06</td>
+            <td class="headerValue">2026-05-31 23:22:13</td>
             <td></td>
             <td class="headerItem">Functions:</td>
             <td class="headerCovTableEntryLo">14.3&nbsp;%</td>
@@ -106,10 +106,10 @@
 <span id="L35"><span class="lineNum">      35</span>                 :             : namespace pl::flux::connector {</span>
 <span id="L36"><span class="lineNum">      36</span>                 :             : </span>
 <span id="L37"><span class="lineNum">      37</span>                 :             : struct TableHandle {</span>
-<span id="L38"><span class="lineNum">      38</span>                 :             :     std::string source;</span>
-<span id="L39"><span class="lineNum">      39</span>                 :             :     std::string driver;</span>
-<span id="L40"><span class="lineNum">      40</span>                 :             :     std::string dsn;</span>
-<span id="L41"><span class="lineNum">      41</span>                 :             :     std::string table;</span>
+<span id="L38"><span class="lineNum">      38</span>                 :             :     std::string source{};</span>
+<span id="L39"><span class="lineNum">      39</span>                 :             :     std::string driver{};</span>
+<span id="L40"><span class="lineNum">      40</span>                 :             :     std::string dsn{};</span>
+<span id="L41"><span class="lineNum">      41</span>                 :             :     std::string table{};</span>
 <span id="L42"><span class="lineNum">      42</span>                 :             : };</span>
 <span id="L43"><span class="lineNum">      43</span>                 :             : </span>
 <span id="L44"><span class="lineNum">      44</span>                 :<span class="tlaUNC tlaBgUNC">           0 : struct ColumnHandle {</span></span>
@@ -122,14 +122,14 @@
 <span id="L51"><span class="lineNum">      51</span>                 :             :     TableHandle table;</span>
 <span id="L52"><span class="lineNum">      52</span>                 :             :     ScanRequest request;</span>
 <span id="L53"><span class="lineNum">      53</span>                 :             :     int64_t split_id = 0;</span>
-<span id="L54"><span class="lineNum">      54</span>                 :             :     std::optional&lt;std::string&gt; partition;</span>
+<span id="L54"><span class="lineNum">      54</span>                 :             :     std::optional&lt;std::string&gt; partition{};</span>
 <span id="L55"><span class="lineNum">      55</span>                 :             :     size_t row_offset = 0;</span>
-<span id="L56"><span class="lineNum">      56</span>                 :             :     std::optional&lt;size_t&gt; row_limit;</span>
-<span id="L57"><span class="lineNum">      57</span>                 :             :     std::optional&lt;int64_t&gt; rowid_lower;</span>
-<span id="L58"><span class="lineNum">      58</span>                 :             :     std::optional&lt;int64_t&gt; rowid_upper;</span>
-<span id="L59"><span class="lineNum">      59</span>                 :             :     std::optional&lt;std::string&gt; split_column;</span>
-<span id="L60"><span class="lineNum">      60</span>                 :             :     std::optional&lt;int64_t&gt; split_lower;</span>
-<span id="L61"><span class="lineNum">      61</span>                 :             :     std::optional&lt;int64_t&gt; split_upper;</span>
+<span id="L56"><span class="lineNum">      56</span>                 :             :     std::optional&lt;size_t&gt; row_limit{};</span>
+<span id="L57"><span class="lineNum">      57</span>                 :             :     std::optional&lt;int64_t&gt; rowid_lower{};</span>
+<span id="L58"><span class="lineNum">      58</span>                 :             :     std::optional&lt;int64_t&gt; rowid_upper{};</span>
+<span id="L59"><span class="lineNum">      59</span>                 :             :     std::optional&lt;std::string&gt; split_column{};</span>
+<span id="L60"><span class="lineNum">      60</span>                 :             :     std::optional&lt;int64_t&gt; split_lower{};</span>
+<span id="L61"><span class="lineNum">      61</span>                 :             :     std::optional&lt;int64_t&gt; split_upper{};</span>
 <span id="L62"><span class="lineNum">      62</span>                 :             :     double metadata_time_ms = 0.0;</span>
 <span id="L63"><span class="lineNum">      63</span>                 :             :     double split_discovery_time_ms = 0.0;</span>
 <span id="L64"><span class="lineNum">      64</span>                 :             :     bool finished = false;</span>
