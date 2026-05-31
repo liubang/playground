@@ -61,6 +61,7 @@ cc_test(
     deps = [
         ":optimizer",
         "@googletest//:gtest_main",
+        "@sqlite3",
     ],
 )
 

@@ -50,6 +50,7 @@ enum class PhysicalShape {
 struct PlanAlternative {
     std::string name;
     PhysicalShape shape = PhysicalShape::MemoryScan;
+    std::shared_ptr<plan::PlanNode> plan;
     plan::CostEstimate cost;
     bool chosen = false;
     std::string reason;

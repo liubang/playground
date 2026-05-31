@@ -96,13 +96,18 @@ std::string query_for_table(const std::string& table) {
     return absl::StrCat("SELECT * FROM ", quote_identifier(table));
 }
 
-std::string query_for_table_rowid_range(const std::string& table, int64_t lower, int64_t upper) {
-    return absl::StrCat("SELECT * FROM ",
-                        quote_identifier(table),
-                        " WHERE rowid >= ",
-                        lower,
-                        " AND rowid <= ",
-                        upper);
+ParameterizedSql query_for_table_rowid_range(const std::string& table,
+                                             int64_t lower,
+                                             int64_t upper) {
+    return {
+        .sql = absl::StrCat(
+            "SELECT * FROM ", quote_identifier(table), " WHERE rowid >= ? AND rowid <= ?"),
+        .params =
+            {
+                {.value = Value::integer(lower)},
+                {.value = Value::integer(upper)},
+            },
+    };
 }
 
 std::string quote_sql_string(const std::string& value) {
@@ -261,11 +266,11 @@ size_t default_sqlite_split_count() {
     return std::min<size_t>(8, std::max<size_t>(1, workers));
 }
 
-absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
+absl::StatusOr<BuiltSql> build_scan_sql(ParameterizedSql query,
                                         const ScanRequest& request,
                                         const TableSchema& schema) {
     const SQLiteDialect dialect;
-    auto sql_or = BuildParameterizedScanSql(query, request, schema, dialect);
+    auto sql_or = BuildParameterizedScanSql(std::move(query), request, schema, dialect);
     if (!sql_or.ok()) {
         return sql_or.status();
     }
@@ -275,6 +280,12 @@ absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
         params.push_back({.value = param.value});
     }
     return BuiltSql{.sql = std::move(sql_or->sql), .params = std::move(params)};
+}
+
+absl::StatusOr<BuiltSql> build_scan_sql(const std::string& query,
+                                        const ScanRequest& request,
+                                        const TableSchema& schema) {
+    return build_scan_sql(ParameterizedSql{.sql = query}, request, schema);
 }
 
 Value value_from_sqlite_column(sqlite3_stmt* stmt, int column) {
@@ -703,11 +714,11 @@ absl::Status SQLitePageSource::Initialize() {
     if (!schema_or.ok()) {
         return schema_or.status();
     }
-    const std::string query =
+    ParameterizedSql query =
         impl_->rowid_lower.has_value() && impl_->rowid_upper.has_value()
             ? query_for_table_rowid_range(table_, *impl_->rowid_lower, *impl_->rowid_upper)
-            : query_for_table(table_);
-    auto sql_or = build_scan_sql(query, impl_->request, *schema_or);
+            : ParameterizedSql{.sql = query_for_table(table_)};
+    auto sql_or = build_scan_sql(std::move(query), impl_->request, *schema_or);
     if (!sql_or.ok()) {
         return sql_or.status();
     }

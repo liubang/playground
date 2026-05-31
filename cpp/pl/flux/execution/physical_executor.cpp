@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdlib>
@@ -106,10 +107,10 @@ Page page_with_plan(Page page, const std::shared_ptr<plan::PlanNode>& plan) {
 }
 
 connector::SourceSpec source_spec_from_plan(const optimizer::PushdownPlan& plan) {
-    return connector::SourceSpec{.source = plan.source->source,
-                                 .driver = plan.source->driver,
-                                 .dsn = plan.source->dsn,
-                                 .table = plan.source->table};
+    return connector::SourceSpec{.source = plan.source.source,
+                                 .driver = plan.source.driver,
+                                 .dsn = plan.source.dsn,
+                                 .table = plan.source.table};
 }
 
 connector::SourceSpec source_spec_from_split(const connector::ConnectorSplit& split) {
@@ -120,11 +121,11 @@ connector::SourceSpec source_spec_from_split(const connector::ConnectorSplit& sp
 }
 
 absl::Status validate_executable_pushdown_plan(const optimizer::PushdownPlan& plan) {
-    if (plan.source == nullptr) {
+    if (plan.source.source.empty() || plan.source.driver.empty()) {
         return absl::InvalidArgumentError("pushdown plan has no source");
     }
     if (!optimizer::CanExecutePushdownPlan(plan)) {
-        return absl::InvalidArgumentError("group without aggregate is not executable pushdown");
+        return absl::InvalidArgumentError("pushdown plan is not executable");
     }
     return absl::OkStatus();
 }
@@ -540,6 +541,47 @@ std::shared_ptr<ObjectValue> null_row_for_columns(const std::vector<std::string>
     return std::make_shared<ObjectValue>(std::move(props));
 }
 
+std::string local_joined_property_name(const std::string& table_name, const std::string& column) {
+    return absl::StrCat(column, "_", table_name);
+}
+
+std::vector<std::pair<std::string, Value>> local_join_group_properties(
+    const ObjectValue* left,
+    const ObjectValue* right,
+    const plan::JoinSpec& spec,
+    const std::unordered_set<std::string>& overlapping_columns) {
+    const std::unordered_set<std::string> on_columns(spec.on.begin(), spec.on.end());
+    std::vector<std::pair<std::string, Value>> props;
+    std::unordered_set<std::string> inserted;
+    auto append = [&](const ObjectValue* row, const std::string& table_name) {
+        if (row == nullptr) {
+            return;
+        }
+        const Value* group = row->lookup("_group");
+        if (group == nullptr || group->type() != Value::Type::Object) {
+            return;
+        }
+        for (const auto& [key, value] : group->as_object().properties) {
+            std::string output_key = key;
+            if (on_columns.count(key) != 0) {
+                if (inserted.insert(key).second) {
+                    props.emplace_back(key, value);
+                }
+                continue;
+            }
+            if (overlapping_columns.count(key) != 0) {
+                output_key = local_joined_property_name(table_name, key);
+            }
+            if (inserted.insert(output_key).second) {
+                props.emplace_back(output_key, value);
+            }
+        }
+    };
+    append(left, spec.left_name);
+    append(right, spec.right_name);
+    return props;
+}
+
 std::shared_ptr<ObjectValue> local_join_row(const ObjectValue* left,
                                             const std::vector<std::string>& left_columns,
                                             const ObjectValue* right,
@@ -548,11 +590,27 @@ std::shared_ptr<ObjectValue> local_join_row(const ObjectValue* left,
     const std::unordered_set<std::string> on_columns(spec.on.begin(), spec.on.end());
     const std::unordered_set<std::string> right_column_set(right_columns.begin(),
                                                            right_columns.end());
+    std::unordered_set<std::string> overlapping_columns;
+    for (const auto& column : left_columns) {
+        if (on_columns.count(column) == 0 && right_column_set.count(column) != 0) {
+            overlapping_columns.insert(column);
+        }
+    }
+    auto group_props = local_join_group_properties(left, right, spec, overlapping_columns);
     std::vector<std::pair<std::string, Value>> props;
-    props.reserve(left_columns.size() + right_columns.size());
+    props.reserve(left_columns.size() + right_columns.size() + group_props.size() + 1);
+    for (const auto& [key, value] : group_props) {
+        props.emplace_back(key, value);
+    }
 
     auto append = [&](const std::string& column, const Value* value) {
-        props.emplace_back(column, value == nullptr ? Value::null() : *value);
+        const bool already_present =
+            std::any_of(props.begin(), props.end(), [&](const auto& property) {
+                return property.first == column;
+            });
+        if (!already_present) {
+            props.emplace_back(column, value == nullptr ? Value::null() : *value);
+        }
     };
     for (const auto& column : spec.on) {
         const Value* value = left == nullptr ? nullptr : left->lookup(column);
@@ -565,22 +623,142 @@ std::shared_ptr<ObjectValue> local_join_row(const ObjectValue* left,
         if (column == "_group" || on_columns.count(column) != 0) {
             continue;
         }
-        const std::string output_name = right_column_set.count(column) == 0
+        const std::string output_name = overlapping_columns.count(column) == 0
                                             ? column
-                                            : absl::StrCat(column, "_", spec.left_name);
+                                            : local_joined_property_name(spec.left_name, column);
         append(output_name, left == nullptr ? nullptr : left->lookup(column));
     }
-    const std::unordered_set<std::string> left_column_set(left_columns.begin(), left_columns.end());
     for (const auto& column : right_columns) {
         if (column == "_group" || on_columns.count(column) != 0) {
             continue;
         }
-        const std::string output_name = left_column_set.count(column) == 0
+        const std::string output_name = overlapping_columns.count(column) == 0
                                             ? column
-                                            : absl::StrCat(column, "_", spec.right_name);
+                                            : local_joined_property_name(spec.right_name, column);
         append(output_name, right == nullptr ? nullptr : right->lookup(column));
     }
+    if (!group_props.empty()) {
+        props.emplace_back("_group", Value::object(std::move(group_props)));
+    }
     return std::make_shared<ObjectValue>(std::move(props));
+}
+
+std::string local_chunk_group_key(const TableChunk& chunk) {
+    if (chunk.group_key != nullptr) {
+        return chunk.group_key->string();
+    }
+    for (const auto& row : chunk.rows) {
+        if (row == nullptr) {
+            continue;
+        }
+        const Value* group = row->lookup("_group");
+        return group == nullptr ? "" : group->string();
+    }
+    return "";
+}
+
+std::vector<const ObjectValue*> local_rows(const std::vector<const TableChunk*>& chunks) {
+    std::vector<const ObjectValue*> rows;
+    for (const auto* chunk : chunks) {
+        for (const auto& row : chunk->rows) {
+            if (row != nullptr) {
+                rows.push_back(row.get());
+            }
+        }
+    }
+    return rows;
+}
+
+TableChunk local_hash_join_group(const std::vector<const ObjectValue*>& left_rows,
+                                 const std::vector<const ObjectValue*>& right_rows,
+                                 const std::vector<std::string>& left_columns,
+                                 const std::vector<std::string>& right_columns,
+                                 const plan::JoinSpec& spec) {
+    auto left_null = null_row_for_columns(left_columns);
+    auto right_null = null_row_for_columns(right_columns);
+    TableChunk chunk;
+    if (spec.build_side == plan::JoinBuildSide::Left) {
+        std::unordered_map<std::string, std::vector<size_t>> left_rows_by_key;
+        left_rows_by_key.reserve(left_rows.size());
+        for (size_t row_index = 0; row_index < left_rows.size(); ++row_index) {
+            auto key = local_join_key(*left_rows[row_index], spec.on);
+            if (key.has_value()) {
+                left_rows_by_key[*key].push_back(row_index);
+            }
+        }
+
+        std::vector<bool> matched_left(left_rows.size(), false);
+        for (const auto* right_row : right_rows) {
+            bool matched = false;
+            auto key = local_join_key(*right_row, spec.on);
+            if (key.has_value()) {
+                auto it = left_rows_by_key.find(*key);
+                if (it != left_rows_by_key.end()) {
+                    matched = true;
+                    for (size_t left_index : it->second) {
+                        matched_left[left_index] = true;
+                        chunk.rows.push_back(local_join_row(
+                            left_rows[left_index], left_columns, right_row, right_columns, spec));
+                    }
+                }
+            }
+            if (!matched &&
+                (spec.method == plan::JoinMethod::Right || spec.method == plan::JoinMethod::Full)) {
+                chunk.rows.push_back(
+                    local_join_row(left_null.get(), left_columns, right_row, right_columns, spec));
+            }
+        }
+        if (spec.method == plan::JoinMethod::Left || spec.method == plan::JoinMethod::Full) {
+            for (size_t left_index = 0; left_index < left_rows.size(); ++left_index) {
+                if (matched_left[left_index]) {
+                    continue;
+                }
+                chunk.rows.push_back(local_join_row(
+                    left_rows[left_index], left_columns, right_null.get(), right_columns, spec));
+            }
+        }
+    } else {
+        std::unordered_map<std::string, std::vector<size_t>> right_rows_by_key;
+        right_rows_by_key.reserve(right_rows.size());
+        for (size_t row_index = 0; row_index < right_rows.size(); ++row_index) {
+            auto key = local_join_key(*right_rows[row_index], spec.on);
+            if (key.has_value()) {
+                right_rows_by_key[*key].push_back(row_index);
+            }
+        }
+
+        std::vector<bool> matched_right(right_rows.size(), false);
+        for (const auto* left_row : left_rows) {
+            bool matched = false;
+            auto key = local_join_key(*left_row, spec.on);
+            if (key.has_value()) {
+                auto it = right_rows_by_key.find(*key);
+                if (it != right_rows_by_key.end()) {
+                    matched = true;
+                    for (size_t right_index : it->second) {
+                        matched_right[right_index] = true;
+                        chunk.rows.push_back(local_join_row(
+                            left_row, left_columns, right_rows[right_index], right_columns, spec));
+                    }
+                }
+            }
+            if (!matched &&
+                (spec.method == plan::JoinMethod::Left || spec.method == plan::JoinMethod::Full)) {
+                chunk.rows.push_back(
+                    local_join_row(left_row, left_columns, right_null.get(), right_columns, spec));
+            }
+        }
+        if (spec.method == plan::JoinMethod::Right || spec.method == plan::JoinMethod::Full) {
+            for (size_t right_index = 0; right_index < right_rows.size(); ++right_index) {
+                if (matched_right[right_index]) {
+                    continue;
+                }
+                chunk.rows.push_back(local_join_row(
+                    left_null.get(), left_columns, right_rows[right_index], right_columns, spec));
+            }
+        }
+    }
+    return chunk;
 }
 
 absl::StatusOr<Value> local_hash_join_values(const Value& left_value,
@@ -594,120 +772,52 @@ absl::StatusOr<Value> local_hash_join_values(const Value& left_value,
     const TableValue& right_table = right_value.as_table();
     const auto left_columns = all_visible_columns_in_order(left_table);
     const auto right_columns = all_visible_columns_in_order(right_table);
-    auto left_null = null_row_for_columns(left_columns);
-    auto right_null = null_row_for_columns(right_columns);
 
-    TableChunk chunk;
-    if (spec.build_side == plan::JoinBuildSide::Left) {
-        std::unordered_map<std::string, std::vector<size_t>> left_rows_by_key;
-        left_rows_by_key.reserve(left_table.rows.size());
-        for (size_t row_index = 0; row_index < left_table.rows.size(); ++row_index) {
-            const auto& row = left_table.rows[row_index];
-            if (row == nullptr) {
-                continue;
-            }
-            auto key = local_join_key(*row, spec.on);
-            if (key.has_value()) {
-                left_rows_by_key[*key].push_back(row_index);
-            }
-        }
+    std::unordered_map<std::string, std::vector<const TableChunk*>> right_chunks_by_group;
+    right_chunks_by_group.reserve(right_table.table_count());
+    for (const auto& chunk : right_table.tables) {
+        right_chunks_by_group[local_chunk_group_key(chunk)].push_back(&chunk);
+    }
 
-        std::vector<bool> matched_left(left_table.rows.size(), false);
-        for (const auto& right_row : right_table.rows) {
-            if (right_row == nullptr) {
-                continue;
-            }
-            bool matched = false;
-            auto key = local_join_key(*right_row, spec.on);
-            if (key.has_value()) {
-                auto it = left_rows_by_key.find(*key);
-                if (it != left_rows_by_key.end()) {
-                    matched = true;
-                    for (size_t left_index : it->second) {
-                        matched_left[left_index] = true;
-                        chunk.rows.push_back(local_join_row(left_table.rows[left_index].get(),
-                                                            left_columns,
-                                                            right_row.get(),
-                                                            right_columns,
-                                                            spec));
-                    }
-                }
-            }
-            if (!matched &&
-                (spec.method == plan::JoinMethod::Right || spec.method == plan::JoinMethod::Full)) {
-                chunk.rows.push_back(local_join_row(
-                    left_null.get(), left_columns, right_row.get(), right_columns, spec));
-            }
-        }
-        if (spec.method == plan::JoinMethod::Left || spec.method == plan::JoinMethod::Full) {
-            for (size_t left_index = 0; left_index < left_table.rows.size(); ++left_index) {
-                if (matched_left[left_index] || left_table.rows[left_index] == nullptr) {
-                    continue;
-                }
-                chunk.rows.push_back(local_join_row(left_table.rows[left_index].get(),
-                                                    left_columns,
-                                                    right_null.get(),
-                                                    right_columns,
-                                                    spec));
-            }
-        }
-    } else {
-        std::unordered_map<std::string, std::vector<size_t>> right_rows_by_key;
-        right_rows_by_key.reserve(right_table.rows.size());
-        for (size_t row_index = 0; row_index < right_table.rows.size(); ++row_index) {
-            const auto& row = right_table.rows[row_index];
-            if (row == nullptr) {
-                continue;
-            }
-            auto key = local_join_key(*row, spec.on);
-            if (key.has_value()) {
-                right_rows_by_key[*key].push_back(row_index);
-            }
-        }
+    std::unordered_map<std::string, std::vector<const TableChunk*>> left_chunks_by_group;
+    left_chunks_by_group.reserve(left_table.table_count());
+    for (const auto& chunk : left_table.tables) {
+        left_chunks_by_group[local_chunk_group_key(chunk)].push_back(&chunk);
+    }
 
-        std::vector<bool> matched_right(right_table.rows.size(), false);
-        for (const auto& left_row : left_table.rows) {
-            if (left_row == nullptr) {
+    std::vector<TableChunk> chunks;
+    std::unordered_set<std::string> processed_groups;
+    for (const auto& [group_key, left_chunks] : left_chunks_by_group) {
+        processed_groups.insert(group_key);
+        const auto right_it = right_chunks_by_group.find(group_key);
+        if (right_it == right_chunks_by_group.end() && spec.method != plan::JoinMethod::Left &&
+            spec.method != plan::JoinMethod::Full) {
+            continue;
+        }
+        auto chunk = local_hash_join_group(local_rows(left_chunks),
+                                           right_it == right_chunks_by_group.end()
+                                               ? std::vector<const ObjectValue*>{}
+                                               : local_rows(right_it->second),
+                                           left_columns,
+                                           right_columns,
+                                           spec);
+        if (!chunk.rows.empty()) {
+            chunks.push_back(std::move(chunk));
+        }
+    }
+    if (spec.method == plan::JoinMethod::Right || spec.method == plan::JoinMethod::Full) {
+        for (const auto& [group_key, right_chunks] : right_chunks_by_group) {
+            if (processed_groups.count(group_key) != 0) {
                 continue;
             }
-            bool matched = false;
-            auto key = local_join_key(*left_row, spec.on);
-            if (key.has_value()) {
-                auto it = right_rows_by_key.find(*key);
-                if (it != right_rows_by_key.end()) {
-                    matched = true;
-                    for (size_t right_index : it->second) {
-                        matched_right[right_index] = true;
-                        chunk.rows.push_back(local_join_row(left_row.get(),
-                                                            left_columns,
-                                                            right_table.rows[right_index].get(),
-                                                            right_columns,
-                                                            spec));
-                    }
-                }
-            }
-            if (!matched &&
-                (spec.method == plan::JoinMethod::Left || spec.method == plan::JoinMethod::Full)) {
-                chunk.rows.push_back(local_join_row(
-                    left_row.get(), left_columns, right_null.get(), right_columns, spec));
-            }
-        }
-        if (spec.method == plan::JoinMethod::Right || spec.method == plan::JoinMethod::Full) {
-            for (size_t right_index = 0; right_index < right_table.rows.size(); ++right_index) {
-                if (matched_right[right_index] || right_table.rows[right_index] == nullptr) {
-                    continue;
-                }
-                chunk.rows.push_back(local_join_row(left_null.get(),
-                                                    left_columns,
-                                                    right_table.rows[right_index].get(),
-                                                    right_columns,
-                                                    spec));
+            auto chunk = local_hash_join_group(
+                {}, local_rows(right_chunks), left_columns, right_columns, spec);
+            if (!chunk.rows.empty()) {
+                chunks.push_back(std::move(chunk));
             }
         }
     }
 
-    std::vector<TableChunk> chunks;
-    chunks.push_back(std::move(chunk));
     Value value = Value::table_stream(
         left_table.bucket.empty() ? right_table.bucket : left_table.bucket,
         std::move(chunks),
@@ -1097,6 +1207,24 @@ ExchangeDistributionProfile HashDistribution(std::vector<std::string> partition_
     };
 }
 
+ExchangeDistributionProfile RoundRobinDistribution(size_t partitions) {
+    return ExchangeDistributionProfile{
+        .kind = "round_robin",
+        .partition_keys = {},
+        .include_group_key = false,
+        .partitions = partitions,
+    };
+}
+
+ExchangeDistributionProfile BroadcastDistribution(size_t partitions) {
+    return ExchangeDistributionProfile{
+        .kind = "broadcast",
+        .partition_keys = {},
+        .include_group_key = false,
+        .partitions = partitions,
+    };
+}
+
 class ExchangeSinkOperator final : public Operator {
 public:
     ExchangeSinkOperator(std::unique_ptr<Operator> input, std::shared_ptr<ExchangeBuffer> buffer)
@@ -1201,9 +1329,22 @@ public:
                                     ExchangeDistributionProfile distribution)
         : input_(std::move(input)),
           buffers_(std::move(buffers)),
-          distribution_(std::move(distribution)) {}
+          distribution_(std::move(distribution)) {
+        partition_stats_.reserve(buffers_.size());
+        for (size_t index = 0; index < buffers_.size(); ++index) {
+            partition_stats_.push_back({.partition = index});
+        }
+    }
 
-    [[nodiscard]] std::string name() const override { return "HashPartitionExchangeSinkOperator"; }
+    [[nodiscard]] std::string name() const override {
+        if (distribution_.kind == "broadcast") {
+            return "BroadcastExchangeSinkOperator";
+        }
+        if (distribution_.kind == "round_robin") {
+            return "RoundRobinPartitionExchangeSinkOperator";
+        }
+        return "HashPartitionExchangeSinkOperator";
+    }
 
     void Cancel() override {
         for (const auto& buffer : buffers_) {
@@ -1225,6 +1366,12 @@ public:
     void CollectAccumulatorStats(std::vector<AccumulatorStats>* out) const override {
         if (input_ != nullptr) {
             input_->CollectAccumulatorStats(out);
+        }
+    }
+
+    void CollectExchangePartitionStats(std::vector<ExchangePartitionStats>* out) const override {
+        if (out != nullptr) {
+            out->insert(out->end(), partition_stats_.begin(), partition_stats_.end());
         }
     }
 
@@ -1266,19 +1413,35 @@ public:
                 columns.push_back(column.name);
             }
             for (size_t row_index = 0; row_index < chunk.row_count; ++row_index) {
+                auto row = RowFromPageChunk(chunk, row_index);
+                auto append = [&](size_t partition) {
+                    TableChunk partition_chunk;
+                    partition_chunk.group_key = chunk.group_key;
+                    partition_chunk.columns = columns;
+                    partition_chunk.rows.push_back(row);
+                    partitions[partition].push_back(std::move(partition_chunk));
+                };
+                if (distribution_.kind == "broadcast") {
+                    for (size_t partition = 0; partition < buffers_.size(); ++partition) {
+                        append(partition);
+                    }
+                    continue;
+                }
+                if (distribution_.kind == "round_robin") {
+                    append(next_partition_++ % buffers_.size());
+                    continue;
+                }
+                if (distribution_.kind != "hash") {
+                    return absl::InvalidArgumentError(absl::StrCat(
+                        "unsupported partitioned exchange distribution: ", distribution_.kind));
+                }
                 auto key = partition_key_for_page_row(chunk,
                                                       row_index,
                                                       distribution_.partition_keys,
                                                       distribution_.include_group_key);
-                if (!key.has_value()) {
-                    continue;
+                if (key.has_value()) {
+                    append(partition_index_for_key(*key, buffers_.size()));
                 }
-                TableChunk partition_chunk;
-                partition_chunk.group_key = chunk.group_key;
-                partition_chunk.columns = columns;
-                partition_chunk.rows.push_back(RowFromPageChunk(chunk, row_index));
-                partitions[partition_index_for_key(*key, buffers_.size())].push_back(
-                    std::move(partition_chunk));
             }
         }
 
@@ -1293,6 +1456,8 @@ public:
                                                    output.result_name);
             partitioned.plan = output.plan;
             partitioned.materialized = output.materialized;
+            partition_stats_[index].rows += partitioned.row_count();
+            partition_stats_[index].bytes += EstimatePageBytes(partitioned);
             auto add_status = buffers_[index]->AddPage(std::move(partitioned));
             if (!add_status.ok()) {
                 return add_status;
@@ -1313,6 +1478,8 @@ private:
     std::unique_ptr<Operator> input_;
     std::vector<std::shared_ptr<ExchangeBuffer>> buffers_;
     ExchangeDistributionProfile distribution_;
+    std::vector<ExchangePartitionStats> partition_stats_;
+    size_t next_partition_ = 0;
     bool finished_ = false;
 };
 
@@ -2018,6 +2185,160 @@ struct ProducedPipeline {
     std::string pipeline_id;
 };
 
+struct PartitionedProducedPipeline {
+    std::vector<std::shared_ptr<ExchangeBuffer>> buffers;
+    std::string pipeline_id;
+};
+
+struct UnaryWrappedJoinPlan {
+    std::shared_ptr<plan::PlanNode> join;
+    std::vector<std::shared_ptr<plan::PlanNode>> wrappers;
+};
+
+std::optional<UnaryWrappedJoinPlan> FindUnaryWrappedJoinPlan(
+    const std::shared_ptr<plan::PlanNode>& root) {
+    UnaryWrappedJoinPlan result;
+    auto cursor = root;
+    while (cursor != nullptr && cursor->kind != plan::PlanNodeKind::Join) {
+        if (cursor->inputs.size() != 1 || cursor->inputs[0] == nullptr) {
+            return std::nullopt;
+        }
+        result.wrappers.push_back(cursor);
+        cursor = cursor->inputs[0];
+    }
+    if (cursor == nullptr || cursor->inputs.size() != 2 || cursor->inputs[0] == nullptr ||
+        cursor->inputs[1] == nullptr) {
+        return std::nullopt;
+    }
+    result.join = std::move(cursor);
+    return result;
+}
+
+bool CanPartitionUnaryWrappedJoin(const UnaryWrappedJoinPlan& plan) {
+    for (const auto& wrapper : plan.wrappers) {
+        if (wrapper == nullptr) {
+            return false;
+        }
+        switch (wrapper->kind) {
+            case plan::PlanNodeKind::Range:
+            case plan::PlanNodeKind::Filter:
+            case plan::PlanNodeKind::Project:
+            case plan::PlanNodeKind::Rename:
+            case plan::PlanNodeKind::Materialize:
+                break;
+            default:
+                return false;
+        }
+    }
+    return true;
+}
+
+struct LocalHashJoinPartitionStrategy {
+    size_t partitions = 1;
+    ExchangeDistributionProfile left;
+    ExchangeDistributionProfile right;
+    ExchangeDistributionProfile output;
+};
+
+LocalHashJoinPartitionStrategy ChooseLocalHashJoinPartitionStrategy(
+    const UnaryWrappedJoinPlan& wrapped_join) {
+    constexpr double kMinPartitionedRows = 8192.0;
+    constexpr double kTargetRowsPerPartition = 4096.0;
+    constexpr double kMaxBroadcastBuildRows = 1024.0;
+    constexpr double kMinBroadcastProbeRows = 8192.0;
+    constexpr double kMinBroadcastProbeToBuildRatio = 8.0;
+    constexpr size_t kMaxPartitions = 8;
+    const auto& join = wrapped_join.join;
+    if (!CanPartitionUnaryWrappedJoin(wrapped_join) || join == nullptr ||
+        join->kind != plan::PlanNodeKind::Join || join->inputs.size() != 2 ||
+        join->inputs[0] == nullptr || join->inputs[1] == nullptr || join->join().on.empty()) {
+        return {};
+    }
+    const auto left_rows = EstimateRowsForPlan(join->inputs[0]);
+    const auto right_rows = EstimateRowsForPlan(join->inputs[1]);
+    if (!left_rows.has_value() || !right_rows.has_value()) {
+        return {};
+    }
+    const double input_rows = *left_rows + *right_rows;
+    if (input_rows < kMinPartitionedRows) {
+        return {};
+    }
+    const size_t partitions = std::min(
+        kMaxPartitions,
+        std::max<size_t>(2, static_cast<size_t>(std::ceil(input_rows / kTargetRowsPerPartition))));
+    const bool build_left = join->join().build_side == plan::JoinBuildSide::Left;
+    const double build_rows = build_left ? *left_rows : *right_rows;
+    const double probe_rows = build_left ? *right_rows : *left_rows;
+    if (join->join().method == plan::JoinMethod::Inner && build_rows > 0.0 &&
+        build_rows <= kMaxBroadcastBuildRows && probe_rows >= kMinBroadcastProbeRows &&
+        probe_rows >= build_rows * kMinBroadcastProbeToBuildRatio) {
+        const auto broadcast = BroadcastDistribution(partitions);
+        const auto round_robin = RoundRobinDistribution(partitions);
+        return LocalHashJoinPartitionStrategy{
+            .partitions = partitions,
+            .left = build_left ? broadcast : round_robin,
+            .right = build_left ? round_robin : broadcast,
+            .output = round_robin,
+        };
+    }
+    const auto hash = HashDistribution(join->join().on, true, partitions);
+    return LocalHashJoinPartitionStrategy{
+        .partitions = partitions,
+        .left = hash,
+        .right = hash,
+        .output = hash,
+    };
+}
+
+absl::StatusOr<std::pair<std::unique_ptr<Operator>, std::vector<std::string>>>
+BuildUnaryWrappedJoinOperator(const UnaryWrappedJoinPlan& plan,
+                              std::unique_ptr<Operator> left,
+                              std::unique_ptr<Operator> right,
+                              const std::shared_ptr<QueryMemoryContext>& memory_context) {
+    std::vector<std::string> operators = {left->name(), right->name()};
+    std::unique_ptr<Operator> current(
+        new LocalHashJoinOperator(plan.join, std::move(left), std::move(right)));
+    operators.push_back(current->name());
+    for (auto it = plan.wrappers.rbegin(); it != plan.wrappers.rend(); ++it) {
+        auto wrapped_or = WrapUnaryOperator(*it, std::move(current), memory_context);
+        if (!wrapped_or.ok()) {
+            return wrapped_or.status();
+        }
+        current = std::move(*wrapped_or);
+        operators.push_back(current->name());
+    }
+    return std::pair<std::unique_ptr<Operator>, std::vector<std::string>>{std::move(current),
+                                                                          std::move(operators)};
+}
+
+absl::StatusOr<PlannedOperator> BuildPartitionedUnaryWrappedJoinOperators(
+    const UnaryWrappedJoinPlan& plan,
+    const std::vector<std::shared_ptr<ExchangeBuffer>>& left_buffers,
+    const std::vector<std::shared_ptr<ExchangeBuffer>>& right_buffers,
+    const std::shared_ptr<QueryMemoryContext>& memory_context) {
+    if (left_buffers.empty() || left_buffers.size() != right_buffers.size()) {
+        return absl::InvalidArgumentError("partitioned join requires matching input buffers");
+    }
+    PlannedOperator planned;
+    planned.driver_roots.reserve(left_buffers.size());
+    for (size_t index = 0; index < left_buffers.size(); ++index) {
+        auto operator_or = BuildUnaryWrappedJoinOperator(
+            plan,
+            std::unique_ptr<Operator>(new ExchangeSourceOperator(left_buffers[index])),
+            std::unique_ptr<Operator>(new ExchangeSourceOperator(right_buffers[index])),
+            memory_context);
+        if (!operator_or.ok()) {
+            return operator_or.status();
+        }
+        auto [root, operators] = std::move(*operator_or);
+        if (planned.operators.empty()) {
+            planned.operators = std::move(operators);
+        }
+        planned.driver_roots.push_back(std::move(root));
+    }
+    return planned;
+}
+
 std::string ChildPipelineId(const std::string& parent, std::string suffix) {
     return parent.empty() ? std::move(suffix) : absl::StrCat(parent, "-", suffix);
 }
@@ -2029,11 +2350,150 @@ absl::StatusOr<ProducedPipeline> AddProducerPipelineForPlan(
     ExecutionTask* task,
     const std::shared_ptr<QueryMemoryContext>& memory_context);
 
-absl::StatusOr<ProducedPipeline> AddJoinProducerPipeline(
-    const std::shared_ptr<plan::PlanNode>& join_plan,
+std::vector<std::shared_ptr<ExchangeBuffer>> MakePartitionedExchangeBuffers(size_t partition_count,
+                                                                            size_t producer_count) {
+    std::vector<std::shared_ptr<ExchangeBuffer>> buffers;
+    buffers.reserve(partition_count);
+    for (size_t index = 0; index < partition_count; ++index) {
+        auto buffer = std::make_shared<ExchangeBuffer>();
+        buffer->SetProducerCount(producer_count);
+        buffers.push_back(std::move(buffer));
+    }
+    return buffers;
+}
+
+absl::StatusOr<PartitionedProducedPipeline> AddPartitionedProducerPipelineForPlan(
+    const std::shared_ptr<plan::PlanNode>& plan_node,
+    std::string id,
+    std::string role,
+    ExchangeDistributionProfile distribution,
+    ExecutionTask* task,
+    const std::shared_ptr<QueryMemoryContext>& memory_context) {
+    if (task == nullptr) {
+        return absl::InvalidArgumentError("missing execution task");
+    }
+    if (distribution.partitions <= 1) {
+        return absl::InvalidArgumentError("partitioned producer requires multiple partitions");
+    }
+    if (FindUnaryWrappedJoinPlan(plan_node).has_value()) {
+        auto input_or = AddProducerPipelineForPlan(
+            plan_node, ChildPipelineId(id, "source"), role, task, memory_context);
+        if (!input_or.ok()) {
+            return input_or.status();
+        }
+        auto buffers = MakePartitionedExchangeBuffers(distribution.partitions, 1);
+        std::unique_ptr<Operator> source(new ExchangeSourceOperator(input_or->buffer));
+        std::vector<std::string> operators = {source->name()};
+        std::unique_ptr<Operator> sink(
+            new PartitionedExchangeSinkOperator(std::move(source), buffers, distribution));
+        operators.push_back(sink->name());
+        task->pipelines.push_back(MakePipeline(std::move(id),
+                                               "repartition producer",
+                                               std::move(role),
+                                               {input_or->pipeline_id},
+                                               std::move(operators),
+                                               std::move(sink),
+                                               {},
+                                               distribution));
+        return PartitionedProducedPipeline{.buffers = std::move(buffers),
+                                           .pipeline_id = task->pipelines.back().id};
+    }
+
+    auto planned_or = BuildOperator(plan_node, true, memory_context);
+    if (!planned_or.ok()) {
+        return planned_or.status();
+    }
+    std::vector<std::unique_ptr<Operator>> roots;
+    if (!planned_or->driver_roots.empty()) {
+        roots = std::move(planned_or->driver_roots);
+    } else if (planned_or->root != nullptr) {
+        roots.push_back(std::move(planned_or->root));
+    } else {
+        return absl::InvalidArgumentError("partitioned producer has no operator");
+    }
+    auto buffers = MakePartitionedExchangeBuffers(distribution.partitions, roots.size());
+    std::vector<std::unique_ptr<Operator>> sinks;
+    sinks.reserve(roots.size());
+    for (auto& root : roots) {
+        sinks.push_back(std::unique_ptr<Operator>(
+            new PartitionedExchangeSinkOperator(std::move(root), buffers, distribution)));
+    }
+    auto operators = std::move(planned_or->operators);
+    operators.push_back(sinks.front()->name());
+    task->pipelines.push_back(MakePipeline(std::move(id),
+                                           "partitioned producer",
+                                           std::move(role),
+                                           {},
+                                           std::move(operators),
+                                           nullptr,
+                                           std::move(sinks),
+                                           distribution));
+    return PartitionedProducedPipeline{.buffers = std::move(buffers),
+                                       .pipeline_id = task->pipelines.back().id};
+}
+
+struct ParallelInputPlan {
+    PlannedOperator planned;
+    std::vector<std::string> dependencies;
+};
+
+absl::StatusOr<ParallelInputPlan> BuildParallelInputForPlan(
+    const std::shared_ptr<plan::PlanNode>& plan_node,
+    const std::string& id,
+    ExecutionTask* task,
+    const std::shared_ptr<QueryMemoryContext>& memory_context) {
+    if (task == nullptr) {
+        return absl::InvalidArgumentError("missing execution task");
+    }
+    auto wrapped_join = FindUnaryWrappedJoinPlan(plan_node);
+    if (wrapped_join.has_value()) {
+        const auto& join = wrapped_join->join;
+        const auto strategy = ChooseLocalHashJoinPartitionStrategy(*wrapped_join);
+        if (strategy.partitions > 1) {
+            const bool build_left = join->join().build_side == plan::JoinBuildSide::Left;
+            auto left_or = AddPartitionedProducerPipelineForPlan(join->inputs[0],
+                                                                 ChildPipelineId(id, "left"),
+                                                                 build_left ? "build" : "probe",
+                                                                 strategy.left,
+                                                                 task,
+                                                                 memory_context);
+            if (!left_or.ok()) {
+                return left_or.status();
+            }
+            auto right_or = AddPartitionedProducerPipelineForPlan(join->inputs[1],
+                                                                  ChildPipelineId(id, "right"),
+                                                                  build_left ? "probe" : "build",
+                                                                  strategy.right,
+                                                                  task,
+                                                                  memory_context);
+            if (!right_or.ok()) {
+                return right_or.status();
+            }
+            auto planned_or = BuildPartitionedUnaryWrappedJoinOperators(
+                *wrapped_join, left_or->buffers, right_or->buffers, memory_context);
+            if (!planned_or.ok()) {
+                return planned_or.status();
+            }
+            return ParallelInputPlan{
+                .planned = std::move(*planned_or),
+                .dependencies = {left_or->pipeline_id, right_or->pipeline_id},
+            };
+        }
+    }
+
+    auto planned_or = BuildOperator(plan_node, true, memory_context);
+    if (!planned_or.ok()) {
+        return planned_or.status();
+    }
+    return ParallelInputPlan{.planned = std::move(*planned_or)};
+}
+
+absl::StatusOr<ProducedPipeline> AddUnaryWrappedJoinProducerPipeline(
+    const UnaryWrappedJoinPlan& wrapped_join,
     std::string id,
     std::string role,
     ExecutionTask* task) {
+    const auto& join_plan = wrapped_join.join;
     if (join_plan == nullptr || join_plan->kind != plan::PlanNodeKind::Join ||
         join_plan->inputs.size() != 2 || join_plan->inputs[0] == nullptr ||
         join_plan->inputs[1] == nullptr) {
@@ -2041,6 +2501,48 @@ absl::StatusOr<ProducedPipeline> AddJoinProducerPipeline(
     }
 
     const bool build_left = join_plan->join().build_side == plan::JoinBuildSide::Left;
+    const auto strategy = ChooseLocalHashJoinPartitionStrategy(wrapped_join);
+    if (strategy.partitions > 1) {
+        auto left_or = AddPartitionedProducerPipelineForPlan(join_plan->inputs[0],
+                                                             ChildPipelineId(id, "left"),
+                                                             build_left ? "build" : "probe",
+                                                             strategy.left,
+                                                             task,
+                                                             task->memory_context);
+        if (!left_or.ok()) {
+            return left_or.status();
+        }
+        auto right_or = AddPartitionedProducerPipelineForPlan(join_plan->inputs[1],
+                                                              ChildPipelineId(id, "right"),
+                                                              build_left ? "probe" : "build",
+                                                              strategy.right,
+                                                              task,
+                                                              task->memory_context);
+        if (!right_or.ok()) {
+            return right_or.status();
+        }
+        auto planned_or = BuildPartitionedUnaryWrappedJoinOperators(
+            wrapped_join, left_or->buffers, right_or->buffers, task->memory_context);
+        if (!planned_or.ok()) {
+            return planned_or.status();
+        }
+        auto output_buffer = std::make_shared<ExchangeBuffer>();
+        output_buffer->SetProducerCount(planned_or->driver_roots.size());
+        auto sinks =
+            WrapDriverRootsWithExchangeSinks(std::move(planned_or->driver_roots), output_buffer);
+        planned_or->operators.emplace_back("ExchangeSinkOperator");
+        task->pipelines.push_back(MakePipeline(std::move(id),
+                                               "partitioned join producer",
+                                               std::move(role),
+                                               {left_or->pipeline_id, right_or->pipeline_id},
+                                               std::move(planned_or->operators),
+                                               nullptr,
+                                               std::move(sinks),
+                                               strategy.output));
+        return ProducedPipeline{.buffer = std::move(output_buffer),
+                                .pipeline_id = task->pipelines.back().id};
+    }
+
     auto left_or = AddProducerPipelineForPlan(join_plan->inputs[0],
                                               ChildPipelineId(id, "left"),
                                               build_left ? "build" : "probe",
@@ -2059,12 +2561,15 @@ absl::StatusOr<ProducedPipeline> AddJoinProducerPipeline(
     }
 
     auto output_buffer = std::make_shared<ExchangeBuffer>();
-    std::unique_ptr<Operator> left_source(new ExchangeSourceOperator(left_or->buffer));
-    std::unique_ptr<Operator> right_source(new ExchangeSourceOperator(right_or->buffer));
-    std::vector<std::string> root_operators = {left_source->name(), right_source->name()};
-    std::unique_ptr<Operator> join(
-        new LocalHashJoinOperator(join_plan, std::move(left_source), std::move(right_source)));
-    root_operators.push_back(join->name());
+    auto operator_or = BuildUnaryWrappedJoinOperator(
+        wrapped_join,
+        std::unique_ptr<Operator>(new ExchangeSourceOperator(left_or->buffer)),
+        std::unique_ptr<Operator>(new ExchangeSourceOperator(right_or->buffer)),
+        task->memory_context);
+    if (!operator_or.ok()) {
+        return operator_or.status();
+    }
+    auto [join, root_operators] = std::move(*operator_or);
     std::unique_ptr<Operator> sink(new ExchangeSinkOperator(std::move(join), output_buffer));
     root_operators.push_back(sink->name());
 
@@ -2089,8 +2594,8 @@ absl::StatusOr<ProducedPipeline> AddProducerPipelineForPlan(
     if (task == nullptr) {
         return absl::InvalidArgumentError("missing execution task");
     }
-    if (plan_node != nullptr && plan_node->kind == plan::PlanNodeKind::Join) {
-        return AddJoinProducerPipeline(plan_node, std::move(id), std::move(role), task);
+    if (auto join = FindUnaryWrappedJoinPlan(plan_node); join.has_value()) {
+        return AddUnaryWrappedJoinProducerPipeline(*join, std::move(id), std::move(role), task);
     }
 
     auto planned_or = BuildOperator(plan_node, true, memory_context);
@@ -2130,9 +2635,14 @@ absl::StatusOr<ProducedPipeline> AddProducerPipelineForPlan(
                             .pipeline_id = task->pipelines.back().id};
 }
 
-absl::StatusOr<ExecutionTask> BuildJoinExecutionTask(
-    const std::shared_ptr<plan::PlanNode>& join_plan,
+absl::StatusOr<ExecutionTask> BuildUnaryWrappedJoinExecutionTask(
+    const std::shared_ptr<plan::PlanNode>& root_plan,
     const std::shared_ptr<QueryMemoryContext>& memory_context) {
+    auto wrapped_join = FindUnaryWrappedJoinPlan(root_plan);
+    if (!wrapped_join.has_value()) {
+        return absl::InvalidArgumentError("join execution task requires a join input");
+    }
+    const auto& join_plan = wrapped_join->join;
     if (join_plan == nullptr || join_plan->kind != plan::PlanNodeKind::Join ||
         join_plan->inputs.size() != 2 || join_plan->inputs[0] == nullptr ||
         join_plan->inputs[1] == nullptr) {
@@ -2142,6 +2652,44 @@ absl::StatusOr<ExecutionTask> BuildJoinExecutionTask(
     ExecutionTask task;
     task.memory_context = memory_context;
     const bool build_left = join_plan->join().build_side == plan::JoinBuildSide::Left;
+    const auto strategy = ChooseLocalHashJoinPartitionStrategy(*wrapped_join);
+    if (strategy.partitions > 1) {
+        auto left_or = AddPartitionedProducerPipelineForPlan(join_plan->inputs[0],
+                                                             "join-left",
+                                                             build_left ? "build" : "probe",
+                                                             strategy.left,
+                                                             &task,
+                                                             task.memory_context);
+        if (!left_or.ok()) {
+            return left_or.status();
+        }
+        auto right_or = AddPartitionedProducerPipelineForPlan(join_plan->inputs[1],
+                                                              "join-right",
+                                                              build_left ? "probe" : "build",
+                                                              strategy.right,
+                                                              &task,
+                                                              task.memory_context);
+        if (!right_or.ok()) {
+            return right_or.status();
+        }
+        auto planned_or = BuildPartitionedUnaryWrappedJoinOperators(
+            *wrapped_join, left_or->buffers, right_or->buffers, memory_context);
+        if (!planned_or.ok()) {
+            return planned_or.status();
+        }
+        planned_or->driver_roots = WrapDriverRootsWithOutput(std::move(planned_or->driver_roots));
+        planned_or->operators.emplace_back("OutputOperator");
+        task.pipelines.push_back(MakePipeline("main",
+                                              "main partitioned join",
+                                              "root",
+                                              {left_or->pipeline_id, right_or->pipeline_id},
+                                              std::move(planned_or->operators),
+                                              nullptr,
+                                              std::move(planned_or->driver_roots),
+                                              strategy.output));
+        return task;
+    }
+
     auto left_or = AddProducerPipelineForPlan(join_plan->inputs[0],
                                               "join-left",
                                               build_left ? "build" : "probe",
@@ -2159,12 +2707,15 @@ absl::StatusOr<ExecutionTask> BuildJoinExecutionTask(
         return right_or.status();
     }
 
-    std::unique_ptr<Operator> left_source(new ExchangeSourceOperator(left_or->buffer));
-    std::unique_ptr<Operator> right_source(new ExchangeSourceOperator(right_or->buffer));
-    std::vector<std::string> root_operators = {left_source->name(), right_source->name()};
-    std::unique_ptr<Operator> join(
-        new LocalHashJoinOperator(join_plan, std::move(left_source), std::move(right_source)));
-    root_operators.push_back(join->name());
+    auto operator_or = BuildUnaryWrappedJoinOperator(
+        *wrapped_join,
+        std::unique_ptr<Operator>(new ExchangeSourceOperator(left_or->buffer)),
+        std::unique_ptr<Operator>(new ExchangeSourceOperator(right_or->buffer)),
+        memory_context);
+    if (!operator_or.ok()) {
+        return operator_or.status();
+    }
+    auto [join, root_operators] = std::move(*operator_or);
     std::unique_ptr<Operator> output(new OutputOperator(std::move(join)));
     root_operators.push_back(output->name());
 
@@ -2313,33 +2864,36 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecut
     const auto& aggregate = chain[*aggregate_index];
     const auto& group = chain[*aggregate_index + 1];
     auto input_plan = SkipMaterializeBarrier(group->inputs[0]);
-    auto planned_or = BuildOperator(input_plan, true, memory_context);
-    if (!planned_or.ok()) {
-        return planned_or.status();
+    ExecutionTask task;
+    task.memory_context = memory_context;
+    auto input_or = BuildParallelInputForPlan(input_plan, "aggregate-input", &task, memory_context);
+    if (!input_or.ok()) {
+        return input_or.status();
     }
-    if (planned_or->driver_roots.size() <= 1) {
+    auto& planned = input_or->planned;
+    if (planned.driver_roots.size() <= 1) {
         return std::nullopt;
     }
 
     const GroupedAggregateStrategy strategy = ChooseGroupedAggregateStrategy(
-        root_plan, *aggregate_index, group, input_plan, planned_or->driver_roots.size());
+        root_plan, *aggregate_index, group, input_plan, planned.driver_roots.size());
     if (strategy == GroupedAggregateStrategy::SingleStage) {
         return std::nullopt;
     }
 
     if (strategy == GroupedAggregateStrategy::TwoStagePartitioned) {
-        const size_t partition_count = planned_or->driver_roots.size();
+        const size_t partition_count = planned.driver_roots.size();
         std::vector<std::shared_ptr<ExchangeBuffer>> buffers;
         buffers.reserve(partition_count);
         for (size_t index = 0; index < partition_count; ++index) {
             auto buffer = std::make_shared<ExchangeBuffer>();
-            buffer->SetProducerCount(planned_or->driver_roots.size());
+            buffer->SetProducerCount(planned.driver_roots.size());
             buffers.push_back(std::move(buffer));
         }
 
         std::vector<std::unique_ptr<Operator>> partial_roots;
-        partial_roots.reserve(planned_or->driver_roots.size());
-        for (auto& root : planned_or->driver_roots) {
+        partial_roots.reserve(planned.driver_roots.size());
+        for (auto& root : planned.driver_roots) {
             std::unique_ptr<Operator> partial(
                 new StreamingGroupedAggregateOperator(aggregate,
                                                       group->group().columns,
@@ -2351,18 +2905,16 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecut
                 new PartitionedExchangeSinkOperator(std::move(partial), buffers, distribution)));
         }
 
-        std::vector<std::string> partial_operators = std::move(planned_or->operators);
+        std::vector<std::string> partial_operators = std::move(planned.operators);
         partial_operators.push_back("GroupOperator");
         partial_operators.push_back("PartialAggregateOperator");
         partial_operators.push_back("HashPartitionExchangeSinkOperator");
 
-        ExecutionTask task;
-        task.memory_context = memory_context;
         task.pipelines.push_back(
             MakePipeline("aggregate-partial",
                          "aggregate partial partitioned",
                          "source",
-                         {},
+                         input_or->dependencies,
                          std::move(partial_operators),
                          nullptr,
                          std::move(partial_roots),
@@ -2400,10 +2952,10 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecut
     }
 
     auto buffer = std::make_shared<ExchangeBuffer>();
-    buffer->SetProducerCount(planned_or->driver_roots.size());
+    buffer->SetProducerCount(planned.driver_roots.size());
     std::vector<std::unique_ptr<Operator>> partial_roots;
-    partial_roots.reserve(planned_or->driver_roots.size());
-    for (auto& root : planned_or->driver_roots) {
+    partial_roots.reserve(planned.driver_roots.size());
+    for (auto& root : planned.driver_roots) {
         std::unique_ptr<Operator> partial(
             new StreamingGroupedAggregateOperator(aggregate,
                                                   group->group().columns,
@@ -2414,17 +2966,15 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildTwoStageGroupedAggregateExecut
             std::unique_ptr<Operator>(new ExchangeSinkOperator(std::move(partial), buffer)));
     }
 
-    std::vector<std::string> partial_operators = std::move(planned_or->operators);
+    std::vector<std::string> partial_operators = std::move(planned.operators);
     partial_operators.push_back("GroupOperator");
     partial_operators.push_back("PartialAggregateOperator");
     partial_operators.push_back("ExchangeSinkOperator");
 
-    ExecutionTask task;
-    task.memory_context = memory_context;
     task.pipelines.push_back(MakePipeline("aggregate-partial",
                                           "aggregate partial",
                                           "source",
-                                          {},
+                                          input_or->dependencies,
                                           std::move(partial_operators),
                                           nullptr,
                                           std::move(partial_roots),
@@ -2477,43 +3027,44 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildPartitionedGroupExecutionTask(
         return std::nullopt;
     }
     auto input_plan = SkipMaterializeBarrier(root_plan->inputs[0]);
-    auto planned_or = BuildOperator(input_plan, true, memory_context);
-    if (!planned_or.ok()) {
-        return planned_or.status();
+    ExecutionTask task;
+    task.memory_context = memory_context;
+    auto input_or = BuildParallelInputForPlan(input_plan, "group-input", &task, memory_context);
+    if (!input_or.ok()) {
+        return input_or.status();
     }
-    if (!ShouldPartitionBlockingInput(input_plan, planned_or->driver_roots.size())) {
+    auto& planned = input_or->planned;
+    if (!ShouldPartitionBlockingInput(input_plan, planned.driver_roots.size())) {
         return std::nullopt;
     }
 
-    const size_t partition_count = planned_or->driver_roots.size();
+    const size_t partition_count = planned.driver_roots.size();
     std::vector<std::shared_ptr<ExchangeBuffer>> buffers;
     buffers.reserve(partition_count);
     for (size_t index = 0; index < partition_count; ++index) {
         auto buffer = std::make_shared<ExchangeBuffer>();
-        buffer->SetProducerCount(planned_or->driver_roots.size());
+        buffer->SetProducerCount(planned.driver_roots.size());
         buffers.push_back(std::move(buffer));
     }
 
     std::vector<std::unique_ptr<Operator>> partial_roots;
-    partial_roots.reserve(planned_or->driver_roots.size());
-    for (auto& root : planned_or->driver_roots) {
+    partial_roots.reserve(planned.driver_roots.size());
+    for (auto& root : planned.driver_roots) {
         std::unique_ptr<Operator> partial(
             new StreamingGroupOperator(root_plan, std::move(root), memory_context, "partial"));
         partial_roots.push_back(std::unique_ptr<Operator>(new PartitionedExchangeSinkOperator(
             std::move(partial), buffers, HashDistribution({}, true, partition_count))));
     }
 
-    std::vector<std::string> partial_operators = std::move(planned_or->operators);
+    std::vector<std::string> partial_operators = std::move(planned.operators);
     partial_operators.push_back("PartialGroupOperator");
     partial_operators.push_back("HashPartitionExchangeSinkOperator");
 
-    ExecutionTask task;
-    task.memory_context = memory_context;
     task.pipelines.push_back(
         MakePipeline("group-partial",
                      "group partial partitioned",
                      "source",
-                     {},
+                     input_or->dependencies,
                      std::move(partial_operators),
                      nullptr,
                      std::move(partial_roots),
@@ -2549,43 +3100,44 @@ absl::StatusOr<std::optional<ExecutionTask>> BuildPartitionedDistinctExecutionTa
         return std::nullopt;
     }
     auto input_plan = SkipMaterializeBarrier(root_plan->inputs[0]);
-    auto planned_or = BuildOperator(input_plan, true, memory_context);
-    if (!planned_or.ok()) {
-        return planned_or.status();
+    ExecutionTask task;
+    task.memory_context = memory_context;
+    auto input_or = BuildParallelInputForPlan(input_plan, "distinct-input", &task, memory_context);
+    if (!input_or.ok()) {
+        return input_or.status();
     }
-    if (!ShouldPartitionBlockingInput(input_plan, planned_or->driver_roots.size())) {
+    auto& planned = input_or->planned;
+    if (!ShouldPartitionBlockingInput(input_plan, planned.driver_roots.size())) {
         return std::nullopt;
     }
 
-    const size_t partition_count = planned_or->driver_roots.size();
+    const size_t partition_count = planned.driver_roots.size();
     std::vector<std::shared_ptr<ExchangeBuffer>> buffers;
     buffers.reserve(partition_count);
     for (size_t index = 0; index < partition_count; ++index) {
         auto buffer = std::make_shared<ExchangeBuffer>();
-        buffer->SetProducerCount(planned_or->driver_roots.size());
+        buffer->SetProducerCount(planned.driver_roots.size());
         buffers.push_back(std::move(buffer));
     }
 
     std::vector<std::unique_ptr<Operator>> partial_roots;
-    partial_roots.reserve(planned_or->driver_roots.size());
+    partial_roots.reserve(planned.driver_roots.size());
     std::vector<std::string> partition_keys = {root_plan->distinct().column};
-    for (auto& root : planned_or->driver_roots) {
+    for (auto& root : planned.driver_roots) {
         std::unique_ptr<Operator> partial(
             new StreamingDistinctOperator(root_plan, std::move(root), memory_context, "partial"));
         partial_roots.push_back(std::unique_ptr<Operator>(new PartitionedExchangeSinkOperator(
             std::move(partial), buffers, HashDistribution(partition_keys, true, partition_count))));
     }
 
-    std::vector<std::string> partial_operators = std::move(planned_or->operators);
+    std::vector<std::string> partial_operators = std::move(planned.operators);
     partial_operators.push_back("PartialDistinctOperator");
     partial_operators.push_back("HashPartitionExchangeSinkOperator");
 
-    ExecutionTask task;
-    task.memory_context = memory_context;
     task.pipelines.push_back(MakePipeline("distinct-partial",
                                           "distinct partial partitioned",
                                           "source",
-                                          {},
+                                          input_or->dependencies,
                                           std::move(partial_operators),
                                           nullptr,
                                           std::move(partial_roots),
@@ -2728,12 +3280,16 @@ absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
         return fast_or.status();
     }
     if (fast_or->rbo_result.plan != nullptr &&
-        fast_or->rbo_result.plan->kind == plan::PlanNodeKind::Join) {
+        optimizer::ContainsPlanNodeKind(*fast_or->rbo_result.plan, plan::PlanNodeKind::Join)) {
         auto cbo_or = optimizer::DefaultCostBasedOptimizer().OptimizeWithTrace(logical_plan);
         if (!cbo_or.ok()) {
             return cbo_or.status();
         }
-        return BuildJoinExecutionTask(cbo_or->rbo_result.plan, memory_context);
+        fast_or = std::move(cbo_or);
+    }
+    if (fast_or->rbo_result.plan != nullptr &&
+        fast_or->rbo_result.plan->kind == plan::PlanNodeKind::Join) {
+        return BuildUnaryWrappedJoinExecutionTask(fast_or->rbo_result.plan, memory_context);
     }
     if (fast_or->rbo_result.plan != nullptr &&
         fast_or->rbo_result.plan->kind == plan::PlanNodeKind::Exchange) {
@@ -2785,8 +3341,11 @@ absl::StatusOr<ExecutionTask> PhysicalPlanner::Plan(
             return std::move(**breaker_task_or);
         }
     }
+    if (FindUnaryWrappedJoinPlan(fast_or->rbo_result.plan).has_value()) {
+        return BuildUnaryWrappedJoinExecutionTask(fast_or->rbo_result.plan, memory_context);
+    }
 
-    auto planned_or = BuildOperator(logical_plan, true, memory_context);
+    auto planned_or = BuildOperator(fast_or->rbo_result.plan, true, memory_context);
     if (!planned_or.ok()) {
         return planned_or.status();
     }
@@ -2824,6 +3383,7 @@ void ResetPipelineStats(const std::shared_ptr<Pipeline::Stats>& stats) {
     stats->rows = 0;
     stats->split_stats.clear();
     stats->accumulator_stats.clear();
+    stats->exchange_partition_stats.clear();
     stats->blocked = false;
     stats->finished = false;
     stats->error.clear();
@@ -2863,6 +3423,24 @@ void AddPipelineAccumulatorStats(const std::shared_ptr<Pipeline::Stats>& stats,
     std::lock_guard<std::mutex> lock(stats->mu);
     stats->accumulator_stats.insert(
         stats->accumulator_stats.end(), accumulator_stats.begin(), accumulator_stats.end());
+}
+
+void AddPipelineExchangePartitionStats(
+    const std::shared_ptr<Pipeline::Stats>& stats,
+    const std::vector<ExchangePartitionStats>& exchange_partition_stats) {
+    if (stats == nullptr || exchange_partition_stats.empty()) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(stats->mu);
+    for (const auto& partition : exchange_partition_stats) {
+        if (stats->exchange_partition_stats.size() <= partition.partition) {
+            stats->exchange_partition_stats.resize(partition.partition + 1);
+        }
+        auto& target = stats->exchange_partition_stats[partition.partition];
+        target.partition = partition.partition;
+        target.rows += partition.rows;
+        target.bytes += partition.bytes;
+    }
 }
 
 void FailPipelineStats(const std::shared_ptr<Pipeline::Stats>& stats, const absl::Status& status) {
@@ -2905,6 +3483,9 @@ absl::Status Driver::RunToSink(const PageSink& sink) const {
     std::vector<AccumulatorStats> accumulator_stats;
     pipeline_.root->CollectAccumulatorStats(&accumulator_stats);
     AddPipelineAccumulatorStats(pipeline_.stats, accumulator_stats);
+    std::vector<ExchangePartitionStats> exchange_partition_stats;
+    pipeline_.root->CollectExchangePartitionStats(&exchange_partition_stats);
+    AddPipelineExchangePartitionStats(pipeline_.stats, exchange_partition_stats);
     FinishPipelineStats(pipeline_.stats);
     return absl::OkStatus();
 }
@@ -2981,6 +3562,7 @@ ExecutionProfile BuildExecutionProfile(const std::vector<PipelineProfile>& pipel
         profile.pipelines[index].rows = stats[index]->rows;
         profile.pipelines[index].split_stats = stats[index]->split_stats;
         profile.pipelines[index].accumulator_stats = stats[index]->accumulator_stats;
+        profile.pipelines[index].exchange_partition_stats = stats[index]->exchange_partition_stats;
         profile.pipelines[index].blocked = stats[index]->blocked;
         profile.pipelines[index].finished = stats[index]->finished;
         profile.pipelines[index].error = stats[index]->error;
@@ -3516,6 +4098,76 @@ std::string FormatPipelinePlanJson(const std::shared_ptr<plan::PlanNode>& logica
     return out.str();
 }
 
+std::string EscapeMermaidLabel(const std::string& value) {
+    std::ostringstream out;
+    for (const char c : value) {
+        switch (c) {
+            case '\\':
+                out << "\\\\";
+                break;
+            case '"':
+                out << "\\\"";
+                break;
+            case '\n':
+                out << "<br/>";
+                break;
+            case '|':
+                out << "&#124;";
+                break;
+            default:
+                out << c;
+                break;
+        }
+    }
+    return out.str();
+}
+
+std::string PipelineMermaidLabel(const Pipeline& pipeline) {
+    std::ostringstream label;
+    const size_t drivers = pipeline.driver_roots.empty() ? 1 : pipeline.driver_roots.size();
+    label << pipeline.id << "\nrole: " << pipeline.role << "\ndrivers: " << drivers;
+    label << "\nblocking: " << (HasBlockingOperator(pipeline.operators) ? "true" : "false");
+    if (pipeline.distribution.has_value()) {
+        label << "\ndistribution: " << FormatDistribution(*pipeline.distribution);
+    }
+    if (!pipeline.operators.empty()) {
+        label << "\noperators: " << plan::StringList(pipeline.operators);
+    }
+    return label.str();
+}
+
+std::string FormatPipelinePlanMermaid(const std::shared_ptr<plan::PlanNode>& logical_plan) {
+    auto task_or = PhysicalPlanner().Plan(logical_plan);
+    if (!task_or.ok()) {
+        return absl::StrCat(
+            "flowchart TD\n  p0[\"", EscapeMermaidLabel(task_or.status().ToString()), "\"]\n");
+    }
+
+    std::ostringstream out;
+    out << "flowchart TD\n";
+    std::unordered_map<std::string, std::string> ids;
+    ids.reserve(task_or->pipelines.size());
+    for (size_t index = 0; index < task_or->pipelines.size(); ++index) {
+        const auto& pipeline = task_or->pipelines[index];
+        const std::string id = "p" + std::to_string(index);
+        ids.emplace(pipeline.id, id);
+        out << "  " << id << "[\"" << EscapeMermaidLabel(PipelineMermaidLabel(pipeline)) << "\"]\n";
+    }
+    for (const auto& pipeline : task_or->pipelines) {
+        auto target = ids.find(pipeline.id);
+        if (target == ids.end()) {
+            continue;
+        }
+        for (const auto& dependency : pipeline.dependencies) {
+            auto source = ids.find(dependency);
+            if (source != ids.end()) {
+                out << "  " << source->second << " --> " << target->second << "\n";
+            }
+        }
+    }
+    return out.str();
+}
+
 std::string FormatSplitStats(const std::vector<connector::ConnectorSplitStats>& stats) {
     std::ostringstream out;
     out << "[";
@@ -3561,6 +4213,20 @@ std::string FormatAccumulatorStats(const std::vector<AccumulatorStats>& stats) {
     return out.str();
 }
 
+std::string FormatExchangePartitionStats(const std::vector<ExchangePartitionStats>& stats) {
+    std::ostringstream out;
+    out << "[";
+    for (size_t index = 0; index < stats.size(); ++index) {
+        if (index != 0) {
+            out << ", ";
+        }
+        out << "{partition=" << stats[index].partition << ", rows=" << stats[index].rows
+            << ", bytes=" << stats[index].bytes << "}";
+    }
+    out << "]";
+    return out.str();
+}
+
 std::string FormatExecutionProfile(const ExecutionProfile& profile) {
     std::ostringstream out;
     out << "ExecutionProfile\n";
@@ -3592,6 +4258,10 @@ std::string FormatExecutionProfile(const ExecutionProfile& profile) {
         if (!pipeline.accumulator_stats.empty()) {
             out << "  accumulator_stats: " << FormatAccumulatorStats(pipeline.accumulator_stats)
                 << "\n";
+        }
+        if (!pipeline.exchange_partition_stats.empty()) {
+            out << "  exchange_partition_stats: "
+                << FormatExchangePartitionStats(pipeline.exchange_partition_stats) << "\n";
         }
         if (!pipeline.error.empty()) {
             out << "  error: " << pipeline.error << "\n";
@@ -3657,6 +4327,23 @@ std::string FormatAccumulatorStatsJson(const std::vector<AccumulatorStats>& stat
     return out.str();
 }
 
+std::string FormatExchangePartitionStatsJson(const std::vector<ExchangePartitionStats>& stats) {
+    std::ostringstream out;
+    out << "[";
+    for (size_t index = 0; index < stats.size(); ++index) {
+        if (index != 0) {
+            out << ",";
+        }
+        out << "{";
+        out << "\"partition\":" << stats[index].partition;
+        out << ",\"rows\":" << stats[index].rows;
+        out << ",\"bytes\":" << stats[index].bytes;
+        out << "}";
+    }
+    out << "]";
+    return out.str();
+}
+
 std::string FormatExecutionProfileJson(const ExecutionProfile& profile) {
     std::ostringstream out;
     out << "{\"memory\":{";
@@ -3687,6 +4374,8 @@ std::string FormatExecutionProfileJson(const ExecutionProfile& profile) {
         out << ",\"error\":" << JsonString(pipeline.error);
         out << ",\"splits\":" << FormatSplitStatsJson(pipeline.split_stats);
         out << ",\"accumulatorStats\":" << FormatAccumulatorStatsJson(pipeline.accumulator_stats);
+        out << ",\"exchangePartitionStats\":"
+            << FormatExchangePartitionStatsJson(pipeline.exchange_partition_stats);
         out << "}";
     }
     out << "]}";

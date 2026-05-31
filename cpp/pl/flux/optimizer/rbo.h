@@ -36,7 +36,7 @@ enum class PushdownState {
 };
 
 struct PushdownPlan {
-    const plan::SourceScanSpec* source = nullptr;
+    plan::SourceScanSpec source;
     connector::ScanRequest request;
     connector::SourceCapabilities capabilities;
     std::vector<std::string> visible_columns;

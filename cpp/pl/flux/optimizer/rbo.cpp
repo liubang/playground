@@ -253,9 +253,31 @@ bool predicate_subsumes(const connector::Predicate& candidate,
     if (candidate.op == existing.op && candidate.literal == existing.literal) {
         return true;
     }
+    if (candidate.op == connector::PredicateOp::Eq &&
+        existing.op == connector::PredicateOp::NotEq &&
+        candidate.literal.type() == existing.literal.type() &&
+        candidate.literal != existing.literal) {
+        return true;
+    }
     auto comparison = compare_predicate_literals(candidate.literal, existing.literal);
     if (!comparison.has_value()) {
         return false;
+    }
+    if (candidate.op == connector::PredicateOp::Eq) {
+        switch (existing.op) {
+            case connector::PredicateOp::Eq:
+                return false;
+            case connector::PredicateOp::NotEq:
+                return *comparison != 0;
+            case connector::PredicateOp::Gt:
+                return *comparison > 0;
+            case connector::PredicateOp::Gte:
+                return *comparison >= 0;
+            case connector::PredicateOp::Lt:
+                return *comparison < 0;
+            case connector::PredicateOp::Lte:
+                return *comparison <= 0;
+        }
     }
     if (is_lower_bound(candidate.op) && is_lower_bound(existing.op)) {
         return *comparison > 0 ||
@@ -272,16 +294,32 @@ bool predicate_subsumes(const connector::Predicate& candidate,
 
 void add_normalized_predicate(std::vector<connector::Predicate>* predicates,
                               connector::Predicate predicate) {
-    for (auto& existing : *predicates) {
+    for (const auto& existing : *predicates) {
         if (predicate_subsumes(existing, predicate)) {
             return;
         }
-        if (predicate_subsumes(predicate, existing)) {
-            existing = std::move(predicate);
-            return;
-        }
     }
-    predicates->push_back(std::move(predicate));
+    bool inserted = false;
+    for (auto it = predicates->begin(); it != predicates->end();) {
+        if (predicate_subsumes(predicate, *it)) {
+            if (!inserted) {
+                *it = predicate;
+                inserted = true;
+                ++it;
+            } else {
+                it = predicates->erase(it);
+            }
+            continue;
+        }
+        ++it;
+    }
+    if (!inserted) {
+        predicates->push_back(std::move(predicate));
+    }
+}
+
+bool has_row_count_boundary(const connector::ScanRequest& request) {
+    return request.limit.has_value() || request.offset.has_value();
 }
 
 bool try_merge_time_predicate(connector::ScanRequest* request,
@@ -322,7 +360,7 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
             return absl::InvalidArgumentError("unsupported pushdown source");
         }
         PushdownPlan plan;
-        plan.source = &node->source_scan();
+        plan.source = node->source_scan();
         auto columns_or = SourceScanColumns(node->source_scan());
         if (!columns_or.ok()) {
             return columns_or.status();
@@ -454,6 +492,9 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
             if (plan_or->request.distinct.has_value()) {
                 return absl::InvalidArgumentError("aggregate after distinct is not pushable");
             }
+            if (has_row_count_boundary(plan_or->request)) {
+                return absl::InvalidArgumentError("aggregate after limit is not pushable");
+            }
             auto source_column_or = source_column_for_visible(plan_or->visible_columns,
                                                               plan_or->source_columns,
                                                               node->aggregate().column,
@@ -475,6 +516,15 @@ absl::StatusOr<PushdownPlan> build_pushdown_plan(const std::shared_ptr<plan::Pla
             if (auto status = require_capability(plan_or->capabilities.distinct, "distinct");
                 !status.ok()) {
                 return status;
+            }
+            if (has_row_count_boundary(plan_or->request)) {
+                return absl::InvalidArgumentError("distinct after limit is not pushable");
+            }
+            if (!plan_or->request.order_by.empty()) {
+                return absl::InvalidArgumentError("distinct after sort is not pushable");
+            }
+            if (plan_or->request.aggregate.has_value() || !plan_or->request.group_by.empty()) {
+                return absl::InvalidArgumentError("distinct after aggregate is not pushable");
             }
             auto source_column_or = source_column_for_visible(plan_or->visible_columns,
                                                               plan_or->source_columns,
@@ -873,7 +923,27 @@ absl::StatusOr<std::vector<std::string>> VisibleColumnsForPlan(
 }
 
 bool CanExecutePushdownPlan(const PushdownPlan& plan) {
-    return plan.request.group_by.empty() || plan.request.aggregate.has_value();
+    const auto& request = plan.request;
+    if (!request.group_by.empty() && !request.aggregate.has_value()) {
+        return false;
+    }
+    if (request.aggregate.has_value() && request.distinct.has_value()) {
+        return false;
+    }
+    if (request.distinct.has_value() &&
+        (request.aggregate.has_value() || !request.group_by.empty())) {
+        return false;
+    }
+    if ((request.limit.has_value() && *request.limit < 0) ||
+        (request.offset.has_value() && *request.offset < 0)) {
+        return false;
+    }
+    if (request.partitioned_topn) {
+        return !request.order_by.empty() && request.limit.has_value() &&
+               !request.offset.has_value() && request.group_by.empty() &&
+               !request.aggregate.has_value() && !request.distinct.has_value();
+    }
+    return true;
 }
 
 std::string FormatSourceCapabilities(const connector::SourceCapabilities& capabilities) {
