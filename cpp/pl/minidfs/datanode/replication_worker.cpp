@@ -22,7 +22,7 @@
 namespace pl::minidfs {
 
 ReplicationWorker::ReplicationWorker(Config config, LocalBlockStore* store, CopyFunc copy_func)
-    : config_(std::move(config)), store_(store), copy_func_(std::move(copy_func)) {}
+    : config_(config), store_(store), copy_func_(std::move(copy_func)) {}
 
 ReplicationWorker::~ReplicationWorker() {
     stop();
@@ -50,7 +50,7 @@ void ReplicationWorker::stop() {
     threads_.clear();
 }
 
-void ReplicationWorker::enqueue(DataNodeTask task) {
+void ReplicationWorker::enqueue(DataNodeTask&& task) {
     {
         std::lock_guard lock(queue_mu_);
         task_queue_.push(std::move(task));
@@ -108,6 +108,8 @@ void ReplicationWorker::execute_copy(const DataNodeTask& task) {
     // Send to target via the copy function (pipeline protocol)
     auto copy_result = copy_func_(task.block_id,
                                   task.generation_stamp,
+                                  task.inode_id,
+                                  task.block_index,
                                   data_result.value(),
                                   task.target_host,
                                   task.target_port);

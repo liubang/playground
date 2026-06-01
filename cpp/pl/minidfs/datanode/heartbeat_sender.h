@@ -42,6 +42,8 @@ struct HeartbeatCommand {
     CommandType type = CommandType::kNone;
     uint64_t block_id = 0;
     uint64_t generation_stamp = 0;
+    uint64_t inode_id = 0;
+    uint32_t block_index = 0;
     std::string target_host; // For replication: destination DN
     uint32_t target_port = 0;
 };

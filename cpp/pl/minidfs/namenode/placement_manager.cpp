@@ -28,6 +28,15 @@ PlacementManager::PlacementManager(DataNodeManager* dn_manager) : dn_manager_(dn
 
 pl::Result<std::vector<DataNodeInfo>> PlacementManager::choose_targets(
     uint32_t num_replicas, std::optional<uint64_t> exclude_datanode_id) {
+    std::unordered_set<uint64_t> excluded;
+    if (exclude_datanode_id.has_value()) {
+        excluded.insert(*exclude_datanode_id);
+    }
+    return choose_targets(num_replicas, excluded);
+}
+
+pl::Result<std::vector<DataNodeInfo>> PlacementManager::choose_targets(
+    uint32_t num_replicas, const std::unordered_set<uint64_t>& excluded_datanode_ids) {
     auto live_result = dn_manager_->get_live_datanodes();
     if (live_result.hasError()) {
         return folly::makeUnexpected(live_result.error());
@@ -35,12 +44,9 @@ pl::Result<std::vector<DataNodeInfo>> PlacementManager::choose_targets(
 
     auto& candidates = live_result.value();
 
-    // Filter out excluded datanode.
-    if (exclude_datanode_id.has_value()) {
-        std::erase_if(candidates, [&](const DataNodeInfo& dn) {
-            return dn.datanode_id == exclude_datanode_id.value();
-        });
-    }
+    std::erase_if(candidates, [&](const DataNodeInfo& dn) {
+        return excluded_datanode_ids.contains(dn.datanode_id);
+    });
 
     if (candidates.size() < num_replicas) {
         return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kNoAvailableDataNode),
@@ -48,7 +54,12 @@ pl::Result<std::vector<DataNodeInfo>> PlacementManager::choose_targets(
     }
 
     // Use a thread-local random engine for randomization.
-    thread_local std::mt19937 rng{std::random_device{}()};
+    thread_local std::mt19937 rng = [] {
+        std::random_device random_device;
+        std::seed_seq seed{
+            random_device(), random_device(), random_device(), random_device()};
+        return std::mt19937(seed);
+    }();
 
     // Sort by free space descending for capacity-aware placement.
     std::sort(
@@ -58,8 +69,12 @@ pl::Result<std::vector<DataNodeInfo>> PlacementManager::choose_targets(
 
     // Add bounded randomness: shuffle within the top 2*num_replicas candidates
     // to avoid always picking the exact same nodes while still preferring high-free nodes.
-    size_t shuffle_range = std::min<size_t>(candidates.size(), num_replicas * 2);
-    std::shuffle(candidates.begin(), candidates.begin() + shuffle_range, rng);
+    size_t shuffle_range =
+        std::min(candidates.size(), static_cast<size_t>(num_replicas) * 2);
+    std::shuffle(candidates.begin(),
+                 candidates.begin() +
+                     static_cast<std::vector<DataNodeInfo>::difference_type>(shuffle_range),
+                 rng);
 
     // Rack-aware selection.
     std::vector<DataNodeInfo> chosen;

@@ -363,6 +363,20 @@ int cmd_put(DfsClient* client, int argc, char* argv[]) {
     return 0;
 }
 
+int cmd_append(DfsClient* client, int argc, char* argv[]) {
+    if (argc < 2) {
+        std::cerr << "Usage: minidfs append <local_path> <dfs_path>\n";
+        return 1;
+    }
+    auto result = client->append(argv[0], argv[1]);
+    if (result.hasError()) {
+        std::cerr << "append failed: " << result.error().describe() << "\n";
+        return 1;
+    }
+    std::cout << "Appended " << argv[0] << " -> " << argv[1] << "\n";
+    return 0;
+}
+
 int cmd_get(DfsClient* client, int argc, char* argv[]) {
     if (argc < 2) {
         std::cerr << "Usage: minidfs -get <dfs_path> <local_path>\n";
@@ -628,6 +642,7 @@ void print_usage() {
               << "  rm [-r] <path>             Delete a file or directory\n"
               << "  mv <src> <dst>             Rename/move a file or directory\n"
               << "  put <local> <dfs_path>     Upload a local file to DFS\n"
+              << "  append <local> <dfs_path>  Append a local file to DFS\n"
               << "  get <dfs_path> <local>     Download a DFS file to local\n"
               << "\n"
               << "Admin Commands:\n"
@@ -685,6 +700,9 @@ int main(int argc, char* argv[]) {
     }
     if (cmd == "-put" || cmd == "put") {
         return cmd_put(client.get(), cmd_argc, cmd_argv);
+    }
+    if (cmd == "append") {
+        return cmd_append(client.get(), cmd_argc, cmd_argv);
     }
     if (cmd == "-get" || cmd == "get") {
         return cmd_get(client.get(), cmd_argc, cmd_argv);

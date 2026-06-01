@@ -123,5 +123,12 @@ TEST_F(LeaseManagerTest, HasActiveLeaseFalseAfterExpire) {
     EXPECT_FALSE(result.value());
 }
 
+TEST_F(LeaseManagerTest, ValidateLeaseOwner) {
+    ASSERT_TRUE(mgr_->acquire_lease(100, "client-a").hasValue());
+    EXPECT_TRUE(mgr_->validate_lease(100, "client-a").hasValue());
+    EXPECT_TRUE(mgr_->validate_lease(100, "client-b").hasError());
+    EXPECT_TRUE(mgr_->validate_lease(101, "client-a").hasError());
+}
+
 } // namespace
 } // namespace pl::minidfs

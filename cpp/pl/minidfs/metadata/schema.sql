@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS id_allocators (
 -- Initialize allocators
 INSERT IGNORE INTO id_allocators (name, next_id) VALUES ('inode', 1000);
 INSERT IGNORE INTO id_allocators (name, next_id) VALUES ('block', 1000);
+INSERT IGNORE INTO id_allocators (name, next_id) VALUES ('generation_stamp', 1000);
 INSERT IGNORE INTO id_allocators (name, next_id) VALUES ('datanode', 1000);
 INSERT IGNORE INTO id_allocators (name, next_id) VALUES ('lease', 1000);
 

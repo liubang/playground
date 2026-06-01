@@ -342,11 +342,23 @@ public:
         return count;
     }
 
+    pl::Result<std::vector<Lease>> list_expired_leases(uint64_t now_ms) override {
+        std::lock_guard lock(mu_);
+        std::vector<Lease> result;
+        for (const auto& lease : leases_) {
+            if (lease.state == LeaseState::kActive && lease.expire_time_ms < now_ms) {
+                result.push_back(lease);
+            }
+        }
+        return result;
+    }
+
     // ID Allocation
     pl::Result<uint64_t> alloc_id(std::string_view name, uint64_t count = 1) override {
         std::lock_guard lock(mu_);
         auto key = std::string(name);
-        auto [it, inserted] = id_counters_.emplace(key, 0);
+        uint64_t initial_id = key == "generation_stamp" ? 1000 : 0;
+        auto [it, inserted] = id_counters_.emplace(key, initial_id);
         uint64_t id = it->second;
         it->second += count;
         return id;

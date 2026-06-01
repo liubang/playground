@@ -110,4 +110,20 @@ pl::Result<bool> LeaseManager::has_active_lease(uint64_t inode_id) {
     return existing.value().has_value();
 }
 
+pl::Result<pl::Void> LeaseManager::validate_lease(uint64_t inode_id, std::string_view client_id) {
+    auto existing = store_->get_active_lease(inode_id);
+    if (existing.hasError()) {
+        return folly::makeUnexpected(existing.error());
+    }
+    if (!existing.value().has_value()) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kLeaseNotFound),
+                             "no active lease for this file");
+    }
+    if (existing.value()->client_id != client_id) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kLeaseConflict),
+                             "lease held by different client");
+    }
+    return pl::Void{};
+}
+
 } // namespace pl::minidfs
