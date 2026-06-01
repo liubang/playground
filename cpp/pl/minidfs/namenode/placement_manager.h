@@ -19,6 +19,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <unordered_set>
 #include <vector>
 
 #include "cpp/pl/minidfs/common/types.h"
@@ -48,6 +49,10 @@ public:
     /// If `exclude_datanode_id` is provided, that node will not be chosen.
     pl::Result<std::vector<DataNodeInfo>> choose_targets(
         uint32_t num_replicas, std::optional<uint64_t> exclude_datanode_id);
+
+    /// Choose targets excluding all datanodes that already hold a replica.
+    pl::Result<std::vector<DataNodeInfo>> choose_targets(
+        uint32_t num_replicas, const std::unordered_set<uint64_t>& excluded_datanode_ids);
 
 private:
     DataNodeManager* dn_manager_;

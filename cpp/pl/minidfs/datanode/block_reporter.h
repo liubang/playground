@@ -37,12 +37,17 @@ struct BlockReportResponse {
     std::vector<uint64_t> blocks_to_delete; // block_ids the NN wants removed
 };
 
+struct BlockReport {
+    bool full_report = false;
+    std::vector<BlockInfo> blocks;
+};
+
 // BlockReporter — periodically reports all stored blocks to the NameNode.
 // Full report: sends all blocks in current/ periodically.
 // Incremental tracking: records adds/removes between full reports.
 // RPC is abstracted via a callback for testability.
 using BlockReportFunc = std::function<pl::Result<BlockReportResponse>(
-    uint64_t datanode_id, const std::vector<BlockInfo>& blocks)>;
+    uint64_t datanode_id, const BlockReport& report)>;
 
 using DeleteBlockFunc = std::function<void(uint64_t block_id, uint64_t generation_stamp)>;
 
@@ -74,8 +79,11 @@ public:
     /// Send a full block report immediately (useful for startup/testing).
     pl::Result<BlockReportResponse> send_full_report();
 
+    /// Send finalized blocks accumulated since the last successful report.
+    pl::Result<BlockReportResponse> send_incremental_report();
+
     /// Notify the reporter that a block was finalized (for incremental tracking).
-    void notify_block_finalized(uint64_t block_id, uint64_t generation_stamp);
+    void notify_block_finalized(uint64_t block_id);
 
     /// Notify the reporter that a block was deleted (for incremental tracking).
     void notify_block_deleted(uint64_t block_id);

@@ -97,10 +97,26 @@ message CreateFileResponse {
     uint64 lease_id = 3;
 }
 
+message AppendFileRequest {
+    string path = 1;
+    string client_id = 2;
+    RequestHeader header = 15;
+}
+
+message AppendFileResponse {
+    StatusProto status = 1;
+    uint64 inode_id = 2;
+    uint64 lease_id = 3;
+    uint32 next_block_index = 4;
+    uint64 block_size = 5;
+    uint32 replication = 6;
+}
+
 message AllocateBlockRequest {
     uint64 inode_id = 1;
     uint32 block_index = 2;
     uint32 replication = 3;
+    string client_id = 4;
     RequestHeader header = 15;
 }
 
@@ -211,6 +227,8 @@ message DataNodeCommand {
     uint64 generation_stamp = 3;
     string target_host = 4;
     uint32 target_port = 5;
+    uint64 inode_id = 6;
+    uint32 block_index = 7;
 }
 
 message HeartbeatResponse {
@@ -221,6 +239,7 @@ message HeartbeatResponse {
 message BlockReportRequest {
     uint64 datanode_id = 1;
     repeated BlockInfoProto blocks = 2;
+    bool full_report = 3;
 }
 
 message BlockReportResponse {
@@ -247,6 +266,7 @@ service NameNodeService {
     // Namespace operations
     rpc Mkdir(MkdirRequest) returns (MkdirResponse);
     rpc CreateFile(CreateFileRequest) returns (CreateFileResponse);
+    rpc AppendFile(AppendFileRequest) returns (AppendFileResponse);
     rpc CompleteFile(CompleteFileRequest) returns (CompleteFileResponse);
     rpc GetFileStatus(GetFileStatusRequest) returns (GetFileStatusResponse);
     rpc ListStatus(ListStatusRequest) returns (ListStatusResponse);
@@ -322,6 +342,8 @@ message TransferBlockRequest {
     uint64 generation_stamp = 2;
     bytes data = 3;           // full block data
     DataNodeEndpointProto target = 4;
+    uint64 inode_id = 5;
+    uint32 block_index = 6;
 }
 
 message TransferBlockResponse {
