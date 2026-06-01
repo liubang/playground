@@ -240,7 +240,9 @@ Result<Void> DfsClient::mv(std::string_view src, std::string_view dst) {
 
 // File write — pipeline replication
 
-Result<Void> DfsClient::put(std::string_view local_path, std::string_view dfs_path) {
+Result<Void> DfsClient::put(std::string_view local_path,
+                            std::string_view dfs_path,
+                            bool overwrite) {
     // 1. Open local file
     ScopedFd fd(::open(std::string(local_path).c_str(), O_RDONLY));
     if (fd.get() < 0) {
@@ -267,6 +269,7 @@ Result<Void> DfsClient::put(std::string_view local_path, std::string_view dfs_pa
     create_req.set_replication(config_.replication);
     create_req.set_block_size(config_.block_size);
     create_req.set_client_id(config_.client_id);
+    create_req.set_overwrite(overwrite);
 
     protocol::CreateFileResponse create_resp;
     stub.CreateFile(&cntl, &create_req, &create_resp, nullptr);
@@ -336,6 +339,38 @@ Result<Void> DfsClient::append(std::string_view local_path, std::string_view dfs
         return folly::makeUnexpected(stream.error());
     }
     return copy_to_stream(fd.get(), &stream.value());
+}
+
+Result<Void> DfsClient::truncate(std::string_view dfs_path, uint64_t length) {
+    protocol::NameNodeService_Stub stub(&namenode_channel_);
+    brpc::Controller controller;
+    protocol::TruncateFileRequest request;
+    request.set_path(std::string(dfs_path));
+    request.set_length(length);
+    protocol::TruncateFileResponse response;
+    stub.TruncateFile(&controller, &request, &response, nullptr);
+    if (controller.Failed()) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
+                            "TruncateFile RPC failed: {}",
+                            controller.ErrorText());
+    }
+    return check_status(response.status());
+}
+
+Result<Void> DfsClient::setrep(std::string_view dfs_path, uint32_t replication) {
+    protocol::NameNodeService_Stub stub(&namenode_channel_);
+    brpc::Controller controller;
+    protocol::SetReplicationRequest request;
+    request.set_path(std::string(dfs_path));
+    request.set_replication(replication);
+    protocol::SetReplicationResponse response;
+    stub.SetReplication(&controller, &request, &response, nullptr);
+    if (controller.Failed()) {
+        return MAKE_ERROR_F(static_cast<status_code_t>(ErrorCode::kRPCError),
+                            "SetReplication RPC failed: {}",
+                            controller.ErrorText());
+    }
+    return check_status(response.status());
 }
 
 // File read

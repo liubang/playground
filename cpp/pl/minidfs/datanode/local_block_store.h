@@ -105,6 +105,11 @@ public:
     /// Soft-delete a block: move from current/ to trash/.
     pl::Result<pl::Void> delete_block(uint64_t block_id, uint64_t generation_stamp);
 
+    /// Shrink a finalized block and rebuild its checksums. Idempotent for retries.
+    pl::Result<pl::Void> truncate_block(uint64_t block_id,
+                                        uint64_t generation_stamp,
+                                        uint64_t length);
+
     /// Permanently remove all files in trash/.
     pl::Result<uint32_t> purge_trash();
 
