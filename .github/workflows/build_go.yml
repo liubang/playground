@@ -39,6 +39,8 @@ jobs:
           sudo apt-get install -y lcov
 
       - name: coverage
+        id: coverage
+        continue-on-error: true
         run: |
           bazel coverage \
             --config=ci \
@@ -53,11 +55,20 @@ jobs:
           genhtml --branch-coverage --ignore-errors negative --output coverage-go /tmp/coverage_filtered.dat
 
       - name: generate coverage badge
+        if: steps.coverage.outcome == 'success'
         uses: ./.github/actions/coverage-badge
         with:
           lcov-file: /tmp/coverage_filtered.dat
           output-dir: coverage-go
-          label: coverage-go
+          label: Go
+
+      - name: generate failure badge
+        if: steps.coverage.outcome == 'failure'
+        uses: ./.github/actions/coverage-badge
+        with:
+          output-dir: coverage-go
+          label: Go
+          status: failure
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v4
@@ -70,3 +81,7 @@ jobs:
           keep_files: true
           user_name: "liubang"
           user_email: "it.liubang@gmail.com"
+
+      - name: Fail the job if coverage failed
+        if: steps.coverage.outcome == 'failure'
+        run: exit 1
