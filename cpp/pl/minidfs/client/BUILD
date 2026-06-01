@@ -15,7 +15,7 @@
 # Authors: liubang (it.liubang@gmail.com)
 # Created: 2026/05/06 20:04
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 load(
     "//cpp:copts/configure_copts.bzl",
     "COPTS",
@@ -24,7 +24,10 @@ load(
 
 cc_library(
     name = "dfs_client",
-    srcs = ["dfs_client.cpp"],
+    srcs = [
+        "dfs_client.cpp",
+        "dfs_output_stream.cpp",
+    ],
     hdrs = [
         "dfs_client.h",
         "dfs_input_stream.h",
@@ -53,5 +56,19 @@ cc_binary(
         "//cpp/pl/ascii_table:pretty",
         "@fmt",
         "@gflags",
+    ],
+)
+
+cc_test(
+    name = "dfs_output_stream_test",
+    srcs = ["dfs_output_stream_test.cpp"],
+    copts = COPTS,
+    linkopts = LINKOPTS,
+    tags = ["no-sandbox"],
+    deps = [
+        ":dfs_client",
+        "//cpp/pl/minidfs/protocol:minidfs_cc_proto",
+        "@brpc",
+        "@googletest//:gtest_main",
     ],
 )

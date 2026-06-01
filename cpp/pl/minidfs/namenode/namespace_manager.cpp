@@ -286,6 +286,31 @@ pl::Result<Inode> NamespaceManager::create_file(std::string_view path,
     return file;
 }
 
+pl::Result<Inode> NamespaceManager::begin_append(std::string_view path) {
+    auto inode = resolve_path(path);
+    if (inode.hasError()) {
+        return folly::makeUnexpected(inode.error());
+    }
+    if (inode.value().type != InodeType::kFile) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kIsDirectory),
+                             "cannot append to a directory");
+    }
+    if (inode.value().state != FileState::kNormal) {
+        return pl::makeError(static_cast<pl::status_code_t>(ErrorCode::kFileUnderConstruction),
+                             "file is already under construction");
+    }
+
+    auto file = std::move(inode.value());
+    file.state = FileState::kUnderConstruction;
+    file.mtime_ms = now_ms();
+    ++file.version;
+    auto update = store_->update_inode(file);
+    if (update.hasError()) {
+        return folly::makeUnexpected(update.error());
+    }
+    return file;
+}
+
 pl::Result<Inode> NamespaceManager::remove(std::string_view path, bool recursive) {
     auto valid = validate_path(path);
     if (valid.hasError()) {
