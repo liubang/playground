@@ -1,16 +1,20 @@
 name: "Generate Coverage Badge"
-description: "Generate a shields.io-compatible badge JSON from an lcov report"
+description: "Generate a shields.io-compatible badge JSON from an lcov report, or a failure badge"
 
 inputs:
   lcov-file:
     description: "Path to the lcov coverage report file"
-    required: true
+    required: false
   output-dir:
     description: "Directory to write badge.json into"
     required: true
   label:
     description: "Badge label text"
     required: true
+  status:
+    description: "Build status: 'success' or 'failure'. When failure, generates a red 'failed' badge."
+    required: false
+    default: "success"
 
 runs:
   using: "composite"
@@ -18,20 +22,26 @@ runs:
     - name: generate badge
       shell: bash
       run: |
-        SUMMARY=$(lcov --rc branch_coverage=1 --summary "${{ inputs.lcov-file }}" 2>&1)
-        COVERAGE=$(echo "$SUMMARY" | grep "lines" | awk '{print $2}' | tr -d '%')
-        BRANCH=$(echo "$SUMMARY" | grep "branches" | awk '{print $2}' | tr -d '%')
-        if [ "$(echo "$COVERAGE >= 80" | bc)" -eq 1 ]; then
-          COLOR="brightgreen"
-        elif [ "$(echo "$COVERAGE >= 60" | bc)" -eq 1 ]; then
-          COLOR="yellow"
+        mkdir -p "${{ inputs.output-dir }}"
+        if [ "${{ inputs.status }}" = "failure" ]; then
+          echo '{"schemaVersion":1,"label":"${{ inputs.label }}","message":"failed","color":"red"}' > "${{ inputs.output-dir }}/badge.json"
+          echo "Badge: ${{ inputs.label }} failed (red)"
         else
-          COLOR="red"
+          SUMMARY=$(lcov --rc branch_coverage=1 --summary "${{ inputs.lcov-file }}" 2>&1)
+          COVERAGE=$(echo "$SUMMARY" | grep "lines" | awk '{print $2}' | tr -d '%')
+          BRANCH=$(echo "$SUMMARY" | grep "branches" | awk '{print $2}' | tr -d '%')
+          if [ "$(echo "$COVERAGE >= 80" | bc)" -eq 1 ]; then
+            COLOR="brightgreen"
+          elif [ "$(echo "$COVERAGE >= 60" | bc)" -eq 1 ]; then
+            COLOR="yellow"
+          else
+            COLOR="red"
+          fi
+          if [ -n "$BRANCH" ] && [ "$BRANCH" != "" ]; then
+            MSG="${COVERAGE}% (branch: ${BRANCH}%)"
+          else
+            MSG="${COVERAGE}%"
+          fi
+          echo "{\"schemaVersion\":1,\"label\":\"${{ inputs.label }}\",\"message\":\"${MSG}\",\"color\":\"${COLOR}\"}" > "${{ inputs.output-dir }}/badge.json"
+          echo "Badge: ${{ inputs.label }} ${COVERAGE}% (branch: ${BRANCH:-N/A}%) [${COLOR}]"
         fi
-        if [ -n "$BRANCH" ] && [ "$BRANCH" != "" ]; then
-          MSG="${COVERAGE}% (branch: ${BRANCH}%)"
-        else
-          MSG="${COVERAGE}%"
-        fi
-        echo "{\"schemaVersion\":1,\"label\":\"${{ inputs.label }}\",\"message\":\"${MSG}\",\"color\":\"${COLOR}\"}" > "${{ inputs.output-dir }}/badge.json"
-        echo "Line Coverage: ${COVERAGE}%, Branch Coverage: ${BRANCH:-N/A}% (${COLOR})"
