@@ -137,6 +137,8 @@ jobs:
             flux_test \
             < cpp/pl/flux/examples/cross_source/mysql_metrics.sql
       - name: run coverage
+        id: coverage
+        continue-on-error: true
         run: |
           bazel coverage \
             --config=release \
@@ -148,6 +150,7 @@ jobs:
             --instrumentation_filter="//cpp/pl[/:]" \
             -- //cpp/... -//cpp/pl/recall/embedding_server/...
       - name: generate html report
+        if: steps.coverage.outcome == 'success'
         run: |
           lcov --rc branch_coverage=1 \
             --remove ./bazel-out/_coverage/_coverage_report.dat \
@@ -156,11 +159,19 @@ jobs:
             --ignore-errors unused,negative
           genhtml --branch-coverage --ignore-errors negative --output coverage-cpp /tmp/coverage_filtered.dat
       - name: generate coverage badge
+        if: steps.coverage.outcome == 'success'
         uses: ./.github/actions/coverage-badge
         with:
           lcov-file: /tmp/coverage_filtered.dat
           output-dir: coverage-cpp
-          label: coverage-c++
+          label: C++
+      - name: generate failure badge
+        if: steps.coverage.outcome == 'failure'
+        uses: ./.github/actions/coverage-badge
+        with:
+          output-dir: coverage-cpp
+          label: C++
+          status: failure
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v4
         if: ${{ github.ref == 'refs/heads/main' }}
@@ -172,3 +183,6 @@ jobs:
           keep_files: true
           user_name: "liubang"
           user_email: "it.liubang@gmail.com"
+      - name: Fail the job if coverage failed
+        if: steps.coverage.outcome == 'failure'
+        run: exit 1
