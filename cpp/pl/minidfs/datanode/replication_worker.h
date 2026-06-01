@@ -40,6 +40,8 @@ struct DataNodeTask {
     TaskKind kind = TaskKind::kCopy;
     uint64_t block_id = 0;
     uint64_t generation_stamp = 0;
+    uint64_t inode_id = 0;
+    uint32_t block_index = 0;
     std::string target_host;  // For copy: destination DN host
     uint32_t target_port = 0; // For copy: destination DN data port
 };
@@ -49,6 +51,8 @@ struct DataNodeTask {
 // from a thread-safe queue. Network send is abstracted via CopyFunc.
 using CopyFunc = std::function<pl::Result<pl::Void>(uint64_t block_id,
                                                     uint64_t generation_stamp,
+                                                    uint64_t inode_id,
+                                                    uint32_t block_index,
                                                     const std::string& data,
                                                     const std::string& target_host,
                                                     uint32_t target_port)>;
@@ -72,7 +76,7 @@ public:
     void stop();
 
     /// Enqueue a task for processing.
-    void enqueue(DataNodeTask task);
+    void enqueue(DataNodeTask&& task);
 
     /// Get the number of pending tasks.
     size_t pending_count() const;

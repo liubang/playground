@@ -56,6 +56,9 @@ public:
     /// Check if a file has an active lease.
     pl::Result<bool> has_active_lease(uint64_t inode_id);
 
+    /// Validate that a client owns the active lease for a file.
+    pl::Result<pl::Void> validate_lease(uint64_t inode_id, std::string_view client_id);
+
 private:
     MetadataStore* store_;
 };

@@ -156,7 +156,8 @@ void DataTransferServiceImpl::WriteBlock(google::protobuf::RpcController* /*cont
 
         // Notify block reporter
         if (reporter_) {
-            reporter_->notify_block_finalized(block_id, generation_stamp);
+            reporter_->notify_block_finalized(block_id);
+            (void)reporter_->send_incremental_report();
         }
 
         XLOGF(INFO, "block {}:{} finalized via pipeline", block_id, generation_stamp);
@@ -216,11 +217,9 @@ void DataTransferServiceImpl::TransferBlock(google::protobuf::RpcController* /*c
     const auto& data = request->data();
 
     // Create block in tmp/
-    // For replication, we use block_id as inode_id placeholder and index 0.
-    // The actual inode_id and block_index are resolved by NameNode metadata.
     auto create_result = store_->create_block(block_id,
-                                              /*inode_id=*/0,
-                                              /*block_index=*/0,
+                                              request->inode_id(),
+                                              request->block_index(),
                                               generation_stamp);
     if (create_result.hasError()) {
         fill_status(response->mutable_status(),
@@ -254,7 +253,8 @@ void DataTransferServiceImpl::TransferBlock(google::protobuf::RpcController* /*c
     }
 
     if (reporter_) {
-        reporter_->notify_block_finalized(block_id, generation_stamp);
+        reporter_->notify_block_finalized(block_id);
+        (void)reporter_->send_incremental_report();
     }
 
     XLOGF(INFO,
